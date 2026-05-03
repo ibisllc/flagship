@@ -12,6 +12,7 @@ import { AppMembership } from "./membership.js";
 import { IdentityInjector } from "./identityInjector.js";
 import { LlmHarness } from "./llmHarness.js";
 import { AppRunner } from "./appRunner.js";
+import { PhoneStateStore, PHONE_STATE_MAX_BYTES } from "./phoneStateStore.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -42,6 +43,8 @@ export interface DaemonContext {
   appRunner?: AppRunner;
   /** Per-app deploy records. Daemon keeps this in memory; persisted by the caller. */
   deployedApps?: Map<string, DeployedApp>;
+  /** Optional phone-state backup store. */
+  phoneState?: PhoneStateStore;
 }
 
 interface HexBytesField {
@@ -352,6 +355,67 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
           deployedAt: e.deployedAt,
           source: e.source,
         })),
+      };
+    },
+  );
+
+  // ---- Phone-state backup (opaque SWK-encrypted blob) -------------------
+
+  app.put<{
+    Body: {
+      sessionToken?: string;
+      ciphertext?: string;
+      nonce?: string;
+      version?: number;
+    };
+  }>("/phone-state", async (req, reply) => {
+    if (!ctx.phoneState) return reply.status(503).send({ error: "phoneState store missing" });
+    const body = req.body ?? {};
+    if (!ctx.resolveSession(body.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    if (
+      typeof body.ciphertext !== "string" ||
+      typeof body.nonce !== "string" ||
+      typeof body.version !== "number"
+    ) {
+      return reply.status(400).send({ error: "ciphertext, nonce, and version required" });
+    }
+    let cipher: Uint8Array;
+    let nonce: Uint8Array;
+    try {
+      cipher = hexToBytes(body.ciphertext);
+      nonce = hexToBytes(body.nonce);
+    } catch {
+      return reply.status(400).send({ error: "invalid hex" });
+    }
+    if (cipher.length > PHONE_STATE_MAX_BYTES) {
+      return reply.status(413).send({ error: "blob too large" });
+    }
+    const r = ctx.phoneState.put({
+      ciphertext: cipher,
+      nonce,
+      version: body.version,
+      storedAt: Date.now(),
+    });
+    if (!r.ok) return reply.status(409).send({ error: r.reason });
+    return { ok: true, version: body.version };
+  });
+
+  app.get<{ Querystring: { sessionToken?: string } }>(
+    "/phone-state",
+    async (req, reply) => {
+      if (!ctx.phoneState) return reply.status(503).send({ error: "phoneState store missing" });
+      if (!ctx.resolveSession(req.query.sessionToken)) {
+        return reply.status(401).send({ error: "session not authenticated" });
+      }
+      const blob = ctx.phoneState.get();
+      if (!blob) return reply.status(404).send({ error: "no state stored" });
+      return {
+        ciphertext: bytesToHex(blob.ciphertext),
+        nonce: bytesToHex(blob.nonce),
+        version: blob.version,
+        storedAt: blob.storedAt,
       };
     },
   );
