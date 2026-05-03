@@ -33,10 +33,24 @@ interface DesktopSession {
   desktopPubKey: Uint8Array;
   phonePubKey?: Uint8Array;
   irkPubKey?: Uint8Array;
+  /** Set after pairing — the userId carried in the pairing claim. */
+  userId?: string;
   status: DesktopSessionStatus;
   createdAt: number;
   pairedAt?: number;
   inbox: { from: "phone" | "desktop"; ciphertext: Uint8Array; ts: number }[];
+}
+
+export interface DesktopSessionView {
+  sessionId: string;
+  userId: string;
+  irkPub: Uint8Array;
+  pairedAt: number;
+}
+
+export interface DesktopSessionStore {
+  /** Returns a paired session view (or undefined for unknown / expired / pending sessions). */
+  getPaired(sessionId: string): DesktopSessionView | undefined;
 }
 
 export interface DesktopPairOptions {
@@ -68,11 +82,26 @@ interface InboxBody {
 export function registerDesktopPair(
   app: FastifyInstance,
   opts: DesktopPairOptions = {},
-): void {
+): DesktopSessionStore {
   const sessions = new Map<string, DesktopSession>();
   const pairingTtl = opts.pairingTtlMs ?? DEFAULT_PAIRING_TTL_MS;
   const sessionTtl = opts.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
   const now = opts.now ?? (() => Date.now());
+
+  const store: DesktopSessionStore = {
+    getPaired(sessionId: string): DesktopSessionView | undefined {
+      const s = sessions.get(sessionId);
+      if (!s) return undefined;
+      expire(s);
+      if (s.status !== "paired" || !s.userId || !s.irkPubKey || !s.pairedAt) return undefined;
+      return {
+        sessionId: s.id,
+        userId: s.userId,
+        irkPub: s.irkPubKey.slice(),
+        pairedAt: s.pairedAt,
+      };
+    },
+  };
 
   function expire(s: DesktopSession): void {
     const t = now();
@@ -179,6 +208,7 @@ export function registerDesktopPair(
 
     s.phonePubKey = phonePub;
     s.irkPubKey = irkPub;
+    s.userId = body.userId;
     s.status = "paired";
     s.pairedAt = now();
     return { sessionId: sid, status: "paired" };
@@ -258,6 +288,8 @@ export function registerDesktopPair(
       };
     },
   );
+
+  return store;
 }
 
 // Used internally to allow tests to drain expired sessions deterministically.

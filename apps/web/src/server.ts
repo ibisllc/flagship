@@ -6,7 +6,11 @@ import { deriveIRK } from "@flagship/protocol";
 import { registerBuildImage } from "./routes/buildImage.js";
 import { registerQrAuth } from "./routes/qrAuth.js";
 import { registerSecurityReport } from "./routes/securityReport.js";
-import { registerDesktopPair, type DesktopPairOptions } from "./routes/desktopPair.js";
+import {
+  registerDesktopPair,
+  type DesktopPairOptions,
+  type DesktopSessionStore,
+} from "./routes/desktopPair.js";
 import { registerMigration, type MigrationOptions } from "./routes/migration.js";
 import {
   registerServerRegistry,
@@ -75,7 +79,24 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   registerBuildImage(app);
   registerQrAuth(app);
   registerSecurityReport(app);
-  registerDesktopPair(app, opts.desktopPair ?? devDesktopPairOptions());
+  const desktopSessions = registerDesktopPair(app, opts.desktopPair ?? devDesktopPairOptions());
+  app.decorate("desktopSessions", desktopSessions);
+
+  // Logged-in user surface — backed by the paired desktop session.
+  app.get<{ Querystring: { sessionId?: string } }>("/api/me/servers", async (req, reply) => {
+    const sid = req.query.sessionId;
+    if (!sid) return reply.status(400).send({ error: "sessionId required" });
+    const view = desktopSessions.getPaired(sid);
+    if (!view) return reply.status(401).send({ error: "session not paired" });
+    const servers = serverRegistry.listForUser(view.userId).map((s) => ({
+      serverId: s.serverId,
+      registeredAt: s.registeredAt,
+      revoked: s.revokedAt
+        ? { reason: s.revocationReason ?? "lost", at: s.revokedAt }
+        : null,
+    }));
+    return { userId: view.userId, servers };
+  });
   if (opts.migration) registerMigration(app, opts.migration);
 
   if (opts.resolveUserIrk) {
@@ -115,6 +136,7 @@ declare module "fastify" {
   interface FastifyInstance {
     serverRegistry: ServerRegistry;
     pushTokenStore: PushTokenStore;
+    desktopSessions: DesktopSessionStore;
   }
 }
 

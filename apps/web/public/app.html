@@ -25,6 +25,9 @@
       .card h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
       .placeholder { color: #888; font-style: italic; font-size: 0.9rem; }
       .actions { margin-top: 1rem; display: flex; gap: 0.5rem; }
+      ul { margin: 0; padding-left: 1.1rem; }
+      li { margin: 0.2rem 0; }
+      .revoked { color: #c66; }
       button, .btn {
         font: inherit;
         padding: 0.4rem 0.9rem;
@@ -38,6 +41,7 @@
       }
       .btn-secondary { background: transparent; color: inherit; border: 1px solid #8884; }
       .err { color: #a44; }
+      .ok { color: #4a8; }
     </style>
   </head>
   <body>
@@ -50,21 +54,19 @@
     <h1>Your Flagship</h1>
     <p>Welcome. This desktop is paired to your phone.</p>
     <p class="session" id="session-line"></p>
+    <p class="session" id="user-line"></p>
 
     <div class="grid">
-      <div class="card">
+      <div class="card" id="servers-card">
         <h3>Servers</h3>
-        <p class="placeholder">your Flagship servers will appear here.</p>
+        <div id="servers-body"><p class="placeholder">loading…</p></div>
         <div class="actions">
           <a class="btn btn-secondary" href="/login.html#order">Order a new server</a>
         </div>
       </div>
       <div class="card">
         <h3>Apps</h3>
-        <p class="placeholder">vibe-coded apps you've deployed will appear here.</p>
-        <div class="actions">
-          <a class="btn btn-secondary" href="#deploy">+ Deploy app</a>
-        </div>
+        <p class="placeholder">vibe-coded apps you've deployed will appear here once your phone authorizes a per-server tunnel.</p>
       </div>
       <div class="card">
         <h3>Linked devices</h3>
@@ -77,7 +79,7 @@
     </div>
 
     <p style="margin-top: 3rem; color: #888; font-size: 0.9rem;">
-      v0 dashboard — these tiles will be wired to the daemon HTTP API as the desktop UI matures.
+      The control plane only ever sees an opaque ciphertext between this desktop and your phone — sensitive operations require a phone biometric prompt.
     </p>
 
     <script type="module">
@@ -88,17 +90,68 @@
       })();
       const sessionId = fromUrl || fromStorage;
       const line = document.getElementById("session-line");
+      const userLine = document.getElementById("user-line");
+      const serversBody = document.getElementById("servers-body");
 
       if (!sessionId) {
         line.innerHTML = '<span class="err">No paired session — <a href="/login.html">connect a phone</a>.</span>';
-      } else {
-        line.textContent = "session: " + sessionId;
-        // Verify the session is still paired; if not, kick to login.
-        fetch("/api/desktop/pair/" + sessionId + "/status").then((r) => r.json()).then((body) => {
-          if (body.status !== "paired") {
-            line.innerHTML = '<span class="err">session ' + body.status + ' — <a href="/login.html">reconnect</a>.</span>';
-          }
-        }).catch(() => {});
+        return;
+      }
+      line.textContent = "session: " + sessionId;
+
+      // 1. Verify session is paired.
+      let pairedOk = false;
+      try {
+        const r = await fetch("/api/desktop/pair/" + sessionId + "/status");
+        const body = await r.json();
+        pairedOk = body.status === "paired";
+        if (!pairedOk) {
+          line.innerHTML = '<span class="err">session ' + body.status + ' — <a href="/login.html">reconnect</a>.</span>';
+        }
+      } catch (e) {
+        line.innerHTML = '<span class="err">failed to verify session: ' + e + '</span>';
+      }
+
+      if (!pairedOk) return;
+
+      // 2. /api/me/servers reads the userId off the paired session and lists registered servers.
+      try {
+        const r = await fetch("/api/me/servers?sessionId=" + encodeURIComponent(sessionId));
+        if (!r.ok) {
+          serversBody.innerHTML = '<p class="err">failed to load servers (' + r.status + ').</p>';
+          return;
+        }
+        const body = await r.json();
+        userLine.textContent = "user: " + body.userId;
+        if (body.servers.length === 0) {
+          serversBody.innerHTML = '<p class="placeholder">no servers yet — order one from your phone or below.</p>';
+        } else {
+          serversBody.innerHTML =
+            "<ul>" +
+            body.servers
+              .map((s) => {
+                const tag = s.revoked
+                  ? '<span class="revoked"> · revoked (' + s.revoked.reason + ')</span>'
+                  : '<span class="ok"> · active</span>';
+                return "<li><code>" + escapeHtml(s.serverId) + "</code>" + tag + "</li>";
+              })
+              .join("") +
+            "</ul>";
+        }
+      } catch (e) {
+        serversBody.innerHTML = '<p class="err">' + escapeHtml(String(e)) + '</p>';
+      }
+
+      // 3. Encrypted relay placeholder. The full DH-derived AES-GCM channel is
+      // wired in /login.html during pairing; subsequent app pages reuse the
+      // session key already cached in sessionStorage. Future revisions will
+      // wrap /api/desktop/session/<id>/{inbox,poll} requests here.
+      function escapeHtml(s) {
+        return String(s)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
       }
     </script>
   </body>
