@@ -90,29 +90,18 @@ export class EncryptedCertStore {
 }
 
 /**
- * Interface to the ACME client. The live implementation will use the
- * `acme-client` npm package for the protocol state machine and `selfsigned`
- * (or `@peculiar/x509`) to mint the TLS-ALPN-01 challenge cert.
- *
- * Stubbed in v0; real wiring is the next concrete task before launch.
+ * Interface to the ACME client. The live implementation
+ * (`./acme/letsEncryptIssuer.ts`) wraps `acme-client` for the protocol
+ * state machine and `@peculiar/x509` to mint TLS-ALPN-01 challenge certs.
  */
 export interface AcmeIssuer {
   /**
    * Obtain or renew a cert covering `names`. For wildcards (e.g.
    * `*.harry.flagship.services`), uses DNS-01 with the control plane
-   * publishing the TXT record on the server's behalf.
+   * publishing the TXT record on the server's behalf. Otherwise prefers
+   * TLS-ALPN-01.
    */
   issue(names: string[]): Promise<{ certPem: string; privateKeyPem: string; notAfter: number }>;
-
-  /**
-   * Compute the TLS-ALPN-01 challenge response cert for the given key
-   * authorization. The returned cert + key are presented when the ACME
-   * validator connects with ALPN protocol "acme-tls/1".
-   */
-  buildAlpnChallengeCert(
-    keyAuthorization: string,
-    sni: string,
-  ): { certPem: string; privateKeyPem: string };
 }
 
 /**

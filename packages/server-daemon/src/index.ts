@@ -64,3 +64,20 @@ export { IdentityInjector, verifyIdentityHeaders } from "./identityInjector.js";
 export type { IdentityInjectorOptions, Decision, InboundRequest } from "./identityInjector.js";
 export { buildDaemonHttp } from "./httpApi.js";
 export type { DaemonContext } from "./httpApi.js";
+export {
+  EncryptedCertStore,
+  deriveTlsKey,
+  alpnChallengeDigest,
+} from "./acme.js";
+export type { AcmeIssuer, StoredCert } from "./acme.js";
+export { LetsEncryptIssuer } from "./acme/letsEncryptIssuer.js";
+export type {
+  LetsEncryptIssuerOptions,
+  LeEnvironment,
+  AlpnChallengeServer,
+  DnsChallengeWriter,
+  MinimalAcmeClient,
+} from "./acme/letsEncryptIssuer.js";
+export { buildAlpnChallengeCert } from "./acme/alpnChallengeCert.js";
+export { LlmHarness } from "./llmHarness.js";
+export type { LlmHarnessOptions } from "./llmHarness.js";
