@@ -20,13 +20,29 @@ export const FRAME_DATA = 0x02;
 export const FRAME_CLOSE = 0x03;
 export const FRAME_CLOSE_REMOTE = 0x04;
 
+// Peer-backup frames (RFC: roadmap.md §1)
+export const FRAME_PB_PUT = 0x20;
+export const FRAME_PB_PUT_ACK = 0x21;
+export const FRAME_PB_GET = 0x22;
+export const FRAME_PB_GET_DATA = 0x23;
+export const FRAME_PB_GET_END = 0x24;
+export const FRAME_PB_CHALLENGE = 0x30;
+export const FRAME_PB_RESPONSE = 0x31;
+
 export type FrameType =
   | typeof FRAME_HELLO
   | typeof FRAME_HELLO_ACK
   | typeof FRAME_OPEN
   | typeof FRAME_DATA
   | typeof FRAME_CLOSE
-  | typeof FRAME_CLOSE_REMOTE;
+  | typeof FRAME_CLOSE_REMOTE
+  | typeof FRAME_PB_PUT
+  | typeof FRAME_PB_PUT_ACK
+  | typeof FRAME_PB_GET
+  | typeof FRAME_PB_GET_DATA
+  | typeof FRAME_PB_GET_END
+  | typeof FRAME_PB_CHALLENGE
+  | typeof FRAME_PB_RESPONSE;
 
 export interface Frame {
   streamId: number;
@@ -88,7 +104,14 @@ function isFrameType(t: number): t is FrameType {
     t === FRAME_OPEN ||
     t === FRAME_DATA ||
     t === FRAME_CLOSE ||
-    t === FRAME_CLOSE_REMOTE
+    t === FRAME_CLOSE_REMOTE ||
+    t === FRAME_PB_PUT ||
+    t === FRAME_PB_PUT_ACK ||
+    t === FRAME_PB_GET ||
+    t === FRAME_PB_GET_DATA ||
+    t === FRAME_PB_GET_END ||
+    t === FRAME_PB_CHALLENGE ||
+    t === FRAME_PB_RESPONSE
   );
 }
 
