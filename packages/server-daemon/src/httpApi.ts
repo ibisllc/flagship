@@ -1,5 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import {
+  parseManifest,
+  type AppManifest,
   type Bytes,
   type InviteAcceptance,
   type InviteToken,
@@ -9,6 +11,7 @@ import { BootCoordinator } from "./bootCoordinator.js";
 import { AppMembership } from "./membership.js";
 import { IdentityInjector } from "./identityInjector.js";
 import { LlmHarness } from "./llmHarness.js";
+import { AppRunner } from "./appRunner.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -16,6 +19,13 @@ import { LlmHarness } from "./llmHarness.js";
  * keep all sensitive ops behind IRK/BAK signatures verified by the underlying
  * stores — the HTTP layer is plumbing, not policy.
  */
+
+export interface DeployedApp {
+  manifest: AppManifest;
+  deployedAt: number;
+  /** Source revision (git sha or tarball digest) — opaque, surfaced to UI. */
+  source?: string;
+}
 
 export interface DaemonContext {
   serverId: string;
@@ -28,6 +38,10 @@ export interface DaemonContext {
   injectors: Map<string, IdentityInjector>;
   /** Optional LLM harness — undefined when SWK isn't yet provisioned. */
   llm?: LlmHarness;
+  /** Optional container runner. When set, /apps/* lifecycle endpoints are live. */
+  appRunner?: AppRunner;
+  /** Per-app deploy records. Daemon keeps this in memory; persisted by the caller. */
+  deployedApps?: Map<string, DeployedApp>;
 }
 
 interface HexBytesField {
@@ -45,6 +59,10 @@ function bytesToHex(b: Uint8Array): string {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");
   return s;
+}
+
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
@@ -210,6 +228,133 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     if (!r.ok) return reply.status(403).send(r);
     return { ok: true, effect: r.effect };
   });
+
+  // ---- App lifecycle (deploy / delete / restart / logs) -----------------
+
+  app.post<{
+    Body: {
+      sessionToken?: string;
+      manifest?: unknown;
+      source?: string;
+    };
+  }>("/apps", async (req, reply) => {
+    if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
+    if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
+    const body = req.body ?? {};
+    if (!ctx.resolveSession(body.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const parsed = parseManifest(body.manifest);
+    if (!parsed.ok) return reply.status(400).send({ error: "invalid manifest", details: parsed.errors });
+    const m = parsed.manifest;
+    const appId = m.name;
+    if (ctx.deployedApps.has(appId)) {
+      return reply.status(409).send({ error: "app already deployed", appId });
+    }
+    try {
+      await ctx.appRunner.deploy({
+        appId,
+        image: m.runtime.image,
+        env: m.runtime.env,
+        port: m.runtime.port,
+      });
+    } catch (e) {
+      return reply.status(500).send({ error: "deploy failed", message: errMsg(e) });
+    }
+    ctx.deployedApps.set(appId, {
+      manifest: m,
+      deployedAt: Date.now(),
+      source: typeof body.source === "string" ? body.source : undefined,
+    });
+    return { ok: true, appId };
+  });
+
+  app.delete<{
+    Params: { appId: string };
+    Body: { sessionToken?: string };
+  }>("/apps/:appId", async (req, reply) => {
+    if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
+    if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
+    if (!ctx.resolveSession(req.body?.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const appId = req.params.appId;
+    const entry = ctx.deployedApps.get(appId);
+    if (!entry) return reply.status(404).send({ error: "app not found" });
+    try {
+      await ctx.appRunner.stop(appId);
+    } catch (e) {
+      return reply.status(500).send({ error: "stop failed", message: errMsg(e) });
+    }
+    ctx.deployedApps.delete(appId);
+    return { ok: true, appId };
+  });
+
+  app.post<{
+    Params: { appId: string };
+    Body: { sessionToken?: string };
+  }>("/apps/:appId/restart", async (req, reply) => {
+    if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
+    if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
+    if (!ctx.resolveSession(req.body?.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const entry = ctx.deployedApps.get(req.params.appId);
+    if (!entry) return reply.status(404).send({ error: "app not found" });
+    try {
+      await ctx.appRunner.restart({
+        appId: req.params.appId,
+        image: entry.manifest.runtime.image,
+        env: entry.manifest.runtime.env,
+        port: entry.manifest.runtime.port,
+      });
+    } catch (e) {
+      return reply.status(500).send({ error: "restart failed", message: errMsg(e) });
+    }
+    return { ok: true };
+  });
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string; tail?: string };
+  }>("/apps/:appId/logs", async (req, reply) => {
+    if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
+    if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
+    if (!ctx.resolveSession(req.query.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    if (!ctx.deployedApps.has(req.params.appId)) {
+      return reply.status(404).send({ error: "app not found" });
+    }
+    const tail = Number(req.query.tail ?? 200);
+    const safeTail = Number.isFinite(tail) && tail > 0 && tail <= 5000 ? Math.floor(tail) : 200;
+    try {
+      const out = await ctx.appRunner.logs(req.params.appId, safeTail);
+      return { stdout: out.stdout, stderr: out.stderr, tail: safeTail };
+    } catch (e) {
+      return reply.status(500).send({ error: "logs failed", message: errMsg(e) });
+    }
+  });
+
+  app.get<{ Querystring: { sessionToken?: string } }>(
+    "/apps",
+    async (req, reply) => {
+      if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
+      if (!ctx.resolveSession(req.query.sessionToken)) {
+        return reply.status(401).send({ error: "session not authenticated" });
+      }
+      return {
+        apps: [...ctx.deployedApps.entries()].map(([appId, e]) => ({
+          appId,
+          name: e.manifest.name,
+          version: e.manifest.version,
+          subdomain: e.manifest.network.subdomain,
+          deployedAt: e.deployedAt,
+          source: e.source,
+        })),
+      };
+    },
+  );
 
   // ---- LLM harness (BYO provider, SWK-sealed payload) -------------------
 

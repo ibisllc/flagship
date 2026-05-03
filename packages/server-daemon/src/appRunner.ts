@@ -9,6 +9,8 @@ export interface AppSpec {
 
 export interface CommandRunner {
   run(cmd: string, args: string[]): Promise<void>;
+  /** Capture stdout. Default impl uses spawn with pipe; tests inject a mock. */
+  capture?(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string }>;
 }
 
 export const realCommandRunner: CommandRunner = {
@@ -17,6 +19,18 @@ export const realCommandRunner: CommandRunner = {
       const p = spawn(cmd, args, { stdio: "inherit" });
       p.on("exit", (code) =>
         code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`)),
+      );
+    });
+  },
+  capture(cmd, args) {
+    return new Promise((resolve, reject) => {
+      const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "";
+      let stderr = "";
+      p.stdout?.on("data", (d) => (stdout += d.toString()));
+      p.stderr?.on("data", (d) => (stderr += d.toString()));
+      p.on("exit", (code) =>
+        code === 0 ? resolve({ stdout, stderr }) : reject(new Error(`${cmd} exited with code ${code}`)),
       );
     });
   },
@@ -44,7 +58,31 @@ export class AppRunner {
     await this.cmd.run("docker", ["rm", this.containerName(appId)]);
   }
 
-  private containerName(appId: string): string {
+  /**
+   * Restart re-creates the container with the same name. We `stop && rm`
+   * first to handle "container exists, image needs refresh" — important when
+   * the user pushed a new tag after the LLM committed.
+   */
+  async restart(spec: AppSpec): Promise<void> {
+    try {
+      await this.stop(spec.appId);
+    } catch {
+      // best-effort: container may not exist
+    }
+    await this.deploy(spec);
+  }
+
+  /**
+   * Returns the most recent N lines of container logs as a single string.
+   * For a real production setup the daemon would stream incrementally;
+   * for v0 a one-shot tail keeps the wire shape simple.
+   */
+  async logs(appId: string, tail: number): Promise<{ stdout: string; stderr: string }> {
+    if (!this.cmd.capture) throw new Error("CommandRunner.capture is not configured");
+    return this.cmd.capture("docker", ["logs", "--tail", String(tail), this.containerName(appId)]);
+  }
+
+  containerName(appId: string): string {
     return `flagship-${appId}`;
   }
 
