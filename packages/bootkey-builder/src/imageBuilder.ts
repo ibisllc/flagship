@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { BuildPlan } from "./buildPlan.js";
 import { nixosConfigFiles } from "./nixos.js";
+import { caddyfileConfigFile } from "./caddyfile.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -37,7 +38,13 @@ export async function materializePlan(plan: BuildPlan, outDir: string): Promise<
   const planJsonPath = resolve(root, "build-plan.json");
   await writeFile(planJsonPath, serializePlan(plan));
 
-  const allFiles = [...plan.configFiles, ...nixosConfigFiles(plan)];
+  // Caddyfile is generated with no apps at first boot; the daemon hot-reloads
+  // it as apps are deployed. We bake the username from the BuildSpec.
+  const allFiles = [
+    ...plan.configFiles,
+    ...nixosConfigFiles(plan),
+    caddyfileConfigFile({ username: plan.spec.userId }, []),
+  ];
   const configFilePaths: string[] = [];
   for (const cf of allFiles) {
     const target = resolve(rootfs, "." + cf.path);

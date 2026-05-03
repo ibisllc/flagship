@@ -36,8 +36,8 @@ describe("materializePlan", () => {
     expect(planJson.spec.irkPublicKey).toMatch(/^[0-9a-f]{64}$/);
     expect(planJson.partitions.length).toBeGreaterThanOrEqual(2);
 
-    // configFiles + 4 NixOS files (flake, configuration, containers, hardware).
-    expect(artifacts.configFilePaths.length).toBe(plan.configFiles.length + 4);
+    // configFiles + 4 NixOS files (flake, configuration, containers, hardware) + 1 Caddyfile.
+    expect(artifacts.configFilePaths.length).toBe(plan.configFiles.length + 5);
     for (const p of artifacts.configFilePaths) {
       const s = await stat(p);
       expect(s.isFile()).toBe(true);
