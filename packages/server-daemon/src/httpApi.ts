@@ -8,6 +8,7 @@ import {
 import { BootCoordinator } from "./bootCoordinator.js";
 import { AppMembership } from "./membership.js";
 import { IdentityInjector } from "./identityInjector.js";
+import { LlmHarness } from "./llmHarness.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -25,6 +26,8 @@ export interface DaemonContext {
   resolveSession: (token: string | undefined) => Bytes | null;
   /** Per-app identity injectors. Built lazily based on per-app manifest. */
   injectors: Map<string, IdentityInjector>;
+  /** Optional LLM harness — undefined when SWK isn't yet provisioned. */
+  llm?: LlmHarness;
 }
 
 interface HexBytesField {
@@ -206,6 +209,49 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     const r = app.applyMutation(mutation, sig);
     if (!r.ok) return reply.status(403).send(r);
     return { ok: true, effect: r.effect };
+  });
+
+  // ---- LLM harness (BYO provider, SWK-sealed payload) -------------------
+
+  app.get("/llm/providers", async (_req, reply) => {
+    if (!ctx.llm) return reply.status(503).send({ error: "llm harness not provisioned" });
+    return { providers: ctx.llm.listProviders() };
+  });
+
+  app.post<{
+    Body: {
+      sessionToken?: string;
+      sealed?: { ciphertext?: string; nonce?: string };
+    };
+  }>("/llm/chat", async (req, reply) => {
+    if (!ctx.llm) return reply.status(503).send({ error: "llm harness not provisioned" });
+    const body = req.body ?? {};
+    if (!ctx.resolveSession(body.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    if (
+      !body.sealed ||
+      typeof body.sealed.ciphertext !== "string" ||
+      typeof body.sealed.nonce !== "string"
+    ) {
+      return reply.status(400).send({ error: "sealed payload required" });
+    }
+    let sealed;
+    try {
+      sealed = {
+        ciphertext: hexToBytes(body.sealed.ciphertext),
+        nonce: hexToBytes(body.sealed.nonce),
+      };
+    } catch {
+      return reply.status(400).send({ error: "invalid hex" });
+    }
+    const out = await ctx.llm.chat(sealed);
+    return {
+      sealed: {
+        ciphertext: bytesToHex(out.ciphertext),
+        nonce: bytesToHex(out.nonce),
+      },
+    };
   });
 
   // ---- Identity-injector decision (used by the in-server Caddy) ---------
