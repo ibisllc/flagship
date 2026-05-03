@@ -14,6 +14,7 @@ import {
   authLookupFromRegistry,
   type ServerRegistry,
 } from "./routes/serverRegistry.js";
+import { registerServerRevocation } from "./routes/serverRevocation.js";
 import {
   registerPushRelay,
   InMemoryPushTokenStore,
@@ -78,6 +79,10 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 
   if (opts.resolveUserIrk) {
     registerServerRegistry(app, {
+      registry: serverRegistry,
+      resolveUserIrk: opts.resolveUserIrk,
+    });
+    registerServerRevocation(app, {
       registry: serverRegistry,
       resolveUserIrk: opts.resolveUserIrk,
     });
