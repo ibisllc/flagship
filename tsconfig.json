@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/protocol" },
     { "path": "./packages/tunnel-protocol" },
+    { "path": "./packages/llm-providers" },
     { "path": "./packages/server-daemon" },
     { "path": "./packages/bootkey-builder" },
     { "path": "./apps/web" }
