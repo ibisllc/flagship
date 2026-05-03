@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import type { BuildPlan } from "./buildPlan.js";
+import { nixosConfigFiles } from "./nixos.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,8 +37,9 @@ export async function materializePlan(plan: BuildPlan, outDir: string): Promise<
   const planJsonPath = resolve(root, "build-plan.json");
   await writeFile(planJsonPath, serializePlan(plan));
 
+  const allFiles = [...plan.configFiles, ...nixosConfigFiles(plan)];
   const configFilePaths: string[] = [];
-  for (const cf of plan.configFiles) {
+  for (const cf of allFiles) {
     const target = resolve(rootfs, "." + cf.path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, cf.content, { mode: cf.mode ?? 0o644 });
