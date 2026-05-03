@@ -1,0 +1,14 @@
+{
+  "userId": "user-faf1cbe0551deb7d",
+  "newServerId": "srv-71ef6f7128a2ab2e",
+  "irkPublicKey": "770cf84f58a79110967b2a20d960088c4d659c0c692801b36b7c2c626d8aa741",
+  "bakPublicKey": "b3847f0b88cc0ad9685e84103b1382a904aba3ac481ab054a3545cd621cde5d8",
+  "swkProvisioningTokenHash": "685fa6840733854f8fcb016e45a77d9ac793389b8b156739f957da26228c6940",
+  "wifi": {
+    "ssid": "ExampleWiFi",
+    "psk": "example-psk-rotate-me"
+  },
+  "shareRatio": 0.5,
+  "totalDiskGb": 256,
+  "issuedAt": 1777832701014
+}

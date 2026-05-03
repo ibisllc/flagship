@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard · Flagship</title>
+    <style>
+      :root { color-scheme: dark light; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { max-width: 56rem; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6; }
+      h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
+      .nav { color: #888; margin-bottom: 2rem; }
+      .nav a { margin-right: 1rem; }
+      .session { color: #888; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.85rem; }
+      .grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+        margin-top: 2rem;
+      }
+      .card {
+        padding: 1.25rem;
+        border: 1px solid #8884;
+        border-radius: 10px;
+      }
+      .card h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+      .placeholder { color: #888; font-style: italic; font-size: 0.9rem; }
+      .actions { margin-top: 1rem; display: flex; gap: 0.5rem; }
+      button, .btn {
+        font: inherit;
+        padding: 0.4rem 0.9rem;
+        border-radius: 6px;
+        cursor: pointer;
+        background: #4a8;
+        color: white;
+        border: 0;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .btn-secondary { background: transparent; color: inherit; border: 1px solid #8884; }
+      .err { color: #a44; }
+    </style>
+  </head>
+  <body>
+    <div class="nav">
+      <a href="/">← home</a>
+      <a href="/login.html">re-pair</a>
+      <a href="/security.html">security</a>
+    </div>
+
+    <h1>Your Flagship</h1>
+    <p>Welcome. This desktop is paired to your phone.</p>
+    <p class="session" id="session-line"></p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Servers</h3>
+        <p class="placeholder">your Flagship servers will appear here.</p>
+        <div class="actions">
+          <a class="btn btn-secondary" href="/login.html#order">Order a new server</a>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Apps</h3>
+        <p class="placeholder">vibe-coded apps you've deployed will appear here.</p>
+        <div class="actions">
+          <a class="btn btn-secondary" href="#deploy">+ Deploy app</a>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Linked devices</h3>
+        <p class="placeholder">manage paired desktops here. Revoke any device from your phone.</p>
+      </div>
+      <div class="card">
+        <h3>Memberships</h3>
+        <p class="placeholder">apps other people have invited you to will appear here.</p>
+      </div>
+    </div>
+
+    <p style="margin-top: 3rem; color: #888; font-size: 0.9rem;">
+      v0 dashboard — these tiles will be wired to the daemon HTTP API as the desktop UI matures.
+    </p>
+
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const fromUrl = params.get("session");
+      const fromStorage = (() => {
+        try { return sessionStorage.getItem("flagship_session_id"); } catch { return null; }
+      })();
+      const sessionId = fromUrl || fromStorage;
+      const line = document.getElementById("session-line");
+
+      if (!sessionId) {
+        line.innerHTML = '<span class="err">No paired session — <a href="/login.html">connect a phone</a>.</span>';
+      } else {
+        line.textContent = "session: " + sessionId;
+        // Verify the session is still paired; if not, kick to login.
+        fetch("/api/desktop/pair/" + sessionId + "/status").then((r) => r.json()).then((body) => {
+          if (body.status !== "paired") {
+            line.innerHTML = '<span class="err">session ' + body.status + ' — <a href="/login.html">reconnect</a>.</span>';
+          }
+        }).catch(() => {});
+      }
+    </script>
+  </body>
+</html>

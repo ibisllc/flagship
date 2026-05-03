@@ -1,0 +1,22 @@
+{
+  "name": "@flagship/server-daemon",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "tsx src/index.ts",
+    "test": "vitest run --dir tests"
+  },
+  "dependencies": {
+    "@flagship/protocol": "*",
+    "@flagship/tunnel-protocol": "*",
+    "fastify": "^4.28.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}

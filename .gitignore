@@ -1,0 +1,31 @@
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.log
+.DS_Store
+.env
+.env.local
+.env.*.local
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# mobile
+apps/mobile/ios/.build/
+apps/mobile/ios/.swiftpm/
+apps/mobile/ios/DerivedData/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/local.properties
+apps/mobile/android/app/build/
+
+# bootkey artifacts (large, regenerable)
+build-artifacts/
+build-out/
+*.img
+*.iso
+
+# fixtures contain SECRETS — never commit
+test-vectors/fixture.json

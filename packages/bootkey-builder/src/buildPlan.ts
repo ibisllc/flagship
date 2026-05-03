@@ -1,0 +1,172 @@
+import type { Bytes } from "@flagship/protocol";
+
+export interface BuildSpec {
+  userId: string;
+  newServerId: string;
+  irkPublicKey: Bytes;
+  bakPublicKey: Bytes;
+  swkProvisioningTokenHash: Bytes;
+  wifi: { ssid: string; psk: string };
+  shareRatio: number;
+  totalDiskGb: number;
+  issuedAt: number;
+}
+
+export interface PartitionPlan {
+  name: string;
+  sizeGb: number;
+  fs: "ext4" | "btrfs";
+  encrypted: boolean;
+  mountPoint: string;
+}
+
+export interface ConfigFile {
+  path: string;
+  content: string;
+  mode?: number;
+}
+
+export interface SystemContainer {
+  /** Logical name used in service file naming. */
+  name: string;
+  /** OCI image reference. */
+  image: string;
+  /** Internal subdomain this container is reachable at via the local Caddy. */
+  subdomain?: string;
+  /** Persistent volume mount: container_path → host_path under /var/flagship/system/<name>. */
+  volumes?: Record<string, string>;
+  /** Description shown to the user in the desktop UI. */
+  description: string;
+}
+
+export interface BuildPlan {
+  spec: BuildSpec;
+  partitions: PartitionPlan[];
+  initramfsModules: string[];
+  systemdUnits: string[];
+  systemContainers: SystemContainer[];
+  configFiles: ConfigFile[];
+}
+
+const SYSTEM_RESERVED_GB = 8;
+
+export function planBuild(spec: BuildSpec): BuildPlan {
+  if (spec.shareRatio < 0 || spec.shareRatio > 0.9) {
+    throw new Error("shareRatio must be in [0, 0.9]");
+  }
+  if (spec.totalDiskGb < 16) {
+    throw new Error("totalDiskGb must be >= 16");
+  }
+  if (!spec.wifi.ssid) throw new Error("wifi.ssid is required");
+  if (!spec.userId) throw new Error("userId is required");
+  if (!spec.newServerId) throw new Error("newServerId is required");
+  assertHexBytes("irkPublicKey", spec.irkPublicKey, 32);
+  assertHexBytes("bakPublicKey", spec.bakPublicKey, 32);
+  assertHexBytes("swkProvisioningTokenHash", spec.swkProvisioningTokenHash, 32);
+
+  const userlandGb = spec.totalDiskGb - SYSTEM_RESERVED_GB;
+  const backupGb = Math.floor(userlandGb * spec.shareRatio);
+  const userGb = userlandGb - backupGb;
+
+  const partitions: PartitionPlan[] = [
+    { name: "system", sizeGb: SYSTEM_RESERVED_GB, fs: "ext4", encrypted: true, mountPoint: "/" },
+    { name: "user-data", sizeGb: userGb, fs: "btrfs", encrypted: true, mountPoint: "/var/flagship/data" },
+  ];
+  if (backupGb > 0) {
+    partitions.push({
+      name: "peer-backup-pool",
+      sizeGb: backupGb,
+      fs: "ext4",
+      encrypted: true,
+      mountPoint: "/var/flagship/peer-pool",
+    });
+  }
+
+  return {
+    spec,
+    partitions,
+    initramfsModules: ["dracut-network", "systemd-networkd", "flagship-unlock"],
+    systemdUnits: [
+      "flagship-server-daemon.service",
+      "flagship-backup.timer",
+      "flagship-tunnel.service",
+      "flagship-system-containers.target",
+    ],
+    systemContainers: [
+      {
+        name: "forgejo",
+        image: "codeberg.org/forgejo/forgejo:9",
+        subdomain: "git",
+        volumes: { "/data": "forgejo-data" },
+        description: "Per-user git host. The LLM commits vibe-coded changes here; you browse, diff, and revert.",
+      },
+      {
+        name: "caddy",
+        image: "docker.io/library/caddy:2",
+        volumes: { "/data": "caddy-data", "/config": "caddy-config" },
+        description: "In-server reverse proxy. Terminates per-app TLS arriving via SNI passthrough; injects the X-Flagship-User identity header on every app request.",
+      },
+    ],
+    configFiles: [
+      {
+        path: "/etc/flagship/server.json",
+        content: serverJson(spec),
+        mode: 0o600,
+      },
+      {
+        path: "/etc/wpa_supplicant/wpa_supplicant.conf",
+        content: wifiConfig(spec.wifi),
+        mode: 0o600,
+      },
+      {
+        path: "/etc/flagship/share-ratio",
+        content: `${spec.shareRatio}\n`,
+      },
+    ],
+  };
+}
+
+function serverJson(spec: BuildSpec): string {
+  return (
+    JSON.stringify(
+      {
+        serverId: spec.newServerId,
+        userId: spec.userId,
+        irkPublicKey: bytesToHex(spec.irkPublicKey),
+        bakPublicKey: bytesToHex(spec.bakPublicKey),
+        swkProvisioningTokenHash: bytesToHex(spec.swkProvisioningTokenHash),
+        issuedAt: spec.issuedAt,
+      },
+      null,
+      2,
+    ) + "\n"
+  );
+}
+
+function wifiConfig(wifi: { ssid: string; psk: string }): string {
+  // Image is single-use-per-machine because the home WiFi PSK lives in it.
+  // Distribute over HTTPS only; flash promptly.
+  return (
+    `ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\n` +
+    `update_config=1\n\n` +
+    `network={\n` +
+    `  ssid=${quote(wifi.ssid)}\n` +
+    `  psk=${quote(wifi.psk)}\n` +
+    `  key_mgmt=WPA-PSK\n` +
+    `}\n`
+  );
+}
+
+function quote(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function assertHexBytes(name: string, b: Bytes, len: number): void {
+  if (b.length !== len) throw new Error(`${name} must be ${len} bytes (got ${b.length})`);
+}
+
+function bytesToHex(b: Bytes): string {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}

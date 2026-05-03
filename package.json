@@ -1,0 +1,28 @@
+{
+  "name": "flagship",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Flagship — personal-cloud ecosystem (phone app + flagshipserver.com + bootable server image)",
+  "workspaces": [
+    "packages/*",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "daemon": "npm --workspace=@flagship/server-daemon run start",
+    "build-image": "npm --workspace=@flagship/bootkey-builder run start --",
+    "web": "npm --workspace=@flagship/web run dev"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

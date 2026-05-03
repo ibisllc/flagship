@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dev: fake phone · Flagship</title>
+    <style>
+      :root { color-scheme: dark light; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { max-width: 38rem; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; }
+      h1 { font-size: 1.5rem; margin: 0; }
+      .tag { color: #888; margin-bottom: 1.5rem; }
+      .nav { color: #888; margin-bottom: 1.5rem; }
+      .nav a { margin-right: 1rem; }
+      .warn {
+        background: #a4400a;
+        color: white;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+      }
+      label { display: block; margin: 1rem 0 0.25rem; font-weight: 600; }
+      input, textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.55rem;
+        border-radius: 6px;
+        border: 1px solid #8886;
+        font: inherit;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 0.9rem;
+        background: transparent;
+        color: inherit;
+      }
+      button {
+        font: inherit;
+        padding: 0.55rem 1.1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        background: #4a8;
+        color: white;
+        border: 0;
+        margin-top: 1rem;
+        margin-right: 0.5rem;
+      }
+      .btn-secondary { background: transparent; color: inherit; border: 1px solid #8884; }
+      pre {
+        background: #1118;
+        color: #ddd;
+        padding: 0.75rem;
+        border-radius: 6px;
+        overflow-x: auto;
+        font-size: 0.78rem;
+        margin-top: 1rem;
+      }
+      .ok { color: #4a8; }
+      .err { color: #a44; }
+    </style>
+  </head>
+  <body>
+    <div class="nav">
+      <a href="/">← home</a>
+      <a href="/login.html">desktop login</a>
+    </div>
+
+    <h1>Dev: fake phone</h1>
+    <p class="tag">
+      Simulates a phone scanning a desktop QR and IRK-signing the pairing claim. Real phone
+      apps live under <code>apps/mobile/</code>. This page is for development demos only.
+    </p>
+    <div class="warn">
+      ⚠ Uses a hardcoded dev IRK seed. Never expose this on a production site.
+    </div>
+
+    <label for="qr">Paste the QR payload</label>
+    <input id="qr" placeholder="flagship://desktop/abc.../deadbeef..." />
+    <p style="color: #888; font-size: 0.85rem; margin-top: 0.4rem;">
+      Hint: open <a href="/login.html" target="_blank">/login.html</a> in another tab and copy the
+      QR's underlying URL via right-click → "Copy image address" or via the displayed session id.
+      You can also use the JS helper below to fetch it from the open desktop tab.
+    </p>
+
+    <button id="approve">Approve pairing</button>
+    <button id="deny" class="btn-secondary">Deny</button>
+
+    <pre id="out">(idle)</pre>
+
+    <script type="module">
+      const out = document.getElementById("out");
+      const qrInput = document.getElementById("qr");
+      const approveBtn = document.getElementById("approve");
+      const denyBtn = document.getElementById("deny");
+
+      // Hardcoded dev UMK seed. The server (when started with FLAGSHIP_DEV=1) registers
+      // the IRK derived from this seed under userId "harry".
+      const DEV_UMK_SEED = new Uint8Array(32).fill(7);
+      const DEV_USER_ID = "harry";
+
+      function bytesToHex(b) {
+        return Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+      }
+
+      function hexToBytes(hex) {
+        const out = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+        return out;
+      }
+
+      // HKDF-SHA256: derive 32 bytes from (umkSeed, info)
+      async function hkdf32(ikm, info) {
+        const baseKey = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+        const salt = new Uint8Array(0);
+        const bits = await crypto.subtle.deriveBits(
+          { name: "HKDF", hash: "SHA-256", salt, info: new TextEncoder().encode(info) },
+          baseKey,
+          256,
+        );
+        return new Uint8Array(bits);
+      }
+
+      // Pack a raw 32-byte Ed25519 seed into PKCS8 format for Web Crypto importKey.
+      function pkcs8FromSeed(seed) {
+        // PKCS8 prefix for Ed25519 private key (RFC 8410 Section 7):
+        // 30 2e 02 01 00 30 05 06 03 2b 65 70 04 22 04 20  + 32 bytes seed
+        const prefix = new Uint8Array([
+          0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70,
+          0x04, 0x22, 0x04, 0x20,
+        ]);
+        const out = new Uint8Array(prefix.length + seed.length);
+        out.set(prefix, 0);
+        out.set(seed, prefix.length);
+        return out;
+      }
+
+      async function deriveIrk(umkSeed) {
+        const seed = await hkdf32(umkSeed, "flagship.irk.v1");
+        const pkcs8 = pkcs8FromSeed(seed);
+        const key = await crypto.subtle.importKey(
+          "pkcs8",
+          pkcs8,
+          { name: "Ed25519" },
+          false,
+          ["sign"],
+        );
+        return { privateKey: key, seed };
+      }
+
+      // Mirrors the rebuild-request canonical bytes shape used by the desktop pairing route.
+      // (See packages/protocol/src/auth.ts canonicalRebuild.)
+      function canonicalPairingClaim(c) {
+        const hex = (b) => bytesToHex(b);
+        return new TextEncoder().encode(
+          "flagship/rebuild/v1" +
+            "|" + c.userId +
+            "|" + c.newServerId +
+            "|" + c.wifiSsid +
+            "|" + hex(c.wifiPskHash) +
+            "|" + c.shareRatio +
+            "|" + c.issuedAt
+        );
+      }
+
+      function parseQrPayload(s) {
+        // flagship://desktop/<sessionId>/<desktopPubKeyHex>
+        const m = s.trim().match(/^flagship:\/\/desktop\/([0-9a-f]{16})\/([0-9a-f]+)$/i);
+        if (!m) throw new Error("payload doesn't match flagship://desktop/<id>/<key>");
+        return { sessionId: m[1], desktopPubKey: hexToBytes(m[2]) };
+      }
+
+      async function generatePhonePub() {
+        // Same trick as the desktop side — generate ECDH P-256 and emit X coordinate as a
+        // 32-byte representative pubkey for the protocol.
+        const kp = await crypto.subtle.generateKey(
+          { name: "ECDH", namedCurve: "P-256" },
+          false,
+          ["deriveKey"],
+        );
+        const raw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
+        return raw.slice(1, 33);
+      }
+
+      async function approve() {
+        out.className = "";
+        out.textContent = "preparing approval…";
+        let parsed;
+        try {
+          parsed = parseQrPayload(qrInput.value);
+        } catch (e) {
+          out.className = "err";
+          out.textContent = "bad QR: " + e.message;
+          return;
+        }
+        try {
+          const phonePub = await generatePhonePub();
+          const issuedAt = Date.now();
+          const claim = {
+            userId: DEV_USER_ID,
+            newServerId: "desktop-pair:" + parsed.sessionId,
+            wifiSsid: bytesToHex(parsed.desktopPubKey),
+            wifiPskHash: phonePub,
+            shareRatio: 0,
+            issuedAt,
+          };
+          const irk = await deriveIrk(DEV_UMK_SEED);
+          const sig = new Uint8Array(
+            await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, canonicalPairingClaim(claim)),
+          );
+          const res = await fetch("/api/desktop/pair/confirm", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              sessionId: parsed.sessionId,
+              userId: DEV_USER_ID,
+              phonePubKey: bytesToHex(phonePub),
+              irkSignature: bytesToHex(sig),
+              issuedAt,
+            }),
+          });
+          const body = await res.json();
+          out.className = res.ok ? "ok" : "err";
+          out.textContent = "HTTP " + res.status + "\n" + JSON.stringify(body, null, 2);
+        } catch (e) {
+          out.className = "err";
+          out.textContent = "error: " + (e?.message ?? e) +
+            "\n\n(Web Crypto Ed25519 needs Chrome 122+, Firefox 130+, or Safari 17.4+.)";
+        }
+      }
+
+      function deny() {
+        out.className = "";
+        out.textContent = "deny is a no-op in v0 — the desktop session simply expires.";
+      }
+
+      approveBtn.addEventListener("click", approve);
+      denyBtn.addEventListener("click", deny);
+    </script>
+  </body>
+</html>
