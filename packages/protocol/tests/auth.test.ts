@@ -6,6 +6,7 @@ import {
   signMembershipMutation,
   signMigrationRequest,
   signRebuildRequest,
+  signRegisterServer,
   signRevocation,
   verifyBootApproval,
   verifyInvite,
@@ -13,14 +14,16 @@ import {
   verifyMembershipMutation,
   verifyMigrationRequest,
   verifyRebuildRequest,
+  verifyRegisterServer,
   verifyRevocation,
   type BootChallenge,
   type ImageRebuildRequest,
   type MembershipMutation,
   type MigrationRequest,
+  type RegisterServer,
   type ServerRevocation,
 } from "../src/auth.js";
-import { deriveBAK, deriveIRK } from "../src/keys.js";
+import { deriveBAK, deriveIRK, deriveSWK, deriveSTK } from "../src/keys.js";
 
 const umk = { seed: new Uint8Array(32).fill(42) };
 
@@ -319,5 +322,40 @@ describe("IRK migration request", () => {
     const sig = signMigrationRequest(m, irk);
     const redirected: MigrationRequest = { ...m, toUser: "attacker" };
     expect(verifyMigrationRequest(redirected, sig, irk.publicKey)).toBe(false);
+  });
+});
+
+describe("IRK server registration", () => {
+  const irk = deriveIRK(umk);
+  const swk = deriveSWK(umk, "srv-1");
+  const stk = deriveSTK(swk);
+  const reg: RegisterServer = {
+    userId: "harry",
+    serverId: "srv-1",
+    stkPub: stk.publicKey,
+    issuedAt: 1735689600000,
+  };
+
+  it("phone IRK-signed registration verifies", () => {
+    const sig = signRegisterServer(reg, irk);
+    expect(verifyRegisterServer(reg, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("rejects when serverId is changed (cannot redirect to attacker server)", () => {
+    const sig = signRegisterServer(reg, irk);
+    const tampered: RegisterServer = { ...reg, serverId: "attacker-srv" };
+    expect(verifyRegisterServer(tampered, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects when stkPub is swapped (cannot bind a different key)", () => {
+    const sig = signRegisterServer(reg, irk);
+    const tampered: RegisterServer = { ...reg, stkPub: new Uint8Array(32).fill(0xff) };
+    expect(verifyRegisterServer(tampered, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects with the wrong signer's IRK pubkey", () => {
+    const sig = signRegisterServer(reg, irk);
+    const otherIrk = deriveIRK({ seed: new Uint8Array(32).fill(99) });
+    expect(verifyRegisterServer(reg, sig, otherIrk.publicKey)).toBe(false);
   });
 });

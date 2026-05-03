@@ -8,6 +8,12 @@ import { registerQrAuth } from "./routes/qrAuth.js";
 import { registerSecurityReport } from "./routes/securityReport.js";
 import { registerDesktopPair, type DesktopPairOptions } from "./routes/desktopPair.js";
 import { registerMigration, type MigrationOptions } from "./routes/migration.js";
+import {
+  registerServerRegistry,
+  InMemoryServerRegistry,
+  authLookupFromRegistry,
+  type ServerRegistry,
+} from "./routes/serverRegistry.js";
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import { TunnelRegistry } from "./tunnel/registry.js";
@@ -17,6 +23,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export interface ServerHandle {
   app: FastifyInstance;
   registry: TunnelRegistry;
+  serverRegistry: ServerRegistry;
   router: RunningSniRouter | null;
   stopHub: () => Promise<void>;
   close(): Promise<void>;
@@ -25,6 +32,10 @@ export interface ServerHandle {
 export interface BuildServerOptions {
   migration?: MigrationOptions;
   desktopPair?: DesktopPairOptions;
+  /** Pre-built server registry (tests pass a seeded one). Defaults to in-memory. */
+  serverRegistry?: ServerRegistry;
+  /** Resolves a userId to its IRK pubkey for registration verification. */
+  resolveUserIrk?: (userId: string) => Uint8Array | null;
 }
 
 /**
@@ -44,6 +55,8 @@ function devDesktopPairOptions(): DesktopPairOptions | undefined {
 
 export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false });
+  const serverRegistry = opts.serverRegistry ?? new InMemoryServerRegistry();
+  app.decorate("serverRegistry", serverRegistry);
 
   app.get("/api/health", async () => ({ ok: true, service: "flagshipserver.com" }));
 
@@ -53,6 +66,13 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   registerDesktopPair(app, opts.desktopPair ?? devDesktopPairOptions());
   if (opts.migration) registerMigration(app, opts.migration);
 
+  if (opts.resolveUserIrk) {
+    registerServerRegistry(app, {
+      registry: serverRegistry,
+      resolveUserIrk: opts.resolveUserIrk,
+    });
+  }
+
   app.register(fastifyStatic, {
     root: resolve(__dirname, "../public"),
     prefix: "/",
@@ -60,6 +80,12 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   });
 
   return app;
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    serverRegistry: ServerRegistry;
+  }
 }
 
 export async function start(opts: {
@@ -71,9 +97,12 @@ export async function start(opts: {
   const host = opts.host ?? "0.0.0.0";
 
   const app = buildServer();
+  const serverRegistry = app.serverRegistry;
   const registry = new TunnelRegistry();
   await app.listen({ port: httpPort, host });
-  const stopHub = startTunnelHub(app.server, registry);
+  const stopHub = startTunnelHub(app.server, registry, {
+    authLookup: authLookupFromRegistry(serverRegistry),
+  });
 
   let router: RunningSniRouter | null = null;
   if (opts.tunnelTcpPort !== undefined) {
@@ -87,6 +116,7 @@ export async function start(opts: {
   return {
     app,
     registry,
+    serverRegistry,
     router,
     stopHub,
     async close() {

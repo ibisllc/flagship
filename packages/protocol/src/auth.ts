@@ -33,6 +33,20 @@ const TAG_MIGRATION = "flagship/migration/v1";
 const TAG_INVITE = "flagship/invite/v1";
 const TAG_INVITE_ACCEPT = "flagship/invite-accept/v1";
 const TAG_TUNNEL_HELLO = "flagship/tunnel-hello/v1";
+const TAG_REGISTER_SERVER = "flagship/register-server/v1";
+
+/**
+ * Phone-signed server-registration payload posted to the control plane at
+ * image-build time. Binds the new server's `serverId` to its STK pubkey
+ * (which the phone derives from UMK + serverId). Tunnel hub's authLookup
+ * reads from this registration to verify HELLO signatures.
+ */
+export interface RegisterServer {
+  userId: UserId;
+  serverId: ServerId;
+  stkPub: Bytes;
+  issuedAt: number;
+}
 
 /** HELLO frame signed by the Flagship server's BAK on tunnel connect. */
 export interface TunnelHello {
@@ -146,6 +160,12 @@ function canonicalTunnelHello(h: TunnelHello): Bytes {
   const subs = [...h.subdomains].sort().join(",");
   return new TextEncoder().encode(
     `${TAG_TUNNEL_HELLO}|${h.serverId}|${subs}|${hex(h.nonce)}|${h.issuedAt}`,
+  );
+}
+
+function canonicalRegisterServer(r: RegisterServer): Bytes {
+  return new TextEncoder().encode(
+    `${TAG_REGISTER_SERVER}|${r.userId}|${r.serverId}|${hex(r.stkPub)}|${r.issuedAt}`,
   );
 }
 
@@ -276,6 +296,18 @@ export function signTunnelHello(h: TunnelHello, bak: Keypair): Bytes {
 export function verifyTunnelHello(h: TunnelHello, sig: Bytes, bakPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalTunnelHello(h), bakPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signRegisterServer(r: RegisterServer, irk: Keypair): Bytes {
+  return ed.sign(canonicalRegisterServer(r), irk.privateKey);
+}
+
+export function verifyRegisterServer(r: RegisterServer, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRegisterServer(r), irkPub);
   } catch {
     return false;
   }
