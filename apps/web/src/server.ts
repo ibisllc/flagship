@@ -14,6 +14,13 @@ import {
   authLookupFromRegistry,
   type ServerRegistry,
 } from "./routes/serverRegistry.js";
+import {
+  registerPushRelay,
+  InMemoryPushTokenStore,
+  NoopPushDispatcher,
+  type PushDispatcher,
+  type PushTokenStore,
+} from "./routes/pushRelay.js";
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import { TunnelRegistry } from "./tunnel/registry.js";
@@ -36,6 +43,9 @@ export interface BuildServerOptions {
   serverRegistry?: ServerRegistry;
   /** Resolves a userId to its IRK pubkey for registration verification. */
   resolveUserIrk?: (userId: string) => Uint8Array | null;
+  /** Push-relay components. Both must be present to expose the routes. */
+  pushTokenStore?: PushTokenStore;
+  pushDispatcher?: PushDispatcher;
 }
 
 /**
@@ -73,6 +83,11 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
     });
   }
 
+  const pushStore = opts.pushTokenStore ?? new InMemoryPushTokenStore();
+  const pushDispatcher = opts.pushDispatcher ?? new NoopPushDispatcher();
+  registerPushRelay(app, { store: pushStore, dispatcher: pushDispatcher });
+  app.decorate("pushTokenStore", pushStore);
+
   app.register(fastifyStatic, {
     root: resolve(__dirname, "../public"),
     prefix: "/",
@@ -85,6 +100,7 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 declare module "fastify" {
   interface FastifyInstance {
     serverRegistry: ServerRegistry;
+    pushTokenStore: PushTokenStore;
   }
 }
 
