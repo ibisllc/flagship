@@ -15,6 +15,7 @@ import {
   type ServerRegistry,
 } from "./routes/serverRegistry.js";
 import { registerServerRevocation } from "./routes/serverRevocation.js";
+import { registerAccountRecovery } from "./routes/accountRecovery.js";
 import {
   registerPushRelay,
   InMemoryPushTokenStore,
@@ -92,6 +93,14 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   const pushDispatcher = opts.pushDispatcher ?? new NoopPushDispatcher();
   registerPushRelay(app, { store: pushStore, dispatcher: pushDispatcher });
   app.decorate("pushTokenStore", pushStore);
+
+  if (opts.resolveUserIrk) {
+    registerAccountRecovery(app, {
+      registry: serverRegistry,
+      pushTokenStore: pushStore,
+      resolveUserIrk: opts.resolveUserIrk,
+    });
+  }
 
   app.register(fastifyStatic, {
     root: resolve(__dirname, "../public"),

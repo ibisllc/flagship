@@ -34,6 +34,7 @@ const TAG_INVITE = "flagship/invite/v1";
 const TAG_INVITE_ACCEPT = "flagship/invite-accept/v1";
 const TAG_TUNNEL_HELLO = "flagship/tunnel-hello/v1";
 const TAG_REGISTER_SERVER = "flagship/register-server/v1";
+const TAG_ACCOUNT_RECOVERY = "flagship/account-recovery/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -45,6 +46,22 @@ export interface RegisterServer {
   userId: UserId;
   serverId: ServerId;
   stkPub: Bytes;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed claim posted by a recovered phone after iCloud/Google Block
+ * Store sync. The IRK is unchanged (it's deterministically derived from UMK),
+ * so the same signature scheme that proves account ownership is reused. The
+ * `newPushTokenHash` lets the phone publish a fresh push token without
+ * leaking the previous one to the control plane.
+ */
+export interface AccountRecovery {
+  userId: UserId;
+  /** SHA-256 of the new push token, lowercased hex (32 bytes). */
+  newPushTokenHash: Bytes;
+  /** Claim of which platform the new device is running ('apns' | 'fcm'). */
+  platform: "apns" | "fcm";
   issuedAt: number;
 }
 
@@ -166,6 +183,12 @@ function canonicalTunnelHello(h: TunnelHello): Bytes {
 function canonicalRegisterServer(r: RegisterServer): Bytes {
   return new TextEncoder().encode(
     `${TAG_REGISTER_SERVER}|${r.userId}|${r.serverId}|${hex(r.stkPub)}|${r.issuedAt}`,
+  );
+}
+
+function canonicalAccountRecovery(r: AccountRecovery): Bytes {
+  return new TextEncoder().encode(
+    `${TAG_ACCOUNT_RECOVERY}|${r.userId}|${hex(r.newPushTokenHash)}|${r.platform}|${r.issuedAt}`,
   );
 }
 
@@ -308,6 +331,18 @@ export function signRegisterServer(r: RegisterServer, irk: Keypair): Bytes {
 export function verifyRegisterServer(r: RegisterServer, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalRegisterServer(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signAccountRecovery(r: AccountRecovery, irk: Keypair): Bytes {
+  return ed.sign(canonicalAccountRecovery(r), irk.privateKey);
+}
+
+export function verifyAccountRecovery(r: AccountRecovery, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalAccountRecovery(r), irkPub);
   } catch {
     return false;
   }
