@@ -73,6 +73,11 @@ function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+function clamp(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return lo;
+  return Math.max(lo, Math.min(hi, Math.floor(n)));
+}
+
 export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   const app = Fastify({ logger: false });
 
@@ -407,6 +412,98 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       };
     },
   );
+
+  // ---- Data dashboard (read-only, paged) --------------------------------
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string };
+  }>("/data/postgres/:appId/tables", async (req, reply) => {
+    if (!ctx.deployedApps || !ctx.dataProvisioner) {
+      return reply.status(503).send({ error: "data subsystem missing" });
+    }
+    if (!ctx.resolveSession(req.query.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const entry = ctx.deployedApps.get(req.params.appId);
+    if (!entry) return reply.status(404).send({ error: "app not found" });
+    const db = entry.data?.postgres?.database;
+    if (!db) return reply.status(404).send({ error: "app does not use postgres" });
+    const tables = await ctx.dataProvisioner.listPostgresTables(db);
+    return { database: db, tables };
+  });
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string; sql?: string; max?: string };
+  }>("/data/postgres/:appId/query", async (req, reply) => {
+    if (!ctx.deployedApps || !ctx.dataProvisioner) {
+      return reply.status(503).send({ error: "data subsystem missing" });
+    }
+    if (!ctx.resolveSession(req.query.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const entry = ctx.deployedApps.get(req.params.appId);
+    if (!entry) return reply.status(404).send({ error: "app not found" });
+    const db = entry.data?.postgres?.database;
+    if (!db) return reply.status(404).send({ error: "app does not use postgres" });
+    if (typeof req.query.sql !== "string" || req.query.sql.length === 0) {
+      return reply.status(400).send({ error: "sql required" });
+    }
+    const max = clamp(Number(req.query.max ?? 100), 1, 1000);
+    try {
+      const out = await ctx.dataProvisioner.queryPostgres({
+        db,
+        sql: req.query.sql,
+        maxRows: max,
+      });
+      return { database: db, columns: out.columns, rows: out.rows, max };
+    } catch (e) {
+      return reply.status(500).send({ error: "query failed", message: errMsg(e) });
+    }
+  });
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string; prefix?: string; max?: string };
+  }>("/data/objects/:appId/list", async (req, reply) => {
+    if (!ctx.deployedApps || !ctx.dataProvisioner) {
+      return reply.status(503).send({ error: "data subsystem missing" });
+    }
+    if (!ctx.resolveSession(req.query.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const entry = ctx.deployedApps.get(req.params.appId);
+    if (!entry) return reply.status(404).send({ error: "app not found" });
+    const bucket = entry.data?.objects?.bucket;
+    if (!bucket) return reply.status(404).send({ error: "app does not use objects" });
+    const max = clamp(Number(req.query.max ?? 200), 1, 5000);
+    const objects = await ctx.dataProvisioner.listObjects(
+      bucket,
+      typeof req.query.prefix === "string" ? req.query.prefix : "",
+      max,
+    );
+    return { bucket, objects, max };
+  });
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string; max?: string };
+  }>("/data/kv/:appId/keys", async (req, reply) => {
+    if (!ctx.deployedApps || !ctx.dataProvisioner) {
+      return reply.status(503).send({ error: "data subsystem missing" });
+    }
+    if (!ctx.resolveSession(req.query.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const entry = ctx.deployedApps.get(req.params.appId);
+    if (!entry) return reply.status(404).send({ error: "app not found" });
+    const prefix = entry.data?.kv?.prefix;
+    if (!prefix) return reply.status(404).send({ error: "app does not use kv" });
+    const max = clamp(Number(req.query.max ?? 200), 1, 5000);
+    const keys = await ctx.dataProvisioner.listKvKeys(prefix, max);
+    return { prefix, keys, max };
+  });
 
   // ---- Phone-state backup (opaque SWK-encrypted blob) -------------------
 

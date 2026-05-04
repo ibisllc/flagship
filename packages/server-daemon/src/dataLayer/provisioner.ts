@@ -102,6 +102,25 @@ export class DataProvisioner {
     return out;
   }
 
+  // Read-only accessors used by the data dashboard. Each throws if the
+  // corresponding admin isn't configured.
+  async listPostgresTables(db: string): Promise<string[]> {
+    if (!this.opts.postgres) throw new Error("postgres admin not configured");
+    return this.opts.postgres.listTables(db);
+  }
+  async queryPostgres(args: { db: string; sql: string; maxRows: number }): Promise<{ columns: string[]; rows: unknown[][] }> {
+    if (!this.opts.postgres) throw new Error("postgres admin not configured");
+    return this.opts.postgres.query(args);
+  }
+  async listObjects(bucket: string, prefix: string, max: number): Promise<{ key: string; size: number }[]> {
+    if (!this.opts.objects) throw new Error("objects admin not configured");
+    return this.opts.objects.listObjects(bucket, prefix, max);
+  }
+  async listKvKeys(prefix: string, max: number): Promise<string[]> {
+    if (!this.opts.kv) throw new Error("kv admin not configured");
+    return this.opts.kv.listKeys(prefix, max);
+  }
+
   async deprovisionApp(args: { username: string; appName: string; stores: AppDataStores }): Promise<void> {
     const naming = { username: args.username, appName: args.appName };
     if (args.stores.postgres && this.opts.postgres) {
