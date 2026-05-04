@@ -19,13 +19,20 @@ import {
   generateEphemeralPub,
   bytesToHex,
   hexToBytes,
-} from "/webapp/keystore.js";
-import { hasBarcodeDetector, parseQrPayload, scanWithCamera } from "/webapp/qrScanner.js";
+} from "./keystore.js";
+import { hasBarcodeDetector, parseQrPayload, scanWithCamera } from "./qrScanner.js";
+import {
+  loadProviders,
+  addProvider,
+  removeProvider,
+  setActive,
+  PROMO_ID,
+} from "./providers.js";
 
 const $ = (id) => document.getElementById(id);
 const setSubtitle = (s) => ($("subtitle").textContent = s);
 
-const VIEWS = ["view-bootstrap", "view-unlock", "view-home", "view-pair"];
+const VIEWS = ["view-bootstrap", "view-unlock", "view-home", "view-pair", "view-settings"];
 function show(view) {
   for (const v of VIEWS) $(v).classList.toggle("hidden", v !== view);
 }
@@ -53,6 +60,7 @@ async function unlock(seed, username) {
   session.irk = await deriveIrkFromSeed(seed);
   session.username = username ?? localStorage.getItem("flagship.username") ?? "";
   await renderHome();
+  await renderActiveProviderChip();
   show("view-home");
 }
 
@@ -112,6 +120,180 @@ function escapeHtml(s) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+/* ---------- providers (promo + BYOK) ---------- */
+
+function maskKey(k) {
+  if (!k) return "";
+  if (k.length < 12) return "••••";
+  return k.slice(0, 4) + "••••" + k.slice(-4);
+}
+
+function renderQuotaMeter(quota) {
+  const lifeFrac = Math.min(1, quota.lifetimeUsed / Math.max(1, quota.lifetimeTotal));
+  const winFrac = Math.min(1, quota.windowUsed / Math.max(1, quota.windowTotal));
+  const fmt = (n) => Math.round(n).toLocaleString();
+  return `
+    <div style="margin-top: 0.6rem;">
+      <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--fg-mute);">
+        <span>Lifetime</span><span>${fmt(quota.lifetimeUsed)} / ${fmt(quota.lifetimeTotal)}</span>
+      </div>
+      <div style="height: 6px; background: #ffffff10; border-radius: 999px; overflow:hidden; margin-top: 0.25rem;">
+        <div style="height: 100%; width: ${(lifeFrac * 100).toFixed(0)}%; background: ${lifeFrac >= 0.8 ? "var(--warn)" : "var(--accent)"};"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--fg-mute); margin-top: 0.5rem;">
+        <span>Last 24h</span><span>${fmt(quota.windowUsed)} / ${fmt(quota.windowTotal)}</span>
+      </div>
+      <div style="height: 6px; background: #ffffff10; border-radius: 999px; overflow:hidden; margin-top: 0.25rem;">
+        <div style="height: 100%; width: ${(winFrac * 100).toFixed(0)}%; background: ${winFrac >= 0.8 ? "var(--warn)" : "var(--accent)"};"></div>
+      </div>
+    </div>
+  `;
+}
+
+async function fetchPromoQuota() {
+  if (!session.umk || !session.username) return null;
+  const issuedAt = Date.now();
+  const canonical = new TextEncoder().encode(
+    `flagship/llm-promo-quota/v1|${session.username}|${issuedAt}`,
+  );
+  const sig = await signWithIrk(session.umk, canonical);
+  try {
+    const r = await fetch("/api/llm-promo/quota", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        request: { userId: session.username, issuedAt },
+        signature: bytesToHex(sig),
+      }),
+    });
+    if (!r.ok) return null;
+    return r.json();
+  } catch {
+    return null;
+  }
+}
+
+async function renderProviders() {
+  const list = $("providers-list");
+  list.innerHTML = "";
+  if (!session.umk) {
+    list.innerHTML = '<div class="card placeholder">unlock first</div>';
+    return;
+  }
+  const stored = await loadProviders(session.umk);
+  const quota = await fetchPromoQuota();
+
+  // Promo entry on top.
+  const promoActive = stored.activeId === PROMO_ID;
+  const promoCard = document.createElement("div");
+  promoCard.className = "card";
+  promoCard.style.borderLeft = `3px solid ${promoActive ? "var(--accent)" : "transparent"}`;
+  promoCard.innerHTML = `
+    <div class="row" style="align-items: flex-start;">
+      <div>
+        <div style="font-weight: 600;">Flagship promo <span class="pill">free credits</span></div>
+        <div style="color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.25rem;">
+          Hosted GPU running an open-source coding model. Prompts are processed by flagshipserver.com on the way to our GPU.
+        </div>
+      </div>
+      <button class="${promoActive ? "" : "secondary"}" data-action="set-active" data-id="${PROMO_ID}">${promoActive ? "active" : "use"}</button>
+    </div>
+    ${quota ? renderQuotaMeter(quota) : '<p style="margin: 0.6rem 0 0; color: var(--fg-mute); font-size: 0.85rem;">quota: (sign in to your account on a server first)</p>'}
+  `;
+  list.appendChild(promoCard);
+
+  // "Almost out" banner toggles based on quota.
+  const banner = $("promo-banner-low");
+  if (banner) banner.style.display = (quota && (quota.almostOut || quota.exhausted)) ? "block" : "none";
+
+  // BYOK entries.
+  for (const e of stored.entries) {
+    const isActive = stored.activeId === e.id;
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.borderLeft = `3px solid ${isActive ? "var(--accent)" : "transparent"}`;
+    card.style.marginTop = "0.6rem";
+    card.innerHTML = `
+      <div class="row" style="align-items: flex-start;">
+        <div>
+          <div style="font-weight: 600;">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
+          <div class="value" style="font-size: 0.78rem; margin-top: 0.25rem;">${escapeHtml(maskKey(e.apiKey))}</div>
+          ${e.defaultModel ? `<div style="color: var(--fg-mute); font-size: 0.78rem;">default: ${escapeHtml(e.defaultModel)}</div>` : ""}
+        </div>
+        <div style="display:flex; gap: 0.4rem;">
+          <button class="${isActive ? "" : "secondary"}" data-action="set-active" data-id="${escapeHtml(e.id)}">${isActive ? "active" : "use"}</button>
+          <button class="secondary" data-action="remove" data-id="${escapeHtml(e.id)}">remove</button>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  }
+
+  // Wire button handlers (event delegation would be cleaner but the list is short).
+  list.querySelectorAll('[data-action="set-active"]').forEach((b) => {
+    b.addEventListener("click", async () => {
+      try {
+        await setActive(session.umk, b.getAttribute("data-id"));
+        await renderProviders();
+        await renderActiveProviderChip();
+        toast("active provider updated");
+      } catch (e) {
+        toast(e.message, "err");
+      }
+    });
+  });
+  list.querySelectorAll('[data-action="remove"]').forEach((b) => {
+    b.addEventListener("click", async () => {
+      if (!confirm("Remove this provider?")) return;
+      try {
+        await removeProvider(session.umk, b.getAttribute("data-id"));
+        await renderProviders();
+        await renderActiveProviderChip();
+      } catch (e) {
+        toast(e.message, "err");
+      }
+    });
+  });
+}
+
+async function renderActiveProviderChip() {
+  const chip = $("home-active-provider");
+  if (!chip || !session.umk) return;
+  const stored = await loadProviders(session.umk);
+  if (stored.activeId === PROMO_ID) {
+    const quota = await fetchPromoQuota();
+    chip.innerHTML = `
+      <div class="row">
+        <div>
+          <div style="font-weight: 600;">Flagship promo</div>
+          <div style="color: var(--fg-mute); font-size: 0.82rem;">free credits — prompts proxied by flagshipserver.com</div>
+        </div>
+        <button class="secondary" id="chip-settings">manage</button>
+      </div>
+      ${quota ? renderQuotaMeter(quota) : ""}
+    `;
+  } else {
+    const e = stored.entries.find((x) => x.id === stored.activeId);
+    if (!e) {
+      chip.innerHTML = '<p style="margin:0; color:var(--fg-mute); font-size:0.9rem;">no active provider — open settings</p>';
+      return;
+    }
+    chip.innerHTML = `
+      <div class="row">
+        <div>
+          <div style="font-weight: 600;">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
+          <div style="color: var(--fg-mute); font-size: 0.82rem;">key on this device — flagshipserver.com cannot read prompts</div>
+        </div>
+        <button class="secondary" id="chip-settings">manage</button>
+      </div>
+    `;
+  }
+  $("chip-settings")?.addEventListener("click", async () => {
+    show("view-settings");
+    await renderProviders();
+  });
 }
 
 /* ---------- pairing flow ---------- */
@@ -273,13 +455,59 @@ async function handleReset() {
 
 /* ---------- boot ---------- */
 
+async function handleAddProvider() {
+  $("add-provider-form").classList.remove("hidden");
+}
+
+async function handleSaveProvider() {
+  if (!session.umk) return toast("unlock first", "err");
+  const provider = $("np-provider").value;
+  const label = $("np-label").value.trim();
+  const apiKey = $("np-key").value;
+  const baseUrl = $("np-base").value.trim();
+  const defaultModel = $("np-model").value.trim();
+  if (!label) return toast("label required", "err");
+  if (!apiKey) return toast("api key required", "err");
+  try {
+    await addProvider(session.umk, {
+      provider,
+      label,
+      apiKey,
+      baseUrl: baseUrl || undefined,
+      defaultModel: defaultModel || undefined,
+    });
+  } catch (e) {
+    return toast(e.message, "err");
+  }
+  // Wipe inputs and re-render.
+  $("np-label").value = "";
+  $("np-key").value = "";
+  $("np-base").value = "";
+  $("np-model").value = "";
+  $("add-provider-form").classList.add("hidden");
+  await renderProviders();
+  toast("provider saved");
+}
+
 async function boot() {
   $("bootstrap-go").addEventListener("click", handleBootstrap);
   $("unlock-go").addEventListener("click", handleUnlock);
   $("pair-with-server").addEventListener("click", handlePairToServer);
   $("pair-paste-go").addEventListener("click", handlePastePair);
-  $("reset-device").addEventListener("click", handleReset);
   $("pair-cancel").addEventListener("click", () => show("view-home"));
+
+  $("open-settings")?.addEventListener("click", async () => {
+    show("view-settings");
+    await renderProviders();
+  });
+  $("settings-back")?.addEventListener("click", async () => {
+    show("view-home");
+    await renderActiveProviderChip();
+  });
+  $("settings-reset")?.addEventListener("click", handleReset);
+  $("add-provider-go")?.addEventListener("click", handleAddProvider);
+  $("np-save")?.addEventListener("click", handleSaveProvider);
+  $("np-cancel")?.addEventListener("click", () => $("add-provider-form").classList.add("hidden"));
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");

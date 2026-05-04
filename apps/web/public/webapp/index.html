@@ -68,9 +68,61 @@
           </div>
           <div class="row">
             <button class="secondary" id="pair-with-server">Pair to a server</button>
-            <button class="secondary" id="reset-device">Reset device</button>
+            <button class="secondary" id="open-settings">Settings</button>
           </div>
         </div>
+
+        <h2 style="margin-top: 1.5rem;">AI providers</h2>
+        <div class="card" id="home-active-provider">
+          <p style="margin:0; color: var(--fg-mute); font-size: 0.9rem;">loading…</p>
+        </div>
+      </section>
+
+      <!-- View 5: Settings — providers, identity, reset. -->
+      <section id="view-settings" class="hidden">
+        <h2>AI providers</h2>
+        <div class="card warning" id="promo-banner-low" style="display:none;">
+          <strong>You're almost out of free Flagship tokens.</strong>
+          <p style="margin: 0.4rem 0 0; color: var(--fg-mute); font-size: 0.85rem;">
+            Add your own LLM API key below to keep building.
+          </p>
+        </div>
+        <div id="providers-list"></div>
+        <button id="add-provider-go" style="margin-top: 0.6rem; width: 100%;">+ Add provider</button>
+
+        <div class="card hidden" id="add-provider-form" style="margin-top: 0.6rem;">
+          <h3 style="margin-top: 0;">New provider</h3>
+          <label for="np-provider" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Provider</label>
+          <select id="np-provider"
+            style="width: 100%; padding: 0.7rem 0.9rem; border-radius: 10px; background: var(--bg); color: var(--fg); border: 1px solid #ffffff20; font: inherit; margin-bottom: 0.6rem;">
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+            <option value="google">Google Gemini</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="ollama">Ollama (local)</option>
+          </select>
+          <label for="np-label" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Label</label>
+          <input id="np-label" type="text" placeholder="personal / work / home-ollama" />
+          <label for="np-key" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase; margin-top: 0.6rem;">API key</label>
+          <input id="np-key" type="password" placeholder="sk-…" autocomplete="off" />
+          <label for="np-base" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase; margin-top: 0.6rem;">Base URL <span style="text-transform: none; font-size: 0.72rem;">(optional)</span></label>
+          <input id="np-base" type="text" placeholder="https://your-proxy.example" />
+          <label for="np-model" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase; margin-top: 0.6rem;">Default model <span style="text-transform: none; font-size: 0.72rem;">(optional)</span></label>
+          <input id="np-model" type="text" placeholder="claude-sonnet-4-6 / gpt-4 / llama3" />
+          <div style="display: flex; gap: 0.6rem; margin-top: 0.8rem;">
+            <button id="np-save" style="flex: 1;">Save</button>
+            <button class="secondary" id="np-cancel" style="flex: 1;">Cancel</button>
+          </div>
+          <p style="margin: 0.6rem 0 0; color: var(--fg-mute); font-size: 0.78rem;">
+            Your key stays on this device, wrapped under your passphrase. flagshipserver.com never sees it.
+          </p>
+        </div>
+
+        <h2 style="margin-top: 1.5rem;">Danger zone</h2>
+        <div class="card">
+          <button class="secondary" id="settings-reset" style="width: 100%;">Reset device</button>
+        </div>
+        <button class="secondary" id="settings-back" style="width: 100%; margin-top: 0.6rem;">← Back</button>
       </section>
 
       <!-- View 4: Pairing — webapp scans a server's QR to take on the "phone" role -->
