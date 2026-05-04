@@ -299,7 +299,18 @@ export async function start(opts: {
   const httpPort = opts.httpPort ?? Number(process.env.PORT) ?? 3000;
   const host = opts.host ?? "0.0.0.0";
 
-  const app = buildServer();
+  // FLAGSHIP_SURFACE selects which routes this binary serves at boot:
+  //   services → flagship.services (traffic + peer mesh)
+  //   com      → flagshipserver.com (identity surface; usually deployed
+  //              as the Cloudflare Worker in apps/com instead)
+  //   both     → dev / single-machine deploy default
+  const surface =
+    process.env.FLAGSHIP_SURFACE === "services" ||
+    process.env.FLAGSHIP_SURFACE === "com" ||
+    process.env.FLAGSHIP_SURFACE === "both"
+      ? (process.env.FLAGSHIP_SURFACE as "services" | "com" | "both")
+      : "both";
+  const app = buildServer({ surface });
   const serverRegistry = app.serverRegistry;
   const registry = new TunnelRegistry();
   await app.listen({ port: httpPort, host });

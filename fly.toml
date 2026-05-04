@@ -1,0 +1,59 @@
+# flagship.services — flagship.services on Fly.
+#
+# This app hosts the Fastify control-plane API in surface=services mode:
+#   - /api/peer-backup/{announce,request-peers,peer-confirm}
+#   - /api/services-zone/{publish-server,dns-01-publish,dns-01-delete}
+#   - /tunnel WebSocket (residential daemons hold open)
+#   - GET /api/health
+#
+# `flagshipserver.com` runs on Cloudflare Workers and reverse-proxies any
+# /api/* it receives to this Fly app via SERVICES_BASE_URL=https://flagship.services.
+#
+# DEFERRED: raw-TCP SNI passthrough on :443 for `*.<server>.<user>.flagship.services`.
+# That needs a SECOND Fly app on a separate anycast IP because TLS-terminated
+# and TLS-passthrough can't share an external :443 on the same app. Land it
+# when there are user-deployed apps to actually serve.
+
+app = "flagship-services"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = "5s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  FLAGSHIP_SURFACE = "services"
+
+# HTTPS API. Fly issues a Let's Encrypt cert for flagship.services
+# (run `flyctl certs add flagship.services` after first deploy).
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 800
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+
+[checks]
+  [checks.health]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/health"
+    port = 3000
+    protocol = "http"
+    timeout = "5s"
+    type = "http"

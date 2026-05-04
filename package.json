@@ -6,7 +6,8 @@
   "license": "BUSL-1.1",
   "workspaces": [
     "packages/*",
-    "apps/web"
+    "apps/web",
+    "apps/com"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

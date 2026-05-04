@@ -1,0 +1,21 @@
+name = "flagship-com"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets — marketing pages, /webapp/, /deck/, /security pages,
+# /.well-known/security.txt. Wrangler will upload everything in this
+# directory to Cloudflare's static edge.
+[assets]
+directory = "../web/public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# Don't intercept paths the Worker explicitly handles (every /api/*
+# call must hit the Worker, not the asset edge).
+run_worker_first = ["/api/*"]
+
+[vars]
+SERVICES_BASE_URL = "https://flagship.services"
+# Cloudflare Worker → Fly app shared secret. Set with:
+#   wrangler secret put SERVICES_HMAC_KEY
+# (NOT in this file — secrets live in CF dashboard.)
