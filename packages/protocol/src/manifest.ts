@@ -30,10 +30,31 @@ export interface AppRuntime {
 }
 
 export interface AppData {
-  /** Single persistent volume mount path inside the container. */
-  path: string;
+  /**
+   * Optional ephemeral scratch path inside the container. Persistence across
+   * restarts is NOT guaranteed — apps that need durable state must use one
+   * of the unified-data-layer stores below. Kept for niche cases (e.g. a
+   * compile cache) where survival across container restarts is unnecessary.
+   */
+  path?: string;
   /** Subpaths to exclude when migrating data. */
   excludes?: string[];
+  /**
+   * Unified data-layer access. Vibe-coded apps must use these for persistent
+   * state — Postgres for relational, MinIO for blobs/files, Redis for
+   * cache/pubsub. The runtime injects FLAGSHIP_PG_URL / FLAGSHIP_S3_* /
+   * FLAGSHIP_REDIS_URL into the container's env when each is enabled.
+   *
+   * Names are scoped to `<username>_<appname>` so the data layer is
+   * portable: `pg_dump` filtered on the prefix is the migration unit.
+   */
+  stores?: AppDataStores;
+}
+
+export interface AppDataStores {
+  postgres?: boolean;
+  objects?: boolean;
+  kv?: boolean;
 }
 
 export interface AppNetwork {
@@ -167,8 +188,16 @@ function parseData(v: unknown, e: (m: string) => void): AppData | undefined {
     return undefined;
   }
   const d = v as Record<string, unknown>;
-  const path = stringField(d, "data.path", e, "path");
-  if (path && !path.startsWith("/")) e("data.path must be absolute (starting with /)");
+  let path: string | undefined;
+  if (d.path !== undefined) {
+    if (typeof d.path !== "string" || d.path.length === 0) {
+      e("data.path must be a non-empty string when present");
+    } else if (!d.path.startsWith("/")) {
+      e("data.path must be absolute (starting with /)");
+    } else {
+      path = d.path;
+    }
+  }
   let excludes: string[] | undefined;
   if (d.excludes !== undefined) {
     if (!Array.isArray(d.excludes)) {
@@ -184,8 +213,31 @@ function parseData(v: unknown, e: (m: string) => void): AppData | undefined {
       }
     }
   }
-  if (!path) return undefined;
-  return { path, excludes };
+  let stores: { postgres?: boolean; objects?: boolean; kv?: boolean } | undefined;
+  if (d.stores !== undefined) {
+    if (typeof d.stores !== "object" || d.stores === null || Array.isArray(d.stores)) {
+      e("data.stores must be an object");
+    } else {
+      stores = {};
+      const s = d.stores as Record<string, unknown>;
+      for (const k of ["postgres", "objects", "kv"] as const) {
+        if (s[k] !== undefined) {
+          if (typeof s[k] !== "boolean") {
+            e(`data.stores.${k} must be a boolean`);
+          } else {
+            stores[k] = s[k] as boolean;
+          }
+        }
+      }
+      // Reject any unknown store flags so typos don't silently disable a store.
+      for (const k of Object.keys(s)) {
+        if (k !== "postgres" && k !== "objects" && k !== "kv") {
+          e(`data.stores.${k} is not a recognized store flag`);
+        }
+      }
+    }
+  }
+  return { path, excludes, stores };
 }
 
 function parseNetwork(v: unknown, e: (m: string) => void): AppNetwork | undefined {

@@ -183,6 +183,57 @@ describe("parseManifest — migration verification levels", () => {
   });
 });
 
+describe("parseManifest — data.stores (unified data layer)", () => {
+  it("accepts a manifest with no data.path when data.stores is declared", () => {
+    const m = { ...valid(), data: { stores: { postgres: true, objects: true, kv: false } } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.data.stores).toEqual({ postgres: true, objects: true, kv: false });
+    expect(r.manifest.data.path).toBeUndefined();
+  });
+
+  it("accepts data.path AND data.stores together (path = ephemeral scratch)", () => {
+    const m = {
+      ...valid(),
+      data: { path: "/cache", stores: { postgres: true } },
+    };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.data.path).toBe("/cache");
+    expect(r.manifest.data.stores?.postgres).toBe(true);
+  });
+
+  it("rejects non-boolean store flags (so a typo can't silently disable persistence)", () => {
+    const m = { ...valid(), data: { stores: { postgres: "yes" } } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join(" ")).toMatch(/data\.stores\.postgres must be a boolean/);
+  });
+
+  it("rejects unknown store flags (typo defense — `objevct: true` would otherwise be silently ignored)", () => {
+    const m = { ...valid(), data: { stores: { objevct: true } } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join(" ")).toMatch(/data\.stores\.objevct.*not a recognized store flag/);
+  });
+
+  it("rejects data.stores being a non-object value", () => {
+    const m = { ...valid(), data: { stores: "all-of-them" } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(false);
+  });
+
+  it("accepts an empty data block (pure-compute apps) — no persistence required", () => {
+    const m = { ...valid(), data: {} };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe("parseManifest — input shape", () => {
   it("rejects non-object input", () => {
     expect(parseManifest("string").ok).toBe(false);
