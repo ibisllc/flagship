@@ -48,6 +48,7 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 EXPOSE 3000
 EXPOSE 8443
 
-# Use tsx so TS source runs without a separate dist build step at deploy.
-# (`tsc -b` already happened in the builder; the dist is alongside src/.)
-CMD ["node", "apps/web/dist/server.js"]
+# Run via tsx so cross-workspace `@flagship/*` imports resolve to TS source
+# (workspace package.json files point `main` at ./src/index.ts; switching
+# them all to dist/ for prod is a follow-up).
+CMD ["npx", "--yes", "tsx", "apps/web/src/server.ts"]
