@@ -51,10 +51,51 @@ export interface AppData {
   stores?: AppDataStores;
 }
 
+/**
+ * Each store flag is one of:
+ *   - `true`     — single default instance; env var is FLAGSHIP_<STORE>_URL (no suffix).
+ *   - `false`    — store not used.
+ *   - string[]   — multiple named instances; env vars are FLAGSHIP_<STORE>_URL_<INSTANCE>.
+ */
+export type StoreFlag = boolean | string[];
+
 export interface AppDataStores {
-  postgres?: boolean;
-  objects?: boolean;
-  kv?: boolean;
+  postgres?: StoreFlag;
+  objects?: StoreFlag;
+  kv?: StoreFlag;
+}
+
+const INSTANCE_RE = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
+
+/**
+ * Normalize a StoreFlag to a list of instance names. Single (default)
+ * instance returns `["default"]` so callers can iterate uniformly; empty
+ * array means the store isn't used.
+ *
+ * Throws on duplicates or instance names that aren't RFC 1035 labels.
+ */
+export function normalizeStoreFlag(flag: StoreFlag | undefined): string[] {
+  if (flag === true) return ["default"];
+  if (flag === false || flag === undefined) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const name of flag) {
+    if (typeof name !== "string") throw new Error("instance names must be strings");
+    if (!INSTANCE_RE.test(name)) {
+      throw new Error(
+        `instance name ${JSON.stringify(name)} must be RFC 1035 label (1–32 chars, [a-z0-9-])`,
+      );
+    }
+    if (seen.has(name)) throw new Error(`duplicate instance name ${JSON.stringify(name)}`);
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+/** Whether a flag indicates the singleton default instance (drives env-var naming). */
+export function isSingletonStore(flag: StoreFlag | undefined): boolean {
+  return flag === true;
 }
 
 export interface AppNetwork {
@@ -213,7 +254,7 @@ function parseData(v: unknown, e: (m: string) => void): AppData | undefined {
       }
     }
   }
-  let stores: { postgres?: boolean; objects?: boolean; kv?: boolean } | undefined;
+  let stores: AppDataStores | undefined;
   if (d.stores !== undefined) {
     if (typeof d.stores !== "object" || d.stores === null || Array.isArray(d.stores)) {
       e("data.stores must be an object");
@@ -222,10 +263,18 @@ function parseData(v: unknown, e: (m: string) => void): AppData | undefined {
       const s = d.stores as Record<string, unknown>;
       for (const k of ["postgres", "objects", "kv"] as const) {
         if (s[k] !== undefined) {
-          if (typeof s[k] !== "boolean") {
-            e(`data.stores.${k} must be a boolean`);
+          const v = s[k];
+          if (typeof v === "boolean") {
+            stores[k] = v;
+          } else if (Array.isArray(v)) {
+            try {
+              normalizeStoreFlag(v as string[]);
+              stores[k] = v as string[];
+            } catch (err) {
+              e(`data.stores.${k}: ${(err as Error).message}`);
+            }
           } else {
-            stores[k] = s[k] as boolean;
+            e(`data.stores.${k} must be a boolean or an array of instance names`);
           }
         }
       }

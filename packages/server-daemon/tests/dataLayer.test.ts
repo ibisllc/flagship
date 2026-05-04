@@ -114,8 +114,79 @@ describe("DataProvisioner.provisionApp", () => {
       appName: "x",
       stores: { postgres: true, kv: true },
     });
-    expect(creds.postgres!.url).toContain("p%2Fa%40ss%3Fword%23");
-    expect(creds.kv!.url).toContain("p%2Fa%40ss%3Fword%23");
+    expect(creds.postgres!.default!.url).toContain("p%2Fa%40ss%3Fword%23");
+    expect(creds.kv!.default!.url).toContain("p%2Fa%40ss%3Fword%23");
+  });
+
+  it("multi-instance Postgres: each named instance gets its own DB + role + suffixed env var", async () => {
+    const { pg, objects, kv } = setup();
+    const prov = new DataProvisioner({
+      postgres: pg,
+      objects,
+      kv,
+      generateSecret: () => "s",
+    });
+    const creds = await prov.provisionApp({
+      username: "harry",
+      appName: "habits",
+      stores: { postgres: ["main", "analytics"] },
+    });
+    expect(Object.keys(creds.postgres!).sort()).toEqual(["analytics", "main"]);
+    expect(pg.databases.has("flagship_harry_habits_main")).toBe(true);
+    expect(pg.databases.has("flagship_harry_habits_analytics")).toBe(true);
+    const env = credentialsToEnv(creds);
+    expect(env.FLAGSHIP_PG_URL_MAIN).toContain("flagship_harry_habits_main");
+    expect(env.FLAGSHIP_PG_URL_ANALYTICS).toContain("flagship_harry_habits_analytics");
+    expect(env.FLAGSHIP_PG_URL).toBeUndefined(); // no singleton when multi-instance
+    expect(env.FLAGSHIP_PG_INSTANCES).toBe("main,analytics");
+  });
+
+  it("multi-instance MinIO: hyphen suffix in bucket names, _<INST> suffix in env vars", async () => {
+    const { pg, objects, kv } = setup();
+    const prov = new DataProvisioner({
+      postgres: pg,
+      objects,
+      kv,
+      generateSecret: () => "s",
+    });
+    const creds = await prov.provisionApp({
+      username: "harry",
+      appName: "habits",
+      stores: { objects: ["public", "private"] },
+    });
+    expect(objects.buckets.has("harry-habits-public")).toBe(true);
+    expect(objects.buckets.has("harry-habits-private")).toBe(true);
+    const env = credentialsToEnv(creds);
+    expect(env.FLAGSHIP_S3_BUCKET_PUBLIC).toBe("harry-habits-public");
+    expect(env.FLAGSHIP_S3_BUCKET_PRIVATE).toBe("harry-habits-private");
+  });
+
+  it("multi-instance Redis: prefix carries the instance name (`<user>:<app>:<instance>:`)", async () => {
+    const { pg, objects, kv } = setup();
+    const prov = new DataProvisioner({
+      postgres: pg,
+      objects,
+      kv,
+      generateSecret: () => "s",
+    });
+    const creds = await prov.provisionApp({
+      username: "harry",
+      appName: "habits",
+      stores: { kv: ["cache", "queue"] },
+    });
+    expect(creds.kv!.cache.prefix).toBe("harry:habits:cache:");
+    expect(creds.kv!.queue.prefix).toBe("harry:habits:queue:");
+  });
+
+  it("rejects manifest with duplicate instance names at the provisioner boundary", async () => {
+    const prov = new DataProvisioner({ postgres: new InMemoryPostgresAdmin() });
+    await expect(
+      prov.provisionApp({
+        username: "harry",
+        appName: "x",
+        stores: { postgres: ["main", "main"] },
+      }),
+    ).rejects.toThrow(/duplicate/);
   });
 
   it("throws if a store is requested but no admin is configured", async () => {

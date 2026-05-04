@@ -19,13 +19,36 @@ function assertSafe(label: string, kind: string): void {
 export interface AppNaming {
   username: string;
   appName: string;
+  /** Optional named instance. `undefined` or `"default"` produces unsuffixed names. */
+  instance?: string;
+}
+
+const DEFAULT_INSTANCE = "default";
+
+function instanceSuffixUnderscore(instance?: string): string {
+  if (instance === undefined || instance === DEFAULT_INSTANCE) return "";
+  return `_${instance.replace(/-/g, "_")}`;
+}
+
+function instanceSuffixDash(instance?: string): string {
+  if (instance === undefined || instance === DEFAULT_INSTANCE) return "";
+  return `-${instance}`;
+}
+
+function assertInstance(instance?: string): void {
+  if (instance !== undefined && instance !== DEFAULT_INSTANCE) {
+    if (!SAFE.test(instance)) {
+      throw new Error(`instance ${JSON.stringify(instance)} is not a valid DNS label`);
+    }
+  }
 }
 
 export function pgDatabase(n: AppNaming): string {
   assertSafe(n.username, "username");
   assertSafe(n.appName, "appName");
+  assertInstance(n.instance);
   // Postgres identifiers: lowercase, max 63 chars, no leading digit.
-  return `flagship_${n.username}_${n.appName}`.replace(/-/g, "_");
+  return `flagship_${n.username}_${n.appName}`.replace(/-/g, "_") + instanceSuffixUnderscore(n.instance);
 }
 
 export function pgRole(n: AppNaming): string {
@@ -35,8 +58,9 @@ export function pgRole(n: AppNaming): string {
 export function s3Bucket(n: AppNaming): string {
   assertSafe(n.username, "username");
   assertSafe(n.appName, "appName");
+  assertInstance(n.instance);
   // S3 bucket: 3–63 chars, lowercase, no underscores, must start with letter.
-  return `${n.username}-${n.appName}`;
+  return `${n.username}-${n.appName}` + instanceSuffixDash(n.instance);
 }
 
 export function s3AccessKey(n: AppNaming): string {
@@ -50,7 +74,11 @@ export function redisUser(n: AppNaming): string {
 export function redisPrefix(n: AppNaming): string {
   assertSafe(n.username, "username");
   assertSafe(n.appName, "appName");
-  return `${n.username}:${n.appName}:`;
+  assertInstance(n.instance);
+  if (n.instance === undefined || n.instance === DEFAULT_INSTANCE) {
+    return `${n.username}:${n.appName}:`;
+  }
+  return `${n.username}:${n.appName}:${n.instance}:`;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { AppDataStores } from "@flagship/protocol";
+import { normalizeStoreFlag, isSingletonStore, type AppDataStores } from "@flagship/protocol";
 import type { MinioAdmin, PostgresAdmin, RedisAdmin } from "./admin.js";
 import {
   generateSecret,
@@ -13,15 +13,39 @@ import {
 /**
  * Per-app credentials minted at deploy time. The daemon stores these wrapped
  * under SWK and re-derives the env-var bundle on each AppRunner deploy /
- * restart. The SWK wrapping means a stolen disk image yields ciphertext,
- * not credentials.
+ * restart.
+ *
+ * Each store carries a map of `instance → instance-credential` so a single
+ * app can have e.g. a `main` Postgres database alongside an `analytics` one.
+ * Singleton stores live under the implicit `"default"` instance.
  */
+export interface PostgresInstance {
+  url: string;
+  database: string;
+  role: string;
+}
+export interface ObjectsInstance {
+  endpoint: string;
+  bucket: string;
+  accessKey: string;
+  secretKey: string;
+}
+export interface KvInstance {
+  url: string;
+  user: string;
+  prefix: string;
+}
+
 export interface AppDataCredentials {
   username: string;
   appName: string;
-  postgres?: { url: string; database: string; role: string };
-  objects?: { endpoint: string; bucket: string; accessKey: string; secretKey: string };
-  kv?: { url: string; user: string; prefix: string };
+  /** True when the corresponding store flag was `true` (singleton); drives env-var naming. */
+  postgresSingleton?: boolean;
+  objectsSingleton?: boolean;
+  kvSingleton?: boolean;
+  postgres?: Record<string, PostgresInstance>;
+  objects?: Record<string, ObjectsInstance>;
+  kv?: Record<string, KvInstance>;
 }
 
 export interface DataProvisionerOptions {
@@ -49,57 +73,93 @@ export class DataProvisioner {
     stores: AppDataStores;
   }): Promise<AppDataCredentials> {
     const { username, appName, stores } = args;
-    const naming = { username, appName };
     const secret = this.opts.generateSecret ?? generateSecret;
     const ep = this.opts.endpoints ?? {};
     const out: AppDataCredentials = { username, appName };
 
-    if (stores.postgres) {
+    const pgInstances = normalizeStoreFlag(stores.postgres);
+    if (pgInstances.length > 0) {
       if (!this.opts.postgres) throw new Error("postgres admin not configured");
-      const db = pgDatabase(naming);
-      const role = pgRole(naming);
-      const password = secret();
-      await this.opts.postgres.createRoleAndDb({ db, role, password });
-      const host = ep.postgresHost ?? "127.0.0.1";
-      const port = ep.postgresPort ?? 5432;
-      out.postgres = {
-        url: `postgresql://${role}:${encodeURIComponent(password)}@${host}:${port}/${db}`,
-        database: db,
-        role,
-      };
+      out.postgresSingleton = isSingletonStore(stores.postgres);
+      out.postgres = {};
+      for (const instance of pgInstances) {
+        const naming = { username, appName, instance };
+        const db = pgDatabase(naming);
+        const role = pgRole(naming);
+        const password = secret();
+        await this.opts.postgres.createRoleAndDb({ db, role, password });
+        const host = ep.postgresHost ?? "127.0.0.1";
+        const port = ep.postgresPort ?? 5432;
+        out.postgres[instance] = {
+          url: `postgresql://${role}:${encodeURIComponent(password)}@${host}:${port}/${db}`,
+          database: db,
+          role,
+        };
+      }
     }
 
-    if (stores.objects) {
+    const s3Instances = normalizeStoreFlag(stores.objects);
+    if (s3Instances.length > 0) {
       if (!this.opts.objects) throw new Error("objects admin not configured");
-      const bucket = s3Bucket(naming);
-      const accessKey = s3AccessKey(naming);
-      const secretKey = secret();
-      await this.opts.objects.createBucketAndKey({ bucket, accessKey, secretKey });
-      out.objects = {
-        endpoint: ep.s3Endpoint ?? "http://127.0.0.1:9000",
-        bucket,
-        accessKey,
-        secretKey,
-      };
+      out.objectsSingleton = isSingletonStore(stores.objects);
+      out.objects = {};
+      for (const instance of s3Instances) {
+        const naming = { username, appName, instance };
+        const bucket = s3Bucket(naming);
+        const accessKey = s3AccessKey(naming);
+        const secretKey = secret();
+        await this.opts.objects.createBucketAndKey({ bucket, accessKey, secretKey });
+        out.objects[instance] = {
+          endpoint: ep.s3Endpoint ?? "http://127.0.0.1:9000",
+          bucket,
+          accessKey,
+          secretKey,
+        };
+      }
     }
 
-    if (stores.kv) {
+    const kvInstances = normalizeStoreFlag(stores.kv);
+    if (kvInstances.length > 0) {
       if (!this.opts.kv) throw new Error("kv admin not configured");
-      const user = redisUser(naming);
-      const prefix = redisPrefix(naming);
-      const password = secret();
-      await this.opts.kv.createAclUser({ user, password, prefix });
-      const host = ep.redisHost ?? "127.0.0.1";
-      const port = ep.redisPort ?? 6379;
-      // Clients honor either "user:password@host" or the AUTH command. We
-      // use the URL form so node-redis / ioredis pick it up automatically.
-      out.kv = {
-        url: `redis://${user}:${encodeURIComponent(password)}@${host}:${port}/0?prefix=${encodeURIComponent(prefix)}`,
-        user,
-        prefix,
-      };
+      out.kvSingleton = isSingletonStore(stores.kv);
+      out.kv = {};
+      for (const instance of kvInstances) {
+        const naming = { username, appName, instance };
+        const user = redisUser(naming);
+        const prefix = redisPrefix(naming);
+        const password = secret();
+        await this.opts.kv.createAclUser({ user, password, prefix });
+        const host = ep.redisHost ?? "127.0.0.1";
+        const port = ep.redisPort ?? 6379;
+        out.kv[instance] = {
+          url: `redis://${user}:${encodeURIComponent(password)}@${host}:${port}/0?prefix=${encodeURIComponent(prefix)}`,
+          user,
+          prefix,
+        };
+      }
     }
     return out;
+  }
+
+  async deprovisionApp(args: { username: string; appName: string; stores: AppDataStores }): Promise<void> {
+    for (const instance of normalizeStoreFlag(args.stores.postgres)) {
+      if (!this.opts.postgres) continue;
+      const naming = { username: args.username, appName: args.appName, instance };
+      await this.opts.postgres.dropRoleAndDb({ db: pgDatabase(naming), role: pgRole(naming) });
+    }
+    for (const instance of normalizeStoreFlag(args.stores.objects)) {
+      if (!this.opts.objects) continue;
+      const naming = { username: args.username, appName: args.appName, instance };
+      await this.opts.objects.dropBucketAndKey({
+        bucket: s3Bucket(naming),
+        accessKey: s3AccessKey(naming),
+      });
+    }
+    for (const instance of normalizeStoreFlag(args.stores.kv)) {
+      if (!this.opts.kv) continue;
+      const naming = { username: args.username, appName: args.appName, instance };
+      await this.opts.kv.dropAclUser(redisUser(naming));
+    }
   }
 
   // Read-only accessors used by the data dashboard. Each throws if the
@@ -120,42 +180,53 @@ export class DataProvisioner {
     if (!this.opts.kv) throw new Error("kv admin not configured");
     return this.opts.kv.listKeys(prefix, max);
   }
-
-  async deprovisionApp(args: { username: string; appName: string; stores: AppDataStores }): Promise<void> {
-    const naming = { username: args.username, appName: args.appName };
-    if (args.stores.postgres && this.opts.postgres) {
-      await this.opts.postgres.dropRoleAndDb({ db: pgDatabase(naming), role: pgRole(naming) });
-    }
-    if (args.stores.objects && this.opts.objects) {
-      await this.opts.objects.dropBucketAndKey({
-        bucket: s3Bucket(naming),
-        accessKey: s3AccessKey(naming),
-      });
-    }
-    if (args.stores.kv && this.opts.kv) {
-      await this.opts.kv.dropAclUser(redisUser(naming));
-    }
-  }
 }
 
-/** Translate AppDataCredentials → the FLAGSHIP_* env bundle for AppRunner. */
+/**
+ * Translate AppDataCredentials → the FLAGSHIP_* env bundle for AppRunner.
+ *
+ * Singleton stores produce unsuffixed env vars (FLAGSHIP_PG_URL); multi-instance
+ * stores produce one suffix per instance (FLAGSHIP_PG_URL_MAIN, FLAGSHIP_PG_URL_ANALYTICS).
+ */
 export function credentialsToEnv(creds: AppDataCredentials): Record<string, string> {
   const env: Record<string, string> = {};
+
   if (creds.postgres) {
-    env.FLAGSHIP_PG_URL = creds.postgres.url;
-    env.FLAGSHIP_PG_DATABASE = creds.postgres.database;
-    env.FLAGSHIP_PG_ROLE = creds.postgres.role;
+    for (const [instance, c] of Object.entries(creds.postgres)) {
+      const suffix = creds.postgresSingleton ? "" : `_${instance.replace(/-/g, "_").toUpperCase()}`;
+      env[`FLAGSHIP_PG_URL${suffix}`] = c.url;
+      env[`FLAGSHIP_PG_DATABASE${suffix}`] = c.database;
+      env[`FLAGSHIP_PG_ROLE${suffix}`] = c.role;
+    }
+    if (!creds.postgresSingleton) {
+      env.FLAGSHIP_PG_INSTANCES = Object.keys(creds.postgres).join(",");
+    }
   }
+
   if (creds.objects) {
-    env.FLAGSHIP_S3_ENDPOINT = creds.objects.endpoint;
-    env.FLAGSHIP_S3_BUCKET = creds.objects.bucket;
-    env.FLAGSHIP_S3_ACCESS_KEY = creds.objects.accessKey;
-    env.FLAGSHIP_S3_SECRET_KEY = creds.objects.secretKey;
+    for (const [instance, c] of Object.entries(creds.objects)) {
+      const suffix = creds.objectsSingleton ? "" : `_${instance.replace(/-/g, "_").toUpperCase()}`;
+      env[`FLAGSHIP_S3_ENDPOINT${suffix}`] = c.endpoint;
+      env[`FLAGSHIP_S3_BUCKET${suffix}`] = c.bucket;
+      env[`FLAGSHIP_S3_ACCESS_KEY${suffix}`] = c.accessKey;
+      env[`FLAGSHIP_S3_SECRET_KEY${suffix}`] = c.secretKey;
+    }
+    if (!creds.objectsSingleton) {
+      env.FLAGSHIP_S3_INSTANCES = Object.keys(creds.objects).join(",");
+    }
   }
+
   if (creds.kv) {
-    env.FLAGSHIP_REDIS_URL = creds.kv.url;
-    env.FLAGSHIP_REDIS_USER = creds.kv.user;
-    env.FLAGSHIP_REDIS_PREFIX = creds.kv.prefix;
+    for (const [instance, c] of Object.entries(creds.kv)) {
+      const suffix = creds.kvSingleton ? "" : `_${instance.replace(/-/g, "_").toUpperCase()}`;
+      env[`FLAGSHIP_REDIS_URL${suffix}`] = c.url;
+      env[`FLAGSHIP_REDIS_USER${suffix}`] = c.user;
+      env[`FLAGSHIP_REDIS_PREFIX${suffix}`] = c.prefix;
+    }
+    if (!creds.kvSingleton) {
+      env.FLAGSHIP_REDIS_INSTANCES = Object.keys(creds.kv).join(",");
+    }
   }
+
   return env;
 }

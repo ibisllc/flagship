@@ -415,9 +415,15 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
 
   // ---- Data dashboard (read-only, paged) --------------------------------
 
+  /** Resolve `?instance=<name>` (or default to the singleton). */
+  function resolveInstance<T>(map: Record<string, T> | undefined, instance?: string): T | undefined {
+    if (!map) return undefined;
+    return map[instance ?? "default"];
+  }
+
   app.get<{
     Params: { appId: string };
-    Querystring: { sessionToken?: string };
+    Querystring: { sessionToken?: string; instance?: string };
   }>("/data/postgres/:appId/tables", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
@@ -427,15 +433,15 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
     const entry = ctx.deployedApps.get(req.params.appId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
-    const db = entry.data?.postgres?.database;
-    if (!db) return reply.status(404).send({ error: "app does not use postgres" });
-    const tables = await ctx.dataProvisioner.listPostgresTables(db);
-    return { database: db, tables };
+    const inst = resolveInstance(entry.data?.postgres, req.query.instance);
+    if (!inst) return reply.status(404).send({ error: "app does not use this postgres instance" });
+    const tables = await ctx.dataProvisioner.listPostgresTables(inst.database);
+    return { database: inst.database, tables };
   });
 
   app.get<{
     Params: { appId: string };
-    Querystring: { sessionToken?: string; sql?: string; max?: string };
+    Querystring: { sessionToken?: string; sql?: string; max?: string; instance?: string };
   }>("/data/postgres/:appId/query", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
@@ -445,19 +451,19 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
     const entry = ctx.deployedApps.get(req.params.appId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
-    const db = entry.data?.postgres?.database;
-    if (!db) return reply.status(404).send({ error: "app does not use postgres" });
+    const inst = resolveInstance(entry.data?.postgres, req.query.instance);
+    if (!inst) return reply.status(404).send({ error: "app does not use this postgres instance" });
     if (typeof req.query.sql !== "string" || req.query.sql.length === 0) {
       return reply.status(400).send({ error: "sql required" });
     }
     const max = clamp(Number(req.query.max ?? 100), 1, 1000);
     try {
       const out = await ctx.dataProvisioner.queryPostgres({
-        db,
+        db: inst.database,
         sql: req.query.sql,
         maxRows: max,
       });
-      return { database: db, columns: out.columns, rows: out.rows, max };
+      return { database: inst.database, columns: out.columns, rows: out.rows, max };
     } catch (e) {
       return reply.status(500).send({ error: "query failed", message: errMsg(e) });
     }
@@ -465,7 +471,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
 
   app.get<{
     Params: { appId: string };
-    Querystring: { sessionToken?: string; prefix?: string; max?: string };
+    Querystring: { sessionToken?: string; prefix?: string; max?: string; instance?: string };
   }>("/data/objects/:appId/list", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
@@ -475,20 +481,20 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
     const entry = ctx.deployedApps.get(req.params.appId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
-    const bucket = entry.data?.objects?.bucket;
-    if (!bucket) return reply.status(404).send({ error: "app does not use objects" });
+    const inst = resolveInstance(entry.data?.objects, req.query.instance);
+    if (!inst) return reply.status(404).send({ error: "app does not use this objects instance" });
     const max = clamp(Number(req.query.max ?? 200), 1, 5000);
     const objects = await ctx.dataProvisioner.listObjects(
-      bucket,
+      inst.bucket,
       typeof req.query.prefix === "string" ? req.query.prefix : "",
       max,
     );
-    return { bucket, objects, max };
+    return { bucket: inst.bucket, objects, max };
   });
 
   app.get<{
     Params: { appId: string };
-    Querystring: { sessionToken?: string; max?: string };
+    Querystring: { sessionToken?: string; max?: string; instance?: string };
   }>("/data/kv/:appId/keys", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
@@ -498,11 +504,11 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
     const entry = ctx.deployedApps.get(req.params.appId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
-    const prefix = entry.data?.kv?.prefix;
-    if (!prefix) return reply.status(404).send({ error: "app does not use kv" });
+    const inst = resolveInstance(entry.data?.kv, req.query.instance);
+    if (!inst) return reply.status(404).send({ error: "app does not use this kv instance" });
     const max = clamp(Number(req.query.max ?? 200), 1, 5000);
-    const keys = await ctx.dataProvisioner.listKvKeys(prefix, max);
-    return { prefix, keys, max };
+    const keys = await ctx.dataProvisioner.listKvKeys(inst.prefix, max);
+    return { prefix: inst.prefix, keys, max };
   });
 
   // ---- Phone-state backup (opaque SWK-encrypted blob) -------------------
