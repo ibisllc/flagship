@@ -29,7 +29,9 @@ import {
   type SmsSender,
 } from "./routes/llmPromo.js";
 import { registerServerDnsPublish } from "./routes/serverDnsPublish.js";
+import { registerDns01Publish } from "./routes/dns01Publish.js";
 import {
+  DnsChallengeService,
   InMemoryServerDnsRegistry,
   ServerDnsPublisher,
   type ServerDnsRegistry,
@@ -215,6 +217,15 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
         resolveUserIrk: opts.resolveUserIrk,
       });
       app.decorate("serverDnsRegistry", serverDnsRegistry);
+
+      // Per-server ACME DNS-01 helper. Daemons call this when their ACME flow
+      // needs a TXT record published; STK signature ties each call to a known
+      // server in the registry.
+      const dnsChallenge = new DnsChallengeService(opts.zone);
+      registerDns01Publish(app, {
+        serverRegistry,
+        dnsChallenge,
+      });
     }
   }
   app.decorate("reciprocityLedger", reciprocityLedger);

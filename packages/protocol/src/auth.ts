@@ -44,6 +44,8 @@ const TAG_LLM_PROMO_ISSUE_START = "flagship/llm-promo-issue-start/v1";
 const TAG_LLM_PROMO_ISSUE_COMPLETE = "flagship/llm-promo-issue-complete/v1";
 const TAG_BACKUP_TOGGLE = "flagship/backup-toggle/v1";
 const TAG_PUBLISH_SERVER_DNS = "flagship/publish-server-dns/v1";
+const TAG_DNS01_PUBLISH = "flagship/dns01-publish/v1";
+const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -124,6 +126,30 @@ export interface PublishServerDns {
   serverId: ServerId;
   mode: "tunnel" | "direct";
   directIp: string;
+  issuedAt: number;
+}
+
+/**
+ * STK-signed request from a Flagship server to publish a DNS-01 challenge
+ * TXT record under its namespace. The signature commits to (serverId,
+ * recordName, recordValueHash, issuedAt) so a captured publish can't be
+ * re-aimed at a different name. Used by the per-server ACME flow.
+ *
+ * recordValueHash is `sha256(recordValue)` — the actual value lives in the
+ * request body alongside; the hash inside the canonical bytes prevents a
+ * man-in-the-middle from swapping the value after we sign.
+ */
+export interface Dns01PublishRequest {
+  serverId: ServerId;
+  recordName: string;
+  recordValueHash: Bytes;
+  issuedAt: number;
+}
+
+/** STK-signed companion to delete a previously-published DNS-01 record. */
+export interface Dns01DeleteRequest {
+  serverId: ServerId;
+  recordId: string;
   issuedAt: number;
 }
 
@@ -352,6 +378,18 @@ function canonicalBackupToggle(r: BackupToggle): Bytes {
 function canonicalPublishServerDns(r: PublishServerDns): Bytes {
   return new TextEncoder().encode(
     [TAG_PUBLISH_SERVER_DNS, r.userId, r.serverId, r.mode, r.directIp, r.issuedAt].join("|"),
+  );
+}
+
+function canonicalDns01Publish(r: Dns01PublishRequest): Bytes {
+  return new TextEncoder().encode(
+    [TAG_DNS01_PUBLISH, r.serverId, r.recordName, hex(r.recordValueHash), r.issuedAt].join("|"),
+  );
+}
+
+function canonicalDns01Delete(r: Dns01DeleteRequest): Bytes {
+  return new TextEncoder().encode(
+    [TAG_DNS01_DELETE, r.serverId, r.recordId, r.issuedAt].join("|"),
   );
 }
 
@@ -590,6 +628,30 @@ export function signPublishServerDns(r: PublishServerDns, irk: Keypair): Bytes {
 export function verifyPublishServerDns(r: PublishServerDns, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalPublishServerDns(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signDns01Publish(r: Dns01PublishRequest, stk: Keypair): Bytes {
+  return ed.sign(canonicalDns01Publish(r), stk.privateKey);
+}
+
+export function verifyDns01Publish(r: Dns01PublishRequest, sig: Bytes, stkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalDns01Publish(r), stkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signDns01Delete(r: Dns01DeleteRequest, stk: Keypair): Bytes {
+  return ed.sign(canonicalDns01Delete(r), stk.privateKey);
+}
+
+export function verifyDns01Delete(r: Dns01DeleteRequest, sig: Bytes, stkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalDns01Delete(r), stkPub);
   } catch {
     return false;
   }

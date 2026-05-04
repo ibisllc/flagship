@@ -79,5 +79,7 @@ export type {
   MinimalAcmeClient,
 } from "./acme/letsEncryptIssuer.js";
 export { buildAlpnChallengeCert } from "./acme/alpnChallengeCert.js";
+export { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
+export type { RemoteDnsChallengeWriterOptions } from "./acme/remoteDnsChallengeWriter.js";
 export { LlmHarness } from "./llmHarness.js";
 export type { LlmHarnessOptions } from "./llmHarness.js";
