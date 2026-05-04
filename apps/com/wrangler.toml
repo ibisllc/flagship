@@ -3,6 +3,19 @@ main = "src/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domains: Cloudflare auto-provisions DNS + cert and ALL traffic
+# (every path) hits this Worker. The www CNAME chains to the apex so the
+# www host shares the same Worker.
+workers_dev = true
+
+# Replaces the legacy DNS records that pointed at the old Surge-hosted
+# Bootstrap template (backed up at repo root as `old_flagship_website.zip`).
+# Pass --x-provision on first deploy if Cloudflare reports an existing record.
+routes = [
+  { pattern = "flagshipserver.com", custom_domain = true },
+  { pattern = "www.flagshipserver.com", custom_domain = true },
+]
+
 # Static assets — marketing pages, /webapp/, /deck/, /security pages,
 # /.well-known/security.txt. Wrangler will upload everything in this
 # directory to Cloudflare's static edge.

@@ -154,11 +154,25 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
     app.decorate("usernameRegistry", usernameRegistry);
   }
 
-  app.get("/api/health", async () => ({
-    ok: true,
-    service: surface === "services" ? "flagship.services" : "flagshipserver.com",
-    surface,
-  }));
+  const bootedAt = Date.now();
+  app.get("/api/health", async () => {
+    const mem = process.memoryUsage();
+    return {
+      ok: true,
+      service: surface === "services" ? "flagship.services" : "flagshipserver.com",
+      surface,
+      uptimeMs: Date.now() - bootedAt,
+      processUptimeSec: Math.round(process.uptime()),
+      memory: {
+        rss: mem.rss,
+        heapUsed: mem.heapUsed,
+        heapTotal: mem.heapTotal,
+      },
+      nodeVersion: process.version,
+      pid: process.pid,
+      now: new Date().toISOString(),
+    };
+  });
 
   let desktopSessions: DesktopSessionStore | undefined;
   if (isCom) {

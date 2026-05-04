@@ -153,3 +153,80 @@ describe("flagshipserver.com Worker — routing", () => {
     expect(calls[0]!.body).toBeUndefined();
   });
 });
+
+describe("/api/_status/probe", () => {
+  it("returns reachable=true with latency + parsed health body when upstream is OK", async () => {
+    nextResp = new Response(
+      JSON.stringify({ ok: true, surface: "services", processUptimeSec: 42 }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+    const r = await route(
+      new Request("https://flagshipserver.com/api/_status/probe"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.reachable).toBe(true);
+    expect(body.statusCode).toBe(200);
+    expect(typeof body.latencyMs).toBe("number");
+    expect(body.latencyMs).toBeGreaterThanOrEqual(0);
+    expect(body.upstream).toBe("https://flagship.services/api/health");
+    expect(body.health).toMatchObject({ ok: true, processUptimeSec: 42 });
+    expect(body.checkedAt).toMatch(/^\d{4}-/);
+  });
+
+  it("hits the upstream itself — does NOT fall through to the asset binding or the proxy path", async () => {
+    nextResp = new Response("{}", { status: 200 });
+    const env = makeEnv();
+    const assetSpy = vi.spyOn(env.ASSETS, "fetch");
+    await route(new Request("https://flagshipserver.com/api/_status/probe"), env);
+    expect(assetSpy).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://flagship.services/api/health");
+  });
+
+  it("returns reachable=false with error when upstream throws (still 200 — the probe itself worked)", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("boom");
+    }) as typeof globalThis.fetch;
+    const r = await route(
+      new Request("https://flagshipserver.com/api/_status/probe"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.reachable).toBe(false);
+    expect(body.statusCode).toBeNull();
+    expect(body.error).toMatch(/boom/);
+  });
+
+  it("returns reachable=false with statusCode on a non-2xx upstream", async () => {
+    nextResp = new Response("nope", { status: 503 });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/_status/probe"),
+      makeEnv(),
+    );
+    const body = JSON.parse(await r.text());
+    expect(body.reachable).toBe(false);
+    expect(body.statusCode).toBe(503);
+  });
+
+  it("sets cache-control: no-store so browsers don't pin a stale probe", async () => {
+    nextResp = new Response("{}", { status: 200 });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/_status/probe"),
+      makeEnv(),
+    );
+    expect(r.headers.get("cache-control")).toBe("no-store");
+    expect(r.headers.get("content-type")).toMatch(/application\/json/);
+  });
+
+  it("returns 500 when SERVICES_BASE_URL is misconfigured (same misconfig guard as the proxy)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/_status/probe"),
+      makeEnv({ SERVICES_BASE_URL: "not-a-url" }),
+    );
+    expect(r.status).toBe(500);
+    expect(calls).toHaveLength(0);
+  });
+});

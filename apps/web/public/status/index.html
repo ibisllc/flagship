@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="description" content="Live status of flagship.services — latency, reachability, load." />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
+    <title>Flagship — status</title>
+    <style>
+      .status-wrap { max-width: 880px; margin: 2rem auto; padding: 0 1rem; }
+      .status-card {
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        background: #111;
+      }
+      .status-pill {
+        display: inline-block;
+        padding: 0.25rem 0.7rem;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.02em;
+      }
+      .status-pill.up    { background: #0d3d22; color: #6ee7a8; }
+      .status-pill.slow  { background: #3d2f0d; color: #fbcc4a; }
+      .status-pill.down  { background: #3d0d0d; color: #ff7a7a; }
+      .status-pill.idle  { background: #222; color: #888; }
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.8rem;
+        margin-top: 1rem;
+      }
+      .metric {
+        background: #0a0a0a;
+        border: 1px solid #222;
+        border-radius: 8px;
+        padding: 0.8rem 1rem;
+      }
+      .metric .k { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+      .metric .v { font-size: 1.4rem; font-weight: 600; color: #eee; margin-top: 0.2rem; }
+      .metric .v.muted { color: #666; }
+      .history {
+        display: flex;
+        gap: 2px;
+        margin-top: 1rem;
+        align-items: flex-end;
+        height: 60px;
+      }
+      .history .bar {
+        flex: 1;
+        min-width: 4px;
+        background: #2a2a2a;
+        border-radius: 2px 2px 0 0;
+        position: relative;
+      }
+      .history .bar.up   { background: #1f7a4d; }
+      .history .bar.slow { background: #997a1d; }
+      .history .bar.down { background: #7a2020; }
+      .meta-row { display: flex; gap: 1rem; flex-wrap: wrap; color: #888; font-size: 0.85rem; margin-top: 0.5rem; }
+      .raw {
+        margin-top: 1rem;
+        background: #0a0a0a;
+        border: 1px solid #222;
+        border-radius: 8px;
+        padding: 0.8rem;
+        font-family: ui-monospace, monospace;
+        font-size: 0.78rem;
+        color: #aaa;
+        white-space: pre-wrap;
+        overflow-x: auto;
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .toolbar { display: flex; gap: 0.6rem; margin-top: 0.8rem; }
+      .toolbar button {
+        background: #1a1a1a;
+        color: #eee;
+        border: 1px solid #333;
+        border-radius: 6px;
+        padding: 0.4rem 0.9rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+      }
+      .toolbar button:hover { background: #222; }
+      .toolbar button.on { background: #1d3d2a; border-color: #2d5d3a; }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/security.html">security</a>
+        <a href="/webapp/">webapp</a>
+      </nav>
+    </header>
+
+    <main class="status-wrap">
+      <h1>Status</h1>
+      <p class="lede">Live health of <code>flagship.services</code>, probed every few seconds from the Cloudflare edge.</p>
+
+      <section class="status-card" id="card">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+          <h2 style="margin: 0;">flagship.services</h2>
+          <span id="pill" class="status-pill idle">checking…</span>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="k">Latency</div>
+            <div class="v" id="latency">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">HTTP status</div>
+            <div class="v" id="http">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Process uptime</div>
+            <div class="v" id="uptime">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">RSS memory</div>
+            <div class="v" id="rss">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Heap used</div>
+            <div class="v" id="heap">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Node</div>
+            <div class="v" id="node">—</div>
+          </div>
+        </div>
+
+        <div class="history" id="history" aria-label="Recent probes (newest on right)"></div>
+        <div class="meta-row">
+          <span>Last checked: <span id="checkedAt">—</span></span>
+          <span>Upstream: <span id="upstream">—</span></span>
+        </div>
+
+        <div class="toolbar">
+          <button id="refreshNow" type="button">Probe now</button>
+          <button id="autoToggle" type="button" class="on">Auto-refresh: on</button>
+        </div>
+
+        <details style="margin-top: 1rem;">
+          <summary style="color:#888; cursor: pointer; font-size: 0.85rem;">Raw response</summary>
+          <pre class="raw" id="raw">—</pre>
+        </details>
+      </section>
+
+      <p style="color:#666; font-size:0.8rem;">
+        This page calls <code>/api/_status/probe</code> on flagshipserver.com. The Worker performs a server-side fetch of <code>flagship.services/api/health</code> and returns timing and reachability — so what you see is what the edge sees, not what your local network sees.
+      </p>
+    </main>
+
+    <script>
+      (function () {
+        const HISTORY_LEN = 30;
+        const SLOW_MS = 800;
+        const POLL_MS = 5000;
+        const history = [];
+        let autoRefresh = true;
+        let timer = null;
+
+        const $ = (id) => document.getElementById(id);
+
+        function fmtBytes(n) {
+          if (typeof n !== "number") return "—";
+          const units = ["B", "KB", "MB", "GB"];
+          let i = 0; let v = n;
+          while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+          return v.toFixed(v >= 10 ? 0 : 1) + " " + units[i];
+        }
+        function fmtUptime(sec) {
+          if (typeof sec !== "number") return "—";
+          if (sec < 60) return sec + "s";
+          if (sec < 3600) return Math.floor(sec / 60) + "m " + (sec % 60) + "s";
+          if (sec < 86400) return Math.floor(sec / 3600) + "h " + Math.floor((sec % 3600) / 60) + "m";
+          return Math.floor(sec / 86400) + "d " + Math.floor((sec % 86400) / 3600) + "h";
+        }
+        function classify(probe) {
+          if (!probe.reachable) return "down";
+          if (probe.latencyMs > SLOW_MS) return "slow";
+          return "up";
+        }
+        function renderHistory() {
+          const el = $("history");
+          el.innerHTML = "";
+          const padded = [];
+          for (let i = 0; i < HISTORY_LEN - history.length; i++) padded.push(null);
+          padded.push(...history);
+          for (const p of padded) {
+            const bar = document.createElement("div");
+            bar.className = "bar";
+            if (p) {
+              const cls = classify(p);
+              bar.classList.add(cls);
+              const heightPct = Math.min(100, Math.max(8, (p.latencyMs / 1000) * 100));
+              bar.style.height = heightPct + "%";
+              bar.title =
+                p.checkedAt + " — " +
+                (p.reachable ? p.statusCode + " in " + p.latencyMs + " ms" : "DOWN: " + (p.error || "unreachable"));
+            } else {
+              bar.style.height = "8%";
+              bar.style.opacity = "0.3";
+            }
+            el.appendChild(bar);
+          }
+        }
+        function render(probe) {
+          const cls = classify(probe);
+          const pill = $("pill");
+          pill.className = "status-pill " + cls;
+          pill.textContent = cls === "up" ? "operational" : cls === "slow" ? "degraded" : "down";
+
+          $("latency").textContent = probe.latencyMs + " ms";
+          $("http").textContent = probe.statusCode != null ? String(probe.statusCode) : "—";
+          $("checkedAt").textContent = new Date(probe.checkedAt).toLocaleString();
+          $("upstream").textContent = probe.upstream;
+          $("raw").textContent = JSON.stringify(probe, null, 2);
+
+          const h = probe.health || {};
+          $("uptime").textContent = fmtUptime(h.processUptimeSec);
+          $("rss").textContent = fmtBytes(h.memory && h.memory.rss);
+          $("heap").textContent = fmtBytes(h.memory && h.memory.heapUsed);
+          $("node").textContent = h.nodeVersion || "—";
+
+          history.push(probe);
+          while (history.length > HISTORY_LEN) history.shift();
+          renderHistory();
+        }
+        async function probe() {
+          try {
+            const r = await fetch("/api/_status/probe", { cache: "no-store" });
+            const body = await r.json();
+            render(body);
+          } catch (e) {
+            render({
+              reachable: false,
+              statusCode: null,
+              latencyMs: 0,
+              upstream: "(local error)",
+              checkedAt: new Date().toISOString(),
+              error: String(e && e.message || e),
+            });
+          }
+        }
+        function schedule() {
+          clearTimeout(timer);
+          if (autoRefresh) timer = setTimeout(tick, POLL_MS);
+        }
+        async function tick() {
+          await probe();
+          schedule();
+        }
+
+        $("refreshNow").addEventListener("click", () => probe());
+        $("autoToggle").addEventListener("click", (e) => {
+          autoRefresh = !autoRefresh;
+          e.currentTarget.classList.toggle("on", autoRefresh);
+          e.currentTarget.textContent = "Auto-refresh: " + (autoRefresh ? "on" : "off");
+          schedule();
+        });
+
+        renderHistory();
+        tick();
+      })();
+    </script>
+  </body>
+</html>

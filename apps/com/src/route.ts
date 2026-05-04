@@ -17,6 +17,7 @@ export interface RouteEnv {
 }
 
 const PROXY_PREFIX = "/api/";
+const STATUS_PROBE_PATH = "/api/_status/probe";
 
 /**
  * Headers the edge sets on every request that should NOT be forwarded
@@ -39,12 +40,88 @@ const STRIP_RES_HEADERS = new Set([
 export async function route(request: Request, env: RouteEnv): Promise<Response> {
   const url = new URL(request.url);
 
+  // Worker-resident probe: never forwarded upstream as-is. The Worker does
+  // the timed fetch itself so /status/ shows what flagshipserver.com sees,
+  // not what the user's browser sees.
+  if (url.pathname === STATUS_PROBE_PATH) {
+    return statusProbe(env);
+  }
+
   if (url.pathname.startsWith(PROXY_PREFIX)) {
     return proxyToServices(request, env, url);
   }
 
   // Static asset path — let the assets binding handle it.
   return env.ASSETS.fetch(request);
+}
+
+interface ProbeResult {
+  reachable: boolean;
+  statusCode: number | null;
+  latencyMs: number;
+  upstream: string;
+  checkedAt: string;
+  error?: string;
+  health?: unknown;
+}
+
+async function statusProbe(env: RouteEnv): Promise<Response> {
+  let base: URL;
+  try {
+    base = new URL(env.SERVICES_BASE_URL);
+  } catch {
+    return jsonResponse(
+      { error: "SERVICES_BASE_URL is not configured" },
+      500,
+    );
+  }
+
+  const target = new URL("/api/health", base).toString();
+  const startedAt = Date.now();
+  let result: ProbeResult;
+  try {
+    // 5s ceiling — anything slower than that is functionally down for a
+    // status page.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5_000);
+    const resp = await fetch(target, { signal: ctrl.signal, redirect: "manual" });
+    clearTimeout(timer);
+    const latencyMs = Date.now() - startedAt;
+    let body: unknown = undefined;
+    try {
+      body = await resp.json();
+    } catch {
+      // ignore parse errors — non-JSON response still counts as reachable
+    }
+    result = {
+      reachable: resp.ok,
+      statusCode: resp.status,
+      latencyMs,
+      upstream: target,
+      checkedAt: new Date().toISOString(),
+      health: body,
+    };
+  } catch (e) {
+    result = {
+      reachable: false,
+      statusCode: null,
+      latencyMs: Date.now() - startedAt,
+      upstream: target,
+      checkedAt: new Date().toISOString(),
+      error: String((e as Error).message ?? e),
+    };
+  }
+  return jsonResponse(result, 200);
+}
+
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+    },
+  });
 }
 
 async function proxyToServices(
@@ -114,4 +191,9 @@ function requestHasBody(method: string): boolean {
   return m !== "GET" && m !== "HEAD" && m !== "OPTIONS";
 }
 
-export const _internal = { PROXY_PREFIX, STRIP_REQ_HEADERS, STRIP_RES_HEADERS };
+export const _internal = {
+  PROXY_PREFIX,
+  STATUS_PROBE_PATH,
+  STRIP_REQ_HEADERS,
+  STRIP_RES_HEADERS,
+};
