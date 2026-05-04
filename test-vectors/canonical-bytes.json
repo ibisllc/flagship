@@ -1,0 +1,166 @@
+{
+  "metadata": {
+    "umkSeedHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "irkPubHex": "c2c973618041bb1ee4d6f423f9d71995f3bd9d010099889e13dc90b496c8c7e3",
+    "bakPubHex": "54cd3c8db6bf8ed8dd1d33e5fa2ea6e6fdf4de78b30d9019bb9ddf8c2dd54b97",
+    "stkPubHex": "b927c2d0bf0e6d27010d32bba280743e8fc4c6dec0b1702ddc7cd6be27cd078d",
+    "version": 1,
+    "generatedAt": 1735689600000,
+    "note": "Deterministic canonical-bytes test vectors. Swift/Kotlin tests assert byte-equality."
+  },
+  "vectors": [
+    {
+      "name": "boot",
+      "signedBy": "bak",
+      "input": {
+        "serverId": "srv-test",
+        "nonce": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "22370f4cb9246fb03866d30b716e1396bb5e648bf2accc00f5355317bdb81aa9ec4870315997a6344c98f48e6192421951f47442b0f9afbdaa3ed8f995e4c10a"
+    },
+    {
+      "name": "rebuild",
+      "signedBy": "irk",
+      "input": {
+        "userId": "harry",
+        "newServerId": "srv-test",
+        "wifiSsid": "Home",
+        "wifiPskHash": "abababababababababababababababababababababababababababababababab",
+        "shareRatio": 0.5,
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "e10ca70ac7c343f31382c6d4123e48c4239368832efff6fc8bd2417830d93f8d4da17a49ca454c0420fb7b98b1ca7e7926bd5e5fc728accdc755574dd5cdbd0f"
+    },
+    {
+      "name": "revoke",
+      "signedBy": "irk",
+      "input": {
+        "userId": "harry",
+        "revokedServerId": "srv-test",
+        "reason": "stolen",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "aaf5ec7373209c8fc07a7e839b9c1ff9717e604c0c79469efe6c373e7198005bf0093d0f10281304988cb15c26c8f9c1f18ceb3dd822f352d19634ea151d7e07"
+    },
+    {
+      "name": "membership",
+      "signedBy": "irk",
+      "input": {
+        "appId": "habit-tracker",
+        "targetIrkPub": "c2c973618041bb1ee4d6f423f9d71995f3bd9d010099889e13dc90b496c8c7e3",
+        "role": "parent",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "f6ff498b3905377b42d1033af8605dcd6509b8fcc864b7d316c0c0caf934f6f55ab5d6d61e9300ccd71924dc471ae01fe34a42b0d2a2f13835bb8407d992cf02"
+    },
+    {
+      "name": "migration",
+      "signedBy": "irk",
+      "input": {
+        "appId": "habit-tracker",
+        "fromUser": "harry",
+        "toUser": "sarah",
+        "mode": "cut",
+        "withData": true,
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "e9956f6f0b126821463cfe6ff4a96cefb4474382af2c7c53a5ad7ea7eeeffcc10e4b12e0b47a11fd81e8e672ae54ce465c9c3243ed25ae5dfe56a8b67c91c002"
+    },
+    {
+      "name": "invite",
+      "signedBy": "irk",
+      "input": {
+        "appId": "habit-tracker",
+        "role": "parent",
+        "nonce": "0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+        "issuedAt": 1735689600000,
+        "expiresAt": 1736899200000
+      },
+      "signatureHex": "e824adbdee457be93aa2ca7fdb9fb7de0fb189f83eda23b5aff45440efae6328827f7ba07e4cf7ed87c6b2e342f8c32a1bc730072e08a4b0caa8299d5bf47304"
+    },
+    {
+      "name": "invite-acceptance",
+      "signedBy": "irk",
+      "input": {
+        "inviteNonce": "0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
+        "accepterIrkPub": "c2c973618041bb1ee4d6f423f9d71995f3bd9d010099889e13dc90b496c8c7e3",
+        "acceptedAt": 1735689601000
+      },
+      "signatureHex": "7b29a15c04b2bd16c00b96bb1f2190cec77b72de5a2503a4ffa9083fe81c6da71a6819fb44272870698ee2e723acb13de5141a2a572d8f162714484d166b1108"
+    },
+    {
+      "name": "tunnel-hello",
+      "signedBy": "bak",
+      "input": {
+        "serverId": "srv-test",
+        "subdomains": [
+          "b.harry",
+          "a.harry"
+        ],
+        "nonce": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "387f7ca7543f7578dcf8c4a7922bab3c2a8d63ac582e72c3217439d9ccedc90236381899de7740d7f4f7efa99e8da2683750380e28b510da46f90c2b0f454b04"
+    },
+    {
+      "name": "register-server",
+      "signedBy": "irk",
+      "input": {
+        "userId": "harry",
+        "serverId": "srv-test",
+        "stkPub": "b927c2d0bf0e6d27010d32bba280743e8fc4c6dec0b1702ddc7cd6be27cd078d",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "e7fa93bed16d31477315ecbcc86e63c7274c2ff82d896f102b8e0e2068bda25c0c11d1524253b61c6f9cc4259532d4d69f081b5cebc38dd2ccaff1df0b8af10a"
+    },
+    {
+      "name": "account-recovery",
+      "signedBy": "irk",
+      "input": {
+        "userId": "harry",
+        "newPushTokenHash": "4242424242424242424242424242424242424242424242424242424242424242",
+        "platform": "apns",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "f035fdd594867abf161eb221af33394c599fc8fc04d4586ae8a21a29ef1277711dbce50b1cbd9cfae5942071d7cc1c95cbb5887a61d21fd313f2956fdd7d3002"
+    },
+    {
+      "name": "pb-announce",
+      "signedBy": "stk",
+      "input": {
+        "serverId": "srv-test",
+        "pledgedBytes": 104857600,
+        "shareRatio": 0.5,
+        "maxShardSize": 4194304,
+        "region": "us-east",
+        "tunnelEndpoint": "203.0.113.1:51820",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "3f881d9e5d7809ab7325ec066cc0eb6f03c60670781aea61fc80fab08d3d1320a3a2a4c5592661ebf6704923d4da0685294ca4a14e5f25a49366987959011803"
+    },
+    {
+      "name": "pb-request-peers",
+      "signedBy": "stk",
+      "input": {
+        "requesterServerId": "srv-test",
+        "n": 16,
+        "shardSizeBytes": 4194304,
+        "durabilityHint": "high",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "969c97fbf068b711ff1bcdd9bc704b8cfe624a9db1f5517ed87f8bf189099153ca48d0a69cfdb1cf76de06975ecb3ecb50fe4d061dcccffabd34d0924db7ef01"
+    },
+    {
+      "name": "pb-peer-confirm",
+      "signedBy": "stk",
+      "input": {
+        "peerServerId": "srv-test",
+        "requesterServerId": "owner-srv",
+        "shardId": "shard-001",
+        "issuedAt": 1735689600000
+      },
+      "signatureHex": "42b418bd66cbaff7ecd1883641cca3abedef5fa8a4672dd9b7e9b22315f4275059318e5d700bfb7db852cca7ba136980d52a2704da25f905e5575e19d85c9f0f"
+    }
+  ]
+}
