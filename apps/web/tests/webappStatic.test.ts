@@ -28,11 +28,13 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("self.addEventListener");
   });
 
-  it("/webapp/app.js loads and imports keystore from /webapp/keystore.js", async () => {
+  it("/webapp/app.js loads and imports keystore from a relative path", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/app.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain('from "/webapp/keystore.js"');
+    // Relative imports resolve correctly in both browsers (relative to
+    // /webapp/app.js → /webapp/keystore.js) and Node test loaders.
+    expect(r.body).toContain('from "./keystore.js"');
     expect(r.body).toContain("bootstrapNewIdentity");
     expect(r.body).toContain("deriveIrkFromSeed");
   });
