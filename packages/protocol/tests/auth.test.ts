@@ -359,3 +359,36 @@ describe("IRK server registration", () => {
     expect(verifyRegisterServer(reg, sig, otherIrk.publicKey)).toBe(false);
   });
 });
+
+describe("LLM promo IRK signatures", () => {
+  const irk = deriveIRK(umk);
+  it("quota request: phone-signed payload verifies", async () => {
+    const { signLlmPromoQuota, verifyLlmPromoQuota } = await import("../src/auth.js");
+    const r = { userId: "harry", issuedAt: 1735689600000 };
+    expect(verifyLlmPromoQuota(r, signLlmPromoQuota(r, irk), irk.publicKey)).toBe(true);
+  });
+
+  it("chat request: signature commits to (model, messagesSha256, maxTokens, issuedAt)", async () => {
+    const { signLlmPromoChat, verifyLlmPromoChat } = await import("../src/auth.js");
+    const r = {
+      userId: "harry",
+      model: "flagship-coder-v1",
+      messagesSha256: new Uint8Array(32).fill(0x42),
+      maxTokens: 1024,
+      issuedAt: 1735689600000,
+    };
+    const sig = signLlmPromoChat(r, irk);
+    expect(verifyLlmPromoChat(r, sig, irk.publicKey)).toBe(true);
+    // Tampering with maxTokens (the cost-multiplying field) breaks verification.
+    expect(verifyLlmPromoChat({ ...r, maxTokens: 4096 }, sig, irk.publicKey)).toBe(false);
+    // Tampering with messages hash breaks verification (replay against a different prompt fails).
+    expect(verifyLlmPromoChat(
+      { ...r, messagesSha256: new Uint8Array(32).fill(0xff) },
+      sig,
+      irk.publicKey,
+    )).toBe(false);
+    // Wrong signer fails.
+    const otherIrk = deriveIRK({ seed: new Uint8Array(32).fill(0xaa) });
+    expect(verifyLlmPromoChat(r, sig, otherIrk.publicKey)).toBe(false);
+  });
+});

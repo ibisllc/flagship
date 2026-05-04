@@ -38,6 +38,8 @@ const TAG_ACCOUNT_RECOVERY = "flagship/account-recovery/v1";
 const TAG_PB_ANNOUNCE = "pb/announce/v1";
 const TAG_PB_REQUEST_PEERS = "pb/request-peers/v1";
 const TAG_PB_PEER_CONFIRM = "pb/peer-confirm/v1";
+const TAG_LLM_PROMO_QUOTA = "flagship/llm-promo-quota/v1";
+const TAG_LLM_PROMO_CHAT = "flagship/llm-promo-chat/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -65,6 +67,31 @@ export interface AccountRecovery {
   newPushTokenHash: Bytes;
   /** Claim of which platform the new device is running ('apns' | 'fcm'). */
   platform: "apns" | "fcm";
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed quota check for the Flagship promo LLM. The phone calls
+ * flagshipserver.com to read its remaining tokens. The signature commits to a
+ * recent timestamp so an old read can't be replayed forever.
+ */
+export interface LlmPromoQuotaRequest {
+  userId: UserId;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed chat request against the Flagship promo LLM. The signature
+ * commits to (model, sha256-of-messages, maxTokens, issuedAt) so a leaked
+ * signature cannot be reused for a different prompt or with a different
+ * model that costs more tokens.
+ */
+export interface LlmPromoChatRequest {
+  userId: UserId;
+  model: string;
+  /** SHA-256 of the canonicalized messages array, hex. */
+  messagesSha256: Bytes;
+  maxTokens: number;
   issuedAt: number;
 }
 
@@ -259,6 +286,16 @@ function canonicalPbPeerConfirm(c: PbPeerConfirm): Bytes {
   );
 }
 
+function canonicalLlmPromoQuota(r: LlmPromoQuotaRequest): Bytes {
+  return new TextEncoder().encode(`${TAG_LLM_PROMO_QUOTA}|${r.userId}|${r.issuedAt}`);
+}
+
+function canonicalLlmPromoChat(r: LlmPromoChatRequest): Bytes {
+  return new TextEncoder().encode(
+    [TAG_LLM_PROMO_CHAT, r.userId, r.model, hex(r.messagesSha256), r.maxTokens, r.issuedAt].join("|"),
+  );
+}
+
 export function signBootApproval(c: BootChallenge, bak: Keypair): Bytes {
   return ed.sign(canonicalBoot(c), bak.privateKey);
 }
@@ -446,6 +483,30 @@ export function signPbPeerConfirm(c: PbPeerConfirm, stk: Keypair): Bytes {
 export function verifyPbPeerConfirm(c: PbPeerConfirm, sig: Bytes, stkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalPbPeerConfirm(c), stkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signLlmPromoQuota(r: LlmPromoQuotaRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalLlmPromoQuota(r), irk.privateKey);
+}
+
+export function verifyLlmPromoQuota(r: LlmPromoQuotaRequest, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalLlmPromoQuota(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signLlmPromoChat(r: LlmPromoChatRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalLlmPromoChat(r), irk.privateKey);
+}
+
+export function verifyLlmPromoChat(r: LlmPromoChatRequest, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalLlmPromoChat(r), irkPub);
   } catch {
     return false;
   }

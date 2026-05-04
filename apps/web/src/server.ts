@@ -21,6 +21,12 @@ import {
 import { registerServerRevocation } from "./routes/serverRevocation.js";
 import { registerAccountRecovery } from "./routes/accountRecovery.js";
 import {
+  registerLlmPromo,
+  InMemoryPromoQuotaStore,
+  type PromoQuotaStore,
+  type PromoUpstream,
+} from "./routes/llmPromo.js";
+import {
   registerPeerBackupMatchmaker,
   InMemoryReciprocityLedger,
   InMemoryPeerCandidatePool,
@@ -62,6 +68,12 @@ export interface BuildServerOptions {
   /** Peer-backup matchmaker components. Defaults are in-memory. */
   reciprocityLedger?: ReciprocityLedger;
   peerCandidatePool?: PeerCandidatePool;
+  /**
+   * Flagship-promo LLM proxy. Both must be present to expose the routes;
+   * the upstream client is the only place the GPU server's API key lives.
+   */
+  promoQuotaStore?: PromoQuotaStore;
+  promoUpstream?: PromoUpstream;
 }
 
 /**
@@ -143,6 +155,16 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   app.decorate("reciprocityLedger", reciprocityLedger);
   app.decorate("peerCandidatePool", peerCandidatePool);
 
+  if (opts.resolveUserIrk && opts.promoUpstream) {
+    const promoStore = opts.promoQuotaStore ?? new InMemoryPromoQuotaStore();
+    registerLlmPromo(app, {
+      resolveUserIrk: opts.resolveUserIrk,
+      store: promoStore,
+      upstream: opts.promoUpstream,
+    });
+    app.decorate("promoQuotaStore", promoStore);
+  }
+
   app.register(fastifyStatic, {
     root: resolve(__dirname, "../public"),
     prefix: "/",
@@ -162,6 +184,7 @@ declare module "fastify" {
     desktopSessions: DesktopSessionStore;
     reciprocityLedger: ReciprocityLedger;
     peerCandidatePool: PeerCandidatePool;
+    promoQuotaStore?: PromoQuotaStore;
   }
 }
 
