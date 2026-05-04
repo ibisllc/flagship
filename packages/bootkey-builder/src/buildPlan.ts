@@ -106,6 +106,32 @@ export function planBuild(spec: BuildSpec): BuildPlan {
         volumes: { "/data": "caddy-data", "/config": "caddy-config" },
         description: "In-server reverse proxy. Terminates per-app TLS arriving via SNI passthrough; injects the X-Flagship-User identity header on every app request.",
       },
+      // Unified data layer (FOSS only — see unified_data_layer.md).
+      {
+        name: "postgres",
+        // PostgreSQL is PostgreSQL Global Development Group — perpetual FOSS.
+        image: "docker.io/library/postgres:16-alpine",
+        volumes: { "/var/lib/postgresql/data": "postgres-data" },
+        description: "Unified relational store. Per-app DB + role created on deploy; FLAGSHIP_PG_URL injected into the container.",
+      },
+      {
+        name: "minio",
+        // MinIO uses AGPLv3; we ship the upstream FOSS image, not the commercial one.
+        image: "docker.io/minio/minio:latest",
+        volumes: {
+          "/data": "minio-data",
+          "/root/.minio": "minio-config",
+        },
+        description: "Unified object store. Per-app bucket + access key created on deploy; FLAGSHIP_S3_* injected.",
+      },
+      {
+        name: "redis",
+        // Redis 7.2 was released under BSD; we pin to that line. If the project
+        // re-licenses upstream we'll switch to the Valkey fork.
+        image: "docker.io/library/redis:7.2-alpine",
+        volumes: { "/data": "redis-data" },
+        description: "Unified KV / pubsub store. Per-app ACL user with key prefix; FLAGSHIP_REDIS_URL injected.",
+      },
     ],
     configFiles: [
       {
