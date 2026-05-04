@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <title>Deck · Flagship</title>
+    <link rel="stylesheet" href="/deck/style.css" />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship Deck</span>
+      </div>
+      <div class="session-pill" id="session-line">checking pairing…</div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/login.html">re-pair</a>
+        <a href="/security.html">security</a>
+      </nav>
+    </header>
+
+    <main>
+      <p class="lede" id="lede">
+        Cast surface — your primary device (phone or webapp) pipes here for a wider view. Sensitive operations still happen on your primary device.
+      </p>
+
+      <section>
+        <h2>Servers</h2>
+        <div class="grid" id="servers-grid">
+          <div class="card placeholder">loading…</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Apps</h2>
+        <div class="grid" id="apps-grid">
+          <div class="card placeholder">connect to a server to list its apps.</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Data layer</h2>
+        <div class="card placeholder small">
+          Postgres, MinIO, and Redis dashboards land here once a server is selected.
+          Cross-app or cross-user data is unreachable from this view by construction.
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>The control plane only relays opaque ciphertext between this tab and your primary device. Anything you sign requires a biometric prompt on the primary.</p>
+    </footer>
+
+    <script type="module" src="/deck/deck.js"></script>
+  </body>
+</html>
