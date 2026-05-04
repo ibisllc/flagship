@@ -147,6 +147,9 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
     root: resolve(__dirname, "../public"),
     prefix: "/",
     decorateReply: false,
+    // Allow `.well-known/*` (RFC 9116 security.txt etc.) which would otherwise
+    // be filtered out by the default dotfile policy.
+    serveDotFiles: true,
   });
 
   return app;
