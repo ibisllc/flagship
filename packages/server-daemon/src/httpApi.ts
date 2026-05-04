@@ -14,6 +14,7 @@ import { LlmHarness } from "./llmHarness.js";
 import { AppRunner } from "./appRunner.js";
 import { PhoneStateStore, PHONE_STATE_MAX_BYTES } from "./phoneStateStore.js";
 import { DataProvisioner, credentialsToEnv, type AppDataCredentials } from "./dataLayer/index.js";
+import { buildLlmAppContext } from "./llmAppContext.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -571,6 +572,29 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       };
     },
   );
+
+  // ---- LLM app context (markdown blob the harness prepends to chat) -----
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string; reveal?: string };
+  }>("/apps/:appId/llm-context", async (req, reply) => {
+    if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
+    if (!ctx.resolveSession(req.query.sessionToken)) {
+      return reply.status(401).send({ error: "session not authenticated" });
+    }
+    const entry = ctx.deployedApps.get(req.params.appId);
+    if (!entry) return reply.status(404).send({ error: "app not found" });
+    const reveal = req.query.reveal === "1" || req.query.reveal === "true";
+    const out = await buildLlmAppContext({
+      manifest: entry.manifest,
+      credentials: entry.data,
+      deployedApps: ctx.deployedApps,
+      dataProvisioner: ctx.dataProvisioner,
+      revealCredentials: reveal,
+    });
+    return out;
+  });
 
   // ---- LLM harness (BYO provider, SWK-sealed payload) -------------------
 

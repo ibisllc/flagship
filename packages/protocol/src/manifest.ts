@@ -116,6 +116,16 @@ export interface AppAccess {
    * opens them for public access (e.g. "/", "/about").
    */
   public_routes?: string[];
+  /**
+   * Sister-app allowlist. App ids listed here may call
+   * `GET /.flagship/peers/<this-app-id>/installed` and learn whether this
+   * app is installed. Apps NOT listed always see `installed: false` —
+   * the lookup is silently denied (no fingerprinting).
+   *
+   * Direction is target-controlled: app A wanting to query app B requires
+   * B's manifest to include A in `queryable_by`.
+   */
+  queryable_by?: string[];
 }
 
 export type MigrationVerification = "standard" | "elevated";
@@ -350,12 +360,34 @@ function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined 
       }
     }
   }
+  let queryableBy: string[] | undefined;
+  if (a.queryable_by !== undefined) {
+    if (!Array.isArray(a.queryable_by)) {
+      e("access.queryable_by must be an array of app ids");
+    } else {
+      queryableBy = [];
+      const seen = new Set<string>();
+      for (const q of a.queryable_by) {
+        if (typeof q !== "string" || !NAME_RE.test(q)) {
+          e(
+            `access.queryable_by entries must be DNS-safe app ids (got ${JSON.stringify(q)})`,
+          );
+        } else if (seen.has(q)) {
+          e(`access.queryable_by has a duplicate entry ${JSON.stringify(q)}`);
+        } else {
+          seen.add(q);
+          queryableBy.push(q);
+        }
+      }
+    }
+  }
   if (a.enabled !== true) return undefined;
   return {
     enabled: true,
     default_role: defaultRole,
     custom_roles: customRoles,
     public_routes: publicRoutes,
+    queryable_by: queryableBy,
   };
 }
 
