@@ -13,6 +13,7 @@ import { IdentityInjector } from "./identityInjector.js";
 import { LlmHarness } from "./llmHarness.js";
 import { AppRunner } from "./appRunner.js";
 import { PhoneStateStore, PHONE_STATE_MAX_BYTES } from "./phoneStateStore.js";
+import { DataProvisioner, credentialsToEnv, type AppDataCredentials } from "./dataLayer/index.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -26,6 +27,8 @@ export interface DeployedApp {
   deployedAt: number;
   /** Source revision (git sha or tarball digest) — opaque, surfaced to UI. */
   source?: string;
+  /** Credentials minted by the DataProvisioner. Used on restart to re-inject env. */
+  data?: AppDataCredentials;
 }
 
 export interface DaemonContext {
@@ -45,6 +48,8 @@ export interface DaemonContext {
   deployedApps?: Map<string, DeployedApp>;
   /** Optional phone-state backup store. */
   phoneState?: PhoneStateStore;
+  /** Optional unified-data-layer provisioner. Required for data.stores in manifests. */
+  dataProvisioner?: DataProvisioner;
 }
 
 interface HexBytesField {
@@ -254,20 +259,52 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     if (ctx.deployedApps.has(appId)) {
       return reply.status(409).send({ error: "app already deployed", appId });
     }
+
+    // Provision data-layer resources before starting the container so the
+    // env vars are present on the very first launch. If the manifest
+    // declared stores but no provisioner is configured, refuse early.
+    let creds: AppDataCredentials | undefined;
+    const stores = m.data.stores ?? {};
+    const wantsAnyStore = !!(stores.postgres || stores.objects || stores.kv);
+    if (wantsAnyStore) {
+      if (!ctx.dataProvisioner) {
+        return reply.status(503).send({ error: "data provisioner not configured" });
+      }
+      try {
+        creds = await ctx.dataProvisioner.provisionApp({
+          username: ctx.userId,
+          appName: appId,
+          stores,
+        });
+      } catch (e) {
+        return reply.status(500).send({ error: "data provisioning failed", message: errMsg(e) });
+      }
+    }
+
+    const dataEnv = creds ? credentialsToEnv(creds) : {};
+    const env = { ...(m.runtime.env ?? {}), ...dataEnv };
     try {
       await ctx.appRunner.deploy({
         appId,
         image: m.runtime.image,
-        env: m.runtime.env,
+        env,
         port: m.runtime.port,
       });
     } catch (e) {
+      // Roll back the data resources so a failed deploy doesn't leak
+      // a half-provisioned tenant.
+      if (creds && ctx.dataProvisioner) {
+        await ctx.dataProvisioner
+          .deprovisionApp({ username: ctx.userId, appName: appId, stores })
+          .catch(() => {});
+      }
       return reply.status(500).send({ error: "deploy failed", message: errMsg(e) });
     }
     ctx.deployedApps.set(appId, {
       manifest: m,
       deployedAt: Date.now(),
       source: typeof body.source === "string" ? body.source : undefined,
+      data: creds,
     });
     return { ok: true, appId };
   });
@@ -289,6 +326,17 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     } catch (e) {
       return reply.status(500).send({ error: "stop failed", message: errMsg(e) });
     }
+    if (entry.data && ctx.dataProvisioner) {
+      await ctx.dataProvisioner
+        .deprovisionApp({
+          username: ctx.userId,
+          appName: appId,
+          stores: entry.manifest.data.stores ?? {},
+        })
+        .catch(() => {
+          // best-effort: data containers may already be gone (system stopping)
+        });
+    }
     ctx.deployedApps.delete(appId);
     return { ok: true, appId };
   });
@@ -304,11 +352,12 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
     const entry = ctx.deployedApps.get(req.params.appId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
+    const dataEnv = entry.data ? credentialsToEnv(entry.data) : {};
     try {
       await ctx.appRunner.restart({
         appId: req.params.appId,
         image: entry.manifest.runtime.image,
-        env: entry.manifest.runtime.env,
+        env: { ...(entry.manifest.runtime.env ?? {}), ...dataEnv },
         port: entry.manifest.runtime.port,
       });
     } catch (e) {
