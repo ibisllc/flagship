@@ -30,6 +30,8 @@ export interface DeployedApp {
   source?: string;
   /** Credentials minted by the DataProvisioner. Used on restart to re-inject env. */
   data?: AppDataCredentials;
+  /** Per-app sister-app token. Issued at deploy; baked into the container env. */
+  peersToken?: string;
 }
 
 export interface DaemonContext {
@@ -77,6 +79,12 @@ function errMsg(e: unknown): string {
 function clamp(n: number, lo: number, hi: number): number {
   if (!Number.isFinite(n)) return lo;
   return Math.max(lo, Math.min(hi, Math.floor(n)));
+}
+
+function randomToken(): string {
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return Buffer.from(b).toString("base64url");
 }
 
 export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
@@ -288,7 +296,13 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
 
     const dataEnv = creds ? credentialsToEnv(creds) : {};
-    const env = { ...(m.runtime.env ?? {}), ...dataEnv };
+    const peersToken = randomToken();
+    const env = {
+      ...(m.runtime.env ?? {}),
+      ...dataEnv,
+      FLAGSHIP_PEERS_TOKEN: peersToken,
+      FLAGSHIP_APP_ID: appId,
+    };
     try {
       await ctx.appRunner.deploy({
         appId,
@@ -311,6 +325,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       deployedAt: Date.now(),
       source: typeof body.source === "string" ? body.source : undefined,
       data: creds,
+      peersToken,
     });
     return { ok: true, appId };
   });
@@ -359,11 +374,17 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     const entry = ctx.deployedApps.get(req.params.appId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     const dataEnv = entry.data ? credentialsToEnv(entry.data) : {};
+    const restartEnv: Record<string, string> = {
+      ...(entry.manifest.runtime.env ?? {}),
+      ...dataEnv,
+      FLAGSHIP_APP_ID: req.params.appId,
+    };
+    if (entry.peersToken) restartEnv.FLAGSHIP_PEERS_TOKEN = entry.peersToken;
     try {
       await ctx.appRunner.restart({
         appId: req.params.appId,
         image: entry.manifest.runtime.image,
-        env: { ...(entry.manifest.runtime.env ?? {}), ...dataEnv },
+        env: restartEnv,
         port: entry.manifest.runtime.port,
       });
     } catch (e) {
@@ -572,6 +593,44 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       };
     },
   );
+
+  // ---- Sister-app capability (.flagship/peers/<target>/installed) -------
+
+  app.get<{
+    Params: { targetAppId: string };
+    Headers: { authorization?: string };
+  }>("/.flagship/peers/:targetAppId/installed", async (req, reply) => {
+    if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
+
+    // Bearer token identifies the *querying* app. Format: `Bearer <token>`.
+    const auth = req.headers.authorization;
+    if (typeof auth !== "string" || !auth.startsWith("Bearer ")) {
+      return reply.status(401).send({ error: "bearer token required" });
+    }
+    const token = auth.slice("Bearer ".length).trim();
+    let queryingAppId: string | undefined;
+    for (const [appId, entry] of ctx.deployedApps) {
+      if (entry.peersToken && entry.peersToken === token) {
+        queryingAppId = appId;
+        break;
+      }
+    }
+    if (!queryingAppId) return reply.status(401).send({ error: "unknown peers token" });
+
+    const target = ctx.deployedApps.get(req.params.targetAppId);
+    // Always returns "not installed" when the target hasn't allowlisted us.
+    // Same response for "target doesn't exist" and "target exists but doesn't
+    // know about us" — the querier cannot distinguish the two, so they cannot
+    // fingerprint the box.
+    if (!target) return { installed: false };
+    const allowed = target.manifest.access.queryable_by ?? [];
+    if (!allowed.includes(queryingAppId)) return { installed: false };
+
+    return {
+      installed: true,
+      subdomain: target.manifest.network.subdomain,
+    };
+  });
 
   // ---- LLM app context (markdown blob the harness prepends to chat) -----
 
