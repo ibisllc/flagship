@@ -1,0 +1,21 @@
+Business Source License 1.1
+
+Parameters
+
+Licensor:             Harry Winner
+Licensed Work:        Flagship
+                      The Licensed Work is (c) 2026 Harry Winner.
+Additional Use Grant: You may use, copy, run, and modify the Licensed Work
+                      for personal or internal-business purposes, including
+                      self-hosting one or more Flagship servers for your own
+                      account. You may NOT offer the Licensed Work, or a
+                      modified version of it, as a hosted or managed service
+                      that competes with Flagship's commercial offerings.
+Change Date:          2030-05-03
+Change License:       Apache License, Version 2.0
+
+For the full text of the Business Source License 1.1, see:
+https://mariadb.com/bsl11/
+
+This file is a parameters block; the canonical BSL-1.1 terms apply
+unmodified except for the parameters above.

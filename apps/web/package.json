@@ -22,5 +22,6 @@
     "@flagship/server-daemon": "*",
     "@types/qrcode": "^1.5.5",
     "@types/ws": "^8.5.13"
-  }
+  },
+  "license": "BUSL-1.1"
 }

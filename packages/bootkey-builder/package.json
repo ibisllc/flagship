@@ -16,5 +16,6 @@
   "dependencies": {
     "@flagship/protocol": "*",
     "commander": "^12.1.0"
-  }
+  },
+  "license": "BUSL-1.1"
 }

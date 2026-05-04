@@ -11,5 +11,6 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --dir tests"
-  }
+  },
+  "license": "BUSL-1.1"
 }
