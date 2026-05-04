@@ -28,6 +28,25 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("self.addEventListener");
   });
 
+  it("/webapp/app.js loads and imports keystore from /webapp/keystore.js", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/app.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('from "/webapp/keystore.js"');
+    expect(r.body).toContain("bootstrapNewIdentity");
+    expect(r.body).toContain("deriveIrkFromSeed");
+  });
+
+  it("/webapp/keystore.js exposes the wrap/unwrap surface used by app.js", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/keystore.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("export async function bootstrapNewIdentity");
+    expect(r.body).toContain("export async function unlockUmk");
+    expect(r.body).toContain("export async function deriveIrkFromSeed");
+    expect(r.body).toContain("export async function deriveBakFromSeed");
+  });
+
   it("never accidentally serves /webapp resources from the root scope", async () => {
     const app = buildServer();
     // Confirm the marketing root is NOT a manifest
