@@ -35,6 +35,9 @@ const TAG_INVITE_ACCEPT = "flagship/invite-accept/v1";
 const TAG_TUNNEL_HELLO = "flagship/tunnel-hello/v1";
 const TAG_REGISTER_SERVER = "flagship/register-server/v1";
 const TAG_ACCOUNT_RECOVERY = "flagship/account-recovery/v1";
+const TAG_PB_ANNOUNCE = "pb/announce/v1";
+const TAG_PB_REQUEST_PEERS = "pb/request-peers/v1";
+const TAG_PB_PEER_CONFIRM = "pb/peer-confirm/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -62,6 +65,36 @@ export interface AccountRecovery {
   newPushTokenHash: Bytes;
   /** Claim of which platform the new device is running ('apns' | 'fcm'). */
   platform: "apns" | "fcm";
+  issuedAt: number;
+}
+
+/** Peer-backup announce: STK-signed by an opted-in server. */
+export interface PbAnnounce {
+  serverId: ServerId;
+  pledgedBytes: number;
+  shareRatio: number;
+  maxShardSize: number;
+  /** ISO 3166 hint (optional). */
+  region?: string;
+  /** STUN-resolved hint, populated by the server. */
+  tunnelEndpoint: string;
+  issuedAt: number;
+}
+
+/** Peer-backup request-peers: STK-signed by the requester. */
+export interface PbRequestPeers {
+  requesterServerId: ServerId;
+  n: number;
+  shardSizeBytes: number;
+  durabilityHint: "high" | "best-effort";
+  issuedAt: number;
+}
+
+/** Peer-backup peer-confirm: STK-signed by the peer that accepted a placement. */
+export interface PbPeerConfirm {
+  peerServerId: ServerId;
+  requesterServerId: ServerId;
+  shardId: string;
   issuedAt: number;
 }
 
@@ -189,6 +222,40 @@ function canonicalRegisterServer(r: RegisterServer): Bytes {
 function canonicalAccountRecovery(r: AccountRecovery): Bytes {
   return new TextEncoder().encode(
     `${TAG_ACCOUNT_RECOVERY}|${r.userId}|${hex(r.newPushTokenHash)}|${r.platform}|${r.issuedAt}`,
+  );
+}
+
+function canonicalPbAnnounce(a: PbAnnounce): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_PB_ANNOUNCE,
+      a.serverId,
+      a.pledgedBytes,
+      a.shareRatio,
+      a.maxShardSize,
+      a.region ?? "",
+      a.tunnelEndpoint,
+      a.issuedAt,
+    ].join("|"),
+  );
+}
+
+function canonicalPbRequestPeers(r: PbRequestPeers): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_PB_REQUEST_PEERS,
+      r.requesterServerId,
+      r.n,
+      r.shardSizeBytes,
+      r.durabilityHint,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+function canonicalPbPeerConfirm(c: PbPeerConfirm): Bytes {
+  return new TextEncoder().encode(
+    [TAG_PB_PEER_CONFIRM, c.peerServerId, c.requesterServerId, c.shardId, c.issuedAt].join("|"),
   );
 }
 
@@ -343,6 +410,42 @@ export function signAccountRecovery(r: AccountRecovery, irk: Keypair): Bytes {
 export function verifyAccountRecovery(r: AccountRecovery, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalAccountRecovery(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signPbAnnounce(a: PbAnnounce, stk: Keypair): Bytes {
+  return ed.sign(canonicalPbAnnounce(a), stk.privateKey);
+}
+
+export function verifyPbAnnounce(a: PbAnnounce, sig: Bytes, stkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPbAnnounce(a), stkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signPbRequestPeers(r: PbRequestPeers, stk: Keypair): Bytes {
+  return ed.sign(canonicalPbRequestPeers(r), stk.privateKey);
+}
+
+export function verifyPbRequestPeers(r: PbRequestPeers, sig: Bytes, stkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPbRequestPeers(r), stkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signPbPeerConfirm(c: PbPeerConfirm, stk: Keypair): Bytes {
+  return ed.sign(canonicalPbPeerConfirm(c), stk.privateKey);
+}
+
+export function verifyPbPeerConfirm(c: PbPeerConfirm, sig: Bytes, stkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPbPeerConfirm(c), stkPub);
   } catch {
     return false;
   }

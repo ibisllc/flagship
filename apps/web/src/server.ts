@@ -21,6 +21,13 @@ import {
 import { registerServerRevocation } from "./routes/serverRevocation.js";
 import { registerAccountRecovery } from "./routes/accountRecovery.js";
 import {
+  registerPeerBackupMatchmaker,
+  InMemoryReciprocityLedger,
+  InMemoryPeerCandidatePool,
+  type ReciprocityLedger,
+  type PeerCandidatePool,
+} from "./routes/peerBackupMatchmaker.js";
+import {
   registerPushRelay,
   InMemoryPushTokenStore,
   NoopPushDispatcher,
@@ -52,6 +59,9 @@ export interface BuildServerOptions {
   /** Push-relay components. Both must be present to expose the routes. */
   pushTokenStore?: PushTokenStore;
   pushDispatcher?: PushDispatcher;
+  /** Peer-backup matchmaker components. Defaults are in-memory. */
+  reciprocityLedger?: ReciprocityLedger;
+  peerCandidatePool?: PeerCandidatePool;
 }
 
 /**
@@ -123,6 +133,16 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
     });
   }
 
+  const reciprocityLedger = opts.reciprocityLedger ?? new InMemoryReciprocityLedger();
+  const peerCandidatePool = opts.peerCandidatePool ?? new InMemoryPeerCandidatePool();
+  registerPeerBackupMatchmaker(app, {
+    serverRegistry,
+    ledger: reciprocityLedger,
+    pool: peerCandidatePool,
+  });
+  app.decorate("reciprocityLedger", reciprocityLedger);
+  app.decorate("peerCandidatePool", peerCandidatePool);
+
   app.register(fastifyStatic, {
     root: resolve(__dirname, "../public"),
     prefix: "/",
@@ -137,6 +157,8 @@ declare module "fastify" {
     serverRegistry: ServerRegistry;
     pushTokenStore: PushTokenStore;
     desktopSessions: DesktopSessionStore;
+    reciprocityLedger: ReciprocityLedger;
+    peerCandidatePool: PeerCandidatePool;
   }
 }
 
