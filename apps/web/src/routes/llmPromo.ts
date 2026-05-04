@@ -126,7 +126,7 @@ class TicketStore {
 }
 
 export interface LlmPromoOptions {
-  resolveUserIrk: (userId: string) => Uint8Array | null;
+  resolveUserIrk: (userId: string) => Uint8Array | null | Promise<Uint8Array | null>;
   ledger: PromoLedger;
   issuer: PromoIssuer;
   sms: SmsSender;
@@ -220,7 +220,7 @@ export function registerLlmPromo(app: FastifyInstance, opts: LlmPromoOptions): v
     if (r.method !== "phone-otp") {
       return reply.status(501).send({ error: "stripe-zero-auth not yet implemented" });
     }
-    const irkPub = opts.resolveUserIrk(r.userId);
+    const irkPub = await opts.resolveUserIrk(r.userId);
     if (!irkPub) return reply.status(404).send({ error: "unknown user" });
 
     let identityHash: Uint8Array;
@@ -299,7 +299,7 @@ export function registerLlmPromo(app: FastifyInstance, opts: LlmPromoOptions): v
     ) {
       return reply.status(400).send({ error: "malformed body" });
     }
-    const irkPub = opts.resolveUserIrk(r.userId);
+    const irkPub = await opts.resolveUserIrk(r.userId);
     if (!irkPub) return reply.status(404).send({ error: "unknown user" });
 
     let otpHash: Uint8Array;

@@ -93,7 +93,7 @@ export interface BuildServerOptions {
   /** Pre-built server registry (tests pass a seeded one). Defaults to in-memory. */
   serverRegistry?: ServerRegistry;
   /** Resolves a userId to its IRK pubkey for registration verification. */
-  resolveUserIrk?: (userId: string) => Uint8Array | null;
+  resolveUserIrk?: (userId: string) => Uint8Array | null | Promise<Uint8Array | null>;
   /** Push-relay components. Both must be present to expose the routes. */
   pushTokenStore?: PushTokenStore;
   pushDispatcher?: PushDispatcher;

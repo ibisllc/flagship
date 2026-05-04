@@ -57,7 +57,7 @@ export class InMemoryServerRegistry implements ServerRegistry {
 export interface RegisterServerOptions {
   registry: ServerRegistry;
   /** Resolves a userId to its IRK pubkey. The control plane stores this on signup. */
-  resolveUserIrk: (userId: string) => Uint8Array | null;
+  resolveUserIrk: (userId: string) => Uint8Array | null | Promise<Uint8Array | null>;
   /** Replay window. Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -98,7 +98,7 @@ export function registerServerRegistry(app: FastifyInstance, opts: RegisterServe
       return reply.status(400).send({ error: "signature must be 64-byte hex" });
     }
 
-    const irkPub = opts.resolveUserIrk(r.userId);
+    const irkPub = await opts.resolveUserIrk(r.userId);
     if (!irkPub) return reply.status(404).send({ error: "unknown user" });
 
     let stkPub: Uint8Array;

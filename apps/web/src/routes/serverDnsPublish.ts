@@ -14,7 +14,7 @@ import { hexToBytes } from "../lib/hex.js";
  */
 export interface PublishServerDnsOptions {
   publisher: ServerDnsPublisher;
-  resolveUserIrk: (userId: string) => Uint8Array | null;
+  resolveUserIrk: (userId: string) => Uint8Array | null | Promise<Uint8Array | null>;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -54,7 +54,7 @@ export function registerServerDnsPublish(
       return reply.status(400).send({ error: "directIp required when mode=direct" });
     }
 
-    const irkPub = opts.resolveUserIrk(r.userId);
+    const irkPub = await opts.resolveUserIrk(r.userId);
     if (!irkPub) return reply.status(404).send({ error: "unknown user" });
 
     let sig: Uint8Array;
@@ -108,7 +108,7 @@ export function registerServerDnsPublish(
       ) {
         return reply.status(400).send({ error: "signature must commit to URL params" });
       }
-      const irkPub = opts.resolveUserIrk(req.params.userId);
+      const irkPub = await opts.resolveUserIrk(req.params.userId);
       if (!irkPub) return reply.status(404).send({ error: "unknown user" });
       let sig: Uint8Array;
       try {

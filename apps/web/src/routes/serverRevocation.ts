@@ -9,7 +9,7 @@ import type { ServerRegistry } from "./serverRegistry.js";
 
 export interface ServerRevocationOptions {
   registry: ServerRegistry;
-  resolveUserIrk: (userId: string) => Uint8Array | null;
+  resolveUserIrk: (userId: string) => Uint8Array | null | Promise<Uint8Array | null>;
   /** Replay window. Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -52,7 +52,7 @@ export function registerServerRevocation(app: FastifyInstance, opts: ServerRevoc
       return reply.status(400).send({ error: "malformed body" });
     }
 
-    const irkPub = opts.resolveUserIrk(r.userId);
+    const irkPub = await opts.resolveUserIrk(r.userId);
     if (!irkPub) return reply.status(404).send({ error: "unknown user" });
 
     let sig: Uint8Array;

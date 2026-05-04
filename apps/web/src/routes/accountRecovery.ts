@@ -23,7 +23,7 @@ import type { PushPlatform, PushTokenStore } from "./pushRelay.js";
 export interface AccountRecoveryOptions {
   registry: ServerRegistry;
   pushTokenStore: PushTokenStore;
-  resolveUserIrk: (userId: string) => Uint8Array | null;
+  resolveUserIrk: (userId: string) => Uint8Array | null | Promise<Uint8Array | null>;
   /**
    * Optional: revoke all paired desktop sessions for this user. Plug in the
    * desktop-pair store from `desktopPair.ts`.
@@ -72,7 +72,7 @@ export function registerAccountRecovery(app: FastifyInstance, opts: AccountRecov
       return reply.status(400).send({ error: "malformed body" });
     }
 
-    const irkPub = opts.resolveUserIrk(r.userId);
+    const irkPub = await opts.resolveUserIrk(r.userId);
     if (!irkPub) return reply.status(404).send({ error: "unknown user" });
 
     let claimedHash: Uint8Array;
