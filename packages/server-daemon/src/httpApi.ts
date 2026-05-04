@@ -15,6 +15,7 @@ import { AppRunner } from "./appRunner.js";
 import { PhoneStateStore, PHONE_STATE_MAX_BYTES } from "./phoneStateStore.js";
 import { DataProvisioner, credentialsToEnv, type AppDataCredentials } from "./dataLayer/index.js";
 import { buildLlmAppContext } from "./llmAppContext.js";
+import { ForgejoAppAdmin } from "./forgejoAppAdmin.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -53,6 +54,8 @@ export interface DaemonContext {
   phoneState?: PhoneStateStore;
   /** Optional unified-data-layer provisioner. Required for data.stores in manifests. */
   dataProvisioner?: DataProvisioner;
+  /** Optional Forgejo admin scoped to <user>-flagship/<app>. */
+  forgejo?: ForgejoAppAdmin;
 }
 
 interface HexBytesField {
@@ -593,6 +596,99 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       };
     },
   );
+
+  // ---- Per-app Forgejo (commits / PRs / merge / revert) -----------------
+
+  function requireForgejoApp(req: { params: { appId: string }; query: { sessionToken?: string } }, reply: import("fastify").FastifyReply) {
+    if (!ctx.forgejo) {
+      reply.status(503).send({ error: "forgejo admin not configured" });
+      return null;
+    }
+    if (!ctx.deployedApps) {
+      reply.status(503).send({ error: "deployedApps store missing" });
+      return null;
+    }
+    if (!ctx.resolveSession(req.query.sessionToken)) {
+      reply.status(401).send({ error: "session not authenticated" });
+      return null;
+    }
+    const entry = ctx.deployedApps.get(req.params.appId);
+    if (!entry) {
+      reply.status(404).send({ error: "app not found" });
+      return null;
+    }
+    return { entry, forgejo: ctx.forgejo };
+  }
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string; max?: string };
+  }>("/apps/:appId/git/commits", async (req, reply) => {
+    const r = requireForgejoApp(req, reply);
+    if (!r) return reply;
+    const max = Number(req.query.max ?? 50);
+    const commits = await r.forgejo.listCommits(req.params.appId, max);
+    return { commits };
+  });
+
+  app.get<{
+    Params: { appId: string };
+    Querystring: { sessionToken?: string; state?: "open" | "closed" | "all" };
+  }>("/apps/:appId/git/prs", async (req, reply) => {
+    const r = requireForgejoApp(req, reply);
+    if (!r) return reply;
+    const state = req.query.state === "closed" || req.query.state === "all" ? req.query.state : "open";
+    const prs = await r.forgejo.listPullRequests(req.params.appId, state);
+    return { prs };
+  });
+
+  app.post<{
+    Params: { appId: string; prNumber: string };
+    Querystring: { sessionToken?: string };
+    Body: { message?: string };
+  }>("/apps/:appId/git/prs/:prNumber/approve", async (req, reply) => {
+    const r = requireForgejoApp(req, reply);
+    if (!r) return reply;
+    const num = Number(req.params.prNumber);
+    if (!Number.isInteger(num) || num <= 0) return reply.status(400).send({ error: "invalid PR number" });
+    try {
+      const merged = await r.forgejo.mergePr(req.params.appId, num, req.body?.message);
+      return merged;
+    } catch (e) {
+      return reply.status(500).send({ error: "merge failed", message: errMsg(e) });
+    }
+  });
+
+  app.post<{
+    Params: { appId: string; prNumber: string };
+    Querystring: { sessionToken?: string };
+  }>("/apps/:appId/git/prs/:prNumber/retract", async (req, reply) => {
+    const r = requireForgejoApp(req, reply);
+    if (!r) return reply;
+    const num = Number(req.params.prNumber);
+    if (!Number.isInteger(num) || num <= 0) return reply.status(400).send({ error: "invalid PR number" });
+    try {
+      await r.forgejo.closePr(req.params.appId, num);
+      return { closed: true };
+    } catch (e) {
+      return reply.status(500).send({ error: "close failed", message: errMsg(e) });
+    }
+  });
+
+  app.post<{
+    Params: { appId: string; sha: string };
+    Querystring: { sessionToken?: string };
+  }>("/apps/:appId/git/commits/:sha/revert", async (req, reply) => {
+    const r = requireForgejoApp(req, reply);
+    if (!r) return reply;
+    if (!/^[0-9a-f]{7,40}$/.test(req.params.sha)) return reply.status(400).send({ error: "invalid sha" });
+    try {
+      const pr = await r.forgejo.createRevertPr(req.params.appId, req.params.sha);
+      return { pr };
+    } catch (e) {
+      return reply.status(500).send({ error: "revert failed", message: errMsg(e) });
+    }
+  });
 
   // ---- Sister-app capability (.flagship/peers/<target>/installed) -------
 
