@@ -46,6 +46,7 @@ const TAG_BACKUP_TOGGLE = "flagship/backup-toggle/v1";
 const TAG_PUBLISH_SERVER_DNS = "flagship/publish-server-dns/v1";
 const TAG_DNS01_PUBLISH = "flagship/dns01-publish/v1";
 const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
+const TAG_CLAIM_USERNAME = "flagship/claim-username/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -126,6 +127,19 @@ export interface PublishServerDns {
   serverId: ServerId;
   mode: "tunnel" | "direct";
   directIp: string;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed claim of a username on flagshipserver.com. The control plane
+ * stores `username → irkPub` keyed on the username; mutations require an
+ * IRK signature that matches the existing pubkey. The signature commits to
+ * (username, irkPub, issuedAt) so a captured signature can't be re-aimed
+ * at a different name.
+ */
+export interface ClaimUsername {
+  username: string;
+  irkPub: Bytes;
   issuedAt: number;
 }
 
@@ -393,6 +407,12 @@ function canonicalDns01Delete(r: Dns01DeleteRequest): Bytes {
   );
 }
 
+function canonicalClaimUsername(c: ClaimUsername): Bytes {
+  return new TextEncoder().encode(
+    [TAG_CLAIM_USERNAME, c.username, hex(c.irkPub), c.issuedAt].join("|"),
+  );
+}
+
 export function signBootApproval(c: BootChallenge, bak: Keypair): Bytes {
   return ed.sign(canonicalBoot(c), bak.privateKey);
 }
@@ -652,6 +672,18 @@ export function signDns01Delete(r: Dns01DeleteRequest, stk: Keypair): Bytes {
 export function verifyDns01Delete(r: Dns01DeleteRequest, sig: Bytes, stkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalDns01Delete(r), stkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signClaimUsername(c: ClaimUsername, irk: Keypair): Bytes {
+  return ed.sign(canonicalClaimUsername(c), irk.privateKey);
+}
+
+export function verifyClaimUsername(c: ClaimUsername, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalClaimUsername(c), irkPub);
   } catch {
     return false;
   }

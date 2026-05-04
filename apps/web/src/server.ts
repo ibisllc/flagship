@@ -21,6 +21,11 @@ import {
 import { registerServerRevocation } from "./routes/serverRevocation.js";
 import { registerAccountRecovery } from "./routes/accountRecovery.js";
 import {
+  registerUsernameRegistry,
+  InMemoryUsernameRegistry,
+  type UsernameRegistry,
+} from "./routes/usernameRegistry.js";
+import {
   registerLlmPromo,
   InMemoryPromoLedger,
   ConsoleSmsSender,
@@ -112,6 +117,11 @@ export interface BuildServerOptions {
   zone?: ZoneApi;
   serverDnsRegistry?: ServerDnsRegistry;
   tunnelIngressIp?: string;
+  /**
+   * .com username registry — username → IRK pubkey.
+   * Defaults to in-memory on .com surface.
+   */
+  usernameRegistry?: UsernameRegistry;
 }
 
 /**
@@ -137,6 +147,12 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
 
   const serverRegistry = opts.serverRegistry ?? new InMemoryServerRegistry();
   app.decorate("serverRegistry", serverRegistry);
+
+  const usernameRegistry = opts.usernameRegistry ?? new InMemoryUsernameRegistry();
+  if (isCom) {
+    registerUsernameRegistry(app, { registry: usernameRegistry });
+    app.decorate("usernameRegistry", usernameRegistry);
+  }
 
   app.get("/api/health", async () => ({
     ok: true,
@@ -270,6 +286,7 @@ declare module "fastify" {
     reciprocityLedger: ReciprocityLedger;
     peerCandidatePool: PeerCandidatePool;
     serverDnsRegistry?: ServerDnsRegistry;
+    usernameRegistry?: UsernameRegistry;
     promoLedger?: PromoLedger;
   }
 }
