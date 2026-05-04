@@ -81,14 +81,37 @@
       <!-- View 5: Settings — providers, identity, reset. -->
       <section id="view-settings" class="hidden">
         <h2>AI providers</h2>
-        <div class="card warning" id="promo-banner-low" style="display:none;">
-          <strong>You're almost out of free Flagship tokens.</strong>
-          <p style="margin: 0.4rem 0 0; color: var(--fg-mute); font-size: 0.85rem;">
-            Add your own LLM API key below to keep building.
-          </p>
-        </div>
         <div id="providers-list"></div>
         <button id="add-provider-go" style="margin-top: 0.6rem; width: 100%;">+ Add provider</button>
+
+        <div class="card hidden" id="promo-issuance-form" style="margin-top: 0.6rem;">
+          <h3 style="margin-top: 0;">Claim free credits</h3>
+          <div id="promo-step-phone">
+            <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+              We use your phone number to issue one promo key per person. The number is hashed before storage; we don't keep it in the clear.
+            </p>
+            <label for="promo-phone" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Phone (E.164)</label>
+            <input id="promo-phone" type="tel" placeholder="+15555550100" autocomplete="tel" />
+            <div style="display: flex; gap: 0.6rem; margin-top: 0.8rem;">
+              <button id="promo-start-go" style="flex: 1;">Send code</button>
+              <button class="secondary" id="promo-cancel" style="flex: 1;">Cancel</button>
+            </div>
+          </div>
+          <div id="promo-step-otp" class="hidden">
+            <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+              Enter the 6-digit code we just sent.
+            </p>
+            <label for="promo-otp" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Code</label>
+            <input id="promo-otp" type="text" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code" />
+            <div style="display: flex; gap: 0.6rem; margin-top: 0.8rem;">
+              <button id="promo-complete-go" style="flex: 1;">Claim</button>
+              <button class="secondary" id="promo-cancel-2" style="flex: 1;" onclick="document.getElementById('promo-cancel').click()">Cancel</button>
+            </div>
+          </div>
+          <p style="margin: 0.7rem 0 0; color: var(--fg-mute); font-size: 0.78rem;">
+            Once issued, the key lives only on this device. flagshipserver.com cannot read your prompts — they go phone → your server → our GPU directly.
+          </p>
+        </div>
 
         <div class="card hidden" id="add-provider-form" style="margin-top: 0.6rem;">
           <h3 style="margin-top: 0;">New provider</h3>

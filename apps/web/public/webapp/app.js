@@ -122,7 +122,9 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
-/* ---------- providers (promo + BYOK) ---------- */
+/* ---------- providers (BYOK + Flagship-promo issuance) ---------- */
+
+const FLAGSHIP_PROMO_LABEL_PREFIX = "Flagship promo";
 
 function maskKey(k) {
   if (!k) return "";
@@ -130,49 +132,8 @@ function maskKey(k) {
   return k.slice(0, 4) + "••••" + k.slice(-4);
 }
 
-function renderQuotaMeter(quota) {
-  const lifeFrac = Math.min(1, quota.lifetimeUsed / Math.max(1, quota.lifetimeTotal));
-  const winFrac = Math.min(1, quota.windowUsed / Math.max(1, quota.windowTotal));
-  const fmt = (n) => Math.round(n).toLocaleString();
-  return `
-    <div style="margin-top: 0.6rem;">
-      <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--fg-mute);">
-        <span>Lifetime</span><span>${fmt(quota.lifetimeUsed)} / ${fmt(quota.lifetimeTotal)}</span>
-      </div>
-      <div style="height: 6px; background: #ffffff10; border-radius: 999px; overflow:hidden; margin-top: 0.25rem;">
-        <div style="height: 100%; width: ${(lifeFrac * 100).toFixed(0)}%; background: ${lifeFrac >= 0.8 ? "var(--warn)" : "var(--accent)"};"></div>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--fg-mute); margin-top: 0.5rem;">
-        <span>Last 24h</span><span>${fmt(quota.windowUsed)} / ${fmt(quota.windowTotal)}</span>
-      </div>
-      <div style="height: 6px; background: #ffffff10; border-radius: 999px; overflow:hidden; margin-top: 0.25rem;">
-        <div style="height: 100%; width: ${(winFrac * 100).toFixed(0)}%; background: ${winFrac >= 0.8 ? "var(--warn)" : "var(--accent)"};"></div>
-      </div>
-    </div>
-  `;
-}
-
-async function fetchPromoQuota() {
-  if (!session.umk || !session.username) return null;
-  const issuedAt = Date.now();
-  const canonical = new TextEncoder().encode(
-    `flagship/llm-promo-quota/v1|${session.username}|${issuedAt}`,
-  );
-  const sig = await signWithIrk(session.umk, canonical);
-  try {
-    const r = await fetch("/api/llm-promo/quota", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        request: { userId: session.username, issuedAt },
-        signature: bytesToHex(sig),
-      }),
-    });
-    if (!r.ok) return null;
-    return r.json();
-  } catch {
-    return null;
-  }
+function isPromoEntry(e) {
+  return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
 async function renderProviders() {
@@ -183,42 +144,37 @@ async function renderProviders() {
     return;
   }
   const stored = await loadProviders(session.umk);
-  const quota = await fetchPromoQuota();
+  const hasPromoEntry = stored.entries.some(isPromoEntry);
 
-  // Promo entry on top.
-  const promoActive = stored.activeId === PROMO_ID;
-  const promoCard = document.createElement("div");
-  promoCard.className = "card";
-  promoCard.style.borderLeft = `3px solid ${promoActive ? "var(--accent)" : "transparent"}`;
-  promoCard.innerHTML = `
-    <div class="row" style="align-items: flex-start;">
-      <div>
-        <div style="font-weight: 600;">Flagship promo <span class="pill">free credits</span></div>
-        <div style="color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.25rem;">
-          Hosted GPU running an open-source coding model. Prompts are processed by flagshipserver.com on the way to our GPU.
-        </div>
+  // CTA card for the issuance flow when the user doesn't have a promo entry yet.
+  if (!hasPromoEntry) {
+    const cta = document.createElement("div");
+    cta.className = "card";
+    cta.innerHTML = `
+      <div style="font-weight: 600;">Flagship free credits</div>
+      <div style="color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.25rem;">
+        500k tokens / 100k per day on our hosted coding model. Verify a phone number to claim once.
+        Once issued, the key lives on this device — flagshipserver.com cannot read your prompts.
       </div>
-      <button class="${promoActive ? "" : "secondary"}" data-action="set-active" data-id="${PROMO_ID}">${promoActive ? "active" : "use"}</button>
-    </div>
-    ${quota ? renderQuotaMeter(quota) : '<p style="margin: 0.6rem 0 0; color: var(--fg-mute); font-size: 0.85rem;">quota: (sign in to your account on a server first)</p>'}
-  `;
-  list.appendChild(promoCard);
+      <button id="promo-claim-go" style="margin-top: 0.7rem; width: 100%;">Get free credits</button>
+    `;
+    list.appendChild(cta);
+  }
 
-  // "Almost out" banner toggles based on quota.
-  const banner = $("promo-banner-low");
-  if (banner) banner.style.display = (quota && (quota.almostOut || quota.exhausted)) ? "block" : "none";
-
-  // BYOK entries.
+  // BYOK entries (including any minted promo entry — it's just a regular entry now).
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
     const card = document.createElement("div");
     card.className = "card";
     card.style.borderLeft = `3px solid ${isActive ? "var(--accent)" : "transparent"}`;
     card.style.marginTop = "0.6rem";
+    const promoBadge = isPromoEntry(e)
+      ? '<span class="pill ok">free credits</span>'
+      : "";
     card.innerHTML = `
       <div class="row" style="align-items: flex-start;">
         <div>
-          <div style="font-weight: 600;">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
+          <div style="font-weight: 600;">${escapeHtml(e.label)} ${promoBadge} <span class="pill">${escapeHtml(e.provider)}</span></div>
           <div class="value" style="font-size: 0.78rem; margin-top: 0.25rem;">${escapeHtml(maskKey(e.apiKey))}</div>
           ${e.defaultModel ? `<div style="color: var(--fg-mute); font-size: 0.78rem;">default: ${escapeHtml(e.defaultModel)}</div>` : ""}
         </div>
@@ -231,7 +187,6 @@ async function renderProviders() {
     list.appendChild(card);
   }
 
-  // Wire button handlers (event delegation would be cleaner but the list is short).
   list.querySelectorAll('[data-action="set-active"]').forEach((b) => {
     b.addEventListener("click", async () => {
       try {
@@ -256,35 +211,35 @@ async function renderProviders() {
       }
     });
   });
+  $("promo-claim-go")?.addEventListener("click", () => {
+    $("promo-issuance-form")?.classList.remove("hidden");
+    $("promo-step-otp")?.classList.add("hidden");
+    $("promo-step-phone")?.classList.remove("hidden");
+  });
 }
 
 async function renderActiveProviderChip() {
   const chip = $("home-active-provider");
   if (!chip || !session.umk) return;
   const stored = await loadProviders(session.umk);
-  if (stored.activeId === PROMO_ID) {
-    const quota = await fetchPromoQuota();
+  const e = stored.entries.find((x) => x.id === stored.activeId);
+  if (!e) {
     chip.innerHTML = `
       <div class="row">
         <div>
-          <div style="font-weight: 600;">Flagship promo</div>
-          <div style="color: var(--fg-mute); font-size: 0.82rem;">free credits — prompts proxied by flagshipserver.com</div>
+          <div style="font-weight: 600;">No active provider</div>
+          <div style="color: var(--fg-mute); font-size: 0.82rem;">claim free credits or add your own key</div>
         </div>
-        <button class="secondary" id="chip-settings">manage</button>
+        <button class="secondary" id="chip-settings">settings</button>
       </div>
-      ${quota ? renderQuotaMeter(quota) : ""}
     `;
   } else {
-    const e = stored.entries.find((x) => x.id === stored.activeId);
-    if (!e) {
-      chip.innerHTML = '<p style="margin:0; color:var(--fg-mute); font-size:0.9rem;">no active provider — open settings</p>';
-      return;
-    }
+    const promo = isPromoEntry(e);
     chip.innerHTML = `
       <div class="row">
         <div>
           <div style="font-weight: 600;">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
-          <div style="color: var(--fg-mute); font-size: 0.82rem;">key on this device — flagshipserver.com cannot read prompts</div>
+          <div style="color: var(--fg-mute); font-size: 0.82rem;">${promo ? "Flagship-issued key — flagshipserver.com cannot read prompts" : "key on this device — flagshipserver.com cannot read prompts"}</div>
         </div>
         <button class="secondary" id="chip-settings">manage</button>
       </div>
@@ -294,6 +249,111 @@ async function renderActiveProviderChip() {
     show("view-settings");
     await renderProviders();
   });
+}
+
+// Holds the live issuance ticket between the /start and /complete steps.
+let promoIssuanceCtx = null;
+
+async function startPromoIssuance() {
+  if (!session.umk) return toast("unlock first", "err");
+  const username = await ensureUsername().catch((e) => {
+    toast(e.message, "err");
+    return null;
+  });
+  if (!username) return;
+  const phone = $("promo-phone").value.trim();
+  if (!/^\+[1-9][0-9]{6,14}$/.test(phone)) {
+    return toast("phone number must be E.164 (e.g. +15555550100)", "err");
+  }
+  const identityHash = await sha256Bytes(new TextEncoder().encode(phone));
+  const issuedAt = Date.now();
+  const canonical = new TextEncoder().encode(
+    `flagship/llm-promo-issue-start/v1|${username}|phone-otp|${bytesToHex(identityHash)}|${issuedAt}`,
+  );
+  const sig = await signWithIrk(session.umk, canonical);
+  try {
+    const r = await fetch("/api/llm-promo/issue/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        request: {
+          userId: username,
+          method: "phone-otp",
+          identityHash: bytesToHex(identityHash),
+          issuedAt,
+        },
+        signature: bytesToHex(sig),
+        identity: phone,
+      }),
+    });
+    if (!r.ok) {
+      const body = await r.text();
+      throw new Error(`status ${r.status}: ${body}`);
+    }
+    const body = await r.json();
+    promoIssuanceCtx = { ticket: body.ticket, username };
+    $("promo-step-phone")?.classList.add("hidden");
+    $("promo-step-otp")?.classList.remove("hidden");
+    toast("we sent you a code");
+  } catch (e) {
+    toast(`could not start: ${e.message}`, "err");
+  }
+}
+
+async function completePromoIssuance() {
+  if (!session.umk || !promoIssuanceCtx) return;
+  const otp = $("promo-otp").value.trim();
+  if (!/^[0-9]{6}$/.test(otp)) return toast("OTP must be 6 digits", "err");
+  const otpHash = await sha256Bytes(new TextEncoder().encode(otp));
+  const issuedAt = Date.now();
+  const canonical = new TextEncoder().encode(
+    `flagship/llm-promo-issue-complete/v1|${promoIssuanceCtx.username}|${promoIssuanceCtx.ticket}|${bytesToHex(otpHash)}|${issuedAt}`,
+  );
+  const sig = await signWithIrk(session.umk, canonical);
+  try {
+    const r = await fetch("/api/llm-promo/issue/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        request: {
+          userId: promoIssuanceCtx.username,
+          ticket: promoIssuanceCtx.ticket,
+          otpHash: bytesToHex(otpHash),
+          issuedAt,
+        },
+        signature: bytesToHex(sig),
+        otp,
+      }),
+    });
+    if (!r.ok) {
+      const body = await r.text();
+      throw new Error(`status ${r.status}: ${body}`);
+    }
+    const { key } = await r.json();
+    // Persist as a normal BYOK provider entry. The OpenAI adapter handles
+    // OpenAI-compatible APIs against an arbitrary baseUrl.
+    await addProvider(session.umk, {
+      provider: "openai",
+      label: `Flagship promo (${key.keyId})`,
+      apiKey: key.apiKey,
+      baseUrl: key.baseUrl,
+      defaultModel: key.model,
+    });
+    promoIssuanceCtx = null;
+    $("promo-issuance-form")?.classList.add("hidden");
+    $("promo-otp").value = "";
+    $("promo-phone").value = "";
+    await renderProviders();
+    await renderActiveProviderChip();
+    toast("free credits ready — selected as active provider");
+  } catch (e) {
+    toast(`could not complete: ${e.message}`, "err");
+  }
+}
+
+async function sha256Bytes(input) {
+  const buf = await crypto.subtle.digest("SHA-256", input);
+  return new Uint8Array(buf);
 }
 
 /* ---------- pairing flow ---------- */
@@ -508,6 +568,15 @@ async function boot() {
   $("add-provider-go")?.addEventListener("click", handleAddProvider);
   $("np-save")?.addEventListener("click", handleSaveProvider);
   $("np-cancel")?.addEventListener("click", () => $("add-provider-form").classList.add("hidden"));
+
+  $("promo-start-go")?.addEventListener("click", startPromoIssuance);
+  $("promo-complete-go")?.addEventListener("click", completePromoIssuance);
+  $("promo-cancel")?.addEventListener("click", () => {
+    promoIssuanceCtx = null;
+    $("promo-issuance-form")?.classList.add("hidden");
+    $("promo-otp").value = "";
+    $("promo-phone").value = "";
+  });
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");
