@@ -42,6 +42,7 @@ const TAG_PB_PEER_CONFIRM = "pb/peer-confirm/v1";
 // promo flow is one-shot issuance — see TAG_LLM_PROMO_ISSUE_* below.
 const TAG_LLM_PROMO_ISSUE_START = "flagship/llm-promo-issue-start/v1";
 const TAG_LLM_PROMO_ISSUE_COMPLETE = "flagship/llm-promo-issue-complete/v1";
+const TAG_BACKUP_TOGGLE = "flagship/backup-toggle/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -104,6 +105,19 @@ export interface LlmPromoIssueComplete {
   ticket: string;
   /** SHA-256 of the OTP / verification code — hex 32 bytes. */
   otpHash: Bytes;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed phone command to flip a server's per-server backup participation.
+ * The signature commits to (serverId, enabled, issuedAt) so a captured
+ * "enable" signature can't be replayed against a different server, and a
+ * captured "disable" can't be reused to flip back on without a fresh
+ * biometric prompt on the phone.
+ */
+export interface BackupToggle {
+  serverId: ServerId;
+  enabled: boolean;
   issuedAt: number;
 }
 
@@ -307,6 +321,12 @@ function canonicalLlmPromoIssueStart(r: LlmPromoIssueStart): Bytes {
 function canonicalLlmPromoIssueComplete(r: LlmPromoIssueComplete): Bytes {
   return new TextEncoder().encode(
     [TAG_LLM_PROMO_ISSUE_COMPLETE, r.userId, r.ticket, hex(r.otpHash), r.issuedAt].join("|"),
+  );
+}
+
+function canonicalBackupToggle(r: BackupToggle): Bytes {
+  return new TextEncoder().encode(
+    `${TAG_BACKUP_TOGGLE}|${r.serverId}|${r.enabled ? "1" : "0"}|${r.issuedAt}`,
   );
 }
 
@@ -521,6 +541,18 @@ export function signLlmPromoIssueComplete(r: LlmPromoIssueComplete, irk: Keypair
 export function verifyLlmPromoIssueComplete(r: LlmPromoIssueComplete, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalLlmPromoIssueComplete(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signBackupToggle(r: BackupToggle, irk: Keypair): Bytes {
+  return ed.sign(canonicalBackupToggle(r), irk.privateKey);
+}
+
+export function verifyBackupToggle(r: BackupToggle, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalBackupToggle(r), irkPub);
   } catch {
     return false;
   }

@@ -360,6 +360,30 @@ describe("IRK server registration", () => {
   });
 });
 
+describe("BackupToggle signatures (per-server)", () => {
+  const irk = deriveIRK(umk);
+
+  it("phone-signed toggle verifies with the matching IRK pubkey", async () => {
+    const { signBackupToggle, verifyBackupToggle } = await import("../src/auth.js");
+    const r = { serverId: "home-box", enabled: true, issuedAt: 1735689600000 };
+    expect(verifyBackupToggle(r, signBackupToggle(r, irk), irk.publicKey)).toBe(true);
+  });
+
+  it("rejects when the signed serverId is changed (no replay across servers)", async () => {
+    const { signBackupToggle, verifyBackupToggle } = await import("../src/auth.js");
+    const r = { serverId: "home-box", enabled: true, issuedAt: 1735689600000 };
+    const sig = signBackupToggle(r, irk);
+    expect(verifyBackupToggle({ ...r, serverId: "chillout" }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects when enabled is flipped (a captured 'enable' can't be reused as 'disable')", async () => {
+    const { signBackupToggle, verifyBackupToggle } = await import("../src/auth.js");
+    const r = { serverId: "home-box", enabled: true, issuedAt: 1735689600000 };
+    const sig = signBackupToggle(r, irk);
+    expect(verifyBackupToggle({ ...r, enabled: false }, sig, irk.publicKey)).toBe(false);
+  });
+});
+
 describe("LLM promo issuance signatures (one-shot — flagshipserver.com is never in the prompt path)", () => {
   const irk = deriveIRK(umk);
 

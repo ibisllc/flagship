@@ -1,7 +1,9 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   parseManifest,
+  verifyBackupToggle,
   type AppManifest,
+  type BackupToggle,
   type Bytes,
   type InviteAcceptance,
   type InviteToken,
@@ -16,6 +18,7 @@ import { PhoneStateStore, PHONE_STATE_MAX_BYTES } from "./phoneStateStore.js";
 import { DataProvisioner, credentialsToEnv, type AppDataCredentials } from "./dataLayer/index.js";
 import { buildLlmAppContext } from "./llmAppContext.js";
 import { ForgejoAppAdmin } from "./forgejoAppAdmin.js";
+import { BackupLoop } from "./backupLoop.js";
 
 /**
  * The HTTP API surface that the Flagship server-daemon exposes for the phone
@@ -56,6 +59,14 @@ export interface DaemonContext {
   dataProvisioner?: DataProvisioner;
   /** Optional Forgejo admin scoped to <user>-flagship/<app>. */
   forgejo?: ForgejoAppAdmin;
+  /** Optional BackupLoop. When set, /backup/* routes are live. */
+  backupLoop?: BackupLoop;
+  /**
+   * The phone's IRK pubkey, baked into this server at provisioning time.
+   * Required for verifying backup-toggle commands (and any other phone-only
+   * mutation that doesn't go through the existing membership flow).
+   */
+  irkPubKey?: Bytes;
 }
 
 interface HexBytesField {
@@ -688,6 +699,60 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     } catch (e) {
       return reply.status(500).send({ error: "revert failed", message: errMsg(e) });
     }
+  });
+
+  // ---- Per-server backup toggle (IRK-signed; runs the BackupLoop) -------
+
+  app.get("/backup/status", async (_req, reply) => {
+    if (!ctx.backupLoop) return reply.status(503).send({ error: "backup loop not configured" });
+    return ctx.backupLoop.status();
+  });
+
+  app.post<{
+    Body: {
+      request?: { serverId?: string; enabled?: boolean; issuedAt?: number };
+      signature?: string;
+    };
+  }>("/backup/toggle", async (req, reply) => {
+    if (!ctx.backupLoop || !ctx.irkPubKey) {
+      return reply.status(503).send({ error: "backup loop not configured" });
+    }
+    const body = req.body ?? {};
+    const r = body.request;
+    if (
+      !r ||
+      typeof r.serverId !== "string" ||
+      typeof r.enabled !== "boolean" ||
+      typeof r.issuedAt !== "number" ||
+      typeof body.signature !== "string"
+    ) {
+      return reply.status(400).send({ error: "malformed body" });
+    }
+    if (r.serverId !== ctx.serverId) {
+      // The signed serverId must be ours. A captured "enable" signed for
+      // server-A can't be replayed against server-B.
+      return reply.status(403).send({ error: "serverId mismatch" });
+    }
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(body.signature);
+    } catch {
+      return reply.status(400).send({ error: "invalid hex signature" });
+    }
+    const claim: BackupToggle = {
+      serverId: r.serverId,
+      enabled: r.enabled,
+      issuedAt: r.issuedAt,
+    };
+    if (!verifyBackupToggle(claim, sig, ctx.irkPubKey)) {
+      return reply.status(403).send({ error: "invalid signature" });
+    }
+    const now = Date.now();
+    if (Math.abs(now - r.issuedAt) > 5 * 60_000) {
+      return reply.status(403).send({ error: "stale request" });
+    }
+    ctx.backupLoop.setEnabled(r.enabled, now);
+    return { ok: true, status: ctx.backupLoop.status() };
   });
 
   // ---- Sister-app capability (.flagship/peers/<target>/installed) -------

@@ -7,7 +7,7 @@ const umk = { seed: new Uint8Array(32).fill(21) };
 describe("BackupLoop", () => {
   it("encrypts and shards each input file", () => {
     const swk = deriveSWK(umk, "srv-1");
-    const loop = new BackupLoop({ swk, k: 1, n: 3 });
+    const loop = new BackupLoop({ swk, k: 1, n: 3, initiallyEnabled: true });
     const enc = new TextEncoder();
     const report = loop.runOnce([
       { path: "a.txt", content: enc.encode("hello") },
@@ -20,7 +20,7 @@ describe("BackupLoop", () => {
 
   it("zero files yields a zero report", () => {
     const swk = deriveSWK(umk, "srv-1");
-    const loop = new BackupLoop({ swk, k: 1, n: 3 });
+    const loop = new BackupLoop({ swk, k: 1, n: 3, initiallyEnabled: true });
     expect(loop.runOnce([])).toEqual({
       filesProcessed: 0,
       totalShards: 0,
