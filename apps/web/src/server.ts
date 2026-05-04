@@ -57,7 +57,23 @@ export interface ServerHandle {
   close(): Promise<void>;
 }
 
+/**
+ * Which surface this Fastify instance is serving.
+ *
+ *  - "com"      — flagshipserver.com (identity surface): static pages, /webapp,
+ *                 /deck, /login, account recovery, push relay, promo issuance,
+ *                 desktop pairing. Sees no traffic.
+ *  - "services" — flagship.services (traffic + peer mesh): tunnel hub,
+ *                 peer-backup matchmaker, DNS publishing (later). Sees traffic
+ *                 metadata but never decrypts user-content.
+ *  - "both"     — single binary serves everything. The dev / test default and
+ *                 the simplest single-machine deploy.
+ */
+export type Surface = "com" | "services" | "both";
+
 export interface BuildServerOptions {
+  /** Default "both" — see Surface for the modes. */
+  surface?: Surface;
   migration?: MigrationOptions;
   desktopPair?: DesktopPairOptions;
   /** Pre-built server registry (tests pass a seeded one). Defaults to in-memory. */
@@ -99,35 +115,47 @@ function devDesktopPairOptions(): DesktopPairOptions | undefined {
 
 export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false });
+  const surface: Surface = opts.surface ?? "both";
+  const isCom = surface === "com" || surface === "both";
+  const isServices = surface === "services" || surface === "both";
+
   const serverRegistry = opts.serverRegistry ?? new InMemoryServerRegistry();
   app.decorate("serverRegistry", serverRegistry);
 
-  app.get("/api/health", async () => ({ ok: true, service: "flagshipserver.com" }));
+  app.get("/api/health", async () => ({
+    ok: true,
+    service: surface === "services" ? "flagship.services" : "flagshipserver.com",
+    surface,
+  }));
 
-  registerBuildImage(app);
-  registerQrAuth(app);
-  registerSecurityReport(app);
-  const desktopSessions = registerDesktopPair(app, opts.desktopPair ?? devDesktopPairOptions());
-  app.decorate("desktopSessions", desktopSessions);
+  let desktopSessions: DesktopSessionStore | undefined;
+  if (isCom) {
+    registerBuildImage(app);
+    registerQrAuth(app);
+    registerSecurityReport(app);
+    desktopSessions = registerDesktopPair(app, opts.desktopPair ?? devDesktopPairOptions());
+    app.decorate("desktopSessions", desktopSessions);
 
-  // Logged-in user surface — backed by the paired desktop session.
-  app.get<{ Querystring: { sessionId?: string } }>("/api/me/servers", async (req, reply) => {
-    const sid = req.query.sessionId;
-    if (!sid) return reply.status(400).send({ error: "sessionId required" });
-    const view = desktopSessions.getPaired(sid);
-    if (!view) return reply.status(401).send({ error: "session not paired" });
-    const servers = serverRegistry.listForUser(view.userId).map((s) => ({
-      serverId: s.serverId,
-      registeredAt: s.registeredAt,
-      revoked: s.revokedAt
-        ? { reason: s.revocationReason ?? "lost", at: s.revokedAt }
-        : null,
-    }));
-    return { userId: view.userId, servers };
-  });
-  if (opts.migration) registerMigration(app, opts.migration);
+    // Logged-in user surface — backed by the paired desktop session.
+    const sessions = desktopSessions;
+    app.get<{ Querystring: { sessionId?: string } }>("/api/me/servers", async (req, reply) => {
+      const sid = req.query.sessionId;
+      if (!sid) return reply.status(400).send({ error: "sessionId required" });
+      const view = sessions.getPaired(sid);
+      if (!view) return reply.status(401).send({ error: "session not paired" });
+      const servers = serverRegistry.listForUser(view.userId).map((s) => ({
+        serverId: s.serverId,
+        registeredAt: s.registeredAt,
+        revoked: s.revokedAt
+          ? { reason: s.revocationReason ?? "lost", at: s.revokedAt }
+          : null,
+      }));
+      return { userId: view.userId, servers };
+    });
+    if (opts.migration) registerMigration(app, opts.migration);
+  }
 
-  if (opts.resolveUserIrk) {
+  if (isCom && opts.resolveUserIrk) {
     registerServerRegistry(app, {
       registry: serverRegistry,
       resolveUserIrk: opts.resolveUserIrk,
@@ -139,29 +167,34 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   }
 
   const pushStore = opts.pushTokenStore ?? new InMemoryPushTokenStore();
-  const pushDispatcher = opts.pushDispatcher ?? new NoopPushDispatcher();
-  registerPushRelay(app, { store: pushStore, dispatcher: pushDispatcher });
-  app.decorate("pushTokenStore", pushStore);
+  if (isCom) {
+    const pushDispatcher = opts.pushDispatcher ?? new NoopPushDispatcher();
+    registerPushRelay(app, { store: pushStore, dispatcher: pushDispatcher });
+    app.decorate("pushTokenStore", pushStore);
 
-  if (opts.resolveUserIrk) {
-    registerAccountRecovery(app, {
-      registry: serverRegistry,
-      pushTokenStore: pushStore,
-      resolveUserIrk: opts.resolveUserIrk,
-    });
+    if (opts.resolveUserIrk) {
+      registerAccountRecovery(app, {
+        registry: serverRegistry,
+        pushTokenStore: pushStore,
+        resolveUserIrk: opts.resolveUserIrk,
+      });
+    }
   }
 
   const reciprocityLedger = opts.reciprocityLedger ?? new InMemoryReciprocityLedger();
   const peerCandidatePool = opts.peerCandidatePool ?? new InMemoryPeerCandidatePool();
-  registerPeerBackupMatchmaker(app, {
-    serverRegistry,
-    ledger: reciprocityLedger,
-    pool: peerCandidatePool,
-  });
+  if (isServices) {
+    registerPeerBackupMatchmaker(app, {
+      serverRegistry,
+      ledger: reciprocityLedger,
+      pool: peerCandidatePool,
+    });
+  }
   app.decorate("reciprocityLedger", reciprocityLedger);
   app.decorate("peerCandidatePool", peerCandidatePool);
 
   if (
+    isCom &&
     opts.resolveUserIrk &&
     opts.promoIssuer &&
     opts.promoIdentityPepper
@@ -178,7 +211,8 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
     app.decorate("promoLedger", ledger);
   }
 
-  app.register(fastifyStatic, {
+  // Static surface (marketing + /webapp + /deck) is only on .com.
+  if (isCom) app.register(fastifyStatic, {
     root: resolve(__dirname, "../public"),
     prefix: "/",
     decorateReply: false,

@@ -97,6 +97,7 @@ describe("GET /api/health", () => {
     const app = buildServer();
     const res = await app.inject({ method: "GET", url: "/api/health" });
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true, service: "flagshipserver.com" });
+    const body = JSON.parse(res.body);
+    expect(body).toMatchObject({ ok: true, service: "flagshipserver.com", surface: "both" });
   });
 });
