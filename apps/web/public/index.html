@@ -2,71 +2,74 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="description" content="Flagship — your servers, your data, your control plane is the phone in your pocket." />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
     <title>Flagship</title>
-    <style>
-      :root { color-scheme: dark light; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.65; }
-      h1 { font-size: 2.5rem; margin: 0 0 0.25rem; letter-spacing: -0.02em; }
-      .tag { color: #888; font-size: 1.05rem; margin-bottom: 2.5rem; }
-      .cta {
-        display: inline-block;
-        padding: 0.7rem 1.4rem;
-        background: #4a8;
-        color: white;
-        border-radius: 8px;
-        text-decoration: none;
-        font-weight: 600;
-        margin-right: 0.75rem;
-      }
-      .cta-secondary {
-        display: inline-block;
-        padding: 0.7rem 1.4rem;
-        border: 1px solid #8884;
-        color: inherit;
-        border-radius: 8px;
-        text-decoration: none;
-      }
-      h2 { margin-top: 3rem; font-size: 1.25rem; }
-      ul { padding-left: 1.25rem; }
-      ul li { margin: 0.4rem 0; }
-      .footer-nav {
-        margin-top: 3.5rem;
-        padding-top: 1.5rem;
-        border-top: 1px solid #8882;
-        color: #888;
-        font-size: 0.95rem;
-      }
-      .footer-nav a { color: inherit; margin-right: 1rem; }
-    </style>
   </head>
   <body>
-    <h1>Flagship</h1>
-    <p class="tag">Your servers. Your data. Your control plane is the phone in your pocket.</p>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/security.html">security</a>
+        <a href="/webapp/">webapp</a>
+        <a href="/login.html">connect</a>
+      </nav>
+    </header>
 
-    <p>
-      <a class="cta" href="/login.html">Connect a desktop →</a>
-      <a class="cta-secondary" href="https://github.com/flagshipserver/flagship">Source on GitHub</a>
-    </p>
+    <main>
+      <h1>Your servers. Your data.<br /><span class="accent">Your phone is the control plane.</span></h1>
+      <p class="lede">
+        Flagship is a personal-cloud ecosystem. Run servers on commodity hardware, hold the master keys on your phone, and host the apps you build (or vibe-code) on your own infrastructure under your own subdomain.
+      </p>
 
-    <h2>What is this?</h2>
-    <p>
-      Flagship is a personal-cloud ecosystem. You run servers on commodity hardware, your phone
-      is the trust root, and the apps you build (or vibe-code) are hosted on your own infrastructure
-      under your own subdomain.
-    </p>
-    <ul>
-      <li>Your phone holds the master keys; the desktop UI never gets them.</li>
-      <li>flagshipserver.com is a passthrough — it cannot read your traffic.</li>
-      <li>Disk encrypted at rest; boot gated by your phone over the internet.</li>
-      <li>Open source. <a href="/security.html">Audit the security model.</a></li>
-    </ul>
+      <div class="cta-row">
+        <a class="cta" href="/login.html">Connect a desktop →</a>
+        <a class="cta-secondary" href="/webapp/">Try the webapp</a>
+        <a class="cta-secondary" href="https://github.com/flagshipserver/flagship">Source on GitHub</a>
+      </div>
 
-    <div class="footer-nav">
+      <h2>Three components, one product</h2>
+      <div class="feature-grid">
+        <div class="feature">
+          <h3>The phone app</h3>
+          <p>iOS or Android — Secure Enclave / StrongBox holds the master key. Every sensitive operation is biometric-gated.</p>
+        </div>
+        <div class="feature">
+          <h3>The bootable image</h3>
+          <p>Headless NixOS that turns commodity hardware into a node. WiFi credentials and identity are baked in at build time.</p>
+        </div>
+        <div class="feature">
+          <h3>The control plane</h3>
+          <p>flagshipserver.com routes traffic by SNI without ever decrypting it. No keys, no secrets, no surveillance.</p>
+        </div>
+      </div>
+
+      <h2>What makes it different</h2>
+      <ul class="bullets">
+        <li>Apps run as containers; persistence goes through one shared Postgres + MinIO + Redis per server, scoped per app — portable migrations, no surprises.</li>
+        <li>You bring your own AI provider (Claude, OpenAI, Google, Ollama). API keys never touch flagshipserver.com.</li>
+        <li>Reciprocal peer-backup with Reed-Solomon erasure coding — your data survives even if your hardware doesn't.</li>
+        <li>Disk encrypted at rest; boot gated by your phone over the internet.</li>
+        <li>Open source. <a href="/security.html">Audit the security model.</a></li>
+      </ul>
+
+      <div class="callout">
+        <strong>Three device families.</strong> iOS, Android, and the installable webapp. Each one is its own primary identity — we deliberately don't share keys between them, the way Apple Pay never crosses to Google Pay.
+      </div>
+    </main>
+
+    <footer class="site">
       <a href="/security.html">Security</a>
       <a href="/security/report.html">Report a vulnerability</a>
-      <a href="/login.html">Connect a desktop</a>
-      <a href="/dev/phone.html">Dev: fake phone</a>
-    </div>
+      <a href="/.well-known/security.txt">security.txt</a>
+      <a href="/webapp/">Webapp</a>
+      <a href="/deck/">Deck</a>
+    </footer>
   </body>
 </html>

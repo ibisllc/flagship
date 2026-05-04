@@ -2,117 +2,142 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
     <title>Security · Flagship</title>
     <style>
-      :root { color-scheme: dark light; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { max-width: 44rem; margin: 3rem auto; padding: 0 1.5rem; line-height: 1.65; }
-      h1 { font-size: 2rem; margin: 0 0 0.25rem; }
-      h2 { margin-top: 2.5rem; font-size: 1.25rem; }
-      h3 { margin-top: 1.5rem; font-size: 1rem; }
-      .tag { color: #888; font-size: 0.95rem; margin-bottom: 2rem; }
-      pre, code { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-      code { background: #1118; color: #ddd; padding: 0.1rem 0.4rem; border-radius: 4px; }
-      pre { background: #1118; color: #ddd; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.9rem; }
-      a { color: inherit; }
-      table { border-collapse: collapse; margin: 1rem 0; }
-      th, td { padding: 0.4rem 0.8rem; border: 1px solid #8884; text-align: left; vertical-align: top; }
-      .nav { color: #888; margin-bottom: 2rem; }
-      .nav a { margin-right: 1rem; }
+      table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
+      th, td { padding: 0.6rem 0.9rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { background: var(--bg-elev); font-weight: 500; font-size: 0.85rem; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.04em; }
+      td ul { padding-left: 1rem; margin: 0; }
+      td li { margin: 0.25rem 0; color: var(--fg); }
+      code { background: var(--bg-elev); color: var(--fg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.92em; }
     </style>
   </head>
   <body>
-    <div class="nav">
-      <a href="/">← home</a>
-      <a href="/security/report.html">Report a vulnerability →</a>
-    </div>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/security/report.html">report a vulnerability</a>
+        <a href="/.well-known/security.txt">security.txt</a>
+      </nav>
+    </header>
 
-    <h1>Security at Flagship</h1>
-    <p class="tag">Flagship is a personal-cloud product. Your phone is the trust root, and you're hosting your own data on hardware you own. We take that seriously.</p>
+    <main>
+      <h1>Security model</h1>
+      <p class="lede">
+        Flagship is a personal-cloud product. Your phone is the trust root, you host your own data on hardware you own. We take that seriously.
+      </p>
 
-    <h2>Threat model in one paragraph</h2>
-    <p>
-      Your phone holds your User Master Key (UMK) inside the Secure Enclave / StrongBox.
-      It never leaves the phone unwrapped. Derived keys do specific jobs:
-      <strong>BAK</strong> gates server boot, <strong>IRK</strong> signs account-level
-      operations like image-rebuild and revocation, and <strong>SWK</strong> is provisioned
-      to the server so backup runs autonomously without keeping your phone awake. Peer
-      hosts who store your backup shards only ever see opaque ciphertext. The
-      flagshipserver.com control plane is a delivery channel and matchmaker; it never
-      sees secrets in the clear.
-    </p>
+      <h2>Threat model in one paragraph</h2>
+      <p>
+        Your phone holds your User Master Key (UMK) inside the Secure Enclave / StrongBox.
+        It never leaves the phone unwrapped. Derived keys do specific jobs:
+        <strong>BAK</strong> gates server boot, <strong>IRK</strong> signs account-level
+        operations like image-rebuild and revocation, and <strong>SWK</strong> is provisioned
+        to the server so backup runs autonomously without keeping your phone awake. Peer
+        hosts who store your backup shards only ever see opaque ciphertext. The
+        <code>flagshipserver.com</code> control plane is a delivery channel and matchmaker;
+        it never sees secrets in the clear.
+      </p>
 
-    <h2>What we promise</h2>
-    <ul>
-      <li>All security-critical code (key derivation, signing, encryption, server daemon, boot path, mobile clients) is open source under Apache 2.0.</li>
-      <li>The boot image is built reproducibly. You can verify the bytes match the source.</li>
-      <li>Cryptographic primitives are standard: <code>Ed25519</code> signatures, <code>AES-256-GCM</code> encryption, <code>HKDF-SHA-256</code> for derivation. No homemade crypto.</li>
-      <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
-      <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>
-    </ul>
+      <div class="callout">
+        <strong>Three device families.</strong> The native iOS app and Android app use Secure
+        Enclave / StrongBox — strong key storage. The installable webapp uses software-only
+        IndexedDB-with-passphrase — weaker, suitable for testing or accessibility. We
+        deliberately don't share keys between families: a webapp identity and an iOS identity
+        are independent accounts, the way Apple Pay never crosses to Google Pay.
+      </div>
 
-    <h2>Scope</h2>
-    <table>
-      <tr><th>In scope</th><th>Out of scope</th></tr>
-      <tr>
-        <td>
-          <ul>
-            <li>Protocol crate (key derivation, signing, encryption)</li>
-            <li>Server daemon</li>
-            <li>Boot image and image-builder</li>
-            <li>iOS and Android apps</li>
-            <li>Control-plane API on <code>flagshipserver.com</code></li>
-            <li>Tunnel transport from each Flagship server</li>
-            <li>Domain configuration / cookie scoping</li>
-          </ul>
-        </td>
-        <td>
-          <ul>
-            <li>User-deployed apps (security is the user's responsibility)</li>
-            <li>Denial-of-service against our infrastructure</li>
-            <li>Automated scanner output without proof of impact</li>
-            <li>Issues in third-party dependencies — please report upstream and copy us</li>
-            <li>Social engineering of staff or users</li>
-          </ul>
-        </td>
-      </tr>
-    </table>
+      <h2>What we promise</h2>
+      <ul class="bullets">
+        <li>All security-critical code (key derivation, signing, encryption, daemon, boot path, mobile clients) is open source under Apache 2.0.</li>
+        <li>The boot image is built reproducibly — you can verify the bytes match the source.</li>
+        <li>Standard primitives only: <code>Ed25519</code>, <code>AES-256-GCM</code>, <code>HKDF-SHA-256</code>. No homemade crypto.</li>
+        <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
+        <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>
+        <li>flagshipserver.com is physically unable to read user-content TLS — bytes are routed by SNI and decrypted only on your own server.</li>
+      </ul>
 
-    <h2>How to report a vulnerability</h2>
-    <p>Two channels:</p>
-    <ol>
-      <li>
-        <strong>Email</strong>:
-        <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a>.
-        Encrypted reports are encouraged — PGP key fingerprint will be published here once minted.
-      </li>
-      <li>
-        <strong>Web form</strong>:
-        <a href="/security/report.html">/security/report.html</a>
-        for low-friction submissions.
-      </li>
-    </ol>
+      <h2>Scope</h2>
+      <table>
+        <thead><tr><th>In scope</th><th>Out of scope</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>
+              <ul>
+                <li>Protocol package (key derivation, signing, encryption)</li>
+                <li>Server daemon (including data-layer provisioner + Forgejo admin)</li>
+                <li>Boot image and image-builder</li>
+                <li>iOS, Android, and webapp clients</li>
+                <li>Control-plane API on <code>flagshipserver.com</code></li>
+                <li>Tunnel transport from each Flagship server</li>
+                <li>Domain configuration / cookie scoping</li>
+              </ul>
+            </td>
+            <td>
+              <ul>
+                <li>User-deployed apps (their security is the user's responsibility)</li>
+                <li>Denial-of-service against our infrastructure</li>
+                <li>Automated scanner output without proof of impact</li>
+                <li>Issues in third-party dependencies — please report upstream and copy us</li>
+                <li>Social engineering of staff or users</li>
+              </ul>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-    <h3>Response targets</h3>
-    <ul>
-      <li>Acknowledge receipt within <strong>48 hours</strong>.</li>
-      <li>Initial triage and severity assessment within <strong>5 business days</strong>.</li>
-      <li>Critical issues fixed within <strong>7 days</strong>; high within 30; medium within 90.</li>
-    </ul>
+      <h2>How to report a vulnerability</h2>
+      <p>Two channels:</p>
+      <ol class="bullets">
+        <li>
+          <strong>Email</strong>:
+          <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a>.
+          Encrypted reports are encouraged — PGP key fingerprint will be published here once minted.
+        </li>
+        <li>
+          <strong>Web form</strong>:
+          <a href="/security/report.html">/security/report.html</a>
+          for low-friction submissions.
+        </li>
+      </ol>
 
-    <h3>Disclosure policy</h3>
-    <ul>
-      <li>Coordinated disclosure. Please give us a reasonable window (we aim for 90 days, negotiable for critical issues).</li>
-      <li>Don't exfiltrate user data or disrupt service while testing. Use your own account.</li>
-      <li>We do not currently operate a paid bug bounty. We will publicly credit reporters in our hall of fame, and as the project matures we'll revisit monetary rewards.</li>
-    </ul>
+      <h3>Response targets</h3>
+      <ul class="bullets">
+        <li>Acknowledge receipt within <strong>48 hours</strong>.</li>
+        <li>Initial triage and severity assessment within <strong>5 business days</strong>.</li>
+        <li>Critical issues fixed within <strong>7 days</strong>; high within 30; medium within 90.</li>
+      </ul>
 
-    <h2>Hall of fame</h2>
-    <p>Researchers who have responsibly disclosed will be listed here. (Empty for now — we're new.)</p>
+      <h3>Disclosure policy</h3>
+      <ul class="bullets">
+        <li>Coordinated disclosure. Please give us a reasonable window (we aim for 90 days, negotiable for critical issues).</li>
+        <li>Don't exfiltrate user data or disrupt service while testing. Use your own account.</li>
+        <li>We don't currently operate a paid bug bounty. We will publicly credit reporters; as the project matures we'll revisit monetary rewards.</li>
+      </ul>
 
-    <h2>Source code</h2>
-    <p>The protocol, daemon, image-builder, and mobile clients live at
-      <a href="https://github.com/flagshipserver/flagship">github.com/flagshipserver/flagship</a>
-      (link will be live when the repo is published). Audit it, build it, run it.</p>
+      <h2>Hall of fame</h2>
+      <p>Researchers who have responsibly disclosed will be listed here. (Empty for now — we're new.)</p>
+
+      <h2>Source code</h2>
+      <p>
+        The protocol, daemon, image-builder, and mobile clients live at
+        <a href="https://github.com/flagshipserver/flagship">github.com/flagshipserver/flagship</a>
+        (link will be live when the repo is published). Audit it, build it, run it.
+      </p>
+    </main>
+
+    <footer class="site">
+      <a href="/">Home</a>
+      <a href="/security/report.html">Report a vulnerability</a>
+      <a href="/.well-known/security.txt">security.txt</a>
+    </footer>
   </body>
 </html>

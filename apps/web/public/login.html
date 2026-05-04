@@ -2,126 +2,121 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
     <title>Connect a desktop · Flagship</title>
     <style>
-      :root { color-scheme: dark light; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { max-width: 38rem; margin: 3rem auto; padding: 0 1.5rem; line-height: 1.6; }
-      h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
-      .tag { color: #888; margin-bottom: 2rem; }
-      .nav { color: #888; margin-bottom: 2rem; }
-      .nav a { margin-right: 1rem; }
       .qr-card {
-        margin: 2rem auto;
-        padding: 1.5rem;
-        max-width: 22rem;
-        border: 1px solid #8884;
-        border-radius: 12px;
+        margin: 2rem 0;
+        padding: 1.75rem;
+        background: var(--bg-elev);
+        border-radius: var(--radius);
         text-align: center;
       }
       .qr-card img {
         width: 100%;
-        max-width: 320px;
+        max-width: 280px;
         height: auto;
         display: block;
         margin: 0 auto 1rem;
         background: white;
-        border-radius: 6px;
+        border-radius: 10px;
       }
       .status {
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
         font-size: 0.95rem;
-        color: #888;
+        color: var(--fg-mute);
       }
-      .status.ok { color: #4a8; }
-      .status.err { color: #a44; }
-      button {
-        font: inherit;
-        padding: 0.6rem 1.2rem;
-        border-radius: 6px;
-        cursor: pointer;
-        background: #4a8;
-        color: white;
-        border: 0;
-      }
-      button[disabled] { opacity: 0.5; cursor: not-allowed; }
-      .hint { font-size: 0.85rem; color: #888; margin-top: 0.75rem; }
-      details { margin-top: 1.5rem; font-size: 0.9rem; color: #888; }
+      .status.ok { color: var(--accent); }
+      .status.err { color: var(--err); }
+      .hint { font-size: 0.85rem; color: var(--fg-mute); margin-top: 0.75rem; }
+      details { margin-top: 1.5rem; font-size: 0.9rem; color: var(--fg-mute); background: var(--bg-elev); padding: 0.85rem 1rem; border-radius: 10px; }
+      details summary { cursor: pointer; color: var(--fg); font-weight: 500; }
+      details p { color: var(--fg-mute); margin: 0.6rem 0 0; }
       pre {
-        background: #1118;
-        color: #ddd;
+        background: var(--bg-elev-2);
+        color: var(--fg);
         padding: 0.75rem;
-        border-radius: 6px;
+        border-radius: 8px;
         overflow-x: auto;
         font-size: 0.8rem;
       }
     </style>
   </head>
   <body>
-    <div class="nav">
-      <a href="/">← home</a>
-      <a href="/security.html">security</a>
-    </div>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/security.html">security</a>
+        <a href="/webapp/">webapp</a>
+      </nav>
+    </header>
 
-    <h1>Connect this desktop</h1>
-    <p class="tag">
-      Open the Flagship app on your phone and scan this QR code. Your phone holds the keys; this
-      desktop never gets them. Authorized operations are signed by your phone.
-    </p>
-
-    <div id="card" class="qr-card">
-      <img id="qr" alt="QR code (loading)" />
-      <p id="status" class="status">starting session…</p>
-      <p id="hint" class="hint"></p>
-    </div>
-
-    <details>
-      <summary>How does this work?</summary>
-      <p>
-        Your browser generated a one-time session id and posted it to flagshipserver.com. The QR
-        code embeds <code>flagship://desktop/&lt;sessionId&gt;/&lt;ephemeralPublicKey&gt;</code>. When you scan
-        with the phone app and tap "Approve", your phone signs a pairing claim with your IRK
-        (the same key that gates server boot, image rebuilds, and account-level operations).
+    <main>
+      <h1>Connect this desktop</h1>
+      <p class="lede">
+        Open the Flagship app on your phone (or the <a href="/webapp/">webapp</a>) and scan the QR. Your primary device holds the keys; this desktop never gets them.
       </p>
-      <p>
-        flagshipserver.com only stores opaque session metadata. After pairing, the desktop and
-        phone share a key that flagshipserver.com has never seen — sensitive operations from this
-        desktop become signed RPCs to your phone.
-      </p>
-    </details>
 
-    <details>
-      <summary>Don't have the phone app yet?</summary>
-      <p>
-        Flagship is currently in development. The mobile clients are scaffolded under
-        <code>apps/mobile/ios/</code> and <code>apps/mobile/android/</code> in the repo. For
-        development you can simulate a phone at <a href="/dev/phone.html">/dev/phone.html</a>.
-      </p>
-    </details>
+      <div class="qr-card">
+        <img id="qr" alt="QR code (loading)" />
+        <p id="status" class="status">starting session…</p>
+        <p id="hint" class="hint"></p>
+      </div>
+
+      <details>
+        <summary>How does this work?</summary>
+        <p>
+          Your browser generated a one-time session id and posted it to flagshipserver.com. The QR
+          embeds <code>flagship://desktop/&lt;sessionId&gt;/&lt;ephemeralPublicKey&gt;</code>. When you
+          scan and approve on your primary device, that device signs a pairing claim with the IRK
+          (the same key that gates boot, image rebuilds, and account-level operations).
+        </p>
+        <p>
+          flagshipserver.com only stores opaque session metadata. After pairing, the desktop and
+          primary share a key flagshipserver.com has never seen — sensitive ops become signed RPCs
+          to your primary device.
+        </p>
+      </details>
+
+      <details>
+        <summary>No primary device yet?</summary>
+        <p>
+          The native iOS / Android apps are in development. You can use the
+          <a href="/webapp/">installable webapp</a> as a primary device today, or simulate a
+          phone at <a href="/dev/phone.html">/dev/phone.html</a> for development.
+        </p>
+      </details>
+    </main>
+
+    <footer class="site">
+      <a href="/">Home</a>
+      <a href="/security.html">Security</a>
+      <a href="/webapp/">Webapp</a>
+    </footer>
 
     <script type="module">
-      const card = document.getElementById("card");
       const qrImg = document.getElementById("qr");
       const status = document.getElementById("status");
       const hint = document.getElementById("hint");
 
-      // Generate an ECDH P-256 ephemeral keypair for the desktop side. We expose only the
-      // raw public key (32 bytes is enough for protocol compatibility — we use the X
-      // coordinate). The browser holds the private key as non-extractable and uses it to
-      // derive a shared secret with the phone after pairing succeeds.
+      // Generate an ECDH P-256 ephemeral keypair for the desktop side. The
+      // private key is non-extractable; the public key's X coordinate (32
+      // bytes) is what we send to the server.
       async function makeDesktopPubKey() {
-        // Web Crypto X25519 isn't yet universally available; use ECDH P-256 and emit a
-        // deterministic 32-byte representation so the protocol stays single-curve at the
-        // wire format level.
         const kp = await crypto.subtle.generateKey(
           { name: "ECDH", namedCurve: "P-256" },
           false,
           ["deriveKey"],
         );
         const raw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
-        // raw is 65 bytes (uncompressed: 0x04 || x(32) || y(32)). Take x as the 32-byte pub.
-        const x = raw.slice(1, 33);
-        return { keypair: kp, pub: x };
+        return { keypair: kp, pub: raw.slice(1, 33) };
       }
 
       function bytesToHex(b) {
@@ -143,11 +138,9 @@
         const session = await startRes.json();
         qrImg.src = session.qrDataUri;
         qrImg.alt = "QR code";
-        status.textContent = "waiting for phone…";
-        hint.textContent = "session id: " + session.sessionId + " · expires in "
-          + session.ttlSeconds + "s";
+        status.textContent = "waiting for primary device…";
+        hint.textContent = "session " + session.sessionId.slice(0, 8) + "… · expires in " + session.ttlSeconds + "s";
 
-        // Poll the session status every second until paired/expired/revoked.
         let stopped = false;
         const deadline = Date.now() + session.ttlSeconds * 1000;
         while (!stopped && Date.now() < deadline) {
@@ -155,17 +148,14 @@
           let res;
           try {
             res = await fetch("/api/desktop/pair/" + session.sessionId + "/status");
-          } catch {
-            continue;
-          }
+          } catch { continue; }
           if (!res.ok) continue;
           const body = await res.json();
           if (body.status === "paired") {
             status.className = "status ok";
-            status.textContent = "✓ paired with phone";
-            hint.innerHTML = '<a href="/app.html?session=' + session.sessionId + '">Continue to dashboard →</a>';
+            status.textContent = "paired";
+            hint.innerHTML = '<a href="/deck/?session=' + session.sessionId + '">Continue to deck →</a>';
             stopped = true;
-            // Stash the session id so the dashboard can pick it up.
             try { sessionStorage.setItem("flagship_session_id", session.sessionId); } catch {}
           } else if (body.status === "revoked" || body.status === "expired") {
             status.className = "status err";

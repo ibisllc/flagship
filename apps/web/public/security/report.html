@@ -2,84 +2,105 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
     <title>Report a vulnerability · Flagship</title>
     <style>
-      :root { color-scheme: dark light; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { max-width: 38rem; margin: 3rem auto; padding: 0 1.5rem; line-height: 1.6; }
-      h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
-      .tag { color: #888; margin-bottom: 2rem; }
-      label { display: block; margin: 1rem 0 0.25rem; font-weight: 600; }
-      input, textarea, select {
+      select {
         width: 100%; box-sizing: border-box;
-        padding: 0.6rem; border-radius: 6px; border: 1px solid #8886;
-        font: inherit; background: transparent; color: inherit;
+        padding: 0.7rem 0.9rem;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--bg-elev);
+        color: var(--fg);
+        font: inherit;
       }
-      textarea { min-height: 12rem; resize: vertical; }
-      button { font: inherit; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; margin-top: 1.5rem; }
-      .nav { color: #888; margin-bottom: 2rem; }
-      .nav a { margin-right: 1rem; }
-      .out { margin-top: 1.5rem; padding: 1rem; border-radius: 6px; }
-      .ok { background: #1d40; border: 1px solid #4a8; }
-      .err { background: #401; border: 1px solid #a44; }
-      .alt { color: #888; margin-top: 1.5rem; font-size: 0.95rem; }
+      textarea { min-height: 14rem; resize: vertical; }
+      .out { margin-top: 1.5rem; padding: 1rem 1.1rem; border-radius: var(--radius); }
+      .out.ok { background: #4ad29515; border: 1px solid var(--accent); color: var(--accent); }
+      .out.err { background: #d34a4a15; border: 1px solid var(--err); color: var(--err); }
+      .req { color: var(--err); }
+      .hint { color: var(--fg-mute); font-weight: 400; font-size: 0.82rem; }
     </style>
   </head>
   <body>
-    <div class="nav">
-      <a href="/">← home</a>
-      <a href="/security.html">← security</a>
-    </div>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/security.html">security model</a>
+        <a href="/.well-known/security.txt">security.txt</a>
+      </nav>
+    </header>
 
-    <h1>Report a vulnerability</h1>
-    <p class="tag">Thanks for taking the time. We aim to acknowledge within 48 hours.</p>
+    <main>
+      <h1>Report a vulnerability</h1>
+      <p class="lede">
+        Thanks for taking the time. We aim to acknowledge within 48 hours.
+      </p>
 
-    <form id="form">
-      <label for="email">Your email <span style="color:#888;font-weight:normal">(so we can reply — optional but recommended)</span></label>
-      <input id="email" name="email" type="email" placeholder="you@example.com" />
+      <form id="form">
+        <label for="email">Your email <span class="hint">— so we can reply (optional but recommended)</span></label>
+        <input id="email" name="email" type="email" placeholder="you@example.com" />
 
-      <label for="severity">Severity (your guess)</label>
-      <select id="severity" name="severity">
-        <option value="critical">Critical — remote unauth, key compromise, data exfil</option>
-        <option value="high" selected>High — privilege escalation, account takeover</option>
-        <option value="medium">Medium — info disclosure, partial bypass</option>
-        <option value="low">Low — minor, requires unusual conditions</option>
-      </select>
+        <label for="severity">Severity (your guess)</label>
+        <select id="severity" name="severity">
+          <option value="critical">Critical — remote unauth, key compromise, data exfil</option>
+          <option value="high" selected>High — privilege escalation, account takeover</option>
+          <option value="medium">Medium — info disclosure, partial bypass</option>
+          <option value="low">Low — minor, requires unusual conditions</option>
+        </select>
 
-      <label for="component">Component</label>
-      <select id="component" name="component">
-        <option>Protocol / crypto</option>
-        <option>Server daemon</option>
-        <option>Boot image / image-builder</option>
-        <option>iOS app</option>
-        <option>Android app</option>
-        <option>Control plane (flagshipserver.com)</option>
-        <option>Tunnel / public ingress</option>
-        <option>Other</option>
-      </select>
+        <label for="component">Component</label>
+        <select id="component" name="component">
+          <option>Protocol / crypto</option>
+          <option>Server daemon</option>
+          <option>Data layer (Postgres / MinIO / Redis provisioning)</option>
+          <option>Boot image / image-builder</option>
+          <option>iOS app</option>
+          <option>Android app</option>
+          <option>Webapp</option>
+          <option>Deck (cast surface)</option>
+          <option>Control plane (flagshipserver.com)</option>
+          <option>Tunnel / public ingress</option>
+          <option>Other</option>
+        </select>
 
-      <label for="summary">Summary <span style="color:#a44">*</span></label>
-      <input id="summary" name="summary" required maxlength="200" placeholder="One-line description" />
+        <label for="summary">Summary <span class="req">*</span></label>
+        <input id="summary" name="summary" required maxlength="200" placeholder="One-line description" />
 
-      <label for="details">Details, repro steps, impact <span style="color:#a44">*</span></label>
-      <textarea id="details" name="details" required maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea>
+        <label for="details">Details, repro steps, impact <span class="req">*</span></label>
+        <textarea id="details" name="details" required maxlength="20000" placeholder="What did you do, what happened, why it matters."></textarea>
 
-      <button type="submit">Submit report</button>
-    </form>
+        <button class="cta" type="submit" style="margin-top: 1.5rem;">Submit report</button>
+      </form>
 
-    <div id="out"></div>
+      <div id="out"></div>
 
-    <p class="alt">Prefer email? Send to
-      <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a>.
-      PGP encouraged.
-    </p>
+      <p style="margin-top: 2rem; color: var(--fg-mute);">
+        Prefer email? Send to
+        <a href="mailto:security@flagshipserver.com">security@flagshipserver.com</a>.
+        PGP encouraged.
+      </p>
+    </main>
+
+    <footer class="site">
+      <a href="/">Home</a>
+      <a href="/security.html">Security model</a>
+      <a href="/.well-known/security.txt">security.txt</a>
+    </footer>
 
     <script type="module">
       const form = document.getElementById("form");
       const out = document.getElementById("out");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        out.className = "";
+        out.className = "out";
         out.textContent = "Submitting…";
         const data = Object.fromEntries(new FormData(form).entries());
         try {
