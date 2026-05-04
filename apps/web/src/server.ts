@@ -22,9 +22,11 @@ import { registerServerRevocation } from "./routes/serverRevocation.js";
 import { registerAccountRecovery } from "./routes/accountRecovery.js";
 import {
   registerLlmPromo,
-  InMemoryPromoQuotaStore,
-  type PromoQuotaStore,
-  type PromoUpstream,
+  InMemoryPromoLedger,
+  ConsoleSmsSender,
+  type PromoLedger,
+  type PromoIssuer,
+  type SmsSender,
 } from "./routes/llmPromo.js";
 import {
   registerPeerBackupMatchmaker,
@@ -69,11 +71,15 @@ export interface BuildServerOptions {
   reciprocityLedger?: ReciprocityLedger;
   peerCandidatePool?: PeerCandidatePool;
   /**
-   * Flagship-promo LLM proxy. Both must be present to expose the routes;
-   * the upstream client is the only place the GPU server's API key lives.
+   * Flagship-promo issuance — the issuer mints a per-user API key that the
+   * phone uses BYOK-style. flagshipserver.com NEVER sees vibe-coding prompts.
+   * Throttling is the GPU server's job.
    */
-  promoQuotaStore?: PromoQuotaStore;
-  promoUpstream?: PromoUpstream;
+  promoLedger?: PromoLedger;
+  promoIssuer?: PromoIssuer;
+  promoSms?: SmsSender;
+  /** Server-side pepper mixed into stored identity hashes. Required for issuance. */
+  promoIdentityPepper?: Uint8Array;
 }
 
 /**
@@ -155,14 +161,21 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   app.decorate("reciprocityLedger", reciprocityLedger);
   app.decorate("peerCandidatePool", peerCandidatePool);
 
-  if (opts.resolveUserIrk && opts.promoUpstream) {
-    const promoStore = opts.promoQuotaStore ?? new InMemoryPromoQuotaStore();
+  if (
+    opts.resolveUserIrk &&
+    opts.promoIssuer &&
+    opts.promoIdentityPepper
+  ) {
+    const ledger = opts.promoLedger ?? new InMemoryPromoLedger();
+    const sms = opts.promoSms ?? new ConsoleSmsSender();
     registerLlmPromo(app, {
       resolveUserIrk: opts.resolveUserIrk,
-      store: promoStore,
-      upstream: opts.promoUpstream,
+      ledger,
+      issuer: opts.promoIssuer,
+      sms,
+      identityPepper: opts.promoIdentityPepper,
     });
-    app.decorate("promoQuotaStore", promoStore);
+    app.decorate("promoLedger", ledger);
   }
 
   app.register(fastifyStatic, {
@@ -184,7 +197,7 @@ declare module "fastify" {
     desktopSessions: DesktopSessionStore;
     reciprocityLedger: ReciprocityLedger;
     peerCandidatePool: PeerCandidatePool;
-    promoQuotaStore?: PromoQuotaStore;
+    promoLedger?: PromoLedger;
   }
 }
 

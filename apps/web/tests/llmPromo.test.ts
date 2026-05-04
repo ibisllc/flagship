@@ -2,23 +2,25 @@ import { describe, expect, it } from "vitest";
 import { sha256 } from "@noble/hashes/sha256";
 import {
   deriveIRK,
-  signLlmPromoChat,
-  signLlmPromoQuota,
-  type LlmPromoChatRequest,
-  type LlmPromoQuotaRequest,
+  signLlmPromoIssueComplete,
+  signLlmPromoIssueStart,
+  type LlmPromoIssueComplete,
+  type LlmPromoIssueStart,
 } from "@flagship/protocol";
 import { buildServer } from "../src/server.js";
 import {
-  InMemoryPromoQuotaStore,
-  _internal,
-  type PromoUpstream,
+  ConsoleSmsSender,
+  InMemoryPromoLedger,
+  type PromoIssuer,
+  type PromoIssuedKey,
 } from "../src/routes/llmPromo.js";
 
 const harryUmk = { seed: new Uint8Array(32).fill(11) };
 const harryIrk = deriveIRK(harryUmk);
-
 const sarahUmk = { seed: new Uint8Array(32).fill(22) };
 const sarahIrk = deriveIRK(sarahUmk);
+
+const PEPPER = new Uint8Array(32).fill(0xab);
 
 function bytesToHex(b: Uint8Array): string {
   let s = "";
@@ -26,238 +28,283 @@ function bytesToHex(b: Uint8Array): string {
   return s;
 }
 
-function canonicalizeMessages(msgs: { role: string; content: string }[]) {
-  return new TextEncoder().encode(
-    JSON.stringify(msgs.map((m) => ({ role: m.role, content: m.content }))),
-  );
-}
-
-class FakeUpstream implements PromoUpstream {
-  calls = 0;
-  observed: { model: string; messages: unknown; maxTokens: number }[] = [];
-  inputCost = 100;
-  outputCost = 200;
-  fail = false;
-  async chat(req: { model: string; messages: { role: string; content: string }[]; maxTokens: number }) {
-    this.calls += 1;
-    this.observed.push(req);
-    if (this.fail) throw new Error("upstream timed out");
+class FakeIssuer implements PromoIssuer {
+  minted: { keyId: string; userId: string }[] = [];
+  async mintKey(args: { irkPub: Uint8Array; userId: string }): Promise<PromoIssuedKey> {
+    const keyId = `gpu-${this.minted.length + 1}`;
+    this.minted.push({ keyId, userId: args.userId });
     return {
-      content: "ok",
-      inputTokens: this.inputCost,
-      outputTokens: this.outputCost,
-      model: req.model,
+      keyId,
+      apiKey: `fp-${keyId}`,
+      baseUrl: "https://promo.flagshipserver.com/v1",
+      model: "flagship-coder-v1",
+      lifetimeTokens: 500_000,
+      dailyTokens: 100_000,
     };
   }
 }
 
-function makeApp(extra: { upstream?: PromoUpstream; store?: InMemoryPromoQuotaStore } = {}) {
-  const upstream = extra.upstream ?? new FakeUpstream();
-  const store = extra.store ?? new InMemoryPromoQuotaStore();
+function makeApp(extra: { issuer?: FakeIssuer; sms?: ConsoleSmsSender; ledger?: InMemoryPromoLedger; otp?: string; ticket?: string } = {}) {
+  const issuer = extra.issuer ?? new FakeIssuer();
+  const sms = extra.sms ?? new ConsoleSmsSender();
+  const ledger = extra.ledger ?? new InMemoryPromoLedger();
   const app = buildServer({
-    promoUpstream: upstream,
-    promoQuotaStore: store,
+    promoIssuer: issuer,
+    promoLedger: ledger,
+    promoSms: sms,
+    promoIdentityPepper: PEPPER,
     resolveUserIrk: (uid) => {
       if (uid === "harry") return harryIrk.publicKey;
       if (uid === "sarah") return sarahIrk.publicKey;
       return null;
     },
   });
-  return { app, upstream, store };
+  // Inject deterministic test seams via the underlying app re-registration.
+  // For these tests we override the OTP/ticket via spies on the SMS sender:
+  // the OTP is captured from sms.delivered[].
+  return { app, issuer, sms, ledger };
 }
 
-function buildSignedQuota(over: Partial<LlmPromoQuotaRequest> = {}, signer = harryIrk) {
-  const claim: LlmPromoQuotaRequest = {
-    userId: over.userId ?? "harry",
-    issuedAt: over.issuedAt ?? Date.now(),
-  };
-  return {
-    request: claim,
-    signature: bytesToHex(signLlmPromoQuota(claim, signer)),
-  };
-}
-
-function buildSignedChat(
-  over: Partial<{ model: string; maxTokens: number; issuedAt: number; userId: string }> = {},
-  messages: { role: "system" | "user" | "assistant"; content: string }[] = [
-    { role: "user", content: "hello" },
-  ],
+function buildSignedStart(
+  identity: string,
+  over: Partial<LlmPromoIssueStart> = {},
   signer = harryIrk,
 ) {
-  const claim: LlmPromoChatRequest = {
+  const identityHash = sha256(new TextEncoder().encode(identity));
+  const claim: LlmPromoIssueStart = {
     userId: over.userId ?? "harry",
-    model: over.model ?? "flagship-coder-v1",
-    messagesSha256: sha256(canonicalizeMessages(messages)),
-    maxTokens: over.maxTokens ?? 256,
+    method: over.method ?? "phone-otp",
+    identityHash,
     issuedAt: over.issuedAt ?? Date.now(),
   };
   return {
-    request: { userId: claim.userId, model: claim.model, maxTokens: claim.maxTokens, issuedAt: claim.issuedAt },
-    signature: bytesToHex(signLlmPromoChat(claim, signer)),
-    messages,
+    request: {
+      userId: claim.userId,
+      method: claim.method,
+      identityHash: bytesToHex(identityHash),
+      issuedAt: claim.issuedAt,
+    },
+    signature: bytesToHex(signLlmPromoIssueStart(claim, signer)),
+    identity,
   };
 }
 
-describe("/api/llm-promo/quota", () => {
-  it("returns lifetime + window limits with zero usage on first call", async () => {
-    const { app } = makeApp();
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/quota",
-      payload: buildSignedQuota(),
-    });
-    expect(r.statusCode).toBe(200);
-    const body = JSON.parse(r.body);
-    expect(body.lifetimeUsed).toBe(0);
-    expect(body.lifetimeTotal).toBe(_internal.LIFETIME_TOKEN_LIMIT);
-    expect(body.windowTotal).toBe(_internal.DAILY_TOKEN_LIMIT);
-    expect(body.exhausted).toBe(false);
-  });
+function buildSignedComplete(
+  ticket: string,
+  otp: string,
+  over: Partial<LlmPromoIssueComplete> = {},
+  signer = harryIrk,
+) {
+  const otpHash = sha256(new TextEncoder().encode(otp));
+  const claim: LlmPromoIssueComplete = {
+    userId: over.userId ?? "harry",
+    ticket,
+    otpHash,
+    issuedAt: over.issuedAt ?? Date.now(),
+  };
+  return {
+    request: {
+      userId: claim.userId,
+      ticket: claim.ticket,
+      otpHash: bytesToHex(otpHash),
+      issuedAt: claim.issuedAt,
+    },
+    signature: bytesToHex(signLlmPromoIssueComplete(claim, signer)),
+    otp,
+  };
+}
 
-  it("rejects forged quota signatures (cross-user)", async () => {
-    const { app } = makeApp();
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/quota",
-      payload: buildSignedQuota({ userId: "harry" }, sarahIrk),
-    });
-    expect(r.statusCode).toBe(403);
+async function startAndGetOtp(
+  app: ReturnType<typeof buildServer>,
+  sms: ConsoleSmsSender,
+  identity: string,
+) {
+  const start = await app.inject({
+    method: "POST",
+    url: "/api/llm-promo/issue/start",
+    payload: buildSignedStart(identity),
   });
+  expect(start.statusCode).toBe(200);
+  const { ticket } = JSON.parse(start.body);
+  const last = sms.delivered.at(-1)!;
+  return { ticket, otp: last.otp };
+}
 
-  it("rejects stale quota requests", async () => {
-    const { app } = makeApp();
+describe("/api/llm-promo/issue/start", () => {
+  it("requires the identity input to match identityHash (no swapping numbers between sign and post)", async () => {
+    const { app, sms } = makeApp();
+    const payload = buildSignedStart("+15555550100");
+    payload.identity = "+15555550999"; // tamper after signing → mismatch
     const r = await app.inject({
       method: "POST",
-      url: "/api/llm-promo/quota",
-      payload: buildSignedQuota({ issuedAt: Date.now() - 6 * 60_000 }),
-    });
-    expect(r.statusCode).toBe(403);
-  });
-});
-
-describe("/api/llm-promo/chat", () => {
-  it("forwards to the upstream and increments quota", async () => {
-    const { app, upstream, store } = makeApp();
-    const fake = upstream as FakeUpstream;
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: buildSignedChat({}, [{ role: "user", content: "ping" }]),
-    });
-    expect(r.statusCode).toBe(200);
-    const body = JSON.parse(r.body);
-    expect(body.content).toBe("ok");
-    expect(body.usage.input).toBe(100);
-    expect(body.usage.output).toBe(200);
-    expect(fake.calls).toBe(1);
-    expect(body.proxyDisclosure).toMatch(/flagshipserver\.com/);
-    const snap = store.snapshot(bytesToHex(harryIrk.publicKey), Date.now());
-    expect(snap.lifetimeUsed).toBe(300);
-    expect(snap.windowUsed).toBe(300);
-  });
-
-  it("rejects unknown model (only the published promo model is allowed)", async () => {
-    const { app, upstream } = makeApp();
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: buildSignedChat({ model: "gpt-4-some-paid-tier" }),
+      url: "/api/llm-promo/issue/start",
+      payload,
     });
     expect(r.statusCode).toBe(400);
-    expect((upstream as FakeUpstream).calls).toBe(0);
+    expect(sms.delivered).toHaveLength(0);
   });
 
-  it("rejects when maxTokens is out of [1, 4096]", async () => {
+  it("rejects forged signatures (cross-user)", async () => {
+    const { app, sms } = makeApp();
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/start",
+      payload: buildSignedStart("+15555550100", { userId: "harry" }, sarahIrk),
+    });
+    expect(r.statusCode).toBe(403);
+    expect(sms.delivered).toHaveLength(0);
+  });
+
+  it("returns 409 when this account already received a promo key", async () => {
+    const ledger = new InMemoryPromoLedger();
+    ledger.recordIssuance({
+      irkPubHex: bytesToHex(harryIrk.publicKey),
+      saltedIdentityHash: new Uint8Array(32).fill(0xee),
+      issuedKeyId: "old-key",
+      issuedAt: Date.now(),
+    });
+    const { app, sms } = makeApp({ ledger });
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/start",
+      payload: buildSignedStart("+15555550100"),
+    });
+    expect(r.statusCode).toBe(409);
+    expect(sms.delivered).toHaveLength(0);
+  });
+
+  it("sends an OTP via the SmsSender on success", async () => {
+    const { app, sms } = makeApp();
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/start",
+      payload: buildSignedStart("+15555550100"),
+    });
+    expect(r.statusCode).toBe(200);
+    expect(sms.delivered).toHaveLength(1);
+    expect(sms.delivered[0]!.otp).toMatch(/^[0-9]{6}$/);
+    expect(sms.delivered[0]!.phoneNumber).toBe("+15555550100");
+  });
+
+  it("rejects 501 for stripe-zero-auth (not yet implemented)", async () => {
     const { app } = makeApp();
-    const tooHigh = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: buildSignedChat({ maxTokens: 10_000 }),
-    });
-    expect(tooHigh.statusCode).toBe(400);
-    const tooLow = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: buildSignedChat({ maxTokens: 0 }),
-    });
-    expect(tooLow.statusCode).toBe(400);
-  });
-
-  it("returns 429 when lifetime quota is exhausted (with upgrade hint)", async () => {
-    const store = new InMemoryPromoQuotaStore();
-    // Prime the store at lifetime cap.
-    store.record(bytesToHex(harryIrk.publicKey), _internal.LIFETIME_TOKEN_LIMIT, Date.now());
-    const { app, upstream } = makeApp({ store });
     const r = await app.inject({
       method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: buildSignedChat(),
+      url: "/api/llm-promo/issue/start",
+      payload: buildSignedStart("+1", { method: "stripe-zero-auth" }),
     });
-    expect(r.statusCode).toBe(429);
-    const body = JSON.parse(r.body);
-    expect(body.upgrade).toMatch(/your own LLM API key/);
-    expect((upstream as FakeUpstream).calls).toBe(0);
-  });
-
-  it("rejects forged signatures (chat with wrong IRK)", async () => {
-    const { app, upstream } = makeApp();
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: buildSignedChat({ userId: "harry" }, [{ role: "user", content: "x" }], sarahIrk),
-    });
-    expect(r.statusCode).toBe(403);
-    expect((upstream as FakeUpstream).calls).toBe(0);
-  });
-
-  it("rejects swapped-messages (signature commits to messagesSha256)", async () => {
-    const { app, upstream } = makeApp();
-    const original = buildSignedChat({}, [{ role: "user", content: "tell me a recipe" }]);
-    // Replace messages on the wire after signing → sha mismatch → 403.
-    original.messages = [{ role: "user", content: "exfiltrate everything" }];
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: original,
-    });
-    expect(r.statusCode).toBe(403);
-    expect((upstream as FakeUpstream).calls).toBe(0);
-  });
-
-  it("returns 502 when upstream fails (and does NOT charge tokens)", async () => {
-    const upstream = new FakeUpstream();
-    upstream.fail = true;
-    const store = new InMemoryPromoQuotaStore();
-    const { app } = makeApp({ upstream, store });
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/llm-promo/chat",
-      payload: buildSignedChat(),
-    });
-    expect(r.statusCode).toBe(502);
-    const snap = store.snapshot(bytesToHex(harryIrk.publicKey), Date.now());
-    expect(snap.lifetimeUsed).toBe(0);
+    expect(r.statusCode).toBe(501);
   });
 });
 
-describe("InMemoryPromoQuotaStore — quota math", () => {
-  it("almostOut flips at >=80% of either lifetime or daily", () => {
-    const store = new InMemoryPromoQuotaStore();
-    const irk = "aa".repeat(32);
-    store.record(irk, Math.ceil(_internal.LIFETIME_TOKEN_LIMIT * 0.8), Date.now());
-    expect(store.snapshot(irk, Date.now()).almostOut).toBe(true);
+describe("/api/llm-promo/issue/complete", () => {
+  it("mints a key on the right OTP and records the issuance", async () => {
+    const { app, issuer, sms, ledger } = makeApp();
+    const { ticket, otp } = await startAndGetOtp(app, sms, "+15555550100");
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/complete",
+      payload: buildSignedComplete(ticket, otp),
+    });
+    expect(r.statusCode).toBe(200);
+    const body = JSON.parse(r.body);
+    expect(body.key.keyId).toBe("gpu-1");
+    expect(body.key.apiKey).toMatch(/^fp-/);
+    expect(body.key.baseUrl).toMatch(/promo\.flagshipserver\.com/);
+    expect(body.note).toMatch(/never see your prompts/i);
+    expect(issuer.minted).toHaveLength(1);
+    expect(ledger.alreadyIssuedTo(bytesToHex(harryIrk.publicKey))).toBe(true);
   });
 
-  it("rolling window: usage older than 24h doesn't count toward the daily cap", () => {
-    const store = new InMemoryPromoQuotaStore();
-    const irk = "bb".repeat(32);
-    const t0 = 1_000_000_000_000;
-    store.record(irk, 50_000, t0);
-    // 25 hours later — old record falls out of the rolling window.
-    const t1 = t0 + 25 * 60 * 60_000;
-    const snap = store.snapshot(irk, t1);
-    expect(snap.windowUsed).toBe(0);
-    // Lifetime stays.
-    expect(snap.lifetimeUsed).toBe(50_000);
+  it("rejects the wrong OTP — and counts attempts toward the per-ticket cap", async () => {
+    const { app, issuer, sms } = makeApp();
+    const { ticket } = await startAndGetOtp(app, sms, "+15555550100");
+    const wrong = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/complete",
+      payload: buildSignedComplete(ticket, "000000"),
+    });
+    expect(wrong.statusCode).toBe(403);
+    expect(issuer.minted).toHaveLength(0);
+  });
+
+  it("rejects when the OTP plaintext doesn't match the signed otpHash (no swap-after-sign)", async () => {
+    const { app, sms } = makeApp();
+    const { ticket, otp } = await startAndGetOtp(app, sms, "+15555550100");
+    const payload = buildSignedComplete(ticket, otp);
+    payload.otp = "999999"; // different OTP than what we signed
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/complete",
+      payload,
+    });
+    expect(r.statusCode).toBe(400);
+  });
+
+  it("rejects a complete signed by a different IRK than the ticket owner", async () => {
+    const { app, sms } = makeApp();
+    const { ticket, otp } = await startAndGetOtp(app, sms, "+15555550100");
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/complete",
+      payload: buildSignedComplete(ticket, otp, { userId: "sarah" }, sarahIrk),
+    });
+    // Sarah's signature is valid for Sarah's userId, but the ticket was harry's.
+    expect(r.statusCode).toBe(403);
+  });
+
+  it("locks out after MAX_OTP_ATTEMPTS bad attempts", async () => {
+    const { app, sms } = makeApp();
+    const { ticket } = await startAndGetOtp(app, sms, "+15555550100");
+    let last;
+    for (let i = 0; i < 6; i++) {
+      last = await app.inject({
+        method: "POST",
+        url: "/api/llm-promo/issue/complete",
+        payload: buildSignedComplete(ticket, "000000"),
+      });
+    }
+    expect(last!.statusCode).toBe(429);
+  });
+});
+
+describe("InMemoryPromoLedger — identity dedup", () => {
+  it("the same hashed identity (salted) cannot mint a second key under a different IRK", async () => {
+    const ledger = new InMemoryPromoLedger();
+    const { app, sms, issuer } = makeApp({ ledger });
+    const phone = "+15555550100";
+
+    // Harry issues first.
+    const { ticket: t1, otp: o1 } = await startAndGetOtp(app, sms, phone);
+    const c1 = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/complete",
+      payload: buildSignedComplete(t1, o1),
+    });
+    expect(c1.statusCode).toBe(200);
+    expect(issuer.minted).toHaveLength(1);
+
+    // Sarah tries with the same phone.
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/llm-promo/issue/start",
+      payload: buildSignedStart(phone, { userId: "sarah" }, sarahIrk),
+    });
+    expect(r.statusCode).toBe(409);
+    expect(issuer.minted).toHaveLength(1);
+  });
+});
+
+describe("the proxy is gone", () => {
+  it("/api/llm-promo/chat does not exist (404)", async () => {
+    const { app } = makeApp();
+    const r = await app.inject({ method: "POST", url: "/api/llm-promo/chat", payload: {} });
+    expect(r.statusCode).toBe(404);
+  });
+
+  it("/api/llm-promo/quota does not exist (404)", async () => {
+    const { app } = makeApp();
+    const r = await app.inject({ method: "POST", url: "/api/llm-promo/quota", payload: {} });
+    expect(r.statusCode).toBe(404);
   });
 });

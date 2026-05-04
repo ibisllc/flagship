@@ -360,35 +360,52 @@ describe("IRK server registration", () => {
   });
 });
 
-describe("LLM promo IRK signatures", () => {
+describe("LLM promo issuance signatures (one-shot — flagshipserver.com is never in the prompt path)", () => {
   const irk = deriveIRK(umk);
-  it("quota request: phone-signed payload verifies", async () => {
-    const { signLlmPromoQuota, verifyLlmPromoQuota } = await import("../src/auth.js");
-    const r = { userId: "harry", issuedAt: 1735689600000 };
-    expect(verifyLlmPromoQuota(r, signLlmPromoQuota(r, irk), irk.publicKey)).toBe(true);
-  });
 
-  it("chat request: signature commits to (model, messagesSha256, maxTokens, issuedAt)", async () => {
-    const { signLlmPromoChat, verifyLlmPromoChat } = await import("../src/auth.js");
+  it("issue-start: signature commits to method + identityHash so the user can't swap numbers between start/complete", async () => {
+    const { signLlmPromoIssueStart, verifyLlmPromoIssueStart } = await import("../src/auth.js");
     const r = {
       userId: "harry",
-      model: "flagship-coder-v1",
-      messagesSha256: new Uint8Array(32).fill(0x42),
-      maxTokens: 1024,
+      method: "phone-otp" as const,
+      identityHash: new Uint8Array(32).fill(0x42),
       issuedAt: 1735689600000,
     };
-    const sig = signLlmPromoChat(r, irk);
-    expect(verifyLlmPromoChat(r, sig, irk.publicKey)).toBe(true);
-    // Tampering with maxTokens (the cost-multiplying field) breaks verification.
-    expect(verifyLlmPromoChat({ ...r, maxTokens: 4096 }, sig, irk.publicKey)).toBe(false);
-    // Tampering with messages hash breaks verification (replay against a different prompt fails).
-    expect(verifyLlmPromoChat(
-      { ...r, messagesSha256: new Uint8Array(32).fill(0xff) },
+    const sig = signLlmPromoIssueStart(r, irk);
+    expect(verifyLlmPromoIssueStart(r, sig, irk.publicKey)).toBe(true);
+    expect(verifyLlmPromoIssueStart(
+      { ...r, identityHash: new Uint8Array(32).fill(0xff) },
       sig,
       irk.publicKey,
     )).toBe(false);
-    // Wrong signer fails.
+    expect(verifyLlmPromoIssueStart(
+      { ...r, method: "stripe-zero-auth" as const },
+      sig,
+      irk.publicKey,
+    )).toBe(false);
+  });
+
+  it("issue-complete: signature commits to (ticket, otpHash) — OTP can't be swapped after signing", async () => {
+    const { signLlmPromoIssueComplete, verifyLlmPromoIssueComplete } = await import("../src/auth.js");
+    const r = {
+      userId: "harry",
+      ticket: "tk-abc123",
+      otpHash: new Uint8Array(32).fill(0x77),
+      issuedAt: 1735689600000,
+    };
+    const sig = signLlmPromoIssueComplete(r, irk);
+    expect(verifyLlmPromoIssueComplete(r, sig, irk.publicKey)).toBe(true);
+    expect(verifyLlmPromoIssueComplete(
+      { ...r, otpHash: new Uint8Array(32).fill(0x88) },
+      sig,
+      irk.publicKey,
+    )).toBe(false);
+    expect(verifyLlmPromoIssueComplete(
+      { ...r, ticket: "tk-different" },
+      sig,
+      irk.publicKey,
+    )).toBe(false);
     const otherIrk = deriveIRK({ seed: new Uint8Array(32).fill(0xaa) });
-    expect(verifyLlmPromoChat(r, sig, otherIrk.publicKey)).toBe(false);
+    expect(verifyLlmPromoIssueComplete(r, sig, otherIrk.publicKey)).toBe(false);
   });
 });

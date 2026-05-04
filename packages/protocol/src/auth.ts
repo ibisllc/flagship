@@ -38,8 +38,10 @@ const TAG_ACCOUNT_RECOVERY = "flagship/account-recovery/v1";
 const TAG_PB_ANNOUNCE = "pb/announce/v1";
 const TAG_PB_REQUEST_PEERS = "pb/request-peers/v1";
 const TAG_PB_PEER_CONFIRM = "pb/peer-confirm/v1";
-const TAG_LLM_PROMO_QUOTA = "flagship/llm-promo-quota/v1";
-const TAG_LLM_PROMO_CHAT = "flagship/llm-promo-chat/v1";
+// Promo proxy was removed (we refuse to be in the prompt path). The new
+// promo flow is one-shot issuance — see TAG_LLM_PROMO_ISSUE_* below.
+const TAG_LLM_PROMO_ISSUE_START = "flagship/llm-promo-issue-start/v1";
+const TAG_LLM_PROMO_ISSUE_COMPLETE = "flagship/llm-promo-issue-complete/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -71,27 +73,37 @@ export interface AccountRecovery {
 }
 
 /**
- * IRK-signed quota check for the Flagship promo LLM. The phone calls
- * flagshipserver.com to read its remaining tokens. The signature commits to a
- * recent timestamp so an old read can't be replayed forever.
+ * IRK-signed promo-issuance start. The user proves account ownership and
+ * commits to ONE specific phone number (or other identity proof). The
+ * server stores `sha256(phoneNumber + serverPepper)` keyed on this user's
+ * IRK so the same number can't be used to mint a second promo key.
  */
-export interface LlmPromoQuotaRequest {
+export interface LlmPromoIssueStart {
   userId: UserId;
+  /** "phone-otp" for v1; "stripe-zero-auth" later. */
+  method: "phone-otp" | "stripe-zero-auth";
+  /**
+   * SHA-256 of the verifier-input — for phone-otp this is sha256(E.164 number).
+   * The server hashes its own pepper in too before storage; the *signature*
+   * commits to the unsalted hash so the user cannot swap numbers between
+   * /start and /complete.
+   */
+  identityHash: Bytes;
   issuedAt: number;
 }
 
 /**
- * IRK-signed chat request against the Flagship promo LLM. The signature
- * commits to (model, sha256-of-messages, maxTokens, issuedAt) so a leaked
- * signature cannot be reused for a different prompt or with a different
- * model that costs more tokens.
+ * IRK-signed promo-issuance completion. The signature commits to the
+ * verification ticket the server returned from /start AND the OTP code.
+ * The OTP itself is sent in plaintext alongside the signature; the
+ * canonical-bytes hash of it prevents a man-in-the-middle from swapping
+ * the OTP after we sign.
  */
-export interface LlmPromoChatRequest {
+export interface LlmPromoIssueComplete {
   userId: UserId;
-  model: string;
-  /** SHA-256 of the canonicalized messages array, hex. */
-  messagesSha256: Bytes;
-  maxTokens: number;
+  ticket: string;
+  /** SHA-256 of the OTP / verification code — hex 32 bytes. */
+  otpHash: Bytes;
   issuedAt: number;
 }
 
@@ -286,13 +298,15 @@ function canonicalPbPeerConfirm(c: PbPeerConfirm): Bytes {
   );
 }
 
-function canonicalLlmPromoQuota(r: LlmPromoQuotaRequest): Bytes {
-  return new TextEncoder().encode(`${TAG_LLM_PROMO_QUOTA}|${r.userId}|${r.issuedAt}`);
+function canonicalLlmPromoIssueStart(r: LlmPromoIssueStart): Bytes {
+  return new TextEncoder().encode(
+    [TAG_LLM_PROMO_ISSUE_START, r.userId, r.method, hex(r.identityHash), r.issuedAt].join("|"),
+  );
 }
 
-function canonicalLlmPromoChat(r: LlmPromoChatRequest): Bytes {
+function canonicalLlmPromoIssueComplete(r: LlmPromoIssueComplete): Bytes {
   return new TextEncoder().encode(
-    [TAG_LLM_PROMO_CHAT, r.userId, r.model, hex(r.messagesSha256), r.maxTokens, r.issuedAt].join("|"),
+    [TAG_LLM_PROMO_ISSUE_COMPLETE, r.userId, r.ticket, hex(r.otpHash), r.issuedAt].join("|"),
   );
 }
 
@@ -488,25 +502,25 @@ export function verifyPbPeerConfirm(c: PbPeerConfirm, sig: Bytes, stkPub: Bytes)
   }
 }
 
-export function signLlmPromoQuota(r: LlmPromoQuotaRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalLlmPromoQuota(r), irk.privateKey);
+export function signLlmPromoIssueStart(r: LlmPromoIssueStart, irk: Keypair): Bytes {
+  return ed.sign(canonicalLlmPromoIssueStart(r), irk.privateKey);
 }
 
-export function verifyLlmPromoQuota(r: LlmPromoQuotaRequest, sig: Bytes, irkPub: Bytes): boolean {
+export function verifyLlmPromoIssueStart(r: LlmPromoIssueStart, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalLlmPromoQuota(r), irkPub);
+    return ed.verify(sig, canonicalLlmPromoIssueStart(r), irkPub);
   } catch {
     return false;
   }
 }
 
-export function signLlmPromoChat(r: LlmPromoChatRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalLlmPromoChat(r), irk.privateKey);
+export function signLlmPromoIssueComplete(r: LlmPromoIssueComplete, irk: Keypair): Bytes {
+  return ed.sign(canonicalLlmPromoIssueComplete(r), irk.privateKey);
 }
 
-export function verifyLlmPromoChat(r: LlmPromoChatRequest, sig: Bytes, irkPub: Bytes): boolean {
+export function verifyLlmPromoIssueComplete(r: LlmPromoIssueComplete, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalLlmPromoChat(r), irkPub);
+    return ed.verify(sig, canonicalLlmPromoIssueComplete(r), irkPub);
   } catch {
     return false;
   }
