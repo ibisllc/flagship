@@ -1,12 +1,13 @@
-// Flagship webapp — UI orchestration on top of keystore.js.
+// Flagship webapp — UI orchestration on top of keystore.js + qrScanner.js.
 //
 // State machine:
-//   no UMK in IDB → bootstrap view
-//   wrapped UMK present, no in-memory seed → unlock view
-//   unwrapped seed in memory → home view (identity + servers)
+//   no UMK in IDB                 → bootstrap view
+//   wrapped UMK present, no seed   → unlock view
+//   unwrapped seed in memory       → home view (identity + servers)
+//   user starts pairing            → pair view (camera or paste)
 //
-// Sensitive material (the unwrapped UMK seed, IRK private key) lives only
-// in this module's closure — never on `window`, never serialized.
+// Sensitive material (UMK seed, IRK private key, scanned session id)
+// lives only in this module's closure — never on `window`, never logged.
 
 import {
   bootstrapNewIdentity,
@@ -14,8 +15,12 @@ import {
   hasWrappedUmk,
   resetDevice,
   deriveIrkFromSeed,
+  signWithIrk,
+  generateEphemeralPub,
   bytesToHex,
+  hexToBytes,
 } from "/webapp/keystore.js";
+import { hasBarcodeDetector, parseQrPayload, scanWithCamera } from "/webapp/qrScanner.js";
 
 const $ = (id) => document.getElementById(id);
 const setSubtitle = (s) => ($("subtitle").textContent = s);
@@ -38,8 +43,8 @@ function toast(text, kind) {
 /* ---------- session-scoped derived state ---------- */
 
 const session = {
-  umk: null, // unwrapped seed
-  irk: null, // { privateKey, publicKey }
+  umk: null,
+  irk: null,
   username: null,
 };
 
@@ -66,7 +71,6 @@ async function renderHome() {
     ? bytesToHex(session.irk.publicKey).slice(0, 16) + "…" + bytesToHex(session.irk.publicKey).slice(-4)
     : "—";
 
-  // Try /api/me/servers if we have a recent paired session id stored.
   const sid = localStorage.getItem("flagship.sessionId");
   const sessionStatusEl = $("session-status");
   const list = $("servers-list");
@@ -74,8 +78,7 @@ async function renderHome() {
   if (!sid) {
     sessionStatusEl.textContent = "unpaired";
     sessionStatusEl.classList.remove("ok");
-    list.innerHTML =
-      '<div class="card"><p style="margin:0;color:var(--fg-mute);font-size:0.9rem;">No paired session yet. Tap "Pair to a server" to start.</p></div>';
+    list.innerHTML = '<div class="card"><p style="margin:0;color:var(--fg-mute);font-size:0.9rem;">No paired session yet. Tap "Pair to a server" to start.</p></div>';
     return;
   }
   try {
@@ -85,8 +88,7 @@ async function renderHome() {
     sessionStatusEl.textContent = "paired";
     sessionStatusEl.classList.add("ok");
     if (!body.servers.length) {
-      list.innerHTML =
-        '<div class="card"><p style="margin:0;color:var(--fg-mute);font-size:0.9rem;">No servers registered yet.</p></div>';
+      list.innerHTML = '<div class="card"><p style="margin:0;color:var(--fg-mute);font-size:0.9rem;">No servers registered yet.</p></div>';
       return;
     }
     for (const s of body.servers) {
@@ -110,6 +112,113 @@ function escapeHtml(s) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+/* ---------- pairing flow ---------- */
+
+async function startCameraScan() {
+  const video = $("pair-video");
+  const status = $("pair-status");
+  if (!hasBarcodeDetector()) {
+    status.textContent = "this browser can't open the camera scanner — paste below";
+    return;
+  }
+  try {
+    status.textContent = "starting camera…";
+    const text = await scanWithCamera(video, { timeoutMs: 60_000 });
+    status.textContent = "QR found, confirming…";
+    await confirmPairing(text);
+  } catch (e) {
+    status.textContent = `camera failed: ${e.message}`;
+  }
+}
+
+async function ensureUsername() {
+  if (session.username) return session.username;
+  const handle = prompt(
+    "Pick a username (DNS-safe label, will appear at <name>.flagship.services):",
+    "",
+  );
+  if (!handle || !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(handle)) {
+    throw new Error("invalid username");
+  }
+  localStorage.setItem("flagship.username", handle);
+  session.username = handle;
+  return handle;
+}
+
+async function confirmPairing(qrText) {
+  if (!session.umk) {
+    toast("unlock first", "err");
+    return;
+  }
+  let parsed;
+  try {
+    parsed = parseQrPayload(qrText);
+  } catch (e) {
+    toast(`invalid QR: ${e.message}`, "err");
+    return;
+  }
+  let username;
+  try {
+    username = await ensureUsername();
+  } catch (e) {
+    toast(e.message, "err");
+    return;
+  }
+
+  const phonePub = await generateEphemeralPub();
+  const issuedAt = Date.now();
+
+  // Pairing claim shape mirrors @flagship/protocol's canonicalRebuild —
+  // see /api/desktop/pair/confirm in apps/web/src/routes/desktopPair.ts.
+  const canonical = canonicalPairingClaim({
+    userId: username,
+    newServerId: `desktop-pair:${parsed.sessionId}`,
+    wifiSsid: parsed.desktopPubKeyHex,
+    wifiPskHashHex: bytesToHex(phonePub),
+    shareRatio: 0,
+    issuedAt,
+  });
+  const sig = await signWithIrk(session.umk, canonical);
+
+  try {
+    const r = await fetch("/api/desktop/pair/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        sessionId: parsed.sessionId,
+        userId: username,
+        phonePubKey: bytesToHex(phonePub),
+        irkSignature: bytesToHex(sig),
+        issuedAt,
+      }),
+    });
+    if (!r.ok) {
+      const body = await r.text();
+      throw new Error(`status ${r.status}: ${body}`);
+    }
+    localStorage.setItem("flagship.sessionId", parsed.sessionId);
+    toast("paired");
+    await renderHome();
+    show("view-home");
+  } catch (e) {
+    toast(`pair failed: ${e.message}`, "err");
+  }
+}
+
+function canonicalPairingClaim(c) {
+  return new TextEncoder().encode(
+    [
+      "flagship/rebuild/v1",
+      c.userId,
+      c.newServerId,
+      c.wifiSsid,
+      c.wifiPskHashHex,
+      c.shareRatio,
+      c.issuedAt,
+    ].join("|"),
+  );
 }
 
 /* ---------- handlers ---------- */
@@ -141,20 +250,22 @@ async function handleUnlock() {
 
 async function handlePairToServer() {
   if (!session.irk) return toast("unlock first", "err");
-  const handle = prompt("Username (DNS-safe label):", session.username || "");
-  if (!handle) return;
-  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(handle)) {
-    return toast("invalid username", "err");
-  }
-  localStorage.setItem("flagship.username", handle);
-  session.username = handle;
-  await renderHome();
-  toast("identity ready — server pairing flow ships next");
+  show("view-pair");
+  // Kick off the camera scan in the background; the paste-fallback works in parallel.
+  startCameraScan();
+}
+
+async function handlePastePair() {
+  const text = $("pair-paste").value.trim();
+  if (!text) return toast("paste a QR payload first", "err");
+  await confirmPairing(text);
 }
 
 async function handleReset() {
   if (!confirm("Reset removes this device's local key. Continue?")) return;
   await resetDevice();
+  localStorage.removeItem("flagship.sessionId");
+  localStorage.removeItem("flagship.username");
   lock();
   setSubtitle("device reset");
   show("view-bootstrap");
@@ -166,6 +277,7 @@ async function boot() {
   $("bootstrap-go").addEventListener("click", handleBootstrap);
   $("unlock-go").addEventListener("click", handleUnlock);
   $("pair-with-server").addEventListener("click", handlePairToServer);
+  $("pair-paste-go").addEventListener("click", handlePastePair);
   $("reset-device").addEventListener("click", handleReset);
   $("pair-cancel").addEventListener("click", () => show("view-home"));
 
@@ -177,6 +289,9 @@ async function boot() {
     show("view-bootstrap");
   }
 }
+
+// Avoid unused-import lint warnings for the helper we only use indirectly.
+void hexToBytes;
 
 boot().catch((e) => {
   setSubtitle("startup failed");

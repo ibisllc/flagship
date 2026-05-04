@@ -73,12 +73,21 @@
         </div>
       </section>
 
-      <!-- View 4: Pairing — show QR for the desktop / mobile to scan -->
+      <!-- View 4: Pairing — webapp scans a server's QR to take on the "phone" role -->
       <section id="view-pair" class="hidden">
-        <h2>Show this to a paired device</h2>
+        <h2>Pair to a server</h2>
         <div class="card">
-          <div id="qr"></div>
-          <p style="text-align: center; color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.6rem;" id="pair-status">Waiting for confirmation…</p>
+          <p style="margin: 0 0 0.6rem; color: var(--fg-mute); font-size: 0.9rem;">
+            Open <code>/login.html</code> on the server's desktop UI, then scan its QR with this device.
+          </p>
+          <video id="pair-video" playsinline autoplay muted
+            style="width: 100%; max-width: 320px; aspect-ratio: 1; border-radius: 12px; background: #000; display: block; margin: 0 auto; object-fit: cover;"></video>
+          <p id="pair-status" style="text-align: center; color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.6rem;">starting camera…</p>
+        </div>
+        <div class="card">
+          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">No camera, or this browser doesn't support BarcodeDetector? Paste the QR payload:</p>
+          <input id="pair-paste" type="text" placeholder="flagship://desktop/…" autocomplete="off" />
+          <button id="pair-paste-go" style="margin-top: 0.6rem; width: 100%;">Confirm pairing</button>
         </div>
         <button class="secondary" id="pair-cancel" style="width: 100%; margin-top: 0.6rem;">Cancel</button>
       </section>

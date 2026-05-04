@@ -211,6 +211,32 @@ function base64urlToBytes(s) {
   return out;
 }
 
+/**
+ * Sign a canonical-bytes payload with the IRK derived from a seed. Mirrors
+ * `signRebuildRequest` etc. in @flagship/protocol — callers compose the
+ * canonical-bytes string in the same shape the server expects.
+ */
+export async function signWithIrk(umkSeed, canonicalBytes) {
+  const irk = await deriveIrkFromSeed(umkSeed);
+  const sig = new Uint8Array(
+    await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, canonicalBytes),
+  );
+  return sig;
+}
+
+/**
+ * Generate an ephemeral X25519/ECDH pubkey the same way the dev/phone.html
+ * dance does: P-256 ECDH, take the X coordinate as a 32-byte representative
+ * pubkey. The control plane treats it as opaque bytes — we only need it for
+ * the pairing handshake's wifiPskHash slot per the existing protocol.
+ */
+export async function generateEphemeralPub() {
+  const kp = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, false, ["deriveKey"]);
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
+  // raw[0] = 0x04 (uncompressed marker); X coordinate is the next 32 bytes.
+  return raw.slice(1, 33);
+}
+
 /* ---------- public surface ---------- */
 
 export async function hasWrappedUmk() {
