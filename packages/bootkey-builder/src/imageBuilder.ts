@@ -43,7 +43,10 @@ export async function materializePlan(plan: BuildPlan, outDir: string): Promise<
   const allFiles = [
     ...plan.configFiles,
     ...nixosConfigFiles(plan),
-    caddyfileConfigFile({ username: plan.spec.userId }, []),
+    caddyfileConfigFile(
+      { username: plan.spec.userId, serverName: plan.spec.newServerId },
+      [],
+    ),
   ];
   const configFilePaths: string[] = [];
   for (const cf of allFiles) {

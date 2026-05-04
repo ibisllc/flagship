@@ -119,4 +119,20 @@ describe("planBuild", () => {
     const sr = plan.configFiles.find((f) => f.path.endsWith("share-ratio"))!;
     expect(sr.content.trim()).toBe("0.33");
   });
+
+  it("rejects a userId that isn't a DNS label (would break the URL hierarchy)", () => {
+    expect(() => planBuild({ ...baseSpec, userId: "Has-Caps" })).toThrow(/RFC 1035/);
+    expect(() => planBuild({ ...baseSpec, userId: "with.dot" })).toThrow(/RFC 1035/);
+    expect(() => planBuild({ ...baseSpec, userId: "-leading-hyphen" })).toThrow(/RFC 1035/);
+  });
+
+  it("rejects a newServerId that isn't a DNS label (every URL embeds it)", () => {
+    expect(() => planBuild({ ...baseSpec, newServerId: "Caps_OK?" })).toThrow(/RFC 1035/);
+    expect(() => planBuild({ ...baseSpec, newServerId: "" })).toThrow();
+  });
+
+  it("accepts kebab-case multi-segment names like 'home-box' or 'parents-rpi'", () => {
+    expect(() => planBuild({ ...baseSpec, newServerId: "home-box" })).not.toThrow();
+    expect(() => planBuild({ ...baseSpec, newServerId: "parents-rpi" })).not.toThrow();
+  });
 });

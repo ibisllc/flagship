@@ -80,12 +80,43 @@ export function validateAppLabel(input: string): LabelValidation {
 }
 
 /**
- * Builds the wildcard SAN list for a user's per-user cert. We always issue
- * for both `<user>.flagship.services` (the apex of their namespace) and
- * `*.<user>.flagship.services` (covers all per-app subdomains).
+ * Per-user wildcard SAN list. Used when issuing a single cert that covers
+ * the user's namespace apex plus a single layer of subdomains. SUPERSEDED
+ * by `serverWildcardSans` for v1 (multi-server), kept for older callers.
  */
 export function userWildcardSans(username: string, apex: string): string[] {
   return [`${username}.${apex}`, `*.${username}.${apex}`];
+}
+
+/**
+ * Per-server wildcard SAN list. Each Flagship server gets its own cert
+ * covering its own namespace under the user — `<server>.<user>.<apex>`
+ * plus `*.<server>.<user>.<apex>` for app subdomains.
+ *
+ * This is the preferred shape for v1 (one user can run many servers).
+ */
+export function serverWildcardSans(
+  serverName: string,
+  username: string,
+  apex: string,
+): string[] {
+  return [
+    `${serverName}.${username}.${apex}`,
+    `*.${serverName}.${username}.${apex}`,
+  ];
+}
+
+/**
+ * Build the FQDN for one app on one server. This is the canonical URL
+ * construction the whole stack should call when it needs an app's address.
+ */
+export function appFqdn(
+  appSubdomain: string,
+  serverName: string,
+  username: string,
+  apex: string,
+): string {
+  return `${appSubdomain}.${serverName}.${username}.${apex}`;
 }
 
 export const _internal = { LABEL_RE, RESERVED_USER_LABELS };

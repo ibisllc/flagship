@@ -3,6 +3,8 @@ import {
   validateUserLabel,
   validateAppLabel,
   userWildcardSans,
+  serverWildcardSans,
+  appFqdn,
   _internal,
 } from "../src/validation.js";
 
@@ -53,12 +55,33 @@ describe("validateAppLabel", () => {
   });
 });
 
-describe("userWildcardSans", () => {
+describe("userWildcardSans (legacy / single-server users)", () => {
   it("returns the apex + wildcard SAN list for a per-user cert", () => {
     expect(userWildcardSans("harry", "flagship.services")).toEqual([
       "harry.flagship.services",
       "*.harry.flagship.services",
     ]);
+  });
+});
+
+describe("serverWildcardSans (multi-server v1)", () => {
+  it("issues a per-SERVER wildcard so adding a server doesn't reissue siblings' certs", () => {
+    expect(serverWildcardSans("home-box", "harry", "flagship.services")).toEqual([
+      "home-box.harry.flagship.services",
+      "*.home-box.harry.flagship.services",
+    ]);
+    expect(serverWildcardSans("chillout", "harry", "flagship.services")).toEqual([
+      "chillout.harry.flagship.services",
+      "*.chillout.harry.flagship.services",
+    ]);
+  });
+});
+
+describe("appFqdn", () => {
+  it("composes <app>.<server>.<user>.<apex>", () => {
+    expect(appFqdn("habits", "home-box", "harry", "flagship.services")).toBe(
+      "habits.home-box.harry.flagship.services",
+    );
   });
 });
 

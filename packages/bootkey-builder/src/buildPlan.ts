@@ -49,6 +49,7 @@ export interface BuildPlan {
 }
 
 const SYSTEM_RESERVED_GB = 8;
+const DNS_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function planBuild(spec: BuildSpec): BuildPlan {
   if (spec.shareRatio < 0 || spec.shareRatio > 0.9) {
@@ -60,6 +61,14 @@ export function planBuild(spec: BuildSpec): BuildPlan {
   if (!spec.wifi.ssid) throw new Error("wifi.ssid is required");
   if (!spec.userId) throw new Error("userId is required");
   if (!spec.newServerId) throw new Error("newServerId is required");
+  // serverId is the human-facing DNS label (e.g. "home-box", "chillout").
+  // It's baked into every URL: <app>.<server>.<user>.flagship.services
+  if (!DNS_LABEL_RE.test(spec.userId)) {
+    throw new Error(`userId must match RFC 1035 label rules (got ${JSON.stringify(spec.userId)})`);
+  }
+  if (!DNS_LABEL_RE.test(spec.newServerId)) {
+    throw new Error(`newServerId must match RFC 1035 label rules (got ${JSON.stringify(spec.newServerId)})`);
+  }
   assertHexBytes("irkPublicKey", spec.irkPublicKey, 32);
   assertHexBytes("bakPublicKey", spec.bakPublicKey, 32);
   assertHexBytes("swkProvisioningTokenHash", spec.swkProvisioningTokenHash, 32);

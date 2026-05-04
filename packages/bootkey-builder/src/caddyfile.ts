@@ -9,8 +9,14 @@ export interface CaddyAppEntry {
 }
 
 export interface CaddyContext {
-  /** The user's DNS subdomain — e.g. "harry" → harry.flagship.services. */
+  /** The user's DNS label — e.g. "harry". */
   username: string;
+  /**
+   * The server's DNS label — e.g. "home-box". Apps are addressed at
+   * `<app>.<server>.<user>.flagship.services` so the user can run
+   * multiple servers under the same `<user>` namespace.
+   */
+  serverName: string;
   /** Daemon address Caddy can reach. Default 127.0.0.1:9090. */
   daemonAddr?: string;
   /** TLS-cert source. Path to PEM bundle on disk that Caddy reads via `tls`. */
@@ -18,9 +24,24 @@ export interface CaddyContext {
 }
 
 /**
+ * Build the FQDN for one app on this server.
+ */
+export function appFqdn(ctx: CaddyContext, subdomain: string): string {
+  return `${subdomain}.${ctx.serverName}.${ctx.username}.flagship.services`;
+}
+
+/**
+ * Build the wildcard Caddy site selector for this server's namespace —
+ * e.g. `*.home-box.harry.flagship.services`.
+ */
+export function serverWildcardSelector(ctx: CaddyContext): string {
+  return `*.${ctx.serverName}.${ctx.username}.flagship.services`;
+}
+
+/**
  * Emit a Caddyfile that:
  * 1. Terminates per-app TLS using the wildcard cert provisioned for
- *    *.<user>.flagship.services (issued by the server's ACME flow).
+ *    `*.<server>.<user>.flagship.services` (issued by the server's ACME flow).
  * 2. STRIPS any client-supplied X-Flagship-* headers (defense against header
  *    injection — the platform's identity guarantees rest on this strip).
  * 3. Calls the local daemon's POST /apps/:id/identity/decide to authorize the
@@ -50,7 +71,7 @@ export function renderCaddyfile(ctx: CaddyContext, apps: CaddyAppEntry[]): strin
   lines.push("");
 
   for (const entry of apps) {
-    const fqdn = `${entry.manifest.network.subdomain}.${ctx.username}.flagship.services`;
+    const fqdn = appFqdn(ctx, entry.manifest.network.subdomain);
     const target = entry.containerHost.includes(":")
       ? entry.containerHost
       : `${entry.containerHost}:${entry.manifest.runtime.port}`;
@@ -78,8 +99,9 @@ export function renderCaddyfile(ctx: CaddyContext, apps: CaddyAppEntry[]): strin
     lines.push("");
   }
 
-  // Catch-all for unknown subdomains under the user's namespace.
-  lines.push(`*.${ctx.username}.flagship.services {${tlsBlock}`);
+  // Catch-all for unknown subdomains under THIS SERVER's namespace.
+  // (Sibling servers under the same user have their own catch-all.)
+  lines.push(`${serverWildcardSelector(ctx)} {${tlsBlock}`);
   lines.push("  respond \"app not found\" 404");
   lines.push("}");
 
