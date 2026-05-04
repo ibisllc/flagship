@@ -3,3 +3,4 @@ export * from "./validation.js";
 export * from "./registry.js";
 export * from "./cloudflare.js";
 export * from "./dnsChallenge.js";
+export * from "./serverDns.js";

@@ -43,6 +43,7 @@ const TAG_PB_PEER_CONFIRM = "pb/peer-confirm/v1";
 const TAG_LLM_PROMO_ISSUE_START = "flagship/llm-promo-issue-start/v1";
 const TAG_LLM_PROMO_ISSUE_COMPLETE = "flagship/llm-promo-issue-complete/v1";
 const TAG_BACKUP_TOGGLE = "flagship/backup-toggle/v1";
+const TAG_PUBLISH_SERVER_DNS = "flagship/publish-server-dns/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -105,6 +106,24 @@ export interface LlmPromoIssueComplete {
   ticket: string;
   /** SHA-256 of the OTP / verification code — hex 32 bytes. */
   otpHash: Bytes;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed phone command that tells `.services` how to publish DNS for
+ * `<server>.<user>.flagship.services`. Two modes:
+ *
+ *   - mode="tunnel": point at the tunnel ingress (default; works for NATed servers).
+ *   - mode="direct": point at the user-supplied A record (their VPS / port-forwarded box).
+ *
+ * The signature commits to (serverId, mode, directIp ?? "", issuedAt).
+ * directIp must be IPv4 dotted-quad or IPv6 in `::` form. Empty when mode=tunnel.
+ */
+export interface PublishServerDns {
+  userId: UserId;
+  serverId: ServerId;
+  mode: "tunnel" | "direct";
+  directIp: string;
   issuedAt: number;
 }
 
@@ -327,6 +346,12 @@ function canonicalLlmPromoIssueComplete(r: LlmPromoIssueComplete): Bytes {
 function canonicalBackupToggle(r: BackupToggle): Bytes {
   return new TextEncoder().encode(
     `${TAG_BACKUP_TOGGLE}|${r.serverId}|${r.enabled ? "1" : "0"}|${r.issuedAt}`,
+  );
+}
+
+function canonicalPublishServerDns(r: PublishServerDns): Bytes {
+  return new TextEncoder().encode(
+    [TAG_PUBLISH_SERVER_DNS, r.userId, r.serverId, r.mode, r.directIp, r.issuedAt].join("|"),
   );
 }
 
@@ -553,6 +578,18 @@ export function signBackupToggle(r: BackupToggle, irk: Keypair): Bytes {
 export function verifyBackupToggle(r: BackupToggle, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalBackupToggle(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signPublishServerDns(r: PublishServerDns, irk: Keypair): Bytes {
+  return ed.sign(canonicalPublishServerDns(r), irk.privateKey);
+}
+
+export function verifyPublishServerDns(r: PublishServerDns, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPublishServerDns(r), irkPub);
   } catch {
     return false;
   }

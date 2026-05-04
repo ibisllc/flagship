@@ -28,6 +28,13 @@ import {
   type PromoIssuer,
   type SmsSender,
 } from "./routes/llmPromo.js";
+import { registerServerDnsPublish } from "./routes/serverDnsPublish.js";
+import {
+  InMemoryServerDnsRegistry,
+  ServerDnsPublisher,
+  type ServerDnsRegistry,
+  type ZoneApi,
+} from "@flagship/services-zone";
 import {
   registerPeerBackupMatchmaker,
   InMemoryReciprocityLedger,
@@ -96,6 +103,13 @@ export interface BuildServerOptions {
   promoSms?: SmsSender;
   /** Server-side pepper mixed into stored identity hashes. Required for issuance. */
   promoIdentityPepper?: Uint8Array;
+  /**
+   * .services-side DNS publishing for `<server>.<user>.flagship.services`.
+   * Both the zone API + tunnel ingress IP are required to expose the route.
+   */
+  zone?: ZoneApi;
+  serverDnsRegistry?: ServerDnsRegistry;
+  tunnelIngressIp?: string;
 }
 
 /**
@@ -189,6 +203,19 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
       ledger: reciprocityLedger,
       pool: peerCandidatePool,
     });
+    if (opts.zone && opts.tunnelIngressIp && opts.resolveUserIrk) {
+      const serverDnsRegistry = opts.serverDnsRegistry ?? new InMemoryServerDnsRegistry();
+      const publisher = new ServerDnsPublisher({
+        zone: opts.zone,
+        registry: serverDnsRegistry,
+        tunnelIngressIp: opts.tunnelIngressIp,
+      });
+      registerServerDnsPublish(app, {
+        publisher,
+        resolveUserIrk: opts.resolveUserIrk,
+      });
+      app.decorate("serverDnsRegistry", serverDnsRegistry);
+    }
   }
   app.decorate("reciprocityLedger", reciprocityLedger);
   app.decorate("peerCandidatePool", peerCandidatePool);
@@ -231,6 +258,7 @@ declare module "fastify" {
     desktopSessions: DesktopSessionStore;
     reciprocityLedger: ReciprocityLedger;
     peerCandidatePool: PeerCandidatePool;
+    serverDnsRegistry?: ServerDnsRegistry;
     promoLedger?: PromoLedger;
   }
 }
