@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/webapp/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="apple-touch-icon" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/webapp/style.css" />
+    <title>Flagship</title>
+  </head>
+  <body>
+    <header>
+      <h1 id="title">Flagship</h1>
+      <p class="subtitle" id="subtitle">Setting up…</p>
+    </header>
+
+    <main>
+      <!-- View 1: First run — passphrase to wrap a fresh UMK -->
+      <section id="view-bootstrap" class="hidden">
+        <h2>Set up this device</h2>
+        <div class="card warning">
+          <p style="margin: 0 0 0.6rem;">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
+          <a class="pill" href="/security.html">Read the trade-offs →</a>
+        </div>
+        <div class="card">
+          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">Pick a passphrase. We use it to encrypt your local key — flagshipserver.com never sees it.</p>
+          <input id="bootstrap-passphrase" type="password" placeholder="Passphrase" autocomplete="new-password" />
+          <input id="bootstrap-passphrase-2" type="password" placeholder="Confirm" autocomplete="new-password" style="margin-top: 0.5rem;" />
+          <button id="bootstrap-go" style="margin-top: 0.8rem; width: 100%;">Generate device key</button>
+        </div>
+      </section>
+
+      <!-- View 2: Locked — passphrase to unwrap UMK -->
+      <section id="view-unlock" class="hidden">
+        <h2>Unlock</h2>
+        <div class="card">
+          <input id="unlock-passphrase" type="password" placeholder="Passphrase" autocomplete="current-password" />
+          <button id="unlock-go" style="margin-top: 0.8rem; width: 100%;">Unlock</button>
+        </div>
+      </section>
+
+      <!-- View 3: Paired — show servers / apps -->
+      <section id="view-home" class="hidden">
+        <h2>Identity</h2>
+        <div class="card">
+          <div class="row">
+            <span class="label">Username</span>
+            <span class="value" id="home-username">…</span>
+          </div>
+          <div class="row">
+            <span class="label">IRK pubkey</span>
+            <span class="value" id="home-irkpub">…</span>
+          </div>
+        </div>
+
+        <h2 style="margin-top: 1.5rem;">Servers</h2>
+        <div id="servers-list"></div>
+
+        <h2 style="margin-top: 1.5rem;">Session</h2>
+        <div class="card">
+          <div class="row">
+            <span class="label">Status</span>
+            <span class="pill" id="session-status">unpaired</span>
+          </div>
+          <div class="row">
+            <button class="secondary" id="pair-with-server">Pair to a server</button>
+            <button class="secondary" id="reset-device">Reset device</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 4: Pairing — show QR for the desktop / mobile to scan -->
+      <section id="view-pair" class="hidden">
+        <h2>Show this to a paired device</h2>
+        <div class="card">
+          <div id="qr"></div>
+          <p style="text-align: center; color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.6rem;" id="pair-status">Waiting for confirmation…</p>
+        </div>
+        <button class="secondary" id="pair-cancel" style="width: 100%; margin-top: 0.6rem;">Cancel</button>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script type="module" src="/webapp/app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/webapp/service-worker.js", { scope: "/webapp/" });
+      }
+    </script>
+  </body>
+</html>
