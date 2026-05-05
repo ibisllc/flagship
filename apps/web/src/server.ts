@@ -36,6 +36,11 @@ import {
   type AuthCodeUseClient,
 } from "./routes/serverRegister.js";
 import {
+  registerBuildTicket,
+  InMemoryBuildTicketStore,
+  type BuildTicketStore,
+} from "./routes/buildTicket.js";
+import {
   registerLlmPromo,
   InMemoryPromoLedger,
   ConsoleSmsSender,
@@ -134,6 +139,8 @@ export interface BuildServerOptions {
   usernameRegistry?: UsernameRegistry;
   /** Auth-code store for the install-flow issue/use/revoke endpoints. */
   authCodeStore?: AuthCodeStore;
+  /** Build-ticket store backing the /api/build-tickets/* endpoints. */
+  buildTicketStore?: BuildTicketStore;
   /**
    * AuthCodeUseClient bridges .services → .com when those run in different
    * processes. When unset and `surface = "both"`, defaults to an in-process
@@ -186,6 +193,12 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
       serverRegistry,
       authCodeUseClient: useClient,
     });
+  }
+
+  const buildTicketStore = opts.buildTicketStore ?? new InMemoryBuildTicketStore();
+  if (isCom) {
+    registerBuildTicket(app, { store: buildTicketStore, usernameRegistry });
+    app.decorate("buildTicketStore", buildTicketStore);
   }
 
   const bootedAt = Date.now();
@@ -337,6 +350,7 @@ declare module "fastify" {
     usernameRegistry?: UsernameRegistry;
     promoLedger?: PromoLedger;
     authCodeStore?: AuthCodeStore;
+    buildTicketStore?: BuildTicketStore;
   }
 }
 
