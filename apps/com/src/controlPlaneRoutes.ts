@@ -10,6 +10,7 @@
 
 import {
   caKeypairFromEnv,
+  CloudflareDnsClient,
   handleAuthCodeIssue,
   handleAuthCodeLookup,
   handleAuthCodeRevoke,
@@ -38,6 +39,13 @@ export interface ControlPlaneEnv {
   DB?: D1Database;
   FLAGSHIP_CA_PRIV_HEX?: string;
   FLAGSHIP_CA_ISSUER?: string;
+  /** API token with Zone:DNS:Edit on flagship.services. */
+  CLOUDFLARE_DNS_API_TOKEN?: string;
+  /** Zone ID for flagship.services. */
+  CLOUDFLARE_SERVICES_ZONE_ID?: string;
+  /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
+  SERVICES_PASSTHROUGH_IPV4?: string;
+  SERVICES_PASSTHROUGH_IPV6?: string;
 }
 
 const ROUTE_RE = {
@@ -155,9 +163,27 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && ROUTE_RE.SERVER_REGISTER.test(path)) {
+    const dns =
+      env.CLOUDFLARE_DNS_API_TOKEN &&
+      env.CLOUDFLARE_SERVICES_ZONE_ID &&
+      env.SERVICES_PASSTHROUGH_IPV4
+        ? {
+            client: new CloudflareDnsClient({
+              apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+              zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+            }),
+            servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+            servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
+          }
+        : undefined;
     return finish(
       await handleServerRegister(
-        { authCodes: storage.authCodes, servers: storage.servers },
+        {
+          authCodes: storage.authCodes,
+          servers: storage.servers,
+          routing: storage.routing,
+          dns,
+        },
         await readJson(request),
       ),
     );

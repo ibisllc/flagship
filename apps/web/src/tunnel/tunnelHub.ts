@@ -18,7 +18,7 @@ const TUNNEL_PATH = "/tunnel";
 
 export interface TunnelAuthLookup {
   /** Returns the server's registered STK (Server Tunnel Key) pubkey, or null if unknown. */
-  (serverId: string): Bytes | null;
+  (serverId: string): Bytes | null | Promise<Bytes | null>;
 }
 
 export interface TunnelHubOptions {
@@ -83,18 +83,29 @@ function attachTunnel(
     const view = new Uint8Array(raw.byteLength);
     view.set(raw);
     buffered = concat(buffered, view);
-    while (true) {
-      const r = decodeFrame(buffered);
-      if (r.kind === "incomplete") return;
-      if (r.kind === "error") {
-        send(helloAckFrame(false, r.reason));
-        ws.close(1002, "frame decode error");
-        return;
-      }
-      buffered = buffered.subarray(r.consumed);
-      handleFrame(r.frame);
-    }
+    void drain();
   });
+
+  let draining = false;
+  async function drain() {
+    if (draining) return;
+    draining = true;
+    try {
+      while (true) {
+        const r = decodeFrame(buffered);
+        if (r.kind === "incomplete") return;
+        if (r.kind === "error") {
+          send(helloAckFrame(false, r.reason));
+          ws.close(1002, "frame decode error");
+          return;
+        }
+        buffered = buffered.subarray(r.consumed);
+        await handleFrame(r.frame);
+      }
+    } finally {
+      draining = false;
+    }
+  }
 
   ws.on("close", () => {
     if (registered) registry.unregister(registered.serverId);
@@ -106,7 +117,7 @@ function attachTunnel(
     /* swallow; close handler does cleanup */
   });
 
-  function handleFrame(f: Frame): void {
+  async function handleFrame(f: Frame): Promise<void> {
     if (!registered) {
       if (f.type !== FRAME_HELLO) {
         send(helloAckFrame(false, "expected HELLO as first frame"));
@@ -128,7 +139,7 @@ function attachTunnel(
       }
 
       if (opts.authLookup) {
-        const stkPub = opts.authLookup(helloOk.serverId);
+        const stkPub = await opts.authLookup(helloOk.serverId);
         if (!stkPub) {
           send(helloAckFrame(false, "serverId is not registered with the control plane"));
           ws.close(1008, "unknown server");

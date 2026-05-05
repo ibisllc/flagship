@@ -4,9 +4,11 @@ import {
   type AuthCode,
   type ServerRegisterRequest,
 } from "@flagship/protocol";
-import type { AuthCodeStorage, ServerStorage } from "@flagship/storage";
+import type { AuthCodeStorage, RoutingStorage, ServerStorage } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
+import { CloudflareDnsClient } from "./cloudflareDns.js";
+import { setRoutingTargetFromRegistration } from "./routing.js";
 import {
   conflict, forbidden, malformed, notFound, ok,
   type HandlerResponseWithHeaders,
@@ -17,6 +19,18 @@ const NONCE_HEX = /^[0-9a-f]{16,128}$/;
 export interface ServerRegisterDeps {
   authCodes: AuthCodeStorage;
   servers: ServerStorage;
+  /** Optional. When provided, server registration also: (a) sets the
+   *  routing target if the user has registered an RCK for this subdomain,
+   *  (b) publishes A/AAAA records pointing the subdomain at the
+   *  flagship.services anycast IP. */
+  routing?: RoutingStorage;
+  dns?: {
+    client: CloudflareDnsClient;
+    /** IPv4 address of .services SNI passthrough listener. */
+    servicesIpv4: string;
+    /** IPv6 address (optional). */
+    servicesIpv6?: string;
+  };
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -134,10 +148,50 @@ export async function handleServerRegister(
     registeredAt: now,
   });
 
+  // If RCK is registered for this subdomain, point routing at this
+  // server identity. Failover/migration via SetRoutingTarget can later
+  // override.
+  if (deps.routing) {
+    await setRoutingTargetFromRegistration(
+      deps.routing,
+      authCode.serverDomain,
+      bytesToHex(identityPub),
+      now,
+    );
+  }
+
+  // Publish A/AAAA so the subdomain resolves to the .services SNI
+  // passthrough IP. Best-effort: a DNS failure shouldn't fail registration
+  // (the subdomain just won't be reachable until DNS is sorted).
+  let dnsPublished: { type: string; content: string }[] = [];
+  let dnsError: string | undefined;
+  if (deps.dns) {
+    try {
+      const a = await deps.dns.client.upsert({
+        name: authCode.serverDomain,
+        type: "A",
+        content: deps.dns.servicesIpv4,
+      });
+      dnsPublished.push({ type: "A", content: a.content });
+      if (deps.dns.servicesIpv6) {
+        const aaaa = await deps.dns.client.upsert({
+          name: authCode.serverDomain,
+          type: "AAAA",
+          content: deps.dns.servicesIpv6,
+        });
+        dnsPublished.push({ type: "AAAA", content: aaaa.content });
+      }
+    } catch (e) {
+      dnsError = String((e as Error).message ?? e);
+    }
+  }
+
   return ok({
     ok: true,
     serverDomain: authCode.serverDomain,
     registeredAt: now,
+    dnsPublished,
+    dnsError,
   });
 }
 

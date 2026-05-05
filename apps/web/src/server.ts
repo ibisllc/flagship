@@ -379,8 +379,34 @@ export async function start(opts: {
   const serverRegistry = app.serverRegistry;
   const registry = new TunnelRegistry();
   await app.listen({ port: httpPort, host });
+  // Authenticate tunnel HELLOs against .com's server registry over HTTPS.
+  // 5-minute cache so reconnects don't hammer the API.
+  const comBaseUrl = process.env.FLAGSHIP_COM_BASE_URL ?? "https://flagshipserver.com";
+  const remoteAuthCache = new Map<string, { pub: Uint8Array; expiresAt: number }>();
+  const remoteAuthLookup = async (serverId: string): Promise<Uint8Array | null> => {
+    const local = authLookupFromRegistry(serverRegistry)(serverId);
+    if (local) return local;
+    const cached = remoteAuthCache.get(serverId);
+    if (cached && cached.expiresAt > Date.now()) return cached.pub;
+    try {
+      const resp = await fetch(
+        `${comBaseUrl}/api/server/by-domain/${encodeURIComponent(serverId)}`,
+      );
+      if (!resp.ok) return null;
+      const body = (await resp.json()) as { identityPubKey?: string; revoked?: unknown };
+      if (!body.identityPubKey || body.revoked) return null;
+      const pub = new Uint8Array(body.identityPubKey.length / 2);
+      for (let i = 0; i < pub.length; i++) {
+        pub[i] = parseInt(body.identityPubKey.slice(i * 2, i * 2 + 2), 16);
+      }
+      remoteAuthCache.set(serverId, { pub, expiresAt: Date.now() + 5 * 60_000 });
+      return pub;
+    } catch {
+      return null;
+    }
+  };
   const stopHub = startTunnelHub(app.server, registry, {
-    authLookup: authLookupFromRegistry(serverRegistry),
+    authLookup: remoteAuthLookup,
   });
 
   let router: RunningSniRouter | null = null;

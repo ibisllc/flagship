@@ -1,0 +1,28 @@
+{
+  "name": "@flagship/hello-daemon",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "flagship-hello-daemon": "./bin/cli.mjs"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@flagship/protocol": "*",
+    "@flagship/tunnel-protocol": "*",
+    "selfsigned": "^2.4.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  },
+  "license": "BUSL-1.1"
+}
