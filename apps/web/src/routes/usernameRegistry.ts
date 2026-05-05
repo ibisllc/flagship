@@ -1,20 +1,22 @@
 import type { FastifyInstance } from "fastify";
 import {
-  verifyClaimUsername,
-  type ClaimUsername,
-} from "@flagship/protocol";
+  handleUsernameClaim,
+  handleUsernameLookup,
+} from "@flagship/control-plane";
+import type { UsernameStorage as ControlPlaneUsernameStorage } from "@flagship/storage";
 import { validateUserLabel } from "@flagship/services-zone";
-import { hexToBytes } from "../lib/hex.js";
+import { hexToBytes, bytesToHex } from "../lib/hex.js";
 
 /**
  * Username registry on flagshipserver.com.
  *
- * The minimal identity surface: one row per user, keyed on `username`,
- * carrying the IRK pubkey that owns it. .services queries this to verify
- * server registrations and tunnel HELLOs.
- *
  * Re-claiming the same username with the same IRK is idempotent (image
  * rebuild / account recovery). Re-claiming with a different IRK is a 409.
+ *
+ * The HTTP route delegates to @flagship/control-plane's pure handler
+ * (which is what the Worker also calls in production); this file just
+ * keeps the legacy sync `UsernameRegistry` API alive for the dozens of
+ * test files that constructed it directly. An adapter bridges the two.
  */
 
 export interface UsernameRecord {
@@ -64,95 +66,69 @@ function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return true;
 }
 
+/**
+ * Adapter that lets control-plane handlers (which expect the async
+ * UsernameStorage interface from @flagship/storage) drive a legacy
+ * sync UsernameRegistry. Used by every Fastify route that re-uses the
+ * shared handler.
+ */
+export function adaptRegistryToStorage(
+  reg: UsernameRegistry,
+): ControlPlaneUsernameStorage {
+  return {
+    async put(rec) {
+      return reg.put({
+        username: rec.username,
+        irkPub: hexToBytes(rec.irkPubHex),
+        claimedAt: rec.claimedAt,
+      });
+    },
+    async get(username) {
+      const r = reg.lookup(username);
+      if (!r) return undefined;
+      return {
+        username: r.username,
+        irkPubHex: bytesToHex(r.irkPub),
+        claimedAt: r.claimedAt,
+      };
+    },
+    async list() {
+      return reg.list().map((r) => ({
+        username: r.username,
+        irkPubHex: bytesToHex(r.irkPub),
+        claimedAt: r.claimedAt,
+      }));
+    },
+  };
+}
+
 export interface UsernameRegistryOptions {
   registry: UsernameRegistry;
   maxAgeMs?: number;
   now?: () => number;
 }
 
-interface ClaimBody {
-  request?: { username?: string; irkPub?: string; issuedAt?: number };
-  signature?: string;
-}
-
-const HEX64 = /^[0-9a-f]{64}$/;
-const HEX128 = /^[0-9a-f]{128}$/;
-
 export function registerUsernameRegistry(
   app: FastifyInstance,
   opts: UsernameRegistryOptions,
 ): void {
-  const maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
-  const now = opts.now ?? (() => Date.now());
+  const storage = adaptRegistryToStorage(opts.registry);
 
-  app.post<{ Body: ClaimBody }>("/api/username/claim", async (req, reply) => {
-    const body = req.body ?? {};
-    const r = body.request;
-    if (
-      !r ||
-      typeof r.username !== "string" ||
-      typeof r.irkPub !== "string" ||
-      !HEX64.test(r.irkPub) ||
-      typeof r.issuedAt !== "number" ||
-      typeof body.signature !== "string" ||
-      !HEX128.test(body.signature)
-    ) {
-      return reply.status(400).send({ error: "malformed body" });
-    }
-
-    let irkPub: Uint8Array;
-    let sig: Uint8Array;
-    try {
-      irkPub = hexToBytes(r.irkPub);
-      sig = hexToBytes(body.signature);
-    } catch {
-      return reply.status(400).send({ error: "invalid hex" });
-    }
-
-    const claim: ClaimUsername = {
-      username: r.username,
-      irkPub,
-      issuedAt: r.issuedAt,
-    };
-    if (!verifyClaimUsername(claim, sig, irkPub)) {
-      return reply.status(403).send({ error: "invalid signature" });
-    }
-    if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-      return reply.status(403).send({ error: "stale request" });
-    }
-
-    const out = opts.registry.put({
-      username: r.username,
-      irkPub,
-      claimedAt: now(),
-    });
-    if (!out.ok) {
-      // 409 for "already claimed by someone else"; 400 for label-validation failures.
-      const code = out.reason === "username already claimed" ? 409 : 400;
-      return reply.status(code).send({ error: out.reason });
-    }
-    return { ok: true, username: r.username.toLowerCase() };
+  app.post("/api/username/claim", async (req, reply) => {
+    const r = await handleUsernameClaim(
+      { storage, freshnessMs: opts.maxAgeMs, now: opts.now },
+      req.body as never,
+    );
+    if (r.headers) for (const [k, v] of Object.entries(r.headers)) reply.header(k, v);
+    return reply.status(r.status).send(r.body);
   });
 
-  // Public lookup so .services can resolve `username → irkPub` to verify
-  // server registrations. No auth required — the data is intentionally
-  // public (it's the unique-username DNS-style registry).
   app.get<{ Params: { username: string } }>(
     "/api/username/:username",
     async (req, reply) => {
-      const rec = opts.registry.lookup(req.params.username);
-      if (!rec) return reply.status(404).send({ error: "not found" });
-      return {
-        username: rec.username,
-        irkPub: bytesToHex(rec.irkPub),
-        claimedAt: rec.claimedAt,
-      };
+      const r = await handleUsernameLookup(storage, req.params.username);
+      if (r.headers) for (const [k, v] of Object.entries(r.headers)) reply.header(k, v);
+      return reply.status(r.status).send(r.body);
     },
   );
-}
-
-function bytesToHex(b: Uint8Array): string {
-  let s = "";
-  for (const x of b) s += x.toString(16).padStart(2, "0");
-  return s;
 }

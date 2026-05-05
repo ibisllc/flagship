@@ -1,0 +1,77 @@
+#!/bin/sh
+# Flagship first-boot bootstrap.
+#
+# This file is the only Flagship-controlled script that ships in the
+# apkovl. It deliberately stays tiny: probe for the trailer, validate the
+# user signature on the InstallBlob, then `curl | sh` the actual installer
+# from the public Flagship GitHub repo at the git ref the trailer pins.
+#
+# The audit story:
+#   - The blob signature commits to the installerGitRef field, so a
+#     compromised .com or compromised network cannot swap the ref.
+#   - The fetched installer is at https://raw.githubusercontent.com/...
+#     pinned to that ref, so anyone can read what the install will do.
+#   - Idempotent: presence of /var/flagship/installed.flag short-circuits
+#     to boot-stage on subsequent boots.
+
+set -eu
+
+LOG=/var/log/flagship-bootstrap.log
+INSTALLED_FLAG=/var/flagship/installed.flag
+GITHUB_RAW="https://raw.githubusercontent.com/harrywinner2/flagship"
+DEFAULT_REF="main"
+
+mkdir -p /var/flagship /var/log
+exec >>"$LOG" 2>&1
+date
+
+if [ -f "$INSTALLED_FLAG" ]; then
+    echo "flagship: previously installed; pulling boot-stage and handing off"
+    REF="$(cat /boot/installer-ref 2>/dev/null || echo "$DEFAULT_REF")"
+    curl -fsSL "$GITHUB_RAW/$REF/installer/boot-stage.sh" | sh
+    exit 0
+fi
+
+# Find the boot medium that carries our trailer.
+TRAILER_SRC=""
+for cand in /dev/sr0 /dev/sda /dev/nvme0n1 /dev/mmcblk0; do
+    [ -e "$cand" ] || continue
+    if /usr/local/bin/flagship-trailer-probe "$cand"; then
+        TRAILER_SRC="$cand"
+        break
+    fi
+done
+if [ -z "$TRAILER_SRC" ]; then
+    echo "flagship: no install trailer found — refusing to install"
+    exit 1
+fi
+echo "flagship: trailer found on $TRAILER_SRC"
+
+# Validate the trailer signature locally (security-critical: we won't
+# fetch anything from the network until we trust the blob).
+BLOB=/run/install-blob.json
+if ! /usr/local/bin/flagship-trailer-validate "$TRAILER_SRC" >"$BLOB"; then
+    echo "flagship: trailer signature invalid — refusing to install"
+    exit 1
+fi
+
+REF="$(jq -r .installerGitRef "$BLOB")"
+if [ -z "$REF" ] || [ "$REF" = "null" ]; then
+    REF="$DEFAULT_REF"
+fi
+echo "flagship: installer pinned to git ref: $REF"
+
+# Fetch the install script from the public repo and run it. The script
+# is responsible for LUKS provisioning, fetching the daemon code, etc.
+INSTALLER_URL="$GITHUB_RAW/$REF/installer/install.sh"
+echo "flagship: fetching $INSTALLER_URL"
+INSTALLER=/run/flagship-install.sh
+if ! curl -fsSL "$INSTALLER_URL" -o "$INSTALLER"; then
+    echo "flagship: failed to fetch installer from $INSTALLER_URL"
+    exit 1
+fi
+chmod +x "$INSTALLER"
+
+# The installer takes (trailer-source, validated-blob, git-ref) so it
+# knows where to clone the rest of the daemon source from.
+exec "$INSTALLER" "$TRAILER_SRC" "$BLOB" "$REF"

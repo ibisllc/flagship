@@ -46,6 +46,7 @@ function buildBlob(): InstallBlob {
     authCodeUserSignature: userSig,
     issuedAt: code.issuedAt,
     expiresAt: code.expiresAt,
+    installerGitRef: "main",
   };
 }
 

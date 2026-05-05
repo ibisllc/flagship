@@ -260,14 +260,15 @@ describe("POST /api/server/register", () => {
     const { code, signature } = buildAuthCode("01HXAFREVOKED01");
     await issueAuthCode(app, code, signature);
 
+    const revIssuedAt = Date.now();
     const revoke = await app.inject({
       method: "POST",
       url: `/api/auth-code/${code.serial}/revoke`,
       payload: {
-        request: { serial: code.serial, username: "harry", issuedAt: Date.now() },
+        request: { serial: code.serial, username: "harry", issuedAt: revIssuedAt },
         signature: bytesToHex(
           (await import("@flagship/protocol")).signAuthCodeRevocation(
-            { serial: code.serial, username: "harry", issuedAt: Date.now() },
+            { serial: code.serial, username: "harry", issuedAt: revIssuedAt },
             harryIrk,
           ),
         ),

@@ -116,6 +116,7 @@ describe("InstallBlob signing", () => {
       authCodeUserSignature: userSig,
       issuedAt: code.issuedAt,
       expiresAt: code.expiresAt,
+      installerGitRef: "main",
     };
   }
 

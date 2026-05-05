@@ -51,6 +51,7 @@ const TAG_AUTH_CODE = "flagship/auth-code/v1";
 const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 const TAG_SERVER_REGISTER = "flagship/server-register/v1";
 const TAG_AUTH_CODE_REVOKE = "flagship/auth-code-revoke/v1";
+const TAG_USER_PUBKEY_BINDING = "flagship-ca-binding/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -296,6 +297,24 @@ export interface InstallBlob {
   authCodeUserSignature: Bytes;
   issuedAt: number;
   expiresAt: number;
+  /**
+   * Git ref the apkovl will pull installer/ from at first boot. Tag is
+   * preferred (`v0.1.0`); branch (`main`) acceptable for early releases.
+   * Empty string is treated as "main" by the bootstrap. The phone signs
+   * over this so a compromised network/control-plane cannot swap the
+   * installer revision.
+   */
+  installerGitRef: string;
+}
+
+export interface UserPubKeyBinding {
+  version: 1;
+  username: string;
+  pubKey: Bytes;
+  issuedAt: number;
+  expiresAt: number;
+  /** CA identifier — versioned so we can rotate the CA later. */
+  issuer: string;
 }
 
 export interface ServerRegisterRequest {
@@ -764,6 +783,7 @@ function canonicalInstallBlob(b: InstallBlob): Bytes {
       hex(b.authCodeUserSignature),
       b.issuedAt,
       b.expiresAt,
+      b.installerGitRef,
     ].join("|"),
   );
 }
@@ -838,6 +858,36 @@ export function verifyAuthCodeRevocation(
 ): boolean {
   try {
     return ed.verify(sig, canonicalAuthCodeRevoke(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+function canonicalUserPubKeyBinding(b: UserPubKeyBinding): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_USER_PUBKEY_BINDING,
+      b.version,
+      b.username,
+      hex(b.pubKey),
+      b.issuedAt,
+      b.expiresAt,
+      b.issuer,
+    ].join("|"),
+  );
+}
+
+export function signUserPubKeyBinding(b: UserPubKeyBinding, ca: Keypair): Bytes {
+  return ed.sign(canonicalUserPubKeyBinding(b), ca.privateKey);
+}
+
+export function verifyUserPubKeyBinding(
+  b: UserPubKeyBinding,
+  sig: Bytes,
+  caPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalUserPubKeyBinding(b), caPub);
   } catch {
     return false;
   }

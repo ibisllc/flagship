@@ -28,8 +28,21 @@ not_found_handling = "single-page-application"
 # call must hit the Worker, not the asset edge).
 run_worker_first = ["/api/*"]
 
+[[r2_buckets]]
+binding = "ISO_BUCKET"
+bucket_name = "flagship-iso"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "flagship-state"
+database_id = "d6f3bc03-0168-4988-8742-83346fdc923c"
+migrations_dir = "../../packages/storage/migrations"
+
 [vars]
 SERVICES_BASE_URL = "https://flagship.services"
+BASE_ISO_URL = "https://flagshipserver.com/build/iso/alpine-3.21.0-x86_64.iso"
+BASE_ISO_VERSION = "alpine-standard-3.21.0-x86_64"
+BASE_ISO_SHA256 = "201e2ba601be5b861345a308591e3e547bf6d210945dfaab3e3251b8dea64b8b"
 # Cloudflare Worker → Fly app shared secret. Set with:
 #   wrangler secret put SERVICES_HMAC_KEY
 # (NOT in this file — secrets live in CF dashboard.)

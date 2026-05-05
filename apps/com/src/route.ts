@@ -1,14 +1,17 @@
 /**
  * Pure routing logic for the flagshipserver.com Cloudflare Worker.
  *
- * Two responsibilities:
- *   1. /api/*  →  reverse-proxy to flagship.services preserving method,
- *                 path+query, headers, and body.
- *   2. anything else → defer to the asset binding (Cloudflare's static edge).
- *
- * Extracted from the Worker entrypoint so it's directly unit-testable in
- * Node — no need for miniflare or a real edge runtime to exercise it.
+ * Responsibilities:
+ *   1. .com control-plane routes (username, auth-code, build-tickets,
+ *      server registration, CA pubkey-cert) — served by Worker + D1.
+ *   2. /build/iso/:filename — streams from R2.
+ *   3. /api/_status/probe — Worker-resident probe of .services.
+ *   4. /api/build/iso-info — base-ISO metadata.
+ *   5. Anything else under /api/* not handled above — proxied to .services.
+ *   6. Anything else — static assets.
  */
+
+import { tryControlPlane } from "./controlPlaneRoutes.js";
 
 export interface RouteEnv {
   SERVICES_BASE_URL: string;
@@ -18,11 +21,31 @@ export interface RouteEnv {
   BASE_ISO_URL?: string;
   BASE_ISO_VERSION?: string;
   BASE_ISO_SHA256?: string;
+  /** R2 bucket holding the base ISO(s). Streams via /build/iso/:filename. */
+  ISO_BUCKET?: R2BucketLike;
+  /** D1 binding for the .com control-plane state. */
+  DB?: import("@flagship/storage").D1Database;
+  /** CA private key for /api/users/:username/pubkey-cert (Worker secret). */
+  FLAGSHIP_CA_PRIV_HEX?: string;
+  FLAGSHIP_CA_ISSUER?: string;
+}
+
+export interface R2BucketLike {
+  get(key: string): Promise<R2ObjectLike | null>;
+}
+
+export interface R2ObjectLike {
+  body: ReadableStream<Uint8Array> | null;
+  size: number;
+  httpEtag?: string;
+  checksums?: { sha256?: ArrayBuffer };
+  writeHttpMetadata?(headers: Headers): void;
 }
 
 const PROXY_PREFIX = "/api/";
 const STATUS_PROBE_PATH = "/api/_status/probe";
 const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
+const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
 
 /**
  * Default placeholder ISO. We don't yet host a real personalizable installer
@@ -64,6 +87,18 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
 
   if (url.pathname === BUILD_ISO_INFO_PATH) {
     return buildIsoInfo(env);
+  }
+
+  if (url.pathname.startsWith(BUILD_ISO_STREAM_PREFIX)) {
+    return streamIsoFromR2(url.pathname.slice(BUILD_ISO_STREAM_PREFIX.length), env);
+  }
+
+  // .com control-plane routes (D1-backed). When DB binding is present,
+  // these are served locally; otherwise fall through to the upstream proxy
+  // (e.g. for the dev wrangler-without-d1 case).
+  if (url.pathname.startsWith(PROXY_PREFIX) && env.DB) {
+    const cp = await tryControlPlane(request, env);
+    if (cp) return cp;
   }
 
   if (url.pathname.startsWith(PROXY_PREFIX)) {
@@ -131,6 +166,28 @@ async function statusProbe(env: RouteEnv): Promise<Response> {
     };
   }
   return jsonResponse(result, 200);
+}
+
+async function streamIsoFromR2(filename: string, env: RouteEnv): Promise<Response> {
+  if (!/^[a-zA-Z0-9._-]+$/.test(filename)) {
+    return jsonResponse({ error: "invalid iso filename" }, 400);
+  }
+  if (!env.ISO_BUCKET) {
+    return jsonResponse({ error: "ISO_BUCKET not bound" }, 500);
+  }
+  const obj = await env.ISO_BUCKET.get(filename);
+  if (!obj || !obj.body) {
+    return jsonResponse({ error: "iso not found" }, 404);
+  }
+  const headers = new Headers({
+    "content-type": "application/octet-stream",
+    "content-length": String(obj.size),
+    "cache-control": "public, max-age=86400, immutable",
+    "content-disposition": `attachment; filename="${filename}"`,
+  });
+  if (obj.httpEtag) headers.set("etag", obj.httpEtag);
+  if (obj.writeHttpMetadata) obj.writeHttpMetadata(headers);
+  return new Response(obj.body, { status: 200, headers });
 }
 
 async function buildIsoInfo(env: RouteEnv): Promise<Response> {
@@ -229,6 +286,7 @@ export const _internal = {
   PROXY_PREFIX,
   STATUS_PROBE_PATH,
   BUILD_ISO_INFO_PATH,
+  BUILD_ISO_STREAM_PREFIX,
   DEFAULT_BASE_ISO_URL,
   DEFAULT_BASE_ISO_VERSION,
   STRIP_REQ_HEADERS,

@@ -16,6 +16,7 @@ import {
   registerServerRegistry,
   InMemoryServerRegistry,
   authLookupFromRegistry,
+  adaptServerRegistryToStorage,
   type ServerRegistry,
 } from "./routes/serverRegistry.js";
 import { registerServerRevocation } from "./routes/serverRevocation.js";
@@ -30,16 +31,17 @@ import {
   InMemoryAuthCodeStore,
   type AuthCodeStore,
 } from "./routes/authCode.js";
-import {
-  registerServerRegister,
-  inProcessAuthCodeUseClient,
-  type AuthCodeUseClient,
-} from "./routes/serverRegister.js";
+import { registerServerRegister } from "./routes/serverRegister.js";
 import {
   registerBuildTicket,
   InMemoryBuildTicketStore,
   type BuildTicketStore,
 } from "./routes/buildTicket.js";
+import {
+  registerUserPubKeyCert,
+  caKeypairFromEnv,
+  type CaIssuer,
+} from "./routes/userPubKeyCert.js";
 import {
   registerLlmPromo,
   InMemoryPromoLedger,
@@ -142,12 +144,11 @@ export interface BuildServerOptions {
   /** Build-ticket store backing the /api/build-tickets/* endpoints. */
   buildTicketStore?: BuildTicketStore;
   /**
-   * AuthCodeUseClient bridges .services → .com when those run in different
-   * processes. When unset and `surface = "both"`, defaults to an in-process
-   * adapter against `authCodeStore`. When `surface = "services"` alone, this
-   * MUST be provided (or there's no way to validate auth codes).
+   * CA issuer for the /api/users/:username/pubkey-cert endpoint. Defaults
+   * to a deterministic dev keypair so tests pass without secret setup; in
+   * production set FLAGSHIP_CA_PRIV_HEX.
    */
-  authCodeUseClient?: AuthCodeUseClient;
+  ca?: CaIssuer;
 }
 
 /**
@@ -187,11 +188,9 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   }
 
   if (isServices) {
-    const useClient =
-      opts.authCodeUseClient ?? inProcessAuthCodeUseClient(authCodeStore);
     registerServerRegister(app, {
-      serverRegistry,
-      authCodeUseClient: useClient,
+      authCodes: authCodeStore,
+      servers: adaptServerRegistryToStorage(serverRegistry),
     });
   }
 
@@ -199,6 +198,9 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   if (isCom) {
     registerBuildTicket(app, { store: buildTicketStore, usernameRegistry });
     app.decorate("buildTicketStore", buildTicketStore);
+
+    const ca = opts.ca ?? caKeypairFromEnv();
+    registerUserPubKeyCert(app, { ca, usernameRegistry });
   }
 
   const bootedAt = Date.now();

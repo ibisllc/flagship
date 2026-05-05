@@ -176,3 +176,55 @@ export function authLookupFromRegistry(registry: ServerRegistry) {
     return r.stkPub;
   };
 }
+
+/**
+ * Adapter that bridges the legacy sync ServerRegistry to the new async
+ * ServerStorage interface used by @flagship/control-plane handlers.
+ * Field-name mapping: userId↔username, serverId↔serverDomain,
+ * stkPub↔identityPubKeyHex. Same data, different shape.
+ */
+import type { ServerStorage as ControlPlaneServerStorage } from "@flagship/storage";
+
+export function adaptServerRegistryToStorage(
+  reg: ServerRegistry,
+): ControlPlaneServerStorage {
+  return {
+    async put(rec) {
+      reg.put({
+        userId: rec.username,
+        serverId: rec.serverDomain,
+        stkPub: hexToBytes(rec.identityPubKeyHex),
+        registeredAt: rec.registeredAt,
+      });
+    },
+    async get(serverDomain) {
+      const r = reg.get(serverDomain);
+      if (!r) return undefined;
+      return {
+        serverDomain: r.serverId,
+        username: r.userId,
+        identityPubKeyHex: bytesToHex(r.stkPub),
+        registeredAt: r.registeredAt,
+        revokedAt: r.revokedAt,
+        revocationReason: r.revocationReason,
+      };
+    },
+    async listForUser(username) {
+      return reg.listForUser(username).map((r) => ({
+        serverDomain: r.serverId,
+        username: r.userId,
+        identityPubKeyHex: bytesToHex(r.stkPub),
+        registeredAt: r.registeredAt,
+        revokedAt: r.revokedAt,
+        revocationReason: r.revocationReason,
+      }));
+    },
+    async revoke(serverDomain, reason, at) {
+      const known = ["lost", "stolen", "decommissioned"] as const;
+      const norm = (known as readonly string[]).includes(reason)
+        ? (reason as "lost" | "stolen" | "decommissioned")
+        : "lost";
+      return reg.revoke(serverDomain, norm, at);
+    },
+  };
+}

@@ -1,0 +1,99 @@
+/**
+ * Pure interfaces for the .com control-plane stores. Two implementations:
+ *   - InMemory (this package), used by tests and for dev runs.
+ *   - D1 (this package), used in production by the Cloudflare Worker.
+ *
+ * The shapes mirror the in-memory record types previously defined in the
+ * apps/web routes; they're hoisted here so both runtimes can share them
+ * without depending on Fastify, Workers, or any HTTP framework.
+ */
+
+export interface UsernameRecord {
+  username: string;
+  irkPubHex: string;
+  claimedAt: number;
+}
+
+export type AuthCodeStatus = "active" | "used" | "revoked";
+
+export interface AuthCodeRecord {
+  serial: string;
+  username: string;
+  serverName: string;
+  serverDomain: string;
+  delegatedPubKeyHex: string;
+  userPubKeyHex: string;
+  userSignatureHex: string;
+  issuedAt: number;
+  expiresAt: number;
+  status: AuthCodeStatus;
+  recordedAt: number;
+  usedAt?: number;
+  revokedAt?: number;
+}
+
+export type BuildTicketStatus = "active" | "redeemed" | "revoked";
+
+export interface BuildTicketRecord {
+  code: string;
+  /** The signed InstallBlob serialized as JSON. Stored opaquely; readers
+   *  parse it with @flagship/iso-personalizer's installBlobFromJson. */
+  blobJson: string;
+  blobSignatureHex: string;
+  username: string;
+  serverDomain: string;
+  createdAt: number;
+  expiresAt: number;
+  status: BuildTicketStatus;
+  redeemedAt?: number;
+  redemptions: number;
+}
+
+export interface ServerRecord {
+  serverDomain: string;
+  username: string;
+  identityPubKeyHex: string;
+  registeredAt: number;
+  revokedAt?: number;
+  revocationReason?: string;
+}
+
+export type Result<T = void> =
+  | ({ ok: true } & ({} extends T ? unknown : { value: T }))
+  | { ok: false; reason: string };
+
+export interface UsernameStorage {
+  put(rec: UsernameRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(username: string): Promise<UsernameRecord | undefined>;
+  list(): Promise<UsernameRecord[]>;
+}
+
+export interface AuthCodeStorage {
+  put(rec: AuthCodeRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(serial: string): Promise<AuthCodeRecord | undefined>;
+  /** Atomic active+now<=expiresAt → used. Returns the post-state. */
+  markUsed(serial: string, now: number): Promise<{ ok: true } | { ok: false; reason: string }>;
+  markRevoked(serial: string, now: number): Promise<{ ok: true } | { ok: false; reason: string }>;
+}
+
+export interface BuildTicketStorage {
+  put(rec: BuildTicketRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(code: string): Promise<BuildTicketRecord | undefined>;
+  refresh(code: string, expiresAt: number): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Increment redemption count and stamp redeemedAt; idempotent for the same now. */
+  markRedeemed(code: string, now: number): Promise<void>;
+}
+
+export interface ServerStorage {
+  put(rec: ServerRecord): Promise<void>;
+  get(serverDomain: string): Promise<ServerRecord | undefined>;
+  listForUser(username: string): Promise<ServerRecord[]>;
+  revoke(serverDomain: string, reason: string, at: number): Promise<boolean>;
+}
+
+export interface Storage {
+  usernames: UsernameStorage;
+  authCodes: AuthCodeStorage;
+  buildTickets: BuildTicketStorage;
+  servers: ServerStorage;
+}

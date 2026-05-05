@@ -53,6 +53,7 @@ function buildBlob(overrides: Partial<InstallBlob> = {}): InstallBlob {
     authCodeUserSignature: userSig,
     issuedAt: code.issuedAt,
     expiresAt: code.expiresAt,
+    installerGitRef: "main",
     ...overrides,
   };
 }

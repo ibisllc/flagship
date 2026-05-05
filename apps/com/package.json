@@ -9,6 +9,11 @@
     "deploy": "wrangler deploy",
     "test": "vitest run --dir test"
   },
+  "dependencies": {
+    "@flagship/control-plane": "*",
+    "@flagship/storage": "*",
+    "@flagship/protocol": "*"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251001.0"
   }

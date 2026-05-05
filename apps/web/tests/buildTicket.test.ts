@@ -87,6 +87,7 @@ function buildSignedBlob(): {
     authCodeUserSignature: userSig,
     issuedAt,
     expiresAt,
+    installerGitRef: "main",
   };
   const blobSignature = signInstallBlob(blob, harryIrk);
   const blobJson = {
@@ -110,6 +111,7 @@ function buildSignedBlob(): {
     authCodeUserSignature: bytesToHex(userSig),
     issuedAt: blob.issuedAt,
     expiresAt: blob.expiresAt,
+    installerGitRef: "main",
   };
   return { blob, blobJson, blobSignature };
 }

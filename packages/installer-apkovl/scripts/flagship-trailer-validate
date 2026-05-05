@@ -1,0 +1,125 @@
+#!/usr/bin/env node
+// Read the trailer from <device>, validate the Ed25519 signature against
+// the embedded user pubkey, and print the install-blob JSON to stdout.
+// Exits 0 on valid; 1 on missing/malformed/invalid-signature.
+
+import { open } from "node:fs/promises";
+
+// Avoid pulling the full TS workspace at boot — we re-implement the
+// minimal canonical-bytes computation and signature verification here
+// using @noble/ed25519 (small, single-file dep).
+import * as ed from "@noble/ed25519";
+import { sha256 } from "@noble/hashes/sha256";
+ed.etc.sha512Sync = (...m) => {
+  // We only need sha512 for ed25519 internal HKDF; @noble/ed25519 v2
+  // provides this hook. Use sha512 from @noble/hashes.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { sha512 } = require("@noble/hashes/sha512");
+  return sha512(ed.etc.concatBytes(...m));
+};
+
+const HEADER_MAGIC = Buffer.from("FLAGSHIP-BOOT\0\0\0", "binary");
+const FOOTER_MAGIC = Buffer.concat([
+  Buffer.from([0, 0, 0]),
+  Buffer.from("FLAGSHIP-END", "utf8"),
+  Buffer.from([0]),
+]);
+const TAG = "flagship/install-blob/v1";
+const SIG_LEN = 64;
+
+function bytesToHex(b) {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
+function hexToBytes(h) {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+async function main() {
+  const path = process.argv[2];
+  if (!path) {
+    console.error("usage: flagship-trailer-validate <device>");
+    process.exit(2);
+  }
+  const fh = await open(path, "r");
+  try {
+    const stat = await fh.stat();
+    let size = stat.size;
+    if (!size) {
+      const { execFileSync } = await import("node:child_process");
+      size = parseInt(execFileSync("blockdev", ["--getsize64", path]).toString().trim(), 10);
+    }
+    const totalBuf = Buffer.alloc(4);
+    await fh.read(totalBuf, 0, 4, size - 4);
+    const total = totalBuf.readUInt32LE(0);
+    if (total < 100 || total > 65536 || total > size) {
+      console.error("trailer footer length out of range");
+      process.exit(1);
+    }
+    const buf = Buffer.alloc(total);
+    await fh.read(buf, 0, total, size - total);
+
+    if (Buffer.compare(buf.subarray(0, HEADER_MAGIC.length), HEADER_MAGIC) !== 0) {
+      console.error("magic header missing");
+      process.exit(1);
+    }
+    let off = HEADER_MAGIC.length;
+    if (buf[off] !== 0x01) {
+      console.error("unsupported trailer version");
+      process.exit(1);
+    }
+    off += 1;
+    const jsonLen = buf.readUInt32LE(off);
+    off += 4;
+    const jsonBytes = buf.subarray(off, off + jsonLen);
+    off += jsonLen;
+    const sig = buf.subarray(off, off + SIG_LEN);
+    off += SIG_LEN;
+    if (Buffer.compare(buf.subarray(off, off + FOOTER_MAGIC.length), FOOTER_MAGIC) !== 0) {
+      console.error("magic footer missing");
+      process.exit(1);
+    }
+
+    let blob;
+    try {
+      blob = JSON.parse(jsonBytes.toString("utf8"));
+    } catch {
+      console.error("invalid JSON payload");
+      process.exit(1);
+    }
+
+    const canonical = [
+      TAG,
+      blob.version,
+      blob.serverDomain,
+      blob.username,
+      blob.serverName,
+      blob.phoneDelegatedPubKey,
+      blob.registrationUrl,
+      blob.authCode.serial,
+      blob.authCode.userPubKey,
+      blob.authCodeUserSignature,
+      blob.issuedAt,
+      blob.expiresAt,
+    ].join("|");
+    const userPub = hexToBytes(blob.authCode.userPubKey);
+    const ok = ed.verify(new Uint8Array(sig), new TextEncoder().encode(canonical), userPub);
+    if (!ok) {
+      console.error("install-blob signature does not verify under embedded userPubKey");
+      process.exit(1);
+    }
+
+    process.stdout.write(JSON.stringify(blob));
+    process.exit(0);
+  } finally {
+    await fh.close();
+  }
+}
+
+main().catch((e) => {
+  console.error("fatal:", e?.message ?? String(e));
+  process.exit(1);
+});

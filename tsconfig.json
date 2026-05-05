@@ -8,6 +8,9 @@
     { "path": "./packages/server-daemon" },
     { "path": "./packages/bootkey-builder" },
     { "path": "./packages/iso-personalizer" },
+    { "path": "./packages/installer-apkovl" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/control-plane" },
     { "path": "./apps/web" }
   ]
 }

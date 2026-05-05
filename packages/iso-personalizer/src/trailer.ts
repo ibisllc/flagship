@@ -143,6 +143,7 @@ interface InstallBlobJson {
   authCodeUserSignature: string;
   issuedAt: number;
   expiresAt: number;
+  installerGitRef: string;
 }
 
 function bytesToHex(b: Bytes): string {
@@ -179,6 +180,7 @@ export function installBlobToJson(b: InstallBlob): InstallBlobJson {
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     issuedAt: b.issuedAt,
     expiresAt: b.expiresAt,
+    installerGitRef: b.installerGitRef,
   };
 }
 
@@ -206,5 +208,6 @@ export function installBlobFromJson(j: InstallBlobJson): InstallBlob {
     authCodeUserSignature: hexToBytes(j.authCodeUserSignature),
     issuedAt: j.issuedAt,
     expiresAt: j.expiresAt,
+    installerGitRef: j.installerGitRef ?? "",
   };
 }

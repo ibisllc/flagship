@@ -1,0 +1,85 @@
+import { describe, expect, it } from "vitest";
+import { gunzipSync } from "node:zlib";
+import { buildApkovl, buildFlagshipApkovl } from "../src/buildApkovl.js";
+
+function untar(buf: Uint8Array): Array<{ name: string; mode: number; content: Uint8Array }> {
+  const entries: Array<{ name: string; mode: number; content: Uint8Array }> = [];
+  for (let off = 0; off < buf.length; off += 512) {
+    const block = buf.subarray(off, off + 512);
+    if (block.every((b) => b === 0)) break;
+    let name = "";
+    for (let i = 0; i < 100 && block[i] !== 0; i++) name += String.fromCharCode(block[i]!);
+    const mode = parseInt(decodeOctal(block, 100, 8), 8);
+    const size = parseInt(decodeOctal(block, 124, 12), 8);
+    off += 512;
+    const content = buf.subarray(off, off + size).slice();
+    const padded = Math.ceil(size / 512) * 512;
+    off += padded - 512;
+    entries.push({ name, mode, content });
+  }
+  return entries;
+}
+
+function decodeOctal(block: Uint8Array, off: number, len: number): string {
+  let s = "";
+  for (let i = off; i < off + len && block[i] !== 0 && block[i] !== 0x20; i++) {
+    s += String.fromCharCode(block[i]!);
+  }
+  return s || "0";
+}
+
+describe("buildApkovl", () => {
+  it("produces a gzipped tar with the expected files and modes", () => {
+    const enc = new TextEncoder();
+    const bytes = buildApkovl({
+      files: [
+        { name: "etc/local.d/01-test.start", content: enc.encode("hello"), mode: 0o755 },
+        { name: "var/flagship/marker", content: enc.encode("x"), mode: 0o644 },
+      ],
+    });
+    expect(bytes[0]).toBe(0x1f);
+    expect(bytes[1]).toBe(0x8b);
+    const tar = new Uint8Array(gunzipSync(bytes));
+    const entries = untar(tar);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!.name).toBe("etc/local.d/01-test.start");
+    expect(entries[0]!.mode & 0o777).toBe(0o755);
+    expect(new TextDecoder().decode(entries[0]!.content)).toBe("hello");
+    expect(entries[1]!.name).toBe("var/flagship/marker");
+    expect(entries[1]!.mode & 0o777).toBe(0o644);
+  });
+
+  it("buildFlagshipApkovl drops scripts at the right paths with executable bits", () => {
+    const bytes = buildFlagshipApkovl({
+      bootstrap: "#!/bin/sh\nbootstrap\n",
+      trailerProbe: "#!/usr/bin/env node\nprobe\n",
+      trailerValidate: "#!/usr/bin/env node\nvalidate\n",
+    });
+    const tar = new Uint8Array(gunzipSync(bytes));
+    const entries = untar(tar);
+    const byName = Object.fromEntries(entries.map((e) => [e.name, e]));
+    expect(byName["etc/local.d/01-flagship-bootstrap.start"]!.mode & 0o777).toBe(0o755);
+    expect(byName["usr/local/bin/flagship-trailer-probe"]!.mode & 0o777).toBe(0o755);
+    expect(byName["usr/local/bin/flagship-trailer-validate"]!.mode & 0o777).toBe(0o755);
+    expect(byName["etc/runlevels/default/local"]).toBeDefined();
+    expect(byName["usr/local/bin/flagship-install.sh"]).toBeUndefined();
+    expect(byName["usr/local/bin/flagship-boot-stage.sh"]).toBeUndefined();
+  });
+
+  it("rejects filenames longer than 100 bytes (USTAR limit)", () => {
+    expect(() =>
+      buildApkovl({
+        files: [{ name: "a/".repeat(60) + "x", content: new Uint8Array(0) }],
+      }),
+    ).toThrow(/longer than 100/);
+  });
+
+  it("ends in two zero blocks (proper tar EOF)", () => {
+    const bytes = buildApkovl({
+      files: [{ name: "x", content: new Uint8Array(10) }],
+    });
+    const tar = new Uint8Array(gunzipSync(bytes));
+    const last1024 = tar.subarray(tar.length - 1024);
+    expect(last1024.every((b) => b === 0)).toBe(true);
+  });
+});

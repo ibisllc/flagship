@@ -156,11 +156,14 @@ async function runFlow() {
     issuedAt: acIssuedAt,
     expiresAt: acExpiresAt,
   };
+  const installerGitRef = "main";
+  blob.installerGitRef = installerGitRef;
   const blobMsg = canonical([
     TAG_INSTALL_BLOB, blob.version, blob.serverDomain, blob.username, blob.serverName,
     bytesToHex(blob.phoneDelegatedPubKey), blob.registrationUrl,
     blob.authCode.serial, bytesToHex(blob.authCode.userPubKey),
     bytesToHex(blob.authCodeUserSignature), blob.issuedAt, blob.expiresAt,
+    installerGitRef,
   ]);
   const blobSig = await sign(irk.keypair.privateKey, blobMsg);
 
@@ -186,6 +189,7 @@ async function runFlow() {
         authCodeUserSignature: bytesToHex(acSig),
         issuedAt: blob.issuedAt,
         expiresAt: blob.expiresAt,
+        installerGitRef: installerGitRef,
       },
       signature: bytesToHex(blobSig),
       ttlMs,

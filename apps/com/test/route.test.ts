@@ -231,6 +231,140 @@ describe("/api/_status/probe", () => {
   });
 });
 
+describe("/build/iso/* — R2 streaming", () => {
+  it("404s when the requested filename is not in the bucket", async () => {
+    const env = makeEnv({
+      ISO_BUCKET: { async get() { return null; } },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/build/iso/missing.iso"),
+      env,
+    );
+    expect(r.status).toBe(404);
+  });
+
+  it("streams the R2 body with correct content-type and size headers", async () => {
+    const isoBytes = new Uint8Array(1024).fill(0x42);
+    const env = makeEnv({
+      ISO_BUCKET: {
+        async get() {
+          return {
+            body: new ReadableStream({
+              start(controller) {
+                controller.enqueue(isoBytes);
+                controller.close();
+              },
+            }),
+            size: isoBytes.length,
+            httpEtag: '"abc123"',
+          };
+        },
+      },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/build/iso/alpine-3.21.0-x86_64.iso"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("application/octet-stream");
+    expect(r.headers.get("content-length")).toBe("1024");
+    expect(r.headers.get("etag")).toBe('"abc123"');
+    expect(r.headers.get("content-disposition")).toContain("alpine-3.21.0");
+    const body = new Uint8Array(await r.arrayBuffer());
+    expect(body.length).toBe(1024);
+    expect(body[0]).toBe(0x42);
+  });
+
+  it("400s on a filename that contains path traversal", async () => {
+    const env = makeEnv({
+      ISO_BUCKET: { async get() { return { body: null, size: 0 }; } },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/build/iso/..%2Fsecret.iso"),
+      env,
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("500s when ISO_BUCKET is not bound (misconfig guard)", async () => {
+    const env = makeEnv();
+    delete (env as { ISO_BUCKET?: unknown }).ISO_BUCKET;
+    const r = await route(
+      new Request("https://flagshipserver.com/build/iso/x.iso"),
+      env,
+    );
+    expect(r.status).toBe(500);
+  });
+});
+
+describe(".com control-plane routes (Worker + D1)", () => {
+  it("falls through to upstream when DB binding is missing", async () => {
+    nextResp = new Response(JSON.stringify({ ok: true, fromUpstream: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/username/claim", {
+        method: "POST",
+        body: "{}",
+        headers: { "content-type": "application/json" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(JSON.parse(await r.text()).fromUpstream).toBe(true);
+  });
+
+  it("routes to the local control-plane handler when DB is bound (no upstream call)", async () => {
+    const env = makeEnv({
+      DB: {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => null,
+            all: async () => ({ results: [], success: true, meta: {} }),
+            run: async () => ({ success: true, meta: { changes: 0 } }),
+          }),
+        }),
+        batch: async () => [],
+      } as unknown as import("@flagship/storage").D1Database,
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/username/claim", {
+        method: "POST",
+        body: "{}",
+        headers: { "content-type": "application/json" },
+      }),
+      env,
+    );
+    expect(r.status).toBe(400);
+    expect(JSON.parse(await r.text()).error).toMatch(/malformed/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("/api/ca/cert returns the dev CA pubkey when bound to D1 + no FLAGSHIP_CA_PRIV_HEX", async () => {
+    const env = makeEnv({
+      DB: {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => null,
+            all: async () => ({ results: [], success: true, meta: {} }),
+            run: async () => ({ success: true, meta: {} }),
+          }),
+        }),
+        batch: async () => [],
+      } as unknown as import("@flagship/storage").D1Database,
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/ca/cert"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.issuer).toBe("flagship-ca-dev");
+    expect(body.pubKey).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
 describe("/api/build/iso-info", () => {
   it("returns the default placeholder when no env override is set", async () => {
     const r = await route(
