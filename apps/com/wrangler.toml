@@ -24,9 +24,10 @@ workers_dev = true
 directory = "../web/public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-# Don't intercept paths the Worker explicitly handles (every /api/*
-# call must hit the Worker, not the asset edge).
-run_worker_first = ["/api/*"]
+# Don't let the asset edge intercept paths the Worker owns: every /api/*
+# call (control plane, status probe) and every /build/iso/* (R2 stream)
+# must hit the Worker first.
+run_worker_first = ["/api/*", "/build/iso/*"]
 
 [[r2_buckets]]
 binding = "ISO_BUCKET"
@@ -40,9 +41,17 @@ migrations_dir = "../../packages/storage/migrations"
 
 [vars]
 SERVICES_BASE_URL = "https://flagship.services"
-BASE_ISO_URL = "https://flagshipserver.com/build/iso/alpine-3.21.0-x86_64.iso"
-BASE_ISO_VERSION = "alpine-standard-3.21.0-x86_64"
-BASE_ISO_SHA256 = "201e2ba601be5b861345a308591e3e547bf6d210945dfaab3e3251b8dea64b8b"
+# `flagship-base-alpine-...` = stock Alpine 3.21 with our apkovl baked at
+# the root of the ISO9660 filesystem. The apkovl carries:
+#   /etc/local.d/01-flagship-bootstrap.start
+#   /usr/local/bin/flagship-trailer-probe
+#   /usr/local/bin/flagship-trailer-validate
+# On boot, Alpine's overlay-init loads the apkovl, the bootstrap script
+# probes the boot media for the trailer, validates the signature, and
+# fetches installer/install.sh from GitHub at the trailer-pinned ref.
+BASE_ISO_URL = "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso"
+BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl1"
+BASE_ISO_SHA256 = "5782da151ecc0328a0e10052405981d6807d9967f6e01836d1cf1c538768fb7d"
 # Cloudflare Worker → Fly app shared secret. Set with:
 #   wrangler secret put SERVICES_HMAC_KEY
 # (NOT in this file — secrets live in CF dashboard.)
