@@ -90,12 +90,13 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 ## Outstanding work (priority order)
 
-1. Daemon → real Linux box bring-up. The production daemon needs to be packaged into the apkovl bootstrap (the `installer/install.sh` already does the clone+build; just hasn't been tested on real hardware).
-2. Persistent ACME state on the daemon (currently the demo daemon regenerates the account key on every restart).
-3. Phone-server `/api/orders-from-user` endpoint on the daemon (trust model exists; endpoint not yet wired).
-4. LUKS unlock-on-boot via phone (architecture clean; endpoints speced but not implemented).
-5. Mobile clients (scaffolds exist; real impl needs Xcode/Android Studio).
-6. Peer-backup distribution (designed in deep detail; encryption layer built; matchmaking + transport unbuilt).
+1. **Wildcard cert via DNS-01** (next session). One cert per server with `[<server>, *.<server>]` SANs covers all apps with one ACME flow. Replaces per-app TLS-ALPN-01 (which would hit LE's 50-certs-per-week-per-registered-domain limit on `flagship.services` immediately at any real scale). Also: apply for LE's high-volume issuer allowlist before public launch.
+2. **Daemon entry point**: merge `hello-daemon`'s tunnel-client + ACME + ALPN-aware TLS server into `packages/server-daemon/src/index.ts`. **No compiled binaries** — `installer/install.sh` already does `git clone` + `npx tsc -b` + OpenRC; just point the OpenRC service at the finished entry. Transparency stays intact.
+3. Persistent ACME state on the daemon (currently the demo daemon regenerates the account key on every restart).
+4. Phone-server `/api/orders-from-user` endpoint on the daemon (trust model exists; endpoint not yet wired).
+5. LUKS unlock-on-boot via phone (architecture clean; endpoints speced but not implemented).
+6. Mobile clients (scaffolds exist; real impl needs Xcode/Android Studio).
+7. Peer-backup distribution (designed in deep detail; encryption layer built; matchmaking + transport unbuilt).
 
 ## When in doubt
 
