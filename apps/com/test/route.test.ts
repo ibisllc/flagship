@@ -230,3 +230,42 @@ describe("/api/_status/probe", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("/api/build/iso-info", () => {
+  it("returns the default placeholder when no env override is set", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/build/iso-info"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.url).toBe(_internal.DEFAULT_BASE_ISO_URL);
+    expect(body.version).toBe(_internal.DEFAULT_BASE_ISO_VERSION);
+    expect(body.placeholder).toBe(true);
+  });
+
+  it("uses BASE_ISO_URL/BASE_ISO_VERSION/BASE_ISO_SHA256 when provided", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/build/iso-info"),
+      makeEnv({
+        BASE_ISO_URL: "https://r2.example/flagship-1.2.3.iso",
+        BASE_ISO_VERSION: "1.2.3",
+        BASE_ISO_SHA256: "deadbeef",
+      }),
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.url).toBe("https://r2.example/flagship-1.2.3.iso");
+    expect(body.version).toBe("1.2.3");
+    expect(body.sha256).toBe("deadbeef");
+    expect(body.placeholder).toBe(false);
+  });
+
+  it("never falls through to the upstream proxy or asset binding", async () => {
+    const env = makeEnv();
+    const assetSpy = vi.spyOn(env.ASSETS, "fetch");
+    await route(new Request("https://flagshipserver.com/api/build/iso-info"), env);
+    expect(assetSpy).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+});

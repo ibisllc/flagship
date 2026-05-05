@@ -7,6 +7,7 @@
     { "path": "./packages/services-zone" },
     { "path": "./packages/server-daemon" },
     { "path": "./packages/bootkey-builder" },
+    { "path": "./packages/iso-personalizer" },
     { "path": "./apps/web" }
   ]
 }

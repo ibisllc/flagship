@@ -8,13 +8,14 @@ compatibility_flags = ["nodejs_compat"]
 # www host shares the same Worker.
 workers_dev = true
 
-# Replaces the legacy DNS records that pointed at the old Surge-hosted
-# Bootstrap template (backed up at repo root as `old_flagship_website.zip`).
-# Pass --x-provision on first deploy if Cloudflare reports an existing record.
-routes = [
-  { pattern = "flagshipserver.com", custom_domain = true },
-  { pattern = "www.flagshipserver.com", custom_domain = true },
-]
+# Routes for `flagshipserver.com/*` and `www.flagshipserver.com/*` are
+# managed out-of-band via the Cloudflare API (POST /zones/{zone}/workers/routes)
+# because the apex retains a legacy CNAME → Surge from the old marketing site
+# (backed up as `old_flagship_website.zip` at the repo root). Worker Routes
+# intercept before origin so the legacy CNAME is harmless.
+# To re-add the routes if dropped:
+#   curl -X POST .../zones/$ZONE/workers/routes -d '{"pattern":"flagshipserver.com/*","script":"flagship-com"}'
+#   curl -X POST .../zones/$ZONE/workers/routes -d '{"pattern":"www.flagshipserver.com/*","script":"flagship-com"}'
 
 # Static assets — marketing pages, /webapp/, /deck/, /security pages,
 # /.well-known/security.txt. Wrangler will upload everything in this
@@ -28,7 +29,11 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
 [vars]
-SERVICES_BASE_URL = "https://flagship.services"
+# Point at the Fly hostname directly until the apex flagship.services
+# DNS records flip from the legacy Surge CNAME to Fly's A/AAAA. Once that
+# flip happens, switch this back to "https://flagship.services" for
+# proper SNI-passthrough end-to-end.
+SERVICES_BASE_URL = "https://flagship-services.fly.dev"
 # Cloudflare Worker → Fly app shared secret. Set with:
 #   wrangler secret put SERVICES_HMAC_KEY
 # (NOT in this file — secrets live in CF dashboard.)

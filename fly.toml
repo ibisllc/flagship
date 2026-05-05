@@ -25,7 +25,10 @@ kill_timeout = "5s"
 [env]
   NODE_ENV = "production"
   PORT = "3000"
-  FLAGSHIP_SURFACE = "services"
+  # `both` because the Cloudflare Worker proxies *every* /api/* hit to this
+  # app, including .com-surface routes (username registry, auth-code issuance).
+  # Switch back to `services` only when .services moves to its own host.
+  FLAGSHIP_SURFACE = "both"
 
 # HTTPS API. Fly issues a Let's Encrypt cert for flagship.services
 # (run `flyctl certs add flagship.services` after first deploy).

@@ -33,7 +33,10 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV FLAGSHIP_SURFACE=services
+# `both` because the Cloudflare Worker fronts /api/* and proxies everything
+# to this app — including .com-surface routes (username registry, auth code
+# issuance). When .services moves to its own host, switch to `services`.
+ENV FLAGSHIP_SURFACE=both
 ENV TUNNEL_TCP_PORT=8443
 
 # Need only the slimmed runtime tree.

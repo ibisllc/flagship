@@ -47,6 +47,10 @@ const TAG_PUBLISH_SERVER_DNS = "flagship/publish-server-dns/v1";
 const TAG_DNS01_PUBLISH = "flagship/dns01-publish/v1";
 const TAG_DNS01_DELETE = "flagship/dns01-delete/v1";
 const TAG_CLAIM_USERNAME = "flagship/claim-username/v1";
+const TAG_AUTH_CODE = "flagship/auth-code/v1";
+const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
+const TAG_SERVER_REGISTER = "flagship/server-register/v1";
+const TAG_AUTH_CODE_REVOKE = "flagship/auth-code-revoke/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -263,6 +267,45 @@ export interface InviteToken {
  * IRK pubkey. Once redeemed, the membership store keys on accepterIrkPub for
  * all future operations on this app.
  */
+export interface AuthCode {
+  version: 1;
+  serial: string;
+  username: string;
+  serverName: string;
+  serverDomain: string;
+  delegatedPubKey: Bytes;
+  userPubKey: Bytes;
+  issuedAt: number;
+  expiresAt: number;
+}
+
+export interface AuthCodeRevocation {
+  serial: string;
+  username: string;
+  issuedAt: number;
+}
+
+export interface InstallBlob {
+  version: 1;
+  serverDomain: string;
+  username: string;
+  serverName: string;
+  phoneDelegatedPubKey: Bytes;
+  registrationUrl: string;
+  authCode: AuthCode;
+  authCodeUserSignature: Bytes;
+  issuedAt: number;
+  expiresAt: number;
+}
+
+export interface ServerRegisterRequest {
+  authCode: AuthCode;
+  authCodeUserSignature: Bytes;
+  serverIdentityPubKey: Bytes;
+  issuedAt: number;
+  nonce: Bytes;
+}
+
 export interface InviteAcceptance {
   inviteNonce: Bytes;
   accepterIrkPub: Bytes;
@@ -684,6 +727,117 @@ export function signClaimUsername(c: ClaimUsername, irk: Keypair): Bytes {
 export function verifyClaimUsername(c: ClaimUsername, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalClaimUsername(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+function canonicalAuthCode(c: AuthCode): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_AUTH_CODE,
+      c.version,
+      c.serial,
+      c.username,
+      c.serverName,
+      c.serverDomain,
+      hex(c.delegatedPubKey),
+      hex(c.userPubKey),
+      c.issuedAt,
+      c.expiresAt,
+    ].join("|"),
+  );
+}
+
+function canonicalInstallBlob(b: InstallBlob): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_INSTALL_BLOB,
+      b.version,
+      b.serverDomain,
+      b.username,
+      b.serverName,
+      hex(b.phoneDelegatedPubKey),
+      b.registrationUrl,
+      b.authCode.serial,
+      hex(b.authCode.userPubKey),
+      hex(b.authCodeUserSignature),
+      b.issuedAt,
+      b.expiresAt,
+    ].join("|"),
+  );
+}
+
+function canonicalServerRegister(r: ServerRegisterRequest): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_SERVER_REGISTER,
+      r.authCode.serial,
+      r.authCode.serverDomain,
+      hex(r.serverIdentityPubKey),
+      r.issuedAt,
+      hex(r.nonce),
+    ].join("|"),
+  );
+}
+
+function canonicalAuthCodeRevoke(r: AuthCodeRevocation): Bytes {
+  return new TextEncoder().encode(
+    [TAG_AUTH_CODE_REVOKE, r.serial, r.username, r.issuedAt].join("|"),
+  );
+}
+
+export function signAuthCode(c: AuthCode, irk: Keypair): Bytes {
+  return ed.sign(canonicalAuthCode(c), irk.privateKey);
+}
+
+export function verifyAuthCode(c: AuthCode, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalAuthCode(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signInstallBlob(b: InstallBlob, irk: Keypair): Bytes {
+  return ed.sign(canonicalInstallBlob(b), irk.privateKey);
+}
+
+export function verifyInstallBlob(b: InstallBlob, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalInstallBlob(b), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signServerRegister(r: ServerRegisterRequest, identity: Keypair): Bytes {
+  return ed.sign(canonicalServerRegister(r), identity.privateKey);
+}
+
+export function verifyServerRegister(
+  r: ServerRegisterRequest,
+  sig: Bytes,
+  identityPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalServerRegister(r), identityPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signAuthCodeRevocation(r: AuthCodeRevocation, irk: Keypair): Bytes {
+  return ed.sign(canonicalAuthCodeRevoke(r), irk.privateKey);
+}
+
+export function verifyAuthCodeRevocation(
+  r: AuthCodeRevocation,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalAuthCodeRevoke(r), irkPub);
   } catch {
     return false;
   }

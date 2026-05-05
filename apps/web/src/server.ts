@@ -26,6 +26,16 @@ import {
   type UsernameRegistry,
 } from "./routes/usernameRegistry.js";
 import {
+  registerAuthCode,
+  InMemoryAuthCodeStore,
+  type AuthCodeStore,
+} from "./routes/authCode.js";
+import {
+  registerServerRegister,
+  inProcessAuthCodeUseClient,
+  type AuthCodeUseClient,
+} from "./routes/serverRegister.js";
+import {
   registerLlmPromo,
   InMemoryPromoLedger,
   ConsoleSmsSender,
@@ -122,6 +132,15 @@ export interface BuildServerOptions {
    * Defaults to in-memory on .com surface.
    */
   usernameRegistry?: UsernameRegistry;
+  /** Auth-code store for the install-flow issue/use/revoke endpoints. */
+  authCodeStore?: AuthCodeStore;
+  /**
+   * AuthCodeUseClient bridges .services → .com when those run in different
+   * processes. When unset and `surface = "both"`, defaults to an in-process
+   * adapter against `authCodeStore`. When `surface = "services"` alone, this
+   * MUST be provided (or there's no way to validate auth codes).
+   */
+  authCodeUseClient?: AuthCodeUseClient;
 }
 
 /**
@@ -152,6 +171,21 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
   if (isCom) {
     registerUsernameRegistry(app, { registry: usernameRegistry });
     app.decorate("usernameRegistry", usernameRegistry);
+  }
+
+  const authCodeStore = opts.authCodeStore ?? new InMemoryAuthCodeStore();
+  if (isCom) {
+    registerAuthCode(app, { store: authCodeStore, usernameRegistry });
+    app.decorate("authCodeStore", authCodeStore);
+  }
+
+  if (isServices) {
+    const useClient =
+      opts.authCodeUseClient ?? inProcessAuthCodeUseClient(authCodeStore);
+    registerServerRegister(app, {
+      serverRegistry,
+      authCodeUseClient: useClient,
+    });
   }
 
   const bootedAt = Date.now();
@@ -302,6 +336,7 @@ declare module "fastify" {
     serverDnsRegistry?: ServerDnsRegistry;
     usernameRegistry?: UsernameRegistry;
     promoLedger?: PromoLedger;
+    authCodeStore?: AuthCodeStore;
   }
 }
 

@@ -14,10 +14,25 @@ export interface RouteEnv {
   SERVICES_BASE_URL: string;
   /** The Worker assets binding. Tests pass a stub. */
   ASSETS: { fetch(req: Request): Promise<Response> };
+  /** Optional base-ISO override for /api/build/iso-info. */
+  BASE_ISO_URL?: string;
+  BASE_ISO_VERSION?: string;
+  BASE_ISO_SHA256?: string;
 }
 
 const PROXY_PREFIX = "/api/";
 const STATUS_PROBE_PATH = "/api/_status/probe";
+const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
+
+/**
+ * Default placeholder ISO. We don't yet host a real personalizable installer
+ * — when we do, this URL points at the canonical R2 (or GH Releases) object
+ * and `version`/`sha256` get pinned to that artifact.
+ */
+const DEFAULT_BASE_ISO_URL =
+  "https://flagshipserver.com/build/placeholder-base.iso";
+const DEFAULT_BASE_ISO_VERSION = "0.0.0-placeholder";
+const DEFAULT_BASE_ISO_SHA256 = "";
 
 /**
  * Headers the edge sets on every request that should NOT be forwarded
@@ -45,6 +60,10 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   // not what the user's browser sees.
   if (url.pathname === STATUS_PROBE_PATH) {
     return statusProbe(env);
+  }
+
+  if (url.pathname === BUILD_ISO_INFO_PATH) {
+    return buildIsoInfo(env);
   }
 
   if (url.pathname.startsWith(PROXY_PREFIX)) {
@@ -112,6 +131,21 @@ async function statusProbe(env: RouteEnv): Promise<Response> {
     };
   }
   return jsonResponse(result, 200);
+}
+
+async function buildIsoInfo(env: RouteEnv): Promise<Response> {
+  const url = env.BASE_ISO_URL ?? DEFAULT_BASE_ISO_URL;
+  const version = env.BASE_ISO_VERSION ?? DEFAULT_BASE_ISO_VERSION;
+  const sha256 = env.BASE_ISO_SHA256 ?? DEFAULT_BASE_ISO_SHA256;
+  return jsonResponse(
+    {
+      url,
+      version,
+      sha256,
+      placeholder: version === DEFAULT_BASE_ISO_VERSION,
+    },
+    200,
+  );
 }
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -194,6 +228,9 @@ function requestHasBody(method: string): boolean {
 export const _internal = {
   PROXY_PREFIX,
   STATUS_PROBE_PATH,
+  BUILD_ISO_INFO_PATH,
+  DEFAULT_BASE_ISO_URL,
+  DEFAULT_BASE_ISO_VERSION,
   STRIP_REQ_HEADERS,
   STRIP_RES_HEADERS,
 };
