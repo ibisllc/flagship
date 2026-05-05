@@ -104,6 +104,21 @@ export interface ServerStorage {
   revoke(serverDomain: string, reason: string, at: number): Promise<boolean>;
 }
 
+export interface InstallEvent {
+  serial: string;
+  seq: number;
+  eventName: string;
+  detail: string;
+  postedAt: number;
+}
+
+export interface InstallEventStorage {
+  /** Append a new event. Implementations cap the per-serial history at
+   *  `maxPerSerial` (default 100); older events get dropped. */
+  put(rec: Omit<InstallEvent, "seq">): Promise<{ ok: true; seq: number } | { ok: false; reason: string }>;
+  list(serial: string, sinceSeq?: number): Promise<InstallEvent[]>;
+}
+
 export interface RoutingStorage {
   /** Register a fresh RCK for a subdomain. Errors if the subdomain is taken
    *  by a different RCK; idempotent for the same RCK pubkey. */
@@ -123,4 +138,5 @@ export interface Storage {
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;
   routing: RoutingStorage;
+  installEvents: InstallEventStorage;
 }

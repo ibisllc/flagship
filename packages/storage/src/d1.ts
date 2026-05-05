@@ -3,6 +3,8 @@ import type {
   AuthCodeStorage,
   BuildTicketRecord,
   BuildTicketStorage,
+  InstallEvent,
+  InstallEventStorage,
   RoutingRecord,
   RoutingStorage,
   ServerRecord,
@@ -421,17 +423,71 @@ export class D1RoutingStorage implements RoutingStorage {
   }
 }
 
+interface InstallEventRow {
+  serial: string;
+  seq: number;
+  event_name: string;
+  detail: string;
+  posted_at: number;
+}
+
+export class D1InstallEventStorage implements InstallEventStorage {
+  constructor(private db: D1Database) {}
+  async put(rec: Omit<InstallEvent, "seq">) {
+    const seqRow = await this.db
+      .prepare("SELECT COALESCE(MAX(seq), 0) AS max_seq FROM install_events WHERE serial = ?")
+      .bind(rec.serial)
+      .first<{ max_seq: number }>();
+    const seq = (seqRow?.max_seq ?? 0) + 1;
+    await this.db
+      .prepare(
+        `INSERT INTO install_events (serial, seq, event_name, detail, posted_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(rec.serial, seq, rec.eventName, rec.detail, rec.postedAt)
+      .run();
+    // Cap at 100 events per serial; oldest dropped first.
+    await this.db
+      .prepare(
+        `DELETE FROM install_events
+         WHERE serial = ? AND seq <= (
+           SELECT MAX(seq) - 100 FROM install_events WHERE serial = ?
+         )`,
+      )
+      .bind(rec.serial, rec.serial)
+      .run();
+    return { ok: true as const, seq };
+  }
+  async list(serial: string, sinceSeq = 0) {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM install_events WHERE serial = ? AND seq > ? ORDER BY seq ASC",
+      )
+      .bind(serial, sinceSeq)
+      .all<InstallEventRow>();
+    return r.results.map((row) => ({
+      serial: row.serial,
+      seq: row.seq,
+      eventName: row.event_name,
+      detail: row.detail,
+      postedAt: row.posted_at,
+    }));
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;
   routing: RoutingStorage;
+  installEvents: InstallEventStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
     this.buildTickets = new D1BuildTicketStorage(db);
     this.servers = new D1ServerStorage(db);
     this.routing = new D1RoutingStorage(db);
+    this.installEvents = new D1InstallEventStorage(db);
   }
 }

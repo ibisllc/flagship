@@ -19,6 +19,8 @@ import {
   handleBuildTicketRedeem,
   handleBuildTicketRefresh,
   handleCaCert,
+  handleGetInstallEvents,
+  handlePostInstallEvent,
   handleRegisterRck,
   handleRoutingLookup,
   handleServerLookup,
@@ -56,6 +58,7 @@ const ROUTE_RE = {
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
+  INSTALL_EVENTS: /^\/api\/install-events\/([^/]+)$/,
 };
 
 export async function tryControlPlane(
@@ -203,6 +206,26 @@ export async function tryControlPlane(
       await handleRoutingLookup(
         { routing: storage.routing, usernames: storage.usernames },
         host,
+      ),
+    );
+  }
+
+  if (method === "POST" && (m = path.match(ROUTE_RE.INSTALL_EVENTS))) {
+    return finish(
+      await handlePostInstallEvent(
+        { storage: storage.installEvents },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.INSTALL_EVENTS))) {
+    const sinceSeq = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
+    return finish(
+      await handleGetInstallEvents(
+        { storage: storage.installEvents },
+        decodeURIComponent(m[1]!),
+        sinceSeq,
       ),
     );
   }

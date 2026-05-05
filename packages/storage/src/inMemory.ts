@@ -3,6 +3,8 @@ import type {
   AuthCodeStorage,
   BuildTicketRecord,
   BuildTicketStorage,
+  InstallEvent,
+  InstallEventStorage,
   RoutingRecord,
   RoutingStorage,
   ServerRecord,
@@ -149,10 +151,28 @@ export class InMemoryRoutingStorage implements RoutingStorage {
   }
 }
 
+export class InMemoryInstallEventStorage implements InstallEventStorage {
+  private bySerial = new Map<string, InstallEvent[]>();
+  private maxPerSerial = 100;
+  async put(rec: Omit<InstallEvent, "seq">) {
+    const arr = this.bySerial.get(rec.serial) ?? [];
+    const seq = arr.length === 0 ? 1 : arr[arr.length - 1]!.seq + 1;
+    arr.push({ ...rec, seq });
+    while (arr.length > this.maxPerSerial) arr.shift();
+    this.bySerial.set(rec.serial, arr);
+    return { ok: true as const, seq };
+  }
+  async list(serial: string, sinceSeq = 0) {
+    const arr = this.bySerial.get(serial) ?? [];
+    return arr.filter((e) => e.seq > sinceSeq).map((e) => ({ ...e }));
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
   buildTickets = new InMemoryBuildTicketStorage();
   servers = new InMemoryServerStorage();
   routing = new InMemoryRoutingStorage();
+  installEvents = new InMemoryInstallEventStorage();
 }
