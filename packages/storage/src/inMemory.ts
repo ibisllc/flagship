@@ -3,6 +3,8 @@ import type {
   AuthCodeStorage,
   BuildTicketRecord,
   BuildTicketStorage,
+  RoutingRecord,
+  RoutingStorage,
   ServerRecord,
   ServerStorage,
   Storage,
@@ -120,9 +122,37 @@ export class InMemoryServerStorage implements ServerStorage {
   }
 }
 
+export class InMemoryRoutingStorage implements RoutingStorage {
+  private bySubdomain = new Map<string, RoutingRecord>();
+  async register(rec: RoutingRecord) {
+    const existing = this.bySubdomain.get(rec.subdomain);
+    if (existing && existing.rckPubKeyHex !== rec.rckPubKeyHex) {
+      return { ok: false as const, reason: "subdomain already controlled by a different RCK" };
+    }
+    this.bySubdomain.set(rec.subdomain, { ...rec });
+    return { ok: true as const };
+  }
+  async get(subdomain: string) {
+    const r = this.bySubdomain.get(subdomain);
+    return r ? { ...r } : undefined;
+  }
+  async setTarget(subdomain: string, newTargetHex: string, nonce: string, at: number) {
+    const r = this.bySubdomain.get(subdomain);
+    if (!r) return { ok: false as const, reason: "unknown subdomain" };
+    if (r.lastTargetNonce && nonce <= r.lastTargetNonce) {
+      return { ok: false as const, reason: "stale nonce (replay)" };
+    }
+    r.currentTargetHex = newTargetHex;
+    r.lastTargetUpdate = at;
+    r.lastTargetNonce = nonce;
+    return { ok: true as const };
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
   buildTickets = new InMemoryBuildTicketStorage();
   servers = new InMemoryServerStorage();
+  routing = new InMemoryRoutingStorage();
 }

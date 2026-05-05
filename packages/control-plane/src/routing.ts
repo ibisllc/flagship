@@ -1,0 +1,180 @@
+import {
+  verifyRegisterRck,
+  verifySetRoutingTarget,
+  type RegisterRck,
+  type SetRoutingTarget,
+} from "@flagship/protocol";
+import type { RoutingStorage, UsernameStorage } from "@flagship/storage";
+import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
+import {
+  conflict, forbidden, malformed, notFound, ok,
+  type HandlerResponseWithHeaders,
+} from "./types.js";
+
+export interface RoutingDeps {
+  routing: RoutingStorage;
+  usernames: UsernameStorage;
+  freshnessMs?: number;
+  now?: () => number;
+}
+
+interface RegisterBody {
+  request?: {
+    username?: string;
+    subdomain?: string;
+    rckPubKey?: string;
+    issuedAt?: number;
+  };
+  signature?: string;
+}
+
+interface SetTargetBody {
+  request?: {
+    subdomain?: string;
+    newTargetIdentityPubKey?: string;
+    issuedAt?: number;
+    nonce?: string;
+  };
+  signature?: string;
+}
+
+const NONCE_HEX = /^[0-9a-f]{16,128}$/;
+
+export async function handleRegisterRck(
+  deps: RoutingDeps,
+  body: RegisterBody | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? (() => Date.now()))();
+  const freshnessMs = deps.freshnessMs ?? 5 * 60_000;
+  const r = body?.request;
+  if (
+    !r ||
+    typeof r.username !== "string" ||
+    typeof r.subdomain !== "string" ||
+    typeof r.rckPubKey !== "string" ||
+    !HEX64.test(r.rckPubKey) ||
+    typeof r.issuedAt !== "number" ||
+    typeof body?.signature !== "string" ||
+    !HEX128.test(body.signature)
+  ) {
+    return malformed("malformed body");
+  }
+  if (Math.abs(now - r.issuedAt) > freshnessMs) return malformed("stale request");
+
+  const userRec = await deps.usernames.get(r.username);
+  if (!userRec) return notFound("username not registered");
+
+  const claim: RegisterRck = {
+    username: r.username,
+    subdomain: r.subdomain,
+    rckPubKey: hexToBytes(r.rckPubKey),
+    issuedAt: r.issuedAt,
+  };
+  const sig = hexToBytes(body.signature);
+  if (!verifyRegisterRck(claim, sig, hexToBytes(userRec.irkPubHex))) {
+    return forbidden("invalid signature");
+  }
+
+  // Subdomain must be `<server>.<user>.flagship.services` and the user
+  // segment must match the username — defends against claiming someone
+  // else's subdomain even with a valid IRK.
+  const expectedSuffix = `.${r.username}.flagship.services`;
+  if (
+    !r.subdomain.endsWith(expectedSuffix) ||
+    r.subdomain.length === expectedSuffix.length
+  ) {
+    return malformed(`subdomain must end with ${expectedSuffix}`);
+  }
+
+  const out = await deps.routing.register({
+    subdomain: r.subdomain,
+    username: r.username,
+    rckPubKeyHex: r.rckPubKey,
+    currentTargetHex: "",
+    registeredAt: now,
+    lastTargetUpdate: 0,
+    lastTargetNonce: "",
+  });
+  if (!out.ok) return conflict(out.reason);
+  return ok({ ok: true, subdomain: r.subdomain });
+}
+
+export async function handleSetRoutingTarget(
+  deps: RoutingDeps,
+  body: SetTargetBody | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? (() => Date.now()))();
+  const freshnessMs = deps.freshnessMs ?? 5 * 60_000;
+  const r = body?.request;
+  if (
+    !r ||
+    typeof r.subdomain !== "string" ||
+    typeof r.newTargetIdentityPubKey !== "string" ||
+    !HEX64.test(r.newTargetIdentityPubKey) ||
+    typeof r.issuedAt !== "number" ||
+    typeof r.nonce !== "string" ||
+    !NONCE_HEX.test(r.nonce) ||
+    typeof body?.signature !== "string" ||
+    !HEX128.test(body.signature)
+  ) {
+    return malformed("malformed body");
+  }
+  if (Math.abs(now - r.issuedAt) > freshnessMs) return malformed("stale request");
+
+  const route = await deps.routing.get(r.subdomain);
+  if (!route) return notFound("subdomain not registered");
+
+  const claim: SetRoutingTarget = {
+    subdomain: r.subdomain,
+    newTargetIdentityPubKey: hexToBytes(r.newTargetIdentityPubKey),
+    issuedAt: r.issuedAt,
+    nonce: hexToBytes(r.nonce),
+  };
+  const sig = hexToBytes(body.signature);
+  if (!verifySetRoutingTarget(claim, sig, hexToBytes(route.rckPubKeyHex))) {
+    return forbidden("invalid signature");
+  }
+
+  const out = await deps.routing.setTarget(
+    r.subdomain,
+    r.newTargetIdentityPubKey,
+    r.nonce,
+    now,
+  );
+  if (!out.ok) {
+    return out.reason === "unknown subdomain" ? notFound(out.reason) : conflict(out.reason);
+  }
+  return ok({ ok: true, subdomain: r.subdomain, currentTarget: r.newTargetIdentityPubKey });
+}
+
+export async function handleRoutingLookup(
+  deps: RoutingDeps,
+  subdomain: string,
+): Promise<HandlerResponseWithHeaders> {
+  const r = await deps.routing.get(subdomain);
+  if (!r) return notFound("subdomain not registered");
+  return ok({
+    subdomain: r.subdomain,
+    username: r.username,
+    rckPubKey: r.rckPubKeyHex,
+    currentTarget: r.currentTargetHex,
+    lastTargetUpdate: r.lastTargetUpdate,
+  });
+}
+
+/** Helper: when a server registers, set it as the current target if no
+ *  prior target was set (first-server-wins for an empty subdomain). The
+ *  phone can later override with a signed SetRoutingTarget. */
+export async function setRoutingTargetFromRegistration(
+  routing: RoutingStorage,
+  subdomain: string,
+  serverIdentityPubKeyHex: string,
+  now: number,
+): Promise<void> {
+  const r = await routing.get(subdomain);
+  if (!r) return; // no RCK registered yet; routing is "free"
+  if (r.currentTargetHex && r.currentTargetHex !== serverIdentityPubKeyHex) return;
+  await routing.setTarget(subdomain, serverIdentityPubKeyHex, "00".repeat(8), now);
+}
+
+export { equalHex };

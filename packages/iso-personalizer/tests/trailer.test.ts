@@ -54,6 +54,7 @@ function buildBlob(overrides: Partial<InstallBlob> = {}): InstallBlob {
     issuedAt: code.issuedAt,
     expiresAt: code.expiresAt,
     installerGitRef: "main",
+    rckPubKey: freshKeypair().publicKey,
     ...overrides,
   };
 }

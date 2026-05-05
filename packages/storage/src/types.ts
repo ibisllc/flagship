@@ -58,6 +58,19 @@ export interface ServerRecord {
   revocationReason?: string;
 }
 
+export interface RoutingRecord {
+  subdomain: string;
+  username: string;
+  rckPubKeyHex: string;
+  /** The server identity currently receiving traffic for this subdomain.
+   *  Empty string until the first server registers. */
+  currentTargetHex: string;
+  registeredAt: number;
+  lastTargetUpdate: number;
+  /** Highest nonce seen in a SetRoutingTarget — replay protection. */
+  lastTargetNonce: string;
+}
+
 export type Result<T = void> =
   | ({ ok: true } & ({} extends T ? unknown : { value: T }))
   | { ok: false; reason: string };
@@ -91,9 +104,23 @@ export interface ServerStorage {
   revoke(serverDomain: string, reason: string, at: number): Promise<boolean>;
 }
 
+export interface RoutingStorage {
+  /** Register a fresh RCK for a subdomain. Errors if the subdomain is taken
+   *  by a different RCK; idempotent for the same RCK pubkey. */
+  register(rec: RoutingRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(subdomain: string): Promise<RoutingRecord | undefined>;
+  setTarget(
+    subdomain: string,
+    newTargetHex: string,
+    nonce: string,
+    at: number,
+  ): Promise<{ ok: true } | { ok: false; reason: string }>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;
+  routing: RoutingStorage;
 }

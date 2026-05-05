@@ -19,8 +19,11 @@ import {
   handleBuildTicketRedeem,
   handleBuildTicketRefresh,
   handleCaCert,
+  handleRegisterRck,
+  handleRoutingLookup,
   handleServerLookup,
   handleServerRegister,
+  handleSetRoutingTarget,
   handleUsernameClaim,
   handleUsernameLookup,
   handleUserPubKeyCert,
@@ -50,6 +53,9 @@ const ROUTE_RE = {
   SERVER_LOOKUP: /^\/api\/server\/by-domain\/([^/]+)$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   CA_CERT: /^\/api\/ca\/cert$/,
+  RCK_REGISTER: /^\/api\/routing\/register-rck$/,
+  RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
+  ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
 };
 
 export async function tryControlPlane(
@@ -174,10 +180,47 @@ export async function tryControlPlane(
     return finish(handleCaCert({ ca, usernames: storage.usernames }));
   }
 
+  if (method === "POST" && ROUTE_RE.RCK_REGISTER.test(path)) {
+    return finish(
+      await handleRegisterRck(
+        { routing: storage.routing, usernames: storage.usernames },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.RCK_SET_TARGET.test(path)) {
+    return finish(
+      await handleSetRoutingTarget(
+        { routing: storage.routing, usernames: storage.usernames },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.ROUTING_LOOKUP.test(path)) {
+    const host = url.searchParams.get("host");
+    if (!host) return jsonResponse({ error: "host query param required" }, 400);
+    return finish(
+      await handleRoutingLookup(
+        { routing: storage.routing, usernames: storage.usernames },
+        host,
+      ),
+    );
+  }
+
   return null;
 }
 
-async function readJson(request: Request): Promise<unknown> {
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+// Returns `any` because the handlers in @flagship/control-plane all
+// re-validate input shape internally. Casting to specific body types here
+// would be busy-work without adding safety.
+async function readJson(request: Request): Promise<any> {
   if (request.method === "GET" || request.method === "HEAD") return undefined;
   const text = await request.text();
   if (!text) return undefined;

@@ -12,6 +12,10 @@ coverage/
 .cache/
 *.tsbuildinfo
 
+# tsc -b emits .js next to .ts when no outDir is set; we never check those in
+apps/com/src/**/*.js
+apps/com/test/**/*.js
+
 # mobile
 apps/mobile/ios/.build/
 apps/mobile/ios/.swiftpm/

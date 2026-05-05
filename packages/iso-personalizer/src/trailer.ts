@@ -144,6 +144,7 @@ interface InstallBlobJson {
   issuedAt: number;
   expiresAt: number;
   installerGitRef: string;
+  rckPubKey: string;
 }
 
 function bytesToHex(b: Bytes): string {
@@ -181,6 +182,7 @@ export function installBlobToJson(b: InstallBlob): InstallBlobJson {
     issuedAt: b.issuedAt,
     expiresAt: b.expiresAt,
     installerGitRef: b.installerGitRef,
+    rckPubKey: bytesToHex(b.rckPubKey),
   };
 }
 
@@ -209,5 +211,6 @@ export function installBlobFromJson(j: InstallBlobJson): InstallBlob {
     issuedAt: j.issuedAt,
     expiresAt: j.expiresAt,
     installerGitRef: j.installerGitRef ?? "",
+    rckPubKey: hexToBytes(j.rckPubKey),
   };
 }

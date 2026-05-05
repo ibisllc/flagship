@@ -48,6 +48,7 @@ interface InstallBlobJson {
   issuedAt?: number;
   expiresAt?: number;
   installerGitRef?: string;
+  rckPubKey?: string;
 }
 
 interface IssueBody {
@@ -108,7 +109,9 @@ function parseInstallBlob(j: InstallBlobJson | undefined): InstallBlob | null {
     !HEX128.test(j.authCodeUserSignature) ||
     typeof j.issuedAt !== "number" ||
     typeof j.expiresAt !== "number" ||
-    typeof j.installerGitRef !== "string"
+    typeof j.installerGitRef !== "string" ||
+    typeof j.rckPubKey !== "string" ||
+    !HEX64.test(j.rckPubKey)
   ) {
     return null;
   }
@@ -151,6 +154,7 @@ function parseInstallBlob(j: InstallBlobJson | undefined): InstallBlob | null {
     issuedAt: j.issuedAt,
     expiresAt: j.expiresAt,
     installerGitRef: j.installerGitRef,
+    rckPubKey: hexToBytes(j.rckPubKey),
   };
 }
 
@@ -177,6 +181,7 @@ function blobToJson(b: InstallBlob): InstallBlobJson {
     issuedAt: b.issuedAt,
     expiresAt: b.expiresAt,
     installerGitRef: b.installerGitRef,
+    rckPubKey: bytesToHex(b.rckPubKey),
   };
 }
 

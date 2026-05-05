@@ -6,3 +6,4 @@ export * from "./authCode.js";
 export * from "./buildTicket.js";
 export * from "./serverRegister.js";
 export * from "./pubkeyCert.js";
+export * from "./routing.js";

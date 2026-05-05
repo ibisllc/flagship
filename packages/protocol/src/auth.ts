@@ -52,6 +52,8 @@ const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 const TAG_SERVER_REGISTER = "flagship/server-register/v1";
 const TAG_AUTH_CODE_REVOKE = "flagship/auth-code-revoke/v1";
 const TAG_USER_PUBKEY_BINDING = "flagship-ca-binding/v1";
+const TAG_RCK_REGISTER = "flagship/rck-register/v1";
+const TAG_RCK_SET_TARGET = "flagship/rck-set-target/v1";
 
 /**
  * Phone-signed server-registration payload posted to the control plane at
@@ -305,6 +307,39 @@ export interface InstallBlob {
    * installer revision.
    */
   installerGitRef: string;
+  /**
+   * Routing-Control-Key public key for this server's subdomain. Daemon
+   * uses it to verify SetRoutingTarget mutations it sees in the routing
+   * record (defense-in-depth against a compromised .com).
+   */
+  rckPubKey: Bytes;
+}
+
+/**
+ * Routing-Control-Key registration. Phone signs with IRK to establish a
+ * keypair that controls "where does this subdomain's traffic go right now?"
+ * — separate from the server identity that's *currently* handling it. Lets
+ * the phone re-route on failover / migration / delegation without having
+ * to rotate any other key.
+ */
+export interface RegisterRck {
+  username: string;
+  subdomain: string;
+  rckPubKey: Bytes;
+  issuedAt: number;
+}
+
+/**
+ * Routing target update — phone re-aims a subdomain at a different server
+ * identity. Signed with the RCK private key. .com mutates the routing
+ * record; .services's SNI passthrough router reads the new target on the
+ * next lookup.
+ */
+export interface SetRoutingTarget {
+  subdomain: string;
+  newTargetIdentityPubKey: Bytes;
+  issuedAt: number;
+  nonce: Bytes;
 }
 
 export interface UserPubKeyBinding {
@@ -784,6 +819,7 @@ function canonicalInstallBlob(b: InstallBlob): Bytes {
       b.issuedAt,
       b.expiresAt,
       b.installerGitRef,
+      hex(b.rckPubKey),
     ].join("|"),
   );
 }
@@ -888,6 +924,46 @@ export function verifyUserPubKeyBinding(
 ): boolean {
   try {
     return ed.verify(sig, canonicalUserPubKeyBinding(b), caPub);
+  } catch {
+    return false;
+  }
+}
+
+function canonicalRegisterRck(r: RegisterRck): Bytes {
+  return new TextEncoder().encode(
+    [TAG_RCK_REGISTER, r.username, r.subdomain, hex(r.rckPubKey), r.issuedAt].join("|"),
+  );
+}
+
+function canonicalSetRoutingTarget(r: SetRoutingTarget): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_RCK_SET_TARGET,
+      r.subdomain,
+      hex(r.newTargetIdentityPubKey),
+      r.issuedAt,
+      hex(r.nonce),
+    ].join("|"),
+  );
+}
+
+export function signRegisterRck(r: RegisterRck, irk: Keypair): Bytes {
+  return ed.sign(canonicalRegisterRck(r), irk.privateKey);
+}
+export function verifyRegisterRck(r: RegisterRck, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRegisterRck(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signSetRoutingTarget(r: SetRoutingTarget, rck: Keypair): Bytes {
+  return ed.sign(canonicalSetRoutingTarget(r), rck.privateKey);
+}
+export function verifySetRoutingTarget(r: SetRoutingTarget, sig: Bytes, rckPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalSetRoutingTarget(r), rckPub);
   } catch {
     return false;
   }

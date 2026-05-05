@@ -5,6 +5,7 @@
 const TAG_CLAIM = "flagship/claim-username/v1";
 const TAG_AUTH_CODE = "flagship/auth-code/v1";
 const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
+const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 
 const $ = (id) => document.getElementById(id);
 
@@ -144,6 +145,40 @@ async function runFlow() {
   setStep("step-issue", "done");
 
   setStep("step-ticket", "active");
+
+  // Generate the routing-control-key for this subdomain. The phone holds
+  // the private side; the public side is registered with .com (signed by
+  // the user's IRK) and baked into the install trailer.
+  const rck = await gen();
+  const rckRegIssuedAt = Date.now();
+  const rckRegMsg = canonical([
+    TAG_RCK_REGISTER, username, code.serverDomain, bytesToHex(rck.publicKey), rckRegIssuedAt,
+  ]);
+  const rckRegSig = await sign(irk.keypair.privateKey, rckRegMsg);
+  const rckResp = await fetch("/api/routing/register-rck", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      request: {
+        username,
+        subdomain: code.serverDomain,
+        rckPubKey: bytesToHex(rck.publicKey),
+        issuedAt: rckRegIssuedAt,
+      },
+      signature: bytesToHex(rckRegSig),
+    }),
+  });
+  if (!rckResp.ok) {
+    setStep("step-ticket", "error", `RCK register failed: ${rckResp.status}`);
+    log("rck register failed", { status: rckResp.status, body: await rckResp.text() });
+    return;
+  }
+  log("RCK registered", {
+    subdomain: code.serverDomain,
+    rckPub: bytesToHex(rck.publicKey).slice(0, 16) + "…",
+  });
+
+  const installerGitRef = "main";
   const blob = {
     version: 1,
     serverDomain: code.serverDomain,
@@ -155,15 +190,15 @@ async function runFlow() {
     authCodeUserSignature: acSig,
     issuedAt: acIssuedAt,
     expiresAt: acExpiresAt,
+    installerGitRef,
+    rckPubKey: rck.publicKey,
   };
-  const installerGitRef = "main";
-  blob.installerGitRef = installerGitRef;
   const blobMsg = canonical([
     TAG_INSTALL_BLOB, blob.version, blob.serverDomain, blob.username, blob.serverName,
     bytesToHex(blob.phoneDelegatedPubKey), blob.registrationUrl,
     blob.authCode.serial, bytesToHex(blob.authCode.userPubKey),
     bytesToHex(blob.authCodeUserSignature), blob.issuedAt, blob.expiresAt,
-    installerGitRef,
+    installerGitRef, bytesToHex(blob.rckPubKey),
   ]);
   const blobSig = await sign(irk.keypair.privateKey, blobMsg);
 
@@ -190,6 +225,7 @@ async function runFlow() {
         issuedAt: blob.issuedAt,
         expiresAt: blob.expiresAt,
         installerGitRef: installerGitRef,
+        rckPubKey: bytesToHex(blob.rckPubKey),
       },
       signature: bytesToHex(blobSig),
       ttlMs,

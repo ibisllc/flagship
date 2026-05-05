@@ -88,6 +88,7 @@ function buildSignedBlob(): {
     issuedAt,
     expiresAt,
     installerGitRef: "main",
+    rckPubKey: freshKeypair(99).publicKey,
   };
   const blobSignature = signInstallBlob(blob, harryIrk);
   const blobJson = {
@@ -112,6 +113,7 @@ function buildSignedBlob(): {
     issuedAt: blob.issuedAt,
     expiresAt: blob.expiresAt,
     installerGitRef: "main",
+    rckPubKey: bytesToHex(blob.rckPubKey),
   };
   return { blob, blobJson, blobSignature };
 }

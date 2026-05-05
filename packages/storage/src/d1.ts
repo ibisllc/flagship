@@ -3,6 +3,8 @@ import type {
   AuthCodeStorage,
   BuildTicketRecord,
   BuildTicketStorage,
+  RoutingRecord,
+  RoutingStorage,
   ServerRecord,
   ServerStorage,
   Storage,
@@ -341,15 +343,95 @@ export class D1ServerStorage implements ServerStorage {
   }
 }
 
+interface RoutingRow {
+  subdomain: string;
+  username: string;
+  rck_pubkey_hex: string;
+  current_target_hex: string;
+  registered_at: number;
+  last_target_update: number;
+  last_target_nonce: string;
+}
+
+function rowToRouting(r: RoutingRow): RoutingRecord {
+  return {
+    subdomain: r.subdomain,
+    username: r.username,
+    rckPubKeyHex: r.rck_pubkey_hex,
+    currentTargetHex: r.current_target_hex,
+    registeredAt: r.registered_at,
+    lastTargetUpdate: r.last_target_update,
+    lastTargetNonce: r.last_target_nonce ?? "",
+  };
+}
+
+export class D1RoutingStorage implements RoutingStorage {
+  constructor(private db: D1Database) {}
+  async register(rec: RoutingRecord) {
+    const existing = await this.db
+      .prepare("SELECT * FROM routing WHERE subdomain = ?")
+      .bind(rec.subdomain)
+      .first<RoutingRow>();
+    if (existing && existing.rck_pubkey_hex !== rec.rckPubKeyHex) {
+      return { ok: false as const, reason: "subdomain already controlled by a different RCK" };
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO routing (
+          subdomain, username, rck_pubkey_hex,
+          current_target_hex, registered_at, last_target_update, last_target_nonce
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(subdomain) DO UPDATE SET
+          username = excluded.username,
+          rck_pubkey_hex = excluded.rck_pubkey_hex,
+          registered_at = excluded.registered_at`,
+      )
+      .bind(
+        rec.subdomain,
+        rec.username,
+        rec.rckPubKeyHex,
+        rec.currentTargetHex,
+        rec.registeredAt,
+        rec.lastTargetUpdate,
+        rec.lastTargetNonce,
+      )
+      .run();
+    return { ok: true as const };
+  }
+  async get(subdomain: string) {
+    const r = await this.db
+      .prepare("SELECT * FROM routing WHERE subdomain = ?")
+      .bind(subdomain)
+      .first<RoutingRow>();
+    return r ? rowToRouting(r) : undefined;
+  }
+  async setTarget(subdomain: string, newTargetHex: string, nonce: string, at: number) {
+    const result = await this.db
+      .prepare(
+        `UPDATE routing
+         SET current_target_hex = ?, last_target_update = ?, last_target_nonce = ?
+         WHERE subdomain = ? AND (last_target_nonce = '' OR last_target_nonce < ?)`,
+      )
+      .bind(newTargetHex, at, nonce, subdomain, nonce)
+      .run();
+    if (result.meta.changes && result.meta.changes > 0) return { ok: true as const };
+    const cur = await this.get(subdomain);
+    if (!cur) return { ok: false as const, reason: "unknown subdomain" };
+    return { ok: false as const, reason: "stale nonce (replay)" };
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;
+  routing: RoutingStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
     this.buildTickets = new D1BuildTicketStorage(db);
     this.servers = new D1ServerStorage(db);
+    this.routing = new D1RoutingStorage(db);
   }
 }

@@ -117,6 +117,7 @@ describe("InstallBlob signing", () => {
       issuedAt: code.issuedAt,
       expiresAt: code.expiresAt,
       installerGitRef: "main",
+      rckPubKey: freshKeypair().publicKey,
     };
   }
 
