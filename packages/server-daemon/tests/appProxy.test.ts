@@ -217,4 +217,49 @@ describe("handleAppRequest — full flow", () => {
     for (let i = 0; i < sig.length; i++) sig[i] = parseInt(sigHex.slice(i * 2, i * 2 + 2), 16);
     expect(ed.verify(sig, new TextEncoder().encode(canonical), injector.publicKey)).toBe(true);
   });
+
+  it("/.flagship/update is delegated to the UpdateServer when configured (container is never reached)", async () => {
+    const { app } = await makeApp({ publicRoutes: ["/.flagship/update"] });
+    const injector = makeKey();
+    let updateServerCalled = false;
+    let containerForwarded = false;
+    const fakeUpdateServer = {
+      handle: async () => {
+        updateServerCalled = true;
+        return {
+          status: 200,
+          headers: { "content-type": "application/x-git-bundle" },
+          body: Buffer.from("BUNDLE"),
+        };
+      },
+    } as Pick<import("../src/updateServer.js").UpdateServer, "handle">;
+    const r = await handleAppRequest(app, fakeReq("/.flagship/update"), {
+      injectorKey: injector,
+      forward: async () => {
+        containerForwarded = true;
+        return { status: 500, body: "should not happen" };
+      },
+      updateServer: fakeUpdateServer as import("../src/updateServer.js").UpdateServer,
+    });
+    expect(updateServerCalled).toBe(true);
+    expect(containerForwarded).toBe(false);
+    expect(r.status).toBe(200);
+    expect(r.headers?.["content-type"]).toBe("application/x-git-bundle");
+  });
+
+  it("/.flagship/update falls through to the container when no UpdateServer is configured", async () => {
+    const { app } = await makeApp({ publicRoutes: ["/.flagship/update"] });
+    const injector = makeKey();
+    let containerForwarded = false;
+    const r = await handleAppRequest(app, fakeReq("/.flagship/update"), {
+      injectorKey: injector,
+      forward: async () => {
+        containerForwarded = true;
+        return { status: 200, body: "container said hi" };
+      },
+      // updateServer omitted
+    });
+    expect(containerForwarded).toBe(true);
+    expect(String(r.body)).toBe("container said hi");
+  });
 });

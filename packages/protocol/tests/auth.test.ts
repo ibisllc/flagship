@@ -433,3 +433,52 @@ describe("LLM promo issuance signatures (one-shot — flagshipserver.com is neve
     expect(verifyLlmPromoIssueComplete(r, sig, otherIrk.publicKey)).toBe(false);
   });
 });
+
+describe("UpdatePullRequest — server-identity-signed app update pull", () => {
+  const irk = deriveIRK(umk);
+  // The puller's identity key is just an ed25519 keypair; reuse IRK as a stand-in.
+  const pullerIdentity = irk;
+
+  it("round-trips sign/verify with the puller's server identity pubkey", async () => {
+    const { signUpdatePull, verifyUpdatePull } = await import("../src/auth.js");
+    const r = {
+      pullerServerId: "home.bob.flagship.services",
+      creator: "alice",
+      slug: "game1",
+      since: "deadbeefcafef00d",
+      issuedAt: 1735689600000,
+    };
+    const sig = signUpdatePull(r, pullerIdentity);
+    expect(verifyUpdatePull(r, sig, pullerIdentity.publicKey)).toBe(true);
+  });
+
+  it("rejects when (creator, slug, since) differ — replay against a different app or revision fails", async () => {
+    const { signUpdatePull, verifyUpdatePull } = await import("../src/auth.js");
+    const r = {
+      pullerServerId: "home.bob.flagship.services",
+      creator: "alice",
+      slug: "game1",
+      since: "abc123",
+      issuedAt: 1000,
+    };
+    const sig = signUpdatePull(r, pullerIdentity);
+    expect(verifyUpdatePull({ ...r, slug: "game2" }, sig, pullerIdentity.publicKey)).toBe(false);
+    expect(verifyUpdatePull({ ...r, creator: "carol" }, sig, pullerIdentity.publicKey)).toBe(false);
+    expect(verifyUpdatePull({ ...r, since: "different" }, sig, pullerIdentity.publicKey)).toBe(false);
+    expect(verifyUpdatePull({ ...r, pullerServerId: "home.eve.flagship.services" }, sig, pullerIdentity.publicKey)).toBe(false);
+  });
+
+  it("rejects under a different identity pubkey", async () => {
+    const { signUpdatePull, verifyUpdatePull } = await import("../src/auth.js");
+    const otherIdentity = deriveIRK({ seed: new Uint8Array(32).fill(0x99) });
+    const r = {
+      pullerServerId: "home.bob.flagship.services",
+      creator: "alice",
+      slug: "game1",
+      since: "",
+      issuedAt: 1,
+    };
+    const sig = signUpdatePull(r, pullerIdentity);
+    expect(verifyUpdatePull(r, sig, otherIdentity.publicKey)).toBe(false);
+  });
+});

@@ -31,6 +31,7 @@ import { request as httpRequest } from "node:http";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
 import type { InstalledApp } from "./appPlatform.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import type { UpdateServer } from "./updateServer.js";
 
 export interface SessionInfo {
   /** The signed-in member's IRK pubkey. */
@@ -56,6 +57,12 @@ export interface AppProxyDeps {
   /** Override fetch implementation for tests. */
   forward?: (host: string, port: number, req: HttpRequest) => Promise<HttpResponse>;
   now?: () => number;
+  /**
+   * App update-pack distribution server. When set, requests for
+   * `/.flagship/update` are routed here before the container is
+   * consulted. Apps cannot ship their own /update.
+   */
+  updateServer?: UpdateServer;
 }
 
 const STRIP_PREFIX = "x-flagship-";
@@ -111,6 +118,15 @@ export async function handleAppRequest(
         injectorPubKeyHex: bytesToHex(deps.injectorKey.publicKey),
       }),
     };
+  }
+
+  // App-update distribution. The proxy intercepts /.flagship/update
+  // before the container, so apps can't ship their own /update that
+  // would lie about lineage. The server enforces signature, subscriber
+  // list, and lineage-coherence cache keying.
+  if (req.path === "/.flagship/update" && deps.updateServer) {
+    const r = await deps.updateServer.handle(app, req);
+    if (r) return r;
   }
 
   // Build the forwarded request: strip incoming X-Flagship-* and inject

@@ -1241,3 +1241,54 @@ export function verifyUninstallApp(r: UninstallAppRequest, sig: Bytes, irkPub: B
     return false;
   }
 }
+
+/**
+ * Pull-request envelope for the app update-pack distribution layer.
+ *
+ * Signed by the **puller's server identity key** (not the phone). The
+ * canonical-home daemon resolves `pullerServerId` to its identity
+ * pubkey via `flagshipserver.com /api/server/by-domain/<id>` and then
+ * verifies. No phone activity is needed for routine update pulls — the
+ * trust grant happened earlier when the puller's host accepted the
+ * app share (an IRK-signed membership mutation).
+ *
+ * `since` is the commit hash the puller already has at HEAD. The home
+ * returns a pack of commits between `since` and current `main` tip.
+ * Empty string means "first pull, send the full history."
+ */
+export interface UpdatePullRequest {
+  pullerServerId: ServerId;
+  /** App identity (creator,slug) — the home cross-checks the puller is in this app's subscriber list. */
+  creator: string;
+  slug: string;
+  /** Commit hash the puller already has, or "" for an initial pull. */
+  since: string;
+  issuedAt: number;
+}
+
+const TAG_UPDATE_PULL = "flagship/update-pull/v1";
+
+function canonicalUpdatePull(r: UpdatePullRequest): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_UPDATE_PULL,
+      r.pullerServerId,
+      r.creator,
+      r.slug,
+      r.since,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signUpdatePull(r: UpdatePullRequest, identity: Keypair): Bytes {
+  return ed.sign(canonicalUpdatePull(r), identity.privateKey);
+}
+
+export function verifyUpdatePull(r: UpdatePullRequest, sig: Bytes, identityPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalUpdatePull(r), identityPub);
+  } catch {
+    return false;
+  }
+}
