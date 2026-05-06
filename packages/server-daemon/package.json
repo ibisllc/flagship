@@ -17,8 +17,12 @@
     "@peculiar/asn1-schema": "^2.7.0",
     "@peculiar/asn1-x509": "^2.7.0",
     "@peculiar/x509": "^2.0.0",
+    "@types/pg": "^8.20.0",
     "acme-client": "^5.4.0",
     "fastify": "^4.28.1",
+    "ioredis": "^5.10.1",
+    "minio": "^8.0.7",
+    "pg": "^8.20.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
