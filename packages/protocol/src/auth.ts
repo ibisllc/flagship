@@ -1153,3 +1153,91 @@ export function verifyServerRevokeBySelf(r: ServerRevokeBySelf, sig: Bytes, iden
     return false;
   }
 }
+
+/**
+ * Phone request to install an app on this server.
+ *
+ * Signed by the **host's** IRK — the user whose box will run the
+ * app. (Not the app's `creator` — when Bob installs Alice's `game1`
+ * on his box, Bob's IRK is the authority because the data lives on
+ * Bob's hardware.)
+ *
+ * The manifest is sent inline (`manifestJson`) so the daemon never
+ * has to fetch from a network the phone doesn't trust. The phone
+ * either composed the manifest itself, fetched + reviewed it from
+ * the LLM harness, or pulled it from a Forgejo repo and is shipping
+ * it over.
+ *
+ * `addOwnerToMembership` defaults to true — the user installing an
+ * app generally wants to be a member of it. The phone install screen
+ * exposes the toggle so a host installing on behalf of others (e.g.,
+ * for the family) can leave themselves out of the membership list.
+ */
+export interface InstallAppRequest {
+  serverId: ServerId;
+  creator: string;
+  slug: string;
+  /** Stringified `flagship.app.json` — the manifest as the phone reviewed it. */
+  manifestJson: string;
+  addOwnerToMembership: boolean;
+  issuedAt: number;
+}
+
+/**
+ * Phone request to uninstall an app. IRK-signed by the host. Removes
+ * the container, drops the data namespace, and forgets the membership
+ * store. Idempotent against an already-uninstalled app.
+ */
+export interface UninstallAppRequest {
+  serverId: ServerId;
+  creator: string;
+  slug: string;
+  issuedAt: number;
+}
+
+const TAG_INSTALL_APP = "flagship/install-app/v1";
+const TAG_UNINSTALL_APP = "flagship/uninstall-app/v1";
+
+function canonicalInstallApp(r: InstallAppRequest): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_INSTALL_APP,
+      r.serverId,
+      r.creator,
+      r.slug,
+      // The manifest is included in the canonical bytes so a MITM can't
+      // swap the manifest body against a captured signature.
+      r.manifestJson,
+      r.addOwnerToMembership ? "1" : "0",
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+function canonicalUninstallApp(r: UninstallAppRequest): Bytes {
+  return new TextEncoder().encode(
+    [TAG_UNINSTALL_APP, r.serverId, r.creator, r.slug, r.issuedAt].join("|"),
+  );
+}
+
+export function signInstallApp(r: InstallAppRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalInstallApp(r), irk.privateKey);
+}
+export function verifyInstallApp(r: InstallAppRequest, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalInstallApp(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signUninstallApp(r: UninstallAppRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalUninstallApp(r), irk.privateKey);
+}
+export function verifyUninstallApp(r: UninstallAppRequest, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalUninstallApp(r), irkPub);
+  } catch {
+    return false;
+  }
+}

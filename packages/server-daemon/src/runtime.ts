@@ -1,8 +1,9 @@
 import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
-import { ed, type Keypair } from "@flagship/protocol";
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
+import { ed, type Bytes, type Keypair } from "@flagship/protocol";
+import { AppPlatform, buildAppHttpHandlers } from "./appPlatform.js";
 import { AppRunner } from "./appRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
@@ -95,18 +96,34 @@ export interface DaemonRuntimeOptions {
     executor: OrderExecutor;
   };
   /**
-   * App-platform plumbing. When `dataServicesEnvFile` points at a
-   * key=value file written by `installer/data-services/init.sh`, the
-   * runtime builds a `DataProvisioner` wired to the running compose
-   * stack. Without it, `dataProvisioner` is null and apps with
-   * `data.stores` declarations will fail at install-time (apps that
-   * declare no stores are still deployable).
+   * App-platform plumbing.
    *
-   * `AppRunner` is built unconditionally (it just shells to docker;
-   * apps that don't need data stores don't need the data layer up).
+   * - `dataServicesEnvFile`: the key=value file written by
+   *   `installer/data-services/init.sh`. When readable, the runtime
+   *   builds a `DataProvisioner` wired to the running compose stack.
+   *   Without it, apps with `data.stores` declarations fail to install
+   *   (apps with no stores still deploy).
+   * - `hostUsername`: the host's username (the middle label of
+   *   `<server>.<host>.flagship.services`). Required to build
+   *   `AppPlatform` (otherwise app install/uninstall is not exposed).
+   * - `hostIrkPub`: the host's IRK pubkey, the authority for
+   *   membership mutations on every app installed here.
+   * - `hostIrk`: optional. When supplied, the install endpoint can
+   *   automatically add the host as `owner` of newly-installed apps
+   *   (the typical UX). Future production callers pass `null` and
+   *   provide a phone-pre-signed membership mutation in the install
+   *   body instead.
+   * - `swk`: Server Working Key, used to derive per-app secrets
+   *   (member stable-id derivation, cross-app fingerprint resistance).
+   *
+   * `AppRunner` is built unconditionally (it just shells to docker).
    */
   appPlatform?: {
     dataServicesEnvFile?: string;
+    hostUsername?: string;
+    hostIrkPub?: Bytes;
+    hostIrk?: Keypair | null;
+    swk?: Bytes;
   };
 }
 
@@ -129,17 +146,22 @@ export interface DaemonRuntime {
   close(): Promise<void>;
   certManager: CertManager;
   /**
-   * App-platform handles — both always present so callers don't need
-   * null-checks. `dataProvisioner` is null when the data-services
-   * compose stack isn't configured for this daemon; in that case,
-   * apps declaring `data.stores` will fail at install-time with a
-   * clear error.
+   * App-platform handles. `appRunner` is unconditional (it just shells
+   * to docker). `dataProvisioner` is null when the data-services
+   * compose stack isn't configured. `appPlatform` is null when
+   * `appPlatform.hostIrkPub` + `appPlatform.swk` weren't supplied —
+   * the daemon then runs without an app-install surface, useful for
+   * tunnel-only / cert-only test profiles.
    */
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
+  appPlatform: AppPlatform | null;
 }
 
-function buildDefaultHandler(opts: DaemonRuntimeOptions): (req: HttpRequest) => Promise<HttpResponse> {
+function buildDefaultHandler(
+  opts: DaemonRuntimeOptions,
+  appPlatformRef: { current: AppPlatform | null },
+): (req: HttpRequest) => Promise<HttpResponse> {
   const orderHandler = opts.orders
     ? buildOrdersHandler({
         serverFqdn: opts.serverFqdn,
@@ -159,6 +181,23 @@ function buildDefaultHandler(opts: DaemonRuntimeOptions): (req: HttpRequest) => 
       }
       return orderHandler(req);
     }
+
+    if (req.path === "/api/apps" || req.path.startsWith("/api/apps/")) {
+      if (!appPlatformRef.current) {
+        return {
+          status: 503,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ error: "AppPlatform not configured" }),
+        };
+      }
+      const appsHandler = buildAppHttpHandlers({
+        platform: appPlatformRef.current,
+        hostIrk: opts.appPlatform?.hostIrk ?? null,
+      });
+      const r = await appsHandler(req);
+      if (r) return r;
+    }
+
     if (req.path === "/" || req.path === "") {
       return {
         status: 200,
@@ -210,7 +249,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
     : [opts.serverFqdn];
   const certManager = new CertManager();
-  const handleHttp = opts.handleHttp ?? buildDefaultHandler(opts);
+  // The default handler needs to refer to AppPlatform, but AppPlatform
+  // is constructed below (after the cert + tunnel). The ref-cell lets
+  // us bind the handler now and populate it later.
+  const appPlatformRef: { current: AppPlatform | null } = { current: null };
+  const handleHttp = opts.handleHttp ?? buildDefaultHandler(opts, appPlatformRef);
 
   // Local TLS server. The tunnel hub forwards inbound TCP from
   // `<serverFqdn>:443` to this socket; the TLS handshake terminates here.
@@ -338,11 +381,25 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
 
   // App-platform construction. AppRunner is unconditional (apps that
   // don't use the data layer can still deploy); DataProvisioner is
-  // wired only if the data-services env file is supplied + readable.
+  // wired only if the data-services env file is supplied + readable;
+  // AppPlatform is wired only when host IRK + SWK are supplied.
   const appRunner = new AppRunner();
   const dataProvisioner = await maybeBuildDataProvisioner(
     opts.appPlatform?.dataServicesEnvFile,
   );
+
+  const apOpts = opts.appPlatform;
+  if (apOpts?.hostUsername && apOpts.hostIrkPub && apOpts.swk) {
+    appPlatformRef.current = new AppPlatform({
+      host: { username: apOpts.hostUsername, irkPub: apOpts.hostIrkPub },
+      swk: apOpts.swk,
+      appRunner,
+      dataProvisioner,
+    });
+    console.log(`[runtime] AppPlatform ready for host ${apOpts.hostUsername}`);
+  } else {
+    console.log(`[runtime] AppPlatform skipped (host IRK / SWK not provided)`);
+  }
 
   return {
     ready: () => Promise.resolve(),
@@ -354,6 +411,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     certManager,
     appRunner,
     dataProvisioner,
+    appPlatform: appPlatformRef.current,
   };
 }
 

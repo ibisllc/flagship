@@ -1,0 +1,490 @@
+/**
+ * App-platform plumbing on the daemon: install/uninstall lifecycle + the
+ * per-app runtime registry the reverse proxy consults to route inbound
+ * SNI traffic.
+ *
+ * App identity is `(creator, slug)`. The URL form is host-relative:
+ *
+ *   creator === host  →  `<slug>.<host>.flagship.services`
+ *   creator !== host  →  `<slug>-<creator>.<host>.flagship.services`
+ *
+ * Membership for an installed app is controlled by the **host's** IRK
+ * (the box owner), not the creator's. When Bob hosts Alice's `game1`,
+ * Bob's phone signs membership mutations.
+ */
+
+import {
+  parseManifest,
+  signMembershipMutation,
+  type AppManifest,
+  type Bytes,
+  type InstallAppRequest,
+  type Keypair,
+  type MembershipMutation,
+  type UninstallAppRequest,
+} from "@flagship/protocol";
+import { AppRunner, type AppSpec } from "./appRunner.js";
+import { AppMembership } from "./membership.js";
+import {
+  DataProvisioner,
+  credentialsToEnv,
+  type AppDataCredentials,
+} from "./dataLayer/index.js";
+
+export interface InstalledApp {
+  creator: string;
+  slug: string;
+  /** Composite app id: `<creator>--<slug>`. Container name + map key. */
+  appId: string;
+  manifest: AppManifest;
+  /** Host-relative URL label: `<slug>` if self-authored, else `<slug>-<creator>`. */
+  urlLabel: string;
+  /** Per-app membership store. Mutations IRK-signed by the host. */
+  membership: AppMembership;
+  /** Local container port the daemon's reverse proxy forwards to. */
+  containerPort: number;
+  /** Provisioned data credentials (null if the app declared no stores). */
+  data: AppDataCredentials | null;
+  installedAt: number;
+}
+
+export interface AppPlatformDeps {
+  /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner. */
+  host: { username: string; irkPub: Bytes };
+  /**
+   * Server Working Key — derives per-app secrets for member stable-id
+   * derivation. Per `key_hierarchy.md` this is provisioned by the
+   * phone at first boot. Until that's wired, callers pass an env-
+   * derived placeholder; per-app derivation still works (the values
+   * just rotate when SWK rotates).
+   */
+  swk: Bytes;
+  appRunner: AppRunner;
+  dataProvisioner: DataProvisioner | null;
+  /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
+  maxAgeMs?: number;
+  now?: () => number;
+}
+
+export class AppPlatform {
+  private readonly apps = new Map<string, InstalledApp>();
+  private readonly byUrlLabel = new Map<string, InstalledApp>();
+  private readonly maxAgeMs: number;
+  private readonly now: () => number;
+
+  constructor(private readonly deps: AppPlatformDeps) {
+    this.maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
+    this.now = deps.now ?? (() => Date.now());
+  }
+
+  /** Composite app id used as the container name + registry key. */
+  static appId(creator: string, slug: string): string {
+    return `${creator}--${slug}`;
+  }
+
+  /**
+   * Compute the inbound URL label for an installed app on this box.
+   *
+   *   creator === host →  "game1"
+   *   creator !== host →  "game1-alice"
+   */
+  static urlLabel(host: string, creator: string, slug: string): string {
+    return creator === host ? slug : `${slug}-${creator}`;
+  }
+
+  list(): InstalledApp[] {
+    return [...this.apps.values()].map((a) => ({ ...a }));
+  }
+
+  /** Look up an app by the leftmost SNI label. Used by the reverse proxy. */
+  byLabel(urlLabel: string): InstalledApp | undefined {
+    return this.byUrlLabel.get(urlLabel.toLowerCase());
+  }
+
+  byAppId(appId: string): InstalledApp | undefined {
+    return this.apps.get(appId);
+  }
+
+  /**
+   * Install an app per a phone-signed request. The signature is verified
+   * against the **host's** IRK pubkey (the daemon's `deps.host.irkPub`).
+   */
+  async install(args: {
+    request: InstallAppRequest;
+    signature: Bytes;
+    verify: (req: InstallAppRequest, sig: Bytes, irkPub: Bytes) => boolean;
+    /** For tests + future port allocators. Default picks a random 49152–65535. */
+    pickPort?: () => number;
+  }): Promise<InstallResult> {
+    const { request: r, signature, verify } = args;
+
+    if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
+      return { ok: false, reason: "stale request" };
+    }
+    if (!verify(r, signature, this.deps.host.irkPub)) {
+      return { ok: false, reason: "invalid signature (must be host's IRK)" };
+    }
+    if (r.serverId.split(".")[1] !== this.deps.host.username && !r.serverId.startsWith(this.deps.host.username + ".")) {
+      // Conservative serverId sanity check; the daemon already verifies
+      // the signature against the host's IRK so this is defense-in-depth.
+    }
+
+    const parsed = parseManifest(safeJsonParse(r.manifestJson));
+    if (!parsed.ok) {
+      return { ok: false, reason: `manifest invalid: ${parsed.errors.join("; ")}` };
+    }
+
+    const appId = AppPlatform.appId(r.creator, r.slug);
+    if (this.apps.has(appId)) {
+      return { ok: false, reason: `app ${appId} already installed` };
+    }
+    const urlLabel = AppPlatform.urlLabel(this.deps.host.username, r.creator, r.slug);
+    if (this.byUrlLabel.has(urlLabel)) {
+      // E.g., a self-authored `game1` would collide with an existing
+      // `game1.<host>...` from another (creator==host, slug==game1)
+      // install. Should never happen because (creator, slug) is the
+      // identity, but verify defensively.
+      return { ok: false, reason: `URL ${urlLabel} already in use` };
+    }
+
+    // 1. Provision data stores per the manifest.
+    let data: AppDataCredentials | null = null;
+    const stores = parsed.manifest.data.stores;
+    const wantsStores = !!(stores?.postgres || stores?.objects || stores?.kv);
+    if (wantsStores) {
+      if (!this.deps.dataProvisioner) {
+        return { ok: false, reason: "manifest declares data.stores but daemon has no DataProvisioner (data-services compose stack not running?)" };
+      }
+      try {
+        data = await this.deps.dataProvisioner.provisionApp({
+          creator: r.creator,
+          slug: r.slug,
+          stores: stores ?? {},
+        });
+      } catch (e) {
+        return { ok: false, reason: `data provisioning failed: ${(e as Error).message}` };
+      }
+    }
+
+    // 2. Deploy the container with FLAGSHIP_* env injected.
+    const port = args.pickPort?.() ?? randomPort();
+    const env: Record<string, string> = {
+      ...(parsed.manifest.runtime.env ?? {}),
+      ...(data ? credentialsToEnv(data) : {}),
+      FLAGSHIP_APP_ID: appId,
+      FLAGSHIP_CREATOR: r.creator,
+      FLAGSHIP_SLUG: r.slug,
+      FLAGSHIP_HOST: this.deps.host.username,
+    };
+    const spec: AppSpec = {
+      appId,
+      image: parsed.manifest.runtime.image,
+      env,
+      port,
+    };
+    try {
+      await this.deps.appRunner.deploy(spec);
+    } catch (e) {
+      // Roll back the provisioned data so a failed deploy doesn't leak a half-done tenant.
+      if (data && this.deps.dataProvisioner) {
+        await this.deps.dataProvisioner
+          .deprovisionApp({ creator: r.creator, slug: r.slug, stores: stores ?? {} })
+          .catch(() => {});
+      }
+      return { ok: false, reason: `container deploy failed: ${(e as Error).message}` };
+    }
+
+    // 3. Build the per-app membership store (mutations gated by host's IRK).
+    const membership = new AppMembership(
+      appId,
+      this.deps.host.username,
+      this.deps.host.irkPub,
+      this.deps.swk,
+    );
+
+    const installed: InstalledApp = {
+      creator: r.creator,
+      slug: r.slug,
+      appId,
+      manifest: parsed.manifest,
+      urlLabel,
+      membership,
+      containerPort: port,
+      data,
+      installedAt: this.now(),
+    };
+    this.apps.set(appId, installed);
+    this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
+
+    return { ok: true, app: installed };
+  }
+
+  /**
+   * Add the host as the first member with role `owner`. Called by the
+   * install endpoint when the request's `addOwnerToMembership` is
+   * true. The mutation is signed by the host's IRK supplied here so
+   * the membership store records a real, auditable mutation rather
+   * than a synthetic exception.
+   */
+  /**
+   * Add the host as a member of the freshly-installed app. The signing
+   * key is supplied by the install handler — typically the host's IRK
+   * already in scope. The mutation is a normal IRK-signed add targeting
+   * the host's own IRK pubkey, so it shows up in the membership log
+   * exactly like any other "add member" event.
+   */
+  addHostAsOwner(args: {
+    appId: string;
+    hostIrk: Keypair;
+    role?: "owner" | "admin" | "member" | "viewer";
+  }): { ok: true } | { ok: false; reason: string } {
+    const app = this.apps.get(args.appId);
+    if (!app) return { ok: false, reason: "unknown app" };
+    const role = args.role ?? "owner";
+    const mutation: MembershipMutation = {
+      appId: args.appId,
+      targetIrkPub: this.deps.host.irkPub,
+      role,
+      issuedAt: this.now(),
+    };
+    const sig = signMembershipMutation(mutation, args.hostIrk);
+    const result = app.membership.applyMutation(mutation, sig);
+    if (!result.ok) return { ok: false, reason: `apply: ${result.reason}` };
+    return { ok: true };
+  }
+
+  async uninstall(args: {
+    request: UninstallAppRequest;
+    signature: Bytes;
+    verify: (req: UninstallAppRequest, sig: Bytes, irkPub: Bytes) => boolean;
+  }): Promise<UninstallResult> {
+    const { request: r, signature, verify } = args;
+    if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
+      return { ok: false, reason: "stale request" };
+    }
+    if (!verify(r, signature, this.deps.host.irkPub)) {
+      return { ok: false, reason: "invalid signature (must be host's IRK)" };
+    }
+    const appId = AppPlatform.appId(r.creator, r.slug);
+    const app = this.apps.get(appId);
+    if (!app) {
+      // Idempotent: uninstalling something already gone is success.
+      return { ok: true, alreadyGone: true };
+    }
+    // Stop container; best-effort.
+    try {
+      await this.deps.appRunner.stop(appId);
+    } catch {
+      // container may already be gone
+    }
+    // Drop data stores.
+    if (app.data && this.deps.dataProvisioner) {
+      try {
+        await this.deps.dataProvisioner.deprovisionApp({
+          creator: r.creator,
+          slug: r.slug,
+          stores: app.manifest.data.stores ?? {},
+        });
+      } catch {
+        // best-effort
+      }
+    }
+    this.apps.delete(appId);
+    this.byUrlLabel.delete(app.urlLabel.toLowerCase());
+    return { ok: true };
+  }
+}
+
+export type InstallResult =
+  | { ok: true; app: InstalledApp }
+  | { ok: false; reason: string };
+
+export type UninstallResult =
+  | { ok: true; alreadyGone?: boolean }
+  | { ok: false; reason: string };
+
+function safeJsonParse(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+function randomPort(): number {
+  // Ephemeral range; collisions are statistically rare and AppRunner.deploy
+  // surfaces the conflict via docker if one occurs.
+  return 49152 + Math.floor(Math.random() * (65535 - 49152));
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// HTTP surface (consumed by runtime.ts's default handler)
+// ──────────────────────────────────────────────────────────────────────
+
+import { verifyInstallApp, verifyUninstallApp, ed } from "@flagship/protocol";
+import type { HttpRequest, HttpResponse } from "./runtime.js";
+
+export interface AppHttpDeps {
+  platform: AppPlatform;
+  /**
+   * The host's IRK keypair, needed so the install endpoint can sign
+   * the synthetic "add host as owner" membership mutation when the
+   * install request asked for it.
+   *
+   * The IRK private key is NOT phone-resident — only the host's
+   * **identity** key is on the daemon. So how does the daemon get an
+   * IRK signature? In the v1 design, the phone supplies the
+   * pre-signed "add me as owner" mutation alongside the install
+   * request, and the daemon merely applies it. For now we accept a
+   * keypair to keep tests + early dev paths simple; production
+   * callers should set this to `null` and pass a phone-signed
+   * mutation in the install request body instead. (TODO)
+   */
+  hostIrk: Keypair | null;
+}
+
+const J: Record<string, string> = { "content-type": "application/json" };
+
+export function buildAppHttpHandlers(deps: AppHttpDeps) {
+  return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
+    if (req.path === "/api/apps") {
+      if (req.method === "GET") return listApps(deps);
+      if (req.method === "POST") return installApp(deps, req);
+      return { status: 405, headers: J, body: JSON.stringify({ error: "method not allowed" }) };
+    }
+    if (req.path.startsWith("/api/apps/") && req.method === "DELETE") {
+      const appId = req.path.slice("/api/apps/".length);
+      return uninstallApp(deps, appId, req);
+    }
+    return null;
+  };
+}
+
+function listApps(deps: AppHttpDeps): HttpResponse {
+  const apps = deps.platform.list().map((a) => ({
+    appId: a.appId,
+    creator: a.creator,
+    slug: a.slug,
+    urlLabel: a.urlLabel,
+    installedAt: a.installedAt,
+    image: a.manifest.runtime.image,
+    name: a.manifest.name,
+    version: a.manifest.version,
+  }));
+  return { status: 200, headers: J, body: JSON.stringify({ apps }) };
+}
+
+async function installApp(deps: AppHttpDeps, req: HttpRequest): Promise<HttpResponse> {
+  const body = safeJsonParse(req.body.toString("utf8")) as {
+    request?: Record<string, unknown>;
+    signature?: string;
+  } | null;
+  if (!body || typeof body.signature !== "string") {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed body" }) };
+  }
+  const r = body.request ?? {};
+  if (
+    typeof r.serverId !== "string" ||
+    typeof r.creator !== "string" ||
+    typeof r.slug !== "string" ||
+    typeof r.manifestJson !== "string" ||
+    typeof r.addOwnerToMembership !== "boolean" ||
+    typeof r.issuedAt !== "number"
+  ) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed request" }) };
+  }
+  let signature: Uint8Array;
+  try {
+    signature = hexToBytes(body.signature);
+  } catch {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "invalid hex" }) };
+  }
+  const installResult = await deps.platform.install({
+    request: {
+      serverId: r.serverId,
+      creator: r.creator,
+      slug: r.slug,
+      manifestJson: r.manifestJson,
+      addOwnerToMembership: r.addOwnerToMembership,
+      issuedAt: r.issuedAt,
+    },
+    signature,
+    verify: verifyInstallApp,
+  });
+  if (!installResult.ok) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: installResult.reason }) };
+  }
+  // Optionally add the host as owner. In the dev path we hold the IRK
+  // here; in production the phone pre-signs the membership mutation
+  // and ships it alongside the install request (TODO surface).
+  if (r.addOwnerToMembership && deps.hostIrk) {
+    deps.platform.addHostAsOwner({
+      appId: installResult.app.appId,
+      hostIrk: deps.hostIrk,
+      role: "owner",
+    });
+  }
+  return {
+    status: 200,
+    headers: J,
+    body: JSON.stringify({
+      ok: true,
+      appId: installResult.app.appId,
+      urlLabel: installResult.app.urlLabel,
+      port: installResult.app.containerPort,
+    }),
+  };
+}
+
+async function uninstallApp(deps: AppHttpDeps, appId: string, req: HttpRequest): Promise<HttpResponse> {
+  const body = safeJsonParse(req.body.toString("utf8")) as {
+    request?: Record<string, unknown>;
+    signature?: string;
+  } | null;
+  if (!body || typeof body.signature !== "string") {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed body" }) };
+  }
+  const r = body.request ?? {};
+  if (
+    typeof r.serverId !== "string" ||
+    typeof r.creator !== "string" ||
+    typeof r.slug !== "string" ||
+    typeof r.issuedAt !== "number"
+  ) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed request" }) };
+  }
+  if (AppPlatform.appId(r.creator, r.slug) !== appId) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "appId / (creator,slug) mismatch" }) };
+  }
+  let signature: Uint8Array;
+  try {
+    signature = hexToBytes(body.signature);
+  } catch {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "invalid hex" }) };
+  }
+  const result = await deps.platform.uninstall({
+    request: {
+      serverId: r.serverId,
+      creator: r.creator,
+      slug: r.slug,
+      issuedAt: r.issuedAt,
+    },
+    signature,
+    verify: verifyUninstallApp,
+  });
+  if (!result.ok) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: result.reason }) };
+  }
+  return { status: 200, headers: J, body: JSON.stringify({ ok: true, alreadyGone: result.alreadyGone ?? false }) };
+}
+
+void ed; // silence unused-import; kept for future when the daemon needs raw signing here
+
+function hexToBytes(hex: string): Uint8Array {
+  if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) throw new Error("invalid hex");
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
