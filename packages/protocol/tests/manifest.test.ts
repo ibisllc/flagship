@@ -258,3 +258,121 @@ describe("parseManifest — input shape", () => {
     expect(r.errors.length).toBeGreaterThan(3);
   });
 });
+
+describe("parseManifest — browser field (pod-resident Chromium gate)", () => {
+  it("manifest without `browser` parses fine; the field stays undefined", () => {
+    const r = parseManifest(valid());
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.browser).toBeUndefined();
+  });
+
+  it("accepts a literal-host domain list", () => {
+    const m = {
+      ...valid(),
+      browser: { domains: ["amazon.com", "accounts.google.com"] },
+    };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.browser?.domains).toEqual(["amazon.com", "accounts.google.com"]);
+  });
+
+  it("accepts wildcard hosts (*.example.com)", () => {
+    const m = { ...valid(), browser: { domains: ["*.example.com"] } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.browser?.domains).toEqual(["*.example.com"]);
+  });
+
+  it("accepts a mixed literal + wildcard list (apex + subdomains)", () => {
+    const m = {
+      ...valid(),
+      browser: { domains: ["example.com", "*.example.com"] },
+    };
+    expect(parseManifest(m).ok).toBe(true);
+  });
+
+  it("captures the login_required UX hint", () => {
+    const m = {
+      ...valid(),
+      browser: { domains: ["amazon.com"], login_required: true },
+    };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.browser?.login_required).toBe(true);
+  });
+
+  it.each([
+    ["scheme prefix", "https://example.com"],
+    ["path suffix", "example.com/login"],
+    ["single-label host", "localhost"],
+    ["trailing dot", "example.com."],
+    ["leading dot", ".example.com"],
+    ["multiple wildcards", "*.*.example.com"],
+    ["uppercase", "EXAMPLE.com"],
+    ["underscore", "ex_ample.com"],
+    ["empty string", ""],
+  ])("rejects malformed domain entry: %s (%s)", (_label, bad) => {
+    const m = { ...valid(), browser: { domains: [bad] } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects duplicate domain entries", () => {
+    const m = { ...valid(), browser: { domains: ["x.com", "x.com"] } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join("|")).toContain("duplicate");
+  });
+
+  it("rejects non-array domains", () => {
+    const m = { ...valid(), browser: { domains: "amazon.com" } };
+    expect(parseManifest(m).ok).toBe(false);
+  });
+
+  it("rejects unknown fields under browser to surface typos", () => {
+    const m = {
+      ...valid(),
+      browser: { domains: ["amazon.com"], domain: ["typo"] },
+    };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join("|")).toContain("not a recognized field");
+  });
+
+  it("rejects login_required of a non-boolean type", () => {
+    const m = {
+      ...valid(),
+      browser: { domains: ["amazon.com"], login_required: "yes" },
+    };
+    expect(parseManifest(m).ok).toBe(false);
+  });
+
+  it("rejects browser as a non-object", () => {
+    const m = { ...valid(), browser: "amazon.com" };
+    expect(parseManifest(m).ok).toBe(false);
+  });
+});
+
+describe("matchBrowserDomain — DomainGate uses this exact matcher", () => {
+  it("literal hosts match exactly, no subdomain leakage", async () => {
+    const { matchBrowserDomain } = await import("../src/manifest.js");
+    expect(matchBrowserDomain("amazon.com", "amazon.com")).toBe(true);
+    expect(matchBrowserDomain("amazon.com", "www.amazon.com")).toBe(false);
+    expect(matchBrowserDomain("amazon.com", "evilamazon.com")).toBe(false);
+  });
+
+  it("wildcard *.example.com matches any subdomain but NOT the apex", async () => {
+    const { matchBrowserDomain } = await import("../src/manifest.js");
+    expect(matchBrowserDomain("*.example.com", "foo.example.com")).toBe(true);
+    expect(matchBrowserDomain("*.example.com", "deep.foo.example.com")).toBe(true);
+    expect(matchBrowserDomain("*.example.com", "example.com")).toBe(false);
+    expect(matchBrowserDomain("*.example.com", "evilexample.com")).toBe(false);
+    expect(matchBrowserDomain("*.example.com", "fooexample.com")).toBe(false);
+  });
+});

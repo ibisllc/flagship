@@ -18,6 +18,14 @@ export interface AppManifest {
   network: AppNetwork;
   access: AppAccess;
   migration: AppMigration;
+  /**
+   * Optional. Apps that need to drive the pod-resident Chromium
+   * browser declare here which web hosts they may navigate to. The
+   * user reviews + approves this list at install time; the daemon
+   * hard-blocks any navigation outside the set. Apps that don't set
+   * this field cannot use the browser API at all.
+   */
+  browser?: AppBrowser;
 }
 
 export interface AppRuntime {
@@ -128,6 +136,46 @@ export interface AppAccess {
   queryable_by?: string[];
 }
 
+export interface AppBrowser {
+  /**
+   * Hosts the app may navigate the pod's Chromium to. Each entry is
+   * either a literal host (`amazon.com`, `accounts.google.com`) or a
+   * single-label wildcard (`*.example.com`, which matches any
+   * subdomain of example.com but NOT example.com itself — declare
+   * both if you need both). No schemes, no paths, no single-label
+   * hosts (`localhost` is rejected).
+   */
+  domains: string[];
+  /**
+   * UX hint for the install screen. When true, the phone tells the
+   * user "this app needs you to log in to its declared domains for
+   * normal operation." Doesn't change daemon behavior — every login
+   * still goes through the phone-mediated password flow.
+   */
+  login_required?: boolean;
+}
+
+/** Match a host literal `example.com` or `accounts.google.com`. Multi-label only. */
+const LITERAL_HOST_RE =
+  /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+/** Match a wildcard host `*.example.com`. Exactly one leading `*.`; rest must be multi-label. */
+const WILDCARD_HOST_RE =
+  /^\*\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/**
+ * Match a request URL host against a domain entry from a manifest.
+ * Exposed so the daemon's DomainGate can reuse the exact same
+ * matching rules the manifest validator enforces.
+ */
+export function matchBrowserDomain(entry: string, host: string): boolean {
+  if (entry === host) return true;
+  if (entry.startsWith("*.")) {
+    const suffix = entry.slice(1); // ".example.com"
+    return host.endsWith(suffix) && host.length > suffix.length;
+  }
+  return false;
+}
+
 export type MigrationVerification = "standard" | "elevated";
 
 export interface AppMigration {
@@ -180,6 +228,7 @@ export function parseManifest(input: unknown): ManifestParseResult {
   const network = parseNetwork(m.network, e);
   const access = parseAccess(m.access, e);
   const migration = parseMigration(m.migration, e);
+  const browser = parseBrowser(m.browser, e);
 
   if (errors.length > 0) return { ok: false, errors };
 
@@ -195,6 +244,7 @@ export function parseManifest(input: unknown): ManifestParseResult {
       network: network!,
       access: access!,
       migration: migration!,
+      browser,
     },
   };
 }
@@ -389,6 +439,59 @@ function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined 
     public_routes: publicRoutes,
     queryable_by: queryableBy,
   };
+}
+
+function parseBrowser(v: unknown, e: (m: string) => void): AppBrowser | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    e("browser must be an object");
+    return undefined;
+  }
+  const b = v as Record<string, unknown>;
+
+  if (!Array.isArray(b.domains)) {
+    e("browser.domains must be an array of host strings");
+    return undefined;
+  }
+  const domains: string[] = [];
+  const seen = new Set<string>();
+  for (const d of b.domains) {
+    if (typeof d !== "string") {
+      e("browser.domains entries must be strings");
+      continue;
+    }
+    if (!LITERAL_HOST_RE.test(d) && !WILDCARD_HOST_RE.test(d)) {
+      e(
+        `browser.domains entry ${JSON.stringify(d)} must be a host like "example.com" or "*.example.com" (no schemes, paths, single-label hosts, or trailing dots)`,
+      );
+      continue;
+    }
+    if (seen.has(d)) {
+      e(`browser.domains has duplicate entry ${JSON.stringify(d)}`);
+      continue;
+    }
+    seen.add(d);
+    domains.push(d);
+  }
+
+  let loginRequired: boolean | undefined;
+  if (b.login_required !== undefined) {
+    if (typeof b.login_required !== "boolean") {
+      e("browser.login_required must be a boolean when present");
+    } else {
+      loginRequired = b.login_required;
+    }
+  }
+
+  // Reject unknown keys so a typo'd field (e.g. "domain" singular) doesn't
+  // silently disable the gate the user thought they were declaring.
+  for (const k of Object.keys(b)) {
+    if (k !== "domains" && k !== "login_required") {
+      e(`browser.${k} is not a recognized field`);
+    }
+  }
+
+  return { domains, login_required: loginRequired };
 }
 
 function parseMigration(v: unknown, e: (m: string) => void): AppMigration | undefined {
