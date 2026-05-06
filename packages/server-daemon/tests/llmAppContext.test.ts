@@ -50,6 +50,48 @@ describe("buildLlmAppContext", () => {
     expect(ctx.markdown).toContain("FLAGSHIP_PEERS_TOKEN");
   });
 
+  it("prependFlagshipSystemPrompt inserts the context markdown as the first system message", async () => {
+    const { prependFlagshipSystemPrompt } = await import("../src/llmAppContext.js");
+    const deployed = new Map<string, { manifest: AppManifest }>();
+    deployed.set("habit-tracker", { manifest: manifest() });
+    const ctx = await buildLlmAppContext({
+      manifest: manifest(),
+      deployedApps: deployed,
+      revealCredentials: false,
+    });
+    const req = {
+      model: "claude-3-5-sonnet",
+      messages: [
+        { role: "user" as const, content: "Add a /streak endpoint." },
+      ],
+    };
+    const augmented = prependFlagshipSystemPrompt(req, ctx);
+    expect(augmented.messages).toHaveLength(2);
+    expect(augmented.messages[0].role).toBe("system");
+    expect(augmented.messages[0].content).toContain("Flagship app context");
+    expect(augmented.messages[0].content).toContain("`_<creator>_<slug>`");
+    expect(augmented.messages[1]).toEqual(req.messages[0]);
+    // Original request unchanged (immutability)
+    expect(req.messages).toHaveLength(1);
+  });
+
+  it("explicitly documents the host-independent data-identity convention so vibe-coded apps stay portable", async () => {
+    const deployed = new Map<string, { manifest: AppManifest }>();
+    deployed.set("habit-tracker", { manifest: manifest() });
+    const ctx = await buildLlmAppContext({
+      manifest: manifest(),
+      deployedApps: deployed,
+      revealCredentials: false,
+    });
+    expect(ctx.markdown).toContain("Data identity (host-independent)");
+    expect(ctx.markdown).toContain("`_<creator>_<slug>`");
+    expect(ctx.markdown).toContain("`<creator>:<slug>:`");
+    expect(ctx.markdown).toContain("`<creator>-<slug>`");
+    // The hard rules now flag transferability concerns explicitly.
+    expect(ctx.markdown).toContain("break on transfer between users");
+    expect(ctx.markdown).toContain("`migrations/NNNN_*.sql|.ts`");
+  });
+
   it("hides credential URLs by default and reveals them only when reveal=true", async () => {
     const provisioner = new DataProvisioner({
       postgres: new InMemoryPostgresAdmin(),
@@ -85,7 +127,7 @@ describe("buildLlmAppContext", () => {
     expect(revealed.markdown).toContain("supersecret");
   });
 
-  it("surfaces multi-instance Postgres env vars + the FLAGSHIP_PG_INSTANCES list", async () => {
+  it("surfaces multi-store Postgres env vars + the FLAGSHIP_PG_STORES list", async () => {
     const provisioner = new DataProvisioner({
       postgres: new InMemoryPostgresAdmin(),
       objects: new InMemoryMinioAdmin(),
@@ -108,7 +150,7 @@ describe("buildLlmAppContext", () => {
       revealCredentials: false,
     });
     const names = ctx.envVars.map((v) => v.name);
-    expect(names).toContain("FLAGSHIP_PG_INSTANCES");
+    expect(names).toContain("FLAGSHIP_PG_STORES");
     expect(names).toContain("FLAGSHIP_PG_URL_MAIN");
     expect(names).toContain("FLAGSHIP_PG_URL_ANALYTICS");
     expect(names).not.toContain("FLAGSHIP_PG_URL"); // no singleton var when multi
