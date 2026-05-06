@@ -109,7 +109,10 @@ export class DataProvisioner {
         const id: AppDataIdentity = { creator, slug, storeName };
         const bucket = s3Bucket(id);
         const accessKey = s3AccessKey(id);
-        const secretKey = secret();
+        // MinIO service-account secrets must be 8–40 chars; generateSecret
+        // emits 43-char base64url. 40 chars of base64url is ~240 bits of
+        // entropy, well past anything that matters for an internal key.
+        const secretKey = secret().slice(0, 40);
         await this.opts.objects.createBucketAndKey({ bucket, accessKey, secretKey });
         out.objects[storeName] = {
           endpoint: ep.s3Endpoint ?? "http://127.0.0.1:9000",

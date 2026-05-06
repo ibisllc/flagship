@@ -1,7 +1,11 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { Client as PgClient } from "pg";
 import { Redis as IORedis } from "ioredis";
 import { Client as MinioClient } from "minio";
 import type { MinioAdmin, PostgresAdmin, RedisAdmin } from "./admin.js";
+
+const execFileP = promisify(execFile);
 
 /**
  * Real admin implementations that talk to the data services brought up
@@ -48,11 +52,14 @@ export class RealPostgresAdmin implements PostgresAdmin {
   async createRoleAndDb(args: { db: string; role: string; password: string }): Promise<void> {
     assertSafeIdent(args.db);
     assertSafeIdent(args.role);
+    // Postgres rejects parameter binding ($1) inside DDL. The role + db
+    // identifiers come from assertSafeIdent so they're double-quoted as
+    // literals; the password is escaped as a SQL string literal (single
+    // quotes doubled). generateSecret currently emits base64url (no
+    // single quotes / backslashes) but we don't rely on that here.
+    const pwLiteral = `'${args.password.replace(/'/g, "''")}'`;
     await this.withClient(async (c) => {
-      // Roles + databases must be created with literal identifiers (no
-      // parameter binding allowed). All inputs are validated through
-      // assertSafeIdent so we control the entire identifier set.
-      await c.query(`CREATE ROLE "${args.role}" LOGIN PASSWORD $1`, [args.password]);
+      await c.query(`CREATE ROLE "${args.role}" LOGIN PASSWORD ${pwLiteral}`);
       await c.query(`CREATE DATABASE "${args.db}" OWNER "${args.role}"`);
       await c.query(`REVOKE CONNECT ON DATABASE "${args.db}" FROM PUBLIC`);
       await c.query(`GRANT CONNECT ON DATABASE "${args.db}" TO "${args.role}"`);
@@ -192,10 +199,30 @@ export interface RealMinioAdminOptions {
   rootUser: string;
   /** Root password. */
   rootPassword: string;
+  /** Path to the `mc` binary. Default `mc` (from PATH). */
+  mcBinary?: string;
+  /** mc config dir, isolated from the invoking user's home. */
+  mcConfigDir?: string;
+  /** Alias name to register inside mc's config. */
+  mcAlias?: string;
 }
 
+/**
+ * MinIO admin operations split between two clients:
+ *
+ *   - The `minio` npm SDK handles bucket existence, object listing, and
+ *     direct object I/O — these endpoints work with plain S3 sigv4.
+ *   - Service-account / user / policy admin endpoints aren't exposed by
+ *     the SDK in any released version; we shell out to the `mc` CLI.
+ *     `installer/data-services/init.sh` installs `mc` on the host.
+ *
+ * The mc alias is set lazily (idempotent) on first admin call. We use
+ * a dedicated config dir so the daemon's writes can't collide with a
+ * sysadmin running mc interactively.
+ */
 export class RealMinioAdmin implements MinioAdmin {
   private readonly opts: RealMinioAdminOptions;
+  private aliasReady = false;
   constructor(opts: RealMinioAdminOptions) {
     this.opts = opts;
   }
@@ -210,6 +237,41 @@ export class RealMinioAdmin implements MinioAdmin {
     });
   }
 
+  private alias(): string {
+    return this.opts.mcAlias ?? "flagship";
+  }
+
+  private mc(): string {
+    return this.opts.mcBinary ?? "mc";
+  }
+
+  private endpointUrl(): string {
+    const proto = this.opts.useSSL ? "https" : "http";
+    const port = this.opts.port ?? 9000;
+    return `${proto}://${this.opts.endPoint}:${port}`;
+  }
+
+  private async runMc(args: string[]): Promise<{ stdout: string; stderr: string }> {
+    const env = {
+      ...process.env,
+      ...(this.opts.mcConfigDir ? { MC_CONFIG_DIR: this.opts.mcConfigDir } : {}),
+    };
+    return execFileP(this.mc(), args, { env, timeout: 30_000 });
+  }
+
+  private async ensureAlias(): Promise<void> {
+    if (this.aliasReady) return;
+    await this.runMc([
+      "alias",
+      "set",
+      this.alias(),
+      this.endpointUrl(),
+      this.opts.rootUser,
+      this.opts.rootPassword,
+    ]);
+    this.aliasReady = true;
+  }
+
   async createBucketAndKey(args: { bucket: string; accessKey: string; secretKey: string }): Promise<void> {
     assertS3Name(args.bucket);
     assertS3Name(args.accessKey);
@@ -217,20 +279,10 @@ export class RealMinioAdmin implements MinioAdmin {
     if (!(await c.bucketExists(args.bucket))) {
       await c.makeBucket(args.bucket, "us-east-1");
     }
-    // Create a service account scoped to this single bucket. The MinIO
-    // Admin API exposes `addServiceAccount` on the standard SDK only
-    // in some versions; if it's missing, fall back to the mc CLI shim
-    // below. The compose stack ships modern minio so the SDK path is
-    // expected to work in production.
-    const adminAny = c as unknown as {
-      addServiceAccount?: (args: {
-        accessKey: string;
-        secretKey: string;
-        targetUser: string;
-        policy?: string;
-      }) => Promise<unknown>;
-    };
-    const policy = JSON.stringify({
+    await this.ensureAlias();
+    // Service account scoped to this single bucket. mc takes the policy
+    // JSON via --policy <file>, so we write it to a tempfile.
+    const policy = {
       Version: "2012-10-17",
       Statement: [
         {
@@ -239,26 +291,37 @@ export class RealMinioAdmin implements MinioAdmin {
           Resource: [`arn:aws:s3:::${args.bucket}`, `arn:aws:s3:::${args.bucket}/*`],
         },
       ],
-    });
-    if (typeof adminAny.addServiceAccount === "function") {
-      await adminAny.addServiceAccount({
-        accessKey: args.accessKey,
-        secretKey: args.secretKey,
-        targetUser: this.opts.rootUser,
-        policy,
-      });
-      return;
+    };
+    const { writeFile, mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "flagship-mc-"));
+    const file = join(dir, "policy.json");
+    try {
+      await writeFile(file, JSON.stringify(policy));
+      await this.runMc([
+        "admin",
+        "user",
+        "svcacct",
+        "add",
+        this.alias(),
+        this.opts.rootUser,
+        "--access-key",
+        args.accessKey,
+        "--secret-key",
+        args.secretKey,
+        "--policy",
+        file,
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
-    throw new Error(
-      "MinIO SDK does not expose addServiceAccount in this version — install a newer minio package or wire the mc CLI",
-    );
   }
 
   async dropBucketAndKey(args: { bucket: string; accessKey: string }): Promise<void> {
     assertS3Name(args.bucket);
     assertS3Name(args.accessKey);
     const c = this.client();
-    // Empty + remove the bucket.
     if (await c.bucketExists(args.bucket)) {
       const stream = c.listObjectsV2(args.bucket, "", true);
       const keys: string[] = [];
@@ -272,13 +335,17 @@ export class RealMinioAdmin implements MinioAdmin {
       if (keys.length > 0) await c.removeObjects(args.bucket, keys);
       await c.removeBucket(args.bucket);
     }
-    // Delete the service account.
-    const adminAny = c as unknown as {
-      deleteServiceAccount?: (accessKey: string) => Promise<unknown>;
-    };
-    if (typeof adminAny.deleteServiceAccount === "function") {
-      await adminAny.deleteServiceAccount(args.accessKey).catch(() => {});
-    }
+    await this.ensureAlias();
+    // Best-effort — service account may already be gone if a previous
+    // cleanup completed partially.
+    await this.runMc([
+      "admin",
+      "user",
+      "svcacct",
+      "rm",
+      this.alias(),
+      args.accessKey,
+    ]).catch(() => {});
   }
 
   async listObjects(bucket: string, prefix: string, max: number): Promise<{ key: string; size: number }[]> {

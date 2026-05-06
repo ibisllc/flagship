@@ -32,6 +32,11 @@ mkdir -p "$SECRETS_DIR"
 chmod 700 "$SECRETS_DIR"
 chmod 700 "$DATA_DIR"
 
+# Forgejo's `:9-rootless` image runs as UID/GID 1000 inside the container.
+# The volume bind-mount preserves host ownership; without this chown the
+# container can't create /var/lib/gitea/git and crashloops on startup.
+chown -R 1000:1000 "$DATA_DIR/forgejo"
+
 gen_secret() {
     head -c 32 /dev/urandom | base64 | tr -d '+/=\n' | head -c 40
 }
@@ -66,6 +71,15 @@ echo "flagship: data-services secrets ensured at $SECRETS_FILE"
 if [ ! -f "$COMPOSE" ]; then
     echo "flagship: missing $COMPOSE — install.sh should have copied it"
     exit 1
+fi
+
+# MinIO admin operations (service-account create/drop, policy attach)
+# require the `mc` CLI — the `minio` npm SDK doesn't expose those
+# endpoints. Install once into /usr/local/bin if not already present.
+if [ ! -x /usr/local/bin/mc ]; then
+    echo "flagship: installing mc CLI"
+    curl -fsSL -o /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc
+    chmod +x /usr/local/bin/mc
 fi
 
 echo "flagship: starting compose stack"
