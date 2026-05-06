@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Flagship works</title>
+  <meta name="description" content="From your phone to your hardware: every step of how a Flagship server is born, lives, and stays yours.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    .page-hero {
+      padding: var(--space-12) 0 var(--space-8);
+      max-width: var(--reading-width);
+    }
+    .page-hero h1 {
+      font-size: var(--display-size);
+      line-height: var(--display-line);
+      letter-spacing: -0.02em;
+      margin-bottom: var(--space-4);
+    }
+    @media (max-width: 720px) {
+      .page-hero h1 { font-size: 40px; line-height: 48px; }
+    }
+    .page-hero p {
+      font-size: var(--h4-size);
+      line-height: 28px;
+      color: var(--text-muted);
+    }
+    .stage {
+      padding: var(--space-12) 0;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: var(--space-8);
+    }
+    @media (max-width: 720px) { .stage { grid-template-columns: 1fr; } }
+    .stage-num {
+      font-family: var(--font-mono);
+      font-size: var(--caption-size);
+      color: var(--text-muted);
+    }
+    .stage h2 {
+      font-size: var(--h2-size);
+      line-height: var(--h2-line);
+      letter-spacing: -0.01em;
+      margin-bottom: var(--space-4);
+    }
+    .stage .body {
+      max-width: var(--reading-width);
+      color: var(--text-muted);
+    }
+    .stage .body p { margin-bottom: var(--space-4); }
+    .seq {
+      display: grid;
+      gap: var(--space-3);
+      margin: var(--space-6) 0;
+      padding: var(--space-6);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      line-height: var(--mono-line);
+      color: var(--text);
+    }
+    .seq .arrow { color: var(--text-muted); }
+    .seq .who { color: var(--primary); }
+    .seq .note { color: var(--text-muted); margin-left: var(--space-3); }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">Flagship</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/how-it-works" aria-current="page">How it works</a>
+      <a href="/marketplace">Apps</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/status/">Status</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/build/" class="btn btn--primary">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section class="page-hero">
+    <h1>How a Flagship server is born.</h1>
+    <p>Five stages. The phone signs every step. We never see your data — even when you're literally registering for the first time.</p>
+  </section>
+
+  <section class="stage">
+    <div>
+      <div class="stage-num">STAGE 01</div>
+      <strong style="display:block; margin-top: var(--space-2);">Pair your phone</strong>
+    </div>
+    <div class="body">
+      <h2>The phone is the keychain.</h2>
+      <p>You install the Flagship app. It generates a master key inside your phone's secure enclave (Touch ID / Face ID / Android StrongBox). That key never leaves your phone. From it we derive three more: one for identity (your username), one for backup-authorization (LUKS unlock), one for working keys (per-server secrets).</p>
+      <p>You pick a username. The phone signs a registration request with the identity key. flagshipserver.com records the username + the public half. That's it — no email, no password, no SMS.</p>
+      <div class="seq">
+        <span><span class="who">phone</span><span class="arrow"> → </span>flagshipserver.com<span class="note"># RegisterUser{username, irkPub}, IRK-signed</span></span>
+        <span><span class="who">.com</span><span class="arrow"> → </span>D1: usernames<span class="note"># PRIMARY KEY username</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div>
+      <div class="stage-num">STAGE 02</div>
+      <strong style="display:block; margin-top: var(--space-2);">Mint a build code</strong>
+    </div>
+    <div class="body">
+      <h2>One-time blob the box trusts.</h2>
+      <p>Your phone mints a build code: a small JSON containing the serverDomain you picked, your phone's delegated pubkey (so the box can verify orders later), and a 24-hour expiry. The phone signs it with your master identity key.</p>
+      <p>You can paste the build code at <a href="/build/">flagshipserver.com/build</a> in your browser to download a personalized installer ISO. Or, if you ordered a pre-built box from us, the box fetches it automatically when you plug it in.</p>
+      <div class="seq">
+        <span><span class="who">phone</span><span class="arrow"> → </span>auth-code blob (signed)<span class="note"># 24h, single-use</span></span>
+        <span><span class="who">browser</span><span class="arrow"> → </span>/build/ → ISO with trailer<span class="note"># personalized</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div>
+      <div class="stage-num">STAGE 03</div>
+      <strong style="display:block; margin-top: var(--space-2);">Boot &amp; install</strong>
+    </div>
+    <div class="body">
+      <h2>The box installs itself in five minutes.</h2>
+      <p>The ISO boots Alpine Linux on your hardware. A first-boot script validates the trailer signature locally, then fetches the public installer from our GitHub repo at the exact ref the trailer pinned. Anyone can audit what the install does — it's a few hundred lines of shell.</p>
+      <p>The installer formats your disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert, registers the server with flagshipserver.com, and boots into steady state. Your phone, watching the install, lights up: <em>"Your Flagship is online."</em></p>
+      <div class="seq">
+        <span><span class="who">box</span><span class="arrow"> → </span>cryptsetup luksFormat<span class="note"># 64-byte random key</span></span>
+        <span><span class="who">box</span><span class="arrow"> → </span>seal-for-bak (your phone's pubkey)<span class="note"># X25519 sealed-box</span></span>
+        <span><span class="who">box</span><span class="arrow"> → </span>flagshipserver.com /api/server/register</span>
+        <span><span class="who">box</span><span class="arrow"> → </span>Let's Encrypt (DNS-01 via .com)<span class="note"># wildcard cert</span></span>
+        <span><span class="who">box</span><span class="arrow"> → </span>tunnel hub (.services WS)<span class="note"># inbound traffic ingress</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div>
+      <div class="stage-num">STAGE 04</div>
+      <strong style="display:block; margin-top: var(--space-2);">Every-boot unlock</strong>
+    </div>
+    <div class="body">
+      <h2>No phone, no decryption.</h2>
+      <p>When the box reboots, the LUKS-encrypted root won't open. The boot stage polls flagshipserver.com for an unsealed unlock key. Your phone, woken by a push, asks for biometrics, decrypts the sealed blob locally, and deposits the unsealed key with a 10-minute TTL. The box consumes it; it's deleted; the disk opens.</p>
+      <p>A stolen box without your phone is a brick. Even we can't help — we never had the unsealed key.</p>
+      <div class="seq">
+        <span><span class="who">box</span><span class="arrow"> ⟳ </span>POST /api/server/&lt;fqdn&gt;/unlock-key/consume<span class="note"># every 1s</span></span>
+        <span><span class="who">.com</span><span class="arrow"> → </span>404 (no deposit yet)</span>
+        <span><span class="who">phone</span><span class="arrow"> → </span>face-ID prompt → unseal locally → POST DepositUnlockKey<span class="note"># 10-min TTL</span></span>
+        <span><span class="who">box</span><span class="arrow"> ← </span>200 + unsealed key<span class="note"># row deleted on read</span></span>
+        <span><span class="who">box</span><span class="arrow"> → </span>cryptsetup luksOpen → mount → boot</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div>
+      <div class="stage-num">STAGE 05</div>
+      <strong style="display:block; margin-top: var(--space-2);">Live. Vibe-code. Share.</strong>
+    </div>
+    <div class="body">
+      <h2>The fun part.</h2>
+      <p>From the phone you describe an app in plain language. An LLM writes it (your provider key, or our daily-promo). The daemon builds the container, provisions Postgres / object store / KV namespaces scoped to the app, deploys it, registers a subdomain. Within a minute it's live at <code>plants.harry.flagship.services</code>.</p>
+      <p>Sharing is one tap: a magic-link invite or a username search. Members hit the same URL and your box authenticates them via headers it injects after a membership check. Apps never see cookies; they never have to handle auth. Listing on the marketplace is two more taps.</p>
+      <p>Updates pull every 6 hours from the canonical creator's pod, signed by their box. If the creator force-pushes (lineage break), every subscriber's phone gets an alert before anything bad happens.</p>
+    </div>
+  </section>
+
+  <section class="stage" style="border-bottom: 1px solid var(--border);">
+    <div>
+      <div class="stage-num">SAFETY NET</div>
+      <strong style="display:block; margin-top: var(--space-2);">If you lose the phone</strong>
+    </div>
+    <div class="body">
+      <h2>Recovery is honest.</h2>
+      <p>Your master key is wrapped with a key that lives in iCloud Keychain (iOS) or Google Block Store (Android). On a fresh phone you can re-derive it with biometrics on the new device + passcode. If you didn't enroll cloud recovery, or you lose access to that account, the data is gone. We tell you this during setup, in plain words.</p>
+      <p>For higher-stakes households, v2 will offer social recovery: split your master key across N friends with a K-of-N threshold. We're not pretending it's done yet.</p>
+    </div>
+  </section>
+
+  <section style="padding: var(--space-12) 0;">
+    <div class="card" style="text-align: center;">
+      <h3 style="margin-bottom: var(--space-3);">Ready to set yours up?</h3>
+      <p style="color: var(--text-muted); margin-bottom: var(--space-6);">About ten minutes start to finish.</p>
+      <a href="/build/" class="btn btn--primary btn--lg">Get a build code</a>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
+      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you, your hardware, and your phone.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/how-it-works">How it works</a></li>
+        <li><a href="/marketplace">Apps</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/build/">Build code</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security">Architecture</a></li>
+        <li><a href="/security/report">Vulnerability report</a></li>
+        <li><a href="/abuse">Abuse</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="https://github.com/harrywinner2/flagship">Source</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/docs">Docs</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span>
+    <span>harry@flagship.services</span>
+  </div>
+</footer>
+
+</body>
+</html>

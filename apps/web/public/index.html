@@ -1,77 +1,396 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0a0a" />
-    <meta name="description" content="Flagship — your servers, your data, your control plane is the phone in your pocket." />
-    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
-    <link rel="stylesheet" href="/site.css" />
-    <title>Flagship</title>
-  </head>
-  <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="logo"></span>
-        <span class="name">Flagship</span>
-      </div>
-      <nav>
-        <a href="/security.html">security</a>
-        <a href="/webapp/">webapp</a>
-        <a href="/login.html">connect</a>
-      </nav>
-    </header>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flagship — Your stuff, on your hardware</title>
+  <meta name="description" content="A personal cloud you actually own. Plug in at home, pair with your phone, and run the apps you (or your friends) vibe-code in an afternoon.">
+  <meta property="og:title" content="Flagship">
+  <meta property="og:description" content="Your stuff, on your hardware, with a real green padlock.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    .hero {
+      padding: var(--space-16) 0 var(--space-12);
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: var(--space-12);
+      align-items: center;
+    }
+    @media (max-width: 960px) {
+      .hero { grid-template-columns: 1fr; padding: var(--space-12) 0 var(--space-8); }
+    }
+    .hero h1 {
+      font-size: var(--display-size);
+      line-height: var(--display-line);
+      letter-spacing: -0.02em;
+      max-width: 18ch;
+    }
+    @media (max-width: 720px) {
+      .hero h1 { font-size: 40px; line-height: 48px; }
+    }
+    .hero .lede {
+      font-size: var(--h4-size);
+      line-height: 28px;
+      color: var(--text-muted);
+      margin-top: var(--space-6);
+      max-width: 38ch;
+    }
+    .hero .cta-row {
+      margin-top: var(--space-8);
+      display: flex;
+      align-items: center;
+      gap: var(--space-6);
+      flex-wrap: wrap;
+    }
+    .hero .trust {
+      margin-top: var(--space-12);
+      display: flex;
+      gap: var(--space-8);
+      flex-wrap: wrap;
+      color: var(--text-muted);
+      font-size: var(--body-sm-size);
+    }
+    .hero .trust span { display: inline-flex; align-items: center; gap: var(--space-2); }
+    .hero .trust span::before {
+      content: "";
+      width: 4px; height: 4px; background: var(--text-muted);
+      border-radius: 50%;
+    }
+    .hero-illustration {
+      aspect-ratio: 4 / 3;
+      background:
+        radial-gradient(circle at 70% 30%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 65%),
+        linear-gradient(140deg, var(--surface-sunken), var(--surface));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-illustration svg { width: min(82%, 480px); height: auto; }
 
-    <main>
-      <h1>Your servers. Your data.<br /><span class="accent">Your phone is the control plane.</span></h1>
-      <p class="lede">
-        Flagship is a personal-cloud ecosystem. Run servers on commodity hardware, hold the master keys on your phone, and host the apps you build (or vibe-code) on your own infrastructure under your own subdomain.
-      </p>
+    .how { padding: var(--space-12) 0; }
+    .how h2 {
+      font-size: var(--h1-size);
+      line-height: var(--h1-line);
+      letter-spacing: -0.01em;
+      max-width: 16ch;
+      margin-bottom: var(--space-8);
+    }
+    .how-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-6);
+    }
+    @media (max-width: 720px) { .how-grid { grid-template-columns: 1fr; } }
+    .step .step-num {
+      font-family: var(--font-mono);
+      font-size: var(--caption-size);
+      color: var(--text-muted);
+      margin-bottom: var(--space-3);
+    }
+    .step h3 { margin-bottom: var(--space-3); }
+    .step p { color: var(--text-muted); }
 
+    .trust-section {
+      padding: var(--space-12) 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-12);
+      align-items: center;
+    }
+    @media (max-width: 960px) { .trust-section { grid-template-columns: 1fr; } }
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-8);
+      display: grid;
+      gap: var(--space-4);
+    }
+    .diagram-row {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      align-items: center;
+      gap: var(--space-4);
+      font-size: var(--body-sm-size);
+    }
+    .diagram-row .who { font-weight: 600; }
+    .diagram-row .what { color: var(--text-muted); }
+    .diagram-arrow {
+      grid-column: 1 / -1;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      padding-left: 38px;
+    }
+
+    .apps { padding: var(--space-12) 0; }
+    .apps h2 {
+      font-size: var(--h1-size);
+      line-height: var(--h1-line);
+      letter-spacing: -0.01em;
+      margin-bottom: var(--space-8);
+    }
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-4);
+    }
+    @media (max-width: 960px) { .app-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 540px) { .app-grid { grid-template-columns: 1fr; } }
+    .app-card { display: block; }
+    .app-card h4 { margin-bottom: var(--space-1); }
+    .app-card .by { color: var(--text-muted); font-size: var(--body-sm-size); margin-bottom: var(--space-3); }
+    .app-card p { color: var(--text-muted); font-size: var(--body-sm-size); margin: 0; }
+
+    .faq { padding: var(--space-12) 0 var(--space-8); }
+    .faq h2 { margin-bottom: var(--space-8); }
+    details.q { border-top: 1px solid var(--border); padding: var(--space-6) 0; }
+    details.q:last-child { border-bottom: 1px solid var(--border); }
+    details.q > summary {
+      font-family: var(--font-heading);
+      font-weight: 500;
+      font-size: var(--h4-size);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    details.q > summary::-webkit-details-marker { display: none; }
+    details.q > summary::after {
+      content: "+";
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      font-size: 22px;
+      transition: transform var(--motion-state);
+    }
+    details.q[open] > summary::after { transform: rotate(45deg); }
+    details.q > .answer {
+      margin-top: var(--space-4);
+      color: var(--text-muted);
+      max-width: var(--reading-width);
+    }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="Flagship home">Flagship</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/how-it-works">How it works</a>
+      <a href="/marketplace">Apps</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/status/">Status</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/build/" class="btn btn--primary">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="hero" aria-label="Introduction">
+    <div>
+      <h1>Your stuff, on your hardware, with a real green padlock.</h1>
+      <p class="lede">A personal cloud you actually own. Plug it in at home, pair it with your phone, and run the apps you (or your friends) vibe-code in an afternoon.</p>
       <div class="cta-row">
-        <a class="cta" href="/build/">Build a server →</a>
-        <a class="cta-secondary" href="/login.html">Connect a desktop</a>
-        <a class="cta-secondary" href="/webapp/">Try the webapp</a>
-        <a class="cta-secondary" href="https://github.com/harrywinner2/flagship">Source on GitHub</a>
+        <a href="/build/" class="btn btn--primary btn--lg">Get a build code</a>
+        <a href="/how-it-works" class="btn btn--ghost btn--lg">See how it works →</a>
       </div>
-
-      <h2>Three components, one product</h2>
-      <div class="feature-grid">
-        <div class="feature">
-          <h3>The phone app</h3>
-          <p>iOS or Android — Secure Enclave / StrongBox holds the master key. Every sensitive operation is biometric-gated.</p>
-        </div>
-        <div class="feature">
-          <h3>The bootable image</h3>
-          <p>Headless NixOS that turns commodity hardware into a node. WiFi credentials and identity are baked in at build time.</p>
-        </div>
-        <div class="feature">
-          <h3>The control plane</h3>
-          <p>flagshipserver.com routes traffic by SNI without ever decrypting it. No keys, no secrets, no surveillance.</p>
-        </div>
+      <div class="trust">
+        <span>No data center</span>
+        <span>You hold the keys</span>
+        <span>Real Let's Encrypt cert</span>
       </div>
+    </div>
+    <div class="hero-illustration" aria-hidden="true">
+      <svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <line x1="40" y1="240" x2="360" y2="240" stroke="var(--border)" stroke-width="1"/>
+        <rect x="140" y="140" width="180" height="100" rx="8" fill="var(--surface)" stroke="var(--border)"/>
+        <path d="M 140 140 L 170 110 L 350 110 L 320 140 Z" fill="var(--surface-sunken)" stroke="var(--border)"/>
+        <path d="M 320 140 L 350 110 L 350 210 L 320 240 Z" fill="var(--surface-sunken)" stroke="var(--border)"/>
+        <line x1="160" y1="170" x2="300" y2="170" stroke="var(--border)"/>
+        <line x1="160" y1="184" x2="300" y2="184" stroke="var(--border)"/>
+        <line x1="160" y1="198" x2="300" y2="198" stroke="var(--border)"/>
+        <line x1="160" y1="212" x2="300" y2="212" stroke="var(--border)"/>
+        <circle cx="290" cy="226" r="4" fill="var(--success)">
+          <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    </div>
+  </section>
 
-      <h2>What makes it different</h2>
-      <ul class="bullets">
-        <li>Apps run as containers; persistence goes through one shared Postgres + MinIO + Redis per server, scoped per app — portable migrations, no surprises.</li>
-        <li>You bring your own AI provider (Claude, OpenAI, Google, Ollama). API keys never touch flagshipserver.com.</li>
-        <li>Reciprocal peer-backup with Reed-Solomon erasure coding — your data survives even if your hardware doesn't.</li>
-        <li>Disk encrypted at rest; boot gated by your phone over the internet.</li>
-        <li>Open source. <a href="/security.html">Audit the security model.</a></li>
+  <section class="how" aria-label="How it works">
+    <h2>Three steps. About ten minutes.</h2>
+    <div class="how-grid">
+      <div class="step card">
+        <div class="step-num">01</div>
+        <h3>Pair</h3>
+        <p>Your phone is the keychain. There is no cloud account, no email-and-password, no recovery questions. Just biometrics on a key only you hold.</p>
+      </div>
+      <div class="step card">
+        <div class="step-num">02</div>
+        <h3>Boot</h3>
+        <p>Plug in any old PC or one of our boxes. One USB stick, one reboot. The phone approves the unlock; your disk encrypts itself.</p>
+      </div>
+      <div class="step card">
+        <div class="step-num">03</div>
+        <h3>Build</h3>
+        <p>Vibe-code an app from the phone. It runs at <code>yours.flagship.services</code> with a real Let's Encrypt cert. Share with friends in a tap.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="trust-section" aria-label="Trust model">
+    <div>
+      <h2>We literally cannot read your data.</h2>
+      <p>flagshipserver.com handles identity. flagship.services is a dumb pipe. Your box terminates TLS itself — the green padlock in your browser is signed against a key only your hardware holds.</p>
+      <p>If we ever get hacked, the worst we can leak about you is your username.</p>
+      <a href="/security" class="btn btn--secondary" style="margin-top: var(--space-4);">Read the architecture →</a>
+    </div>
+    <div class="diagram" aria-label="Trust diagram">
+      <div class="diagram-row">
+        <span class="who">Your phone</span>
+        <span class="what">Holds the keys. Approves every action.</span>
+      </div>
+      <div class="diagram-arrow">↓ HTTPS, signed</div>
+      <div class="diagram-row">
+        <span class="who">.com</span>
+        <span class="what">Username + sealed-blob storage. Stateless.</span>
+      </div>
+      <div class="diagram-arrow">↓ TCP, SNI passthrough</div>
+      <div class="diagram-row">
+        <span class="who">.services</span>
+        <span class="what">Tunnel pipe. Sees encrypted bytes.</span>
+      </div>
+      <div class="diagram-arrow">↓ TLS terminated here</div>
+      <div class="diagram-row">
+        <span class="who">Your box</span>
+        <span class="what">Real Let's Encrypt cert. Your data, your apps.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="apps" aria-label="Sample apps">
+    <h2>Apps people are vibe-coding.</h2>
+    <div class="app-grid">
+      <article class="card app-card">
+        <h4>plant-water</h4>
+        <div class="by">@harry</div>
+        <p>Tracks which houseplants got watered. Push when one's been thirsty 5+ days.</p>
+      </article>
+      <article class="card app-card">
+        <h4>study-club</h4>
+        <div class="by">@sarah</div>
+        <p>A private discussion board for our weekly book club. No moderation needed.</p>
+      </article>
+      <article class="card app-card">
+        <h4>family-photos</h4>
+        <div class="by">@martin</div>
+        <p>Self-hosted album. Phone uploads automatically when on home Wi-Fi.</p>
+      </article>
+      <article class="card app-card">
+        <h4>shopper</h4>
+        <div class="by">@alice</div>
+        <p>Logs into Amazon for me, watches a wishlist, alerts me on real price drops.</p>
+      </article>
+      <article class="card app-card">
+        <h4>fitness-log</h4>
+        <div class="by">@nora</div>
+        <p>A tiny PR tracker for my friend group. We see each other's lifts.</p>
+      </article>
+      <article class="card app-card">
+        <h4>recipe-jar</h4>
+        <div class="by">@max</div>
+        <p>One-tap save from any recipe site, full search, no ads, ever.</p>
+      </article>
+    </div>
+    <div style="margin-top: var(--space-6);">
+      <a href="/marketplace" class="btn btn--ghost">Browse the marketplace →</a>
+    </div>
+  </section>
+
+  <section class="faq" aria-label="Frequently asked questions">
+    <h2>Honest questions.</h2>
+
+    <details class="q">
+      <summary>Why not just use [iCloud / Google / Dropbox]?</summary>
+      <div class="answer">Because they read your data. We don't, and structurally we can't. That's the whole product.</div>
+    </details>
+    <details class="q">
+      <summary>What happens when I lose my phone?</summary>
+      <div class="answer">If you backed up to iCloud Keychain or Google Block Store, your new phone can recover. If you didn't, your data is gone — like a hardware wallet. We tell you this clearly during setup.</div>
+    </details>
+    <details class="q">
+      <summary>Do I need to be a developer?</summary>
+      <div class="answer">No. The phone walks you through it. Vibe-coding an app means typing what you want; the LLM writes it. You'll learn what a Postgres table is by accident, not on purpose.</div>
+    </details>
+    <details class="q">
+      <summary>Can I run this on a Raspberry Pi?</summary>
+      <div class="answer">Probably. Anything that can run x86_64 Alpine + docker compose works. We sell pre-built boxes if you want plug-and-go; if you have spare hardware, build your own.</div>
+    </details>
+    <details class="q">
+      <summary>Is this open source?</summary>
+      <div class="answer">Yes. BUSL-1.1, becomes Apache 2.0 in 2030. <a href="https://github.com/harrywinner2/flagship">Read the source.</a> Reproducible builds are coming for v1.</div>
+    </details>
+    <details class="q">
+      <summary>How does the marketplace work?</summary>
+      <div class="answer">Anyone can list. We host a description, screenshots, and a link to the canonical pod. We don't host code or data. Listings can pay for a security scan (we run npm audit + trivy + semgrep + dynamic checks; you get a letter grade). They can also pay to be featured — clearly labeled.</div>
+    </details>
+    <details class="q">
+      <summary>What if Flagship the company goes away?</summary>
+      <div class="answer">Your box keeps working. Your apps keep running. Your TLS cert keeps renewing as long as Let's Encrypt is up and your DNS points home. We don't lock you in because we structurally can't.</div>
+    </details>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
+      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you, your hardware, and your phone.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/how-it-works">How it works</a></li>
+        <li><a href="/marketplace">Apps</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/build/">Build code</a></li>
       </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security">Architecture</a></li>
+        <li><a href="/security/report">Vulnerability report</a></li>
+        <li><a href="/abuse">Abuse</a></li>
+        <li><a href="/.well-known/security.txt">security.txt</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="https://github.com/harrywinner2/flagship">Source on GitHub</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/blog">Blog</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span>
+    <span>harry@flagship.services</span>
+  </div>
+</footer>
 
-      <div class="callout">
-        <strong>Three device families.</strong> iOS, Android, and the installable webapp. Each one is its own primary identity — we deliberately don't share keys between them, the way Apple Pay never crosses to Google Pay.
-      </div>
-    </main>
-
-    <footer class="site">
-      <a href="/security.html">Security</a>
-      <a href="/security/report.html">Report a vulnerability</a>
-      <a href="/.well-known/security.txt">security.txt</a>
-      <a href="/abuse.html">Report abuse</a>
-      <a href="/webapp/">Webapp</a>
-      <a href="/deck/">Deck</a>
-    </footer>
-  </body>
+</body>
 </html>

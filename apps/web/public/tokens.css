@@ -1,0 +1,135 @@
+/*
+ * Flagship design tokens.
+ *
+ * Source of truth: /home/kamdemharry/flagship/docs/design-system.md
+ *
+ * Two themes: light (default for marketing) and dark (default for the
+ * web console). Switch via:
+ *   - `prefers-color-scheme` (system preference)
+ *   - `data-theme="dark" | "light"` on <html> (manual override)
+ *
+ * Every page should pull tokens from here; never hard-code a hex.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  /* ── Light theme (default) ──────────────────────────────────── */
+  --bg:               #FAFAF7;
+  --surface:          #FFFFFF;
+  --surface-sunken:   #F2F1EC;
+  --border:           #E6E4DD;
+  --text:             #14140F;
+  --text-muted:       #6B6A63;
+  --primary:          #3B5BFF;
+  --primary-hover:    #2C46E0;
+  --success:          #1F8A4C;
+  --warning:          #B8651A;
+  --danger:           #C83A3A;
+
+  /* ── Type scale ─────────────────────────────────────────────── */
+  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, -apple-system,
+                  "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter", ui-sans-serif, system-ui, -apple-system,
+                  "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas,
+                  monospace;
+
+  --display-size: 56px;       --display-line: 60px;
+  --h1-size:      40px;       --h1-line:      48px;
+  --h2-size:      28px;       --h2-line:      36px;
+  --h3-size:      22px;       --h3-line:      30px;
+  --h4-size:      17px;       --h4-line:      24px;
+  --body-size:    16px;       --body-line:    26px;
+  --body-sm-size: 14px;       --body-sm-line: 22px;
+  --caption-size: 13px;       --caption-line: 18px;
+  --mono-size:    14px;       --mono-line:    22px;
+
+  /* ── Spacing — strict 4px grid ──────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Radii ──────────────────────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* ── Shadows (modals only) ──────────────────────────────────── */
+  --shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.18);
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  --content-width: 1120px;
+  --reading-width: 36rem;     /* 68 ch line cap */
+
+  /* ── Motion ─────────────────────────────────────────────────── */
+  --motion-state:  200ms ease-out;
+  --motion-layout: 350ms ease-out;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:             #0E0F12;
+    --surface:        #16181C;
+    --surface-sunken: #1C1F24;
+    --border:         #2A2D33;
+    --text:           #F2F1EC;
+    --text-muted:     #9A9A93;
+    --primary:        #7E96FF;
+    --primary-hover:  #A8B8FF;
+    --success:        #4FBE7A;
+    --warning:        #E5A050;
+    --danger:         #E86464;
+    --shadow-modal:   0 12px 40px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:             #0E0F12;
+  --surface:        #16181C;
+  --surface-sunken: #1C1F24;
+  --border:         #2A2D33;
+  --text:           #F2F1EC;
+  --text-muted:     #9A9A93;
+  --primary:        #7E96FF;
+  --primary-hover:  #A8B8FF;
+  --success:        #4FBE7A;
+  --warning:        #E5A050;
+  --danger:         #E86464;
+  --shadow-modal:   0 12px 40px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg:             #FAFAF7;
+  --surface:        #FFFFFF;
+  --surface-sunken: #F2F1EC;
+  --border:         #E6E4DD;
+  --text:           #14140F;
+  --text-muted:     #6B6A63;
+  --primary:        #3B5BFF;
+  --primary-hover:  #2C46E0;
+  --success:        #1F8A4C;
+  --warning:        #B8651A;
+  --danger:         #C83A3A;
+  --shadow-modal:   0 12px 40px rgba(0, 0, 0, 0.18);
+  color-scheme: light;
+}
+
+/* ── Reduced motion ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
