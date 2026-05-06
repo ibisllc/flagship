@@ -2,7 +2,15 @@ import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
 import { ed, type Keypair } from "@flagship/protocol";
 import acme from "acme-client";
+import { readFile } from "node:fs/promises";
+import { AppRunner } from "./appRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
+import {
+  DataProvisioner,
+  RealMinioAdmin,
+  RealPostgresAdmin,
+  RealRedisAdmin,
+} from "./dataLayer/index.js";
 import { LetsEncryptIssuer, type LeEnvironment } from "./acme/letsEncryptIssuer.js";
 import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
@@ -86,6 +94,20 @@ export interface DaemonRuntimeOptions {
     pskPub: Uint8Array;
     executor: OrderExecutor;
   };
+  /**
+   * App-platform plumbing. When `dataServicesEnvFile` points at a
+   * key=value file written by `installer/data-services/init.sh`, the
+   * runtime builds a `DataProvisioner` wired to the running compose
+   * stack. Without it, `dataProvisioner` is null and apps with
+   * `data.stores` declarations will fail at install-time (apps that
+   * declare no stores are still deployable).
+   *
+   * `AppRunner` is built unconditionally (it just shells to docker;
+   * apps that don't need data stores don't need the data layer up).
+   */
+  appPlatform?: {
+    dataServicesEnvFile?: string;
+  };
 }
 
 export interface HttpRequest {
@@ -106,6 +128,15 @@ export interface DaemonRuntime {
   ready(): Promise<void>;
   close(): Promise<void>;
   certManager: CertManager;
+  /**
+   * App-platform handles — both always present so callers don't need
+   * null-checks. `dataProvisioner` is null when the data-services
+   * compose stack isn't configured for this daemon; in that case,
+   * apps declaring `data.stores` will fail at install-time with a
+   * clear error.
+   */
+  appRunner: AppRunner;
+  dataProvisioner: DataProvisioner | null;
 }
 
 function buildDefaultHandler(opts: DaemonRuntimeOptions): (req: HttpRequest) => Promise<HttpResponse> {
@@ -305,6 +336,14 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     renewalTimer.unref?.();
   }
 
+  // App-platform construction. AppRunner is unconditional (apps that
+  // don't use the data layer can still deploy); DataProvisioner is
+  // wired only if the data-services env file is supplied + readable.
+  const appRunner = new AppRunner();
+  const dataProvisioner = await maybeBuildDataProvisioner(
+    opts.appPlatform?.dataServicesEnvFile,
+  );
+
   return {
     ready: () => Promise.resolve(),
     close: async () => {
@@ -313,7 +352,63 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       tls.close();
     },
     certManager,
+    appRunner,
+    dataProvisioner,
   };
+}
+
+async function maybeBuildDataProvisioner(envFile?: string): Promise<DataProvisioner | null> {
+  if (!envFile) return null;
+  let env: Record<string, string>;
+  try {
+    env = parseEnvFile(await readFile(envFile, "utf8"));
+  } catch (e) {
+    console.warn(
+      `[runtime] data-services env file ${envFile} unreadable; data layer disabled: ${(e as Error).message}`,
+    );
+    return null;
+  }
+  const required = [
+    "POSTGRES_ADMIN_USER",
+    "POSTGRES_ADMIN_PASSWORD",
+    "MINIO_ROOT_USER",
+    "MINIO_ROOT_PASSWORD",
+    "REDIS_ADMIN_PASSWORD",
+  ];
+  for (const k of required) {
+    if (!env[k]) {
+      console.warn(`[runtime] data-services env missing ${k}; data layer disabled`);
+      return null;
+    }
+  }
+  const pgUrl = `postgresql://${env.POSTGRES_ADMIN_USER}:${encodeURIComponent(env.POSTGRES_ADMIN_PASSWORD!)}@127.0.0.1:5432/postgres`;
+  const redisUrl = `redis://default:${encodeURIComponent(env.REDIS_ADMIN_PASSWORD!)}@127.0.0.1:6379/0`;
+  console.log(`[runtime] data layer wired (postgres + redis + minio admins ready)`);
+  return new DataProvisioner({
+    postgres: new RealPostgresAdmin({ adminUrl: pgUrl }),
+    kv: new RealRedisAdmin({ adminUrl: redisUrl }),
+    objects: new RealMinioAdmin({
+      endPoint: "127.0.0.1",
+      port: 9000,
+      rootUser: env.MINIO_ROOT_USER!,
+      rootPassword: env.MINIO_ROOT_PASSWORD!,
+    }),
+  });
+}
+
+/** Parse a flat KEY=VALUE env file. Lines starting with # are comments. */
+function parseEnvFile(content: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx < 0) continue;
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim();
+    if (key) out[key] = value;
+  }
+  return out;
 }
 
 interface IssueDeps {

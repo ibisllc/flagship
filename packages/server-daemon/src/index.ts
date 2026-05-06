@@ -151,6 +151,13 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       orders,
+      appPlatform: {
+        // The data-services compose stack writes its admin creds here on
+        // first boot. If it's missing, the runtime degrades gracefully:
+        // apps declaring `data.stores` will refuse to install with a
+        // clear error, but apps without data are unaffected.
+        dataServicesEnvFile: process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env",
+      },
     });
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
