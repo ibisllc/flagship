@@ -172,4 +172,50 @@ export interface Storage {
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
+  marketplace: MarketplaceStorage;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Marketplace
+// ──────────────────────────────────────────────────────────────────────
+
+export interface MarketplaceListingRecord {
+  creator: string;
+  slug: string;
+  name: string;
+  tagline: string;
+  descriptionMd: string;
+  category: string;
+  tagsCsv: string;
+  canonicalUrl: string;
+  manifestHashHex: string;
+  screenshotKeysJson: string;       // JSON array of strings
+  status: "listed" | "private" | "removed";
+  scanGrade?: "A" | "B" | "C" | "D" | "F";
+  scanReportKey?: string;
+  scanCompletedAt?: number;
+  featuredUntil?: number;
+  rankScore: number;
+  installCount: number;
+  publicDistribution: boolean;
+  listedAt: number;
+  updatedAt: number;
+  irkSignatureHex: string;
+}
+
+export interface MarketplaceSearchQuery {
+  text?: string;            // free-text search across name + tagline + tags
+  category?: string;
+  verifiedOnly?: boolean;
+  limit?: number;           // default 30
+  offset?: number;          // default 0
+  sort?: "popular" | "newest" | "name";
+}
+
+export interface MarketplaceStorage {
+  upsert(rec: MarketplaceListingRecord): Promise<void>;
+  get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined>;
+  search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]>;
+  remove(creator: string, slug: string): Promise<void>;
+  recordInstall(creator: string, slug: string): Promise<void>;
 }

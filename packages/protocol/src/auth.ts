@@ -1387,3 +1387,102 @@ export function verifyUpdatePull(r: UpdatePullRequest, sig: Bytes, identityPub: 
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Marketplace listing
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Phone-signed marketplace listing request. .com stores ONLY the metadata
+ * here — never code or data. `manifestHashHex` commits to the manifest
+ * the listing claims; phone clients re-check before installing.
+ *
+ * `descriptionMd` is markdown, capped at 10_000 chars on the .com side.
+ * `screenshotKeys` is a list of R2 keys uploaded via a separate route;
+ * the listing references them.
+ */
+export interface MarketplaceListRequest {
+  creator: string;        // username
+  slug: string;
+  name: string;           // display name
+  tagline: string;        // ≤ 80 chars
+  descriptionMd: string;
+  category: string;       // free text on .com side; UI offers a curated set
+  tagsCsv: string;        // comma-separated lowercase tags
+  canonicalUrl: string;   // <slug>.<creator>.flagship.services
+  manifestHashHex: string;
+  screenshotKeys: string[];
+  publicDistribution: boolean;
+  status: "listed" | "private";
+  issuedAt: number;
+}
+
+const TAG_MARKETPLACE_LIST = "flagship/marketplace-list/v1";
+
+function canonicalMarketplaceList(r: MarketplaceListRequest): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_MARKETPLACE_LIST,
+      r.creator,
+      r.slug,
+      r.name,
+      r.tagline,
+      r.descriptionMd,
+      r.category,
+      r.tagsCsv,
+      r.canonicalUrl,
+      r.manifestHashHex,
+      r.screenshotKeys.join(","),
+      r.publicDistribution ? "1" : "0",
+      r.status,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signMarketplaceList(r: MarketplaceListRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalMarketplaceList(r), irk.privateKey);
+}
+
+export function verifyMarketplaceList(r: MarketplaceListRequest, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalMarketplaceList(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// User registration (RegisterUser canonical-bytes)
+//
+// Adjacent to the existing `username/claim` flow. Whereas claim is for
+// the very first IRK→username binding, RegisterUser is the same envelope
+// but kept as a stable name across mobile clients. Functionally a thin
+// alias. v2 may extend with display-name + push-token fields.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface RegisterUser {
+  username: string;
+  irkPub: Bytes;
+  issuedAt: number;
+}
+
+const TAG_REGISTER_USER = "flagship/register-user/v1";
+
+function canonicalRegisterUser(r: RegisterUser): Bytes {
+  return new TextEncoder().encode(
+    [TAG_REGISTER_USER, r.username, hex(r.irkPub), r.issuedAt].join("|"),
+  );
+}
+
+export function signRegisterUser(r: RegisterUser, irk: Keypair): Bytes {
+  return ed.sign(canonicalRegisterUser(r), irk.privateKey);
+}
+
+export function verifyRegisterUser(r: RegisterUser, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRegisterUser(r), irkPub);
+  } catch {
+    return false;
+  }
+}

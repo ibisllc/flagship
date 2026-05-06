@@ -6,6 +6,9 @@ import type {
   InstallEvent,
   InstallEventStorage,
   LuksKeyStorage,
+  MarketplaceListingRecord,
+  MarketplaceSearchQuery,
+  MarketplaceStorage,
   RoutingRecord,
   RoutingStorage,
   SealedLuksKeyRecord,
@@ -196,6 +199,65 @@ export class InMemoryLuksKeyStorage implements LuksKeyStorage {
   }
 }
 
+export class InMemoryMarketplaceStorage implements MarketplaceStorage {
+  private listings = new Map<string, MarketplaceListingRecord>();
+  private key(c: string, s: string) { return `${c.toLowerCase()}/${s.toLowerCase()}`; }
+  async upsert(rec: MarketplaceListingRecord): Promise<void> {
+    this.listings.set(this.key(rec.creator, rec.slug), { ...rec });
+  }
+  async get(creator: string, slug: string): Promise<MarketplaceListingRecord | undefined> {
+    const r = this.listings.get(this.key(creator, slug));
+    return r ? { ...r } : undefined;
+  }
+  async search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]> {
+    const limit = q.limit ?? 30;
+    const offset = q.offset ?? 0;
+    let all = [...this.listings.values()].filter((l) => l.status === "listed");
+    if (q.category) all = all.filter((l) => l.category === q.category);
+    if (q.verifiedOnly) all = all.filter((l) => !!l.scanGrade);
+    if (q.text) {
+      const needle = q.text.toLowerCase();
+      all = all.filter((l) =>
+        l.name.toLowerCase().includes(needle) ||
+        l.tagline.toLowerCase().includes(needle) ||
+        l.tagsCsv.toLowerCase().includes(needle),
+      );
+    }
+    switch (q.sort ?? "popular") {
+      case "popular":
+        all.sort((a, b) => b.rankScore - a.rankScore || b.installCount - a.installCount);
+        break;
+      case "newest":
+        all.sort((a, b) => b.listedAt - a.listedAt);
+        break;
+      case "name":
+        all.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+    }
+    return all.slice(offset, offset + limit).map((r) => ({ ...r }));
+  }
+  async remove(creator: string, slug: string): Promise<void> {
+    const key = this.key(creator, slug);
+    const r = this.listings.get(key);
+    if (r) this.listings.set(key, { ...r, status: "removed" });
+  }
+  async recordInstall(creator: string, slug: string): Promise<void> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (r) {
+      r.installCount += 1;
+      r.rankScore = computeMarketplaceRank(r);
+    }
+  }
+}
+
+export function computeMarketplaceRank(l: MarketplaceListingRecord): number {
+  const installs = Math.log10(l.installCount + 1) * 4;
+  const recency = Math.max(0, 30 - (Date.now() - l.updatedAt) / 86_400_000);
+  const grade = l.scanGrade ? { A: 5, B: 3, C: 1, D: -2, F: -5 }[l.scanGrade] : 0;
+  const featured = l.featuredUntil && l.featuredUntil > Date.now() ? 10 : 0;
+  return installs + recency + grade + featured;
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -204,4 +266,5 @@ export class InMemoryStorage implements Storage {
   routing = new InMemoryRoutingStorage();
   installEvents = new InMemoryInstallEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
+  marketplace = new InMemoryMarketplaceStorage();
 }

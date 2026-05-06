@@ -40,6 +40,11 @@ import {
   handleUsernameClaim,
   handleUsernameLookup,
   handleUserPubKeyCert,
+  handleMarketplaceList,
+  handleMarketplaceGet,
+  handleMarketplaceSearch,
+  handleMarketplaceRemove,
+  handleMarketplaceInstall,
   type CaIssuer,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
@@ -88,6 +93,10 @@ const ROUTE_RE = {
   LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
+  MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
+  MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
+  MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
+  MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
 };
 
 export async function tryControlPlane(
@@ -386,6 +395,63 @@ export async function tryControlPlane(
         { storage: storage.installEvents },
         decodeURIComponent(m[1]!),
         sinceSeq,
+      ),
+    );
+  }
+
+  // ── Marketplace ──────────────────────────────────────────────
+  if (method === "POST" && ROUTE_RE.MARKETPLACE_LIST.test(path)) {
+    return finish(
+      await handleMarketplaceList(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.MARKETPLACE_SEARCH.test(path)) {
+    const limit = parseInt(url.searchParams.get("limit") ?? "30", 10) || 30;
+    const offset = parseInt(url.searchParams.get("offset") ?? "0", 10) || 0;
+    const sortRaw = url.searchParams.get("sort");
+    const sort = sortRaw === "newest" || sortRaw === "name" || sortRaw === "popular" ? sortRaw : undefined;
+    return finish(
+      await handleMarketplaceSearch(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        {
+          text: url.searchParams.get("q") ?? undefined,
+          category: url.searchParams.get("cat") ?? undefined,
+          verifiedOnly: url.searchParams.get("verified") === "1",
+          limit,
+          offset,
+          sort,
+        },
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.MARKETPLACE_GET))) {
+    return finish(
+      await handleMarketplaceGet(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.MARKETPLACE_GET))) {
+    return finish(
+      await handleMarketplaceRemove(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_INSTALL))) {
+    return finish(
+      await handleMarketplaceInstall(
+        { marketplace: storage.marketplace, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
       ),
     );
   }
