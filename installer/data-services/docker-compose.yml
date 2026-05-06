@@ -96,6 +96,21 @@ services:
       postgres:
         condition: service_healthy
 
+  # redis-commander: web UI for the kv store. Bound to 127.0.0.1:8082
+  # only; the daemon's /.flagship/admin/kv proxy gates access behind
+  # phone-paired sessions.
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    container_name: flagship-redis-commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: "local:redis:6379:0:${REDIS_ADMIN_PASSWORD}"
+    ports:
+      - "127.0.0.1:8082:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+
   # Chromium: pod-resident browser used by the app-platform's browser
   # API (apps drive web automation against the user's logged-in
   # sessions; cookies stay in the container). Headful with Xvfb so

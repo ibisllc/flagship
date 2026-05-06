@@ -67,3 +67,55 @@ describe("chunk encryption", () => {
     expect(decryptChunk(enc, swk)).toEqual(data);
   });
 });
+
+describe("public-key sealed payload (LUKS unlock key delivery)", () => {
+  it("sealForRecipient + openSealed roundtrips arbitrary bytes", async () => {
+    const { sealForRecipient, openSealed } = await import("../src/encryption.js");
+    const { x25519 } = await import("@noble/curves/ed25519.js");
+    const recipPriv = x25519.utils.randomSecretKey();
+    const recipPub = x25519.getPublicKey(recipPriv);
+    const luksKey = new Uint8Array(64);
+    crypto.getRandomValues(luksKey);
+    const sealed = sealForRecipient(luksKey, recipPub);
+    const opened = openSealed(sealed, recipPriv);
+    expect(opened).toEqual(luksKey);
+  });
+
+  it("ephemeral public key sits at the front of the wire format", async () => {
+    const { sealForRecipient } = await import("../src/encryption.js");
+    const { x25519 } = await import("@noble/curves/ed25519.js");
+    const recipPriv = x25519.utils.randomSecretKey();
+    const recipPub = x25519.getPublicKey(recipPriv);
+    const sealed = sealForRecipient(new Uint8Array([1, 2, 3]), recipPub);
+    expect(sealed.length).toBe(32 + 12 + 3 + 16); // eph + nonce + ct + GCM tag
+  });
+
+  it("a different recipient cannot decrypt", async () => {
+    const { sealForRecipient, openSealed } = await import("../src/encryption.js");
+    const { x25519 } = await import("@noble/curves/ed25519.js");
+    const aliceP = x25519.utils.randomSecretKey();
+    const aliceK = x25519.getPublicKey(aliceP);
+    const bobP = x25519.utils.randomSecretKey();
+    const sealed = sealForRecipient(new Uint8Array([7, 7, 7]), aliceK);
+    expect(() => openSealed(sealed, bobP)).toThrow();
+  });
+
+  it("rejects malformed sizes", async () => {
+    const { sealForRecipient, openSealed } = await import("../src/encryption.js");
+    const { x25519 } = await import("@noble/curves/ed25519.js");
+    const recipPub = new Uint8Array(31);
+    expect(() => sealForRecipient(new Uint8Array([1]), recipPub)).toThrow(/32 bytes/);
+    const recipPriv = x25519.utils.randomSecretKey();
+    expect(() => openSealed(new Uint8Array(40), recipPriv)).toThrow(/too short/);
+  });
+
+  it("each call produces a different sealed blob even for the same plaintext", async () => {
+    const { sealForRecipient } = await import("../src/encryption.js");
+    const { x25519 } = await import("@noble/curves/ed25519.js");
+    const recipPriv = x25519.utils.randomSecretKey();
+    const recipPub = x25519.getPublicKey(recipPriv);
+    const a = sealForRecipient(new Uint8Array([1, 2, 3]), recipPub);
+    const b = sealForRecipient(new Uint8Array([1, 2, 3]), recipPub);
+    expect(a).not.toEqual(b);
+  });
+});

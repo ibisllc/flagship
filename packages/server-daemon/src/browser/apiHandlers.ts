@@ -15,6 +15,7 @@
  */
 
 import type { AppAuthTokens } from "../appAuthToken.js";
+import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { BrowserManager } from "./browserManager.js";
 import type { DomainGate } from "./domainGate.js";
@@ -30,11 +31,41 @@ export interface BrowserApiDeps {
   domainGate: DomainGate;
   phonePipe: PhonePipe;
   appAuthTokens: AppAuthTokens;
+  /**
+   * When set, `/api/browser/screenshot/<ref>` is gated by the paired-
+   * session token (the phone-paired browser is the only legitimate
+   * fetcher of those bytes — apps shouldn't see screenshots of fields
+   * they're trying to elicit input for). When unset, the route falls
+   * back to v1 behavior: any app-token-bearing caller can attempt a
+   * fetch (the ref space is opaque random hex, so an app that didn't
+   * issue the request can't guess refs).
+   */
+  pairedSessionGate?: PairedSessionGate;
 }
 
 export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     if (!req.path.startsWith("/api/browser/")) return null;
+
+    // Phone-paired-session route: GET /api/browser/screenshot/<ref> is
+    // intended for the phone's paired browser. When the gate is wired
+    // it checks the Flagship-Session token; without a gate the route
+    // still resolves but only via the legacy app-token path below.
+    {
+      const qIdx = req.path.indexOf("?");
+      const cleanPath = qIdx >= 0 ? req.path.slice(0, qIdx) : req.path;
+      const m = /^\/api\/browser\/screenshot\/([a-zA-Z0-9._-]+)$/.exec(cleanPath);
+      if (m && req.method === "GET" && deps.pairedSessionGate) {
+        const denied = deps.pairedSessionGate.check(req);
+        if (!denied) {
+          const png = deps.phonePipe.getScreenshot(m[1]!);
+          if (!png) return jerr(404, "screenshot ref not found or expired");
+          return { status: 200, headers: PNG, body: png };
+        }
+        // Gate denied — fall through to the app-token path. An app
+        // that DOES hold the token may still reach the legacy route.
+      }
+    }
 
     const appId = await resolveAppId(req, deps.appAuthTokens);
     if (!appId) return jerr(401, "missing or invalid app token");

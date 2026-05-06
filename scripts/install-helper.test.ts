@@ -93,6 +93,48 @@ describe("install-helper", () => {
     expect(pem).toMatch(/-----END PRIVATE KEY-----/);
   });
 
+  it("seal-for-bak --bak-x25519-pub roundtrips through openSealed", async () => {
+    const { x25519 } = await import("@noble/curves/ed25519.js");
+    const { openSealed } = await import("@flagship/protocol");
+    const recipPriv = x25519.utils.randomSecretKey();
+    const recipPub = x25519.getPublicKey(recipPriv);
+    const luksKey = new Uint8Array(64);
+    for (let i = 0; i < 64; i++) luksKey[i] = (i * 7) & 0xff;
+    const luksPath = join(dir, "luks.key");
+    writeFileSync(luksPath, luksKey);
+    const { stdout } = run([
+      "seal-for-bak",
+      "--bak-x25519-pub",
+      Buffer.from(recipPub).toString("hex"),
+      "--in",
+      luksPath,
+    ]);
+    const sealed = hexToBytes(stdout);
+    const opened = openSealed(sealed, recipPriv);
+    expect(Buffer.from(opened)).toEqual(Buffer.from(luksKey));
+  });
+
+  it("seal-for-bak --bak-ed25519-pub roundtrips via the Ed25519→X25519 conversion", async () => {
+    const { ed25519 } = await import("@noble/curves/ed25519.js");
+    const { openSealed } = await import("@flagship/protocol");
+    const edPriv = ed25519.utils.randomSecretKey();
+    const edPub = ed25519.getPublicKey(edPriv);
+    const xPriv = ed25519.utils.toMontgomerySecret(edPriv);
+    const luksKey = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const luksPath = join(dir, "luks.key");
+    writeFileSync(luksPath, luksKey);
+    const { stdout } = run([
+      "seal-for-bak",
+      "--bak-ed25519-pub",
+      Buffer.from(edPub).toString("hex"),
+      "--in",
+      luksPath,
+    ]);
+    const sealed = hexToBytes(stdout);
+    const opened = openSealed(sealed, xPriv);
+    expect(Buffer.from(opened)).toEqual(Buffer.from(luksKey));
+  });
+
   it("sign-sealed-key: produces a verifiable PutSealedLuksKey envelope", async () => {
     const priv = new Uint8Array(32);
     for (let i = 0; i < 32; i++) priv[i] = i + 1;

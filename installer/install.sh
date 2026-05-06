@@ -172,15 +172,26 @@ echo "$REGISTRATION_URL"     > /mnt/boot/registration-url
 echo "$SERVER_DOMAIN"        > /mnt/boot/server-domain
 echo "$GIT_REF"              > /mnt/boot/installer-ref
 
-# 7. Encrypt the LUKS key for the phone. The actual sealed-box (x25519
-#    sealed_box / libsodium) implementation isn't yet wired into the
-#    install-helper — that piece needs the phone's BAK / PSK pubkey
-#    layout to be finalized. For now we placeholder a hex-encoded copy
-#    of the LUKS key as the "sealed" payload; the LUKS unlock flow
-#    still works because the phone-side will round-trip the same bytes
-#    until real sealing is in place.
-#    TODO: replace placeholder with libsodium sealed_box once phone is wired.
-SEALED_LUKS_KEY_HEX="$(xxd -p -c 256 "$LUKS_KEY" | tr -d '\n')"
+# 7. Encrypt the LUKS key for the phone using the Flagship sealed-box
+#    construction (ephemeral X25519 + AES-GCM, see
+#    `packages/protocol/src/encryption.ts → sealForRecipient`).
+#
+#    v1 auth-codes only carry the phone's Ed25519 delegated pubkey, not
+#    a dedicated BAK X25519 pubkey. We seal against the Ed25519 pubkey
+#    by birational-mapping it to its X25519 equivalent — the phone-side
+#    runs the matching conversion on its Ed25519 private key (the
+#    standard libsodium pattern). When future installs ship a BAK
+#    X25519 pubkey directly, swap the flag below for --bak-x25519-pub.
+#
+#    Copy the LUKS key into the chroot (it lives on the live USB by
+#    default) so the helper can read it.
+mkdir -p /mnt/run
+install -m 600 "$LUKS_KEY" /mnt/run/flagship-luks.key
+SEALED_LUKS_KEY_HEX="$(chroot /mnt sh -c "cd /opt/flagship && npx tsx scripts/install-helper.ts \
+    seal-for-bak \
+    --bak-ed25519-pub \"$PHONE_DELEGATED_PUBKEY\" \
+    --in /run/flagship-luks.key" | tr -d '\n')"
+shred -u /mnt/run/flagship-luks.key 2>/dev/null || rm -f /mnt/run/flagship-luks.key
 
 # 8. Register with .services via the runtime-agnostic control-plane handler.
 #    install-helper signs the ServerRegisterRequest from the auth-code blob
@@ -210,8 +221,28 @@ curl -fsS -X POST -H 'content-type: application/json' \
     "${CONTROL_PLANE_BASE}/api/server/${SERVER_DOMAIN}/sealed-luks-key" \
     || echo "flagship: warning — sealed-key upload failed; phone will need OOB"
 
-# 10. Boot-stage script runs on every boot.
-install -m 755 /usr/local/bin/flagship-boot-stage.sh /mnt/usr/local/bin/flagship-boot-stage.sh
+# 10. Boot-stage script runs on every boot. Source is the freshly-cloned
+#     installer/boot-stage.sh (the apkovl only ships the trailer-validate
+#     + bootstrap scripts; boot-stage lives in the repo so it can be
+#     iterated alongside the daemon code).
+install -m 755 /mnt/opt/flagship/installer/boot-stage.sh /mnt/usr/local/bin/flagship-boot-stage.sh
+
+# Register boot-stage as an OpenRC service that runs before the daemon
+# (which needs the LUKS-encrypted root mounted, which boot-stage owns).
+cat > /mnt/etc/init.d/flagship-boot-stage <<'OPENRC'
+#!/sbin/openrc-run
+name="flagship-boot-stage"
+description="Flagship steady-state boot stage: phone-mediated LUKS unlock"
+command="/usr/local/bin/flagship-boot-stage.sh"
+command_background="no"
+pidfile="/run/flagship-boot-stage.pid"
+depend() {
+    need net
+    before flagship-data-services flagship-daemon
+}
+OPENRC
+chmod +x /mnt/etc/init.d/flagship-boot-stage
+chroot /mnt rc-update add flagship-boot-stage default
 
 # 11. Bootloader (Alpine's setup-bootable equivalent — syslinux on the
 #     unencrypted boot partition).

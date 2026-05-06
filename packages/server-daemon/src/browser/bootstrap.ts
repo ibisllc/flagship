@@ -33,6 +33,7 @@
 
 import { join } from "node:path";
 import type { AlertInbox } from "../alertInbox.js";
+import type { PairedSessionGate } from "../alertInboxHttp.js";
 import { FileAppAuthTokens, type AppAuthTokens } from "../appAuthToken.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { buildBrowserApiHandlers } from "./apiHandlers.js";
@@ -70,6 +71,13 @@ export interface BootstrapBrowserOptions {
    * implementation.
    */
   appAuthTokens?: AppAuthTokens;
+  /**
+   * When set, the bundle's apiHandle gates `GET /api/browser/screenshot/<ref>`
+   * on a paired-session token. Production wires this to the same gate
+   * the AlertInbox HTTP uses so phone-paired browser sessions can fetch
+   * the bytes the alert references.
+   */
+  pairedSessionGate?: PairedSessionGate;
 }
 
 export interface BrowserBundle {
@@ -138,6 +146,7 @@ export async function bootstrapBrowserBundle(
     domainGate,
     phonePipe,
     appAuthTokens,
+    pairedSessionGate: opts.pairedSessionGate,
   });
 
   let closed = false;

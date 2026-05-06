@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   ed,
@@ -259,6 +259,14 @@ interface ExecutorDeps {
   controlPlaneBaseUrl: string;
   /** Where deliver-bak writes the BAK pubkey hex. Default `/var/flagship/bak.pub.hex`. */
   bakPubPath?: string;
+  /** Where rotate-server-identity reads the pending priv-hex. Default `/var/flagship/identity/identity.pending.priv.hex`. */
+  pendingIdentityPrivPath?: string;
+  /** Active identity priv-hex. Default `/var/flagship/identity/identity.priv.hex`. */
+  activeIdentityPrivPath?: string;
+  /** Active identity pub-hex. Default `/var/flagship/identity/identity.pub.hex`. */
+  activeIdentityPubPath?: string;
+  /** Boot-stage PEM the unsealed identity is consumed from at boot. Default `/boot/identity.pem`. */
+  bootIdentityPemPath?: string;
   /**
    * When the browser bundle is up, the orders dispatcher routes
    * `browser-input-response` here so the typed value reaches the
@@ -299,9 +307,18 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       }
       setTimeout(() => process.exit(0), 1000);
     },
-    rotateServerIdentity: ({ newIdentityPubKey }) => {
-      const len = newIdentityPubKey.length;
-      console.log(`[daemon] order: rotate-server-identity ${len}B (TODO: persist + reload)`);
+    rotateServerIdentity: async ({ newIdentityPubKey }) => {
+      console.log(
+        `[daemon] order: rotate-server-identity → swapping to pubkey ${bytesToHexLocal(newIdentityPubKey).slice(0, 16)}…`,
+      );
+      try {
+        await rotateIdentity(deps, newIdentityPubKey);
+        console.log(`[daemon] rotate complete; exiting in 1s so OpenRC respawns with new identity`);
+        setTimeout(() => process.exit(0), 1000);
+      } catch (e) {
+        console.error(`[daemon] rotate-server-identity failed: ${(e as Error).message}`);
+        throw e; // surfaces as 500 to phone
+      }
     },
     deliverBak: async ({ bakPubKey }) => {
       const path = deps.bakPubPath ?? "/var/flagship/bak.pub.hex";
@@ -329,6 +346,113 @@ async function persistBakPubKey(path: string, bakPubKey: Uint8Array): Promise<vo
   const tmp = `${path}.tmp`;
   await writeFile(tmp, hex + "\n", { mode: 0o600 });
   await rename(tmp, path);
+}
+
+/**
+ * Rotate the daemon's server-identity keypair. The phone-issued order
+ * carries the NEW pubkey; the matching priv must already be on disk
+ * under `pendingIdentityPrivPath` (the daemon writes that file via a
+ * prior phone-paired-session HTTP call to `/api/identity/pending`).
+ *
+ * Flow:
+ *   1. Verify the pending priv-hex on disk derives to the order's pubkey
+ *      — defends against a phone signing the wrong key.
+ *   2. Atomically replace `active.priv.hex` + `active.pub.hex` + boot
+ *      PEM with the new material (write tmp → rename, original priv
+ *      kept as `.previous` for one cycle in case the next start fails).
+ *   3. Best-effort revoke the old identity at .com so the routing
+ *      table updates. Failure is logged but doesn't abort — the new
+ *      identity is already on disk and will take over on next boot.
+ *   4. Caller exits the process (OpenRC respawns the daemon, which
+ *      reads the rotated files at startup).
+ *
+ * Tests inject all four paths through ExecutorDeps; production uses
+ * the defaults documented in the interface.
+ */
+async function rotateIdentity(
+  deps: ExecutorDeps,
+  newIdentityPubKey: Uint8Array,
+): Promise<void> {
+  const pendingPath =
+    deps.pendingIdentityPrivPath ?? "/var/flagship/identity/identity.pending.priv.hex";
+  const activePrivPath =
+    deps.activeIdentityPrivPath ?? "/var/flagship/identity/identity.priv.hex";
+  const activePubPath =
+    deps.activeIdentityPubPath ?? "/var/flagship/identity/identity.pub.hex";
+  const bootPemPath = deps.bootIdentityPemPath ?? "/boot/identity.pem";
+
+  let pendingHex: string;
+  try {
+    pendingHex = (await readFile(pendingPath, "utf8")).trim();
+  } catch (e) {
+    throw new Error(
+      `pending identity not on disk at ${pendingPath} — phone must POST /api/identity/pending first; ${(e as Error).message}`,
+    );
+  }
+  const pendingPriv = hexToBytes(pendingHex);
+  const derivedPub = ed.getPublicKey(pendingPriv);
+  if (!bytesEqualLocal(derivedPub, newIdentityPubKey)) {
+    throw new Error("pending identity priv on disk does not derive to the order's newIdentityPubKey");
+  }
+
+  // 1. Snapshot the current active priv as `.previous` so a rotation
+  //    that fails post-restart can be rolled back manually.
+  try {
+    const prev = await readFile(activePrivPath);
+    await writeFile(`${activePrivPath}.previous`, prev, { mode: 0o600 });
+  } catch {
+    // no prior identity — fresh-box rotation is unusual but not fatal
+  }
+
+  // 2. Atomically swap active = pending, plus the boot PEM.
+  await writeFile(`${activePrivPath}.tmp`, pendingHex + "\n", { mode: 0o600 });
+  await rename(`${activePrivPath}.tmp`, activePrivPath);
+  const newPubHex = bytesToHexLocal(newIdentityPubKey);
+  await writeFile(`${activePubPath}.tmp`, newPubHex + "\n", { mode: 0o644 });
+  await rename(`${activePubPath}.tmp`, activePubPath);
+  // Boot PEM gets the new priv as PKCS8 so boot-stage.sh can sign with it.
+  await writeFile(`${bootPemPath}.tmp`, pkcs8PemFromRaw(pendingPriv), { mode: 0o600 });
+  await rename(`${bootPemPath}.tmp`, bootPemPath);
+
+  // 3. Drop the pending file so the next rotate has to start fresh.
+  try {
+    await rm(pendingPath, { force: true });
+  } catch {
+    // best-effort
+  }
+
+  // 4. Revoke the old identity at .com so routing lookups stop accepting
+  //    HELLOs signed by it. The daemon's tunnel will reconnect on next
+  //    start with the new identity.
+  try {
+    await postSelfRevoke(deps, "rotated-by-phone");
+  } catch (e) {
+    // Non-fatal: the new identity is already on disk; we'll re-attempt
+    // revocation manually if needed.
+    console.warn(`[daemon] rotate: .com revoke best-effort failed: ${(e as Error).message}`);
+  }
+}
+
+const PKCS8_ED25519_PREFIX = new Uint8Array([
+  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04,
+  0x22, 0x04, 0x20,
+]);
+
+function pkcs8PemFromRaw(raw32: Uint8Array): string {
+  if (raw32.length !== 32) throw new Error("Ed25519 priv must be exactly 32 bytes");
+  const der = new Uint8Array(PKCS8_ED25519_PREFIX.length + 32);
+  der.set(PKCS8_ED25519_PREFIX, 0);
+  der.set(raw32, PKCS8_ED25519_PREFIX.length);
+  const b64 = Buffer.from(der).toString("base64");
+  const wrapped = b64.match(/.{1,64}/g)?.join("\n") ?? b64;
+  return `-----BEGIN PRIVATE KEY-----\n${wrapped}\n-----END PRIVATE KEY-----\n`;
+}
+
+function bytesEqualLocal(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0;
 }
 
 async function postSelfRevoke(deps: ExecutorDeps, reason: string): Promise<void> {

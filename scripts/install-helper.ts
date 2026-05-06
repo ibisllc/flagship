@@ -26,6 +26,8 @@
 import { writeFileSync, chmodSync, readFileSync } from "node:fs";
 import {
   ed,
+  sealForEd25519Recipient,
+  sealForRecipient,
   signPutSealedLuksKey,
   signServerRegister,
   type AuthCode,
@@ -190,6 +192,46 @@ function signSealedKey(argv: string[]): void {
   );
 }
 
+/**
+ * seal-for-bak --bak-x25519-pub <hex> --in <path> > sealed.hex
+ *   OR  --bak-ed25519-pub <hex> --in <path> > sealed.hex
+ *
+ * Encrypt the bytes at `--in` against the BAK pubkey using the Flagship
+ * sealed-box construction (ephemeral X25519 + AES-GCM). Output is hex on
+ * stdout — install.sh feeds that hex straight into the
+ * ServerRegisterRequest's sealedKey field.
+ *
+ * `--bak-x25519-pub` accepts a 32-byte raw X25519 pubkey (the strict
+ * production path). `--bak-ed25519-pub` accepts the Ed25519 pubkey from
+ * the auth-code's `phoneDelegatedPubKey` and converts it via the
+ * standard Ed25519→X25519 birational map; the matching phone-side
+ * unsealer runs the same conversion on its Ed25519 private key. This
+ * fallback exists because v1 auth-codes only carry the phone's Ed25519
+ * key; once the phone sends a dedicated BAK X25519 pubkey the strict
+ * path supersedes it.
+ *
+ * The phone is the only entity that can decrypt the output;
+ * flagshipserver.com stores the sealed blob but cannot recover the LUKS
+ * unlock key without the phone's private key.
+ */
+function sealForBak(argv: string[]): void {
+  const inPath = arg(argv, "--in");
+  const plaintext = readFileSync(inPath);
+  const xHexIdx = argv.indexOf("--bak-x25519-pub");
+  const eHexIdx = argv.indexOf("--bak-ed25519-pub");
+  let sealed: Uint8Array;
+  if (xHexIdx >= 0) {
+    const bakPub = hexToBytes(argv[xHexIdx + 1]!);
+    sealed = sealForRecipient(plaintext, bakPub);
+  } else if (eHexIdx >= 0) {
+    const edPub = hexToBytes(argv[eHexIdx + 1]!);
+    sealed = sealForEd25519Recipient(plaintext, edPub);
+  } else {
+    throw new Error("seal-for-bak requires --bak-x25519-pub or --bak-ed25519-pub");
+  }
+  process.stdout.write(bytesToHex(sealed) + "\n");
+}
+
 function main(): void {
   const [, , cmd, ...rest] = process.argv;
   switch (cmd) {
@@ -201,9 +243,11 @@ function main(): void {
       return signRegister(rest);
     case "sign-sealed-key":
       return signSealedKey(rest);
+    case "seal-for-bak":
+      return sealForBak(rest);
     default:
       console.error(
-        "usage: install-helper <gen-identity|pkcs8-from-hex|sign-server-register|sign-sealed-key> [args]",
+        "usage: install-helper <gen-identity|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak> [args]",
       );
       process.exit(2);
   }

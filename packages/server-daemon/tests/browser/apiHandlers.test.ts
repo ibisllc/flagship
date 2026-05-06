@@ -296,6 +296,79 @@ describe("Browser HTTP handlers", () => {
     expect(r2?.status).toBe(404);
   });
 
+  it("GET /api/browser/screenshot/:ref via paired-session token bypasses the app-token requirement", async () => {
+    const { TokenSetSessionGate } = await import("../../src/alertInboxHttp.js");
+    const sessionGate = new TokenSetSessionGate(new Set(["phone-paired-secret"]));
+    const gatedHandle = buildBrowserApiHandlers({
+      browser: mgr,
+      tabRegistry: registry,
+      domainGate: gate,
+      phonePipe: pipe,
+      appAuthTokens: tokens,
+      pairedSessionGate: sessionGate,
+    });
+    server.on("Target.createTarget", () => ({ targetId: "tab-1" }));
+    await gatedHandle(
+      req({
+        method: "POST",
+        path: "/api/browser/tabs",
+        token: aliceToken,
+        body: { url: "https://amazon.com/" },
+      }),
+    );
+    const reqR = await gatedHandle(
+      req({
+        method: "POST",
+        path: "/api/browser/tabs/tab-1/request-input",
+        token: aliceToken,
+        body: { inputKind: "password" },
+      }),
+    );
+    const ref = JSON.parse(String(reqR?.body)).screenshotRef;
+
+    // Phone-paired call: no app-token bearer, but a Flagship-Session
+    // header. Should succeed.
+    const phoneR = await gatedHandle({
+      method: "GET",
+      path: `/api/browser/screenshot/${ref}`,
+      headers: { authorization: "Flagship-Session phone-paired-secret" },
+      body: Buffer.alloc(0),
+    });
+    expect(phoneR?.status).toBe(200);
+    expect(phoneR?.headers?.["content-type"]).toBe("image/png");
+  });
+
+  it("paired-session gate denies a wrong session token, falls through to app-token path", async () => {
+    const { TokenSetSessionGate } = await import("../../src/alertInboxHttp.js");
+    const sessionGate = new TokenSetSessionGate(new Set(["phone-paired-secret"]));
+    const gatedHandle = buildBrowserApiHandlers({
+      browser: mgr,
+      tabRegistry: registry,
+      domainGate: gate,
+      phonePipe: pipe,
+      appAuthTokens: tokens,
+      pairedSessionGate: sessionGate,
+    });
+    server.on("Target.createTarget", () => ({ targetId: "tab-1" }));
+    await gatedHandle(
+      req({
+        method: "POST",
+        path: "/api/browser/tabs",
+        token: aliceToken,
+        body: { url: "https://amazon.com/" },
+      }),
+    );
+
+    // Wrong session token + no app token → 401 from the app-token path.
+    const r = await gatedHandle({
+      method: "GET",
+      path: `/api/browser/screenshot/some-ref`,
+      headers: { authorization: "Flagship-Session WRONG" },
+      body: Buffer.alloc(0),
+    });
+    expect(r?.status).toBe(401);
+  });
+
   it("405 for an unsupported verb under /tabs/:id/", async () => {
     server.on("Target.createTarget", () => ({ targetId: "tab-1" }));
     await handle(req({ method: "POST", path: "/api/browser/tabs", token: aliceToken, body: { url: "https://amazon.com/" } }));
