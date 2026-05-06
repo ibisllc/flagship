@@ -93,3 +93,39 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Forgejo: per-server git host. Each app's repo lives here. The
+  # daemon's update-pack mechanism (future feature; see
+  # `memory/future_app_update_pack.md`) reads/writes via Forgejo's HTTP
+  # API. SSH is disabled — git traffic is HTTP+token only, all over
+  # loopback.
+  #
+  # Storage: SQLite under /data; one volume holds both the SQLite DB
+  # and the on-disk repos. Bound to 127.0.0.1:3030 only.
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:9-rootless
+    container_name: flagship-forgejo
+    restart: unless-stopped
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      FORGEJO__database__DB_TYPE: sqlite3
+      FORGEJO__database__PATH: /var/lib/gitea/data/forgejo.db
+      FORGEJO__server__DOMAIN: 127.0.0.1
+      FORGEJO__server__HTTP_ADDR: 0.0.0.0
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__server__ROOT_URL: http://127.0.0.1:3030
+      FORGEJO__server__DISABLE_SSH: "true"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__service__REGISTER_EMAIL_CONFIRM: "false"
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__log__MODE: console
+    volumes:
+      - /var/flagship/data/forgejo:/var/lib/gitea
+    ports:
+      - "127.0.0.1:3030:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 60

@@ -27,7 +27,7 @@ SECRETS_DIR=/var/flagship
 SECRETS_FILE="$SECRETS_DIR/data-services.env"
 COMPOSE=/opt/flagship/installer/data-services/docker-compose.yml
 
-mkdir -p "$DATA_DIR/postgres" "$DATA_DIR/minio" "$DATA_DIR/redis"
+mkdir -p "$DATA_DIR/postgres" "$DATA_DIR/minio" "$DATA_DIR/redis" "$DATA_DIR/forgejo"
 mkdir -p "$SECRETS_DIR"
 chmod 700 "$SECRETS_DIR"
 chmod 700 "$DATA_DIR"
@@ -83,11 +83,12 @@ while :; do
     pg=$(docker inspect -f '{{.State.Health.Status}}' flagship-postgres 2>/dev/null || echo starting)
     mn=$(docker inspect -f '{{.State.Health.Status}}' flagship-minio 2>/dev/null || echo starting)
     rd=$(docker inspect -f '{{.State.Health.Status}}' flagship-redis 2>/dev/null || echo starting)
-    if [ "$pg" = "healthy" ] && [ "$mn" = "healthy" ] && [ "$rd" = "healthy" ]; then
-        echo "flagship: data services healthy (pg=$pg minio=$mn redis=$rd)"
+    fg=$(docker inspect -f '{{.State.Health.Status}}' flagship-forgejo 2>/dev/null || echo starting)
+    if [ "$pg" = "healthy" ] && [ "$mn" = "healthy" ] && [ "$rd" = "healthy" ] && [ "$fg" = "healthy" ]; then
+        echo "flagship: data services healthy (pg=$pg minio=$mn redis=$rd forgejo=$fg)"
         break
     fi
-    echo "flagship: waiting (pg=$pg minio=$mn redis=$rd)"
+    echo "flagship: waiting (pg=$pg minio=$mn redis=$rd forgejo=$fg)"
     sleep 3
 done
 
