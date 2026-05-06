@@ -449,3 +449,42 @@ export type {
 } from "./browser/bootstrap.js";
 export { InMemoryAlertInbox } from "./alertInbox.js";
 export type { AlertInbox, AlertEnvelope } from "./alertInbox.js";
+export {
+  FileAppPullStateStore,
+  InMemoryAppPullStateStore,
+  UpdateClient,
+} from "./updateClient.js";
+export type {
+  AppPullState,
+  AppPullStateStore,
+  PhoneUpdateAlert,
+  PullResult,
+  UpdateClientDeps,
+  UpdatePolicy,
+} from "./updateClient.js";
+export { UpdateServer } from "./updateServer.js";
+export type {
+  AppDistributionInfo,
+  UpdateServerDeps,
+} from "./updateServer.js";
+export { UpdateScheduler } from "./updateScheduler.js";
+export type { UpdateSchedulerDeps } from "./updateScheduler.js";
+export {
+  FileSubscriberRegistry,
+  InMemorySubscriberRegistry,
+  buildAppDistribution,
+} from "./subscriberRegistry.js";
+export type {
+  SubscriberRegistry,
+  BuildAppDistributionDeps,
+} from "./subscriberRegistry.js";
+export { buildRunMigration } from "./runMigration.js";
+export type { RunMigrationDeps } from "./runMigration.js";
+export {
+  TokenSetSessionGate,
+  buildAlertInboxHandlers,
+} from "./alertInboxHttp.js";
+export type {
+  AlertInboxHttpDeps,
+  PairedSessionGate,
+} from "./alertInboxHttp.js";

@@ -33,6 +33,7 @@ import {
 import type { AppAuthTokens } from "./appAuthToken.js";
 import type { DomainGate } from "./browser/domainGate.js";
 import type { TabRegistry } from "./browser/tabRegistry.js";
+import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClient.js";
 
 export interface InstalledApp {
   creator: string;
@@ -82,6 +83,25 @@ export interface AppPlatformDeps {
    */
   domainGate?: DomainGate | null;
   tabRegistry?: TabRegistry | null;
+  /**
+   * Update-pack canonical-home registration. When `pullStateStore`
+   * is set AND the app is cross-creator (creator !== host), install
+   * records an initial AppPullState so the pull scheduler can fetch
+   * updates from the canonical home.
+   *
+   * `cloneApp` is the daemon-injected hook that clones the canonical
+   * repo into the working tree and returns the HEAD commit (lineage
+   * anchor + initial tip). Production wires it to a real git client;
+   * tests inject a fake. When unset, install records canonicalUrl +
+   * empty anchor (the first pull then materializes history) — this
+   * is "register but don't clone yet" and is sometimes useful for
+   * deferred-fetch flows.
+   */
+  pullStateStore?: AppPullStateStore | null;
+  cloneApp?: ((args: {
+    appId: string;
+    canonicalUrl: string;
+  }) => Promise<{ currentTip: string }>) | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -111,6 +131,19 @@ export class AppPlatform {
    */
   static urlLabel(host: string, creator: string, slug: string): string {
     return creator === host ? slug : `${slug}-${creator}`;
+  }
+
+  /**
+   * The canonical home of an app — where update-packs are pulled from.
+   * Always the creator's pod, regardless of who is hosting:
+   *
+   *   `<slug>.<creator>.flagship.services`
+   *
+   * (For self-authored apps, this is also where THIS box lives, so
+   * registering a pull state is generally a no-op.)
+   */
+  static canonicalUrl(creator: string, slug: string): string {
+    return `${slug}.${creator}.flagship.services`;
   }
 
   list(): InstalledApp[] {
@@ -265,6 +298,42 @@ export class AppPlatform {
       this.deps.domainGate.setGrant(appId, parsed.manifest.browser.domains);
     }
 
+    // Update-pack: record canonical-home pull state on first install
+    // for cross-creator apps. Self-authored apps don't need this — the
+    // pull scheduler skips them since this box IS the canonical home.
+    if (
+      this.deps.pullStateStore &&
+      r.creator !== this.deps.host.username
+    ) {
+      const canonicalUrl = AppPlatform.canonicalUrl(r.creator, r.slug);
+      const updatePolicy: UpdatePolicy = "auto";
+      let currentTip = "";
+      if (this.deps.cloneApp) {
+        try {
+          const r2 = await this.deps.cloneApp({ appId, canonicalUrl });
+          currentTip = r2.currentTip;
+        } catch (e) {
+          // Cloning is best-effort; the pull scheduler will recover on its
+          // next tick if the canonical home was unreachable transiently.
+          // We log and proceed (the install itself succeeded).
+          void e;
+        }
+      }
+      const pullState: AppPullState = {
+        canonicalUrl,
+        lineageAnchor: currentTip,
+        currentTip,
+        lastAppliedMigration: "",
+        updatePolicy,
+      };
+      try {
+        await this.deps.pullStateStore.put(appId, pullState);
+      } catch {
+        // Same rationale: don't fail the install over a state-write
+        // hiccup; the scheduler is the recovery path.
+      }
+    }
+
     return { ok: true, app: installed };
   }
 
@@ -351,6 +420,11 @@ export class AppPlatform {
     }
     if (this.deps.domainGate) {
       this.deps.domainGate.revoke(appId);
+    }
+    // Update-pack: drop pull state so the scheduler doesn't keep
+    // contacting the canonical home for an app no longer installed.
+    if (this.deps.pullStateStore?.delete) {
+      await this.deps.pullStateStore.delete(appId).catch(() => {});
     }
     this.apps.delete(appId);
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());

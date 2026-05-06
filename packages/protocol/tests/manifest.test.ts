@@ -359,6 +359,50 @@ describe("parseManifest — browser field (pod-resident Chromium gate)", () => {
   });
 });
 
+describe("parseManifest — distribution field (update-pack policy)", () => {
+  it("manifest without `distribution` parses fine; the field stays undefined", () => {
+    const m = valid();
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.distribution).toBeUndefined();
+  });
+
+  it("accepts distribution.public true (open-source apps)", () => {
+    const m = { ...valid(), distribution: { public: true } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.distribution?.public).toBe(true);
+  });
+
+  it("accepts distribution.public false explicitly", () => {
+    const m = { ...valid(), distribution: { public: false } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.distribution?.public).toBe(false);
+  });
+
+  it("rejects distribution.public of a non-boolean type", () => {
+    const m = { ...valid(), distribution: { public: "yes" } };
+    expect(parseManifest(m).ok).toBe(false);
+  });
+
+  it("rejects unknown fields under distribution to surface typos", () => {
+    const m = {
+      ...valid(),
+      distribution: { public: true, secret: false },
+    };
+    expect(parseManifest(m).ok).toBe(false);
+  });
+
+  it("rejects distribution as a non-object", () => {
+    const m = { ...valid(), distribution: "public" };
+    expect(parseManifest(m).ok).toBe(false);
+  });
+});
+
 describe("matchBrowserDomain — DomainGate uses this exact matcher", () => {
   it("literal hosts match exactly, no subdomain leakage", async () => {
     const { matchBrowserDomain } = await import("../src/manifest.js");

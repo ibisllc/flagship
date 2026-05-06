@@ -26,6 +26,21 @@ export interface AppManifest {
    * this field cannot use the browser API at all.
    */
   browser?: AppBrowser;
+  /**
+   * Optional. Update-pack distribution policy.
+   */
+  distribution?: AppDistribution;
+}
+
+export interface AppDistribution {
+  /**
+   * When true, any signed puller can fetch update packs without being
+   * on the canonical-home's subscriber list. Useful for open-source
+   * apps that want anyone hosting the app to receive updates. The
+   * puller's identity is still verified (sig auth on every request),
+   * but no membership check gates access. Default: false.
+   */
+  public?: boolean;
 }
 
 export interface AppRuntime {
@@ -229,6 +244,7 @@ export function parseManifest(input: unknown): ManifestParseResult {
   const access = parseAccess(m.access, e);
   const migration = parseMigration(m.migration, e);
   const browser = parseBrowser(m.browser, e);
+  const distribution = parseDistribution(m.distribution, e);
 
   if (errors.length > 0) return { ok: false, errors };
 
@@ -245,8 +261,33 @@ export function parseManifest(input: unknown): ManifestParseResult {
       access: access!,
       migration: migration!,
       browser,
+      distribution,
     },
   };
+}
+
+function parseDistribution(
+  v: unknown,
+  e: (m: string) => void,
+): AppDistribution | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    e("distribution must be an object");
+    return undefined;
+  }
+  const d = v as Record<string, unknown>;
+  let pub: boolean | undefined;
+  if (d.public !== undefined) {
+    if (typeof d.public !== "boolean") {
+      e("distribution.public must be a boolean when present");
+    } else {
+      pub = d.public;
+    }
+  }
+  for (const k of Object.keys(d)) {
+    if (k !== "public") e(`distribution.${k} is not a recognized field`);
+  }
+  return { public: pub };
 }
 
 function parseRuntime(v: unknown, e: (m: string) => void): AppRuntime | undefined {

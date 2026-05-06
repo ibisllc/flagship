@@ -56,6 +56,10 @@ export interface AppPullState {
 export interface AppPullStateStore {
   get(appId: string): Promise<AppPullState | null>;
   put(appId: string, state: AppPullState): Promise<void>;
+  /** List all appIds with persisted pull state (for the scheduler). */
+  list?(): Promise<string[]>;
+  /** Drop the entry — called on uninstall. Idempotent. */
+  delete?(appId: string): Promise<void>;
 }
 
 export type PhoneUpdateAlert =
@@ -425,6 +429,42 @@ export class FileAppPullStateStore implements AppPullStateStore {
     // atomic replace
     const { rename } = await import("node:fs/promises");
     await rename(tmp, this.path(appId));
+  }
+
+  async list(): Promise<string[]> {
+    if (!existsSync(this.dir)) return [];
+    return readdirSync(this.dir)
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -".json".length));
+  }
+
+  async delete(appId: string): Promise<void> {
+    await rm(this.path(appId), { force: true });
+  }
+}
+
+/**
+ * In-memory store for tests and ephemeral test daemons. Production uses
+ * `FileAppPullStateStore`. Implements `list` + `delete` so the scheduler
+ * + AppPlatform.uninstall can find/clean entries.
+ */
+export class InMemoryAppPullStateStore implements AppPullStateStore {
+  private readonly byApp = new Map<string, AppPullState>();
+
+  async get(appId: string): Promise<AppPullState | null> {
+    return this.byApp.get(appId) ?? null;
+  }
+
+  async put(appId: string, state: AppPullState): Promise<void> {
+    this.byApp.set(appId, state);
+  }
+
+  async list(): Promise<string[]> {
+    return [...this.byApp.keys()];
+  }
+
+  async delete(appId: string): Promise<void> {
+    this.byApp.delete(appId);
   }
 }
 

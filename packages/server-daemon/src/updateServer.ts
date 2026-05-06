@@ -59,9 +59,12 @@ export interface AppDistributionInfo {
 export interface UpdateServerDeps {
   /**
    * Per-app distribution lookup. Returns null if the app isn't shareable
-   * (no repo, or this box isn't its canonical home).
+   * (no repo, or this box isn't its canonical home). Async so subscriber
+   * lookups can hit a real (file/D1-backed) registry.
    */
-  appDistribution: (app: InstalledApp) => AppDistributionInfo | null;
+  appDistribution: (
+    app: InstalledApp,
+  ) => Promise<AppDistributionInfo | null> | AppDistributionInfo | null;
 
   /**
    * Resolve a remote server identity FQDN to its Ed25519 pubkey.
@@ -174,7 +177,7 @@ export class UpdateServer {
     }
 
     // Authorization: subscriber-list or public.
-    const dist = this.deps.appDistribution(app);
+    const dist = await this.deps.appDistribution(app);
     if (!dist) {
       return { status: 404, headers: { "content-type": "text/plain" }, body: "app has no distribution surface on this box" };
     }
