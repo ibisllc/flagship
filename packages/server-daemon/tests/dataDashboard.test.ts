@@ -74,14 +74,14 @@ describe("/data dashboard endpoints", () => {
     const { ctx, pg } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
-    pg.databases.get("flagship_harry_habit_tracker")!.tables.set("habits", []);
+    pg.databases.get("_harry_habit_tracker")!.tables.set("habits", []);
     const r = await http.inject({
       method: "GET",
       url: "/data/postgres/habit-tracker/tables?sessionToken=phone-token",
     });
     expect(r.statusCode).toBe(200);
     const body = JSON.parse(r.body);
-    expect(body.database).toBe("flagship_harry_habit_tracker");
+    expect(body.database).toBe("_harry_habit_tracker");
     expect(body.tables).toEqual(["habits"]);
   });
 
@@ -89,7 +89,7 @@ describe("/data dashboard endpoints", () => {
     const { ctx, pg } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
-    pg.databases.get("flagship_harry_habit_tracker")!.tables.set("habits", [
+    pg.databases.get("_harry_habit_tracker")!.tables.set("habits", [
       [{ id: 1 }],
       [{ id: 2 }],
     ]);

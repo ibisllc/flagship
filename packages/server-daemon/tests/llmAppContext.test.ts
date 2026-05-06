@@ -58,8 +58,8 @@ describe("buildLlmAppContext", () => {
       generateSecret: () => "supersecret",
     });
     const creds = await provisioner.provisionApp({
-      username: "harry",
-      appName: "habit-tracker",
+      creator: "harry",
+      slug: "habit-tracker",
       stores: { postgres: true },
     });
     const deployed = new Map<string, { manifest: AppManifest }>();
@@ -93,8 +93,8 @@ describe("buildLlmAppContext", () => {
       generateSecret: () => "x",
     });
     const creds = await provisioner.provisionApp({
-      username: "harry",
-      appName: "habits",
+      creator: "harry",
+      slug: "habits",
       stores: { postgres: ["main", "analytics"] },
     });
     const m = manifest({ data: { stores: { postgres: ["main", "analytics"] } } });

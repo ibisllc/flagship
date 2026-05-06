@@ -236,11 +236,11 @@ describe("daemon HTTP — POST /apps with data.stores", () => {
       },
     });
     expect(r.statusCode).toBe(200);
-    expect(pg.databases.has("flagship_harry_habit_tracker")).toBe(true);
+    expect(pg.databases.has("_harry_habit_tracker")).toBe(true);
     const runArgs = rec.calls.find((c) => c.args[0] === "run")!;
     const envFlags = runArgs.args.filter((_, i) => runArgs.args[i - 1] === "-e");
     expect(envFlags.find((e) => e.startsWith("FLAGSHIP_PG_URL="))).toBeDefined();
-    expect(envFlags.find((e) => e.startsWith("FLAGSHIP_PG_DATABASE=flagship_harry_habit_tracker"))).toBeDefined();
+    expect(envFlags.find((e) => e.startsWith("FLAGSHIP_PG_DATABASE=_harry_habit_tracker"))).toBeDefined();
   });
 
   it("rolls back data resources when the deploy fails", async () => {

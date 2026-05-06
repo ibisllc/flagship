@@ -14,21 +14,48 @@ import {
   s3Bucket,
 } from "../src/dataLayer/index.js";
 
-describe("naming helpers", () => {
-  it("Postgres database name uses the flagship_<user>_<app> shape with underscores", () => {
-    expect(pgDatabase({ username: "harry", appName: "habit-tracker" })).toBe(
-      "flagship_harry_habit_tracker",
+describe("naming helpers — host-independent (creator, slug, storeName) identity", () => {
+  it("Postgres database is `_<creator>_<slug>` with dashes folded to underscores", () => {
+    expect(pgDatabase({ creator: "harry", slug: "habit-tracker" })).toBe(
+      "_harry_habit_tracker",
     );
   });
-  it("S3 bucket is hyphenated and DNS-safe", () => {
-    expect(s3Bucket({ username: "harry", appName: "habit-tracker" })).toBe("harry-habit-tracker");
+  it("Postgres database includes a dashless storeName suffix when present", () => {
+    expect(
+      pgDatabase({ creator: "harry", slug: "game1", storeName: "sprites" }),
+    ).toBe("_harry_game1_sprites");
   });
-  it("Redis prefix has trailing colon for safe glob matching", () => {
-    expect(redisPrefix({ username: "harry", appName: "habits" })).toBe("harry:habits:");
+  it("default storeName renders as if absent (single-store apps stay clean)", () => {
+    expect(
+      pgDatabase({ creator: "harry", slug: "game1", storeName: "default" }),
+    ).toBe("_harry_game1");
   });
-  it("rejects non-DNS-label inputs (typo defense; could otherwise inject SQL identifiers)", () => {
-    expect(() => pgDatabase({ username: "Harry!", appName: "x" })).toThrow();
-    expect(() => s3Bucket({ username: "h", appName: "with.dot" })).toThrow();
+  it("S3 bucket is dash-joined and preserves dashes in slug", () => {
+    expect(s3Bucket({ creator: "harry", slug: "habit-tracker" })).toBe("harry-habit-tracker");
+    expect(
+      s3Bucket({ creator: "harry", slug: "game1", storeName: "sprites" }),
+    ).toBe("harry-game1-sprites");
+  });
+  it("Redis prefix uses colon separators, dashes preserved", () => {
+    expect(redisPrefix({ creator: "harry", slug: "habit-tracker" })).toBe(
+      "harry:habit-tracker:",
+    );
+    expect(
+      redisPrefix({ creator: "harry", slug: "game1", storeName: "sprites" }),
+    ).toBe("harry:game1:sprites:");
+  });
+  it("rejects creator with dashes (parsing ambiguity defense)", () => {
+    expect(() => pgDatabase({ creator: "har-ry", slug: "x" })).toThrow();
+  });
+  it("rejects slug with leading/trailing dash or double dash", () => {
+    expect(() => pgDatabase({ creator: "harry", slug: "-foo" })).toThrow();
+    expect(() => pgDatabase({ creator: "harry", slug: "foo-" })).toThrow();
+    expect(() => pgDatabase({ creator: "harry", slug: "foo--bar" })).toThrow();
+  });
+  it("rejects storeName with dashes (storeNames are dashless)", () => {
+    expect(() =>
+      pgDatabase({ creator: "harry", slug: "x", storeName: "main-data" }),
+    ).toThrow();
   });
   it("generateSecret produces 32 bytes of base64url with no padding chars", () => {
     const s = generateSecret();
@@ -36,16 +63,16 @@ describe("naming helpers", () => {
     expect(s.length).toBeGreaterThan(40);
   });
   it("pgRole equals pgDatabase (one role per app keeps RBAC predictable)", () => {
-    const naming = { username: "harry", appName: "x" };
-    expect(pgRole(naming)).toBe(pgDatabase(naming));
+    const id = { creator: "harry", slug: "x" };
+    expect(pgRole(id)).toBe(pgDatabase(id));
   });
   it("redisUser equals pgRole (callers can refer to one identifier)", () => {
-    const naming = { username: "harry", appName: "x" };
-    expect(redisUser(naming)).toBe(pgRole(naming));
+    const id = { creator: "harry", slug: "x" };
+    expect(redisUser(id)).toBe(pgRole(id));
   });
   it("s3AccessKey equals s3Bucket", () => {
-    const naming = { username: "harry", appName: "x" };
-    expect(s3AccessKey(naming)).toBe(s3Bucket(naming));
+    const id = { creator: "harry", slug: "x" };
+    expect(s3AccessKey(id)).toBe(s3Bucket(id));
   });
 });
 
@@ -67,14 +94,14 @@ describe("DataProvisioner.provisionApp", () => {
       generateSecret: () => "fixed-secret",
     });
     const creds = await prov.provisionApp({
-      username: "harry",
-      appName: "habit-tracker",
+      creator: "harry",
+      slug: "habit-tracker",
       stores: { postgres: true, objects: false, kv: false },
     });
     expect(creds.postgres).toBeDefined();
     expect(creds.objects).toBeUndefined();
     expect(creds.kv).toBeUndefined();
-    expect(pg.databases.has("flagship_harry_habit_tracker")).toBe(true);
+    expect(pg.databases.has("_harry_habit_tracker")).toBe(true);
     expect(objects.buckets.size).toBe(0);
     expect(kv.users.size).toBe(0);
   });
@@ -88,12 +115,12 @@ describe("DataProvisioner.provisionApp", () => {
       generateSecret: () => "secret",
     });
     const creds = await prov.provisionApp({
-      username: "harry",
-      appName: "habits",
+      creator: "harry",
+      slug: "habits",
       stores: { postgres: true, objects: true, kv: true },
     });
     const env = credentialsToEnv(creds);
-    expect(env.FLAGSHIP_PG_URL).toContain("flagship_harry_habits");
+    expect(env.FLAGSHIP_PG_URL).toContain("_harry_habits");
     expect(env.FLAGSHIP_S3_BUCKET).toBe("harry-habits");
     expect(env.FLAGSHIP_REDIS_URL).toContain(encodeURIComponent("harry:habits:"));
     expect(env.FLAGSHIP_REDIS_PREFIX).toBe("harry:habits:");
@@ -110,15 +137,15 @@ describe("DataProvisioner.provisionApp", () => {
       generateSecret: () => "p/a@ss?word#",
     });
     const creds = await prov.provisionApp({
-      username: "harry",
-      appName: "x",
+      creator: "harry",
+      slug: "x",
       stores: { postgres: true, kv: true },
     });
     expect(creds.postgres!.default!.url).toContain("p%2Fa%40ss%3Fword%23");
     expect(creds.kv!.default!.url).toContain("p%2Fa%40ss%3Fword%23");
   });
 
-  it("multi-instance Postgres: each named instance gets its own DB + role + suffixed env var", async () => {
+  it("multi-store Postgres: each named store gets its own DB + role + suffixed env var", async () => {
     const { pg, objects, kv } = setup();
     const prov = new DataProvisioner({
       postgres: pg,
@@ -127,21 +154,21 @@ describe("DataProvisioner.provisionApp", () => {
       generateSecret: () => "s",
     });
     const creds = await prov.provisionApp({
-      username: "harry",
-      appName: "habits",
+      creator: "harry",
+      slug: "habits",
       stores: { postgres: ["main", "analytics"] },
     });
     expect(Object.keys(creds.postgres!).sort()).toEqual(["analytics", "main"]);
-    expect(pg.databases.has("flagship_harry_habits_main")).toBe(true);
-    expect(pg.databases.has("flagship_harry_habits_analytics")).toBe(true);
+    expect(pg.databases.has("_harry_habits_main")).toBe(true);
+    expect(pg.databases.has("_harry_habits_analytics")).toBe(true);
     const env = credentialsToEnv(creds);
-    expect(env.FLAGSHIP_PG_URL_MAIN).toContain("flagship_harry_habits_main");
-    expect(env.FLAGSHIP_PG_URL_ANALYTICS).toContain("flagship_harry_habits_analytics");
-    expect(env.FLAGSHIP_PG_URL).toBeUndefined(); // no singleton when multi-instance
-    expect(env.FLAGSHIP_PG_INSTANCES).toBe("main,analytics");
+    expect(env.FLAGSHIP_PG_URL_MAIN).toContain("_harry_habits_main");
+    expect(env.FLAGSHIP_PG_URL_ANALYTICS).toContain("_harry_habits_analytics");
+    expect(env.FLAGSHIP_PG_URL).toBeUndefined(); // no singleton when multi-store
+    expect(env.FLAGSHIP_PG_STORES).toBe("main,analytics");
   });
 
-  it("multi-instance MinIO: hyphen suffix in bucket names, _<INST> suffix in env vars", async () => {
+  it("multi-store MinIO: dash suffix in bucket names, _<NAME> suffix in env vars", async () => {
     const { pg, objects, kv } = setup();
     const prov = new DataProvisioner({
       postgres: pg,
@@ -150,8 +177,8 @@ describe("DataProvisioner.provisionApp", () => {
       generateSecret: () => "s",
     });
     const creds = await prov.provisionApp({
-      username: "harry",
-      appName: "habits",
+      creator: "harry",
+      slug: "habits",
       stores: { objects: ["public", "private"] },
     });
     expect(objects.buckets.has("harry-habits-public")).toBe(true);
@@ -161,7 +188,7 @@ describe("DataProvisioner.provisionApp", () => {
     expect(env.FLAGSHIP_S3_BUCKET_PRIVATE).toBe("harry-habits-private");
   });
 
-  it("multi-instance Redis: prefix carries the instance name (`<user>:<app>:<instance>:`)", async () => {
+  it("multi-store Redis: prefix carries the storeName (`<creator>:<slug>:<storeName>:`)", async () => {
     const { pg, objects, kv } = setup();
     const prov = new DataProvisioner({
       postgres: pg,
@@ -170,20 +197,20 @@ describe("DataProvisioner.provisionApp", () => {
       generateSecret: () => "s",
     });
     const creds = await prov.provisionApp({
-      username: "harry",
-      appName: "habits",
+      creator: "harry",
+      slug: "habits",
       stores: { kv: ["cache", "queue"] },
     });
     expect(creds.kv!.cache.prefix).toBe("harry:habits:cache:");
     expect(creds.kv!.queue.prefix).toBe("harry:habits:queue:");
   });
 
-  it("rejects manifest with duplicate instance names at the provisioner boundary", async () => {
+  it("rejects manifest with duplicate storeNames at the provisioner boundary", async () => {
     const prov = new DataProvisioner({ postgres: new InMemoryPostgresAdmin() });
     await expect(
       prov.provisionApp({
-        username: "harry",
-        appName: "x",
+        creator: "harry",
+        slug: "x",
         stores: { postgres: ["main", "main"] },
       }),
     ).rejects.toThrow(/duplicate/);
@@ -193,8 +220,8 @@ describe("DataProvisioner.provisionApp", () => {
     const prov = new DataProvisioner({});
     await expect(
       prov.provisionApp({
-        username: "harry",
-        appName: "x",
+        creator: "harry",
+        slug: "x",
         stores: { postgres: true },
       }),
     ).rejects.toThrow(/postgres admin/);
@@ -208,17 +235,33 @@ describe("DataProvisioner.deprovisionApp", () => {
     const kv = new InMemoryRedisAdmin();
     const prov = new DataProvisioner({ postgres: pg, objects, kv });
     await prov.provisionApp({
-      username: "harry",
-      appName: "x",
+      creator: "harry",
+      slug: "x",
       stores: { postgres: true, objects: true, kv: true },
     });
     await prov.deprovisionApp({
-      username: "harry",
-      appName: "x",
+      creator: "harry",
+      slug: "x",
       stores: { postgres: true, objects: false, kv: true },
     });
     expect(pg.databases.size).toBe(0);
     expect(objects.buckets.size).toBe(1); // not asked to drop objects
     expect(kv.users.size).toBe(0);
+  });
+});
+
+describe("cross-host portability — same data identity regardless of where the app runs", () => {
+  it("a `<creator>=alice, slug=game1` app produces the same names on alice's box and on bob's", async () => {
+    // Simulates the migration story: alice creates the app; later bob's box
+    // runs the same identity. The data namespace doesn't include the host,
+    // so the names match regardless of which box the test is "running on."
+    const onAlicesBox = pgDatabase({ creator: "alice", slug: "game1" });
+    const onBobsBox = pgDatabase({ creator: "alice", slug: "game1" });
+    expect(onAlicesBox).toBe(onBobsBox);
+    expect(onAlicesBox).toBe("_alice_game1");
+
+    // The host appears in the URL but never in data names.
+    expect(s3Bucket({ creator: "alice", slug: "game1" })).toBe("alice-game1");
+    expect(redisPrefix({ creator: "alice", slug: "game1" })).toBe("alice:game1:");
   });
 });

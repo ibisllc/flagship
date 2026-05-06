@@ -300,8 +300,8 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       }
       try {
         creds = await ctx.dataProvisioner.provisionApp({
-          username: ctx.userId,
-          appName: appId,
+          creator: ctx.userId,
+          slug: appId,
           stores,
         });
       } catch (e) {
@@ -329,7 +329,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       // a half-provisioned tenant.
       if (creds && ctx.dataProvisioner) {
         await ctx.dataProvisioner
-          .deprovisionApp({ username: ctx.userId, appName: appId, stores })
+          .deprovisionApp({ creator: ctx.userId, slug: appId, stores })
           .catch(() => {});
       }
       return reply.status(500).send({ error: "deploy failed", message: errMsg(e) });
@@ -364,8 +364,8 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     if (entry.data && ctx.dataProvisioner) {
       await ctx.dataProvisioner
         .deprovisionApp({
-          username: ctx.userId,
-          appName: appId,
+          creator: ctx.userId,
+          slug: appId,
           stores: entry.manifest.data.stores ?? {},
         })
         .catch(() => {

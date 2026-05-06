@@ -101,8 +101,12 @@ chmod 700 "$SERVER_IDENTITY_DIR"
 
 # 5. Fetch flagship code into the encrypted root, install build deps,
 #    build the daemon, set up the systemd-equivalent unit (OpenRC under
-#    Alpine).
-apk add --no-cache git nodejs npm openrc openssl
+#    Alpine). Docker is added here too — it backs both the per-app
+#    AppRunner and the unified data-layer compose stack (postgres,
+#    minio, redis, adminer).
+apk add --no-cache git nodejs npm openrc openssl docker docker-cli-compose curl
+rc-update add docker default
+service docker start || true
 git clone --depth 1 --branch "$GIT_REF" "$REPO_URL" /mnt/opt/flagship || \
     git clone --depth 1 "$REPO_URL" /mnt/opt/flagship
 cd /mnt/opt/flagship
@@ -118,6 +122,25 @@ chroot /mnt sh -c "cd /opt/flagship && npx tsx scripts/install-helper.ts gen-ide
 SERVER_IDENTITY_PRIV_HEX="$(cat /mnt/var/flagship/identity/identity.priv.hex | tr -d '\n')"
 SERVER_IDENTITY_PUB="$(cat /mnt/var/flagship/identity/identity.pub.hex | tr -d '\n')"
 
+# Bring up the unified data-layer (postgres + minio + redis + adminer)
+# at boot via OpenRC. The init.sh script under installer/data-services/
+# is idempotent: secret generation only happens once; subsequent boots
+# just `docker compose up -d` against existing volumes.
+cat > /mnt/etc/init.d/flagship-data-services <<'OPENRC'
+#!/sbin/openrc-run
+name="flagship-data-services"
+description="Flagship unified data layer: postgres + minio + redis + adminer"
+command="/opt/flagship/installer/data-services/init.sh"
+command_background="no"
+pidfile="/run/flagship-data-services.pid"
+depend() {
+    need net docker
+    before flagship-daemon
+}
+OPENRC
+chmod +x /mnt/etc/init.d/flagship-data-services
+chroot /mnt rc-update add flagship-data-services default
+
 cat > /mnt/etc/init.d/flagship-daemon <<'OPENRC'
 #!/sbin/openrc-run
 name="flagship-daemon"
@@ -126,7 +149,9 @@ command_args="--workspace=@flagship/server-daemon run start"
 directory="/opt/flagship"
 pidfile="/run/flagship-daemon.pid"
 command_background="yes"
-depend() { need net; }
+depend() {
+    need net flagship-data-services
+}
 OPENRC
 chmod +x /mnt/etc/init.d/flagship-daemon
 chroot /mnt rc-update add flagship-daemon default

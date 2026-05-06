@@ -1,0 +1,95 @@
+# Flagship unified data-layer compose.
+#
+# Brought up at first boot by `installer/data-services/init.sh` — that
+# script generates random root credentials into /var/flagship/data-services.env
+# (mode 0600) before this compose file ever sees them.
+#
+# Architectural rules:
+#   - All three data services bind to **127.0.0.1 only**. Never publicly
+#     exposed. The only client is the daemon process running on the host;
+#     per-app credentials are minted by `DataProvisioner` and never reach
+#     the public network.
+#   - Persistent volumes live under /var/flagship/data/<service>/ so they
+#     sit inside the LUKS-encrypted root.
+#   - Adminer (a small web-based PG viewer) runs on 127.0.0.1:8081. The
+#     daemon's reverse proxy is responsible for gating access to it
+#     behind phone-paired sessions; it is NEVER directly exposed to the
+#     public network.
+#
+# Bring up:    docker compose -f /opt/flagship/data-services/docker-compose.yml --env-file /var/flagship/data-services.env up -d
+# Stop:        docker compose ... down
+# Healthcheck: docker compose ... ps        # all healthy = data layer ready
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flagship-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - /var/flagship/data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    container_name: flagship-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - /var/flagship/data/minio:/data
+    command: server /data --address ":9000" --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: flagship-redis
+    restart: unless-stopped
+    volumes:
+      - /var/flagship/data/redis:/data
+    # `requirepass` enables the default-user password we use for admin ops;
+    # per-app ACL users are added by the daemon at provisioning time via
+    # `ACL SETUSER ... on >password ~prefix:* +@all`.
+    command:
+      [
+        "redis-server",
+        "--requirepass", "${REDIS_ADMIN_PASSWORD}",
+        "--appendonly", "yes",
+      ]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "redis-cli -a $${REDIS_ADMIN_PASSWORD} --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  adminer:
+    image: adminer:latest
+    container_name: flagship-adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
