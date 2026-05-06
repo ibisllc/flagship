@@ -5,16 +5,23 @@ import type {
   BuildTicketStorage,
   InstallEvent,
   InstallEventStorage,
+  LlmPromoLifetimeRecord,
+  LlmPromoStorage,
+  LlmPromoUsageRecord,
   LuksKeyStorage,
   MarketplaceListingRecord,
   MarketplaceSearchQuery,
   MarketplaceStorage,
+  PushTokenRecord,
+  PushTokenStorage,
   RoutingRecord,
   RoutingStorage,
   SealedLuksKeyRecord,
   ServerRecord,
   ServerStorage,
   Storage,
+  TierStorage,
+  TierSubscriptionRecord,
   UnlockKeyDeposit,
   UsernameRecord,
   UsernameStorage,
@@ -670,6 +677,142 @@ function rowToRecord(r: RawMarketplaceRow): MarketplaceListingRecord {
   };
 }
 
+export class D1PushTokenStorage implements PushTokenStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: PushTokenRecord): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, registered_at, last_seen_at)
+       VALUES (?,?,?,?,?,?,?,?)
+       ON CONFLICT(token_id) DO UPDATE SET
+         provider_token=excluded.provider_token,
+         push_x25519_pub_hex=excluded.push_x25519_pub_hex,
+         registration_signature_hex=excluded.registration_signature_hex,
+         last_seen_at=excluded.last_seen_at`,
+    ).bind(
+      rec.tokenId, rec.username, rec.platform, rec.providerToken,
+      rec.pushX25519PubHex, rec.registrationSignatureHex,
+      rec.registeredAt, rec.lastSeenAt,
+    ).run();
+  }
+  async get(tokenId: string): Promise<PushTokenRecord | undefined> {
+    const r = await this.db.prepare(`SELECT * FROM push_tokens WHERE token_id = ?`).bind(tokenId).first<RawPushRow>();
+    return r ? pushRowToRecord(r) : undefined;
+  }
+  async listByUser(username: string): Promise<PushTokenRecord[]> {
+    const r = await this.db.prepare(`SELECT * FROM push_tokens WHERE username = ?`).bind(username).all<RawPushRow>();
+    return (r.results ?? []).map(pushRowToRecord);
+  }
+  async remove(tokenId: string): Promise<void> {
+    await this.db.prepare(`DELETE FROM push_tokens WHERE token_id = ?`).bind(tokenId).run();
+  }
+  async touchLastSeen(tokenId: string, at: number): Promise<void> {
+    await this.db.prepare(`UPDATE push_tokens SET last_seen_at = ? WHERE token_id = ?`).bind(at, tokenId).run();
+  }
+}
+
+interface RawPushRow {
+  token_id: string; username: string; platform: string; provider_token: string;
+  push_x25519_pub_hex: string; registration_signature_hex: string;
+  registered_at: number; last_seen_at: number;
+}
+function pushRowToRecord(r: RawPushRow): PushTokenRecord {
+  return {
+    tokenId: r.token_id,
+    username: r.username,
+    platform: r.platform as "apns" | "fcm" | "webpush",
+    providerToken: r.provider_token,
+    pushX25519PubHex: r.push_x25519_pub_hex,
+    registrationSignatureHex: r.registration_signature_hex,
+    registeredAt: r.registered_at,
+    lastSeenAt: r.last_seen_at,
+  };
+}
+
+export class D1LlmPromoStorage implements LlmPromoStorage {
+  constructor(private readonly db: D1Database) {}
+  async getDaily(u: string, d: number): Promise<LlmPromoUsageRecord | undefined> {
+    const r = await this.db.prepare(`SELECT * FROM llm_promo_usage WHERE username = ? AND day = ?`).bind(u, d).first<{
+      username: string; day: number; daily_count: number; daily_input_tokens: number; daily_output_tokens: number;
+    }>();
+    return r ? { username: r.username, day: r.day, dailyCount: r.daily_count, dailyInputTokens: r.daily_input_tokens, dailyOutputTokens: r.daily_output_tokens } : undefined;
+  }
+  async bumpDaily(u: string, d: number, i: number, o: number): Promise<LlmPromoUsageRecord> {
+    await this.db.prepare(
+      `INSERT INTO llm_promo_usage (username, day, daily_count, daily_input_tokens, daily_output_tokens)
+       VALUES (?,?,1,?,?)
+       ON CONFLICT(username, day) DO UPDATE SET
+         daily_count = daily_count + 1,
+         daily_input_tokens = daily_input_tokens + excluded.daily_input_tokens,
+         daily_output_tokens = daily_output_tokens + excluded.daily_output_tokens`,
+    ).bind(u, d, i, o).run();
+    return (await this.getDaily(u, d))!;
+  }
+  async getLifetime(u: string): Promise<LlmPromoLifetimeRecord | undefined> {
+    const r = await this.db.prepare(`SELECT * FROM llm_promo_lifetime WHERE username = ?`).bind(u).first<{
+      username: string; lifetime_count: number; lifetime_input_tokens: number; lifetime_output_tokens: number; override_json: string | null; updated_at: number;
+    }>();
+    return r ? {
+      username: r.username,
+      lifetimeCount: r.lifetime_count,
+      lifetimeInputTokens: r.lifetime_input_tokens,
+      lifetimeOutputTokens: r.lifetime_output_tokens,
+      overrideJson: r.override_json ?? undefined,
+      updatedAt: r.updated_at,
+    } : undefined;
+  }
+  async bumpLifetime(u: string, i: number, o: number, now: number): Promise<LlmPromoLifetimeRecord> {
+    await this.db.prepare(
+      `INSERT INTO llm_promo_lifetime (username, lifetime_count, lifetime_input_tokens, lifetime_output_tokens, updated_at)
+       VALUES (?,1,?,?,?)
+       ON CONFLICT(username) DO UPDATE SET
+         lifetime_count = lifetime_count + 1,
+         lifetime_input_tokens = lifetime_input_tokens + excluded.lifetime_input_tokens,
+         lifetime_output_tokens = lifetime_output_tokens + excluded.lifetime_output_tokens,
+         updated_at = excluded.updated_at`,
+    ).bind(u, i, o, now).run();
+    return (await this.getLifetime(u))!;
+  }
+}
+
+export class D1TierStorage implements TierStorage {
+  constructor(private readonly db: D1Database) {}
+  async get(u: string): Promise<TierSubscriptionRecord | undefined> {
+    const r = await this.db.prepare(`SELECT * FROM tier_subscriptions WHERE username = ?`).bind(u).first<{
+      username: string; tier: string; stripe_customer_id: string | null; stripe_subscription_id: string | null;
+      current_period_end: number | null; irk_receipt_hex: string | null; irk_signature_hex: string | null;
+      updated_at: number;
+    }>();
+    return r ? {
+      username: r.username,
+      tier: r.tier as "free" | "hobby" | "maker",
+      stripeCustomerId: r.stripe_customer_id ?? undefined,
+      stripeSubscriptionId: r.stripe_subscription_id ?? undefined,
+      currentPeriodEnd: r.current_period_end ?? undefined,
+      irkReceiptHex: r.irk_receipt_hex ?? undefined,
+      irkSignatureHex: r.irk_signature_hex ?? undefined,
+      updatedAt: r.updated_at,
+    } : undefined;
+  }
+  async put(rec: TierSubscriptionRecord): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO tier_subscriptions (username, tier, stripe_customer_id, stripe_subscription_id, current_period_end, irk_receipt_hex, irk_signature_hex, updated_at)
+       VALUES (?,?,?,?,?,?,?,?)
+       ON CONFLICT(username) DO UPDATE SET
+         tier = excluded.tier,
+         stripe_customer_id = excluded.stripe_customer_id,
+         stripe_subscription_id = excluded.stripe_subscription_id,
+         current_period_end = excluded.current_period_end,
+         irk_receipt_hex = excluded.irk_receipt_hex,
+         irk_signature_hex = excluded.irk_signature_hex,
+         updated_at = excluded.updated_at`,
+    ).bind(
+      rec.username, rec.tier, rec.stripeCustomerId ?? null, rec.stripeSubscriptionId ?? null,
+      rec.currentPeriodEnd ?? null, rec.irkReceiptHex ?? null, rec.irkSignatureHex ?? null,
+      rec.updatedAt,
+    ).run();
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -679,6 +822,9 @@ export class D1Storage implements Storage {
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
   marketplace: MarketplaceStorage;
+  pushTokens: PushTokenStorage;
+  llmPromo: LlmPromoStorage;
+  tiers: TierStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -688,5 +834,8 @@ export class D1Storage implements Storage {
     this.installEvents = new D1InstallEventStorage(db);
     this.luksKeys = new D1LuksKeyStorage(db);
     this.marketplace = new D1MarketplaceStorage(db);
+    this.pushTokens = new D1PushTokenStorage(db);
+    this.llmPromo = new D1LlmPromoStorage(db);
+    this.tiers = new D1TierStorage(db);
   }
 }

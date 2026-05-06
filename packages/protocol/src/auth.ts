@@ -1486,3 +1486,99 @@ export function verifyRegisterUser(r: RegisterUser, sig: Bytes, irkPub: Bytes): 
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Push-token registration
+//
+// The phone registers a device push token (APNs / FCM / WebPush) with
+// .com so other devices can reach it. The phone also pre-shares an
+// X25519 pubkey at register time; later relays seal payloads to it
+// so the Worker forwards opaque ciphertext (cannot read).
+// ──────────────────────────────────────────────────────────────────────
+
+export type PushPlatform = "apns" | "fcm" | "webpush";
+
+export interface PushTokenRegister {
+  username: string;
+  platform: PushPlatform;
+  providerToken: string;        // opaque to .com
+  pushX25519Pub: Bytes;         // 32 bytes — encryption key for relays
+  issuedAt: number;
+}
+
+const TAG_PUSH_TOKEN_REGISTER = "flagship/push-token-register/v1";
+
+function canonicalPushTokenRegister(r: PushTokenRegister): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_PUSH_TOKEN_REGISTER,
+      r.username,
+      r.platform,
+      r.providerToken,
+      hex(r.pushX25519Pub),
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signPushTokenRegister(r: PushTokenRegister, irk: Keypair): Bytes {
+  return ed.sign(canonicalPushTokenRegister(r), irk.privateKey);
+}
+
+export function verifyPushTokenRegister(r: PushTokenRegister, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPushTokenRegister(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// LLM promo-key issue
+//
+// Phone-signed request from a user to mint a one-shot scoped LLM API
+// key. The Worker checks tier + daily/lifetime caps + asks the
+// upstream provider for a scoped key, returns it sealed against the
+// phone's pre-shared pubkey so the box receives it without the
+// Worker storing the plaintext.
+// ──────────────────────────────────────────────────────────────────────
+
+export type LlmProvider = "anthropic" | "openai" | "google";
+
+export interface LlmPromoIssueRequest {
+  username: string;
+  serverFqdn: string;          // which box will use the key
+  provider: LlmProvider;
+  /** Hint for daily token cap; .com clamps to tier-allowed max. */
+  desiredDailyInputTokenCap: number;
+  desiredDailyOutputTokenCap: number;
+  issuedAt: number;
+}
+
+const TAG_LLM_PROMO_ISSUE = "flagship/llm-promo-issue/v1";
+
+function canonicalLlmPromoIssue(r: LlmPromoIssueRequest): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_LLM_PROMO_ISSUE,
+      r.username,
+      r.serverFqdn,
+      r.provider,
+      r.desiredDailyInputTokenCap,
+      r.desiredDailyOutputTokenCap,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signLlmPromoIssue(r: LlmPromoIssueRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalLlmPromoIssue(r), irk.privateKey);
+}
+
+export function verifyLlmPromoIssue(r: LlmPromoIssueRequest, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalLlmPromoIssue(r), irkPub);
+  } catch {
+    return false;
+  }
+}

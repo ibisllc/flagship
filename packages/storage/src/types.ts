@@ -173,6 +173,9 @@ export interface Storage {
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
   marketplace: MarketplaceStorage;
+  pushTokens: PushTokenStorage;
+  llmPromo: LlmPromoStorage;
+  tiers: TierStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -218,4 +221,78 @@ export interface MarketplaceStorage {
   search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]>;
   remove(creator: string, slug: string): Promise<void>;
   recordInstall(creator: string, slug: string): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Push tokens
+// ──────────────────────────────────────────────────────────────────────
+
+export interface PushTokenRecord {
+  tokenId: string;                      // random 16-byte hex
+  username: string;
+  platform: "apns" | "fcm" | "webpush";
+  providerToken: string;                 // opaque
+  pushX25519PubHex: string;
+  registrationSignatureHex: string;
+  registeredAt: number;
+  lastSeenAt: number;
+}
+
+export interface PushTokenStorage {
+  put(rec: PushTokenRecord): Promise<void>;
+  get(tokenId: string): Promise<PushTokenRecord | undefined>;
+  listByUser(username: string): Promise<PushTokenRecord[]>;
+  remove(tokenId: string): Promise<void>;
+  touchLastSeen(tokenId: string, at: number): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// LLM-promo usage
+// ──────────────────────────────────────────────────────────────────────
+
+export interface LlmPromoUsageRecord {
+  username: string;
+  day: number;                            // floor(ms / 86_400_000)
+  dailyCount: number;
+  dailyInputTokens: number;
+  dailyOutputTokens: number;
+}
+
+export interface LlmPromoLifetimeRecord {
+  username: string;
+  lifetimeCount: number;
+  lifetimeInputTokens: number;
+  lifetimeOutputTokens: number;
+  /** Per-tier override; null fields fall back to defaults. */
+  overrideJson?: string;
+  updatedAt: number;
+}
+
+export interface LlmPromoStorage {
+  getDaily(username: string, day: number): Promise<LlmPromoUsageRecord | undefined>;
+  bumpDaily(username: string, day: number, inputTokens: number, outputTokens: number): Promise<LlmPromoUsageRecord>;
+  getLifetime(username: string): Promise<LlmPromoLifetimeRecord | undefined>;
+  bumpLifetime(username: string, inputTokens: number, outputTokens: number, now: number): Promise<LlmPromoLifetimeRecord>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Tier subscriptions
+// ──────────────────────────────────────────────────────────────────────
+
+export type TierName = "free" | "hobby" | "maker";
+
+export interface TierSubscriptionRecord {
+  username: string;
+  tier: TierName;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  currentPeriodEnd?: number;
+  irkReceiptHex?: string;
+  irkSignatureHex?: string;
+  updatedAt: number;
+}
+
+export interface TierStorage {
+  get(username: string): Promise<TierSubscriptionRecord | undefined>;
+  put(rec: TierSubscriptionRecord): Promise<void>;
 }

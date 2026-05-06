@@ -5,16 +5,23 @@ import type {
   BuildTicketStorage,
   InstallEvent,
   InstallEventStorage,
+  LlmPromoLifetimeRecord,
+  LlmPromoStorage,
+  LlmPromoUsageRecord,
   LuksKeyStorage,
   MarketplaceListingRecord,
   MarketplaceSearchQuery,
   MarketplaceStorage,
+  PushTokenRecord,
+  PushTokenStorage,
   RoutingRecord,
   RoutingStorage,
   SealedLuksKeyRecord,
   ServerRecord,
   ServerStorage,
   Storage,
+  TierStorage,
+  TierSubscriptionRecord,
   UnlockKeyDeposit,
   UsernameRecord,
   UsernameStorage,
@@ -258,6 +265,50 @@ export function computeMarketplaceRank(l: MarketplaceListingRecord): number {
   return installs + recency + grade + featured;
 }
 
+export class InMemoryPushTokenStorage implements PushTokenStorage {
+  private byId = new Map<string, PushTokenRecord>();
+  async put(rec: PushTokenRecord): Promise<void> { this.byId.set(rec.tokenId, { ...rec }); }
+  async get(tokenId: string): Promise<PushTokenRecord | undefined> {
+    const r = this.byId.get(tokenId);
+    return r ? { ...r } : undefined;
+  }
+  async listByUser(username: string): Promise<PushTokenRecord[]> {
+    return [...this.byId.values()].filter((r) => r.username === username).map((r) => ({ ...r }));
+  }
+  async remove(tokenId: string): Promise<void> { this.byId.delete(tokenId); }
+  async touchLastSeen(tokenId: string, at: number): Promise<void> {
+    const r = this.byId.get(tokenId);
+    if (r) r.lastSeenAt = at;
+  }
+}
+
+export class InMemoryLlmPromoStorage implements LlmPromoStorage {
+  private daily = new Map<string, LlmPromoUsageRecord>();
+  private lifetime = new Map<string, LlmPromoLifetimeRecord>();
+  private dailyKey(u: string, d: number) { return `${u}|${d}`; }
+  async getDaily(u: string, d: number) { const r = this.daily.get(this.dailyKey(u, d)); return r ? { ...r } : undefined; }
+  async bumpDaily(u: string, d: number, i: number, o: number): Promise<LlmPromoUsageRecord> {
+    const k = this.dailyKey(u, d);
+    const cur = this.daily.get(k) ?? { username: u, day: d, dailyCount: 0, dailyInputTokens: 0, dailyOutputTokens: 0 };
+    const next = { ...cur, dailyCount: cur.dailyCount + 1, dailyInputTokens: cur.dailyInputTokens + i, dailyOutputTokens: cur.dailyOutputTokens + o };
+    this.daily.set(k, next);
+    return { ...next };
+  }
+  async getLifetime(u: string) { const r = this.lifetime.get(u); return r ? { ...r } : undefined; }
+  async bumpLifetime(u: string, i: number, o: number, now: number): Promise<LlmPromoLifetimeRecord> {
+    const cur = this.lifetime.get(u) ?? { username: u, lifetimeCount: 0, lifetimeInputTokens: 0, lifetimeOutputTokens: 0, updatedAt: now };
+    const next = { ...cur, lifetimeCount: cur.lifetimeCount + 1, lifetimeInputTokens: cur.lifetimeInputTokens + i, lifetimeOutputTokens: cur.lifetimeOutputTokens + o, updatedAt: now };
+    this.lifetime.set(u, next);
+    return { ...next };
+  }
+}
+
+export class InMemoryTierStorage implements TierStorage {
+  private byUser = new Map<string, TierSubscriptionRecord>();
+  async get(u: string) { const r = this.byUser.get(u); return r ? { ...r } : undefined; }
+  async put(r: TierSubscriptionRecord): Promise<void> { this.byUser.set(r.username, { ...r }); }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -267,4 +318,7 @@ export class InMemoryStorage implements Storage {
   installEvents = new InMemoryInstallEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
   marketplace = new InMemoryMarketplaceStorage();
+  pushTokens = new InMemoryPushTokenStorage();
+  llmPromo = new InMemoryLlmPromoStorage();
+  tiers = new InMemoryTierStorage();
 }

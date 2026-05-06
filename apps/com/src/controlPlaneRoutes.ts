@@ -45,6 +45,11 @@ import {
   handleMarketplaceSearch,
   handleMarketplaceRemove,
   handleMarketplaceInstall,
+  handlePushRegister,
+  handlePushRelay,
+  handlePushRevoke,
+  handleLlmPromoIssue,
+  handleLlmPromoStatus,
   type CaIssuer,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
@@ -97,6 +102,11 @@ const ROUTE_RE = {
   MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
   MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
   MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
+  PUSH_REGISTER: /^\/api\/push\/register$/,
+  PUSH_RELAY: /^\/api\/push\/relay$/,
+  PUSH_REVOKE: /^\/api\/push\/([^/]+)$/,
+  LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
+  LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
 };
 
 export async function tryControlPlane(
@@ -452,6 +462,68 @@ export async function tryControlPlane(
         { marketplace: storage.marketplace, usernames: storage.usernames },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+
+  // ── Push notifications ──────────────────────────────────────
+  if (method === "POST" && ROUTE_RE.PUSH_REGISTER.test(path)) {
+    return finish(
+      await handlePushRegister(
+        { pushTokens: storage.pushTokens, usernames: storage.usernames },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.PUSH_RELAY.test(path)) {
+    // forwardToProviders not yet wired (real APNs/FCM bridge); the
+    // handler returns simulated:true when no forwarder is provided.
+    return finish(
+      await handlePushRelay(
+        { pushTokens: storage.pushTokens, usernames: storage.usernames },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.PUSH_REVOKE))) {
+    return finish(
+      await handlePushRevoke(
+        { pushTokens: storage.pushTokens, usernames: storage.usernames },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+
+  // ── LLM promo ──────────────────────────────────────────────
+  if (method === "POST" && ROUTE_RE.LLM_PROMO_ISSUE.test(path)) {
+    return finish(
+      await handleLlmPromoIssue(
+        {
+          llmPromo: storage.llmPromo,
+          tiers: storage.tiers,
+          usernames: storage.usernames,
+          // Stub minter: returns a deterministic fake key. Real Worker
+          // wiring calls the upstream provider's scoped-key API.
+          mintProviderKey: async (args) => ({
+            key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
+            providerKeyId: `pkid-${args.expiresAt}`,
+          }),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.LLM_PROMO_STATUS))) {
+    return finish(
+      await handleLlmPromoStatus(
+        {
+          llmPromo: storage.llmPromo,
+          tiers: storage.tiers,
+          usernames: storage.usernames,
+          mintProviderKey: async () => ({ key: "", providerKeyId: "" }),
+        },
+        decodeURIComponent(m[1]!),
       ),
     );
   }
