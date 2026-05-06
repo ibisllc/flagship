@@ -4,6 +4,7 @@ import acme from "acme-client";
 import { readFile } from "node:fs/promises";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
 import { AppPlatform, buildAppHttpHandlers } from "./appPlatform.js";
+import { handleAppRequest } from "./appProxy.js";
 import { AppRunner } from "./appRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
@@ -273,6 +274,22 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       socket.end();
       return;
     }
+    // Per-app routing: if the SNI's leftmost label matches an installed
+    // app, forward the request to its container (gated by membership);
+    // otherwise fall back to the daemon's own HTTP surface.
+    const sni = ((typeof socket.servername === "string" ? socket.servername : null) ?? opts.serverFqdn).toLowerCase();
+    const leftmost = leftmostLabel(sni, opts.serverFqdn);
+    const app = leftmost && appPlatformRef.current
+      ? appPlatformRef.current.byLabel(leftmost)
+      : undefined;
+    if (app) {
+      handleHttpConnection(socket, async (req) => {
+        return handleAppRequest(app, req, {
+          injectorKey: identityKeypairForInjection,
+        });
+      });
+      return;
+    }
     handleHttpConnection(socket, handleHttp);
   });
   await new Promise<void>((resolve) => tls.listen(0, "127.0.0.1", () => resolve()));
@@ -280,11 +297,19 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   if (!tlsAddr || typeof tlsAddr === "string") throw new Error("could not bind TLS backend");
   const tlsPort = tlsAddr.port;
 
+  // The same Ed25519 keypair the daemon uses for its server-identity
+  // (signing tunnel HELLO, etc.) doubles as the X-Flagship-Signature
+  // injector key — apps that want to verify the signature fetch the
+  // pubkey from `GET /.flagship/runtime-pubkey`. (Future: derive a
+  // separate injection-only key from SWK so the identity-key blast
+  // radius stays minimal.)
+  // (Defined below; built once we have the keypair.)
   // Identity keypair derived from the priv key.
   const identity: Keypair = {
     privateKey: opts.identityPrivKey,
     publicKey: ed.getPublicKey(opts.identityPrivKey),
   };
+  const identityKeypairForInjection = identity;
 
   // Tunnel client: forwards FRAME_OPEN(SNI) → 127.0.0.1:tlsPort.
   // Register both the server FQDN and (when wildcard-enabled) the
@@ -600,6 +625,29 @@ function handleHttpConnection(
     socket.write(body);
     socket.end();
   }
+}
+
+/**
+ * Pull the leftmost DNS label out of an SNI hostname *if* it sits
+ * under the daemon's serverFqdn. Returns null if the SNI doesn't end
+ * with `.<serverFqdn>` (e.g., the server FQDN itself, or a hostname
+ * outside our zone).
+ *
+ *   sni = "game1.alice.flagship.services"
+ *   serverFqdn = "alice.flagship.services" → "game1"
+ *
+ *   sni = "game1-john.alice.flagship.services"
+ *   serverFqdn = "alice.flagship.services" → "game1-john"
+ *
+ *   sni = "alice.flagship.services" (no leftmost) → null
+ */
+function leftmostLabel(sni: string, serverFqdn: string): string | null {
+  const suffix = `.${serverFqdn.toLowerCase()}`;
+  const lower = sni.toLowerCase();
+  if (!lower.endsWith(suffix)) return null;
+  const head = lower.slice(0, lower.length - suffix.length);
+  if (head.length === 0 || head.includes(".")) return null;
+  return head;
 }
 
 function statusText(s: number): string {
