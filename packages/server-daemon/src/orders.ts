@@ -32,6 +32,18 @@ export interface OrderExecutor {
   revokeSelf?(args: { reason: string }): Promise<void> | void;
   rotateServerIdentity?(args: { newIdentityPubKey: Uint8Array }): Promise<void> | void;
   deliverBak?(args: { bakPubKey: Uint8Array }): Promise<void> | void;
+  /**
+   * Browser input from the phone (password / OTP / text) bound for a
+   * specific tab. The daemon validates `tabId` ownership and dispatches
+   * the value via CDP `Input.dispatchKeyEvent` into the focused field.
+   * Wired by PhonePipe in the browser feature.
+   */
+  browserInputResponse?(args: {
+    tabId: string;
+    inputKind: "password" | "otp" | "text";
+    value: string;
+    screenshotRef: string;
+  }): Promise<void> | void;
 }
 
 export interface OrdersHandlerOptions {
@@ -154,6 +166,25 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
         return null;
       }
     }
+    case "browser-input-response": {
+      if (
+        typeof r.tabId !== "string" ||
+        typeof r.value !== "string" ||
+        typeof r.screenshotRef !== "string" ||
+        (r.inputKind !== "password" && r.inputKind !== "otp" && r.inputKind !== "text")
+      ) {
+        return null;
+      }
+      return {
+        type: "browser-input-response",
+        serverId: r.serverId,
+        tabId: r.tabId,
+        inputKind: r.inputKind,
+        value: r.value,
+        screenshotRef: r.screenshotRef,
+        issuedAt: r.issuedAt,
+      };
+    }
     default:
       return null;
   }
@@ -183,6 +214,15 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
     case "deliver-bak":
       if (!ex.deliverBak) throw new Error("deliverBak not implemented");
       await ex.deliverBak({ bakPubKey: order.bakPubKey });
+      return;
+    case "browser-input-response":
+      if (!ex.browserInputResponse) throw new Error("browserInputResponse not implemented");
+      await ex.browserInputResponse({
+        tabId: order.tabId,
+        inputKind: order.inputKind,
+        value: order.value,
+        screenshotRef: order.screenshotRef,
+      });
       return;
   }
 }

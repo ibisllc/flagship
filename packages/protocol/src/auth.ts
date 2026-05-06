@@ -984,7 +984,27 @@ export type PhoneOrder =
   | { type: "shut-down"; serverId: ServerId; issuedAt: number }
   | { type: "revoke-self"; serverId: ServerId; reason: string; issuedAt: number }
   | { type: "rotate-server-identity"; serverId: ServerId; newIdentityPubKey: Bytes; issuedAt: number }
-  | { type: "deliver-bak"; serverId: ServerId; bakPubKey: Bytes; issuedAt: number };
+  | { type: "deliver-bak"; serverId: ServerId; bakPubKey: Bytes; issuedAt: number }
+  | {
+      /**
+       * Phone-supplied input bound for the pod-resident browser. Sent
+       * after the daemon emits a `browser-input-needed` alert for a
+       * focused password / OTP / text field. The canonical bytes
+       * cover everything including `value` so a captured response
+       * cannot be diverted to a different field or tab.
+       *
+       * `screenshotRef` correlates back to a specific alert — the
+       * daemon rejects responses whose ref doesn't match a live alert
+       * (replay defense within the alert lifecycle).
+       */
+      type: "browser-input-response";
+      serverId: ServerId;
+      tabId: string;
+      inputKind: "password" | "otp" | "text";
+      value: string;
+      screenshotRef: string;
+      issuedAt: number;
+    };
 
 const TAG_ORDER_NOOP = "flagship/order/noop/v1";
 const TAG_ORDER_SET_BACKUP_POLICY = "flagship/order/set-backup-policy/v1";
@@ -992,6 +1012,7 @@ const TAG_ORDER_SHUT_DOWN = "flagship/order/shut-down/v1";
 const TAG_ORDER_REVOKE_SELF = "flagship/order/revoke-self/v1";
 const TAG_ORDER_ROTATE_IDENTITY = "flagship/order/rotate-server-identity/v1";
 const TAG_ORDER_DELIVER_BAK = "flagship/order/deliver-bak/v1";
+const TAG_ORDER_BROWSER_INPUT = "flagship/order/browser-input-response/v1";
 
 function canonicalPhoneOrder(o: PhoneOrder): Bytes {
   const enc = new TextEncoder();
@@ -1013,6 +1034,18 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
     case "deliver-bak":
       return enc.encode(
         [TAG_ORDER_DELIVER_BAK, o.serverId, hex(o.bakPubKey), o.issuedAt].join("|"),
+      );
+    case "browser-input-response":
+      return enc.encode(
+        [
+          TAG_ORDER_BROWSER_INPUT,
+          o.serverId,
+          o.tabId,
+          o.inputKind,
+          o.value,
+          o.screenshotRef,
+          o.issuedAt,
+        ].join("|"),
       );
   }
 }

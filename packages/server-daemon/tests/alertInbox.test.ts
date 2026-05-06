@@ -103,4 +103,47 @@ describe("InMemoryAlertInbox", () => {
     expect(inbox.list().some((e) => e.alert.appId === "a--104")).toBe(true);
     expect(inbox.list().some((e) => e.alert.appId === "a--0")).toBe(false);
   });
+
+  it("browser-input-needed dedupes by (appId, tabId, inputKind)", () => {
+    const inbox = new InMemoryAlertInbox();
+    const id1 = inbox.emit({
+      kind: "browser-input-needed",
+      appId: "alice--shopper",
+      tabId: "tab-1",
+      domain: "amazon.com",
+      inputKind: "password",
+      screenshotRef: "shot-1",
+    });
+    expect(id1).toBe(1);
+    // Same field still focused — re-detection should not flood the phone.
+    const dup = inbox.emit({
+      kind: "browser-input-needed",
+      appId: "alice--shopper",
+      tabId: "tab-1",
+      domain: "amazon.com",
+      inputKind: "password",
+      screenshotRef: "shot-2",
+    });
+    expect(dup).toBeNull();
+    // Page transitions to OTP step (different inputKind) — new alert is fine.
+    const id2 = inbox.emit({
+      kind: "browser-input-needed",
+      appId: "alice--shopper",
+      tabId: "tab-1",
+      domain: "amazon.com",
+      inputKind: "otp",
+      screenshotRef: "shot-3",
+    });
+    expect(id2).toBe(2);
+    // Different tab — new alert.
+    const id3 = inbox.emit({
+      kind: "browser-input-needed",
+      appId: "alice--shopper",
+      tabId: "tab-2",
+      domain: "amazon.com",
+      inputKind: "password",
+      screenshotRef: "shot-4",
+    });
+    expect(id3).toBe(3);
+  });
 });

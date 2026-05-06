@@ -173,4 +173,103 @@ describe("orders-from-user handler", () => {
     const r = await h({ method: "GET", path: "/api/orders-from-user", headers: {}, body: Buffer.alloc(0) });
     expect(r.status).toBe(405);
   });
+
+  it("dispatches browser-input-response (PSK-signed; daemon validates + pipes via CDP)", async () => {
+    const psk = makeKey();
+    let captured: {
+      tabId?: string;
+      inputKind?: string;
+      value?: string;
+      screenshotRef?: string;
+    } = {};
+    const ex: OrderExecutor = {
+      browserInputResponse: (a) => void (captured = a),
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "browser-input-response",
+      serverId: SERVER_FQDN,
+      tabId: "tab-abc-123",
+      inputKind: "password",
+      value: "hunter2!@#",
+      screenshotRef: "shot-7f3a",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(captured).toEqual({
+      tabId: "tab-abc-123",
+      inputKind: "password",
+      value: "hunter2!@#",
+      screenshotRef: "shot-7f3a",
+    });
+  });
+
+  it("rejects browser-input-response with an invalid inputKind", async () => {
+    const psk = makeKey();
+    const h = buildOrdersHandler({
+      serverFqdn: SERVER_FQDN,
+      pskPub: psk.publicKey,
+      executor: { browserInputResponse: () => {} },
+    });
+    // Build the order envelope manually so we can corrupt inputKind without
+    // tripping our typed constructor.
+    const wire = {
+      request: {
+        type: "browser-input-response",
+        serverId: SERVER_FQDN,
+        tabId: "t1",
+        inputKind: "exec-arbitrary-code",
+        value: "x",
+        screenshotRef: "s1",
+        issuedAt: Date.now(),
+      },
+      signature: "00".repeat(64),
+    };
+    const r = await h(makeReq(wire));
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects browser-input-response when the executor doesn't implement it", async () => {
+    const psk = makeKey();
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: {} });
+    const order: PhoneOrder = {
+      type: "browser-input-response",
+      serverId: SERVER_FQDN,
+      tabId: "t1",
+      inputKind: "otp",
+      value: "123456",
+      screenshotRef: "s1",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    // 500 because dispatch reaches a "not implemented" branch — the
+    // signature was valid; the daemon just isn't wired for browser yet.
+    expect(r.status).toBe(500);
+  });
+
+  it("captured browser-input-response signature does NOT verify if value is changed mid-flight", async () => {
+    const psk = makeKey();
+    const order: PhoneOrder = {
+      type: "browser-input-response",
+      serverId: SERVER_FQDN,
+      tabId: "t1",
+      inputKind: "password",
+      value: "original",
+      screenshotRef: "s1",
+      issuedAt: Date.now(),
+    };
+    const env = envelope(order, psk);
+    // Tamper with value after signing.
+    (env.request as Record<string, unknown>).value = "tampered";
+    const h = buildOrdersHandler({
+      serverFqdn: SERVER_FQDN,
+      pskPub: psk.publicKey,
+      executor: { browserInputResponse: () => {} },
+    });
+    const r = await h(makeReq(env));
+    expect(r.status).toBe(403);
+    const body = JSON.parse(String(r.body));
+    expect(body.error).toBe("invalid signature");
+  });
 });

@@ -482,3 +482,70 @@ describe("UpdatePullRequest — server-identity-signed app update pull", () => {
     expect(verifyUpdatePull(r, sig, otherIdentity.publicKey)).toBe(false);
   });
 });
+
+describe("PhoneOrder browser-input-response — PSK-signed input from phone", () => {
+  const psk = deriveBAK(umk, "srv-browser-test");
+
+  it("round-trips sign/verify with the per-server PSK", async () => {
+    const { signPhoneOrder, verifyPhoneOrder } = await import("../src/auth.js");
+    const order = {
+      type: "browser-input-response" as const,
+      serverId: "home.alice.flagship.services",
+      tabId: "tab-deadbeef",
+      inputKind: "password" as const,
+      value: "hunter2!@#",
+      screenshotRef: "shot-1",
+      issuedAt: 1735689600000,
+    };
+    const sig = signPhoneOrder(order, psk);
+    expect(verifyPhoneOrder(order, sig, psk.publicKey)).toBe(true);
+  });
+
+  it("rejects when value is tampered (canonical-bytes covers value)", async () => {
+    const { signPhoneOrder, verifyPhoneOrder } = await import("../src/auth.js");
+    const order = {
+      type: "browser-input-response" as const,
+      serverId: "home.alice.flagship.services",
+      tabId: "tab-1",
+      inputKind: "password" as const,
+      value: "original",
+      screenshotRef: "s1",
+      issuedAt: 1,
+    };
+    const sig = signPhoneOrder(order, psk);
+    expect(verifyPhoneOrder({ ...order, value: "tampered" }, sig, psk.publicKey)).toBe(false);
+  });
+
+  it("rejects when tabId or screenshotRef differ — sig pins them too", async () => {
+    const { signPhoneOrder, verifyPhoneOrder } = await import("../src/auth.js");
+    const order = {
+      type: "browser-input-response" as const,
+      serverId: "home.alice.flagship.services",
+      tabId: "tab-1",
+      inputKind: "otp" as const,
+      value: "123456",
+      screenshotRef: "s1",
+      issuedAt: 1,
+    };
+    const sig = signPhoneOrder(order, psk);
+    expect(verifyPhoneOrder({ ...order, tabId: "different-tab" }, sig, psk.publicKey)).toBe(false);
+    expect(verifyPhoneOrder({ ...order, screenshotRef: "different" }, sig, psk.publicKey)).toBe(false);
+    expect(verifyPhoneOrder({ ...order, inputKind: "password" }, sig, psk.publicKey)).toBe(false);
+  });
+
+  it("rejects under a different PSK (cross-server replay defense)", async () => {
+    const { signPhoneOrder, verifyPhoneOrder } = await import("../src/auth.js");
+    const otherPsk = deriveBAK(umk, "srv-different");
+    const order = {
+      type: "browser-input-response" as const,
+      serverId: "home.alice.flagship.services",
+      tabId: "t",
+      inputKind: "text" as const,
+      value: "v",
+      screenshotRef: "s",
+      issuedAt: 1,
+    };
+    const sig = signPhoneOrder(order, psk);
+    expect(verifyPhoneOrder(order, sig, otherPsk.publicKey)).toBe(false);
+  });
+});
