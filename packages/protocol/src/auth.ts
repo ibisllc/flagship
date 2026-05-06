@@ -968,3 +968,152 @@ export function verifySetRoutingTarget(r: SetRoutingTarget, sig: Bytes, rckPub: 
     return false;
   }
 }
+
+/**
+ * Phone-server order. Signed by the per-server PSK private key (held on
+ * the phone); the daemon verifies against the PSK pubkey baked into the
+ * install trailer.
+ *
+ * Each order is a discriminated union; the canonical-bytes function
+ * tags by type so a captured signature for one variant can't be
+ * replayed as a different variant.
+ */
+export type PhoneOrder =
+  | { type: "noop"; serverId: ServerId; issuedAt: number }
+  | { type: "set-backup-policy"; serverId: ServerId; enabled: boolean; issuedAt: number }
+  | { type: "shut-down"; serverId: ServerId; issuedAt: number }
+  | { type: "revoke-self"; serverId: ServerId; reason: string; issuedAt: number }
+  | { type: "rotate-server-identity"; serverId: ServerId; newIdentityPubKey: Bytes; issuedAt: number }
+  | { type: "deliver-bak"; serverId: ServerId; bakPubKey: Bytes; issuedAt: number };
+
+const TAG_ORDER_NOOP = "flagship/order/noop/v1";
+const TAG_ORDER_SET_BACKUP_POLICY = "flagship/order/set-backup-policy/v1";
+const TAG_ORDER_SHUT_DOWN = "flagship/order/shut-down/v1";
+const TAG_ORDER_REVOKE_SELF = "flagship/order/revoke-self/v1";
+const TAG_ORDER_ROTATE_IDENTITY = "flagship/order/rotate-server-identity/v1";
+const TAG_ORDER_DELIVER_BAK = "flagship/order/deliver-bak/v1";
+
+function canonicalPhoneOrder(o: PhoneOrder): Bytes {
+  const enc = new TextEncoder();
+  switch (o.type) {
+    case "noop":
+      return enc.encode([TAG_ORDER_NOOP, o.serverId, o.issuedAt].join("|"));
+    case "set-backup-policy":
+      return enc.encode(
+        [TAG_ORDER_SET_BACKUP_POLICY, o.serverId, o.enabled ? "1" : "0", o.issuedAt].join("|"),
+      );
+    case "shut-down":
+      return enc.encode([TAG_ORDER_SHUT_DOWN, o.serverId, o.issuedAt].join("|"));
+    case "revoke-self":
+      return enc.encode([TAG_ORDER_REVOKE_SELF, o.serverId, o.reason, o.issuedAt].join("|"));
+    case "rotate-server-identity":
+      return enc.encode(
+        [TAG_ORDER_ROTATE_IDENTITY, o.serverId, hex(o.newIdentityPubKey), o.issuedAt].join("|"),
+      );
+    case "deliver-bak":
+      return enc.encode(
+        [TAG_ORDER_DELIVER_BAK, o.serverId, hex(o.bakPubKey), o.issuedAt].join("|"),
+      );
+  }
+}
+
+export function signPhoneOrder(o: PhoneOrder, psk: Keypair): Bytes {
+  return ed.sign(canonicalPhoneOrder(o), psk.privateKey);
+}
+export function verifyPhoneOrder(o: PhoneOrder, sig: Bytes, pskPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPhoneOrder(o), pskPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * LUKS-unlock-on-boot endpoints.
+ *
+ * Flow:
+ *   1. At install time, the daemon seals the LUKS root key with the
+ *      user's BAK pubkey and POSTs `PutSealedLuksKey` to .com (signed
+ *      by the server identity key).
+ *   2. At boot, the unencrypted boot stage GETs the sealed blob (anyone
+ *      can — sealed against BAK is useless without the phone).
+ *   3. Phone, when present + biometric-authenticated, unseals locally
+ *      and POSTs `DepositUnlockKey` to .com (signed by IRK).
+ *   4. Boot stage POSTs `ConsumeUnlockKey` (signed by server identity)
+ *      to fetch the unsealed key and atomically clear the entry.
+ */
+export interface PutSealedLuksKey {
+  serverId: ServerId;
+  sealedKey: Bytes;
+  issuedAt: number;
+}
+
+export interface DepositUnlockKey {
+  serverId: ServerId;
+  unlockKey: Bytes;
+  /** Wall-clock ms after which the deposit is considered expired. */
+  expiresAt: number;
+  issuedAt: number;
+}
+
+export interface ConsumeUnlockKey {
+  serverId: ServerId;
+  /** 32-byte nonce; rejected if it matches the previous accepted one. */
+  nonce: Bytes;
+  issuedAt: number;
+}
+
+const TAG_PUT_SEALED_LUKS_KEY = "flagship/put-sealed-luks-key/v1";
+const TAG_DEPOSIT_UNLOCK_KEY = "flagship/deposit-unlock-key/v1";
+const TAG_CONSUME_UNLOCK_KEY = "flagship/consume-unlock-key/v1";
+
+function canonicalPutSealedLuksKey(r: PutSealedLuksKey): Bytes {
+  return new TextEncoder().encode(
+    [TAG_PUT_SEALED_LUKS_KEY, r.serverId, hex(r.sealedKey), r.issuedAt].join("|"),
+  );
+}
+
+function canonicalDepositUnlockKey(r: DepositUnlockKey): Bytes {
+  return new TextEncoder().encode(
+    [TAG_DEPOSIT_UNLOCK_KEY, r.serverId, hex(r.unlockKey), r.expiresAt, r.issuedAt].join("|"),
+  );
+}
+
+function canonicalConsumeUnlockKey(r: ConsumeUnlockKey): Bytes {
+  return new TextEncoder().encode(
+    [TAG_CONSUME_UNLOCK_KEY, r.serverId, hex(r.nonce), r.issuedAt].join("|"),
+  );
+}
+
+export function signPutSealedLuksKey(r: PutSealedLuksKey, identity: Keypair): Bytes {
+  return ed.sign(canonicalPutSealedLuksKey(r), identity.privateKey);
+}
+export function verifyPutSealedLuksKey(r: PutSealedLuksKey, sig: Bytes, identityPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPutSealedLuksKey(r), identityPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signDepositUnlockKey(r: DepositUnlockKey, irk: Keypair): Bytes {
+  return ed.sign(canonicalDepositUnlockKey(r), irk.privateKey);
+}
+export function verifyDepositUnlockKey(r: DepositUnlockKey, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalDepositUnlockKey(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signConsumeUnlockKey(r: ConsumeUnlockKey, identity: Keypair): Bytes {
+  return ed.sign(canonicalConsumeUnlockKey(r), identity.privateKey);
+}
+export function verifyConsumeUnlockKey(r: ConsumeUnlockKey, sig: Bytes, identityPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalConsumeUnlockKey(r), identityPub);
+  } catch {
+    return false;
+  }
+}

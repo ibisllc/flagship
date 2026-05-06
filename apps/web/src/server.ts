@@ -51,9 +51,7 @@ import {
   type SmsSender,
 } from "./routes/llmPromo.js";
 import { registerServerDnsPublish } from "./routes/serverDnsPublish.js";
-import { registerDns01Publish } from "./routes/dns01Publish.js";
 import {
-  DnsChallengeService,
   InMemoryServerDnsRegistry,
   ServerDnsPublisher,
   type ServerDnsRegistry,
@@ -297,14 +295,9 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
       });
       app.decorate("serverDnsRegistry", serverDnsRegistry);
 
-      // Per-server ACME DNS-01 helper. Daemons call this when their ACME flow
-      // needs a TXT record published; STK signature ties each call to a known
-      // server in the registry.
-      const dnsChallenge = new DnsChallengeService(opts.zone);
-      registerDns01Publish(app, {
-        serverRegistry,
-        dnsChallenge,
-      });
+      // (DNS-01 publish/delete moved to the .com Worker, which holds the
+      // Cloudflare DNS API token. See apps/com/src/controlPlaneRoutes.ts +
+      // packages/control-plane/src/dns01.ts.)
     }
   }
   app.decorate("reciprocityLedger", reciprocityLedger);

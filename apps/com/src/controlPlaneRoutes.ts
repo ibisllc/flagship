@@ -20,7 +20,13 @@ import {
   handleBuildTicketRedeem,
   handleBuildTicketRefresh,
   handleCaCert,
+  handleConsumeUnlockKey,
+  handleDepositUnlockKey,
+  handleDns01Delete,
+  handleDns01Publish,
   handleGetInstallEvents,
+  handleGetSealedLuksKey,
+  handlePutSealedLuksKey,
   handlePostInstallEvent,
   handleRegisterRck,
   handleRoutingLookup,
@@ -31,6 +37,7 @@ import {
   handleUsernameLookup,
   handleUserPubKeyCert,
   type CaIssuer,
+  type HandlerResponse,
   type HandlerResponseWithHeaders,
 } from "@flagship/control-plane";
 import { D1Storage, type D1Database } from "@flagship/storage";
@@ -67,6 +74,11 @@ const ROUTE_RE = {
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
   INSTALL_EVENTS: /^\/api\/install-events\/([^/]+)$/,
+  DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
+  DNS01_DELETE: /^\/api\/dns-01\/delete$/,
+  LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
+  LUKS_UNLOCK_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key$/,
+  LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
 };
 
 export async function tryControlPlane(
@@ -236,6 +248,76 @@ export async function tryControlPlane(
     );
   }
 
+  if (method === "POST" && (ROUTE_RE.DNS01_PUBLISH.test(path) || ROUTE_RE.DNS01_DELETE.test(path))) {
+    if (
+      !env.CLOUDFLARE_DNS_API_TOKEN ||
+      !env.CLOUDFLARE_SERVICES_ZONE_ID
+    ) {
+      return jsonResponse({ error: "DNS-01 not configured on this control plane" }, 503);
+    }
+    const dns = new CloudflareDnsClient({
+      apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+      zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+    });
+    const handler = ROUTE_RE.DNS01_PUBLISH.test(path) ? handleDns01Publish : handleDns01Delete;
+    const res = await handler({ servers: storage.servers, dns }, await readJson(request));
+    return finishPlain(res);
+  }
+
+  if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_SEALED))) {
+    return finishPlain(
+      await handlePutSealedLuksKey(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.LUKS_SEALED))) {
+    return finishPlain(
+      await handleGetSealedLuksKey(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+        },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_UNLOCK_CONSUME))) {
+    const host = decodeURIComponent(m[1]!);
+    return finishPlain(
+      await handleConsumeUnlockKey(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+        },
+        host,
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_UNLOCK_DEPOSIT))) {
+    const host = decodeURIComponent(m[1]!);
+    return finishPlain(
+      await handleDepositUnlockKey(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+        },
+        host,
+        await readJson(request),
+      ),
+    );
+  }
+
   if (method === "POST" && (m = path.match(ROUTE_RE.INSTALL_EVENTS))) {
     return finish(
       await handlePostInstallEvent(
@@ -284,4 +366,11 @@ function finish(r: HandlerResponseWithHeaders): Response {
   const headers = new Headers({ "content-type": "application/json" });
   if (r.headers) for (const [k, v] of Object.entries(r.headers)) headers.set(k, v);
   return new Response(JSON.stringify(r.body), { status: r.status, headers });
+}
+
+function finishPlain(r: HandlerResponse): Response {
+  return new Response(JSON.stringify(r.body), {
+    status: r.status,
+    headers: { "content-type": "application/json" },
+  });
 }

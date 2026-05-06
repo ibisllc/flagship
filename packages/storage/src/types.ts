@@ -132,6 +132,33 @@ export interface RoutingStorage {
   ): Promise<{ ok: true } | { ok: false; reason: string }>;
 }
 
+export interface SealedLuksKeyRecord {
+  serverDomain: string;
+  sealedKeyHex: string;
+  sealedAt: number;
+}
+
+export interface UnlockKeyDeposit {
+  serverDomain: string;
+  unlockKeyHex: string;
+  depositedAt: number;
+  expiresAt: number;
+}
+
+export interface LuksKeyStorage {
+  /** Server stores its sealed LUKS root key (sealed-with-BAK). Idempotent overwrite. */
+  putSealed(rec: SealedLuksKeyRecord): Promise<void>;
+  /** Public read of the sealed blob (useless without the phone). */
+  getSealed(serverDomain: string): Promise<SealedLuksKeyRecord | undefined>;
+  /** Phone deposits the unsealed key. Replaces any prior pending deposit. */
+  putUnlock(rec: UnlockKeyDeposit): Promise<void>;
+  /**
+   * Boot stage fetches and atomically clears the deposit. Returns
+   * undefined if no deposit is pending or the deposit has expired.
+   */
+  consumeUnlock(serverDomain: string, now: number): Promise<UnlockKeyDeposit | undefined>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -139,4 +166,5 @@ export interface Storage {
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
+  luksKeys: LuksKeyStorage;
 }

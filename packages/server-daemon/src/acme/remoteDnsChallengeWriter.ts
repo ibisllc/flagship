@@ -11,18 +11,33 @@ import type { FetchLike } from "@flagship/llm-providers";
 import type { DnsChallengeWriter } from "./letsEncryptIssuer.js";
 
 /**
- * DnsChallengeWriter that calls flagship.services to publish/delete DNS-01
- * TXT records on behalf of this server. Each call is STK-signed; the
- * service-side route verifies against the server's registered STK pubkey.
+ * DnsChallengeWriter that calls the .com control plane to publish/delete
+ * DNS-01 TXT records on behalf of this server. Each call is signed with
+ * the server's identity key; the Worker-side route verifies against the
+ * pubkey registered via `/api/server/register`.
  *
- * The plaintext TXT value rides alongside the signed-hash so the service
- * can re-hash and reject if a man-in-the-middle swapped the value after
- * the daemon signed.
+ * The plaintext TXT value rides alongside the signed-hash so the control
+ * plane can re-hash and reject if a man-in-the-middle swapped the value
+ * after the daemon signed.
+ *
+ * Endpoints: `POST /api/dns-01/publish` and `POST /api/dns-01/delete`
+ * on `https://flagshipserver.com`. (Earlier versions targeted
+ * `/api/services-zone/dns-01-*` on `flagship.services`; that legacy
+ * Fastify route still exists for now but the Worker is the canonical
+ * location since `.com` holds the Cloudflare DNS API token.)
  */
 export interface RemoteDnsChallengeWriterOptions {
-  /** Base URL of flagship.services. e.g. "https://flagship.services". */
-  servicesBaseUrl: string;
+  /**
+   * Base URL of the control plane. Default `https://flagshipserver.com`.
+   * Override for tests or non-production environments.
+   */
+  controlPlaneBaseUrl?: string;
   serverId: string;
+  /**
+   * The server's identity keypair (registered via `/api/server/register`).
+   * Field name preserved as `stk` for backward compatibility with
+   * existing callers, but semantically this is the identity key.
+   */
   stk: Keypair;
   fetchImpl?: FetchLike;
   now?: () => number;
@@ -39,6 +54,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
 
   async publishTxt(host: string, value: string): Promise<() => Promise<void>> {
     const f = this.opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+    const baseUrl = this.opts.controlPlaneBaseUrl ?? "https://flagshipserver.com";
     const recordValueHash = sha256(new TextEncoder().encode(value));
     const issuedAt = (this.opts.now ?? (() => Date.now()))();
     const claim: Dns01PublishRequest = {
@@ -49,7 +65,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
     };
     const sig = signDns01Publish(claim, this.opts.stk);
 
-    const res = await f(`${this.opts.servicesBaseUrl}/api/services-zone/dns-01-publish`, {
+    const res = await f(`${baseUrl}/api/dns-01/publish`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -64,7 +80,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
       }),
     });
     if (!res.ok) {
-      throw new Error(`dns-01-publish failed: ${res.status} ${await res.text()}`);
+      throw new Error(`dns-01 publish failed: ${res.status} ${await res.text()}`);
     }
     const body = (await res.json()) as { recordId: string };
 
@@ -76,7 +92,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
         issuedAt: dIssuedAt,
       };
       const dSig = signDns01Delete(dClaim, this.opts.stk);
-      await f(`${this.opts.servicesBaseUrl}/api/services-zone/dns-01-delete`, {
+      await f(`${baseUrl}/api/dns-01/delete`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -88,7 +104,7 @@ export class RemoteDnsChallengeWriter implements DnsChallengeWriter {
           signature: bytesToHex(dSig),
         }),
       }).catch(() => {
-        // best-effort cleanup; the .services side has its own GC for stale records
+        // best-effort cleanup; the control plane has its own GC for stale records
       });
     };
   }

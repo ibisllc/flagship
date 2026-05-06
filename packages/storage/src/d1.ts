@@ -5,11 +5,14 @@ import type {
   BuildTicketStorage,
   InstallEvent,
   InstallEventStorage,
+  LuksKeyStorage,
   RoutingRecord,
   RoutingStorage,
+  SealedLuksKeyRecord,
   ServerRecord,
   ServerStorage,
   Storage,
+  UnlockKeyDeposit,
   UsernameRecord,
   UsernameStorage,
 } from "./types.js";
@@ -475,6 +478,64 @@ export class D1InstallEventStorage implements InstallEventStorage {
   }
 }
 
+export class D1LuksKeyStorage implements LuksKeyStorage {
+  constructor(private db: D1Database) {}
+  async putSealed(rec: SealedLuksKeyRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO sealed_luks_keys (server_domain, sealed_key_hex, sealed_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(server_domain) DO UPDATE SET
+           sealed_key_hex = excluded.sealed_key_hex,
+           sealed_at = excluded.sealed_at`,
+      )
+      .bind(rec.serverDomain, rec.sealedKeyHex, rec.sealedAt)
+      .run();
+  }
+  async getSealed(serverDomain: string): Promise<SealedLuksKeyRecord | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM sealed_luks_keys WHERE server_domain = ?")
+      .bind(serverDomain)
+      .first<{ server_domain: string; sealed_key_hex: string; sealed_at: number }>();
+    return r ? { serverDomain: r.server_domain, sealedKeyHex: r.sealed_key_hex, sealedAt: r.sealed_at } : undefined;
+  }
+  async putUnlock(rec: UnlockKeyDeposit): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO unlock_key_deposits (server_domain, unlock_key_hex, deposited_at, expires_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(server_domain) DO UPDATE SET
+           unlock_key_hex = excluded.unlock_key_hex,
+           deposited_at = excluded.deposited_at,
+           expires_at = excluded.expires_at`,
+      )
+      .bind(rec.serverDomain, rec.unlockKeyHex, rec.depositedAt, rec.expiresAt)
+      .run();
+  }
+  async consumeUnlock(serverDomain: string, now: number): Promise<UnlockKeyDeposit | undefined> {
+    // SELECT, then DELETE — D1 doesn't support RETURNING in all contexts;
+    // since the consume is one-shot per boot we accept the small race in
+    // the (single-server) production case. Two simultaneous boot stages
+    // would each try to consume and only one would win.
+    const r = await this.db
+      .prepare("SELECT * FROM unlock_key_deposits WHERE server_domain = ?")
+      .bind(serverDomain)
+      .first<{ server_domain: string; unlock_key_hex: string; deposited_at: number; expires_at: number }>();
+    if (!r) return undefined;
+    await this.db
+      .prepare("DELETE FROM unlock_key_deposits WHERE server_domain = ?")
+      .bind(serverDomain)
+      .run();
+    if (r.expires_at <= now) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      unlockKeyHex: r.unlock_key_hex,
+      depositedAt: r.deposited_at,
+      expiresAt: r.expires_at,
+    };
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -482,6 +543,7 @@ export class D1Storage implements Storage {
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
+  luksKeys: LuksKeyStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -489,5 +551,6 @@ export class D1Storage implements Storage {
     this.servers = new D1ServerStorage(db);
     this.routing = new D1RoutingStorage(db);
     this.installEvents = new D1InstallEventStorage(db);
+    this.luksKeys = new D1LuksKeyStorage(db);
   }
 }

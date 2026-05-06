@@ -5,11 +5,14 @@ import type {
   BuildTicketStorage,
   InstallEvent,
   InstallEventStorage,
+  LuksKeyStorage,
   RoutingRecord,
   RoutingStorage,
+  SealedLuksKeyRecord,
   ServerRecord,
   ServerStorage,
   Storage,
+  UnlockKeyDeposit,
   UsernameRecord,
   UsernameStorage,
 } from "./types.js";
@@ -168,6 +171,28 @@ export class InMemoryInstallEventStorage implements InstallEventStorage {
   }
 }
 
+export class InMemoryLuksKeyStorage implements LuksKeyStorage {
+  private sealed = new Map<string, SealedLuksKeyRecord>();
+  private unlock = new Map<string, UnlockKeyDeposit>();
+  async putSealed(rec: SealedLuksKeyRecord): Promise<void> {
+    this.sealed.set(rec.serverDomain, { ...rec });
+  }
+  async getSealed(serverDomain: string): Promise<SealedLuksKeyRecord | undefined> {
+    const r = this.sealed.get(serverDomain);
+    return r ? { ...r } : undefined;
+  }
+  async putUnlock(rec: UnlockKeyDeposit): Promise<void> {
+    this.unlock.set(rec.serverDomain, { ...rec });
+  }
+  async consumeUnlock(serverDomain: string, now: number): Promise<UnlockKeyDeposit | undefined> {
+    const r = this.unlock.get(serverDomain);
+    if (!r) return undefined;
+    this.unlock.delete(serverDomain);
+    if (r.expiresAt <= now) return undefined;
+    return { ...r };
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -175,4 +200,5 @@ export class InMemoryStorage implements Storage {
   servers = new InMemoryServerStorage();
   routing = new InMemoryRoutingStorage();
   installEvents = new InMemoryInstallEventStorage();
+  luksKeys = new InMemoryLuksKeyStorage();
 }

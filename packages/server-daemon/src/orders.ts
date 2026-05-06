@@ -1,0 +1,197 @@
+import { verifyPhoneOrder, type PhoneOrder } from "@flagship/protocol";
+import type { HttpRequest, HttpResponse } from "./runtime.js";
+
+/**
+ * Phone → server orders. Each request is signed by the per-server PSK
+ * private key on the user's phone; the daemon verifies against the PSK
+ * pubkey baked into its install trailer (passed in as `pskPub` here).
+ *
+ * The endpoint accepts a JSON envelope:
+ *
+ *   {
+ *     "request": { "type": "noop" | "set-backup-policy" | ..., ...fields, "issuedAt": <ms> },
+ *     "signature": "<hex>"
+ *   }
+ *
+ * The handler:
+ *   1. Validates body shape.
+ *   2. Confirms `request.serverId` matches this daemon's serverFqdn.
+ *   3. Re-builds the canonical bytes and verifies the Ed25519 signature
+ *      against the trailer-pinned PSK pubkey.
+ *   4. Confirms `issuedAt` is within the replay window (default 5 min).
+ *   5. Dispatches to the matching method on the supplied `OrderExecutor`.
+ *
+ * The executor is the consumer-defined adapter to the daemon's actual
+ * subsystems (data layer, peer-backup loop, OpenRC service, etc.).
+ */
+
+export interface OrderExecutor {
+  noop?(): Promise<void> | void;
+  setBackupPolicy?(args: { enabled: boolean }): Promise<void> | void;
+  shutDown?(): Promise<void> | void;
+  revokeSelf?(args: { reason: string }): Promise<void> | void;
+  rotateServerIdentity?(args: { newIdentityPubKey: Uint8Array }): Promise<void> | void;
+  deliverBak?(args: { bakPubKey: Uint8Array }): Promise<void> | void;
+}
+
+export interface OrdersHandlerOptions {
+  /** This daemon's server FQDN. Orders for any other serverId are rejected. */
+  serverFqdn: string;
+  /** PSK pubkey baked into the install trailer. */
+  pskPub: Uint8Array;
+  executor: OrderExecutor;
+  maxAgeMs?: number;
+  now?: () => number;
+}
+
+interface PhoneOrderEnvelope {
+  request?: Record<string, unknown>;
+  signature?: unknown;
+}
+
+export function buildOrdersHandler(opts: OrdersHandlerOptions) {
+  const maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
+  const now = opts.now ?? (() => Date.now());
+
+  return async function handleOrder(req: HttpRequest): Promise<HttpResponse> {
+    if (req.method !== "POST") {
+      return { status: 405, body: JSON.stringify({ error: "method not allowed" }), headers: H };
+    }
+    let envelope: PhoneOrderEnvelope;
+    try {
+      envelope = JSON.parse(req.body.toString("utf8")) as PhoneOrderEnvelope;
+    } catch {
+      return { status: 400, body: JSON.stringify({ error: "invalid json" }), headers: H };
+    }
+    const r = envelope.request;
+    if (!r || typeof r !== "object" || typeof envelope.signature !== "string") {
+      return { status: 400, body: JSON.stringify({ error: "malformed body" }), headers: H };
+    }
+    if (typeof r.serverId !== "string" || r.serverId !== opts.serverFqdn) {
+      return { status: 403, body: JSON.stringify({ error: "serverId mismatch" }), headers: H };
+    }
+    if (typeof r.issuedAt !== "number") {
+      return { status: 400, body: JSON.stringify({ error: "issuedAt must be a number" }), headers: H };
+    }
+    if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
+      return { status: 403, body: JSON.stringify({ error: "stale request" }), headers: H };
+    }
+
+    const order = parseOrder(r);
+    if (!order) {
+      return { status: 400, body: JSON.stringify({ error: "unknown or malformed order" }), headers: H };
+    }
+
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(envelope.signature);
+    } catch {
+      return { status: 400, body: JSON.stringify({ error: "invalid signature hex" }), headers: H };
+    }
+    if (!verifyPhoneOrder(order, sig, opts.pskPub)) {
+      return { status: 403, body: JSON.stringify({ error: "invalid signature" }), headers: H };
+    }
+
+    try {
+      await dispatch(order, opts.executor);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        status: 500,
+        body: JSON.stringify({ error: "executor failed", message: msg }),
+        headers: H,
+      };
+    }
+    return { status: 200, body: JSON.stringify({ ok: true, type: order.type }), headers: H };
+  };
+}
+
+const H = { "content-type": "application/json" };
+
+function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
+  if (typeof r.type !== "string" || typeof r.serverId !== "string" || typeof r.issuedAt !== "number") {
+    return null;
+  }
+  switch (r.type) {
+    case "noop":
+      return { type: "noop", serverId: r.serverId, issuedAt: r.issuedAt };
+    case "set-backup-policy":
+      if (typeof r.enabled !== "boolean") return null;
+      return {
+        type: "set-backup-policy",
+        serverId: r.serverId,
+        enabled: r.enabled,
+        issuedAt: r.issuedAt,
+      };
+    case "shut-down":
+      return { type: "shut-down", serverId: r.serverId, issuedAt: r.issuedAt };
+    case "revoke-self":
+      if (typeof r.reason !== "string") return null;
+      return { type: "revoke-self", serverId: r.serverId, reason: r.reason, issuedAt: r.issuedAt };
+    case "rotate-server-identity": {
+      if (typeof r.newIdentityPubKey !== "string") return null;
+      try {
+        return {
+          type: "rotate-server-identity",
+          serverId: r.serverId,
+          newIdentityPubKey: hexToBytes(r.newIdentityPubKey),
+          issuedAt: r.issuedAt,
+        };
+      } catch {
+        return null;
+      }
+    }
+    case "deliver-bak": {
+      if (typeof r.bakPubKey !== "string") return null;
+      try {
+        return {
+          type: "deliver-bak",
+          serverId: r.serverId,
+          bakPubKey: hexToBytes(r.bakPubKey),
+          issuedAt: r.issuedAt,
+        };
+      } catch {
+        return null;
+      }
+    }
+    default:
+      return null;
+  }
+}
+
+async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
+  switch (order.type) {
+    case "noop":
+      await ex.noop?.();
+      return;
+    case "set-backup-policy":
+      if (!ex.setBackupPolicy) throw new Error("setBackupPolicy not implemented");
+      await ex.setBackupPolicy({ enabled: order.enabled });
+      return;
+    case "shut-down":
+      if (!ex.shutDown) throw new Error("shutDown not implemented");
+      await ex.shutDown();
+      return;
+    case "revoke-self":
+      if (!ex.revokeSelf) throw new Error("revokeSelf not implemented");
+      await ex.revokeSelf({ reason: order.reason });
+      return;
+    case "rotate-server-identity":
+      if (!ex.rotateServerIdentity) throw new Error("rotateServerIdentity not implemented");
+      await ex.rotateServerIdentity({ newIdentityPubKey: order.newIdentityPubKey });
+      return;
+    case "deliver-bak":
+      if (!ex.deliverBak) throw new Error("deliverBak not implemented");
+      await ex.deliverBak({ bakPubKey: order.bakPubKey });
+      return;
+  }
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) throw new Error("invalid hex");
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}

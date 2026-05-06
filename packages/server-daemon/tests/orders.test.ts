@@ -1,0 +1,138 @@
+import { describe, expect, it } from "vitest";
+import { ed, signPhoneOrder, type Keypair, type PhoneOrder } from "@flagship/protocol";
+import { buildOrdersHandler, type OrderExecutor } from "../src/orders.js";
+
+const SERVER_FQDN = "home.alice.flagship.services";
+
+function makeKey(): Keypair {
+  const priv = new Uint8Array(32);
+  crypto.getRandomValues(priv);
+  return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+}
+
+function bytesToHex(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
+
+function envelope(order: PhoneOrder, psk: Keypair): { request: unknown; signature: string } {
+  const sig = signPhoneOrder(order, psk);
+  // Re-shape for wire format: hex-encode any byte fields.
+  const r: Record<string, unknown> = { ...order };
+  if ("newIdentityPubKey" in order) r.newIdentityPubKey = bytesToHex(order.newIdentityPubKey);
+  if ("bakPubKey" in order) r.bakPubKey = bytesToHex(order.bakPubKey);
+  return { request: r, signature: bytesToHex(sig) };
+}
+
+function makeReq(body: unknown) {
+  return {
+    method: "POST",
+    path: "/api/orders-from-user",
+    headers: { "content-type": "application/json" },
+    body: Buffer.from(JSON.stringify(body)),
+  };
+}
+
+describe("orders-from-user handler", () => {
+  it("accepts a valid noop", async () => {
+    const psk = makeKey();
+    const calls: string[] = [];
+    const ex: OrderExecutor = { noop: () => void calls.push("noop") };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = { type: "noop", serverId: SERVER_FQDN, issuedAt: Date.now() };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual(["noop"]);
+  });
+
+  it("dispatches set-backup-policy with the enabled flag", async () => {
+    const psk = makeKey();
+    let captured: { enabled?: boolean } = {};
+    const ex: OrderExecutor = { setBackupPolicy: ({ enabled }) => void (captured = { enabled }) };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "set-backup-policy",
+      serverId: SERVER_FQDN,
+      enabled: true,
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(captured).toEqual({ enabled: true });
+  });
+
+  it("rejects an invalid signature (403)", async () => {
+    const psk = makeKey();
+    const attacker = makeKey();
+    const ex: OrderExecutor = {};
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = { type: "noop", serverId: SERVER_FQDN, issuedAt: Date.now() };
+    const r = await h(makeReq(envelope(order, attacker)));
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects an order for a different server (403)", async () => {
+    const psk = makeKey();
+    const h = buildOrdersHandler({
+      serverFqdn: SERVER_FQDN,
+      pskPub: psk.publicKey,
+      executor: {},
+    });
+    const order: PhoneOrder = {
+      type: "noop",
+      serverId: "home.bob.flagship.services",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects a stale request (403)", async () => {
+    const psk = makeKey();
+    const h = buildOrdersHandler({
+      serverFqdn: SERVER_FQDN,
+      pskPub: psk.publicKey,
+      executor: {},
+      maxAgeMs: 1000,
+    });
+    const order: PhoneOrder = { type: "noop", serverId: SERVER_FQDN, issuedAt: Date.now() - 60_000 };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects a captured noop replayed as a different order type", async () => {
+    // Sign a noop, but submit an envelope claiming type=shut-down with the
+    // same signature. Canonical bytes differ → verify must fail.
+    const psk = makeKey();
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: {} });
+    const noop: PhoneOrder = { type: "noop", serverId: SERVER_FQDN, issuedAt: Date.now() };
+    const env = envelope(noop, psk);
+    const tampered = { request: { ...(env.request as Record<string, unknown>), type: "shut-down" }, signature: env.signature };
+    const r = await h(makeReq(tampered));
+    expect(r.status).toBe(403);
+  });
+
+  it("returns 500 with a clear message when the executor throws", async () => {
+    const psk = makeKey();
+    const ex: OrderExecutor = {
+      shutDown: () => {
+        throw new Error("nope");
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = { type: "shut-down", serverId: SERVER_FQDN, issuedAt: Date.now() };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(500);
+    const body = JSON.parse(String(r.body));
+    expect(body.error).toBe("executor failed");
+    expect(body.message).toBe("nope");
+  });
+
+  it("405 for non-POST requests", async () => {
+    const psk = makeKey();
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: {} });
+    const r = await h({ method: "GET", path: "/api/orders-from-user", headers: {}, body: Buffer.alloc(0) });
+    expect(r.status).toBe(405);
+  });
+});

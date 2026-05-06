@@ -93,6 +93,65 @@ export class CloudflareDnsClient {
     return body.result;
   }
 
+  /**
+   * Plain create — does not dedupe by (name,type). Use this for ACME DNS-01
+   * challenges where two authorizations of the same cert can produce two
+   * TXT records at `_acme-challenge.<host>` that must both be present at
+   * the same time. Each call returns a fresh record id which the caller
+   * must keep to delete later.
+   */
+  async createTxt(opts: {
+    name: string;
+    value: string;
+    ttl?: number;
+  }): Promise<CloudflareDnsRecord> {
+    const ttl = opts.ttl ?? 60;
+    const resp = await fetch(`${CF_API}/zones/${this.cfg.zoneId}/dns_records`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        type: "TXT",
+        name: opts.name,
+        content: opts.value,
+        ttl,
+        proxied: false,
+      }),
+    });
+    const body = (await resp.json()) as { success: boolean; result?: CloudflareDnsRecord; errors?: unknown };
+    if (!body.success || !body.result) {
+      throw new Error(`Cloudflare DNS createTxt failed: ${JSON.stringify(body.errors ?? body)}`);
+    }
+    return body.result;
+  }
+
+  /** Look up a single record by its CF record id. Returns null on 404. */
+  async getById(id: string): Promise<CloudflareDnsRecord | null> {
+    const resp = await fetch(
+      `${CF_API}/zones/${this.cfg.zoneId}/dns_records/${encodeURIComponent(id)}`,
+      { headers: this.headers() },
+    );
+    if (resp.status === 404) return null;
+    const body = (await resp.json()) as { success: boolean; result?: CloudflareDnsRecord; errors?: unknown };
+    if (!body.success || !body.result) {
+      throw new Error(`Cloudflare DNS getById failed: ${JSON.stringify(body.errors ?? body)}`);
+    }
+    return body.result;
+  }
+
+  /** Delete a single record by id. Resolves true on success, false if absent. */
+  async deleteById(id: string): Promise<boolean> {
+    const resp = await fetch(
+      `${CF_API}/zones/${this.cfg.zoneId}/dns_records/${encodeURIComponent(id)}`,
+      { method: "DELETE", headers: this.headers() },
+    );
+    if (resp.status === 404) return false;
+    const body = (await resp.json()) as { success: boolean; errors?: unknown };
+    if (!body.success) {
+      throw new Error(`Cloudflare DNS deleteById failed: ${JSON.stringify(body.errors ?? body)}`);
+    }
+    return true;
+  }
+
   async list(name: string, type?: string): Promise<CloudflareDnsRecord[]> {
     const params = new URLSearchParams({ name });
     if (type) params.set("type", type);
