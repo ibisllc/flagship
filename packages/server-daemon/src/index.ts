@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   ed,
   signServerRevokeBySelf,
@@ -199,6 +200,8 @@ interface ExecutorDeps {
   identity: Keypair;
   serverFqdn: string;
   controlPlaneBaseUrl: string;
+  /** Where deliver-bak writes the BAK pubkey hex. Default `/var/flagship/bak.pub.hex`. */
+  bakPubPath?: string;
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -237,11 +240,27 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       const len = newIdentityPubKey.length;
       console.log(`[daemon] order: rotate-server-identity ${len}B (TODO: persist + reload)`);
     },
-    deliverBak: ({ bakPubKey }) => {
-      const len = bakPubKey.length;
-      console.log(`[daemon] order: deliver-bak ${len}B (TODO: install at /var/flagship/bak.pub)`);
+    deliverBak: async ({ bakPubKey }) => {
+      const path = deps.bakPubPath ?? "/var/flagship/bak.pub.hex";
+      try {
+        await persistBakPubKey(path, bakPubKey);
+        console.log(
+          `[daemon] order: deliver-bak — wrote ${bakPubKey.length}B BAK pubkey to ${path}`,
+        );
+      } catch (e) {
+        console.error(`[daemon] order: deliver-bak failed to persist: ${(e as Error).message}`);
+        throw e; // surfaces as 500 to the phone
+      }
     },
   };
+}
+
+async function persistBakPubKey(path: string, bakPubKey: Uint8Array): Promise<void> {
+  const hex = bytesToHexLocal(bakPubKey);
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, hex + "\n", { mode: 0o600 });
+  await rename(tmp, path);
 }
 
 async function postSelfRevoke(deps: ExecutorDeps, reason: string): Promise<void> {
