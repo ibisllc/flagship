@@ -6,15 +6,23 @@ import {
   type Keypair,
   type ServerRevokeBySelf,
 } from "@flagship/protocol";
+import { InMemoryAlertInbox } from "./alertInbox.js";
 import { BackupLoop } from "./backupLoop.js";
 import { BootCoordinator } from "./bootCoordinator.js";
+import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import { AppMembership } from "./membership.js";
 import { IdentityInjector } from "./identityInjector.js";
-import { startDaemonRuntime, type DaemonRuntime } from "./runtime.js";
+import {
+  startDaemonRuntime,
+  type DaemonRuntime,
+  type HttpRequest,
+  type HttpResponse,
+} from "./runtime.js";
 import type { LeEnvironment } from "./acme/letsEncryptIssuer.js";
 import type { OrderExecutor } from "./orders.js";
+import type { PhonePipe } from "./browser/phonePipe.js";
 import {
   defaultEndpointsCachePath,
   resolveServicesEndpoints,
@@ -120,6 +128,33 @@ async function main(): Promise<void> {
     privateKey: identityPrivKey,
     publicKey: ed.getPublicKey(identityPrivKey),
   };
+
+  // ---- Pod-resident browser bundle (optional) ----
+  // The compose stack publishes Chromium's CDP on 127.0.0.1:9222. If the
+  // daemon can reach it we wire the full browser surface; if it can't,
+  // the daemon still boots and apps without `browser.domains` are
+  // unaffected. Bundle survives daemon shutdown via `bundle.close()`
+  // registered on process exit.
+  const alertInbox = new InMemoryAlertInbox();
+  const cdpEndpoint =
+    process.env.FLAGSHIP_CHROMIUM_CDP ?? "http://127.0.0.1:9222";
+  let browserBundle: BrowserBundle | null = null;
+  if (process.env.FLAGSHIP_DISABLE_BROWSER !== "1") {
+    try {
+      browserBundle = await bootstrapBrowserBundle({
+        cdpEndpoint,
+        dataDir,
+        alertInbox,
+      });
+      console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
+    } catch (e) {
+      console.warn(
+        `[daemon] browser bundle disabled: ${(e as Error).message}; ` +
+          `apps with browser.domains will get 403`,
+      );
+    }
+  }
+
   const orders = pskPubHex
     ? {
         pskPub: hexToBytes(pskPubHex.trim()),
@@ -128,6 +163,7 @@ async function main(): Promise<void> {
           identity: identityKeypair,
           serverFqdn: env.serverFqdn!,
           controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+          phonePipe: browserBundle?.phonePipe ?? null,
         }),
       }
     : undefined;
@@ -157,7 +193,11 @@ async function main(): Promise<void> {
         // apps declaring `data.stores` will refuse to install with a
         // clear error, but apps without data are unaffected.
         dataServicesEnvFile: process.env.FLAGSHIP_DATA_SERVICES_ENV ?? "/var/flagship/data-services.env",
+        appAuthTokens: browserBundle?.appAuthTokens,
+        domainGate: browserBundle?.domainGate,
+        tabRegistry: browserBundle?.tabRegistry,
       },
+      additionalHandlers: browserBundle ? [browserBundle.apiHandle] : undefined,
     });
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
@@ -189,6 +229,16 @@ async function main(): Promise<void> {
     console.log(`[daemon] FLAGSHIP_CONFIG not provided; skipping local HTTP API`);
   }
 
+  // Tear the browser bundle down on graceful exit so Chromium isn't
+  // left holding the singleton lock if the daemon restarts. We don't
+  // try to be clever about ordering — the runtime owns the cert +
+  // tunnel lifecycle and OpenRC/systemd will SIGKILL us if we hang.
+  if (browserBundle) {
+    const bundle = browserBundle;
+    process.once("SIGTERM", () => void bundle.close().catch(() => {}));
+    process.once("SIGINT", () => void bundle.close().catch(() => {}));
+  }
+
   // Stay alive forever (tunnel client + TLS server are event-driven and
   // hold the event loop on their own).
   await runtime.ready();
@@ -209,6 +259,12 @@ interface ExecutorDeps {
   controlPlaneBaseUrl: string;
   /** Where deliver-bak writes the BAK pubkey hex. Default `/var/flagship/bak.pub.hex`. */
   bakPubPath?: string;
+  /**
+   * When the browser bundle is up, the orders dispatcher routes
+   * `browser-input-response` here so the typed value reaches the
+   * focused field via CDP `Input.insertText`.
+   */
+  phonePipe?: PhonePipe | null;
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -259,6 +315,11 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
         throw e; // surfaces as 500 to the phone
       }
     },
+    browserInputResponse: deps.phonePipe
+      ? async (args) => {
+          await deps.phonePipe!.applyInputResponse(args);
+        }
+      : undefined,
   };
 }
 
@@ -381,3 +442,10 @@ export type {
 } from "./servicesEndpoints.js";
 export { LlmHarness } from "./llmHarness.js";
 export type { LlmHarnessOptions } from "./llmHarness.js";
+export { bootstrapBrowserBundle } from "./browser/bootstrap.js";
+export type {
+  BootstrapBrowserOptions,
+  BrowserBundle,
+} from "./browser/bootstrap.js";
+export { InMemoryAlertInbox } from "./alertInbox.js";
+export type { AlertInbox, AlertEnvelope } from "./alertInbox.js";

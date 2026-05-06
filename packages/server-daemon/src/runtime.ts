@@ -84,8 +84,21 @@ export interface DaemonRuntimeOptions {
    * Default: a tiny "Flagship daemon — no app configured" page on /,
    * `/api/orders-from-user` if `orders` is configured, 404 elsewhere.
    * Replace with a real reverse-proxy / app router.
+   *
+   * Replacing this entirely also disables the built-in routes for
+   * `/api/orders-from-user` and `/api/apps` — usually you want
+   * `additionalHandlers` instead.
    */
   handleHttp?: (req: HttpRequest) => Promise<HttpResponse>;
+  /**
+   * Optional pre-handlers tried before the default handler. Each
+   * returns null to fall through. The first non-null response wins.
+   * Use this to overlay extra surfaces (the browser feature's
+   * `/api/browser/*`, the admin-UI proxy's `/.flagship/admin/*`)
+   * without losing the built-in `/api/orders-from-user` + `/api/apps`
+   * routes.
+   */
+  additionalHandlers?: Array<(req: HttpRequest) => Promise<HttpResponse | null>>;
   /**
    * Phone-server orders endpoint. When set, the default HTTP handler
    * dispatches `POST /api/orders-from-user` to a signature-verifying
@@ -266,7 +279,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // is constructed below (after the cert + tunnel). The ref-cell lets
   // us bind the handler now and populate it later.
   const appPlatformRef: { current: AppPlatform | null } = { current: null };
-  const handleHttp = opts.handleHttp ?? buildDefaultHandler(opts, appPlatformRef);
+  const baseHandleHttp = opts.handleHttp ?? buildDefaultHandler(opts, appPlatformRef);
+  const extras = opts.additionalHandlers ?? [];
+  const handleHttp: (req: HttpRequest) => Promise<HttpResponse> = extras.length === 0
+    ? baseHandleHttp
+    : async (req) => {
+        for (const h of extras) {
+          const r = await h(req);
+          if (r) return r;
+        }
+        return baseHandleHttp(req);
+      };
 
   // Local TLS server. The tunnel hub forwards inbound TCP from
   // `<serverFqdn>:443` to this socket; the TLS handshake terminates here.
