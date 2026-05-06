@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="description" content="Report abuse on flagship.services subdomains." />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
+    <title>Abuse · Flagship</title>
+    <style>
+      code { background: var(--bg-elev); color: var(--fg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.92em; }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/security.html">security</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Report abuse</h1>
+      <p class="lede">
+        If a <code>*.flagship.services</code> subdomain is hosting malware, phishing, copyright infringement, or other abuse, contact us and we will investigate and take action.
+      </p>
+
+      <h2>Contact</h2>
+      <ul class="bullets">
+        <li><strong>Email</strong>: <a href="mailto:abuse@flagship.services">abuse@flagship.services</a></li>
+        <li><strong>Authorized representative</strong>: Harry Winner, Flagship (<a href="https://flagshipserver.com">flagshipserver.com</a>)</li>
+      </ul>
+
+      <h2>What to include</h2>
+      <ul class="bullets">
+        <li>The full URL or hostname (e.g. <code>something.example.flagship.services</code>).</li>
+        <li>A short description of the abuse (phishing, malware, CSAM, copyright, harassment, etc.).</li>
+        <li>Evidence — screenshots, headers, sample URLs, or a reference to a third-party report (Google Safe Browsing, PhishTank, NCMEC, etc.).</li>
+        <li>Your contact info if you would like an acknowledgement and resolution update.</li>
+      </ul>
+
+      <h2>Response targets</h2>
+      <ul class="bullets">
+        <li>Acknowledge within <strong>2 business days</strong>.</li>
+        <li>CSAM and active phishing escalated immediately on receipt.</li>
+        <li>Other categories triaged within <strong>5 business days</strong>.</li>
+      </ul>
+
+      <h2>What we can do</h2>
+      <p>
+        Each Flagship server runs on hardware the user owns; user content is end-to-end private to that user (TLS terminates on their machine, not on our infrastructure). What we control is the routing layer: we can revoke a subdomain's routing entry on <code>flagship.services</code>, which removes the abusive site from the public internet, and we can revoke the user's identity on <code>flagshipserver.com</code>.
+      </p>
+      <p>
+        We cannot read the content of a user's TLS-encrypted traffic, so requests for content monitoring or interception cannot be honored — by design.
+      </p>
+
+      <h2>Security vulnerabilities</h2>
+      <p>
+        For security issues in Flagship itself (the protocol, daemon, control plane, or clients), please use the <a href="/security.html">security disclosure process</a> instead.
+      </p>
+    </main>
+
+    <footer class="site">
+      <a href="/">Home</a>
+      <a href="/security.html">Security</a>
+    </footer>
+  </body>
+</html>
