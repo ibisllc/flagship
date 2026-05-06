@@ -2,7 +2,13 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PersistentAcmeStore, isCertFresh } from "../src/acme/persistentStore.js";
+import {
+  PersistentAcmeStore,
+  isCertFresh,
+  sansEqual,
+  shouldReuseCert,
+  type PersistedCert,
+} from "../src/acme/persistentStore.js";
 
 let dir: string;
 
@@ -125,5 +131,74 @@ describe("isCertFresh", () => {
       issuedAt: now,
     };
     expect(isCertFresh(cert, 10_000, now)).toBe(true);
+  });
+});
+
+describe("sansEqual", () => {
+  it("is order-insensitive", () => {
+    expect(sansEqual(["a", "b"], ["b", "a"])).toBe(true);
+    expect(sansEqual(["a", "b"], ["a", "c"])).toBe(false);
+    expect(sansEqual(["a"], ["a", "b"])).toBe(false);
+  });
+});
+
+describe("shouldReuseCert (renewal decision)", () => {
+  const fqdn = "home.alice.flagship.services";
+  const wildcard = `*.${fqdn}`;
+  const sans = [fqdn, wildcard];
+  const now = 2_000_000_000_000; // 2033-ish; arbitrary fixed clock for the suite.
+  const day = 24 * 60 * 60_000;
+
+  function cert(notAfterMs: number, names: string[] = sans): PersistedCert {
+    return {
+      certPem: "stub",
+      privateKeyPem: "stub",
+      names,
+      notAfter: notAfterMs,
+      issuedAt: now - 30 * day,
+    };
+  }
+
+  it("reuses a cert with 60 days remaining + matching SANs", () => {
+    expect(shouldReuseCert(cert(now + 60 * day), sans, 30 * day, now)).toBe(true);
+  });
+
+  it("re-issues when expiry is inside the renewal window (25 days left)", () => {
+    expect(shouldReuseCert(cert(now + 25 * day), sans, 30 * day, now)).toBe(false);
+  });
+
+  it("re-issues when SANs change (e.g. wildcard newly added)", () => {
+    expect(
+      shouldReuseCert(cert(now + 60 * day, [fqdn]), sans, 30 * day, now),
+    ).toBe(false);
+  });
+
+  it("re-issues when there's no cert on disk", () => {
+    expect(shouldReuseCert(null, sans, 30 * day, now)).toBe(false);
+  });
+
+  it("simulates a disk-roundtrip startup path: cert too old → re-issue, fresh → reuse", async () => {
+    // Save a near-expiry cert; loading it back through PersistentAcmeStore
+    // must yield the same renewal decision.
+    const s = new PersistentAcmeStore(dir);
+    await s.saveCert("home.alice.flagship.services", {
+      certPem: "c",
+      privateKeyPem: "k",
+      names: sans,
+      notAfter: now + 10 * day,
+    });
+    const loaded = await s.loadCert("home.alice.flagship.services");
+    expect(loaded).not.toBeNull();
+    expect(shouldReuseCert(loaded, sans, 30 * day, now)).toBe(false);
+
+    // Replace with a fresh cert.
+    await s.saveCert("home.alice.flagship.services", {
+      certPem: "c",
+      privateKeyPem: "k",
+      names: sans,
+      notAfter: now + 80 * day,
+    });
+    const fresh = await s.loadCert("home.alice.flagship.services");
+    expect(shouldReuseCert(fresh, sans, 30 * day, now)).toBe(true);
   });
 });

@@ -36,6 +36,15 @@ export interface LetsEncryptIssuerOptions {
   directoryUrl?: string;
   /** Test seam: replace acme.Client. */
   clientFactory?: (cfg: { directoryUrl: string; accountKey: string }) => MinimalAcmeClient;
+  /**
+   * Wait this long after publishing a DNS-01 TXT before notifying Let's
+   * Encrypt to validate. Cloudflare DNS propagates fast (~few seconds)
+   * but LE caches NXDOMAIN responses, so notifying too early causes the
+   * very first lookup to land on a stale negative cache and fail the
+   * challenge. Default 10s — empirically reliable on the CF→LE path.
+   * Tests can override to 0 to keep them fast.
+   */
+  dns01PropagationDelayMs?: number;
 }
 
 /** The subset of acme-client.Client we actually use, for substitutability in tests. */
@@ -117,6 +126,8 @@ export class LetsEncryptIssuer implements AcmeIssuer {
     const authorizations = await client.getAuthorizations(order);
     const cleanups: Array<() => Promise<void> | void> = [];
 
+    const dns01PropagationDelayMs = this.opts.dns01PropagationDelayMs ?? 10_000;
+
     try {
       for (const authz of authorizations) {
         const isWildcard = authz.identifier.value.startsWith("*.");
@@ -129,6 +140,7 @@ export class LetsEncryptIssuer implements AcmeIssuer {
         }
         const keyAuth = await client.getChallengeKeyAuthorization(challenge);
 
+        let usedDns01 = false;
         if (challenge.type === "tls-alpn-01") {
           const cert = await buildAlpnChallengeCert(keyAuth, authz.identifier.value);
           const dispose = this.opts.alpn.present(authz.identifier.value, cert);
@@ -138,8 +150,17 @@ export class LetsEncryptIssuer implements AcmeIssuer {
           const host = authz.identifier.value.replace(/^\*\./, "");
           const dispose = await this.opts.dns.publishTxt(`_acme-challenge.${host}`, keyAuth);
           cleanups.push(() => dispose());
+          usedDns01 = true;
         } else {
           throw new Error(`unsupported challenge type ${challenge.type}`);
+        }
+
+        // DNS-01 only: wait for the TXT to actually propagate before LE
+        // looks. LE caches negative responses, so a too-fast lookup pins
+        // NXDOMAIN until the SOA TTL expires. TLS-ALPN-01 has no
+        // propagation lag (the cert is presented synchronously).
+        if (usedDns01 && dns01PropagationDelayMs > 0) {
+          await new Promise((r) => setTimeout(r, dns01PropagationDelayMs));
         }
 
         await client.completeChallenge(challenge);

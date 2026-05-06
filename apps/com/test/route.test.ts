@@ -89,7 +89,7 @@ describe("flagshipserver.com Worker — routing", () => {
 
   it("strips edge-only request headers (host, content-length, hop-by-hop)", async () => {
     await route(
-      new Request("https://flagshipserver.com/api/health", {
+      new Request("https://flagshipserver.com/api/something-else", {
         headers: { host: "flagshipserver.com", connection: "keep-alive" },
       }),
       makeEnv(),
@@ -102,7 +102,7 @@ describe("flagshipserver.com Worker — routing", () => {
 
   it("adds x-forwarded-host + x-forwarded-proto so .services can log the original surface", async () => {
     await route(
-      new Request("https://flagshipserver.com/api/health"),
+      new Request("https://flagshipserver.com/api/something-else"),
       makeEnv(),
     );
     expect(calls[0]!.headers["x-forwarded-host"]).toBe("flagshipserver.com");
@@ -111,7 +111,7 @@ describe("flagshipserver.com Worker — routing", () => {
 
   it("returns 500 if SERVICES_BASE_URL is not absolute (misconfig guard)", async () => {
     const r = await route(
-      new Request("https://flagshipserver.com/api/health"),
+      new Request("https://flagshipserver.com/api/something-else"),
       makeEnv({ SERVICES_BASE_URL: "not-a-url" }),
     );
     expect(r.status).toBe(500);
@@ -124,7 +124,7 @@ describe("flagshipserver.com Worker — routing", () => {
       throw new Error("ECONNREFUSED");
     }) as typeof globalThis.fetch;
     const r = await route(
-      new Request("https://flagshipserver.com/api/health"),
+      new Request("https://flagshipserver.com/api/something-else"),
       makeEnv(),
     );
     expect(r.status).toBe(502);
@@ -147,7 +147,7 @@ describe("flagshipserver.com Worker — routing", () => {
 
   it("does NOT forward GET-style methods with a body (HEAD/OPTIONS too)", async () => {
     await route(
-      new Request("https://flagshipserver.com/api/health", { method: "HEAD" }),
+      new Request("https://flagshipserver.com/api/something-else", { method: "HEAD" }),
       makeEnv(),
     );
     expect(calls[0]!.body).toBeUndefined();
@@ -294,6 +294,67 @@ describe("/build/iso/* — R2 streaming", () => {
       env,
     );
     expect(r.status).toBe(500);
+  });
+});
+
+describe("/api/services/endpoints (discovery)", () => {
+  it("returns the configured tunnelHub + passthrough IPs, served directly (not proxied)", async () => {
+    const env = makeEnv({
+      TUNNEL_HUB_URL: "wss://my-hub.example/tunnel",
+      SERVICES_PASSTHROUGH_IPV4: "1.2.3.4",
+      SERVICES_PASSTHROUGH_IPV6: "::1",
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/services/endpoints"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.version).toBe(_internal.SERVICES_ENDPOINTS_VERSION);
+    expect(body.tunnelHub).toBe("wss://my-hub.example/tunnel");
+    expect(body.passthroughIPv4).toBe("1.2.3.4");
+    expect(body.passthroughIPv6).toBe("::1");
+    expect(body.siblings).toEqual([]);
+    expect(typeof body.issuedAt).toBe("string");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("falls back to the hardcoded default when TUNNEL_HUB_URL isn't set", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/services/endpoints"),
+      makeEnv(),
+    );
+    const body = JSON.parse(await r.text());
+    expect(body.tunnelHub).toBe(_internal.DEFAULT_TUNNEL_HUB_URL);
+    expect(body.passthroughIPv4).toBeNull();
+  });
+
+  it("emits cache-control: max-age=60 so the edge can absorb load + infra moves are visible within ~1 min", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/services/endpoints"),
+      makeEnv(),
+    );
+    expect(r.headers.get("cache-control")).toMatch(/max-age=60/);
+  });
+});
+
+describe("/api/health", () => {
+  it("is served directly by the Worker, never proxied", async () => {
+    const env = makeEnv();
+    const r = await route(new Request("https://flagshipserver.com/api/health"), env);
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.ok).toBe(true);
+    expect(body.surface).toBe("com");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("succeeds even when SERVICES_BASE_URL is broken (proves it doesn't depend on .services)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/health"),
+      makeEnv({ SERVICES_BASE_URL: "not-a-url" }),
+    );
+    expect(r.status).toBe(200);
   });
 });
 

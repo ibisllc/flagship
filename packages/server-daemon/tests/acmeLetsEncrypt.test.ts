@@ -149,6 +149,8 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
       alpn,
       dns,
       clientFactory: () => client,
+      // Tests run a fake ACME server, so no DNS propagation to wait for.
+      dns01PropagationDelayMs: 0,
     });
 
     return { client, calls, presented, publishedTxt, issuer } as unknown as {

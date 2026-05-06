@@ -40,7 +40,13 @@ database_id = "d6f3bc03-0168-4988-8742-83346fdc923c"
 migrations_dir = "../../packages/storage/migrations"
 
 [vars]
-SERVICES_BASE_URL = "https://flagship.services"
+# Fly's TLS-term endpoint (port 8443). The flagship.services apex itself
+# runs SNI passthrough on :443, so https://flagship.services/api/* will
+# always 525. The Worker proxies any /api/* path it doesn't handle to
+# this endpoint instead. (For end-to-end requests, clients should use
+# `flagshipserver.com` for API and `<server>.<user>.flagship.services`
+# for user content.)
+SERVICES_BASE_URL = "https://flagship-services.fly.dev:8443"
 # `flagship-base-alpine-...` = stock Alpine 3.21 with our apkovl baked at
 # the root of the ISO9660 filesystem. The apkovl carries:
 #   /etc/local.d/01-flagship-bootstrap.start
@@ -59,6 +65,10 @@ BASE_ISO_SHA256 = "5782da151ecc0328a0e10052405981d6807d9967f6e01836d1cf1c538768f
 # subdomain at these IPs.
 SERVICES_PASSTHROUGH_IPV4 = "149.248.216.86"
 SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::110:d2b6:0"
+# WebSocket URL daemons dial for the tunnel hub. Surfaced at
+# /api/services/endpoints so daemons can discover migrations silently
+# (no need to update each daemon's environment when we move the hub).
+TUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel"
 # Cloudflare zone ID for flagship.services (DNS API target).
 CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
 # CLOUDFLARE_DNS_API_TOKEN is set via:

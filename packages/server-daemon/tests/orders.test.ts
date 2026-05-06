@@ -62,6 +62,44 @@ describe("orders-from-user handler", () => {
     expect(captured).toEqual({ enabled: true });
   });
 
+  it("set-backup-policy actually toggles a real BackupLoop", async () => {
+    const { BackupLoop } = await import("../src/backupLoop.js");
+    const psk = makeKey();
+    const swk = new Uint8Array(32);
+    crypto.getRandomValues(swk);
+    const loop = new BackupLoop({ swk, k: 3, n: 5 });
+    expect(loop.status().enabled).toBe(false);
+
+    const ex: OrderExecutor = {
+      setBackupPolicy: ({ enabled }) => loop.setEnabled(enabled),
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+
+    // Enable
+    let r = await h(
+      makeReq(
+        envelope(
+          { type: "set-backup-policy", serverId: SERVER_FQDN, enabled: true, issuedAt: Date.now() },
+          psk,
+        ),
+      ),
+    );
+    expect(r.status).toBe(200);
+    expect(loop.status().enabled).toBe(true);
+
+    // Disable
+    r = await h(
+      makeReq(
+        envelope(
+          { type: "set-backup-policy", serverId: SERVER_FQDN, enabled: false, issuedAt: Date.now() },
+          psk,
+        ),
+      ),
+    );
+    expect(r.status).toBe(200);
+    expect(loop.status().enabled).toBe(false);
+  });
+
   it("rejects an invalid signature (403)", async () => {
     const psk = makeKey();
     const attacker = makeKey();

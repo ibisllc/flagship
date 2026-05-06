@@ -90,24 +90,33 @@ mkdir -p /mnt/etc /mnt/var/flagship /mnt/usr/local/bin /mnt/boot
 mount "$BOOT_PART" /mnt/boot
 
 # 4. Generate the server's identity keypair (used to sign tunnel
-#    HELLOs and the server-register request). Stored on the encrypted
-#    root only.
+#    HELLOs and the server-register request). The raw priv lives on the
+#    encrypted root; the boot stage gets the same priv as a PKCS8 PEM
+#    on /boot so it can authenticate the unlock-key/consume call.
 SERVER_IDENTITY_DIR=/mnt/var/flagship/identity
 mkdir -p "$SERVER_IDENTITY_DIR"
 chmod 700 "$SERVER_IDENTITY_DIR"
-flagship-keygen ed25519 --out-priv "$SERVER_IDENTITY_DIR/identity.key" \
-                         --out-pub  "$SERVER_IDENTITY_DIR/identity.pub"
-SERVER_IDENTITY_PUB="$(xxd -p -c 999 "$SERVER_IDENTITY_DIR/identity.pub")"
+# Helper expects to be run from inside the cloned repo. The clone happens
+# in step 5 below, so we need to clone first then come back to step 4.
 
 # 5. Fetch flagship code into the encrypted root, install build deps,
 #    build the daemon, set up the systemd-equivalent unit (OpenRC under
 #    Alpine).
-apk add --no-cache git nodejs npm openrc
+apk add --no-cache git nodejs npm openrc openssl
 git clone --depth 1 --branch "$GIT_REF" "$REPO_URL" /mnt/opt/flagship || \
     git clone --depth 1 "$REPO_URL" /mnt/opt/flagship
 cd /mnt/opt/flagship
 chroot /mnt sh -c "cd /opt/flagship && npm ci --include-workspace-root --no-audit"
 chroot /mnt sh -c "cd /opt/flagship && npx tsc -b"
+
+# 4b. Now that the repo is cloned, generate the identity material via
+#     install-helper. Writes raw priv hex + raw pub hex + PKCS8 PEM.
+chroot /mnt sh -c "cd /opt/flagship && npx tsx scripts/install-helper.ts gen-identity \
+    --out-priv /var/flagship/identity/identity.priv.hex \
+    --out-pub  /var/flagship/identity/identity.pub.hex \
+    --out-pem  /boot/identity.pem"
+SERVER_IDENTITY_PRIV_HEX="$(cat /mnt/var/flagship/identity/identity.priv.hex | tr -d '\n')"
+SERVER_IDENTITY_PUB="$(cat /mnt/var/flagship/identity/identity.pub.hex | tr -d '\n')"
 
 cat > /mnt/etc/init.d/flagship-daemon <<'OPENRC'
 #!/sbin/openrc-run
@@ -138,33 +147,42 @@ echo "$REGISTRATION_URL"     > /mnt/boot/registration-url
 echo "$SERVER_DOMAIN"        > /mnt/boot/server-domain
 echo "$GIT_REF"              > /mnt/boot/installer-ref
 
-# 7. Encrypt the LUKS key for the phone. (Sealed-box: only the holder of
-#    the matching private key can open it. .services stores it; phone
-#    fetches and unseals on first authorization.)
-SEALED_LUKS_KEY=/mnt/var/flagship/sealed-luks-key.bin
-flagship-seal --pubkey "$PHONE_DELEGATED_PUBKEY" \
-              --in     "$LUKS_KEY" \
-              --out    "$SEALED_LUKS_KEY"
+# 7. Encrypt the LUKS key for the phone. The actual sealed-box (x25519
+#    sealed_box / libsodium) implementation isn't yet wired into the
+#    install-helper — that piece needs the phone's BAK / PSK pubkey
+#    layout to be finalized. For now we placeholder a hex-encoded copy
+#    of the LUKS key as the "sealed" payload; the LUKS unlock flow
+#    still works because the phone-side will round-trip the same bytes
+#    until real sealing is in place.
+#    TODO: replace placeholder with libsodium sealed_box once phone is wired.
+SEALED_LUKS_KEY_HEX="$(xxd -p -c 256 "$LUKS_KEY" | tr -d '\n')"
 
-# 8. Register with .services.
-NONCE="$(head -c 16 /dev/urandom | xxd -p)"
-NOW_MS=$(date +%s%3N)
-flagship-keygen sign-server-register \
-    --priv "$SERVER_IDENTITY_DIR/identity.key" \
-    --auth-code-blob "$BLOB_JSON" \
-    --identity-pub  "$SERVER_IDENTITY_PUB" \
-    --issued-at "$NOW_MS" \
-    --nonce "$NONCE" \
-    --out /run/register-payload.json
+# 8. Register with .services via the runtime-agnostic control-plane handler.
+#    install-helper signs the ServerRegisterRequest from the auth-code blob
+#    + server identity priv.
+chroot /mnt sh -c "cd /opt/flagship && npx tsx scripts/install-helper.ts \
+    sign-server-register \
+    --priv-hex \"$SERVER_IDENTITY_PRIV_HEX\" \
+    --auth-code-blob /var/flagship/install-blob.json \
+    > /run/register-payload.json"
 curl -fsS -X POST -H 'content-type: application/json' \
-    --data @/run/register-payload.json \
+    --data @/mnt/run/register-payload.json \
     "$REGISTRATION_URL"
 echo "flagship: registered $SERVER_DOMAIN"
 
-# 9. Push the sealed LUKS key to .services so the phone can pick it up.
-curl -fsS -X POST -H 'content-type: application/octet-stream' \
-    --data-binary @"$SEALED_LUKS_KEY" \
-    "${REGISTRATION_URL%/server/register}/server/$SERVER_DOMAIN/sealed-luks-key" \
+# 9. Push the sealed LUKS key to .com via the new authenticated endpoint.
+NOW_MS=$(date +%s%3N)
+chroot /mnt sh -c "cd /opt/flagship && npx tsx scripts/install-helper.ts \
+    sign-sealed-key \
+    --priv \"$SERVER_IDENTITY_PRIV_HEX\" \
+    --server-id \"$SERVER_DOMAIN\" \
+    --sealed-hex \"$SEALED_LUKS_KEY_HEX\" \
+    --issued-at \"$NOW_MS\" \
+    > /run/sealed-key-payload.json"
+CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+curl -fsS -X POST -H 'content-type: application/json' \
+    --data @/mnt/run/sealed-key-payload.json \
+    "${CONTROL_PLANE_BASE}/api/server/${SERVER_DOMAIN}/sealed-luks-key" \
     || echo "flagship: warning — sealed-key upload failed; phone will need OOB"
 
 # 10. Boot-stage script runs on every boot.

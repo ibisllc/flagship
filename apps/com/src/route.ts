@@ -28,6 +28,11 @@ export interface RouteEnv {
   /** CA private key for /api/users/:username/pubkey-cert (Worker secret). */
   FLAGSHIP_CA_PRIV_HEX?: string;
   FLAGSHIP_CA_ISSUER?: string;
+  /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
+  TUNNEL_HUB_URL?: string;
+  /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */
+  SERVICES_PASSTHROUGH_IPV4?: string;
+  SERVICES_PASSTHROUGH_IPV6?: string;
 }
 
 export interface R2BucketLike {
@@ -45,7 +50,23 @@ export interface R2ObjectLike {
 const PROXY_PREFIX = "/api/";
 const STATUS_PROBE_PATH = "/api/_status/probe";
 const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
+const HEALTH_PATH = "/api/health";
+const SERVICES_ENDPOINTS_PATH = "/api/services/endpoints";
 const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
+
+/**
+ * Default tunnel hub URL when TUNNEL_HUB_URL env var isn't set. Matches
+ * the hardcoded fallback in `packages/server-daemon/src/index.ts` so a
+ * daemon that can't reach the discovery endpoint still works.
+ */
+const DEFAULT_TUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel";
+
+/**
+ * Schema version for /api/services/endpoints. Bump when we make a
+ * non-additive change so daemons can refuse to act on a response they
+ * don't understand.
+ */
+const SERVICES_ENDPOINTS_VERSION = 1;
 
 /**
  * Default placeholder ISO. We don't yet host a real personalizable installer
@@ -87,6 +108,14 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
 
   if (url.pathname === BUILD_ISO_INFO_PATH) {
     return buildIsoInfo(env);
+  }
+
+  if (url.pathname === HEALTH_PATH) {
+    return jsonHealth();
+  }
+
+  if (url.pathname === SERVICES_ENDPOINTS_PATH) {
+    return jsonServicesEndpoints(env);
   }
 
   if (url.pathname.startsWith(BUILD_ISO_STREAM_PREFIX)) {
@@ -215,6 +244,54 @@ function jsonResponse(body: unknown, status: number): Response {
   });
 }
 
+/**
+ * Worker-served health endpoint. Returns directly without proxying to
+ * .services so the answer doesn't depend on the Fly app being up — the
+ * Worker is the canonical "is the control plane alive?" answer.
+ */
+function jsonHealth(): Response {
+  return jsonResponse(
+    {
+      ok: true,
+      service: "flagshipserver.com",
+      surface: "com",
+      now: new Date().toISOString(),
+    },
+    200,
+  );
+}
+
+/**
+ * Service-discovery payload daemons fetch on startup so they can dial
+ * the tunnel hub without any hardcoded host. Also surfaces the SNI
+ * passthrough IPs (informational; daemons don't dial these directly,
+ * but tooling and the status page benefit).
+ *
+ * `siblings` is reserved for future inter-`.services` peer routing
+ * (see future_inter_services_peering.md). Today we always emit `[]`;
+ * daemons must ignore unknown fields, and a future Worker deploy can
+ * populate the array without any daemon-side change.
+ */
+function jsonServicesEndpoints(env: RouteEnv): Response {
+  const body = {
+    version: SERVICES_ENDPOINTS_VERSION,
+    tunnelHub: env.TUNNEL_HUB_URL ?? DEFAULT_TUNNEL_HUB_URL,
+    passthroughIPv4: env.SERVICES_PASSTHROUGH_IPV4 ?? null,
+    passthroughIPv6: env.SERVICES_PASSTHROUGH_IPV6 ?? null,
+    siblings: [] as Array<{ wsUrl: string; pubKeyHex: string }>,
+    issuedAt: new Date().toISOString(),
+  };
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      // 60s cache: daemons fetch on startup + reconnect; this keeps
+      // edge load low while making infra moves visible within ~1 min.
+      "cache-control": "public, max-age=60",
+    },
+  });
+}
+
 async function proxyToServices(
   request: Request,
   env: RouteEnv,
@@ -286,9 +363,13 @@ export const _internal = {
   PROXY_PREFIX,
   STATUS_PROBE_PATH,
   BUILD_ISO_INFO_PATH,
+  HEALTH_PATH,
+  SERVICES_ENDPOINTS_PATH,
   BUILD_ISO_STREAM_PREFIX,
   DEFAULT_BASE_ISO_URL,
   DEFAULT_BASE_ISO_VERSION,
+  DEFAULT_TUNNEL_HUB_URL,
+  SERVICES_ENDPOINTS_VERSION,
   STRIP_REQ_HEADERS,
   STRIP_RES_HEADERS,
 };

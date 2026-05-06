@@ -161,25 +161,31 @@ export async function handleServerRegister(
   }
 
   // Publish A/AAAA so the subdomain resolves to the .services SNI
-  // passthrough IP. Best-effort: a DNS failure shouldn't fail registration
-  // (the subdomain just won't be reachable until DNS is sorted).
-  let dnsPublished: { type: string; content: string }[] = [];
+  // passthrough IP — both for the apex `<server>.<user>.<apex>` and for
+  // `*.<server>.<user>.<apex>` so app subdomains (which the daemon's
+  // wildcard cert covers) are reachable. Best-effort: a DNS failure
+  // shouldn't fail registration.
+  let dnsPublished: { type: string; name: string; content: string }[] = [];
   let dnsError: string | undefined;
   if (deps.dns) {
+    const apex = authCode.serverDomain;
+    const wildcard = `*.${apex}`;
     try {
-      const a = await deps.dns.client.upsert({
-        name: authCode.serverDomain,
-        type: "A",
-        content: deps.dns.servicesIpv4,
-      });
-      dnsPublished.push({ type: "A", content: a.content });
-      if (deps.dns.servicesIpv6) {
-        const aaaa = await deps.dns.client.upsert({
-          name: authCode.serverDomain,
-          type: "AAAA",
-          content: deps.dns.servicesIpv6,
+      for (const name of [apex, wildcard]) {
+        const a = await deps.dns.client.upsert({
+          name,
+          type: "A",
+          content: deps.dns.servicesIpv4,
         });
-        dnsPublished.push({ type: "AAAA", content: aaaa.content });
+        dnsPublished.push({ type: "A", name, content: a.content });
+        if (deps.dns.servicesIpv6) {
+          const aaaa = await deps.dns.client.upsert({
+            name,
+            type: "AAAA",
+            content: deps.dns.servicesIpv6,
+          });
+          dnsPublished.push({ type: "AAAA", name, content: aaaa.content });
+        }
       }
     } catch (e) {
       dnsError = String((e as Error).message ?? e);

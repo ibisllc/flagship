@@ -4,7 +4,7 @@ import { ed, type Keypair } from "@flagship/protocol";
 import acme from "acme-client";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import { LetsEncryptIssuer, type LeEnvironment } from "./acme/letsEncryptIssuer.js";
-import { PersistentAcmeStore, isCertFresh } from "./acme/persistentStore.js";
+import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 import { startTunnelClient, type TunnelClient } from "./tunnel/tunnelClient.js";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
@@ -204,10 +204,16 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   };
 
   // Tunnel client: forwards FRAME_OPEN(SNI) → 127.0.0.1:tlsPort.
+  // Register both the server FQDN and (when wildcard-enabled) the
+  // single-label wildcard so app subdomains land on the same tunnel.
+  // The .services SNI router already handles `*.host` → tunnel.
+  const tunnelSubdomains = wantWildcard
+    ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
+    : [opts.serverFqdn];
   const tunnel = startTunnelClient({
     hubUrl: opts.tunnelHubUrl,
     serverId: opts.serverFqdn,
-    subdomains: [opts.serverFqdn],
+    subdomains: tunnelSubdomains,
     signingKey: identity,
     resolveBackend: () => ({ host: "127.0.0.1", port: tlsPort }),
   });
@@ -224,7 +230,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // Try to short-circuit ACME if a fresh cert is already on disk.
   if (store) {
     const existing = await store.loadCert(opts.serverFqdn);
-    if (existing && isCertFresh(existing, renewalWindowMs) && sansEqual(existing.names, sans)) {
+    if (existing && shouldReuseCert(existing, sans, renewalWindowMs)) {
       certManager.install(
         { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
         existing.notAfter,
@@ -299,12 +305,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   };
 }
 
-function sansEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const sa = [...a].sort();
-  const sb = [...b].sort();
-  return sa.every((v, i) => v === sb[i]);
-}
 
 /**
  * Tiny HTTP/1.1 reader on the TLS socket. Real production path will

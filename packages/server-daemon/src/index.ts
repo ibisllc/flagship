@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { BackupLoop } from "./backupLoop.js";
 import { BootCoordinator } from "./bootCoordinator.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
@@ -7,6 +8,10 @@ import { IdentityInjector } from "./identityInjector.js";
 import { startDaemonRuntime, type DaemonRuntime } from "./runtime.js";
 import type { LeEnvironment } from "./acme/letsEncryptIssuer.js";
 import type { OrderExecutor } from "./orders.js";
+import {
+  defaultEndpointsCachePath,
+  resolveServicesEndpoints,
+} from "./servicesEndpoints.js";
 
 /**
  * Production daemon entry point. Brings up:
@@ -25,7 +30,12 @@ import type { OrderExecutor } from "./orders.js";
 interface RuntimeEnv {
   serverFqdn: string;
   identityPrivKeyHex: string;
-  tunnelHubUrl: string;
+  /**
+   * Hardcoded fallback for the tunnel hub URL when both the live
+   * discovery call and the on-disk cache fail. Production daemons get
+   * the URL via `/api/services/endpoints` on flagshipserver.com.
+   */
+  tunnelHubFallback: string;
   controlPlaneBaseUrl: string;
   acmeEmail: string;
   acmeEnvironment: LeEnvironment;
@@ -36,7 +46,7 @@ function envFromProcess(): Partial<RuntimeEnv> {
   return {
     serverFqdn: process.env.FLAGSHIP_SUBDOMAIN,
     identityPrivKeyHex: process.env.FLAGSHIP_IDENTITY_PRIV_HEX,
-    tunnelHubUrl: process.env.FLAGSHIP_HUB ?? "wss://flagship-services.fly.dev:8443/tunnel",
+    tunnelHubFallback: process.env.FLAGSHIP_HUB ?? "wss://flagship-services.fly.dev:8443/tunnel",
     controlPlaneBaseUrl:
       process.env.FLAGSHIP_CONTROL_PLANE_BASE_URL ?? "https://flagshipserver.com",
     acmeEmail: process.env.FLAGSHIP_ACME_EMAIL ?? "ops@flagship.services",
@@ -70,6 +80,29 @@ async function main(): Promise<void> {
 
   const identityPrivKey = hexToBytes(env.identityPrivKeyHex);
 
+  // ---- Discover the tunnel hub (so we can move infra without redeploying daemons) ----
+  const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+  const endpoints = await resolveServicesEndpoints({
+    controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+    cachePath: defaultEndpointsCachePath(dataDir),
+    fallback: { tunnelHub: env.tunnelHubFallback! },
+  });
+  console.log(
+    `[daemon] services endpoints (${endpoints.source}): tunnelHub=${endpoints.endpoints.tunnelHub}`,
+  );
+
+  // ---- Backup loop (peer-backup participation) ----
+  // SWK is provisioned by the phone at first boot. Until that's wired,
+  // we accept FLAGSHIP_SWK_HEX from env / disk so the loop can be
+  // constructed and toggled by phone orders. Without an SWK the loop
+  // can't encrypt; we still construct a stub so set-backup-policy has
+  // somewhere meaningful to call.
+  const swkHex =
+    process.env.FLAGSHIP_SWK_HEX ?? (await tryReadFile("/var/flagship/swk.hex"));
+  const backupLoop = swkHex
+    ? new BackupLoop({ swk: hexToBytes(swkHex.trim()), k: 3, n: 5 })
+    : null;
+
   // ---- Phone-issued orders endpoint ----
   // PSK pubkey is baked into the install trailer; install.sh writes it
   // to /var/flagship/psk.pub.hex on first boot. For dev runs we accept
@@ -79,13 +112,13 @@ async function main(): Promise<void> {
   const orders = pskPubHex
     ? {
         pskPub: hexToBytes(pskPubHex.trim()),
-        executor: defaultExecutor(),
+        executor: defaultExecutor({ backupLoop }),
       }
     : undefined;
 
   // ---- Bring up TLS + tunnel + ACME ----
   console.log(`[daemon] starting runtime for ${env.serverFqdn}`);
-  console.log(`[daemon]   tunnel hub:    ${env.tunnelHubUrl}`);
+  console.log(`[daemon]   tunnel hub:    ${endpoints.endpoints.tunnelHub}`);
   console.log(`[daemon]   control plane: ${env.controlPlaneBaseUrl}`);
   console.log(`[daemon]   ACME env:      ${env.acmeEnvironment}`);
   console.log(`[daemon]   wildcard:      ${env.wildcard ? "yes" : "no"}`);
@@ -95,12 +128,12 @@ async function main(): Promise<void> {
     runtime = await startDaemonRuntime({
       serverFqdn: env.serverFqdn!,
       identityPrivKey,
-      tunnelHubUrl: env.tunnelHubUrl!,
+      tunnelHubUrl: endpoints.endpoints.tunnelHub,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
       acmeEmail: env.acmeEmail!,
       acmeEnvironment: env.acmeEnvironment!,
       wildcard: env.wildcard,
-      dataDir: process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship",
+      dataDir,
       orders,
     });
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
@@ -146,13 +179,25 @@ async function tryReadFile(path: string): Promise<string | null> {
   }
 }
 
-function defaultExecutor(): OrderExecutor {
+interface ExecutorDeps {
+  backupLoop: BackupLoop | null;
+}
+
+function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
   return {
     noop: () => {
       console.log(`[daemon] order: noop`);
     },
     setBackupPolicy: ({ enabled }) => {
-      console.log(`[daemon] order: set-backup-policy enabled=${enabled} (TODO: wire to BackupLoop)`);
+      if (!deps.backupLoop) {
+        console.log(
+          `[daemon] order: set-backup-policy enabled=${enabled} — but no backup loop ` +
+            `(missing FLAGSHIP_SWK_HEX); persisting policy intent only.`,
+        );
+        return;
+      }
+      deps.backupLoop.setEnabled(enabled);
+      console.log(`[daemon] order: set-backup-policy → BackupLoop.setEnabled(${enabled})`);
     },
     shutDown: () => {
       console.log(`[daemon] order: shut-down — exiting in 1s`);
@@ -238,9 +283,24 @@ export type {
   HttpRequest as DaemonHttpRequest,
   HttpResponse as DaemonHttpResponse,
 } from "./runtime.js";
-export { PersistentAcmeStore, isCertFresh } from "./acme/persistentStore.js";
+export {
+  PersistentAcmeStore,
+  isCertFresh,
+  sansEqual,
+  shouldReuseCert,
+} from "./acme/persistentStore.js";
 export type { PersistedCert } from "./acme/persistentStore.js";
 export { buildOrdersHandler } from "./orders.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
+export {
+  resolveServicesEndpoints,
+  parseServicesEndpoints,
+  defaultEndpointsCachePath,
+} from "./servicesEndpoints.js";
+export type {
+  ServicesEndpoints,
+  ResolveOptions as EndpointsResolveOptions,
+  ResolveResult as EndpointsResolveResult,
+} from "./servicesEndpoints.js";
 export { LlmHarness } from "./llmHarness.js";
 export type { LlmHarnessOptions } from "./llmHarness.js";

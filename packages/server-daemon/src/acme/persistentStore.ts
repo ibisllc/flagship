@@ -122,3 +122,29 @@ async function atomicWrite(path: string, content: string): Promise<void> {
 export function isCertFresh(cert: PersistedCert, windowMs = 30 * 24 * 60 * 60 * 1000, now = Date.now()): boolean {
   return cert.notAfter - now > windowMs;
 }
+
+/** Set-equality on the cert's SANs. Order-insensitive. */
+export function sansEqual(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((v, i) => v === sb[i]);
+}
+
+/**
+ * Decision for whether the runtime should reuse an existing cert from
+ * disk or kick off a new ACME issuance. Pure function, easy to test —
+ * extracted from `startDaemonRuntime` so the renewal logic is exercised
+ * without spinning up TLS server + tunnel + ACME.
+ */
+export function shouldReuseCert(
+  existing: PersistedCert | null,
+  desiredSans: ReadonlyArray<string>,
+  windowMs = 30 * 24 * 60 * 60 * 1000,
+  now = Date.now(),
+): boolean {
+  if (!existing) return false;
+  if (!sansEqual(existing.names, desiredSans)) return false;
+  if (!isCertFresh(existing, windowMs, now)) return false;
+  return true;
+}
