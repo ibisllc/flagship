@@ -327,7 +327,7 @@ export { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 export type { RemoteDnsChallengeWriterOptions } from "./acme/remoteDnsChallengeWriter.js";
 export { CertManager } from "./certManager.js";
 export type { CertMaterial } from "./certManager.js";
-export { startDaemonRuntime } from "./runtime.js";
+export { startDaemonRuntime, renewIfNeeded } from "./runtime.js";
 export type {
   DaemonRuntime,
   DaemonRuntimeOptions,

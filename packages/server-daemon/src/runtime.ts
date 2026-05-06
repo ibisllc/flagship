@@ -44,11 +44,20 @@ export interface DaemonRuntimeOptions {
    */
   dataDir?: string;
   /**
-   * Renewal window in ms. If a cert loaded from disk has at least this
-   * much time before expiry, we skip ACME on startup. Default: 30 days
-   * (matching Let's Encrypt's renewal recommendation).
+   * Renewal window in ms. The runtime re-issues the cert when the live
+   * one has less than this remaining. Same value gates the startup
+   * "reuse-disk-cert" decision and the periodic renewal scheduler.
+   * Default: 30 days (matching Let's Encrypt's renewal recommendation).
    */
   renewalWindowMs?: number;
+  /**
+   * How often the daemon wakes up to check whether the cert is in the
+   * renewal window. Default 6 hours; 0 disables periodic renewal
+   * (used by tests, or by callers that prefer to drive renewals
+   * externally). With the default 30d window + 6h check, a long-lived
+   * daemon can miss several checks and still renew with weeks to spare.
+   */
+  renewalCheckIntervalMs?: number;
   /** Test seam — replace with mock store. */
   persistentStore?: PersistentAcmeStore;
   /**
@@ -226,39 +235,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const store: PersistentAcmeStore | null =
     opts.persistentStore ?? (opts.dataDir ? new PersistentAcmeStore(opts.dataDir) : null);
   const renewalWindowMs = opts.renewalWindowMs ?? 30 * 24 * 60 * 60 * 1000;
+  const renewalCheckIntervalMs = opts.renewalCheckIntervalMs ?? 6 * 60 * 60 * 1000;
 
-  // Try to short-circuit ACME if a fresh cert is already on disk.
-  if (store) {
-    const existing = await store.loadCert(opts.serverFqdn);
-    if (existing && shouldReuseCert(existing, sans, renewalWindowMs)) {
-      certManager.install(
-        { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
-        existing.notAfter,
-      );
-      console.log(
-        `[runtime] reusing on-disk cert for ${opts.serverFqdn}; not after ${new Date(existing.notAfter).toISOString()}`,
-      );
-      return {
-        ready: () => Promise.resolve(),
-        close: async () => {
-          await tunnel.close();
-          tls.close();
-        },
-        certManager,
-      };
-    }
-  }
-
-  // ACME. Run after the tunnel is live so TLS-ALPN-01 validators can
-  // reach our local TLS server through the same passthrough.
+  // Resolve the ACME account key once: env-supplied → on-disk → fresh.
+  // We need it for both initial issuance AND periodic renewal, so do it
+  // up front rather than only on the issuance path.
   let accountKeyPem = opts.accountKeyPem;
-  let accountKeyFreshlyMinted = false;
   if (!accountKeyPem && store) {
     accountKeyPem = (await store.loadAccountKey()) ?? undefined;
   }
   if (!accountKeyPem) {
     accountKeyPem = (await acme.crypto.createPrivateKey()).toString();
-    accountKeyFreshlyMinted = true;
     if (store) await store.saveAccountKey(accountKeyPem);
     opts.onAccountKeyGenerated?.(accountKeyPem);
   }
@@ -276,33 +263,115 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     dns,
   });
 
-  const result = await issuer.issue(sans);
-  certManager.install(
-    { certPem: result.certPem, privateKeyPem: result.privateKeyPem },
-    result.notAfter,
-  );
-  if (store) {
-    await store.saveCert(opts.serverFqdn, {
-      certPem: result.certPem,
-      privateKeyPem: result.privateKeyPem,
-      names: sans,
-      notAfter: result.notAfter,
+  // Issue or reuse the initial cert.
+  const existing = store ? await store.loadCert(opts.serverFqdn) : null;
+  if (existing && shouldReuseCert(existing, sans, renewalWindowMs)) {
+    certManager.install(
+      { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
+      existing.notAfter,
+    );
+    console.log(
+      `[runtime] reusing on-disk cert for ${opts.serverFqdn}; not after ${new Date(existing.notAfter).toISOString()}`,
+    );
+  } else {
+    await issueAndInstall({
+      issuer,
+      certManager,
+      store,
+      serverFqdn: opts.serverFqdn,
+      sans,
+      onCertIssued: opts.onCertIssued,
     });
   }
-  opts.onCertIssued?.(
-    { certPem: result.certPem, privateKeyPem: result.privateKeyPem },
-    result.notAfter,
-    sans,
-  );
+
+  // Periodic renewal. With the default 30-day window + 6-hour cadence,
+  // a daemon that's online any reasonable fraction of the time renews
+  // with weeks to spare. setInterval timers don't keep Node alive on
+  // their own once `unref`'d, so the tunnel and TLS server are still
+  // what holds the event loop.
+  let renewalTimer: NodeJS.Timeout | null = null;
+  if (renewalCheckIntervalMs > 0) {
+    renewalTimer = setInterval(() => {
+      void renewIfNeeded({
+        issuer,
+        certManager,
+        store,
+        serverFqdn: opts.serverFqdn,
+        sans,
+        renewalWindowMs,
+        onCertIssued: opts.onCertIssued,
+      });
+    }, renewalCheckIntervalMs);
+    renewalTimer.unref?.();
+  }
 
   return {
     ready: () => Promise.resolve(),
     close: async () => {
+      if (renewalTimer) clearInterval(renewalTimer);
       await tunnel.close();
       tls.close();
     },
     certManager,
   };
+}
+
+interface IssueDeps {
+  issuer: { issue(names: string[]): Promise<{ certPem: string; privateKeyPem: string; notAfter: number }> };
+  certManager: CertManager;
+  store: PersistentAcmeStore | null;
+  serverFqdn: string;
+  sans: string[];
+  onCertIssued?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
+}
+
+/** Run the issuer, install the result in CertManager, and persist. */
+async function issueAndInstall(deps: IssueDeps): Promise<void> {
+  const result = await deps.issuer.issue(deps.sans);
+  deps.certManager.install(
+    { certPem: result.certPem, privateKeyPem: result.privateKeyPem },
+    result.notAfter,
+  );
+  if (deps.store) {
+    await deps.store.saveCert(deps.serverFqdn, {
+      certPem: result.certPem,
+      privateKeyPem: result.privateKeyPem,
+      names: deps.sans,
+      notAfter: result.notAfter,
+    });
+  }
+  deps.onCertIssued?.(
+    { certPem: result.certPem, privateKeyPem: result.privateKeyPem },
+    result.notAfter,
+    deps.sans,
+  );
+}
+
+/**
+ * Periodic renewal check. Exported (via `_internal` below) so tests can
+ * trigger it with a fake issuer + clock without spinning up a real
+ * daemon. Failures log and bail; the next tick will retry.
+ */
+export async function renewIfNeeded(
+  deps: IssueDeps & { renewalWindowMs: number; now?: () => number },
+): Promise<{ renewed: boolean; reason?: string; error?: string }> {
+  const now = deps.now ?? (() => Date.now());
+  if (!deps.certManager.needsRenewal(deps.renewalWindowMs, now())) {
+    return { renewed: false, reason: "not in renewal window" };
+  }
+  const daysLeft = Math.floor(deps.certManager.msUntilExpiry(now()) / 86_400_000);
+  console.log(
+    `[runtime] cert for ${deps.serverFqdn} has ${daysLeft}d left — renewing`,
+  );
+  try {
+    await issueAndInstall(deps);
+    console.log(`[runtime] cert renewed for ${deps.serverFqdn}`);
+    return { renewed: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[runtime] renewal failed for ${deps.serverFqdn}: ${msg}`);
+    return { renewed: false, error: msg };
+  }
 }
 
 
