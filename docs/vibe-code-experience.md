@@ -78,23 +78,8 @@ COPY src ./src
 EXPOSE 8080
 CMD ["node", "src/index.js"]
 === src/index.js ===
-import { createServer } from "node:http";
-import pg from "pg";
-const pool = new pg.Pool({ connectionString: process.env.FLAGSHIP_PG_URL });
-createServer(async (req, res) => {
-  const user = req.headers["x-flagship-user"];
-  if (!user || user === "anonymous") { res.writeHead(403); res.end(); return; }
-  if (req.method === "GET" && req.url === "/api/items") {
-    const { rows } = await pool.query("select id,label,done,added_by from items order by done,id desc");
-    res.writeHead(200,{ "content-type":"application/json" }); res.end(JSON.stringify(rows)); return;
-  }
-  if (req.method === "POST" && req.url === "/api/items") {
-    let b=""; for await (const c of req) b+=c;
-    const { rows } = await pool.query("insert into items(label,added_by) values($1,$2) returning *",[JSON.parse(b).label,user]);
-    res.writeHead(201,{ "content-type":"application/json" }); res.end(JSON.stringify(rows[0])); return;
-  }
-  res.writeHead(404); res.end();
-}).listen(8080);
+// HTTP server: 403 on anonymous, GET /api/items, POST /api/items.
+// Reads x-flagship-user header for authorship; pg.Pool against FLAGSHIP_PG_URL.
 === migrations/0001_init.sql ===
 create table items (
   id        bigserial primary key,
@@ -137,7 +122,7 @@ User taps `My players too`. The session resumes:
 
 **[user]** (continuing): *"they should be able to read and edit. about 5 of them."*
 
-**[assistant]**:
+**[assistant]** (manifest + Dockerfile + sources + migration; key fields shown):
 
 ```
 === flagship.app.json ===
@@ -150,39 +135,27 @@ User taps `My players too`. The session resumes:
   "data": { "stores": { "postgres": true, "objects": true } },
   "network": { "subdomain": "campaign" },
   "access": {
-    "enabled": true,
-    "default_role": "member",
-    "custom_roles": ["dm"],
-    "public_routes": []
+    "enabled": true, "default_role": "member",
+    "custom_roles": ["dm"], "public_routes": []
   },
   "migration": { "verification": "standard" }
 }
-=== Dockerfile ===
-FROM node:20-alpine
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
-COPY src ./src
-EXPOSE 8080
-CMD ["node", "src/index.js"]
+=== Dockerfile === (node:20-alpine, exposes 8080)
 === src/index.js ===
-// (server reads X-Flagship-Role to gate `dm`-only edits on session
-//  notes; otherwise members edit pages, viewers read.)
+// Server reads X-Flagship-Role to gate `dm`-only edits on session notes;
+// members edit pages, viewers read.
 === migrations/0001_init.sql ===
 create table pages (
-  id        bigserial primary key,
-  slug      text unique not null,
-  title     text not null,
-  body      text not null default '',
+  id bigserial primary key, slug text unique not null,
+  title text not null, body text not null default '',
   is_secret boolean not null default false,
   updated_by text not null,
   updated_at timestamptz not null default now()
 );
 create table revisions (
-  id        bigserial primary key,
-  page_id   bigint not null references pages(id) on delete cascade,
-  body      text not null,
-  author    text not null,
+  id bigserial primary key,
+  page_id bigint not null references pages(id) on delete cascade,
+  body text not null, author text not null,
   created_at timestamptz not null default now()
 );
 create index on revisions(page_id, created_at desc);
@@ -200,9 +173,7 @@ No ambiguity — single-user, simple schema, no browser, no objects.
 ```
 === flagship.app.json ===
 {
-  "schema_version": 1,
-  "name": "focus",
-  "version": "0.1.0",
+  "schema_version": 1, "name": "focus", "version": "0.1.0",
   "description": "Pomodoro timer that logs how each session felt.",
   "runtime": { "image": "flagship/focus:0.1.0", "port": 8080 },
   "data": { "stores": { "postgres": true, "kv": true } },
@@ -210,27 +181,18 @@ No ambiguity — single-user, simple schema, no browser, no objects.
   "access": { "enabled": true, "default_role": "owner", "public_routes": [] },
   "migration": { "verification": "standard" }
 }
-=== Dockerfile ===
-FROM node:20-alpine
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
-COPY src ./src
-EXPOSE 8080
-CMD ["node", "src/index.js"]
+=== Dockerfile === (node:20-alpine, exposes 8080)
 === src/index.js ===
-// (one-page timer: POST /api/sessions inserts {start, end, mood:1..5, note};
-//  GET /api/stats returns weekly aggregates; FLAGSHIP_REDIS_URL holds the
-//  currently-running timer so it survives a browser refresh.)
+// One-page timer: POST /api/sessions inserts {start, end, mood:1..5, note};
+// GET /api/stats returns weekly aggregates; FLAGSHIP_REDIS_URL holds the
+// currently-running timer so it survives a browser refresh.
 === migrations/0001_init.sql ===
 create table sessions (
-  id        bigserial primary key,
-  started_at timestamptz not null,
-  ended_at   timestamptz not null,
+  id bigserial primary key,
+  started_at timestamptz not null, ended_at timestamptz not null,
   duration_seconds int not null,
-  mood       int not null check (mood between 1 and 5),
-  note       text,
-  user_id    text not null
+  mood int not null check (mood between 1 and 5),
+  note text, user_id text not null
 );
 create index on sessions(user_id, started_at desc);
 === END ===
@@ -375,11 +337,11 @@ No retry button — ACME has its own. If the user navigates away, a push notific
 
 | State | Copy |
 |---|---|
-| Empty state | *"No apps yet. The hardest part of vibe-coding is the first idea."* |
+| Empty | *"No apps yet. The hardest part of vibe-coding is the first idea."* |
 | Connecting | *"Thinking."* |
-| Manifest writing | *"Working out what your app should be called and what it'll need."* |
-| Code writing | *"Writing the app."* |
-| Migration writing | *"Setting up the database."* |
+| Manifest | *"Working out what your app should be called and what it'll need."* |
+| Code | *"Writing the app."* |
+| Migration | *"Setting up the database."* |
 | Permissions ready | *"Here's what it'll ask for."* |
 | Building | *"Packaging it up. About 30 seconds."* |
 | Starting | *"Bringing it up."* |
@@ -392,7 +354,7 @@ No retry button — ACME has its own. If the user navigates away, a push notific
 | Migration fail | *"A database change failed partway through."* |
 | Cert fail | *"Almost there."* |
 
-What's missing: *Sorry*. *Error*. *Failed* on its own. We say what happened and what to try, in that order. The success card is one sentence and one URL — no exclamation point, no emoji. The pulsing dot already celebrated.
+Missing: *Sorry*, *Error*, *Failed* on its own. We say what happened and what to try, in that order. The success card is one sentence and one URL — no exclamation point, no emoji. The pulsing dot already celebrated.
 
 ---
 
