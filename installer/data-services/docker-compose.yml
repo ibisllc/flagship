@@ -96,6 +96,35 @@ services:
       postgres:
         condition: service_healthy
 
+  # Chromium: pod-resident browser used by the app-platform's browser
+  # API (apps drive web automation against the user's logged-in
+  # sessions; cookies stay in the container). Headful with Xvfb so
+  # fingerprinting checks like `navigator.webdriver` and
+  # `HeadlessChrome` user-agent return less suspect values.
+  #
+  # CDP is exposed on 127.0.0.1:9222 — only the daemon (running as a
+  # host process) is the legitimate client. Apps reach the browser
+  # ONLY via the daemon's filtered HTTP surface; they never touch
+  # CDP directly.
+  #
+  # Profile (cookies + localStorage + cached logins) is bind-mounted
+  # under /var/flagship/data/chromium/profile so it survives container
+  # rebuilds and benefits from LUKS-at-rest.
+  chromium:
+    build:
+      context: ./chromium
+    container_name: flagship-chromium
+    restart: unless-stopped
+    volumes:
+      - /var/flagship/data/chromium/profile:/home/flagship/profile
+    ports:
+      - "127.0.0.1:9222:9222"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9222/json/version || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
   # Forgejo: per-server git host. Each app's repo lives here. The
   # daemon's update-pack mechanism (future feature; see
   # `memory/future_app_update_pack.md`) reads/writes via Forgejo's HTTP
