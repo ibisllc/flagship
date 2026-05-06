@@ -157,6 +157,34 @@
         </details>
       </section>
 
+      <section class="status-card">
+        <h2 style="margin-top: 0;">Configured infrastructure</h2>
+        <p style="color:#888; font-size:0.85rem; margin-top:0.2rem;">
+          What flagshipserver.com tells daemons + browsers about where the
+          data plane lives. Sourced from
+          <code>/api/services/endpoints</code>; updated by deploying the
+          Worker. If these change unexpectedly, something's drifted.
+        </p>
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="k">Tunnel hub</div>
+            <div class="v" id="tunnelHub" style="font-size:0.95rem; word-break:break-all;">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Passthrough IPv4</div>
+            <div class="v" id="passthroughIPv4" style="font-size:1rem;">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Passthrough IPv6</div>
+            <div class="v" id="passthroughIPv6" style="font-size:0.9rem; word-break:break-all;">—</div>
+          </div>
+          <div class="metric">
+            <div class="k">Endpoints version</div>
+            <div class="v" id="endpointsVersion">—</div>
+          </div>
+        </div>
+      </section>
+
       <p style="color:#666; font-size:0.8rem;">
         This page calls <code>/api/_status/probe</code> on flagshipserver.com. The Worker performs a server-side fetch of <code>flagship.services/api/health</code> and returns timing and reachability — so what you see is what the edge sees, not what your local network sees.
       </p>
@@ -271,7 +299,22 @@
           schedule();
         });
 
+        async function loadEndpoints() {
+          try {
+            const r = await fetch("/api/services/endpoints", { cache: "no-store" });
+            if (!r.ok) return;
+            const e = await r.json();
+            $("tunnelHub").textContent = e.tunnelHub || "—";
+            $("passthroughIPv4").textContent = e.passthroughIPv4 || "—";
+            $("passthroughIPv6").textContent = e.passthroughIPv6 || "—";
+            $("endpointsVersion").textContent = e.version != null ? "v" + e.version : "—";
+          } catch {
+            // Silent: the configured-infra card just stays at em-dashes.
+          }
+        }
+
         renderHistory();
+        loadEndpoints();
         tick();
       })();
     </script>
