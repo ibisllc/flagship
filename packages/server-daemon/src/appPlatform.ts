@@ -31,6 +31,8 @@ import {
   type AppDataCredentials,
 } from "./dataLayer/index.js";
 import type { AppAuthTokens } from "./appAuthToken.js";
+import type { DomainGate } from "./browser/domainGate.js";
+import type { TabRegistry } from "./browser/tabRegistry.js";
 
 export interface InstalledApp {
   creator: string;
@@ -71,6 +73,15 @@ export interface AppPlatformDeps {
    * and the daemon-side surfaces that require it return 401.
    */
   appAuthTokens?: AppAuthTokens | null;
+  /**
+   * Browser-feature surfaces. When all three are configured AND the
+   * app's manifest declares `browser.domains`, install registers the
+   * domain grant and uninstall revokes it + closes the app's tabs.
+   * Apps without a manifest browser.domains are NOT entitled to the
+   * browser API regardless of these deps.
+   */
+  domainGate?: DomainGate | null;
+  tabRegistry?: TabRegistry | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -247,6 +258,13 @@ export class AppPlatform {
     this.apps.set(appId, installed);
     this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
 
+    // Browser feature: register the domain grant if the manifest
+    // declares one AND the daemon has the gate wired in. Without a
+    // grant, the app's calls to /api/browser/* return 403.
+    if (this.deps.domainGate && parsed.manifest.browser?.domains) {
+      this.deps.domainGate.setGrant(appId, parsed.manifest.browser.domains);
+    }
+
     return { ok: true, app: installed };
   }
 
@@ -324,6 +342,15 @@ export class AppPlatform {
     // call back; idempotent + best-effort.
     if (this.deps.appAuthTokens) {
       await this.deps.appAuthTokens.forget(appId).catch(() => {});
+    }
+    // Browser feature: close any tabs the app opened, then revoke its
+    // domain grant. Order matters — close tabs first so the gate is
+    // still in place during shutdown (paranoid; close shouldn't navigate).
+    if (this.deps.tabRegistry) {
+      await this.deps.tabRegistry.closeAllForApp(appId).catch(() => {});
+    }
+    if (this.deps.domainGate) {
+      this.deps.domainGate.revoke(appId);
     }
     this.apps.delete(appId);
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());

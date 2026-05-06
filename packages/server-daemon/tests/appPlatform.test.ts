@@ -17,6 +17,7 @@ import {
   InMemoryRedisAdmin,
 } from "../src/dataLayer/index.js";
 import { InMemoryAppAuthTokens } from "../src/appAuthToken.js";
+import { DomainGate } from "../src/browser/domainGate.js";
 
 const HOST_USERNAME = "alice";
 const HOST_FQDN = `home.${HOST_USERNAME}.flagship.services`;
@@ -529,5 +530,133 @@ describe("AppPlatform — per-app daemon-API auth token", () => {
     const dockerLine = calls.find((c) => c.includes("docker run"));
     expect(dockerLine).toBeTruthy();
     expect(dockerLine).not.toContain("FLAGSHIP_APP_TOKEN");
+  });
+});
+
+describe("AppPlatform — browser-feature integration", () => {
+  const SHOPPER_MANIFEST = JSON.stringify({
+    schema_version: 1,
+    name: "shopper",
+    version: "0.1.0",
+    runtime: { image: "ghcr.io/alice/shopper:0.1.0", port: 8080 },
+    data: {},
+    network: { subdomain: "shopper" },
+    access: { enabled: true, default_role: "viewer" },
+    migration: { verification: "standard" },
+    browser: { domains: ["amazon.com", "*.amazon.com"], login_required: true },
+  });
+
+  function setup(options?: { withDomainGate?: boolean; withTabRegistry?: boolean }) {
+    const irk = makeKey();
+    const { runner } = fakeRunner();
+    const gate = options?.withDomainGate !== false ? new DomainGate() : null;
+    const closedTabs: { appId: string; count: number }[] = [];
+    const fakeRegistry =
+      options?.withTabRegistry !== false
+        ? ({
+            closeAllForApp: async (appId: string) => {
+              closedTabs.push({ appId, count: 1 });
+              return { closed: 1 };
+            },
+          } as unknown as Parameters<typeof AppPlatform>[0]["tabRegistry"])
+        : null;
+    const platform = new AppPlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+      domainGate: gate ?? undefined,
+      tabRegistry: fakeRegistry ?? undefined,
+    });
+    return { platform, irk, gate, closedTabs };
+  }
+
+  it("install with browser.domains in the manifest registers the DomainGate grant", async () => {
+    const { platform, gate } = setup();
+    await platform.install({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "shopper",
+        manifestJson: SHOPPER_MANIFEST,
+        addOwnerToMembership: true,
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    expect(gate?.hasGrant("alice--shopper")).toBe(true);
+    expect(gate?.check("alice--shopper", "https://www.amazon.com/")).toBe("allow");
+    expect(gate?.check("alice--shopper", "https://walmart.com/")).toBe("deny");
+  });
+
+  it("install of a manifest WITHOUT browser.domains does not touch the gate", async () => {
+    const { platform, gate } = setup();
+    const noBrowserManifest = JSON.stringify({
+      ...JSON.parse(SHOPPER_MANIFEST),
+      browser: undefined,
+    });
+    await platform.install({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "shopper",
+        manifestJson: noBrowserManifest,
+        addOwnerToMembership: true,
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    expect(gate?.hasGrant("alice--shopper")).toBe(false);
+  });
+
+  it("uninstall closes app's tabs and revokes the grant", async () => {
+    const { platform, gate, closedTabs } = setup();
+    await platform.install({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "shopper",
+        manifestJson: SHOPPER_MANIFEST,
+        addOwnerToMembership: true,
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    expect(gate?.hasGrant("alice--shopper")).toBe(true);
+
+    await platform.uninstall({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "shopper",
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    expect(gate?.hasGrant("alice--shopper")).toBe(false);
+    expect(closedTabs).toEqual([{ appId: "alice--shopper", count: 1 }]);
+  });
+
+  it("install with no domainGate dep doesn't blow up on browser-declaring manifests", async () => {
+    const { platform } = setup({ withDomainGate: false });
+    const r = await platform.install({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "shopper",
+        manifestJson: SHOPPER_MANIFEST,
+        addOwnerToMembership: true,
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    expect(r.ok).toBe(true);
+    // App is installed but has no daemon-side gate, so its browser API
+    // calls would 403 at the apiHandler layer.
   });
 });

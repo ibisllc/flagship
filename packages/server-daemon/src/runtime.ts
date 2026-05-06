@@ -125,6 +125,18 @@ export interface DaemonRuntimeOptions {
     hostIrkPub?: Bytes;
     hostIrk?: Keypair | null;
     swk?: Bytes;
+    /**
+     * Optional browser-feature wiring. The caller builds + starts
+     * BrowserManager / TabRegistry / DomainGate / PhonePipe externally
+     * and hands them in here; the runtime just plumbs them through to
+     * AppPlatform so install/uninstall hooks domain grants on the gate.
+     * Apps' /api/browser/* calls are routed by the caller's
+     * `opts.handleHttp` overlay, not by the default handler — keeps
+     * runtime.ts decoupled from the browser surface.
+     */
+    appAuthTokens?: import("./appAuthToken.js").AppAuthTokens;
+    domainGate?: import("./browser/domainGate.js").DomainGate;
+    tabRegistry?: import("./browser/tabRegistry.js").TabRegistry;
   };
 }
 
@@ -420,8 +432,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       swk: apOpts.swk,
       appRunner,
       dataProvisioner,
+      appAuthTokens: apOpts.appAuthTokens ?? null,
+      domainGate: apOpts.domainGate ?? null,
+      tabRegistry: apOpts.tabRegistry ?? null,
     });
-    console.log(`[runtime] AppPlatform ready for host ${apOpts.hostUsername}`);
+    const extras: string[] = [];
+    if (apOpts.appAuthTokens) extras.push("app-tokens");
+    if (apOpts.domainGate) extras.push("browser-gate");
+    console.log(
+      `[runtime] AppPlatform ready for host ${apOpts.hostUsername}` +
+        (extras.length ? ` (with ${extras.join(", ")})` : ""),
+    );
   } else {
     console.log(`[runtime] AppPlatform skipped (host IRK / SWK not provided)`);
   }
