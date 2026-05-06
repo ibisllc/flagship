@@ -30,6 +30,7 @@ import {
   credentialsToEnv,
   type AppDataCredentials,
 } from "./dataLayer/index.js";
+import type { AppAuthTokens } from "./appAuthToken.js";
 
 export interface InstalledApp {
   creator: string;
@@ -61,6 +62,15 @@ export interface AppPlatformDeps {
   swk: Bytes;
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
+  /**
+   * Per-app daemon-API auth tokens. When set, the platform mints a
+   * fresh `FLAGSHIP_APP_TOKEN` at install time and injects it into the
+   * container's env so the app can authenticate calls back to the
+   * daemon (used by the browser API and any future app→daemon
+   * surfaces). Optional — when null, apps simply don't get a token
+   * and the daemon-side surfaces that require it return 401.
+   */
+  appAuthTokens?: AppAuthTokens | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -166,7 +176,22 @@ export class AppPlatform {
       }
     }
 
-    // 2. Deploy the container with FLAGSHIP_* env injected.
+    // 2. Mint the app's daemon-API token (browser API + future surfaces auth).
+    // We do this BEFORE deploy so the env var is set on first container start.
+    let apiToken: string | null = null;
+    if (this.deps.appAuthTokens) {
+      try {
+        apiToken = await this.deps.appAuthTokens.mint(appId);
+      } catch (e) {
+        // A failed token mint shouldn't kill an install — the app just
+        // won't be able to use the browser surface until re-installed.
+        // Log it; carry on.
+        // (No actual logger here — leaving as a soft failure.)
+        void e;
+      }
+    }
+
+    // 3. Deploy the container with FLAGSHIP_* env injected.
     const port = args.pickPort?.() ?? randomPort();
     const env: Record<string, string> = {
       ...(parsed.manifest.runtime.env ?? {}),
@@ -175,6 +200,7 @@ export class AppPlatform {
       FLAGSHIP_CREATOR: r.creator,
       FLAGSHIP_SLUG: r.slug,
       FLAGSHIP_HOST: this.deps.host.username,
+      ...(apiToken ? { FLAGSHIP_APP_TOKEN: apiToken } : {}),
     };
     const spec: AppSpec = {
       appId,
@@ -190,6 +216,11 @@ export class AppPlatform {
         await this.deps.dataProvisioner
           .deprovisionApp({ creator: r.creator, slug: r.slug, stores: stores ?? {} })
           .catch(() => {});
+      }
+      // Roll back the minted token too — a stale entry would let a
+      // re-attempted install collide on the same appId.
+      if (apiToken && this.deps.appAuthTokens) {
+        await this.deps.appAuthTokens.forget(appId).catch(() => {});
       }
       return { ok: false, reason: `container deploy failed: ${(e as Error).message}` };
     }
@@ -288,6 +319,11 @@ export class AppPlatform {
       } catch {
         // best-effort
       }
+    }
+    // Drop the daemon-API token so any container that's still alive can't
+    // call back; idempotent + best-effort.
+    if (this.deps.appAuthTokens) {
+      await this.deps.appAuthTokens.forget(appId).catch(() => {});
     }
     this.apps.delete(appId);
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());

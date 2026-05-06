@@ -16,6 +16,7 @@ import {
   InMemoryPostgresAdmin,
   InMemoryRedisAdmin,
 } from "../src/dataLayer/index.js";
+import { InMemoryAppAuthTokens } from "../src/appAuthToken.js";
 
 const HOST_USERNAME = "alice";
 const HOST_FQDN = `home.${HOST_USERNAME}.flagship.services`;
@@ -429,3 +430,104 @@ describe("buildAppHttpHandlers", () => {
 });
 
 void vi; // not currently used; kept to silence unused-import in case future tests use spies
+
+describe("AppPlatform — per-app daemon-API auth token", () => {
+  it("install mints a token and injects FLAGSHIP_APP_TOKEN into the container env", async () => {
+    const irk = makeKey();
+    const { runner, calls } = fakeRunner();
+    const tokens = new InMemoryAppAuthTokens();
+    const platform = new AppPlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+      appAuthTokens: tokens,
+    });
+    await platform.install({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "game1",
+        manifestJson: SELF_MANIFEST,
+        addOwnerToMembership: true,
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    const stored = await tokens.tokenForApp("alice--game1");
+    expect(stored).toBeTruthy();
+    expect(await tokens.resolve(stored!)).toBe("alice--game1");
+    // The docker run command line was built with `-e FLAGSHIP_APP_TOKEN=<token>`.
+    const dockerLine = calls.find((c) => c.includes("docker run"));
+    expect(dockerLine).toBeTruthy();
+    expect(dockerLine).toContain(`FLAGSHIP_APP_TOKEN=${stored}`);
+  });
+
+  it("uninstall forgets the token (resolve returns null afterwards)", async () => {
+    const irk = makeKey();
+    const { runner } = fakeRunner();
+    const tokens = new InMemoryAppAuthTokens();
+    const platform = new AppPlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+      appAuthTokens: tokens,
+    });
+    await platform.install({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "game1",
+        manifestJson: SELF_MANIFEST,
+        addOwnerToMembership: true,
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    const t = await tokens.tokenForApp("alice--game1");
+    expect(t).toBeTruthy();
+
+    await platform.uninstall({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "game1",
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    expect(await tokens.resolve(t!)).toBeNull();
+    expect(await tokens.tokenForApp("alice--game1")).toBeNull();
+  });
+
+  it("install without appAuthTokens dep simply skips the env var (browser API stays disabled)", async () => {
+    const irk = makeKey();
+    const { runner, calls } = fakeRunner();
+    const platform = new AppPlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey },
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+      // appAuthTokens omitted
+    });
+    await platform.install({
+      request: {
+        serverId: HOST_FQDN,
+        creator: HOST_USERNAME,
+        slug: "game1",
+        manifestJson: SELF_MANIFEST,
+        addOwnerToMembership: true,
+        issuedAt: Date.now(),
+      },
+      signature: new Uint8Array(64),
+      verify: () => true,
+    });
+    const dockerLine = calls.find((c) => c.includes("docker run"));
+    expect(dockerLine).toBeTruthy();
+    expect(dockerLine).not.toContain("FLAGSHIP_APP_TOKEN");
+  });
+});
