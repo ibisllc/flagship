@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Help · Flagship</title>
+  <meta name="description" content="You're stuck. Here's what to try first.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    .page-hero { padding: var(--space-12) 0 var(--space-8); max-width: var(--reading-width); }
+    .page-hero h1 { font-size: var(--display-size); line-height: var(--display-line); letter-spacing: -0.02em; margin-bottom: var(--space-4); }
+    @media (max-width: 720px) { .page-hero h1 { font-size: 40px; line-height: 48px; } }
+    .page-hero p { font-size: var(--h4-size); line-height: 28px; color: var(--text-muted); }
+
+    .help-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--space-4);
+      margin-bottom: var(--space-12);
+    }
+    @media (max-width: 720px) { .help-grid { grid-template-columns: 1fr; } }
+
+    .help-card {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .help-card .label {
+      font-family: var(--font-mono);
+      font-size: var(--caption-size);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .help-card h3 { margin: 0; }
+    .help-card p { color: var(--text-muted); margin: 0; }
+    .help-card ol, .help-card ul { padding-left: var(--space-6); margin: 0; color: var(--text); }
+    .help-card ol li, .help-card ul li { margin-bottom: var(--space-2); }
+    .help-card ol li:last-child, .help-card ul li:last-child { margin-bottom: 0; }
+    .help-card .code-line {
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      background: var(--surface-sunken);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+    }
+    .help-card .next {
+      margin-top: auto;
+      padding-top: var(--space-3);
+      border-top: 1px solid var(--border);
+      font-size: var(--body-sm-size);
+    }
+
+    .triage {
+      padding: var(--space-12) 0;
+      border-top: 1px solid var(--border);
+    }
+    .triage h2 {
+      font-size: var(--h1-size);
+      line-height: var(--h1-line);
+      letter-spacing: -0.01em;
+      margin-bottom: var(--space-4);
+    }
+    .triage > p {
+      color: var(--text-muted);
+      max-width: var(--reading-width);
+      margin-bottom: var(--space-8);
+    }
+
+    .symptom { padding: var(--space-6) 0; border-top: 1px solid var(--border); }
+    .symptom:first-of-type { border-top: 0; padding-top: 0; }
+    .symptom h3 { margin-bottom: var(--space-3); }
+    .symptom p { color: var(--text-muted); max-width: var(--reading-width); }
+    .symptom ol { padding-left: var(--space-6); max-width: var(--reading-width); }
+    .symptom ol li { margin-bottom: var(--space-3); }
+    .symptom ol li strong { color: var(--text); }
+
+    .human {
+      margin-top: var(--space-12);
+      padding: var(--space-8);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: var(--space-8);
+      align-items: center;
+    }
+    @media (max-width: 720px) { .human { grid-template-columns: 1fr; } }
+    .human h2 { margin-bottom: var(--space-3); }
+    .human p { color: var(--text-muted); margin-bottom: var(--space-4); }
+    .human .links { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="Flagship home">Flagship</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/how-it-works">How it works</a>
+      <a href="/marketplace">Apps</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/status/">Status</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/build/" class="btn btn--primary">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="page-hero">
+    <h1>You're stuck. Here's what to try first.</h1>
+    <p>Quick fixes for the four problems we see most often. If none of these unstick you, scroll to the bottom and email a real human.</p>
+  </section>
+
+  <section class="help-grid" aria-label="Quick help">
+    <article class="card help-card">
+      <span class="label">Quick start</span>
+      <h3>I just want to start.</h3>
+      <ol>
+        <li>Install the phone app from <a href="/download">/download</a> (or use the <a href="/webapp">web app</a>).</li>
+        <li>Pick a username; the app will mint a build code.</li>
+        <li>Paste it into <a href="/build/">/build/</a>, write the ISO to a USB stick (8 GB+), boot the target machine from it.</li>
+      </ol>
+      <p class="next">About ten minutes to a real green padlock at <code>you.flagship.services</code>.</p>
+    </article>
+
+    <article class="card help-card">
+      <span class="label">Stuck on install</span>
+      <h3>I'm stuck on the install screen.</h3>
+      <ol>
+        <li><strong>"No build code accepted"</strong> — codes expire in 24 hours and are single-use. Mint a new one from the phone.</li>
+        <li><strong>"No network"</strong> — the installer needs DHCP on a wired ethernet port. Wi-Fi is not supported during install. Plug a cable in.</li>
+        <li><strong>"Disk too small"</strong> — minimum is 32 GB. The installer formats whichever disk you point it at; it does not dual-boot.</li>
+      </ol>
+      <p class="next">Still stuck? Capture the screen and email it.</p>
+    </article>
+
+    <article class="card help-card">
+      <span class="label">Phone trouble</span>
+      <h3>My phone died.</h3>
+      <ol>
+        <li>If you enabled iCloud Keychain or Google Block Store at setup, sign in on the new phone and your identity unwraps with biometrics.</li>
+        <li>If you didn't, your account is unrecoverable — that's by design (we have no backdoor) and we tried to be clear about it during setup.</li>
+        <li>The hardware itself is fine. Spinning up a new account against the same box is a clean reinstall.</li>
+      </ol>
+      <p class="next">Full recovery flow: <a href="/docs/recovery">/docs/recovery</a>.</p>
+    </article>
+
+    <article class="card help-card">
+      <span class="label">App not loading</span>
+      <h3>An app isn't loading.</h3>
+      <ol>
+        <li><strong>Browser shows "DNS error"</strong> — your subdomain is propagating. Wait 60 seconds; check <a href="/status/">/status</a>.</li>
+        <li><strong>"Cert invalid" / no green padlock</strong> — the daemon is renewing. Check the dashboard for "Renewing" pill; usually clears in 90 seconds.</li>
+        <li><strong>"403 not a member"</strong> — the app is identity-gated and your phone hasn't approved your device. Approve from the phone, refresh.</li>
+      </ol>
+      <p class="next">Logs live on your box at <code>journalctl -u flagshipd</code>.</p>
+    </article>
+  </section>
+
+  <section class="triage" aria-label="Common symptoms">
+    <h2>A bit more, by symptom.</h2>
+    <p>Three things that can knock a working install offline. Each one resolves on its own most of the time; if it doesn't, here's where to look.</p>
+
+    <div class="symptom">
+      <h3>The dashboard says "Offline"</h3>
+      <p>The tunnel from your box to <code>flagship.services</code> is down. Check, in order:</p>
+      <ol>
+        <li><strong>Power and network</strong>. Is the box on? Is the cable in? Can it reach the internet (<code>ping 1.1.1.1</code>)?</li>
+        <li><strong>Outbound 443 reachable</strong>. Some restrictive networks block long-lived WebSockets. <code>curl https://flagship.services/api/health</code> from the box should return JSON.</li>
+        <li><strong>Daemon health</strong>. SSH in, run <code>systemctl status flagshipd</code>. Restart with <code>systemctl restart flagshipd</code>; recent logs in <code>journalctl -u flagshipd -n 200</code>.</li>
+      </ol>
+    </div>
+
+    <div class="symptom">
+      <h3>"Cert invalid" in the browser</h3>
+      <p>Your TLS cert lives on the daemon and renews automatically 30 days before expiry. If you're seeing a cert warning:</p>
+      <ol>
+        <li><strong>Wait 90 seconds.</strong> Renewals re-issue and reload silently. The dashboard shows a "Renewing" pill while it's happening.</li>
+        <li><strong>Check the dashboard's cert section.</strong> If it says "Failed", the underlying cause is in the daemon log. The most common reason: the box was offline during the renewal window. Triggering a manual renewal from the dashboard fixes it.</li>
+        <li><strong>Brand-new install with no cert at all</strong>: the first issuance happens at boot and takes 30 to 60 seconds. Refresh.</li>
+      </ol>
+    </div>
+
+    <div class="symptom">
+      <h3>"403 not a member" or "App locked"</h3>
+      <p>Apps default to identity-gated — only the owner and explicitly invited users can hit them. If you're the owner and seeing 403:</p>
+      <ol>
+        <li>Confirm you're signed in on this device. Open the dashboard at <code>https://you.flagship.services/.flagship/</code>; if it asks for pairing, pair.</li>
+        <li>If you're a guest someone shared the app with: ask them to re-issue the invite. Invite tokens expire after first use.</li>
+        <li>If the app is supposed to be public, check its manifest's <code>access</code> field. Owner can change it from the dashboard.</li>
+      </ol>
+    </div>
+  </section>
+
+  <div class="human">
+    <div>
+      <h2>I want to talk to a human.</h2>
+      <p>One of us reads every email. Mail <a href="mailto:harry@flagship.services">harry@flagship.services</a> with what you tried, what you saw, and the dashboard URL or device path. Replies usually within a day, faster if you mention "blocked".</p>
+      <div class="links">
+        <a href="mailto:harry@flagship.services" class="btn btn--primary">Email harry@flagship.services</a>
+        <a href="/status/" class="btn btn--secondary">Check status</a>
+        <a href="/faq" class="btn btn--ghost">Read the full FAQ →</a>
+      </div>
+    </div>
+    <div>
+      <span class="pill pill--online">Live</span>
+      <p style="margin-top: var(--space-3); color: var(--text-muted); font-size: var(--body-sm-size);">If <a href="/status/">/status</a> shows green and you're still broken, that's almost always something local — and that's almost always something we can help with by email.</p>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
+      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you, your hardware, and your phone.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/how-it-works">How it works</a></li>
+        <li><a href="/marketplace">Apps</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/build/">Build code</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security">Architecture</a></li>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/terms">Terms</a></li>
+        <li><a href="/abuse">Abuse</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="https://github.com/harrywinner2/flagship">Source on GitHub</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/help" aria-current="page">Help</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span>
+    <span>harry@flagship.services</span>
+  </div>
+</footer>
+
+</body>
+</html>

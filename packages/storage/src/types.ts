@@ -176,6 +176,7 @@ export interface Storage {
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
+  aliases: AppAliasStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -295,4 +296,37 @@ export interface TierSubscriptionRecord {
 export interface TierStorage {
   get(username: string): Promise<TierSubscriptionRecord | undefined>;
   put(rec: TierSubscriptionRecord): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// App aliases (URL multiplexing — see docs/multiplexing.md)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AppAliasRecord {
+  username: string;
+  slug: string;
+  fullLabel: string;
+  serverDomain: string;
+  /** v2 replication: stringified JSON array of secondary server FQDNs. */
+  replicationSet?: string;
+  declaredAt: number;
+  declaredByIrkPubHex: string;
+  declaredIrkSignatureHex: string;
+}
+
+export interface AppAliasStorage {
+  /**
+   * Conflict-aware insert. Returns:
+   *   { ok: true, alreadyEqual?: true }  — the alias exists or was created.
+   *   { ok: false, reason: "conflict", existing }  — a different alias holds
+   *     this (username, slug) pair; caller must release first.
+   */
+  declare(rec: AppAliasRecord): Promise<
+    | { ok: true; alreadyEqual?: boolean }
+    | { ok: false; reason: "conflict"; existing: AppAliasRecord }
+  >;
+  release(username: string, slug: string): Promise<void>;
+  get(username: string, slug: string): Promise<AppAliasRecord | undefined>;
+  listByUser(username: string): Promise<AppAliasRecord[]>;
+  listByServer(serverDomain: string): Promise<AppAliasRecord[]>;
 }

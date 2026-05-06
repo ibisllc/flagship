@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FAQ · Flagship</title>
+  <meta name="description" content="The questions people actually ask before they hand us their hardware and their phone. Honest answers, no marketing.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    .page-hero { padding: var(--space-12) 0 var(--space-8); max-width: var(--reading-width); }
+    .page-hero h1 { font-size: var(--display-size); line-height: var(--display-line); letter-spacing: -0.02em; margin-bottom: var(--space-4); }
+    @media (max-width: 720px) { .page-hero h1 { font-size: 40px; line-height: 48px; } }
+    .page-hero p { font-size: var(--h4-size); line-height: 28px; color: var(--text-muted); }
+
+    .toc {
+      display: flex; flex-wrap: wrap; gap: var(--space-2);
+      margin: var(--space-6) 0 var(--space-12);
+    }
+    .toc a {
+      display: inline-flex; align-items: center;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      color: var(--text-muted);
+      font-size: var(--body-sm-size);
+      font-weight: 500;
+    }
+    .toc a:hover { color: var(--text); border-color: var(--text-muted); }
+
+    .faq-section {
+      padding: var(--space-12) 0;
+      border-top: 1px solid var(--border);
+    }
+    .faq-section h2 {
+      font-size: var(--h1-size);
+      line-height: var(--h1-line);
+      letter-spacing: -0.01em;
+      margin-bottom: var(--space-3);
+    }
+    .faq-section .section-lede {
+      color: var(--text-muted);
+      max-width: var(--reading-width);
+      margin-bottom: var(--space-8);
+    }
+
+    details.q { border-top: 1px solid var(--border); padding: var(--space-6) 0; }
+    .qlist details.q:last-child { border-bottom: 1px solid var(--border); }
+    details.q > summary {
+      font-family: var(--font-heading);
+      font-weight: 500;
+      font-size: var(--h4-size);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    details.q > summary::-webkit-details-marker { display: none; }
+    details.q > summary::after {
+      content: "+";
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      font-size: 22px;
+      transition: transform var(--motion-state);
+    }
+    details.q[open] > summary::after { transform: rotate(45deg); }
+    details.q > .answer {
+      margin-top: var(--space-4);
+      color: var(--text-muted);
+      max-width: var(--reading-width);
+    }
+    details.q > .answer p { margin-bottom: var(--space-3); }
+    details.q > .answer p:last-child { margin-bottom: 0; }
+
+    .help-out {
+      margin-top: var(--space-12);
+      padding: var(--space-8);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+    .help-out h3 { margin-bottom: var(--space-3); }
+    .help-out p { color: var(--text-muted); margin-bottom: var(--space-4); }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand" aria-label="Flagship home">Flagship</a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/how-it-works">How it works</a>
+      <a href="/marketplace">Apps</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+      <a href="/status/">Status</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/build/" class="btn btn--primary">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <section class="page-hero">
+    <h1>Questions, in plain English.</h1>
+    <p>The ones people actually ask before they hand us their hardware and their phone. If yours isn't here, mail <a href="mailto:harry@flagship.services">harry@flagship.services</a>.</p>
+    <nav class="toc" aria-label="Sections">
+      <a href="#setup">Setup &amp; install</a>
+      <a href="#privacy">Privacy &amp; security</a>
+      <a href="#apps">Apps &amp; marketplace</a>
+      <a href="#money">Money &amp; subscriptions</a>
+      <a href="#endgame">If Flagship goes away</a>
+    </nav>
+  </section>
+
+  <section class="faq-section" id="setup" aria-label="Setup and install">
+    <h2>Setup &amp; install</h2>
+    <p class="section-lede">Plug in any old PC. Boot from one USB stick. Pair with your phone. Most people are online in about ten minutes.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>What hardware do I actually need?</summary>
+        <div class="answer">
+          <p>Anything that boots x86_64 Alpine and has at least 2 GB of RAM, 32 GB of disk, and a working ethernet port. An old laptop, a NUC, an Optiplex from 2014, our pre-built box — all fine. ARM (Raspberry Pi 4/5) works too if you build the ISO yourself; we don't ship the ARM image as a default yet.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How long does install take?</summary>
+        <div class="answer">
+          <p>About ten minutes from inserting the USB stick to a real green padlock at <code>you.flagship.services</code>. Most of that is the kernel booting and Let's Encrypt issuing your cert. The personalized installer is one file you download from <a href="/build/">/build/</a> after pasting the build code your phone minted.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Will it wipe the disk?</summary>
+        <div class="answer">
+          <p>Yes. The installer formats the target disk, sets up LUKS full-disk encryption with a key only your phone can release, and lays down Alpine. Anything that was on the disk before is gone. The installer asks twice and shows you the device path; we try hard not to surprise anyone.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Do I need a static IP or port forwarding at home?</summary>
+        <div class="answer">
+          <p>No. Your box opens an outbound WebSocket to <code>flagship.services</code>; that's the tunnel. No port-forwarding, no dynamic DNS, no router config. CGNAT is fine. The only requirement is that outbound TCP/443 works, which it does on every consumer ISP.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can I install without a phone?</summary>
+        <div class="answer">
+          <p>Not really. The phone <em>is</em> the trust root — there's no email-and-password to fall back to. If you don't want to use a phone, the installable web app at <a href="/webapp">/webapp</a> works as a software-only client (passphrase + WebAuthn instead of Secure Enclave). It's weaker security but it's an account you fully control.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What's a "build code"?</summary>
+        <div class="answer">
+          <p>A short, single-use, time-limited token your phone signs and hands you. You paste it into <a href="/build/">/build/</a> and we stream you a personalized ISO with your server's identity baked in. The code expires in 24 hours and is invalidated the moment it's used. Lost it? Mint another from the phone.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can I run it on a Raspberry Pi?</summary>
+        <div class="answer">
+          <p>Probably. We don't ship a default ARM image yet, but the daemon is plain TypeScript and the dependencies are all on Alpine. A Pi 4 with an SSD via USB 3 is fine for a single-user setup. If you do this, please tell us how it went.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="privacy" aria-label="Privacy and security">
+    <h2>Privacy &amp; security</h2>
+    <p class="section-lede">The structural answer to "can you read my data?" is no — the bytes never leave your box decrypted. Here's what that means in practice.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>Can Flagship read my data?</summary>
+        <div class="answer">
+          <p>No, and structurally we can't. TLS terminates on your hardware against a Let's Encrypt cert that only your box holds the private key for. <code>flagship.services</code> sees encrypted bytes go past on a TCP pipe. <code>flagshipserver.com</code> only ever sees your username, your sealed LUKS blob (useless without your phone), and routing metadata. If we get hacked tomorrow, the worst thing leaked about you is your username.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What does Flagship the company actually store?</summary>
+        <div class="answer">
+          <p>Username, your server's public key, a sealed LUKS-unlock blob (encrypted to your phone), DNS records for <code>your.flagship.services</code>, push-notification tokens, billing data if you paid us money, and marketplace listing metadata if you publish an app. That's it. No file content, no prompts, no chats, no app traffic. The full inventory lives in <a href="/privacy">/privacy</a>.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What if my phone is compromised?</summary>
+        <div class="answer">
+          <p>Game over for that account, the same way it's game over for your bank app. The phone is the trust root; a compromised root can sign whatever it wants. That's why every key sits in the Secure Enclave / StrongBox behind a biometric, never leaves the chip unwrapped, and every sensitive action requires a fresh biometric prompt. If you suspect a compromise, use any other paired device to revoke the phone's identity key.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What encryption do you use?</summary>
+        <div class="answer">
+          <p>Standard primitives only — Ed25519 signatures, X25519 + AES-256-GCM for sealed blobs, HKDF-SHA-256 for key derivation, LUKS2/argon2id for the disk. Real Let's Encrypt certs (TLS-ALPN-01 today, DNS-01 wildcard rolling out) for transport. If we ever invent our own crypto, please report it as a bug.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Is the source open?</summary>
+        <div class="answer">
+          <p>Yes. The protocol, daemon, image-builder, and clients are at <a href="https://github.com/harrywinner2/flagship">github.com/harrywinner2/flagship</a> under BUSL-1.1, which converts to Apache 2.0 in 2030. Reproducible builds for the ISO are on the roadmap so you can verify the bytes match the source.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can a court compel you to hand over my data?</summary>
+        <div class="answer">
+          <p>They can compel us to hand over what we have, and what we have is a username, a sealed blob, and routing metadata. We can't decrypt your traffic because we don't terminate it. We can revoke the routing entry for your subdomain (which takes your apps offline) — that's a power we have and we'd resist abusing. We'll publish a transparency report annually once we have any requests to report.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What do you log?</summary>
+        <div class="answer">
+          <p>Cloudflare gets normal request logs (IP, path, status) for <code>flagshipserver.com</code> on a 30-day window — we don't extend them. Fly gets TCP connection metadata for <code>flagship.services</code>. Your daemon logs locally on your box and never ships those logs anywhere. We don't run analytics, ad pixels, or session-replay on the marketing site or the dashboard.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="apps" aria-label="Apps and marketplace">
+    <h2>Apps &amp; marketplace</h2>
+    <p class="section-lede">Apps are containers running on your box, namespaced by user. The marketplace is a list of pointers, not a code host.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>What is "vibe-coding" an app?</summary>
+        <div class="answer">
+          <p>You describe what you want in plain language ("a tracker for which houseplants I've watered, push me when one's been thirsty 5+ days"). An LLM writes the code. Your daemon builds it, picks the data-layer scopes (Postgres tables, object storage, push), and runs it at <code>plant-water.you.flagship.services</code>. About 90 seconds. You can edit the code if you feel like it.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How does the marketplace work?</summary>
+        <div class="answer">
+          <p>Anyone can publish a listing — a title, description, screenshots, a link to a canonical pod. We host listings; we don't host code. When you install an app, your daemon pulls source from the canonical pod (or a fork you point to), signs it with your server identity, and runs it under your namespace. The marketplace is a directory, not an app store.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Are listings reviewed?</summary>
+        <div class="answer">
+          <p>Optionally, by the lister. Publishers can pay for a security scan (npm audit + trivy + semgrep + dynamic checks) and get a letter grade displayed on their listing. The grade is informational; we don't gate listings behind it. We'll take down listings that violate the acceptable-use policy in <a href="/terms">/terms</a> on report.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can I share an app with a friend?</summary>
+        <div class="answer">
+          <p>Yes. Generate a signed invite token from your phone; your friend's box pulls the source from your pod and runs its own copy under their namespace. Their data stays on their box; yours stays on yours. No central database, no shared backend.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What stops a malicious app from stealing my data?</summary>
+        <div class="answer">
+          <p>The data-layer is per-app and per-user-namespaced — an app declares which Postgres tables and which object-storage buckets it wants in its manifest, and the daemon enforces it. An app for "plant watering" can't read your photos. Outbound network access is allowlisted in the manifest; the browser feature has a domain gate. Nothing stops a malicious app from being terrible inside its own scope, which is why you should think before installing one.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Which AI providers can apps use?</summary>
+        <div class="answer">
+          <p>Whichever you've configured. BYOK to Anthropic, OpenAI, Mistral, anyone with an API. Keys live on your daemon, encrypted at rest, scoped per app. Apps never see the raw key. We also ship a one-shot promo path that mints a fresh key at first run for the supported providers — useful for "try Flagship without a credit card" but cosmetically rate-limited.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can I uninstall an app cleanly?</summary>
+        <div class="answer">
+          <p>Yes. Uninstall drops its container, its Postgres schema, its object-storage bucket, its DNS entry, and its cert. The marketplace listing (if any) is independent of installs and stays up. You can keep a snapshot before uninstall if you want to come back to the data later.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="money" aria-label="Money and subscriptions">
+    <h2>Money &amp; subscriptions</h2>
+    <p class="section-lede">Hardware is one-time. Subscriptions are optional. Bring-your-own-hardware is free forever.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>What does Flagship cost?</summary>
+        <div class="answer">
+          <p>Bring-your-own-hardware: $0. Pre-built box: $199 / $349 / $699 one-time. Optional subscription for things we run on your behalf (push notifications at scale, peer-backup matchmaking, the AI promo path): a flat monthly fee that depends on which add-ons you turn on. Full breakdown at <a href="/pricing">/pricing</a>.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Why charge anything if it's "your hardware"?</summary>
+        <div class="answer">
+          <p>Three real costs: shipping the pre-built boxes (margin, not profit-from-pricing), running the tunnel hub on Fly (a few cents per server per month at our scale), and running the registrar of <code>flagship.services</code> wildcard DNS. The free tier covers the steady-state for an individual on their own hardware. Subscriptions cover the things we'd otherwise have to subsidize.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Can I cancel anytime?</summary>
+        <div class="answer">
+          <p>Yes. Cancellation is one tap from the phone. We prorate the unused portion of the current period. Your subdomain stays yours; the routing entry continues to work; only the billed add-ons (push at scale, peer-backup pool, etc.) shut off. We don't ransom your DNS.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What's your refund policy on hardware?</summary>
+        <div class="answer">
+          <p>30 days, full refund, you ship it back. We pay return shipping inside the US; outside the US it's on you. If the box arrived dead or DOA we pay both ways. We don't restock-fee. Full terms at <a href="/terms">/terms</a>.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Do you take crypto?</summary>
+        <div class="answer">
+          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:harry@flagship.services">harry@flagship.services</a> and tell us — that's how features get prioritized.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Will the price change?</summary>
+        <div class="answer">
+          <p>Hardware: probably, with component costs. Existing orders are locked in. Subscriptions: we'll grandfather every existing subscriber on a price change for at least 12 months and we'll tell you at signup if a plan is "introductory." We don't do "your renewal is now triple."</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>How do you make money long-term?</summary>
+        <div class="answer">
+          <p>Hardware margin, subscriptions on the optional add-ons, marketplace promotion fees (clearly labeled "featured"). We don't sell ads, telemetry, model-training rights, or your data — partly because it's the right thing, mostly because we structurally can't.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="faq-section" id="endgame" aria-label="If Flagship goes away">
+    <h2>If Flagship goes away</h2>
+    <p class="section-lede">A fair question. The product is designed so this is survivable.</p>
+    <div class="qlist">
+      <details class="q">
+        <summary>What happens to my server if you shut down?</summary>
+        <div class="answer">
+          <p>It keeps running. Your apps keep running. Your TLS cert keeps renewing through Let's Encrypt as long as DNS resolves. The two things that would break: routing through <code>flagship.services</code> (because the tunnel hub is ours) and the build pipeline at <code>flagshipserver.com</code> (because that's our Worker). The fix in both cases is a self-hosting playbook we've already drafted — you'd run your own services-zone or point your subdomain at your own IP via DDNS.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>What about my data and identity?</summary>
+        <div class="answer">
+          <p>The data is on your disk; it was never anywhere else. The identity is your phone's keypair; it doesn't depend on us being alive. The username at <code>flagshipserver.com</code> goes away if the company does, but the underlying public key is yours forever. Migrating to a self-hosted control plane would be one DNS change away.</p>
+        </div>
+      </details>
+      <details class="q">
+        <summary>Will the source survive you?</summary>
+        <div class="answer">
+          <p>Yes. BUSL-1.1 with a Change Date of 2030-05-03 — even if the company evaporates tomorrow, the entire codebase becomes Apache 2.0 in 2030 by license, and the GitHub mirror stays up regardless. We'll publish escrow instructions for the build pipeline before public launch.</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <div class="help-out">
+    <h3>Didn't find it?</h3>
+    <p>Mail <a href="mailto:harry@flagship.services">harry@flagship.services</a> — a real person reads everything. For broken installs, try <a href="/help">/help</a> first; for security questions, <a href="/security">/security</a> goes deeper than this page does.</p>
+    <a href="/help" class="btn btn--secondary">Open the help center</a>
+  </div>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
+      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you, your hardware, and your phone.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/how-it-works">How it works</a></li>
+        <li><a href="/marketplace">Apps</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/build/">Build code</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security">Architecture</a></li>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/terms">Terms</a></li>
+        <li><a href="/abuse">Abuse</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="https://github.com/harrywinner2/flagship">Source on GitHub</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/help">Help</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span>
+    <span>harry@flagship.services</span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,4 +1,6 @@
 import type {
+  AppAliasRecord,
+  AppAliasStorage,
   AuthCodeRecord,
   AuthCodeStorage,
   BuildTicketRecord,
@@ -813,6 +815,100 @@ export class D1TierStorage implements TierStorage {
   }
 }
 
+export class D1AppAliasStorage implements AppAliasStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async declare(rec: AppAliasRecord): Promise<
+    | { ok: true; alreadyEqual?: boolean }
+    | { ok: false; reason: "conflict"; existing: AppAliasRecord }
+  > {
+    // Race-safe declare: try to insert; on PK conflict, read the existing
+    // row and decide if it equals our claim (idempotent) or conflicts.
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO app_aliases (
+             username, slug, full_label, server_domain, replication_set,
+             declared_at, declared_by_irk_pub_hex, declared_irk_signature_hex
+           ) VALUES (?,?,?,?,?,?,?,?)`,
+        )
+        .bind(
+          rec.username, rec.slug, rec.fullLabel, rec.serverDomain,
+          rec.replicationSet ?? null,
+          rec.declaredAt, rec.declaredByIrkPubHex, rec.declaredIrkSignatureHex,
+        )
+        .run();
+      return { ok: true };
+    } catch {
+      const existing = await this.get(rec.username, rec.slug);
+      if (
+        existing &&
+        existing.fullLabel === rec.fullLabel &&
+        existing.serverDomain === rec.serverDomain
+      ) {
+        return { ok: true, alreadyEqual: true };
+      }
+      if (!existing) {
+        // Insert failed but no row found — surface as conflict against
+        // the canonical empty record so callers get a deterministic shape.
+        return {
+          ok: false,
+          reason: "conflict",
+          existing: rec,
+        };
+      }
+      return { ok: false, reason: "conflict", existing };
+    }
+  }
+
+  async release(username: string, slug: string): Promise<void> {
+    await this.db.prepare(`DELETE FROM app_aliases WHERE username = ? AND slug = ?`)
+      .bind(username, slug).run();
+  }
+
+  async get(username: string, slug: string): Promise<AppAliasRecord | undefined> {
+    const r = await this.db
+      .prepare(`SELECT * FROM app_aliases WHERE username = ? AND slug = ?`)
+      .bind(username, slug)
+      .first<RawAliasRow>();
+    return r ? aliasRowToRecord(r) : undefined;
+  }
+
+  async listByUser(username: string): Promise<AppAliasRecord[]> {
+    const r = await this.db
+      .prepare(`SELECT * FROM app_aliases WHERE username = ?`)
+      .bind(username)
+      .all<RawAliasRow>();
+    return (r.results ?? []).map(aliasRowToRecord);
+  }
+
+  async listByServer(serverDomain: string): Promise<AppAliasRecord[]> {
+    const r = await this.db
+      .prepare(`SELECT * FROM app_aliases WHERE server_domain = ?`)
+      .bind(serverDomain)
+      .all<RawAliasRow>();
+    return (r.results ?? []).map(aliasRowToRecord);
+  }
+}
+
+interface RawAliasRow {
+  username: string; slug: string; full_label: string; server_domain: string;
+  replication_set: string | null; declared_at: number;
+  declared_by_irk_pub_hex: string; declared_irk_signature_hex: string;
+}
+function aliasRowToRecord(r: RawAliasRow): AppAliasRecord {
+  return {
+    username: r.username,
+    slug: r.slug,
+    fullLabel: r.full_label,
+    serverDomain: r.server_domain,
+    replicationSet: r.replication_set ?? undefined,
+    declaredAt: r.declared_at,
+    declaredByIrkPubHex: r.declared_by_irk_pub_hex,
+    declaredIrkSignatureHex: r.declared_irk_signature_hex,
+  };
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -825,6 +921,7 @@ export class D1Storage implements Storage {
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
+  aliases: AppAliasStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -837,5 +934,6 @@ export class D1Storage implements Storage {
     this.pushTokens = new D1PushTokenStorage(db);
     this.llmPromo = new D1LlmPromoStorage(db);
     this.tiers = new D1TierStorage(db);
+    this.aliases = new D1AppAliasStorage(db);
   }
 }

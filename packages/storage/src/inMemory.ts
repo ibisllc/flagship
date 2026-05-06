@@ -1,4 +1,6 @@
 import type {
+  AppAliasRecord,
+  AppAliasStorage,
   AuthCodeRecord,
   AuthCodeStorage,
   BuildTicketRecord,
@@ -309,6 +311,48 @@ export class InMemoryTierStorage implements TierStorage {
   async put(r: TierSubscriptionRecord): Promise<void> { this.byUser.set(r.username, { ...r }); }
 }
 
+export class InMemoryAppAliasStorage implements AppAliasStorage {
+  private byKey = new Map<string, AppAliasRecord>();
+  private key(u: string, s: string) { return `${u.toLowerCase()}/${s.toLowerCase()}`; }
+
+  async declare(rec: AppAliasRecord) {
+    const key = this.key(rec.username, rec.slug);
+    const existing = this.byKey.get(key);
+    if (existing) {
+      if (
+        existing.fullLabel === rec.fullLabel &&
+        existing.serverDomain === rec.serverDomain
+      ) {
+        return { ok: true as const, alreadyEqual: true };
+      }
+      return { ok: false as const, reason: "conflict" as const, existing: { ...existing } };
+    }
+    this.byKey.set(key, { ...rec });
+    return { ok: true as const };
+  }
+
+  async release(username: string, slug: string): Promise<void> {
+    this.byKey.delete(this.key(username, slug));
+  }
+
+  async get(username: string, slug: string): Promise<AppAliasRecord | undefined> {
+    const r = this.byKey.get(this.key(username, slug));
+    return r ? { ...r } : undefined;
+  }
+
+  async listByUser(username: string): Promise<AppAliasRecord[]> {
+    return [...this.byKey.values()]
+      .filter((r) => r.username.toLowerCase() === username.toLowerCase())
+      .map((r) => ({ ...r }));
+  }
+
+  async listByServer(serverDomain: string): Promise<AppAliasRecord[]> {
+    return [...this.byKey.values()]
+      .filter((r) => r.serverDomain.toLowerCase() === serverDomain.toLowerCase())
+      .map((r) => ({ ...r }));
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -321,4 +365,5 @@ export class InMemoryStorage implements Storage {
   pushTokens = new InMemoryPushTokenStorage();
   llmPromo = new InMemoryLlmPromoStorage();
   tiers = new InMemoryTierStorage();
+  aliases = new InMemoryAppAliasStorage();
 }

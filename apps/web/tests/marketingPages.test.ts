@@ -91,4 +91,39 @@ describe("marketing surface — design system v2", () => {
     expect(r.body).toContain('/deck/?session=');
     expect(r.body).not.toMatch(/href="\/app\.html\?session/);
   });
+
+  for (const path of ["/faq.html", "/privacy.html", "/terms.html", "/help.html", "/docs/index.html", "/disambiguate.html"]) {
+    it(`${path} loads the design tokens + has the Flagship nav`, async () => {
+      const app = buildServer();
+      const r = await app.inject({ method: "GET", url: path });
+      expect(r.statusCode).toBe(200);
+      expect(r.body).toContain('href="/tokens.css"');
+      expect(r.body).toContain('class="nav"');
+      expect(r.body).toContain("Flagship");
+    });
+  }
+
+  it("faq covers the major topic groups", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/faq.html" });
+    // The FAQ should organize into sections; we check for at least 3 of the 5
+    const groups = ["Setup", "Privacy", "Apps", "money", "company"];
+    const hits = groups.filter((g) => r.body.toLowerCase().includes(g.toLowerCase()));
+    expect(hits.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("privacy + terms include real contact addresses", async () => {
+    const app = buildServer();
+    const priv = await app.inject({ method: "GET", url: "/privacy.html" });
+    const terms = await app.inject({ method: "GET", url: "/terms.html" });
+    expect(priv.body).toContain("@flagship.services");
+    expect(terms.body).toContain("@flagship.services");
+  });
+
+  it("disambiguation page references the resolver endpoint", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/disambiguate.html" });
+    expect(r.body).toContain("/api/aliases/resolve");
+    expect(r.body).toContain("Pick a destination");
+  });
 });

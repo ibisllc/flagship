@@ -16,3 +16,4 @@ export * from "./serverRevoke.js";
 export * from "./marketplace.js";
 export * from "./push.js";
 export * from "./llmPromo.js";
+export * from "./aliases.js";

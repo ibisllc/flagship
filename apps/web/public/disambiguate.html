@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pick a destination · Flagship</title>
+  <meta name="description" content="This short URL points to more than one app. Pick which one you mean.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    .page {
+      padding: var(--space-12) 0 var(--space-16);
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .page h1 {
+      font-size: var(--h1-size);
+      line-height: var(--h1-line);
+      letter-spacing: -0.01em;
+      margin-bottom: var(--space-3);
+    }
+    .page .lede {
+      font-size: var(--h4-size);
+      line-height: 28px;
+      color: var(--text-muted);
+      margin-bottom: var(--space-8);
+    }
+    .candidate {
+      display: block;
+      padding: var(--space-4) var(--space-6);
+      margin-bottom: var(--space-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      transition: border-color var(--motion-state), transform var(--motion-state);
+      text-decoration: none;
+      color: var(--text);
+    }
+    .candidate:hover {
+      border-color: var(--text-muted);
+      transform: translateY(-1px);
+    }
+    .candidate .row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+    .candidate .url { font-family: var(--font-mono); font-size: var(--mono-size); color: var(--text); }
+    .candidate .meta { color: var(--text-muted); font-size: var(--body-sm-size); margin-top: var(--space-1); }
+    .candidate .arrow { color: var(--text-muted); font-family: var(--font-mono); }
+
+    .empty {
+      padding: var(--space-8);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .help {
+      margin-top: var(--space-12);
+      color: var(--text-muted);
+      font-size: var(--body-sm-size);
+    }
+    .help a { color: var(--text-muted); text-decoration: underline; text-underline-offset: 2px; }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">Flagship</a>
+    <nav class="nav-links">
+      <a href="/how-it-works">How it works</a>
+      <a href="/marketplace">Apps</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/build/" class="btn btn--primary">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section class="page" aria-labelledby="title">
+    <h1 id="title">Pick a destination.</h1>
+    <p class="lede">The short URL <code id="short-host">…</code> points to more than one place. Tap whichever you meant. (You can ask the host of this app to claim the short URL — then this page goes away.)</p>
+
+    <div id="candidates" aria-live="polite">
+      <div class="empty" id="empty">Looking up your candidates…</div>
+    </div>
+
+    <div class="help">
+      <strong style="color: var(--text);">Why does this happen?</strong>
+      <p style="margin-top: var(--space-2);">When two installs of the same app share a username, the short URL is ambiguous. The long URLs always work — they include the server name, so they're unique. <a href="/docs/multiplexing">More on multiplexing →</a></p>
+    </div>
+  </section>
+</main>
+
+<script>
+  // Resolve the short URL by hitting the public resolver.
+  const host = location.host;
+  document.getElementById("short-host").textContent = host;
+
+  fetch(`https://flagshipserver.com/api/aliases/resolve?host=${encodeURIComponent(host)}`)
+    .then((r) => r.json())
+    .then((body) => {
+      const empty = document.getElementById("empty");
+      const candidates = document.getElementById("candidates");
+
+      // Single-target case shouldn't reach this page (DNS already CNAME'd
+      // to the long form), but if we *did* get here, show a "go to full URL"
+      // card.
+      if (body.kind === "single" && body.longHost) {
+        candidates.innerHTML = renderSingle(body.longHost);
+        return;
+      }
+      if (body.kind === "missing") {
+        candidates.innerHTML = renderMissing(host);
+        return;
+      }
+      if (body.kind === "ambiguous" && Array.isArray(body.candidates)) {
+        candidates.innerHTML = body.candidates.map(renderCandidate).join("");
+        return;
+      }
+      empty.textContent = "Couldn't reach the resolver. Try again in a moment.";
+    })
+    .catch(() => {
+      document.getElementById("empty").textContent =
+        "Couldn't reach the resolver. Try again in a moment.";
+    });
+
+  function renderCandidate(c) {
+    const url = `https://${c.long_host}`;
+    const safeUrl = url.replace(/[<>"]/g, "");
+    return `
+      <a class="candidate" href="${safeUrl}">
+        <div class="row">
+          <div>
+            <div class="url">${escapeHtml(c.long_host)}</div>
+            <div class="meta">${escapeHtml(c.full_label)} on ${escapeHtml(c.server_domain)}</div>
+          </div>
+          <div class="arrow">→</div>
+        </div>
+      </a>
+    `;
+  }
+  function renderSingle(longHost) {
+    const url = `https://${longHost}`;
+    return `
+      <a class="candidate" href="${url.replace(/[<>"]/g, "")}">
+        <div class="row">
+          <div>
+            <div class="url">${escapeHtml(longHost)}</div>
+            <div class="meta">Open the full address.</div>
+          </div>
+          <div class="arrow">→</div>
+        </div>
+      </a>
+    `;
+  }
+  function renderMissing(h) {
+    return `<div class="empty">No app at <code>${escapeHtml(h)}</code>. Maybe a typo?</div>`;
+  }
+  function escapeHtml(s) {
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+</script>
+
+</body>
+</html>

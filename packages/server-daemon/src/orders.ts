@@ -48,6 +48,8 @@ export interface OrderExecutor {
   removeSubscriber?(args: { appId: string; fqdn: string }): Promise<void> | void;
   addPairedSession?(args: { token: string; label: string }): Promise<void> | void;
   removePairedSession?(args: { token: string }): Promise<void> | void;
+  addAliasShortFqdn?(args: { shortFqdn: string }): Promise<void> | void;
+  removeAliasShortFqdn?(args: { shortFqdn: string }): Promise<void> | void;
 }
 
 export interface OrdersHandlerOptions {
@@ -224,6 +226,22 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
         token: r.token,
         issuedAt: r.issuedAt,
       };
+    case "add-alias-short-fqdn":
+      if (typeof r.shortFqdn !== "string") return null;
+      return {
+        type: "add-alias-short-fqdn",
+        serverId: r.serverId,
+        shortFqdn: r.shortFqdn,
+        issuedAt: r.issuedAt,
+      };
+    case "remove-alias-short-fqdn":
+      if (typeof r.shortFqdn !== "string") return null;
+      return {
+        type: "remove-alias-short-fqdn",
+        serverId: r.serverId,
+        shortFqdn: r.shortFqdn,
+        issuedAt: r.issuedAt,
+      };
     default:
       return null;
   }
@@ -278,6 +296,14 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
     case "remove-paired-session":
       if (!ex.removePairedSession) throw new Error("removePairedSession not implemented");
       await ex.removePairedSession({ token: order.token });
+      return;
+    case "add-alias-short-fqdn":
+      if (!ex.addAliasShortFqdn) throw new Error("addAliasShortFqdn not implemented");
+      await ex.addAliasShortFqdn({ shortFqdn: order.shortFqdn });
+      return;
+    case "remove-alias-short-fqdn":
+      if (!ex.removeAliasShortFqdn) throw new Error("removeAliasShortFqdn not implemented");
+      await ex.removeAliasShortFqdn({ shortFqdn: order.shortFqdn });
       return;
   }
 }

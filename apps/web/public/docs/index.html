@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docs · Flagship</title>
+  <meta name="description" content="Everything you need to set up Flagship, build apps on it, and recover when something goes sideways.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    .docs { padding: var(--space-12) 0 var(--space-16); max-width: var(--reading-width); }
+    .docs h1 { font-size: var(--display-size); line-height: var(--display-line); letter-spacing: -0.02em; margin-bottom: var(--space-4); }
+    @media (max-width: 720px) { .docs h1 { font-size: 40px; line-height: 48px; } }
+    .docs p.lede { font-size: var(--h4-size); line-height: 28px; color: var(--text-muted); margin-bottom: var(--space-12); }
+    .doc-section { padding: var(--space-8) 0; border-top: 1px solid var(--border); }
+    .doc-section h2 { font-size: var(--h2-size); line-height: var(--h2-line); margin-bottom: var(--space-3); letter-spacing: -0.01em; }
+    .doc-section p { color: var(--text-muted); }
+    .doc-section a { font-weight: 600; }
+    .doc-section .next { display: inline-block; margin-top: var(--space-3); }
+    .toc { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-6) 0; }
+    .toc a {
+      padding: 6px 12px; border: 1px solid var(--border);
+      border-radius: var(--radius-pill); color: var(--text-muted);
+      font-size: var(--body-sm-size); font-weight: 500;
+    }
+    .toc a:hover { color: var(--text); border-color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">Flagship</a>
+    <nav class="nav-links">
+      <a href="/how-it-works">How it works</a>
+      <a href="/marketplace">Apps</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs" aria-current="page">Docs</a>
+      <a href="/status/">Status</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/build/" class="btn btn--primary">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <section class="docs">
+    <h1>Docs.</h1>
+    <p class="lede">Concrete answers, no fluff. Pick a starting point.</p>
+
+    <div class="toc">
+      <a href="#quick-start">Quick start</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#install">Install</a>
+      <a href="#pair">Phone pairing</a>
+      <a href="#apps">Apps &amp; manifest</a>
+      <a href="#multiplexing">URL multiplexing</a>
+      <a href="#recovery">Recovery</a>
+      <a href="#api">API reference</a>
+    </div>
+
+    <section class="doc-section" id="quick-start">
+      <h2>Quick start</h2>
+      <p>Three steps. About ten minutes.</p>
+      <p><strong>1.</strong> Install the phone app. Pick a username. Approve biometrics. Your master key never leaves the phone.</p>
+      <p><strong>2.</strong> Generate a build code. Either order a pre-built box or paste the code at <a href="/build/">/build</a> to download a personalized installer ISO. Flash, plug in, boot.</p>
+      <p><strong>3.</strong> Vibe-code your first app from the phone. Or <a href="/marketplace">install someone else's</a>. Done.</p>
+      <a class="next" href="/how-it-works">Walk through the full flow →</a>
+    </section>
+
+    <section class="doc-section" id="architecture">
+      <h2>Architecture</h2>
+      <p>Three planes. flagshipserver.com handles identity. flagship.services is a stateless pipe (SNI passthrough + tunnel hub). Your box terminates TLS itself with a real Let's Encrypt cert. We literally cannot read your data.</p>
+      <p>The phone holds your keys. The .com Worker is the registrar; it never sees plaintext content. The .services Fly app is a dumb router that sees encrypted bytes only.</p>
+      <a class="next" href="/security">Read the trust model →</a>
+    </section>
+
+    <section class="doc-section" id="install">
+      <h2>Install &amp; first boot</h2>
+      <p>The installer is a public shell script in our open-source repo. It's pinned by hash inside the build code blob. The installer formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com.</p>
+      <p>Every subsequent boot, the phone has to approve the LUKS unlock. A stolen box without your phone is a brick.</p>
+      <a class="next" href="/help">Stuck on install? →</a>
+    </section>
+
+    <section class="doc-section" id="pair">
+      <h2>Phone pairing</h2>
+      <p>To use the web console you scan a QR code from the phone. The phone mints a 32-byte session token, signs an <code>add-paired-session</code> order, and the daemon stores the token. The browser holds it as a cookie; every admin call carries it.</p>
+      <p>Pairings are listed in <em>Settings → Paired devices</em>. Revoke any time.</p>
+    </section>
+
+    <section class="doc-section" id="apps">
+      <h2>Apps &amp; manifest</h2>
+      <p>An app is a Docker container with a <code>flagship.app.json</code> manifest. The manifest declares which data stores the app needs (Postgres, MinIO, Redis), which web hosts it can navigate to, and what's public. The daemon injects identity headers so apps never have to handle login.</p>
+      <p>You vibe-code an app from the phone (the LLM emits the manifest + Dockerfile + sources) or you write it by hand and push to your Forgejo. Either way the daemon builds, deploys, and routes.</p>
+      <p>Manifest reference: TODO (in progress).</p>
+    </section>
+
+    <section class="doc-section" id="multiplexing">
+      <h2>URL multiplexing</h2>
+      <p>When you have one install of <code>game</code>, the URL <code>game.john.flagship.services</code> just works. When you have two installs of <code>game</code> on different boxes, that short URL is ambiguous and we serve a disambiguation page. The full long form (<code>game.home.john.flagship.services</code>) always works.</p>
+      <p>You declare and release short-URL aliases from the phone. <a href="/docs/multiplexing">Full design →</a></p>
+    </section>
+
+    <section class="doc-section" id="recovery">
+      <h2>Recovery</h2>
+      <p>If you backed up to iCloud Keychain or Google Block Store at setup, a fresh phone can recover your master key with biometrics. If you didn't, your data is gone — like a hardware wallet. We tell you this clearly during setup.</p>
+      <p>Detailed flow: TODO. The short version: install the phone app, log in to your iCloud / Google account, the wrapped key downloads, biometrics unwrap it, you re-pair each server.</p>
+    </section>
+
+    <section class="doc-section" id="api">
+      <h2>API reference</h2>
+      <p>The .com Worker exposes an extensive API for build codes, server registration, marketplace, push, LLM-promo, and aliases. The daemon exposes a per-app surface (browser, alerts, identity rotation, app install/uninstall).</p>
+      <p>Reference: TODO. For now, the source is the spec — see <a href="https://github.com/harrywinner2/flagship">github.com/harrywinner2/flagship</a> and start at <code>packages/control-plane/src/index.ts</code>.</p>
+    </section>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
+      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you.</p>
+    </div>
+    <div class="footer-col"><h4>Product</h4><ul><li><a href="/how-it-works">How it works</a></li><li><a href="/marketplace">Apps</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/build/">Build code</a></li></ul></div>
+    <div class="footer-col"><h4>Trust</h4><ul><li><a href="/security">Architecture</a></li><li><a href="/privacy">Privacy</a></li><li><a href="/terms">Terms</a></li><li><a href="/abuse">Abuse</a></li></ul></div>
+    <div class="footer-col"><h4>Open</h4><ul><li><a href="https://github.com/harrywinner2/flagship">Source</a></li><li><a href="/status/">Status</a></li><li><a href="/faq">FAQ</a></li><li><a href="/help">Help</a></li></ul></div>
+  </div>
+  <div class="footer-bottom"><span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span><span>harry@flagship.services</span></div>
+</footer>
+</body>
+</html>
