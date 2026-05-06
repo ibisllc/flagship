@@ -101,6 +101,11 @@ export interface ServerStorage {
   put(rec: ServerRecord): Promise<void>;
   get(serverDomain: string): Promise<ServerRecord | undefined>;
   listForUser(username: string): Promise<ServerRecord[]>;
+  /**
+   * Every non-revoked server. Used by operational tooling — e.g. the
+   * DNS re-publisher that rewrites A/AAAA after a passthrough-IP move.
+   */
+  listAll(): Promise<ServerRecord[]>;
   revoke(serverDomain: string, reason: string, at: number): Promise<boolean>;
 }
 

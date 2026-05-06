@@ -118,6 +118,9 @@ export class InMemoryServerStorage implements ServerStorage {
       .filter((r) => r.username === username)
       .map((r) => ({ ...r }));
   }
+  async listAll() {
+    return [...this.byDomain.values()].map((r) => ({ ...r }));
+  }
   async revoke(serverDomain: string, reason: string, at: number) {
     const r = this.byDomain.get(serverDomain);
     if (!r) return false;

@@ -337,6 +337,12 @@ export class D1ServerStorage implements ServerStorage {
       .all<ServerRow>();
     return r.results.map(rowToServer);
   }
+  async listAll() {
+    const r = await this.db
+      .prepare("SELECT * FROM servers")
+      .all<ServerRow>();
+    return r.results.map(rowToServer);
+  }
   async revoke(serverDomain: string, reason: string, at: number) {
     const r = await this.db
       .prepare(

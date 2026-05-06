@@ -26,6 +26,7 @@ export interface ServerRegistry {
   put(reg: ServerRegistration): void;
   get(serverId: string): ServerRegistration | undefined;
   listForUser(userId: string): ServerRegistration[];
+  listAll(): ServerRegistration[];
   revoke(serverId: string, reason: "lost" | "stolen" | "decommissioned", at: number): boolean;
 }
 
@@ -43,6 +44,10 @@ export class InMemoryServerRegistry implements ServerRegistry {
 
   listForUser(userId: string): ServerRegistration[] {
     return [...this.byId.values()].filter((r) => r.userId === userId).map((r) => ({ ...r }));
+  }
+
+  listAll(): ServerRegistration[] {
+    return [...this.byId.values()].map((r) => ({ ...r }));
   }
 
   revoke(serverId: string, reason: "lost" | "stolen" | "decommissioned", at: number): boolean {
@@ -211,6 +216,16 @@ export function adaptServerRegistryToStorage(
     },
     async listForUser(username) {
       return reg.listForUser(username).map((r) => ({
+        serverDomain: r.serverId,
+        username: r.userId,
+        identityPubKeyHex: bytesToHex(r.stkPub),
+        registeredAt: r.registeredAt,
+        revokedAt: r.revokedAt,
+        revocationReason: r.revocationReason,
+      }));
+    },
+    async listAll() {
+      return reg.listAll().map((r) => ({
         serverDomain: r.serverId,
         username: r.userId,
         identityPubKeyHex: bytesToHex(r.stkPub),

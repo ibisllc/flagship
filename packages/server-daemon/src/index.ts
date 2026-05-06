@@ -1,4 +1,10 @@
 import { readFile } from "node:fs/promises";
+import {
+  ed,
+  signServerRevokeBySelf,
+  type Keypair,
+  type ServerRevokeBySelf,
+} from "@flagship/protocol";
 import { BackupLoop } from "./backupLoop.js";
 import { BootCoordinator } from "./bootCoordinator.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
@@ -109,10 +115,19 @@ async function main(): Promise<void> {
   // FLAGSHIP_PSK_PUB_HEX directly.
   const pskPubHex =
     process.env.FLAGSHIP_PSK_PUB_HEX ?? (await tryReadFile("/var/flagship/psk.pub.hex"));
+  const identityKeypair: Keypair = {
+    privateKey: identityPrivKey,
+    publicKey: ed.getPublicKey(identityPrivKey),
+  };
   const orders = pskPubHex
     ? {
         pskPub: hexToBytes(pskPubHex.trim()),
-        executor: defaultExecutor({ backupLoop }),
+        executor: defaultExecutor({
+          backupLoop,
+          identity: identityKeypair,
+          serverFqdn: env.serverFqdn!,
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+        }),
       }
     : undefined;
 
@@ -181,6 +196,9 @@ async function tryReadFile(path: string): Promise<string | null> {
 
 interface ExecutorDeps {
   backupLoop: BackupLoop | null;
+  identity: Keypair;
+  serverFqdn: string;
+  controlPlaneBaseUrl: string;
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -203,8 +221,17 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       console.log(`[daemon] order: shut-down — exiting in 1s`);
       setTimeout(() => process.exit(0), 1000);
     },
-    revokeSelf: ({ reason }) => {
-      console.log(`[daemon] order: revoke-self reason=${JSON.stringify(reason)} (TODO: notify .com)`);
+    revokeSelf: async ({ reason }) => {
+      console.log(`[daemon] order: revoke-self reason=${JSON.stringify(reason)}`);
+      try {
+        await postSelfRevoke(deps, reason);
+        console.log(`[daemon] revoke-self acknowledged by .com — exiting in 1s`);
+      } catch (e) {
+        console.error(
+          `[daemon] revoke-self failed to reach .com: ${(e as Error).message}; exiting anyway`,
+        );
+      }
+      setTimeout(() => process.exit(0), 1000);
     },
     rotateServerIdentity: ({ newIdentityPubKey }) => {
       const len = newIdentityPubKey.length;
@@ -215,6 +242,30 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       console.log(`[daemon] order: deliver-bak ${len}B (TODO: install at /var/flagship/bak.pub)`);
     },
   };
+}
+
+async function postSelfRevoke(deps: ExecutorDeps, reason: string): Promise<void> {
+  const issuedAt = Date.now();
+  const claim: ServerRevokeBySelf = { serverId: deps.serverFqdn, reason, issuedAt };
+  const sig = signServerRevokeBySelf(claim, deps.identity);
+  const url = `${deps.controlPlaneBaseUrl.replace(/\/+$/, "")}/api/server/by-domain/${encodeURIComponent(deps.serverFqdn)}/revoke`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      request: { serverId: deps.serverFqdn, reason, issuedAt },
+      signature: bytesToHexLocal(sig),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`revoke-self HTTP ${res.status} ${await res.text()}`);
+  }
+}
+
+function bytesToHexLocal(b: Uint8Array): string {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
 }
 
 function hexToBytes(hex: string): Uint8Array {

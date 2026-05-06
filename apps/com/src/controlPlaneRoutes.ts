@@ -9,6 +9,7 @@
  */
 
 import {
+  authorizeAdmin,
   caKeypairFromEnv,
   CloudflareDnsClient,
   handleAuthCodeIssue,
@@ -20,6 +21,7 @@ import {
   handleBuildTicketRedeem,
   handleBuildTicketRefresh,
   handleCaCert,
+  handleCleanupApex,
   handleConsumeUnlockKey,
   handleDepositUnlockKey,
   handleDns01Delete,
@@ -29,9 +31,11 @@ import {
   handlePutSealedLuksKey,
   handlePostInstallEvent,
   handleRegisterRck,
+  handleRepublishServerDns,
   handleRoutingLookup,
   handleServerLookup,
   handleServerRegister,
+  handleServerRevokeBySelf,
   handleSetRoutingTarget,
   handleUsernameClaim,
   handleUsernameLookup,
@@ -53,6 +57,8 @@ export interface ControlPlaneEnv {
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
+  /** Shared secret gating /api/admin/* operational endpoints. */
+  FLAGSHIP_ADMIN_SECRET?: string;
 }
 
 const ROUTE_RE = {
@@ -68,6 +74,7 @@ const ROUTE_RE = {
   BUILD_TICKET_LOOKUP: /^\/api\/build-tickets\/([^/]+)$/,
   SERVER_REGISTER: /^\/api\/server\/register$/,
   SERVER_LOOKUP: /^\/api\/server\/by-domain\/([^/]+)$/,
+  SERVER_REVOKE_BY_SELF: /^\/api\/server\/by-domain\/([^/]+)\/revoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
@@ -79,6 +86,8 @@ const ROUTE_RE = {
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
   LUKS_UNLOCK_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key$/,
   LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
+  ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
+  ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
 };
 
 export async function tryControlPlane(
@@ -208,6 +217,15 @@ export async function tryControlPlane(
       ),
     );
   }
+  if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_REVOKE_BY_SELF))) {
+    return finishPlain(
+      await handleServerRevokeBySelf(
+        { servers: storage.servers },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
 
   if (method === "GET" && (m = path.match(ROUTE_RE.PUBKEY_CERT))) {
     return finish(
@@ -315,6 +333,40 @@ export async function tryControlPlane(
         host,
         await readJson(request),
       ),
+    );
+  }
+
+  if (method === "POST" && (ROUTE_RE.ADMIN_REPUBLISH.test(path) || ROUTE_RE.ADMIN_CLEANUP_APEX.test(path))) {
+    const auth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (auth) return finishPlain(auth);
+    if (
+      !env.CLOUDFLARE_DNS_API_TOKEN ||
+      !env.CLOUDFLARE_SERVICES_ZONE_ID
+    ) {
+      return jsonResponse({ error: "DNS API not configured" }, 503);
+    }
+    const dns = new CloudflareDnsClient({
+      apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+      zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+    });
+    if (ROUTE_RE.ADMIN_REPUBLISH.test(path)) {
+      if (!env.SERVICES_PASSTHROUGH_IPV4) {
+        return jsonResponse({ error: "SERVICES_PASSTHROUGH_IPV4 not set" }, 503);
+      }
+      return finishPlain(
+        await handleRepublishServerDns({
+          servers: storage.servers,
+          dns,
+          servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
+          servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
+        }),
+      );
+    }
+    return finishPlain(
+      await handleCleanupApex({ dns, apex: "flagship.services" }),
     );
   }
 
