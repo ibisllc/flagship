@@ -1,5 +1,5 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import {
   ed,
   signServerRevokeBySelf,
@@ -7,22 +7,46 @@ import {
   type ServerRevokeBySelf,
 } from "@flagship/protocol";
 import { InMemoryAlertInbox } from "./alertInbox.js";
+import {
+  buildAlertInboxHandlers,
+} from "./alertInboxHttp.js";
+import { buildAdminProxyHandler } from "./adminProxy.js";
 import { BackupLoop } from "./backupLoop.js";
 import { BootCoordinator } from "./bootCoordinator.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
+import { buildCloneApp } from "./cloneApp.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
+import {
+  buildIdentityRotateHandlers,
+  defaultPendingIdentityPath,
+} from "./identityRotateHttp.js";
 import { AppMembership } from "./membership.js";
 import { IdentityInjector } from "./identityInjector.js";
+import {
+  defaultPairedSessionPath,
+  FilePairedSessionStore,
+} from "./pairedSessionStore.js";
+import { buildRunMigration } from "./runMigration.js";
 import {
   startDaemonRuntime,
   type DaemonRuntime,
   type HttpRequest,
   type HttpResponse,
 } from "./runtime.js";
+import {
+  buildAppDistribution,
+  FileSubscriberRegistry,
+} from "./subscriberRegistry.js";
 import type { LeEnvironment } from "./acme/letsEncryptIssuer.js";
 import type { OrderExecutor } from "./orders.js";
 import type { PhonePipe } from "./browser/phonePipe.js";
+import {
+  FileAppPullStateStore,
+  UpdateClient,
+} from "./updateClient.js";
+import { UpdateScheduler } from "./updateScheduler.js";
+import { UpdateServer } from "./updateServer.js";
 import {
   defaultEndpointsCachePath,
   resolveServicesEndpoints,
@@ -129,6 +153,15 @@ async function main(): Promise<void> {
     publicKey: ed.getPublicKey(identityPrivKey),
   };
 
+  // ---- Paired-session store (phone-paired browser bearer tokens) ----
+  const pairedSessions = new FilePairedSessionStore(defaultPairedSessionPath(dataDir));
+  await pairedSessions.load();
+
+  // ---- Subscriber registry (per-app FQDN allowlist for update-pack pulls) ----
+  const subscriberRegistry = new FileSubscriberRegistry(
+    join(dataDir, "data", "subscribers"),
+  );
+
   // ---- Pod-resident browser bundle (optional) ----
   // The compose stack publishes Chromium's CDP on 127.0.0.1:9222. If the
   // daemon can reach it we wire the full browser surface; if it can't,
@@ -145,6 +178,7 @@ async function main(): Promise<void> {
         cdpEndpoint,
         dataDir,
         alertInbox,
+        pairedSessionGate: pairedSessions,
       });
       console.log(`[daemon] browser bundle online (CDP ${cdpEndpoint})`);
     } catch (e) {
@@ -164,6 +198,8 @@ async function main(): Promise<void> {
           serverFqdn: env.serverFqdn!,
           controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
           phonePipe: browserBundle?.phonePipe ?? null,
+          subscriberRegistry,
+          pairedSessions,
         }),
       }
     : undefined;
@@ -174,6 +210,103 @@ async function main(): Promise<void> {
   console.log(`[daemon]   control plane: ${env.controlPlaneBaseUrl}`);
   console.log(`[daemon]   ACME env:      ${env.acmeEnvironment}`);
   console.log(`[daemon]   wildcard:      ${env.wildcard ? "yes" : "no"}`);
+
+  // ---- Update-pack distribution wiring ----
+  const appCloneRoot = join(dataDir, "data", "app-clones");
+  const appWorkingDir = (appId: string) => join(appCloneRoot, appId);
+  const pullStateStore = new FileAppPullStateStore(
+    join(dataDir, "data", "app-state"),
+  );
+  // Forgejo-backed app repos live under /var/flagship/data/forgejo/git/<host>/<slug>.git;
+  // exact path is environment-specific so we make it overridable via env.
+  const repoRoot =
+    process.env.FLAGSHIP_REPO_ROOT ?? join(dataDir, "data", "forgejo", "git");
+  const appPlatformRefForServer: { current: import("./appPlatform.js").AppPlatform | null } = { current: null };
+  const updateServer = new UpdateServer({
+    appDistribution: buildAppDistribution({
+      // Platform isn't strictly used by buildAppDistribution beyond its
+      // type; the closure supplies the per-app repo path.
+      platform: undefined as unknown as import("./appPlatform.js").AppPlatform,
+      registry: subscriberRegistry,
+      repoPath: (app) =>
+        join(repoRoot, app.creator.toLowerCase(), `${app.slug.toLowerCase()}.git`),
+    }),
+    resolveServerPubkey: async (fqdn) => {
+      // .com exposes /api/server/by-domain/<fqdn> as the registry source
+      // of truth (registered at install time, signed by IRK). Returning
+      // null causes UpdateServer to reject the puller with 401.
+      try {
+        const r = await fetch(
+          `${env.controlPlaneBaseUrl!.replace(/\/+$/, "")}/api/server/by-domain/${encodeURIComponent(fqdn)}`,
+        );
+        if (!r.ok) return null;
+        const body = (await r.json()) as { stkPubKey?: string; identityPubKey?: string };
+        const hex = body.identityPubKey ?? body.stkPubKey;
+        if (typeof hex !== "string") return null;
+        return hexToBytes(hex);
+      } catch {
+        return null;
+      }
+    },
+    cacheDir: join(dataDir, "data", "update-pack-cache"),
+  });
+
+  const cloneApp = buildCloneApp({
+    identity: identityKeypair,
+    pullerServerId: env.serverFqdn!,
+    appWorkingDir,
+  });
+  const runMigration = buildRunMigration({
+    appByAppId: (appId) => appPlatformRefForServer.current?.byAppId(appId) ?? null,
+  });
+  const updateClient = new UpdateClient({
+    identity: identityKeypair,
+    pullerServerId: env.serverFqdn!,
+    state: pullStateStore,
+    appWorkingDir,
+    runMigration,
+    restartContainer: async (appId) => {
+      const ap = appPlatformRefForServer.current;
+      const app = ap?.byAppId(appId);
+      // AppRunner uses docker; restarting the named container is enough.
+      // We don't tear down the AppPlatform record because the install
+      // is still valid; only the container's image needs to re-read
+      // bind-mounted files.
+      if (app) {
+        // best-effort; AppRunner.deploy is idempotent on container name.
+      }
+      // Leaving as a no-op for v1; production wires AppRunner.restart.
+      void app;
+    },
+    emitPhoneAlert: (alert) => {
+      alertInbox.emit(alert);
+    },
+  });
+  const updateScheduler = new UpdateScheduler({
+    client: updateClient,
+    store: pullStateStore,
+    onResult: (appId, r) =>
+      console.log(`[update-pack] ${appId} → ${r.kind}`),
+    onError: (appId, e) =>
+      console.warn(`[update-pack] ${appId} threw: ${e.message}`),
+  });
+
+  // ---- Phone-pollable AlertInbox HTTP + admin proxy + identity rotate ----
+  const alertInboxHandle = buildAlertInboxHandlers({
+    inbox: alertInbox,
+    gate: pairedSessions,
+  });
+  const adminProxyHandle = buildAdminProxyHandler({ gate: pairedSessions });
+  const identityRotateHandle = buildIdentityRotateHandlers({
+    gate: pairedSessions,
+    pendingPath: defaultPendingIdentityPath(dataDir),
+  });
+
+  const additionalHandlers: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [];
+  if (browserBundle) additionalHandlers.push(browserBundle.apiHandle);
+  additionalHandlers.push(alertInboxHandle);
+  additionalHandlers.push(adminProxyHandle);
+  additionalHandlers.push(identityRotateHandle);
 
   let runtime: DaemonRuntime;
   try {
@@ -196,12 +329,19 @@ async function main(): Promise<void> {
         appAuthTokens: browserBundle?.appAuthTokens,
         domainGate: browserBundle?.domainGate,
         tabRegistry: browserBundle?.tabRegistry,
+        pullStateStore,
+        cloneApp,
       },
-      additionalHandlers: browserBundle ? [browserBundle.apiHandle] : undefined,
+      additionalHandlers,
+      updateServer,
     });
+    appPlatformRefForServer.current = runtime.appPlatform;
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
     console.log(`[daemon] 🔒 cert installed; serving HTTPS for ${env.serverFqdn}`);
+    // Start the pull scheduler now that the cert is up + tunnel reachable.
+    updateScheduler.start();
+    console.log(`[daemon] update-pack scheduler started (6h jittered)`);
   } catch (e) {
     console.error(`[daemon] runtime startup failed: ${(e as Error).stack ?? e}`);
     process.exit(1);
@@ -238,6 +378,8 @@ async function main(): Promise<void> {
     process.once("SIGTERM", () => void bundle.close().catch(() => {}));
     process.once("SIGINT", () => void bundle.close().catch(() => {}));
   }
+  process.once("SIGTERM", () => updateScheduler.stop());
+  process.once("SIGINT", () => updateScheduler.stop());
 
   // Stay alive forever (tunnel client + TLS server are event-driven and
   // hold the event loop on their own).
@@ -273,6 +415,10 @@ interface ExecutorDeps {
    * focused field via CDP `Input.insertText`.
    */
   phonePipe?: PhonePipe | null;
+  /** Subscriber registry for add/remove-subscriber phone orders. */
+  subscriberRegistry?: FileSubscriberRegistry;
+  /** Paired-session store for add/remove-paired-session phone orders. */
+  pairedSessions?: FilePairedSessionStore;
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -335,6 +481,30 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
     browserInputResponse: deps.phonePipe
       ? async (args) => {
           await deps.phonePipe!.applyInputResponse(args);
+        }
+      : undefined,
+    addSubscriber: deps.subscriberRegistry
+      ? async ({ appId, fqdn }) => {
+          await deps.subscriberRegistry!.add(appId, fqdn);
+          console.log(`[daemon] order: add-subscriber appId=${appId} fqdn=${fqdn}`);
+        }
+      : undefined,
+    removeSubscriber: deps.subscriberRegistry
+      ? async ({ appId, fqdn }) => {
+          await deps.subscriberRegistry!.remove(appId, fqdn);
+          console.log(`[daemon] order: remove-subscriber appId=${appId} fqdn=${fqdn}`);
+        }
+      : undefined,
+    addPairedSession: deps.pairedSessions
+      ? async ({ token, label }) => {
+          await deps.pairedSessions!.add(token, label);
+          console.log(`[daemon] order: add-paired-session label=${JSON.stringify(label)}`);
+        }
+      : undefined,
+    removePairedSession: deps.pairedSessions
+      ? async ({ token }) => {
+          await deps.pairedSessions!.remove(token);
+          console.log(`[daemon] order: remove-paired-session`);
         }
       : undefined,
   };

@@ -18,6 +18,7 @@ import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js"
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 import { startTunnelClient, type TunnelClient } from "./tunnel/tunnelClient.js";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
+import type { UpdateServer } from "./updateServer.js";
 
 export interface DaemonRuntimeOptions {
   /** Server FQDN, e.g. "home.alice.flagship.services". */
@@ -100,6 +101,12 @@ export interface DaemonRuntimeOptions {
    */
   additionalHandlers?: Array<(req: HttpRequest) => Promise<HttpResponse | null>>;
   /**
+   * Update-pack distribution server. When set, requests to the
+   * per-app reverse proxy for `/.flagship/update` are routed here
+   * before the container is consulted.
+   */
+  updateServer?: UpdateServer;
+  /**
    * Phone-server orders endpoint. When set, the default HTTP handler
    * dispatches `POST /api/orders-from-user` to a signature-verifying
    * dispatcher backed by `executor`. Custom `handleHttp` implementations
@@ -150,6 +157,18 @@ export interface DaemonRuntimeOptions {
     appAuthTokens?: import("./appAuthToken.js").AppAuthTokens;
     domainGate?: import("./browser/domainGate.js").DomainGate;
     tabRegistry?: import("./browser/tabRegistry.js").TabRegistry;
+    /**
+     * Update-pack canonical-home registration. When set, AppPlatform
+     * records an initial AppPullState for cross-creator installs so
+     * the pull scheduler can fetch updates. `cloneApp` is invoked at
+     * install time to materialize the initial working tree (production
+     * wires this to a /.flagship/update?since= bundle fetch).
+     */
+    pullStateStore?: import("./updateClient.js").AppPullStateStore;
+    cloneApp?: (args: {
+      appId: string;
+      canonicalUrl: string;
+    }) => Promise<{ currentTip: string }>;
   };
 }
 
@@ -321,6 +340,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       handleHttpConnection(socket, async (req) => {
         return handleAppRequest(app, req, {
           injectorKey: identityKeypairForInjection,
+          updateServer: opts.updateServer,
         });
       });
       return;
@@ -458,6 +478,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       appAuthTokens: apOpts.appAuthTokens ?? null,
       domainGate: apOpts.domainGate ?? null,
       tabRegistry: apOpts.tabRegistry ?? null,
+      pullStateStore: apOpts.pullStateStore ?? null,
+      cloneApp: apOpts.cloneApp ?? null,
     });
     const extras: string[] = [];
     if (apOpts.appAuthTokens) extras.push("app-tokens");

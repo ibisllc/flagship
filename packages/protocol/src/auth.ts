@@ -1004,6 +1004,48 @@ export type PhoneOrder =
       value: string;
       screenshotRef: string;
       issuedAt: number;
+    }
+  | {
+      /**
+       * Add an FQDN to an app's update-pack subscriber list. Affects
+       * `/.flagship/update`'s authorization check the next time the
+       * named subscriber pulls. `fqdn` is normalized to lowercase by
+       * the daemon.
+       */
+      type: "add-subscriber";
+      serverId: ServerId;
+      appId: string;
+      fqdn: string;
+      issuedAt: number;
+    }
+  | {
+      type: "remove-subscriber";
+      serverId: ServerId;
+      appId: string;
+      fqdn: string;
+      issuedAt: number;
+    }
+  | {
+      /**
+       * Mint a paired-session token. The phone supplies the token bytes
+       * (random 32 bytes is the usual choice — typed as hex) and the
+       * daemon stores it in its PairedSessionStore so subsequent calls
+       * carrying `Authorization: Flagship-Session <token>` are accepted.
+       *
+       * `label` is a human-readable name the host can use to revoke a
+       * specific paired browser later (e.g. "Harry's iPhone").
+       */
+      type: "add-paired-session";
+      serverId: ServerId;
+      token: string;
+      label: string;
+      issuedAt: number;
+    }
+  | {
+      type: "remove-paired-session";
+      serverId: ServerId;
+      token: string;
+      issuedAt: number;
     };
 
 const TAG_ORDER_NOOP = "flagship/order/noop/v1";
@@ -1013,6 +1055,10 @@ const TAG_ORDER_REVOKE_SELF = "flagship/order/revoke-self/v1";
 const TAG_ORDER_ROTATE_IDENTITY = "flagship/order/rotate-server-identity/v1";
 const TAG_ORDER_DELIVER_BAK = "flagship/order/deliver-bak/v1";
 const TAG_ORDER_BROWSER_INPUT = "flagship/order/browser-input-response/v1";
+const TAG_ORDER_ADD_SUBSCRIBER = "flagship/order/add-subscriber/v1";
+const TAG_ORDER_REMOVE_SUBSCRIBER = "flagship/order/remove-subscriber/v1";
+const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v1";
+const TAG_ORDER_REMOVE_PAIRED_SESSION = "flagship/order/remove-paired-session/v1";
 
 function canonicalPhoneOrder(o: PhoneOrder): Bytes {
   const enc = new TextEncoder();
@@ -1046,6 +1092,22 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
           o.screenshotRef,
           o.issuedAt,
         ].join("|"),
+      );
+    case "add-subscriber":
+      return enc.encode(
+        [TAG_ORDER_ADD_SUBSCRIBER, o.serverId, o.appId, o.fqdn, o.issuedAt].join("|"),
+      );
+    case "remove-subscriber":
+      return enc.encode(
+        [TAG_ORDER_REMOVE_SUBSCRIBER, o.serverId, o.appId, o.fqdn, o.issuedAt].join("|"),
+      );
+    case "add-paired-session":
+      return enc.encode(
+        [TAG_ORDER_ADD_PAIRED_SESSION, o.serverId, o.token, o.label, o.issuedAt].join("|"),
+      );
+    case "remove-paired-session":
+      return enc.encode(
+        [TAG_ORDER_REMOVE_PAIRED_SESSION, o.serverId, o.token, o.issuedAt].join("|"),
       );
   }
 }

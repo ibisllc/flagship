@@ -272,4 +272,87 @@ describe("orders-from-user handler", () => {
     const body = JSON.parse(String(r.body));
     expect(body.error).toBe("invalid signature");
   });
+
+  it("dispatches add-subscriber with appId + fqdn", async () => {
+    const psk = makeKey();
+    const calls: Array<{ appId: string; fqdn: string }> = [];
+    const ex: OrderExecutor = {
+      addSubscriber: (a) => {
+        calls.push(a);
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "add-subscriber",
+      serverId: SERVER_FQDN,
+      appId: "alice--game1",
+      fqdn: "home.bob.flagship.services",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual([{ appId: "alice--game1", fqdn: "home.bob.flagship.services" }]);
+  });
+
+  it("dispatches remove-subscriber", async () => {
+    const psk = makeKey();
+    const calls: Array<{ appId: string; fqdn: string }> = [];
+    const ex: OrderExecutor = {
+      removeSubscriber: (a) => {
+        calls.push(a);
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "remove-subscriber",
+      serverId: SERVER_FQDN,
+      appId: "alice--game1",
+      fqdn: "home.bob.flagship.services",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("dispatches add-paired-session with token + label", async () => {
+    const psk = makeKey();
+    const calls: Array<{ token: string; label: string }> = [];
+    const ex: OrderExecutor = {
+      addPairedSession: (a) => {
+        calls.push(a);
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "add-paired-session",
+      serverId: SERVER_FQDN,
+      token: "a".repeat(64),
+      label: "Harry's iPhone",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls[0]?.label).toBe("Harry's iPhone");
+  });
+
+  it("dispatches remove-paired-session", async () => {
+    const psk = makeKey();
+    const calls: Array<{ token: string }> = [];
+    const ex: OrderExecutor = {
+      removePairedSession: (a) => {
+        calls.push(a);
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "remove-paired-session",
+      serverId: SERVER_FQDN,
+      token: "b".repeat(64),
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toHaveLength(1);
+  });
 });

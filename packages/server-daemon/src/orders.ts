@@ -44,6 +44,10 @@ export interface OrderExecutor {
     value: string;
     screenshotRef: string;
   }): Promise<void> | void;
+  addSubscriber?(args: { appId: string; fqdn: string }): Promise<void> | void;
+  removeSubscriber?(args: { appId: string; fqdn: string }): Promise<void> | void;
+  addPairedSession?(args: { token: string; label: string }): Promise<void> | void;
+  removePairedSession?(args: { token: string }): Promise<void> | void;
 }
 
 export interface OrdersHandlerOptions {
@@ -185,6 +189,41 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
         issuedAt: r.issuedAt,
       };
     }
+    case "add-subscriber":
+      if (typeof r.appId !== "string" || typeof r.fqdn !== "string") return null;
+      return {
+        type: "add-subscriber",
+        serverId: r.serverId,
+        appId: r.appId,
+        fqdn: r.fqdn,
+        issuedAt: r.issuedAt,
+      };
+    case "remove-subscriber":
+      if (typeof r.appId !== "string" || typeof r.fqdn !== "string") return null;
+      return {
+        type: "remove-subscriber",
+        serverId: r.serverId,
+        appId: r.appId,
+        fqdn: r.fqdn,
+        issuedAt: r.issuedAt,
+      };
+    case "add-paired-session":
+      if (typeof r.token !== "string" || typeof r.label !== "string") return null;
+      return {
+        type: "add-paired-session",
+        serverId: r.serverId,
+        token: r.token,
+        label: r.label,
+        issuedAt: r.issuedAt,
+      };
+    case "remove-paired-session":
+      if (typeof r.token !== "string") return null;
+      return {
+        type: "remove-paired-session",
+        serverId: r.serverId,
+        token: r.token,
+        issuedAt: r.issuedAt,
+      };
     default:
       return null;
   }
@@ -223,6 +262,22 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
         value: order.value,
         screenshotRef: order.screenshotRef,
       });
+      return;
+    case "add-subscriber":
+      if (!ex.addSubscriber) throw new Error("addSubscriber not implemented");
+      await ex.addSubscriber({ appId: order.appId, fqdn: order.fqdn });
+      return;
+    case "remove-subscriber":
+      if (!ex.removeSubscriber) throw new Error("removeSubscriber not implemented");
+      await ex.removeSubscriber({ appId: order.appId, fqdn: order.fqdn });
+      return;
+    case "add-paired-session":
+      if (!ex.addPairedSession) throw new Error("addPairedSession not implemented");
+      await ex.addPairedSession({ token: order.token, label: order.label });
+      return;
+    case "remove-paired-session":
+      if (!ex.removePairedSession) throw new Error("removePairedSession not implemented");
+      await ex.removePairedSession({ token: order.token });
       return;
   }
 }
