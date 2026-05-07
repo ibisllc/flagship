@@ -1674,3 +1674,121 @@ export function verifyAliasRelease(r: AliasReleaseRequest, sig: Bytes, irkPub: B
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// ClaimUrlCapability — phone-issued, IRK-signed authorization for a
+// specific app instance to claim a specific FQDN.
+//
+// The harness's `/api/url/claim` endpoint MUST enforce that all three
+// of (appId, siblingId, fqdn) match the calling instance. The capability
+// alone is not a bearer token: it is a stored authorization the daemon
+// looks up by tuple. Possession of the capability bytes does not grant
+// claiming rights — only their presence in the daemon's capability store
+// for the calling (appId, siblingId, fqdn) tuple does.
+//
+// Why username on the capability: makes verification self-contained
+// against the user's registered IRK pubkey.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface ClaimUrlCapability {
+  username: string;
+  appId: string;
+  siblingId: ServerId;
+  /** Lower-cased FQDN — the URL this capability authorizes claiming. */
+  fqdn: string;
+  /** ms since epoch when the capability was minted. */
+  issuedAt: number;
+  /** ms since epoch after which the capability is invalid. */
+  expiresAt: number;
+}
+
+const TAG_CLAIM_URL_CAP = "flagship/claim-url-capability/v1";
+
+function canonicalClaimUrlCapability(c: ClaimUrlCapability): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_CLAIM_URL_CAP,
+      c.username,
+      c.appId,
+      c.siblingId,
+      c.fqdn,
+      c.issuedAt,
+      c.expiresAt,
+    ].join("|"),
+  );
+}
+
+export function signClaimUrlCapability(c: ClaimUrlCapability, irk: Keypair): Bytes {
+  return ed.sign(canonicalClaimUrlCapability(c), irk.privateKey);
+}
+
+export function verifyClaimUrlCapability(
+  c: ClaimUrlCapability,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalClaimUrlCapability(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stable identifier for a capability — deterministic SHA-256 over the
+ * canonical bytes, lower-cased hex. Used as the lookup key in the
+ * daemon's capability store and on the revocation list.
+ */
+export async function claimUrlCapabilityId(c: ClaimUrlCapability): Promise<string> {
+  const bytes = canonicalClaimUrlCapability(c);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return hex(new Uint8Array(digest));
+}
+
+/**
+ * Phone-signed revocation list for a user. The phone broadcasts this on
+ * change; daemons cache it with a TTL (default 60s) and refuse to honor
+ * any capability whose `id` (canonical-SHA-256 hex) appears in the list.
+ *
+ * `issuedAt` lets the daemon discard older lists when a newer one
+ * arrives (monotonic).
+ */
+export interface ClaimUrlCapabilityRevocationList {
+  username: string;
+  capabilityIds: string[];
+  issuedAt: number;
+}
+
+const TAG_CLAIM_URL_CAP_REVOKE = "flagship/claim-url-capability-revoke/v1";
+
+function canonicalClaimUrlCapabilityRevocationList(
+  r: ClaimUrlCapabilityRevocationList,
+): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_CLAIM_URL_CAP_REVOKE,
+      r.username,
+      r.capabilityIds.join(","),
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signClaimUrlCapabilityRevocationList(
+  r: ClaimUrlCapabilityRevocationList,
+  irk: Keypair,
+): Bytes {
+  return ed.sign(canonicalClaimUrlCapabilityRevocationList(r), irk.privateKey);
+}
+
+export function verifyClaimUrlCapabilityRevocationList(
+  r: ClaimUrlCapabilityRevocationList,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalClaimUrlCapabilityRevocationList(r), irkPub);
+  } catch {
+    return false;
+  }
+}
