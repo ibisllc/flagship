@@ -12,33 +12,65 @@ import {
   helloAckFrame,
   type Frame,
 } from "@flagship/tunnel-protocol";
-import { verifyTunnelHello, type Bytes } from "@flagship/protocol";
+import {
+  appEntitlementCertId,
+  rootEntitlementCertId,
+  verifyAppEntitlement,
+  verifyRootEntitlement,
+  verifyTunnelHelloV2,
+  type AppEntitlement,
+  type Bytes,
+  type RootEntitlement,
+  type TunnelHelloV2,
+} from "@flagship/protocol";
 import type { RegisteredTunnel, StreamCallbacks, TunnelRegistry } from "./registry.js";
 
 const TUNNEL_PATH = "/tunnel";
 
 export interface TunnelAuthLookup {
-  /** Returns the server's registered STK (Server Tunnel Key) pubkey, or null if unknown. */
+  /**
+   * Look up a server's registered tunnel-auth (STK) pubkey. Returns
+   * null if the server is unknown / revoked.
+   */
   (serverId: string): Bytes | null | Promise<Bytes | null>;
+}
+
+export interface IrkLookup {
+  /**
+   * Look up a username's registered IRK pubkey. Used to verify
+   * entitlement-cert signatures. Returns null if the username isn't
+   * registered with .com.
+   */
+  (username: string): Bytes | null | Promise<Bytes | null>;
 }
 
 export interface TunnelHubOptions {
   /**
-   * Look up a server's registered tunnel-auth pubkey. Required in production;
-   * tests may pass a closure that maps known serverIds to known pubkeys.
+   * Required in production: lets the hub verify the STK signature on
+   * the HELLO envelope against .com's registered server identity.
+   * Tests may pass a closure mapping serverIds → STK pubkeys.
    *
-   * If omitted, HELLO signature verification is SKIPPED — only safe for v0
-   * dev environments. A WARN is logged in that case.
+   * If omitted, STK signature verification is SKIPPED (v0 dev only).
    */
   authLookup?: TunnelAuthLookup;
+  /**
+   * Required in production: lets the hub verify the IRK signature on
+   * each entitlement cert. Tests pass a static map.
+   *
+   * If omitted, IRK verification is SKIPPED (v0 dev only).
+   */
+  irkLookup?: IrkLookup;
+  /**
+   * Optional: list of revoked entitlement cert ids per user. Hub
+   * fetches via this callback (caller caches with TTL) on every HELLO.
+   * Returning null means "couldn't fetch — accept anyway" (fail-open
+   * to avoid bricking pods on a transient .com outage). Returning
+   * an empty Set means "definitely empty list."
+   */
+  revocationLookup?: (username: string) => Promise<Set<string> | null>;
   /** Reject HELLOs whose issuedAt is older than this. Default 5 min. */
   maxHelloAgeMs?: number;
-  /**
-   * Idle close timeout. When a HELLO update leaves the tunnel's
-   * controlledDomains list empty, the hub waits this long before
-   * closing the WS. A non-empty HELLO arriving in the window cancels.
-   * Default 60s.
-   */
+  /** Idle close: empty state on hello → close after this many ms. Default 60s. */
   idleCloseMs?: number;
   now?: () => number;
 }
@@ -55,7 +87,12 @@ export function startTunnelHub(
   const wss = new WebSocketServer({ noServer: true });
   if (!opts.authLookup) {
     console.warn(
-      "[flagship tunnel hub] no authLookup provided — HELLO signatures will not be verified. v0 dev only.",
+      "[flagship tunnel hub] no authLookup — STK signatures will not be verified. v0 dev only.",
+    );
+  }
+  if (!opts.irkLookup) {
+    console.warn(
+      "[flagship tunnel hub] no irkLookup — entitlement-cert signatures will not be verified. v0 dev only.",
     );
   }
 
@@ -77,7 +114,6 @@ function attachTunnel(
   opts: TunnelHubOptions,
 ): void {
   let registered: RegisteredTunnel | null = null;
-  /** Issued-at of the last accepted HELLO; subsequent ones must be newer. */
   let lastHelloIssuedAt = 0;
   let nextStream = 1;
   const streams = new Map<number, StreamCallbacks>();
@@ -95,10 +131,9 @@ function attachTunnel(
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       idleTimer = null;
-      ws.close(1000, "controlledDomains empty for idle window");
+      ws.close(1000, "no canonicals after register");
     }, idleCloseMs);
   };
-
   const cancelIdleClose = () => {
     if (idleTimer) {
       clearTimeout(idleTimer);
@@ -136,61 +171,18 @@ function attachTunnel(
 
   ws.on("close", () => {
     cancelIdleClose();
-    if (registered) registry.unregister(registered.serverId);
+    if (registered) {
+      const result = registry.unregister(registered.podCanonical);
+      // Re-broadcast snapshots to every set affected by the removal.
+      for (const key of result.affectedSets) {
+        broadcastSnapshot(registry, key);
+      }
+    }
     for (const cb of streams.values()) cb.onRemoteClose();
     streams.clear();
   });
 
-  ws.on("error", () => {
-    /* swallow; close handler does cleanup */
-  });
-
-  async function authenticateHello(
-    helloOk: HelloPayload,
-  ): Promise<{ ok: true } | { ok: false; reason: string; closeCode: number }> {
-    const age = now() - helloOk.issuedAt;
-    if (age > maxHelloAgeMs || age < -60_000) {
-      return { ok: false, reason: "HELLO issuedAt is stale or too far in the future", closeCode: 1008 };
-    }
-    if (helloOk.issuedAt <= lastHelloIssuedAt) {
-      // Replay defense — issuedAt must increase per WS.
-      return {
-        ok: false,
-        reason: "HELLO issuedAt did not advance (replay?)",
-        closeCode: 1008,
-      };
-    }
-    const podUsername = extractMiddleLabel(helloOk.serverId);
-    if (!podUsername) {
-      return { ok: false, reason: "HELLO.serverId does not match <server>.<user>.flagship.services", closeCode: 1002 };
-    }
-    for (const fqdn of helloOk.controlledDomains) {
-      const owner = ownerOfFqdn(fqdn);
-      if (owner !== podUsername) {
-        return {
-          ok: false,
-          reason: `HELLO.controlledDomains[${JSON.stringify(fqdn)}] is not under user ${podUsername}'s zone`,
-          closeCode: 1008,
-        };
-      }
-    }
-    if (opts.authLookup) {
-      const stkPub = await opts.authLookup(helloOk.serverId);
-      if (!stkPub) {
-        return { ok: false, reason: "serverId is not registered with the control plane", closeCode: 1008 };
-      }
-      const helloRecord = {
-        serverId: helloOk.serverId,
-        controlledDomains: helloOk.controlledDomains,
-        nonce: helloOk.nonce,
-        issuedAt: helloOk.issuedAt,
-      };
-      if (!verifyTunnelHello(helloRecord, helloOk.signature, stkPub)) {
-        return { ok: false, reason: "HELLO signature failed verification", closeCode: 1008 };
-      }
-    }
-    return { ok: true };
-  }
+  ws.on("error", () => { /* close handler does cleanup */ });
 
   async function handleFrame(f: Frame): Promise<void> {
     if (!registered) {
@@ -205,81 +197,71 @@ function attachTunnel(
         ws.close(1002, "bad HELLO");
         return;
       }
-
-      const auth = await authenticateHello(helloOk);
+      const auth = await authenticateHello(helloOk, opts, now, maxHelloAgeMs);
       if (!auth.ok) {
         send(helloAckFrame(false, auth.reason));
         ws.close(auth.closeCode, "auth failed");
         return;
       }
-
-      const tunnel: RegisteredTunnel = {
-        serverId: helloOk.serverId,
-        controlledDomains: helloOk.controlledDomains,
-        send,
-        attachStream(streamId, cbs) {
-          streams.set(streamId, cbs);
-        },
-        detachStream(streamId) {
-          streams.delete(streamId);
-        },
-        nextStreamId() {
-          return nextStream++;
-        },
-      };
-      const reg = registry.register(tunnel);
-      for (const t of reg.takeovers) {
-        console.log(
-          `[tunnel hub] takeover: ${t.fqdn} from ${t.previousServerId} → ${tunnel.serverId}`,
-        );
+      // Build the canonical list from the validated entitlements.
+      const canonicals: string[] = [helloOk.rootEntitlement.podCanonical];
+      if (helloOk.appEntitlement) {
+        for (const c of helloOk.appEntitlement.canonicals) canonicals.push(c);
       }
+      const tunnel: RegisteredTunnel = {
+        podCanonical: helloOk.rootEntitlement.podCanonical.toLowerCase(),
+        send,
+        attachStream: (id, cb) => streams.set(id, cb),
+        detachStream: (id) => streams.delete(id),
+        nextStreamId: () => nextStream++,
+      };
+      const reg = registry.register({ tunnel, canonicals });
       registered = tunnel;
       lastHelloIssuedAt = helloOk.issuedAt;
-      // Announce every fqdn this tunnel now owns to ALL connected
-      // tunnels (including itself) so apps can react. Domain grants
-      // never happen silently.
-      broadcastDomainGrants(registry, tunnel.serverId, helloOk.controlledDomains);
-      if (helloOk.controlledDomains.length === 0) armIdleClose();
       send(helloAckFrame(true));
+      // Broadcast a fresh snapshot to every affected set so all
+      // currently-connected pods learn about the new arrival.
+      for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
+      if (canonicals.length === 0) armIdleClose();
       return;
     }
 
     if (f.type === FRAME_HELLO) {
       // HELLO update on a registered tunnel: re-authenticate, then
-      // atomically replace the controlledDomains list.
+      // refresh the pod's canonicals via the allocator (idempotent
+      // when nothing changed; allocates new canonicals when the cert
+      // grew, drops on shrink).
       const helloOk = parseHello(f.payload);
       if (!helloOk.ok) {
         send(helloAckFrame(false, helloOk.reason));
         return;
       }
-      if (helloOk.serverId !== registered.serverId) {
-        send(helloAckFrame(false, "HELLO serverId changed mid-WS"));
-        ws.close(1008, "serverId changed");
+      if (
+        helloOk.rootEntitlement.podCanonical.toLowerCase() !== registered.podCanonical
+      ) {
+        send(helloAckFrame(false, "HELLO podCanonical changed mid-WS"));
+        ws.close(1008, "podCanonical changed");
         return;
       }
-      const auth = await authenticateHello(helloOk);
+      if (helloOk.issuedAt <= lastHelloIssuedAt) {
+        send(helloAckFrame(false, "HELLO issuedAt did not advance (replay?)"));
+        return;
+      }
+      const auth = await authenticateHello(helloOk, opts, now, maxHelloAgeMs);
       if (!auth.ok) {
         send(helloAckFrame(false, auth.reason));
-        // Don't close the WS; just refuse the update so the daemon can
-        // retry. Hard rejections fold into close on the very next bad
-        // HELLO via the freshness/identity invariants.
         return;
       }
-      const result = registry.replaceClaims(registered, helloOk.controlledDomains);
-      for (const t of result.takeovers) {
-        console.log(
-          `[tunnel hub] takeover: ${t.fqdn} from ${t.previousServerId} → ${registered.serverId}`,
-        );
+      const canonicals: string[] = [helloOk.rootEntitlement.podCanonical];
+      if (helloOk.appEntitlement) {
+        for (const c of helloOk.appEntitlement.canonicals) canonicals.push(c);
       }
+      const reg = registry.register({ tunnel: registered, canonicals });
       lastHelloIssuedAt = helloOk.issuedAt;
-      // Announce every fqdn now owned by this tunnel after the update.
-      // We broadcast the full set rather than just the delta so a tunnel
-      // that joined recently and missed prior grants still observes the
-      // current ownership state on the next update.
-      broadcastDomainGrants(registry, registered.serverId, helloOk.controlledDomains);
-      if (helloOk.controlledDomains.length === 0) armIdleClose();
-      else cancelIdleClose();
       send(helloAckFrame(true));
+      for (const key of reg.affectedSets) broadcastSnapshot(registry, key);
+      if (canonicals.length === 0) armIdleClose();
+      else cancelIdleClose();
       return;
     }
 
@@ -294,19 +276,23 @@ function attachTunnel(
       streams.delete(f.streamId);
       return;
     }
-    // Unexpected control frame from client side; ignore.
   }
 }
 
-interface HelloPayload {
+interface ParsedHelloV2 {
   serverId: string;
-  controlledDomains: string[];
-  nonce: Uint8Array;
+  rootEntitlement: RootEntitlement;
+  rootEntitlementSig: Bytes;
+  rootEntitlementCertId: string;
+  appEntitlement: AppEntitlement | null;
+  appEntitlementSig: Bytes | null;
+  appEntitlementCertId: string;
+  nonce: Bytes;
   issuedAt: number;
-  signature: Uint8Array;
+  signature: Bytes;
 }
 
-type HelloParse = ({ ok: true } & HelloPayload) | { ok: false; reason: string };
+type HelloParse = ({ ok: true } & ParsedHelloV2) | { ok: false; reason: string };
 
 function parseHello(payload: Uint8Array): HelloParse {
   let obj: unknown;
@@ -317,45 +303,228 @@ function parseHello(payload: Uint8Array): HelloParse {
   }
   if (typeof obj !== "object" || obj === null) return { ok: false, reason: "HELLO not object" };
   const o = obj as Record<string, unknown>;
-  if (typeof o.serverId !== "string" || o.serverId.length === 0) {
+  if (o.version !== 2) return { ok: false, reason: "HELLO version must be 2" };
+  if (typeof o.serverId !== "string" || !o.serverId.length) {
     return { ok: false, reason: "HELLO.serverId missing" };
-  }
-  if (!Array.isArray(o.controlledDomains)) {
-    return { ok: false, reason: "HELLO.controlledDomains missing" };
-  }
-  const sds: string[] = [];
-  for (const sd of o.controlledDomains) {
-    if (typeof sd !== "string" || sd.length === 0 || sd.length > 253) {
-      return { ok: false, reason: "HELLO.controlledDomains contains invalid entry" };
-    }
-    sds.push(sd.toLowerCase());
-  }
-  if (typeof o.nonce !== "string" || !/^[0-9a-f]+$/.test(o.nonce) || o.nonce.length !== 64) {
-    return { ok: false, reason: "HELLO.nonce must be 32-byte hex" };
   }
   if (typeof o.issuedAt !== "number" || !Number.isFinite(o.issuedAt)) {
     return { ok: false, reason: "HELLO.issuedAt must be a number" };
   }
-  if (typeof o.signature !== "string" || !/^[0-9a-f]+$/.test(o.signature) || o.signature.length !== 128) {
+  if (typeof o.nonce !== "string" || !/^[0-9a-f]{64}$/.test(o.nonce)) {
+    return { ok: false, reason: "HELLO.nonce must be 32-byte hex" };
+  }
+  if (typeof o.signature !== "string" || !/^[0-9a-f]{128}$/.test(o.signature)) {
     return { ok: false, reason: "HELLO.signature must be 64-byte hex" };
   }
+  if (typeof o.rootEntitlement !== "object" || o.rootEntitlement === null) {
+    return { ok: false, reason: "HELLO.rootEntitlement missing" };
+  }
+  if (typeof o.rootEntitlementSig !== "string" || !/^[0-9a-f]{128}$/.test(o.rootEntitlementSig)) {
+    return { ok: false, reason: "HELLO.rootEntitlementSig must be 64-byte hex" };
+  }
+  if (typeof o.rootEntitlementCertId !== "string" || !/^[0-9a-f]{64}$/.test(o.rootEntitlementCertId)) {
+    return { ok: false, reason: "HELLO.rootEntitlementCertId must be 32-byte hex" };
+  }
+  const re = parseRootEntitlement(o.rootEntitlement);
+  if (!re.ok) return { ok: false, reason: re.reason };
+
+  let app: AppEntitlement | null = null;
+  let appSig: Bytes | null = null;
+  let appCertId = "";
+  if (o.appEntitlement !== undefined && o.appEntitlement !== null) {
+    if (typeof o.appEntitlement !== "object") {
+      return { ok: false, reason: "HELLO.appEntitlement not an object" };
+    }
+    if (typeof o.appEntitlementSig !== "string" || !/^[0-9a-f]{128}$/.test(o.appEntitlementSig)) {
+      return { ok: false, reason: "HELLO.appEntitlementSig must be 64-byte hex" };
+    }
+    if (typeof o.appEntitlementCertId !== "string" || !/^[0-9a-f]{64}$/.test(o.appEntitlementCertId)) {
+      return { ok: false, reason: "HELLO.appEntitlementCertId must be 32-byte hex" };
+    }
+    const ae = parseAppEntitlement(o.appEntitlement);
+    if (!ae.ok) return { ok: false, reason: ae.reason };
+    app = ae.value;
+    appSig = hexToBytes(o.appEntitlementSig);
+    appCertId = o.appEntitlementCertId;
+  }
+
   return {
     ok: true,
     serverId: o.serverId,
-    controlledDomains: sds,
+    rootEntitlement: re.value,
+    rootEntitlementSig: hexToBytes(o.rootEntitlementSig),
+    rootEntitlementCertId: o.rootEntitlementCertId,
+    appEntitlement: app,
+    appEntitlementSig: appSig,
+    appEntitlementCertId: appCertId,
     nonce: hexToBytes(o.nonce),
     issuedAt: o.issuedAt,
     signature: hexToBytes(o.signature),
   };
 }
 
+function parseRootEntitlement(o: unknown): { ok: true; value: RootEntitlement } | { ok: false; reason: string } {
+  if (typeof o !== "object" || o === null) return { ok: false, reason: "rootEntitlement not object" };
+  const r = o as Record<string, unknown>;
+  if (typeof r.username !== "string" || !r.username) return { ok: false, reason: "rootEntitlement.username missing" };
+  if (typeof r.podPubKey !== "string" || !/^[0-9a-f]{64}$/.test(r.podPubKey)) {
+    return { ok: false, reason: "rootEntitlement.podPubKey must be 32-byte hex" };
+  }
+  if (typeof r.podCanonical !== "string" || !r.podCanonical) return { ok: false, reason: "rootEntitlement.podCanonical missing" };
+  if (typeof r.issuedAt !== "number") return { ok: false, reason: "rootEntitlement.issuedAt must be a number" };
+  return {
+    ok: true,
+    value: {
+      username: r.username,
+      podPubKey: hexToBytes(r.podPubKey),
+      podCanonical: r.podCanonical.toLowerCase(),
+      issuedAt: r.issuedAt,
+    },
+  };
+}
+
+function parseAppEntitlement(o: unknown): { ok: true; value: AppEntitlement } | { ok: false; reason: string } {
+  if (typeof o !== "object" || o === null) return { ok: false, reason: "appEntitlement not object" };
+  const r = o as Record<string, unknown>;
+  if (typeof r.username !== "string") return { ok: false, reason: "appEntitlement.username missing" };
+  if (typeof r.podPubKey !== "string" || !/^[0-9a-f]{64}$/.test(r.podPubKey)) {
+    return { ok: false, reason: "appEntitlement.podPubKey must be 32-byte hex" };
+  }
+  if (!Array.isArray(r.canonicals)) return { ok: false, reason: "appEntitlement.canonicals must be an array" };
+  for (const c of r.canonicals) {
+    if (typeof c !== "string" || !c) return { ok: false, reason: "appEntitlement.canonicals contains a non-string" };
+  }
+  if (typeof r.issuedAt !== "number") return { ok: false, reason: "appEntitlement.issuedAt must be a number" };
+  if (typeof r.expiresAt !== "number") return { ok: false, reason: "appEntitlement.expiresAt must be a number" };
+  return {
+    ok: true,
+    value: {
+      username: r.username,
+      podPubKey: hexToBytes(r.podPubKey),
+      canonicals: (r.canonicals as string[]).map((s) => s.toLowerCase()),
+      issuedAt: r.issuedAt,
+      expiresAt: r.expiresAt,
+    },
+  };
+}
+
+async function authenticateHello(
+  hello: ParsedHelloV2,
+  opts: TunnelHubOptions,
+  now: () => number,
+  maxHelloAgeMs: number,
+): Promise<{ ok: true } | { ok: false; reason: string; closeCode: number }> {
+  const age = now() - hello.issuedAt;
+  if (age > maxHelloAgeMs || age < -60_000) {
+    return { ok: false, reason: "HELLO issuedAt is stale or in the future", closeCode: 1008 };
+  }
+  // serverId must match the rootEntitlement's podCanonical (the pod's
+  // own URL is the only thing it can serverId-as).
+  if (hello.serverId.toLowerCase() !== hello.rootEntitlement.podCanonical) {
+    return { ok: false, reason: "serverId must equal rootEntitlement.podCanonical", closeCode: 1002 };
+  }
+  // Pod-zone identity check: rootEntitlement.podCanonical's middle
+  // label must equal rootEntitlement.username (the user-zone owner).
+  const podUser = extractMiddleLabel(hello.rootEntitlement.podCanonical);
+  if (!podUser || podUser !== hello.rootEntitlement.username) {
+    return {
+      ok: false,
+      reason: "rootEntitlement.podCanonical does not live in its declared user zone",
+      closeCode: 1008,
+    };
+  }
+  // Verify the cert ids the envelope advertises match the actual certs.
+  const computedRootId = await rootEntitlementCertId(hello.rootEntitlement);
+  if (computedRootId !== hello.rootEntitlementCertId) {
+    return { ok: false, reason: "rootEntitlementCertId does not match cert", closeCode: 1002 };
+  }
+  if (hello.appEntitlement) {
+    const computedAppId = await appEntitlementCertId(hello.appEntitlement);
+    if (computedAppId !== hello.appEntitlementCertId) {
+      return { ok: false, reason: "appEntitlementCertId does not match cert", closeCode: 1002 };
+    }
+    // App entitlement expiry check.
+    if (hello.appEntitlement.expiresAt <= now()) {
+      return { ok: false, reason: "appEntitlement expired", closeCode: 1008 };
+    }
+    if (hello.appEntitlement.username !== hello.rootEntitlement.username) {
+      return { ok: false, reason: "appEntitlement.username mismatches root", closeCode: 1008 };
+    }
+    // Bind: app cert's podPubKey must equal root cert's podPubKey.
+    if (!equalBytes(hello.appEntitlement.podPubKey, hello.rootEntitlement.podPubKey)) {
+      return { ok: false, reason: "appEntitlement.podPubKey mismatches root", closeCode: 1008 };
+    }
+  }
+  // Verify entitlement IRK signatures against the user's IRK.
+  if (opts.irkLookup) {
+    const irkPub = await opts.irkLookup(hello.rootEntitlement.username);
+    if (!irkPub) {
+      return { ok: false, reason: "username not registered with .com", closeCode: 1008 };
+    }
+    if (!verifyRootEntitlement(hello.rootEntitlement, hello.rootEntitlementSig, irkPub)) {
+      return { ok: false, reason: "rootEntitlement signature failed verification", closeCode: 1008 };
+    }
+    if (hello.appEntitlement && hello.appEntitlementSig) {
+      if (!verifyAppEntitlement(hello.appEntitlement, hello.appEntitlementSig, irkPub)) {
+        return { ok: false, reason: "appEntitlement signature failed verification", closeCode: 1008 };
+      }
+    }
+  }
+  // Revocation check.
+  if (opts.revocationLookup) {
+    const revoked = await opts.revocationLookup(hello.rootEntitlement.username);
+    if (revoked) {
+      if (revoked.has(hello.rootEntitlementCertId)) {
+        return { ok: false, reason: "rootEntitlement is revoked", closeCode: 1008 };
+      }
+      if (hello.appEntitlement && revoked.has(hello.appEntitlementCertId)) {
+        return { ok: false, reason: "appEntitlement is revoked", closeCode: 1008 };
+      }
+    }
+  }
+  // Verify the STK signature on the HELLO envelope.
+  const envelope: TunnelHelloV2 = {
+    serverId: hello.serverId,
+    rootEntitlementCertId: hello.rootEntitlementCertId,
+    appEntitlementCertId: hello.appEntitlementCertId,
+    nonce: hello.nonce,
+    issuedAt: hello.issuedAt,
+  };
+  if (opts.authLookup) {
+    const stkPub = await opts.authLookup(hello.serverId);
+    if (!stkPub) {
+      return { ok: false, reason: "serverId not registered with .com", closeCode: 1008 };
+    }
+    // STK pubkey must match the cert's podPubKey — closes a substitution loophole.
+    if (!equalBytes(stkPub, hello.rootEntitlement.podPubKey)) {
+      return { ok: false, reason: "STK pubkey mismatches rootEntitlement.podPubKey", closeCode: 1008 };
+    }
+    if (!verifyTunnelHelloV2(envelope, hello.signature, stkPub)) {
+      return { ok: false, reason: "HELLO STK signature failed verification", closeCode: 1008 };
+    }
+  }
+  return { ok: true };
+}
+
 /**
- * For a serverId of the form `<server>.<user>.flagship.services`,
- * return `<user>`. Returns null if the shape doesn't match.
- *
- * The label between the server and the apex is the username; the hub
- * uses it as the per-pod identity check anchor.
+ * Send a domain-granted-style snapshot to every member of the set.
+ * We reuse FRAME_DOMAIN_GRANTED for now (one frame per slot) so the
+ * existing tunnel-client onDomainGranted path keeps working. The
+ * allocator's per-slot model maps cleanly into per-slot frames.
  */
+function broadcastSnapshot(registry: TunnelRegistry, key: import("./allocator.js").AppUserSetKey): void {
+  const snap = registry.snapshotByKey(key);
+  if (!snap) return;
+  const members = registry.membersOf(key);
+  if (members.length === 0) return;
+  for (const slot of snap.slotHolders) {
+    const f = domainGrantedFrame({ fqdn: slot.fqdn, ownerServerId: slot.podCanonical });
+    for (const t of members) {
+      try { t.send(f); } catch { /* swallow */ }
+    }
+  }
+}
+
 function extractMiddleLabel(serverId: string): string | null {
   const lower = serverId.toLowerCase();
   if (!lower.endsWith(".flagship.services")) return null;
@@ -367,48 +536,6 @@ function extractMiddleLabel(serverId: string): string | null {
   return user;
 }
 
-/**
- * The user (middle label) that owns a claimed FQDN. For
- * `<*|app>.<user>.flagship.services` returns `<user>`. For
- * `<server>.<user>.flagship.services` returns `<user>`. For anything
- * else returns null.
- */
-function ownerOfFqdn(fqdn: string): string | null {
-  const lower = fqdn.toLowerCase();
-  if (!lower.endsWith(".flagship.services")) return null;
-  const head = lower.slice(0, -".flagship.services".length);
-  if (head.length === 0) return null;
-  const parts = head.split(".");
-  // The owner is always the rightmost remaining label.
-  const user = parts[parts.length - 1]!;
-  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(user)) return null;
-  return user;
-}
-
-/**
- * Send a domain-granted frame to every currently-connected tunnel for
- * each fqdn the new owner now serves. Errors on individual tunnel
- * sends are swallowed — the hub is still healthy if one peer's WS
- * happens to be wedged.
- */
-function broadcastDomainGrants(
-  registry: TunnelRegistry,
-  ownerServerId: string,
-  fqdns: ReadonlyArray<string>,
-): void {
-  if (fqdns.length === 0) return;
-  for (const fqdn of fqdns) {
-    const frame = domainGrantedFrame({ fqdn, ownerServerId });
-    registry.forEach((t) => {
-      try {
-        t.send(frame);
-      } catch {
-        /* peer wedged; close handler cleans up */
-      }
-    });
-  }
-}
-
 function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) {
@@ -416,10 +543,15 @@ function hexToBytes(hex: string): Uint8Array {
   }
   return out;
 }
-
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
   out.set(b, a.length);
   return out;
+}
+function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= (a[i]! ^ b[i]!);
+  return diff === 0;
 }

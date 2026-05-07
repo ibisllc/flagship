@@ -1885,6 +1885,15 @@ export function verifyRootEntitlement(
  * `<slug>[-<author>].<host>.<user>.flagship.services`. The hub uses
  * them to derive the shortened slots the pod can compete for; the
  * pod doesn't list shortened slots explicitly.
+ *
+ * FUTURE: extend with `customDomains: Array<{ host: string; appId:
+ * { slug: string; author: string } }>`. A user-purchased domain
+ * (e.g., `notes.alice.com` pointed at .services) MUST be bound to a
+ * specific (slug, author, user) tuple — never free-floating. The
+ * binding goes in the cert so the hub can route the SNI through the
+ * same allocator state. This expansion is wire-only on AppEntitlement;
+ * the allocator already keys per-(slug, author, user) so custom
+ * domains slot in alongside derived shorteneds in the same set.
  */
 export interface AppEntitlement {
   username: string;
@@ -1989,6 +1998,66 @@ export function verifyEntitlementRevocationList(
 ): boolean {
   try {
     return ed.verify(sig, canonicalEntitlementRevocationList(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * TunnelHello v2 — the HELLO frame envelope sent over the .services
+ * tunnel WS. Replaces v1's `subdomains` / `controlledDomains` model
+ * with entitlement-cert-driven allocation.
+ *
+ * The pod's STK signs `canonicalTunnelHelloV2` (which references the
+ * cert ids, not the certs themselves). This binds the STK signature
+ * to the specific certs being presented; a captured signature can't
+ * be replayed against a different cert set.
+ *
+ * The wire payload (sent as the FRAME_HELLO body) carries the certs +
+ * their IRK signatures alongside this signed envelope so the hub can
+ * verify both (STK on envelope, IRK on certs) without an extra
+ * round-trip.
+ */
+export interface TunnelHelloV2 {
+  serverId: ServerId;
+  /** SHA-256 hex of the RootEntitlement's canonical bytes. */
+  rootEntitlementCertId: string;
+  /**
+   * SHA-256 hex of the AppEntitlement's canonical bytes, or empty
+   * string when no app entitlement is presented (initial provisioning).
+   */
+  appEntitlementCertId: string;
+  /** 32-byte random nonce for replay defense. */
+  nonce: Bytes;
+  issuedAt: number;
+}
+
+const TAG_TUNNEL_HELLO_V2 = "flagship/tunnel-hello/v2";
+
+function canonicalTunnelHelloV2(h: TunnelHelloV2): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_TUNNEL_HELLO_V2,
+      h.serverId,
+      h.rootEntitlementCertId,
+      h.appEntitlementCertId,
+      hex(h.nonce),
+      h.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signTunnelHelloV2(h: TunnelHelloV2, stk: Keypair): Bytes {
+  return ed.sign(canonicalTunnelHelloV2(h), stk.privateKey);
+}
+
+export function verifyTunnelHelloV2(
+  h: TunnelHelloV2,
+  sig: Bytes,
+  stkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalTunnelHelloV2(h), stkPub);
   } catch {
     return false;
   }

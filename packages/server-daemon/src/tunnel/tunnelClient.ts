@@ -14,7 +14,16 @@ import {
   FRAME_OPEN,
   type Frame,
 } from "@flagship/tunnel-protocol";
-import { signTunnelHello, type Keypair } from "@flagship/protocol";
+import {
+  appEntitlementCertId,
+  rootEntitlementCertId,
+  signTunnelHelloV2,
+  type AppEntitlement,
+  type Bytes,
+  type Keypair,
+  type RootEntitlement,
+  type TunnelHelloV2,
+} from "@flagship/protocol";
 
 export interface BackendTarget {
   host: string;
@@ -23,21 +32,37 @@ export interface BackendTarget {
 
 export type BackendResolver = (sni: string) => BackendTarget | null;
 
+/**
+ * Snapshot of the entitlement certs the daemon currently holds. The
+ * daemon caches these on disk (re-loaded on boot) and presents them
+ * on every HELLO. The phone re-issues + ships fresh certs whenever
+ * apps change OR on rolling refresh before TTL.
+ */
+export interface EntitlementBundle {
+  rootEntitlement: RootEntitlement;
+  rootEntitlementSig: Bytes;
+  /** Optional. Pods can boot with no apps yet (root-only HELLO). */
+  appEntitlement?: AppEntitlement | null;
+  appEntitlementSig?: Bytes | null;
+}
+
 export interface TunnelClientOptions {
   /** ws:// or wss:// URL of the control-plane tunnel hub. */
   hubUrl: string;
-  serverId: string;
-  controlledDomains: string[];
-  /** STK (Server Tunnel Key) used to sign the HELLO. Derived from SWK. */
+  /** Pod's STK keypair (signs the HELLO envelope). */
   signingKey: Keypair;
+  /**
+   * Source of fresh entitlement bundles. Called every HELLO so the
+   * pod can pick up rotated certs on the fly. The serverId for HELLO
+   * is taken from `bundle.rootEntitlement.podCanonical`.
+   */
+  getEntitlements: () => EntitlementBundle | Promise<EntitlementBundle>;
   /** Given an SNI hostname, return the local backend to forward to. */
   resolveBackend: BackendResolver;
   /**
    * Called when the hub broadcasts a domain-granted event (FRAME 0x12).
-   * Every tunnel — including the new owner — receives one of these per
-   * grant. The daemon plumbs this into its in-pod live-siblings router
-   * so apps observe the grant via /api/live_siblings/poll. Optional;
-   * unset means the daemon drops the event.
+   * Daemon plumbs into the in-pod live-siblings router so apps observe
+   * the grant via /api/live_siblings/poll. Optional.
    */
   onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
 }
@@ -46,12 +71,11 @@ export interface TunnelClient {
   /** Resolves once HELLO_ACK is received and registration is confirmed. */
   ready(): Promise<void>;
   /**
-   * Push a HELLO update to the hub with the new controlled-domain list.
-   * The hub atomically replaces the route table for this tunnel. Used by
-   * /api/url/{claim,release} once N0d/N0j land. Idempotent — re-sending
-   * the same list is harmless (issuedAt advances).
+   * Re-send a HELLO with the latest entitlement bundle. Used after
+   * the phone delivers fresh certs (new app installed, rotation).
+   * Idempotent.
    */
-  updateControlledDomains(next: string[]): void;
+  rehello(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -68,30 +92,52 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     rejectReady = rej;
   });
   let lastIssuedAt = 0;
-  let currentDomains = [...opts.controlledDomains];
 
   function send(frame: Frame): void {
     if (ws.readyState === WebSocket.OPEN) ws.send(encodeFrame(frame), { binary: true });
   }
 
-  function sendHello(controlledDomains: string[]): void {
+  async function sendHello(): Promise<void> {
+    const bundle = await opts.getEntitlements();
     const nonce = new Uint8Array(32);
     crypto.getRandomValues(nonce);
-    // Make sure issuedAt strictly advances even on rapid successive
-    // calls — the hub's replay defense rejects equal timestamps.
     let issuedAt = Date.now();
     if (issuedAt <= lastIssuedAt) issuedAt = lastIssuedAt + 1;
     lastIssuedAt = issuedAt;
-    const helloRecord = {
-      serverId: opts.serverId,
-      controlledDomains,
+    const rootCertId = await rootEntitlementCertId(bundle.rootEntitlement);
+    const appCertId = bundle.appEntitlement
+      ? await appEntitlementCertId(bundle.appEntitlement)
+      : "";
+    const envelope: TunnelHelloV2 = {
+      serverId: bundle.rootEntitlement.podCanonical,
+      rootEntitlementCertId: rootCertId,
+      appEntitlementCertId: appCertId,
       nonce,
       issuedAt,
     };
-    const signature = signTunnelHello(helloRecord, opts.signingKey);
+    const signature = signTunnelHelloV2(envelope, opts.signingKey);
     const payload = JSON.stringify({
-      serverId: opts.serverId,
-      controlledDomains,
+      version: 2,
+      serverId: bundle.rootEntitlement.podCanonical,
+      rootEntitlement: {
+        username: bundle.rootEntitlement.username,
+        podPubKey: bytesToHex(bundle.rootEntitlement.podPubKey),
+        podCanonical: bundle.rootEntitlement.podCanonical,
+        issuedAt: bundle.rootEntitlement.issuedAt,
+      },
+      rootEntitlementSig: bytesToHex(bundle.rootEntitlementSig),
+      rootEntitlementCertId: rootCertId,
+      appEntitlement: bundle.appEntitlement
+        ? {
+            username: bundle.appEntitlement.username,
+            podPubKey: bytesToHex(bundle.appEntitlement.podPubKey),
+            canonicals: bundle.appEntitlement.canonicals,
+            issuedAt: bundle.appEntitlement.issuedAt,
+            expiresAt: bundle.appEntitlement.expiresAt,
+          }
+        : null,
+      appEntitlementSig: bundle.appEntitlementSig ? bytesToHex(bundle.appEntitlementSig) : null,
+      appEntitlementCertId: appCertId,
       nonce: bytesToHex(nonce),
       issuedAt,
       signature: bytesToHex(signature),
@@ -104,7 +150,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   }
 
   ws.on("open", () => {
-    sendHello(currentDomains);
+    void sendHello();
   });
 
   ws.on("message", (raw: ArrayBuffer | Buffer | Buffer[]) => {
@@ -177,12 +223,8 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
           ),
         );
       });
-      sock.on("end", () => {
-        send(closeFrame(f.streamId, true));
-      });
-      sock.on("close", () => {
-        streams.delete(f.streamId);
-      });
+      sock.on("end", () => send(closeFrame(f.streamId, true)));
+      sock.on("close", () => streams.delete(f.streamId));
       sock.on("error", () => {
         send(closeFrame(f.streamId, true));
         sock.destroy();
@@ -205,10 +247,7 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
 
   return {
     ready: () => ready,
-    updateControlledDomains(next: string[]) {
-      currentDomains = [...next];
-      sendHello(currentDomains);
-    },
+    rehello: () => sendHello(),
     close: () =>
       new Promise<void>((resolve) => {
         if (ws.readyState === WebSocket.CLOSED) return resolve();

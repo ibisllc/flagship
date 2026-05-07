@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { createServer, type AddressInfo, type Server } from "node:net";
 import { connect as netConnect } from "node:net";
 import { startTunnelClient, type TunnelClient } from "@flagship/server-daemon";
-import { deriveSTK, deriveSWK } from "@flagship/protocol";
+import { deriveSTK, deriveSWK, ed, mintDevEntitlements, type Keypair } from "@flagship/protocol";
 import { TunnelRegistry } from "../src/tunnel/registry.js";
 import { startSniRouter, type RunningSniRouter } from "../src/tunnel/sniRouter.js";
 import { startTunnelHub } from "../src/tunnel/tunnelHub.js";
@@ -85,16 +85,25 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
   let tunnel: TunnelClient;
 
   const SERVER_FQDN = "home.harry.flagship.services";
+  let irk: Keypair;
+
+  function makeIrk(): Keypair {
+    const priv = new Uint8Array(32);
+    crypto.getRandomValues(priv);
+    return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+  }
 
   beforeEach(async () => {
     const swk = deriveSWK({ seed: new Uint8Array(32).fill(101) }, SERVER_FQDN);
     const stk = deriveSTK(swk);
+    irk = makeIrk();
 
     registry = new TunnelRegistry();
     app = Fastify({ logger: false });
     await app.listen({ port: 0, host: "127.0.0.1" });
     stopHub = startTunnelHub(app.server, registry, {
       authLookup: (serverId) => (serverId === SERVER_FQDN ? stk.publicKey : null),
+      irkLookup: (username) => (username === "harry" ? irk.publicKey : null),
     });
     const hubPort = (app.server.address() as AddressInfo).port;
 
@@ -107,9 +116,15 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
 
     tunnel = startTunnelClient({
       hubUrl: `ws://127.0.0.1:${hubPort}/tunnel`,
-      serverId: SERVER_FQDN,
-      controlledDomains: ["*.harry.flagship.services"],
       signingKey: stk,
+      getEntitlements: () =>
+        mintDevEntitlements({
+          irk,
+          podPubKey: stk.publicKey,
+          username: "harry",
+          podCanonical: SERVER_FQDN,
+          appCanonicals: ["photos.home.harry.flagship.services"],
+        }),
       resolveBackend: (sni) => {
         if (sni.endsWith(".harry.flagship.services")) {
           return { host: "127.0.0.1", port: backendPort };
@@ -176,17 +191,17 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
     expect(true).toBe(true); // reaching here = connection closed cleanly
   });
 
-  it("rejects a tunnel client whose HELLO signature is from the wrong STK", async () => {
-    // Spin up a second hub instance with a STRICT authLookup that only accepts
-    // a different STK pubkey, then try to connect with the original STK.
+  it("rejects a tunnel client whose HELLO STK signature mismatches the registered key", async () => {
     const otherSwk = deriveSWK({ seed: new Uint8Array(32).fill(202) }, SERVER_FQDN);
     const otherStk = deriveSTK(otherSwk);
+    const otherIrk = makeIrk();
 
     const altApp = Fastify({ logger: false });
     const altRegistry = new TunnelRegistry();
     await altApp.listen({ port: 0, host: "127.0.0.1" });
     const altStop = startTunnelHub(altApp.server, altRegistry, {
       authLookup: (sid) => (sid === SERVER_FQDN ? otherStk.publicKey : null),
+      irkLookup: (u) => (u === "harry" ? otherIrk.publicKey : null),
     });
     const altPort = (altApp.server.address() as AddressInfo).port;
 
@@ -195,9 +210,14 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
 
     const t = startTunnelClient({
       hubUrl: `ws://127.0.0.1:${altPort}/tunnel`,
-      serverId: SERVER_FQDN,
-      controlledDomains: ["*.harry.flagship.services"],
       signingKey: wrongStk, // does NOT match what authLookup returns
+      getEntitlements: () =>
+        mintDevEntitlements({
+          irk: otherIrk,
+          podPubKey: wrongStk.publicKey,
+          username: "harry",
+          podCanonical: SERVER_FQDN,
+        }),
       resolveBackend: () => null,
     });
 

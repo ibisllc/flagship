@@ -92,6 +92,13 @@ export interface DaemonRuntimeOptions {
    */
   peerStkLookup?: (peerServerId: string) => Promise<Uint8Array | null>;
   /**
+   * REQUIRED when starting a tunnel client. Returns the daemon's
+   * current entitlement bundle (root + optional app certs from the
+   * phone). Production loads from on-disk cache populated by
+   * PhoneOrders; tests mint an in-test bundle with a fake IRK.
+   */
+  entitlements?: () => import("./tunnel/tunnelClient.js").EntitlementBundle | Promise<import("./tunnel/tunnelClient.js").EntitlementBundle>;
+  /**
    * Called when a fresh ACME account key is generated. Fires AFTER
    * persistence. Useful for tests / observability.
    */
@@ -493,11 +500,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const { InMemorySiblingRouter } = await import("./sibling/router.js");
   const siblingRouter = new InMemorySiblingRouter();
 
+  if (!opts.entitlements) {
+    throw new Error(
+      "[runtime] DaemonRuntimeOptions.entitlements is required " +
+        "(N12b: tunnel client now sends IRK-signed entitlement certs, not controlledDomains). " +
+        "Production loads from disk; tests inject a mint-on-the-fly bundle.",
+    );
+  }
   const tunnel = startTunnelClient({
     hubUrl: opts.tunnelHubUrl,
-    serverId: opts.serverFqdn,
-    controlledDomains: tunnelInitialDomains,
     signingKey: identity,
+    getEntitlements: opts.entitlements,
     resolveBackend: () => ({ host: "127.0.0.1", port: tlsPort }),
     onDomainGranted: (e) => {
       siblingRouter.broadcastDomainGranted({
@@ -507,6 +520,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       opts.onDomainGranted?.(e);
     },
   });
+  void tunnelInitialDomains;
   await tunnel.ready();
 
   // Persistent ACME state. If a `dataDir` (or test-injected store) is
@@ -619,27 +633,23 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     console.log(`[runtime] AppPlatform skipped (host IRK / SWK not provided)`);
   }
 
-  // URL controller wraps the tunnel client's HELLO update path. The
-  // base set (canonical pod FQDN + wildcard) is always present;
-  // app-claimed FQDNs are accumulated in `extra` and the union is
-  // pushed on every change.
-  const baseDomains = [...tunnelInitialDomains];
+  // URL controller — under the new entitlement model, claims happen
+  // at the HUB via "request transfer" requests, not via the tunnel
+  // client's HELLO. For now this is a stub that re-runs `rehello()`
+  // when called (which causes the hub to re-evaluate the pod's
+  // entitled canonicals). The proper transfer-request path is wired
+  // in N12b's hub-integration follow-up.
   const extra = new Set<string>();
-  const pushHello = () => {
-    tunnel.updateControlledDomains([...baseDomains, ...extra]);
-  };
   const urlController: UrlController = {
     async claim(fqdn: string) {
       const lower = fqdn.toLowerCase();
-      if (extra.has(lower)) return;
       extra.add(lower);
-      pushHello();
+      await tunnel.rehello().catch(() => {});
     },
     async release(fqdn: string) {
       const lower = fqdn.toLowerCase();
-      if (!extra.has(lower)) return;
       extra.delete(lower);
-      pushHello();
+      await tunnel.rehello().catch(() => {});
     },
     list(): string[] {
       return [...extra];

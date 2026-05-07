@@ -5,12 +5,11 @@ import {
   type StreamCallbacks,
 } from "../src/tunnel/registry.js";
 
-function fakeTunnel(serverId: string, controlledDomains: string[]): RegisteredTunnel {
+function fakeTunnel(podCanonical: string): RegisteredTunnel {
   const streams = new Map<number, StreamCallbacks>();
   let nextStream = 1;
   return {
-    serverId,
-    controlledDomains: [...controlledDomains],
+    podCanonical,
     send: vi.fn(),
     attachStream: (streamId, cbs) => streams.set(streamId, cbs),
     detachStream: (streamId) => streams.delete(streamId),
@@ -18,104 +17,74 @@ function fakeTunnel(serverId: string, controlledDomains: string[]): RegisteredTu
   };
 }
 
-describe("TunnelRegistry", () => {
-  it("registers and finds by exact FQDN", () => {
+describe("TunnelRegistry — allocator-backed (N12b)", () => {
+  it("registers a pod and finds it by its canonical", () => {
     const reg = new TunnelRegistry();
-    const t = fakeTunnel("srv-1", ["harry.flagship.services"]);
-    const r = reg.register(t);
+    const t = fakeTunnel("home.harry.flagship.services");
+    const r = reg.register({ tunnel: t, canonicals: ["home.harry.flagship.services"] });
+    expect(r.shortenedsHeld).toEqual([]); // pod-root canonical has no shortened
+    expect(reg.findBySni("home.harry.flagship.services")).toBe(t);
+  });
+
+  it("a self-authored app's canonical wins the user-zone shortened", () => {
+    const reg = new TunnelRegistry();
+    const t = fakeTunnel("home.harry.flagship.services");
+    reg.register({
+      tunnel: t,
+      canonicals: ["notes.home.harry.flagship.services"],
+    });
+    expect(reg.findBySni("notes.home.harry.flagship.services")).toBe(t);
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(t);
+  });
+
+  it("preserves existing shortened on second pod (FCFS)", () => {
+    const reg = new TunnelRegistry();
+    const home = fakeTunnel("home.harry.flagship.services");
+    const office = fakeTunnel("office.harry.flagship.services");
+    reg.register({ tunnel: home, canonicals: ["notes.home.harry.flagship.services"] });
+    reg.register({ tunnel: office, canonicals: ["notes.office.harry.flagship.services"] });
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(home);
+  });
+
+  it("explicit transfer reassigns the slot to the requester", () => {
+    const reg = new TunnelRegistry();
+    const home = fakeTunnel("home.harry.flagship.services");
+    const office = fakeTunnel("office.harry.flagship.services");
+    reg.register({ tunnel: home, canonicals: ["notes.home.harry.flagship.services"] });
+    reg.register({ tunnel: office, canonicals: ["notes.office.harry.flagship.services"] });
+    const r = reg.requestTransfer({
+      podCanonical: office.podCanonical,
+      fqdn: "notes.harry.flagship.services",
+    });
     expect(r.ok).toBe(true);
-    expect(r.takeovers).toEqual([]);
-    expect(reg.findBySni("harry.flagship.services")).toBe(t);
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(office);
   });
 
-  it("matches a wildcard one DNS label deep", () => {
+  it("unregister removes the pod and redistributes orphans to a survivor", () => {
     const reg = new TunnelRegistry();
-    const t = fakeTunnel("srv-1", ["*.harry.flagship.services"]);
-    reg.register(t);
-    expect(reg.findBySni("photos.harry.flagship.services")).toBe(t);
-    expect(reg.findBySni("blog.harry.flagship.services")).toBe(t);
-  });
-
-  it("does NOT match a wildcard across multiple labels (RFC 6125)", () => {
-    const reg = new TunnelRegistry();
-    const t = fakeTunnel("srv-1", ["*.flagship.services"]);
-    reg.register(t);
-    expect(reg.findBySni("harry.flagship.services")).toBe(t);
-    expect(reg.findBySni("photos.harry.flagship.services")).toBeUndefined();
-  });
-
-  it("last-HELLO-wins: a new tunnel takes over an FQDN held by another server", () => {
-    const reg = new TunnelRegistry();
-    const t1 = fakeTunnel("srv-1", ["harry.flagship.services"]);
-    reg.register(t1);
-    const t2 = fakeTunnel("srv-2", ["harry.flagship.services"]);
-    const r = reg.register(t2);
-    expect(r.ok).toBe(true);
-    expect(r.takeovers).toEqual([
-      { fqdn: "harry.flagship.services", previousServerId: "srv-1" },
-    ]);
-    expect(reg.findBySni("harry.flagship.services")).toBe(t2);
-    expect(t1.controlledDomains).toEqual([]);
-  });
-
-  it("re-registering the same server is idempotent", () => {
-    const reg = new TunnelRegistry();
-    const t = fakeTunnel("srv-1", ["harry.flagship.services"]);
-    reg.register(t);
-    expect(reg.register(t).ok).toBe(true);
-    expect(reg.findBySni("harry.flagship.services")).toBe(t);
-  });
-
-  it("replaceClaims atomically updates the route table", () => {
-    const reg = new TunnelRegistry();
-    const t = fakeTunnel("srv-1", ["a.harry.flagship.services", "b.harry.flagship.services"]);
-    reg.register(t);
-    const result = reg.replaceClaims(t, ["b.harry.flagship.services", "c.harry.flagship.services"]);
-    expect(result.released).toEqual(["a.harry.flagship.services"]);
-    expect(result.takeovers).toEqual([]);
-    expect(reg.findBySni("a.harry.flagship.services")).toBeUndefined();
-    expect(reg.findBySni("b.harry.flagship.services")).toBe(t);
-    expect(reg.findBySni("c.harry.flagship.services")).toBe(t);
-  });
-
-  it("replaceClaims to an empty list releases everything but keeps the WS reachable", () => {
-    const reg = new TunnelRegistry();
-    const t = fakeTunnel("srv-1", ["a.harry.flagship.services"]);
-    reg.register(t);
-    const result = reg.replaceClaims(t, []);
-    expect(result.released).toEqual(["a.harry.flagship.services"]);
-    expect(reg.findBySni("a.harry.flagship.services")).toBeUndefined();
-    expect(reg.size()).toBe(1);
-  });
-
-  it("replaceClaims steals an FQDN from another tunnel", () => {
-    const reg = new TunnelRegistry();
-    const t1 = fakeTunnel("srv-1", ["x.harry.flagship.services"]);
-    const t2 = fakeTunnel("srv-2", []);
-    reg.register(t1);
-    reg.register(t2);
-    const r = reg.replaceClaims(t2, ["x.harry.flagship.services"]);
-    expect(r.takeovers).toEqual([
-      { fqdn: "x.harry.flagship.services", previousServerId: "srv-1" },
-    ]);
-    expect(t1.controlledDomains).toEqual([]);
-    expect(reg.findBySni("x.harry.flagship.services")).toBe(t2);
-  });
-
-  it("clears all entries after unregister", () => {
-    const reg = new TunnelRegistry();
-    const t = fakeTunnel("srv-1", ["harry.flagship.services", "*.harry.flagship.services"]);
-    reg.register(t);
-    expect(reg.size()).toBe(1);
-    reg.unregister("srv-1");
-    expect(reg.size()).toBe(0);
-    expect(reg.findBySni("harry.flagship.services")).toBeUndefined();
-    expect(reg.findBySni("photos.harry.flagship.services")).toBeUndefined();
+    const home = fakeTunnel("home.harry.flagship.services");
+    const office = fakeTunnel("office.harry.flagship.services");
+    reg.register({ tunnel: home, canonicals: ["notes.home.harry.flagship.services"] });
+    reg.register({ tunnel: office, canonicals: ["notes.office.harry.flagship.services"] });
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(home);
+    reg.unregister(home.podCanonical);
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(office);
   });
 
   it("findBySni is case-insensitive", () => {
     const reg = new TunnelRegistry();
-    reg.register(fakeTunnel("srv-1", ["harry.flagship.services"]));
-    expect(reg.findBySni("HARRY.FLAGSHIP.SERVICES")).toBeDefined();
+    const t = fakeTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: t, canonicals: ["notes.home.harry.flagship.services"] });
+    expect(reg.findBySni("NOTES.HOME.HARRY.flagship.services")).toBe(t);
+  });
+
+  it("size reflects the number of registered tunnels", () => {
+    const reg = new TunnelRegistry();
+    expect(reg.size()).toBe(0);
+    reg.register({
+      tunnel: fakeTunnel("home.harry.flagship.services"),
+      canonicals: ["notes.home.harry.flagship.services"],
+    });
+    expect(reg.size()).toBe(1);
   });
 });
