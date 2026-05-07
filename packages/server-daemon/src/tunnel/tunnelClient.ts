@@ -8,6 +8,7 @@ import {
   FRAME_CLOSE,
   FRAME_CLOSE_REMOTE,
   FRAME_DATA,
+  FRAME_DOMAIN_GRANTED,
   FRAME_HELLO,
   FRAME_HELLO_ACK,
   FRAME_OPEN,
@@ -31,6 +32,14 @@ export interface TunnelClientOptions {
   signingKey: Keypair;
   /** Given an SNI hostname, return the local backend to forward to. */
   resolveBackend: BackendResolver;
+  /**
+   * Called when the hub broadcasts a domain-granted event (FRAME 0x12).
+   * Every tunnel — including the new owner — receives one of these per
+   * grant. The daemon plumbs this into its in-pod live-siblings router
+   * so apps observe the grant via /api/live_siblings/poll. Optional;
+   * unset means the daemon drops the event.
+   */
+  onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
 }
 
 export interface TunnelClient {
@@ -124,6 +133,21 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   });
 
   function handleFrame(f: Frame): void {
+    if (f.type === FRAME_DOMAIN_GRANTED) {
+      if (!opts.onDomainGranted) return;
+      try {
+        const body = JSON.parse(new TextDecoder().decode(f.payload)) as {
+          fqdn?: unknown;
+          ownerServerId?: unknown;
+        };
+        if (typeof body.fqdn === "string" && typeof body.ownerServerId === "string") {
+          opts.onDomainGranted({ fqdn: body.fqdn, ownerServerId: body.ownerServerId });
+        }
+      } catch {
+        /* malformed; drop */
+      }
+      return;
+    }
     if (f.type === FRAME_HELLO_ACK) {
       let body: { ok?: boolean; reason?: string };
       try {

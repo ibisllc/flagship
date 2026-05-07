@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import {
   decodeFrame,
+  domainGrantedFrame,
   encodeFrame,
   FRAME_CLOSE,
   FRAME_CLOSE_REMOTE,
@@ -234,6 +235,10 @@ function attachTunnel(
       }
       registered = tunnel;
       lastHelloIssuedAt = helloOk.issuedAt;
+      // Announce every fqdn this tunnel now owns to ALL connected
+      // tunnels (including itself) so apps can react. Domain grants
+      // never happen silently.
+      broadcastDomainGrants(registry, tunnel.serverId, helloOk.controlledDomains);
       if (helloOk.controlledDomains.length === 0) armIdleClose();
       send(helloAckFrame(true));
       return;
@@ -267,6 +272,11 @@ function attachTunnel(
         );
       }
       lastHelloIssuedAt = helloOk.issuedAt;
+      // Announce every fqdn now owned by this tunnel after the update.
+      // We broadcast the full set rather than just the delta so a tunnel
+      // that joined recently and missed prior grants still observes the
+      // current ownership state on the next update.
+      broadcastDomainGrants(registry, registered.serverId, helloOk.controlledDomains);
       if (helloOk.controlledDomains.length === 0) armIdleClose();
       else cancelIdleClose();
       send(helloAckFrame(true));
@@ -373,6 +383,30 @@ function ownerOfFqdn(fqdn: string): string | null {
   const user = parts[parts.length - 1]!;
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(user)) return null;
   return user;
+}
+
+/**
+ * Send a domain-granted frame to every currently-connected tunnel for
+ * each fqdn the new owner now serves. Errors on individual tunnel
+ * sends are swallowed — the hub is still healthy if one peer's WS
+ * happens to be wedged.
+ */
+function broadcastDomainGrants(
+  registry: TunnelRegistry,
+  ownerServerId: string,
+  fqdns: ReadonlyArray<string>,
+): void {
+  if (fqdns.length === 0) return;
+  for (const fqdn of fqdns) {
+    const frame = domainGrantedFrame({ fqdn, ownerServerId });
+    registry.forEach((t) => {
+      try {
+        t.send(frame);
+      } catch {
+        /* peer wedged; close handler cleans up */
+      }
+    });
+  }
 }
 
 function hexToBytes(hex: string): Uint8Array {

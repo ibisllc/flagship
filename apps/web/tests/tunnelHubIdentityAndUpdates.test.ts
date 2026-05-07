@@ -178,6 +178,98 @@ describe("tunnel hub: HELLO updates and last-HELLO-wins", () => {
   });
 });
 
+describe("tunnel hub: domain-granted broadcast (FRAME 0x12)", () => {
+  let s: Setup;
+  beforeEach(async () => {
+    s = await makeHub({ idleCloseMs: 500 });
+  });
+  afterEach(async () => {
+    await teardown(s);
+  });
+
+  it("notifies every connected tunnel — including the new owner — when a domain is granted", async () => {
+    // First tunnel claims x. Capture its received grants.
+    const stk1 = deriveStkFor(ALICE_FQDN, 1);
+    s.authLookups.set(ALICE_FQDN, stk1.publicKey);
+    const aliceGrants: Array<{ fqdn: string; ownerServerId: string }> = [];
+    const t1 = startTunnelClient({
+      hubUrl: `ws://127.0.0.1:${s.hubPort}/tunnel`,
+      serverId: ALICE_FQDN,
+      controlledDomains: ["x.alice.flagship.services"],
+      signingKey: stk1,
+      resolveBackend: () => null,
+      onDomainGranted: (e) => aliceGrants.push(e),
+    });
+    await t1.ready();
+    // First tunnel should hear about its own grant of x.
+    await waitFor(() =>
+      aliceGrants.some(
+        (g) =>
+          g.fqdn === "x.alice.flagship.services" &&
+          g.ownerServerId === ALICE_FQDN,
+      ),
+    );
+
+    // Second tunnel arrives and claims y under the same user.
+    const ALICE_FQDN2 = "office.alice.flagship.services";
+    const stk2 = deriveStkFor(ALICE_FQDN2, 2);
+    s.authLookups.set(ALICE_FQDN2, stk2.publicKey);
+    const officeGrants: Array<{ fqdn: string; ownerServerId: string }> = [];
+    const t2 = startTunnelClient({
+      hubUrl: `ws://127.0.0.1:${s.hubPort}/tunnel`,
+      serverId: ALICE_FQDN2,
+      controlledDomains: ["y.alice.flagship.services"],
+      signingKey: stk2,
+      resolveBackend: () => null,
+      onDomainGranted: (e) => officeGrants.push(e),
+    });
+    await t2.ready();
+
+    // Both tunnels should now have received the y → office grant.
+    await waitFor(() =>
+      aliceGrants.some(
+        (g) =>
+          g.fqdn === "y.alice.flagship.services" &&
+          g.ownerServerId === ALICE_FQDN2,
+      ),
+    );
+    await waitFor(() =>
+      officeGrants.some(
+        (g) =>
+          g.fqdn === "y.alice.flagship.services" &&
+          g.ownerServerId === ALICE_FQDN2,
+      ),
+    );
+    await t1.close();
+    await t2.close();
+  });
+
+  it("a HELLO update with new fqdns triggers fresh grant broadcasts", async () => {
+    const stk = deriveStkFor(ALICE_FQDN);
+    s.authLookups.set(ALICE_FQDN, stk.publicKey);
+    const grants: Array<{ fqdn: string; ownerServerId: string }> = [];
+    const t = startTunnelClient({
+      hubUrl: `ws://127.0.0.1:${s.hubPort}/tunnel`,
+      serverId: ALICE_FQDN,
+      controlledDomains: [ALICE_FQDN],
+      signingKey: stk,
+      resolveBackend: () => null,
+      onDomainGranted: (e) => grants.push(e),
+    });
+    await t.ready();
+    grants.length = 0;
+    t.updateControlledDomains([ALICE_FQDN, "z.alice.flagship.services"]);
+    await waitFor(() =>
+      grants.some(
+        (g) =>
+          g.fqdn === "z.alice.flagship.services" &&
+          g.ownerServerId === ALICE_FQDN,
+      ),
+    );
+    await t.close();
+  });
+});
+
 async function waitFor(
   cond: () => boolean,
   opts: { timeoutMs?: number; stepMs?: number } = {},

@@ -165,9 +165,9 @@ describe("/api/live_siblings/send", () => {
 });
 
 describe("/api/live_siblings/poll", () => {
-  it("returns immediately with buffered messages once one arrives", async () => {
+  it("returns immediately with the buffered app-message event once one arrives", async () => {
     const s = await setup();
-    // Pre-buffer a message by issuing a poll, then injecting after.
+    // Pre-buffer an event by issuing a poll, then injecting after.
     const pending = s.handle(
       req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenA }),
     );
@@ -181,7 +181,9 @@ describe("/api/live_siblings/poll", () => {
     const r = await pending;
     expect(r?.status).toBe(200);
     const body = JSON.parse(String(r!.body));
-    expect(body.messages).toEqual([{ fromSiblingId: OFFICE, payloadHex: "01" }]);
+    expect(body.events).toEqual([
+      { kind: "app-message", fromSiblingId: OFFICE, payloadHex: "01" },
+    ]);
   });
 
   it("does NOT deliver app A's traffic to app B (route by appId)", async () => {
@@ -197,14 +199,38 @@ describe("/api/live_siblings/poll", () => {
     });
     const r = await pendingB;
     const body = JSON.parse(String(r!.body));
-    expect(body.messages).toEqual([]);
+    expect(body.events).toEqual([]);
   });
 
-  it("times out empty when no messages arrive within pollWaitMs", async () => {
+  it("times out empty when no events arrive within pollWaitMs", async () => {
     const s = await setup();
     const r = await s.handle(req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenA }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(String(r!.body));
-    expect(body.messages).toEqual([]);
+    expect(body.events).toEqual([]);
+  });
+
+  it("fans out a domain-granted event to ALL apps regardless of appId", async () => {
+    const s = await setup();
+    // Both apps poll concurrently.
+    const pendingA = s.handle(
+      req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenA }),
+    );
+    const pendingB = s.handle(
+      req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenB }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    s.router.broadcastDomainGranted({
+      fqdn: "notes.alice.flagship.services",
+      ownerSiblingId: OFFICE,
+    });
+    const [rA, rB] = await Promise.all([pendingA, pendingB]);
+    const expected = {
+      kind: "domain-granted",
+      fqdn: "notes.alice.flagship.services",
+      ownerSiblingId: OFFICE,
+    };
+    expect(JSON.parse(String(rA!.body)).events).toEqual([expected]);
+    expect(JSON.parse(String(rB!.body)).events).toEqual([expected]);
   });
 });

@@ -110,6 +110,13 @@ Frame catalogue — deliberately minimal:
 | `0x01` | `sibling-hello` | both — challenge + signed response + `liveSiblings` gossip |
 | `0x06` | `sibling-app-message` | bidirectional — opaque per-app payloads |
 
+Separately, the **tunnel-hub control surface** carries one extra frame
+that the daemon receives over its `.services` WS (not the sibling-WS):
+
+| Byte | Frame | Direction |
+|---|---|---|
+| `0x12` | `domain-granted` | hub → every tunnel — `{fqdn, ownerServerId}` whenever a grant happens |
+
 Everything app-level — URL-takeover dances, leader election, state
 sync, RPC, exactly-once delivery — is built on top of
 `sibling-app-message`. The harness owns auth and the WS lifecycle;
@@ -137,6 +144,27 @@ concern; the previous holder finds out by hub-side route eviction.
 Apps that want graceful state handoff coordinate over
 `sibling-app-message` before/after the call — that is purely an app
 concern.
+
+### Domain-granted broadcast
+
+Every time `.services` accepts a HELLO that grants an FQDN to a tunnel
+(register OR update), the hub broadcasts a `domain-granted` control
+frame (`0x12`, payload `{fqdn, ownerServerId}`) to **every connected
+tunnel** for that user — including the new owner. The daemon plumbs
+this into its in-pod live-siblings router so apps observe the grant
+through `/api/live_siblings/poll` as:
+
+```json
+{
+  "kind": "domain-granted",
+  "fqdn": "notes.alice.flagship.services",
+  "ownerSiblingId": "office.alice.flagship.services"
+}
+```
+
+Apps know their pod's canonical and react accordingly: if
+`ownerSiblingId === my-canonical` they're the new holder; otherwise
+some sibling is. Either way nothing changes silently.
 
 ### Disambiguation fallback
 

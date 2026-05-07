@@ -22,9 +22,9 @@
 import type { AppAuthTokens } from "../appAuthToken.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type {
-  AppMessageListener,
+  EventListener,
   InMemorySiblingRouter,
-  InboundAppMessage,
+  InboundEvent,
 } from "./router.js";
 
 const J = { "content-type": "application/json" } as const;
@@ -42,12 +42,12 @@ export interface SiblingHttpDeps {
 
 export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
   // App-scoped pending queues for long-poll. Each entry holds a list
-  // of buffered messages (received while no poll was active) plus a
+  // of buffered events (received while no poll was active) plus a
   // pending-resolver if a poll is currently waiting.
   interface PollSlot {
-    buffer: InboundAppMessage[];
-    resolver?: (msgs: InboundAppMessage[]) => void;
-    listener: AppMessageListener;
+    buffer: InboundEvent[];
+    resolver?: (events: InboundEvent[]) => void;
+    listener: EventListener;
   }
   const slots = new Map<string, PollSlot>();
   const pollWaitMs = deps.pollWaitMs ?? 25_000;
@@ -58,14 +58,14 @@ export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
     if (s) return s;
     const slot: PollSlot = {
       buffer: [],
-      listener: (msg) => {
+      listener: (event) => {
         if (slot.resolver) {
           const r = slot.resolver;
           slot.resolver = undefined;
-          r([msg]);
+          r([event]);
           return;
         }
-        if (slot.buffer.length < bufferMax) slot.buffer.push(msg);
+        if (slot.buffer.length < bufferMax) slot.buffer.push(event);
         // Else drop — apps that don't drain are responsible for their own
         // backpressure.
       },
@@ -123,18 +123,18 @@ export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
 
     if (req.path === "/api/live_siblings/poll" && req.method === "GET") {
       const slot = ensureSlot(appId);
-      // If we have buffered messages, return immediately.
+      // If we have buffered events, return immediately.
       if (slot.buffer.length > 0) {
-        const msgs = slot.buffer.splice(0);
+        const events = slot.buffer.splice(0);
         return {
           status: 200,
           headers: J,
-          body: JSON.stringify({ messages: msgs }),
+          body: JSON.stringify({ events }),
         };
       }
-      // Park the request waiting for a message or the long-poll
-      // timeout to fire.
-      const msgs = await new Promise<InboundAppMessage[]>((resolve) => {
+      // Park the request waiting for an event or the long-poll timeout
+      // to fire.
+      const events = await new Promise<InboundEvent[]>((resolve) => {
         slot.resolver = resolve;
         const t = setTimeout(() => {
           if (slot.resolver === resolve) {
@@ -145,7 +145,7 @@ export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
         // unref so a hung poll doesn't keep the daemon alive
         (t as unknown as { unref?: () => void }).unref?.();
       });
-      return { status: 200, headers: J, body: JSON.stringify({ messages: msgs }) };
+      return { status: 200, headers: J, body: JSON.stringify({ events }) };
     }
 
     return null;

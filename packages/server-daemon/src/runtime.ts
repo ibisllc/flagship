@@ -76,6 +76,14 @@ export interface DaemonRuntimeOptions {
    */
   onCertIssued?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
   /**
+   * Called when the .services hub broadcasts a domain-granted event
+   * (FRAME 0x12). Production wires this to a SiblingRouter instance so
+   * apps observe the grant via /api/live_siblings/poll. Tests inject a
+   * recording closure. Optional; unset means the daemon drops the
+   * event.
+   */
+  onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
+  /**
    * Called when a fresh ACME account key is generated. Fires AFTER
    * persistence. Useful for tests / observability.
    */
@@ -421,6 +429,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     controlledDomains: tunnelInitialDomains,
     signingKey: identity,
     resolveBackend: () => ({ host: "127.0.0.1", port: tlsPort }),
+    onDomainGranted: opts.onDomainGranted,
   });
   await tunnel.ready();
 

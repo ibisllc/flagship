@@ -3,8 +3,10 @@ import {
   closeFrame,
   dataFrame,
   decodeFrame,
+  domainGrantedFrame,
   encodeFrame,
   FRAME_DATA,
+  FRAME_DOMAIN_GRANTED,
   FRAME_HELLO,
   FRAME_HELLO_ACK,
   FRAME_HEADER_BYTES,
@@ -40,6 +42,25 @@ describe("encode/decode round-trip", () => {
     if (r.kind !== "ok") return;
     expect(r.frame.type).toBe(FRAME_HELLO_ACK);
     expect(JSON.parse(new TextDecoder().decode(r.frame.payload)).ok).toBe(true);
+  });
+
+  it("DOMAIN_GRANTED frame carries fqdn + ownerServerId", () => {
+    const buf = encodeFrame(
+      domainGrantedFrame({
+        fqdn: "notes.alice.flagship.services",
+        ownerServerId: "office.alice.flagship.services",
+      }),
+    );
+    const r = decodeFrame(buf);
+    expect(r.kind).toBe("ok");
+    if (r.kind !== "ok") return;
+    expect(r.frame.streamId).toBe(0);
+    expect(r.frame.type).toBe(FRAME_DOMAIN_GRANTED);
+    const body = JSON.parse(new TextDecoder().decode(r.frame.payload));
+    expect(body).toEqual({
+      fqdn: "notes.alice.flagship.services",
+      ownerServerId: "office.alice.flagship.services",
+    });
   });
 
   it("OPEN frame carries the SNI hostname", () => {

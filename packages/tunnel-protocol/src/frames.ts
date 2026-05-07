@@ -15,6 +15,16 @@
 
 export const FRAME_HELLO = 0x10;
 export const FRAME_HELLO_ACK = 0x11;
+/**
+ * Hub-to-tunnel broadcast: a domain has been granted (or transferred)
+ * to a tunnel. Sent to ALL currently-connected tunnels — including the
+ * new owner — so nothing changes silently. Apps observing this through
+ * the daemon's `/api/live_siblings/poll` event stream can compare
+ * `ownerServerId` against their pod's canonical FQDN to decide if
+ * they're the new holder, an old holder who just lost it, or simply
+ * tracking ownership in their user's zone.
+ */
+export const FRAME_DOMAIN_GRANTED = 0x12;
 export const FRAME_OPEN = 0x01;
 export const FRAME_DATA = 0x02;
 export const FRAME_CLOSE = 0x03;
@@ -32,6 +42,7 @@ export const FRAME_PB_RESPONSE = 0x31;
 export type FrameType =
   | typeof FRAME_HELLO
   | typeof FRAME_HELLO_ACK
+  | typeof FRAME_DOMAIN_GRANTED
   | typeof FRAME_OPEN
   | typeof FRAME_DATA
   | typeof FRAME_CLOSE
@@ -101,6 +112,7 @@ function isFrameType(t: number): t is FrameType {
   return (
     t === FRAME_HELLO ||
     t === FRAME_HELLO_ACK ||
+    t === FRAME_DOMAIN_GRANTED ||
     t === FRAME_OPEN ||
     t === FRAME_DATA ||
     t === FRAME_CLOSE ||
@@ -151,6 +163,20 @@ export function helloAckFrame(ok: boolean, reason?: string): Frame {
     streamId: 0,
     type: FRAME_HELLO_ACK,
     payload: new TextEncoder().encode(JSON.stringify({ ok, reason })),
+  };
+}
+
+export interface DomainGrantedPayload {
+  fqdn: string;
+  /** Canonical FQDN of the pod that now holds the route. */
+  ownerServerId: string;
+}
+
+export function domainGrantedFrame(p: DomainGrantedPayload): Frame {
+  return {
+    streamId: 0,
+    type: FRAME_DOMAIN_GRANTED,
+    payload: new TextEncoder().encode(JSON.stringify(p)),
   };
 }
 

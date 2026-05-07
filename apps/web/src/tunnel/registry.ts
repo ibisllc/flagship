@@ -134,6 +134,15 @@ export class TunnelRegistry {
     return this.byId.size;
   }
 
+  /**
+   * Iterate over every currently-connected tunnel. Used by the hub to
+   * broadcast domain-granted events on every grant — every tunnel
+   * hears about every ownership change so nothing happens silently.
+   */
+  forEach(cb: (t: RegisteredTunnel) => void): void {
+    for (const t of this.byId.values()) cb(t);
+  }
+
   clear(): void {
     this.byId.clear();
     this.byDomain.clear();

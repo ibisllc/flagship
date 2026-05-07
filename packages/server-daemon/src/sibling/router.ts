@@ -50,7 +50,19 @@ export interface InboundAppMessage {
   payloadHex: string;
 }
 
-export type AppMessageListener = (msg: InboundAppMessage) => void;
+export interface DomainGrantedEvent {
+  fqdn: string;
+  /** Canonical FQDN of the pod that now holds the route. */
+  ownerSiblingId: string;
+}
+
+export type InboundEvent =
+  | ({ kind: "app-message" } & InboundAppMessage)
+  | ({ kind: "domain-granted" } & DomainGrantedEvent);
+
+export type EventListener = (event: InboundEvent) => void;
+/** @deprecated alias kept so existing callers still resolve. */
+export type AppMessageListener = EventListener;
 
 export type SendResult =
   | { ok: true }
@@ -165,17 +177,39 @@ export class InMemorySiblingRouter {
   }): void {
     const cur = this.subscribers.get(args.appId);
     if (!cur) return;
-    const msg: InboundAppMessage = {
+    const event: InboundEvent = {
+      kind: "app-message",
       fromSiblingId: args.fromSiblingId,
       payloadHex: args.payloadHex,
     };
-    // Fan out — any listener throwing is contained so the router stays
-    // healthy.
-    for (const l of cur) {
+    this.fanOut(cur, event);
+  }
+
+  /**
+   * Pod-level event: the .services hub just told us a domain was
+   * granted (FRAME 0x12). Broadcast to every subscriber on this pod
+   * regardless of appId — every app that cares can compare
+   * `ownerSiblingId` against its pod's canonical and react. Granted
+   * events for the new owner are included; apps know if they're the
+   * recipient.
+   */
+  broadcastDomainGranted(e: DomainGrantedEvent): void {
+    const event: InboundEvent = {
+      kind: "domain-granted",
+      fqdn: e.fqdn,
+      ownerSiblingId: e.ownerSiblingId,
+    };
+    for (const set of this.subscribers.values()) {
+      this.fanOut(set, event);
+    }
+  }
+
+  private fanOut(listeners: Set<EventListener>, event: InboundEvent): void {
+    for (const l of listeners) {
       try {
-        l(msg);
+        l(event);
       } catch {
-        /* swallow */
+        /* swallow — router stays healthy */
       }
     }
   }

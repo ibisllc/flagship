@@ -103,6 +103,19 @@ persisted history. Pods come and go as the user adds and removes
 boxes — write your code so it tolerates a peer disappearing
 mid-conversation.
 
+The `/api/live_siblings/poll` long-poll returns events of two kinds:
+
+```json
+{ "kind": "app-message", "fromSiblingId": "...", "payloadHex": "..." }
+{ "kind": "domain-granted", "fqdn": "...", "ownerSiblingId": "..." }
+```
+
+`domain-granted` fires whenever `.services` grants a domain to any
+pod for this user — including this pod itself. Compare
+`ownerSiblingId` against the pod's canonical FQDN to decide if you're
+the new holder, an old holder who just lost it, or simply tracking
+ownership in your user's zone. Nothing changes silently.
+
 The harness does NOT replicate Postgres / MinIO / Redis for you. If
 your app needs cross-pod consistency, you implement it on top of these
 primitives. Three patterns the LLM is taught to use (see N0k):
