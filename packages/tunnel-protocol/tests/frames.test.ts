@@ -18,7 +18,10 @@ import {
 
 describe("encode/decode round-trip", () => {
   it("HELLO frame", () => {
-    const f = helloFrame({ serverId: "srv-1", subdomains: ["*.harry.flagship.services"] });
+    const f = helloFrame({
+      serverId: "srv-1",
+      controlledDomains: ["*.harry.flagship.services"],
+    });
     const buf = encodeFrame(f);
     const r = decodeFrame(buf);
     expect(r.kind).toBe("ok");

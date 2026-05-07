@@ -144,7 +144,7 @@ describe("cross-language canonical-bytes vectors", () => {
         return verifyTunnelHello(
           {
             serverId: i.serverId as string,
-            subdomains: i.subdomains as string[],
+            controlledDomains: i.subdomains as string[],
             nonce: fromHex("nonce"),
             issuedAt: i.issuedAt as number,
           },

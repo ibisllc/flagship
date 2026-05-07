@@ -367,16 +367,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const identityKeypairForInjection = identity;
 
   // Tunnel client: forwards FRAME_OPEN(SNI) → 127.0.0.1:tlsPort.
-  // Register both the server FQDN and (when wildcard-enabled) the
-  // single-label wildcard so app subdomains land on the same tunnel.
-  // The .services SNI router already handles `*.host` → tunnel.
-  const tunnelSubdomains = wantWildcard
+  // The initial controlledDomains list is the canonical pod FQDN plus
+  // (when wildcard is on) its single-label wildcard, which together
+  // cover the canonical app URL space (`<app>.<server>.<user>.flagship.services`).
+  // App-claimed alias / custom FQDNs are added later via /api/url/claim
+  // and pushed to the hub as a HELLO update.
+  const tunnelInitialDomains = wantWildcard
     ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
     : [opts.serverFqdn];
   const tunnel = startTunnelClient({
     hubUrl: opts.tunnelHubUrl,
     serverId: opts.serverFqdn,
-    subdomains: tunnelSubdomains,
+    controlledDomains: tunnelInitialDomains,
     signingKey: identity,
     resolveBackend: () => ({ host: "127.0.0.1", port: tlsPort }),
   });

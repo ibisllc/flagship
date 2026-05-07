@@ -26,7 +26,7 @@ export interface TunnelClientOptions {
   /** ws:// or wss:// URL of the control-plane tunnel hub. */
   hubUrl: string;
   serverId: string;
-  subdomains: string[];
+  controlledDomains: string[];
   /** STK (Server Tunnel Key) used to sign the HELLO. Derived from SWK. */
   signingKey: Keypair;
   /** Given an SNI hostname, return the local backend to forward to. */
@@ -36,6 +36,13 @@ export interface TunnelClientOptions {
 export interface TunnelClient {
   /** Resolves once HELLO_ACK is received and registration is confirmed. */
   ready(): Promise<void>;
+  /**
+   * Push a HELLO update to the hub with the new controlled-domain list.
+   * The hub atomically replaces the route table for this tunnel. Used by
+   * /api/url/{claim,release} once N0d/N0j land. Idempotent — re-sending
+   * the same list is harmless (issuedAt advances).
+   */
+  updateControlledDomains(next: string[]): void;
   close(): Promise<void>;
 }
 
@@ -51,25 +58,31 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     resolveReady = res;
     rejectReady = rej;
   });
+  let lastIssuedAt = 0;
+  let currentDomains = [...opts.controlledDomains];
 
   function send(frame: Frame): void {
     if (ws.readyState === WebSocket.OPEN) ws.send(encodeFrame(frame), { binary: true });
   }
 
-  ws.on("open", () => {
+  function sendHello(controlledDomains: string[]): void {
     const nonce = new Uint8Array(32);
     crypto.getRandomValues(nonce);
-    const issuedAt = Date.now();
+    // Make sure issuedAt strictly advances even on rapid successive
+    // calls — the hub's replay defense rejects equal timestamps.
+    let issuedAt = Date.now();
+    if (issuedAt <= lastIssuedAt) issuedAt = lastIssuedAt + 1;
+    lastIssuedAt = issuedAt;
     const helloRecord = {
       serverId: opts.serverId,
-      subdomains: opts.subdomains,
+      controlledDomains,
       nonce,
       issuedAt,
     };
     const signature = signTunnelHello(helloRecord, opts.signingKey);
     const payload = JSON.stringify({
       serverId: opts.serverId,
-      subdomains: opts.subdomains,
+      controlledDomains,
       nonce: bytesToHex(nonce),
       issuedAt,
       signature: bytesToHex(signature),
@@ -79,6 +92,10 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       type: FRAME_HELLO,
       payload: new TextEncoder().encode(payload),
     });
+  }
+
+  ws.on("open", () => {
+    sendHello(currentDomains);
   });
 
   ws.on("message", (raw: ArrayBuffer | Buffer | Buffer[]) => {
@@ -164,6 +181,10 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
 
   return {
     ready: () => ready,
+    updateControlledDomains(next: string[]) {
+      currentDomains = [...next];
+      sendHello(currentDomains);
+    },
     close: () =>
       new Promise<void>((resolve) => {
         if (ws.readyState === WebSocket.CLOSED) return resolve();

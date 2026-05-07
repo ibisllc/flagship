@@ -217,10 +217,22 @@ export interface PbPeerConfirm {
   issuedAt: number;
 }
 
-/** HELLO frame signed by the Flagship server's BAK on tunnel connect. */
+/**
+ * HELLO frame signed by the Flagship server's STK on tunnel connect.
+ *
+ * `controlledDomains` is the explicit list of FQDNs this pod claims to
+ * serve right now. The .services tunnel hub treats this list as the only
+ * source of truth for SNI routing — there is no D1 mirror. A subsequent
+ * HELLO on the same WS replaces the list atomically (see N0b).
+ *
+ * Each FQDN must end with `<pod_username>.flagship.services` (where
+ * `pod_username` is the middle label of `serverId`). The hub enforces
+ * this so a compromised STK can only claim FQDNs under its own user's
+ * zone.
+ */
 export interface TunnelHello {
   serverId: ServerId;
-  subdomains: string[];
+  controlledDomains: string[];
   /** Random nonce supplied by the control plane (issued at WS upgrade time). */
   nonce: Bytes;
   issuedAt: number;
@@ -415,10 +427,10 @@ function canonicalInviteAcceptance(a: InviteAcceptance): Bytes {
 }
 
 function canonicalTunnelHello(h: TunnelHello): Bytes {
-  // sort subdomains so signing is independent of array ordering
-  const subs = [...h.subdomains].sort().join(",");
+  // Sort the FQDN list so signing is independent of array ordering.
+  const list = [...h.controlledDomains].sort().join(",");
   return new TextEncoder().encode(
-    `${TAG_TUNNEL_HELLO}|${h.serverId}|${subs}|${hex(h.nonce)}|${h.issuedAt}`,
+    `${TAG_TUNNEL_HELLO}|${h.serverId}|${list}|${hex(h.nonce)}|${h.issuedAt}`,
   );
 }
 

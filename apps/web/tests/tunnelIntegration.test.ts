@@ -84,15 +84,17 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
   let backendClose: () => Promise<void>;
   let tunnel: TunnelClient;
 
+  const SERVER_FQDN = "home.harry.flagship.services";
+
   beforeEach(async () => {
-    const swk = deriveSWK({ seed: new Uint8Array(32).fill(101) }, "srv-test");
+    const swk = deriveSWK({ seed: new Uint8Array(32).fill(101) }, SERVER_FQDN);
     const stk = deriveSTK(swk);
 
     registry = new TunnelRegistry();
     app = Fastify({ logger: false });
     await app.listen({ port: 0, host: "127.0.0.1" });
     stopHub = startTunnelHub(app.server, registry, {
-      authLookup: (serverId) => (serverId === "srv-test" ? stk.publicKey : null),
+      authLookup: (serverId) => (serverId === SERVER_FQDN ? stk.publicKey : null),
     });
     const hubPort = (app.server.address() as AddressInfo).port;
 
@@ -105,8 +107,8 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
 
     tunnel = startTunnelClient({
       hubUrl: `ws://127.0.0.1:${hubPort}/tunnel`,
-      serverId: "srv-test",
-      subdomains: ["*.harry.flagship.services"],
+      serverId: SERVER_FQDN,
+      controlledDomains: ["*.harry.flagship.services"],
       signingKey: stk,
       resolveBackend: (sni) => {
         if (sni.endsWith(".harry.flagship.services")) {
@@ -177,24 +179,24 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
   it("rejects a tunnel client whose HELLO signature is from the wrong STK", async () => {
     // Spin up a second hub instance with a STRICT authLookup that only accepts
     // a different STK pubkey, then try to connect with the original STK.
-    const otherSwk = deriveSWK({ seed: new Uint8Array(32).fill(202) }, "srv-other");
+    const otherSwk = deriveSWK({ seed: new Uint8Array(32).fill(202) }, SERVER_FQDN);
     const otherStk = deriveSTK(otherSwk);
 
     const altApp = Fastify({ logger: false });
     const altRegistry = new TunnelRegistry();
     await altApp.listen({ port: 0, host: "127.0.0.1" });
     const altStop = startTunnelHub(altApp.server, altRegistry, {
-      authLookup: (sid) => (sid === "srv-test" ? otherStk.publicKey : null),
+      authLookup: (sid) => (sid === SERVER_FQDN ? otherStk.publicKey : null),
     });
     const altPort = (altApp.server.address() as AddressInfo).port;
 
-    const wrongSwk = deriveSWK({ seed: new Uint8Array(32).fill(101) }, "srv-test");
+    const wrongSwk = deriveSWK({ seed: new Uint8Array(32).fill(101) }, SERVER_FQDN);
     const wrongStk = deriveSTK(wrongSwk);
 
     const t = startTunnelClient({
       hubUrl: `ws://127.0.0.1:${altPort}/tunnel`,
-      serverId: "srv-test",
-      subdomains: ["*.harry.flagship.services"],
+      serverId: SERVER_FQDN,
+      controlledDomains: ["*.harry.flagship.services"],
       signingKey: wrongStk, // does NOT match what authLookup returns
       resolveBackend: () => null,
     });

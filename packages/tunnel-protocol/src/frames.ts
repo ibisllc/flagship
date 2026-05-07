@@ -135,7 +135,10 @@ function readU32BE(buf: Uint8Array, offset: number): number {
 /**
  * Convenience helpers for building specific frames.
  */
-export function helloFrame(payload: { serverId: string; subdomains: string[] }): Frame {
+export function helloFrame(payload: {
+  serverId: string;
+  controlledDomains: string[];
+}): Frame {
   return {
     streamId: 0,
     type: FRAME_HELLO,
