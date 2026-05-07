@@ -14,10 +14,19 @@ Companion docs (already written):
 - `design-system.md` — visual + voice tokens.
 - `roadmap.md` — peer-backup deep dive (v2).
 
-**Counts as of last write:** 1129 tests green. Backend daemon, Worker
-control-plane, ISO build, and web design system are shipped. Mobile,
-marketplace backend, LLM harness, push, recovery, and tier billing
-are this list.
+**Counts as of last write (2026-05-07 multiplexing-v2 cycle):** 1265
+tests green across 130 test files. Multiplexing v2 (controlledDomains
+HELLO, last-HELLO-wins, sibling-WS protocol, ClaimUrlCapability,
+/api/url/*, /api/sibling/*, user-zone wildcard cert, .services
+fallback page) shipped. Backend daemon, Worker control-plane, ISO
+build, web design system, marketplace backend, push token storage,
+LLM-promo + tier subscription storage, VibeCodeSession parser, and
+mobile Apps/Marketplace screens are shipped. Live URL deploy /
+real-LLM streaming / APNs+FCM bridge / Stripe / sibling-WS endpoint
+wiring (N0e-2) / install-policy push fan-out (N0d-2) remain.
+
+See `memory/session_close_2026_05_07_multiplex_v2.md` for the full
+push log of the multiplexing-v2 cycle.
 
 ---
 
@@ -624,3 +633,40 @@ subtasks fresh IDs (don't reuse).
 
 Long-lived workstreams (R.10) get their own follow-up files referenced
 from this one.
+
+---
+
+## Multiplexing v2 (added 2026-05-07)
+
+The v1 alias system (D1 table + `/api/aliases/*` Worker routes + per-
+alias SAN expansion on the daemon, briefly shipped in `3fe6854`) was
+ripped out and replaced with a controlledDomains-on-HELLO model. New
+task IDs:
+
+| ID | Task | Status |
+|---|---|---|
+| N0a | Rip out v1 app_aliases system | ☑ |
+| N0b | Tunnel HELLO controlledDomains + last-HELLO-wins routing | ☑ |
+| N0c | User-zone wildcard cert + wildcard CNAME | ☑ |
+| N0d | claim-url / release-url PhoneOrders + UrlController | ☑ |
+| N0d-2 | Install-policy storage + push fan-out on new server | ☐ |
+| N0e | Sibling-WS frame protocol + handshake state machine | ☑ |
+| N0e-2 | Sibling WS endpoint at /.flagship/sibling-handshake + outbound client | ☐ |
+| N0f | .services fallback page when SNI unclaimed under user zone | ☑ |
+| N0g | Rewrite docs/multiplexing.md to FINAL DESIGN | ☑ |
+| N0h | ClaimUrlCapability primitives + CapabilityStore + checkCapability | ☑ |
+| N0i | App-level sibling API (/api/sibling/list,send,poll) | ☑ |
+| N0j | App-claim primitives (/api/url/*) with capability enforcement | ☑ |
+| N0k | Replication-patterns chapter for the LLM system prompt | ☑ |
+| N1 | Wire deploySession end-to-end (vibe-code → AppPlatform.install + Forgejo + docker) | ☐ |
+| N2 | Real LLM provider streaming (Anthropic, OpenAI, Google) | ☐ |
+| N3 | APNs + FCM push bridge (replaces /api/push/relay simulated:true) | ☐ |
+| N4 | Apps list + Apps detail screens (iOS + Android) | ☑ |
+| N5 | Marketplace list + detail screens (iOS + Android) | ☑ |
+| N8 | Stripe Checkout + tier-subscription webhook | ☐ |
+| N9 | Manifest reference + app-developer guide | ☑ |
+| N10 | Sweep build-tasks.md statuses | ☑ (this section) |
+
+`N6` (alias UI in Apps detail) folded into `N4`.
+`N7` (replication v2) deprecated — replication is no longer harness
+territory; the sibling-WS in N0e + N0i is the substrate apps build on.
