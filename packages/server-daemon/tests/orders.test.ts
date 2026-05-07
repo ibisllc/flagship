@@ -403,4 +403,49 @@ describe("orders-from-user handler", () => {
     expect(r.status).toBe(200);
     expect(calls).toEqual([{ fqdn: "notes.alice.flagship.services" }]);
   });
+
+  it("dispatches backup-app, password optional", async () => {
+    const psk = makeKey();
+    const calls: Array<{
+      creator: string;
+      slug: string;
+      includeUserData: boolean;
+      password?: string;
+    }> = [];
+    const ex: OrderExecutor = {
+      backupApp: async (a) => {
+        calls.push(a);
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const o1: PhoneOrder = {
+      type: "backup-app",
+      serverId: SERVER_FQDN,
+      creator: "alice",
+      slug: "habits",
+      includeUserData: true,
+      password: "secret",
+      issuedAt: Date.now(),
+    };
+    const r1 = await h(makeReq(envelope(o1, psk)));
+    expect(r1.status).toBe(200);
+    expect(calls[0]).toEqual({
+      creator: "alice",
+      slug: "habits",
+      includeUserData: true,
+      password: "secret",
+    });
+    // Sanity: no password works too
+    const o2: PhoneOrder = {
+      type: "backup-app",
+      serverId: SERVER_FQDN,
+      creator: "alice",
+      slug: "habits",
+      includeUserData: false,
+      issuedAt: Date.now() + 1,
+    };
+    const r2 = await h(makeReq(envelope(o2, psk)));
+    expect(r2.status).toBe(200);
+    expect(calls[1]?.password).toBeUndefined();
+  });
 });

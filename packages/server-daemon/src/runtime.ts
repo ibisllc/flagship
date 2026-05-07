@@ -239,6 +239,12 @@ export interface DaemonRuntime {
    * /api/url/claim consumes them via checkCapability.
    */
   capabilityStore: import("./capabilityStore.js").CapabilityStore;
+  /**
+   * App backup service. PhoneOrder backup-app calls into this; the
+   * resulting one-shot fetch URL is served at /api/backups/<id>.
+   * Null when no AppPlatform / dataDir is wired.
+   */
+  appBackup: import("./appBackup.js").AppBackupService | null;
 }
 
 export interface UrlController {
@@ -655,6 +661,28 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     has: async () => false,
     refresh: async () => {},
   };
+  // App backup service. Wired only when we have a place to put backup
+  // archives + a way to find an app's source tree (AppPlatform).
+  const { AppBackupService } = await import("./appBackup.js");
+  const appBackup =
+    opts.dataDir && appPlatformRef.current
+      ? new AppBackupService({
+          backupDir: `${opts.dataDir}/backups`,
+          resolveSource: async ({ creator, slug }) => {
+            const ap = appPlatformRef.current;
+            if (!ap) return null;
+            const app = ap.byAppId(`${creator}--${slug}`);
+            if (!app) return null;
+            // Vibe-coded apps live under <dataDir>/data/app-clones/<appId>;
+            // cross-creator apps under their Forgejo checkout. The runtime
+            // doesn't currently track per-app source paths centrally — the
+            // common path is the daemon's app-clones dir. Caller may
+            // override later when Forgejo discovery lands.
+            return `${opts.dataDir}/data/app-clones/${creator}--${slug}`;
+          },
+        })
+      : null;
+
   if (appAuthTokens) {
     const { buildSiblingHttpHandlers } = await import("./sibling/httpHandlers.js");
     const { buildUrlHttpHandlers } = await import("./sibling/urlHttpHandlers.js");
@@ -705,6 +733,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     urlController,
     siblingRouter,
     capabilityStore,
+    appBackup,
   };
 }
 

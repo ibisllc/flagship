@@ -63,6 +63,22 @@ export interface OrderExecutor {
    * from controlledDomains. Does not delete the stored capability.
    */
   releaseUrl?(args: { fqdn: string }): Promise<void> | void;
+  /**
+   * Phone-driven app backup. The implementer bundles the app, optionally
+   * encrypts with the password, and returns a one-shot fetch path. The
+   * order's response (200 OK) carries the path the phone polls.
+   *
+   * For now the response shape is opaque from this dispatch path —
+   * the daemon's executor reports back via console + the paired
+   * session's HTTP fetch endpoint. Future revision may carry the
+   * fetchPath + backupId in the order ack.
+   */
+  backupApp?(args: {
+    creator: string;
+    slug: string;
+    includeUserData: boolean;
+    password?: string;
+  }): Promise<void> | void;
 }
 
 export interface OrdersHandlerOptions {
@@ -277,6 +293,22 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
         fqdn: r.fqdn,
         issuedAt: r.issuedAt,
       };
+    case "backup-app":
+      if (
+        typeof r.creator !== "string" ||
+        typeof r.slug !== "string" ||
+        typeof r.includeUserData !== "boolean"
+      ) return null;
+      if (r.password !== undefined && typeof r.password !== "string") return null;
+      return {
+        type: "backup-app",
+        serverId: r.serverId,
+        creator: r.creator,
+        slug: r.slug,
+        includeUserData: r.includeUserData,
+        password: r.password as string | undefined,
+        issuedAt: r.issuedAt,
+      };
     default:
       return null;
   }
@@ -342,6 +374,15 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
     case "release-url":
       if (!ex.releaseUrl) throw new Error("releaseUrl not implemented");
       await ex.releaseUrl({ fqdn: order.fqdn });
+      return;
+    case "backup-app":
+      if (!ex.backupApp) throw new Error("backupApp not implemented");
+      await ex.backupApp({
+        creator: order.creator,
+        slug: order.slug,
+        includeUserData: order.includeUserData,
+        password: order.password,
+      });
       return;
   }
 }

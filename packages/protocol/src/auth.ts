@@ -1089,6 +1089,32 @@ export type PhoneOrder =
       serverId: ServerId;
       fqdn: string;
       issuedAt: number;
+    }
+  | {
+      /**
+       * Phone-driven app backup. Daemon bundles the app's source +
+       * (optionally) its user data into a tar.gz, optionally encrypts
+       * with a password-derived key, holds it on disk, and returns a
+       * one-shot fetch URL the phone pulls bytes from. Phone owns the
+       * archive afterwards — store it however, share it however.
+       *
+       * Modes:
+       *   - includeUserData: false → manifest + source + Dockerfile
+       *     only. Sharable archive (no user data).
+       *   - includeUserData: true → adds dumped Postgres/MinIO/Redis
+       *     namespaces. Personal restore archive only.
+       *
+       * `password` is an optional UTF-8 passphrase. Daemon derives an
+       * AES-GCM key via PBKDF2 and encrypts the archive end-to-end.
+       * Phone-side import recomputes the key from the same password.
+       */
+      type: "backup-app";
+      serverId: ServerId;
+      creator: string;
+      slug: string;
+      includeUserData: boolean;
+      password?: string;
+      issuedAt: number;
     };
 
 const TAG_ORDER_NOOP = "flagship/order/noop/v1";
@@ -1104,6 +1130,7 @@ const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v1";
 const TAG_ORDER_REMOVE_PAIRED_SESSION = "flagship/order/remove-paired-session/v1";
 const TAG_ORDER_CLAIM_URL = "flagship/order/claim-url/v1";
 const TAG_ORDER_RELEASE_URL = "flagship/order/release-url/v1";
+const TAG_ORDER_BACKUP_APP = "flagship/order/backup-app/v1";
 
 function canonicalPhoneOrder(o: PhoneOrder): Bytes {
   const enc = new TextEncoder();
@@ -1172,6 +1199,18 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
     case "release-url":
       return enc.encode(
         [TAG_ORDER_RELEASE_URL, o.serverId, o.fqdn, o.issuedAt].join("|"),
+      );
+    case "backup-app":
+      return enc.encode(
+        [
+          TAG_ORDER_BACKUP_APP,
+          o.serverId,
+          o.creator,
+          o.slug,
+          o.includeUserData ? "1" : "0",
+          o.password ?? "",
+          o.issuedAt,
+        ].join("|"),
       );
   }
 }
