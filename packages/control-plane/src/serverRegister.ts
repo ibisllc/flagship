@@ -160,18 +160,26 @@ export async function handleServerRegister(
     );
   }
 
-  // Publish A/AAAA so the subdomain resolves to the .services SNI
-  // passthrough IP — both for the apex `<server>.<user>.<apex>` and for
-  // `*.<server>.<user>.<apex>` so app subdomains (which the daemon's
-  // wildcard cert covers) are reachable. Best-effort: a DNS failure
-  // shouldn't fail registration.
+  // Publish A/AAAA so the user's URLs resolve to the .services SNI
+  // passthrough. Four names per server registration (idempotent — DNS
+  // upsert is no-op when the record already exists with the right
+  // content):
+  //   - <server>.<user>.flagship.services    (apex of the pod zone)
+  //   - *.<server>.<user>.flagship.services  (canonical app URLs)
+  //   - <user>.flagship.services             (apex of the user zone)
+  //   - *.<user>.flagship.services           (alias URLs + the canonical
+  //                                           <server>.<user> pod label)
+  // Best-effort: a DNS failure shouldn't fail registration.
   let dnsPublished: { type: string; name: string; content: string }[] = [];
   let dnsError: string | undefined;
   if (deps.dns) {
-    const apex = authCode.serverDomain;
-    const wildcard = `*.${apex}`;
+    const podApex = authCode.serverDomain;
+    const podWildcard = `*.${podApex}`;
+    const userZone = userZoneOf(podApex);
+    const names = [podApex, podWildcard];
+    if (userZone) names.push(userZone, `*.${userZone}`);
     try {
-      for (const name of [apex, wildcard]) {
+      for (const name of names) {
         const a = await deps.dns.client.upsert({
           name,
           type: "A",
@@ -199,6 +207,22 @@ export async function handleServerRegister(
     dnsPublished,
     dnsError,
   });
+}
+
+/**
+ * For a podApex of the form `<server>.<user>.flagship.services`, return
+ * the user zone `<user>.flagship.services`. Returns null on shape
+ * mismatch.
+ */
+function userZoneOf(podApex: string): string | null {
+  const lower = podApex.toLowerCase();
+  if (!lower.endsWith(".flagship.services")) return null;
+  const head = lower.slice(0, -".flagship.services".length);
+  const parts = head.split(".");
+  if (parts.length < 2) return null;
+  const user = parts[parts.length - 1]!;
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(user)) return null;
+  return `${user}.flagship.services`;
 }
 
 export async function handleServerLookup(

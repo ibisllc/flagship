@@ -90,14 +90,24 @@ export async function handleDns01Publish(
   if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
 
   // recordName must be a DNS-01 challenge record under the requesting
-  // server's namespace. ACME always uses `_acme-challenge.<host>`; <host>
-  // is either the server FQDN (for the apex SAN) or the bare server FQDN
-  // (for the wildcard SAN — the `*.` prefix is stripped per RFC 8555).
-  const expectedHost = r.serverId;
-  const acceptedNames = [`_acme-challenge.${expectedHost}`];
-  if (!expectedHost.endsWith(`.${apex}`)) {
+  // server's namespace OR under its user's zone. ACME always uses
+  // `_acme-challenge.<host>`; the host is either:
+  //   - the server FQDN (apex SAN: `<server>.<user>.flagship.services`)
+  //   - the server FQDN with the `*.` prefix stripped (per RFC 8555 — for
+  //     `*.<server>.<user>.flagship.services` the challenge is at
+  //     `_acme-challenge.<server>.<user>.flagship.services`)
+  //   - the user-zone FQDN: `<user>.flagship.services` (apex of the
+  //     user-zone wildcard cert, see N0c)
+  //   - the user-zone FQDN with `*.` stripped (per RFC 8555 — for
+  //     `*.<user>.flagship.services` the challenge is at
+  //     `_acme-challenge.<user>.flagship.services`)
+  if (!r.serverId.endsWith(`.${apex}`)) {
     return { status: 403, body: { error: "serverId outside managed apex" } };
   }
+  const podUsername = extractMiddleLabel(r.serverId, apex);
+  const userZone = podUsername ? `${podUsername}.${apex}` : null;
+  const acceptedNames = [`_acme-challenge.${r.serverId}`];
+  if (userZone) acceptedNames.push(`_acme-challenge.${userZone}`);
   if (!acceptedNames.includes(r.recordName)) {
     return {
       status: 403,
@@ -202,7 +212,11 @@ export async function handleDns01Delete(
   if (rec.type !== "TXT") {
     return { status: 403, body: { error: "recordId is not a TXT record" } };
   }
-  if (rec.name !== `_acme-challenge.${r.serverId}`) {
+  const podUsername = extractMiddleLabel(r.serverId, apex);
+  const userZone = podUsername ? `${podUsername}.${apex}` : null;
+  const acceptedRecNames = new Set<string>([`_acme-challenge.${r.serverId}`]);
+  if (userZone) acceptedRecNames.add(`_acme-challenge.${userZone}`);
+  if (!acceptedRecNames.has(rec.name)) {
     return { status: 403, body: { error: "recordId not owned by this server" } };
   }
 
@@ -216,6 +230,24 @@ export async function handleDns01Delete(
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * For a serverId of the form `<server>.<user>.<apex>`, return `<user>`.
+ * Returns null if the shape doesn't match. Mirrors the tunnel hub's
+ * extractor — the .com Worker uses the same anchor for the user-zone
+ * DNS-01 authorization check.
+ */
+function extractMiddleLabel(serverId: string, apex: string): string | null {
+  const lower = serverId.toLowerCase();
+  const apexLower = apex.toLowerCase();
+  if (!lower.endsWith(`.${apexLower}`)) return null;
+  const head = lower.slice(0, -`.${apexLower}`.length);
+  const parts = head.split(".");
+  if (parts.length < 2) return null;
+  const user = parts[parts.length - 1]!;
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(user)) return null;
+  return user;
 }
 
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {

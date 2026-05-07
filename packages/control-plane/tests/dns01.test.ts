@@ -183,6 +183,40 @@ describe("handleDns01Publish", () => {
     );
     expect(r.status).toBe(403);
   });
+
+  it("accepts the user-zone challenge name (N0c — for *.<user>.flagship.services SAN)", async () => {
+    const storage = new InMemoryStorage();
+    const identity = makeKey();
+    await registerServer(storage, identity);
+    const dns = new FakeCfClient();
+    const r = await handleDns01Publish(
+      { servers: storage.servers, dns },
+      publishBody({
+        identity,
+        recordValue: "user-zone-token",
+        recordName: `_acme-challenge.alice.${APEX}`,
+      }),
+    );
+    expect(r.status).toBe(200);
+    const rec = [...dns.records.values()][0]!;
+    expect(rec.name).toBe(`_acme-challenge.alice.${APEX}`);
+  });
+
+  it("rejects challenges for a DIFFERENT user's zone", async () => {
+    const storage = new InMemoryStorage();
+    const identity = makeKey();
+    await registerServer(storage, identity);
+    const dns = new FakeCfClient();
+    const r = await handleDns01Publish(
+      { servers: storage.servers, dns },
+      publishBody({
+        identity,
+        recordValue: "x",
+        recordName: `_acme-challenge.bob.${APEX}`,
+      }),
+    );
+    expect(r.status).toBe(403);
+  });
 });
 
 describe("handleDns01Delete", () => {

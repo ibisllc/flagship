@@ -290,8 +290,19 @@ function defaultHelloPage(): string {
  */
 export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<DaemonRuntime> {
   const wantWildcard = opts.wildcard ?? true;
+  // SAN list (N0c). The user-zone wildcard `*.<user>.flagship.services`
+  // covers single-label-deep names — both the canonical
+  // `<server>.<user>.flagship.services` and any aliased
+  // `<app>.<user>.flagship.services`. The pod-zone wildcard
+  // `*.<server>.<user>.flagship.services` covers the canonical
+  // app URLs `<app>.<server>.<user>.flagship.services` (one label deeper).
+  // The user-zone apex is included for completeness; it would otherwise
+  // not be covered by any wildcard.
+  const userZone = userZoneOf(opts.serverFqdn);
   const sans = wantWildcard
-    ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
+    ? userZone
+      ? [userZone, `*.${userZone}`, `*.${opts.serverFqdn}`]
+      : [opts.serverFqdn, `*.${opts.serverFqdn}`]
     : [opts.serverFqdn];
   const certManager = new CertManager();
   // The default handler needs to refer to AppPlatform, but AppPlatform
@@ -709,6 +720,23 @@ function handleHttpConnection(
  *
  *   sni = "alice.flagship.services" (no leftmost) → null
  */
+/**
+ * For a serverFqdn `<server>.<user>.flagship.services`, return the user
+ * zone `<user>.flagship.services`. Returns null if the shape doesn't
+ * match (degenerate; the runtime then falls back to the per-pod wildcard
+ * SAN set without the user-zone leg).
+ */
+function userZoneOf(serverFqdn: string): string | null {
+  const lower = serverFqdn.toLowerCase();
+  if (!lower.endsWith(".flagship.services")) return null;
+  const head = lower.slice(0, -".flagship.services".length);
+  const parts = head.split(".");
+  if (parts.length < 2) return null;
+  const user = parts[parts.length - 1]!;
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(user)) return null;
+  return `${user}.flagship.services`;
+}
+
 function leftmostLabel(sni: string, serverFqdn: string): string | null {
   const suffix = `.${serverFqdn.toLowerCase()}`;
   const lower = sni.toLowerCase();
