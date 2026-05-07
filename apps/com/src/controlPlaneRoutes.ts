@@ -45,6 +45,7 @@ import {
   handleMarketplaceSearch,
   handleMarketplaceRemove,
   handleMarketplaceInstall,
+  buildPushForwarder,
   handlePushRegister,
   handlePushRelay,
   handlePushRevoke,
@@ -69,6 +70,18 @@ export interface ControlPlaneEnv {
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
+
+  /** APNs HTTP/2 token-auth credentials. Set together to enable APNs. */
+  APNS_KEY_ID?: string;
+  APNS_TEAM_ID?: string;
+  APNS_PRIVATE_KEY_PEM?: string;
+  APNS_BUNDLE_ID?: string;
+  /** Default api.push.apple.com; set to api.sandbox.push.apple.com for dev. */
+  APNS_HOST?: string;
+
+  /** FCM HTTP v1 service-account JSON (full file content). */
+  FCM_SERVICE_ACCOUNT_JSON?: string;
+  FCM_PROJECT_ID?: string;
 }
 
 const ROUTE_RE = {
@@ -476,11 +489,17 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && ROUTE_RE.PUSH_RELAY.test(path)) {
-    // forwardToProviders not yet wired (real APNs/FCM bridge); the
-    // handler returns simulated:true when no forwarder is provided.
+    // Build the forwarder iff at least one provider's secrets are
+    // wired. Otherwise the handler short-circuits with simulated:true
+    // (preserves the dev-environment loop).
+    const forwarder = buildOptionalPushForwarder(env);
     return finish(
       await handlePushRelay(
-        { pushTokens: storage.pushTokens, usernames: storage.usernames },
+        {
+          pushTokens: storage.pushTokens,
+          usernames: storage.usernames,
+          ...(forwarder ? { forwardToProviders: forwarder } : {}),
+        },
         await readJson(request),
       ),
     );
@@ -529,6 +548,37 @@ export async function tryControlPlane(
   }
 
   return null;
+}
+
+function buildOptionalPushForwarder(env: ControlPlaneEnv) {
+  const apnsConfigured =
+    !!env.APNS_KEY_ID &&
+    !!env.APNS_TEAM_ID &&
+    !!env.APNS_PRIVATE_KEY_PEM &&
+    !!env.APNS_BUNDLE_ID;
+  const fcmConfigured = !!env.FCM_SERVICE_ACCOUNT_JSON && !!env.FCM_PROJECT_ID;
+  if (!apnsConfigured && !fcmConfigured) return null;
+  return buildPushForwarder({
+    ...(apnsConfigured
+      ? {
+          apns: {
+            keyId: env.APNS_KEY_ID!,
+            teamId: env.APNS_TEAM_ID!,
+            privateKeyPem: env.APNS_PRIVATE_KEY_PEM!,
+            bundleId: env.APNS_BUNDLE_ID!,
+            host: env.APNS_HOST,
+          },
+        }
+      : {}),
+    ...(fcmConfigured
+      ? {
+          fcm: {
+            serviceAccountJson: env.FCM_SERVICE_ACCOUNT_JSON!,
+            projectId: env.FCM_PROJECT_ID!,
+          },
+        }
+      : {}),
+  });
 }
 
 function jsonResponse(body: unknown, status: number): Response {
