@@ -1,0 +1,149 @@
+/**
+ * Deploy a VibeCodeSession's parsed manifest + source files into a
+ * running app.
+ *
+ * Flow:
+ *   1. Pull the manifest JSON + source files out of the session.
+ *   2. Write the source tree to disk under <workingDir>/<appId>/.
+ *   3. Run `docker build -t flagship-vibe-<appId>:<revision> <workingDir>`
+ *      to produce a local image. The image ref replaces the manifest's
+ *      runtime.image so AppPlatform.install hands the right tag to
+ *      AppRunner.
+ *   4. Construct + sign an InstallAppRequest with the host's IRK
+ *      (vibe-coded apps are always self-authored on the calling pod's
+ *      host — creator === username).
+ *   5. Call AppPlatform.install.
+ *   6. Return the canonical URL the app will live at.
+ *
+ * Forgejo / canonical-home redistribution is intentionally OUT of
+ * scope here. For self-authored apps the canonical URL IS this pod;
+ * cross-creator update-pack pulls aren't needed at deploy time.
+ * Forgejo wiring lands in a follow-up.
+ */
+
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  signInstallApp,
+  verifyInstallApp,
+  type InstallAppRequest,
+  type Keypair,
+} from "@flagship/protocol";
+import type { CommandRunner } from "../appRunner.js";
+import type { AppPlatform } from "../appPlatform.js";
+import type { VibeCodeSession } from "./vibeCodeSession.js";
+
+export interface DeploySessionDeps {
+  appPlatform: AppPlatform;
+  /** The host's IRK keypair — signs the InstallAppRequest. */
+  hostIrk: Keypair;
+  /** Daemon username (the creator/host of vibe-coded apps). */
+  hostUsername: string;
+  /**
+   * Where to write source trees + run docker build. Each app gets a
+   * subdirectory `<workingDir>/<appId>/`.
+   */
+  workingDir: string;
+  /**
+   * Command runner for `docker build`. Defaults to the same real
+   * runner AppRunner uses; tests inject a mock.
+   */
+  cmd: CommandRunner;
+  /** Override for tests / observability. */
+  now?: () => number;
+}
+
+export type DeployResult =
+  | { ok: true; appId: string; url: string; image: string }
+  | { ok: false; reason: string };
+
+export function buildDeploySession(deps: DeploySessionDeps) {
+  const now = deps.now ?? (() => Date.now());
+
+  return async function deploy(session: VibeCodeSession): Promise<DeployResult> {
+    const files = session.files();
+    const manifestJson = files["flagship.app.json"];
+    if (!manifestJson) {
+      return { ok: false, reason: "session has no flagship.app.json" };
+    }
+    let manifest: { name?: unknown; runtime?: { image?: unknown } };
+    try {
+      manifest = JSON.parse(manifestJson);
+    } catch (e) {
+      return { ok: false, reason: `manifest is not valid JSON: ${(e as Error).message}` };
+    }
+    if (typeof manifest.name !== "string" || !manifest.name) {
+      return { ok: false, reason: "manifest.name missing" };
+    }
+
+    // Self-authored: creator is the host. Cross-creator vibe-coding
+    // would need a different signing path (the original creator's IRK).
+    const creator = deps.hostUsername;
+    const slug = manifest.name;
+    const appId = `${creator}--${slug}`;
+    const appDir = join(deps.workingDir, appId);
+
+    // 1. Write the source tree. We blow away any prior working tree
+    // so a re-deploy is reproducible.
+    try {
+      await rm(appDir, { recursive: true, force: true });
+      await mkdir(appDir, { recursive: true });
+      for (const [path, content] of Object.entries(files)) {
+        if (path.includes("..") || path.startsWith("/")) {
+          return { ok: false, reason: `unsafe path in session files: ${path}` };
+        }
+        const full = join(appDir, path);
+        await mkdir(join(full, ".."), { recursive: true });
+        await writeFile(full, content, "utf8");
+      }
+    } catch (e) {
+      return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
+    }
+
+    // 2. Build the image. Tag includes a per-deploy revision so
+    // re-deploys produce a fresh tag (avoids stale cached images on
+    // restart).
+    const revision = String(now());
+    const image = `flagship-vibe-${appId}:${revision}`.toLowerCase();
+    try {
+      await deps.cmd.run("docker", ["build", "-t", image, appDir]);
+    } catch (e) {
+      return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
+    }
+
+    // 3. Update the manifest's runtime.image to our local tag. The
+    // LLM may have emitted a placeholder ref it doesn't actually have
+    // permission to push to.
+    const patchedManifestJson = JSON.stringify(
+      { ...manifest, runtime: { ...(manifest as { runtime?: object }).runtime ?? {}, image } },
+    );
+
+    // 4. Build + sign the InstallAppRequest.
+    const request: InstallAppRequest = {
+      serverId: session.meta.serverFqdn,
+      creator,
+      slug,
+      manifestJson: patchedManifestJson,
+      addOwnerToMembership: true,
+      issuedAt: now(),
+    };
+    const signature = signInstallApp(request, deps.hostIrk);
+
+    // 5. Install via AppPlatform — provisions data, mints token,
+    // deploys the container.
+    const installResult = await deps.appPlatform.install({
+      request,
+      signature,
+      verify: verifyInstallApp,
+    });
+    if (!installResult.ok) {
+      return { ok: false, reason: `install rejected: ${installResult.reason}` };
+    }
+
+    // 6. Compose the canonical URL. AppPlatform exposes urlLabel via
+    // its static helper; we rebuild it here to avoid coupling.
+    const urlLabel = creator === deps.hostUsername ? slug : `${slug}-${creator}`;
+    const url = `https://${urlLabel}.${session.meta.serverFqdn}`;
+    return { ok: true, appId, url, image };
+  };
+}
