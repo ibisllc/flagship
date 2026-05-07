@@ -92,10 +92,16 @@ When the user installs your app on multiple pods AND enables "let
 instances talk to each other," your code can use:
 
 ```
-GET  /api/sibling/list      list of {siblingId, fqdns, online, lastSeenMs}
-POST /api/sibling/send      {toSiblingId, payloadHex} — route to peer
-GET  /api/sibling/poll      long-poll for inbound app-messages
+GET  /api/live_siblings/list      list of {siblingId, fqdns, online, lastSeenMs}
+POST /api/live_siblings/send      {toSiblingId, payloadHex} — route to peer
+GET  /api/live_siblings/poll      long-poll for inbound app-messages
 ```
+
+`live_siblings` is the deliberate name: the harness gives you only
+peers it can currently see (live WS or just-gossiped). There is no
+persisted history. Pods come and go as the user adds and removes
+boxes — write your code so it tolerates a peer disappearing
+mid-conversation.
 
 The harness does NOT replicate Postgres / MinIO / Redis for you. If
 your app needs cross-pod consistency, you implement it on top of these
@@ -105,7 +111,7 @@ primitives. Three patterns the LLM is taught to use (see N0k):
    with a wall-clock timestamp + sibling-id; receivers apply if newer.
 2. **Leader-only writes**: gate writes on URL ownership. The pod
    holding the alias FQDN is the leader by definition; reads work
-   everywhere; writes route via `/api/sibling/send` to the holder.
+   everywhere; writes route via `/api/live_siblings/send` to the holder.
 3. **Per-pod independent state** (default when "let them talk" is
    off): each pod has its own data, no coordination.
 

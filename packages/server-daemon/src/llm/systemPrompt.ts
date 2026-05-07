@@ -300,15 +300,20 @@ you primitives to coordinate.
 ## Harness primitives (FLAGSHIP_APP_TOKEN gated)
 
 \`\`\`
-GET  /api/sibling/list      → [{siblingId, fqdns:[...], online, lastSeenMs}, ...]
-POST /api/sibling/send      → {toSiblingId, payloadHex} routes to peer
-GET  /api/sibling/poll      → long-poll for inbound app-messages
+GET  /api/live_siblings/list   → [{siblingId, fqdns:[...], online, lastSeenMs}, ...]
+POST /api/live_siblings/send   → {toSiblingId, payloadHex} routes to peer
+GET  /api/live_siblings/poll   → long-poll for inbound app-messages
 
-GET  /api/url               → list of URLs you may interact with on this pod
-POST /api/url/claim         → {fqdn} take ownership of a URL
-POST /api/url/release       → {fqdn} drop ownership
-GET  /api/url/owned         → URLs THIS instance currently holds
+GET  /api/url                  → list of URLs you may interact with on this pod
+POST /api/url/claim            → {fqdn} take ownership of a URL
+POST /api/url/release          → {fqdn} drop ownership
+GET  /api/url/owned            → URLs THIS instance currently holds
 \`\`\`
+
+The set of \`live_siblings\` is exactly the peers visible right now —
+authenticated WSes plus what those peers gossiped this session. Pods
+that go offline disappear from the list; the harness keeps no
+historical record. Write code that tolerates peers vanishing.
 
 The URL holder is the leader by definition — there is no separate
 leader-election primitive. Apps that need a single-writer ledger should
@@ -317,24 +322,24 @@ gate writes on the URL ownership.
 ## Pattern 1: eventual-consistency notes app (LWW)
 
 Every note carries a wall-clock timestamp + sibling-id. On every write,
-broadcast \`{op:"upsert", note}\` via /api/sibling/send to all online
-siblings. On receive (via /api/sibling/poll), apply if the inbound
+broadcast \`{op:"upsert", note}\` via /api/live_siblings/send to all online
+siblings. On receive (via /api/live_siblings/poll), apply if the inbound
 timestamp is newer. Conflicts resolve by last-write-wins; minor
 latency is acceptable.
 
 ## Pattern 2: leader-only-writes ledger
 
 Treat the alias FQDN \`<slug>.<user>.flagship.services\` as the leader
-seat. On startup, poll /api/sibling/list — if no sibling holds the
+seat. On startup, poll /api/live_siblings/list — if no sibling holds the
 alias, /api/url/claim it (capability allowing). Reads work everywhere;
-writes route to the holder via /api/sibling/send. If the holder goes
+writes route to the holder via /api/live_siblings/send. If the holder goes
 offline, no automatic failover — surface a "needs intervention" alert
 to the user; phone-driven re-claim takes over.
 
 ## Pattern 3: per-pod independent state (default)
 
 If the user does NOT enable "let them talk", each pod has its own
-state. Don't call any /api/sibling/* endpoints. The user is making a
+state. Don't call any /api/live_siblings/* endpoints. The user is making a
 conscious choice that these are separate logical apps that happen to
 share a name.
 

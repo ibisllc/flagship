@@ -17,7 +17,7 @@ Companion docs (already written):
 **Counts as of last write (2026-05-07 multiplexing-v2 cycle):** 1265
 tests green across 130 test files. Multiplexing v2 (controlledDomains
 HELLO, last-HELLO-wins, sibling-WS protocol, ClaimUrlCapability,
-/api/url/*, /api/sibling/*, user-zone wildcard cert, .services
+/api/url/*, /api/live_siblings/*, user-zone wildcard cert, .services
 fallback page) shipped. Backend daemon, Worker control-plane, ISO
 build, web design system, marketplace backend, push token storage,
 LLM-promo + tier subscription storage, VibeCodeSession parser, and
@@ -655,7 +655,7 @@ task IDs:
 | N0f | .services fallback page when SNI unclaimed under user zone | ☑ |
 | N0g | Rewrite docs/multiplexing.md to FINAL DESIGN | ☑ |
 | N0h | ClaimUrlCapability primitives + CapabilityStore + checkCapability | ☑ |
-| N0i | App-level sibling API (/api/sibling/list,send,poll) | ☑ |
+| N0i | App-level sibling API (/api/live_siblings/list,send,poll) | ☑ |
 | N0j | App-claim primitives (/api/url/*) with capability enforcement | ☑ |
 | N0k | Replication-patterns chapter for the LLM system prompt | ☑ |
 | N1 | Wire deploySession end-to-end (vibe-code → AppPlatform.install + Forgejo + docker) | ☐ |

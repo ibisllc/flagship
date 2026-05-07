@@ -1,7 +1,7 @@
 /**
  * SiblingRouter — multiplexes sibling-app-message (frame 0x06) traffic
  * for the calling pod. It is the in-pod backbone of N0i's
- * `/api/sibling/{list,send,subscribe}` API.
+ * `/api/live_siblings/{list,send,poll}` API.
  *
  * State this owns:
  *   - The set of known siblings (siblingId, controlled FQDNs, online,

@@ -68,10 +68,10 @@ function req(opts: {
   };
 }
 
-describe("/api/sibling/list", () => {
+describe("/api/live_siblings/list", () => {
   it("returns the registered siblings (token-gated)", async () => {
     const s = await setup();
-    const r = await s.handle(req({ method: "GET", path: "/api/sibling/list", token: s.tokenA }));
+    const r = await s.handle(req({ method: "GET", path: "/api/live_siblings/list", token: s.tokenA }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(String(r!.body));
     const ids = body.siblings.map((x: { siblingId: string }) => x.siblingId).sort();
@@ -83,18 +83,18 @@ describe("/api/sibling/list", () => {
 
   it("rejects missing app token", async () => {
     const s = await setup();
-    const r = await s.handle(req({ method: "GET", path: "/api/sibling/list" }));
+    const r = await s.handle(req({ method: "GET", path: "/api/live_siblings/list" }));
     expect(r?.status).toBe(401);
   });
 });
 
-describe("/api/sibling/send", () => {
+describe("/api/live_siblings/send", () => {
   it("routes a payload to the named sibling under the calling app's id", async () => {
     const s = await setup();
     const r = await s.handle(
       req({
         method: "POST",
-        path: "/api/sibling/send",
+        path: "/api/live_siblings/send",
         token: s.tokenA,
         body: { toSiblingId: OFFICE, payloadHex: "deadbeef" },
       }),
@@ -115,7 +115,7 @@ describe("/api/sibling/send", () => {
     const r = await s.handle(
       req({
         method: "POST",
-        path: "/api/sibling/send",
+        path: "/api/live_siblings/send",
         token: s.tokenB,
         body: { toSiblingId: OFFICE, payloadHex: "" },
       }),
@@ -129,7 +129,7 @@ describe("/api/sibling/send", () => {
     const r = await s.handle(
       req({
         method: "POST",
-        path: "/api/sibling/send",
+        path: "/api/live_siblings/send",
         token: s.tokenA,
         body: { toSiblingId: "ghost.alice.flagship.services", payloadHex: "" },
       }),
@@ -142,7 +142,7 @@ describe("/api/sibling/send", () => {
     const r = await s.handle(
       req({
         method: "POST",
-        path: "/api/sibling/send",
+        path: "/api/live_siblings/send",
         token: s.tokenA,
         body: { toSiblingId: GARAGE, payloadHex: "" },
       }),
@@ -155,7 +155,7 @@ describe("/api/sibling/send", () => {
     const r = await s.handle(
       req({
         method: "POST",
-        path: "/api/sibling/send",
+        path: "/api/live_siblings/send",
         token: s.tokenA,
         body: { toSiblingId: OFFICE, payloadHex: "ZZ" },
       }),
@@ -164,12 +164,12 @@ describe("/api/sibling/send", () => {
   });
 });
 
-describe("/api/sibling/poll", () => {
+describe("/api/live_siblings/poll", () => {
   it("returns immediately with buffered messages once one arrives", async () => {
     const s = await setup();
     // Pre-buffer a message by issuing a poll, then injecting after.
     const pending = s.handle(
-      req({ method: "GET", path: "/api/sibling/poll", token: s.tokenA }),
+      req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenA }),
     );
     // Give the poll a tick to register its resolver.
     await new Promise((r) => setTimeout(r, 10));
@@ -187,7 +187,7 @@ describe("/api/sibling/poll", () => {
   it("does NOT deliver app A's traffic to app B (route by appId)", async () => {
     const s = await setup();
     const pendingB = s.handle(
-      req({ method: "GET", path: "/api/sibling/poll", token: s.tokenB }),
+      req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenB }),
     );
     await new Promise((r) => setTimeout(r, 10));
     s.router.ingestFromSibling({
@@ -202,7 +202,7 @@ describe("/api/sibling/poll", () => {
 
   it("times out empty when no messages arrive within pollWaitMs", async () => {
     const s = await setup();
-    const r = await s.handle(req({ method: "GET", path: "/api/sibling/poll", token: s.tokenA }));
+    const r = await s.handle(req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenA }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(String(r!.body));
     expect(body.messages).toEqual([]);

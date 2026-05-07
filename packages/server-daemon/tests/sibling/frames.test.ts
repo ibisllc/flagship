@@ -4,10 +4,6 @@ import {
   encodeSiblingFrame,
   FRAME_SIBLING_APP_MESSAGE,
   FRAME_SIBLING_HELLO,
-  FRAME_SIBLING_SYNC_COMPLETE,
-  FRAME_SIBLING_SYNC_FRAME,
-  FRAME_SIBLING_TAKEOVER_ACK,
-  FRAME_SIBLING_TAKEOVER_REQUEST,
   type SiblingFrame,
 } from "../../src/sibling/frames.js";
 
@@ -27,60 +23,20 @@ describe("sibling-frame encode/decode round-trip", () => {
         serverId: "home.alice.flagship.services",
         challenge: "ab".repeat(32),
         challengeResponseSignature: "cd".repeat(64),
-        resumeToken: "tok-1",
+        liveSiblings: ["office.alice.flagship.services", "garage.alice.flagship.services"],
       },
     };
     expect(roundTrip(frame)).toEqual(frame);
   });
 
-  it("sibling-takeover-request with embedded capability", () => {
+  it("sibling-hello without optional liveSiblings", () => {
     const frame: SiblingFrame = {
-      type: FRAME_SIBLING_TAKEOVER_REQUEST,
+      type: FRAME_SIBLING_HELLO,
       payload: {
-        requestId: "req-1",
-        fqdn: "notes.alice.flagship.services",
-        capability: {
-          username: "alice",
-          appId: "notes",
-          siblingId: "home.alice.flagship.services",
-          fqdn: "notes.alice.flagship.services",
-          issuedAt: 1_000,
-          expiresAt: 2_000,
-        },
-        capabilitySignatureHex: "ef".repeat(64),
+        protocolVersion: 1,
+        serverId: "home.alice.flagship.services",
+        challenge: "ab".repeat(32),
       },
-    };
-    expect(roundTrip(frame)).toEqual(frame);
-  });
-
-  it("sibling-sync-frame with opaque payload", () => {
-    const frame: SiblingFrame = {
-      type: FRAME_SIBLING_SYNC_FRAME,
-      payload: { requestId: "req-1", payloadHex: "deadbeef" },
-    };
-    expect(roundTrip(frame)).toEqual(frame);
-  });
-
-  it("sibling-takeover-ack ok", () => {
-    const frame: SiblingFrame = {
-      type: FRAME_SIBLING_TAKEOVER_ACK,
-      payload: { requestId: "req-1", ok: true },
-    };
-    expect(roundTrip(frame)).toEqual(frame);
-  });
-
-  it("sibling-takeover-ack with rejection reason", () => {
-    const frame: SiblingFrame = {
-      type: FRAME_SIBLING_TAKEOVER_ACK,
-      payload: { requestId: "req-1", ok: false, reason: "capability expired" },
-    };
-    expect(roundTrip(frame)).toEqual(frame);
-  });
-
-  it("sibling-sync-complete", () => {
-    const frame: SiblingFrame = {
-      type: FRAME_SIBLING_SYNC_COMPLETE,
-      payload: { requestId: "req-1" },
     };
     expect(roundTrip(frame)).toEqual(frame);
   });
@@ -106,7 +62,9 @@ describe("sibling-frame decode error handling", () => {
   });
 
   it("rejects an unknown frame type byte", () => {
-    const r = decodeSiblingFrame(new Uint8Array([0x99, 0x7b, 0x7d])); // 0x99 + "{}"
+    // 0x02 was a takeover frame in earlier drafts; now stripped.
+    // Apps that need takeover semantics build them on FRAME_SIBLING_APP_MESSAGE.
+    const r = decodeSiblingFrame(new Uint8Array([0x02, 0x7b, 0x7d]));
     expect(r.kind).toBe("error");
     if (r.kind === "error") expect(r.reason).toMatch(/unknown frame type/);
   });
@@ -131,13 +89,27 @@ describe("sibling-frame decode error handling", () => {
     expect(r.kind).toBe("error");
   });
 
-  it("rejects a takeover-request missing capability", () => {
+  it("rejects a hello whose liveSiblings entry is not a string", () => {
     const buf = new Uint8Array([
-      FRAME_SIBLING_TAKEOVER_REQUEST,
+      FRAME_SIBLING_HELLO,
       ...new TextEncoder().encode(JSON.stringify({
-        requestId: "r",
-        fqdn: "x.alice.flagship.services",
-        capabilitySignatureHex: "00".repeat(64),
+        protocolVersion: 1,
+        serverId: "x.alice.flagship.services",
+        challenge: "ab".repeat(32),
+        liveSiblings: [42],
+      })),
+    ]);
+    const r = decodeSiblingFrame(buf);
+    expect(r.kind).toBe("error");
+  });
+
+  it("rejects an app-message missing payloadHex", () => {
+    const buf = new Uint8Array([
+      FRAME_SIBLING_APP_MESSAGE,
+      ...new TextEncoder().encode(JSON.stringify({
+        appId: "notes",
+        fromSiblingId: "a",
+        toSiblingId: "b",
       })),
     ]);
     const r = decodeSiblingFrame(buf);

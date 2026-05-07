@@ -100,27 +100,43 @@ Idempotent on re-register.
 ### Sibling coordination
 
 Sibling-WS at `/.flagship/sibling-handshake` between pods. Mutual STK
-auth on connect, then pods coordinate URL takeovers + relay opaque
-app-payload frames.
+auth on connect, then the WS carries opaque app-message bytes. The
+harness does not bless any one coordination shape.
 
-Frame catalogue:
+Frame catalogue — deliberately minimal:
 
 | Byte | Frame | Direction |
 |---|---|---|
-| `0x01` | `sibling-hello` | both — challenge + signed response |
-| `0x02` | `sibling-takeover-request` | initiator → incumbent (carries cap) |
-| `0x03` | `sibling-sync-frame` | incumbent → initiator (opaque) |
-| `0x04` | `sibling-takeover-ack` | incumbent → initiator (ok/reason) |
-| `0x05` | `sibling-sync-complete` | end of takeover |
-| `0x06` | `sibling-app-message` | bidirectional — apps' messages |
+| `0x01` | `sibling-hello` | both — challenge + signed response + `liveSiblings` gossip |
+| `0x06` | `sibling-app-message` | bidirectional — opaque per-app payloads |
 
-When a pod receives a `claim-url` order for an FQDN currently held by a
-sibling: open HTTPS to the FQDN → sibling answers → upgrade to
-`/.flagship/sibling-handshake` → mutual auth → takeover handshake. The
-old sibling drops the FQDN from its next HELLO; the new pod adds it.
+Everything app-level — URL-takeover dances, leader election, state
+sync, RPC, exactly-once delivery — is built on top of
+`sibling-app-message`. The harness owns auth and the WS lifecycle;
+apps own everything else.
 
-If no sibling answers (the FQDN was unclaimed): the pod just adds the
-FQDN to its HELLO update and `.services` accepts the claim.
+#### Boot sweep
+
+On boot, the daemon iterates every cap an installed app holds. For
+each cap it opens an HTTPS handshake to the FQDN.
+
+- If TCP/handshake reaches a sibling, mutual auth runs and the WS is
+  held open. **The incumbent stays — no automatic takeover.** The
+  sibling exchanges its `liveSiblings` set on the hello; ours grows.
+  New entries surface to apps as `new-sibling` events on
+  `/api/live_siblings/poll`.
+- If nobody answers (DNS NXDOMAIN, TCP refused, TLS error), the pod
+  sends a HELLO update claiming the FQDN — filling the vacuum.
+
+#### Active claim
+
+A pod is free to call `/api/url/claim` for any FQDN it has a cap for,
+at any time. `.services` checks the cap and last-HELLO-wins applies.
+Whether the previous holder also wanted that URL is not the harness's
+concern; the previous holder finds out by hub-side route eviction.
+Apps that want graceful state handoff coordinate over
+`sibling-app-message` before/after the call — that is purely an app
+concern.
 
 ### Disambiguation fallback
 
@@ -172,17 +188,22 @@ of older lists are rejected via monotonic `issuedAt`.
 All FLAGSHIP_APP_TOKEN gated.
 
 ```
-GET  /api/sibling/list     [{siblingId, fqdns:[...], online, lastSeenMs}, ...]
-POST /api/sibling/send     {toSiblingId, payloadHex}
-GET  /api/sibling/poll     long-poll for inbound app-messages
-                           (real WS endpoint at /api/sibling/subscribe
-                           lands in N0e-2)
+GET  /api/live_siblings/list    [{siblingId, fqdns:[...], online, lastSeenMs}, ...]
+POST /api/live_siblings/send    {toSiblingId, payloadHex}
+GET  /api/live_siblings/poll    long-poll for inbound app-messages
+                                (real WS endpoint lands in N0e-2)
 
-GET  /api/url              [{fqdn, kind, ownedBy, canClaim, capabilityExpiresAt}, ...]
-POST /api/url/claim        {fqdn} — checks capability, claims via HELLO update
-POST /api/url/release      {fqdn} — releases via HELLO update
-GET  /api/url/owned        [{fqdn}, ...]
+GET  /api/url                   [{fqdn, kind, ownedBy, canClaim, capabilityExpiresAt}, ...]
+POST /api/url/claim             {fqdn} — checks capability, claims via HELLO update
+POST /api/url/release           {fqdn} — releases via HELLO update
+GET  /api/url/owned             [{fqdn}, ...]
 ```
+
+The `live_siblings` name is deliberate: this surface only ever exposes
+peers we have an authenticated WS to right now (or that one of those
+peers gossiped to us via `sibling-hello.liveSiblings` in the current
+session). There is no persisted "siblings I once knew" set — apps must
+roll with the punches as the user adds and removes pods.
 
 `kind`: `"canonical" | "alias" | "custom"`.
 `ownedBy`: `"self" | "<siblingId>" | null`.
@@ -245,7 +266,7 @@ Apps own consistency. The harness owns distribution fabric.
 | URL controller (per-pod claim state) | `packages/server-daemon/src/runtime.ts` |
 | Capability store + checkCapability | `packages/server-daemon/src/capabilityStore.ts` |
 | Sibling-WS protocol + handshake | `packages/server-daemon/src/sibling/{frames,handshake}.ts` |
-| App-facing /api/sibling/* | `packages/server-daemon/src/sibling/httpHandlers.ts` |
+| App-facing /api/live_siblings/* | `packages/server-daemon/src/sibling/httpHandlers.ts` |
 | App-facing /api/url/* | `packages/server-daemon/src/sibling/urlHttpHandlers.ts` |
 | Disambiguation fallback | `packages/server-daemon/src/runtime.ts` (`disambiguationResponse`) |
 

@@ -27,7 +27,7 @@ describe("buildUserContext — replication-patterns chapter (N0k)", () => {
   it("INCLUDES the chapter when siblingsEnabled is true", () => {
     const out = buildUserContext({ ...BASE, siblingsEnabled: true });
     expect(out).toContain("Multi-pod (sibling) replication");
-    expect(out).toContain("/api/sibling/list");
+    expect(out).toContain("/api/live_siblings/list");
     expect(out).toContain("/api/url/claim");
     expect(out).toContain("Pattern 1");
     expect(out).toContain("Pattern 2");

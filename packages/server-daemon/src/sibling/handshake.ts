@@ -56,11 +56,16 @@ export interface SiblingHandshakeOptions {
   /** Send a frame on the underlying transport. */
   send: (frame: SiblingFrame) => void;
   /**
-   * Optional resume-token from a previous successful handshake on this
-   * (initiator, responder) pair. Echoed in our hello; receivers may
-   * use it to skip frame replay (see N0e-2). Currently unused.
+   * Snapshot getter for the currently-live sibling set. Called at
+   * hello-send time; the result is piggybacked on the hello as
+   * `liveSiblings` so peers can grow their own live set via gossip.
+   * Optional — when omitted, no gossip is sent (the receiver can
+   * still bootstrap its own discovery elsewhere).
+   *
+   * The set is purely ephemeral. There is no historical record; what
+   * the getter returns at send-time is what the peer learns.
    */
-  resumeToken?: string;
+  liveSiblings?: () => string[];
   /** Test seam — supply random bytes for the challenge nonce. */
   randomChallenge?: () => Uint8Array;
 }
@@ -215,7 +220,7 @@ export class SiblingHandshake {
       serverId: this.opts.myServerId,
       challenge: bytesToHex(this.myChallenge),
       challengeResponseSignature: signature,
-      resumeToken: this.opts.resumeToken,
+      liveSiblings: this.opts.liveSiblings?.(),
     };
     this.opts.send({ type: FRAME_SIBLING_HELLO, payload });
   }
