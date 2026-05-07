@@ -1058,6 +1058,37 @@ export type PhoneOrder =
       serverId: ServerId;
       token: string;
       issuedAt: number;
+    }
+  | {
+      /**
+       * Phone-driven URL claim. The order carries a ClaimUrlCapability
+       * (signed by IRK separately — see TAG_CLAIM_URL_CAP) plus its
+       * signature; the daemon admits it into the capability store and
+       * immediately updates its controlledDomains list. Used by the
+       * phone UI when the user explicitly maps a URL to a specific pod
+       * without going through the app's own claim path.
+       *
+       * The wire-level capability fields are kept separate from the
+       * PhoneOrder canonical bytes so the cap signature can be
+       * re-verified independently.
+       */
+      type: "claim-url";
+      serverId: ServerId;
+      capability: ClaimUrlCapability;
+      capabilitySignatureHex: string;
+      issuedAt: number;
+    }
+  | {
+      /**
+       * Phone-driven URL release. Removes the FQDN from this pod's
+       * controlledDomains list (HELLO update). Does NOT delete the
+       * stored capability — that's `revoke-claim-capability`. A
+       * subsequent claim-url is then idempotent.
+       */
+      type: "release-url";
+      serverId: ServerId;
+      fqdn: string;
+      issuedAt: number;
     };
 
 const TAG_ORDER_NOOP = "flagship/order/noop/v1";
@@ -1071,6 +1102,8 @@ const TAG_ORDER_ADD_SUBSCRIBER = "flagship/order/add-subscriber/v1";
 const TAG_ORDER_REMOVE_SUBSCRIBER = "flagship/order/remove-subscriber/v1";
 const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v1";
 const TAG_ORDER_REMOVE_PAIRED_SESSION = "flagship/order/remove-paired-session/v1";
+const TAG_ORDER_CLAIM_URL = "flagship/order/claim-url/v1";
+const TAG_ORDER_RELEASE_URL = "flagship/order/release-url/v1";
 
 function canonicalPhoneOrder(o: PhoneOrder): Bytes {
   const enc = new TextEncoder();
@@ -1120,6 +1153,25 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
     case "remove-paired-session":
       return enc.encode(
         [TAG_ORDER_REMOVE_PAIRED_SESSION, o.serverId, o.token, o.issuedAt].join("|"),
+      );
+    case "claim-url":
+      return enc.encode(
+        [
+          TAG_ORDER_CLAIM_URL,
+          o.serverId,
+          o.capability.username,
+          o.capability.appId,
+          o.capability.siblingId,
+          o.capability.fqdn,
+          o.capability.issuedAt,
+          o.capability.expiresAt,
+          o.capabilitySignatureHex,
+          o.issuedAt,
+        ].join("|"),
+      );
+    case "release-url":
+      return enc.encode(
+        [TAG_ORDER_RELEASE_URL, o.serverId, o.fqdn, o.issuedAt].join("|"),
       );
   }
 }

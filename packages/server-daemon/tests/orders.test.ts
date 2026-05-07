@@ -356,4 +356,51 @@ describe("orders-from-user handler", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("dispatches claim-url with the capability payload", async () => {
+    const psk = makeKey();
+    const calls: Array<{ fqdn: string }> = [];
+    const ex: OrderExecutor = {
+      claimUrl: async ({ capability }) => {
+        calls.push({ fqdn: capability.fqdn });
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "claim-url",
+      serverId: SERVER_FQDN,
+      capability: {
+        username: "alice",
+        appId: "notes",
+        siblingId: SERVER_FQDN,
+        fqdn: "notes.alice.flagship.services",
+        issuedAt: 1_000,
+        expiresAt: 1_000 + 90 * 24 * 60 * 60 * 1000,
+      },
+      capabilitySignatureHex: "ab".repeat(64),
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual([{ fqdn: "notes.alice.flagship.services" }]);
+  });
+
+  it("dispatches release-url", async () => {
+    const psk = makeKey();
+    const calls: Array<{ fqdn: string }> = [];
+    const ex: OrderExecutor = {
+      releaseUrl: async (a) => {
+        calls.push(a);
+      },
+    };
+    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
+    const order: PhoneOrder = {
+      type: "release-url",
+      serverId: SERVER_FQDN,
+      fqdn: "notes.alice.flagship.services",
+      issuedAt: Date.now(),
+    };
+    const r = await h(makeReq(envelope(order, psk)));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual([{ fqdn: "notes.alice.flagship.services" }]);
+  });
 });

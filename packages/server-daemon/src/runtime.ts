@@ -201,6 +201,23 @@ export interface DaemonRuntime {
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
   appPlatform: AppPlatform | null;
+  /**
+   * App-claim primitives: add/remove FQDNs from this pod's
+   * controlledDomains list and push a HELLO update to the tunnel hub.
+   * Capability enforcement happens at a higher layer (the phone-order
+   * dispatcher or N0j's /api/url/claim handler) — `urlController`
+   * itself is the lower-level mutation primitive.
+   */
+  urlController: UrlController;
+}
+
+export interface UrlController {
+  /** Add an FQDN to the controlled list. Idempotent. Pushes a HELLO update. */
+  claim(fqdn: string): Promise<void>;
+  /** Remove an FQDN. Idempotent. Pushes a HELLO update. */
+  release(fqdn: string): Promise<void>;
+  /** Snapshot of extra (non-base) claimed FQDNs. */
+  list(): string[];
 }
 
 function buildDefaultHandler(
@@ -505,6 +522,33 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     console.log(`[runtime] AppPlatform skipped (host IRK / SWK not provided)`);
   }
 
+  // URL controller wraps the tunnel client's HELLO update path. The
+  // base set (canonical pod FQDN + wildcard) is always present;
+  // app-claimed FQDNs are accumulated in `extra` and the union is
+  // pushed on every change.
+  const baseDomains = [...tunnelInitialDomains];
+  const extra = new Set<string>();
+  const pushHello = () => {
+    tunnel.updateControlledDomains([...baseDomains, ...extra]);
+  };
+  const urlController: UrlController = {
+    async claim(fqdn: string) {
+      const lower = fqdn.toLowerCase();
+      if (extra.has(lower)) return;
+      extra.add(lower);
+      pushHello();
+    },
+    async release(fqdn: string) {
+      const lower = fqdn.toLowerCase();
+      if (!extra.has(lower)) return;
+      extra.delete(lower);
+      pushHello();
+    },
+    list(): string[] {
+      return [...extra];
+    },
+  };
+
   return {
     ready: () => Promise.resolve(),
     close: async () => {
@@ -516,6 +560,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     appRunner,
     dataProvisioner,
     appPlatform: appPlatformRef.current,
+    urlController,
   };
 }
 
