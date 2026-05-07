@@ -47,8 +47,14 @@ export interface SiblingPeerLookup {
 export interface SiblingHandshakeOptions {
   /** This pod's serverId (will be sent in our sibling-hello). */
   myServerId: string;
-  /** The peer we expect to talk to. */
-  peerServerId: string;
+  /**
+   * The peer we expect to talk to. Optional on the responder side —
+   * when undefined, the handshake binds it from the first inbound
+   * hello's `serverId` (and then enforces the bound value for the
+   * rest of the connection). Initiators ALWAYS know who they're
+   * dialling and should pass it.
+   */
+  peerServerId?: string;
   /** This pod's STK keypair. */
   myStk: Keypair;
   /** STK pubkey lookup. */
@@ -83,6 +89,12 @@ export class SiblingHandshake {
   private peerChallenge: Uint8Array | null = null;
   private peerVerified = false;
   private sentSignedHello = false;
+  /**
+   * Bound peer serverId. Initialized from opts.peerServerId if the
+   * caller supplied one; otherwise set on the first inbound hello and
+   * frozen for the rest of the connection.
+   */
+  private peerServerId: string | null;
   private resolveReady!: () => void;
   private rejectReady!: (reason: string) => void;
   private readyPromise: Promise<void>;
@@ -90,6 +102,7 @@ export class SiblingHandshake {
   constructor(private readonly opts: SiblingHandshakeOptions) {
     const rng = opts.randomChallenge ?? defaultRandom;
     this.myChallenge = rng();
+    this.peerServerId = opts.peerServerId ?? null;
     this.readyPromise = new Promise((resolve, reject) => {
       this.resolveReady = resolve;
       this.rejectReady = (r) => reject(new Error(r));
@@ -113,6 +126,15 @@ export class SiblingHandshake {
     return this.status;
   }
 
+  /**
+   * The peer's serverId. Null until the first inbound hello arrives
+   * (only relevant on the responder side; initiators have it from
+   * construction).
+   */
+  getPeerServerId(): string | null {
+    return this.peerServerId;
+  }
+
   /** Feed a raw inbound WS message. */
   async ingest(message: Uint8Array): Promise<void> {
     if (this.status.state === "failed" || this.status.state === "ready") return;
@@ -126,14 +148,14 @@ export class SiblingHandshake {
 
   private async onFrame(frame: SiblingFrame): Promise<void> {
     if (frame.type !== FRAME_SIBLING_HELLO) {
-      // Pre-completion non-hello frames are protocol errors. Post-ready
-      // they are handled by the higher-level dispatcher (not this state
-      // machine).
       this.fail(`unexpected frame 0x${frame.type.toString(16)} before handshake`);
       return;
     }
     const hello = frame.payload;
-    if (hello.serverId !== this.opts.peerServerId) {
+    if (this.peerServerId === null) {
+      // Responder side: bind the peer serverId on first hello.
+      this.peerServerId = hello.serverId;
+    } else if (hello.serverId !== this.peerServerId) {
       this.fail("peer serverId mismatch");
       return;
     }
@@ -184,10 +206,14 @@ export class SiblingHandshake {
       this.fail("peer serverId not registered with .com");
       return false;
     }
+    if (this.peerServerId === null) {
+      this.fail("peer serverId not bound");
+      return false;
+    }
     // The peer signs OUR challenge — the bytes they were authenticating
     // against, with their serverId in the "peer" slot.
     const challenge = siblingHelloChallenge({
-      peerServerId: this.opts.peerServerId,
+      peerServerId: this.peerServerId,
       myServerId: this.opts.myServerId,
       challengeHex: bytesToHex(this.myChallenge),
     });
@@ -206,10 +232,10 @@ export class SiblingHandshake {
 
   private sendHello(peerChallenge: Uint8Array | undefined): void {
     let signature: string | undefined;
-    if (peerChallenge) {
+    if (peerChallenge && this.peerServerId !== null) {
       const challenge = siblingHelloChallenge({
         peerServerId: this.opts.myServerId,
-        myServerId: this.opts.peerServerId,
+        myServerId: this.peerServerId,
         challengeHex: bytesToHex(peerChallenge),
       });
       const sig = ed.sign(challenge, this.opts.myStk.privateKey);

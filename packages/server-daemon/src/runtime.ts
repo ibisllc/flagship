@@ -18,6 +18,7 @@ import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js"
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 import { startTunnelClient, type TunnelClient } from "./tunnel/tunnelClient.js";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
+import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
 
 export interface DaemonRuntimeOptions {
@@ -76,13 +77,20 @@ export interface DaemonRuntimeOptions {
    */
   onCertIssued?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
   /**
-   * Called when the .services hub broadcasts a domain-granted event
-   * (FRAME 0x12). Production wires this to a SiblingRouter instance so
-   * apps observe the grant via /api/live_siblings/poll. Tests inject a
-   * recording closure. Optional; unset means the daemon drops the
-   * event.
+   * Optional secondary listener for domain-granted events from the
+   * hub. The runtime always wires its internal SiblingRouter to
+   * receive the event (so apps see it via /api/live_siblings/poll);
+   * this hook is for tests / observability that need to assert events
+   * were forwarded.
    */
   onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
+  /**
+   * Override the STK pubkey lookup used to verify inbound sibling-WS
+   * handshakes. Production fetches from .com `/api/server/by-domain`;
+   * tests inject a static map. Default: a fetcher pointed at
+   * `controlPlaneBaseUrl`.
+   */
+  peerStkLookup?: (peerServerId: string) => Promise<Uint8Array | null>;
   /**
    * Called when a fresh ACME account key is generated. Fires AFTER
    * persistence. Useful for tests / observability.
@@ -217,6 +225,20 @@ export interface DaemonRuntime {
    * itself is the lower-level mutation primitive.
    */
   urlController: UrlController;
+  /**
+   * In-pod live-siblings router. Receives FRAME_DOMAIN_GRANTED events
+   * from the tunnel hub and inbound sibling-app-message frames from
+   * peer connections; fans out to app subscribers via
+   * /api/live_siblings/poll. The sibling-WS connection layer (N0e-2)
+   * registers/removes peers via setSibling/removeSibling.
+   */
+  siblingRouter: import("./sibling/router.js").InMemorySiblingRouter;
+  /**
+   * In-pod capability store. PhoneOrder claim-url + future
+   * admit-capability orders deposit ClaimUrlCapability records here;
+   * /api/url/claim consumes them via checkCapability.
+   */
+  capabilityStore: import("./capabilityStore.js").CapabilityStore;
 }
 
 export interface UrlController {
@@ -335,16 +357,20 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // us bind the handler now and populate it later.
   const appPlatformRef: { current: AppPlatform | null } = { current: null };
   const baseHandleHttp = opts.handleHttp ?? buildDefaultHandler(opts, appPlatformRef);
-  const extras = opts.additionalHandlers ?? [];
-  const handleHttp: (req: HttpRequest) => Promise<HttpResponse> = extras.length === 0
-    ? baseHandleHttp
-    : async (req) => {
-        for (const h of extras) {
-          const r = await h(req);
-          if (r) return r;
-        }
-        return baseHandleHttp(req);
-      };
+  // Mutable handler chain. We push internally-built handlers (live_siblings,
+  // url) into this AFTER startup wires their dependencies. The closure
+  // below captures the array by reference so post-startup additions are
+  // visible to subsequent requests.
+  const extras: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [
+    ...(opts.additionalHandlers ?? []),
+  ];
+  const handleHttp: (req: HttpRequest) => Promise<HttpResponse> = async (req) => {
+    for (const h of extras) {
+      const r = await h(req);
+      if (r) return r;
+    }
+    return baseHandleHttp(req);
+  };
 
   // Local TLS server. The tunnel hub forwards inbound TCP from
   // `<serverFqdn>:443` to this socket; the TLS handshake terminates here.
@@ -385,15 +411,47 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // canonical address, fall through to the daemon's own HTTP
     // surface. Otherwise the SNI is an unclaimed FQDN under our
     // user-zone wildcard cert (per N0c) — serve the disambiguation
-    // fallback page (N0f).
-    if (sni !== opts.serverFqdn && sni !== `*.${opts.serverFqdn}`) {
+    // fallback page (N0f) UNLESS the request is a sibling-handshake
+    // upgrade (N0e-2): peers reach us via the FQDN they're trying to
+    // talk to, so the WS path needs to work on every SNI we serve.
+    handleHttpConnection(socket, async (req) => {
+      // Default fallback when not handled by upgrade or extras.
       const userZone = userZoneOf(opts.serverFqdn);
-      if (userZone && (sni === userZone || sni.endsWith(`.${userZone}`))) {
-        handleHttpConnection(socket, async () => disambiguationResponse(sni));
-        return;
-      }
-    }
-    handleHttpConnection(socket, handleHttp);
+      const isOwnHost = sni === opts.serverFqdn || sni === `*.${opts.serverFqdn}`;
+      const inUserZone = userZone && (sni === userZone || sni.endsWith(`.${userZone}`));
+      if (!isOwnHost && inUserZone) return disambiguationResponse(sni);
+      return handleHttp(req);
+    }, {
+      onUpgrade: ({ socket: rawSocket, path: reqPath, headers, headBuffer }) => {
+        if (reqPath !== "/.flagship/sibling-handshake") return false;
+        if (!opts.appPlatform?.swk) return false; // no STK → can't auth siblings
+        // Build the sibling STK from SWK on demand. The STK is the
+        // ed25519 keypair derived from SWK; same key the tunnel
+        // client uses to sign HELLO.
+        const accepted = acceptSiblingUpgrade({
+          socket: rawSocket as unknown as import("node:net").Socket,
+          headBuffer,
+          headers,
+          myServerId: opts.serverFqdn,
+          myStk: identity, // identity keypair is the STK in this runtime
+          lookupPeerStk: opts.peerStkLookup ?? defaultPeerStkLookup(opts),
+          router: siblingRouter,
+          liveSiblings: () => listLiveSiblings(siblingRouter),
+          onReady: ({ peerServerId }) => {
+            siblingRouter.setSibling({
+              siblingId: peerServerId,
+              fqdns: [],
+              online: true,
+              transport: null,
+            });
+          },
+          onClose: ({ peerServerId }) => {
+            if (peerServerId) siblingRouter.removeSibling(peerServerId);
+          },
+        });
+        return accepted;
+      },
+    });
   });
   await new Promise<void>((resolve) => tls.listen(0, "127.0.0.1", () => resolve()));
   const tlsAddr = tls.address();
@@ -423,13 +481,25 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const tunnelInitialDomains = wantWildcard
     ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
     : [opts.serverFqdn];
+  // In-pod live-siblings router. Receives the hub's domain-granted
+  // broadcast (and, once N0e-2 lands the WS layer, inbound
+  // sibling-app-message frames from peer pods).
+  const { InMemorySiblingRouter } = await import("./sibling/router.js");
+  const siblingRouter = new InMemorySiblingRouter();
+
   const tunnel = startTunnelClient({
     hubUrl: opts.tunnelHubUrl,
     serverId: opts.serverFqdn,
     controlledDomains: tunnelInitialDomains,
     signingKey: identity,
     resolveBackend: () => ({ host: "127.0.0.1", port: tlsPort }),
-    onDomainGranted: opts.onDomainGranted,
+    onDomainGranted: (e) => {
+      siblingRouter.broadcastDomainGranted({
+        fqdn: e.fqdn,
+        ownerSiblingId: e.ownerServerId,
+      });
+      opts.onDomainGranted?.(e);
+    },
   });
   await tunnel.ready();
 
@@ -570,6 +640,57 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     },
   };
 
+  // Wire app-facing HTTP surfaces — /api/live_siblings/* (sibling
+  // discovery + opaque app messaging) and /api/url/* (URL claims) —
+  // when an AppAuthTokens map is wired. Without it, apps can't
+  // authenticate so the routes would always 401; we just don't mount
+  // them. Capability store + revocation cache are constructed here:
+  // the store is the deposit target for incoming caps (PhoneOrders,
+  // future install orders); revocation defaults to never-revoke
+  // until N0d-2 wires the .com fetch.
+  const appAuthTokens = opts.appPlatform?.appAuthTokens;
+  const { InMemoryCapabilityStore } = await import("./capabilityStore.js");
+  const capabilityStore = new InMemoryCapabilityStore();
+  const noRevoke: import("./capabilityStore.js").RevocationCache = {
+    has: async () => false,
+    refresh: async () => {},
+  };
+  if (appAuthTokens) {
+    const { buildSiblingHttpHandlers } = await import("./sibling/httpHandlers.js");
+    const { buildUrlHttpHandlers } = await import("./sibling/urlHttpHandlers.js");
+    extras.push(
+      buildSiblingHttpHandlers({
+        router: siblingRouter,
+        appAuthTokens,
+        thisSiblingId: opts.serverFqdn,
+      }),
+    );
+    extras.push(
+      buildUrlHttpHandlers({
+        appAuthTokens,
+        capabilityStore,
+        revocations: noRevoke,
+        urlController,
+        thisSiblingId: opts.serverFqdn,
+        canonicalFqdnsForApp: (appId) => {
+          const ap = appPlatformRef.current;
+          if (!ap) return [];
+          const app = ap.byAppId(appId);
+          if (!app) return [];
+          // The pod's wildcard already covers <app>.<server>.<user>; the
+          // canonical FQDN we surface is the leftmost-label form so apps
+          // can show + reason about their identity URL.
+          const host = apOpts?.hostUsername ?? "";
+          const label = host
+            ? AppPlatform.urlLabel(host, app.creator, app.slug)
+            : app.slug;
+          return [`${label}.${opts.serverFqdn}`];
+        },
+      }),
+    );
+    console.log(`[runtime] mounted /api/live_siblings/* + /api/url/* handlers`);
+  }
+
   return {
     ready: () => Promise.resolve(),
     close: async () => {
@@ -582,6 +703,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     dataProvisioner,
     appPlatform: appPlatformRef.current,
     urlController,
+    siblingRouter,
+    capabilityStore,
   };
 }
 
@@ -704,9 +827,26 @@ export async function renewIfNeeded(
  * is a self-contained handler so the daemon can prove end-to-end without
  * an app in the picture.
  */
+interface HandleHttpOptions {
+  /**
+   * Optional WebSocket upgrade hook. Invoked when an inbound request
+   * is `Upgrade: websocket` for one of the path prefixes the caller
+   * recognizes. When the hook returns true the socket is handed off
+   * (no further HTTP parsing). When it returns false a 400 is sent.
+   */
+  onUpgrade?: (args: {
+    socket: TLSSocket;
+    method: string;
+    path: string;
+    headers: Record<string, string>;
+    headBuffer: Buffer;
+  }) => boolean;
+}
+
 function handleHttpConnection(
   socket: TLSSocket,
   handler: (req: HttpRequest) => Promise<HttpResponse>,
+  upgradeOpts?: HandleHttpOptions,
 ): void {
   let buf: Buffer = Buffer.alloc(0);
   let headersDone = false;
@@ -715,8 +855,10 @@ function handleHttpConnection(
   let headers: Record<string, string> = {};
   let bodyExpected = 0;
   let bodyAccum: Buffer = Buffer.alloc(0);
+  let detached = false;
 
-  socket.on("data", (chunk: Buffer) => {
+  const onData = (chunk: Buffer) => {
+    if (detached) return;
     buf = Buffer.concat([buf, chunk]);
     if (!headersDone) {
       const sep = buf.indexOf("\r\n\r\n");
@@ -735,6 +877,26 @@ function handleHttpConnection(
         const v = line.slice(idx + 1).trim();
         headers[k] = v;
       }
+      // Detect WebSocket upgrade. If the caller has an upgrade hook
+      // and accepts the request, hand the socket off and stop HTTP
+      // parsing. The hook owns the socket from this point on.
+      const upgradeHdr = headers["upgrade"]?.toLowerCase();
+      const connectionHdr = headers["connection"]?.toLowerCase() ?? "";
+      const isUpgrade = upgradeHdr === "websocket" && connectionHdr.includes("upgrade");
+      if (isUpgrade && upgradeOpts?.onUpgrade) {
+        const accepted = upgradeOpts.onUpgrade({
+          socket,
+          method,
+          path,
+          headers,
+          headBuffer: buf,
+        });
+        if (accepted) {
+          detached = true;
+          socket.off("data", onData);
+          return;
+        }
+      }
       bodyExpected = parseInt(headers["content-length"] ?? "0", 10) || 0;
       headersDone = true;
     }
@@ -745,7 +907,8 @@ function handleHttpConnection(
         respond({ method, path, headers, body: bodyAccum.subarray(0, bodyExpected) }).catch(() => {});
       }
     }
-  });
+  };
+  socket.on("data", onData);
   socket.on("error", () => {});
 
   async function respond(req: HttpRequest): Promise<void> {
@@ -786,6 +949,41 @@ function handleHttpConnection(
  *
  *   sni = "alice.flagship.services" (no leftmost) → null
  */
+/**
+ * Default STK pubkey lookup for inbound sibling-WS handshakes.
+ * Fetches `<controlPlaneBaseUrl>/api/server/by-domain/<fqdn>` and
+ * extracts identityPubKey/stkPubKey hex.
+ */
+function defaultPeerStkLookup(opts: DaemonRuntimeOptions): (peerServerId: string) => Promise<Uint8Array | null> {
+  const base = (opts.controlPlaneBaseUrl ?? "https://flagshipserver.com").replace(/\/+$/, "");
+  return async (peerServerId: string) => {
+    try {
+      const r = await fetch(`${base}/api/server/by-domain/${encodeURIComponent(peerServerId)}`);
+      if (!r.ok) return null;
+      const body = (await r.json()) as { stkPubKey?: string; identityPubKey?: string };
+      const hex = body.identityPubKey ?? body.stkPubKey;
+      if (typeof hex !== "string") return null;
+      const out = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < out.length; i++) {
+        out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  };
+}
+
+/**
+ * Snapshot of currently-live sibling serverIds from the router. Used
+ * as the gossip getter on outbound + inbound sibling-WS handshakes.
+ */
+function listLiveSiblings(
+  router: import("./sibling/router.js").InMemorySiblingRouter,
+): string[] {
+  return router.list().map((s) => s.siblingId);
+}
+
 /**
  * Disambiguation HTTP response served when the SNI is under our
  * user-zone wildcard cert but no app has claimed it. The .services
