@@ -1,4 +1,13 @@
-import type { ChatRequest, ChatResponse, FetchLike, LLMProvider, ProviderConfig } from "../types.js";
+import type {
+  ChatRequest,
+  ChatResponse,
+  ChatStreamEvent,
+  FetchLike,
+  LLMProvider,
+  ProviderConfig,
+  StreamingFetchLike,
+  StreamingLLMProvider,
+} from "../types.js";
 import { ProviderError } from "../types.js";
 
 const DEFAULT_BASE = "https://api.anthropic.com";
@@ -55,3 +64,168 @@ export const anthropic: LLMProvider = {
     };
   },
 };
+
+/**
+ * Streaming variant. Sets `stream: true` on the request and parses
+ * Anthropic's SSE event stream into ChatStreamEvent. The handler
+ * never throws on provider errors — it routes them through `onEvent`
+ * so callers can surface them to the user without unwinding.
+ *
+ * Anthropic SSE event types we handle:
+ *   - `content_block_delta` with `delta.text` → emit "delta"
+ *   - `message_delta` with `usage` → record usage for the end event
+ *   - `message_stop` → emit "end" with the captured usage + stop_reason
+ *   - `error` → emit "error" and stop
+ *
+ * Other event types (message_start, content_block_start, ping, etc.)
+ * are ignored.
+ */
+export const anthropicStreaming: StreamingLLMProvider = {
+  name: "anthropic",
+  async chatStream(
+    req: ChatRequest,
+    cfg: ProviderConfig,
+    onEvent: (e: ChatStreamEvent) => void,
+    fetchImpl?: StreamingFetchLike,
+  ): Promise<void> {
+    const f = fetchImpl ?? (defaultStreamingFetch as StreamingFetchLike);
+    const base = cfg.baseUrl ?? DEFAULT_BASE;
+    const { system, conv } = splitSystem(req.messages);
+    const body = {
+      model: req.model,
+      max_tokens: req.maxTokens ?? 1024,
+      temperature: req.temperature,
+      system: system.length > 0 ? system : undefined,
+      messages: conv,
+      stream: true,
+    };
+    let res: Awaited<ReturnType<StreamingFetchLike>>;
+    try {
+      res = await f(`${base}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": cfg.apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      onEvent({
+        kind: "error",
+        message: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "<no body>");
+      onEvent({
+        kind: "error",
+        message: text.slice(0, 512),
+        status: res.status,
+      });
+      return;
+    }
+    let stopReason: string | undefined;
+    let inputTokens: number | undefined;
+    let outputTokens: number | undefined;
+    try {
+      for await (const line of res.lines()) {
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice("data:".length).trim();
+        if (!payload || payload === "[DONE]") continue;
+        let parsed: {
+          type?: string;
+          delta?: { text?: string; stop_reason?: string };
+          usage?: { input_tokens?: number; output_tokens?: number };
+          message?: { stop_reason?: string };
+          error?: { message?: string };
+        };
+        try {
+          parsed = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        switch (parsed.type) {
+          case "content_block_delta":
+            if (typeof parsed.delta?.text === "string") {
+              onEvent({ kind: "delta", text: parsed.delta.text });
+            }
+            break;
+          case "message_delta":
+            if (parsed.usage) {
+              inputTokens = parsed.usage.input_tokens ?? inputTokens;
+              outputTokens = parsed.usage.output_tokens ?? outputTokens;
+            }
+            if (parsed.delta?.stop_reason) {
+              stopReason = parsed.delta.stop_reason;
+            }
+            break;
+          case "message_stop":
+            // The SSE-level signal that the stream is finished.
+            // We emit "end" once on stream-close; defer to after-loop.
+            break;
+          case "error":
+            onEvent({
+              kind: "error",
+              message: parsed.error?.message ?? "anthropic stream error",
+            });
+            return;
+        }
+      }
+    } catch (e) {
+      onEvent({
+        kind: "error",
+        message: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
+    onEvent({
+      kind: "end",
+      stopReason,
+      usage: { inputTokens, outputTokens },
+    });
+  },
+};
+
+/**
+ * Default streaming-fetch built on Node's global fetch. Splits the
+ * response body into UTF-8 lines and yields them via async iteration.
+ */
+const defaultStreamingFetch: StreamingFetchLike = async (input, init) => {
+  const f = globalThis.fetch as typeof globalThis.fetch;
+  const r = await f(input, {
+    method: init?.method,
+    headers: init?.headers,
+    body: init?.body,
+  });
+  return {
+    ok: r.ok,
+    status: r.status,
+    text: () => r.text(),
+    lines: () => readLines(r.body),
+  };
+};
+
+async function* readLines(
+  body: ReadableStream<Uint8Array> | null,
+): AsyncIterable<string> {
+  if (!body) return;
+  const reader = body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      if (buf.length > 0) yield buf;
+      return;
+    }
+    buf += decoder.decode(value, { stream: true });
+    let nl = buf.indexOf("\n");
+    while (nl !== -1) {
+      yield buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      nl = buf.indexOf("\n");
+    }
+  }
+}
