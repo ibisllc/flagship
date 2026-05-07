@@ -1803,3 +1803,193 @@ export function verifyClaimUrlCapabilityRevocationList(
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Pod entitlement certs — two-tier model.
+//
+// RootEntitlement: never-expires. Signed by the user's IRK. Authorizes
+// the pod's own canonical (e.g. `kitchen.john.flagship.services`).
+// Without this, a long-offline pod couldn't reconnect even to fetch
+// fresh app entitlements — chicken-and-egg.
+//
+// AppEntitlement: 90-day default TTL. Signed by the user's IRK. Lists
+// every app-canonical the pod is currently entitled to serve (e.g.
+// `messenger-facebook.kitchen.john.flagship.services`,
+// `shittygame.woodshed.john.flagship.services`). Phone re-issues
+// opportunistically (on app install/uninstall, on rolling refresh).
+//
+// `.services` validates both at HELLO time. Shortened slots (the
+// user-zone and host-zone collapsed forms like
+// `messenger.john.flagship.services`) are AUTOMATICALLY DERIVED from
+// the cert's canonicals — not separately listed. Multiple pods may
+// derive overlapping shortened slots → collision is normal → FCFS
+// resolves at the hub.
+//
+// Each cert has a stable `certId` = SHA-256 hex of its canonical
+// bytes. Revocation lists reference certs by id.
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Perpetual cert authorizing a single pod canonical. Issued once at
+ * pod registration, never re-issued. Phone retains the ability to
+ * REVOKE it (via the cert revocation list — see below) for compromise
+ * scenarios.
+ */
+export interface RootEntitlement {
+  /** User-zone owner — middle label of the pod canonical. */
+  username: string;
+  /** Pod identity pubkey (the STK). 32 bytes. */
+  podPubKey: Bytes;
+  /** Pod's canonical FQDN, e.g. `kitchen.john.flagship.services`. */
+  podCanonical: string;
+  /** ms since epoch when this cert was minted. */
+  issuedAt: number;
+}
+
+const TAG_ROOT_ENTITLEMENT = "flagship/root-entitlement/v1";
+
+function canonicalRootEntitlement(c: RootEntitlement): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_ROOT_ENTITLEMENT,
+      c.username,
+      hex(c.podPubKey),
+      c.podCanonical,
+      c.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signRootEntitlement(c: RootEntitlement, irk: Keypair): Bytes {
+  return ed.sign(canonicalRootEntitlement(c), irk.privateKey);
+}
+
+export function verifyRootEntitlement(
+  c: RootEntitlement,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalRootEntitlement(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Time-limited cert authorizing a list of app-canonicals on a pod.
+ * Re-issued by the phone whenever the canonicals change OR before
+ * `expiresAt` lapses (default TTL 90 days).
+ *
+ * Canonicals listed here are FQDNs of the form
+ * `<slug>[-<author>].<host>.<user>.flagship.services`. The hub uses
+ * them to derive the shortened slots the pod can compete for; the
+ * pod doesn't list shortened slots explicitly.
+ */
+export interface AppEntitlement {
+  username: string;
+  podPubKey: Bytes;
+  /** Lower-cased FQDNs the pod is entitled to serve. */
+  canonicals: string[];
+  issuedAt: number;
+  expiresAt: number;
+}
+
+const TAG_APP_ENTITLEMENT = "flagship/app-entitlement/v1";
+
+function canonicalAppEntitlement(c: AppEntitlement): Bytes {
+  // Sort canonicals so signing is order-independent.
+  const list = [...c.canonicals].map((s) => s.toLowerCase()).sort().join(",");
+  return new TextEncoder().encode(
+    [
+      TAG_APP_ENTITLEMENT,
+      c.username,
+      hex(c.podPubKey),
+      list,
+      c.issuedAt,
+      c.expiresAt,
+    ].join("|"),
+  );
+}
+
+export function signAppEntitlement(c: AppEntitlement, irk: Keypair): Bytes {
+  return ed.sign(canonicalAppEntitlement(c), irk.privateKey);
+}
+
+export function verifyAppEntitlement(
+  c: AppEntitlement,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalAppEntitlement(c), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stable identifier for an entitlement cert — SHA-256 hex of its
+ * canonical bytes. Used as the lookup key in revocation lists.
+ *
+ * The discriminator argument selects which canonical-bytes function
+ * to hash, since the two cert types share an `issuedAt` and could
+ * otherwise collide (extremely unlikely in practice, but guard
+ * cheaply).
+ */
+export async function rootEntitlementCertId(c: RootEntitlement): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", canonicalRootEntitlement(c));
+  return hex(new Uint8Array(digest));
+}
+
+export async function appEntitlementCertId(c: AppEntitlement): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", canonicalAppEntitlement(c));
+  return hex(new Uint8Array(digest));
+}
+
+/**
+ * Phone-signed revocation list. The phone publishes this to .com on
+ * change; .services pulls per-user with a small cache TTL (default
+ * 5 min) to honor revocations promptly without hammering the Worker.
+ *
+ * Monotonic `issuedAt` defends against replay of an older list (which
+ * would un-revoke certs).
+ */
+export interface EntitlementRevocationList {
+  username: string;
+  /** Cert ids (SHA-256 hex) that are revoked. */
+  certIds: string[];
+  issuedAt: number;
+}
+
+const TAG_ENTITLEMENT_REVOKE = "flagship/entitlement-revoke/v1";
+
+function canonicalEntitlementRevocationList(r: EntitlementRevocationList): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_ENTITLEMENT_REVOKE,
+      r.username,
+      [...r.certIds].sort().join(","),
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signEntitlementRevocationList(
+  r: EntitlementRevocationList,
+  irk: Keypair,
+): Bytes {
+  return ed.sign(canonicalEntitlementRevocationList(r), irk.privateKey);
+}
+
+export function verifyEntitlementRevocationList(
+  r: EntitlementRevocationList,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalEntitlementRevocationList(r), irkPub);
+  } catch {
+    return false;
+  }
+}
