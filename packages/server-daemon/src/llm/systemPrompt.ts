@@ -210,6 +210,14 @@ export interface UserContextInput {
    * model honest about what data stores are already in use.
    */
   existingApps: ExistingAppSummary[];
+  /**
+   * When true, the user has marked this app as "let instances talk to
+   * each other" across multiple pods. The replication-patterns chapter
+   * (sibling + URL APIs, worked patterns, regenerate-on-toggle workflow)
+   * is appended to the prompt; the LLM should produce sibling-aware
+   * code. Defaults to false.
+   */
+  siblingsEnabled?: boolean;
 }
 
 export interface ExistingAppSummary {
@@ -262,6 +270,10 @@ export function buildUserContext(input: UserContextInput): string {
         "want to extend the existing app — don't silently overwrite.",
     );
   }
+  if (input.siblingsEnabled) {
+    lines.push("");
+    lines.push(REPLICATION_PATTERNS_CHAPTER);
+  }
   lines.push("");
   lines.push(
     "The user's prompt is the next message. Emit either the full block " +
@@ -271,3 +283,66 @@ export function buildUserContext(input: UserContextInput): string {
 
   return lines.join("\n");
 }
+
+/**
+ * Replication-patterns chapter (N0k). Appended to the prompt only when
+ * `siblingsEnabled` is true. Teaches the LLM the sibling + URL API and
+ * three patterns; deliberately small so it doesn't drown the rest of
+ * the system prompt.
+ */
+export const REPLICATION_PATTERNS_CHAPTER = `# Multi-pod (sibling) replication
+
+This app will run on more than one of the user's pods AND the user has
+opted into "let instances talk to each other." Your code should expect
+multiple instances each with their own data layer; the harness gives
+you primitives to coordinate.
+
+## Harness primitives (FLAGSHIP_APP_TOKEN gated)
+
+\`\`\`
+GET  /api/sibling/list      → [{siblingId, fqdns:[...], online, lastSeenMs}, ...]
+POST /api/sibling/send      → {toSiblingId, payloadHex} routes to peer
+GET  /api/sibling/poll      → long-poll for inbound app-messages
+
+GET  /api/url               → list of URLs you may interact with on this pod
+POST /api/url/claim         → {fqdn} take ownership of a URL
+POST /api/url/release       → {fqdn} drop ownership
+GET  /api/url/owned         → URLs THIS instance currently holds
+\`\`\`
+
+The URL holder is the leader by definition — there is no separate
+leader-election primitive. Apps that need a single-writer ledger should
+gate writes on the URL ownership.
+
+## Pattern 1: eventual-consistency notes app (LWW)
+
+Every note carries a wall-clock timestamp + sibling-id. On every write,
+broadcast \`{op:"upsert", note}\` via /api/sibling/send to all online
+siblings. On receive (via /api/sibling/poll), apply if the inbound
+timestamp is newer. Conflicts resolve by last-write-wins; minor
+latency is acceptable.
+
+## Pattern 2: leader-only-writes ledger
+
+Treat the alias FQDN \`<slug>.<user>.flagship.services\` as the leader
+seat. On startup, poll /api/sibling/list — if no sibling holds the
+alias, /api/url/claim it (capability allowing). Reads work everywhere;
+writes route to the holder via /api/sibling/send. If the holder goes
+offline, no automatic failover — surface a "needs intervention" alert
+to the user; phone-driven re-claim takes over.
+
+## Pattern 3: per-pod independent state (default)
+
+If the user does NOT enable "let them talk", each pod has its own
+state. Don't call any /api/sibling/* endpoints. The user is making a
+conscious choice that these are separate logical apps that happen to
+share a name.
+
+## Toggle-on workflow
+
+If the user toggles "let them talk" on a previously-deployed app, the
+phone re-opens the vibe-code session with the existing files preloaded
+and this chapter included. You are NOT making a runtime config change —
+you are rewriting the app to be sibling-aware. Ask the user about
+consistency tradeoffs if it matters for this domain (notes vs. ledger
+vs. inventory) before emitting code.`;

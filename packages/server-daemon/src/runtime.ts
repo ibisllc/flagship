@@ -373,6 +373,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       });
       return;
     }
+    // SNI doesn't match an installed app. If the SNI is the pod's
+    // canonical address, fall through to the daemon's own HTTP
+    // surface. Otherwise the SNI is an unclaimed FQDN under our
+    // user-zone wildcard cert (per N0c) — serve the disambiguation
+    // fallback page (N0f).
+    if (sni !== opts.serverFqdn && sni !== `*.${opts.serverFqdn}`) {
+      const userZone = userZoneOf(opts.serverFqdn);
+      if (userZone && (sni === userZone || sni.endsWith(`.${userZone}`))) {
+        handleHttpConnection(socket, async () => disambiguationResponse(sni));
+        return;
+      }
+    }
     handleHttpConnection(socket, handleHttp);
   });
   await new Promise<void>((resolve) => tls.listen(0, "127.0.0.1", () => resolve()));
@@ -766,12 +778,52 @@ function handleHttpConnection(
  *   sni = "alice.flagship.services" (no leftmost) → null
  */
 /**
+ * Disambiguation HTTP response served when the SNI is under our
+ * user-zone wildcard cert but no app has claimed it. The .services
+ * fallback per N0f. Exported for test reachability.
+ */
+export function disambiguationResponse(sni: string): HttpResponse {
+  const safe = sni.replace(/[<>"&]/g, (c) =>
+    ({ "<": "&lt;", ">": "&gt;", '"': "&quot;", "&": "&amp;" }[c] ?? c),
+  );
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>No app here · Flagship</title>
+    <meta name="robots" content="noindex">
+    <style>
+      :root { --bg:#0a0a0a; --fg:#eee; --muted:#888; --accent:#7ad; }
+      body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--fg); padding: 4rem 1.5rem; max-width: 640px; margin: 0 auto; line-height: 1.55; }
+      h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
+      .lede { color: var(--muted); margin-bottom: 1.5rem; }
+      code { font-family: ui-monospace, monospace; color: var(--accent); }
+      .help { margin-top: 2rem; color: var(--muted); font-size: .9rem; }
+      .help a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <h1>No app here yet.</h1>
+    <p class="lede">The URL <code>${safe}</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it.</p>
+    <p class="help">The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable. <a href="https://flagshipserver.com/docs/multiplexing">More on multiplexing →</a></p>
+  </body>
+</html>`;
+  return {
+    status: 404,
+    headers: { "content-type": "text/html; charset=utf-8" },
+    body: html,
+  };
+}
+
+/**
  * For a serverFqdn `<server>.<user>.flagship.services`, return the user
  * zone `<user>.flagship.services`. Returns null if the shape doesn't
  * match (degenerate; the runtime then falls back to the per-pod wildcard
- * SAN set without the user-zone leg).
+ * SAN set without the user-zone leg). Exported so test code can invoke
+ * the same parser the cert/SAN logic uses.
  */
-function userZoneOf(serverFqdn: string): string | null {
+export function userZoneOf(serverFqdn: string): string | null {
   const lower = serverFqdn.toLowerCase();
   if (!lower.endsWith(".flagship.services")) return null;
   const head = lower.slice(0, -".flagship.services".length);

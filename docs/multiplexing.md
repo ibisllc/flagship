@@ -1,263 +1,257 @@
-# URL multiplexing & app aliases
+# URL multiplexing — final design
 
-> **Goal.** When a user visits `game.john.flagship.services` and there's
-> no ambiguity about which install they want, just take them there.
-> When there *is* ambiguity, show a calm disambiguation page that lists
-> the candidates.
+> **The shape.** Pods declare what they serve. The .services tunnel hub
+> uses that declaration as the only source of truth. Apps own their own
+> consistency model. The harness is plumbing.
 
-This collapses Flagship's full-form URL (`<slug>.<server>.<user>.flagship.services`)
-into a shorter form (`<slug>.<user>.flagship.services`) when it's
-unambiguous, while leaving the long form always-resolvable for cases
-that need the full address.
+This doc replaces the v1 alias system that briefly shipped in commit
+`3fe6854`. v1 used a D1 table at `.com` to mirror per-user URL claims
+and per-alias SAN expansion on the daemon. v2 (this doc) collapses both
+into the tunnel HELLO frame and a per-pod user-zone wildcard cert. There
+is no D1 mirror.
 
----
+## URL forms
 
-## 1. URL forms
-
-| Tier | Form | When it appears |
+| Tier | Form | Always reachable? |
 |---|---|---|
-| **Long, self-authored** | `<slug>.<server>.<user>.flagship.services` | Always — the canonical address. |
-| **Long, cross-creator** | `<slug>-<creator>.<server>.<user>.flagship.services` | When `<user>` hosts an app `<creator>` made (and `<creator> !== <user>`). |
-| **Short** (this doc) | `<slug>.<user>.flagship.services` | Granted when `<user>` has exactly one install of `<slug>`, regardless of creator and regardless of which server hosts it. |
+| Canonical, self-authored | `<slug>.<server>.<user>.flagship.services` | Yes — pod-zone wildcard cert + base controlledDomains. |
+| Canonical, cross-creator | `<slug>-<creator>.<server>.<user>.flagship.services` | Yes — same. |
+| User-zone alias | `<slug>.<user>.flagship.services` | Only when an app explicitly claims it (or via a phone-driven `claim-url` order). |
+| Custom domain | `<host>` | Same — explicit claim. |
 
-The long form is **always** resolvable. The short form is a courtesy
-that the user can release at any time, and that .com revokes
-automatically when the user creates a second install of `<slug>` (so
-`game.john` never silently flips to a different app).
+## Runtime architecture
 
-### Examples
-
-User `john` has servers `home` and `work`.
-
-| Installs | Short URL `game.john` resolves to | Notes |
-|---|---|---|
-| `game` (self) on `home` only | `game.home.john.flagship.services` | Trivial collapse. |
-| `game` (self) on `home` AND `work` | *(ambiguous → disambiguation page)* | John must pick one as the alias holder, or use replication (v2). |
-| `game-peter` on `home` only, no other `game` | `game-peter.home.john.flagship.services` | Cross-creator collapse: short form drops the `-peter` segment too. |
-| `game-peter` on `home` AND `game-anna` on `work` | *(ambiguous → disambiguation page)* | Two different creators, both want the `game` slot. |
-| `game` (self) on `home` AND `game-peter` on `work` | *(ambiguous → disambiguation page)* | Same slug, two creators, two boxes. |
-
----
-
-## 2. Data model
-
-A new D1 table, `app_aliases`. One row per `(username, slug)` pair.
-
-```sql
-CREATE TABLE app_aliases (
-  username       TEXT NOT NULL,
-  slug           TEXT NOT NULL,
-  -- The full label this alias resolves to:
-  -- "<slug>" (self, single install) → CNAME → "<slug>.<server>.<user>"
-  -- "<slug>-<creator>" → CNAME → "<slug>-<creator>.<server>.<user>"
-  full_label     TEXT NOT NULL,
-  -- Which of the user's servers hosts the (currently aliased) install.
-  server_domain  TEXT NOT NULL,
-  -- Replication v2: JSON array of secondary server FQDNs that also
-  -- hold this app and can answer if the primary is offline. NULL in v1.
-  replication_set TEXT,
-  -- Last-write-wins on declare; phone signs both declare and release.
-  declared_at    INTEGER NOT NULL,
-  declared_by_irk_pub_hex TEXT NOT NULL,
-  declared_irk_signature_hex TEXT NOT NULL,
-  PRIMARY KEY (username, slug)
-);
+```
+                phone
+                  │
+         ┌────────┼────────┐
+         │ install │ orders │  (PSK-signed; verify-on-daemon)
+         ▼        ▼        ▼
+    ┌────────────────────────┐
+    │      pod (daemon)      │  one wildcard cert per pod, SANs:
+    │                        │   <user>.flagship.services
+    │   urlController        │   *.<user>.flagship.services
+    │   capabilityStore      │   *.<server>.<user>.flagship.services
+    │   tunnel client ──┐    │
+    │                   │    │
+    └───────────────────┼────┘
+                        │ WS
+                ┌───────▼────────┐
+                │  .services hub │   in-memory only:
+                │  TunnelRegistry│   FQDN → tunnel
+                │                │   last-HELLO-wins
+                └───────┬────────┘
+                        │ TCP passthrough
+                        ▼
+                  visitor browser
 ```
 
-Conflicts on `(username, slug)` are not allowed:
-- `declare-alias` returns 409 if a row already exists with a different
-  `full_label`. The Worker returns the conflicting candidate so the
-  client can render the disambiguation copy.
-- `declare-alias` is idempotent if the same `full_label` is re-declared.
-- The phone can `release-alias` first, then `declare-alias` to a
-  different target.
+### Tunnel HELLO carries `controlledDomains`
 
----
+Every pod's HELLO frame includes `controlledDomains: string[]` — the
+explicit list of FQDNs the pod claims to serve right now. The hub's
+TunnelRegistry maps each FQDN → tunnel and matches incoming SNI against
+that map (exact, then one-label wildcard).
 
-## 3. Wire types (`@flagship/protocol`)
+The hub enforces two invariants on every HELLO:
+
+1. **Per-pod identity**: every claimed FQDN's middle label must equal
+   the pod's username (extracted from `<server>.<user>.flagship.services`
+   in `serverId`). A compromised STK can only ever claim FQDNs under
+   its own user's zone.
+2. **Last-HELLO-wins**: when a new HELLO claims an FQDN held by a
+   different tunnel, the new tunnel wins atomically. The loser's
+   `controlledDomains` shrinks; its SNI route is dropped. (The loser's
+   WS stays open — sibling coordination is between pods, not at the
+   hub.)
+
+A subsequent HELLO on the same WS is a route-table update — `issuedAt`
+must strictly advance per WS as replay defense, and the pod's
+controlledDomains list is replaced atomically. When a HELLO leaves the
+list empty, the hub schedules a clean close after `idleCloseMs`
+(default 60s); a non-empty update cancels the timer.
+
+### One wildcard cert per pod (user-zone level)
+
+Issued via DNS-01 against the .com Worker. SAN list:
+
+```
+<user>.flagship.services
+*.<user>.flagship.services
+*.<server>.<user>.flagship.services
+```
+
+`*.<user>.flagship.services` covers single-label-deep names —
+`<server>.<user>.flagship.services` AND any `<app>.<user>.flagship.services`
+alias. `*.<server>.<user>.flagship.services` covers the canonical app
+URLs `<app>.<server>.<user>.flagship.services`.
+
+### One wildcard CNAME per user
+
+The .com Worker writes A/AAAA records on every server registration:
+
+- `<server>.<user>.flagship.services` → .services anycast IP
+- `*.<server>.<user>.flagship.services` → .services anycast IP
+- `<user>.flagship.services` → .services anycast IP
+- `*.<user>.flagship.services` → .services anycast IP
+
+Idempotent on re-register.
+
+### Sibling coordination
+
+Sibling-WS at `/.flagship/sibling-handshake` between pods. Mutual STK
+auth on connect, then pods coordinate URL takeovers + relay opaque
+app-payload frames.
+
+Frame catalogue:
+
+| Byte | Frame | Direction |
+|---|---|---|
+| `0x01` | `sibling-hello` | both — challenge + signed response |
+| `0x02` | `sibling-takeover-request` | initiator → incumbent (carries cap) |
+| `0x03` | `sibling-sync-frame` | incumbent → initiator (opaque) |
+| `0x04` | `sibling-takeover-ack` | incumbent → initiator (ok/reason) |
+| `0x05` | `sibling-sync-complete` | end of takeover |
+| `0x06` | `sibling-app-message` | bidirectional — apps' messages |
+
+When a pod receives a `claim-url` order for an FQDN currently held by a
+sibling: open HTTPS to the FQDN → sibling answers → upgrade to
+`/.flagship/sibling-handshake` → mutual auth → takeover handshake. The
+old sibling drops the FQDN from its next HELLO; the new pod adds it.
+
+If no sibling answers (the FQDN was unclaimed): the pod just adds the
+FQDN to its HELLO update and `.services` accepts the claim.
+
+### Disambiguation fallback
+
+When a visitor's SNI hits .services for a FQDN that:
+
+- ends in `<user>.flagship.services` (a real user zone), and
+- is not currently claimed by any tunnel,
+
+…the SNI matches the `*.<user>` wildcard claim of whichever pod
+currently holds it (last-HELLO-wins). That pod's daemon serves a small
+disambiguation HTML page: "no app here right now."
+
+Static fallback at `https://flagshipserver.com/disambiguate.html` exists
+for the .services edge fallback path.
+
+## Capabilities — security-load-bearing
+
+Every URL claim must present a `ClaimUrlCapability` matching all three
+of:
+
+- **`appId`** — the app behind the calling FLAGSHIP_APP_TOKEN.
+- **`siblingId`** — this specific pod's serverId.
+- **`fqdn`** — the URL being claimed.
+
+Capabilities are phone-issued, IRK-signed:
 
 ```ts
-export interface AliasDeclareRequest {
+interface ClaimUrlCapability {
   username: string;
-  slug: string;
-  fullLabel: string;        // "<slug>" or "<slug>-<creator>"
-  serverDomain: string;     // "<server>.<user>.flagship.services"
+  appId: string;
+  siblingId: ServerId;
+  fqdn: string;
   issuedAt: number;
+  expiresAt: number;  // default 90 days
 }
-// canonical-bytes tag: flagship/alias-declare/v1
-
-export interface AliasReleaseRequest {
-  username: string;
-  slug: string;
-  issuedAt: number;
-}
-// canonical-bytes tag: flagship/alias-release/v1
 ```
 
-Both signed by IRK (the source of authorship truth for the username).
+Stored on the daemon (the cap's CapabilityStore is in-memory + on-disk
+in production). `/api/url/claim` and `/api/url/release` both run
+`checkCapability` — every component must match the calling instance.
+Rejections are uniform 403 (no leaking which check failed).
 
----
+Revocation: phone POSTs a signed list to `.com`; the daemon polls (60s
+TTL) and refuses any cap whose id appears in the cached list. Replays
+of older lists are rejected via monotonic `issuedAt`.
 
-## 4. Worker routes
+## App-facing API surface
 
-| Route | Method | Purpose |
-|---|---|---|
-| `/api/aliases/declare` | POST | IRK-signed; create or replace the alias for `(username, slug)`. 409 + `{ candidates }` on conflict. |
-| `/api/aliases/release` | POST | IRK-signed; remove the alias. |
-| `/api/aliases/resolve?host=<host>` | GET | Public resolver. Returns `{ kind: "single" | "ambiguous" | "missing", … }`. |
-| `/api/aliases/by-user/<username>` | GET | Public listing of a user's active aliases (used by the marketplace + dashboards). |
+All FLAGSHIP_APP_TOKEN gated.
 
-`resolve` is the read path. Inputs:
-- `host=game.john.flagship.services` → look up `(john, game)` in
-  `app_aliases`. Return the long-form target if exactly one row;
-  otherwise `ambiguous`.
+```
+GET  /api/sibling/list     [{siblingId, fqdns:[...], online, lastSeenMs}, ...]
+POST /api/sibling/send     {toSiblingId, payloadHex}
+GET  /api/sibling/poll     long-poll for inbound app-messages
+                           (real WS endpoint at /api/sibling/subscribe
+                           lands in N0e-2)
 
----
+GET  /api/url              [{fqdn, kind, ownedBy, canClaim, capabilityExpiresAt}, ...]
+POST /api/url/claim        {fqdn} — checks capability, claims via HELLO update
+POST /api/url/release      {fqdn} — releases via HELLO update
+GET  /api/url/owned        [{fqdn}, ...]
+```
 
-## 5. DNS plumbing
+`kind`: `"canonical" | "alias" | "custom"`.
+`ownedBy`: `"self" | "<siblingId>" | null`.
 
-Every alias creation/removal pokes Cloudflare DNS via the existing
-`CloudflareDnsClient`:
+## Phone UX (per app)
 
-| State | DNS records |
+```
+This app: notes
+
+Where should it run?
+  ☑ home box
+  ☑ office box
+  ☐ garage box
+  ☐ run on all current and future boxes
+
+Let instances talk to each other?
+  ● Yes  ○ No
+
+[ Save ]
+```
+
+That is the whole UI. No "failover," no "leader," no "primary," no
+"consistency mode." Past these two checkboxes, everything is between
+the user and their app code.
+
+## Vibe-code LLM workflow
+
+- "home only" → LLM writes single-instance code. Standard CRUD.
+- "home + office" + "let instances talk" → LLM gets the replication-
+  patterns chapter (sibling + URL APIs, 2-3 worked patterns,
+  consistency tradeoff guidance). LLM writes app-specific replication
+  code.
+- "multi-pod" + NOT "let them talk" → LLM writes per-pod independent
+  state.
+- Toggling "let them talk" later → phone offers to **regenerate** the
+  app with sibling-aware code. The vibe-code session re-opens with
+  existing files preloaded plus the system-prompt chapter. Not a
+  runtime config change; the AI rewrites the app, asks the user about
+  consistency tradeoffs if it matters for this domain, redeploys.
+
+## What the harness explicitly does NOT do
+
+- ❌ Postgres / MinIO / Redis replication (no streaming, no diff sync).
+- ❌ Leader election (the URL holder is the leader by definition).
+- ❌ Heartbeat-based auto-failover (apps decide via sibling-WS).
+- ❌ Schema-migration coordination during replication (no replication).
+- ❌ Auto-claiming the alias URL on multi-pod installs.
+- ❌ Saying "primary" / "leader" / "failover" in any phone surface.
+- ❌ Mirroring the URL-ownership state at .com.
+
+Apps own consistency. The harness owns distribution fabric.
+
+## Code map
+
+| Layer | Source |
 |---|---|
-| **Single alias** | `<slug>.<user>.flagship.services` CNAME → `<slug>.<server>.<user>.flagship.services` |
-| **Cross-creator alias** | `<slug>.<user>.flagship.services` CNAME → `<slug>-<creator>.<server>.<user>.flagship.services` |
-| **Ambiguous / missing** | No CNAME; the wildcard `*.<user>.flagship.services` falls through to a Worker route that serves a disambiguation page |
-| **Replication (v2)** | Two records with health-check failover, OR a Worker resolver that returns the live primary based on heartbeat data |
+| Tunnel hub (FQDN → tunnel, last-HELLO-wins) | `apps/web/src/tunnel/{tunnelHub,registry}.ts` |
+| Tunnel client (HELLO update, idle close) | `packages/server-daemon/src/tunnel/tunnelClient.ts` |
+| HELLO frame protocol | `packages/protocol/src/auth.ts` (TunnelHello) |
+| URL controller (per-pod claim state) | `packages/server-daemon/src/runtime.ts` |
+| Capability store + checkCapability | `packages/server-daemon/src/capabilityStore.ts` |
+| Sibling-WS protocol + handshake | `packages/server-daemon/src/sibling/{frames,handshake}.ts` |
+| App-facing /api/sibling/* | `packages/server-daemon/src/sibling/httpHandlers.ts` |
+| App-facing /api/url/* | `packages/server-daemon/src/sibling/urlHttpHandlers.ts` |
+| Disambiguation fallback | `packages/server-daemon/src/runtime.ts` (`disambiguationResponse`) |
 
-The `<slug>.<user>` zone is part of `flagship.services` so the
-Worker already has the API token (`CLOUDFLARE_DNS_API_TOKEN`) to write
-records.
+## Open follow-ups
 
----
-
-## 6. Cert plumbing
-
-The daemon's wildcard cert covers `*.<server>.<user>.flagship.services`
-— that is, the long form. The short form is a level shallower and the
-wildcard does not match it (Let's Encrypt wildcards are exactly one
-label deep).
-
-When an alias is granted, the daemon hosting the install adds the
-short FQDN to its SAN list and re-runs ACME via DNS-01. The .com
-Worker's existing DNS-01 publish/delete handlers serve the
-`_acme-challenge.<short>.flagship.services` TXT records.
-
-Per-app short FQDNs add 1 cert SAN per active alias on the daemon's
-single cert. With Let's Encrypt's 100-name SAN limit per cert, that's
-plenty for a household. We can spread across multiple certs if a power
-user's box ever serves >50 aliased apps.
-
----
-
-## 7. Lifecycle
-
-### Declare
-1. Phone signs `AliasDeclareRequest{ username, slug, fullLabel, serverDomain, issuedAt }`.
-2. POST to `/api/aliases/declare`.
-3. Worker:
-   - Verify IRK signature against the username's registered IRK.
-   - Atomic upsert: if `(username, slug)` exists with same `fullLabel`,
-     return 200 idempotent; else return 409 + `{ candidates }`.
-   - On success: write/replace the CNAME in CF DNS.
-4. Worker fans out to the daemon at `serverDomain` via the existing
-   `/.flagship/runtime-pubkey` channel (or via a new alias-notify hook)
-   so the daemon adds the short FQDN to its cert.
-5. Daemon re-runs ACME, adds the new SAN to its live cert.
-
-### Release
-1. Phone signs `AliasReleaseRequest{ username, slug, issuedAt }`.
-2. POST to `/api/aliases/release`.
-3. Worker removes the row + CNAME. Daemon shrinks its cert SAN list at
-   next renewal (no need to force-renew immediately — extra SANs are
-   harmless).
-
-### Conflict (auto-revoke)
-When the phone installs a SECOND app with the same `slug` on a different
-server, the install order also carries an `aliasIfFree: true` flag. The
-Worker checks the table:
-- If alias exists for the same target → no-op.
-- If alias exists for a different target → silently leave it. The
-  install still completes; the user just doesn't get the short URL
-  this time. The phone shows a banner "the short URL game.john is
-  taken; tap to manage."
-
----
-
-## 8. Disambiguation page (Worker fallback)
-
-A wildcard CNAME at `*.<user>.flagship.services` (or a default DNS
-record) routes `game.john.flagship.services` to the Worker when no
-specific CNAME exists. The Worker:
-
-1. Parses the host.
-2. Looks up `(<user>, <slug>)` in `app_aliases`.
-3. If exactly one row: serves a 308 redirect to the long form (defense
-   in depth — the CNAME should already have done this, but if DNS is
-   stale / the record was deleted seconds ago, the redirect catches it).
-4. If zero or multiple rows: serves an HTML disambiguation page with:
-   - A short, plain explanation.
-   - Each candidate as a clickable card showing the long URL, the
-     creator, and the server.
-   - A "What's happening?" link to /docs/multiplexing.
-
----
-
-## 9. Replication (v2 sketch)
-
-Out of v1 scope. Notes for future:
-- A user marks an app as "replicate across {home, work}" in the phone.
-- Each daemon installs the app; data layer is local to each box.
-- Periodic sync (every 5 min by default) via a daemon-pair WebSocket
-  on the existing tunnel: pg_dump diff + S3 mirror sync + Redis SET
-  diff. Best-effort; LWW on object store, sequence-id on Postgres
-  rows. Conflicts surface as a phone alert.
-- The alias holds `replication_set`; the Worker's DNS resolver returns
-  the live primary based on heartbeat data the daemons publish to .com.
-- Failover: 5-minute window. Hard cutover via a phone-issued
-  `promote-replica` order if the primary is dead longer.
-
----
-
-## 10. UX implications
-
-- App creation in the phone shows the **proposed URL** in real time,
-  collapsed when possible. Tooltip explains what changed.
-- App detail screen shows "URLs that point here" as a list, with the
-  short form crossed out + tappable when taken by another install.
-- Marketplace listings always link to the **long** form (stable; never
-  silently changes meaning even if the user juggles aliases).
-
----
-
-## 11. Tests we ship
-
-| Test | What it asserts |
-|---|---|
-| `aliases.test.ts` (control-plane) | declare → resolve returns single; second declare different target → 409 + candidates; release → resolve returns missing; verify-IRK rejects wrong sig. |
-| `aliasResolveDisambiguation.test.ts` (Worker) | Catch-all serves the HTML disambiguation page when host has zero or multiple aliases. |
-| `aliasCertExpansion.test.ts` (daemon) | Adding an alias adds to the SAN list at next ACME run. |
-| `aliasD1.test.ts` | D1 storage round-trips. |
-
----
-
-## 12. Open questions
-
-- **Username-as-app-slug collision.** A user's username is a label at the
-  same depth as a slug (`john.flagship.services` is the user's "page";
-  `game.john.flagship.services` is an app). We need to forbid app slugs
-  that collide with reserved labels (e.g. `www`, `mail`, `admin`,
-  `_acme-challenge`). Existing slug validator in
-  `services-zone/validation.ts` already rejects most of these, but we
-  should add a public-suffix-list-style reserved-labels list.
-- **DNS propagation lag.** New aliases propagate in seconds at CF, but
-  some recursive resolvers cache old NXDOMAINs for ≤ TTL. The 308
-  redirect catches the stragglers.
-- **Multiple boxes share a username.** All collapsed names live under
-  the username's zone, not per box. So aliases are user-level, not
-  box-level. The phone is the natural arbiter.
-- **PSL listing.** When `flagship.services` is on the PSL, browsers
-  treat each user's subdomain as a distinct origin. The collapse keeps
-  that origin boundary at `<user>.flagship.services`, which is what we
-  want.
+- **N0d-2** Install-policy storage + push fan-out on new server.
+- **N0e-2** Sibling-WS endpoint at `/.flagship/sibling-handshake` and
+  the outbound client used during /api/url/claim takeovers.
+- LE high-volume issuer allowlist before public launch.
