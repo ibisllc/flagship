@@ -1,4 +1,6 @@
 import type {
+  EntitlementRevocationListRecord,
+  EntitlementRevocationStorage,
   AuthCodeRecord,
   AuthCodeStorage,
   BuildTicketRecord,
@@ -813,6 +815,54 @@ export class D1TierStorage implements TierStorage {
   }
 }
 
+export class D1EntitlementRevocationStorage implements EntitlementRevocationStorage {
+  constructor(private readonly db: D1Database) {}
+  async putIfNewer(rec: EntitlementRevocationListRecord) {
+    const existing = await this.get(rec.username);
+    if (existing && rec.issuedAt <= existing.issuedAt) {
+      return { stored: existing, accepted: false };
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO entitlement_revocation_lists
+            (username, cert_ids_json, irk_signature_hex, issued_at, updated_at)
+         VALUES (?,?,?,?,?)
+         ON CONFLICT(username) DO UPDATE SET
+           cert_ids_json     = excluded.cert_ids_json,
+           irk_signature_hex = excluded.irk_signature_hex,
+           issued_at         = excluded.issued_at,
+           updated_at        = excluded.updated_at`,
+      )
+      .bind(rec.username, rec.certIdsJson, rec.irkSignatureHex, rec.issuedAt, rec.updatedAt)
+      .run();
+    return { stored: { ...rec }, accepted: true };
+  }
+  async get(username: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT username, cert_ids_json, irk_signature_hex, issued_at, updated_at
+           FROM entitlement_revocation_lists
+          WHERE username = ?`,
+      )
+      .bind(username)
+      .first<{
+        username: string;
+        cert_ids_json: string;
+        irk_signature_hex: string;
+        issued_at: number;
+        updated_at: number;
+      }>();
+    if (!r) return undefined;
+    return {
+      username: r.username,
+      certIdsJson: r.cert_ids_json,
+      irkSignatureHex: r.irk_signature_hex,
+      issuedAt: r.issued_at,
+      updatedAt: r.updated_at,
+    };
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -825,6 +875,7 @@ export class D1Storage implements Storage {
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
+  entitlementRevocations: EntitlementRevocationStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -837,5 +888,6 @@ export class D1Storage implements Storage {
     this.pushTokens = new D1PushTokenStorage(db);
     this.llmPromo = new D1LlmPromoStorage(db);
     this.tiers = new D1TierStorage(db);
+    this.entitlementRevocations = new D1EntitlementRevocationStorage(db);
   }
 }

@@ -46,6 +46,8 @@ import {
   handleMarketplaceRemove,
   handleMarketplaceInstall,
   buildPushForwarder,
+  handleGetEntitlementRevocations,
+  handlePostEntitlementRevocations,
   handlePushRegister,
   handlePushRelay,
   handlePushRevoke,
@@ -120,6 +122,8 @@ const ROUTE_RE = {
   PUSH_REVOKE: /^\/api\/push\/([^/]+)$/,
   LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
+  CERT_REVOCATIONS_POST: /^\/api\/cert-revocations$/,
+  CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
 };
 
 export async function tryControlPlane(
@@ -541,6 +545,30 @@ export async function tryControlPlane(
           tiers: storage.tiers,
           usernames: storage.usernames,
           mintProviderKey: async () => ({ key: "", providerKeyId: "" }),
+        },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+
+  // ── Entitlement revocation lists (N12c) ───────────────────────
+  if (method === "POST" && ROUTE_RE.CERT_REVOCATIONS_POST.test(path)) {
+    return finishPlain(
+      await handlePostEntitlementRevocations(
+        {
+          storage: storage.entitlementRevocations,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.CERT_REVOCATIONS_GET))) {
+    return finishPlain(
+      await handleGetEntitlementRevocations(
+        {
+          storage: storage.entitlementRevocations,
+          usernames: storage.usernames,
         },
         decodeURIComponent(m[1]!),
       ),

@@ -176,6 +176,35 @@ export interface Storage {
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
+  entitlementRevocations: EntitlementRevocationStorage;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Entitlement revocation lists (N12c)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface EntitlementRevocationListRecord {
+  username: string;
+  /** JSON array of revoked cert id hex strings. */
+  certIdsJson: string;
+  /** IRK signature over the canonical bytes of the list (for .services to verify). */
+  irkSignatureHex: string;
+  issuedAt: number;
+  updatedAt: number;
+}
+
+export interface EntitlementRevocationStorage {
+  /**
+   * Replace the user's revocation list iff `issuedAt` is strictly
+   * greater than the existing list's `issuedAt` (monotonic — older
+   * lists can't un-revoke). Returns the stored record (either the
+   * new one or the unchanged existing one).
+   */
+  putIfNewer(rec: EntitlementRevocationListRecord): Promise<{
+    stored: EntitlementRevocationListRecord;
+    accepted: boolean;
+  }>;
+  get(username: string): Promise<EntitlementRevocationListRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -1,4 +1,6 @@
 import type {
+  EntitlementRevocationListRecord,
+  EntitlementRevocationStorage,
   AuthCodeRecord,
   AuthCodeStorage,
   BuildTicketRecord,
@@ -309,6 +311,22 @@ export class InMemoryTierStorage implements TierStorage {
   async put(r: TierSubscriptionRecord): Promise<void> { this.byUser.set(r.username, { ...r }); }
 }
 
+export class InMemoryEntitlementRevocationStorage implements EntitlementRevocationStorage {
+  private byUser = new Map<string, EntitlementRevocationListRecord>();
+  async putIfNewer(rec: EntitlementRevocationListRecord) {
+    const existing = this.byUser.get(rec.username);
+    if (existing && rec.issuedAt <= existing.issuedAt) {
+      return { stored: { ...existing }, accepted: false };
+    }
+    this.byUser.set(rec.username, { ...rec });
+    return { stored: { ...rec }, accepted: true };
+  }
+  async get(username: string) {
+    const r = this.byUser.get(username);
+    return r ? { ...r } : undefined;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -321,4 +339,5 @@ export class InMemoryStorage implements Storage {
   pushTokens = new InMemoryPushTokenStorage();
   llmPromo = new InMemoryLlmPromoStorage();
   tiers = new InMemoryTierStorage();
+  entitlementRevocations = new InMemoryEntitlementRevocationStorage();
 }
