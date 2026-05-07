@@ -1046,23 +1046,6 @@ export type PhoneOrder =
       serverId: ServerId;
       token: string;
       issuedAt: number;
-    }
-  | {
-      /**
-       * The phone has declared a short-form alias `<slug>.<user>.flagship.services`
-       * pointing at this server. The daemon should add the FQDN to its
-       * cert's SAN list and start serving it. Idempotent.
-       */
-      type: "add-alias-short-fqdn";
-      serverId: ServerId;
-      shortFqdn: string;
-      issuedAt: number;
-    }
-  | {
-      type: "remove-alias-short-fqdn";
-      serverId: ServerId;
-      shortFqdn: string;
-      issuedAt: number;
     };
 
 const TAG_ORDER_NOOP = "flagship/order/noop/v1";
@@ -1076,8 +1059,6 @@ const TAG_ORDER_ADD_SUBSCRIBER = "flagship/order/add-subscriber/v1";
 const TAG_ORDER_REMOVE_SUBSCRIBER = "flagship/order/remove-subscriber/v1";
 const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v1";
 const TAG_ORDER_REMOVE_PAIRED_SESSION = "flagship/order/remove-paired-session/v1";
-const TAG_ORDER_ADD_ALIAS_SHORT_FQDN = "flagship/order/add-alias-short-fqdn/v1";
-const TAG_ORDER_REMOVE_ALIAS_SHORT_FQDN = "flagship/order/remove-alias-short-fqdn/v1";
 
 function canonicalPhoneOrder(o: PhoneOrder): Bytes {
   const enc = new TextEncoder();
@@ -1127,14 +1108,6 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
     case "remove-paired-session":
       return enc.encode(
         [TAG_ORDER_REMOVE_PAIRED_SESSION, o.serverId, o.token, o.issuedAt].join("|"),
-      );
-    case "add-alias-short-fqdn":
-      return enc.encode(
-        [TAG_ORDER_ADD_ALIAS_SHORT_FQDN, o.serverId, o.shortFqdn, o.issuedAt].join("|"),
-      );
-    case "remove-alias-short-fqdn":
-      return enc.encode(
-        [TAG_ORDER_REMOVE_ALIAS_SHORT_FQDN, o.serverId, o.shortFqdn, o.issuedAt].join("|"),
       );
   }
 }
@@ -1605,71 +1578,6 @@ export function signLlmPromoIssue(r: LlmPromoIssueRequest, irk: Keypair): Bytes 
 export function verifyLlmPromoIssue(r: LlmPromoIssueRequest, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalLlmPromoIssue(r), irkPub);
-  } catch {
-    return false;
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────
-// App aliases (URL multiplexing)
-//
-// `<slug>.<user>.flagship.services` resolves to the user's install of
-// that slug when there's no ambiguity. Phone-signed declare/release
-// because the username's IRK is the source of authorship truth and the
-// alias is a per-user resource.
-// ──────────────────────────────────────────────────────────────────────
-
-export interface AliasDeclareRequest {
-  username: string;
-  slug: string;
-  /** "<slug>" (self) or "<slug>-<creator>" (cross-creator). */
-  fullLabel: string;
-  /** "<server>.<user>.flagship.services" — where the install lives. */
-  serverDomain: string;
-  issuedAt: number;
-}
-
-const TAG_ALIAS_DECLARE = "flagship/alias-declare/v1";
-
-function canonicalAliasDeclare(r: AliasDeclareRequest): Bytes {
-  return new TextEncoder().encode(
-    [TAG_ALIAS_DECLARE, r.username, r.slug, r.fullLabel, r.serverDomain, r.issuedAt].join("|"),
-  );
-}
-
-export function signAliasDeclare(r: AliasDeclareRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalAliasDeclare(r), irk.privateKey);
-}
-
-export function verifyAliasDeclare(r: AliasDeclareRequest, sig: Bytes, irkPub: Bytes): boolean {
-  try {
-    return ed.verify(sig, canonicalAliasDeclare(r), irkPub);
-  } catch {
-    return false;
-  }
-}
-
-export interface AliasReleaseRequest {
-  username: string;
-  slug: string;
-  issuedAt: number;
-}
-
-const TAG_ALIAS_RELEASE = "flagship/alias-release/v1";
-
-function canonicalAliasRelease(r: AliasReleaseRequest): Bytes {
-  return new TextEncoder().encode(
-    [TAG_ALIAS_RELEASE, r.username, r.slug, r.issuedAt].join("|"),
-  );
-}
-
-export function signAliasRelease(r: AliasReleaseRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalAliasRelease(r), irk.privateKey);
-}
-
-export function verifyAliasRelease(r: AliasReleaseRequest, sig: Bytes, irkPub: Bytes): boolean {
-  try {
-    return ed.verify(sig, canonicalAliasRelease(r), irkPub);
   } catch {
     return false;
   }

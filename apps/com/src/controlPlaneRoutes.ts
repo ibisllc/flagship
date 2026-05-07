@@ -50,10 +50,6 @@ import {
   handlePushRevoke,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
-  handleAliasDeclare,
-  handleAliasRelease,
-  handleAliasResolve,
-  handleAliasListByUser,
   type CaIssuer,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
@@ -111,10 +107,6 @@ const ROUTE_RE = {
   PUSH_REVOKE: /^\/api\/push\/([^/]+)$/,
   LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
-  ALIAS_DECLARE: /^\/api\/aliases\/declare$/,
-  ALIAS_RELEASE: /^\/api\/aliases\/release$/,
-  ALIAS_RESOLVE: /^\/api\/aliases\/resolve$/,
-  ALIAS_LIST_BY_USER: /^\/api\/aliases\/by-user\/([^/]+)$/,
 };
 
 export async function tryControlPlane(
@@ -531,76 +523,6 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           mintProviderKey: async () => ({ key: "", providerKeyId: "" }),
         },
-        decodeURIComponent(m[1]!),
-      ),
-    );
-  }
-
-  // ── App aliases ────────────────────────────────────────────
-  if (method === "POST" && ROUTE_RE.ALIAS_DECLARE.test(path)) {
-    return finish(
-      await handleAliasDeclare(
-        {
-          aliases: storage.aliases,
-          usernames: storage.usernames,
-          // CNAME write is wired on the Worker side via this hook —
-          // requires CLOUDFLARE_DNS_API_TOKEN + zone id, already in env.
-          onDeclared: env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
-            ? async (rec) => {
-                const dns = new CloudflareDnsClient({
-                  apiToken: env.CLOUDFLARE_DNS_API_TOKEN!,
-                  zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID!,
-                });
-                const shortHost = `${rec.slug}.${rec.username}.flagship.services`;
-                const target = `${rec.fullLabel}.${rec.serverDomain}`;
-                await dns.upsert({
-                  type: "CNAME",
-                  name: shortHost,
-                  content: target,
-                  ttl: 300,
-                  proxied: false,
-                });
-              }
-            : undefined,
-        },
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "POST" && ROUTE_RE.ALIAS_RELEASE.test(path)) {
-    return finish(
-      await handleAliasRelease(
-        {
-          aliases: storage.aliases,
-          usernames: storage.usernames,
-          onReleased: env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
-            ? async (username, slug) => {
-                const dns = new CloudflareDnsClient({
-                  apiToken: env.CLOUDFLARE_DNS_API_TOKEN!,
-                  zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID!,
-                });
-                const shortHost = `${slug}.${username}.flagship.services`;
-                await dns.deleteByName(shortHost, "CNAME").catch(() => undefined);
-              }
-            : undefined,
-        },
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "GET" && ROUTE_RE.ALIAS_RESOLVE.test(path)) {
-    const host = url.searchParams.get("host") ?? "";
-    return finish(
-      await handleAliasResolve(
-        { aliases: storage.aliases, usernames: storage.usernames },
-        host,
-      ),
-    );
-  }
-  if (method === "GET" && (m = path.match(ROUTE_RE.ALIAS_LIST_BY_USER))) {
-    return finish(
-      await handleAliasListByUser(
-        { aliases: storage.aliases, usernames: storage.usernames },
         decodeURIComponent(m[1]!),
       ),
     );

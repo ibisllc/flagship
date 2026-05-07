@@ -120,10 +120,10 @@ describe("marketing surface — design system v2", () => {
     expect(terms.body).toContain("@flagship.services");
   });
 
-  it("disambiguation page references the resolver endpoint", async () => {
+  it("disambiguation page is a static fallback (no client-side resolver call)", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/disambiguate.html" });
-    expect(r.body).toContain("/api/aliases/resolve");
-    expect(r.body).toContain("Pick a destination");
+    expect(r.body).toContain("No app here");
+    expect(r.body).not.toContain("/api/aliases/");
   });
 });

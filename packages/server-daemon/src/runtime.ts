@@ -107,15 +107,6 @@ export interface DaemonRuntimeOptions {
    */
   updateServer?: UpdateServer;
   /**
-   * Initial set of short-form FQDNs the daemon should serve in
-   * addition to its `<server>.<user>.flagship.services` + wildcard.
-   * These come from active aliases (`<slug>.<user>.flagship.services`).
-   * The runtime adds them to the cert SAN list on initial issuance,
-   * and exposes `addAliasShortFqdn` / `removeAliasShortFqdn` for
-   * runtime expansion when the user declares a new alias.
-   */
-  aliasShortFqdns?: string[];
-  /**
    * Phone-server orders endpoint. When set, the default HTTP handler
    * dispatches `POST /api/orders-from-user` to a signature-verifying
    * dispatcher backed by `executor`. Custom `handleHttp` implementations
@@ -210,21 +201,6 @@ export interface DaemonRuntime {
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
   appPlatform: AppPlatform | null;
-  /**
-   * Add a short-form alias FQDN (e.g. `game.john.flagship.services`)
-   * to the cert's SAN list and re-issue. Idempotent — adding an
-   * already-present FQDN is a no-op. Throws if ACME fails (rare;
-   * the cert isn't replaced unless issuance succeeds).
-   */
-  addAliasShortFqdn(fqdn: string): Promise<void>;
-  /**
-   * Remove a short-form alias FQDN. Doesn't force re-issuance — extra
-   * SANs are harmless and the next renewal cycle will shrink the
-   * cert naturally. Idempotent.
-   */
-  removeAliasShortFqdn(fqdn: string): void;
-  /** Snapshot of currently-served alias FQDNs. */
-  listAliasShortFqdns(): string[];
 }
 
 function buildDefaultHandler(
@@ -314,16 +290,9 @@ function defaultHelloPage(): string {
  */
 export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<DaemonRuntime> {
   const wantWildcard = opts.wildcard ?? true;
-  // Cert SAN list. Mutable across the runtime's lifetime so alias
-  // declarations can grow it; we re-issue when it changes.
-  const aliasFqdns = new Set<string>(opts.aliasShortFqdns ?? []);
-  const computeSans = (): string[] => {
-    const base = wantWildcard
-      ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
-      : [opts.serverFqdn];
-    return [...base, ...aliasFqdns];
-  };
-  let sans = computeSans();
+  const sans = wantWildcard
+    ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
+    : [opts.serverFqdn];
   const certManager = new CertManager();
   // The default handler needs to refer to AppPlatform, but AppPlatform
   // is constructed below (after the cert + tunnel). The ref-cell lets
@@ -534,38 +503,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     appRunner,
     dataProvisioner,
     appPlatform: appPlatformRef.current,
-    async addAliasShortFqdn(fqdn: string) {
-      const lower = fqdn.toLowerCase();
-      if (aliasFqdns.has(lower)) return;
-      aliasFqdns.add(lower);
-      sans = computeSans();
-      // Re-issue the cert with the expanded SAN list. Tunnel-hub
-      // routing for the new short FQDN currently picks up only on
-      // tunnel reconnect; in practice the .com Worker writes the
-      // CNAME so resolution works as soon as DNS propagates, and the
-      // daemon's existing tunnel registration covers it via SNI
-      // since the short FQDN ends in <user>.flagship.services and
-      // the .services SNI router is currently configured with the
-      // user's parent zone catching all subdomains. (TODO: per-FQDN
-      // dynamic registration on the hub for tighter routing.)
-      await issueAndInstall({
-        issuer,
-        certManager,
-        store,
-        serverFqdn: opts.serverFqdn,
-        sans,
-        onCertIssued: opts.onCertIssued,
-      });
-    },
-    removeAliasShortFqdn(fqdn: string) {
-      aliasFqdns.delete(fqdn.toLowerCase());
-      sans = computeSans();
-      // Don't force re-issue — the cert with extra SANs is still valid.
-      // Next renewal picks up the trimmed list.
-    },
-    listAliasShortFqdns(): string[] {
-      return [...aliasFqdns];
-    },
   };
 }
 

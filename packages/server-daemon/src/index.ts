@@ -189,11 +189,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Forward-declared ref-cell so the executor can call into the runtime
-  // for alias FQDN add/remove orders. Filled in once `startDaemonRuntime`
-  // returns.
-  const aliasRuntime: { current: { addAliasShortFqdn(f: string): Promise<void>; removeAliasShortFqdn(f: string): void } | null } = { current: null };
-
   const orders = pskPubHex
     ? {
         pskPub: hexToBytes(pskPubHex.trim()),
@@ -205,7 +200,6 @@ async function main(): Promise<void> {
           phonePipe: browserBundle?.phonePipe ?? null,
           subscriberRegistry,
           pairedSessions,
-          aliasRuntime,
         }),
       }
     : undefined;
@@ -342,10 +336,6 @@ async function main(): Promise<void> {
       updateServer,
     });
     appPlatformRefForServer.current = runtime.appPlatform;
-    aliasRuntime.current = {
-      addAliasShortFqdn: runtime.addAliasShortFqdn.bind(runtime),
-      removeAliasShortFqdn: runtime.removeAliasShortFqdn.bind(runtime),
-    };
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
     console.log(`[daemon] 🔒 cert installed; serving HTTPS for ${env.serverFqdn}`);
@@ -429,13 +419,6 @@ interface ExecutorDeps {
   subscriberRegistry?: FileSubscriberRegistry;
   /** Paired-session store for add/remove-paired-session phone orders. */
   pairedSessions?: FilePairedSessionStore;
-  /**
-   * Hook into runtime.addAliasShortFqdn / removeAliasShortFqdn for the
-   * URL-multiplexing alias orders. Set after runtime startup; the
-   * default executor closes over a ref-cell so the runtime can install
-   * itself post-construction.
-   */
-  aliasRuntime?: { current: { addAliasShortFqdn(f: string): Promise<void>; removeAliasShortFqdn(f: string): void } | null };
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -522,25 +505,6 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       ? async ({ token }) => {
           await deps.pairedSessions!.remove(token);
           console.log(`[daemon] order: remove-paired-session`);
-        }
-      : undefined,
-    addAliasShortFqdn: deps.aliasRuntime
-      ? async ({ shortFqdn }) => {
-          const rt = deps.aliasRuntime!.current;
-          if (!rt) {
-            console.warn(`[daemon] order: add-alias-short-fqdn but runtime not yet ready`);
-            return;
-          }
-          await rt.addAliasShortFqdn(shortFqdn);
-          console.log(`[daemon] order: add-alias-short-fqdn ${shortFqdn} (cert re-issued)`);
-        }
-      : undefined,
-    removeAliasShortFqdn: deps.aliasRuntime
-      ? async ({ shortFqdn }) => {
-          const rt = deps.aliasRuntime!.current;
-          if (!rt) return;
-          rt.removeAliasShortFqdn(shortFqdn);
-          console.log(`[daemon] order: remove-alias-short-fqdn ${shortFqdn} (next renewal trims cert)`);
         }
       : undefined,
   };

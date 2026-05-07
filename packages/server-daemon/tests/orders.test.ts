@@ -356,43 +356,4 @@ describe("orders-from-user handler", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("dispatches add-alias-short-fqdn", async () => {
-    const psk = makeKey();
-    const calls: Array<{ shortFqdn: string }> = [];
-    const ex: OrderExecutor = {
-      addAliasShortFqdn: async (a) => {
-        calls.push(a);
-      },
-    };
-    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
-    const order: PhoneOrder = {
-      type: "add-alias-short-fqdn",
-      serverId: SERVER_FQDN,
-      shortFqdn: "game.alice.flagship.services",
-      issuedAt: Date.now(),
-    };
-    const r = await h(makeReq(envelope(order, psk)));
-    expect(r.status).toBe(200);
-    expect(calls).toEqual([{ shortFqdn: "game.alice.flagship.services" }]);
-  });
-
-  it("dispatches remove-alias-short-fqdn", async () => {
-    const psk = makeKey();
-    const calls: Array<{ shortFqdn: string }> = [];
-    const ex: OrderExecutor = {
-      removeAliasShortFqdn: (a) => {
-        calls.push(a);
-      },
-    };
-    const h = buildOrdersHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, executor: ex });
-    const order: PhoneOrder = {
-      type: "remove-alias-short-fqdn",
-      serverId: SERVER_FQDN,
-      shortFqdn: "game.alice.flagship.services",
-      issuedAt: Date.now(),
-    };
-    const r = await h(makeReq(envelope(order, psk)));
-    expect(r.status).toBe(200);
-    expect(calls).toHaveLength(1);
-  });
 });

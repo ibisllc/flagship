@@ -82,88 +82,22 @@
 
 <main class="container">
   <section class="page" aria-labelledby="title">
-    <h1 id="title">Pick a destination.</h1>
-    <p class="lede">The short URL <code id="short-host">…</code> points to more than one place. Tap whichever you meant. (You can ask the host of this app to claim the short URL — then this page goes away.)</p>
+    <h1 id="title">No app here yet.</h1>
+    <p class="lede">The short URL <code id="short-host">…</code> isn't pointing at an app right now. The owner of this username can decide which install — if any — claims it. <a href="/docs/multiplexing">More on multiplexing →</a></p>
 
     <div id="candidates" aria-live="polite">
-      <div class="empty" id="empty">Looking up your candidates…</div>
+      <div class="empty" id="empty">No app is currently claiming this URL.</div>
     </div>
 
     <div class="help">
       <strong style="color: var(--text);">Why does this happen?</strong>
-      <p style="margin-top: var(--space-2);">When two installs of the same app share a username, the short URL is ambiguous. The long URLs always work — they include the server name, so they're unique. <a href="/docs/multiplexing">More on multiplexing →</a></p>
+      <p style="margin-top: var(--space-2);">Each app instance decides whether to claim a short URL. Until somebody claims it, this fallback shows. The long form (<code>&lt;app&gt;.&lt;server&gt;.&lt;user&gt;.flagship.services</code>) is always reachable.</p>
     </div>
   </section>
 </main>
 
 <script>
-  // Resolve the short URL by hitting the public resolver.
-  const host = location.host;
-  document.getElementById("short-host").textContent = host;
-
-  fetch(`https://flagshipserver.com/api/aliases/resolve?host=${encodeURIComponent(host)}`)
-    .then((r) => r.json())
-    .then((body) => {
-      const empty = document.getElementById("empty");
-      const candidates = document.getElementById("candidates");
-
-      // Single-target case shouldn't reach this page (DNS already CNAME'd
-      // to the long form), but if we *did* get here, show a "go to full URL"
-      // card.
-      if (body.kind === "single" && body.longHost) {
-        candidates.innerHTML = renderSingle(body.longHost);
-        return;
-      }
-      if (body.kind === "missing") {
-        candidates.innerHTML = renderMissing(host);
-        return;
-      }
-      if (body.kind === "ambiguous" && Array.isArray(body.candidates)) {
-        candidates.innerHTML = body.candidates.map(renderCandidate).join("");
-        return;
-      }
-      empty.textContent = "Couldn't reach the resolver. Try again in a moment.";
-    })
-    .catch(() => {
-      document.getElementById("empty").textContent =
-        "Couldn't reach the resolver. Try again in a moment.";
-    });
-
-  function renderCandidate(c) {
-    const url = `https://${c.long_host}`;
-    const safeUrl = url.replace(/[<>"]/g, "");
-    return `
-      <a class="candidate" href="${safeUrl}">
-        <div class="row">
-          <div>
-            <div class="url">${escapeHtml(c.long_host)}</div>
-            <div class="meta">${escapeHtml(c.full_label)} on ${escapeHtml(c.server_domain)}</div>
-          </div>
-          <div class="arrow">→</div>
-        </div>
-      </a>
-    `;
-  }
-  function renderSingle(longHost) {
-    const url = `https://${longHost}`;
-    return `
-      <a class="candidate" href="${url.replace(/[<>"]/g, "")}">
-        <div class="row">
-          <div>
-            <div class="url">${escapeHtml(longHost)}</div>
-            <div class="meta">Open the full address.</div>
-          </div>
-          <div class="arrow">→</div>
-        </div>
-      </a>
-    `;
-  }
-  function renderMissing(h) {
-    return `<div class="empty">No app at <code>${escapeHtml(h)}</code>. Maybe a typo?</div>`;
-  }
-  function escapeHtml(s) {
-    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-  }
+  document.getElementById("short-host").textContent = location.host;
 </script>
 
 </body>
