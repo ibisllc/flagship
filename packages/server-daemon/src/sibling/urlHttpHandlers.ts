@@ -1,41 +1,31 @@
 /**
  * App-claim primitives — `/api/url/*`.
  *
- * Apps in containers reach the daemon at:
- *
- *   GET  /api/url            list of all URLs the calling app may interact
- *                            with on this pod (canonical + ones with a cap)
- *   POST /api/url/claim      { fqdn } — claim a non-canonical URL
- *   POST /api/url/release    { fqdn } — release a previously-claimed URL
- *   GET  /api/url/owned      what THIS instance currently holds
+ *   GET  /api/url            list URLs the calling app may interact
+ *                            with on this pod
+ *   POST /api/url/claim      { fqdn } — ask the hub to transfer the
+ *                            slot to this pod
+ *   POST /api/url/release    { fqdn } — drop our claim record
+ *   GET  /api/url/owned      what this instance currently has asked for
  *
  * carrying `Authorization: Bearer <FLAGSHIP_APP_TOKEN>`.
  *
- * Three checks every claim must pass (see N0h capabilityStore):
- *   1. The capability's appId must equal the appId behind the bearer.
- *   2. The capability's siblingId must equal THIS pod's serverId.
- *   3. The capability's fqdn must equal the request's fqdn.
+ * Under the entitlement model (N12), per-fqdn capabilities are GONE.
+ * The pod's IRK-signed cert presented to the .services hub at HELLO
+ * time is the authority. This handler is a thin pass-through:
+ *  - `claim` calls `urlController.claim(fqdn)` → hub `FRAME_REQUEST_TRANSFER`.
+ *  - `release` is informational; the hub-side release happens via
+ *    FCFS reassignment when another peer claims, or via socket-death
+ *    redistribution.
  *
- * Canonical URLs are immutable. The pod's own
- * `<server>.<user>.flagship.services` and `*.<server>.<user>...` cannot
- * be claimed or released — they always point here. Attempting to do so
- * is a 400 (so apps don't waste cycles on a meaningless call).
- *
- * Release does NOT require a capability — any app can drop a claim it
- * (or its predecessor on this pod) currently holds. We do require a
- * matching cap to EXIST, otherwise the release request reveals the
- * existence of mappings the caller has no business knowing about.
- *
- * NO harness replication. NO auto-claim.
+ * Validation is out at the hub now: the hub checks "is this fqdn
+ * derivable from any of your cert's canonicals?" via the allocator.
+ * If it isn't, the request is silently a no-op there. This keeps the
+ * daemon side dumb and tracks the user's "stay dumb" principle for
+ * the .services edge.
  */
 
 import type { AppAuthTokens } from "../appAuthToken.js";
-import type {
-  CapabilityStore,
-  RevocationCache,
-  StoredCapability,
-} from "../capabilityStore.js";
-import { checkCapability } from "../capabilityStore.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { UrlController } from "../runtime.js";
 
@@ -43,19 +33,12 @@ const J = { "content-type": "application/json" } as const;
 
 export interface UrlHttpDeps {
   appAuthTokens: AppAuthTokens;
-  capabilityStore: CapabilityStore;
-  revocations: RevocationCache;
   urlController: UrlController;
-  /** This pod's serverId — used as the fixed siblingId in cap checks. */
+  /** This pod's serverId — used to compute canonical URLs for the list. */
   thisSiblingId: string;
   /**
    * Resolver: given an appId, return the canonical app FQDNs that
-   * always point here. For a self-authored slug `notes` on pod
-   * `home.alice.flagship.services` this is just
-   * `notes.home.alice.flagship.services`. Cross-creator slugs add the
-   * `-creator` suffix. The resolver is supplied by the caller because
-   * it depends on AppPlatform — we don't import that here so this
-   * module stays leaf.
+   * always point here. Same shape as before; supplied by the runtime.
    */
   canonicalFqdnsForApp: (appId: string) => string[];
   now?: () => number;
@@ -67,13 +50,9 @@ export interface UrlEntry {
   fqdn: string;
   kind: UrlKind;
   ownedBy: "self" | string | null;
-  canClaim: boolean;
-  capabilityExpiresAt: number | null;
 }
 
 export function buildUrlHttpHandlers(deps: UrlHttpDeps) {
-  const now = deps.now ?? (() => Date.now());
-
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     if (!req.path.startsWith("/api/url")) return null;
 
@@ -81,7 +60,7 @@ export function buildUrlHttpHandlers(deps: UrlHttpDeps) {
     if (!appId) return jerr(401, "missing or invalid app token");
 
     if (req.path === "/api/url" && req.method === "GET") {
-      const entries = await listEntries(appId, deps, now);
+      const entries = listEntries(appId, deps);
       return ok({ urls: entries });
     }
 
@@ -97,13 +76,6 @@ export function buildUrlHttpHandlers(deps: UrlHttpDeps) {
       if (isCanonicalUrl(fqdn, deps.thisSiblingId)) {
         return jerr(400, "canonical URLs cannot be claimed/released");
       }
-      const r = await checkCapability(
-        { callerAppId: appId, thisSiblingId: deps.thisSiblingId, requestedFqdn: fqdn },
-        deps.capabilityStore,
-        deps.revocations,
-        now,
-      );
-      if (!r.ok) return jerr(403, "no valid capability for this (app, fqdn) on this pod");
       await deps.urlController.claim(fqdn);
       return ok({ ok: true, fqdn });
     }
@@ -115,17 +87,6 @@ export function buildUrlHttpHandlers(deps: UrlHttpDeps) {
       if (isCanonicalUrl(fqdn, deps.thisSiblingId)) {
         return jerr(400, "canonical URLs cannot be claimed/released");
       }
-      // Defense-in-depth: require a matching cap to exist before
-      // acknowledging the release. Otherwise an app could probe by
-      // trying release on every fqdn and observe the success/error
-      // shape.
-      const r = await checkCapability(
-        { callerAppId: appId, thisSiblingId: deps.thisSiblingId, requestedFqdn: fqdn },
-        deps.capabilityStore,
-        deps.revocations,
-        now,
-      );
-      if (!r.ok) return jerr(403, "no valid capability for this (app, fqdn) on this pod");
       await deps.urlController.release(fqdn);
       return ok({ ok: true, fqdn });
     }
@@ -134,48 +95,22 @@ export function buildUrlHttpHandlers(deps: UrlHttpDeps) {
   };
 }
 
-async function listEntries(
-  appId: string,
-  deps: UrlHttpDeps,
-  now: () => number,
-): Promise<UrlEntry[]> {
+function listEntries(appId: string, deps: UrlHttpDeps): UrlEntry[] {
   const ownedSet = new Set(deps.urlController.list().map((s) => s.toLowerCase()));
-  const all = await deps.capabilityStore.list();
-  const seen = new Set<string>();
   const out: UrlEntry[] = [];
-  // Canonical URLs first — always self-owned, no cap, immutable.
   for (const fqdn of deps.canonicalFqdnsForApp(appId)) {
-    const lower = fqdn.toLowerCase();
-    if (seen.has(lower)) continue;
-    seen.add(lower);
     out.push({
-      fqdn: lower,
+      fqdn: fqdn.toLowerCase(),
       kind: "canonical",
       ownedBy: "self",
-      canClaim: false,
-      capabilityExpiresAt: null,
     });
   }
-  // Caps stored on this pod for this app on this sibling. These are the
-  // FQDNs the app *may* claim (or already has).
-  for (const stored of all) {
-    if (stored.capability.appId !== appId) continue;
-    if (stored.capability.siblingId !== deps.thisSiblingId) continue;
-    const lower = stored.capability.fqdn.toLowerCase();
-    if (seen.has(lower)) continue;
-    seen.add(lower);
-    const ownedBy: "self" | null = ownedSet.has(lower) ? "self" : null;
-    const expired = stored.capability.expiresAt <= now();
-    const revoked = await deps.revocations.has({
-      username: stored.capability.username,
-      capabilityId: stored.id,
-    });
+  for (const fqdn of ownedSet) {
+    if (out.some((e) => e.fqdn === fqdn)) continue;
     out.push({
-      fqdn: lower,
-      kind: detectKind(lower, deps.thisSiblingId),
-      ownedBy,
-      canClaim: !expired && !revoked,
-      capabilityExpiresAt: stored.capability.expiresAt,
+      fqdn,
+      kind: detectKind(fqdn, deps.thisSiblingId),
+      ownedBy: "self",
     });
   }
   return out;
@@ -218,7 +153,3 @@ function ok(body: unknown): HttpResponse {
 function jerr(status: number, error: string): HttpResponse {
   return { status, headers: J, body: JSON.stringify({ error }) };
 }
-
-// Re-export so test helpers can build StoredCapability without pulling
-// the type from a separate module.
-export type { StoredCapability };

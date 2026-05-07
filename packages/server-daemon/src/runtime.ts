@@ -241,12 +241,6 @@ export interface DaemonRuntime {
    */
   siblingRouter: import("./sibling/router.js").InMemorySiblingRouter;
   /**
-   * In-pod capability store. PhoneOrder claim-url + future
-   * admit-capability orders deposit ClaimUrlCapability records here;
-   * /api/url/claim consumes them via checkCapability.
-   */
-  capabilityStore: import("./capabilityStore.js").CapabilityStore;
-  /**
    * App backup service. PhoneOrder backup-app calls into this; the
    * resulting one-shot fetch URL is served at /api/backups/<id>.
    * Null when no AppPlatform / dataDir is wired.
@@ -633,26 +627,34 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     console.log(`[runtime] AppPlatform skipped (host IRK / SWK not provided)`);
   }
 
-  // URL controller — under the new entitlement model, claims happen
-  // at the HUB via "request transfer" requests, not via the tunnel
-  // client's HELLO. For now this is a stub that re-runs `rehello()`
-  // when called (which causes the hub to re-evaluate the pod's
-  // entitled canonicals). The proper transfer-request path is wired
-  // in N12b's hub-integration follow-up.
-  const extra = new Set<string>();
+  // URL controller — under the entitlement model, claims happen at
+  // the hub via FRAME_REQUEST_TRANSFER, not via HELLO updates. The
+  // hub's allocator validates that the pod has a derivable claim
+  // (from its presented entitlement cert) and atomically reassigns;
+  // the result surfaces back through the next FRAME_DOMAIN_GRANTED
+  // snapshot the hub broadcasts.
+  //
+  // The local set tracks in-flight + locally-acknowledged claims so
+  // /api/url/owned can show what this app asked for. The snapshot
+  // received from the hub is the source of truth.
+  const requestedClaims = new Set<string>();
   const urlController: UrlController = {
     async claim(fqdn: string) {
       const lower = fqdn.toLowerCase();
-      extra.add(lower);
-      await tunnel.rehello().catch(() => {});
+      requestedClaims.add(lower);
+      tunnel.requestTransfer(lower);
     },
     async release(fqdn: string) {
       const lower = fqdn.toLowerCase();
-      extra.delete(lower);
-      await tunnel.rehello().catch(() => {});
+      requestedClaims.delete(lower);
+      // No dedicated release-frame yet — when a holder explicitly
+      // gives up a slot, the next holder's FRAME_REQUEST_TRANSFER
+      // takes over via FCFS in the allocator. Apps that genuinely
+      // want to abandon a held slot rely on socket-death
+      // redistribution or a peer's transfer-request.
     },
     list(): string[] {
-      return [...extra];
+      return [...requestedClaims];
     },
   };
 
@@ -660,17 +662,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // discovery + opaque app messaging) and /api/url/* (URL claims) —
   // when an AppAuthTokens map is wired. Without it, apps can't
   // authenticate so the routes would always 401; we just don't mount
-  // them. Capability store + revocation cache are constructed here:
-  // the store is the deposit target for incoming caps (PhoneOrders,
-  // future install orders); revocation defaults to never-revoke
-  // until N0d-2 wires the .com fetch.
+  // them. URL claims are now hub-driven via FRAME_REQUEST_TRANSFER —
+  // no daemon-side capability store needed (N12d).
   const appAuthTokens = opts.appPlatform?.appAuthTokens;
-  const { InMemoryCapabilityStore } = await import("./capabilityStore.js");
-  const capabilityStore = new InMemoryCapabilityStore();
-  const noRevoke: import("./capabilityStore.js").RevocationCache = {
-    has: async () => false,
-    refresh: async () => {},
-  };
   // App backup service. Wired only when we have a place to put backup
   // archives + a way to find an app's source tree (AppPlatform).
   const { AppBackupService } = await import("./appBackup.js");
@@ -706,8 +700,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     extras.push(
       buildUrlHttpHandlers({
         appAuthTokens,
-        capabilityStore,
-        revocations: noRevoke,
         urlController,
         thisSiblingId: opts.serverFqdn,
         canonicalFqdnsForApp: (appId) => {
@@ -742,7 +734,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     appPlatform: appPlatformRef.current,
     urlController,
     siblingRouter,
-    capabilityStore,
     appBackup,
   };
 }

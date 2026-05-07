@@ -189,10 +189,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Forward-declared so the executor can call into the runtime's URL
-  // controller. Filled in once startDaemonRuntime returns.
-  const urlControllerRef: { current: import("./runtime.js").UrlController | null } = { current: null };
-
   const orders = pskPubHex
     ? {
         pskPub: hexToBytes(pskPubHex.trim()),
@@ -204,7 +200,6 @@ async function main(): Promise<void> {
           phonePipe: browserBundle?.phonePipe ?? null,
           subscriberRegistry,
           pairedSessions,
-          urlControllerRef,
         }),
       }
     : undefined;
@@ -341,7 +336,6 @@ async function main(): Promise<void> {
       updateServer,
     });
     appPlatformRefForServer.current = runtime.appPlatform;
-    urlControllerRef.current = runtime.urlController;
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
     console.log(`[daemon] 🔒 cert installed; serving HTTPS for ${env.serverFqdn}`);
@@ -425,13 +419,6 @@ interface ExecutorDeps {
   subscriberRegistry?: FileSubscriberRegistry;
   /** Paired-session store for add/remove-paired-session phone orders. */
   pairedSessions?: FilePairedSessionStore;
-  /**
-   * Hook into the runtime's UrlController for claim-url / release-url
-   * phone orders. Set after runtime startup; the default executor
-   * closes over a ref-cell so the runtime can install itself
-   * post-construction.
-   */
-  urlControllerRef?: { current: import("./runtime.js").UrlController | null };
 }
 
 function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
@@ -518,28 +505,6 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
       ? async ({ token }) => {
           await deps.pairedSessions!.remove(token);
           console.log(`[daemon] order: remove-paired-session`);
-        }
-      : undefined,
-    claimUrl: deps.urlControllerRef
-      ? async ({ capability }) => {
-          const rt = deps.urlControllerRef!.current;
-          if (!rt) {
-            console.warn(`[daemon] order: claim-url but runtime not yet ready`);
-            return;
-          }
-          // Phone-driven: the order envelope's PSK signature already
-          // proved phone authority. Cap admission with full IRK
-          // verification is layered on top in N0j (app-driven path).
-          await rt.claim(capability.fqdn);
-          console.log(`[daemon] order: claim-url ${capability.fqdn}`);
-        }
-      : undefined,
-    releaseUrl: deps.urlControllerRef
-      ? async ({ fqdn }) => {
-          const rt = deps.urlControllerRef!.current;
-          if (!rt) return;
-          await rt.release(fqdn);
-          console.log(`[daemon] order: release-url ${fqdn}`);
         }
       : undefined,
   };

@@ -1,35 +1,11 @@
 import { describe, expect, it } from "vitest";
-import {
-  ed,
-  signClaimUrlCapability,
-  type ClaimUrlCapability,
-  type Keypair,
-} from "@flagship/protocol";
 import { InMemoryAppAuthTokens } from "../../src/appAuthToken.js";
-import {
-  admitCapability,
-  InMemoryCapabilityStore,
-  type RevocationCache,
-} from "../../src/capabilityStore.js";
 import { buildUrlHttpHandlers } from "../../src/sibling/urlHttpHandlers.js";
-import type { UrlController } from "../../src/runtime.js";
-import type { HttpRequest } from "../../src/runtime.js";
+import type { HttpRequest, UrlController } from "../../src/runtime.js";
 
 const POD = "home.alice.flagship.services";
 const APP_A = "alice--notes";
 const APP_B = "alice--tasks";
-
-function makeKey(): Keypair {
-  const priv = new Uint8Array(32);
-  crypto.getRandomValues(priv);
-  return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
-}
-
-function hex(b: Uint8Array): string {
-  let s = "";
-  for (const x of b) s += x.toString(16).padStart(2, "0");
-  return s;
-}
 
 function inMemoryUrlController(): UrlController & { _list: Set<string> } {
   const set = new Set<string>();
@@ -47,38 +23,13 @@ function inMemoryUrlController(): UrlController & { _list: Set<string> } {
   };
 }
 
-const noRevoke: RevocationCache = {
-  has: async () => false,
-  refresh: async () => {},
-};
-
-async function depositCap(
-  store: InMemoryCapabilityStore,
-  irk: Keypair,
-  cap: ClaimUrlCapability,
-  now = () => 1_500,
-) {
-  const sig = signClaimUrlCapability(cap, irk);
-  return admitCapability({
-    capability: cap,
-    signatureHex: hex(sig),
-    irkPubLookup: async () => irk.publicKey,
-    store,
-    now,
-  });
-}
-
 async function setup() {
   const tokens = new InMemoryAppAuthTokens();
   const tokenA = await tokens.mint(APP_A);
   const tokenB = await tokens.mint(APP_B);
-  const capStore = new InMemoryCapabilityStore();
   const ctrl = inMemoryUrlController();
-  const irk = makeKey();
   const handle = buildUrlHttpHandlers({
     appAuthTokens: tokens,
-    capabilityStore: capStore,
-    revocations: noRevoke,
     urlController: ctrl,
     thisSiblingId: POD,
     canonicalFqdnsForApp: (appId) => {
@@ -88,7 +39,7 @@ async function setup() {
     },
     now: () => 2_000,
   });
-  return { tokens, tokenA, tokenB, capStore, ctrl, handle, irk };
+  return { tokens, tokenA, tokenB, ctrl, handle };
 }
 
 function req(opts: {
@@ -105,17 +56,9 @@ function req(opts: {
   };
 }
 
-describe("/api/url/claim", () => {
-  it("admits a request with a valid (appId, siblingId, fqdn) capability", async () => {
+describe("/api/url/claim — thin pass-through under entitlement model", () => {
+  it("forwards to urlController.claim and tracks the URL", async () => {
     const s = await setup();
-    await depositCap(s.capStore, s.irk, {
-      username: "alice",
-      appId: APP_A,
-      siblingId: POD,
-      fqdn: "notes.alice.flagship.services",
-      issuedAt: 1_000,
-      expiresAt: 1_000 + 90 * 24 * 60 * 60 * 1000,
-    });
     const r = await s.handle(
       req({
         method: "POST",
@@ -126,49 +69,6 @@ describe("/api/url/claim", () => {
     );
     expect(r?.status).toBe(200);
     expect(s.ctrl._list.has("notes.alice.flagship.services")).toBe(true);
-  });
-
-  it("REJECTS app B trying to claim with app A's stored cap (cross-app)", async () => {
-    const s = await setup();
-    await depositCap(s.capStore, s.irk, {
-      username: "alice",
-      appId: APP_A,
-      siblingId: POD,
-      fqdn: "notes.alice.flagship.services",
-      issuedAt: 1_000,
-      expiresAt: 1_000 + 90 * 24 * 60 * 60 * 1000,
-    });
-    const r = await s.handle(
-      req({
-        method: "POST",
-        path: "/api/url/claim",
-        token: s.tokenB, // app B's token
-        body: { fqdn: "notes.alice.flagship.services" },
-      }),
-    );
-    expect(r?.status).toBe(403);
-    expect(s.ctrl._list.size).toBe(0);
-  });
-
-  it("REJECTS a request whose fqdn doesn't match any stored cap", async () => {
-    const s = await setup();
-    await depositCap(s.capStore, s.irk, {
-      username: "alice",
-      appId: APP_A,
-      siblingId: POD,
-      fqdn: "notes.alice.flagship.services",
-      issuedAt: 1_000,
-      expiresAt: 1_000 + 90 * 24 * 60 * 60 * 1000,
-    });
-    const r = await s.handle(
-      req({
-        method: "POST",
-        path: "/api/url/claim",
-        token: s.tokenA,
-        body: { fqdn: "tasks.alice.flagship.services" },
-      }),
-    );
-    expect(r?.status).toBe(403);
   });
 
   it("REJECTS attempts to claim canonical URLs", async () => {
@@ -184,6 +84,18 @@ describe("/api/url/claim", () => {
     expect(r?.status).toBe(400);
   });
 
+  it("rejects an unauthenticated request", async () => {
+    const s = await setup();
+    const r = await s.handle(
+      req({
+        method: "POST",
+        path: "/api/url/claim",
+        body: { fqdn: "notes.alice.flagship.services" },
+      }),
+    );
+    expect(r?.status).toBe(401);
+  });
+
   it("rejects malformed body", async () => {
     const s = await setup();
     const r = await s.handle(
@@ -194,16 +106,8 @@ describe("/api/url/claim", () => {
 });
 
 describe("/api/url/release", () => {
-  it("releases a previously-claimed URL when the cap is still valid", async () => {
+  it("removes the fqdn from urlController state", async () => {
     const s = await setup();
-    await depositCap(s.capStore, s.irk, {
-      username: "alice",
-      appId: APP_A,
-      siblingId: POD,
-      fqdn: "notes.alice.flagship.services",
-      issuedAt: 1_000,
-      expiresAt: 1_000 + 90 * 24 * 60 * 60 * 1000,
-    });
     await s.ctrl.claim("notes.alice.flagship.services");
     const r = await s.handle(
       req({
@@ -217,7 +121,7 @@ describe("/api/url/release", () => {
     expect(s.ctrl._list.size).toBe(0);
   });
 
-  it("rejects release for an fqdn the calling app has no cap for (probe defense)", async () => {
+  it("is a no-op when the fqdn isn't tracked locally", async () => {
     const s = await setup();
     const r = await s.handle(
       req({
@@ -227,56 +131,51 @@ describe("/api/url/release", () => {
         body: { fqdn: "tasks.alice.flagship.services" },
       }),
     );
-    expect(r?.status).toBe(403);
+    expect(r?.status).toBe(200);
+    expect(s.ctrl._list.size).toBe(0);
+  });
+
+  it("REJECTS attempts to release canonical URLs", async () => {
+    const s = await setup();
+    const r = await s.handle(
+      req({
+        method: "POST",
+        path: "/api/url/release",
+        token: s.tokenA,
+        body: { fqdn: POD },
+      }),
+    );
+    expect(r?.status).toBe(400);
   });
 });
 
 describe("/api/url and /api/url/owned", () => {
-  it("/api/url lists canonical + capability-bearing FQDNs with ownedBy", async () => {
+  it("/api/url lists the calling app's canonical FQDNs + currently-owned URLs", async () => {
     const s = await setup();
-    await depositCap(s.capStore, s.irk, {
-      username: "alice",
-      appId: APP_A,
-      siblingId: POD,
-      fqdn: "notes.alice.flagship.services",
-      issuedAt: 1_000,
-      expiresAt: 1_000 + 90 * 24 * 60 * 60 * 1000,
-    });
     await s.ctrl.claim("notes.alice.flagship.services");
     const r = await s.handle(req({ method: "GET", path: "/api/url", token: s.tokenA }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(String(r!.body)) as {
-      urls: Array<{ fqdn: string; kind: string; ownedBy: string | null; canClaim: boolean }>;
+      urls: Array<{ fqdn: string; kind: string; ownedBy: string | null }>;
     };
     const byFqdn = Object.fromEntries(body.urls.map((u) => [u.fqdn, u]));
     expect(byFqdn[`notes.${POD}`]).toMatchObject({
       kind: "canonical",
       ownedBy: "self",
-      canClaim: false,
     });
     expect(byFqdn["notes.alice.flagship.services"]).toMatchObject({
       kind: "alias",
       ownedBy: "self",
-      canClaim: true,
     });
   });
 
-  it("/api/url omits another app's caps", async () => {
+  it("/api/url for app B returns only B's canonical (not A's owned URLs)", async () => {
     const s = await setup();
-    await depositCap(s.capStore, s.irk, {
-      username: "alice",
-      appId: APP_A,
-      siblingId: POD,
-      fqdn: "notes.alice.flagship.services",
-      issuedAt: 1_000,
-      expiresAt: 1_000 + 90 * 24 * 60 * 60 * 1000,
-    });
     const r = await s.handle(req({ method: "GET", path: "/api/url", token: s.tokenB }));
     const body = JSON.parse(String(r!.body)) as { urls: Array<{ fqdn: string }> };
     const fqdns = body.urls.map((u) => u.fqdn);
-    expect(fqdns).not.toContain("notes.alice.flagship.services");
-    // app B still sees its own canonical
     expect(fqdns).toContain(`tasks.${POD}`);
+    expect(fqdns).not.toContain(`notes.${POD}`);
   });
 
   it("/api/url/owned reflects current urlController state", async () => {

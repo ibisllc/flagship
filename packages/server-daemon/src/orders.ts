@@ -48,21 +48,8 @@ export interface OrderExecutor {
   removeSubscriber?(args: { appId: string; fqdn: string }): Promise<void> | void;
   addPairedSession?(args: { token: string; label: string }): Promise<void> | void;
   removePairedSession?(args: { token: string }): Promise<void> | void;
-  /**
-   * Phone-driven URL claim. The implementer admits the capability into
-   * its capability store (verifying the IRK signature) and pushes a
-   * HELLO update to the tunnel hub adding `fqdn` to controlledDomains.
-   * Idempotent on retry.
-   */
-  claimUrl?(args: {
-    capability: import("@flagship/protocol").ClaimUrlCapability;
-    capabilitySignatureHex: string;
-  }): Promise<void> | void;
-  /**
-   * Phone-driven URL release. Pushes a HELLO update removing `fqdn`
-   * from controlledDomains. Does not delete the stored capability.
-   */
-  releaseUrl?(args: { fqdn: string }): Promise<void> | void;
+  // (claimUrl / releaseUrl removed in N12d — claims now flow app →
+  //  daemon → hub via FRAME_REQUEST_TRANSFER, not via PhoneOrder.)
   /**
    * Phone-driven app backup. The implementer bundles the app, optionally
    * encrypts with the password, and returns a one-shot fetch path. The
@@ -255,44 +242,6 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
         token: r.token,
         issuedAt: r.issuedAt,
       };
-    case "claim-url": {
-      const c = r.capability;
-      if (
-        typeof c !== "object" || c === null ||
-        typeof (c as Record<string, unknown>).username !== "string" ||
-        typeof (c as Record<string, unknown>).appId !== "string" ||
-        typeof (c as Record<string, unknown>).siblingId !== "string" ||
-        typeof (c as Record<string, unknown>).fqdn !== "string" ||
-        typeof (c as Record<string, unknown>).issuedAt !== "number" ||
-        typeof (c as Record<string, unknown>).expiresAt !== "number" ||
-        typeof r.capabilitySignatureHex !== "string"
-      ) {
-        return null;
-      }
-      const cap = c as Record<string, unknown>;
-      return {
-        type: "claim-url",
-        serverId: r.serverId,
-        capability: {
-          username: cap.username as string,
-          appId: cap.appId as string,
-          siblingId: cap.siblingId as string,
-          fqdn: cap.fqdn as string,
-          issuedAt: cap.issuedAt as number,
-          expiresAt: cap.expiresAt as number,
-        },
-        capabilitySignatureHex: r.capabilitySignatureHex,
-        issuedAt: r.issuedAt,
-      };
-    }
-    case "release-url":
-      if (typeof r.fqdn !== "string") return null;
-      return {
-        type: "release-url",
-        serverId: r.serverId,
-        fqdn: r.fqdn,
-        issuedAt: r.issuedAt,
-      };
     case "backup-app":
       if (
         typeof r.creator !== "string" ||
@@ -363,17 +312,6 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
     case "remove-paired-session":
       if (!ex.removePairedSession) throw new Error("removePairedSession not implemented");
       await ex.removePairedSession({ token: order.token });
-      return;
-    case "claim-url":
-      if (!ex.claimUrl) throw new Error("claimUrl not implemented");
-      await ex.claimUrl({
-        capability: order.capability,
-        capabilitySignatureHex: order.capabilitySignatureHex,
-      });
-      return;
-    case "release-url":
-      if (!ex.releaseUrl) throw new Error("releaseUrl not implemented");
-      await ex.releaseUrl({ fqdn: order.fqdn });
       return;
     case "backup-app":
       if (!ex.backupApp) throw new Error("backupApp not implemented");

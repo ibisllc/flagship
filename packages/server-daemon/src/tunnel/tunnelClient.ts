@@ -12,6 +12,7 @@ import {
   FRAME_HELLO,
   FRAME_HELLO_ACK,
   FRAME_OPEN,
+  requestTransferFrame,
   type Frame,
 } from "@flagship/tunnel-protocol";
 import {
@@ -76,6 +77,13 @@ export interface TunnelClient {
    * Idempotent.
    */
   rehello(): Promise<void>;
+  /**
+   * Ask the hub to transfer ownership of `fqdn` to this pod. The hub
+   * validates the pod has a derivable claim (via the cert it
+   * presented at HELLO) and atomically reassigns. Result surfaces via
+   * the next FRAME_DOMAIN_GRANTED broadcast.
+   */
+  requestTransfer(fqdn: string): void;
   close(): Promise<void>;
 }
 
@@ -248,6 +256,9 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
   return {
     ready: () => ready,
     rehello: () => sendHello(),
+    requestTransfer: (fqdn: string) => {
+      send(requestTransferFrame({ fqdn: fqdn.toLowerCase() }));
+    },
     close: () =>
       new Promise<void>((resolve) => {
         if (ws.readyState === WebSocket.CLOSED) return resolve();

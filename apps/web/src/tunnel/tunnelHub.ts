@@ -9,6 +9,7 @@ import {
   FRAME_CLOSE_REMOTE,
   FRAME_DATA,
   FRAME_HELLO,
+  FRAME_REQUEST_TRANSFER,
   helloAckFrame,
   type Frame,
 } from "@flagship/tunnel-protocol";
@@ -265,6 +266,23 @@ function attachTunnel(
       return;
     }
 
+    if (f.type === FRAME_REQUEST_TRANSFER) {
+      let body: { fqdn?: unknown };
+      try {
+        body = JSON.parse(new TextDecoder().decode(f.payload));
+      } catch {
+        return;
+      }
+      if (typeof body.fqdn !== "string") return;
+      const r = registry.requestTransfer({
+        podCanonical: registered.podCanonical,
+        fqdn: body.fqdn,
+      });
+      if (r.ok) {
+        broadcastSnapshot(registry, r.affectedSet);
+      }
+      return;
+    }
     if (f.type === FRAME_DATA) {
       const cb = streams.get(f.streamId);
       if (cb) cb.onData(f.payload);

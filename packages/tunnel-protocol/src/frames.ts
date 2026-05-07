@@ -25,6 +25,13 @@ export const FRAME_HELLO_ACK = 0x11;
  * tracking ownership in their user's zone.
  */
 export const FRAME_DOMAIN_GRANTED = 0x12;
+/**
+ * Pod → hub: "transfer ownership of <fqdn> to me." The hub validates
+ * the pod has a derivable claim (via the cert presented at HELLO)
+ * and atomically reassigns. On success, the resulting snapshot is
+ * broadcast to every member of the affected set via FRAME_DOMAIN_GRANTED.
+ */
+export const FRAME_REQUEST_TRANSFER = 0x13;
 export const FRAME_OPEN = 0x01;
 export const FRAME_DATA = 0x02;
 export const FRAME_CLOSE = 0x03;
@@ -43,6 +50,7 @@ export type FrameType =
   | typeof FRAME_HELLO
   | typeof FRAME_HELLO_ACK
   | typeof FRAME_DOMAIN_GRANTED
+  | typeof FRAME_REQUEST_TRANSFER
   | typeof FRAME_OPEN
   | typeof FRAME_DATA
   | typeof FRAME_CLOSE
@@ -113,6 +121,7 @@ function isFrameType(t: number): t is FrameType {
     t === FRAME_HELLO ||
     t === FRAME_HELLO_ACK ||
     t === FRAME_DOMAIN_GRANTED ||
+    t === FRAME_REQUEST_TRANSFER ||
     t === FRAME_OPEN ||
     t === FRAME_DATA ||
     t === FRAME_CLOSE ||
@@ -176,6 +185,18 @@ export function domainGrantedFrame(p: DomainGrantedPayload): Frame {
   return {
     streamId: 0,
     type: FRAME_DOMAIN_GRANTED,
+    payload: new TextEncoder().encode(JSON.stringify(p)),
+  };
+}
+
+export interface RequestTransferPayload {
+  fqdn: string;
+}
+
+export function requestTransferFrame(p: RequestTransferPayload): Frame {
+  return {
+    streamId: 0,
+    type: FRAME_REQUEST_TRANSFER,
     payload: new TextEncoder().encode(JSON.stringify(p)),
   };
 }

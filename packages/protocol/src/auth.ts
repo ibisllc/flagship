@@ -1061,37 +1061,6 @@ export type PhoneOrder =
     }
   | {
       /**
-       * Phone-driven URL claim. The order carries a ClaimUrlCapability
-       * (signed by IRK separately — see TAG_CLAIM_URL_CAP) plus its
-       * signature; the daemon admits it into the capability store and
-       * immediately updates its controlledDomains list. Used by the
-       * phone UI when the user explicitly maps a URL to a specific pod
-       * without going through the app's own claim path.
-       *
-       * The wire-level capability fields are kept separate from the
-       * PhoneOrder canonical bytes so the cap signature can be
-       * re-verified independently.
-       */
-      type: "claim-url";
-      serverId: ServerId;
-      capability: ClaimUrlCapability;
-      capabilitySignatureHex: string;
-      issuedAt: number;
-    }
-  | {
-      /**
-       * Phone-driven URL release. Removes the FQDN from this pod's
-       * controlledDomains list (HELLO update). Does NOT delete the
-       * stored capability — that's `revoke-claim-capability`. A
-       * subsequent claim-url is then idempotent.
-       */
-      type: "release-url";
-      serverId: ServerId;
-      fqdn: string;
-      issuedAt: number;
-    }
-  | {
-      /**
        * Phone-driven app backup. Daemon bundles the app's source +
        * (optionally) its user data into a tar.gz, optionally encrypts
        * with a password-derived key, holds it on disk, and returns a
@@ -1128,8 +1097,6 @@ const TAG_ORDER_ADD_SUBSCRIBER = "flagship/order/add-subscriber/v1";
 const TAG_ORDER_REMOVE_SUBSCRIBER = "flagship/order/remove-subscriber/v1";
 const TAG_ORDER_ADD_PAIRED_SESSION = "flagship/order/add-paired-session/v1";
 const TAG_ORDER_REMOVE_PAIRED_SESSION = "flagship/order/remove-paired-session/v1";
-const TAG_ORDER_CLAIM_URL = "flagship/order/claim-url/v1";
-const TAG_ORDER_RELEASE_URL = "flagship/order/release-url/v1";
 const TAG_ORDER_BACKUP_APP = "flagship/order/backup-app/v1";
 
 function canonicalPhoneOrder(o: PhoneOrder): Bytes {
@@ -1180,25 +1147,6 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
     case "remove-paired-session":
       return enc.encode(
         [TAG_ORDER_REMOVE_PAIRED_SESSION, o.serverId, o.token, o.issuedAt].join("|"),
-      );
-    case "claim-url":
-      return enc.encode(
-        [
-          TAG_ORDER_CLAIM_URL,
-          o.serverId,
-          o.capability.username,
-          o.capability.appId,
-          o.capability.siblingId,
-          o.capability.fqdn,
-          o.capability.issuedAt,
-          o.capability.expiresAt,
-          o.capabilitySignatureHex,
-          o.issuedAt,
-        ].join("|"),
-      );
-    case "release-url":
-      return enc.encode(
-        [TAG_ORDER_RELEASE_URL, o.serverId, o.fqdn, o.issuedAt].join("|"),
       );
     case "backup-app":
       return enc.encode(
@@ -1686,123 +1634,9 @@ export function verifyLlmPromoIssue(r: LlmPromoIssueRequest, sig: Bytes, irkPub:
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// ClaimUrlCapability — phone-issued, IRK-signed authorization for a
-// specific app instance to claim a specific FQDN.
-//
-// The harness's `/api/url/claim` endpoint MUST enforce that all three
-// of (appId, siblingId, fqdn) match the calling instance. The capability
-// alone is not a bearer token: it is a stored authorization the daemon
-// looks up by tuple. Possession of the capability bytes does not grant
-// claiming rights — only their presence in the daemon's capability store
-// for the calling (appId, siblingId, fqdn) tuple does.
-//
-// Why username on the capability: makes verification self-contained
-// against the user's registered IRK pubkey.
-// ──────────────────────────────────────────────────────────────────────
-
-export interface ClaimUrlCapability {
-  username: string;
-  appId: string;
-  siblingId: ServerId;
-  /** Lower-cased FQDN — the URL this capability authorizes claiming. */
-  fqdn: string;
-  /** ms since epoch when the capability was minted. */
-  issuedAt: number;
-  /** ms since epoch after which the capability is invalid. */
-  expiresAt: number;
-}
-
-const TAG_CLAIM_URL_CAP = "flagship/claim-url-capability/v1";
-
-function canonicalClaimUrlCapability(c: ClaimUrlCapability): Bytes {
-  return new TextEncoder().encode(
-    [
-      TAG_CLAIM_URL_CAP,
-      c.username,
-      c.appId,
-      c.siblingId,
-      c.fqdn,
-      c.issuedAt,
-      c.expiresAt,
-    ].join("|"),
-  );
-}
-
-export function signClaimUrlCapability(c: ClaimUrlCapability, irk: Keypair): Bytes {
-  return ed.sign(canonicalClaimUrlCapability(c), irk.privateKey);
-}
-
-export function verifyClaimUrlCapability(
-  c: ClaimUrlCapability,
-  sig: Bytes,
-  irkPub: Bytes,
-): boolean {
-  try {
-    return ed.verify(sig, canonicalClaimUrlCapability(c), irkPub);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Stable identifier for a capability — deterministic SHA-256 over the
- * canonical bytes, lower-cased hex. Used as the lookup key in the
- * daemon's capability store and on the revocation list.
- */
-export async function claimUrlCapabilityId(c: ClaimUrlCapability): Promise<string> {
-  const bytes = canonicalClaimUrlCapability(c);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return hex(new Uint8Array(digest));
-}
-
-/**
- * Phone-signed revocation list for a user. The phone broadcasts this on
- * change; daemons cache it with a TTL (default 60s) and refuse to honor
- * any capability whose `id` (canonical-SHA-256 hex) appears in the list.
- *
- * `issuedAt` lets the daemon discard older lists when a newer one
- * arrives (monotonic).
- */
-export interface ClaimUrlCapabilityRevocationList {
-  username: string;
-  capabilityIds: string[];
-  issuedAt: number;
-}
-
-const TAG_CLAIM_URL_CAP_REVOKE = "flagship/claim-url-capability-revoke/v1";
-
-function canonicalClaimUrlCapabilityRevocationList(
-  r: ClaimUrlCapabilityRevocationList,
-): Bytes {
-  return new TextEncoder().encode(
-    [
-      TAG_CLAIM_URL_CAP_REVOKE,
-      r.username,
-      r.capabilityIds.join(","),
-      r.issuedAt,
-    ].join("|"),
-  );
-}
-
-export function signClaimUrlCapabilityRevocationList(
-  r: ClaimUrlCapabilityRevocationList,
-  irk: Keypair,
-): Bytes {
-  return ed.sign(canonicalClaimUrlCapabilityRevocationList(r), irk.privateKey);
-}
-
-export function verifyClaimUrlCapabilityRevocationList(
-  r: ClaimUrlCapabilityRevocationList,
-  sig: Bytes,
-  irkPub: Bytes,
-): boolean {
-  try {
-    return ed.verify(sig, canonicalClaimUrlCapabilityRevocationList(r), irkPub);
-  } catch {
-    return false;
-  }
-}
+// (ClaimUrlCapability + ClaimUrlCapabilityRevocationList removed in
+//  N12d. The hub-side per-pod entitlement cert is the new authority;
+//  see RootEntitlement / AppEntitlement above.)
 
 // ──────────────────────────────────────────────────────────────────────
 // Pod entitlement certs — two-tier model.
