@@ -43,6 +43,17 @@ describe("marketing surface — design system v2", () => {
     });
   }
 
+  it("/open-source.html lists the BUSL-1.1 license + 2030 Change Date", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/open-source.html" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("BUSL-1.1");
+    expect(r.body).toContain("2030");
+    expect(r.body).toContain("Apache 2.0");
+    // Names the canonical repo so contributors know where to file PRs.
+    expect(r.body).toContain("github.com/flagshipserver/flagship");
+  });
+
   it("the landing page leads with the new positioning headline", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/" });

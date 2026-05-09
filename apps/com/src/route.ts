@@ -122,6 +122,18 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     return streamIsoFromR2(url.pathname.slice(BUILD_ISO_STREAM_PREFIX.length), env);
   }
 
+  // P3.7 — `/me` and `/me/*` redirect to the webapp PWA (the cycle plan
+  // chose webapp-subsumes-me over a separate paired-session-gated user
+  // area). 308 keeps method semantics for any future POSTs from
+  // bookmarks; query strings and hash fragments are preserved by the
+  // browser's redirect handling.
+  if (url.pathname === "/me" || url.pathname.startsWith("/me/")) {
+    return new Response(null, {
+      status: 308,
+      headers: { location: "/webapp/" },
+    });
+  }
+
   // .com control-plane routes (D1-backed). When DB binding is present,
   // these are served locally; otherwise fall through to the upstream proxy
   // (e.g. for the dev wrangler-without-d1 case).

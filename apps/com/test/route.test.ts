@@ -426,6 +426,33 @@ describe(".com control-plane routes (Worker + D1)", () => {
   });
 });
 
+describe("/me redirects to /webapp/ (P3.7)", () => {
+  it("/me returns a 308 to /webapp/", async () => {
+    const r = await route(new Request("https://flagshipserver.com/me"), makeEnv());
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("/webapp/");
+  });
+
+  it("/me/anything also redirects to /webapp/", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/me/settings"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("/webapp/");
+  });
+
+  it("/messages (similar prefix) is NOT redirected — it falls through to the asset binding", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/messages"),
+      makeEnv(),
+    );
+    // Asset binding stub returns "asset:<path>" with status 200.
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/messages");
+  });
+});
+
 describe("/api/build/iso-info", () => {
   it("returns the default placeholder when no env override is set", async () => {
     const r = await route(

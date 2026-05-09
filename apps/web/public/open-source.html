@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
+    <title>Open source · Flagship</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo"></span>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/security.html">security</a>
+        <a href="/pricing.html">pricing</a>
+        <a href="/docs/">docs</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Open source</h1>
+      <p class="lede">
+        Flagship is OSS. The platform's value belongs to the user, on hardware
+        the user owns, under keys the user controls. The license guarantees
+        that — even if we vanished tomorrow, your install keeps running and
+        anyone can fork the codebase to keep it alive.
+      </p>
+
+      <h2>License</h2>
+      <p>
+        Flagship is licensed under the
+        <a href="https://mariadb.com/bsl11/" target="_blank" rel="noopener">Business Source License 1.1</a>
+        (BUSL-1.1) with a <strong>Change Date of 2030-05-03</strong>. On that
+        date the entire codebase auto-relicenses to <strong>Apache 2.0</strong>.
+        Until then, you can:
+      </p>
+      <ul>
+        <li>Read every line of source — nothing is hidden.</li>
+        <li>Run the entire stack on your own hardware, for your own use.</li>
+        <li>Share modifications with friends running their own boxes.</li>
+        <li>Fork the project to keep it alive if we go away.</li>
+      </ul>
+      <p>
+        The license restricts only one thing: standing up a commercial,
+        hosted Flagship-as-a-service competitor before the Change Date. That
+        carve-out is what funds the work that would otherwise have to be
+        VC-funded — and the carve-out evaporates in 2030.
+      </p>
+
+      <h2>Repository</h2>
+      <p>
+        The canonical repo is
+        <a href="https://github.com/flagshipserver/flagship" target="_blank" rel="noopener">github.com/flagshipserver/flagship</a>.
+        It contains everything: the Cloudflare Worker that powers
+        flagshipserver.com, the Fly app that powers flagship.services, the
+        server daemon, the apkovl + ISO builders, the install scripts, and
+        the iOS / Android scaffolds.
+      </p>
+
+      <h2>How to contribute</h2>
+      <ul>
+        <li>
+          <strong>Bug reports + small PRs:</strong> open an issue or PR
+          against the canonical repo. We respond on a weekly cadence; tests
+          must pass.
+        </li>
+        <li>
+          <strong>Security disclosures:</strong> see
+          <a href="/security.html">/security.html</a> and
+          <a href="/.well-known/security.txt">/.well-known/security.txt</a>
+          — please report privately first.
+        </li>
+        <li>
+          <strong>Larger features:</strong> open a discussion before writing
+          code. The codebase has strong architectural invariants (TLS
+          terminates on the user's box; flagship.services literally cannot
+          read user content; every cross-pod message is canonical-bytes
+          signed) and we'd rather align upfront than reject a 2-week PR.
+        </li>
+      </ul>
+
+      <h2>Governance</h2>
+      <p>
+        The Flagship project is currently maintained by Anthropic-funded
+        contributors plus the open community. There is no formal foundation
+        yet; we'll set one up before we hit 1.0 and start growing past
+        early adopters. Until then, "what gets merged" is decided in public
+        on the issue tracker. There are no closed-door technical decisions.
+      </p>
+
+      <h2>Reproducible builds</h2>
+      <p>
+        The bootable ISO is reproducible: anyone can build it from the same
+        source tag and verify the personalization trailer doesn't smuggle
+        anything past the user's view. This is essential for the trust pitch
+        — the install medium is too high-leverage to leave unverifiable.
+      </p>
+
+      <h2>Why BUSL and not Apache from day one?</h2>
+      <p>
+        We picked BUSL-1.1 with a 2030 Change Date for one specific reason:
+        a hyperscaler running a hosted "Flagship-but-it's-our-product"
+        service in year one would kill the project's ability to fund itself
+        before we could ship the things that take time (mobile apps, peer
+        backup, hardware partnership). The 2030 date is the gate; after that
+        the entire codebase is Apache 2.0, with no hidden private modules.
+        We are not pulling a SSPL-style bait-and-switch.
+      </p>
+
+      <h2>Contributors</h2>
+      <p>
+        The full contributor list lives in
+        <code>CONTRIBUTORS.md</code> at the canonical repo. Significant
+        contributors get listed on the project's public site at the next
+        release after their PR lands.
+      </p>
+
+      <p style="margin-top: 2rem; color: var(--fg-mute); font-size: 0.85rem;">
+        Last updated: 2026-05-09. License questions:
+        <a href="mailto:legal@flagshipserver.com">legal@flagshipserver.com</a>.
+      </p>
+    </main>
+  </body>
+</html>
