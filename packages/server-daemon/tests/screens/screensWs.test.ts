@@ -4,6 +4,9 @@ import { WebSocket } from "ws";
 import { extractPairedSessionToken } from "../../src/pairedSessionStore.js";
 import { buildScreensUpgradeHandler } from "../../src/screens/screensWs.js";
 import { VibeCodeSessionRegistry } from "../../src/llm/vibeCodeSession.js";
+import { BrowserManager } from "../../src/browser/browserManager.js";
+import { TabRegistry } from "../../src/browser/tabRegistry.js";
+import { FakeCdpServer } from "../browser/fakeCdpServer.js";
 import type { HttpRequest, HttpResponse, UpgradeRequest } from "../../src/runtime.js";
 
 // ---------- extractPairedSessionToken ----------
@@ -221,5 +224,163 @@ describe("screensWs — vibe-code/:id/stream", () => {
       headBuffer: Buffer.alloc(0),
     };
     expect(handler(dummy)).toBe(false);
+  });
+});
+
+describe("screensWs — browser-tabs/:tabId/stream (P1.11)", () => {
+  it("returns 503 when no browser bundle is wired", async () => {
+    const handler = buildScreensUpgradeHandler({
+      gate: new FakeGate(new Set(["good-tok"])),
+    });
+    const server = await startTcpServer(handler);
+    const ws = connect(server.port, `/api/screens/browser-tabs/tab-1/stream?sessionToken=good-tok`);
+    const code = await new Promise<number>((resolve) => {
+      ws.once("unexpected-response", (_req, res) => {
+        resolve(res.statusCode ?? -1);
+        res.resume();
+      });
+      ws.once("error", () => resolve(-2));
+    });
+    expect(code).toBe(503);
+  });
+
+  it("returns 404 when the tab has no app owner (cross-tenant lookup)", async () => {
+    const cdp = new FakeCdpServer();
+    const ep = await cdp.start();
+    const browser = new BrowserManager({ endpoint: ep.endpoint });
+    await browser.start();
+    const tabRegistry = new TabRegistry(browser);
+    tabRegistry.start();
+    const handler = buildScreensUpgradeHandler({
+      gate: new FakeGate(new Set(["good-tok"])),
+      browser,
+      tabRegistry,
+    });
+    const server = await startTcpServer(handler);
+    const ws = connect(server.port, `/api/screens/browser-tabs/no-such-tab/stream?sessionToken=good-tok`);
+    const code = await new Promise<number>((resolve) => {
+      ws.once("unexpected-response", (_req, res) => {
+        resolve(res.statusCode ?? -1);
+        res.resume();
+      });
+      ws.once("error", () => resolve(-2));
+    });
+    expect(code).toBe(404);
+    await browser.stop();
+    tabRegistry.stop();
+    await cdp.stop();
+  });
+
+  it("accepts upgrade + forwards screencast frames + dispatches input", async () => {
+    const cdp = new FakeCdpServer();
+    const ep = await cdp.start();
+    const browser = new BrowserManager({ endpoint: ep.endpoint });
+    await browser.start();
+
+    // Register the tab as owned by an app (mirroring what apiHandlers
+    // does after openTab) so the cross-tenant gate in screensWs lets
+    // it through.
+    const tabRegistry = new TabRegistry(browser);
+    tabRegistry.start();
+    tabRegistry.assignTab("tab-A", "alice--game");
+
+    let attachedSession: string | null = null;
+    cdp.on("Target.attachToTarget", (_p, _s) => {
+      attachedSession = "session-fake";
+      return { sessionId: "session-fake" };
+    });
+    let screencastStarted = false;
+    cdp.on("Page.startScreencast", () => {
+      screencastStarted = true;
+      return {};
+    });
+    let stoppedScreencast = false;
+    cdp.on("Page.stopScreencast", () => {
+      stoppedScreencast = true;
+      return {};
+    });
+    let lastInput: { method: string; params: unknown } | null = null;
+    cdp.on("Input.dispatchMouseEvent", (params) => {
+      lastInput = { method: "Input.dispatchMouseEvent", params };
+      return {};
+    });
+
+    const handler = buildScreensUpgradeHandler({
+      gate: new FakeGate(new Set(["good-tok"])),
+      browser,
+      tabRegistry,
+    });
+    const server = await startTcpServer(handler);
+    const ws = connect(server.port, `/api/screens/browser-tabs/tab-A/stream?sessionToken=good-tok`);
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", resolve);
+      ws.once("error", reject);
+    });
+
+    const frames: Array<Record<string, unknown>> = [];
+    ws.on("message", (data) => {
+      frames.push(JSON.parse(String(data)));
+    });
+
+    // Wait for startScreencast to land + then push a fake frame event.
+    await new Promise<void>((resolve) => {
+      const t = setInterval(() => {
+        if (screencastStarted && attachedSession) {
+          clearInterval(t);
+          resolve();
+        }
+      }, 5);
+    });
+    cdp.emitEvent("Page.screencastFrame", {
+      data: Buffer.from("fake-jpeg").toString("base64"),
+      sessionId: 1,
+      metadata: { offsetTop: 0, deviceWidth: 1024, deviceHeight: 768 },
+    }, attachedSession ?? undefined);
+
+    // Wait for the frame to arrive on the WS.
+    await new Promise<void>((resolve) => {
+      const t = setInterval(() => {
+        if (frames.some((f) => f.kind === "frame")) {
+          clearInterval(t);
+          resolve();
+        }
+      }, 5);
+    });
+    expect(frames.find((f) => f.kind === "frame")?.dataBase64).toBe(
+      Buffer.from("fake-jpeg").toString("base64"),
+    );
+
+    // Send an input event WS-side and assert the CDP server saw it.
+    ws.send(JSON.stringify({
+      kind: "input",
+      input: { kind: "mouseDown", x: 10, y: 20, button: "left" },
+    }));
+    await new Promise<void>((resolve) => {
+      const t = setInterval(() => {
+        if (lastInput) {
+          clearInterval(t);
+          resolve();
+        }
+      }, 5);
+    });
+    expect(lastInput?.method).toBe("Input.dispatchMouseEvent");
+    expect((lastInput?.params as { type: string }).type).toBe("mousePressed");
+
+    ws.close();
+    await new Promise<void>((resolve) => ws.once("close", () => resolve()));
+    // After WS close the daemon stops the screencast.
+    await new Promise<void>((resolve) => {
+      const t = setInterval(() => {
+        if (stoppedScreencast) {
+          clearInterval(t);
+          resolve();
+        }
+      }, 5);
+    });
+    expect(stoppedScreencast).toBe(true);
+
+    await browser.stop();
+    tabRegistry.stop();
+    await cdp.stop();
   });
 });

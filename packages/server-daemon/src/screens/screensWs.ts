@@ -2,11 +2,8 @@
  * `/api/screens/*` WebSocket upgrade handlers.
  *
  * Currently implemented:
- *   - GET /api/screens/vibe-code/<id>/stream   (P1.6)
- *
- * Pending:
- *   - GET /api/screens/browser-tabs/<tabId>/stream  (P1.11) —
- *     framebuffer streaming over CDP screencast.
+ *   - GET /api/screens/vibe-code/<id>/stream         (P1.6)
+ *   - GET /api/screens/browser-tabs/<tabId>/stream   (P1.11)
  *
  * Auth: paired-session token is supplied via the `?sessionToken=...`
  * query string. Browsers can't set custom headers on `new WebSocket()`,
@@ -18,6 +15,11 @@
 import type { Socket } from "node:net";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import type { PairedSessionGate } from "../alertInboxHttp.js";
+import type {
+  BrowserManager,
+  InputEvent,
+} from "../browser/browserManager.js";
+import type { TabRegistry } from "../browser/tabRegistry.js";
 import type {
   VibeCodeEvent,
   VibeCodeSession,
@@ -31,9 +33,12 @@ const wss = new WebSocketServer({ noServer: true });
 export interface ScreensWsDeps {
   gate: PairedSessionGate;
   vibeCodeRegistry?: VibeCodeSessionRegistry | null;
+  browser?: BrowserManager | null;
+  tabRegistry?: TabRegistry | null;
 }
 
 const VIBE_CODE_STREAM_RE = /^\/api\/screens\/vibe-code\/([^/]+)\/stream$/;
+const BROWSER_TAB_STREAM_RE = /^\/api\/screens\/browser-tabs\/([^/]+)\/stream$/;
 
 export function buildScreensUpgradeHandler(
   deps: ScreensWsDeps,
@@ -48,6 +53,11 @@ export function buildScreensUpgradeHandler(
     const vcMatch = VIBE_CODE_STREAM_RE.exec(justPath);
     if (vcMatch) {
       return acceptVibeCodeStream(args, deps, vcMatch[1]!, query);
+    }
+
+    const tabMatch = BROWSER_TAB_STREAM_RE.exec(justPath);
+    if (tabMatch) {
+      return acceptBrowserTabStream(args, deps, tabMatch[1]!);
     }
 
     return false;
@@ -183,6 +193,97 @@ function bridgeVibeCodeSession(ws: WsSocket, session: VibeCodeSession): void {
   ws.on("error", () => {
     session.off("event", onEvent);
   });
+}
+
+function acceptBrowserTabStream(
+  args: UpgradeRequest,
+  deps: ScreensWsDeps,
+  tabId: string,
+): boolean {
+  // Same gate path as vibe-code — synthesize an HttpRequest so the
+  // gate can read the token from query / header / authorization.
+  const fakeHttpReq: HttpRequest = {
+    method: args.method,
+    path: args.path,
+    headers: args.headers,
+    body: Buffer.alloc(0),
+  };
+  const denied = deps.gate.check(fakeHttpReq);
+  if (denied) {
+    rejectUpgrade(args.socket, denied.status, "unauthorized");
+    return true;
+  }
+
+  if (!deps.browser || !deps.tabRegistry) {
+    rejectUpgrade(args.socket, 503, "browser bundle not configured");
+    return true;
+  }
+  // The tab must be tracked by the registry — i.e. owned by an
+  // installed app. Cross-tenant lookups return null.
+  const ownerAppId = deps.tabRegistry.appIdForTab(tabId);
+  if (!ownerAppId) {
+    rejectUpgrade(args.socket, 404, "tab not found");
+    return true;
+  }
+
+  const fakeReq = {
+    headers: args.headers,
+    method: args.method,
+    url: args.path,
+  } as unknown as import("node:http").IncomingMessage;
+
+  wss.handleUpgrade(fakeReq, args.socket as unknown as Socket, args.headBuffer, (ws: WsSocket) => {
+    void bridgeBrowserTab(ws, tabId, deps.browser!);
+  });
+  return true;
+}
+
+async function bridgeBrowserTab(ws: WsSocket, tabId: string, browser: BrowserManager): Promise<void> {
+  const sendJson = (obj: unknown) => {
+    if (ws.readyState === ws.OPEN) {
+      try {
+        ws.send(JSON.stringify(obj));
+      } catch {
+        // ignored — ws may have closed mid-send
+      }
+    }
+  };
+
+  let unsubscribe: (() => Promise<void>) | null = null;
+  try {
+    const sub = await browser.subscribeScreencast(tabId, ({ dataBase64, metadata }) => {
+      sendJson({ kind: "frame", dataBase64, metadata });
+    });
+    unsubscribe = sub.unsubscribe;
+  } catch (e) {
+    sendJson({ kind: "error", message: `screencast failed: ${(e as Error).message}` });
+    ws.close();
+    return;
+  }
+
+  ws.on("message", (raw) => {
+    let msg: { kind: string; input?: InputEvent };
+    try {
+      msg = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+    if (msg.kind === "input" && msg.input) {
+      void browser.dispatchInput(tabId, msg.input).catch((e) => {
+        sendJson({ kind: "error", message: `input failed: ${(e as Error).message}` });
+      });
+    }
+  });
+
+  const cleanup = () => {
+    if (unsubscribe) {
+      const u = unsubscribe;
+      unsubscribe = null;
+      void u().catch(() => {});
+    }
+  };
+  ws.on("close", cleanup);
+  ws.on("error", cleanup);
 }
 
 function rejectUpgrade(socket: { write: (b: string) => void; end: () => void }, status: number, message: string): void {

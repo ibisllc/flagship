@@ -3,7 +3,7 @@
 // (instant launch even on lossy networks); network-first for /api/* so dynamic
 // state never staleness-bites the user.
 
-const SHELL_VERSION = "v4";
+const SHELL_VERSION = "v5";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 const SHELL = [
   "/webapp/",
@@ -39,6 +39,7 @@ const SHELL = [
   "/webapp/views/recovery.js",
   "/webapp/views/install-progress.js",
   "/webapp/views/orders-debug.js",
+  "/webapp/views/browser-viewer.js",
 ];
 
 self.addEventListener("install", (event) => {

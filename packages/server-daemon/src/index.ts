@@ -408,6 +408,8 @@ async function main(): Promise<void> {
       buildScreensUpgradeHandler({
         gate: pairedSessions,
         vibeCodeRegistry: deploySession ? vibeRegistry : null,
+        browser: browserBundle?.browser ?? null,
+        tabRegistry: browserBundle?.tabRegistry ?? null,
       }),
     );
     console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);

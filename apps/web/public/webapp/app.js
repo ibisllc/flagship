@@ -29,6 +29,7 @@ import { initUnlockApprovalsView, enterUnlockApprovals } from "./views/unlock-ap
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
+import { initBrowserViewerView, enterBrowserViewer } from "./views/browser-viewer.js";
 
 async function boot() {
   initBootstrapView();
@@ -54,6 +55,7 @@ async function boot() {
   initRecoveryView();
   initInstallProgressView();
   initOrdersDebugView();
+  initBrowserViewerView();
 
   // Home → screens nav
   const wire = (id, fn) =>
@@ -69,6 +71,7 @@ async function boot() {
   wire("open-recovery", enterRecovery);
   wire("open-install-progress", enterInstallProgress);
   wire("open-orders-debug", enterOrdersDebug);
+  wire("open-browser-viewer", () => enterBrowserViewer());
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");

@@ -26,6 +26,30 @@ import { request as httpRequest } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket from "ws";
 
+export interface ScreencastOptions {
+  format?: "jpeg" | "png";
+  quality?: number;        // 0..100, JPEG only
+  maxWidth?: number;
+  maxHeight?: number;
+  everyNthFrame?: number;
+}
+
+export interface ScreencastFrameMetadata {
+  offsetTop?: number;
+  pageScaleFactor?: number;
+  deviceWidth?: number;
+  deviceHeight?: number;
+  scrollOffsetX?: number;
+  scrollOffsetY?: number;
+  timestamp?: number;
+}
+
+export type InputEvent =
+  | { kind: "mouseDown" | "mouseUp" | "mouseMove"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number }
+  | { kind: "scroll"; x: number; y: number; deltaX: number; deltaY: number }
+  | { kind: "key"; eventType?: "keyDown" | "keyUp" | "char"; key: string; code?: string; text?: string }
+  | { kind: "text"; text: string };
+
 export interface BrowserManagerOptions {
   /** CDP HTTP endpoint that lists targets, e.g. `http://127.0.0.1:9222`. */
   endpoint: string;
@@ -211,6 +235,108 @@ export class BrowserManager {
   async insertText(tabId: string, text: string): Promise<void> {
     const sessionId = await this.ensureSession(tabId);
     await this.sessionSend(sessionId, "Input.insertText", { text });
+  }
+
+  /**
+   * Subscribe to a continuous JPEG screencast for the given tab.
+   *
+   * Calls `Page.startScreencast` with reasonable defaults (jpeg, 60% q,
+   * 1024px max edge), then forwards every `Page.screencastFrame` event
+   * matching the tab's session through `onFrame`. Each frame must be
+   * acked back to Chromium via `Page.screencastFrameAck` or the stream
+   * pauses; we ack synchronously after the callback returns. The
+   * caller-returned promise resolves once startScreencast acks; the
+   * returned `unsubscribe` stops the stream and detaches the listener.
+   */
+  async subscribeScreencast(
+    tabId: string,
+    onFrame: (args: { dataBase64: string; metadata: ScreencastFrameMetadata }) => void,
+    opts?: ScreencastOptions,
+  ): Promise<{ unsubscribe: () => Promise<void> }> {
+    const sessionId = await this.ensureSession(tabId);
+    const handlerOff = this.on("Page.screencastFrame", (params, frameSessionId) => {
+      if (frameSessionId !== sessionId) return;
+      const p = params as {
+        data?: string;
+        sessionId?: number;
+        metadata?: ScreencastFrameMetadata;
+      };
+      if (typeof p.data !== "string" || typeof p.sessionId !== "number") return;
+      try {
+        onFrame({ dataBase64: p.data, metadata: p.metadata ?? {} });
+      } catch {
+        // swallow user-side errors so a bad consumer doesn't kill the stream
+      }
+      // Ack so the next frame ships. The CDP-protocol sessionId here
+      // is a frame-counter, not the attach sessionId.
+      void this.sessionSend(sessionId, "Page.screencastFrameAck", {
+        sessionId: p.sessionId,
+      }).catch(() => {});
+    });
+    await this.sessionSend(sessionId, "Page.startScreencast", {
+      format: opts?.format ?? "jpeg",
+      quality: opts?.quality ?? 60,
+      maxWidth: opts?.maxWidth ?? 1024,
+      maxHeight: opts?.maxHeight ?? 1024,
+      everyNthFrame: opts?.everyNthFrame ?? 1,
+    });
+    let stopped = false;
+    return {
+      unsubscribe: async () => {
+        if (stopped) return;
+        stopped = true;
+        handlerOff();
+        try {
+          await this.sessionSend(sessionId, "Page.stopScreencast", {});
+        } catch {
+          /* tab may already be gone */
+        }
+      },
+    };
+  }
+
+  /**
+   * Dispatch a single input event into a tab. Supports the common
+   * cases the framebuffer view needs: mouse click / move / scroll +
+   * key press + bulk text insertion. Each call attaches the per-tab
+   * session if needed.
+   */
+  async dispatchInput(tabId: string, input: InputEvent): Promise<void> {
+    const sessionId = await this.ensureSession(tabId);
+    switch (input.kind) {
+      case "mouseDown":
+      case "mouseUp":
+      case "mouseMove":
+        await this.sessionSend(sessionId, "Input.dispatchMouseEvent", {
+          type: input.kind === "mouseDown" ? "mousePressed"
+            : input.kind === "mouseUp" ? "mouseReleased" : "mouseMoved",
+          x: input.x,
+          y: input.y,
+          button: input.button ?? "left",
+          clickCount: input.clickCount ?? 1,
+        });
+        return;
+      case "scroll":
+        await this.sessionSend(sessionId, "Input.dispatchMouseEvent", {
+          type: "mouseWheel",
+          x: input.x,
+          y: input.y,
+          deltaX: input.deltaX,
+          deltaY: input.deltaY,
+        });
+        return;
+      case "key":
+        await this.sessionSend(sessionId, "Input.dispatchKeyEvent", {
+          type: input.eventType ?? "keyDown",
+          key: input.key,
+          code: input.code,
+          text: input.text,
+        });
+        return;
+      case "text":
+        await this.sessionSend(sessionId, "Input.insertText", { text: input.text });
+        return;
+    }
   }
 
   /** List all open targets (page targets only). */

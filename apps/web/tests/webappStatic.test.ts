@@ -102,6 +102,7 @@ describe("/webapp PWA static surface", () => {
       "/webapp/views/recovery.js",
       "/webapp/views/install-progress.js",
       "/webapp/views/orders-debug.js",
+      "/webapp/views/browser-viewer.js",
     ]) {
       const r = await app.inject({ method: "GET", url: path });
       expect(r.statusCode).toBe(200);
@@ -125,6 +126,7 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/unlock-approvals/pending", "/webapp/views/unlock-approvals.js"],
       ["/api/screens/install-events/", "/webapp/views/install-progress.js"],
       ["/api/screens/orders/send", "/webapp/views/orders-debug.js"],
+      ["/api/screens/browser-tabs/list/", "/webapp/views/browser-viewer.js"],
     ];
     for (const [endpoint, view] of want) {
       const r = await app.inject({ method: "GET", url: view });

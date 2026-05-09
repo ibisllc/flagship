@@ -88,6 +88,7 @@
             <button class="secondary" id="open-tier-status">Tier &amp; usage</button>
             <button class="secondary" id="open-install-progress">Install progress</button>
             <button class="secondary" id="open-orders-debug">Send order</button>
+            <button class="secondary" id="open-browser-viewer" style="grid-column: span 2;">Browser viewer</button>
             <button class="secondary" id="open-recovery" style="grid-column: span 2;">Recovery</button>
           </div>
         </div>
@@ -232,6 +233,25 @@
         </div>
         <div id="install-progress-content" style="margin-top:0.6rem;"></div>
         <button class="secondary" id="install-progress-back" style="width:100%; margin-top:0.6rem;">← Back</button>
+      </section>
+
+      <!-- View 18: Browser viewer (P2.7) -->
+      <section id="view-browser-viewer" class="hidden">
+        <h2>Browser viewer</h2>
+        <div class="card">
+          <div class="row"><span class="label">app</span><span class="value" id="bv-app-id">…</span></div>
+          <div class="row"><span class="label">stream</span><span class="value" id="bv-stream-status">no tab selected</span></div>
+        </div>
+        <h3 style="margin-top: 1.2rem; font-size: 1rem;">Tabs</h3>
+        <div id="bv-tabs"></div>
+        <h3 style="margin-top: 1.2rem; font-size: 1rem;">Live frame</h3>
+        <div class="card" style="padding: 0.4rem;">
+          <img id="bv-frame" alt="live frame" style="width: 100%; max-width: 800px; display: block; border-radius: 6px; background: #000;" />
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
+          <button class="secondary" id="bv-refresh" style="flex:1;">Refresh tabs</button>
+          <button class="secondary" id="browser-viewer-back" style="flex:1;">← Back</button>
+        </div>
       </section>
 
       <!-- View 17: Debug send-order panel (P2.9) -->
