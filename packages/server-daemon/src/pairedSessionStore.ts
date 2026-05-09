@@ -73,14 +73,9 @@ export class FilePairedSessionStore implements PairedSessionGate {
 
   /** PairedSessionGate.check */
   check(req: HttpRequest): HttpResponse | null {
-    const auth = req.headers["authorization"] ?? req.headers["Authorization"];
-    if (typeof auth !== "string" || !auth.startsWith("Flagship-Session ")) {
-      return jerr(401, "missing or malformed paired-session token");
-    }
-    const token = auth.slice("Flagship-Session ".length).trim();
-    if (!token || !this.byToken.has(token)) {
-      return jerr(401, "invalid paired-session token");
-    }
+    const token = extractPairedSessionToken(req);
+    if (!token) return jerr(401, "missing paired-session token");
+    if (!this.byToken.has(token)) return jerr(401, "invalid paired-session token");
     return null;
   }
 
@@ -92,6 +87,34 @@ export class FilePairedSessionStore implements PairedSessionGate {
     await writeFile(tmp, JSON.stringify(obj, null, 2), { mode: 0o600 });
     await rename(tmp, this.path);
   }
+}
+
+/**
+ * Extract a paired-session token from any of three carriers:
+ *   - `Authorization: Flagship-Session <token>` — original phone-side
+ *     scheme.
+ *   - `x-flagship-session: <token>` — easier for the webapp / fetch
+ *     callers; can't be set on `new WebSocket()`.
+ *   - `?sessionToken=<token>` — required for browser-initiated
+ *     WebSocket upgrades (which can't carry custom request headers).
+ *
+ * Returns the raw token string or null if none was supplied.
+ */
+export function extractPairedSessionToken(req: HttpRequest): string | null {
+  const auth = req.headers["authorization"] ?? req.headers["Authorization"];
+  if (typeof auth === "string" && auth.startsWith("Flagship-Session ")) {
+    const t = auth.slice("Flagship-Session ".length).trim();
+    if (t) return t;
+  }
+  const x = req.headers["x-flagship-session"] ?? req.headers["X-Flagship-Session"];
+  if (typeof x === "string" && x.length > 0) return x;
+  const qIdx = req.path.indexOf("?");
+  if (qIdx >= 0) {
+    const sp = new URLSearchParams(req.path.slice(qIdx + 1));
+    const t = sp.get("sessionToken");
+    if (t) return t;
+  }
+  return null;
 }
 
 const J = { "content-type": "application/json" } as const;

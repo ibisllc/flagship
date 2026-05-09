@@ -29,6 +29,7 @@ import {
 } from "./pairedSessionStore.js";
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
+import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { VibeCodeSessionRegistry } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
@@ -403,6 +404,12 @@ async function main(): Promise<void> {
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
     });
     runtime.addHandler(screensHandle);
+    runtime.addUpgradeHandler(
+      buildScreensUpgradeHandler({
+        gate: pairedSessions,
+        vibeCodeRegistry: deploySession ? vibeRegistry : null,
+      }),
+    );
     console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);
 
     // Start the pull scheduler now that the cert is up + tunnel reachable.

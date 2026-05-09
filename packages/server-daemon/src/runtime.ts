@@ -253,6 +253,26 @@ export interface DaemonRuntime {
    * post-startup state (appPlatform, urlController, appBackup).
    */
   addHandler(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
+  /**
+   * Append a WebSocket upgrade handler. Handlers are tried in
+   * registration order until one returns true (accepted + detached
+   * the socket); if none accept, the inbound request falls back to
+   * the HTTP handler chain (which will typically respond 501 for
+   * Upgrade requests it doesn't recognize).
+   *
+   * The handler MUST take ownership of the socket if it returns true.
+   */
+  addUpgradeHandler(
+    h: (args: UpgradeRequest) => boolean,
+  ): void;
+}
+
+export interface UpgradeRequest {
+  socket: TLSSocket;
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  headBuffer: Buffer;
 }
 
 export interface UrlController {
@@ -378,6 +398,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const extras: Array<(req: HttpRequest) => Promise<HttpResponse | null>> = [
     ...(opts.additionalHandlers ?? []),
   ];
+  // Same idea for WebSocket upgrade handlers — `addUpgradeHandler`
+  // pushes here, the onUpgrade closure consults this list before
+  // falling through to the built-in sibling-handshake path.
+  const extraUpgrades: Array<(args: UpgradeRequest) => boolean> = [];
   const handleHttp: (req: HttpRequest) => Promise<HttpResponse> = async (req) => {
     for (const h of extras) {
       const r = await h(req);
@@ -436,16 +460,20 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       if (!isOwnHost && inUserZone) return disambiguationResponse(sni);
       return handleHttp(req);
     }, {
-      onUpgrade: ({ socket: rawSocket, path: reqPath, headers, headBuffer }) => {
-        if (reqPath !== "/.flagship/sibling-handshake") return false;
+      onUpgrade: (args) => {
+        // Try registered upgrade handlers first (post-startup wiring
+        // pushes screensWs etc. onto extraUpgrades). The sibling-WS
+        // path is the runtime's own built-in upgrade — checked last
+        // so external handlers can override if needed.
+        for (const h of extraUpgrades) {
+          if (h(args)) return true;
+        }
+        if (args.path !== "/.flagship/sibling-handshake") return false;
         if (!opts.appPlatform?.swk) return false; // no STK → can't auth siblings
-        // Build the sibling STK from SWK on demand. The STK is the
-        // ed25519 keypair derived from SWK; same key the tunnel
-        // client uses to sign HELLO.
         const accepted = acceptSiblingUpgrade({
-          socket: rawSocket as unknown as import("node:net").Socket,
-          headBuffer,
-          headers,
+          socket: args.socket as unknown as import("node:net").Socket,
+          headBuffer: args.headBuffer,
+          headers: args.headers,
           myServerId: opts.serverFqdn,
           myStk: identity, // identity keypair is the STK in this runtime
           lookupPeerStk: opts.peerStkLookup ?? defaultPeerStkLookup(opts),
@@ -744,6 +772,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     appBackup,
     addHandler(h) {
       extras.push(h);
+    },
+    addUpgradeHandler(h) {
+      extraUpgrades.push(h);
     },
   };
 }
