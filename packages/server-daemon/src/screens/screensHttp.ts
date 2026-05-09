@@ -134,28 +134,59 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     const path = req.path.split("?")[0]!;
     const method = req.method.toUpperCase();
 
-    // ---- Streaming endpoints — STUBS (P1.6 / P1.11 / P1.15)
-    // These three return 501 with a clear hint to fall back to the
-    // polling alternative. Checked BEFORE the prefix-matched GET
-    // handlers so the GETs don't accidentally swallow the /stream
-    // suffix and respond with the wrong status.
+    // ---- WS-upgrade-only endpoints (P1.6 + P1.11)
+    // These paths normally don't reach the HTTP dispatch at all — the
+    // runtime's upgrade-handler chain detects WebSocket upgrades and
+    // detaches the socket before this function is called. If a
+    // non-WS GET lands here (e.g. a curl probe), respond 501 with a
+    // hint. P1.6 vibe-code-stream is wired in screens/screensWs.ts;
+    // P1.11 browser-tabs framebuffer is still unimplemented.
     if (path.startsWith("/api/screens/vibe-code/") && path.endsWith("/stream")) {
       return jerr(
         501,
-        "WS stream not yet implemented; poll /api/screens/vibe-code/<id> instead",
+        "use a WebSocket upgrade; or poll /api/screens/vibe-code/<id>",
       );
     }
     if (path.startsWith("/api/screens/browser-tabs/") && path.endsWith("/stream")) {
       return jerr(
         501,
-        "WS framebuffer stream not yet implemented; poll /api/screens/browser-tabs/list/<appId> for screenshot keys",
+        "framebuffer streaming not yet implemented; poll /api/screens/browser-tabs/list/<appId>",
       );
     }
-    if (path.startsWith("/api/screens/install-events/")) {
-      return jerr(
-        501,
-        "SSE install-events stream not yet implemented; poll .com /api/install-events/<serial> instead",
+    if (path.startsWith("/api/screens/install-events/") && method === "GET") {
+      // P1.15 — JSON poll proxy for install events.
+      //
+      // The cycle plan calls for SSE here. The .com side returns
+      // plain JSON (`GET /api/install-events/<serial>?since=N`), and
+      // the daemon's HTTP handler chain doesn't currently support
+      // streaming responses. So we ship a thin polling proxy: webapp
+      // / mobile clients call this every ~2s during install and we
+      // relay the upstream payload. SSE on top can land later as a
+      // pure server-side optimisation without any client change.
+      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
+      if (!deps.controlPlaneBaseUrl) return jerr(503, "control plane not configured");
+      const serial = decodeURIComponent(
+        path.slice("/api/screens/install-events/".length),
       );
+      if (!serial) return jerr(400, "serial required");
+      const sinceParam = (() => {
+        const qIdx = req.path.indexOf("?");
+        if (qIdx < 0) return "0";
+        return new URLSearchParams(req.path.slice(qIdx + 1)).get("since") ?? "0";
+      })();
+      const upstreamUrl =
+        `${trimSlash(deps.controlPlaneBaseUrl)}/api/install-events/${encodeURIComponent(serial)}?since=${encodeURIComponent(sinceParam)}`;
+      try {
+        const r = await f(upstreamUrl, { method: "GET" });
+        if (!r.ok) return jerr(502, `install-events upstream: ${r.status}`);
+        const text = await r.text();
+        return { status: 200, headers: { ...J, "cache-control": "no-store" }, body: text };
+      } catch (e) {
+        return jerr(502, `install-events fetch failed: ${(e as Error).message}`);
+      }
+    }
+    if (path.startsWith("/api/screens/install-events/")) {
+      return jerr(405, "method not allowed");
     }
 
     // ---- P1.1 GET /api/screens/server-detail

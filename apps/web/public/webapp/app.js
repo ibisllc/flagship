@@ -27,6 +27,8 @@ import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
 import { initUnlockApprovalsView, enterUnlockApprovals } from "./views/unlock-approvals.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
+import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
+import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 
 async function boot() {
   initBootstrapView();
@@ -50,6 +52,8 @@ async function boot() {
   initVibeCodeView();
   initUnlockApprovalsView();
   initRecoveryView();
+  initInstallProgressView();
+  initOrdersDebugView();
 
   // Home → screens nav
   const wire = (id, fn) =>
@@ -63,6 +67,8 @@ async function boot() {
   wire("open-paired-sessions", enterPairedSessions);
   wire("open-tier-status", enterTierStatus);
   wire("open-recovery", enterRecovery);
+  wire("open-install-progress", enterInstallProgress);
+  wire("open-orders-debug", enterOrdersDebug);
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");

@@ -100,6 +100,8 @@ describe("/webapp PWA static surface", () => {
       "/webapp/views/vibe-code.js",
       "/webapp/views/unlock-approvals.js",
       "/webapp/views/recovery.js",
+      "/webapp/views/install-progress.js",
+      "/webapp/views/orders-debug.js",
     ]) {
       const r = await app.inject({ method: "GET", url: path });
       expect(r.statusCode).toBe(200);
@@ -121,6 +123,8 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/marketplace-browse", "/webapp/views/marketplace.js"],
       ["/api/screens/vibe-code/start", "/webapp/views/vibe-code.js"],
       ["/api/screens/unlock-approvals/pending", "/webapp/views/unlock-approvals.js"],
+      ["/api/screens/install-events/", "/webapp/views/install-progress.js"],
+      ["/api/screens/orders/send", "/webapp/views/orders-debug.js"],
     ];
     for (const [endpoint, view] of want) {
       const r = await app.inject({ method: "GET", url: view });
@@ -137,6 +141,38 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("flagship/uninstall-app/v1");
     expect(r.body).toContain("/api/marketplace/");
     expect(r.body).toContain("/api/apps");
+  });
+
+  it("service-worker exposes the offline-replay queue (P2.13)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/service-worker.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("REPLAY_QUEUE");
+    expect(r.body).toContain("addEventListener(\"online\"");
+    // Idempotent endpoints we'll auto-retry — appear in REPLAY_PATH_PATTERNS
+    // as escaped-slash regex literals.
+    expect(r.body).toContain("\\/api\\/screens\\/orders\\/send");
+    expect(r.body).toContain("\\/api\\/screens\\/url-controller\\/claim");
+    expect(r.body).toContain("\\/api\\/screens\\/app-backup\\/start");
+  });
+
+  it("orders-debug view enumerates the standard PhoneOrder kinds", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/orders-debug.js" });
+    expect(r.statusCode).toBe(200);
+    // Each order kind's tag prefix appears in the canonical-bytes
+    // builder, so the test catches drift between webapp and protocol.
+    for (const tag of [
+      "flagship/order/noop/v1",
+      "flagship/order/shut-down/v1",
+      "flagship/order/set-backup-policy/v1",
+      "flagship/order/revoke-self/v1",
+      "flagship/order/add-paired-session/v1",
+      "flagship/order/remove-paired-session/v1",
+      "flagship/order/backup-app/v1",
+    ]) {
+      expect(r.body).toContain(tag);
+    }
   });
 
   it("never accidentally serves /webapp resources from the root scope", async () => {

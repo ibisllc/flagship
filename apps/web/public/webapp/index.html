@@ -86,6 +86,8 @@
             <button class="secondary" id="open-unlock-approvals">Unlock requests</button>
             <button class="secondary" id="open-paired-sessions">Sessions</button>
             <button class="secondary" id="open-tier-status">Tier &amp; usage</button>
+            <button class="secondary" id="open-install-progress">Install progress</button>
+            <button class="secondary" id="open-orders-debug">Send order</button>
             <button class="secondary" id="open-recovery" style="grid-column: span 2;">Recovery</button>
           </div>
         </div>
@@ -213,6 +215,49 @@
           <button class="secondary" id="unlock-approvals-refresh" style="flex:1;">Refresh</button>
           <button class="secondary" id="unlock-approvals-back" style="flex:1;">← Back</button>
         </div>
+      </section>
+
+      <!-- View 16: Install progress (P2.10) -->
+      <section id="view-install-progress" class="hidden">
+        <h2>Install progress</h2>
+        <div class="card">
+          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+            Watch a freshly-built ISO come online. Enter the box's serial; we poll the control plane every 2s for events until READY or FAILED.
+          </p>
+          <input id="ip-serial" type="text" placeholder="serial e.g. SN-ABC123" autocomplete="off" />
+          <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
+            <button id="ip-go" style="flex:1;">Watch</button>
+            <button class="secondary" id="ip-reset" style="flex:1;">Reset</button>
+          </div>
+        </div>
+        <div id="install-progress-content" style="margin-top:0.6rem;"></div>
+        <button class="secondary" id="install-progress-back" style="width:100%; margin-top:0.6rem;">← Back</button>
+      </section>
+
+      <!-- View 17: Debug send-order panel (P2.9) -->
+      <section id="view-orders-debug" class="hidden">
+        <h2>Send phone order</h2>
+        <div class="card">
+          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+            Build, sign, and send any of the 12 phone-order types to the paired pod. The order is signed with your IRK and dispatched via /api/screens/orders/send.
+          </p>
+          <label style="display:block; font-size:0.78rem; color:var(--fg-mute); text-transform:uppercase;">Order kind</label>
+          <select id="od-kind" style="width:100%; padding: 0.5rem; background: var(--bg); color: var(--fg); border: 1px solid #ffffff20; border-radius: 8px; font: inherit;">
+            <option value="noop">noop</option>
+            <option value="shut-down">shut-down</option>
+            <option value="set-backup-policy">set-backup-policy</option>
+            <option value="revoke-self">revoke-self</option>
+            <option value="add-paired-session">add-paired-session</option>
+            <option value="remove-paired-session">remove-paired-session</option>
+            <option value="add-subscriber">add-subscriber</option>
+            <option value="remove-subscriber">remove-subscriber</option>
+            <option value="backup-app">backup-app</option>
+          </select>
+          <div id="od-fields" style="margin-top:0.5rem;"></div>
+          <button id="od-send" style="margin-top:0.6rem; width:100%;">Sign &amp; send</button>
+          <div id="od-result" style="margin-top:0.6rem; font-size:0.85rem;"></div>
+        </div>
+        <button class="secondary" id="orders-debug-back" style="width:100%; margin-top:0.6rem;">← Back</button>
       </section>
 
       <!-- View 15: Recovery (P2.12) -->

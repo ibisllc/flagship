@@ -863,18 +863,18 @@ describe("screens HTTP — P1.10 browser-tabs/list/:appId", () => {
   });
 });
 
-describe("screens HTTP — streaming stubs (P1.6 / P1.11 / P1.15)", () => {
-  it("vibe-code/:id/stream returns 501 with a hint to poll P1.7", async () => {
+describe("screens HTTP — non-WS hits on /stream paths fall through to 501", () => {
+  it("vibe-code/:id/stream returns 501 — WS upgrade goes via screensWs.ts", async () => {
     const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
     const r = await handle(req({
       path: "/api/screens/vibe-code/abc/stream",
       headers: { "x-flagship-session": "tok-good" },
     }));
     expect(r?.status).toBe(501);
-    expect(JSON.parse(r!.body as string).error).toMatch(/poll/);
+    expect(JSON.parse(r!.body as string).error).toMatch(/WebSocket|poll/);
   });
 
-  it("browser-tabs/:tabId/stream returns 501", async () => {
+  it("browser-tabs/:tabId/stream returns 501 (P1.11 still unimplemented)", async () => {
     const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
     const r = await handle(req({
       path: "/api/screens/browser-tabs/tab1/stream",
@@ -882,14 +882,89 @@ describe("screens HTTP — streaming stubs (P1.6 / P1.11 / P1.15)", () => {
     }));
     expect(r?.status).toBe(501);
   });
+});
 
-  it("install-events/:serial returns 501", async () => {
-    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
+describe("screens HTTP — P1.15 install-events JSON poll proxy", () => {
+  it("forwards GET to .com /api/install-events/<serial>?since=...", async () => {
+    const calls: string[] = [];
+    const fakeFetch: FetchLike = async (url: string) => {
+      calls.push(url);
+      return jsonOk({ events: [{ kind: "ready", at: 5, serverFqdn: "x" }], cursor: 7 }) as never;
+    };
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      fetchImpl: fakeFetch,
+    });
     const r = await handle(req({
-      path: "/api/screens/install-events/SN1234",
+      path: "/api/screens/install-events/SN42?since=3",
       headers: { "x-flagship-session": "tok-good" },
     }));
-    expect(r?.status).toBe(501);
+    expect(r?.status).toBe(200);
+    expect(calls[0]).toBe("https://flagshipserver.com/api/install-events/SN42?since=3");
+    const body = JSON.parse(r!.body as string);
+    expect(body.events).toHaveLength(1);
+    expect(body.cursor).toBe(7);
+    // No-store cache header so polling clients always see fresh state.
+    expect(r?.headers?.["cache-control"]).toBe("no-store");
+  });
+
+  it("defaults `since` to 0 when not provided", async () => {
+    const calls: string[] = [];
+    const fakeFetch: FetchLike = async (url: string) => {
+      calls.push(url);
+      return jsonOk({ events: [] }) as never;
+    };
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      fetchImpl: fakeFetch,
+    });
+    await handle(req({
+      path: "/api/screens/install-events/SN42",
+      headers: { "x-flagship-session": "tok-good" },
+    }));
+    expect(calls[0]).toContain("since=0");
+  });
+
+  it("returns 502 when upstream is non-2xx", async () => {
+    const fakeFetch: FetchLike = async () => jsonFail(503, "down") as never;
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      fetchImpl: fakeFetch,
+    });
+    const r = await handle(req({
+      path: "/api/screens/install-events/SN42",
+      headers: { "x-flagship-session": "tok-good" },
+    }));
+    expect(r?.status).toBe(502);
+  });
+
+  it("returns 503 when control plane is not configured", async () => {
+    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
+    const r = await handle(req({
+      path: "/api/screens/install-events/SN42",
+      headers: { "x-flagship-session": "tok-good" },
+    }));
+    expect(r?.status).toBe(503);
+  });
+
+  it("returns 405 for non-GET methods on install-events", async () => {
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+    });
+    const r = await handle(req({
+      method: "POST",
+      path: "/api/screens/install-events/SN42",
+      headers: { "x-flagship-session": "tok-good" },
+    }));
+    expect(r?.status).toBe(405);
   });
 });
 

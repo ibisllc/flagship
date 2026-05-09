@@ -2,16 +2,20 @@
 //
 // Flow:
 //   1. User types a prompt → POST /api/screens/vibe-code/start (P1.5).
-//   2. While the session is in `streaming`/`ready-to-deploy`, poll
-//      /api/screens/vibe-code/<id> (P1.7) every 500ms and re-render
-//      transcript + files tree.
-//   3. When status becomes `ready-to-deploy`, surface a "Deploy" button
-//      that calls /api/llm/sessions/<id>/deploy (the legacy deploy
-//      endpoint — works with the production-wired deploySession seam).
-//   4. Final state surfaces the deployedUrl.
+//   2. Open a WS to /api/screens/vibe-code/<id>/stream (P1.6) and
+//      render frames live. Token frames append to the assistant
+//      transcript; manifest-emit / deploy / done / error are surfaced
+//      as discrete UI states.
+//   3. On WS open we ALSO do an immediate GET P1.7 to pull the
+//      current files snapshot, since the WS doesn't replay token
+//      deltas (clients that need transcript history use polling).
+//   4. If the WS errors out — older daemons return 501 — fall back to
+//      polling P1.7 every 500ms until terminal.
+//   5. When status becomes ready-to-deploy, surface a Deploy button
+//      that calls /api/llm/sessions/<id>/deploy.
 //
-// The WS stream variant (P1.6) is a follow-up; this polling-based
-// cadence is good enough for v1 and exercises the same daemon path.
+// Both code paths run against the same daemon-side primitives, so the
+// fallback is fully equivalent — just chattier on the network.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
@@ -25,11 +29,20 @@ const TERMINAL_STATUSES = new Set(["deployed", "failed", "cancelled"]);
 
 let activeSessionId = null;
 let pollTimer = null;
+let activeSocket = null;
+let assistantStreamBuffer = "";
 
 function clearPoll() {
   if (pollTimer) {
     clearTimeout(pollTimer);
     pollTimer = null;
+  }
+}
+
+function closeSocket() {
+  if (activeSocket) {
+    try { activeSocket.close(); } catch (_e) { /* ignore */ }
+    activeSocket = null;
   }
 }
 
@@ -47,12 +60,95 @@ async function startSession() {
     });
     activeSessionId = r.sessionId;
     promptEl.disabled = true;
-    schedulePoll();
+    openStream();
   } catch (e) {
     if (e instanceof ScreensError) toast(e.message, "err");
     else toast(String(e), "err");
     startBtn.disabled = false;
     startBtn.textContent = "Start";
+  }
+}
+
+function openStream() {
+  if (!activeSessionId) return;
+  const baseUrl = getPodBaseUrl();
+  const tok = getSessionToken();
+  if (!baseUrl || !tok) {
+    schedulePoll();
+    return;
+  }
+  // The pod URL is https://; flip the protocol for the WS upgrade.
+  const wsBase = baseUrl.replace(/^http/, "ws").replace(/\/+$/, "");
+  const url = `${wsBase}/api/screens/vibe-code/${encodeURIComponent(activeSessionId)}/stream?sessionToken=${encodeURIComponent(tok)}`;
+  let socket;
+  try {
+    socket = new WebSocket(url);
+  } catch {
+    schedulePoll();
+    return;
+  }
+  activeSocket = socket;
+
+  // Pull the current snapshot once so the files-tree renders even
+  // before any frames arrive.
+  void (async () => {
+    try {
+      const body = await screensFetch(
+        `/api/screens/vibe-code/${encodeURIComponent(activeSessionId)}`,
+      );
+      renderSession(body);
+    } catch {
+      /* ignore — the WS will catch us up when frames flow */
+    }
+  })();
+
+  socket.addEventListener("message", (ev) => {
+    let frame;
+    try {
+      frame = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    handleFrame(frame);
+  });
+  socket.addEventListener("error", () => {
+    // Often the server returned a non-101; fall back to polling.
+    if (activeSocket === socket) activeSocket = null;
+    schedulePoll();
+  });
+  socket.addEventListener("close", () => {
+    if (activeSocket === socket) activeSocket = null;
+    // After WS close, refresh once via GET — picks up the terminal
+    // state if we missed the closing frame.
+    if (activeSessionId) {
+      poll().catch(() => {});
+    }
+  });
+}
+
+function handleFrame(frame) {
+  if (!frame || typeof frame.kind !== "string") return;
+  switch (frame.kind) {
+    case "token": {
+      assistantStreamBuffer += frame.text ?? "";
+      $("vc-transcript").textContent = assistantStreamBuffer;
+      // Keep status fresh — the GET reconciles files-tree snapshots.
+      $("vc-status").textContent = "streaming";
+      return;
+    }
+    case "manifest-emit":
+    case "build-start":
+    case "deploy":
+    case "done":
+    case "error":
+      // For these state transitions we re-fetch P1.7 once — the
+      // session's files-tree + status are easier to render against
+      // the canonical snapshot than to maintain locally in the FE.
+      poll().catch(() => {});
+      if (frame.kind === "error" && frame.message) toast(frame.message, "err");
+      return;
+    default:
+      return;
   }
 }
 
@@ -168,7 +264,9 @@ async function triggerDeploy() {
 
 function reset() {
   clearPoll();
+  closeSocket();
   activeSessionId = null;
+  assistantStreamBuffer = "";
   const promptEl = $("vc-prompt");
   promptEl.disabled = false;
   promptEl.value = "";
@@ -193,6 +291,7 @@ export function initVibeCodeView() {
   $("vc-reset")?.addEventListener("click", reset);
   $("vibe-code-back")?.addEventListener("click", () => {
     clearPoll();
+    closeSocket();
     show("view-home");
   });
 }
