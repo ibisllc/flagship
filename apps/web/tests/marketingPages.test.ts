@@ -43,6 +43,24 @@ describe("marketing surface — design system v2", () => {
     });
   }
 
+  it("/blog/ ships a landing page that links the RSS feed", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/blog/" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('href="/blog/rss.xml"');
+    expect(r.body).toContain("Flagship");
+  });
+
+  it("/blog/rss.xml is well-formed RSS 2.0 with the canonical channel link", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/blog/rss.xml" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('<?xml version="1.0"');
+    expect(r.body).toContain('<rss version="2.0"');
+    expect(r.body).toContain("<title>Flagship blog</title>");
+    expect(r.body).toContain("<link>https://flagshipserver.com/blog/</link>");
+  });
+
   it("/open-source.html lists the BUSL-1.1 license + 2030 Change Date", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/open-source.html" });

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Flagship blog</title>
+    <link>https://flagshipserver.com/blog/</link>
+    <description>Field notes from a personal-cloud project that takes self-hosting seriously.</description>
+    <language>en-us</language>
+    <atom:link href="https://flagshipserver.com/blog/rss.xml" rel="self" type="application/rss+xml" />
+    <!-- First posts ship alongside v1 alpha. Until then this feed is empty by design. -->
+  </channel>
+</rss>

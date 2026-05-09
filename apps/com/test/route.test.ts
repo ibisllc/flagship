@@ -426,6 +426,63 @@ describe(".com control-plane routes (Worker + D1)", () => {
   });
 });
 
+describe("/og — OG-poster generator (P3.6)", () => {
+  it("returns an SVG with the title baked in", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/og?title=Hello+world"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("image/svg+xml");
+    const body = await r.text();
+    expect(body).toContain("<svg");
+    expect(body).toContain("Hello world");
+    expect(body).toContain("Flagship");
+  });
+
+  it("escapes XML special characters in the title to prevent injection", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/og?title=%3Cscript%3Eevil%3C/script%3E"),
+      makeEnv(),
+    );
+    const body = await r.text();
+    // The literal `<script>` must NOT appear (it'd let an attacker
+    // smuggle markup into the SVG body).
+    expect(body).not.toContain("<script>");
+    expect(body).toContain("&lt;script&gt;");
+  });
+
+  it("clamps absurdly long titles to 120 chars", async () => {
+    const long = "a".repeat(500);
+    const r = await route(
+      new Request(`https://flagshipserver.com/og?title=${long}`),
+      makeEnv(),
+    );
+    const body = await r.text();
+    // Some chunking happens at word boundaries; assert we never emit
+    // the full 500-char string.
+    expect(body).not.toContain("a".repeat(200));
+  });
+
+  it("falls back to defaults when no params are passed", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/og"),
+      makeEnv(),
+    );
+    const body = await r.text();
+    expect(body).toContain("Flagship");
+    expect(body).toContain("Your stuff, on your hardware.");
+  });
+
+  it("is cacheable for 1 hour at the edge", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/og?title=x"),
+      makeEnv(),
+    );
+    expect(r.headers.get("cache-control")).toContain("max-age=3600");
+  });
+});
+
 describe("/me redirects to /webapp/ (P3.7)", () => {
   it("/me returns a 308 to /webapp/", async () => {
     const r = await route(new Request("https://flagshipserver.com/me"), makeEnv());

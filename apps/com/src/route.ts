@@ -122,6 +122,16 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     return streamIsoFromR2(url.pathname.slice(BUILD_ISO_STREAM_PREFIX.length), env);
   }
 
+  // P3.6 — /og?title=...&subtitle=...
+  // Returns an SVG poster with the title baked in. SVG is acceptable
+  // for Twitter / Discord previews; some OG validators want PNG —
+  // when that becomes a concern we'll rasterize via the existing
+  // build pipeline rather than pulling a runtime renderer into the
+  // Worker.
+  if (url.pathname === "/og") {
+    return ogImage(url);
+  }
+
   // P3.7 — `/me` and `/me/*` redirect to the webapp PWA (the cycle plan
   // chose webapp-subsumes-me over a separate paired-session-gated user
   // area). 308 keeps method semantics for any future POSTs from
@@ -244,6 +254,80 @@ async function buildIsoInfo(env: RouteEnv): Promise<Response> {
     },
     200,
   );
+}
+
+/**
+ * P3.6 — generate an OG-poster SVG with the provided title (and
+ * optional subtitle). Worker-rendered so we don't need to pre-build
+ * one image per page. Cached at the edge for 1h since the title-set
+ * is small + slow-changing.
+ *
+ * Inputs:
+ *   ?title=<text>     required, ≤120 chars
+ *   ?subtitle=<text>  optional, ≤200 chars
+ *
+ * Returns image/svg+xml.
+ */
+function ogImage(url: URL): Response {
+  const title = (url.searchParams.get("title") ?? "Flagship").slice(0, 120);
+  const subtitle = (url.searchParams.get("subtitle") ?? "Your stuff, on your hardware.").slice(0, 200);
+  // Wrap the title to ~22 chars/line so the poster doesn't overflow.
+  const titleLines = wordWrap(title, 22).slice(0, 3);
+  const titleSvg = titleLines.map((line, i) => {
+    const dy = i === 0 ? 0 : 88;
+    return `<text x="80" y="${260 + i * 88}" fill="#fafafa" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif" font-weight="700" font-size="80" letter-spacing="-2">${escapeXml(line)}</text>${dy === 0 ? "" : ""}`;
+  }).join("");
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g>
+    <circle cx="80" cy="100" r="22" fill="#3b5bff"/>
+    <text x="120" y="110" fill="#fafafa" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600" font-size="32" letter-spacing="-0.5">Flagship</text>
+  </g>
+  ${titleSvg}
+  <text x="80" y="${260 + titleLines.length * 88 + 28}" fill="#a0a0b0" font-family="ui-sans-serif, system-ui, sans-serif" font-size="32" letter-spacing="-0.5">${escapeXml(subtitle)}</text>
+  <text x="80" y="580" fill="#666680" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22">flagshipserver.com</text>
+</svg>`;
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      "content-type": "image/svg+xml; charset=utf-8",
+      "cache-control": "public, max-age=3600",
+    },
+  });
+}
+
+function wordWrap(text: string, maxChars: number): string[] {
+  const words = text.split(/\s+/).filter((w) => w.length > 0);
+  if (words.length === 0) return [text];
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    const candidate = current ? `${current} ${w}` : w;
+    if (candidate.length > maxChars && current) {
+      lines.push(current);
+      current = w;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 function jsonResponse(body: unknown, status: number): Response {
