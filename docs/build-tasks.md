@@ -93,17 +93,29 @@ push log of the multiplexing-v2 cycle.
 | A.5.4 | `GET /api/marketplace/<creator>/<slug>` — single listing | S | A.5.1 |
 | A.5.5 | `POST /api/marketplace/<creator>/<slug>/install` — IRK-signed; idempotent install_count++ | S | A.5.1 |
 | A.5.6 | `POST /api/marketplace/<creator>/<slug>/screenshots` — multipart, R2 upload, ≤5 files | M | A.5.1 |
-| A.5.7 | `POST /api/marketplace/scan/request` — Stripe payment first; queues scan job | M | L.1, I.1 |
-| A.5.8 | `POST /api/marketplace/feature/buy` — Stripe payment; sets `featured_until` | M | I.1 |
+| A.5.7 | `POST /api/marketplace/scan/request` — Stripe payment first; queues scan job *(power-user only — see Monetization note below)* | M | L.1, I.1 |
+| A.5.8 | `POST /api/marketplace/feature/buy` — Stripe payment; sets `featured_until` *(power-user only — see Monetization note below)* | M | I.1 |
 | A.5.9 | `POST /api/admin/marketplace/takedown` — admin-secret gated; status=removed | S | — |
 
 ### A.6 API: tier billing & LLM-promo
 
+> **Monetization note (2026-05-09):** A.6.1–A.6.3 (Stripe checkout / portal /
+> webhook) and A.5.7–A.5.8 (paid scan, paid feature) are **power-user only**
+> and **do NOT gate any v1 alpha user flow**. Per the free-tier-first
+> stance documented in `docs/monetization-free-tier-first.md` and memory
+> `feedback_monetization_principle.md`, the core user loop (vibe → install
+> → run → share → recover) must work end-to-end *without any payment
+> surface existing*. The four power-user fees (LLM-promo bootstrap,
+> dispatcher overage, custom domains, reserved trademark names) are
+> deferred until that bar is hit. This means: the webapp cycle (P0–P5
+> in `next-session-webapp-cycle.md`) ships first; A.6.x and the
+> companion power-user wiring (P5.1–P5.4 in the cycle plan) ship after.
+
 | ID | Task | Effort | Deps |
 |---|---|---|---|
-| A.6.1 | `POST /api/tier/checkout` — Stripe Checkout session; returns redirect URL | S | I.1 |
-| A.6.2 | `POST /api/tier/portal` — Stripe Billing Portal session | S | I.1 |
-| A.6.3 | `POST /api/tier/webhook` — Stripe webhook; updates `tier_subscriptions` + IRK receipt | M | I.1 |
+| A.6.1 | `POST /api/tier/checkout` — Stripe Checkout session; returns redirect URL *(power-user, deferred)* | S | I.1 |
+| A.6.2 | `POST /api/tier/portal` — Stripe Billing Portal session *(power-user, deferred)* | S | I.1 |
+| A.6.3 | `POST /api/tier/webhook` — Stripe webhook; updates `tier_subscriptions` + IRK receipt *(power-user, deferred)* | M | I.1 |
 | A.6.4 | `POST /api/llm-promo/issue` — IRK-signed; check daily/lifetime caps; mint scoped key | M | I.2 |
 | A.6.5 | `POST /api/llm-promo/usage-report` — provider webhook; updates counters | M | I.2 |
 | A.6.6 | `GET /api/llm-promo/status` — current daily / lifetime usage for the calling user | S | A.6.4 |
