@@ -5,20 +5,19 @@
  * Flow:
  *   1. Pull the manifest JSON + source files out of the session.
  *   2. Write the source tree to disk under <workingDir>/<appId>/.
- *   3. Run `docker build -t flagship-vibe-<appId>:<revision> <workingDir>`
+ *   3. (Optional) Push the tree to the per-app Forgejo repo so the
+ *      user can browse/review/revert the LLM's commits via the
+ *      existing /apps/:appId/git/* surface. First deploy creates the
+ *      repo; subsequent deploys add a commit on top.
+ *   4. Run `docker build -t flagship-vibe-<appId>:<revision> <workingDir>`
  *      to produce a local image. The image ref replaces the manifest's
  *      runtime.image so AppPlatform.install hands the right tag to
  *      AppRunner.
- *   4. Construct + sign an InstallAppRequest with the host's IRK
+ *   5. Construct + sign an InstallAppRequest with the host's IRK
  *      (vibe-coded apps are always self-authored on the calling pod's
  *      host — creator === username).
- *   5. Call AppPlatform.install.
- *   6. Return the canonical URL the app will live at.
- *
- * Forgejo / canonical-home redistribution is intentionally OUT of
- * scope here. For self-authored apps the canonical URL IS this pod;
- * cross-creator update-pack pulls aren't needed at deploy time.
- * Forgejo wiring lands in a follow-up.
+ *   6. Call AppPlatform.install.
+ *   7. Return the canonical URL the app will live at.
  */
 
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -31,6 +30,7 @@ import {
 } from "@flagship/protocol";
 import type { CommandRunner } from "../appRunner.js";
 import type { AppPlatform } from "../appPlatform.js";
+import type { ForgejoAppAdmin } from "../forgejoAppAdmin.js";
 import type { VibeCodeSession } from "./vibeCodeSession.js";
 
 export interface DeploySessionDeps {
@@ -49,6 +49,13 @@ export interface DeploySessionDeps {
    * runner AppRunner uses; tests inject a mock.
    */
   cmd: CommandRunner;
+  /**
+   * When set, the deploy step ensures a per-app repo exists in Forgejo
+   * and commits the session's files before docker build. When null
+   * (e.g. dev environments without Forgejo provisioned), the source
+   * tree only lives on disk — useful for tests and minimal dev runs.
+   */
+  forgejoAdmin?: ForgejoAppAdmin | null;
   /** Override for tests / observability. */
   now?: () => number;
 }
@@ -100,10 +107,35 @@ export function buildDeploySession(deps: DeploySessionDeps) {
       return { ok: false, reason: `failed to write source tree: ${(e as Error).message}` };
     }
 
-    // 2. Build the image. Tag includes a per-deploy revision so
+    const revision = String(now());
+
+    // 2. Push to Forgejo so the user can browse/review/revert the
+    // LLM's output through the existing /apps/:appId/git/* surface.
+    // First deploy creates the repo (idempotent). Subsequent deploys
+    // add a commit on top — commitFiles infers create/update per file
+    // from the live tree.
+    if (deps.forgejoAdmin) {
+      try {
+        await deps.forgejoAdmin.createRepo(slug, {
+          description: `Vibe-coded Flagship app: ${slug}`,
+        });
+        const repoFiles = Object.entries(files).map(([path, content]) => ({
+          path,
+          content,
+        }));
+        await deps.forgejoAdmin.commitFiles(
+          slug,
+          repoFiles,
+          `deploy ${slug} @ ${revision}`,
+        );
+      } catch (e) {
+        return { ok: false, reason: `forgejo push failed: ${(e as Error).message}` };
+      }
+    }
+
+    // 3. Build the image. Tag includes a per-deploy revision so
     // re-deploys produce a fresh tag (avoids stale cached images on
     // restart).
-    const revision = String(now());
     const image = `flagship-vibe-${appId}:${revision}`.toLowerCase();
     try {
       await deps.cmd.run("docker", ["build", "-t", image, appDir]);
@@ -111,14 +143,14 @@ export function buildDeploySession(deps: DeploySessionDeps) {
       return { ok: false, reason: `docker build failed: ${(e as Error).message}` };
     }
 
-    // 3. Update the manifest's runtime.image to our local tag. The
+    // 4. Update the manifest's runtime.image to our local tag. The
     // LLM may have emitted a placeholder ref it doesn't actually have
     // permission to push to.
     const patchedManifestJson = JSON.stringify(
       { ...manifest, runtime: { ...(manifest as { runtime?: object }).runtime ?? {}, image } },
     );
 
-    // 4. Build + sign the InstallAppRequest.
+    // 5. Build + sign the InstallAppRequest.
     const request: InstallAppRequest = {
       serverId: session.meta.serverFqdn,
       creator,
@@ -129,7 +161,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     };
     const signature = signInstallApp(request, deps.hostIrk);
 
-    // 5. Install via AppPlatform — provisions data, mints token,
+    // 6. Install via AppPlatform — provisions data, mints token,
     // deploys the container.
     const installResult = await deps.appPlatform.install({
       request,
@@ -140,7 +172,7 @@ export function buildDeploySession(deps: DeploySessionDeps) {
       return { ok: false, reason: `install rejected: ${installResult.reason}` };
     }
 
-    // 6. Compose the canonical URL. AppPlatform exposes urlLabel via
+    // 7. Compose the canonical URL. AppPlatform exposes urlLabel via
     // its static helper; we rebuild it here to avoid coupling.
     const urlLabel = creator === deps.hostUsername ? slug : `${slug}-${creator}`;
     const url = `https://${urlLabel}.${session.meta.serverFqdn}`;

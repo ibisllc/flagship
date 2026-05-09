@@ -141,6 +141,191 @@ describe("ForgejoAppAdmin", () => {
     expect((calls[0]!.body as { state: string }).state).toBe("closed");
   });
 
+  it("createRepo POSTs to /orgs/<org>/repos with auto_init", async () => {
+    const { f, calls } = fakeForgejo(() => ({ data: { name: "habits" } }));
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    const r = await admin.createRepo("habits");
+    expect(r.created).toBe(true);
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.url).toBe("http://forgejo.local/api/v1/orgs/harry-flagship/repos");
+    const body = calls[0]!.body as { name: string; auto_init: boolean; private: boolean; default_branch: string };
+    expect(body.name).toBe("habits");
+    expect(body.auto_init).toBe(true);
+    expect(body.private).toBe(true);
+    expect(body.default_branch).toBe("main");
+  });
+
+  it("createRepo treats 409/already-exists as not-created (idempotent)", async () => {
+    const { f } = fakeForgejo(() => ({
+      ok: false,
+      status: 409,
+      data: "repository name already exists",
+    }));
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    const r = await admin.createRepo("habits");
+    expect(r.created).toBe(false);
+  });
+
+  it("createRepo propagates non-conflict errors", async () => {
+    const { f } = fakeForgejo(() => ({ ok: false, status: 500, data: "boom" }));
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    await expect(admin.createRepo("habits")).rejects.toThrow(/500/);
+  });
+
+  it("commitFiles tags new files 'create' and existing files 'update' with sha", async () => {
+    const seenOps: Array<{ operation: string; path: string; sha?: string }> = [];
+    const { f, calls } = fakeForgejo((c) => {
+      if (c.url.includes("/git/trees/")) {
+        return {
+          data: {
+            tree: [
+              { path: "README.md", type: "blob", sha: "readme-sha" },
+              { path: "Dockerfile", type: "blob", sha: "df-sha" },
+            ],
+          },
+        };
+      }
+      // ChangeFiles endpoint
+      const body = c.body as { files: Array<{ operation: string; path: string; sha?: string }> };
+      for (const op of body.files) seenOps.push({ operation: op.operation, path: op.path, sha: op.sha });
+      return { data: { commit: { sha: "new-commit-sha" } } };
+    });
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    const r = await admin.commitFiles(
+      "habits",
+      [
+        { path: "Dockerfile", content: "FROM alpine\n" },          // existing → update
+        { path: "src/main.js", content: "console.log('x');\n" },   // new → create
+      ],
+      "deploy v2",
+    );
+    expect(r.commitSha).toBe("new-commit-sha");
+    const dfOp = seenOps.find((o) => o.path === "Dockerfile");
+    expect(dfOp?.operation).toBe("update");
+    expect(dfOp?.sha).toBe("df-sha");
+    const newOp = seenOps.find((o) => o.path === "src/main.js");
+    expect(newOp?.operation).toBe("create");
+    expect(newOp?.sha).toBeUndefined();
+    // ChangeFiles request hit the right endpoint with branch + message
+    const changeCall = calls.find((c) => c.method === "POST" && c.url.endsWith("/contents"));
+    expect(changeCall).toBeDefined();
+    const changeBody = changeCall!.body as { branch: string; message: string };
+    expect(changeBody.branch).toBe("main");
+    expect(changeBody.message).toBe("deploy v2");
+  });
+
+  it("commitFiles base64-encodes content on the wire", async () => {
+    const { f } = fakeForgejo((c) => {
+      if (c.url.includes("/git/trees/")) return { data: { tree: [] } };
+      const body = c.body as { files: Array<{ content: string }> };
+      // content must be base64; decoding should give us the original utf8.
+      const decoded = Buffer.from(body.files[0]!.content, "base64").toString("utf8");
+      expect(decoded).toBe("hello\n");
+      return { data: { commit: { sha: "sha1" } } };
+    });
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    await admin.commitFiles("habits", [{ path: "x.txt", content: "hello\n" }], "init");
+  });
+
+  it("commitFiles falls back to all-create when listTreePaths sees an empty repo (404)", async () => {
+    const ops: Array<{ operation: string; path: string }> = [];
+    const { f } = fakeForgejo((c) => {
+      if (c.url.includes("/git/trees/")) {
+        return { ok: false, status: 404, data: "branch not found" };
+      }
+      const body = c.body as { files: Array<{ operation: string; path: string }> };
+      for (const op of body.files) ops.push({ operation: op.operation, path: op.path });
+      return { data: { commit: { sha: "first-commit" } } };
+    });
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    const r = await admin.commitFiles(
+      "habits",
+      [
+        { path: "flagship.app.json", content: "{}\n" },
+        { path: "Dockerfile", content: "FROM busybox\n" },
+      ],
+      "first deploy",
+    );
+    expect(r.commitSha).toBe("first-commit");
+    expect(ops.every((o) => o.operation === "create")).toBe(true);
+  });
+
+  it("commitFiles rejects an empty file list", async () => {
+    const { f } = fakeForgejo(() => ({ data: {} }));
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    await expect(admin.commitFiles("habits", [], "msg")).rejects.toThrow(/at least one file/);
+  });
+
+  it("commitFiles rejects unsafe paths (traversal, absolute, empty)", async () => {
+    const { f } = fakeForgejo(() => ({ data: {} }));
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    await expect(
+      admin.commitFiles("habits", [{ path: "../etc/passwd", content: "x" }], "m"),
+    ).rejects.toThrow(/unsafe path/);
+    await expect(
+      admin.commitFiles("habits", [{ path: "/etc/passwd", content: "x" }], "m"),
+    ).rejects.toThrow(/unsafe path/);
+    await expect(
+      admin.commitFiles("habits", [{ path: "", content: "x" }], "m"),
+    ).rejects.toThrow(/empty path/);
+  });
+
+  it("commitFiles surfaces ChangeFiles failures", async () => {
+    const { f } = fakeForgejo((c) => {
+      if (c.url.includes("/git/trees/")) return { data: { tree: [] } };
+      return { ok: false, status: 500, data: "internal" };
+    });
+    const admin = new ForgejoAppAdmin({
+      baseUrl: "http://forgejo.local",
+      orgName: "harry-flagship",
+      serviceToken: "tk",
+      fetchImpl: f,
+    });
+    await expect(
+      admin.commitFiles("habits", [{ path: "x", content: "y" }], "m"),
+    ).rejects.toThrow(/500/);
+  });
+
   it("createRevertPr opens a PR with the right title format", async () => {
     let prCreated = false;
     const { f } = fakeForgejo((c) => {

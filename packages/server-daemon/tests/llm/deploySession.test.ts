@@ -11,6 +11,7 @@ import {
   InMemoryPostgresAdmin,
   InMemoryRedisAdmin,
 } from "../../src/dataLayer/index.js";
+import { ForgejoAppAdmin } from "../../src/forgejoAppAdmin.js";
 import { buildDeploySession } from "../../src/llm/deploySession.js";
 import { VibeCodeSession } from "../../src/llm/vibeCodeSession.js";
 
@@ -27,6 +28,19 @@ function fakeSwk(): Uint8Array {
   crypto.getRandomValues(b);
   return b;
 }
+function jsonReply(status: number, body: unknown) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async text() {
+      return typeof body === "string" ? body : JSON.stringify(body);
+    },
+    async json() {
+      return body;
+    },
+  };
+}
+
 function recordingCmd(): { cmd: CommandRunner; calls: string[] } {
   const calls: string[] = [];
   const cmd: CommandRunner = {
@@ -190,6 +204,289 @@ describe("buildDeploySession", () => {
       expect(r.ok).toBe(false);
       if (r.ok) return;
       expect(r.reason).toMatch(/unsafe path/);
+    } finally {
+      await wd.cleanup();
+    }
+  });
+
+  it("when forgejoAdmin is set, ensures the repo + commits files before docker build", async () => {
+    const wd = await tmpWorkdir();
+    try {
+      const { cmd, calls } = recordingCmd();
+      const irk = makeKey();
+
+      // Track the order of operations: forgejo calls must precede docker build.
+      const events: string[] = [];
+
+      // Mock fetch for ForgejoAppAdmin.
+      let createSeen = false;
+      let commitSeen = false;
+      const fakeFetch = async (
+        url: string,
+        init?: { method?: string; headers?: Record<string, string>; body?: string },
+      ) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST" && /\/api\/v1\/orgs\/[^/]+\/repos$/.test(url)) {
+          events.push("createRepo");
+          createSeen = true;
+          return jsonReply(201, { name: "habits" });
+        }
+        if (method === "GET" && url.includes("/git/trees/")) {
+          // Empty repo (auto_init repo with no committed files yet).
+          return jsonReply(404, "Not Found");
+        }
+        if (method === "POST" && url.endsWith("/contents")) {
+          events.push("commitFiles");
+          commitSeen = true;
+          // Verify the request body includes our files.
+          const body = JSON.parse(init?.body ?? "{}") as { files: Array<{ path: string }> };
+          expect(body.files.map((f) => f.path).sort()).toEqual(
+            ["Dockerfile", "flagship.app.json", "src/main.js"].sort(),
+          );
+          return jsonReply(200, { commit: { sha: "deadbeef" } });
+        }
+        throw new Error(`unexpected forgejo call ${method} ${url}`);
+      };
+      const forgejoAdmin = new ForgejoAppAdmin({
+        baseUrl: "http://forgejo.local",
+        orgName: "alice-flagship",
+        serviceToken: "tk",
+        fetchImpl: fakeFetch as never,
+      });
+
+      // Tee docker calls into the same event stream so we can assert order.
+      const teeingCmd: CommandRunner = {
+        run: async (c, args) => {
+          if (c === "docker" && args[0] === "build") events.push("dockerBuild");
+          return cmd.run(c, args);
+        },
+        capture: cmd.capture,
+      };
+
+      const platform = new AppPlatform({
+        host: { username: HOST, irkPub: irk.publicKey },
+        swk: fakeSwk(),
+        appRunner: new AppRunner(teeingCmd),
+        dataProvisioner: new DataProvisioner({
+          postgres: new InMemoryPostgresAdmin(),
+          objects: new InMemoryMinioAdmin(),
+          kv: new InMemoryRedisAdmin(),
+        }),
+        appAuthTokens: null,
+        domainGate: null,
+        tabRegistry: null,
+        pullStateStore: null,
+        cloneApp: null,
+      });
+      const deploy = buildDeploySession({
+        appPlatform: platform,
+        hostIrk: irk,
+        hostUsername: HOST,
+        workingDir: wd.dir,
+        cmd: teeingCmd,
+        forgejoAdmin,
+      });
+      const session = makeSession({
+        "flagship.app.json": MANIFEST,
+        "Dockerfile": "FROM busybox\nCMD echo hi\n",
+        "src/main.js": "console.log('hi');\n",
+      });
+      const r = await deploy(session);
+      if (!r.ok) throw new Error(`deploy failed: ${r.reason}`);
+      expect(createSeen).toBe(true);
+      expect(commitSeen).toBe(true);
+      // Forgejo must come before docker build (so the user can review
+      // even if the build fails for some reason).
+      expect(events.indexOf("createRepo")).toBeLessThan(events.indexOf("dockerBuild"));
+      expect(events.indexOf("commitFiles")).toBeLessThan(events.indexOf("dockerBuild"));
+      // Confirm docker build was still invoked
+      expect(calls.some((c) => c.startsWith("docker build "))).toBe(true);
+    } finally {
+      await wd.cleanup();
+    }
+  });
+
+  it("when forgejoAdmin push fails, surfaces the failure and skips docker build", async () => {
+    const wd = await tmpWorkdir();
+    try {
+      const { cmd, calls } = recordingCmd();
+      const irk = makeKey();
+      const failingFetch = async (
+        url: string,
+        init?: { method?: string },
+      ) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST" && /\/api\/v1\/orgs\/[^/]+\/repos$/.test(url)) {
+          return jsonReply(500, "forgejo internal error");
+        }
+        throw new Error(`unexpected ${method} ${url}`);
+      };
+      const forgejoAdmin = new ForgejoAppAdmin({
+        baseUrl: "http://forgejo.local",
+        orgName: "alice-flagship",
+        serviceToken: "tk",
+        fetchImpl: failingFetch as never,
+      });
+      const platform = new AppPlatform({
+        host: { username: HOST, irkPub: irk.publicKey },
+        swk: fakeSwk(),
+        appRunner: new AppRunner(cmd),
+        dataProvisioner: null,
+        appAuthTokens: null,
+        domainGate: null,
+        tabRegistry: null,
+        pullStateStore: null,
+        cloneApp: null,
+      });
+      const deploy = buildDeploySession({
+        appPlatform: platform,
+        hostIrk: irk,
+        hostUsername: HOST,
+        workingDir: wd.dir,
+        cmd,
+        forgejoAdmin,
+      });
+      const session = makeSession({
+        "flagship.app.json": MANIFEST,
+        "Dockerfile": "FROM busybox\n",
+      });
+      const r = await deploy(session);
+      expect(r.ok).toBe(false);
+      if (r.ok) return;
+      expect(r.reason).toMatch(/forgejo push failed/);
+      // Build was NOT attempted — we never reach docker after a forgejo failure.
+      expect(calls.some((c) => c.startsWith("docker build "))).toBe(false);
+    } finally {
+      await wd.cleanup();
+    }
+  });
+
+  it("when forgejoAdmin is null, skips repo push (dev path) and still deploys", async () => {
+    const wd = await tmpWorkdir();
+    try {
+      const { cmd, calls } = recordingCmd();
+      const irk = makeKey();
+      const platform = new AppPlatform({
+        host: { username: HOST, irkPub: irk.publicKey },
+        swk: fakeSwk(),
+        appRunner: new AppRunner(cmd),
+        dataProvisioner: new DataProvisioner({
+          postgres: new InMemoryPostgresAdmin(),
+          objects: new InMemoryMinioAdmin(),
+          kv: new InMemoryRedisAdmin(),
+        }),
+        appAuthTokens: null,
+        domainGate: null,
+        tabRegistry: null,
+        pullStateStore: null,
+        cloneApp: null,
+      });
+      const deploy = buildDeploySession({
+        appPlatform: platform,
+        hostIrk: irk,
+        hostUsername: HOST,
+        workingDir: wd.dir,
+        cmd,
+        forgejoAdmin: null,
+      });
+      const session = makeSession({
+        "flagship.app.json": MANIFEST,
+        "Dockerfile": "FROM busybox\n",
+      });
+      const r = await deploy(session);
+      if (!r.ok) throw new Error(`deploy failed: ${r.reason}`);
+      // Build still happened
+      expect(calls.some((c) => c.startsWith("docker build "))).toBe(true);
+    } finally {
+      await wd.cleanup();
+    }
+  });
+
+  it("end-to-end: streamed LLM output → Forgejo commit → AppPlatform.install", async () => {
+    // This is the test mandated by the P1.X1 carryover: feed the parser
+    // with a realistic streaming response and assert the deploy step
+    // follows through to a successful container-launch invocation.
+    const wd = await tmpWorkdir();
+    try {
+      const { cmd, calls } = recordingCmd();
+      const irk = makeKey();
+
+      const fakeFetch = async (url: string, init?: { method?: string; body?: string }) => {
+        const method = init?.method ?? "GET";
+        if (method === "POST" && /\/repos$/.test(url)) {
+          return jsonReply(201, { name: "habits" });
+        }
+        if (method === "GET" && url.includes("/git/trees/")) {
+          return jsonReply(404, "empty");
+        }
+        if (method === "POST" && url.endsWith("/contents")) {
+          return jsonReply(200, { commit: { sha: "feed" + Date.now().toString(16) } });
+        }
+        throw new Error(`unexpected ${method} ${url}`);
+      };
+      const forgejoAdmin = new ForgejoAppAdmin({
+        baseUrl: "http://forgejo.local",
+        orgName: "alice-flagship",
+        serviceToken: "tk",
+        fetchImpl: fakeFetch as never,
+      });
+
+      const platform = new AppPlatform({
+        host: { username: HOST, irkPub: irk.publicKey },
+        swk: fakeSwk(),
+        appRunner: new AppRunner(cmd),
+        dataProvisioner: new DataProvisioner({
+          postgres: new InMemoryPostgresAdmin(),
+          objects: new InMemoryMinioAdmin(),
+          kv: new InMemoryRedisAdmin(),
+        }),
+        appAuthTokens: null,
+        domainGate: null,
+        tabRegistry: null,
+        pullStateStore: null,
+        cloneApp: null,
+      });
+      const deploy = buildDeploySession({
+        appPlatform: platform,
+        hostIrk: irk,
+        hostUsername: HOST,
+        workingDir: wd.dir,
+        cmd,
+        forgejoAdmin,
+      });
+
+      // Build a session by feeding chunks the way the streaming-LLM
+      // bridge would (one chunk per SSE delta), so the parser is
+      // exercised end-to-end. Splits land mid-line on purpose.
+      const session = new VibeCodeSession({ username: HOST, serverFqdn: SERVER });
+      session.pushUserMessage("build me a hello-world habit tracker");
+      const stream = [
+        "I will create the app now.\n",
+        "=== flagship.app.json ===\n",
+        MANIFEST + "\n",
+        "=== Dockerfile ===\n",
+        "FROM busybox\n",
+        "CMD [\"sh\", \"-c\", \"echo hi\"]\n",
+        "=== src/index.js ===\n",
+        "console.log('serv',process.env.PORT);\n",
+        "=== END ===\n",
+      ];
+      for (const chunk of stream) session.feedAssistant(chunk);
+      session.endAssistant();
+
+      // The LLM stream yielded a ready-to-deploy session.
+      expect(session.meta.status).toBe("ready-to-deploy");
+      expect(Object.keys(session.files()).sort()).toEqual(
+        ["Dockerfile", "flagship.app.json", "src/index.js"].sort(),
+      );
+
+      const r = await deploy(session);
+      if (!r.ok) throw new Error(`deploy failed: ${r.reason}`);
+      expect(r.appId).toBe("alice--habits");
+      expect(r.url).toBe(`https://habits.${SERVER}`);
+
+      // The container was actually launched (docker run with the patched image).
+      expect(calls.some((c) => c.startsWith("docker run ") && c.includes(r.image))).toBe(true);
     } finally {
       await wd.cleanup();
     }

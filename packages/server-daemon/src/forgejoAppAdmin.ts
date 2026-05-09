@@ -40,11 +40,131 @@ export interface ForgejoPullRequest {
   createdAt: string;
 }
 
+export interface RepoFile {
+  /** Repo-relative path. Forward slashes; no leading `/`; no `..`. */
+  path: string;
+  /** UTF-8 file content. The wire encoding is base64 — we handle that. */
+  content: string;
+}
+
+export interface CommitResult {
+  /** SHA of the resulting commit on the target branch. */
+  commitSha: string;
+}
+
 export class ForgejoAppAdmin {
   private readonly opts: ForgejoAppAdminOptions;
 
   constructor(opts: ForgejoAppAdminOptions) {
     this.opts = opts;
+  }
+
+  /**
+   * Idempotently create the org-scoped repo for an app. Returns
+   * `{ created: true }` on a fresh creation, `{ created: false }` if
+   * Forgejo reports the repo already exists. Any other error throws.
+   *
+   * The repo is private + auto-init'd so subsequent commitFiles() calls
+   * have a default branch (`main`) to push to without an empty-repo
+   * special case.
+   */
+  async createRepo(
+    appName: string,
+    opts?: { description?: string; private?: boolean; defaultBranch?: string },
+  ): Promise<{ created: boolean }> {
+    const body = {
+      name: appName,
+      description: opts?.description ?? `Flagship app: ${appName}`,
+      private: opts?.private ?? true,
+      auto_init: true,
+      default_branch: opts?.defaultBranch ?? "main",
+    };
+    try {
+      await this.api(
+        "POST",
+        `/api/v1/orgs/${encodeURIComponent(this.opts.orgName)}/repos`,
+        body,
+      );
+      return { created: true };
+    } catch (e) {
+      if (isAlreadyExistsError(e)) return { created: false };
+      throw e;
+    }
+  }
+
+  /**
+   * Commit a set of files to the repo's default branch in a single
+   * commit. Existing files are updated (sha pulled from the current
+   * tree); new files are created. Returns the resulting commit sha.
+   *
+   * Empty `files` is rejected — Forgejo's ChangeFiles endpoint requires
+   * at least one operation.
+   */
+  async commitFiles(
+    appName: string,
+    files: RepoFile[],
+    message: string,
+    branch = "main",
+  ): Promise<CommitResult> {
+    if (files.length === 0) {
+      throw new Error("commitFiles: at least one file required");
+    }
+    for (const f of files) {
+      if (typeof f.path !== "string" || f.path.length === 0) {
+        throw new Error(`commitFiles: file has empty path`);
+      }
+      if (f.path.startsWith("/") || f.path.includes("..")) {
+        throw new Error(`commitFiles: unsafe path ${f.path}`);
+      }
+    }
+    const existing = await this.listTreePaths(appName, branch);
+    const ops = files.map((f) => {
+      const sha = existing.get(f.path);
+      const op: Record<string, unknown> = {
+        operation: sha !== undefined ? "update" : "create",
+        path: f.path,
+        content: Buffer.from(f.content, "utf8").toString("base64"),
+      };
+      if (sha !== undefined) op.sha = sha;
+      return op;
+    });
+    const data = await this.api<{ commit?: { sha?: string } }>(
+      "POST",
+      `/api/v1/repos/${this.path(appName)}/contents`,
+      { branch, message, files: ops },
+    );
+    const sha = data?.commit?.sha;
+    if (typeof sha !== "string" || sha.length === 0) {
+      throw new Error("forgejo ChangeFiles returned no commit sha");
+    }
+    return { commitSha: sha };
+  }
+
+  /**
+   * Walk the repo's tree at `branch` (recursive) and return a map of
+   * blob path → blob sha. Used by commitFiles to decide create-vs-update
+   * per file. A 404 (empty repo with no branch yet) returns an empty
+   * map; other errors propagate.
+   */
+  async listTreePaths(appName: string, branch = "main"): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    try {
+      const data = await this.api<{
+        tree?: Array<{ path?: string; type?: string; sha?: string }>;
+      }>(
+        "GET",
+        `/api/v1/repos/${this.path(appName)}/git/trees/${encodeURIComponent(branch)}?recursive=true`,
+      );
+      for (const e of data.tree ?? []) {
+        if (e.type === "blob" && typeof e.path === "string" && typeof e.sha === "string") {
+          out.set(e.path, e.sha);
+        }
+      }
+    } catch (e) {
+      if (isNotFoundError(e)) return out;
+      throw e;
+    }
+    return out;
   }
 
   /** List commits on the default branch of an app's repo. */
@@ -144,6 +264,18 @@ export class ForgejoAppAdmin {
     if (text.length === 0) return {} as T;
     return JSON.parse(text) as T;
   }
+}
+
+function isAlreadyExistsError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  // Forgejo replies with 409 on duplicate-name; some versions return 422
+  // with a "repository name already exists" body.
+  return /\b(409|422)\b/.test(e.message) || /already exists/i.test(e.message);
+}
+
+function isNotFoundError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  return /\b404\b/.test(e.message);
 }
 
 function clampMax(n: number): number {
