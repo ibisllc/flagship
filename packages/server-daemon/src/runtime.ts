@@ -246,6 +246,13 @@ export interface DaemonRuntime {
    * Null when no AppPlatform / dataDir is wired.
    */
   appBackup: import("./appBackup.js").AppBackupService | null;
+  /**
+   * Append a handler to the live HTTP-handler chain. Handlers are
+   * tried in registration order; the first non-null response wins.
+   * Use this to wire surfaces that depend on the runtime's own
+   * post-startup state (appPlatform, urlController, appBackup).
+   */
+  addHandler(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
 }
 
 export interface UrlController {
@@ -735,6 +742,9 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     urlController,
     siblingRouter,
     appBackup,
+    addHandler(h) {
+      extras.push(h);
+    },
   };
 }
 

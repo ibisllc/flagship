@@ -28,6 +28,11 @@ import {
   FilePairedSessionStore,
 } from "./pairedSessionStore.js";
 import { buildRunMigration } from "./runMigration.js";
+import { buildScreensHttp } from "./screens/screensHttp.js";
+import { VibeCodeSessionRegistry } from "./llm/vibeCodeSession.js";
+import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
+import { buildDeploySession } from "./llm/deploySession.js";
+import { ForgejoAppAdmin } from "./forgejoAppAdmin.js";
 import {
   startDaemonRuntime,
   type DaemonRuntime,
@@ -339,6 +344,67 @@ async function main(): Promise<void> {
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
     console.log(`[daemon] 🔒 cert installed; serving HTTPS for ${env.serverFqdn}`);
+
+    // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
+    // surface now that runtime.appPlatform / appBackup / urlController
+    // are populated. Both surfaces are paired-session gated.
+    const vibeRegistry = new VibeCodeSessionRegistry();
+    const forgejoBaseUrl = process.env.FLAGSHIP_FORGEJO_BASE_URL;
+    const forgejoToken = process.env.FLAGSHIP_FORGEJO_TOKEN;
+    const forgejoOrg =
+      process.env.FLAGSHIP_FORGEJO_ORG ?? `${cfg?.userId ?? "user"}-flagship`;
+    const forgejoAdmin =
+      forgejoBaseUrl && forgejoToken
+        ? new ForgejoAppAdmin({
+            baseUrl: forgejoBaseUrl,
+            orgName: forgejoOrg,
+            serviceToken: forgejoToken,
+          })
+        : null;
+    const vibeAppDir = join(dataDir, "data", "app-clones");
+    const username = cfg?.userId ?? env.serverFqdn!.split(".")[1] ?? "user";
+    const deploySession = runtime.appPlatform
+      ? buildDeploySession({
+          appPlatform: runtime.appPlatform,
+          hostIrk: identityKeypair,
+          hostUsername: username,
+          workingDir: vibeAppDir,
+          cmd: (await import("./appRunner.js")).realCommandRunner,
+          forgejoAdmin,
+        })
+      : undefined;
+    const vibeCodeHandle = buildVibeCodeHttpHandlers({
+      registry: vibeRegistry,
+      gate: pairedSessions,
+      username,
+      serverFqdn: env.serverFqdn!,
+      deploySession,
+    });
+    runtime.addHandler(vibeCodeHandle);
+
+    const screensHandle = buildScreensHttp({
+      gate: pairedSessions,
+      serverFqdn: env.serverFqdn!,
+      username,
+      daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
+      startedAt: Date.now(),
+      appPlatform: runtime.appPlatform,
+      pairedSessions,
+      tabRegistry: browserBundle?.tabRegistry ?? null,
+      appBackup: runtime.appBackup,
+      urlController: runtime.urlController,
+      vibeCode: deploySession
+        ? {
+            registry: vibeRegistry,
+            username,
+            serverFqdn: env.serverFqdn!,
+          }
+        : null,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
+    });
+    runtime.addHandler(screensHandle);
+    console.log(`[daemon] /api/screens/* + /api/llm/sessions handlers mounted`);
+
     // Start the pull scheduler now that the cert is up + tunnel reachable.
     updateScheduler.start();
     console.log(`[daemon] update-pack scheduler started (6h jittered)`);
