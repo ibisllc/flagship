@@ -23,6 +23,10 @@ import { initAppsListView, enterAppsList } from "./views/apps-list.js";
 import { initAppDetailView } from "./views/app-detail.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
+import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
+import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
+import { initUnlockApprovalsView, enterUnlockApprovals } from "./views/unlock-approvals.js";
+import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 
 async function boot() {
   initBootstrapView();
@@ -42,13 +46,23 @@ async function boot() {
   initAppDetailView();
   initPairedSessionsView();
   initTierStatusView();
+  initMarketplaceView();
+  initVibeCodeView();
+  initUnlockApprovalsView();
+  initRecoveryView();
 
   // Home → screens nav
-  $("open-pod-pair")?.addEventListener("click", () => enterPodPair().catch((e) => toast(String(e), "err")));
-  $("open-server-detail")?.addEventListener("click", () => enterServerDetail().catch((e) => toast(String(e), "err")));
-  $("open-apps-list")?.addEventListener("click", () => enterAppsList().catch((e) => toast(String(e), "err")));
-  $("open-paired-sessions")?.addEventListener("click", () => enterPairedSessions().catch((e) => toast(String(e), "err")));
-  $("open-tier-status")?.addEventListener("click", () => enterTierStatus().catch((e) => toast(String(e), "err")));
+  const wire = (id, fn) =>
+    $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
+  wire("open-pod-pair", enterPodPair);
+  wire("open-server-detail", enterServerDetail);
+  wire("open-apps-list", enterAppsList);
+  wire("open-marketplace", enterMarketplace);
+  wire("open-vibe-code", enterVibeCode);
+  wire("open-unlock-approvals", enterUnlockApprovals);
+  wire("open-paired-sessions", enterPairedSessions);
+  wire("open-tier-status", enterTierStatus);
+  wire("open-recovery", enterRecovery);
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");

@@ -96,6 +96,10 @@ describe("/webapp PWA static surface", () => {
       "/webapp/views/paired-sessions.js",
       "/webapp/views/tier-status.js",
       "/webapp/views/pod-pair.js",
+      "/webapp/views/marketplace.js",
+      "/webapp/views/vibe-code.js",
+      "/webapp/views/unlock-approvals.js",
+      "/webapp/views/recovery.js",
     ]) {
       const r = await app.inject({ method: "GET", url: path });
       expect(r.statusCode).toBe(200);
@@ -114,12 +118,25 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/app-detail/", "/webapp/views/app-detail.js"],
       ["/api/screens/paired-sessions/list", "/webapp/views/paired-sessions.js"],
       ["/api/screens/tier-status", "/webapp/views/tier-status.js"],
+      ["/api/screens/marketplace-browse", "/webapp/views/marketplace.js"],
+      ["/api/screens/vibe-code/start", "/webapp/views/vibe-code.js"],
+      ["/api/screens/unlock-approvals/pending", "/webapp/views/unlock-approvals.js"],
     ];
     for (const [endpoint, view] of want) {
       const r = await app.inject({ method: "GET", url: view });
       expect(r.statusCode).toBe(200);
       expect(r.body).toContain(endpoint);
     }
+  });
+
+  it("/webapp/lib/installApp.js signs canonical install-app + uninstall-app envelopes", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/installApp.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("flagship/install-app/v1");
+    expect(r.body).toContain("flagship/uninstall-app/v1");
+    expect(r.body).toContain("/api/marketplace/");
+    expect(r.body).toContain("/api/apps");
   });
 
   it("never accidentally serves /webapp resources from the root scope", async () => {
