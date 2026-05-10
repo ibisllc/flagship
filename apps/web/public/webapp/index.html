@@ -6,10 +6,10 @@
     <meta name="theme-color" content="#0a0a0a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="manifest" href="/webapp/manifest.json" />
-    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
-    <link rel="apple-touch-icon" href="/webapp/icon.svg" />
-    <link rel="stylesheet" href="/webapp/style.css" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="stylesheet" href="/style.css" />
     <title>Flagship</title>
   </head>
   <body>
@@ -24,7 +24,7 @@
         <h2>Set up this device</h2>
         <div class="card warning">
           <p style="margin: 0 0 0.6rem;">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
-          <a class="pill" href="/security.html">Read the trade-offs →</a>
+          <a class="pill" href="https://flagshipserver.com/security.html">Read the trade-offs →</a>
         </div>
         <div class="card">
           <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">Pick a passphrase. We use it to encrypt your local key — flagshipserver.com never sees it.</p>
@@ -388,10 +388,10 @@
 
     <div id="toast" class="toast hidden"></div>
 
-    <script type="module" src="/webapp/app.js"></script>
+    <script type="module" src="/app.js"></script>
     <script>
       if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("/webapp/service-worker.js", { scope: "/webapp/" });
+        navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
       }
     </script>
   </body>

@@ -49,17 +49,23 @@ function makeEnv(overrides: Partial<RouteEnv> = {}): RouteEnv {
 }
 
 describe("flagshipserver.com Worker — routing", () => {
-  it("non-/api paths are served by the asset binding (marketing, /webapp, /deck)", async () => {
+  it("non-/api paths are served by the asset binding (marketing, /deck, /.well-known)", async () => {
+    // /webapp/* used to fall through here too, but as of the
+    // web.flagshipserver.com migration it 308-redirects to the new
+    // origin — see the dedicated `/me + /webapp redirects` describe.
     const r = await route(new Request("https://flagshipserver.com/"), makeEnv());
     expect(r.status).toBe(200);
     expect(await r.text()).toBe("asset:/");
-    const r2 = await route(new Request("https://flagshipserver.com/webapp/"), makeEnv());
-    expect(await r2.text()).toBe("asset:/webapp/");
-    const r3 = await route(
+    const r2 = await route(
       new Request("https://flagshipserver.com/.well-known/security.txt"),
       makeEnv(),
     );
-    expect(await r3.text()).toBe("asset:/.well-known/security.txt");
+    expect(await r2.text()).toBe("asset:/.well-known/security.txt");
+    const r3 = await route(
+      new Request("https://flagshipserver.com/deck/"),
+      makeEnv(),
+    );
+    expect(await r3.text()).toBe("asset:/deck/");
   });
 
   it("/api/* is forwarded to SERVICES_BASE_URL preserving method + path + query", async () => {
@@ -483,30 +489,143 @@ describe("/og — OG-poster generator (P3.6)", () => {
   });
 });
 
-describe("/me redirects to /webapp/ (P3.7)", () => {
-  it("/me returns a 308 to /webapp/", async () => {
+describe("/me + /webapp redirects to web.flagshipserver.com", () => {
+  it("/me returns a 308 to https://web.flagshipserver.com/", async () => {
     const r = await route(new Request("https://flagshipserver.com/me"), makeEnv());
     expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe("/webapp/");
+    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
   });
 
-  it("/me/anything also redirects to /webapp/", async () => {
+  it("/me/anything also redirects to the webapp origin root", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/me/settings"),
       makeEnv(),
     );
     expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe("/webapp/");
+    // /me/* always lands on the webapp root — sub-paths under /me/ aren't
+    // mapped 1:1 because the legacy /me area was speced as a single
+    // landing surface.
+    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
   });
 
-  it("/messages (similar prefix) is NOT redirected — it falls through to the asset binding", async () => {
+  it("/webapp redirects to the new origin root", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/webapp"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
+  });
+
+  it("/webapp/ (with trailing slash) also redirects to the new origin root", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/webapp/"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://web.flagshipserver.com/");
+  });
+
+  it("/webapp/foo/bar?x=1 preserves path tail and query", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/webapp/foo/bar?x=1"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://web.flagshipserver.com/foo/bar?x=1",
+    );
+  });
+
+  it("/messages (similar prefix to /me) is NOT redirected — falls through to assets", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/messages"),
       makeEnv(),
     );
-    // Asset binding stub returns "asset:<path>" with status 200.
     expect(r.status).toBe(200);
     expect(await r.text()).toBe("asset:/messages");
+  });
+
+  it("/webappish (similar prefix to /webapp) is NOT redirected — falls through to assets", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/webappish"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webappish");
+  });
+});
+
+describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
+  it("/ on web. host fetches ASSETS /webapp/ (binding serves index.html)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/");
+  });
+
+  it("/manifest.json on web. host fetches ASSETS /webapp/manifest.json", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/manifest.json"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/manifest.json");
+  });
+
+  it("/lib/api.js on web. host fetches ASSETS /webapp/lib/api.js (deep paths)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/lib/api.js"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/lib/api.js");
+  });
+
+  it("/views/home.js?v=2 preserves query when rewriting", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/views/home.js?v=2"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/views/home.js");
+  });
+
+  it("/api/* on web. host is NOT proxied — it's rewritten under /webapp/ (not exposed here)", async () => {
+    // The webapp talks to the user's pod for /api/screens/*, never to
+    // web.flagshipserver.com. Anything that lands on /api/* here is a
+    // bug; we deliberately do NOT proxy to .services.
+    const r = await route(
+      new Request("https://web.flagshipserver.com/api/screens/server-detail"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/api/screens/server-detail");
+    // Crucially: no upstream call.
+    expect(calls).toHaveLength(0);
+  });
+
+  it("POST to web. host is rejected with 405 (writes go to the user's pod)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/whatever", {
+        method: "POST",
+        body: "{}",
+        headers: { "content-type": "application/json" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(405);
+    expect(r.headers.get("allow")).toBe("GET, HEAD");
+  });
+
+  it("HEAD on web. host works (browsers preflight)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/manifest.json", { method: "HEAD" }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
   });
 });
 

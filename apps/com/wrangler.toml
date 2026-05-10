@@ -8,26 +8,44 @@ compatibility_flags = ["nodejs_compat"]
 # www host shares the same Worker.
 workers_dev = true
 
-# Routes for `flagshipserver.com/*` and `www.flagshipserver.com/*` are
-# managed out-of-band via the Cloudflare API (POST /zones/{zone}/workers/routes)
-# because the apex retains a legacy CNAME → Surge from the old marketing site
-# (backed up as `old_flagship_website.zip` at the repo root). Worker Routes
-# intercept before origin so the legacy CNAME is harmless.
-# To re-add the routes if dropped:
-#   curl -X POST .../zones/$ZONE/workers/routes -d '{"pattern":"flagshipserver.com/*","script":"flagship-com"}'
-#   curl -X POST .../zones/$ZONE/workers/routes -d '{"pattern":"www.flagshipserver.com/*","script":"flagship-com"}'
+# Routes are wrangler-managed (declared in the `routes` array below).
+# Every `wrangler deploy` reconciles to exactly the listed set — so to
+# add or remove a route, edit this file and redeploy.
+#
+# Why Routes (not Custom Domains)? The apex retains a legacy CNAME →
+# Surge from the old marketing site (backed up as
+# `old_flagship_website.zip` at the repo root). Custom Domains insist
+# on owning DNS for the host they attach to and refuse to attach to a
+# host with externally-managed DNS records; Worker Routes intercept
+# before origin lookup, so the legacy CNAME is simply never reached.
+# `web.flagshipserver.com` is a CNAME → flagshipserver.com, proxied
+# through Cloudflare; the universal SSL cert covers it.
+#
+# Discovered the hard way (2026-05-10): `wrangler deploy --routes X`
+# reconciles to ONLY `X`, dropping every previously-attached route.
+# Always pass the full set, or just trust the `routes` array here.
+routes = [
+  { pattern = "flagshipserver.com/*",     zone_name = "flagshipserver.com" },
+  { pattern = "www.flagshipserver.com/*", zone_name = "flagshipserver.com" },
+  { pattern = "web.flagshipserver.com/*", zone_name = "flagshipserver.com" },
+]
 
-# Static assets — marketing pages, /webapp/, /deck/, /security pages,
-# /.well-known/security.txt. Wrangler will upload everything in this
-# directory to Cloudflare's static edge.
+# Static assets — marketing pages, the webapp source under /webapp/
+# (served at root on web.flagshipserver.com via Worker rewrite),
+# /deck/, /security pages, /.well-known/security.txt. Wrangler uploads
+# everything in this directory to Cloudflare's static edge.
 [assets]
 directory = "../web/public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-# Don't let the asset edge intercept paths the Worker owns: every /api/*
-# call (control plane, status probe) and every /build/iso/* (R2 stream)
-# must hit the Worker first.
-run_worker_first = ["/api/*", "/build/iso/*"]
+# Worker runs first for every request so it can: (1) host-rewrite
+# web.flagshipserver.com/X → asset /webapp/X before the assets edge
+# applies its SPA fallback at the wrong root; (2) 308-redirect apex
+# /webapp/* to web.; (3) handle /api/* and /build/iso/* directly. The
+# Worker calls ASSETS.fetch as the default fallback for anything it
+# doesn't intercept, so static-file behavior is unchanged for the
+# marketing site — only one extra Worker invocation per request.
+run_worker_first = ["/*"]
 
 [[r2_buckets]]
 binding = "ISO_BUCKET"

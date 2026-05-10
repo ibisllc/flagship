@@ -2,16 +2,25 @@
  * Pure routing logic for the flagshipserver.com Cloudflare Worker.
  *
  * Responsibilities:
- *   1. .com control-plane routes (username, auth-code, build-tickets,
+ *   1. Host-aware: serves the apex (flagshipserver.com / www.) and the
+ *      webapp origin (web.flagshipserver.com).
+ *   2. .com control-plane routes (username, auth-code, build-tickets,
  *      server registration, CA pubkey-cert) — served by Worker + D1.
- *   2. /build/iso/:filename — streams from R2.
- *   3. /api/_status/probe — Worker-resident probe of .services.
- *   4. /api/build/iso-info — base-ISO metadata.
- *   5. Anything else under /api/* not handled above — proxied to .services.
- *   6. Anything else — static assets.
+ *   3. /build/iso/:filename — streams from R2.
+ *   4. /api/_status/probe — Worker-resident probe of .services.
+ *   5. /api/build/iso-info — base-ISO metadata.
+ *   6. Anything else under /api/* not handled above — proxied to .services.
+ *   7. On the apex: /webapp/* and /me/* 308-redirect to web.flagshipserver.com.
+ *   8. On web.flagshipserver.com: /X is rewritten to ASSETS /webapp/X so
+ *      the on-disk webapp source serves at the new origin's root. Files
+ *      stay under apps/web/public/webapp/ — no churn.
+ *   9. Anything else — static assets.
  */
 
 import { tryControlPlane } from "./controlPlaneRoutes.js";
+
+const WEBAPP_HOST = "web.flagshipserver.com";
+const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
 export interface RouteEnv {
   SERVICES_BASE_URL: string;
@@ -99,6 +108,18 @@ const STRIP_RES_HEADERS = new Set([
 export async function route(request: Request, env: RouteEnv): Promise<Response> {
   const url = new URL(request.url);
 
+  // ---- web.flagshipserver.com ----
+  // Webapp lives at this dedicated origin. Files on disk are under
+  // apps/web/public/webapp/, but on this host we serve them at root —
+  // so /X is rewritten to ASSETS /webapp/X. Everything on this host is
+  // either a webapp asset or the SPA fallback; the apex's /api/* and
+  // /og + control-plane routes are NOT exposed here. The webapp itself
+  // talks to the user's pod for /api/screens/* and to the apex for
+  // anything .com-resident — never to web. directly.
+  if (url.hostname === WEBAPP_HOST) {
+    return serveWebapp(request, url, env);
+  }
+
   // Worker-resident probe: never forwarded upstream as-is. The Worker does
   // the timed fetch itself so /status/ shows what flagshipserver.com sees,
   // not what the user's browser sees.
@@ -132,15 +153,27 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
     return ogImage(url);
   }
 
-  // P3.7 — `/me` and `/me/*` redirect to the webapp PWA (the cycle plan
-  // chose webapp-subsumes-me over a separate paired-session-gated user
-  // area). 308 keeps method semantics for any future POSTs from
-  // bookmarks; query strings and hash fragments are preserved by the
-  // browser's redirect handling.
+  // P3.7 — `/me` and `/me/*` redirect to the webapp on its dedicated
+  // origin. 308 keeps method semantics for any future POSTs from
+  // bookmarks. Query and hash are preserved by the browser.
   if (url.pathname === "/me" || url.pathname.startsWith("/me/")) {
     return new Response(null, {
       status: 308,
-      headers: { location: "/webapp/" },
+      headers: { location: `${WEBAPP_ORIGIN}/${url.search}` },
+    });
+  }
+
+  // Legacy `/webapp/*` paths on the apex 308-redirect to the new origin.
+  // Path tail and query string are preserved so deep links survive the
+  // move (`/webapp/foo?x=1` → `https://web.flagshipserver.com/foo?x=1`).
+  // PWA installs made on the apex are now broken — that's accepted,
+  // since the migration ran before any meaningful install base existed.
+  if (url.pathname === "/webapp" || url.pathname.startsWith("/webapp/")) {
+    const tail = url.pathname.slice("/webapp".length); // "" or "/X"
+    const target = `${WEBAPP_ORIGIN}${tail || "/"}${url.search}`;
+    return new Response(null, {
+      status: 308,
+      headers: { location: target },
     });
   }
 
@@ -455,6 +488,43 @@ function requestHasBody(method: string): boolean {
   return m !== "GET" && m !== "HEAD" && m !== "OPTIONS";
 }
 
+/**
+ * Serve a request to web.flagshipserver.com by rewriting `/X` to
+ * `/webapp/X` and handing off to the assets binding. The on-disk file
+ * tree is unchanged (apps/web/public/webapp/...); the user-visible
+ * origin sees those files at root paths so the manifest's start_url
+ * and the service-worker scope can both be `/`.
+ *
+ * Anything not a GET/HEAD on this host falls through to a 405 — the
+ * webapp's data-plane writes (orders, paired-session adds) go to the
+ * user's pod (`<server>.<user>.flagship.services`), never to .com.
+ */
+async function serveWebapp(
+  request: Request,
+  url: URL,
+  env: RouteEnv,
+): Promise<Response> {
+  const method = request.method.toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    return new Response(
+      JSON.stringify({ error: "method not allowed", host: WEBAPP_HOST }),
+      { status: 405, headers: { "content-type": "application/json", allow: "GET, HEAD" } },
+    );
+  }
+
+  // Disk layout:  apps/web/public/webapp/<file>
+  // Public path:  /<file>     → rewrite to /webapp/<file> for ASSETS
+  // Public root:  /           → ASSETS /webapp/  (binding serves index.html)
+  const rewrittenPath = url.pathname === "/" ? "/webapp/" : `/webapp${url.pathname}`;
+  const rewritten = new URL(rewrittenPath + url.search, "https://flagshipserver.com");
+  // Preserve method + headers; body is empty for GET/HEAD.
+  const assetReq = new Request(rewritten.toString(), {
+    method,
+    headers: request.headers,
+  });
+  return env.ASSETS.fetch(assetReq);
+}
+
 export const _internal = {
   PROXY_PREFIX,
   STATUS_PROBE_PATH,
@@ -468,4 +538,6 @@ export const _internal = {
   SERVICES_ENDPOINTS_VERSION,
   STRIP_REQ_HEADERS,
   STRIP_RES_HEADERS,
+  WEBAPP_HOST,
+  WEBAPP_ORIGIN,
 };

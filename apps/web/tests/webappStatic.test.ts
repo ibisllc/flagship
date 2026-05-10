@@ -2,30 +2,50 @@ import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
 describe("/webapp PWA static surface", () => {
-  it("serves /webapp/manifest.json with the right shape", async () => {
+  // The on-disk file tree still lives at apps/web/public/webapp/* —
+  // only the user-visible paths change. In production the Cloudflare
+  // Worker rewrites web.flagshipserver.com/X → ASSETS /webapp/X (see
+  // apps/com/src/route.ts → serveWebapp), so the manifest and SW
+  // declare scope/start_url/cache keys at root, not under /webapp/.
+  // The Fastify dev/test harness still serves files at their disk
+  // paths (/webapp/...), so requests here use the disk path while the
+  // *content* asserts root-relative paths.
+  it("serves /webapp/manifest.json with root scope (matches the new origin)", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/manifest.json" });
     expect(r.statusCode).toBe(200);
     const body = JSON.parse(r.body);
-    expect(body.start_url).toBe("/webapp/");
-    expect(body.scope).toBe("/webapp/");
+    expect(body.start_url).toBe("/");
+    expect(body.scope).toBe("/");
     expect(body.display).toBe("standalone");
+    // Icons reference root-relative paths so they resolve against
+    // web.flagshipserver.com, not /webapp/.
+    expect(body.icons[0].src).toBe("/icon.svg");
   });
 
-  it("serves /webapp/index.html and links the manifest + service worker", async () => {
+  it("serves /webapp/index.html and links the manifest + service worker at root paths", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain('rel="manifest"');
-    expect(r.body).toContain("/webapp/service-worker.js");
+    // Root-relative service-worker registration; scope is "/" on the new origin.
+    expect(r.body).toContain("/service-worker.js");
+    expect(r.body).not.toContain("/webapp/service-worker.js");
+    expect(r.body).toContain('scope: "/"');
   });
 
-  it("serves /webapp/service-worker.js with the correct scope hooks", async () => {
+  it("serves /webapp/service-worker.js with root-scoped SHELL list", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/service-worker.js" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain("flagship-webapp-shell-");
     expect(r.body).toContain("self.addEventListener");
+    // SHELL paths are root-relative on the new origin.
+    expect(r.body).toContain('"/index.html"');
+    expect(r.body).toContain('"/app.js"');
+    expect(r.body).toContain('"/lib/api.js"');
+    // No remaining /webapp/ prefixes inside the SW source.
+    expect(r.body).not.toContain('"/webapp/');
   });
 
   it("/webapp/app.js loads and dispatches to view modules", async () => {

@@ -3,43 +3,47 @@
 // (instant launch even on lossy networks); network-first for /api/* so dynamic
 // state never staleness-bites the user.
 
-const SHELL_VERSION = "v5";
+// SHELL_VERSION bumped to v6 for the web.flagshipserver.com migration —
+// any old service worker registered under the /webapp/ scope on the
+// apex is unreachable from the new origin (different scope), so this
+// bump is more documentation than functional.
+const SHELL_VERSION = "v6";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 const SHELL = [
-  "/webapp/",
-  "/webapp/index.html",
-  "/webapp/app.js",
-  "/webapp/style.css",
-  "/webapp/manifest.json",
-  "/webapp/icon.svg",
-  "/webapp/keystore.js",
-  "/webapp/providers.js",
-  "/webapp/qrScanner.js",
-  "/webapp/lib/router.js",
-  "/webapp/lib/toast.js",
-  "/webapp/lib/state.js",
-  "/webapp/lib/util.js",
-  "/webapp/lib/api.js",
-  "/webapp/lib/podPair.js",
-  "/webapp/lib/installApp.js",
-  "/webapp/views/bootstrap.js",
-  "/webapp/views/unlock.js",
-  "/webapp/views/home.js",
-  "/webapp/views/pair.js",
-  "/webapp/views/settings.js",
-  "/webapp/views/pod-pair.js",
-  "/webapp/views/server-detail.js",
-  "/webapp/views/apps-list.js",
-  "/webapp/views/app-detail.js",
-  "/webapp/views/paired-sessions.js",
-  "/webapp/views/tier-status.js",
-  "/webapp/views/marketplace.js",
-  "/webapp/views/vibe-code.js",
-  "/webapp/views/unlock-approvals.js",
-  "/webapp/views/recovery.js",
-  "/webapp/views/install-progress.js",
-  "/webapp/views/orders-debug.js",
-  "/webapp/views/browser-viewer.js",
+  "/",
+  "/index.html",
+  "/app.js",
+  "/style.css",
+  "/manifest.json",
+  "/icon.svg",
+  "/keystore.js",
+  "/providers.js",
+  "/qrScanner.js",
+  "/lib/router.js",
+  "/lib/toast.js",
+  "/lib/state.js",
+  "/lib/util.js",
+  "/lib/api.js",
+  "/lib/podPair.js",
+  "/lib/installApp.js",
+  "/views/bootstrap.js",
+  "/views/unlock.js",
+  "/views/home.js",
+  "/views/pair.js",
+  "/views/settings.js",
+  "/views/pod-pair.js",
+  "/views/server-detail.js",
+  "/views/apps-list.js",
+  "/views/app-detail.js",
+  "/views/paired-sessions.js",
+  "/views/tier-status.js",
+  "/views/marketplace.js",
+  "/views/vibe-code.js",
+  "/views/unlock-approvals.js",
+  "/views/recovery.js",
+  "/views/install-progress.js",
+  "/views/orders-debug.js",
+  "/views/browser-viewer.js",
 ];
 
 self.addEventListener("install", (event) => {
@@ -73,10 +77,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (event.request.method !== "GET") return;
-  if (!url.pathname.startsWith("/webapp/")) return;
+  // Same-origin gate: scope is "/" on web.flagshipserver.com, so any
+  // in-scope GET is a webapp asset. Cross-origin calls (the user's pod
+  // at <server>.<user>.flagship.services for /api/screens/*) bypass
+  // the SW entirely.
+  if (url.origin !== self.location.origin) return;
 
-  // Never cache API calls — they're dynamic.
-  if (url.pathname.startsWith("/webapp/api/")) {
+  // Never cache API calls — they're dynamic. The webapp's only
+  // same-origin /api/* paths today are the ones the offline-replay
+  // queue handles above; this is a defensive skip in case future
+  // additions slip through.
+  if (url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(event.request));
     return;
   }
