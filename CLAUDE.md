@@ -7,19 +7,21 @@ If you have access to agent memory, **read `project_overview.md`** first — it'
 ## What's where
 
 ```
-apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state)
-apps/web/                  Fly app — flagship.services (stateless data plane)
+apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state) + web.flagshipserver.com (webapp host-rewrite)
+apps/web/                  Fly app — flagship.services (stateless data plane) + the webapp static surface
 apps/web/public/           Static assets served by the Worker's [assets] binding
    build/                  /build/ — paste a build code, download a personalized ISO
    dev/create-server       /dev/create-server — phone simulator
    status/                 /status/ — live health dashboard
-apps/mobile/               iOS Swift + Android Kotlin scaffolds (deferred)
+   security/               disclosure.html, report.html
+   webapp/                 PWA source (served at root on web.flagshipserver.com)
+apps/mobile/               iOS Swift + Android Kotlin clients — substantial code; not yet on TestFlight/Play
 
 packages/protocol/         Canonical-bytes + Ed25519 sign/verify for every signed message
 packages/storage/          Storage interfaces + InMemory + D1 adapters + SQL migrations
 packages/control-plane/    Pure runtime-agnostic handlers (used by Worker AND Fastify)
-packages/server-daemon/    Production daemon scaffolding (acme, tunnel client, app runner)
-packages/hello-daemon/     Minimal demo daemon — proves the chain end-to-end
+packages/server-daemon/    PRODUCTION daemon entry (acme, tunnel client, app runner, lease store, browser bundle)
+packages/hello-daemon/     Minimal demo daemon — kept around for chain smoke-testing only
 packages/iso-personalizer/ Trailer format (build/parse/personalize-stream)
 packages/installer-apkovl/ Builds the apkovl tarball baked into the Alpine ISO
 packages/tunnel-protocol/  Frame format for the tunnel + SNI parser
@@ -84,20 +86,24 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 ## Status
 
-- **End-to-end live**: real Let's Encrypt cert via TLS-ALPN-01 over SNI passthrough, verified 2026-05-05.
-- ~757 tests, ~85 files, all green.
+- **End-to-end live**: real Let's Encrypt cert via TLS-ALPN-01 over SNI passthrough, verified 2026-05-05; wildcard SANs via DNS-01 since 2026-05-06; webapp at `web.flagshipserver.com`; auto-unlock-lease (one-shot + long-lived) live with silent renewer; WebAuthn-PRF cloud recovery; Web Push w/ RFC 8291 encrypted payloads; /consume → push auto-trigger.
+- 1500+ tests across 144+ files, all green. `npx vitest run` ~30s, `npx tsc -b` clean.
 - Workspace deps: `npm install` + `npx tsc -b`.
 
-## Outstanding work (priority order)
+## Outstanding work (verified 2026-05-11; reconciled with the v1-alpha checklist in `docs/build-tasks.md`)
 
-1. **Wildcard cert via DNS-01** (next session). One cert per server with `[<server>, *.<server>]` SANs covers all apps with one ACME flow. Replaces per-app TLS-ALPN-01 (which would hit LE's 50-certs-per-week-per-registered-domain limit on `flagship.services` immediately at any real scale). Also: apply for LE's high-volume issuer allowlist before public launch.
-2. **Daemon entry point**: merge `hello-daemon`'s tunnel-client + ACME + ALPN-aware TLS server into `packages/server-daemon/src/index.ts`. **No compiled binaries** — `installer/install.sh` already does `git clone` + `npx tsc -b` + OpenRC; just point the OpenRC service at the finished entry. Transparency stays intact.
-3. Persistent ACME state on the daemon (currently the demo daemon regenerates the account key on every restart).
-4. Phone-server `/api/orders-from-user` endpoint on the daemon (trust model exists; endpoint not yet wired).
-5. LUKS unlock-on-boot via phone (architecture clean; endpoints speced but not implemented).
-6. Mobile clients (scaffolds exist; real impl needs Xcode/Android Studio).
-7. Peer-backup distribution (designed in deep detail; encryption layer built; matchmaking + transport unbuilt).
+**Confirmed done despite older notes:** wildcard cert via DNS-01 (RemoteDnsChallengeWriter wired, `wildcard:true` default); daemon entry merge (server-daemon/src/index.ts is the production entry; hello-daemon stays as the explicit demo); persistent ACME on the production daemon; phone-server `/api/orders-from-user` endpoint; LUKS unlock-on-boot end-to-end (smoke-luks-unlock.ts and smoke-lease-unlock.ts both pass live); peer-backup matchmaker + BackupLoop wired (apps/web Fastify + server-daemon).
+
+**v1-launch blockers still open:**
+1. **E2E test rig + scenarios** (`docs/e2e-test-plan.md`). Playwright + pod-sim, chromium-only first. 13 scenarios covering signup → unlock-approve → lease + renewal → webauthn recovery → push subscribe + deliver. Largest single piece of work remaining.
+2. **iOS app real impl** (TestFlight-ready). Substantial Swift code under `apps/mobile/ios/Sources/` already; needs Xcode build + signing + TestFlight upload + 5 external testers.
+3. **Android app real impl** (Play internal track). 17 Kotlin files under `apps/mobile/android/`; same shape — Gradle build, FCM setup, signing, internal-track upload + 5 testers.
+4. **Marketplace security scan service**. `marketplace_listings.scan_grade` column ships NULL today; scanner service that pulls a docker image, runs Trivy + custom checks, posts back grade + R2 report. MVP requirement before public marketplace launch.
+5. **Recovery J.3 + J.4** — re-pair envelope (new IRK refs old; .com confirms in 24h grace; daemon swaps PSK + paired-session) + membership re-attach (walk apps, re-issue stable-ids, alert per app). Without these, a recovered UMK can't actually take over the user's existing servers.
+6. **Reproducible-build CI for the Alpine ISO**. Today the base ISO is built ad-hoc; for a "trust the bytes you boot" claim we need bit-for-bit reproducible builds in GitHub Actions with deterministic timestamps.
+7. **Peer-backup distribution at scale** — primitives all built (peerLink, transport, shardStore, registry, repairDaemon, matchmaker, BackupLoop); needs operational tuning + a 7-day exercise across multiple pods to validate.
+8. Update-pack + lineage-break + STK rotation + recovery-from-lost-phone — each needs a live exercise per the v1-alpha done-when checklist.
 
 ## When in doubt
 
-Read `project_overview.md` (in agent memory) end-to-end before making changes. The `final_architecture_2026_05_05.md` doc is the canonical reference for the .com/.services/daemon split + RCK + ACME-on-daemon shape.
+Read `project_overview.md` (in agent memory) end-to-end before making changes. `docs/build-tasks.md` (section S "v1 alpha done-when checklist") is the most current ground-truth for the launch list. `docs/e2e-test-plan.md` covers the test rig design.
