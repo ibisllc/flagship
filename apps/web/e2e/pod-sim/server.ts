@@ -145,7 +145,15 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
   });
   app.options("*", async (req, reply) => {
     reply.header("access-control-allow-methods", "GET, HEAD, POST, DELETE, OPTIONS");
-    reply.header("access-control-allow-headers", "content-type, x-flagship-session, authorization");
+    // `x-flagship-effective-host` is the e2e harness override (set by
+    // playwright.config.ts when WEBAPP_BASE_URL is localhost). It tells
+    // wrangler dev which canonical origin to route as, but Chromium
+    // forwards it on every cross-origin request — including pod-sim
+    // calls — so the preflight has to include it in the allow-list.
+    reply.header(
+      "access-control-allow-headers",
+      "content-type, x-flagship-session, authorization, x-flagship-effective-host",
+    );
     reply.header("access-control-max-age", "600");
     // PNA preflight requires this header on the response.
     if (req.headers["access-control-request-private-network"]) {

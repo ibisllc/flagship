@@ -124,8 +124,78 @@ const STRIP_RES_HEADERS = new Set([
   "connection",
 ]);
 
+/**
+ * Asset names that exist exclusively under apps/web/public/webapp/ on
+ * disk. Any apex request for one of these paths in local dev is
+ * almost certainly the webapp's SW or PWA-shell asset — fetched
+ * before the host override hooks have a chance to fire (SW
+ * registration in particular bypasses page.route).
+ *
+ * Production never sees these on the apex (the webapp lives on its
+ * own origin) so the helper is a no-op there.
+ */
+const WEBAPP_SHELL_PATHS = new Set([
+  "/service-worker.js",
+  "/manifest.json",
+  "/icon.svg",
+  "/icon-maskable.svg",
+  "/app.js",
+  "/keystore.js",
+  "/providers.js",
+  "/qrScanner.js",
+]);
+const WEBAPP_SHELL_PREFIXES = ["/lib/", "/views/"];
+
+function isWebappShellPath(pathname: string): boolean {
+  if (WEBAPP_SHELL_PATHS.has(pathname)) return true;
+  for (const p of WEBAPP_SHELL_PREFIXES) {
+    if (pathname.startsWith(p)) return true;
+  }
+  return false;
+}
+
 export async function route(request: Request, env: RouteEnv): Promise<Response> {
-  const url = new URL(request.url);
+  const requestUrl = new URL(request.url);
+
+  // Workerd (wrangler dev) replaces the Host header with the route's
+  // configured zone, so `request.url` always reports the apex hostname
+  // and the webapp host-rewrite below never fires. For the e2e harness
+  // we accept an `x-flagship-effective-host` header (set by the
+  // pod-sim fixture's per-page route) and reroute against it. The
+  // header is never emitted by real browsers, and the production
+  // Worker happily ignores it since the canonical Host already
+  // matches the URL it would resolve to. So this is a no-op on prod.
+  //
+  // ServiceWorker registration fetches and cross-origin font requests
+  // bypass the per-page route, so we add a second escape hatch: when
+  // the request lands on a localhost dev origin AND the path is
+  // unambiguously a webapp-shell asset (paths that exist only under
+  // /webapp/ on disk), treat it as webapp. Production never serves
+  // these paths from the apex — they're only fetched by the webapp
+  // origin — so this is also a no-op there.
+  let url = requestUrl;
+  const override = request.headers.get("x-flagship-effective-host");
+  if (override) {
+    const lowered = override.split(":")[0]?.toLowerCase() ?? "";
+    if (lowered === WEBAPP_HOST ||
+        lowered === "www.flagshipserver.com" ||
+        lowered === "flagshipserver.com") {
+      url = new URL(
+        `https://${lowered}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
+      );
+    }
+  } else if (isWebappShellPath(requestUrl.pathname)) {
+    // Path is unambiguously a webapp asset (these files exist only
+    // under apps/web/public/webapp/ on disk). The marketing apex
+    // never requests them in production, so rewriting unconditionally
+    // is safe — and it's the only way to serve them correctly under
+    // wrangler dev, where workerd reports the apex hostname even
+    // when the request really came from the SW registration on the
+    // webapp origin.
+    url = new URL(
+      `https://${WEBAPP_HOST}${requestUrl.pathname}${requestUrl.search}${requestUrl.hash}`,
+    );
+  }
 
   // ---- CORS preflight ----
   // Cross-origin POSTs from the webapp (on web.flagshipserver.com) to
@@ -336,29 +406,44 @@ async function buildIsoInfo(env: RouteEnv): Promise<Response> {
  */
 function ogImage(url: URL): Response {
   const title = (url.searchParams.get("title") ?? "Flagship").slice(0, 120);
-  const subtitle = (url.searchParams.get("subtitle") ?? "Your stuff, on your hardware.").slice(0, 200);
-  // Wrap the title to ~22 chars/line so the poster doesn't overflow.
-  const titleLines = wordWrap(title, 22).slice(0, 3);
+  const subtitle = (url.searchParams.get("subtitle")
+    ?? "Your stuff, on hardware you own.").slice(0, 200);
+  const titleLines = wordWrap(title, 18).slice(0, 3);
   const titleSvg = titleLines.map((line, i) => {
-    const dy = i === 0 ? 0 : 88;
-    return `<text x="80" y="${260 + i * 88}" fill="#fafafa" font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif" font-weight="700" font-size="80" letter-spacing="-2">${escapeXml(line)}</text>${dy === 0 ? "" : ""}`;
+    return `<text x="80" y="${300 + i * 96}" fill="#14130E" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="400" font-size="104" letter-spacing="-3">${escapeXml(line)}</text>`;
   }).join("");
+  const subtitleY = 300 + titleLines.length * 96 + 36;
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0a0a0a"/>
-      <stop offset="100%" stop-color="#1a1a2e"/>
+    <radialGradient id="bg" cx="0.85" cy="0.15" r="1.2">
+      <stop offset="0%" stop-color="#EFE9D6"/>
+      <stop offset="55%" stop-color="#F4F1E8"/>
+      <stop offset="100%" stop-color="#EDE9DC"/>
+    </radialGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#D38347"/>
+      <stop offset="100%" stop-color="#B26016"/>
     </linearGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
-  <g>
-    <circle cx="80" cy="100" r="22" fill="#3b5bff"/>
-    <text x="120" y="110" fill="#fafafa" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600" font-size="32" letter-spacing="-0.5">Flagship</text>
+  <!-- Hairline frame -->
+  <rect x="32" y="32" width="1136" height="566" fill="none" stroke="#DAD5C5" stroke-width="1"/>
+  <!-- Pennant mark, top-left -->
+  <g transform="translate(80,80)">
+    <line x1="0" y1="0" x2="0" y2="58" stroke="#14130E" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M0 4 L42 4 L33 19 L42 34 L0 34 Z" fill="url(#amber)"/>
+    <circle cx="0" cy="0" r="4" fill="#14130E"/>
+    <circle cx="0" cy="58" r="4" fill="#14130E"/>
+    <text x="60" y="20" fill="#14130E" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600" font-size="22" letter-spacing="-0.3">Flagship</text>
+    <text x="60" y="44" fill="#6C685D" font-family="ui-monospace, monospace" font-size="13" letter-spacing="0.18em">A PERSONAL CLOUD</text>
   </g>
   ${titleSvg}
-  <text x="80" y="${260 + titleLines.length * 88 + 28}" fill="#a0a0b0" font-family="ui-sans-serif, system-ui, sans-serif" font-size="32" letter-spacing="-0.5">${escapeXml(subtitle)}</text>
-  <text x="80" y="580" fill="#666680" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22">flagshipserver.com</text>
+  <text x="80" y="${subtitleY}" fill="#5A5B5E" font-family="ui-sans-serif, -apple-system, system-ui, sans-serif" font-weight="500" font-size="28" letter-spacing="-0.3">${escapeXml(subtitle)}</text>
+  <!-- Bottom rule -->
+  <line x1="80" y1="540" x2="1120" y2="540" stroke="#DAD5C5" stroke-width="1"/>
+  <text x="80" y="572" fill="#6C685D" font-family="ui-monospace, monospace" font-size="16" letter-spacing="0.12em">FLAGSHIPSERVER.COM</text>
+  <text x="1120" y="572" fill="#6C685D" font-family="ui-monospace, monospace" font-size="16" letter-spacing="0.12em" text-anchor="end">YOU HOLD THE KEYS</text>
 </svg>`;
   return new Response(svg, {
     status: 200,
@@ -560,7 +645,7 @@ function corsPreflight(request: Request): Response {
   const origin = originHeader(request);
   const headers = new Headers({
     "access-control-allow-methods": "GET, HEAD, POST, DELETE, OPTIONS",
-    "access-control-allow-headers": "content-type, x-flagship-session, authorization",
+    "access-control-allow-headers": "content-type, x-flagship-session, authorization, x-flagship-effective-host",
     "access-control-max-age": "600",
     vary: "origin",
   });

@@ -16,6 +16,19 @@ import { defineConfig, devices } from "@playwright/test";
  *   - The webapp is reachable at WEBAPP_BASE_URL (default the
  *     localhost wrangler dev URL above; live = https://web.flagshipserver.com).
  */
+
+const webappBase = process.env.WEBAPP_BASE_URL ?? "http://localhost:8787";
+
+// The wrangler-dev host override (x-flagship-effective-host) is NOT
+// applied here as `extraHTTPHeaders` because Playwright sends those on
+// every request — including cross-origin font fetches and SW
+// registration — which trigger CORS preflight failures (Google Fonts
+// rejects the unknown header) and MIME-type errors (the SW fetch isn't
+// scoped). Instead, the per-page route in fixtures/pod-sim.ts injects
+// the header only on requests that target the configured webapp origin.
+// Specs that need to talk to the apex AS apex (S14 marketing surface)
+// just use the @playwright/test base directly.
+
 export default defineConfig({
   testDir: "./flows",
   fullyParallel: false, // pod-sim + d1 seeding share state across tests in a worker
@@ -24,7 +37,7 @@ export default defineConfig({
   workers: 1,
   reporter: process.env.CI ? [["github"], ["list"]] : [["list"]],
   use: {
-    baseURL: process.env.WEBAPP_BASE_URL ?? "http://localhost:8787",
+    baseURL: webappBase,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
