@@ -174,4 +174,46 @@ describe("InMemoryStorage", () => {
     });
   });
 
+  describe("webauthnRecovery", () => {
+    function rec(over: Partial<{ username: string; credentialIdHex: string; wrappedUmkB64: string; irkPubHex: string; createdAt: number; updatedAt: number }> = {}) {
+      return {
+        username: "alice",
+        credentialIdHex: "deadbeef",
+        wrappedUmkB64: "QUJDRA==", // ABCD
+        irkPubHex: "aa".repeat(32),
+        createdAt: 1_000,
+        updatedAt: 1_000,
+        ...over,
+      };
+    }
+
+    it("upsert + get round-trip (case-insensitive lookup)", async () => {
+      const s = new InMemoryStorage();
+      await s.webauthnRecovery.upsert(rec({ username: "Alice" }));
+      const r = await s.webauthnRecovery.get("alice");
+      expect(r?.credentialIdHex).toBe("deadbeef");
+    });
+
+    it("upsert overwrites the prior wrappedUmkB64 (passkey rotation)", async () => {
+      const s = new InMemoryStorage();
+      await s.webauthnRecovery.upsert(rec({ wrappedUmkB64: "first==", updatedAt: 100 }));
+      await s.webauthnRecovery.upsert(rec({ wrappedUmkB64: "second==", updatedAt: 200 }));
+      const r = await s.webauthnRecovery.get("alice");
+      expect(r?.wrappedUmkB64).toBe("second==");
+      expect(r?.updatedAt).toBe(200);
+    });
+
+    it("delete removes the row and reports the change", async () => {
+      const s = new InMemoryStorage();
+      await s.webauthnRecovery.upsert(rec());
+      expect(await s.webauthnRecovery.delete("alice")).toBe(true);
+      expect(await s.webauthnRecovery.get("alice")).toBeUndefined();
+      expect(await s.webauthnRecovery.delete("alice")).toBe(false);
+    });
+
+    it("get returns undefined for an unknown username", async () => {
+      const s = new InMemoryStorage();
+      expect(await s.webauthnRecovery.get("ghost")).toBeUndefined();
+    });
+  });
 });

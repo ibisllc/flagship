@@ -234,6 +234,50 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("auto-unlock-enable");
   });
 
+  it("/webapp/lib/recovery.js exposes the WebAuthn-PRF recovery surface", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("export async function setupCloudRecovery");
+    expect(r.body).toContain("export async function recoverFromCloud");
+    expect(r.body).toContain("export async function deleteCloudRecovery");
+    expect(r.body).toContain("export async function hasCloudRecovery");
+    // Canonical bytes pinned to the protocol-side tag.
+    expect(r.body).toContain("flagship/upload-recovery-record/v1");
+    // Uses WebAuthn PRF extension for the wrap key.
+    expect(r.body).toContain("prf");
+    // Same rpId for apex + web. so the passkey is portable.
+    expect(r.body).toContain("flagshipserver.com");
+  });
+
+  it("/webapp/views/recovery.js wires the cloud-recovery setup + remove buttons", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("setupCloudRecovery");
+    expect(r.body).toContain("deleteCloudRecovery");
+    expect(r.body).toContain("hasCloudRecovery");
+    expect(r.body).toContain("recovery-cloud-setup");
+  });
+
+  it("/webapp/views/bootstrap.js offers the recover-from-passkey path", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/bootstrap.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("recoverFromCloud");
+    expect(r.body).toContain("bootstrapFromExistingSeed");
+    expect(r.body).toContain("bootstrap-recover");
+  });
+
+  it("/webapp/keystore.js exposes bootstrapFromExistingSeed for the recovery flow", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/keystore.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("export async function bootstrapFromExistingSeed");
+    // Re-uses the same wrapUmk path so unlock semantics stay identical.
+    expect(r.body).toContain("wrapUmk(passphrase, seed)");
+  });
+
   it("never accidentally serves /webapp resources from the root scope", async () => {
     const app = buildServer();
     // Confirm the marketing root is NOT a manifest

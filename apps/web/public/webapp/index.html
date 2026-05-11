@@ -32,6 +32,12 @@
           <input id="bootstrap-passphrase-2" type="password" placeholder="Confirm" autocomplete="new-password" style="margin-top: 0.5rem;" />
           <button id="bootstrap-go" style="margin-top: 0.8rem; width: 100%;">Generate device key</button>
         </div>
+        <div class="card" style="margin-top: 0.6rem;">
+          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+            Already have an account on another browser? Recover with your passkey.
+          </p>
+          <button class="secondary" id="bootstrap-recover" style="width: 100%;">Recover from passkey</button>
+        </div>
       </section>
 
       <!-- View 2: Locked — passphrase to unwrap UMK -->
@@ -285,9 +291,15 @@
         <h2>Recovery</h2>
         <div class="card">
           <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
-            Cloud-shard recovery (iCloud Keychain / Google Block Store) is the iOS / Android port's job.
-            On the web, your wrapped UMK lives in this browser's IndexedDB.
-            Use the export/import below to move between browsers; once cloud-shard primitives ship, this view will gain a "recover from iCloud / Google" button.
+            <strong>Cloud recovery (passkey):</strong> wrap your master key with a passkey's PRF output and upload the ciphertext to flagshipserver.com. The unwrap key never leaves your browser; flagshipserver.com only ever sees opaque ciphertext.
+          </p>
+          <div class="row"><span class="label">Status</span><span class="pill" id="recovery-cloud-pill">checking…</span></div>
+          <button id="recovery-cloud-setup" style="width:100%; margin-top:0.5rem;">Set up cloud recovery</button>
+          <button class="secondary" id="recovery-cloud-remove" style="width:100%; margin-top:0.4rem; display:none;">Remove cloud recovery</button>
+        </div>
+        <div class="card" style="margin-top:0.6rem;">
+          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+            <strong>Manual export (no cloud):</strong> download a JSON copy of the wrapped UMK and unlock it on another browser with the same passphrase.
           </p>
           <button id="recovery-export" style="width:100%; margin-top:0.4rem;">Export wrapped UMK</button>
           <label style="display:block; margin-top: 0.6rem; font-size: 0.85rem; color: var(--fg-mute);">Import wrapped UMK</label>

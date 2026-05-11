@@ -8,7 +8,8 @@
 //   v6: web.flagshipserver.com migration (origin change made the bump
 //       documentation-only since old SWs were on a different origin).
 //   v7: added lib/leases.js for the auto-unlock lease flow.
-const SHELL_VERSION = "v7";
+//   v8: added lib/recovery.js for WebAuthn-PRF cloud-shard recovery.
+const SHELL_VERSION = "v8";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 const SHELL = [
   "/",
@@ -28,6 +29,7 @@ const SHELL = [
   "/lib/podPair.js",
   "/lib/installApp.js",
   "/lib/leases.js",
+  "/lib/recovery.js",
   "/views/bootstrap.js",
   "/views/unlock.js",
   "/views/home.js",

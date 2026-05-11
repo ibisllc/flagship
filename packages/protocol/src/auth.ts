@@ -1338,6 +1338,65 @@ function canonicalRevokeAutoUnlockLease(r: RevokeAutoUnlockLease): Bytes {
   );
 }
 
+/**
+ * Webapp cloud-shard recovery — upload a wrapped-UMK ciphertext to
+ * flagshipserver.com, encrypted under a WebAuthn passkey's PRF
+ * output. `.com` only stores the ciphertext + the credentialId
+ * pointer; the unwrap key never leaves the user's browser.
+ *
+ * The signed envelope binds the upload to the user's IRK so squatting
+ * "I am alice" is impossible — `.com` cross-checks the signature
+ * against the IRK pubkey stored against `username` in the usernames
+ * table.
+ *
+ * Field shape:
+ *   - username:        identifier under which the record is keyed
+ *                      (matches the existing usernames table; ASCII,
+ *                      lowercased)
+ *   - credentialIdHex: WebAuthn credential ID (hex), used by the
+ *                      recovering browser to scope the get() call
+ *   - wrappedUmkHash:  SHA-256 of the wrapped-UMK ciphertext, hex.
+ *                      We sign the hash (not the blob) to keep
+ *                      canonical-bytes small and to let `.com` check
+ *                      the upload-time hash matches the stored blob
+ *                      bytes.
+ */
+export interface UploadRecoveryRecord {
+  username: string;
+  credentialIdHex: string;
+  wrappedUmkHashHex: string;
+  issuedAt: number;
+}
+
+const TAG_UPLOAD_RECOVERY_RECORD = "flagship/upload-recovery-record/v1";
+
+function canonicalUploadRecoveryRecord(r: UploadRecoveryRecord): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_UPLOAD_RECOVERY_RECORD,
+      r.username,
+      r.credentialIdHex,
+      r.wrappedUmkHashHex,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signUploadRecoveryRecord(r: UploadRecoveryRecord, irk: Keypair): Bytes {
+  return ed.sign(canonicalUploadRecoveryRecord(r), irk.privateKey);
+}
+export function verifyUploadRecoveryRecord(
+  r: UploadRecoveryRecord,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalUploadRecoveryRecord(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
 export function signAutoUnlockLease(r: AutoUnlockLease, irk: Keypair): Bytes {
   return ed.sign(canonicalAutoUnlockLease(r), irk.privateKey);
 }

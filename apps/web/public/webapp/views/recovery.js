@@ -1,23 +1,25 @@
 // P2.12 — Recovery flow.
 //
-// Status (2026-05-09): cloud-shard wrap/unwrap primitives (iCloud
-// Keychain / Google Block Store) live in the iOS + Android keystores
-// but the webapp's keystore.js doesn't yet have web-equivalent
-// primitives. The recovery story for the webapp is currently:
+// Two paths coexist:
 //
-//   1. Keep your wrapped UMK + passphrase backed up somewhere.
-//   2. On a fresh device, open this webapp + use Unlock with the same
-//      passphrase against the same browser profile (the wrapped UMK
-//      lives in IndexedDB).
+//   (A) Cloud-shard recovery via WebAuthn passkey (primary).
+//       Wraps the UMK seed under a passkey's PRF output and
+//       uploads the ciphertext to .com. Recovery from a new
+//       browser: enter username → WebAuthn → unwrap → restore.
+//       See lib/recovery.js + protocol's UploadRecoveryRecord.
 //
-// This view documents that path and offers a manual "export wrapped
-// UMK" + "import wrapped UMK" pair so a determined user can move
-// between browsers / devices today.
-//
-// Real cloud-shard recovery lands in a follow-up cycle once the
-// platform-specific webauthn / passkey path is designed.
+//   (B) Manual export/import of the wrapped UMK (fallback).
+//       The user moves a JSON file between browsers themselves.
+//       Useful for devices without WebAuthn or for paranoid
+//       users who don't want any cloud copy.
 
 import { $, registerView, show } from "../lib/router.js";
+import {
+  deleteCloudRecovery,
+  hasCloudRecovery,
+  setupCloudRecovery,
+} from "../lib/recovery.js";
+import { ensureUsername } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 
 registerView("view-recovery");
@@ -104,6 +106,68 @@ function txDone(tx) {
   });
 }
 
+async function refreshCloudStatus() {
+  const pill = $("recovery-cloud-pill");
+  const setupBtn = $("recovery-cloud-setup");
+  const removeBtn = $("recovery-cloud-remove");
+  if (!pill || !setupBtn || !removeBtn) return;
+  const username = (await import("../lib/state.js")).getSession().username;
+  if (!username) {
+    pill.textContent = "no username yet";
+    setupBtn.textContent = "Set up cloud recovery";
+    removeBtn.style.display = "none";
+    return;
+  }
+  pill.textContent = "checking…";
+  const exists = await hasCloudRecovery(username);
+  pill.textContent = exists ? "on" : "off";
+  setupBtn.textContent = exists ? "Re-register passkey" : "Set up cloud recovery";
+  removeBtn.style.display = exists ? "" : "none";
+}
+
+async function runSetupCloud() {
+  const btn = $("recovery-cloud-setup");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Waiting for passkey…";
+  }
+  try {
+    const username = await ensureUsername();
+    await setupCloudRecovery(username);
+    toast(`cloud recovery on for ${username}`, "ok");
+  } catch (e) {
+    toast(`setup failed: ${e.message ?? e}`, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+    void refreshCloudStatus();
+  }
+}
+
+async function runRemoveCloud() {
+  const btn = $("recovery-cloud-remove");
+  const username = (await import("../lib/state.js")).getSession().username;
+  if (!username) return;
+  if (!confirm(`Remove cloud recovery for ${username}? You'll lose the ability to recover this account from a new browser unless you have a manual export.`)) {
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Removing…";
+  }
+  try {
+    await deleteCloudRecovery(username);
+    toast("cloud recovery removed", "ok");
+  } catch (e) {
+    toast(`remove failed: ${e.message ?? e}`, "err");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Remove cloud recovery";
+    }
+    void refreshCloudStatus();
+  }
+}
+
 export function initRecoveryView() {
   $("recovery-back")?.addEventListener("click", () => show("view-home"));
   $("recovery-export")?.addEventListener("click", exportWrapped);
@@ -111,8 +175,11 @@ export function initRecoveryView() {
     const f = ev.target.files?.[0];
     if (f) importWrapped(f);
   });
+  $("recovery-cloud-setup")?.addEventListener("click", runSetupCloud);
+  $("recovery-cloud-remove")?.addEventListener("click", runRemoveCloud);
 }
 
 export function enterRecovery() {
   show("view-recovery");
+  void refreshCloudStatus();
 }

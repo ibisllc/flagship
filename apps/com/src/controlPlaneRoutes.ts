@@ -56,6 +56,9 @@ import {
   handlePushRevoke,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
+  handleDeleteWebauthnRecovery,
+  handleFetchWebauthnRecovery,
+  handleUploadWebauthnRecovery,
   type CaIssuer,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
@@ -130,6 +133,8 @@ const ROUTE_RE = {
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
   CERT_REVOCATIONS_POST: /^\/api\/cert-revocations$/,
   CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
+  RECOVERY_UPLOAD: /^\/api\/recovery$/,
+  RECOVERY_BY_USERNAME: /^\/api\/recovery\/by-username\/([^/]+)$/,
 };
 
 export async function tryControlPlane(
@@ -420,6 +425,42 @@ export async function tryControlPlane(
           luksKeys: storage.luksKeys,
         },
         host,
+        await readJson(request),
+      ),
+    );
+  }
+
+  // ---- Webapp cloud-shard recovery (WebAuthn PRF) ----
+  if (method === "POST" && ROUTE_RE.RECOVERY_UPLOAD.test(path)) {
+    return finishPlain(
+      await handleUploadWebauthnRecovery(
+        {
+          usernames: storage.usernames,
+          webauthnRecovery: storage.webauthnRecovery,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.RECOVERY_BY_USERNAME))) {
+    return finishPlain(
+      await handleFetchWebauthnRecovery(
+        {
+          usernames: storage.usernames,
+          webauthnRecovery: storage.webauthnRecovery,
+        },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.RECOVERY_BY_USERNAME))) {
+    return finishPlain(
+      await handleDeleteWebauthnRecovery(
+        {
+          usernames: storage.usernames,
+          webauthnRecovery: storage.webauthnRecovery,
+        },
+        decodeURIComponent(m[1]!),
         await readJson(request),
       ),
     );

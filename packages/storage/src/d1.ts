@@ -1,6 +1,8 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  WebauthnRecoveryRecord,
+  WebauthnRecoveryStorage,
   EntitlementRevocationListRecord,
   EntitlementRevocationStorage,
   AuthCodeRecord,
@@ -664,6 +666,65 @@ export class D1AutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
   }
 }
 
+export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async upsert(rec: WebauthnRecoveryRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO webauthn_recovery_records
+           (username, credential_id_hex, wrapped_umk_b64, irk_pub_hex, created_at, updated_at)
+         VALUES (?,?,?,?,?,?)
+         ON CONFLICT(username) DO UPDATE SET
+           credential_id_hex = excluded.credential_id_hex,
+           wrapped_umk_b64 = excluded.wrapped_umk_b64,
+           irk_pub_hex = excluded.irk_pub_hex,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(
+        rec.username.toLowerCase(),
+        rec.credentialIdHex,
+        rec.wrappedUmkB64,
+        rec.irkPubHex,
+        rec.createdAt,
+        rec.updatedAt,
+      )
+      .run();
+  }
+
+  async get(username: string): Promise<WebauthnRecoveryRecord | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM webauthn_recovery_records WHERE username = ?")
+      .bind(username.toLowerCase())
+      .first<{
+        username: string;
+        credential_id_hex: string;
+        wrapped_umk_b64: string;
+        irk_pub_hex: string;
+        created_at: number;
+        updated_at: number;
+      }>();
+    if (!r) return undefined;
+    return {
+      username: r.username,
+      credentialIdHex: r.credential_id_hex,
+      wrappedUmkB64: r.wrapped_umk_b64,
+      irkPubHex: r.irk_pub_hex,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    };
+  }
+
+  async delete(username: string): Promise<boolean> {
+    const r = await this.db
+      .prepare("DELETE FROM webauthn_recovery_records WHERE username = ?")
+      .bind(username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+}
+
 export class D1MarketplaceStorage implements MarketplaceStorage {
   constructor(private readonly db: D1Database) {}
 
@@ -982,6 +1043,7 @@ export class D1Storage implements Storage {
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
+  webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
@@ -996,6 +1058,7 @@ export class D1Storage implements Storage {
     this.installEvents = new D1InstallEventStorage(db);
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
+    this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.marketplace = new D1MarketplaceStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);
     this.llmPromo = new D1LlmPromoStorage(db);

@@ -165,6 +165,29 @@ export interface LuksKeyStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Webapp cloud-shard recovery records (WebAuthn PRF)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface WebauthnRecoveryRecord {
+  username: string;
+  credentialIdHex: string;
+  /** Opaque AES-GCM ciphertext (base64). `.com` cannot decrypt — only the user's passkey can. */
+  wrappedUmkB64: string;
+  irkPubHex: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface WebauthnRecoveryStorage {
+  /** Insert or replace. Caller has already verified the IRK signature. */
+  upsert(rec: WebauthnRecoveryRecord): Promise<void>;
+  /** Public read by username; ciphertext-only so disclosure is safe. */
+  get(username: string): Promise<WebauthnRecoveryRecord | undefined>;
+  /** Delete by username (kill switch — also requires sig verification at handler). */
+  delete(username: string): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Auto-unlock leases
 // ──────────────────────────────────────────────────────────────────────
 
@@ -204,6 +227,7 @@ export interface Storage {
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
+  webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;

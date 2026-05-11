@@ -1,6 +1,8 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  WebauthnRecoveryRecord,
+  WebauthnRecoveryStorage,
   EntitlementRevocationListRecord,
   EntitlementRevocationStorage,
   AuthCodeRecord,
@@ -383,6 +385,21 @@ export class InMemoryAutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
   }
 }
 
+export class InMemoryWebauthnRecoveryStorage implements WebauthnRecoveryStorage {
+  private rows = new Map<string, WebauthnRecoveryRecord>();
+  private k(u: string): string { return u.toLowerCase(); }
+  async upsert(rec: WebauthnRecoveryRecord): Promise<void> {
+    this.rows.set(this.k(rec.username), { ...rec });
+  }
+  async get(username: string): Promise<WebauthnRecoveryRecord | undefined> {
+    const r = this.rows.get(this.k(username));
+    return r ? { ...r } : undefined;
+  }
+  async delete(username: string): Promise<boolean> {
+    return this.rows.delete(this.k(username));
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -392,6 +409,7 @@ export class InMemoryStorage implements Storage {
   installEvents = new InMemoryInstallEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
+  webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   marketplace = new InMemoryMarketplaceStorage();
   pushTokens = new InMemoryPushTokenStorage();
   llmPromo = new InMemoryLlmPromoStorage();

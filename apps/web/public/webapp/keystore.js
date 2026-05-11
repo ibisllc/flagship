@@ -130,7 +130,7 @@ async function unwrapUmk(passphrase, blob) {
 
 /* ---------- HKDF + Ed25519 derivations (mirror @flagship/protocol) ---------- */
 
-async function hkdf32(ikm, info) {
+export async function hkdf32(ikm, info) {
   const baseKey = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: new TextEncoder().encode(info) },
@@ -250,6 +250,23 @@ export async function bootstrapNewIdentity(passphrase) {
   const wrapped = await wrapUmk(passphrase, seed);
   await dbPut(RECORD_KEY, wrapped);
   return seed;
+}
+
+/**
+ * Persist a recovered UMK seed under a fresh local passphrase. Used by
+ * the cloud-recovery flow on a new browser: the WebAuthn-PRF unwrap
+ * gives us back the original 32-byte seed, and we wrap it again
+ * locally so subsequent unlocks can use the cheaper passphrase path
+ * (avoiding a passkey prompt every time the user opens the webapp).
+ */
+export async function bootstrapFromExistingSeed(passphrase, seed) {
+  if (await hasWrappedUmk()) throw new Error("device already has an identity");
+  if (!passphrase || passphrase.length < 8) throw new Error("passphrase must be 8+ chars");
+  if (!(seed instanceof Uint8Array) || seed.length !== 32) {
+    throw new Error("seed must be a 32-byte Uint8Array");
+  }
+  const wrapped = await wrapUmk(passphrase, seed);
+  await dbPut(RECORD_KEY, wrapped);
 }
 
 export async function unlockUmk(passphrase) {

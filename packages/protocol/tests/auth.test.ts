@@ -649,3 +649,56 @@ describe("AutoUnlockLease — IRK-signed unlock-key deposit / long-lived lease",
   });
 });
 
+describe("UploadRecoveryRecord — IRK-signed cloud-shard recovery upload", () => {
+  const irk = deriveIRK(umk);
+
+  it("round-trips sign/verify against the user's IRK", async () => {
+    const { signUploadRecoveryRecord, verifyUploadRecoveryRecord } = await import(
+      "../src/auth.js"
+    );
+    const r = {
+      username: "alice",
+      credentialIdHex: "deadbeef".repeat(8),
+      wrappedUmkHashHex: "ab".repeat(32),
+      issuedAt: 1_700_000_000_000,
+    };
+    const sig = signUploadRecoveryRecord(r, irk);
+    expect(verifyUploadRecoveryRecord(r, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("pins all four fields — tampering with any invalidates the signature", async () => {
+    const { signUploadRecoveryRecord, verifyUploadRecoveryRecord } = await import(
+      "../src/auth.js"
+    );
+    const r = {
+      username: "alice",
+      credentialIdHex: "1111".repeat(8),
+      wrappedUmkHashHex: "2222".repeat(8),
+      issuedAt: 100,
+    };
+    const sig = signUploadRecoveryRecord(r, irk);
+    expect(verifyUploadRecoveryRecord({ ...r, username: "bob" }, sig, irk.publicKey)).toBe(false);
+    expect(
+      verifyUploadRecoveryRecord({ ...r, credentialIdHex: "3333".repeat(8) }, sig, irk.publicKey),
+    ).toBe(false);
+    expect(
+      verifyUploadRecoveryRecord({ ...r, wrappedUmkHashHex: "4444".repeat(8) }, sig, irk.publicKey),
+    ).toBe(false);
+    expect(verifyUploadRecoveryRecord({ ...r, issuedAt: 200 }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects under a different IRK (cross-account)", async () => {
+    const { signUploadRecoveryRecord, verifyUploadRecoveryRecord } = await import(
+      "../src/auth.js"
+    );
+    const otherIrk = deriveIRK({ seed: new Uint8Array(32).fill(7) });
+    const r = {
+      username: "alice",
+      credentialIdHex: "11".repeat(16),
+      wrappedUmkHashHex: "22".repeat(32),
+      issuedAt: 1,
+    };
+    const sig = signUploadRecoveryRecord(r, irk);
+    expect(verifyUploadRecoveryRecord(r, sig, otherIrk.publicKey)).toBe(false);
+  });
+});
