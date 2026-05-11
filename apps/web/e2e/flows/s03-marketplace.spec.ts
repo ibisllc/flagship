@@ -16,6 +16,14 @@ test("S3 — install a marketplace listing via the webapp", async ({
   identity,
   podSim,
 }) => {
+  // runInstall() calls window.confirm(); stub it before page scripts run.
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis, "confirm", {
+      value: () => true,
+      writable: true,
+      configurable: true,
+    });
+  });
   await page.goto("/");
   await page.fill("#bootstrap-passphrase", PASSPHRASE);
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
@@ -65,12 +73,33 @@ test("S3 — install a marketplace listing via the webapp", async ({
     }),
   );
 
+  // installFromMarketplace fetches the per-listing endpoint to get
+  // the canonical manifestJson before signing. Stub it so the install
+  // POST can proceed.
+  // installFromMarketplace fetches the per-listing endpoint to get
+  // the canonical manifestJson before signing. Stub it.
+  await page.route("**/api/marketplace/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        creator: "vendorbob",
+        slug: "habit-tracker",
+        manifestJson: JSON.stringify({
+          name: "Habit Tracker",
+          version: "1.0.0",
+          slug: "habit-tracker",
+          creator: "vendorbob",
+        }),
+      }),
+    }),
+  );
+
   await page.click("#open-marketplace");
   await expect(page.locator("#view-marketplace")).toBeVisible();
   await expect(page.locator("text=Habit Tracker")).toBeVisible({ timeout: 5_000 });
 
-  // Click Install. The webapp signs an install-app envelope with
-  // the IRK and POSTs /api/apps on the pod.
+  // confirm() is already stubbed via addInitScript at the top.
   await page.click('button[data-action="install"]');
 
   await expect.poll(() => podSim.orders.filterByType("install-app").length, {

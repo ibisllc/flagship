@@ -24,7 +24,11 @@ import { toast } from "../lib/toast.js";
 
 registerView("view-recovery");
 
-const WRAPPED_UMK_KEY = "flagship.wrappedUmk";
+// Must match keystore.js's RECORD_KEY exactly — both sides write/read
+// the same IndexedDB row, so a typo here was silently breaking export
+// and import (toast would say "no wrapped UMK on this device yet" even
+// right after a successful bootstrap).
+const WRAPPED_UMK_KEY = "wrappedUmk";
 
 async function exportWrapped() {
   // The keystore module stores the wrapped UMK in IndexedDB. We fetch
@@ -33,8 +37,8 @@ async function exportWrapped() {
   // stable enough that direct access works for export/import.
   try {
     const db = await openDb();
-    const tx = db.transaction("kv", "readonly");
-    const store = tx.objectStore("kv");
+    const tx = db.transaction("keystore", "readonly");
+    const store = tx.objectStore("keystore");
     const wrapped = await reqToPromise(store.get(WRAPPED_UMK_KEY));
     if (!wrapped) return toast("no wrapped UMK on this device yet", "err");
     const json = JSON.stringify(wrapped, (_, v) => {
@@ -72,8 +76,8 @@ async function importWrapped(file) {
       return v;
     });
     const db = await openDb();
-    const tx = db.transaction("kv", "readwrite");
-    tx.objectStore("kv").put(parsed, WRAPPED_UMK_KEY);
+    const tx = db.transaction("keystore", "readwrite");
+    tx.objectStore("keystore").put(parsed, WRAPPED_UMK_KEY);
     await txDone(tx);
     toast("imported — refresh, then unlock with your passphrase");
   } catch (e) {
@@ -82,11 +86,14 @@ async function importWrapped(file) {
 }
 
 function openDb() {
+  // Must match keystore.js's DB_NAME exactly. Bootstrap writes the
+  // wrapped UMK into "flagship-webapp", so export/import has to open
+  // the same database.
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open("flagship", 1);
+    const r = indexedDB.open("flagship-webapp", 1);
     r.onupgradeneeded = () => {
       const db = r.result;
-      if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
+      if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
     };
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);

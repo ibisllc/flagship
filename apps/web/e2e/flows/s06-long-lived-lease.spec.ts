@@ -126,6 +126,16 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
     }),
   );
 
+  // The home view's renderServers() early-returns when no
+  // flagship.sessionId is in localStorage (the webapp's apex-device-
+  // pair flow is what normally sets it, separate from pod-pair).
+  // Seed it so scheduleRenewals → /api/me/servers → /unlock-key/leases
+  // actually fires under the rig.
+  await page.evaluate(() => {
+    ((globalThis as unknown) as { localStorage: { setItem(k: string, v: string): void } })
+      .localStorage.setItem("flagship.sessionId", "e2e-session-id");
+  });
+
   // Reload home to trigger renderHome → scheduleRenewals → tickRenewals.
   await page.reload();
   await page.fill("#unlock-passphrase", PASSPHRASE);

@@ -29,6 +29,13 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     ignoreHTTPSErrors: true,
+    // SWs intercept /api/* via event.respondWith(fetch(event.request)),
+    // and Playwright's page.route() does NOT see SW-originated network
+    // calls. So tests that rely on page.route to stub apex /api/*
+    // endpoints (S3 marketplace, S5/S6 lease, S8 recovery, etc.) need
+    // the SW disabled. The lone exception is S13 which exercises the
+    // SW's REPLAY_PATH_PATTERNS — it overrides via test.use().
+    serviceWorkers: "block",
   },
   projects: [
     {

@@ -10,6 +10,11 @@
 
 import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
+// S13 is the one suite that tests the service worker; the project
+// default blocks SWs (so page.route can intercept /api/* in other
+// flows). Re-enable for this scenario only.
+test.use({ serviceWorkers: "allow" });
+
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
 test("S13 — orders/send queued while offline + SW carries the replay patterns", async ({

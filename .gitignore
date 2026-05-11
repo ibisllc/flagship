@@ -37,3 +37,4 @@ test-vectors/fixture.json
 # Playwright e2e artifacts
 apps/web/e2e/test-results/
 apps/web/e2e/playwright-report/
+test-results/

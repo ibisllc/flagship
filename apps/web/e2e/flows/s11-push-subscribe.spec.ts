@@ -10,6 +10,11 @@
 
 import { test, expect } from "../fixtures/pod-sim.js";
 
+// PushManager.subscribe requires a SW registration; project default
+// blocks SWs so other tests get clean page.route interception. S11
+// re-enables for this scenario.
+test.use({ serviceWorkers: "allow" });
+
 const PASSPHRASE = "correct-horse-battery-staple-test";
 const FAKE_VAPID = "BP_test_only_uncompressed_p256_pubkey_b64url";
 
@@ -23,28 +28,31 @@ test("S11 — enable browser notifications + register webpush token", async ({
   // the OS prompt — we assert the wire side).
   await context.grantPermissions(["notifications"]);
 
-  // Bootstrap + claim a username (push register requires username).
+  // unlockSession() reads flagship.username from localStorage at
+  // unlock time, so we have to seed it BEFORE bootstrap runs.
+  // Use addInitScript so it's in place on the very first page script.
+  await page.addInitScript((u) => {
+    ((globalThis as unknown) as { localStorage: { setItem(k: string, v: string): void } })
+      .localStorage.setItem("flagship.username", u);
+  }, identity.username);
+
+  // Bootstrap.
   await page.goto("/");
   await page.fill("#bootstrap-passphrase", PASSPHRASE);
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
   await page.click("#bootstrap-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
 
-  // Pre-seed a username in localStorage so the push register doesn't
-  // prompt mid-test (the prompt() dialog is brittle in Playwright).
-  await page.evaluate((u) => {
-    ((globalThis as unknown) as { localStorage: { setItem(k: string, v: string): void } })
-      .localStorage.setItem("flagship.username", u);
-  }, identity.username);
-
   // Intercept .com endpoints. Pretend webpush is configured.
-  await page.route("**/api/push/vapid-public-key", (route) =>
-    route.fulfill({
+  let fetchedVapid = false;
+  await page.route("**/api/push/vapid-public-key", (route) => {
+    fetchedVapid = true;
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ key: FAKE_VAPID }),
-    }),
-  );
+    });
+  });
   let registerBody: string | null = null;
   await page.route("**/api/push/register", async (route, request) => {
     if (request.method() === "POST") {
@@ -58,26 +66,34 @@ test("S11 — enable browser notifications + register webpush token", async ({
     return route.continue();
   });
 
-  // Open settings → click Enable.
+  // Open settings.
   await page.click("#open-settings");
   await expect(page.locator("#view-settings")).toBeVisible();
-  await page.click("#push-enable");
 
-  // Assert the webapp POSTed /api/push/register with platform=webpush.
-  // PushManager.subscribe in real Chromium needs a backing push
-  // service, which Playwright's headless Chromium doesn't have by
-  // default — we may see the click error out at the subscribe step.
-  // Either way, the VAPID key fetch fires first.
-  await expect.poll(() => registerBody != null || true, { timeout: 5_000 });
+  // Headless Chromium reports `PushManager` exists but `pushManager.subscribe`
+  // throws because there's no real push backing. The settings view's
+  // `refreshPushStatus()` may also disable the button if it can't read
+  // the SW registration. Drive the underlying flow directly to assert
+  // the wire intent: subscribeToWebPush() fetches VAPID then attempts
+  // pushManager.subscribe(); both attempts hit our route stubs.
+  const result = await page.evaluate(async () => {
+    try {
+      const pushMod = await import("/lib/push.js");
+      await pushMod.subscribeToWebPush();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, err: String((e as Error).message ?? e) };
+    }
+  });
+  void result;
 
-  // Sanity: the token id we'd persist on success.
-  const tokenId = await page.evaluate(
-    () => ((globalThis as unknown) as { localStorage: { getItem(k: string): string | null } })
-      .localStorage.getItem("flagship.pushTokenId"),
-  );
-  // Either tokenId is set (subscribe worked) OR null (browser had no
-  // push service backing). Both are valid in the headless rig; the
-  // wire-side assertion is what matters.
-  void tokenId;
-  expect(true).toBe(true); // Placeholder: scope-of-rig assertion captured above.
+  // The first thing subscribeToWebPush() does is fetch the VAPID key.
+  // That always fires regardless of whether the subsequent pushManager
+  // call succeeds — a stable wire-side assertion.
+  await expect.poll(() => fetchedVapid, { timeout: 5_000 }).toBe(true);
+
+  // If register also fired, the body should declare platform=webpush.
+  if (registerBody) {
+    expect(registerBody).toContain("webpush");
+  }
 });
