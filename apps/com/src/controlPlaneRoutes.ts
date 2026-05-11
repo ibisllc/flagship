@@ -84,6 +84,12 @@ export interface ControlPlaneEnv {
   APNS_TEAM_ID?: string;
   APNS_PRIVATE_KEY_PEM?: string;
   APNS_BUNDLE_ID?: string;
+  /** ES256 PKCS8 private key the Worker uses to sign VAPID JWTs. */
+  WEBPUSH_VAPID_PRIVATE_KEY_PEM?: string;
+  /** Uncompressed P-256 public key (65 bytes), base64url. Public — webapp fetches it. */
+  WEBPUSH_VAPID_PUBLIC_KEY_B64URL?: string;
+  /** Required `mailto:` for the VAPID `sub` claim (operator contact). */
+  WEBPUSH_CONTACT?: string;
   /** Default api.push.apple.com; set to api.sandbox.push.apple.com for dev. */
   APNS_HOST?: string;
 
@@ -128,6 +134,7 @@ const ROUTE_RE = {
   MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
+  PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
   PUSH_REVOKE: /^\/api\/push\/([^/]+)$/,
   LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
@@ -578,6 +585,21 @@ export async function tryControlPlane(
   }
 
   // ── Push notifications ──────────────────────────────────────
+  if (method === "GET" && ROUTE_RE.PUSH_VAPID_KEY.test(path)) {
+    // Public endpoint — webapp fetches this to subscribe via the
+    // PushManager. Key rotation is just a wrangler-secret swap; the
+    // webapp re-fetches every time settings opens.
+    if (!env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL) {
+      return finishPlain({
+        status: 503,
+        body: { error: "web push not configured on this deployment" },
+      });
+    }
+    return finishPlain({
+      status: 200,
+      body: { key: env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL },
+    });
+  }
   if (method === "POST" && ROUTE_RE.PUSH_REGISTER.test(path)) {
     return finish(
       await handlePushRegister(
@@ -679,7 +701,11 @@ function buildOptionalPushForwarder(env: ControlPlaneEnv) {
     !!env.APNS_PRIVATE_KEY_PEM &&
     !!env.APNS_BUNDLE_ID;
   const fcmConfigured = !!env.FCM_SERVICE_ACCOUNT_JSON && !!env.FCM_PROJECT_ID;
-  if (!apnsConfigured && !fcmConfigured) return null;
+  const webpushConfigured =
+    !!env.WEBPUSH_VAPID_PRIVATE_KEY_PEM &&
+    !!env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL &&
+    !!env.WEBPUSH_CONTACT;
+  if (!apnsConfigured && !fcmConfigured && !webpushConfigured) return null;
   return buildPushForwarder({
     ...(apnsConfigured
       ? {
@@ -697,6 +723,15 @@ function buildOptionalPushForwarder(env: ControlPlaneEnv) {
           fcm: {
             serviceAccountJson: env.FCM_SERVICE_ACCOUNT_JSON!,
             projectId: env.FCM_PROJECT_ID!,
+          },
+        }
+      : {}),
+    ...(webpushConfigured
+      ? {
+          webpush: {
+            vapidPrivateKeyPem: env.WEBPUSH_VAPID_PRIVATE_KEY_PEM!,
+            vapidPublicKeyB64Url: env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL!,
+            contact: env.WEBPUSH_CONTACT!,
           },
         }
       : {}),

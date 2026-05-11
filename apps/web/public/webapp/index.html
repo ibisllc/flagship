@@ -371,6 +371,16 @@
           </p>
         </div>
 
+        <h2 style="margin-top: 1.5rem;">Browser notifications</h2>
+        <div class="card">
+          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+            Get a notification when one of your servers is asking to boot. Web Push uses your browser's native push channel — flagshipserver.com sends the wakeup, the notification body is generic ("a server is asking to boot"), and the webapp shows you which one.
+          </p>
+          <div class="row"><span class="label">Status</span><span class="pill" id="push-status">checking…</span></div>
+          <button id="push-enable" style="margin-top: 0.5rem; width: 100%;">Enable browser notifications</button>
+          <button class="secondary" id="push-disable" style="margin-top: 0.4rem; width: 100%; display: none;">Disable</button>
+        </div>
+
         <h2 style="margin-top: 1.5rem;">Danger zone</h2>
         <div class="card">
           <button class="secondary" id="settings-reset" style="width: 100%;">Reset device</button>

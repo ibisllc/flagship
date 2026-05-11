@@ -408,6 +408,49 @@ describe(".com control-plane routes (Worker + D1)", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("/api/push/vapid-public-key returns 503 when WEBPUSH_VAPID_PUBLIC_KEY_B64URL isn't set", async () => {
+    const env = makeEnv({
+      DB: {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => null,
+            all: async () => ({ results: [], success: true, meta: {} }),
+            run: async () => ({ success: true, meta: {} }),
+          }),
+        }),
+        batch: async () => [],
+      } as unknown as import("@flagship/storage").D1Database,
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/push/vapid-public-key"),
+      env,
+    );
+    expect(r.status).toBe(503);
+  });
+
+  it("/api/push/vapid-public-key returns the configured key when set", async () => {
+    const env = makeEnv({
+      DB: {
+        prepare: () => ({
+          bind: () => ({
+            first: async () => null,
+            all: async () => ({ results: [], success: true, meta: {} }),
+            run: async () => ({ success: true, meta: {} }),
+          }),
+        }),
+        batch: async () => [],
+      } as unknown as import("@flagship/storage").D1Database,
+      WEBPUSH_VAPID_PUBLIC_KEY_B64URL: "BFD2WVWGSb2i6UH1DCbDmrVVB_UpYxQSdg_qfybBtoslDy",
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/api/push/vapid-public-key"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    const body = JSON.parse(await r.text());
+    expect(body.key).toBe("BFD2WVWGSb2i6UH1DCbDmrVVB_UpYxQSdg_qfybBtoslDy");
+  });
+
   it("/api/ca/cert returns the dev CA pubkey when bound to D1 + no FLAGSHIP_CA_PRIV_HEX", async () => {
     const env = makeEnv({
       DB: {

@@ -202,3 +202,118 @@ describe("buildPushForwarder — APNs", () => {
     expect(calls[0]!.headers["authorization"]).not.toBe(calls[1]!.headers["authorization"]);
   });
 });
+
+describe("buildPushForwarder — Web Push (RFC 8030 + VAPID)", () => {
+  // Reuse the APNS_TEST_KEY — both APNs and VAPID use ES256/P-256, the
+  // PKCS8 shape is identical. (The real production VAPID key is a
+  // separate Worker secret; tests just need a valid ES256 PKCS8.)
+  const VAPID_PRIV = APNS_TEST_KEY;
+  const VAPID_PUB =
+    "BNQ_uncompressed_p256_pubkey_base64url_doesnt_matter_for_outgoing_test";
+  const cfg = {
+    webpush: {
+      vapidPrivateKeyPem: VAPID_PRIV,
+      vapidPublicKeyB64Url: VAPID_PUB,
+      contact: "mailto:harry@flagship.services",
+    },
+  };
+
+  function subscription(endpoint: string) {
+    return JSON.stringify({
+      endpoint,
+      keys: { p256dh: "keyhex", auth: "authhex" },
+    });
+  }
+
+  it("POSTs to the subscription endpoint with VAPID JWT + public key in Authorization", async () => {
+    const { f, calls } = fakeFetch([{ status: 201, body: "" }]);
+    const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1_700_000_000_000 });
+    const r = await forward({
+      targets: [{
+        tokenId: "tok-web",
+        platform: "webpush",
+        providerToken: subscription("https://fcm.googleapis.com/wp/abc123"),
+      }],
+      category: "unlock-request",
+      sealedPayloadHex: "deadbeef",
+    });
+    expect(r.ok).toBe(true);
+    expect(r.sent).toBe(1);
+    expect(calls[0]!.url).toBe("https://fcm.googleapis.com/wp/abc123");
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.headers["authorization"]).toMatch(/^vapid t=ey[A-Za-z0-9_-]+\.ey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+, k=BNQ/);
+    expect(calls[0]!.headers["ttl"]).toBe(String(60 * 60));
+    // Empty-payload push: no body.
+    expect(calls[0]!.body).toBe("");
+    expect(calls[0]!.headers["content-length"]).toBe("0");
+  });
+
+  it("VAPID JWT audience is the endpoint origin (RFC 8292)", async () => {
+    const { f, calls } = fakeFetch([{ status: 201, body: "" }]);
+    const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1_700_000_000_000 });
+    await forward({
+      targets: [{
+        tokenId: "t",
+        platform: "webpush",
+        providerToken: subscription("https://updates.push.services.mozilla.com/wpush/v2/abc"),
+      }],
+      category: "x",
+      sealedPayloadHex: "",
+    });
+    const auth = calls[0]!.headers["authorization"]!;
+    const jwt = auth.match(/t=([^,]+)/)![1]!;
+    const payload = JSON.parse(
+      Buffer.from(jwt.split(".")[1]!, "base64").toString("utf8"),
+    );
+    expect(payload.aud).toBe("https://updates.push.services.mozilla.com");
+    expect(payload.sub).toBe("mailto:harry@flagship.services");
+    expect(typeof payload.exp).toBe("number");
+  });
+
+  it("treats 410 Gone as a prune-the-token failure (counts as failed)", async () => {
+    const { f } = fakeFetch([{ status: 410, body: "" }]);
+    const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1 });
+    const r = await forward({
+      targets: [{
+        tokenId: "t",
+        platform: "webpush",
+        providerToken: subscription("https://x/y"),
+      }],
+      category: "x",
+      sealedPayloadHex: "",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.failed).toBe(1);
+  });
+
+  it("treats malformed providerToken (bad JSON / missing endpoint) as failed", async () => {
+    const { f } = fakeFetch([]);
+    const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1 });
+    const r = await forward({
+      targets: [
+        { tokenId: "a", platform: "webpush", providerToken: "not-json" },
+        { tokenId: "b", platform: "webpush", providerToken: '{"keys":{}}' }, // no endpoint
+      ],
+      category: "x",
+      sealedPayloadHex: "",
+    });
+    expect(r.failed).toBe(2);
+    expect(r.sent).toBe(0);
+  });
+
+  it("counts as failed when webpush isn't configured (cfg.webpush undefined)", async () => {
+    const { f } = fakeFetch([]);
+    const forward = buildPushForwarder({ fetchImpl: f, now: () => 1 });
+    const r = await forward({
+      targets: [{
+        tokenId: "t",
+        platform: "webpush",
+        providerToken: subscription("https://x/y"),
+      }],
+      category: "x",
+      sealedPayloadHex: "",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.failed).toBe(1);
+  });
+});

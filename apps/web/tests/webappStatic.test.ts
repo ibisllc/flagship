@@ -309,6 +309,47 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("stopRenewals");
   });
 
+  it("/webapp/lib/push.js exposes the Web Push subscription surface", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/push.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("export async function subscribeToWebPush");
+    expect(r.body).toContain("export async function unsubscribeFromWebPush");
+    expect(r.body).toContain("export async function fetchVapidPublicKey");
+    expect(r.body).toContain("export function webPushSupported");
+    // platform=webpush dispatched on the same /api/push/register
+    // endpoint the iOS/Android paths use (apns/fcm). Pinned to the
+    // protocol-side canonical-bytes tag.
+    expect(r.body).toContain('platform: "webpush"');
+    expect(r.body).toContain("flagship/push-token-register/v1");
+    expect(r.body).toContain("/api/push/register");
+    expect(r.body).toContain("/api/push/vapid-public-key");
+    // userVisibleOnly is required by the spec for push subscriptions.
+    expect(r.body).toContain("userVisibleOnly: true");
+  });
+
+  it("/webapp/service-worker.js handles 'push' + 'notificationclick' events", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/service-worker.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain('addEventListener("push"');
+    expect(r.body).toContain('addEventListener("notificationclick"');
+    expect(r.body).toContain("showNotification");
+    // SHELL gained /lib/push.js with the v9 bump.
+    expect(r.body).toContain('"/lib/push.js"');
+    expect(r.body).toContain('SHELL_VERSION = "v9"');
+  });
+
+  it("/webapp/views/settings.js wires the browser-notifications toggle", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/settings.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("subscribeToWebPush");
+    expect(r.body).toContain("unsubscribeFromWebPush");
+    expect(r.body).toContain("push-enable");
+    expect(r.body).toContain("push-disable");
+  });
+
   it("never accidentally serves /webapp resources from the root scope", async () => {
     const app = buildServer();
     // Confirm the marketing root is NOT a manifest

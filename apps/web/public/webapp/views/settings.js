@@ -1,4 +1,10 @@
 import { bytesToHex, signWithIrk } from "../keystore.js";
+import {
+  notificationPermission,
+  subscribeToWebPush,
+  unsubscribeFromWebPush,
+  webPushSupported,
+} from "../lib/push.js";
 import { $, registerView, show } from "../lib/router.js";
 import { getSession, ensureUsername } from "../lib/state.js";
 import { escapeHtml, sha256Bytes } from "../lib/util.js";
@@ -21,7 +27,10 @@ function isPromoEntry(e) {
   return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
+export { refreshPushStatus };
+
 export async function renderProviders() {
+  void refreshPushStatus();
   const session = getSession();
   const list = $("providers-list");
   list.innerHTML = "";
@@ -233,12 +242,85 @@ async function handleSaveProvider() {
   toast("provider saved");
 }
 
+async function refreshPushStatus() {
+  const pill = $("push-status");
+  const enableBtn = $("push-enable");
+  const disableBtn = $("push-disable");
+  if (!pill || !enableBtn || !disableBtn) return;
+  if (!webPushSupported()) {
+    pill.textContent = "unsupported";
+    enableBtn.disabled = true;
+    disableBtn.style.display = "none";
+    return;
+  }
+  const perm = notificationPermission();
+  let active = false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    active = !!sub && perm === "granted";
+  } catch {
+    active = false;
+  }
+  pill.textContent = active ? "on" : perm === "denied" ? "blocked" : "off";
+  enableBtn.style.display = active ? "none" : "";
+  disableBtn.style.display = active ? "" : "none";
+  enableBtn.disabled = perm === "denied";
+}
+
+async function runEnablePush() {
+  const btn = $("push-enable");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Requesting…";
+  }
+  try {
+    await ensureUsername();
+    await subscribeToWebPush();
+    toast("notifications enabled", "ok");
+  } catch (e) {
+    toast(`enable failed: ${e.message ?? e}`, "err");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Enable browser notifications";
+    }
+    void refreshPushStatus();
+  }
+}
+
+async function runDisablePush() {
+  const btn = $("push-disable");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Disabling…";
+  }
+  try {
+    await unsubscribeFromWebPush();
+    toast("notifications disabled", "ok");
+  } catch (e) {
+    toast(`disable failed: ${e.message ?? e}`, "err");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Disable";
+    }
+    void refreshPushStatus();
+  }
+}
+
 export function initSettingsView() {
   $("settings-back")?.addEventListener("click", async () => {
     show("view-home");
     await renderActiveProviderChip();
   });
   $("settings-reset")?.addEventListener("click", handleReset);
+  $("push-enable")?.addEventListener("click", runEnablePush);
+  $("push-disable")?.addEventListener("click", runDisablePush);
+  // Refresh once on init; repeated renders are kicked from the
+  // chip-settings click handler in home.js (it dispatches into
+  // renderProviders, which we extend below).
+  void refreshPushStatus();
   $("add-provider-go")?.addEventListener("click", handleAddProvider);
   $("np-save")?.addEventListener("click", handleSaveProvider);
   $("np-cancel")?.addEventListener("click", () =>

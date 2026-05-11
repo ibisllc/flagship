@@ -9,7 +9,9 @@
 //       documentation-only since old SWs were on a different origin).
 //   v7: added lib/leases.js for the auto-unlock lease flow.
 //   v8: added lib/recovery.js for WebAuthn-PRF cloud-shard recovery.
-const SHELL_VERSION = "v8";
+//   v9: added lib/push.js + Web Push event handler for unlock-approval
+//       notifications.
+const SHELL_VERSION = "v9";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 const SHELL = [
   "/",
@@ -30,6 +32,7 @@ const SHELL = [
   "/lib/installApp.js",
   "/lib/leases.js",
   "/lib/recovery.js",
+  "/lib/push.js",
   "/views/bootstrap.js",
   "/views/unlock.js",
   "/views/home.js",
@@ -148,6 +151,47 @@ async function fetchOrQueue(request) {
 
 self.addEventListener("online", () => {
   void replayQueue();
+});
+
+// ---------- Web Push: unlock-approval notifications -------------------
+//
+// Empty-payload pushes for v1: we don't know which server is asking
+// from the wire bytes, so the notification is generic and the user
+// opens the webapp to see the pending request. RFC 8291 encrypted
+// payloads can land later without rebuilding registration.
+//
+// `notificationclick` focuses an existing webapp tab if one is open,
+// otherwise opens the root (the SPA routes the user to the
+// unlock-approvals view from there).
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    self.registration.showNotification("Flagship", {
+      body: "A server is asking to boot — tap to review.",
+      tag: "flagship-unlock-request",
+      renotify: true,
+      requireInteraction: false,
+      icon: "/icon.svg",
+      data: { kind: "unlock-request" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      const same = all.find((c) => new URL(c.url).origin === self.location.origin);
+      if (same) {
+        await same.focus();
+        return;
+      }
+      await self.clients.openWindow("/");
+    })(),
+  );
 });
 
 async function replayQueue() {

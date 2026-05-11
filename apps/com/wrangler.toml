@@ -95,3 +95,17 @@ CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
 # Cloudflare Worker → Fly app shared secret. Set with:
 #   wrangler secret put SERVICES_HMAC_KEY
 # (NOT in this file — secrets live in CF dashboard.)
+
+# Web Push (RFC 8030 + VAPID per RFC 8292) for the webapp.
+# Mint a VAPID key pair once via `npx tsx scripts/generate-vapid.ts`,
+# then load:
+#   wrangler secret put WEBPUSH_VAPID_PRIVATE_KEY_PEM     # PKCS8 ES256
+#   wrangler secret put WEBPUSH_VAPID_PUBLIC_KEY_B64URL   # uncompressed P-256
+#   wrangler secret put WEBPUSH_CONTACT                    # mailto:harry@flagship.services
+# The public key is exposed at /api/push/vapid-public-key for the
+# webapp's PushManager.subscribe() call.
+#
+# iOS uses APNs (APNS_* secrets above); Android uses FCM (FCM_*).
+# All three platforms hit the same /api/push/register endpoint, so
+# the webapp registration path doesn't need a separate "is webapp"
+# branch on .com — `platform=webpush` does the dispatch.
