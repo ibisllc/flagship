@@ -629,6 +629,73 @@ describe("web.flagshipserver.com — webapp origin (host rewrite)", () => {
   });
 });
 
+describe("CORS — cross-origin webapp → apex /api/* calls", () => {
+  it("answers OPTIONS preflight from web. with the right ACL headers", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/recovery", {
+        method: "OPTIONS",
+        headers: { origin: "https://web.flagshipserver.com" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(204);
+    expect(r.headers.get("access-control-allow-origin")).toBe(
+      "https://web.flagshipserver.com",
+    );
+    expect(r.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(r.headers.get("access-control-allow-methods")).toContain("DELETE");
+    expect(r.headers.get("access-control-allow-headers")).toContain("content-type");
+  });
+
+  it("attaches access-control-allow-origin to /api/* responses for allow-listed origin", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/health", {
+        headers: { origin: "https://web.flagshipserver.com" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("access-control-allow-origin")).toBe(
+      "https://web.flagshipserver.com",
+    );
+    expect(r.headers.get("vary")).toMatch(/origin/i);
+  });
+
+  it("does NOT attach CORS headers for an unlisted origin (defense in depth)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/health", {
+        headers: { origin: "https://evil.example.com" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("does NOT touch non-/api responses (marketing site stays plain)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/", {
+        headers: { origin: "https://web.flagshipserver.com" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("preflight refuses to echo an unlisted origin (returns 204 with no ACL-Origin)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/recovery", {
+        method: "OPTIONS",
+        headers: { origin: "https://evil.example.com" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(204);
+    expect(r.headers.get("access-control-allow-origin")).toBeNull();
+  });
+});
+
 describe("/api/build/iso-info", () => {
   it("returns the default placeholder when no env override is set", async () => {
     const r = await route(

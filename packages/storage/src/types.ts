@@ -164,6 +164,37 @@ export interface LuksKeyStorage {
   consumeUnlock(serverDomain: string, now: number): Promise<UnlockKeyDeposit | undefined>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Auto-unlock leases
+// ──────────────────────────────────────────────────────────────────────
+
+/** Persisted shape mirrors the IRK-signed AutoUnlockLease envelope. */
+export interface AutoUnlockLeaseRecord {
+  serverDomain: string;
+  leaseId: string;
+  unlockKeyHex: string;
+  multiUse: boolean;
+  depositedAt: number;
+  expiresAt: number;
+}
+
+export interface AutoUnlockLeaseStorage {
+  /** Insert or replace a lease (keyed by serverDomain + leaseId). */
+  put(rec: AutoUnlockLeaseRecord): Promise<void>;
+  /**
+   * Boot stage's /consume path. Returns the most-recently-deposited
+   * non-expired lease for the server, deleting it iff it's one-shot
+   * (multiUse=false). Multi-use leases are returned without delete
+   * so subsequent boots reuse them until expiry. Expired rows are
+   * cleaned up opportunistically when seen.
+   */
+  consume(serverDomain: string, now: number): Promise<AutoUnlockLeaseRecord | undefined>;
+  /** Per-device kill switch. Returns true iff a row was actually deleted. */
+  revoke(serverDomain: string, leaseId: string): Promise<boolean>;
+  /** Snapshot of active (non-expired) leases for a server (UI listing). */
+  list(serverDomain: string, now: number): Promise<AutoUnlockLeaseRecord[]>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -172,6 +203,7 @@ export interface Storage {
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
+  autoUnlockLeases: AutoUnlockLeaseStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;

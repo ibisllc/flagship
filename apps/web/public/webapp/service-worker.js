@@ -3,11 +3,12 @@
 // (instant launch even on lossy networks); network-first for /api/* so dynamic
 // state never staleness-bites the user.
 
-// SHELL_VERSION bumped to v6 for the web.flagshipserver.com migration —
-// any old service worker registered under the /webapp/ scope on the
-// apex is unreachable from the new origin (different scope), so this
-// bump is more documentation than functional.
-const SHELL_VERSION = "v6";
+// SHELL_VERSION bumped each time the SHELL list changes so existing
+// installs invalidate their cache.
+//   v6: web.flagshipserver.com migration (origin change made the bump
+//       documentation-only since old SWs were on a different origin).
+//   v7: added lib/leases.js for the auto-unlock lease flow.
+const SHELL_VERSION = "v7";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 const SHELL = [
   "/",
@@ -26,6 +27,7 @@ const SHELL = [
   "/lib/api.js",
   "/lib/podPair.js",
   "/lib/installApp.js",
+  "/lib/leases.js",
   "/views/bootstrap.js",
   "/views/unlock.js",
   "/views/home.js",

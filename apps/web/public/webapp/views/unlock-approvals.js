@@ -1,17 +1,13 @@
 // P2.6 — Unlock approvals view.
 //
-// Status (2026-05-09): the IRK-signed boot-approval claim needed by
-// P1.9 ("body: IRK-signed unlock-key envelope") is not yet specified
-// in @flagship/protocol. Until it is, this view lists pending
-// unlock requests fetched via P1.8 — useful for visibility and to
-// prove the proxy chain — and surfaces the approve button as a
-// placeholder that emits a clear "pending backend wiring" message.
-//
-// When the IRK-signed envelope shape lands, replace runApprove() with
-// the real signing flow.
+// Approve = sign + post a one-shot AutoUnlockLease (10-minute expiry,
+// multiUse=false). The webapp signs the lease envelope locally with
+// its IRK — peer device, no phone hop required. See
+// auto_unlock_lease_design.md for the unified lease model.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
+import { approveOneShot } from "../lib/leases.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 
@@ -45,11 +41,18 @@ export async function renderUnlockApprovals() {
           ${p.ip ? `· from ${escapeHtml(p.ip)}` : ""}
         </div>
         ${p.userAgent ? `<div style="color:var(--fg-mute); font-size:0.78rem;">${escapeHtml(p.userAgent)}</div>` : ""}
-        <button data-action="approve" data-request-id="${escapeHtml(p.requestId)}" style="margin-top:0.5rem; width:100%;">Approve</button>
+        <button data-action="approve"
+                data-server-fqdn="${escapeHtml(p.serverFqdn)}"
+                data-request-id="${escapeHtml(p.requestId)}"
+                style="margin-top:0.5rem; width:100%;">Approve</button>
       </div>
     `).join("");
     root.querySelectorAll('[data-action="approve"]').forEach((b) => {
-      b.addEventListener("click", () => runApprove(b.getAttribute("data-request-id")));
+      b.addEventListener("click", () => runApprove(
+        b.getAttribute("data-server-fqdn"),
+        b.getAttribute("data-request-id"),
+        b,
+      ));
     });
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -60,14 +63,30 @@ export async function renderUnlockApprovals() {
   }
 }
 
-async function runApprove(requestId) {
-  // Until the IRK-signed boot-approval envelope is speced + wired in
-  // @flagship/protocol, surface a clear "pending backend" message
-  // rather than POST a malformed envelope to .com.
-  toast(
-    `approve flow pending backend wiring (request ${requestId.slice(0, 8)}…)`,
-    "err",
-  );
+async function runApprove(serverFqdn, requestId, btn) {
+  if (!serverFqdn) {
+    toast("missing server fqdn on approve button", "err");
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Approving…";
+  }
+  try {
+    const r = await approveOneShot(serverFqdn);
+    toast(
+      `lease deposited (${r.leaseId.slice(0, 8)}…); server can boot for the next 10 min`,
+      "ok",
+    );
+    // Refresh so the now-satisfied request drops off the list.
+    void renderUnlockApprovals();
+  } catch (e) {
+    toast(`approve failed: ${e.message ?? e}`, "err");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Approve";
+    }
+  }
 }
 
 function schedulePoll() {

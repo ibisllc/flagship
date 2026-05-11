@@ -23,7 +23,10 @@ import {
   handleCaCert,
   handleCleanupApex,
   handleConsumeUnlockKey,
+  handleDepositAutoUnlockLease,
   handleDepositUnlockKey,
+  handleListAutoUnlockLeases,
+  handleRevokeAutoUnlockLease,
   handleDns01Delete,
   handleDns01Publish,
   handleGetInstallEvents,
@@ -111,6 +114,9 @@ const ROUTE_RE = {
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
   LUKS_UNLOCK_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key$/,
   LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
+  LUKS_LEASE_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease$/,
+  LUKS_LEASE_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease\/([^/]+)$/,
+  LUKS_LEASE_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
@@ -351,9 +357,56 @@ export async function tryControlPlane(
           servers: storage.servers,
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
+          autoUnlockLeases: storage.autoUnlockLeases,
         },
         host,
         await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_LEASE_DEPOSIT))) {
+    const host = decodeURIComponent(m[1]!);
+    return finishPlain(
+      await handleDepositAutoUnlockLease(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+          autoUnlockLeases: storage.autoUnlockLeases,
+        },
+        host,
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "DELETE" && (m = path.match(ROUTE_RE.LUKS_LEASE_REVOKE))) {
+    const host = decodeURIComponent(m[1]!);
+    const leaseId = decodeURIComponent(m[2]!);
+    return finishPlain(
+      await handleRevokeAutoUnlockLease(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+          autoUnlockLeases: storage.autoUnlockLeases,
+        },
+        host,
+        leaseId,
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.LUKS_LEASE_LIST))) {
+    const host = decodeURIComponent(m[1]!);
+    return finishPlain(
+      await handleListAutoUnlockLeases(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+          autoUnlockLeases: storage.autoUnlockLeases,
+        },
+        host,
       ),
     );
   }

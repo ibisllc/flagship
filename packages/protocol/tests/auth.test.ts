@@ -549,3 +549,103 @@ describe("PhoneOrder browser-input-response — PSK-signed input from phone", ()
     expect(verifyPhoneOrder(order, sig, otherPsk.publicKey)).toBe(false);
   });
 });
+
+describe("AutoUnlockLease — IRK-signed unlock-key deposit / long-lived lease", () => {
+  const irk = deriveIRK(umk);
+
+  it("round-trips sign/verify for a one-shot lease (multiUse=false)", async () => {
+    const { signAutoUnlockLease, verifyAutoUnlockLease } = await import("../src/auth.js");
+    const lease = {
+      serverId: "home.alice.flagship.services",
+      leaseId: "0123456789abcdef",
+      expiresAt: 1_700_000_600_000,
+      unlockKey: new Uint8Array(64).fill(0xa5),
+      multiUse: false,
+      issuedAt: 1_700_000_000_000,
+    };
+    const sig = signAutoUnlockLease(lease, irk);
+    expect(verifyAutoUnlockLease(lease, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("round-trips sign/verify for a long-lived lease (multiUse=true)", async () => {
+    const { signAutoUnlockLease, verifyAutoUnlockLease } = await import("../src/auth.js");
+    const lease = {
+      serverId: "home.alice.flagship.services",
+      leaseId: "feedfacecafebeef",
+      expiresAt: 1_700_604_800_000,
+      unlockKey: new Uint8Array(64).fill(0x5a),
+      multiUse: true,
+      issuedAt: 1_700_000_000_000,
+    };
+    const sig = signAutoUnlockLease(lease, irk);
+    expect(verifyAutoUnlockLease(lease, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("multiUse is part of canonical-bytes — flipping it invalidates the signature", async () => {
+    // This is the most important assertion: a one-shot lease can NOT be
+    // upgraded to multi-use by anyone other than the IRK holder. If
+    // multiUse weren't in the canonical bytes, .com would have to trust
+    // the field separately, which is a privilege escalation.
+    const { signAutoUnlockLease, verifyAutoUnlockLease } = await import("../src/auth.js");
+    const lease = {
+      serverId: "home.alice.flagship.services",
+      leaseId: "abc",
+      expiresAt: 1000,
+      unlockKey: new Uint8Array(32).fill(1),
+      multiUse: false,
+      issuedAt: 500,
+    };
+    const sig = signAutoUnlockLease(lease, irk);
+    expect(verifyAutoUnlockLease({ ...lease, multiUse: true }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects when leaseId / expiresAt / unlockKey / serverId / issuedAt are tampered", async () => {
+    const { signAutoUnlockLease, verifyAutoUnlockLease } = await import("../src/auth.js");
+    const lease = {
+      serverId: "srv-A",
+      leaseId: "id-1",
+      expiresAt: 1000,
+      unlockKey: new Uint8Array(32).fill(1),
+      multiUse: false,
+      issuedAt: 500,
+    };
+    const sig = signAutoUnlockLease(lease, irk);
+    expect(verifyAutoUnlockLease({ ...lease, serverId: "srv-B" }, sig, irk.publicKey)).toBe(false);
+    expect(verifyAutoUnlockLease({ ...lease, leaseId: "id-2" }, sig, irk.publicKey)).toBe(false);
+    expect(verifyAutoUnlockLease({ ...lease, expiresAt: 2000 }, sig, irk.publicKey)).toBe(false);
+    expect(verifyAutoUnlockLease({ ...lease, issuedAt: 600 }, sig, irk.publicKey)).toBe(false);
+    const tamperedKey = new Uint8Array(32).fill(2);
+    expect(verifyAutoUnlockLease({ ...lease, unlockKey: tamperedKey }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects under a different IRK (cross-account isolation)", async () => {
+    const { signAutoUnlockLease, verifyAutoUnlockLease } = await import("../src/auth.js");
+    const otherIrk = deriveIRK({ seed: new Uint8Array(32).fill(99) });
+    const lease = {
+      serverId: "srv-A",
+      leaseId: "id",
+      expiresAt: 1,
+      unlockKey: new Uint8Array(32),
+      multiUse: false,
+      issuedAt: 0,
+    };
+    const sig = signAutoUnlockLease(lease, irk);
+    expect(verifyAutoUnlockLease(lease, sig, otherIrk.publicKey)).toBe(false);
+  });
+
+  it("revoke-lease envelope round-trips and pins (serverId, leaseId)", async () => {
+    const { signRevokeAutoUnlockLease, verifyRevokeAutoUnlockLease } = await import(
+      "../src/auth.js"
+    );
+    const r = { serverId: "srv-A", leaseId: "lease-xyz", issuedAt: 1_700_000_000_000 };
+    const sig = signRevokeAutoUnlockLease(r, irk);
+    expect(verifyRevokeAutoUnlockLease(r, sig, irk.publicKey)).toBe(true);
+    expect(
+      verifyRevokeAutoUnlockLease({ ...r, leaseId: "other" }, sig, irk.publicKey),
+    ).toBe(false);
+    expect(
+      verifyRevokeAutoUnlockLease({ ...r, serverId: "srv-B" }, sig, irk.publicKey),
+    ).toBe(false);
+  });
+});
+

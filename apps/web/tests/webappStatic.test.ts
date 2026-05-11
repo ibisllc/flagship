@@ -197,6 +197,43 @@ describe("/webapp PWA static surface", () => {
     }
   });
 
+  it("/webapp/lib/leases.js exposes the auto-unlock lease surface (sign + post + revoke)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/leases.js" });
+    expect(r.statusCode).toBe(200);
+    // Public surface every consumer relies on.
+    expect(r.body).toContain("export async function approveOneShot");
+    expect(r.body).toContain("export async function enableLongLived");
+    expect(r.body).toContain("export async function revokeLease");
+    expect(r.body).toContain("export async function listLeases");
+    // Canonical bytes pinned to the protocol-side tag (auth.ts).
+    expect(r.body).toContain("flagship/auto-unlock-lease/v1");
+    expect(r.body).toContain("flagship/revoke-auto-unlock-lease/v1");
+    // Talks to the apex (not web.) for .com endpoints.
+    expect(r.body).toContain("https://flagshipserver.com");
+    // Must do the Ed25519 → X25519 conversion locally (no @flagship/protocol bundle on the webapp).
+    expect(r.body).toContain("X25519");
+  });
+
+  it("/webapp/views/unlock-approvals.js wires Approve to the lease helper (no more 'pending backend' stub)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/unlock-approvals.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("approveOneShot");
+    // Confirm the old placeholder string is gone.
+    expect(r.body).not.toContain("pending backend wiring");
+  });
+
+  it("/webapp/views/server-detail.js exposes the auto-unlock toggle + revoke + list", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/server-detail.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("enableLongLived");
+    expect(r.body).toContain("revokeLease");
+    expect(r.body).toContain("listLeases");
+    expect(r.body).toContain("auto-unlock-enable");
+  });
+
   it("never accidentally serves /webapp resources from the root scope", async () => {
     const app = buildServer();
     // Confirm the marketing root is NOT a manifest

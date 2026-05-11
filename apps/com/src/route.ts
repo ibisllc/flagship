@@ -22,6 +22,25 @@ import { tryControlPlane } from "./controlPlaneRoutes.js";
 const WEBAPP_HOST = "web.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
+/**
+ * Origins allowed to call /api/* on the apex via cross-origin XHR.
+ * The webapp lives on web.flagshipserver.com; the marketing/identity
+ * site on flagshipserver.com is same-origin (no preflight); local dev
+ * runs against http://localhost.
+ *
+ * All sensitive endpoints (lease deposit, recovery upload) are
+ * signature-gated, so the CORS allowlist is a defense-in-depth layer
+ * — relaxing it doesn't bypass auth, but a tight list reduces
+ * accidental cross-tab attack surface.
+ */
+const CORS_ALLOWED_ORIGINS = new Set<string>([
+  WEBAPP_ORIGIN,
+  "https://flagshipserver.com",
+  "https://www.flagshipserver.com",
+  "http://localhost:8787",
+  "http://localhost:5173",
+]);
+
 export interface RouteEnv {
   SERVICES_BASE_URL: string;
   /** The Worker assets binding. Tests pass a stub. */
@@ -108,6 +127,20 @@ const STRIP_RES_HEADERS = new Set([
 export async function route(request: Request, env: RouteEnv): Promise<Response> {
   const url = new URL(request.url);
 
+  // ---- CORS preflight ----
+  // Cross-origin POSTs from the webapp (on web.flagshipserver.com) to
+  // /api/* on the apex trigger a preflight. Answer it directly so the
+  // actual request can proceed.
+  if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
+    return corsPreflight(request);
+  }
+
+  const res = await routeImpl(request, env, url);
+  return applyCors(request, url, res);
+}
+
+/** Internal — the actual routing logic. `route` wraps this with CORS. */
+async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Response> {
   // ---- web.flagshipserver.com ----
   // Webapp lives at this dedicated origin. Files on disk are under
   // apps/web/public/webapp/, but on this host we serve them at root —
@@ -486,6 +519,55 @@ async function proxyToServices(
 function requestHasBody(method: string): boolean {
   const m = method.toUpperCase();
   return m !== "GET" && m !== "HEAD" && m !== "OPTIONS";
+}
+
+/** Origin sniffing — null when missing or not an http(s) URL. */
+function originHeader(request: Request): string | null {
+  const o = request.headers.get("origin");
+  if (!o) return null;
+  try {
+    const u = new URL(o);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Add CORS headers to /api/* responses when the request origin is
+ * allow-listed. Same-origin requests have no `Origin` header; we no-op
+ * for those (and for non-/api paths). Sensitive endpoints are signed,
+ * so this CORS layer is defense-in-depth, not the primary auth gate.
+ */
+function applyCors(request: Request, url: URL, res: Response): Response {
+  if (!url.pathname.startsWith("/api/")) return res;
+  const origin = originHeader(request);
+  if (!origin || !CORS_ALLOWED_ORIGINS.has(origin)) return res;
+  // Headers on a Response are immutable when sourced from fetch(); clone
+  // into a fresh Response with the merged header set.
+  const headers = new Headers(res.headers);
+  headers.set("access-control-allow-origin", origin);
+  headers.append("vary", "origin");
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
+/** Preflight handler — answers OPTIONS for /api/* without touching downstream. */
+function corsPreflight(request: Request): Response {
+  const origin = originHeader(request);
+  const headers = new Headers({
+    "access-control-allow-methods": "GET, HEAD, POST, DELETE, OPTIONS",
+    "access-control-allow-headers": "content-type, x-flagship-session, authorization",
+    "access-control-max-age": "600",
+    vary: "origin",
+  });
+  if (origin && CORS_ALLOWED_ORIGINS.has(origin)) {
+    headers.set("access-control-allow-origin", origin);
+  }
+  return new Response(null, { status: 204, headers });
 }
 
 /**

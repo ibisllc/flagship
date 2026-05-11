@@ -1,4 +1,6 @@
 import type {
+  AutoUnlockLeaseRecord,
+  AutoUnlockLeaseStorage,
   EntitlementRevocationListRecord,
   EntitlementRevocationStorage,
   AuthCodeRecord,
@@ -554,6 +556,114 @@ export class D1LuksKeyStorage implements LuksKeyStorage {
   }
 }
 
+export class D1AutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async put(rec: AutoUnlockLeaseRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO auto_unlock_leases
+           (server_domain, lease_id, unlock_key_hex, multi_use, deposited_at, expires_at)
+         VALUES (?,?,?,?,?,?)
+         ON CONFLICT(server_domain, lease_id) DO UPDATE SET
+           unlock_key_hex = excluded.unlock_key_hex,
+           multi_use = excluded.multi_use,
+           deposited_at = excluded.deposited_at,
+           expires_at = excluded.expires_at`,
+      )
+      .bind(
+        rec.serverDomain,
+        rec.leaseId,
+        rec.unlockKeyHex,
+        rec.multiUse ? 1 : 0,
+        rec.depositedAt,
+        rec.expiresAt,
+      )
+      .run();
+  }
+
+  async consume(
+    serverDomain: string,
+    now: number,
+  ): Promise<AutoUnlockLeaseRecord | undefined> {
+    // Pick the freshest non-expired row. Like the legacy consumeUnlock,
+    // there's a small race when two boot stages call simultaneously —
+    // single-server production case where this can't happen, so we
+    // accept it. GC of expired rows happens here too so the table
+    // doesn't grow unbounded.
+    await this.db
+      .prepare("DELETE FROM auto_unlock_leases WHERE server_domain = ? AND expires_at <= ?")
+      .bind(serverDomain, now)
+      .run();
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM auto_unlock_leases WHERE server_domain = ? ORDER BY deposited_at DESC LIMIT 1",
+      )
+      .bind(serverDomain)
+      .first<{
+        server_domain: string;
+        lease_id: string;
+        unlock_key_hex: string;
+        multi_use: number;
+        deposited_at: number;
+        expires_at: number;
+      }>();
+    if (!r) return undefined;
+    if (r.multi_use === 0) {
+      await this.db
+        .prepare("DELETE FROM auto_unlock_leases WHERE server_domain = ? AND lease_id = ?")
+        .bind(serverDomain, r.lease_id)
+        .run();
+    }
+    return {
+      serverDomain: r.server_domain,
+      leaseId: r.lease_id,
+      unlockKeyHex: r.unlock_key_hex,
+      multiUse: r.multi_use === 1,
+      depositedAt: r.deposited_at,
+      expiresAt: r.expires_at,
+    };
+  }
+
+  async revoke(serverDomain: string, leaseId: string): Promise<boolean> {
+    const r = await this.db
+      .prepare("DELETE FROM auto_unlock_leases WHERE server_domain = ? AND lease_id = ?")
+      .bind(serverDomain, leaseId)
+      .run();
+    // D1's `meta.changes` reports rows affected. Older bindings may not
+    // expose it; fall back to assuming success when undefined.
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+
+  async list(
+    serverDomain: string,
+    now: number,
+  ): Promise<AutoUnlockLeaseRecord[]> {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM auto_unlock_leases WHERE server_domain = ? AND expires_at > ? ORDER BY deposited_at DESC",
+      )
+      .bind(serverDomain, now)
+      .all<{
+        server_domain: string;
+        lease_id: string;
+        unlock_key_hex: string;
+        multi_use: number;
+        deposited_at: number;
+        expires_at: number;
+      }>();
+    return (r.results ?? []).map((row) => ({
+      serverDomain: row.server_domain,
+      leaseId: row.lease_id,
+      unlockKeyHex: row.unlock_key_hex,
+      multiUse: row.multi_use === 1,
+      depositedAt: row.deposited_at,
+      expiresAt: row.expires_at,
+    }));
+  }
+}
+
 export class D1MarketplaceStorage implements MarketplaceStorage {
   constructor(private readonly db: D1Database) {}
 
@@ -871,6 +981,7 @@ export class D1Storage implements Storage {
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
+  autoUnlockLeases: AutoUnlockLeaseStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
   llmPromo: LlmPromoStorage;
@@ -884,6 +995,7 @@ export class D1Storage implements Storage {
     this.routing = new D1RoutingStorage(db);
     this.installEvents = new D1InstallEventStorage(db);
     this.luksKeys = new D1LuksKeyStorage(db);
+    this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
     this.marketplace = new D1MarketplaceStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);
     this.llmPromo = new D1LlmPromoStorage(db);

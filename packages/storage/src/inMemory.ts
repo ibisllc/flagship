@@ -1,4 +1,6 @@
 import type {
+  AutoUnlockLeaseRecord,
+  AutoUnlockLeaseStorage,
   EntitlementRevocationListRecord,
   EntitlementRevocationStorage,
   AuthCodeRecord,
@@ -327,6 +329,60 @@ export class InMemoryEntitlementRevocationStorage implements EntitlementRevocati
   }
 }
 
+export class InMemoryAutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
+  // Composite key: `${serverDomain} ${leaseId}`
+  private rows = new Map<string, AutoUnlockLeaseRecord>();
+  private k(server: string, lease: string): string {
+    return `${server} ${lease}`;
+  }
+
+  async put(rec: AutoUnlockLeaseRecord): Promise<void> {
+    this.rows.set(this.k(rec.serverDomain, rec.leaseId), { ...rec });
+  }
+
+  async consume(
+    serverDomain: string,
+    now: number,
+  ): Promise<AutoUnlockLeaseRecord | undefined> {
+    // Find the most-recently-deposited non-expired lease for this
+    // server. Multiple devices may have signed leases concurrently;
+    // we return the freshest. Expired rows are GC'd opportunistically.
+    let best: AutoUnlockLeaseRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.depositedAt > best.depositedAt) best = r;
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best) return undefined;
+    if (!best.multiUse) {
+      this.rows.delete(this.k(best.serverDomain, best.leaseId));
+    }
+    return { ...best };
+  }
+
+  async revoke(serverDomain: string, leaseId: string): Promise<boolean> {
+    return this.rows.delete(this.k(serverDomain, leaseId));
+  }
+
+  async list(
+    serverDomain: string,
+    now: number,
+  ): Promise<AutoUnlockLeaseRecord[]> {
+    const out: AutoUnlockLeaseRecord[] = [];
+    for (const r of this.rows.values()) {
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.expiresAt <= now) continue;
+      out.push({ ...r });
+    }
+    return out.sort((a, b) => b.depositedAt - a.depositedAt);
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -335,6 +391,7 @@ export class InMemoryStorage implements Storage {
   routing = new InMemoryRoutingStorage();
   installEvents = new InMemoryInstallEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
+  autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
   marketplace = new InMemoryMarketplaceStorage();
   pushTokens = new InMemoryPushTokenStorage();
   llmPromo = new InMemoryLlmPromoStorage();
