@@ -1,0 +1,23 @@
+{
+  "name": "@flagship/e2e",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Playwright + pod-sim end-to-end tests for the webapp → .com → user pod chain",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "pod-sim": "tsx pod-sim/server.ts"
+  },
+  "dependencies": {
+    "@flagship/protocol": "*",
+    "@flagship/server-daemon": "*",
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0"
+  }
+}
