@@ -10,7 +10,7 @@
  * full-chain scenario; if it passes, the rig works.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -22,6 +22,11 @@ test("S2 — pair the webapp with the pod-sim", async ({ page, identity, podSim 
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
   await page.click("#bootstrap-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+
+  // The webapp's bootstrap minted a fresh random UMK in-browser, so
+  // its derived IRK pubkey differs from the test fixture's. Sync it
+  // to the pod-sim before any signed order goes out.
+  await syncWebappPubkey(page, podSim);
 
   // 2. Pod pairing.
   await page.click("#open-pod-pair");
@@ -38,7 +43,11 @@ test("S2 — pair the webapp with the pod-sim", async ({ page, identity, podSim 
 
   const order = podSim.orders.filterByType("add-paired-session")[0]!;
   const raw = order.raw as { serverId: string; token: string; label: string };
-  expect(raw.serverId).toBe(identity.serverFqdn);
+  // pairWithPod sets serverId = new URL(baseUrl).host. In production that
+  // resolves to the pod's FQDN (home.alice.flagship.services); in the
+  // rig we run pod-sim on a loopback random port, so we compare against
+  // the URL host directly.
+  expect(raw.serverId).toBe(new URL(podSim.baseUrl).host);
   expect(raw.label).toBe(`e2e-${identity.username}`);
   expect(raw.token).toMatch(/^[0-9a-f]{64}$/);
 

@@ -8,7 +8,7 @@
  * the REPLAY_PATH_PATTERNS (smoke for the queue's wiring).
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -23,6 +23,7 @@ test("S13 — orders/send queued while offline + SW carries the replay patterns"
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
   await page.click("#bootstrap-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await syncWebappPubkey(page, podSim);
 
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);

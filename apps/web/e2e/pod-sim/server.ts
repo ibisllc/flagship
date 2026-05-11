@@ -20,6 +20,9 @@
  *   GET  /api/screens/tier-status         static fixture
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   ed,
@@ -30,6 +33,16 @@ import {
 import { OrdersStore, type RecordedOrder } from "./orders-store.js";
 import { AppsStore } from "./apps-store.js";
 import { PendingStore } from "./pending-store.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+// Self-signed cert for 127.0.0.1 / localhost (committed alongside the
+// pod-sim source). The webapp's pairWithPod() requires https:// for
+// pod URLs — that's a real security feature in production, so the
+// rig has to satisfy it. Playwright accepts the cert via the
+// ignoreHTTPSErrors flag in playwright.config.ts.
+const DEV_KEY = readFileSync(join(HERE, "dev-key.pem"));
+const DEV_CERT = readFileSync(join(HERE, "dev-cert.pem"));
 
 export interface PodSimOptions {
   /** Username component of the simulated server FQDN. */
@@ -53,6 +66,13 @@ export interface PodSim {
   pending: PendingStore;
   /** Remember which session tokens are valid (added by add-paired-session order). */
   validSessionTokens: Set<string>;
+  /**
+   * Swap the trusted PSK + host-IRK pubkeys at runtime. Used by tests
+   * that bootstrap a brand-new UMK in the webapp (so its derived IRK
+   * differs from `identity.irk` the fixture handed to the pod-sim at
+   * startup). Call once, AFTER the webapp's bootstrap step.
+   */
+  setTrustedIrkPub(hex: string): void;
   /** Tear down the Fastify server. */
   close(): Promise<void>;
 }
@@ -97,23 +117,40 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
     validSessionTokens.add(opts.preIssuedSessionToken);
   }
 
-  const pskPub: Bytes = hexToBytes(opts.pskPubHex);
-  const hostIrkPub: Bytes = hexToBytes(opts.hostIrkPubHex);
+  // Mutable so tests can swap to the webapp's freshly-bootstrapped
+  // IRK pubkey via setTrustedIrkPub(). The unverified seed value
+  // matters only for the trivial S0 smoke test that signs with the
+  // fixture's IRK directly.
+  let pskPub: Bytes = hexToBytes(opts.pskPubHex);
+  let hostIrkPub: Bytes = hexToBytes(opts.hostIrkPubHex);
 
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: false,
+    https: { key: DEV_KEY, cert: DEV_CERT },
+  });
 
-  // CORS — the webapp on web.flagshipserver.com calls cross-origin.
+  // CORS — the webapp on web.flagshipserver.com calls cross-origin
+  // AND across the public-→-private-network boundary, so we also
+  // satisfy Chrome's Private Network Access preflight (RFC draft
+  // implemented as Access-Control-{Request,Allow}-Private-Network).
   app.addHook("onSend", (req, reply, payload, done) => {
     const origin = req.headers["origin"];
     if (typeof origin === "string") {
       reply.header("access-control-allow-origin", origin);
       reply.header("vary", "origin");
     }
+    reply.header("access-control-allow-credentials", "true");
+    reply.header("access-control-allow-private-network", "true");
     done(null, payload);
   });
-  app.options("*", async (_req, reply) => {
+  app.options("*", async (req, reply) => {
     reply.header("access-control-allow-methods", "GET, HEAD, POST, DELETE, OPTIONS");
     reply.header("access-control-allow-headers", "content-type, x-flagship-session, authorization");
+    reply.header("access-control-max-age", "600");
+    // PNA preflight requires this header on the response.
+    if (req.headers["access-control-request-private-network"]) {
+      reply.header("access-control-allow-private-network", "true");
+    }
     return reply.status(204).send();
   });
 
@@ -264,7 +301,7 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
   if (!addr || typeof addr === "string") {
     throw new Error("pod-sim failed to bind a port");
   }
-  const baseUrl = `http://127.0.0.1:${addr.port}`;
+  const baseUrl = `https://127.0.0.1:${addr.port}`;
 
   return {
     app,
@@ -274,6 +311,11 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
     apps,
     pending,
     validSessionTokens,
+    setTrustedIrkPub(hex: string) {
+      const next = hexToBytes(hex);
+      pskPub = next;
+      hostIrkPub = next;
+    },
     close: () => app.close(),
   };
 }

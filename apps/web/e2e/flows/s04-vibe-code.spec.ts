@@ -8,7 +8,7 @@
  * scope is "the click reaches the start endpoint."
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -22,6 +22,7 @@ test("S4 — vibe-code start hits /api/screens/vibe-code/start with a prompt", a
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
   await page.click("#bootstrap-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await syncWebappPubkey(page, podSim);
 
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);

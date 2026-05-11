@@ -8,7 +8,7 @@
  * consume roundtrip is asserted live by smoke-lease-unlock.ts.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -23,6 +23,7 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
   await page.click("#bootstrap-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await syncWebappPubkey(page, podSim);
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
   await page.fill("#pod-pair-label", "e2e-s6");
@@ -79,6 +80,7 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
   await page.click("#bootstrap-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await syncWebappPubkey(page, podSim);
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
   await page.fill("#pod-pair-label", "e2e-s7");

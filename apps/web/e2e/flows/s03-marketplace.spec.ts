@@ -7,7 +7,7 @@
  * envelope.
  */
 
-import { test, expect } from "../fixtures/pod-sim.js";
+import { test, expect, syncWebappPubkey } from "../fixtures/pod-sim.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -21,6 +21,7 @@ test("S3 — install a marketplace listing via the webapp", async ({
   await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
   await page.click("#bootstrap-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  await syncWebappPubkey(page, podSim);
 
   await page.click("#open-pod-pair");
   await page.fill("#pod-pair-base", podSim.baseUrl);
@@ -41,19 +42,23 @@ test("S3 — install a marketplace listing via the webapp", async ({
           {
             creator: "vendorbob",
             slug: "habit-tracker",
-            name: "Habit Tracker",
-            tagline: "Daily streaks.",
+            // Webapp's marketplace view reads title / summary /
+            // installCount (camelCase). Server-side data uses
+            // snake_case for some fields; the BFF flattens. Keep this
+            // fixture in the BFF-flat shape.
+            title: "Habit Tracker",
+            summary: "Daily streaks.",
             tags: ["productivity", "habits"],
             category: "productivity",
-            canonical_url: "habit-tracker.vendorbob.flagship.services",
-            manifest_hash: "ab".repeat(32),
-            scan_grade: "A",
-            install_count: 42,
-            public_distribution: true,
-            rank_score: 1.5,
+            canonicalUrl: "habit-tracker.vendorbob.flagship.services",
+            manifestHash: "ab".repeat(32),
+            scanGrade: "A",
+            installCount: 42,
+            publicDistribution: true,
+            rankScore: 1.5,
             screenshots: [],
-            listed_at: Date.now() - 30 * 86400_000,
-            updated_at: Date.now() - 86400_000,
+            listedAt: Date.now() - 30 * 86400_000,
+            updatedAt: Date.now() - 86400_000,
           },
         ],
       }),

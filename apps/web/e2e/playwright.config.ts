@@ -35,8 +35,35 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
-        // Virtual authenticator support is enabled by default in Chromium
-        // via Playwright's CDP integration; the WebAuthn fixtures use it.
+        // Two cross-network gotchas the rig has to defuse:
+        //  1. The webapp loads from https://web.flagshipserver.com (PUBLIC,
+        //     SECURE). It then tries to fetch https://127.0.0.1:NN/api/...
+        //     (PRIVATE). Chrome's Private Network Access blocks this unless
+        //     the target server replies to the preflight with
+        //     Access-Control-Allow-Private-Network: true. Pod-sim's CORS
+        //     hook covers that.
+        //  2. The pod-sim's TLS cert is a committed self-signed dev cert.
+        //     `ignoreHTTPSErrors` covers Playwright's own request layer;
+        //     for the BROWSER's network stack we need
+        //     --ignore-certificate-errors at launch.
+        launchOptions: {
+          args: [
+            "--ignore-certificate-errors",
+            // Modern Chromium blocks loopback access from public-secure
+            // origins under several overlapping policies that have
+            // evolved across versions. Disable every one we've seen
+            // surface so the rig isn't fragile to Chrome upgrades:
+            //   - BlockInsecurePrivateNetworkRequests: the original
+            //     Private Network Access enforcement.
+            //   - PrivateNetworkAccessSendPreflights: optional CORS
+            //     preflight on PNA requests; we'd rather skip it.
+            //   - LocalNetworkAccessChecks: the 2024+ replacement that
+            //     ALSO blocks loopback (127.0.0.1) and emits "Permission
+            //     was denied for this request to access the `loopback`
+            //     address space."
+            "--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,LocalNetworkAccessChecks,PrivateNetworkAccessForWorkers,PrivateNetworkAccessForNavigations",
+          ],
+        },
       },
     },
   ],
