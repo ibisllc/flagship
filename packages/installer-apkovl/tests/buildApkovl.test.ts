@@ -82,4 +82,27 @@ describe("buildApkovl", () => {
     const last1024 = tar.subarray(tar.length - 1024);
     expect(last1024.every((b) => b === 0)).toBe(true);
   });
+
+  it("produces byte-identical output across two builds with the same input (reproducibility)", () => {
+    // The single most important property the reproducible-ISO build
+    // depends on: same inputs → same bytes. If gzip ever embeds a
+    // timestamp, or tar mtimes drift, the GHA build-twice-and-compare
+    // step catches it — but we'd rather catch the regression here in
+    // the unit suite where the failure mode is obvious.
+    const inputs = {
+      files: [
+        { name: "etc/local.d/01-a.start", content: new Uint8Array([0x01, 0x02, 0x03]), mode: 0o755 },
+        { name: "usr/local/bin/helper", content: new Uint8Array(64).fill(0xab), mode: 0o755 },
+        { name: "etc/runlevels/default/local", content: new Uint8Array([0x10]), mode: 0o644 },
+      ],
+    };
+    const a = buildApkovl(inputs);
+    const b = buildApkovl(inputs);
+    expect(a.length).toBe(b.length);
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        throw new Error(`apkovl bytes diverge at offset ${i}: ${a[i]} vs ${b[i]}`);
+      }
+    }
+  });
 });
