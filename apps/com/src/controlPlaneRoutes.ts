@@ -53,6 +53,7 @@ import {
   handleMarketplaceSearch,
   handleMarketplaceRemove,
   handleMarketplaceInstall,
+  handleMarketplaceScanResult,
   buildPushForwarder,
   handleGetEntitlementRevocations,
   handlePostEntitlementRevocations,
@@ -81,6 +82,8 @@ export interface ControlPlaneEnv {
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
+  /** Hex-encoded Ed25519 pubkey of the marketplace scanner (Flagship-operated). */
+  MARKETPLACE_SCANNER_PUBKEY_HEX?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
 
@@ -142,6 +145,7 @@ const ROUTE_RE = {
   MARKETPLACE_SEARCH: /^\/api\/marketplace\/search$/,
   MARKETPLACE_GET: /^\/api\/marketplace\/([^/]+)\/([^/]+)$/,
   MARKETPLACE_INSTALL: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/install$/,
+  MARKETPLACE_SCAN_RESULT: /^\/api\/marketplace\/([^/]+)\/([^/]+)\/scan$/,
   PUSH_REGISTER: /^\/api\/push\/register$/,
   PUSH_RELAY: /^\/api\/push\/relay$/,
   PUSH_VAPID_KEY: /^\/api\/push\/vapid-public-key$/,
@@ -654,6 +658,30 @@ export async function tryControlPlane(
         { marketplace: storage.marketplace, usernames: storage.usernames },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.MARKETPLACE_SCAN_RESULT))) {
+    if (!env.MARKETPLACE_SCANNER_PUBKEY_HEX) {
+      return finishPlain({
+        status: 503,
+        body: { error: "marketplace scanner not configured on this deployment" },
+      });
+    }
+    let scannerPubkey: Uint8Array;
+    try {
+      const hex = env.MARKETPLACE_SCANNER_PUBKEY_HEX;
+      scannerPubkey = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < scannerPubkey.length; i++) {
+        scannerPubkey[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+      }
+    } catch {
+      return finishPlain({ status: 500, body: { error: "scanner pubkey misconfigured" } });
+    }
+    return finish(
+      await handleMarketplaceScanResult(
+        { marketplace: storage.marketplace, scannerPubkey },
+        await readJson(request),
       ),
     );
   }

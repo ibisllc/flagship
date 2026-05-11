@@ -15,7 +15,9 @@
 
 import {
   verifyMarketplaceList,
+  verifyMarketplaceScanResult,
   type MarketplaceListRequest,
+  type MarketplaceScanResult,
 } from "@flagship/protocol";
 import { computeMarketplaceRank } from "@flagship/storage";
 import type {
@@ -203,6 +205,78 @@ export async function handleMarketplaceInstall(
   if (!rec || rec.status !== "listed") return notFound("listing not found");
   await deps.marketplace.recordInstall(creator, slug);
   return ok({ ok: true });
+}
+
+/**
+ * Receive a scanner-signed scan result. .com verifies the signature
+ * against a fixed `scannerPubkey` (env-loaded; the Flagship-operated
+ * scanner holds the corresponding private key). Updates scan_grade +
+ * scan_report_key on the listing.
+ *
+ * Listings ship scan_grade=NULL until a verifying scan posts. The
+ * search endpoint's `verifiedOnly` filter gates on this field.
+ */
+export interface MarketplaceScanDeps {
+  marketplace: MarketplaceStorage;
+  /** Ed25519 pubkey of the Flagship-operated scanner. */
+  scannerPubkey: Uint8Array;
+  freshnessMs?: number;
+  now?: () => number;
+}
+
+export async function handleMarketplaceScanResult(
+  deps: MarketplaceScanDeps,
+  body: unknown,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const freshnessMs = deps.freshnessMs ?? 60 * 60_000; // 1 hour — scans run async
+
+  const b = body as { request?: Record<string, unknown>; signature?: unknown };
+  const r = b?.request ?? {};
+  if (
+    typeof r.creator !== "string" ||
+    typeof r.slug !== "string" ||
+    typeof r.grade !== "string" ||
+    typeof r.reportKey !== "string" ||
+    typeof r.imageDigestHex !== "string" ||
+    typeof r.scannedAt !== "number" ||
+    typeof b?.signature !== "string"
+  ) {
+    return malformed("malformed body");
+  }
+  if (!["A", "B", "C", "D", "F"].includes(r.grade)) {
+    return malformed("grade must be A|B|C|D|F");
+  }
+  if (Math.abs(now() - r.scannedAt) > freshnessMs) {
+    return forbidden("stale scan result");
+  }
+
+  let sig: Uint8Array;
+  try {
+    sig = hexToBytes(b.signature);
+  } catch {
+    return malformed("invalid signature hex");
+  }
+  const claim: MarketplaceScanResult = {
+    creator: r.creator,
+    slug: r.slug,
+    grade: r.grade as "A" | "B" | "C" | "D" | "F",
+    reportKey: r.reportKey,
+    imageDigestHex: r.imageDigestHex,
+    scannedAt: r.scannedAt,
+  };
+  if (!verifyMarketplaceScanResult(claim, sig, deps.scannerPubkey)) {
+    return forbidden("invalid scanner signature");
+  }
+  const updated = await deps.marketplace.setScanResult(
+    r.creator,
+    r.slug,
+    r.grade as "A" | "B" | "C" | "D" | "F",
+    r.reportKey,
+    r.scannedAt,
+  );
+  if (!updated) return notFound("listing not found");
+  return ok({ ok: true, grade: r.grade });
 }
 
 function serializeListing(r: MarketplaceListingRecord) {

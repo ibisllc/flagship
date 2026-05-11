@@ -384,6 +384,19 @@ export interface MarketplaceStorage {
   search(q: MarketplaceSearchQuery): Promise<MarketplaceListingRecord[]>;
   remove(creator: string, slug: string): Promise<void>;
   recordInstall(creator: string, slug: string): Promise<void>;
+  /**
+   * Update scan_grade + scan_report_key + scan_completed_at on an
+   * existing listing. Called by the scanner service after it
+   * pulls the listing's docker image and runs Trivy + custom checks.
+   * Returns false if the listing doesn't exist.
+   */
+  setScanResult(
+    creator: string,
+    slug: string,
+    grade: "A" | "B" | "C" | "D" | "F",
+    reportKey: string,
+    completedAt: number,
+  ): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

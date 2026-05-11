@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   ed,
   signMarketplaceList,
+  signMarketplaceScanResult,
   type Keypair,
   type MarketplaceListRequest,
 } from "@flagship/protocol";
@@ -16,6 +17,7 @@ import {
   handleMarketplaceGet,
   handleMarketplaceInstall,
   handleMarketplaceList,
+  handleMarketplaceScanResult,
   handleMarketplaceSearch,
 } from "../src/marketplace.js";
 
@@ -263,5 +265,109 @@ describe("handleMarketplaceInstall", () => {
     await handleMarketplaceInstall({ marketplace, usernames }, "alice", "habit-tracker");
     const after = (await marketplace.get("alice", "habit-tracker"))!.installCount;
     expect(after).toBe(before + 1);
+  });
+});
+
+describe("handleMarketplaceScanResult", () => {
+  async function seededWithListing() {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const irk = makeIrk();
+    await seedUser(usernames, "alice", irk);
+    const claim = listingPayload();
+    const sig = signMarketplaceList(claim, irk);
+    await handleMarketplaceList(
+      { marketplace, usernames },
+      { request: { ...claim, irkPub: bytesToHex(irk.publicKey) }, signature: bytesToHex(sig) },
+    );
+    return { usernames, marketplace };
+  }
+
+  it("accepts a scanner-signed result + writes scan_grade on the listing", async () => {
+    const { marketplace } = await seededWithListing();
+    const scanner = makeIrk();
+    const claim = {
+      creator: "alice",
+      slug: "habit-tracker",
+      grade: "A" as const,
+      reportKey: "alice/habit-tracker/1700000000000.json",
+      imageDigestHex: "ab".repeat(32),
+      scannedAt: Date.now(),
+    };
+    const sig = signMarketplaceScanResult(claim, scanner);
+    const res = await handleMarketplaceScanResult(
+      { marketplace, scannerPubkey: scanner.publicKey },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(res.status).toBe(200);
+    const stored = await marketplace.get("alice", "habit-tracker");
+    expect(stored?.scanGrade).toBe("A");
+    expect(stored?.scanReportKey).toBe(claim.reportKey);
+  });
+
+  it("403s on a signature from anything other than the configured scanner key", async () => {
+    const { marketplace } = await seededWithListing();
+    const scanner = makeIrk();
+    const attacker = makeIrk();
+    const claim = {
+      creator: "alice",
+      slug: "habit-tracker",
+      grade: "A" as const,
+      reportKey: "x.json",
+      imageDigestHex: "ab".repeat(32),
+      scannedAt: Date.now(),
+    };
+    const sig = signMarketplaceScanResult(claim, attacker);
+    const res = await handleMarketplaceScanResult(
+      { marketplace, scannerPubkey: scanner.publicKey },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("400s on grade outside A..F", async () => {
+    const { marketplace } = await seededWithListing();
+    const scanner = makeIrk();
+    const claim = {
+      creator: "alice", slug: "habit-tracker", grade: "X" as never,
+      reportKey: "x.json", imageDigestHex: "00".repeat(32), scannedAt: Date.now(),
+    };
+    const sig = signMarketplaceScanResult(claim as never, scanner);
+    const res = await handleMarketplaceScanResult(
+      { marketplace, scannerPubkey: scanner.publicKey },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("404s when the listing doesn't exist", async () => {
+    const marketplace = new InMemoryMarketplaceStorage();
+    const scanner = makeIrk();
+    const claim = {
+      creator: "ghost", slug: "nope", grade: "A" as const,
+      reportKey: "x.json", imageDigestHex: "00".repeat(32), scannedAt: Date.now(),
+    };
+    const sig = signMarketplaceScanResult(claim, scanner);
+    const res = await handleMarketplaceScanResult(
+      { marketplace, scannerPubkey: scanner.publicKey },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("403s on a stale scannedAt (replay defense)", async () => {
+    const { marketplace } = await seededWithListing();
+    const scanner = makeIrk();
+    const claim = {
+      creator: "alice", slug: "habit-tracker", grade: "A" as const,
+      reportKey: "x.json", imageDigestHex: "00".repeat(32),
+      scannedAt: Date.now() - 2 * 60 * 60_000, // 2h old, default freshness is 1h
+    };
+    const sig = signMarketplaceScanResult(claim, scanner);
+    const res = await handleMarketplaceScanResult(
+      { marketplace, scannerPubkey: scanner.publicKey },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(res.status).toBe(403);
   });
 });

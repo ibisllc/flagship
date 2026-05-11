@@ -952,6 +952,24 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
       .bind(Date.now(), creator, slug)
       .run();
   }
+  async setScanResult(
+    creator: string,
+    slug: string,
+    grade: "A" | "B" | "C" | "D" | "F",
+    reportKey: string,
+    completedAt: number,
+  ): Promise<boolean> {
+    const r = await this.db
+      .prepare(
+        `UPDATE marketplace_listings
+           SET scan_grade = ?, scan_report_key = ?, scan_completed_at = ?, updated_at = ?
+         WHERE creator = ? AND slug = ?`,
+      )
+      .bind(grade, reportKey, completedAt, Date.now(), creator, slug)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
 }
 
 interface RawMarketplaceRow {

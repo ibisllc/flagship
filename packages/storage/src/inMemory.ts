@@ -296,6 +296,21 @@ export class InMemoryMarketplaceStorage implements MarketplaceStorage {
       r.rankScore = computeMarketplaceRank(r);
     }
   }
+  async setScanResult(
+    creator: string,
+    slug: string,
+    grade: "A" | "B" | "C" | "D" | "F",
+    reportKey: string,
+    completedAt: number,
+  ): Promise<boolean> {
+    const r = this.listings.get(this.key(creator, slug));
+    if (!r) return false;
+    r.scanGrade = grade;
+    r.scanReportKey = reportKey;
+    r.scanCompletedAt = completedAt;
+    r.rankScore = computeMarketplaceRank(r);
+    return true;
+  }
 }
 
 export function computeMarketplaceRank(l: MarketplaceListingRecord): number {
