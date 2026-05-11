@@ -52,6 +52,63 @@ export async function listLeases(serverFqdn) {
   return Array.isArray(body.leases) ? body.leases : [];
 }
 
+// Renew when a long-lived lease has less than this much time left.
+// 1 day default — at the 7d expiry, this means we re-sign on the
+// 6th day. With a webapp opened at least once a week the lease
+// stays alive; longer absences correctly let it decay (the design
+// intent — see auto_unlock_lease_design.md).
+const RENEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Re-sign every long-lived lease on `serverFqdn` whose `expiresAt`
+ * is within `windowMs` of now. Silent — no UI prompt, the IRK is
+ * already in the unlocked session. Returns the list of leases that
+ * were actually renewed (empty when there was nothing to do).
+ *
+ * Failure to fetch the lease list (server unreachable, .com 5xx)
+ * silently no-ops — we'll try again on the next tick.
+ */
+export async function renewIfExpiringSoon(serverFqdn, windowMs = RENEW_WINDOW_MS) {
+  const session = getSession();
+  if (!session.umk) return [];
+  let active;
+  try {
+    active = await listLeases(serverFqdn);
+  } catch {
+    return [];
+  }
+  const now = Date.now();
+  const renewed = [];
+  for (const lease of active) {
+    if (!lease.multiUse) continue;
+    if (lease.expiresAt - now > windowMs) continue;
+    // Re-issue with the default 7-day TTL. Multiple long-lived
+    // leases (e.g., user has webapp + phone both signed) would
+    // each get refreshed independently — that's fine, .com keeps
+    // them as separate rows keyed by leaseId.
+    try {
+      const r = await enableLongLived(serverFqdn);
+      renewed.push({ oldLeaseId: lease.leaseId, newLeaseId: r.leaseId, expiresAt: r.expiresAt });
+    } catch {
+      // Best-effort: a single failure doesn't abort the loop.
+    }
+  }
+  return renewed;
+}
+
+/**
+ * Run `renewIfExpiringSoon` against every server the user has paired
+ * with locally. Called on app open + on a 30-min ticker while open.
+ */
+export async function tickRenewals(serverFqdns) {
+  const out = [];
+  for (const fqdn of serverFqdns) {
+    const r = await renewIfExpiringSoon(fqdn);
+    if (r.length) out.push({ serverFqdn: fqdn, renewed: r });
+  }
+  return out;
+}
+
 /** Sign + DELETE a lease. Per-device kill switch. */
 export async function revokeLease(serverFqdn, leaseId) {
   const session = getSession();

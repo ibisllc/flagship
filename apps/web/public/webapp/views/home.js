@@ -1,10 +1,18 @@
 import { bytesToHex } from "../keystore.js";
+import { tickRenewals } from "../lib/leases.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { loadProviders } from "../providers.js";
 
 registerView("view-home");
+
+// 30-minute cadence for the silent lease renewer. The renewer also
+// fires opportunistically on every home-view enter, so this interval
+// is a safety net for users who leave the webapp open all day.
+const RENEWAL_TICK_MS = 30 * 60 * 1000;
+let renewalTimer = null;
+let renewalLastServerList = null; // dedupe: only kick a tick when servers change
 
 const FLAGSHIP_PROMO_LABEL_PREFIX = "Flagship promo";
 
@@ -51,6 +59,14 @@ export async function renderHome() {
       card.innerHTML = `<div class="row"><span class="value">${escapeHtml(s.serverId)}</span>${status}</div>`;
       list.appendChild(card);
     }
+    // Silent auto-renewal of long-lived leases. Fires on every home
+    // enter (cheap — no-ops when no leases are close to expiry) and
+    // refreshes the timer so the cadence resets each time the user
+    // re-engages with the webapp.
+    const liveServerIds = body.servers
+      .filter((s) => !s.revoked)
+      .map((s) => s.serverId);
+    scheduleRenewals(liveServerIds);
   } catch (e) {
     sessionStatusEl.textContent = "error";
     list.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(String(e))}</p></div>`;
@@ -101,4 +117,38 @@ export async function enterHome() {
 export function initHomeView({ onPair, onSettings }) {
   $("pair-with-server")?.addEventListener("click", onPair);
   $("open-settings")?.addEventListener("click", onSettings);
+}
+
+/**
+ * Kick off the renewer for the user's known servers and (re)arm a
+ * 30-min interval. The interval is deliberately a no-op until the
+ * lease enters its 1-day pre-expiry window, so it's cheap to run
+ * frequently. We dedupe by stringified server list so we don't
+ * re-schedule on every render.
+ */
+function scheduleRenewals(serverFqdns) {
+  const key = serverFqdns.slice().sort().join("|");
+  if (key === renewalLastServerList && renewalTimer) {
+    // Already running for the same server set — fire once now (cheap)
+    // so app-open semantics hold, but don't reset the interval.
+    void tickRenewals(serverFqdns).catch(() => {});
+    return;
+  }
+  renewalLastServerList = key;
+  if (renewalTimer) clearInterval(renewalTimer);
+  void tickRenewals(serverFqdns).catch(() => {});
+  if (serverFqdns.length === 0) {
+    renewalTimer = null;
+    return;
+  }
+  renewalTimer = setInterval(() => {
+    void tickRenewals(serverFqdns).catch(() => {});
+  }, RENEWAL_TICK_MS);
+}
+
+/** Stop the renewer (called on lock so a new account doesn't inherit timers). */
+export function stopRenewals() {
+  if (renewalTimer) clearInterval(renewalTimer);
+  renewalTimer = null;
+  renewalLastServerList = null;
 }

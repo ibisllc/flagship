@@ -278,6 +278,37 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("wrapUmk(passphrase, seed)");
   });
 
+  it("/webapp/lib/leases.js exposes the silent auto-renewer surface", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/leases.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("export async function renewIfExpiringSoon");
+    expect(r.body).toContain("export async function tickRenewals");
+    // Default renewal window — re-issues with ~1d remaining at the
+    // 7d expiry, so a webapp opened weekly keeps leases alive.
+    expect(r.body).toContain("RENEW_WINDOW_MS");
+    // Renewer must skip non-multiUse leases (one-shots are gone after
+    // first consume; renewing them is meaningless).
+    expect(r.body).toMatch(/multiUse[\s\S]{0,80}continue/);
+  });
+
+  it("/webapp/views/home.js wires the renewer to home enter + a 30-min interval", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/home.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("tickRenewals");
+    expect(r.body).toContain("scheduleRenewals");
+    expect(r.body).toContain("RENEWAL_TICK_MS");
+    expect(r.body).toContain("export function stopRenewals");
+  });
+
+  it("/webapp/views/unlock.js calls stopRenewals on reset (no leaked timers)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/unlock.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("stopRenewals");
+  });
+
   it("never accidentally serves /webapp resources from the root scope", async () => {
     const app = buildServer();
     // Confirm the marketing root is NOT a manifest

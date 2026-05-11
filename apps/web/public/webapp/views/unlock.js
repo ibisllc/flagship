@@ -2,7 +2,7 @@ import { unlockUmk, hasWrappedUmk, resetDevice } from "../keystore.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { unlockSession, lockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
-import { enterHome } from "./home.js";
+import { enterHome, stopRenewals } from "./home.js";
 
 registerView("view-unlock");
 
@@ -26,6 +26,7 @@ export async function handleReset() {
   localStorage.removeItem("flagship.sessionToken");
   localStorage.removeItem("flagship.podBaseUrl");
   lockSession();
+  stopRenewals();
   setSubtitle("device reset");
   show("view-bootstrap");
 }
