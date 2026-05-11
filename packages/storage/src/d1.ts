@@ -1,6 +1,8 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  PendingUnlockApprovalRecord,
+  PendingUnlockApprovalStorage,
   WebauthnRecoveryRecord,
   WebauthnRecoveryStorage,
   EntitlementRevocationListRecord,
@@ -666,6 +668,65 @@ export class D1AutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
   }
 }
 
+export class D1PendingUnlockApprovalStorage implements PendingUnlockApprovalStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async upsertWithDedup(
+    serverDomain: string,
+    requestId: string,
+    now: number,
+    pushDedupMs: number,
+  ): Promise<{ requestId: string; shouldPush: boolean }> {
+    const existing = await this.db
+      .prepare("SELECT * FROM pending_unlock_approvals WHERE server_domain = ?")
+      .bind(serverDomain)
+      .first<{ server_domain: string; request_id: string; requested_at: number; last_push_at: number }>();
+    if (!existing) {
+      await this.db
+        .prepare(
+          `INSERT INTO pending_unlock_approvals
+             (server_domain, request_id, requested_at, last_push_at)
+           VALUES (?, ?, ?, 0)`,
+        )
+        .bind(serverDomain, requestId, now)
+        .run();
+      return { requestId, shouldPush: true };
+    }
+    const shouldPush = now - existing.last_push_at > pushDedupMs;
+    return { requestId: existing.request_id, shouldPush };
+  }
+
+  async touchLastPushAt(serverDomain: string, at: number): Promise<void> {
+    await this.db
+      .prepare("UPDATE pending_unlock_approvals SET last_push_at = ? WHERE server_domain = ?")
+      .bind(at, serverDomain)
+      .run();
+  }
+
+  async get(serverDomain: string): Promise<PendingUnlockApprovalRecord | undefined> {
+    const r = await this.db
+      .prepare("SELECT * FROM pending_unlock_approvals WHERE server_domain = ?")
+      .bind(serverDomain)
+      .first<{ server_domain: string; request_id: string; requested_at: number; last_push_at: number }>();
+    if (!r) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      requestId: r.request_id,
+      requestedAt: r.requested_at,
+      lastPushAt: r.last_push_at,
+    };
+  }
+
+  async delete(serverDomain: string): Promise<boolean> {
+    const r = await this.db
+      .prepare("DELETE FROM pending_unlock_approvals WHERE server_domain = ?")
+      .bind(serverDomain)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+}
+
 export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
   constructor(private readonly db: D1Database) {}
 
@@ -1043,6 +1104,7 @@ export class D1Storage implements Storage {
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
+  pendingUnlockApprovals: PendingUnlockApprovalStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
@@ -1058,6 +1120,7 @@ export class D1Storage implements Storage {
     this.installEvents = new D1InstallEventStorage(db);
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
+    this.pendingUnlockApprovals = new D1PendingUnlockApprovalStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.marketplace = new D1MarketplaceStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);

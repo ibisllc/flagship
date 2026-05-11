@@ -13,6 +13,7 @@ import {
 import type {
   AutoUnlockLeaseStorage,
   LuksKeyStorage,
+  PendingUnlockApprovalStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
@@ -46,11 +47,36 @@ export interface LuksKeyDeps {
    * absent, only the legacy deposit path is in play.
    */
   autoUnlockLeases?: AutoUnlockLeaseStorage;
+  /**
+   * When wired alongside `pushUserDevices`, /consume returning 404
+   * records a pending row + fans a push to the user's devices (rate-
+   * limited per pushDedupMs). The lease deposit handler clears the
+   * pending row on success. When absent, /consume just returns 404.
+   */
+  pendingUnlockApprovals?: PendingUnlockApprovalStorage;
+  /**
+   * Push fan-out for unlock-request notifications. Built by the
+   * apex Worker from `forwardToProviders` + `pushTokens.listByUser`.
+   * Returns silently on no-tokens / no-config — the consume path
+   * doesn't care if the push actually went out.
+   */
+  pushUserDevices?: (username: string, category: string) => Promise<void>;
   maxAgeMs?: number;
+  /** Skip pushing if a push for this server fired within this window. Default 60s. */
+  pushDedupMs?: number;
   now?: () => number;
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
+const DEFAULT_PUSH_DEDUP_MS = 60_000;
+
+function randomRequestId(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
+}
 
 export async function handlePutSealedLuksKey(
   deps: LuksKeyDeps,
@@ -255,6 +281,27 @@ export async function handleConsumeUnlockKey(
   // /api/server/:host/unlock-key endpoint still works.
   const dep = await deps.luksKeys.consumeUnlock(host, now());
   if (!dep) {
+    // No lease, no legacy deposit — record this server as a pending
+    // unlock approval and fan a push to the owner's devices (rate-
+    // limited). The pending row is the canonical "this server is
+    // asking to boot" entity that the webapp's unlock-approvals
+    // view shows + the lease deposit handler clears on success.
+    if (deps.pendingUnlockApprovals) {
+      const dedupMs = deps.pushDedupMs ?? DEFAULT_PUSH_DEDUP_MS;
+      const result = await deps.pendingUnlockApprovals.upsertWithDedup(
+        host,
+        randomRequestId(),
+        now(),
+        dedupMs,
+      );
+      if (result.shouldPush && deps.pushUserDevices) {
+        // Fire-and-forget push so the boot poll's response time
+        // isn't held back by APNs/FCM/Web Push round-trips. Errors
+        // are silently swallowed by the pushUserDevices wrapper.
+        await deps.pendingUnlockApprovals.touchLastPushAt(host, now());
+        void deps.pushUserDevices(reg.username, "unlock-request").catch(() => {});
+      }
+    }
     return { status: 404, body: { error: "no pending unlock-key deposit" } };
   }
   return {
@@ -348,6 +395,11 @@ export async function handleDepositAutoUnlockLease(
     depositedAt: now(),
     expiresAt: r.expiresAt,
   });
+  // Clear the pending row — the user has acted, no more pushes needed
+  // for this boot wait.
+  if (deps.pendingUnlockApprovals) {
+    await deps.pendingUnlockApprovals.delete(host).catch(() => {});
+  }
   return { status: 200, body: { ok: true, leaseId: r.leaseId } };
 }
 
@@ -410,6 +462,37 @@ export async function handleRevokeAutoUnlockLease(
 
   const removed = await deps.autoUnlockLeases.revoke(host, leaseId);
   return { status: 200, body: { ok: true, removed } };
+}
+
+/**
+ * Read the pending unlock-approval row for a server (proxied by the
+ * daemon's /api/screens/unlock-approvals/pending). Public read —
+ * the row only contains opaque metadata (requestId + requestedAt),
+ * never the unlock key itself, so disclosure is safe. Returns
+ * `{ pending: [] }` shape so the daemon-side response parser doesn't
+ * need conditional branching.
+ */
+export async function handleGetPendingUnlockApproval(
+  deps: LuksKeyDeps,
+  serverFqdn: string,
+): Promise<HandlerResponse> {
+  if (!deps.pendingUnlockApprovals) {
+    return { status: 200, body: { pending: [] } };
+  }
+  const row = await deps.pendingUnlockApprovals.get(serverFqdn);
+  if (!row) return { status: 200, body: { pending: [] } };
+  return {
+    status: 200,
+    body: {
+      pending: [
+        {
+          requestId: row.requestId,
+          serverFqdn: row.serverDomain,
+          requestedAt: row.requestedAt,
+        },
+      ],
+    },
+  };
 }
 
 /**

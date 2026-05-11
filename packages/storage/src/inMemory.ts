@@ -1,6 +1,8 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  PendingUnlockApprovalRecord,
+  PendingUnlockApprovalStorage,
   WebauthnRecoveryRecord,
   WebauthnRecoveryStorage,
   EntitlementRevocationListRecord,
@@ -400,6 +402,39 @@ export class InMemoryWebauthnRecoveryStorage implements WebauthnRecoveryStorage 
   }
 }
 
+export class InMemoryPendingUnlockApprovalStorage implements PendingUnlockApprovalStorage {
+  private rows = new Map<string, PendingUnlockApprovalRecord>();
+
+  async upsertWithDedup(
+    serverDomain: string,
+    requestId: string,
+    now: number,
+    pushDedupMs: number,
+  ): Promise<{ requestId: string; shouldPush: boolean }> {
+    const existing = this.rows.get(serverDomain);
+    if (!existing) {
+      this.rows.set(serverDomain, { serverDomain, requestId, requestedAt: now, lastPushAt: 0 });
+      return { requestId, shouldPush: true };
+    }
+    const shouldPush = now - existing.lastPushAt > pushDedupMs;
+    return { requestId: existing.requestId, shouldPush };
+  }
+
+  async touchLastPushAt(serverDomain: string, at: number): Promise<void> {
+    const r = this.rows.get(serverDomain);
+    if (r) r.lastPushAt = at;
+  }
+
+  async get(serverDomain: string): Promise<PendingUnlockApprovalRecord | undefined> {
+    const r = this.rows.get(serverDomain);
+    return r ? { ...r } : undefined;
+  }
+
+  async delete(serverDomain: string): Promise<boolean> {
+    return this.rows.delete(serverDomain);
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -409,6 +444,7 @@ export class InMemoryStorage implements Storage {
   installEvents = new InMemoryInstallEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
+  pendingUnlockApprovals = new InMemoryPendingUnlockApprovalStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   marketplace = new InMemoryMarketplaceStorage();
   pushTokens = new InMemoryPushTokenStorage();

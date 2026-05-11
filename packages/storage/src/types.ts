@@ -188,6 +188,41 @@ export interface WebauthnRecoveryStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Pending unlock approvals (push trigger from /consume)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface PendingUnlockApprovalRecord {
+  serverDomain: string;
+  requestId: string;
+  requestedAt: number;
+  /** Wall-clock ms of the last push fan-out for this row, or 0 if never. */
+  lastPushAt: number;
+}
+
+export interface PendingUnlockApprovalStorage {
+  /**
+   * Insert (or refresh) a pending row keyed by serverDomain. Returns
+   * `{ requestId, shouldPush }` — `shouldPush` is true iff the row
+   * was newly inserted OR `now - lastPushAt > pushDedupMs`. Either
+   * way, callers should `touchLastPushAt(serverDomain, now)` after a
+   * successful fan-out so subsequent polls within the dedup window
+   * skip the push.
+   */
+  upsertWithDedup(
+    serverDomain: string,
+    requestId: string,
+    now: number,
+    pushDedupMs: number,
+  ): Promise<{ requestId: string; shouldPush: boolean }>;
+  /** Confirm push fired (writes lastPushAt). */
+  touchLastPushAt(serverDomain: string, at: number): Promise<void>;
+  /** Read for /api/unlock/approvals/pending (the daemon proxies this). */
+  get(serverDomain: string): Promise<PendingUnlockApprovalRecord | undefined>;
+  /** Called from handleDepositAutoUnlockLease on success. */
+  delete(serverDomain: string): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Auto-unlock leases
 // ──────────────────────────────────────────────────────────────────────
 
@@ -227,6 +262,7 @@ export interface Storage {
   installEvents: InstallEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
+  pendingUnlockApprovals: PendingUnlockApprovalStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;

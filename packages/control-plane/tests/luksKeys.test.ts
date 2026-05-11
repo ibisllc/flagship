@@ -13,6 +13,7 @@ import {
   handleConsumeUnlockKey,
   handleDepositAutoUnlockLease,
   handleDepositUnlockKey,
+  handleGetPendingUnlockApproval,
   handleGetSealedLuksKey,
   handleListAutoUnlockLeases,
   handlePutSealedLuksKey,
@@ -599,5 +600,265 @@ describe("auto-unlock leases — list", () => {
       "ghost.flagship.services",
     );
     expect(res.status).toBe(404);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// /consume push trigger + pending-approvals (#8)
+// ──────────────────────────────────────────────────────────────────────
+
+function consumeRequest(identity: Keypair, issuedAtOverride?: number) {
+  const nonce = new Uint8Array(32);
+  crypto.getRandomValues(nonce);
+  const issuedAt = issuedAtOverride ?? Date.now();
+  const sig = signConsumeUnlockKey({ serverId: HOST, nonce, issuedAt }, identity);
+  return {
+    request: { serverId: HOST, nonce: bytesToHex(nonce), issuedAt },
+    signature: bytesToHex(sig),
+  };
+}
+
+describe("consume → push trigger (no lease, no deposit)", () => {
+  it("records a pending-approval row + fires push on first poll", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    const pushed: Array<{ username: string; category: string }> = [];
+
+    const res = await handleConsumeUnlockKey(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        autoUnlockLeases: storage.autoUnlockLeases,
+        pendingUnlockApprovals: storage.pendingUnlockApprovals,
+        pushUserDevices: async (username, category) => {
+          pushed.push({ username, category });
+        },
+      },
+      HOST,
+      consumeRequest(identity),
+    );
+    expect(res.status).toBe(404);
+
+    // Pending row recorded.
+    const row = await storage.pendingUnlockApprovals.get(HOST);
+    expect(row).toBeDefined();
+    expect(row?.serverDomain).toBe(HOST);
+    expect(row?.requestId.length).toBeGreaterThanOrEqual(16);
+
+    // Push fired with the right user + category. The async push is
+    // fire-and-forget; the upsert/touch is synchronous, so we wait
+    // a microtask before asserting.
+    await new Promise((r) => setImmediate(r));
+    expect(pushed).toEqual([{ username: USERNAME, category: "unlock-request" }]);
+  });
+
+  it("dedupes pushes within the configured window (default 60s)", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    const pushed: string[] = [];
+    const deps = {
+      servers: storage.servers,
+      usernames: storage.usernames,
+      luksKeys: storage.luksKeys,
+      autoUnlockLeases: storage.autoUnlockLeases,
+      pendingUnlockApprovals: storage.pendingUnlockApprovals,
+      pushUserDevices: async (u: string) => { pushed.push(u); },
+      pushDedupMs: 60_000,
+    };
+    await handleConsumeUnlockKey(deps, HOST, consumeRequest(identity));
+    await new Promise((r) => setImmediate(r));
+    await handleConsumeUnlockKey(deps, HOST, consumeRequest(identity));
+    await new Promise((r) => setImmediate(r));
+    await handleConsumeUnlockKey(deps, HOST, consumeRequest(identity));
+    await new Promise((r) => setImmediate(r));
+    expect(pushed).toHaveLength(1);
+  });
+
+  it("re-pushes after the dedup window elapses (boot stage backed off then retried)", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    const pushed: string[] = [];
+    let clock = 1_000_000;
+    const deps = {
+      servers: storage.servers,
+      usernames: storage.usernames,
+      luksKeys: storage.luksKeys,
+      autoUnlockLeases: storage.autoUnlockLeases,
+      pendingUnlockApprovals: storage.pendingUnlockApprovals,
+      pushUserDevices: async (u: string) => { pushed.push(u); },
+      pushDedupMs: 1_000,
+      now: () => clock,
+    };
+    await handleConsumeUnlockKey(deps, HOST, consumeRequest(identity, clock));
+    await new Promise((r) => setImmediate(r));
+    clock += 2_000; // past the 1s dedup window
+    await handleConsumeUnlockKey(deps, HOST, consumeRequest(identity, clock));
+    await new Promise((r) => setImmediate(r));
+    expect(pushed).toHaveLength(2);
+  });
+
+  it("does NOT push when pushUserDevices isn't wired (graceful degrade)", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    const res = await handleConsumeUnlockKey(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        autoUnlockLeases: storage.autoUnlockLeases,
+        pendingUnlockApprovals: storage.pendingUnlockApprovals,
+        // pushUserDevices intentionally omitted
+      },
+      HOST,
+      consumeRequest(identity),
+    );
+    expect(res.status).toBe(404);
+    // Pending row still recorded so the daemon's screen view can list it.
+    expect(await storage.pendingUnlockApprovals.get(HOST)).toBeDefined();
+  });
+
+  it("does NOT push when a lease is present (lease wins; no boot wait)", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    // Pre-deposit a lease.
+    await storage.autoUnlockLeases.put({
+      serverDomain: HOST,
+      leaseId: "abcdef0123456789",
+      unlockKeyHex: "00".repeat(32),
+      multiUse: false,
+      depositedAt: Date.now(),
+      expiresAt: Date.now() + 600_000,
+    });
+    const pushed: string[] = [];
+    const res = await handleConsumeUnlockKey(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        autoUnlockLeases: storage.autoUnlockLeases,
+        pendingUnlockApprovals: storage.pendingUnlockApprovals,
+        pushUserDevices: async (u) => { pushed.push(u); },
+      },
+      HOST,
+      consumeRequest(identity),
+    );
+    expect(res.status).toBe(200);
+    expect(pushed).toHaveLength(0);
+    expect(await storage.pendingUnlockApprovals.get(HOST)).toBeUndefined();
+  });
+
+  it("clears the pending row when a lease is deposited (Approve flow)", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    // First, simulate a boot poll → records pending.
+    await handleConsumeUnlockKey(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        autoUnlockLeases: storage.autoUnlockLeases,
+        pendingUnlockApprovals: storage.pendingUnlockApprovals,
+      },
+      HOST,
+      consumeRequest(identity),
+    );
+    expect(await storage.pendingUnlockApprovals.get(HOST)).toBeDefined();
+
+    // Now the user clicks Approve — webapp signs + posts a lease.
+    const unlockKey = new Uint8Array(32).fill(0xab);
+    const issuedAt = Date.now();
+    const expiresAt = issuedAt + 600_000;
+    const leaseSig = signAutoUnlockLease(
+      { serverId: HOST, leaseId: "feedface00112233", expiresAt, unlockKey, multiUse: false, issuedAt },
+      irk,
+    );
+    const dRes = await handleDepositAutoUnlockLease(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        autoUnlockLeases: storage.autoUnlockLeases,
+        pendingUnlockApprovals: storage.pendingUnlockApprovals,
+      },
+      HOST,
+      {
+        request: {
+          serverId: HOST,
+          leaseId: "feedface00112233",
+          unlockKey: bytesToHex(unlockKey),
+          multiUse: false,
+          expiresAt,
+          issuedAt,
+        },
+        signature: bytesToHex(leaseSig),
+      },
+    );
+    expect(dRes.status).toBe(200);
+    // Pending row is gone.
+    expect(await storage.pendingUnlockApprovals.get(HOST)).toBeUndefined();
+  });
+});
+
+describe("GET /api/unlock/approvals/pending (proxied by daemon)", () => {
+  it("returns pending=[] when no row exists", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    const res = await handleGetPendingUnlockApproval(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        pendingUnlockApprovals: storage.pendingUnlockApprovals,
+      },
+      HOST,
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as { pending: unknown[] }).pending).toEqual([]);
+  });
+
+  it("returns the pending row's metadata (no unlock key disclosure)", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    await storage.pendingUnlockApprovals.upsertWithDedup(HOST, "req-deadbeef", 1_700_000_000_000, 60_000);
+    const res = await handleGetPendingUnlockApproval(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        pendingUnlockApprovals: storage.pendingUnlockApprovals,
+      },
+      HOST,
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as { pending: Array<{ requestId: string; serverFqdn: string; requestedAt: number }> };
+    expect(body.pending).toEqual([
+      { requestId: "req-deadbeef", serverFqdn: HOST, requestedAt: 1_700_000_000_000 },
+    ]);
+  });
+
+  it("gracefully returns pending=[] when storage isn't configured", async () => {
+    const irk = makeKey();
+    const identity = makeKey();
+    const storage = await setup({ irk, identity });
+    const res = await handleGetPendingUnlockApproval(
+      {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        luksKeys: storage.luksKeys,
+        // pendingUnlockApprovals intentionally omitted
+      },
+      HOST,
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as { pending: unknown[] }).pending).toEqual([]);
   });
 });

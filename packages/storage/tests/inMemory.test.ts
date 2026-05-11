@@ -216,4 +216,51 @@ describe("InMemoryStorage", () => {
       expect(await s.webauthnRecovery.get("ghost")).toBeUndefined();
     });
   });
+
+  describe("pendingUnlockApprovals", () => {
+    const SRV = "test.alice.flagship.services";
+
+    it("first upsert returns shouldPush=true and a fresh requestId", async () => {
+      const s = new InMemoryStorage();
+      const r = await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-1", 1_000, 60_000);
+      expect(r).toEqual({ requestId: "req-1", shouldPush: true });
+    });
+
+    it("second upsert within dedup window keeps original requestId and skips push", async () => {
+      const s = new InMemoryStorage();
+      await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-1", 1_000, 60_000);
+      await s.pendingUnlockApprovals.touchLastPushAt(SRV, 1_000);
+      const r = await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-2", 30_000, 60_000);
+      expect(r).toEqual({ requestId: "req-1", shouldPush: false });
+    });
+
+    it("upsert outside dedup window returns shouldPush=true (re-push), keeps original requestId", async () => {
+      const s = new InMemoryStorage();
+      await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-1", 1_000, 60_000);
+      await s.pendingUnlockApprovals.touchLastPushAt(SRV, 1_000);
+      const r = await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-2", 65_000, 60_000);
+      expect(r).toEqual({ requestId: "req-1", shouldPush: true });
+    });
+
+    it("delete clears the row; subsequent upsert is a fresh row", async () => {
+      const s = new InMemoryStorage();
+      await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-1", 1_000, 60_000);
+      expect(await s.pendingUnlockApprovals.delete(SRV)).toBe(true);
+      expect(await s.pendingUnlockApprovals.get(SRV)).toBeUndefined();
+      const r = await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-fresh", 2_000, 60_000);
+      expect(r).toEqual({ requestId: "req-fresh", shouldPush: true });
+    });
+
+    it("get returns the persisted row including lastPushAt", async () => {
+      const s = new InMemoryStorage();
+      await s.pendingUnlockApprovals.upsertWithDedup(SRV, "req-1", 1_000, 60_000);
+      await s.pendingUnlockApprovals.touchLastPushAt(SRV, 1_500);
+      expect(await s.pendingUnlockApprovals.get(SRV)).toEqual({
+        serverDomain: SRV,
+        requestId: "req-1",
+        requestedAt: 1_000,
+        lastPushAt: 1_500,
+      });
+    });
+  });
 });

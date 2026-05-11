@@ -25,6 +25,7 @@ import {
   handleConsumeUnlockKey,
   handleDepositAutoUnlockLease,
   handleDepositUnlockKey,
+  handleGetPendingUnlockApproval,
   handleListAutoUnlockLeases,
   handleRevokeAutoUnlockLease,
   handleDns01Delete,
@@ -126,6 +127,7 @@ const ROUTE_RE = {
   LUKS_LEASE_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease$/,
   LUKS_LEASE_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease\/([^/]+)$/,
   LUKS_LEASE_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases$/,
+  UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
@@ -363,6 +365,7 @@ export async function tryControlPlane(
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_UNLOCK_CONSUME))) {
     const host = decodeURIComponent(m[1]!);
+    const forwarder = buildOptionalPushForwarder(env);
     return finishPlain(
       await handleConsumeUnlockKey(
         {
@@ -370,6 +373,10 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
+          pendingUnlockApprovals: storage.pendingUnlockApprovals,
+          pushUserDevices: forwarder
+            ? buildPushUserDevices(storage.pushTokens, forwarder)
+            : undefined,
         },
         host,
         await readJson(request),
@@ -385,9 +392,30 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
+          pendingUnlockApprovals: storage.pendingUnlockApprovals,
         },
         host,
         await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.UNLOCK_APPROVALS_PENDING.test(path)) {
+    const serverFqdn = url.searchParams.get("serverFqdn");
+    if (!serverFqdn) {
+      return finishPlain({
+        status: 400,
+        body: { error: "serverFqdn query param required" },
+      });
+    }
+    return finishPlain(
+      await handleGetPendingUnlockApproval(
+        {
+          servers: storage.servers,
+          usernames: storage.usernames,
+          luksKeys: storage.luksKeys,
+          pendingUnlockApprovals: storage.pendingUnlockApprovals,
+        },
+        serverFqdn,
       ),
     );
   }
@@ -770,4 +798,41 @@ function finishPlain(r: HandlerResponse): Response {
     status: r.status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/**
+ * Build the `pushUserDevices` closure handed to the consume handler.
+ * Returns silently when the user has no registered tokens or the
+ * forwarder has no provider configured. The wrapper swallows errors
+ * because /consume's response time shouldn't be held back by push
+ * provider round-trips, and a failed push isn't an unlock failure.
+ */
+function buildPushUserDevices(
+  pushTokens: import("@flagship/storage").PushTokenStorage,
+  forwarder: NonNullable<ReturnType<typeof buildOptionalPushForwarder>>,
+): (username: string, category: string) => Promise<void> {
+  return async (username, category) => {
+    try {
+      const tokens = await pushTokens.listByUser(username);
+      if (tokens.length === 0) return;
+      await forwarder({
+        targets: tokens.map((t) => ({
+          tokenId: t.tokenId,
+          platform: t.platform,
+          providerToken: t.providerToken,
+        })),
+        category,
+        // Empty payload — the SW shows a generic "server is asking
+        // to boot" notification. RFC 8291 encrypted payloads can
+        // ride this same shape later by setting sealedPayloadHex
+        // from a sealed-against-pushX25519Pub blob.
+        sealedPayloadHex: "",
+      });
+    } catch {
+      // Silently swallow — push failures shouldn't surface as boot
+      // failures. The pending row stays around so the next /consume
+      // poll within the dedup window will skip the push, and a
+      // later poll outside the window will retry.
+    }
+  };
 }
