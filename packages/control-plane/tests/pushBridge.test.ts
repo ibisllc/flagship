@@ -301,6 +301,82 @@ describe("buildPushForwarder — Web Push (RFC 8030 + VAPID)", () => {
     expect(r.sent).toBe(0);
   });
 
+  it("RFC 8291 encrypted-payload push: sets aes128gcm content-encoding + body has the spec header", async () => {
+    // Generate a real P-256 keypair to play the role of the user-agent
+    // — exporting raw gives us a 65-byte uncompressed pubkey.
+    const uaKp = (await crypto.subtle.generateKey(
+      { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"],
+    )) as CryptoKeyPair;
+    const uaP256dh = new Uint8Array(await crypto.subtle.exportKey("raw", uaKp.publicKey));
+    const auth = crypto.getRandomValues(new Uint8Array(16));
+    const subWithKeys = JSON.stringify({
+      endpoint: "https://fcm.googleapis.com/wp/abc123",
+      keys: {
+        p256dh: Buffer.from(uaP256dh).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+        auth: Buffer.from(auth).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+      },
+    });
+    const { f, calls } = fakeFetch([{ status: 201, body: "" }]);
+    const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1_700_000_000_000 });
+    const r = await forward({
+      targets: [{ tokenId: "tok-web", platform: "webpush", providerToken: subWithKeys }],
+      category: "unlock-request",
+      sealedPayloadHex: "",
+      webpushPayloadBytes: new TextEncoder().encode('{"kind":"unlock-request","serverFqdn":"x.alice.flagship.services"}'),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.sent).toBe(1);
+    const c = calls[0]!;
+    expect(c.headers["content-encoding"]).toBe("aes128gcm");
+    expect(c.headers["content-type"]).toBe("application/octet-stream");
+    expect(c.headers["content-length"]).not.toBe("0");
+    // RFC 8188 header: salt(16) | rs(4 BE = 4096) | idlen(1=65) | keyid(65)
+    // = 86 bytes minimum, then ciphertext+tag. The fakeFetch stores
+    // whatever init.body was — for the encrypted path that's an
+    // ArrayBuffer; coerce to Uint8Array for byte-level assertions.
+    const raw = c.body as unknown;
+    const bodyBytes = raw instanceof Uint8Array
+      ? raw
+      : new Uint8Array(raw as ArrayBuffer);
+    expect(bodyBytes.byteLength).toBeGreaterThan(86);
+    // rs at offset 16 should be 0x00001000 (4096) big-endian.
+    expect(bodyBytes[16]).toBe(0x00);
+    expect(bodyBytes[17]).toBe(0x00);
+    expect(bodyBytes[18]).toBe(0x10);
+    expect(bodyBytes[19]).toBe(0x00);
+    // idlen at offset 20 = 65.
+    expect(bodyBytes[20]).toBe(65);
+    // keyid first byte = 0x04 (uncompressed P-256 marker).
+    expect(bodyBytes[21]).toBe(0x04);
+  });
+
+  it("falls back to empty-payload when payloadBytes omitted (existing behaviour preserved)", async () => {
+    const { f, calls } = fakeFetch([{ status: 201, body: "" }]);
+    const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1 });
+    await forward({
+      targets: [{ tokenId: "t", platform: "webpush", providerToken: subscription("https://x/y") }],
+      category: "x",
+      sealedPayloadHex: "",
+    });
+    expect(calls[0]!.body).toBe("");
+    expect(calls[0]!.headers["content-encoding"]).toBeUndefined();
+    expect(calls[0]!.headers["content-length"]).toBe("0");
+  });
+
+  it("rejects encrypted-payload request when subscription is missing keys (helpful error path)", async () => {
+    const subNoKeys = JSON.stringify({ endpoint: "https://x/y" });
+    const { f } = fakeFetch([]);
+    const forward = buildPushForwarder({ ...cfg, fetchImpl: f, now: () => 1 });
+    const r = await forward({
+      targets: [{ tokenId: "t", platform: "webpush", providerToken: subNoKeys }],
+      category: "x",
+      sealedPayloadHex: "",
+      webpushPayloadBytes: new TextEncoder().encode("hi"),
+    });
+    expect(r.failed).toBe(1);
+    expect(r.sent).toBe(0);
+  });
+
   it("counts as failed when webpush isn't configured (cfg.webpush undefined)", async () => {
     const { f } = fakeFetch([]);
     const forward = buildPushForwarder({ fetchImpl: f, now: () => 1 });

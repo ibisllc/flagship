@@ -28,7 +28,16 @@ export interface ProviderConfig {
 
 export type FetchLike = (
   input: string,
-  init?: { method?: string; headers?: Record<string, string>; body?: string }
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    /**
+     * Body may be a string (JSON / form payloads) OR raw bytes —
+     * the latter is needed for binary surfaces like RFC 8291
+     * encrypted Web Push (Content-Encoding: aes128gcm).
+     */
+    body?: string | Uint8Array | ArrayBuffer;
+  }
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> }>;
 
 export interface LLMProvider {

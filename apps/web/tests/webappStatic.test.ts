@@ -328,16 +328,21 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("userVisibleOnly: true");
   });
 
-  it("/webapp/service-worker.js handles 'push' + 'notificationclick' events", async () => {
+  it("/webapp/service-worker.js handles 'push' + 'notificationclick' events with RFC 8291 personalisation", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/service-worker.js" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain('addEventListener("push"');
     expect(r.body).toContain('addEventListener("notificationclick"');
     expect(r.body).toContain("showNotification");
-    // SHELL gained /lib/push.js with the v9 bump.
     expect(r.body).toContain('"/lib/push.js"');
-    expect(r.body).toContain('SHELL_VERSION = "v9"');
+    // v10 reads event.data.json() (RFC 8291 plaintext from .com) and
+    // personalises the body with the requesting server FQDN.
+    expect(r.body).toContain('SHELL_VERSION = "v10"');
+    expect(r.body).toContain("event.data?.json");
+    expect(r.body).toContain("serverFqdn");
+    // Must keep the empty-payload fallback (some pushes have no body).
+    expect(r.body).toContain("A server is asking to boot");
   });
 
   it("/webapp/views/settings.js wires the browser-notifications toggle", async () => {

@@ -88,6 +88,13 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
     targets: PushTarget[];
     category: string;
     sealedPayloadHex: string;
+    /**
+     * Optional plaintext payload, used by the Web Push path to encrypt
+     * via RFC 8291 so the SW can show server-specific notification
+     * text. APNs and FCM ride the existing sealed-payload pattern
+     * (encrypted by the daemon under the device's pushX25519Pub).
+     */
+    webpushPayloadBytes?: Uint8Array;
   }): Promise<PushFanoutResult> {
     let sent = 0;
     let failed = 0;
@@ -124,6 +131,7 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
             await sendWebpush({
               cfg: cfg.webpush,
               providerToken: t.providerToken,
+              payloadBytes: args.webpushPayloadBytes,
               fetchImpl,
               now,
             });
@@ -300,10 +308,12 @@ const WEBPUSH_DEFAULT_TTL_SEC = 60 * 60; // 1 hour
 async function sendWebpush(args: {
   cfg: NonNullable<PushBridgeConfig["webpush"]>;
   providerToken: string;
+  /** Optional plaintext payload (RFC 8291). When omitted, an empty push is sent. */
+  payloadBytes?: Uint8Array;
   fetchImpl: FetchLike;
   now: () => number;
 }): Promise<void> {
-  let sub: { endpoint?: unknown };
+  let sub: { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
   try {
     sub = JSON.parse(args.providerToken);
   } catch {
@@ -321,25 +331,199 @@ async function sendWebpush(args: {
     now: args.now,
   });
 
-  // Empty-payload push: no body, no Content-Encoding, no Crypto-Key
-  // beyond what VAPID requires. The browser receives a `push` event
-  // with `event.data === null` and the SW shows a generic notification.
+  // Two paths:
+  //   - empty payload (no keys needed): no body, no Content-Encoding.
+  //   - encrypted payload (RFC 8291): need subscription's p256dh + auth
+  //     keys; encrypt with AES-128-GCM per RFC 8188 framing.
+  let body: ArrayBuffer | null = null;
+  const headers: Record<string, string> = {
+    authorization: `vapid t=${jwt}, k=${args.cfg.vapidPublicKeyB64Url}`,
+    ttl: String(WEBPUSH_DEFAULT_TTL_SEC),
+  };
+  if (args.payloadBytes && args.payloadBytes.length > 0) {
+    if (typeof sub.keys?.p256dh !== "string" || typeof sub.keys?.auth !== "string") {
+      throw new Error("webpush payload requested but subscription missing p256dh/auth keys");
+    }
+    const encrypted = await encryptWebPushPayload(
+      args.payloadBytes,
+      base64UrlDecode(sub.keys.p256dh),
+      base64UrlDecode(sub.keys.auth),
+    );
+    body = encrypted.body.buffer.slice(
+      encrypted.body.byteOffset,
+      encrypted.body.byteOffset + encrypted.body.byteLength,
+    ) as ArrayBuffer;
+    headers["content-encoding"] = "aes128gcm";
+    headers["content-type"] = "application/octet-stream";
+    headers["content-length"] = String(encrypted.body.length);
+  } else {
+    headers["content-length"] = "0";
+  }
+
   const r = await args.fetchImpl(sub.endpoint, {
     method: "POST",
-    headers: {
-      authorization: `vapid t=${jwt}, k=${args.cfg.vapidPublicKeyB64Url}`,
-      ttl: String(WEBPUSH_DEFAULT_TTL_SEC),
-      "content-length": "0",
-    },
+    headers,
+    ...(body ? { body } : {}),
   });
-  // 201 Created (push queued) is the success case. 410 Gone means
-  // the subscription was revoked client-side; surface that so the
-  // caller can prune the dead token. Other 4xx/5xx are treated as
-  // failures (counted against `failed` upstream).
+  // 201 Created = queued. 410/404 = subscription revoked client-side
+  // (caller can prune); otherwise non-2xx is a generic failure.
   if (r.status === 410 || r.status === 404) {
     throw new Error("webpush 410: subscription gone (prune)");
   }
   if (!r.ok) throw new Error(`webpush ${r.status}: ${await r.text()}`);
+}
+
+// ────────────────────────────────────────────────────────────────────
+// RFC 8291 (Web Push Message Encryption) + RFC 8188 (aes128gcm framing)
+// ────────────────────────────────────────────────────────────────────
+
+/**
+ * Encrypt a Web Push payload per RFC 8291 / RFC 8188.
+ *
+ * Wire format (single record, max 4078 bytes plaintext):
+ *   [salt(16) | rs(4 BE) | idlen(1) | server_eph_pub(65) | ciphertext+tag]
+ *
+ * Key derivation:
+ *   1. Generate ephemeral P-256 keypair on the application server.
+ *   2. ECDH shared = ECDH(eph_priv, ua_p256dh).
+ *   3. IKM = HKDF-SHA256(salt=auth_secret, info="WebPush: info\0" || ua_p256dh || eph_pub, IKM_len=32, key=shared).
+ *   4. CEK = HKDF-SHA256(salt=salt, info="Content-Encoding: aes128gcm\0", L=16, key=IKM).
+ *   5. NONCE = HKDF-SHA256(salt=salt, info="Content-Encoding: nonce\0", L=12, key=IKM).
+ *
+ * Plaintext is appended with the per-record delimiter byte (0x02 for
+ * the last record; this implementation is single-record so always
+ * 0x02). No length-obfuscation padding for v1.
+ */
+async function encryptWebPushPayload(
+  plaintext: Uint8Array,
+  uaP256dh: Uint8Array,        // 65-byte uncompressed P-256 pubkey
+  authSecret: Uint8Array,      // 16-byte secret from subscription.keys.auth
+): Promise<{ body: Uint8Array }> {
+  if (uaP256dh.length !== 65 || uaP256dh[0] !== 0x04) {
+    throw new Error("ua p256dh must be 65-byte uncompressed P-256 pubkey");
+  }
+  if (authSecret.length !== 16) {
+    throw new Error("auth secret must be 16 bytes");
+  }
+  // RFC 8188 single-record limit: rs - 16 (tag) - 1 (delimiter) bytes.
+  // Default rs=4096, so 4079 plaintext.
+  const RECORD_SIZE = 4096;
+  if (plaintext.length > RECORD_SIZE - 17) {
+    throw new Error(`plaintext too large (${plaintext.length} > ${RECORD_SIZE - 17})`);
+  }
+
+  // 1. Server ephemeral keypair. Some lib targets in this build don't
+  // expose CryptoKeyPair / CryptoKey by name, so we let TS infer
+  // through the SubtleCrypto surface and skip the named annotations.
+  const ephKp = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"],
+  );
+  const ephPubKey =
+    "publicKey" in ephKp ? ephKp.publicKey : (ephKp as { publicKey: typeof ephKp }).publicKey;
+  const ephPrivKey =
+    "privateKey" in ephKp ? ephKp.privateKey : (ephKp as { privateKey: typeof ephKp }).privateKey;
+  const ephPub = new Uint8Array(await crypto.subtle.exportKey("raw", ephPubKey));
+  if (ephPub.length !== 65 || ephPub[0] !== 0x04) {
+    throw new Error("unexpected ephemeral pubkey shape");
+  }
+
+  // 2. ECDH shared secret. Import the UA's pubkey as a CryptoKey.
+  const uaKey = await crypto.subtle.importKey(
+    "raw", uaP256dh,
+    { name: "ECDH", namedCurve: "P-256" },
+    false, [],
+  );
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: "ECDH", public: uaKey },
+    ephPrivKey,
+    256,
+  );
+  const shared = new Uint8Array(sharedBits);
+
+  // 3. IKM per RFC 8291.
+  const ikmInfo = concatBytes(
+    new TextEncoder().encode("WebPush: info\0"),
+    uaP256dh,
+    ephPub,
+  );
+  const ikm = await hkdfSha256(authSecret, shared, ikmInfo, 32);
+
+  // 4 + 5. CEK + NONCE per RFC 8188.
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdfSha256(
+    salt,
+    ikm,
+    new TextEncoder().encode("Content-Encoding: aes128gcm\0"),
+    16,
+  );
+  const nonce = await hkdfSha256(
+    salt,
+    ikm,
+    new TextEncoder().encode("Content-Encoding: nonce\0"),
+    12,
+  );
+
+  // Encrypt: plaintext || 0x02 (last-record delimiter) → AES-128-GCM.
+  const padded = new Uint8Array(plaintext.length + 1);
+  padded.set(plaintext, 0);
+  padded[plaintext.length] = 0x02;
+  const aesKey = await crypto.subtle.importKey(
+    "raw", cek,
+    { name: "AES-GCM" },
+    false, ["encrypt"],
+  );
+  const ciphertext = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, padded),
+  );
+
+  // Header per RFC 8188:
+  //   salt(16) | rs(4 BE) | idlen(1) | keyid(idlen)  → followed by ciphertext.
+  const header = new Uint8Array(16 + 4 + 1 + 65);
+  header.set(salt, 0);
+  // rs = 4096 (record size)
+  header[16] = (RECORD_SIZE >>> 24) & 0xff;
+  header[17] = (RECORD_SIZE >>> 16) & 0xff;
+  header[18] = (RECORD_SIZE >>> 8) & 0xff;
+  header[19] = RECORD_SIZE & 0xff;
+  header[20] = 65; // idlen
+  header.set(ephPub, 21);
+
+  return { body: concatBytes(header, ciphertext) };
+}
+
+async function hkdfSha256(
+  salt: Uint8Array,
+  ikm: Uint8Array,
+  info: Uint8Array,
+  length: number,
+): Promise<Uint8Array> {
+  const baseKey = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt, info },
+    baseKey,
+    length * 8,
+  );
+  return new Uint8Array(bits);
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
+function base64UrlDecode(s: string): Uint8Array {
+  const padded = s.replace(/-/g, "+").replace(/_/g, "/")
+    .padEnd(Math.ceil(s.length / 4) * 4, "=");
+  const bin = atob(padded);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 async function mintVapidJwt(args: {

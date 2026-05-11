@@ -810,8 +810,8 @@ function finishPlain(r: HandlerResponse): Response {
 function buildPushUserDevices(
   pushTokens: import("@flagship/storage").PushTokenStorage,
   forwarder: NonNullable<ReturnType<typeof buildOptionalPushForwarder>>,
-): (username: string, category: string) => Promise<void> {
-  return async (username, category) => {
+): (username: string, category: string, payload?: Uint8Array) => Promise<void> {
+  return async (username, category, payload) => {
     try {
       const tokens = await pushTokens.listByUser(username);
       if (tokens.length === 0) return;
@@ -822,11 +822,14 @@ function buildPushUserDevices(
           providerToken: t.providerToken,
         })),
         category,
-        // Empty payload — the SW shows a generic "server is asking
-        // to boot" notification. RFC 8291 encrypted payloads can
-        // ride this same shape later by setting sealedPayloadHex
-        // from a sealed-against-pushX25519Pub blob.
+        // APNs/FCM use the sealed-payload story (encrypted by the
+        // daemon under the device's pushX25519Pub) — empty here for
+        // the consume-trigger path since we don't have a pre-sealed
+        // blob to forward. Web Push uses RFC 8291 with the plaintext
+        // payload below; the SW decrypts and personalises the
+        // notification.
         sealedPayloadHex: "",
+        ...(payload ? { webpushPayloadBytes: payload } : {}),
       });
     } catch {
       // Silently swallow — push failures shouldn't surface as boot

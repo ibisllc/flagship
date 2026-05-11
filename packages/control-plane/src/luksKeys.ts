@@ -58,9 +58,15 @@ export interface LuksKeyDeps {
    * Push fan-out for unlock-request notifications. Built by the
    * apex Worker from `forwardToProviders` + `pushTokens.listByUser`.
    * Returns silently on no-tokens / no-config — the consume path
-   * doesn't care if the push actually went out.
+   * doesn't care if the push actually went out. `payload` is the
+   * plaintext to encrypt via RFC 8291 for Web Push (APNs/FCM use
+   * the existing sealed-payload pattern unrelated to this).
    */
-  pushUserDevices?: (username: string, category: string) => Promise<void>;
+  pushUserDevices?: (
+    username: string,
+    category: string,
+    payload?: Uint8Array,
+  ) => Promise<void>;
   maxAgeMs?: number;
   /** Skip pushing if a push for this server fired within this window. Default 60s. */
   pushDedupMs?: number;
@@ -299,7 +305,14 @@ export async function handleConsumeUnlockKey(
         // isn't held back by APNs/FCM/Web Push round-trips. Errors
         // are silently swallowed by the pushUserDevices wrapper.
         await deps.pendingUnlockApprovals.touchLastPushAt(host, now());
-        void deps.pushUserDevices(reg.username, "unlock-request").catch(() => {});
+        // RFC 8291 plaintext for the SW to personalise the notification
+        // ("test.alice.flagship.services is asking to boot"). APNs/FCM
+        // ignore this; they get the sealed-payload-by-pushX25519Pub
+        // story instead.
+        const payload = new TextEncoder().encode(
+          JSON.stringify({ kind: "unlock-request", serverFqdn: host, requestId: result.requestId }),
+        );
+        void deps.pushUserDevices(reg.username, "unlock-request", payload).catch(() => {});
       }
     }
     return { status: 404, body: { error: "no pending unlock-key deposit" } };

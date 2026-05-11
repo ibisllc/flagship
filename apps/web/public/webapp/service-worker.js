@@ -11,7 +11,9 @@
 //   v8: added lib/recovery.js for WebAuthn-PRF cloud-shard recovery.
 //   v9: added lib/push.js + Web Push event handler for unlock-approval
 //       notifications.
-const SHELL_VERSION = "v9";
+//  v10: push event handler reads RFC 8291 encrypted payload and
+//       personalises the notification with the requesting server FQDN.
+const SHELL_VERSION = "v10";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 const SHELL = [
   "/",
@@ -155,23 +157,36 @@ self.addEventListener("online", () => {
 
 // ---------- Web Push: unlock-approval notifications -------------------
 //
-// Empty-payload pushes for v1: we don't know which server is asking
-// from the wire bytes, so the notification is generic and the user
-// opens the webapp to see the pending request. RFC 8291 encrypted
-// payloads can land later without rebuilding registration.
+// .com sends an RFC 8291-encrypted payload with the JSON shape
+// { kind: "unlock-request", serverFqdn, requestId }. The browser
+// decrypts before the push event fires; we get the plaintext via
+// event.data.json(). Empty-payload pushes (no event.data) still work
+// — they fall back to a generic notification body.
 //
 // `notificationclick` focuses an existing webapp tab if one is open,
 // otherwise opens the root (the SPA routes the user to the
 // unlock-approvals view from there).
 self.addEventListener("push", (event) => {
+  let serverFqdn = null;
+  try {
+    const data = event.data?.json?.();
+    if (data && typeof data.serverFqdn === "string") {
+      serverFqdn = data.serverFqdn;
+    }
+  } catch (_e) {
+    // Malformed payload — fall back to the generic body below.
+  }
+  const body = serverFqdn
+    ? `${serverFqdn} is asking to boot — tap to review.`
+    : "A server is asking to boot — tap to review.";
   event.waitUntil(
     self.registration.showNotification("Flagship", {
-      body: "A server is asking to boot — tap to review.",
+      body,
       tag: "flagship-unlock-request",
       renotify: true,
       requireInteraction: false,
       icon: "/icon.svg",
-      data: { kind: "unlock-request" },
+      data: { kind: "unlock-request", serverFqdn },
     }),
   );
 });
