@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="14" fill="#3B5BFF"/>
-  <path d="M16 24 L24 16 L48 16 L40 24 Z" fill="#FFFFFF" opacity="0.9"/>
-  <rect x="16" y="24" width="32" height="24" rx="2" fill="#FFFFFF"/>
-  <line x1="20" y1="30" x2="44" y2="30" stroke="#3B5BFF" stroke-width="1.5"/>
-  <line x1="20" y1="36" x2="44" y2="36" stroke="#3B5BFF" stroke-width="1.5"/>
-  <line x1="20" y1="42" x2="44" y2="42" stroke="#3B5BFF" stroke-width="1.5"/>
-  <circle cx="42" cy="42" r="2" fill="#1F8A4C"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Flagship">
+  <rect width="64" height="64" rx="14" fill="#14130E"/>
+  <!-- Pennant: a flag furling over an upright staff. Single mark in
+       signal-amber on warm off-black. Reads as both 'F' and 'flag'. -->
+  <line x1="22" y1="12" x2="22" y2="54" stroke="#F4F1E8" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M22 14 L48 14 L42 25 L48 36 L22 36 Z" fill="#B26016"/>
+  <circle cx="22" cy="12" r="3.2" fill="#F4F1E8"/>
+  <circle cx="22" cy="54" r="3.2" fill="#F4F1E8"/>
 </svg>

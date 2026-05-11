@@ -38,3 +38,9 @@ test-vectors/fixture.json
 apps/web/e2e/test-results/
 apps/web/e2e/playwright-report/
 test-results/
+
+# Wrangler local-dev state (D1, R2, KV emulation)
+**/.wrangler/
+
+# Local IDE / agent settings — personal to each contributor
+.claude/

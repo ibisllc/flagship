@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#0a0a0a"/>
-  <path d="M180 170 h110 a80 80 0 0 1 80 80 v0 a80 80 0 0 1 -80 80 h-50 v82 h-60 z" fill="none" stroke="#4ad295" stroke-width="34" stroke-linejoin="round"/>
-  <circle cx="290" cy="250" r="13" fill="#4ad295"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Flagship">
+  <rect width="512" height="512" fill="#14120D"/>
+  <line x1="206" y1="132" x2="206" y2="392" stroke="#EFE9D6" stroke-width="18" stroke-linecap="round"/>
+  <path d="M206 152 L376 152 L336 224 L376 296 L206 296 Z" fill="#D38347"/>
+  <circle cx="206" cy="132" r="22" fill="#EFE9D6"/>
+  <circle cx="206" cy="392" r="22" fill="#EFE9D6"/>
 </svg>

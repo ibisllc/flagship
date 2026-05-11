@@ -4,57 +4,31 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dev: fake phone · Flagship</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/tokens.css" />
+    <link rel="stylesheet" href="/components.css" />
     <style>
-      :root { color-scheme: dark light; font-family: ui-sans-serif, system-ui, sans-serif; }
-      body { max-width: 38rem; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; }
-      h1 { font-size: 1.5rem; margin: 0; }
-      .tag { color: #888; margin-bottom: 1.5rem; }
-      .nav { color: #888; margin-bottom: 1.5rem; }
-      .nav a { margin-right: 1rem; }
+      body { max-width: 42rem; margin: 0 auto; padding: var(--space-12) var(--gutter) var(--space-20); }
+      h1 { font-family: var(--font-display); font-style: italic; font-weight: 400; font-size: clamp(36px, 5vw, 52px); letter-spacing: -0.02em; margin: 0; line-height: 1.04; }
+      .tag { color: var(--ink-muted); margin: var(--space-3) 0 var(--space-6); max-width: 56ch; }
+      .nav { color: var(--ink-muted); margin-bottom: var(--space-8); font-family: var(--font-mono); font-size: var(--caption-size); letter-spacing: 0.06em; text-transform: uppercase; }
+      .nav a { margin-right: var(--space-6); color: var(--ink-muted); background-size: 0 1px; }
+      .nav a:hover { color: var(--ink); }
       .warn {
-        background: #a4400a;
-        color: white;
-        padding: 0.5rem 0.75rem;
-        border-radius: 6px;
-        margin-bottom: 1.5rem;
-        font-size: 0.9rem;
+        background: var(--warn-soft);
+        border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+        color: var(--warn);
+        padding: var(--space-3) var(--space-4);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--space-6);
+        font-size: var(--body-sm-size);
+        font-family: var(--font-mono);
       }
-      label { display: block; margin: 1rem 0 0.25rem; font-weight: 600; }
-      input, textarea {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 0.55rem;
-        border-radius: 6px;
-        border: 1px solid #8886;
-        font: inherit;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 0.9rem;
-        background: transparent;
-        color: inherit;
-      }
-      button {
-        font: inherit;
-        padding: 0.55rem 1.1rem;
-        border-radius: 6px;
-        cursor: pointer;
-        background: #4a8;
-        color: white;
-        border: 0;
-        margin-top: 1rem;
-        margin-right: 0.5rem;
-      }
-      .btn-secondary { background: transparent; color: inherit; border: 1px solid #8884; }
-      pre {
-        background: #1118;
-        color: #ddd;
-        padding: 0.75rem;
-        border-radius: 6px;
-        overflow-x: auto;
-        font-size: 0.78rem;
-        margin-top: 1rem;
-      }
-      .ok { color: #4a8; }
-      .err { color: #a44; }
+      input, textarea { font-family: var(--font-mono); font-size: 14px; }
+      .btn-secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--border); padding: 10px 18px; border-radius: var(--radius-pill); font: inherit; font-weight: 500; cursor: pointer; }
+      pre { background: var(--surface-sunken); border: 1px solid var(--border-soft); color: var(--ink-soft); padding: var(--space-4); border-radius: var(--radius-md); overflow-x: auto; font-size: 12px; line-height: 1.55; margin-top: var(--space-4); }
+      .ok { color: var(--ok); }
+      .err { color: var(--err); }
     </style>
   </head>
   <body>
@@ -234,5 +208,6 @@
       approveBtn.addEventListener("click", approve);
       denyBtn.addEventListener("click", deny);
     </script>
-  </body>
+  <script src="/motion.js" defer></script>
+</body>
 </html>

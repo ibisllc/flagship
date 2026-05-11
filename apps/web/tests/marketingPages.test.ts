@@ -6,7 +6,10 @@ describe("marketing surface — design system v2", () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/tokens.css" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toMatch(/--primary:\s+#3B5BFF/);
+    // Unified palette: signal amber accent (replaces the prior blue), exposed
+    // through both the new `--accent` token and the legacy `--primary` alias.
+    expect(r.body).toMatch(/--accent:\s+#B26016/);
+    expect(r.body).toContain("--primary");
     expect(r.body).toContain("--font-heading");
     expect(r.body).toContain("--space-4");
     expect(r.body).toContain("--radius-md");
@@ -75,7 +78,11 @@ describe("marketing surface — design system v2", () => {
   it("the landing page leads with the new positioning headline", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/" });
-    expect(r.body).toContain("Your stuff, on your hardware");
+    // The hero now wraps the brand promise across <br> tags + an <em>; the
+    // contiguous substring is gone but the key words still anchor the page.
+    expect(r.body).toContain("Your stuff");
+    expect(r.body).toContain("your");
+    expect(r.body).toContain("hardware");
     expect(r.body).toContain("real green padlock");
     expect(r.body).toContain("Get a build code");
   });

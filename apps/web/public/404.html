@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>404 · Flagship</title>
+  <meta name="description" content="That route doesn't exist on flagshipserver.com.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    .lost {
+      min-height: 80dvh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: clamp(40px, 6vw, 96px);
+      padding: var(--space-16) 0;
+    }
+    @media (max-width: 820px) { .lost { grid-template-columns: 1fr; } }
+    .lost h1 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: clamp(56px, 10vw, 144px);
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      margin-bottom: var(--space-6);
+    }
+    .lost h1 em { font-style: italic; color: var(--accent); }
+    .lost p { font-size: 18px; max-width: 50ch; color: var(--ink-muted); }
+    .lost .ascii {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--ink-faint);
+      background: var(--canvas-tinted);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+      box-shadow: var(--shadow-flat);
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .suggestions {
+      margin-top: var(--space-8);
+      display: grid;
+      gap: var(--space-2);
+      max-width: 36ch;
+    }
+    .suggestions a {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--ink);
+      font-size: var(--body-sm-size);
+      transition: border-color var(--motion-state), background var(--motion-state);
+      background-size: 0 1px;
+    }
+    .suggestions a:hover { border-color: var(--ink-muted); background: var(--surface-elev); background-size: 0 1px; }
+    .suggestions .arrow { color: var(--ink-muted); font-family: var(--font-mono); }
+  </style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <line x1="6" y1="3" x2="6" y2="21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M6 5 L19 5 L16 11 L19 17 L6 17 Z" fill="var(--accent)"/>
+        <circle cx="6" cy="3" r="1.5" fill="currentColor"/>
+        <circle cx="6" cy="21" r="1.5" fill="currentColor"/>
+      </svg>
+      <span>Flagship</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/how-it-works">How it works</a>
+      <a href="/marketplace/">Apps</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs/">Docs</a>
+      <a href="/status/">Status</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/build/" class="btn btn--primary btn--accent">Get a build code</a>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="container">
+  <section class="lost">
+    <div>
+      <span class="eyebrow">404 · route not found</span>
+      <h1>You sailed past <em>the harbor.</em></h1>
+      <p>This URL doesn't exist on flagshipserver.com, or the page it pointed to has been retired. If you got here from a deep link inside the product, the route may have moved — try the suggestions below, or head home.</p>
+      <div class="cta-row" style="margin-top: var(--space-8); display: flex; gap: var(--space-3); flex-wrap: wrap;">
+        <a href="/" class="btn btn--primary btn--accent btn--lg">
+          Back to harbor
+          <span class="btn-arrow" aria-hidden="true">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </a>
+        <a href="/help" class="btn btn--ghost btn--lg">Open the help desk</a>
+      </div>
+      <div class="suggestions">
+        <a href="/build/"><span>Build code →</span><span class="arrow">/build/</span></a>
+        <a href="/marketplace/"><span>Marketplace →</span><span class="arrow">/marketplace/</span></a>
+        <a href="/status/"><span>Live status →</span><span class="arrow">/status/</span></a>
+        <a href="/security.html"><span>Architecture →</span><span class="arrow">/security.html</span></a>
+      </div>
+    </div>
+    <pre class="ascii" aria-hidden="true">
+      _.--.
+   .-'    \
+  /        \    HTTP 404
+ |   .-.    |   ─────────
+ |  ( o )   |   route not found
+ |   '-'    |
+  \        /    you sailed past the harbor.
+   '.____.'     try one of the suggestions, or head home.
+       |
+       |
+   ────┴────
+</pre>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <strong style="font-size: 16px; color: var(--ink); letter-spacing: -0.01em;">Flagship</strong>
+      <p style="margin-top: var(--space-3); color: var(--ink-muted); max-width: 32ch;">
+        A personal cloud that respects you, your hardware, and your phone.
+      </p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="/">Home</a></li>
+        <li><a href="/how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Apps</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Trust</h4>
+      <ul>
+        <li><a href="/security.html">Architecture</a></li>
+        <li><a href="/security/disclosure.html">Disclosure</a></li>
+        <li><a href="/abuse">Abuse</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Open</h4>
+      <ul>
+        <li><a href="/docs/">Docs</a></li>
+        <li><a href="/status/">Status</a></li>
+        <li><a href="/blog/">Blog</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Flagship · BUSL-1.1 → Apache 2.0 on 2030-05-03</span>
+    <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span>
+  </div>
+</footer>
+<script src="/motion.js" defer></script>
+</body>
+</html>

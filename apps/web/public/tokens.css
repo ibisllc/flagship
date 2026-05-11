@@ -1,132 +1,235 @@
 /*
- * Flagship design tokens.
+ * Flagship — unified design tokens.
  *
- * Source of truth: /home/kamdemharry/flagship/docs/design-system.md
+ * One palette, one type system, one motion language. Every surface in the
+ * product (marketing site, build flow, status page, deck, webapp PWA) pulls
+ * from this file. Never hard-code a hex.
  *
- * Two themes: light (default for marketing) and dark (default for the
- * web console). Switch via:
- *   - `prefers-color-scheme` (system preference)
- *   - `data-theme="dark" | "light"` on <html> (manual override)
+ * Two surface modes:
+ *   - bone (default for marketing + identity surfaces — light canvas)
+ *   - ink  (default for the webapp + deck — paired dark canvas, same accent)
  *
- * Every page should pull tokens from here; never hard-code a hex.
+ * Toggle via `data-surface="ink"` on <html>, or via media query for the
+ * webapp where ink mode is the default regardless of system preference.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap");
 
 :root {
-  /* ── Light theme (default) ──────────────────────────────────── */
-  --bg:               #FAFAF7;
-  --surface:          #FFFFFF;
-  --surface-sunken:   #F2F1EC;
-  --border:           #E6E4DD;
-  --text:             #14140F;
-  --text-muted:       #6B6A63;
-  --primary:          #3B5BFF;
-  --primary-hover:    #2C46E0;
-  --success:          #1F8A4C;
-  --warning:          #B8651A;
-  --danger:           #C83A3A;
+  /* ── Bone (light, default for marketing) ───────────────────────── */
+  --canvas:           #F4F1E8;
+  --canvas-tinted:    #EDE9DC;
+  --surface:          #FBF9F2;
+  --surface-sunken:   #E8E4D6;
+  --surface-elev:     #FFFFFF;
+  --border:           #DAD5C5;
+  --border-soft:      #E6E2D4;
+  --ink:              #14130E;
+  --ink-soft:         #2A2823;
+  --ink-muted:        #6C685D;
+  --ink-faint:        #948F80;
 
-  /* ── Type scale ─────────────────────────────────────────────── */
-  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, -apple-system,
-                  "Segoe UI", Roboto, sans-serif;
-  --font-body:    "Inter", ui-sans-serif, system-ui, -apple-system,
-                  "Segoe UI", Roboto, sans-serif;
-  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas,
-                  monospace;
+  /* The single accent. Signal amber — warm rust. Saturation kept under
+     80% so it reads as a considered material, not a glow. Replaces both
+     the old blue (#3B5BFF) and the old green (#4ad295). */
+  --accent:           #B26016;
+  --accent-press:     #8E4B0E;
+  --accent-soft:      rgba(178, 96, 22, 0.10);
+  --accent-on:        #FBF9F2;
 
-  --display-size: 56px;       --display-line: 60px;
-  --h1-size:      40px;       --h1-line:      48px;
-  --h2-size:      28px;       --h2-line:      36px;
-  --h3-size:      22px;       --h3-line:      30px;
-  --h4-size:      17px;       --h4-line:      24px;
-  --body-size:    16px;       --body-line:    26px;
-  --body-sm-size: 14px;       --body-sm-line: 22px;
-  --caption-size: 13px;       --caption-line: 18px;
-  --mono-size:    14px;       --mono-line:    22px;
+  --ok:               #2F6A48;
+  --warn:             #8A5612;
+  --err:              #9B342B;
+  --ok-soft:          rgba(47, 106, 72, 0.10);
+  --warn-soft:        rgba(138, 86, 18, 0.10);
+  --err-soft:         rgba(155, 52, 43, 0.10);
 
-  /* ── Spacing — strict 4px grid ──────────────────────────────── */
+  /* ── Type ──────────────────────────────────────────────────────── */
+  --font-display: "Instrument Serif", "Lyon Text", Georgia, ui-serif, serif;
+  --font-sans:    "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                  ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono",
+                  Menlo, Consolas, monospace;
+
+  /* Legacy aliases. Some pages still reference these names. */
+  --font-heading: var(--font-sans);
+  --font-body:    var(--font-sans);
+
+  /* Editorial scale. The display size is fluid; everything else fixed. */
+  --display-size:   clamp(48px, 8vw, 92px);
+  --display-line:   1.02;
+  --display-track:  -0.025em;
+  --h1-size:        clamp(36px, 5vw, 56px);
+  --h1-line:        1.06;
+  --h1-track:       -0.022em;
+  --h2-size:        clamp(28px, 3.4vw, 36px);
+  --h2-line:        1.15;
+  --h2-track:       -0.014em;
+  --h3-size:        22px;       --h3-line: 30px;
+  --h4-size:        18px;       --h4-line: 26px;
+  --body-size:      17px;       --body-line: 28px;
+  --body-sm-size:   15px;       --body-sm-line: 24px;
+  --caption-size:   13px;       --caption-line: 18px;
+  --mono-size:      14px;       --mono-line: 22px;
+  --eyebrow-size:   11px;       --eyebrow-line: 14px;
+  --eyebrow-track:  0.18em;
+
+  /* ── Spacing — 4px grid ────────────────────────────────────────── */
   --space-1:  4px;
   --space-2:  8px;
   --space-3:  12px;
   --space-4:  16px;
+  --space-5:  20px;
   --space-6:  24px;
+  --space-7:  28px;
   --space-8:  32px;
+  --space-10: 40px;
   --space-12: 48px;
+  --space-14: 56px;
   --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+  --space-40: 160px;
 
-  /* ── Radii ──────────────────────────────────────────────────── */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  /* ── Radii — concentric, exaggerated for the bezel pattern ─────── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 28px;
+  --radius-2xl: 36px;
   --radius-pill: 999px;
 
-  /* ── Shadows (modals only) ──────────────────────────────────── */
-  --shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.18);
+  /* ── Shadows — tinted toward the canvas hue, never pure black ──── */
+  --shadow-flat:     0 1px 0 rgba(20, 19, 14, 0.04);
+  --shadow-resting:  0 1px 2px rgba(20, 19, 14, 0.04),
+                     0 6px 18px rgba(20, 19, 14, 0.06);
+  --shadow-lift:     0 2px 4px rgba(20, 19, 14, 0.06),
+                     0 16px 40px rgba(20, 19, 14, 0.10);
+  --shadow-modal:    0 24px 80px rgba(20, 19, 14, 0.22);
+  --shadow-inset:    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 
-  /* ── Layout ─────────────────────────────────────────────────── */
-  --content-width: 1120px;
-  --reading-width: 36rem;     /* 68 ch line cap */
+  /* ── Layout ────────────────────────────────────────────────────── */
+  --content-width:  1240px;
+  --reading-width:  64ch;
+  --gutter:         clamp(20px, 4vw, 48px);
 
-  /* ── Motion ─────────────────────────────────────────────────── */
-  --motion-state:  200ms ease-out;
-  --motion-layout: 350ms ease-out;
+  /* ── Motion — premium spring-y bezier, used everywhere ─────────── */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1.4);
+  --ease-flat:   cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-state:  220ms var(--ease-out);
+  --motion-layout: 380ms var(--ease-out);
+  --motion-reveal: 700ms var(--ease-out);
 
   color-scheme: light;
+
+  /* ── Legacy compatibility aliases ──────────────────────────────────
+     Pages that still load /site.css (and any inline rules referencing
+     these older variable names) keep working. Map them onto the unified
+     palette so the visual identity is one. */
+  --bg:               var(--canvas);
+  --bg-elev:          var(--surface);
+  --bg-elev-2:        var(--surface-sunken);
+  --fg:               var(--ink);
+  --fg-mute:          var(--ink-muted);
+  --line:             var(--border);
+  --primary:          var(--accent);
+  --primary-hover:    var(--accent-press);
+  --success:          var(--ok);
+  --warning:          var(--warn);
+  --danger:           var(--err);
+  --text:             var(--ink);
+  --text-muted:       var(--ink-muted);
+  --accent-deep:      var(--accent-press);
+  --radius:           var(--radius-md);
 }
 
+/* ── Ink (paired dark — webapp, deck, opt-in) ─────────────────────── */
+:root[data-surface="ink"],
+html[data-surface="ink"] {
+  --canvas:           #14120D;
+  --canvas-tinted:    #1B1813;
+  --surface:          #1F1C16;
+  --surface-sunken:   #18150F;
+  --surface-elev:     #26221A;
+  --border:           #2E2A21;
+  --border-soft:      #25221A;
+  --ink:              #EFE9D6;
+  --ink-soft:         #D7D0BC;
+  --ink-muted:        #948E7C;
+  --ink-faint:        #5F5B4F;
+
+  --accent:           #D38347;
+  --accent-press:     #B26016;
+  --accent-soft:      rgba(211, 131, 71, 0.14);
+  --accent-on:        #14120D;
+
+  --ok:               #6BB088;
+  --warn:             #D9A85A;
+  --err:              #D87463;
+  --ok-soft:          rgba(107, 176, 136, 0.14);
+  --warn-soft:        rgba(217, 168, 90, 0.14);
+  --err-soft:         rgba(216, 116, 99, 0.14);
+
+  --shadow-flat:     0 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-resting:  0 1px 2px rgba(0, 0, 0, 0.3),
+                     0 6px 22px rgba(0, 0, 0, 0.4);
+  --shadow-lift:     0 2px 6px rgba(0, 0, 0, 0.35),
+                     0 18px 48px rgba(0, 0, 0, 0.5);
+  --shadow-modal:    0 30px 90px rgba(0, 0, 0, 0.7);
+  --shadow-inset:    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  color-scheme: dark;
+}
+
+/* Auto-pair: respect system preference unless explicit override. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg:             #0E0F12;
-    --surface:        #16181C;
-    --surface-sunken: #1C1F24;
-    --border:         #2A2D33;
-    --text:           #F2F1EC;
-    --text-muted:     #9A9A93;
-    --primary:        #7E96FF;
-    --primary-hover:  #A8B8FF;
-    --success:        #4FBE7A;
-    --warning:        #E5A050;
-    --danger:         #E86464;
-    --shadow-modal:   0 12px 40px rgba(0, 0, 0, 0.6);
+  :root:not([data-surface="bone"]) {
+    --canvas:           #14120D;
+    --canvas-tinted:    #1B1813;
+    --surface:          #1F1C16;
+    --surface-sunken:   #18150F;
+    --surface-elev:     #26221A;
+    --border:           #2E2A21;
+    --border-soft:      #25221A;
+    --ink:              #EFE9D6;
+    --ink-soft:         #D7D0BC;
+    --ink-muted:        #948E7C;
+    --ink-faint:        #5F5B4F;
+
+    --accent:           #D38347;
+    --accent-press:     #B26016;
+    --accent-soft:      rgba(211, 131, 71, 0.14);
+    --accent-on:        #14120D;
+
+    --ok:               #6BB088;
+    --warn:             #D9A85A;
+    --err:              #D87463;
+    --ok-soft:          rgba(107, 176, 136, 0.14);
+    --warn-soft:        rgba(217, 168, 90, 0.14);
+    --err-soft:         rgba(216, 116, 99, 0.14);
+
+    --shadow-flat:     0 1px 0 rgba(0, 0, 0, 0.4);
+    --shadow-resting:  0 1px 2px rgba(0, 0, 0, 0.3),
+                       0 6px 22px rgba(0, 0, 0, 0.4);
+    --shadow-lift:     0 2px 6px rgba(0, 0, 0, 0.35),
+                       0 18px 48px rgba(0, 0, 0, 0.5);
+    --shadow-modal:    0 30px 90px rgba(0, 0, 0, 0.7);
+    --shadow-inset:    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
     color-scheme: dark;
   }
 }
 
-:root[data-theme="dark"] {
-  --bg:             #0E0F12;
-  --surface:        #16181C;
-  --surface-sunken: #1C1F24;
-  --border:         #2A2D33;
-  --text:           #F2F1EC;
-  --text-muted:     #9A9A93;
-  --primary:        #7E96FF;
-  --primary-hover:  #A8B8FF;
-  --success:        #4FBE7A;
-  --warning:        #E5A050;
-  --danger:         #E86464;
-  --shadow-modal:   0 12px 40px rgba(0, 0, 0, 0.6);
-  color-scheme: dark;
-}
-
-:root[data-theme="light"] {
-  --bg:             #FAFAF7;
-  --surface:        #FFFFFF;
-  --surface-sunken: #F2F1EC;
-  --border:         #E6E4DD;
-  --text:           #14140F;
-  --text-muted:     #6B6A63;
-  --primary:        #3B5BFF;
-  --primary-hover:  #2C46E0;
-  --success:        #1F8A4C;
-  --warning:        #B8651A;
-  --danger:         #C83A3A;
-  --shadow-modal:   0 12px 40px rgba(0, 0, 0, 0.18);
-  color-scheme: light;
-}
-
-/* ── Reduced motion ───────────────────────────────────────────── */
+/* Reduced motion — collapse the spring choreography down. */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-state:  0.01ms linear;
+    --motion-layout: 0.01ms linear;
+    --motion-reveal: 0.01ms linear;
+  }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

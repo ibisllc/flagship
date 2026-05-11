@@ -520,7 +520,7 @@ describe("/og — OG-poster generator (P3.6)", () => {
     );
     const body = await r.text();
     expect(body).toContain("Flagship");
-    expect(body).toContain("Your stuff, on your hardware.");
+    expect(body).toContain("Your stuff, on hardware you own.");
   });
 
   it("is cacheable for 1 hour at the edge", async () => {

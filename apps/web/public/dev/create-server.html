@@ -4,54 +4,73 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dev: phone simulator — create a server · Flagship</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+    <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
     <link rel="stylesheet" href="/site.css" />
     <style>
-      .wrap { max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+      .wrap { max-width: 680px; margin: var(--space-12) auto; padding: 0 var(--gutter); }
       .warn {
-        background: #3d2f0d; color: #fbcc4a; border: 1px solid #5d4f1d;
-        border-radius: 6px; padding: 0.6rem 0.9rem; font-size: 0.9rem;
-        margin-bottom: 1rem;
+        background: var(--warn-soft);
+        color: var(--warn);
+        border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+        border-radius: var(--radius-md);
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--body-sm-size);
+        margin-bottom: var(--space-5);
+        font-family: var(--font-mono);
       }
-      label { display: block; margin: 1rem 0 0.4rem; color: #aaa; font-size: 0.9rem; }
-      input, select {
-        width: 100%; box-sizing: border-box;
-        background: #0a0a0a; color: #eee; border: 1px solid #333;
-        border-radius: 6px; padding: 0.55rem 0.7rem; font-size: 0.95rem;
-        font-family: ui-monospace, monospace;
-      }
-      button {
-        background: #1d3d2a; color: #eee; border: 1px solid #2d5d3a;
-        border-radius: 8px; padding: 0.7rem 1.4rem; cursor: pointer;
-        font-size: 1rem; font-weight: 500;
-      }
-      button:hover:not(:disabled) { background: #245036; }
-      button:disabled { opacity: 0.4; cursor: not-allowed; }
+      .warn strong { color: var(--ink); }
+      label { display: block; margin: var(--space-5) 0 var(--space-2); color: var(--ink-muted); font-size: var(--caption-size); font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; }
+      input, select { font-family: var(--font-mono); font-size: 14px; }
       .step {
-        border: 1px solid #2a2a2a; border-radius: 12px;
-        padding: 1.2rem 1.4rem; margin-bottom: 0.9rem; background: #111;
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5) var(--space-6);
+        margin-bottom: var(--space-3);
+        background: var(--surface);
+        box-shadow: var(--shadow-flat);
+        transition: border-color var(--motion-state), box-shadow var(--motion-state), opacity var(--motion-state);
       }
-      .step h3 { margin: 0 0 0.4rem; font-size: 1rem; color: #eee; }
-      .step.pending { opacity: 0.5; }
-      .step.done h3::before { content: "✓ "; color: #6ee7a8; }
-      .step.error h3::before { content: "✗ "; color: #ff7a7a; }
-      .step.active h3::before { content: "▸ "; color: #fbcc4a; }
+      .step h3 { margin: 0 0 var(--space-2); font-size: 17px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: var(--space-2); }
+      .step.pending { opacity: 0.55; }
+      .step.done    { border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+      .step.error   { border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+      .step.active  { border-color: var(--accent); box-shadow: var(--shadow-resting); }
+      .step.done  h3::before  { content: "✓"; color: var(--ok);  font-family: var(--font-mono); }
+      .step.error h3::before  { content: "✗"; color: var(--err); font-family: var(--font-mono); }
+      .step.active h3::before { content: "▸"; color: var(--accent); font-family: var(--font-mono); }
       .code-out {
-        font-family: ui-monospace, monospace;
-        font-size: 1.8rem; letter-spacing: 0.15em; color: #6ee7a8;
-        background: #0a0a0a; border: 1px solid #2d5d3a;
-        border-radius: 10px; padding: 1rem 1.2rem; margin: 0.8rem 0;
+        font-family: var(--font-mono);
+        font-size: 28px; font-weight: 500; letter-spacing: 0.14em;
+        color: var(--accent-press);
+        background: var(--canvas-tinted);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 18px 22px;
+        margin: var(--space-4) 0;
         text-align: center;
+        font-feature-settings: "tnum", "zero";
       }
       .code-actions {
-        display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.6rem;
+        display: flex; gap: var(--space-2); flex-wrap: wrap;
+        margin-top: var(--space-3);
       }
       .raw {
-        background: #0a0a0a; border: 1px solid #222; border-radius: 6px;
-        padding: 0.6rem 0.8rem; margin-top: 0.5rem;
-        font-family: ui-monospace, monospace; font-size: 0.78rem; color: #aaa;
-        white-space: pre-wrap; overflow-x: auto;
+        background: var(--canvas-tinted);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-sm);
+        padding: var(--space-3) var(--space-4);
+        margin-top: var(--space-3);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--ink-muted);
+        white-space: pre-wrap;
+        overflow-x: auto;
+        line-height: 1.55;
       }
-      .field-row { display: flex; gap: 0.6rem; }
+      .field-row { display: flex; gap: var(--space-3); }
       .field-row .field { flex: 1; }
     </style>
   </head>
@@ -137,5 +156,6 @@
     </main>
 
     <script type="module" src="/dev/create-server.js"></script>
-  </body>
+  <script src="/motion.js" defer></script>
+</body>
 </html>

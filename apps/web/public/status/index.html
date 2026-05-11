@@ -3,91 +3,137 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="Live status of flagship.services — latency, reachability, load." />
-    <link rel="icon" type="image/svg+xml" href="/webapp/icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
     <link rel="stylesheet" href="/site.css" />
     <title>Flagship — status</title>
     <style>
-      .status-wrap { max-width: 880px; margin: 2rem auto; padding: 0 1rem; }
+      .status-wrap { max-width: 960px; margin: var(--space-12) auto; padding: 0 var(--gutter); }
       .status-card {
-        border: 1px solid #2a2a2a;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        background: #111;
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-xl);
+        padding: var(--space-7);
+        margin-bottom: var(--space-4);
+        background: var(--surface);
+        box-shadow: var(--shadow-flat);
+        transition: border-color var(--motion-state), box-shadow var(--motion-state);
       }
+      .status-card:hover { border-color: var(--border); box-shadow: var(--shadow-resting); }
       .status-pill {
-        display: inline-block;
-        padding: 0.25rem 0.7rem;
-        border-radius: 999px;
-        font-weight: 600;
-        font-size: 0.85rem;
-        letter-spacing: 0.02em;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: var(--radius-pill);
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
-      .status-pill.up    { background: #0d3d22; color: #6ee7a8; }
-      .status-pill.slow  { background: #3d2f0d; color: #fbcc4a; }
-      .status-pill.down  { background: #3d0d0d; color: #ff7a7a; }
-      .status-pill.idle  { background: #222; color: #888; }
+      .status-pill::before {
+        content: "";
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .status-pill.up   { background: var(--ok-soft);  color: var(--ok); }
+      .status-pill.up::before { animation: pulse-dot 1.8s ease-out infinite; }
+      .status-pill.slow { background: var(--warn-soft); color: var(--warn); }
+      .status-pill.down { background: var(--err-soft);  color: var(--err); }
+      .status-pill.idle { background: var(--surface-sunken); color: var(--ink-muted); }
       .metric-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 0.8rem;
-        margin-top: 1rem;
+        gap: var(--space-3);
+        margin-top: var(--space-5);
       }
       .metric {
-        background: #0a0a0a;
-        border: 1px solid #222;
-        border-radius: 8px;
-        padding: 0.8rem 1rem;
+        background: var(--canvas-tinted);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        padding: var(--space-3) var(--space-4);
       }
-      .metric .k { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
-      .metric .v { font-size: 1.4rem; font-weight: 600; color: #eee; margin-top: 0.2rem; }
-      .metric .v.muted { color: #666; }
+      .metric .k {
+        font-size: 11px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-family: var(--font-mono);
+      }
+      .metric .v {
+        font-family: var(--font-display);
+        font-style: italic;
+        font-size: 32px;
+        font-weight: 400;
+        color: var(--ink);
+        margin-top: var(--space-1);
+        line-height: 1.05;
+        letter-spacing: -0.01em;
+        font-feature-settings: "tnum";
+      }
+      .metric .v.muted { color: var(--ink-faint); }
       .history {
         display: flex;
         gap: 2px;
-        margin-top: 1rem;
+        margin-top: var(--space-4);
         align-items: flex-end;
         height: 60px;
       }
       .history .bar {
         flex: 1;
         min-width: 4px;
-        background: #2a2a2a;
+        background: var(--surface-sunken);
         border-radius: 2px 2px 0 0;
-        position: relative;
+        transition: background var(--motion-state);
       }
-      .history .bar.up   { background: #1f7a4d; }
-      .history .bar.slow { background: #997a1d; }
-      .history .bar.down { background: #7a2020; }
-      .meta-row { display: flex; gap: 1rem; flex-wrap: wrap; color: #888; font-size: 0.85rem; margin-top: 0.5rem; }
+      .history .bar.up   { background: var(--ok); }
+      .history .bar.slow { background: var(--warn); }
+      .history .bar.down { background: var(--err); }
+      .meta-row {
+        display: flex;
+        gap: var(--space-4);
+        flex-wrap: wrap;
+        color: var(--ink-muted);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        margin-top: var(--space-3);
+        letter-spacing: 0.02em;
+      }
       .raw {
-        margin-top: 1rem;
-        background: #0a0a0a;
-        border: 1px solid #222;
-        border-radius: 8px;
-        padding: 0.8rem;
-        font-family: ui-monospace, monospace;
-        font-size: 0.78rem;
-        color: #aaa;
+        margin-top: var(--space-4);
+        background: var(--canvas-tinted);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-sm);
+        padding: var(--space-4);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--ink-muted);
         white-space: pre-wrap;
         overflow-x: auto;
         max-height: 240px;
         overflow-y: auto;
+        line-height: 1.55;
       }
-      .toolbar { display: flex; gap: 0.6rem; margin-top: 0.8rem; }
+      .toolbar { display: flex; gap: var(--space-2); margin-top: var(--space-3); }
       .toolbar button {
-        background: #1a1a1a;
-        color: #eee;
-        border: 1px solid #333;
-        border-radius: 6px;
-        padding: 0.4rem 0.9rem;
+        background: var(--surface);
+        color: var(--ink);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        padding: 8px 18px;
         cursor: pointer;
-        font-size: 0.85rem;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        font-weight: 500;
+        text-transform: uppercase;
       }
-      .toolbar button:hover { background: #222; }
-      .toolbar button.on { background: #1d3d2a; border-color: #2d5d3a; }
+      .toolbar button:hover { background: var(--surface-elev); border-color: var(--ink-muted); }
+      .toolbar button.on { background: var(--accent-soft); color: var(--accent-press); border-color: var(--accent); }
     </style>
   </head>
   <body>
@@ -318,5 +364,6 @@
         tick();
       })();
     </script>
-  </body>
+  <script src="/motion.js" defer></script>
+</body>
 </html>

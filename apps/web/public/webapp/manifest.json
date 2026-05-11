@@ -1,13 +1,14 @@
 {
   "name": "Flagship",
   "short_name": "Flagship",
-  "description": "Flagship — your personal cloud, on the web. Use the native app for stronger key storage.",
+  "description": "Flagship — a personal cloud you actually own. Pair with your phone, run apps on your own hardware. Use the native app for stronger key storage.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#14120D",
+  "theme_color": "#14120D",
+  "categories": ["productivity", "utilities", "personalization"],
   "icons": [
     { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
     { "src": "/icon-maskable.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "maskable" }
