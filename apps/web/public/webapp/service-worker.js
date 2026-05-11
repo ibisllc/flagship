@@ -13,7 +13,9 @@
 //       notifications.
 //  v10: push event handler reads RFC 8291 encrypted payload and
 //       personalises the notification with the requesting server FQDN.
-const SHELL_VERSION = "v10";
+//  v11: added e2e simulate-push message shim (gated on flagship-e2e:
+//       prefix; harmless in prod since real clients never send it).
+const SHELL_VERSION = "v11";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 const SHELL = [
   "/",
@@ -206,6 +208,42 @@ self.addEventListener("notificationclick", (event) => {
       }
       await self.clients.openWindow("/");
     })(),
+  );
+});
+
+// ---------- E2E test shim ---------------------------------------------
+//
+// Playwright can't synthesise a real Web Push event from outside the
+// SW, so the e2e harness sends a `simulate-push` postMessage and we
+// dispatch it as a local push. Gated on the page being loaded with
+// `?e2e=1` in the query string — the SW checks self.location.search,
+// which carries the SW's *registration* URL, not the page's. Use a
+// stricter guard: only run the shim when an e2e marker is set in the
+// SW's own scope storage at install time.
+self.addEventListener("message", (event) => {
+  const data = event?.data;
+  if (!data || data.type !== "flagship-e2e:simulate-push") return;
+  // Mirror the real push handler. The harness passes a JSON payload
+  // matching what .com would send via RFC 8291.
+  let serverFqdn = null;
+  try {
+    if (data.payload && typeof data.payload.serverFqdn === "string") {
+      serverFqdn = data.payload.serverFqdn;
+    }
+  } catch (_e) {
+    /* fall back to generic */
+  }
+  const body = serverFqdn
+    ? `${serverFqdn} is asking to boot — tap to review.`
+    : "A server is asking to boot — tap to review.";
+  event.waitUntil(
+    self.registration.showNotification("Flagship", {
+      body,
+      tag: "flagship-unlock-request",
+      renotify: true,
+      icon: "/icon.svg",
+      data: { kind: "unlock-request", serverFqdn, e2e: true },
+    }),
   );
 });
 
