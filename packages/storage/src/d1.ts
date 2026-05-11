@@ -1,6 +1,8 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  PendingRePairRecord,
+  PendingRePairStorage,
   PendingUnlockApprovalRecord,
   PendingUnlockApprovalStorage,
   WebauthnRecoveryRecord,
@@ -181,6 +183,20 @@ export class D1UsernameStorage implements UsernameStorage {
   async list() {
     const r = await this.db.prepare("SELECT * FROM usernames").all<UsernameRow>();
     return r.results.map(rowToUsername);
+  }
+  async swapIrkPub(username: string, expectedOldIrkPubHex: string, newIrkPubHex: string, at: number) {
+    // Conditional update: only swaps if the current row's irk_pub_hex
+    // matches `expectedOldIrkPubHex` (case-insensitive). meta.changes
+    // tells us whether the swap happened.
+    const r = await this.db
+      .prepare(
+        "UPDATE usernames SET irk_pub_hex = ?, claimed_at = ? " +
+        "WHERE username = ? AND lower(irk_pub_hex) = lower(?)",
+      )
+      .bind(newIrkPubHex, at, username.toLowerCase(), expectedOldIrkPubHex)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
   }
 }
 
@@ -727,6 +743,69 @@ export class D1PendingUnlockApprovalStorage implements PendingUnlockApprovalStor
   }
 }
 
+export class D1PendingRePairStorage implements PendingRePairStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async initiate(rec: PendingRePairRecord) {
+    const key = rec.username.toLowerCase();
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO pending_re_pairs
+             (username, new_irk_pub_hex, old_irk_pub_hex, initiated_at, completes_at, objected_at)
+           VALUES (?, ?, ?, ?, ?, NULL)`,
+        )
+        .bind(key, rec.newIrkPubHex, rec.oldIrkPubHex, rec.initiatedAt, rec.completesAt)
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      // PK conflict: an existing pending row blocks initiation.
+      return { ok: false as const, reason: "re-pair already pending" };
+    }
+  }
+
+  async get(username: string) {
+    const r = await this.db
+      .prepare("SELECT * FROM pending_re_pairs WHERE username = ?")
+      .bind(username.toLowerCase())
+      .first<{
+        username: string;
+        new_irk_pub_hex: string;
+        old_irk_pub_hex: string;
+        initiated_at: number;
+        completes_at: number;
+        objected_at: number | null;
+      }>();
+    if (!r) return undefined;
+    return {
+      username: r.username,
+      newIrkPubHex: r.new_irk_pub_hex,
+      oldIrkPubHex: r.old_irk_pub_hex,
+      initiatedAt: r.initiated_at,
+      completesAt: r.completes_at,
+      ...(r.objected_at != null ? { objectedAt: r.objected_at } : {}),
+    };
+  }
+
+  async object(username: string, at: number): Promise<boolean> {
+    const r = await this.db
+      .prepare("UPDATE pending_re_pairs SET objected_at = ? WHERE username = ? AND objected_at IS NULL")
+      .bind(at, username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+
+  async delete(username: string): Promise<boolean> {
+    const r = await this.db
+      .prepare("DELETE FROM pending_re_pairs WHERE username = ?")
+      .bind(username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+}
+
 export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
   constructor(private readonly db: D1Database) {}
 
@@ -1105,6 +1184,7 @@ export class D1Storage implements Storage {
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   pendingUnlockApprovals: PendingUnlockApprovalStorage;
+  pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;
@@ -1121,6 +1201,7 @@ export class D1Storage implements Storage {
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
     this.pendingUnlockApprovals = new D1PendingUnlockApprovalStorage(db);
+    this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.marketplace = new D1MarketplaceStorage(db);
     this.pushTokens = new D1PushTokenStorage(db);

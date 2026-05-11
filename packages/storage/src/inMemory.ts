@@ -1,6 +1,8 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  PendingRePairRecord,
+  PendingRePairStorage,
   PendingUnlockApprovalRecord,
   PendingUnlockApprovalStorage,
   WebauthnRecoveryRecord,
@@ -57,6 +59,37 @@ export class InMemoryUsernameStorage implements UsernameStorage {
   }
   async list() {
     return [...this.byName.values()].map((r) => ({ ...r }));
+  }
+  async swapIrkPub(username: string, expectedOldIrkPubHex: string, newIrkPubHex: string, at: number) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    if (r.irkPubHex.toLowerCase() !== expectedOldIrkPubHex.toLowerCase()) return false;
+    this.byName.set(norm, { ...r, irkPubHex: newIrkPubHex, claimedAt: at });
+    return true;
+  }
+}
+
+export class InMemoryPendingRePairStorage implements PendingRePairStorage {
+  private rows = new Map<string, PendingRePairRecord>();
+  async initiate(rec: PendingRePairRecord) {
+    const key = rec.username.toLowerCase();
+    if (this.rows.has(key)) return { ok: false as const, reason: "re-pair already pending" };
+    this.rows.set(key, { ...rec, username: key });
+    return { ok: true as const };
+  }
+  async get(username: string) {
+    const r = this.rows.get(username.toLowerCase());
+    return r ? { ...r } : undefined;
+  }
+  async object(username: string, at: number) {
+    const r = this.rows.get(username.toLowerCase());
+    if (!r) return false;
+    r.objectedAt = at;
+    return true;
+  }
+  async delete(username: string) {
+    return this.rows.delete(username.toLowerCase());
   }
 }
 
@@ -445,6 +478,7 @@ export class InMemoryStorage implements Storage {
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
   pendingUnlockApprovals = new InMemoryPendingUnlockApprovalStorage();
+  pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   marketplace = new InMemoryMarketplaceStorage();
   pushTokens = new InMemoryPushTokenStorage();

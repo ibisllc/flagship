@@ -11,6 +11,7 @@ export * from "./installEvents.js";
 export * from "./cloudflareDns.js";
 export * from "./dns01.js";
 export * from "./luksKeys.js";
+export * from "./rePair.js";
 export * from "./webauthnRecovery.js";
 export * from "./admin.js";
 export * from "./serverRevoke.js";

@@ -79,6 +79,19 @@ export interface UsernameStorage {
   put(rec: UsernameRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
   get(username: string): Promise<UsernameRecord | undefined>;
   list(): Promise<UsernameRecord[]>;
+  /**
+   * Atomically swap the IRK pubkey for an existing username. Used by
+   * the recovery re-pair flow (J.3) after the 24h grace expires
+   * without an objection. Returns false if the username doesn't
+   * exist or if the supplied `expectedOldIrkPubHex` doesn't match
+   * the stored value (concurrent rotation defense).
+   */
+  swapIrkPub(
+    username: string,
+    expectedOldIrkPubHex: string,
+    newIrkPubHex: string,
+    at: number,
+  ): Promise<boolean>;
 }
 
 export interface AuthCodeStorage {
@@ -188,6 +201,34 @@ export interface WebauthnRecoveryStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Pending re-pair (recovery J.3 — IRK takeover after lost-UMK recovery)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface PendingRePairRecord {
+  username: string;
+  newIrkPubHex: string;
+  oldIrkPubHex: string;
+  initiatedAt: number;
+  /** Wall-clock ms after which `complete` will swap if no objection. */
+  completesAt: number;
+  /** Set when an objection is filed; blocks completion. */
+  objectedAt?: number;
+}
+
+export interface PendingRePairStorage {
+  /**
+   * Initiate a re-pair. Returns ok=false if a pending row already
+   * exists (caller should object the old one before re-initiating).
+   */
+  initiate(rec: PendingRePairRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(username: string): Promise<PendingRePairRecord | undefined>;
+  /** Mark the row as objected; no-op if no row exists. Returns whether the row existed. */
+  object(username: string, at: number): Promise<boolean>;
+  /** Delete the row (called after `complete` succeeds). */
+  delete(username: string): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Pending unlock approvals (push trigger from /consume)
 // ──────────────────────────────────────────────────────────────────────
 
@@ -263,6 +304,7 @@ export interface Storage {
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   pendingUnlockApprovals: PendingUnlockApprovalStorage;
+  pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;
   pushTokens: PushTokenStorage;

@@ -99,6 +99,22 @@ export function adaptRegistryToStorage(
         claimedAt: r.claimedAt,
       }));
     },
+    async swapIrkPub(username, expectedOldIrkPubHex, newIrkPubHex, at) {
+      // Legacy Fastify path predates the recovery re-pair flow (J.3),
+      // which is .com (Worker)-side only. The handler still requires
+      // the method to satisfy UsernameStorage, but no Fastify route
+      // calls it — the re-pair endpoints are wired exclusively in
+      // apps/com/src/controlPlaneRoutes.ts.
+      const cur = reg.lookup(username);
+      if (!cur) return false;
+      if (bytesToHex(cur.irkPub) !== expectedOldIrkPubHex.toLowerCase()) return false;
+      reg.put({
+        username,
+        irkPub: hexToBytes(newIrkPubHex),
+        claimedAt: at,
+      });
+      return true;
+    },
   };
 }
 

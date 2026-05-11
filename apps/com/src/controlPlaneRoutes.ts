@@ -22,11 +22,15 @@ import {
   handleBuildTicketRefresh,
   handleCaCert,
   handleCleanupApex,
+  handleCompleteRePair,
   handleConsumeUnlockKey,
   handleDepositAutoUnlockLease,
   handleDepositUnlockKey,
   handleGetPendingUnlockApproval,
+  handleGetRePair,
+  handleInitiateRePair,
   handleListAutoUnlockLeases,
+  handleObjectRePair,
   handleRevokeAutoUnlockLease,
   handleDns01Delete,
   handleDns01Publish,
@@ -128,6 +132,10 @@ const ROUTE_RE = {
   LUKS_LEASE_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease\/([^/]+)$/,
   LUKS_LEASE_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases$/,
   UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
+  RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
+  RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
+  RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
+  RE_PAIR_GET: /^\/api\/users\/([^/]+)\/re-pair$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
@@ -497,6 +505,44 @@ export async function tryControlPlane(
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
+      ),
+    );
+  }
+
+  // ---- Recovery re-pair (J.3) ----
+  // Order matters: /re-pair/object + /re-pair/complete must be matched
+  // before /re-pair (the latter regex matches their paths' prefix).
+  if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_OBJECT))) {
+    return finishPlain(
+      await handleObjectRePair(
+        { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_COMPLETE))) {
+    return finishPlain(
+      await handleCompleteRePair(
+        { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_INITIATE))) {
+    return finishPlain(
+      await handleInitiateRePair(
+        { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.RE_PAIR_GET))) {
+    return finishPlain(
+      await handleGetRePair(
+        { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+        decodeURIComponent(m[1]!),
       ),
     );
   }

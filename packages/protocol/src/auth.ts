@@ -1263,6 +1263,72 @@ const TAG_DEPOSIT_UNLOCK_KEY = "flagship/deposit-unlock-key/v1";
 const TAG_CONSUME_UNLOCK_KEY = "flagship/consume-unlock-key/v1";
 const TAG_AUTO_UNLOCK_LEASE = "flagship/auto-unlock-lease/v1";
 const TAG_REVOKE_AUTO_UNLOCK_LEASE = "flagship/revoke-auto-unlock-lease/v1";
+const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
+const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
+
+/**
+ * Recovery re-pair (J.3) — after the user has lost their old UMK
+ * and generated a fresh one (so a NEW IRK), they POST this
+ * envelope to claim ownership of their existing username + servers.
+ * .com starts a 24h grace timer; the OLD IRK can sign a
+ * `RePairObject` to cancel. After the grace expires with no
+ * objection, .com swaps the username's IRK pubkey atomically.
+ *
+ * Signed by the NEW IRK (the one taking over).
+ */
+export interface RePairInitiate {
+  username: string;
+  newIrkPub: Bytes;
+  /** Old IRK pubkey, included so .com can show "is this old key really yours to retire?" copy on the objection prompt. */
+  oldIrkPub: Bytes;
+  issuedAt: number;
+}
+
+/**
+ * Cancel a pending re-pair. Signed by the OLD IRK — the one being
+ * displaced. If the old IRK is still in the user's possession, this
+ * is the kill switch for an unauthorized takeover attempt.
+ */
+export interface RePairObject {
+  username: string;
+  /** Pinned to the new IRK pubkey from the pending row, so a leaked old objection can't cancel a future re-pair. */
+  newIrkPub: Bytes;
+  issuedAt: number;
+}
+
+function canonicalRePairInitiate(r: RePairInitiate): Bytes {
+  return new TextEncoder().encode(
+    [TAG_RE_PAIR_INITIATE, r.username, hex(r.newIrkPub), hex(r.oldIrkPub), r.issuedAt].join("|"),
+  );
+}
+
+function canonicalRePairObject(r: RePairObject): Bytes {
+  return new TextEncoder().encode(
+    [TAG_RE_PAIR_OBJECT, r.username, hex(r.newIrkPub), r.issuedAt].join("|"),
+  );
+}
+
+export function signRePairInitiate(r: RePairInitiate, newIrk: Keypair): Bytes {
+  return ed.sign(canonicalRePairInitiate(r), newIrk.privateKey);
+}
+export function verifyRePairInitiate(r: RePairInitiate, sig: Bytes, newIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRePairInitiate(r), newIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signRePairObject(r: RePairObject, oldIrk: Keypair): Bytes {
+  return ed.sign(canonicalRePairObject(r), oldIrk.privateKey);
+}
+export function verifyRePairObject(r: RePairObject, sig: Bytes, oldIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRePairObject(r), oldIrkPub);
+  } catch {
+    return false;
+  }
+}
 
 function canonicalPutSealedLuksKey(r: PutSealedLuksKey): Bytes {
   return new TextEncoder().encode(
