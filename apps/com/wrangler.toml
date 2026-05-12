@@ -129,8 +129,8 @@ SERVICES_BASE_URL = "https://flagship-services.fly.dev:8443"
 # probes the boot media for the trailer, validates the signature, and
 # fetches installer/install.sh from GitHub at the trailer-pinned ref.
 BASE_ISO_URL = "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso"
-BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl1"
-BASE_ISO_SHA256 = "5782da151ecc0328a0e10052405981d6807d9967f6e01836d1cf1c538768fb7d"
+BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl2"
+BASE_ISO_SHA256 = "faafc1b9f868c47c99733c2c6d453e8202d93f9b36df6d6b653eb774914736b2"
 
 # Fly anycast IPs of the .services SNI passthrough listener. When DNS
 # auto-publish is enabled (CLOUDFLARE_DNS_API_TOKEN secret set), the

@@ -36,8 +36,13 @@ ALPINE_URL="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION%.*}/releases
 
 # To bump: download the new ISO, sha256sum it, paste here. Mismatched
 # checksum aborts the build before any further work.
+#
+# Alpine has been observed to RE-PUBLISH a patch release with the same
+# point-version string (3.21.0 was reissued at some point with different
+# bytes). To avoid chasing reissues, pin to the LATEST patch in the
+# series rather than the first.
 declare -A ALPINE_SHA256
-ALPINE_SHA256["3.21.0"]="ab27d3da0bd62e3a8b27a83bdb7c6c80fee9d28db4bcc88c8f06ab0d04671c19"
+ALPINE_SHA256["3.21.0"]="201e2ba601be5b861345a308591e3e547bf6d210945dfaab3e3251b8dea64b8b"
 
 OUT_PATH="${1:?usage: build-flagship-iso.sh <out.iso>}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
@@ -74,7 +79,7 @@ echo "[build-iso] sha256 verified: $actual_sha"
 # ── 2. Build the Flagship apkovl ─────────────────────────────────
 APKOVL="$WORK_DIR/flagship.apkovl.tar.gz"
 echo "[build-iso] emitting apkovl"
-node packages/installer-apkovl/scripts/emit-apkovl.mjs "$APKOVL"
+npx tsx packages/installer-apkovl/scripts/emit-apkovl.mjs "$APKOVL"
 
 # ── 3. Extract the Alpine ISO into a working tree ────────────────
 EXTRACTED="$WORK_DIR/extracted"
@@ -99,7 +104,8 @@ xorriso \
   -volume_date "uuid" "$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00)" \
   -joliet on \
   -map "$EXTRACTED" / \
-  -boot_image isolinux dir=/boot/syslinux \
+  -boot_image isolinux bin_path=/boot/syslinux/isolinux.bin \
+  -boot_image isolinux cat_path=/boot/syslinux/boot.cat \
   -boot_image isolinux system_area=/usr/share/syslinux/isohdpfx.bin \
   -- >/dev/null 2>&1 || {
     # Fall back: some environments don't have isohdpfx at the standard
@@ -113,7 +119,8 @@ xorriso \
       -volume_date "uuid" "$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00)" \
       -joliet on \
       -map "$EXTRACTED" / \
-      -boot_image isolinux dir=/boot/syslinux \
+      -boot_image isolinux bin_path=/boot/syslinux/isolinux.bin \
+  -boot_image isolinux cat_path=/boot/syslinux/boot.cat \
       -boot_image isolinux system_area="$WORK_DIR/mbr.bin" \
       -- >/dev/null
   }
