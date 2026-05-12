@@ -16,25 +16,30 @@ WORKDIR /app
 # is good-enough for a small monorepo.)
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json vitest.config.ts ./
 COPY packages packages/
-# maintainers/ is a workspace member declared in the root package.json and
-# is referenced from packages/server-daemon/tsconfig.json; `tsc -b` from
-# the repo root fails to resolve it without these source files in the
-# build context. We don't ship maintainers/ in the runtime stage (it's a
-# separate project; the runtime only needs the compiled apps/web bundle
-# plus its transitive @flagship/* deps).
-COPY maintainers maintainers/
+# scripts/pull-maintainers.sh + its pinned-SHA file are needed BEFORE the
+# preinstall hook on `npm install`. The pull-maintainers script needs git
+# at runtime; the rest of the build is plain Node.
+COPY scripts/pull-maintainers.sh scripts/maintainers.pinned-sha scripts/
+RUN apk add --no-cache git bash
+# Pull the maintainers tree from ibisllc/maintainers at the pinned SHA
+# (docs/maintainers-deployment.md). It's gitignored locally; the
+# Dockerfile is the canonical place this fetches in CI.
+RUN bash scripts/pull-maintainers.sh
 # services/marketplace-scanner is referenced from root tsconfig.json so
-# `tsc -b` walks into it. Same story — needed only at build time, not
-# runtime.
+# `tsc -b` walks into it. Same story as maintainers/ — needed only at
+# build time, not runtime.
 COPY services services/
 COPY apps/web/package.json apps/web/tsconfig.json apps/web/
 COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/
 COPY apps/com/package.json apps/com/
 
+# The npm preinstall hook re-runs pull-maintainers; SKIP_PULL_MAINTAINERS=1
+# tells it to no-op since we just pulled. Saves a network round-trip.
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --workspaces --include-workspace-root --no-audit --no-fund --ignore-scripts || \
-    npm install --workspaces --include-workspace-root --no-audit --no-fund
+    SKIP_PULL_MAINTAINERS=1 \
+    (npm ci --workspaces --include-workspace-root --no-audit --no-fund --ignore-scripts || \
+     npm install --workspaces --include-workspace-root --no-audit --no-fund)
 
 RUN npx tsc -b
 

@@ -45,3 +45,10 @@ test-results/
 
 # Local IDE / agent settings — personal to each contributor
 .claude/
+
+# maintainers/ is NOT vendored — it's pulled at build time from
+# github.com/ibisllc/maintainers at the SHA pinned in
+# scripts/maintainers.pinned-sha. The pull is wired through
+# scripts/pull-maintainers.sh (npm preinstall + Dockerfile + CI).
+# See docs/maintainers-deployment.md for the rationale.
+maintainers/
