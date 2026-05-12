@@ -905,3 +905,30 @@ export type {
   AlertInboxHttpDeps,
   PairedSessionGate,
 } from "./alertInboxHttp.js";
+export {
+  InMemoryAppGrantStore,
+  memorySyncTransportPair,
+  mintTestBinding,
+  startSyncConnection,
+  wrapWsAsSyncTransport,
+} from "./sibling/syncConnection.js";
+export type {
+  AppGrantStore,
+  IrkPubKeyLookup,
+  SyncConnection,
+  SyncConnectionOptions,
+  SyncRevocationLookup,
+  SyncTransport,
+} from "./sibling/syncConnection.js";
+export {
+  SiblingClientManager,
+  startPersistentSiblingClient,
+} from "./sibling/siblingClient.js";
+export type {
+  PersistentSiblingClient,
+  PersistentSiblingClientOptions,
+  SiblingClientManagerOptions,
+  WsLike as SiblingWsLike,
+} from "./sibling/siblingClient.js";
+export { acceptSyncUpgrade } from "./sibling/siblingServer.js";
+export type { AcceptSyncUpgradeArgs } from "./sibling/siblingServer.js";
