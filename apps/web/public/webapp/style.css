@@ -674,6 +674,57 @@ section:not(.hidden) {
 /* Install-progress per-event error detail. */
 .err-detail { color: var(--err); font-size: 12px; }
 
+/* ── Icons (Task #45) ────────────────────────────────────────────
+ * Lucide SVGs, single-color via currentColor. The wrapper span
+ * provides a fixed display box; the SVG inside fills it. Hover-
+ * colorization lives on the parent (button:hover etc.) so the icon
+ * shifts to amber along with the rest of the button. */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: inherit;
+}
+.icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  fill: none;
+}
+
+/* Home-grid buttons re-flow content vertically — icon on top, label
+ * below — once decorateHomeGrid() wires the icon span in. The
+ * `.label-text` span exists only after wiring; until then the button
+ * stays horizontal (so the page is still usable if the JS module
+ * fails to load). */
+.home-grid button .icon { color: var(--ink-muted); transition: color var(--motion-state); }
+.home-grid button:hover .icon { color: var(--accent); }
+.home-grid button .icon + .label-text { display: block; }
+.home-grid button:has(.label-text) {
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 10px;
+  min-height: 72px;
+  text-align: center;
+  line-height: 1.2;
+}
+.home-grid button:has(.label-text) .icon { width: 22px; height: 22px; }
+
+/* Toast variants — coloured ring + leading icon. */
+.toast { display: inline-flex; align-items: center; gap: var(--space-2); }
+.toast .icon { width: 16px; height: 16px; }
+.toast.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+.toast.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
 /* Slim progress bar (tier-status dispatcher relay). */
 .progress-track {
   height: 8px;

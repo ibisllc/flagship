@@ -61,6 +61,7 @@ const OPTIONAL_SHELL = [
   "/lib/leases.js",
   "/lib/recovery.js",
   "/lib/push.js",
+  "/lib/icons.js",
   "/views/bootstrap.js",
   "/views/unlock.js",
   "/views/home.js",

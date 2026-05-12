@@ -357,6 +357,44 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("push-disable");
   });
 
+  it("/webapp/lib/icons.js bundles the Lucide subset + home-grid wiring (#45)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/icons.js" });
+    expect(r.statusCode).toBe(200);
+    // Public surface — both the named SVG exports the toast uses and the
+    // helper that wires the home grid.
+    expect(r.body).toContain("export const serverIcon");
+    expect(r.body).toContain("export const shieldIcon");
+    expect(r.body).toContain("export const sparklesIcon");
+    expect(r.body).toContain("export const sendIcon");
+    expect(r.body).toContain("export const checkCircleIcon");
+    expect(r.body).toContain("export const alertCircleIcon");
+    expect(r.body).toContain("export const HOME_BUTTON_ICONS");
+    expect(r.body).toContain("export const TOAST_ICONS");
+    expect(r.body).toContain("export function decorateHomeGrid");
+    // Every SVG must be single-color via currentColor so the parent's
+    // ink-muted / accent cascade works.
+    expect(r.body).toContain('stroke="currentColor"');
+    // ISC license attribution (lucide-icons).
+    expect(r.body).toContain("lucide");
+  });
+
+  it("/webapp/views/home.js decorates the home grid on enterHome (#45)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/home.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("decorateHomeGrid");
+    expect(r.body).toContain('from "../lib/icons.js"');
+  });
+
+  it("/webapp/lib/toast.js prepends the icon for ok/err/warn variants (#45)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/toast.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("TOAST_ICONS");
+    expect(r.body).toContain('from "./icons.js"');
+  });
+
   it("never accidentally serves /webapp resources from the root scope", async () => {
     const app = buildServer();
     // Confirm the marketing root is NOT a manifest

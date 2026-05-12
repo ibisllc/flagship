@@ -1,4 +1,5 @@
 import { bytesToHex } from "../keystore.js";
+import { decorateHomeGrid } from "../lib/icons.js";
 import { tickRenewals } from "../lib/leases.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
@@ -110,6 +111,7 @@ export async function renderActiveProviderChip() {
 
 export async function enterHome() {
   show("view-home");
+  decorateHomeGrid(document);
   await renderHome();
   await renderActiveProviderChip();
 }
