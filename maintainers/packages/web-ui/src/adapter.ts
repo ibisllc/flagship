@@ -156,7 +156,10 @@ async function submit(
     bytes: e.bytes,
   }));
   const bytes = buildZip(zipEntries);
-  const blob = new Blob([bytes], { type: "application/zip" });
+  // Cast bypasses the SharedArrayBuffer/ArrayBuffer union complaint in
+  // recent lib.dom.d.ts. Our bytes is always a fresh ArrayBuffer-backed
+  // Uint8Array from buildZip; the runtime path is safe.
+  const blob = new Blob([bytes as BlobPart], { type: "application/zip" });
   const filename = filenameForBundle(ref, input.entries);
   return {
     kind: "downloadable",
