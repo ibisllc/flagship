@@ -18,11 +18,11 @@ export async function renderPairedSessions() {
     }
     root.innerHTML = body.sessions.map((s) => `
       <div class="card">
-        <div class="row" style="align-items:flex-start;">
+        <div class="row row-top">
           <div>
-            <div style="font-weight:600;">${escapeHtml(s.label)} ${s.current ? '<span class="pill ok">this device</span>' : ""}</div>
-            <div class="value" style="font-size:0.78rem;">${escapeHtml(s.tokenPrefix)}…</div>
-            <div style="color:var(--fg-mute); font-size:0.78rem;">added ${escapeHtml(new Date(s.addedAt).toLocaleString())}</div>
+            <div class="weight-600">${escapeHtml(s.label)} ${s.current ? '<span class="pill ok">this device</span>' : ""}</div>
+            <div class="value text-xs">${escapeHtml(s.tokenPrefix)}…</div>
+            <div class="faint-sm">added ${escapeHtml(new Date(s.addedAt).toLocaleString())}</div>
           </div>
           ${s.current
             ? '<button class="secondary" disabled>can\'t revoke self</button>'
@@ -35,7 +35,7 @@ export async function renderPairedSessions() {
     });
   } catch (e) {
     if (e instanceof ScreensError) {
-      root.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
       throw e;
     }

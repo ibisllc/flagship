@@ -55,6 +55,6 @@ export async function enterPodPair() {
     `;
     $("pod-pair-unpair")?.addEventListener("click", () => handleUnpair());
   } else {
-    status.innerHTML = '<p style="margin:0; color:var(--fg-mute); font-size:0.85rem;">not paired with any pod yet</p>';
+    status.innerHTML = '<p class="note">not paired with any pod yet</p>';
   }
 }

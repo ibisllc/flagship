@@ -28,12 +28,12 @@ export async function renderMarketplace() {
         : "";
       return `
         <div class="card" data-key="${safeKey}">
-          <div class="row" style="align-items:flex-start;">
+          <div class="row row-top">
             <div>
-              <div style="font-weight:600;">${escapeHtml(l.title)} ${installedBadge} ${llmBadge}</div>
-              <div style="color:var(--fg-mute); font-size:0.82rem;">${escapeHtml(l.summary)}</div>
-              <div class="value" style="font-size:0.78rem; margin-top:0.2rem;">${escapeHtml(l.creator)}/${escapeHtml(l.slug)}</div>
-              <div style="color:var(--fg-mute); font-size:0.78rem;">${l.installCount} installs</div>
+              <div class="weight-600">${escapeHtml(l.title)} ${installedBadge} ${llmBadge}</div>
+              <div class="muted-sm">${escapeHtml(l.summary)}</div>
+              <div class="value text-xs">${escapeHtml(l.creator)}/${escapeHtml(l.slug)}</div>
+              <div class="faint-sm">${l.installCount} installs</div>
             </div>
             ${l.alreadyInstalled
               ? '<button class="secondary" disabled>installed</button>'
@@ -53,7 +53,7 @@ export async function renderMarketplace() {
     });
   } catch (e) {
     if (e instanceof ScreensError) {
-      root.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
       throw e;
     }

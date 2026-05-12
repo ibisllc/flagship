@@ -69,6 +69,21 @@ bucket_name = "flagship-backups"
 [triggers]
 crons = ["0 */6 * * *"]
 
+# Rate-limit namespace shared across the four mutating control-plane
+# endpoints. The Worker composes per-request keys of the form
+# `<endpoint>|<axis>|<id>` (see apps/com/src/rateLimit.ts).
+#
+# The binding's (period, limit) below is set to the tightest threshold
+# (3-per-15min) so that the recovery endpoint's usernameHash axis can
+# actually fire. Endpoints with more generous budgets are protected by
+# the in-Worker LIMITS table — see rateLimit.ts. The dashboard's
+# advanced ratelimits are NOT used; the simple binding suffices.
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 3, period = 900 }
+
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state"

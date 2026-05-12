@@ -586,3 +586,55 @@ section:not(.hidden) {
  * (title + summary + meta) and the right column carries an action. */
 .row-top { align-items: flex-start; }
 
+/* Vibe-code transcript pre — scrollable, muted body. */
+.vc-transcript {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--ink-muted);
+  max-height: 200px;
+  overflow: auto;
+}
+
+/* Live frame in browser viewer — wrapper card has tighter padding. */
+.bv-frame-card { padding: var(--space-2); }
+
+/* Pair-view video preview (camera feed). */
+.pair-video {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: #000;
+  display: block;
+  margin: 0 auto;
+  object-fit: cover;
+}
+.pair-status {
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 13px;
+  margin: var(--space-2) 0 0;
+}
+
+/* Three-column equal-flex button row (Send code / Cancel pairs). */
+.row-gap-3 {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.row-gap-3 > * { flex: 1; }
+
+/* Slim progress bar (tier-status dispatcher relay). */
+.progress-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  margin-top: var(--space-1);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--motion-state);
+}

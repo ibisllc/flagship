@@ -52,14 +52,22 @@ validate_ref() {
             return 1
             ;;
     esac
-    # Reject anything outside [A-Za-z0-9._/-]. We test by stripping the
-    # allowed character class and checking the remainder is empty. The
-    # tr fallback is POSIX; busybox tr supports the same syntax.
-    _stripped=$(printf '%s' "$_ref" | tr -d 'A-Za-z0-9._/-')
-    if [ -n "$_stripped" ]; then
-        echo "flagship: ${_label} contains disallowed characters (\"$_ref\") — refusing to install"
-        return 1
-    fi
+    # Reject anything outside [A-Za-z0-9._/-]. POSIX globbing doesn't
+    # do negated character classes the way regex does, but `case` with
+    # explicit alternations is portable across busybox + dash + bash.
+    # We list every disallowed char individually; the alternation
+    # matches if ANY of them appears anywhere in the ref.
+    #
+    # Why not `tr -d` + length compare? Command substitution strips
+    # trailing newlines, so a ref like "main\n..." would silently look
+    # like an all-allowed string after tr. The case-glob path doesn't
+    # have that footgun.
+    case "$_ref" in
+        *[!A-Za-z0-9._/-]*)
+            echo "flagship: ${_label} contains disallowed characters (\"$_ref\") — refusing to install"
+            return 1
+            ;;
+    esac
     return 0
 }
 

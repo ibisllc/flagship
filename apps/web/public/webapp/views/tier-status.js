@@ -30,7 +30,7 @@ export async function renderTierStatus() {
       <div class="card">
         <div class="row"><span class="label">Tier</span><span>${tierBadge}</span></div>
       </div>
-      <h2 style="margin-top:1.2rem;">LLM credits</h2>
+      <h2 class="mt-4">LLM credits</h2>
       <div class="card">
         ${typeof llmDay === "number"
           ? `<div class="row"><span class="label">today remaining</span><span class="value">${llmDay.toLocaleString()}</span></div>`
@@ -39,7 +39,7 @@ export async function renderTierStatus() {
           ? `<div class="row"><span class="label">lifetime remaining</span><span class="value">${llmTotal.toLocaleString()}</span></div>`
           : ""}
       </div>
-      <h2 style="margin-top:1.2rem;">Dispatcher relay</h2>
+      <h2 class="mt-4">Dispatcher relay</h2>
       <div class="card">
         ${typeof dispatchUsed === "number"
           ? `
@@ -47,19 +47,19 @@ export async function renderTierStatus() {
               <span class="label">this month</span>
               <span class="value">${dispatchUsed.toFixed(2)} GB / ${typeof dispatchQuota === "number" ? `${dispatchQuota.toFixed(0)} GB free` : "—"}</span>
             </div>
-            <div style="height:8px; background:#ffffff10; border-radius:4px; margin-top:0.4rem; overflow:hidden;">
-              <div style="height:100%; width:${pct(dispatchUsed, dispatchQuota)}%; background:var(--accent);"></div>
+            <div class="progress-track">
+              <div class="progress-fill" style="width:${pct(dispatchUsed, dispatchQuota)}%"></div>
             </div>
           `
           : '<div class="row"><span class="label">usage</span><span class="value">—</span></div>'}
       </div>
-      <h2 style="margin-top:1.2rem;">Custom domains</h2>
+      <h2 class="mt-4">Custom domains</h2>
       ${(body.customDomains ?? []).length === 0
         ? '<div class="card placeholder">none — your default subdomain is forever-free</div>'
         : (body.customDomains ?? []).map((d) => `
           <div class="card"><div class="value">${escapeHtml(d)}</div></div>
         `).join("")}
-      <h2 style="margin-top:1.2rem;">Reserved names</h2>
+      <h2 class="mt-4">Reserved names</h2>
       ${(body.reservedNames ?? []).length === 0
         ? '<div class="card placeholder">none — your username is FCFS-free</div>'
         : (body.reservedNames ?? []).map((n) => `
@@ -68,7 +68,7 @@ export async function renderTierStatus() {
     `;
   } catch (e) {
     if (e instanceof ScreensError) {
-      root.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
       throw e;
     }

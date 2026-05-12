@@ -18,6 +18,15 @@
  */
 
 import { tryControlPlane } from "./controlPlaneRoutes.js";
+import {
+  checkRateLimit,
+  clientIp,
+  endpointFor,
+  extractIrkPub,
+  extractUsernameHash,
+  rateLimitedResponse,
+  type RateLimitBinding,
+} from "./rateLimit.js";
 
 const WEBAPP_HOST = "web.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
@@ -61,6 +70,8 @@ export interface RouteEnv {
   /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
+  /** Cloudflare rate-limit binding shared by all four mutating control-plane endpoints. */
+  RATE_LIMITER?: RateLimitBinding;
 }
 
 export interface R2BucketLike {
@@ -280,16 +291,57 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     });
   }
 
+  // Rate-limit the four mutating control-plane endpoints. Runs BEFORE
+  // dispatch but AFTER body buffering so we can pull the IRK pubkey
+  // out of signed requests for the per-IRK axis. When the limit trips
+  // we 429 immediately — never reach the D1 handler or the upstream.
+  //
+  // The body is buffered once here and re-attached to a fresh Request
+  // so downstream readers (tryControlPlane, proxyToServices) see the
+  // same payload. This duplicates the body parse but each endpoint's
+  // payload is small JSON, so the cost is negligible compared to
+  // protecting D1 from a tight-loop attacker.
+  const rlEndpoint = endpointFor(request.method, url.pathname);
+  let buffered = request;
+  if (rlEndpoint) {
+    let bodyText: string | undefined;
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      bodyText = await request.text();
+      buffered = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: bodyText && bodyText.length > 0 ? bodyText : undefined,
+      });
+    }
+    let parsed: unknown;
+    if (bodyText) {
+      try {
+        parsed = JSON.parse(bodyText);
+      } catch {
+        parsed = undefined;
+      }
+    }
+    const irkPub = extractIrkPub(rlEndpoint, parsed);
+    const usernameHash = extractUsernameHash(url.pathname);
+    const rl = await checkRateLimit(env, {
+      endpoint: rlEndpoint,
+      ip: clientIp(request),
+      ...(irkPub ? { irkPub } : {}),
+      ...(usernameHash ? { usernameHash } : {}),
+    });
+    if (rl.limited) return rateLimitedResponse(rl);
+  }
+
   // .com control-plane routes (D1-backed). When DB binding is present,
   // these are served locally; otherwise fall through to the upstream proxy
   // (e.g. for the dev wrangler-without-d1 case).
   if (url.pathname.startsWith(PROXY_PREFIX) && env.DB) {
-    const cp = await tryControlPlane(request, env);
+    const cp = await tryControlPlane(buffered, env);
     if (cp) return cp;
   }
 
   if (url.pathname.startsWith(PROXY_PREFIX)) {
-    return proxyToServices(request, env, url);
+    return proxyToServices(buffered, env, url);
   }
 
   // Static asset path — let the assets binding handle it.
