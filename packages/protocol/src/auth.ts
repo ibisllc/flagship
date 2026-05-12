@@ -2795,3 +2795,83 @@ export function verifyUsernameRename(r: UsernameRename, sig: Bytes, irkPub: Byte
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// InheritanceDeclaration (#77) — opt-in heir track.
+//
+// A user MAY publish a signed declaration naming one or more heirs and
+// a `triggerAfterInactiveDays` threshold. If the user signs nothing for
+// that many days, the heir may post a takeover request which then waits
+// out a 7-day public notice period before .com swaps the IRK pubkey to
+// the heir.
+//
+// Default: OFF. The webapp's settings carries a loud opt-in popup; the
+// declaration is keyed on the user's username and stored on the user-
+// identity encrypted blob (see control-plane/inheritance.ts).
+//
+// The threshold is a K-of-N policy: `threshold` heir signatures must be
+// present on a takeover request for it to advance to the notice
+// period. K=1, N=1 is the simple "one heir" case; K=2, N=3 supports
+// "two of three lawyers" patterns without giving any single lawyer
+// unilateral takeover power.
+//
+// Sensitive primitive — see docs/policy/inheritance.md for the threat
+// model. The 7-day notice period is critical: the user has a chance
+// to sign any envelope (resetting the inactive timer) before the
+// takeover binds, and may revoke the declaration outright with one
+// IRK-signed POST. .com publicly logs every takeover request so the
+// user is alerted via every active push channel.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface InheritanceDeclaration {
+  username: string;
+  /** Hex pubkeys of every heir (32 bytes each), sorted ascending. */
+  heirIrkPub: Bytes[];
+  /** K-of-N. 1 ≤ threshold ≤ heirIrkPub.length. */
+  threshold: number;
+  /** Bumps when the user edits the heir set; replay-defends downstream takeovers. */
+  heirSetVersion: number;
+  /** Inactive-days threshold; default 365. */
+  triggerAfterInactiveDays: number;
+  issuedAt: number;
+}
+
+const TAG_INHERITANCE_DECLARATION = "flagship/inheritance-declaration/v1";
+
+function canonicalInheritanceDeclaration(d: InheritanceDeclaration): Bytes {
+  validateNoSepCtrl("username", d.username);
+  // Sort heir pubkeys ascending by hex so the bytes don't depend on
+  // input ordering — clients sometimes assemble heir lists from
+  // multiple sources and we want the sig to verify regardless.
+  const heirList = [...d.heirIrkPub].map((b) => hex(b)).sort().join(",");
+  return new TextEncoder().encode(
+    [
+      TAG_INHERITANCE_DECLARATION,
+      d.username,
+      heirList,
+      d.threshold,
+      d.heirSetVersion,
+      d.triggerAfterInactiveDays,
+      d.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signInheritanceDeclaration(
+  d: InheritanceDeclaration,
+  irk: Keypair,
+): Bytes {
+  return ed.sign(canonicalInheritanceDeclaration(d), irk.privateKey);
+}
+
+export function verifyInheritanceDeclaration(
+  d: InheritanceDeclaration,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalInheritanceDeclaration(d), irkPub);
+  } catch {
+    return false;
+  }
+}
