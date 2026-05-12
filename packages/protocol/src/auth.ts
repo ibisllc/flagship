@@ -1937,6 +1937,13 @@ export function verifyLlmPromoIssue(r: LlmPromoIssueRequest, sig: Bytes, irkPub:
 // ──────────────────────────────────────────────────────────────────────
 
 /**
+ * @deprecated Use AppGrant (see below). RootEntitlement and
+ * AppEntitlement are subsumed by AppGrant under the Thread-C model.
+ * Existing signed RootEntitlements remain verifiable for back-compat;
+ * new pods issue AppGrants instead, which carry a 7-day TTL by
+ * convention (#51 cadence — long-offline pods naturally lose authority
+ * without depending on revocation-list propagation).
+ *
  * Perpetual cert authorizing a single pod canonical. Issued once at
  * pod registration, never re-issued. Phone retains the ability to
  * REVOKE it (via the cert revocation list — see below) for compromise
@@ -2001,6 +2008,11 @@ export function verifyRootEntitlement(
  * same allocator state. This expansion is wire-only on AppEntitlement;
  * the allocator already keys per-(slug, author, user) so custom
  * domains slot in alongside derived shorteneds in the same set.
+ */
+/**
+ * @deprecated Use AppGrant. AppEntitlement was the per-pod listing of
+ * canonicals; AppGrant inverts the axis (per-app listing of pods) for
+ * cleaner multi-pod failover.
  */
 export interface AppEntitlement {
   username: string;

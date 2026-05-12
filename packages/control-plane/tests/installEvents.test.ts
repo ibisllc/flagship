@@ -1,11 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  __resetInstallEventRateLimit,
   handleGetInstallEvents,
   handlePostInstallEvent,
 } from "../src/installEvents.js";
 import { InMemoryStorage } from "@flagship/storage";
 
 describe("install events", () => {
+  // Per-serial in-memory rate-limit (#18 hardening) is module-level;
+  // reset before each case so test fixtures can post freely.
+  beforeEach(() => __resetInstallEventRateLimit());
   it("appends events with monotonic seq, returned in order on GET", async () => {
     const storage = new InMemoryStorage();
     for (const ev of ["probe-trailer", "validate-trailer", "partition-disk"]) {
@@ -73,7 +77,11 @@ describe("install events", () => {
 
   it("caps history per serial (in-memory cap = 100)", async () => {
     const storage = new InMemoryStorage();
+    // Storage caps at 100; the rate-limit ring is reset by beforeEach
+    // but kicks in at 60/min. Reset between batches so we can still
+    // post enough to exercise the storage-level cap.
     for (let i = 0; i < 120; i++) {
+      if (i % 50 === 0) __resetInstallEventRateLimit();
       await handlePostInstallEvent(
         { storage: storage.installEvents },
         "01HXAFINST00004",
@@ -89,5 +97,30 @@ describe("install events", () => {
     expect(body.events.length).toBe(100);
     expect(body.events[0]!.eventName).toBe("event-20");
     expect(body.events[99]!.eventName).toBe("event-119");
+  });
+
+  it("rate-limits per-serial flood (#18 ring)", async () => {
+    const storage = new InMemoryStorage();
+    let firstReject: number | null = null;
+    for (let i = 0; i < 200; i++) {
+      const r = await handlePostInstallEvent(
+        { storage: storage.installEvents },
+        "01HXAFFLOOD0001",
+        { event: `e${i}` },
+      );
+      if (r.status !== 200 && firstReject === null) firstReject = i;
+    }
+    // 60/min window; the 61st post in the same window should reject.
+    expect(firstReject).toBe(60);
+  });
+
+  it("rejects events for unknown serial when authCodes gate is wired (#18)", async () => {
+    const storage = new InMemoryStorage();
+    const r = await handlePostInstallEvent(
+      { storage: storage.installEvents, authCodes: storage.authCodes },
+      "01HXAFSTRANGE001",
+      { event: "probe-trailer" },
+    );
+    expect(r.status).toBe(403);
   });
 });

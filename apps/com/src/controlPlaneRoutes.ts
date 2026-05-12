@@ -578,7 +578,8 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.INSTALL_EVENTS))) {
     return finish(
       await handlePostInstallEvent(
-        { storage: storage.installEvents },
+        // Pass authCodes so the handler gates on serial-existence (#18).
+        { storage: storage.installEvents, authCodes: storage.authCodes },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),
