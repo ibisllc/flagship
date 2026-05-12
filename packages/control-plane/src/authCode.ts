@@ -173,21 +173,32 @@ export async function handleAuthCodeRevoke(
   const now = (deps.now ?? (() => Date.now()))();
   const freshnessMs = deps.freshnessMs ?? 5 * 60_000;
   const r = body?.request;
-  const wellFormed =
-    !!r &&
+  // Narrow once into a typed `wellFormedRequest` so downstream code
+  // doesn't need non-null assertions every time.
+  const wellFormedRequest:
+    | { serial: string; username: string; issuedAt: number; signatureHex: string }
+    | null =
+    r &&
     typeof r.serial === "string" &&
     r.serial === serial &&
     typeof r.username === "string" &&
     typeof r.issuedAt === "number" &&
     typeof body?.signature === "string" &&
-    HEX128.test(body.signature);
+    HEX128.test(body.signature)
+      ? {
+          serial: r.serial,
+          username: r.username,
+          issuedAt: r.issuedAt,
+          signatureHex: body.signature,
+        }
+      : null;
 
   // Always do the lookups, regardless of well-formedness, so timing
   // doesn't leak "we never got far enough to check storage."
   // Use a stable placeholder username/serial when the body is malformed
   // so the lookups still happen and take comparable time.
-  const lookupSerial = wellFormed ? r!.serial : serial;
-  const lookupUsername = wellFormed && typeof r!.username === "string" ? r!.username : "";
+  const lookupSerial = wellFormedRequest?.serial ?? serial;
+  const lookupUsername = wellFormedRequest?.username ?? "";
   const [existing, userRec] = await Promise.all([
     deps.storage.get(lookupSerial),
     lookupUsername === "" ? Promise.resolve(undefined) : deps.usernames.get(lookupUsername),
@@ -198,22 +209,22 @@ export async function handleAuthCodeRevoke(
   // serial exist" is itself an oracle.
   const denied = (): HandlerResponseWithHeaders => forbidden("authentication failed");
 
-  if (!wellFormed) return denied();
-  if (Math.abs(now - r!.issuedAt) > freshnessMs) return denied();
+  if (!wellFormedRequest) return denied();
+  if (Math.abs(now - wellFormedRequest.issuedAt) > freshnessMs) return denied();
   if (!existing) return denied();
   if (!userRec) return denied();
   if (!equalHex(userRec.irkPubHex, existing.userPubKeyHex)) return denied();
 
   const revocation: AuthCodeRevocation = {
-    serial: r!.serial,
-    username: r!.username,
-    issuedAt: r!.issuedAt,
+    serial: wellFormedRequest.serial,
+    username: wellFormedRequest.username,
+    issuedAt: wellFormedRequest.issuedAt,
   };
-  const sig = hexToBytes(body!.signature!);
+  const sig = hexToBytes(wellFormedRequest.signatureHex);
   if (!verifyAuthCodeRevocation(revocation, sig, hexToBytes(existing.userPubKeyHex))) {
     return denied();
   }
-  await deps.storage.markRevoked(r!.serial, now);
+  await deps.storage.markRevoked(wellFormedRequest.serial, now);
   return ok({ ok: true });
 }
 

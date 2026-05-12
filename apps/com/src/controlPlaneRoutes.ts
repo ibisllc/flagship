@@ -55,6 +55,7 @@ import {
   handleMarketplaceScanResult,
   buildPushForwarder,
   handleGetEntitlementRevocations,
+  handleListRevocations,
   handlePostEntitlementRevocations,
   handlePushRegister,
   handlePushRelay,
@@ -152,6 +153,7 @@ const ROUTE_RE = {
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
   CERT_REVOCATIONS_POST: /^\/api\/cert-revocations$/,
   CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
+  REVOCATIONS_LIST: /^\/api\/revocations$/,
   RECOVERY_UPLOAD: /^\/api\/recovery$/,
   RECOVERY_BY_USERNAME: /^\/api\/recovery\/by-username\/([^/]+)$/,
 };
@@ -780,6 +782,25 @@ export async function tryControlPlane(
           usernames: storage.usernames,
         },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // #88 — flexible-query revocation API. Daemons + webapp/phone fetch
+  // with ?since=<ts> for incremental sync; ?certId=<hex> for an
+  // interactive lookup.
+  if (method === "GET" && ROUTE_RE.REVOCATIONS_LIST.test(path)) {
+    const since = parseInt(url.searchParams.get("since") ?? "", 10);
+    return finishPlain(
+      await handleListRevocations(
+        {
+          storage: storage.entitlementRevocations,
+          usernames: storage.usernames,
+        },
+        {
+          username: url.searchParams.get("username") ?? undefined,
+          since: Number.isFinite(since) ? since : undefined,
+          certId: url.searchParams.get("certId") ?? undefined,
+        },
       ),
     );
   }

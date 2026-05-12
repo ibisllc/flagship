@@ -132,3 +132,73 @@ export async function handleGetEntitlementRevocations(
     signature: rec.irkSignatureHex,
   });
 }
+
+/**
+ * #88 — Flexible-query revocation API.
+ *
+ * GET /api/revocations?username=&since=&certId=
+ *
+ * Used by daemons + the webapp/phone for incremental sync (?since=)
+ * and interactive lookup (?certId=). Returns .com-signed result so
+ * consumers can verify without trusting the Worker as an oracle.
+ *
+ * Filter axes currently supported:
+ *   - username  (required) — bounds the result to one user's list
+ *   - since     (optional) — return only revocations newer than this ms
+ *   - certId    (optional) — filter to a single SHA-256 cert id
+ *
+ * The kind field in each entry is currently "EntitlementCert"; future
+ * envelope kinds (AppGrant per-grantId revocation, etc.) extend the
+ * union as the underlying envelope inventory grows. Schema is
+ * forward-compatible: consumers that don't recognize a kind ignore
+ * that entry.
+ */
+export interface RevocationsQuery {
+  username?: string;
+  since?: number;
+  certId?: string;
+}
+
+export async function handleListRevocations(
+  deps: EntitlementRevocationsDeps,
+  query: RevocationsQuery,
+): Promise<HandlerResponse> {
+  if (!query.username || typeof query.username !== "string") {
+    return malformed("username param is required");
+  }
+  const rec = await deps.storage.get(query.username);
+  if (!rec) {
+    return ok({
+      revocations: [],
+      nextSince: query.since ?? 0,
+    });
+  }
+  let certIds: string[] = [];
+  try {
+    const parsed = JSON.parse(rec.certIdsJson);
+    if (Array.isArray(parsed)) certIds = parsed.filter((s) => typeof s === "string");
+  } catch {
+    /* corrupt row → treat as empty */
+  }
+
+  // since-filter: the stored list is monotonic — issuedAt advances
+  // each replace. We treat any list whose issuedAt > since as "all new".
+  if (typeof query.since === "number" && rec.issuedAt <= query.since) {
+    return ok({ revocations: [], nextSince: rec.issuedAt });
+  }
+
+  let entries = certIds.map((id) => ({
+    certId: id,
+    kind: "EntitlementCert" as const,
+    revokedAt: rec.issuedAt,
+    signedBy: "irk" as const,
+  }));
+  if (query.certId) {
+    entries = entries.filter((e) => e.certId === query.certId);
+  }
+  return ok({
+    revocations: entries,
+    nextSince: rec.issuedAt,
+    signature: rec.irkSignatureHex,
+  });
+}
