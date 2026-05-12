@@ -104,6 +104,50 @@ if ! /usr/local/bin/flagship-trailer-validate "$TRAILER_SRC" >"$BLOB"; then
     exit 1
 fi
 
+# H4 hardening (#14): cross-check the trailer's embedded IRK pubkey
+# against the Flagship CA's pubkey-cert binding for the same username.
+# parseTrailer alone is circular (signature verifies against the IRK
+# pubkey embedded in the same blob), so an evil-maid USB swap with
+# attacker-IRK-signed content would pass. Resolving the username's
+# CA-signed binding closes that path.
+TRAILER_USERNAME="$(jq -r .username "$BLOB")"
+TRAILER_IRK_PUB="$(jq -r .userPubKey "$BLOB")"
+if [ -z "$TRAILER_USERNAME" ] || [ "$TRAILER_USERNAME" = "null" ]; then
+    echo "flagship: trailer missing username field — refusing to install"
+    exit 1
+fi
+if [ -z "$TRAILER_IRK_PUB" ] || [ "$TRAILER_IRK_PUB" = "null" ]; then
+    echo "flagship: trailer missing userPubKey field — refusing to install"
+    exit 1
+fi
+case "$TRAILER_USERNAME" in
+    *[!A-Za-z0-9.-]*)
+        echo "flagship: trailer username has invalid shape — refusing to install"
+        exit 1
+        ;;
+esac
+echo "flagship: cross-checking IRK against CA pubkey-cert for $TRAILER_USERNAME"
+CA_CERT="$(curl --fail --silent --show-error --max-time 30 \
+    "https://flagshipserver.com/api/users/${TRAILER_USERNAME}/pubkey-cert" || echo "")"
+if [ -z "$CA_CERT" ]; then
+    echo "flagship: failed to fetch CA pubkey-cert for $TRAILER_USERNAME — refusing to install"
+    exit 1
+fi
+CA_IRK_PUB="$(echo "$CA_CERT" | jq -r .irkPub 2>/dev/null || echo "")"
+if [ -z "$CA_IRK_PUB" ] || [ "$CA_IRK_PUB" = "null" ]; then
+    echo "flagship: pubkey-cert response malformed — refusing to install"
+    exit 1
+fi
+if [ "$(echo "$TRAILER_IRK_PUB" | tr '[:upper:]' '[:lower:]')" \
+        != "$(echo "$CA_IRK_PUB" | tr '[:upper:]' '[:lower:]')" ]; then
+    echo "flagship: trailer IRK does NOT match CA-signed binding for $TRAILER_USERNAME"
+    echo "  trailer: $TRAILER_IRK_PUB"
+    echo "  CA:      $CA_IRK_PUB"
+    echo "  refusing to install — possible evil-maid USB swap"
+    exit 1
+fi
+echo "flagship: CA cross-check OK — trailer IRK matches binding for $TRAILER_USERNAME"
+
 REF="$(jq -r .installerGitRef "$BLOB")"
 if [ -z "$REF" ] || [ "$REF" = "null" ]; then
     REF="$DEFAULT_REF"
