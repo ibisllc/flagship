@@ -5,3 +5,4 @@ export * from "./signing.js";
 export * from "./verifier.js";
 export * from "./endorsement.js";
 export * from "./storage.js";
+export * from "./encryptedBlobAdapter.js";
