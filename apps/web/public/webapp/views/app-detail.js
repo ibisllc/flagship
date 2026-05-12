@@ -1,14 +1,30 @@
 // P2.3 — app-detail view. Calls /api/screens/app-detail/:appId (P1.3).
-// Includes a "backup this app" button that calls P1.19.
+// Includes a "backup this app" button that calls P1.19, and (when the
+// app declares a browser bundle) a "Open browser viewer" button that
+// drives the user into views/browser-viewer.js with appId pre-set.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
+import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 
 registerView("view-app-detail");
 
 let currentAppId = null;
+
+/**
+ * #32 — browser-viewer is only reachable from here, only when the
+ * manifest claims a browser bundle. We treat a non-empty `browserTabs`
+ * array OR an explicit `browser:` block in the manifest as proof. The
+ * legacy home-grid entry point (with its window.prompt fallback) is
+ * gone — see views/browser-viewer.js.
+ */
+function hasBrowserBundle(body) {
+  if ((body.browserTabs ?? []).length > 0) return true;
+  const m = body.manifest;
+  return !!(m && typeof m === "object" && (m.browser || m.browserBundle));
+}
 
 export async function renderAppDetail(appId) {
   currentAppId = appId;
@@ -59,6 +75,29 @@ export async function renderAppDetail(appId) {
           </div>
         `).join("")
       }
+      ${hasBrowserBundle(body) ? `
+        <h2 class="mt-4">Browser bundle</h2>
+        <div class="card">
+          <p class="note">
+            This app ships a Chromium tab the daemon runs on your pod. Open
+            the viewer to drive a sign-in or paste-a-cookie flow against it
+            from your webapp — frames stream over the paired-session WS.
+          </p>
+          <button id="ad-open-browser" class="full-width">Open browser viewer</button>
+        </div>
+      ` : ""}
+      <h2 class="mt-4">Invites</h2>
+      <div class="card">
+        <p class="note">
+          Share access via single-use bearer links. Names you attach to an
+          invite stay on this device (encrypted user-blob synced lazily); the
+          daemon and flagshipserver.com never see them.
+        </p>
+        <div class="row-2 mt-2">
+          <button id="ad-invite-issue" class="secondary">Invite people</button>
+          <button id="ad-invite-manage" class="secondary">Manage invites</button>
+        </div>
+      </div>
       <h2 class="mt-4">Backup</h2>
       <div class="card">
         <p class="note">
@@ -76,6 +115,17 @@ export async function renderAppDetail(appId) {
     `;
 
     $("ad-backup-go")?.addEventListener("click", () => triggerBackup(a.appId));
+    $("ad-open-browser")?.addEventListener("click", () => {
+      enterBrowserViewer(a.appId).catch((e) => toast(String(e), "err"));
+    });
+    $("ad-invite-issue")?.addEventListener("click", async () => {
+      const { enterInviteIssue } = await import("./invite-issue.js");
+      await enterInviteIssue(a);
+    });
+    $("ad-invite-manage")?.addEventListener("click", async () => {
+      const { enterInviteManage } = await import("./invite-manage.js");
+      await enterInviteManage(a);
+    });
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
