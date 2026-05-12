@@ -311,6 +311,7 @@ export interface Storage {
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
+  userIdentity: UserIdentityRecordStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -471,5 +472,52 @@ export interface TierSubscriptionRecord {
 export interface TierStorage {
   get(username: string): Promise<TierSubscriptionRecord | undefined>;
   put(rec: TierSubscriptionRecord): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// User-identity mandate store (#71)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Per-user identity state held by `.com` as an opaque encrypted blob.
+ *
+ * `.com` is allowed to see:
+ *   - `usernameHash`         — keyed lookup label (sha256 of a salted
+ *                              username). No way back to the username
+ *                              without a brute-force over the username
+ *                              namespace.
+ *   - `authorizedSigners`    — the user's own published Ed25519 pubkey
+ *                              list. Plaintext because the Worker has
+ *                              to verify the PUT signature against it.
+ *   - `blobVersion`          — monotonic counter; rolls forward only.
+ *   - `signatureHex`         — Ed25519 signature over the canonical
+ *                              bytes the user signed (`encryptedBlob |
+ *                              blobVersion`). Retained so any replica
+ *                              can re-verify.
+ *
+ * `.com` never sees the plaintext: only the user's UMK-derived key
+ * (`maintainers/protocol`'s `EncryptedBlobAdapter`) can unseal it. See
+ * docs/policy/no-kyc.md.
+ */
+export interface UserIdentityRecord {
+  usernameHash: string;
+  encryptedBlob: Uint8Array;
+  authorizedSigners: string[];
+  blobVersion: number;
+  signatureHex: string;
+  updatedAt: number;
+}
+
+export interface UserIdentityRecordStorage {
+  /**
+   * Replace the row iff `blobVersion` is strictly greater than the
+   * stored version. Returns the post-state record (either the freshly
+   * stored one or the unchanged existing one) so the caller can branch
+   * on `accepted` without re-fetching.
+   */
+  putIfNewer(
+    rec: UserIdentityRecord,
+  ): Promise<{ stored: UserIdentityRecord; accepted: boolean }>;
+  get(usernameHash: string): Promise<UserIdentityRecord | undefined>;
 }
 

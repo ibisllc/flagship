@@ -62,4 +62,13 @@ CREATE TABLE IF NOT EXISTS routing (
 );
 CREATE INDEX IF NOT EXISTS idx_routing_username ON routing(username);
 CREATE INDEX IF NOT EXISTS idx_routing_target ON routing(current_target_hex);
+
+CREATE TABLE IF NOT EXISTS user_identity_records (
+  username_hash TEXT PRIMARY KEY,
+  encrypted_blob BLOB NOT NULL,
+  authorized_signers_json TEXT NOT NULL,
+  blob_version INTEGER NOT NULL,
+  signature_hex TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `;

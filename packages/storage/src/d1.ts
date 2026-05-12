@@ -33,6 +33,8 @@ import type {
   TierStorage,
   TierSubscriptionRecord,
   UnlockKeyDeposit,
+  UserIdentityRecord,
+  UserIdentityRecordStorage,
   UsernameRecord,
   UsernameStorage,
 } from "./types.js";
@@ -1192,6 +1194,82 @@ export class D1EntitlementRevocationStorage implements EntitlementRevocationStor
   }
 }
 
+export class D1UserIdentityRecordStorage implements UserIdentityRecordStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async putIfNewer(rec: UserIdentityRecord) {
+    const existing = await this.get(rec.usernameHash);
+    if (existing && rec.blobVersion <= existing.blobVersion) {
+      return { stored: existing, accepted: false };
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO user_identity_records
+            (username_hash, encrypted_blob, authorized_signers_json, blob_version, signature_hex, updated_at)
+         VALUES (?,?,?,?,?,?)
+         ON CONFLICT(username_hash) DO UPDATE SET
+           encrypted_blob          = excluded.encrypted_blob,
+           authorized_signers_json = excluded.authorized_signers_json,
+           blob_version            = excluded.blob_version,
+           signature_hex           = excluded.signature_hex,
+           updated_at              = excluded.updated_at`,
+      )
+      .bind(
+        rec.usernameHash,
+        rec.encryptedBlob,
+        JSON.stringify(rec.authorizedSigners),
+        rec.blobVersion,
+        rec.signatureHex,
+        rec.updatedAt,
+      )
+      .run();
+    return {
+      stored: {
+        ...rec,
+        encryptedBlob: new Uint8Array(rec.encryptedBlob),
+        authorizedSigners: [...rec.authorizedSigners],
+      },
+      accepted: true,
+    };
+  }
+
+  async get(usernameHash: string): Promise<UserIdentityRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        `SELECT username_hash, encrypted_blob, authorized_signers_json,
+                blob_version, signature_hex, updated_at
+           FROM user_identity_records WHERE username_hash = ?`,
+      )
+      .bind(usernameHash)
+      .first<{
+        username_hash: string;
+        encrypted_blob: ArrayBuffer | Uint8Array;
+        authorized_signers_json: string;
+        blob_version: number;
+        signature_hex: string;
+        updated_at: number;
+      }>();
+    if (!r) return undefined;
+    const raw = r.encrypted_blob;
+    const blob = raw instanceof Uint8Array ? new Uint8Array(raw) : new Uint8Array(raw);
+    let signers: string[] = [];
+    try {
+      const parsed = JSON.parse(r.authorized_signers_json);
+      if (Array.isArray(parsed)) signers = parsed.filter((s) => typeof s === "string");
+    } catch {
+      // empty list — defensive; corrupt JSON shouldn't crash a fetch
+    }
+    return {
+      usernameHash: r.username_hash,
+      encryptedBlob: blob,
+      authorizedSigners: signers,
+      blobVersion: r.blob_version,
+      signatureHex: r.signature_hex,
+      updatedAt: r.updated_at,
+    };
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
@@ -1209,6 +1287,7 @@ export class D1Storage implements Storage {
   llmPromo: LlmPromoStorage;
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
+  userIdentity: UserIdentityRecordStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
@@ -1226,5 +1305,6 @@ export class D1Storage implements Storage {
     this.llmPromo = new D1LlmPromoStorage(db);
     this.tiers = new D1TierStorage(db);
     this.entitlementRevocations = new D1EntitlementRevocationStorage(db);
+    this.userIdentity = new D1UserIdentityRecordStorage(db);
   }
 }

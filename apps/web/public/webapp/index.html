@@ -288,6 +288,54 @@
         <button class="secondary full-width mt-2" id="orders-debug-back">← Back</button>
       </section>
 
+      <!-- View 19: Create-server draft composer (#60) -->
+      <section id="view-create-server" class="hidden">
+        <h2>Create a server</h2>
+        <div class="card">
+          <p class="note">
+            Compose a build-and-deliver draft. Save it for later, or push the signed InstallBlob through flagshipserver.com to a browser tab open at <a href="https://flagshipserver.com/build/" target="_blank" rel="noopener">flagshipserver.com/build/</a>. The webapp signs with your IRK; the relay sees only opaque ciphertext.
+          </p>
+          <label>Server name (DNS label)</label>
+          <input id="cs-server-name" type="text" placeholder="home" autocomplete="off" />
+          <label>Backup policy</label>
+          <select id="cs-backup-policy">
+            <option value="phone-only">Phone-only (default)</option>
+            <option value="none">None</option>
+            <option value="peer">Reciprocal peer backup</option>
+          </select>
+          <label>LLM preferences <span class="faint-sm">(one per line, <code>providerId:modelName</code>)</span></label>
+          <textarea id="cs-llm-pref" rows="3" placeholder="anthropic:claude-sonnet-4-6&#10;openai:gpt-4"></textarea>
+          <div class="row-2 mt-2">
+            <button class="secondary" id="cs-save-draft">Save draft</button>
+            <button class="secondary" id="cs-new">New</button>
+          </div>
+        </div>
+
+        <div class="card mt-2">
+          <h3>Deliver now</h3>
+          <p class="note">
+            Open <a href="https://flagshipserver.com/build/" target="_blank" rel="noopener">flagshipserver.com/build/</a> on the target machine, tap <em>Start build session</em>, and paste the displayed session id here. Verify the six-digit code matches on both surfaces before approving.
+          </p>
+          <button class="secondary full-width mt-2" id="cs-open-build">Open /build/ in a new tab</button>
+          <label class="mt-3">Session id (from /build/)</label>
+          <input id="cs-relay-session" type="text" placeholder="paste sessionId" autocomplete="off" />
+          <div class="row mt-2">
+            <span class="label">Match code</span>
+            <strong id="cs-match-code" class="value" style="letter-spacing:0.3em;">— — —</strong>
+          </div>
+          <div class="row mt-2">
+            <span class="label">Status</span>
+            <span class="pill" id="cs-status">idle</span>
+          </div>
+          <button id="cs-deliver" class="full-width mt-2">Deliver to /build/</button>
+        </div>
+
+        <h2 class="mt-5">Drafts</h2>
+        <div id="cs-drafts"></div>
+
+        <button class="secondary full-width mt-2" id="create-server-back">← Back</button>
+      </section>
+
       <!-- View 15: Recovery (P2.12) -->
       <section id="view-recovery" class="hidden">
         <h2>Recovery</h2>

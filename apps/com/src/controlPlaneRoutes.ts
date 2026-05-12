@@ -68,6 +68,8 @@ import {
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
   handleUploadWebauthnRecovery,
+  handleGetUserIdentity,
+  handlePutUserIdentity,
   type CaIssuer,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
@@ -171,6 +173,8 @@ const ROUTE_RE = {
   REVOCATIONS_LIST: /^\/api\/revocations$/,
   RECOVERY_UPLOAD: /^\/api\/recovery$/,
   RECOVERY_BY_USERNAME: /^\/api\/recovery\/by-username\/([^/]+)$/,
+  USER_IDENTITY_PUT: /^\/api\/user-identity$/,
+  USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
 };
 
 export async function tryControlPlane(
@@ -535,6 +539,24 @@ export async function tryControlPlane(
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
+      ),
+    );
+  }
+
+  // ---- Encrypted user-identity mandate store (#71) ----
+  if (method === "POST" && ROUTE_RE.USER_IDENTITY_PUT.test(path)) {
+    return finishPlain(
+      await handlePutUserIdentity(
+        { storage: storage.userIdentity },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_IDENTITY_GET))) {
+    return finishPlain(
+      await handleGetUserIdentity(
+        { storage: storage.userIdentity },
+        decodeURIComponent(m[1]!),
       ),
     );
   }

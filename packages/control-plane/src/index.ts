@@ -21,3 +21,4 @@ export * from "./push.js";
 export * from "./pushBridge.js";
 export * from "./entitlementRevocations.js";
 export * from "./llmPromo.js";
+export * from "./userIdentity.js";

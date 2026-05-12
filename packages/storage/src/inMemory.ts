@@ -33,6 +33,8 @@ import type {
   TierStorage,
   TierSubscriptionRecord,
   UnlockKeyDeposit,
+  UserIdentityRecord,
+  UserIdentityRecordStorage,
   UsernameRecord,
   UsernameStorage,
 } from "./types.js";
@@ -483,6 +485,29 @@ export class InMemoryPendingUnlockApprovalStorage implements PendingUnlockApprov
   }
 }
 
+export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStorage {
+  private byHash = new Map<string, UserIdentityRecord>();
+  private clone(r: UserIdentityRecord): UserIdentityRecord {
+    return {
+      ...r,
+      encryptedBlob: new Uint8Array(r.encryptedBlob),
+      authorizedSigners: [...r.authorizedSigners],
+    };
+  }
+  async putIfNewer(rec: UserIdentityRecord) {
+    const existing = this.byHash.get(rec.usernameHash);
+    if (existing && rec.blobVersion <= existing.blobVersion) {
+      return { stored: this.clone(existing), accepted: false };
+    }
+    this.byHash.set(rec.usernameHash, this.clone(rec));
+    return { stored: this.clone(rec), accepted: true };
+  }
+  async get(usernameHash: string) {
+    const r = this.byHash.get(usernameHash);
+    return r ? this.clone(r) : undefined;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   authCodes = new InMemoryAuthCodeStorage();
@@ -500,4 +525,5 @@ export class InMemoryStorage implements Storage {
   llmPromo = new InMemoryLlmPromoStorage();
   tiers = new InMemoryTierStorage();
   entitlementRevocations = new InMemoryEntitlementRevocationStorage();
+  userIdentity = new InMemoryUserIdentityRecordStorage();
 }

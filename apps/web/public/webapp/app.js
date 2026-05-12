@@ -30,6 +30,7 @@ import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 import { initBrowserViewerView, enterBrowserViewer } from "./views/browser-viewer.js";
+import { initCreateServerView, enterCreateServer } from "./views/create-server.js";
 
 async function boot() {
   initBootstrapView();
@@ -56,6 +57,7 @@ async function boot() {
   initInstallProgressView();
   initOrdersDebugView();
   initBrowserViewerView();
+  initCreateServerView();
 
   // Home → screens nav
   const wire = (id, fn) =>
@@ -72,6 +74,7 @@ async function boot() {
   wire("open-install-progress", enterInstallProgress);
   wire("open-orders-debug", enterOrdersDebug);
   wire("open-browser-viewer", () => enterBrowserViewer());
+  wire("open-create-server", enterCreateServer);
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");
