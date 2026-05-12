@@ -248,6 +248,7 @@ export async function route(request: Request, env: RouteEnv): Promise<Response> 
   if (override) {
     const lowered = override.split(":")[0]?.toLowerCase() ?? "";
     if (lowered === WEBAPP_HOST ||
+        lowered === RECOVERY_HOST ||
         lowered === "www.flagshipserver.com" ||
         lowered === "flagshipserver.com") {
       url = new URL(

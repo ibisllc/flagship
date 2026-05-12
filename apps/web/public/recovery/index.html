@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#14120D" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/recovery.css" />
+    <title>Flagship recovery</title>
+  </head>
+  <body>
+    <header>
+      <h1>Flagship recovery</h1>
+      <p class="subtitle">A dedicated origin, isolated from the rest of the site.</p>
+    </header>
+
+    <main>
+      <section id="view-idle" class="card">
+        <p>This window opens automatically from the Flagship webapp. If you got here directly, close this tab and click <em>Set up cloud recovery</em> (or <em>Recover from passkey</em>) inside the webapp.</p>
+      </section>
+
+      <section id="view-enroll" class="card hidden">
+        <h2>Set up cloud recovery</h2>
+        <p class="note">Pick a recovery passphrase. We use it to derive a fetch token (so flagshipserver.com won't hand out your wrapped key without it) and a per-user PRF salt (so a stolen passkey alone can't unwrap your UMK either).</p>
+        <label for="enroll-passphrase">Passphrase</label>
+        <input id="enroll-passphrase" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <label for="enroll-passphrase-2">Confirm</label>
+        <input id="enroll-passphrase-2" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <p id="enroll-username" class="meta"></p>
+        <button id="enroll-go" type="button">Create passkey + upload wrapped UMK</button>
+        <p id="enroll-status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section id="view-recover" class="card hidden">
+        <h2>Recover from passkey</h2>
+        <p class="note">Enter the username and the passphrase you set during enrolment. We re-derive the fetch token + PRF salt locally, fetch the wrapped UMK, then unlock it with your passkey.</p>
+        <label for="recover-username">Username</label>
+        <input id="recover-username" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <label for="recover-passphrase">Passphrase</label>
+        <input id="recover-passphrase" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <button id="recover-go" type="button">Fetch + unlock</button>
+        <p id="recover-status" class="status" aria-live="polite"></p>
+      </section>
+
+      <p class="footnote">rpId: <code>recovery.flagshipserver.com</code> &middot; passkey isolated by sub-origin</p>
+    </main>
+
+    <script type="module" src="/recovery.js"></script>
+  </body>
+</html>

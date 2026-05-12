@@ -887,3 +887,107 @@ describe("build-relay routes (task #59)", () => {
     expect([200, 400, 410]).toContain(r.status);
   });
 });
+
+describe("recovery.flagshipserver.com — dedicated WebAuthn-PRF origin (Task #73)", () => {
+  it("/ on recovery host fetches ASSETS /recovery/ (binding serves index.html)", async () => {
+    const r = await route(
+      new Request("https://recovery.flagshipserver.com/"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/recovery/");
+  });
+
+  it("/recovery.js on recovery host fetches ASSETS /recovery/recovery.js", async () => {
+    const r = await route(
+      new Request("https://recovery.flagshipserver.com/recovery.js"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/recovery/recovery.js");
+  });
+
+  it("every response carries a strict Content-Security-Policy header", async () => {
+    const r = await route(
+      new Request("https://recovery.flagshipserver.com/"),
+      makeEnv(),
+    );
+    const csp = r.headers.get("content-security-policy");
+    expect(csp).not.toBeNull();
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("frame-ancestors 'none'");
+    // Critically: no inline scripts permitted on this origin.
+    expect(csp).not.toContain("'unsafe-inline'");
+    expect(csp).not.toContain("'unsafe-eval'");
+    expect(r.headers.get("x-frame-options")).toBe("DENY");
+    expect(r.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("POST/DELETE/PUT to recovery host is rejected with 405 (it's GET-only)", async () => {
+    for (const method of ["POST", "DELETE", "PUT", "PATCH"]) {
+      const r = await route(
+        new Request("https://recovery.flagshipserver.com/", {
+          method,
+          body: method === "POST" || method === "PUT" || method === "PATCH" ? "{}" : undefined,
+        }),
+        makeEnv(),
+      );
+      expect(r.status).toBe(405);
+      // Even the 405 carries the CSP — no XSS escape via error pages.
+      expect(r.headers.get("content-security-policy")).toBeTruthy();
+    }
+  });
+
+  it("apex /recovery/ 308-redirects to the dedicated sub-origin", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/recovery/"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://recovery.flagshipserver.com/");
+  });
+
+  it("apex /recovery (no trailing slash) also redirects to sub-origin /", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/recovery"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe("https://recovery.flagshipserver.com/");
+  });
+
+  it("apex /recovery/anything preserves the tail + query when redirecting", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/recovery/foo.js?v=1#x"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(308);
+    expect(r.headers.get("location")).toBe(
+      "https://recovery.flagshipserver.com/foo.js?v=1",
+    );
+  });
+
+  it("CORS allowlist includes the recovery origin (so /api/recovery POSTs from there succeed)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/api/recovery", {
+        method: "OPTIONS",
+        headers: { origin: "https://recovery.flagshipserver.com" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(204);
+    expect(r.headers.get("access-control-allow-origin")).toBe(
+      "https://recovery.flagshipserver.com",
+    );
+  });
+
+  it("HEAD works on recovery host (some browsers preflight static assets)", async () => {
+    const r = await route(
+      new Request("https://recovery.flagshipserver.com/", { method: "HEAD" }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+  });
+});

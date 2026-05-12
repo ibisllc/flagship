@@ -244,10 +244,12 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("export async function hasCloudRecovery");
     // Canonical bytes pinned to the protocol-side tag.
     expect(r.body).toContain("flagship/upload-recovery-record/v1");
-    // Uses WebAuthn PRF extension for the wrap key.
-    expect(r.body).toContain("prf");
-    // Same rpId for apex + web. so the passkey is portable.
-    expect(r.body).toContain("flagshipserver.com");
+    // After Task #73 the webapp delegates every WebAuthn call to the
+    // dedicated sub-origin via window.open + postMessage. The lib file
+    // no longer materialises a PRF wrap of its own — see the dedicated
+    // recoverySubOrigin.test.ts for the sub-origin's surface.
+    expect(r.body).toContain("https://recovery.flagshipserver.com");
+    expect(r.body).toContain("runSubOriginFlow");
   });
 
   it("/webapp/views/recovery.js wires the cloud-recovery setup + remove buttons", async () => {
