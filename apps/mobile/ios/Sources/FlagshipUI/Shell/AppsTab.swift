@@ -23,7 +23,8 @@ public struct AppsTab: View {
     @ViewBuilder
     private var content: some View {
         let c = FSColors.scheme(scheme)
-        Group {
+        ZStack {
+            c.bg.ignoresSafeArea()
             if let vm {
                 ScrollView {
                     VStack(alignment: .leading, spacing: FS.space.s4) {
@@ -35,12 +36,15 @@ public struct AppsTab: View {
                     }
                     .padding(.horizontal, FS.space.s6)
                 }
-                .background(c.bg.ignoresSafeArea())
                 .refreshable { await vm.load() }
-                .task(id: "apps-initial") { if case .idle = vm.state { await vm.load() } }
+            } else {
+                ProgressView()
             }
         }
-        .onAppear { if vm == nil { vm = AppsListViewModel(client: client) } }
+        .task {
+            if vm == nil { vm = AppsListViewModel(client: client) }
+            if case .idle = vm?.state { await vm?.load() }
+        }
     }
 
     @ViewBuilder

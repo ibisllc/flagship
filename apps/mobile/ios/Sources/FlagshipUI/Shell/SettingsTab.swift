@@ -22,7 +22,8 @@ public struct SettingsTab: View {
 
     @ViewBuilder
     private var content: some View {
-        Group {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
             if let vm {
                 SettingsScreen(
                     username: app.currentUser ?? "",
@@ -38,10 +39,14 @@ public struct SettingsTab: View {
                     onOpenAbout: { path.append(.about) },
                     onRefresh: { await vm.load() }
                 )
-                .task(id: "settings-load") { if case .idle = vm.tier { await vm.load() } }
+            } else {
+                ProgressView()
             }
         }
-        .onAppear { if vm == nil { vm = SettingsViewModel(client: client) } }
+        .task {
+            if vm == nil { vm = SettingsViewModel(client: client) }
+            if case .idle = vm?.tier { await vm?.load() }
+        }
     }
 
     @ViewBuilder

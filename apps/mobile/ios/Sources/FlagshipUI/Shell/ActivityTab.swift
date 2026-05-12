@@ -24,20 +24,23 @@ public struct ActivityTab: View {
 
     @ViewBuilder
     private var content: some View {
-        Group {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
             if let vm {
                 ActivityScreen(
                     state: vm.state,
-                    onApproveUnlock: { _ in
-                        path.append(.unlockApprovals)
-                    },
+                    onApproveUnlock: { _ in path.append(.unlockApprovals) },
                     onRevokeSession: { _ in },
                     onRefresh: { await vm.load() }
                 )
-                .task(id: "activity-load") { if case .idle = vm.state { await vm.load() } }
+            } else {
+                ProgressView()
             }
         }
-        .onAppear { if vm == nil { vm = ActivityViewModel(client: client) } }
+        .task {
+            if vm == nil { vm = ActivityViewModel(client: client) }
+            if case .idle = vm?.state { await vm?.load() }
+        }
     }
 }
 

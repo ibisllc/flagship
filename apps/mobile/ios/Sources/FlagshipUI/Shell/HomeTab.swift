@@ -23,7 +23,8 @@ public struct HomeTab: View {
 
     @ViewBuilder
     private var content: some View {
-        Group {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
             if let vm {
                 HomeScreen(
                     state: vm.detail,
@@ -37,13 +38,13 @@ public struct HomeTab: View {
                     onBrowseMarketplace: {},
                     onRefresh: { await vm.load() }
                 )
-                .task(id: "home-initial-load") {
-                    if case .idle = vm.detail { await vm.load() }
-                }
+            } else {
+                ProgressView()
             }
         }
-        .onAppear {
+        .task {
             if vm == nil { vm = HomeViewModel(client: client) }
+            if case .idle = vm?.detail { await vm?.load() }
         }
     }
 
