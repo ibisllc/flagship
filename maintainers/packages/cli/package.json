@@ -1,0 +1,22 @@
+{
+  "name": "@maintainers/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "maintainers": "./bin/maintainers"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests"
+  },
+  "dependencies": {
+    "@maintainers/protocol": "*"
+  },
+  "license": "BUSL-1.1"
+}

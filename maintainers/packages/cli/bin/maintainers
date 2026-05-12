@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+// Forward to the built dist. The protocol package currently exports its `.ts`
+// source as `main`; that resolution path requires a TypeScript loader (tsx
+// or similar) to actually execute. The dist itself is fine — it's the
+// transitive @maintainers/protocol resolution that needs help. A future
+// follow-up will publish `dist/index.js` as the protocol package's main,
+// at which point this shim becomes pure plain Node.
+import("../dist/index.js")
+  .then((m) => {
+    const code = m.run(process.argv.slice(2));
+    if (typeof code === "number") process.exit(code);
+  })
+  .catch((err) => {
+    process.stderr.write(String(err && err.stack ? err.stack : err) + "\n");
+    process.exit(1);
+  });
