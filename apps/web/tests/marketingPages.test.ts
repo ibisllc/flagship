@@ -72,7 +72,7 @@ describe("marketing surface — design system v2", () => {
     expect(r.body).toContain("2030");
     expect(r.body).toContain("Apache 2.0");
     // Names the canonical repo so contributors know where to file PRs.
-    expect(r.body).toContain("github.com/flagshipserver/flagship");
+    expect(r.body).toContain("github.com/ibisllc/flagship");
   });
 
   it("the landing page leads with the new positioning headline", async () => {
