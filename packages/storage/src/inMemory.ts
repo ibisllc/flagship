@@ -39,6 +39,8 @@ import type {
   UsernameAliasStorage,
   UsernameRecord,
   UsernameStorage,
+  DaemonStatusRecord,
+  DaemonStatusStorage,
 } from "./types.js";
 
 /**
@@ -544,9 +546,33 @@ export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStor
   }
 }
 
+export class InMemoryDaemonStatusStorage implements DaemonStatusStorage {
+  private rows = new Map<string, DaemonStatusRecord>();
+  async put(rec: DaemonStatusRecord) {
+    this.rows.set(rec.serverDomain.toLowerCase(), { ...rec });
+  }
+  async get(serverDomain: string) {
+    const r = this.rows.get(serverDomain.toLowerCase());
+    return r ? { ...r } : undefined;
+  }
+  async listForUser(username: string, serverFilter?: (sd: string) => boolean) {
+    const u = username.toLowerCase();
+    const out: DaemonStatusRecord[] = [];
+    for (const r of this.rows.values()) {
+      // Heuristic for tests: serverDomain is "<server>.<username>.flagship.services".
+      const parts = r.serverDomain.toLowerCase().split(".");
+      if (parts.length < 4 || parts[1] !== u) continue;
+      if (serverFilter && !serverFilter(r.serverDomain)) continue;
+      out.push({ ...r });
+    }
+    return out;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
+  daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
   buildTickets = new InMemoryBuildTicketStorage();
   servers = new InMemoryServerStorage();

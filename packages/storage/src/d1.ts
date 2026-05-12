@@ -39,6 +39,8 @@ import type {
   UsernameAliasRecord,
   UsernameAliasStorage,
   UsernameStorage,
+  DaemonStatusRecord,
+  DaemonStatusStorage,
 } from "./types.js";
 
 /**
@@ -1331,9 +1333,78 @@ export class D1UserIdentityRecordStorage implements UserIdentityRecordStorage {
   }
 }
 
+export class D1DaemonStatusStorage implements DaemonStatusStorage {
+  constructor(private db: D1Database) {}
+  async put(rec: DaemonStatusRecord) {
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO daemon_status
+         (server_domain, cert_sha256, cert_valid_until, cert_issuer,
+          apps_served_json, last_reported)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+      )
+      .bind(
+        rec.serverDomain.toLowerCase(),
+        rec.certSha256,
+        rec.certValidUntil,
+        rec.certIssuer,
+        rec.appsServedJson,
+        rec.lastReported,
+      )
+      .run();
+  }
+  async get(serverDomain: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM daemon_status WHERE server_domain = ?1`)
+      .bind(serverDomain.toLowerCase())
+      .first<{
+        server_domain: string;
+        cert_sha256: string | null;
+        cert_valid_until: number | null;
+        cert_issuer: string | null;
+        apps_served_json: string;
+        last_reported: number;
+      }>();
+    if (!r) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      certSha256: r.cert_sha256,
+      certValidUntil: r.cert_valid_until,
+      certIssuer: r.cert_issuer,
+      appsServedJson: r.apps_served_json,
+      lastReported: r.last_reported,
+    };
+  }
+  async listForUser(username: string) {
+    // SQLite LIKE with a placeholder for the username segment.
+    // server_domain shape: "<server>.<username>.flagship.services"
+    const pattern = `%.${username.toLowerCase()}.flagship.services`;
+    const r = await this.db
+      .prepare(`SELECT * FROM daemon_status WHERE server_domain LIKE ?1`)
+      .bind(pattern)
+      .all<{
+        server_domain: string;
+        cert_sha256: string | null;
+        cert_valid_until: number | null;
+        cert_issuer: string | null;
+        apps_served_json: string;
+        last_reported: number;
+      }>();
+    return (r.results ?? []).map((row) => ({
+      serverDomain: row.server_domain,
+      certSha256: row.cert_sha256,
+      certValidUntil: row.cert_valid_until,
+      certIssuer: row.cert_issuer,
+      appsServedJson: row.apps_served_json,
+      lastReported: row.last_reported,
+    }));
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
+  daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;
@@ -1353,6 +1424,7 @@ export class D1Storage implements Storage {
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
+    this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
     this.buildTickets = new D1BuildTicketStorage(db);
     this.servers = new D1ServerStorage(db);

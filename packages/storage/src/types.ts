@@ -328,9 +328,26 @@ export interface AutoUnlockLeaseStorage {
   list(serverDomain: string, now: number): Promise<AutoUnlockLeaseRecord[]>;
 }
 
+export interface DaemonStatusRecord {
+  serverDomain: string;
+  certSha256: string | null;
+  certValidUntil: number | null;
+  certIssuer: string | null;
+  /** JSON-encoded list of canonical FQDNs the daemon currently serves. */
+  appsServedJson: string;
+  lastReported: number;
+}
+
+export interface DaemonStatusStorage {
+  put(rec: DaemonStatusRecord): Promise<void>;
+  get(serverDomain: string): Promise<DaemonStatusRecord | undefined>;
+  listForUser(username: string, serverFilter?: (sd: string) => boolean): Promise<DaemonStatusRecord[]>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
+  daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;

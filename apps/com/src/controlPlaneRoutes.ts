@@ -51,6 +51,8 @@ import {
   handleUsernameLookup,
   handlePostUsernameRename,
   handleGetUsernameAlias,
+  handleGetUserPods,
+  handlePostDaemonStatus,
   handleUserPubKeyCert,
   handleMarketplaceList,
   handleMarketplaceGet,
@@ -156,6 +158,8 @@ const ROUTE_RE = {
   LUKS_LEASE_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease\/([^/]+)$/,
   LUKS_LEASE_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases$/,
   UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
+  USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
+  DAEMON_STATUS: /^\/api\/daemon-status$/,
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
   RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
@@ -615,6 +619,30 @@ export async function tryControlPlane(
       await handleCompleteRePair(
         { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_PODS))) {
+    return finish(
+      await handleGetUserPods(
+        {
+          daemonStatus: storage.daemonStatus,
+          servers: storage.servers,
+          routing: storage.routing,
+        },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.DAEMON_STATUS.test(path)) {
+    return finish(
+      await handlePostDaemonStatus(
+        {
+          daemonStatus: storage.daemonStatus,
+          servers: storage.servers,
+          routing: storage.routing,
+        },
+        await readJson(request),
       ),
     );
   }
