@@ -1,0 +1,127 @@
+# Multi-pod (multipod) — how your app sees other pods of the same user
+
+The user runs more than one Flagship pod ("phone-server", "home-tower",
+"travel-mini", whatever). When they install your app on more than one,
+each install is its OWN container with its OWN data layer. They are
+siblings. The multipod harness is how those instances coordinate.
+
+## Mental model
+
+A pod is a server. An app on a pod is a tenant of that server. Two
+copies of the same app on two different pods are TWO TENANTS — they
+don't share state by default. The harness lets them talk over an
+opaque, IRK-signed channel; what they DO with the messages is your
+design.
+
+The user's phone signs an "AppGrant" listing which pods are allowed to
+run this app, which URLs route to it, and for how long (7 days, then
+renewed). Everything the harness does is gated by that grant. You
+don't manage the grant — the daemon does.
+
+## API (FLAGSHIP_APP_TOKEN gated)
+
+```
+GET  /api/multipod/own-urls
+  → ["https://notes.alice.flagship.services", ...]
+  URLs the user authorized for this app. May overlap between siblings
+  (canonical URLs always route through whichever pod currently holds
+  the slot at the hub).
+
+GET  /api/multipod/siblings
+  → [{ podId: "office.alice.flagship.services",
+       canonicalUrl: "https://office.alice.flagship.services" }, ...]
+  Other pods of the same user running THIS app under the active grant.
+  This list comes from the grant, not from runtime liveness — peers
+  may be offline. Test the WS open before assuming reachability.
+
+POST /api/multipod/request-url   { url }
+  → { ok: true }           grant covers it, claim queued at the hub
+  → { ok: false, reason: "needs-user-approval" }
+  Ask for a URL to point at THIS instance. If the AppGrant already
+  authorizes the URL, returns immediately and the hub flips routing on
+  its next FRAME_DOMAIN_GRANTED. Otherwise a phone alert is queued and
+  the user must approve in their phone app first; on approval the
+  phone re-signs a fresh AppGrant and the next request-url succeeds.
+
+POST /api/multipod/open-ws       { podId }
+  → opens a duplex WS to the sibling instance. Bytes you send arrive
+  in their /api/multipod/inbound stream.
+
+POST /api/multipod/send          { podId, message_b64 }
+  → fire-and-forget send. Equivalent to open-ws + send + close but
+  cheaper for one-shot pings. No delivery receipt; design for that.
+
+GET  /api/multipod/inbound       (long-poll / WS)
+  → stream of { fromPod, message_b64 } as siblings send to you.
+  Only messages from peers in your CURRENT AppGrant are delivered.
+```
+
+## Rules
+
+1. **The grant is authoritative.** If you try to send to a pod that
+   isn't in your AppGrant, you get "peer not entitled" — even if you
+   can see the pod in /api/multipod/siblings (e.g. because the grant
+   just rotated and the local cache is stale, the harness re-checks at
+   send time). Treat any "peer not entitled" as a transient and retry
+   on the next event.
+
+2. **No control plane in your code.** Don't try to discover peers via
+   .com, don't store pod IDs in your DB. The harness is the only
+   source of truth; the list will shrink and grow as the user adds
+   and removes pods.
+
+3. **Messages are opaque bytes.** No daemon-side framing, no schema.
+   You design the protocol; protobuf, JSON, raw binary — your call.
+
+4. **No delivery guarantees.** Send is best-effort over a live WS. If
+   the peer's offline, send returns "peer offline". Apps that need
+   at-least-once handle their own ack / retry layer.
+
+5. **No leader election primitive.** The pod currently holding a
+   canonical URL is the leader by definition; query
+   /api/multipod/own-urls + /api/url/owned to find out who the leader
+   is right now. Apps that need single-writer semantics should write
+   only when they hold the URL.
+
+6. **Cert sync is invisible to you.** When a sibling rotates its
+   Let's Encrypt cert, the daemon's sibling-WS layer (#86) pulls it
+   automatically and re-installs locally so requests served via the
+   user-zone wildcard still verify against your peer. You do nothing.
+
+## Patterns
+
+### Pattern A: CRDT / LWW (notes, todos, anything tolerant of merges)
+
+Write locally, then broadcast `{op:"upsert", item}` to every
+sibling. Receivers apply if their copy is older. Conflicts resolve by
+last-write-wins on wall-clock + pod-id tiebreaker. Don't try to be
+clever about consistency — let the user see "eventually" and move on.
+
+### Pattern B: leader-only-writes (ledger, accounting, anything where
+order matters)
+
+Use a single canonical URL (the alias, e.g. notes.alice.flagship.services)
+as the leader seat. On startup, check /api/multipod/own-urls + the
+hub's current owner via /api/url/owned. If you don't hold the
+canonical URL, READ locally but ROUTE WRITES to the holder via
+/api/multipod/send. If the holder vanishes (peer offline for N
+minutes), DON'T auto-promote — surface a phone alert
+("ledger leader gone"). The user reclaims via the phone app, which
+re-signs an AppGrant pinning the URL to a different pod.
+
+### Pattern C: per-pod independent (default for apps that don't
+opt-in)
+
+If the user did NOT enable "let them talk" at install time, you don't
+get a grant covering multiple pods at all. Don't call any
+/api/multipod/* endpoints. Each pod IS its own logical app.
+
+## A note on sibling removal
+
+When the user removes a pod from a sibling group, the phone re-signs
+a fresh AppGrant WITHOUT that pod. The harness immediately stops
+listing it as a sibling, stops accepting inbound from it, and refuses
+to send to it — but the removed pod itself may still hold valid certs
+issued earlier. That's fine: the sibling-WS layer's routine cert sync
+just stops pushing to the removed peer, and the natural 90-day Let's
+Encrypt renewal handles eviction. You do nothing; the system handles it.
