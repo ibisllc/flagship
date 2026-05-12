@@ -137,6 +137,35 @@ export async function handlePutSealedLuksKey(
   return { status: 200, body: { ok: true } };
 }
 
+/**
+ * #48 — public-read decision (M4).
+ *
+ * This endpoint is intentionally UNAUTHENTICATED. The audit raised
+ * the concern that returning the sealed LUKS key ciphertext to any
+ * caller enables an attacker to enumerate which serverDomains have
+ * a deposit on file. After deliberation in the Thread-G design pass:
+ *
+ * DECISION: accept the metadata leak. Reasoning:
+ *   - The CONTENT is sealed against BAK, which lives only on the
+ *     user's phone (or webapp peer device). Without BAK, the
+ *     ciphertext is unusable — no offline attack works against
+ *     well-chosen BAK material.
+ *   - The bootstrap flow needs to fetch this WITHOUT authentication,
+ *     because at boot the daemon has only the disk's pubkey material,
+ *     not an IRK-bound session.
+ *   - Per-IP rate limit (apps/com /rateLimit binding, #9) bounds the
+ *     enumeration cost.
+ *
+ * PATH TO CLOSURE if we ever decide to gate further:
+ *   - Require an IRK-signed fetch envelope, which would mean the boot
+ *     stage needs to carry the IRK pubkey + a fresh signature from
+ *     the phone via the LUKS unlock approval flow.
+ *   - That couples boot-time unlock with phone reachability more
+ *     tightly than the current design wants.
+ *   - DO NOT add the gate without revisiting the boot-stage protocol.
+ *
+ * In short: this endpoint is public-by-design and reviewed.
+ */
 export async function handleGetSealedLuksKey(
   deps: LuksKeyDeps,
   host: string,
@@ -517,6 +546,25 @@ export async function handleGetPendingUnlockApproval(
  * lease metadata only — leaseId, multiUse, expiresAt — never the
  * unlockKeyHex). If we later want to gate it, a paired-session check
  * at the apex Worker is the right hook.
+ */
+/**
+ * #48 — public-read decision (M8).
+ *
+ * Same posture as handleGetSealedLuksKey above. The sealed LUKS
+ * unlock-lease records are public-readable because:
+ *   - The lease content is sealed against BAK; without phone keys
+ *     it's useless ciphertext.
+ *   - The bootstrap flow's auto-unlock path needs to discover whether
+ *     a lease exists for this host before it has any session state.
+ *   - Per-IP rate limit caps enumeration.
+ *
+ * The metadata leak: an attacker can learn that a given serverDomain
+ * has at least one active lease. Compared to the prior alternative
+ * (forcing an IRK-signed read at boot time), this leak is materially
+ * less harmful than the operational complexity it would cost.
+ *
+ * Documented decision; do NOT add a gate without revisiting the
+ * boot-stage protocol holistically.
  */
 export async function handleListAutoUnlockLeases(
   deps: LuksKeyDeps,
