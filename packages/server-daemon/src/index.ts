@@ -809,6 +809,21 @@ export type { PersistedCert } from "./acme/persistentStore.js";
 export { buildOrdersHandler } from "./orders.js";
 export type { OrderExecutor, OrdersHandlerOptions } from "./orders.js";
 export {
+  buildInviteHandler,
+  canonicalIssueInvite,
+  canonicalRevokeAccess,
+  InMemoryAppInviteStore,
+  invitePage,
+  signIssueInvite,
+  signRevokeAccess,
+} from "./inviteHandler.js";
+export type {
+  AppAccessRow,
+  AppInviteRow,
+  AppInviteStore,
+  InviteHandlerDeps,
+} from "./inviteHandler.js";
+export {
   resolveServicesEndpoints,
   parseServicesEndpoints,
   defaultEndpointsCachePath,
