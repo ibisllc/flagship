@@ -405,8 +405,8 @@ select {
 }
 
 /* The button grid inside the home view — make it dense and tappable. */
-#view-home .card div[style*="grid-template-columns"] {
-  gap: 8px !important;
+#view-home .card .home-grid {
+  gap: 8px;
 }
 #view-home .card button.secondary {
   padding: 11px 12px;
@@ -512,3 +512,77 @@ section:not(.hidden) {
 
 /* ── Tiny utility: monospace number rendering ───────────────────── */
 .mono { font-family: var(--font-mono); font-feature-settings: "tnum", "zero"; }
+
+/* ── Class primitives (Task #44) ─────────────────────────────────
+ * Extracted from the ~80 inline `style="…"` strings that used to
+ * pepper index.html + views/*.js. Keep these primitives small,
+ * composable, and named for intent (not appearance). */
+
+/* Muted intro paragraph — short explainer at the top of a card. */
+.note {
+  margin: 0 0 var(--space-2);
+  color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.note:last-child { margin-bottom: 0; }
+
+/* Vertical stacks with a fixed gap (children flow top-to-bottom). */
+.stack-sm { display: flex; flex-direction: column; gap: var(--space-2); }
+.stack-md { display: flex; flex-direction: column; gap: var(--space-3); }
+.stack-lg { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* Inline label-value pair, baseline-aligned. */
+.kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+/* Small muted text + small faint text (used for secondary lines in
+ * list cards and footnotes). */
+.muted-sm { color: var(--ink-muted); font-size: 13px; }
+.faint-sm { color: var(--ink-faint); font-size: 12px; }
+.text-sm  { font-size: 13px; }
+.text-xs  { font-size: 12px; }
+.weight-600 { font-weight: 600; }
+.mt-2 { margin-top: var(--space-2); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-5 { margin-top: var(--space-5); }
+.full-width { width: 100%; }
+
+/* Danger zone — revoke/delete/reset block with a faint red border. */
+.danger-zone {
+  border: 1px solid color-mix(in srgb, var(--err) 30%, transparent);
+  background: var(--err-soft);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+}
+
+/* Error-tinted body copy inside a card (replaces the common
+ * `style="margin:0;color:var(--err);font-size:0.9rem;"` pattern). */
+.err-text { margin: 0; color: var(--err); font-size: 14px; }
+
+/* Two-column equal-width row of buttons / inputs (the common
+ * "Refresh + Back" footer at the bottom of every detail view). */
+.row-2 {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.row-2 > * { flex: 1; }
+
+/* Home grid — 2-column dense button grid. */
+.home-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.home-grid .span-2 { grid-column: span 2; }
+
+/* List cards where the left column carries multiple lines of text
+ * (title + summary + meta) and the right column carries an action. */
+.row-top { align-items: flex-start; }
+

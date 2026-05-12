@@ -27,20 +27,18 @@
       <section id="view-bootstrap" class="hidden">
         <h2>Set up this device</h2>
         <div class="card warning">
-          <p style="margin: 0 0 0.6rem;">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
+          <p class="note">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
           <a class="pill" href="https://flagshipserver.com/security.html">Read the trade-offs →</a>
         </div>
         <div class="card">
-          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">Pick a passphrase. We use it to encrypt your local key — flagshipserver.com never sees it.</p>
+          <p class="note">Pick a passphrase. We use it to encrypt your local key — flagshipserver.com never sees it.</p>
           <input id="bootstrap-passphrase" type="password" placeholder="Passphrase" autocomplete="new-password" />
-          <input id="bootstrap-passphrase-2" type="password" placeholder="Confirm" autocomplete="new-password" style="margin-top: 0.5rem;" />
-          <button id="bootstrap-go" style="margin-top: 0.8rem; width: 100%;">Generate device key</button>
+          <input id="bootstrap-passphrase-2" type="password" placeholder="Confirm" autocomplete="new-password" class="mt-2" />
+          <button id="bootstrap-go" class="full-width mt-3">Generate device key</button>
         </div>
-        <div class="card" style="margin-top: 0.6rem;">
-          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
-            Already have an account on another browser? Recover with your passkey.
-          </p>
-          <button class="secondary" id="bootstrap-recover" style="width: 100%;">Recover from passkey</button>
+        <div class="card mt-2">
+          <p class="note">Already have an account on another browser? Recover with your passkey.</p>
+          <button class="secondary full-width" id="bootstrap-recover">Recover from passkey</button>
         </div>
       </section>
 
@@ -49,7 +47,7 @@
         <h2>Unlock</h2>
         <div class="card">
           <input id="unlock-passphrase" type="password" placeholder="Passphrase" autocomplete="current-password" />
-          <button id="unlock-go" style="margin-top: 0.8rem; width: 100%;">Unlock</button>
+          <button id="unlock-go" class="full-width mt-3">Unlock</button>
         </div>
       </section>
 
@@ -67,10 +65,10 @@
           </div>
         </div>
 
-        <h2 style="margin-top: 1.5rem;">Servers</h2>
+        <h2 class="mt-5">Servers</h2>
         <div id="servers-list"></div>
 
-        <h2 style="margin-top: 1.5rem;">Session</h2>
+        <h2 class="mt-5">Session</h2>
         <div class="card">
           <div class="row">
             <span class="label">Status</span>
@@ -82,12 +80,12 @@
           </div>
         </div>
 
-        <h2 style="margin-top: 1.5rem;">My pod</h2>
+        <h2 class="mt-5">My pod</h2>
         <div class="card">
-          <p style="margin:0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+          <p class="note">
             Connect to your Flagship server to manage apps + sessions from here.
           </p>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <div class="home-grid">
             <button class="secondary" id="open-pod-pair">Pod pairing</button>
             <button class="secondary" id="open-server-detail">Server detail</button>
             <button class="secondary" id="open-apps-list">Apps</button>
@@ -98,14 +96,14 @@
             <button class="secondary" id="open-tier-status">Tier &amp; usage</button>
             <button class="secondary" id="open-install-progress">Install progress</button>
             <button class="secondary" id="open-orders-debug">Send order</button>
-            <button class="secondary" id="open-browser-viewer" style="grid-column: span 2;">Browser viewer</button>
-            <button class="secondary" id="open-recovery" style="grid-column: span 2;">Recovery</button>
+            <button class="secondary span-2" id="open-browser-viewer">Browser viewer</button>
+            <button class="secondary span-2" id="open-recovery">Recovery</button>
           </div>
         </div>
 
-        <h2 style="margin-top: 1.5rem;">AI providers</h2>
+        <h2 class="mt-5">AI providers</h2>
         <div class="card" id="home-active-provider">
-          <p style="margin:0; color: var(--fg-mute); font-size: 0.9rem;">loading…</p>
+          <p class="note">loading…</p>
         </div>
       </section>
 
@@ -113,26 +111,26 @@
       <section id="view-pod-pair" class="hidden">
         <h2>Pod pairing</h2>
         <div class="card" id="pod-pair-status">
-          <p style="margin:0; color: var(--fg-mute); font-size:0.85rem;">checking…</p>
+          <p class="note">checking…</p>
         </div>
-        <div class="card" style="margin-top: 0.6rem;">
-          <p style="margin:0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+        <div class="card mt-2">
+          <p class="note">
             Paste your pod's base URL. The webapp signs an add-paired-session order with your IRK and stores the resulting token in this browser only.
           </p>
           <input id="pod-pair-base" type="url" placeholder="https://home.alice.flagship.services" autocomplete="off" />
-          <input id="pod-pair-label" type="text" placeholder="Device label (e.g. 'phone-webapp')" autocomplete="off" style="margin-top: 0.5rem;" />
-          <button id="pod-pair-go" style="margin-top: 0.6rem; width: 100%;">Pair</button>
+          <input id="pod-pair-label" type="text" placeholder="Device label (e.g. 'phone-webapp')" autocomplete="off" class="mt-2" />
+          <button id="pod-pair-go" class="full-width mt-2">Pair</button>
         </div>
-        <button class="secondary" id="pod-pair-back" style="width:100%; margin-top: 0.6rem;">← Back</button>
+        <button class="secondary full-width mt-2" id="pod-pair-back">← Back</button>
       </section>
 
       <!-- View 7: Server detail (P2.1) -->
       <section id="view-server-detail" class="hidden">
         <h2>Server</h2>
         <div id="server-detail-content"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="server-detail-refresh" style="flex:1;">Refresh</button>
-          <button class="secondary" id="server-detail-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="server-detail-refresh">Refresh</button>
+          <button class="secondary" id="server-detail-back">← Back</button>
         </div>
       </section>
 
@@ -140,9 +138,9 @@
       <section id="view-apps-list" class="hidden">
         <h2>Apps</h2>
         <div id="apps-list-content"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="apps-list-refresh" style="flex:1;">Refresh</button>
-          <button class="secondary" id="apps-list-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="apps-list-refresh">Refresh</button>
+          <button class="secondary" id="apps-list-back">← Back</button>
         </div>
       </section>
 
@@ -150,9 +148,9 @@
       <section id="view-app-detail" class="hidden">
         <h2>App</h2>
         <div id="app-detail-content"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="app-detail-refresh" style="flex:1;">Refresh</button>
-          <button class="secondary" id="app-detail-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="app-detail-refresh">Refresh</button>
+          <button class="secondary" id="app-detail-back">← Back</button>
         </div>
       </section>
 
@@ -160,9 +158,9 @@
       <section id="view-paired-sessions" class="hidden">
         <h2>Paired sessions</h2>
         <div id="paired-sessions-content"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="paired-sessions-refresh" style="flex:1;">Refresh</button>
-          <button class="secondary" id="paired-sessions-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="paired-sessions-refresh">Refresh</button>
+          <button class="secondary" id="paired-sessions-back">← Back</button>
         </div>
       </section>
 
@@ -170,9 +168,9 @@
       <section id="view-tier-status" class="hidden">
         <h2>Tier &amp; usage</h2>
         <div id="tier-status-content"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="tier-status-refresh" style="flex:1;">Refresh</button>
-          <button class="secondary" id="tier-status-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="tier-status-refresh">Refresh</button>
+          <button class="secondary" id="tier-status-back">← Back</button>
         </div>
       </section>
 
@@ -180,9 +178,9 @@
       <section id="view-marketplace" class="hidden">
         <h2>Marketplace</h2>
         <div id="marketplace-content"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="marketplace-refresh" style="flex:1;">Refresh</button>
-          <button class="secondary" id="marketplace-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="marketplace-refresh">Refresh</button>
+          <button class="secondary" id="marketplace-back">← Back</button>
         </div>
       </section>
 
@@ -190,31 +188,31 @@
       <section id="view-vibe-code" class="hidden">
         <h2>Vibe-code an app</h2>
         <div class="card">
-          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+          <p class="note">
             Describe an app. The LLM emits a manifest + Dockerfile + source; the daemon commits to your Forgejo, builds the container, and deploys.
           </p>
-          <textarea id="vc-prompt" rows="4" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible, JSON-persisted." style="width: 100%; font-family: inherit; font-size: 0.9rem; padding: 0.6rem 0.7rem; background: var(--bg); color: var(--fg); border: 1px solid #ffffff20; border-radius: 8px; resize: vertical;"></textarea>
-          <button id="vc-start" style="margin-top: 0.6rem; width: 100%;">Start</button>
+          <textarea id="vc-prompt" rows="4" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible, JSON-persisted."></textarea>
+          <button id="vc-start" class="full-width mt-2">Start</button>
         </div>
-        <div class="card" style="margin-top:0.6rem;">
+        <div class="card mt-2">
           <div class="row"><span class="label">status</span><span class="value" id="vc-status">idle</span></div>
         </div>
-        <h3 style="margin-top:1.2rem; font-size:1rem;">Files</h3>
+        <h3 class="mt-4">Files</h3>
         <div id="vc-files"><div class="card placeholder">files appear here as the LLM emits them…</div></div>
-        <h3 style="margin-top:1.2rem; font-size:1rem;">Transcript</h3>
+        <h3 class="mt-4">Transcript</h3>
         <div class="card">
-          <pre id="vc-transcript" style="margin:0; white-space:pre-wrap; font-size:0.78rem; color:var(--fg-mute); max-height: 200px; overflow:auto;"></pre>
+          <pre id="vc-transcript" class="vc-transcript"></pre>
         </div>
-        <div id="vc-deploy-box" class="card hidden" style="margin-top:0.6rem;">
-          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+        <div id="vc-deploy-box" class="card hidden mt-2">
+          <p class="note">
             Session ready to deploy. Tapping deploy runs docker build + AppPlatform.install on your pod.
           </p>
-          <button id="vc-deploy-go" style="width:100%;">Deploy</button>
+          <button id="vc-deploy-go" class="full-width">Deploy</button>
         </div>
-        <div id="vc-result" class="hidden" style="margin-top:0.6rem;"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="vc-reset" style="flex:1;">Reset</button>
-          <button class="secondary" id="vibe-code-back" style="flex:1;">← Back</button>
+        <div id="vc-result" class="hidden mt-2"></div>
+        <div class="row-2">
+          <button class="secondary" id="vc-reset">Reset</button>
+          <button class="secondary" id="vibe-code-back">← Back</button>
         </div>
       </section>
 
@@ -222,9 +220,9 @@
       <section id="view-unlock-approvals" class="hidden">
         <h2>Pending unlock requests</h2>
         <div id="unlock-approvals-content"></div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="unlock-approvals-refresh" style="flex:1;">Refresh</button>
-          <button class="secondary" id="unlock-approvals-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="unlock-approvals-refresh">Refresh</button>
+          <button class="secondary" id="unlock-approvals-back">← Back</button>
         </div>
       </section>
 
@@ -232,17 +230,17 @@
       <section id="view-install-progress" class="hidden">
         <h2>Install progress</h2>
         <div class="card">
-          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+          <p class="note">
             Watch a freshly-built ISO come online. Enter the box's serial; we poll the control plane every 2s for events until READY or FAILED.
           </p>
           <input id="ip-serial" type="text" placeholder="serial e.g. SN-ABC123" autocomplete="off" />
-          <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-            <button id="ip-go" style="flex:1;">Watch</button>
-            <button class="secondary" id="ip-reset" style="flex:1;">Reset</button>
+          <div class="row-2">
+            <button id="ip-go">Watch</button>
+            <button class="secondary" id="ip-reset">Reset</button>
           </div>
         </div>
-        <div id="install-progress-content" style="margin-top:0.6rem;"></div>
-        <button class="secondary" id="install-progress-back" style="width:100%; margin-top:0.6rem;">← Back</button>
+        <div id="install-progress-content" class="mt-2"></div>
+        <button class="secondary full-width mt-2" id="install-progress-back">← Back</button>
       </section>
 
       <!-- View 18: Browser viewer (P2.7) -->
@@ -252,15 +250,15 @@
           <div class="row"><span class="label">app</span><span class="value" id="bv-app-id">…</span></div>
           <div class="row"><span class="label">stream</span><span class="value" id="bv-stream-status">no tab selected</span></div>
         </div>
-        <h3 style="margin-top: 1.2rem; font-size: 1rem;">Tabs</h3>
+        <h3 class="mt-4">Tabs</h3>
         <div id="bv-tabs"></div>
-        <h3 style="margin-top: 1.2rem; font-size: 1rem;">Live frame</h3>
-        <div class="card" style="padding: 0.4rem;">
-          <img id="bv-frame" alt="live frame" style="width: 100%; max-width: 800px; display: block; border-radius: 6px; background: #000;" />
+        <h3 class="mt-4">Live frame</h3>
+        <div class="card bv-frame-card">
+          <img id="bv-frame" alt="live frame" />
         </div>
-        <div style="display:flex; gap:0.5rem; margin-top:0.6rem;">
-          <button class="secondary" id="bv-refresh" style="flex:1;">Refresh tabs</button>
-          <button class="secondary" id="browser-viewer-back" style="flex:1;">← Back</button>
+        <div class="row-2">
+          <button class="secondary" id="bv-refresh">Refresh tabs</button>
+          <button class="secondary" id="browser-viewer-back">← Back</button>
         </div>
       </section>
 
@@ -268,11 +266,11 @@
       <section id="view-orders-debug" class="hidden">
         <h2>Send phone order</h2>
         <div class="card">
-          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+          <p class="note">
             Build, sign, and send any of the 12 phone-order types to the paired pod. The order is signed with your IRK and dispatched via /api/screens/orders/send.
           </p>
-          <label style="display:block; font-size:0.78rem; color:var(--fg-mute); text-transform:uppercase;">Order kind</label>
-          <select id="od-kind" style="width:100%; padding: 0.5rem; background: var(--bg); color: var(--fg); border: 1px solid #ffffff20; border-radius: 8px; font: inherit;">
+          <label>Order kind</label>
+          <select id="od-kind">
             <option value="noop">noop</option>
             <option value="shut-down">shut-down</option>
             <option value="set-backup-policy">set-backup-policy</option>
@@ -283,132 +281,130 @@
             <option value="remove-subscriber">remove-subscriber</option>
             <option value="backup-app">backup-app</option>
           </select>
-          <div id="od-fields" style="margin-top:0.5rem;"></div>
-          <button id="od-send" style="margin-top:0.6rem; width:100%;">Sign &amp; send</button>
-          <div id="od-result" style="margin-top:0.6rem; font-size:0.85rem;"></div>
+          <div id="od-fields" class="mt-2"></div>
+          <button id="od-send" class="full-width mt-2">Sign &amp; send</button>
+          <div id="od-result" class="mt-2 text-sm"></div>
         </div>
-        <button class="secondary" id="orders-debug-back" style="width:100%; margin-top:0.6rem;">← Back</button>
+        <button class="secondary full-width mt-2" id="orders-debug-back">← Back</button>
       </section>
 
       <!-- View 15: Recovery (P2.12) -->
       <section id="view-recovery" class="hidden">
         <h2>Recovery</h2>
         <div class="card">
-          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+          <p class="note">
             <strong>Cloud recovery (passkey):</strong> wrap your master key with a passkey's PRF output and upload the ciphertext to flagshipserver.com. The unwrap key never leaves your browser; flagshipserver.com only ever sees opaque ciphertext.
           </p>
           <div class="row"><span class="label">Status</span><span class="pill" id="recovery-cloud-pill">checking…</span></div>
-          <button id="recovery-cloud-setup" style="width:100%; margin-top:0.5rem;">Set up cloud recovery</button>
-          <button class="secondary" id="recovery-cloud-remove" style="width:100%; margin-top:0.4rem; display:none;">Remove cloud recovery</button>
+          <button id="recovery-cloud-setup" class="full-width mt-2">Set up cloud recovery</button>
+          <button class="secondary full-width mt-2" id="recovery-cloud-remove" style="display:none;">Remove cloud recovery</button>
         </div>
-        <div class="card" style="margin-top:0.6rem;">
-          <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+        <div class="card mt-2">
+          <p class="note">
             <strong>Manual export (no cloud):</strong> download a JSON copy of the wrapped UMK and unlock it on another browser with the same passphrase.
           </p>
-          <button id="recovery-export" style="width:100%; margin-top:0.4rem;">Export wrapped UMK</button>
-          <label style="display:block; margin-top: 0.6rem; font-size: 0.85rem; color: var(--fg-mute);">Import wrapped UMK</label>
-          <input type="file" id="recovery-import-input" accept="application/json" style="margin-top: 0.3rem;" />
+          <button id="recovery-export" class="full-width mt-2">Export wrapped UMK</button>
+          <label class="mt-3">Import wrapped UMK</label>
+          <input type="file" id="recovery-import-input" accept="application/json" />
         </div>
-        <button class="secondary" id="recovery-back" style="width:100%; margin-top:0.6rem;">← Back</button>
+        <button class="secondary full-width mt-2" id="recovery-back">← Back</button>
       </section>
 
       <!-- View 5: Settings — providers, identity, reset. -->
       <section id="view-settings" class="hidden">
         <h2>AI providers</h2>
         <div id="providers-list"></div>
-        <button id="add-provider-go" style="margin-top: 0.6rem; width: 100%;">+ Add provider</button>
+        <button id="add-provider-go" class="full-width mt-2">+ Add provider</button>
 
-        <div class="card hidden" id="promo-issuance-form" style="margin-top: 0.6rem;">
-          <h3 style="margin-top: 0;">Claim free credits</h3>
+        <div class="card hidden mt-2" id="promo-issuance-form">
+          <h3>Claim free credits</h3>
           <div id="promo-step-phone">
-            <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+            <p class="note">
               We use your phone number to issue one promo key per person. The number is hashed before storage; we don't keep it in the clear.
             </p>
-            <label for="promo-phone" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Phone (E.164)</label>
+            <label for="promo-phone">Phone (E.164)</label>
             <input id="promo-phone" type="tel" placeholder="+15555550100" autocomplete="tel" />
-            <div style="display: flex; gap: 0.6rem; margin-top: 0.8rem;">
-              <button id="promo-start-go" style="flex: 1;">Send code</button>
-              <button class="secondary" id="promo-cancel" style="flex: 1;">Cancel</button>
+            <div class="row-gap-3">
+              <button id="promo-start-go">Send code</button>
+              <button class="secondary" id="promo-cancel">Cancel</button>
             </div>
           </div>
           <div id="promo-step-otp" class="hidden">
-            <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+            <p class="note">
               Enter the 6-digit code we just sent.
             </p>
-            <label for="promo-otp" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Code</label>
+            <label for="promo-otp">Code</label>
             <input id="promo-otp" type="text" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code" />
-            <div style="display: flex; gap: 0.6rem; margin-top: 0.8rem;">
-              <button id="promo-complete-go" style="flex: 1;">Claim</button>
-              <button class="secondary" id="promo-cancel-2" style="flex: 1;" onclick="document.getElementById('promo-cancel').click()">Cancel</button>
+            <div class="row-gap-3">
+              <button id="promo-complete-go">Claim</button>
+              <button class="secondary" id="promo-cancel-2" onclick="document.getElementById('promo-cancel').click()">Cancel</button>
             </div>
           </div>
-          <p style="margin: 0.7rem 0 0; color: var(--fg-mute); font-size: 0.78rem;">
+          <p class="faint-sm mt-3">
             Once issued, the key lives only on this device. flagshipserver.com cannot read your prompts — they go phone → your server → our GPU directly.
           </p>
         </div>
 
-        <div class="card hidden" id="add-provider-form" style="margin-top: 0.6rem;">
-          <h3 style="margin-top: 0;">New provider</h3>
-          <label for="np-provider" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Provider</label>
-          <select id="np-provider"
-            style="width: 100%; padding: 0.7rem 0.9rem; border-radius: 10px; background: var(--bg); color: var(--fg); border: 1px solid #ffffff20; font: inherit; margin-bottom: 0.6rem;">
+        <div class="card hidden mt-2" id="add-provider-form">
+          <h3>New provider</h3>
+          <label for="np-provider">Provider</label>
+          <select id="np-provider">
             <option value="anthropic">Anthropic</option>
             <option value="openai">OpenAI</option>
             <option value="google">Google Gemini</option>
             <option value="openrouter">OpenRouter</option>
             <option value="ollama">Ollama (local)</option>
           </select>
-          <label for="np-label" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase;">Label</label>
+          <label for="np-label">Label</label>
           <input id="np-label" type="text" placeholder="personal / work / home-ollama" />
-          <label for="np-key" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase; margin-top: 0.6rem;">API key</label>
+          <label for="np-key">API key</label>
           <input id="np-key" type="password" placeholder="sk-…" autocomplete="off" />
-          <label for="np-base" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase; margin-top: 0.6rem;">Base URL <span style="text-transform: none; font-size: 0.72rem;">(optional)</span></label>
+          <label for="np-base">Base URL <span class="faint-sm">(optional)</span></label>
           <input id="np-base" type="text" placeholder="https://your-proxy.example" />
-          <label for="np-model" style="display:block; font-size: 0.78rem; color: var(--fg-mute); text-transform: uppercase; margin-top: 0.6rem;">Default model <span style="text-transform: none; font-size: 0.72rem;">(optional)</span></label>
+          <label for="np-model">Default model <span class="faint-sm">(optional)</span></label>
           <input id="np-model" type="text" placeholder="claude-sonnet-4-6 / gpt-4 / llama3" />
-          <div style="display: flex; gap: 0.6rem; margin-top: 0.8rem;">
-            <button id="np-save" style="flex: 1;">Save</button>
-            <button class="secondary" id="np-cancel" style="flex: 1;">Cancel</button>
+          <div class="row-gap-3">
+            <button id="np-save">Save</button>
+            <button class="secondary" id="np-cancel">Cancel</button>
           </div>
-          <p style="margin: 0.6rem 0 0; color: var(--fg-mute); font-size: 0.78rem;">
+          <p class="faint-sm mt-3">
             Your key stays on this device, wrapped under your passphrase. flagshipserver.com never sees it.
           </p>
         </div>
 
-        <h2 style="margin-top: 1.5rem;">Browser notifications</h2>
+        <h2 class="mt-5">Browser notifications</h2>
         <div class="card">
-          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">
+          <p class="note">
             Get a notification when one of your servers is asking to boot. Web Push uses your browser's native push channel — flagshipserver.com sends the wakeup, the notification body is generic ("a server is asking to boot"), and the webapp shows you which one.
           </p>
           <div class="row"><span class="label">Status</span><span class="pill" id="push-status">checking…</span></div>
-          <button id="push-enable" style="margin-top: 0.5rem; width: 100%;">Enable browser notifications</button>
-          <button class="secondary" id="push-disable" style="margin-top: 0.4rem; width: 100%; display: none;">Disable</button>
+          <button id="push-enable" class="full-width mt-2">Enable browser notifications</button>
+          <button class="secondary full-width mt-2" id="push-disable" style="display: none;">Disable</button>
         </div>
 
-        <h2 style="margin-top: 1.5rem;">Danger zone</h2>
-        <div class="card">
-          <button class="secondary" id="settings-reset" style="width: 100%;">Reset device</button>
+        <h2 class="mt-5">Danger zone</h2>
+        <div class="card danger-zone">
+          <button class="secondary full-width" id="settings-reset">Reset device</button>
         </div>
-        <button class="secondary" id="settings-back" style="width: 100%; margin-top: 0.6rem;">← Back</button>
+        <button class="secondary full-width mt-2" id="settings-back">← Back</button>
       </section>
 
       <!-- View 4: Pairing — webapp scans a server's QR to take on the "phone" role -->
       <section id="view-pair" class="hidden">
         <h2>Pair to a server</h2>
         <div class="card">
-          <p style="margin: 0 0 0.6rem; color: var(--fg-mute); font-size: 0.9rem;">
+          <p class="note">
             Open <code>/login.html</code> on the server's desktop UI, then scan its QR with this device.
           </p>
-          <video id="pair-video" playsinline autoplay muted
-            style="width: 100%; max-width: 320px; aspect-ratio: 1; border-radius: 12px; background: #000; display: block; margin: 0 auto; object-fit: cover;"></video>
-          <p id="pair-status" style="text-align: center; color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.6rem;">starting camera…</p>
+          <video id="pair-video" class="pair-video" playsinline autoplay muted></video>
+          <p id="pair-status" class="pair-status">starting camera…</p>
         </div>
         <div class="card">
-          <p style="margin: 0 0 0.5rem; color: var(--fg-mute); font-size: 0.85rem;">No camera, or this browser doesn't support BarcodeDetector? Paste the QR payload:</p>
+          <p class="note">No camera, or this browser doesn't support BarcodeDetector? Paste the QR payload:</p>
           <input id="pair-paste" type="text" placeholder="flagship://desktop/…" autocomplete="off" />
-          <button id="pair-paste-go" style="margin-top: 0.6rem; width: 100%;">Confirm pairing</button>
+          <button id="pair-paste-go" class="full-width mt-2">Confirm pairing</button>
         </div>
-        <button class="secondary" id="pair-cancel" style="width: 100%; margin-top: 0.6rem;">Cancel</button>
+        <button class="secondary full-width mt-2" id="pair-cancel">Cancel</button>
       </section>
     </main>
 

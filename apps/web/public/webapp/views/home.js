@@ -36,7 +36,7 @@ export async function renderHome() {
     sessionStatusEl.textContent = "unpaired";
     sessionStatusEl.classList.remove("ok");
     list.innerHTML =
-      '<div class="card"><p style="margin:0;color:var(--fg-mute);font-size:0.9rem;">No paired session yet. Tap "Pair to a server" to start.</p></div>';
+      '<div class="card"><p class="note">No paired session yet. Tap "Pair to a server" to start.</p></div>';
     return;
   }
   try {
@@ -47,7 +47,7 @@ export async function renderHome() {
     sessionStatusEl.classList.add("ok");
     if (!body.servers.length) {
       list.innerHTML =
-        '<div class="card"><p style="margin:0;color:var(--fg-mute);font-size:0.9rem;">No servers registered yet.</p></div>';
+        '<div class="card"><p class="note">No servers registered yet.</p></div>';
       return;
     }
     for (const s of body.servers) {
@@ -69,7 +69,7 @@ export async function renderHome() {
     scheduleRenewals(liveServerIds);
   } catch (e) {
     sessionStatusEl.textContent = "error";
-    list.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(String(e))}</p></div>`;
+    list.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(String(e))}</p></div>`;
   }
 }
 
@@ -83,8 +83,8 @@ export async function renderActiveProviderChip() {
     chip.innerHTML = `
       <div class="row">
         <div>
-          <div style="font-weight: 600;">No active provider</div>
-          <div style="color: var(--fg-mute); font-size: 0.82rem;">claim free credits or add your own key</div>
+          <div class="weight-600">No active provider</div>
+          <div class="muted-sm">claim free credits or add your own key</div>
         </div>
         <button class="secondary" id="chip-settings">settings</button>
       </div>
@@ -94,8 +94,8 @@ export async function renderActiveProviderChip() {
     chip.innerHTML = `
       <div class="row">
         <div>
-          <div style="font-weight: 600;">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
-          <div style="color: var(--fg-mute); font-size: 0.82rem;">${promo ? "Flagship-issued key — flagshipserver.com cannot read prompts" : "key on this device — flagshipserver.com cannot read prompts"}</div>
+          <div class="weight-600">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
+          <div class="muted-sm">${promo ? "Flagship-issued key — flagshipserver.com cannot read prompts" : "key on this device — flagshipserver.com cannot read prompts"}</div>
         </div>
         <button class="secondary" id="chip-settings">manage</button>
       </div>
