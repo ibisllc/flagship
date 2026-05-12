@@ -27,8 +27,15 @@ async function handlePair() {
   }
 }
 
-function handleUnpair() {
-  if (!confirm("Forget this pod from this device?")) return;
+async function handleUnpair() {
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm({
+    title: "Forget this pod?",
+    message: "Removes the paired-session token from this device. You can re-pair anytime.",
+    okLabel: "Forget",
+    danger: true,
+  });
+  if (!ok) return;
   setPodBaseUrl("");
   setSessionToken("");
   toast("unpaired");

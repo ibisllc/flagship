@@ -20,7 +20,14 @@ async function handleUnlock() {
 }
 
 export async function handleReset() {
-  if (!confirm("Reset removes this device's local key. Continue?")) return;
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm({
+    title: "Reset this device?",
+    message: "Removes this device's local key. You'll need your recovery passkey or the wrapped UMK export to come back. Continue?",
+    okLabel: "Reset",
+    danger: true,
+  });
+  if (!ok) return;
   await resetDevice();
   localStorage.removeItem("flagship.sessionId");
   localStorage.removeItem("flagship.username");

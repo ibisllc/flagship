@@ -43,7 +43,14 @@ export async function renderPairedSessions() {
 }
 
 async function revoke(prefix) {
-  if (!confirm(`Revoke session ${prefix}…?`)) return;
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm({
+    title: `Revoke session ${prefix}…?`,
+    message: "The device using this session token will be signed out immediately.",
+    okLabel: "Revoke",
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await screensFetch(
       `/api/screens/paired-sessions/${encodeURIComponent(prefix)}`,

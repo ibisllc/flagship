@@ -1,11 +1,14 @@
 import { bootstrapNewIdentity, bootstrapFromExistingSeed } from "../keystore.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
+import { inlinePrompt } from "../lib/modal.js";
 import { recoverFromCloud } from "../lib/recovery.js";
 import { unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 
 registerView("view-bootstrap");
+
+const USERNAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 async function handleBootstrap() {
   const a = $("bootstrap-passphrase").value;
@@ -23,15 +26,38 @@ async function handleBootstrap() {
 }
 
 async function handleRecover() {
-  const username = prompt("Username on the account you're recovering:");
+  // #30 — three inline-modal steps replace three window.prompts. We
+  // keep them as a sequence (rather than one combined form) so the
+  // user can cancel between steps without losing their place.
+  const username = await inlinePrompt({
+    title: "Recover account",
+    message: "Username on the account you're recovering.",
+    placeholder: "alice",
+    validate: (v) => {
+      if (!v) return "username required";
+      if (!USERNAME_RE.test(v)) return "lowercase letters, digits, and hyphens only";
+      return null;
+    },
+  });
   if (!username) return;
-  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(username)) {
-    return toast("invalid username", "err");
-  }
-  const passA = prompt("Pick a new local passphrase for this browser (8+ chars):");
-  if (!passA || passA.length < 8) return toast("passphrase must be 8+ chars", "err");
-  const passB = prompt("Confirm passphrase:");
-  if (passA !== passB) return toast("passphrases don't match", "err");
+  const passA = await inlinePrompt({
+    title: "New local passphrase",
+    message: "Encrypts the recovered key on this browser. 8+ characters.",
+    type: "password",
+    placeholder: "passphrase",
+    validate: (v) => {
+      if (!v || v.length < 8) return "passphrase must be 8+ chars";
+      return null;
+    },
+  });
+  if (!passA) return;
+  const passB = await inlinePrompt({
+    title: "Confirm passphrase",
+    type: "password",
+    placeholder: "passphrase",
+    validate: (v) => (v === passA ? null : "passphrases don't match"),
+  });
+  if (!passB) return;
   try {
     const seed = await recoverFromCloud(username);
     await bootstrapFromExistingSeed(passA, seed);

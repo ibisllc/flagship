@@ -159,9 +159,15 @@ export function initBrowserViewerView() {
 
 export async function enterBrowserViewer(appId) {
   closeSocket();
-  activeAppId = appId ?? prompt("App id (e.g. alice--game)", "");
+  // #30 + #32 — appId must be provided by the caller (only reachable
+  // from app-detail.js for apps that declare a browser bundle). The
+  // legacy window.prompt() fallback is gone.
+  if (!appId) {
+    toast("open the browser viewer from an app's detail screen", "err");
+    return;
+  }
+  activeAppId = appId;
   activeTabId = null;
-  if (!activeAppId) return;
   $("bv-app-id").textContent = activeAppId;
   $("bv-frame").src = "";
   $("bv-stream-status").textContent = "no tab selected";

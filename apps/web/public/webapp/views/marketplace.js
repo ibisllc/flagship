@@ -90,7 +90,13 @@ export async function renderMarketplace() {
 }
 
 async function runInstall(creator, slug, btn) {
-  if (!confirm(`Install ${creator}/${slug}?`)) return;
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm({
+    title: `Install ${creator}/${slug}?`,
+    message: "The signed app envelope is verified against your IRK before the daemon starts the container.",
+    okLabel: "Install",
+  });
+  if (!ok) return;
   btn.disabled = true;
   btn.textContent = "installing…";
   try {

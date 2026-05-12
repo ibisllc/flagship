@@ -154,9 +154,14 @@ async function runRemoveCloud() {
   const btn = $("recovery-cloud-remove");
   const username = (await import("../lib/state.js")).getSession().username;
   if (!username) return;
-  if (!confirm(`Remove cloud recovery for ${username}? You'll lose the ability to recover this account from a new browser unless you have a manual export.`)) {
-    return;
-  }
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm({
+    title: `Remove cloud recovery for ${username}?`,
+    message: "You'll lose the ability to recover this account from a new browser unless you have a manual export.",
+    okLabel: "Remove",
+    danger: true,
+  });
+  if (!ok) return;
   if (btn) {
     btn.disabled = true;
     btn.textContent = "Removing…";

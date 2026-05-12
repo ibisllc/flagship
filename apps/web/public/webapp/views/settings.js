@@ -90,7 +90,14 @@ export async function renderProviders() {
   });
   list.querySelectorAll('[data-action="remove"]').forEach((b) => {
     b.addEventListener("click", async () => {
-      if (!confirm("Remove this provider?")) return;
+      const { inlineConfirm } = await import("../lib/modal.js");
+      const ok = await inlineConfirm({
+        title: "Remove this provider?",
+        message: "The API key for this provider will be deleted from this device.",
+        okLabel: "Remove",
+        danger: true,
+      });
+      if (!ok) return;
       try {
         await removeProvider(getSession().umk, b.getAttribute("data-id"));
         await renderProviders();

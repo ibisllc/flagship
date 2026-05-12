@@ -100,8 +100,16 @@ function renderDraftList(drafts) {
       const id = e.currentTarget.getAttribute("data-id");
       if (action === "resume") resumeDraft(id).catch((err) => toast(String(err), "err"));
       else if (action === "delete") {
-        if (!confirm("delete this draft?")) return;
-        deleteDraft(id).then(refreshDrafts).catch((err) => toast(String(err), "err"));
+        (async () => {
+          const { inlineConfirm } = await import("../lib/modal.js");
+          const ok = await inlineConfirm({
+            title: "Delete this draft?",
+            okLabel: "Delete",
+            danger: true,
+          });
+          if (!ok) return;
+          deleteDraft(id).then(refreshDrafts).catch((err) => toast(String(err), "err"));
+        })();
       }
     });
   });
