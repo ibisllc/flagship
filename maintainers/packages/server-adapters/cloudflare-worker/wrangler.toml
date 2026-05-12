@@ -1,0 +1,48 @@
+# Cloudflare Worker — maintainers protocol Model A adapter.
+#
+# This Worker holds a GitHub fine-grained PAT (contents:write, single repo)
+# and accepts signed-envelope commits over a /commit endpoint. It refuses
+# to write anything outside `.maintainers/**` and refuses any envelope
+# whose signatures don't satisfy the relevant track's approval rule
+# against the keys currently present in the target repo.
+#
+# Deploy:
+#   wrangler secret put GITHUB_MAINTAINERS_PAT   # set to a fine-grained
+#                                                # PAT with contents:write
+#                                                # on exactly the repo(s)
+#                                                # this Worker manages.
+#   wrangler deploy
+#
+# Optional: bind a Cloudflare rate-limit binding instead of relying on
+# the in-memory throttle. See `[[unsafe.bindings]]` below.
+
+name = "maintainers-cloudflare-worker"
+main = "src/worker.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+workers_dev = true
+
+[vars]
+# Per-IP commit rate limit (commits per hour).
+RATE_LIMIT_PER_IP_PER_HOUR = "60"
+# Per-repo commit rate limit (commits per hour).
+RATE_LIMIT_PER_REPO_PER_HOUR = "100"
+# Comma-separated list of repos this Worker is allowed to write to
+# (format: "github.com/owner/repo"). Empty means deny-all.
+# Override in your deployment; never bake in a default.
+ALLOWED_REPOS = ""
+# Default branch when the request omits `targetBranch`.
+DEFAULT_BRANCH = "main"
+# Path prefix the Worker is allowed to write under. Hard-coded as a
+# defense-in-depth fence behind the policy verifier.
+MAINTAINERS_PATH_PREFIX = ".maintainers/"
+
+# Optional: bind a Cloudflare native rate-limit binding for
+# distributed throttling. Uncomment after creating the namespace.
+#
+# [[unsafe.bindings]]
+# name = "RATE_LIMITER"
+# type = "ratelimit"
+# namespace_id = "maintainers-commits"
+# simple = { limit = 60, period = 3600 }

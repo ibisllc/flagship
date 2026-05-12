@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/protocol" },
+    { "path": "./packages/web-ui" },
     { "path": "./packages/server-adapters/cloudflare-worker" },
     { "path": "./packages/cli" },
     { "path": "./packages/extension" }

@@ -1,0 +1,26 @@
+{
+  "name": "@maintainers/server-adapter-cloudflare-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/worker.ts",
+  "types": "./src/worker.ts",
+  "exports": {
+    ".": "./src/worker.ts",
+    "./policy": "./src/policy.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "@maintainers/protocol": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "wrangler": "^3.78.0"
+  },
+  "license": "BUSL-1.1"
+}
