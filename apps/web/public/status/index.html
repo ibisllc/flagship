@@ -198,14 +198,14 @@
         </div>
 
         <details style="margin-top: 1rem;">
-          <summary style="color:#888; cursor: pointer; font-size: 0.85rem;">Raw response</summary>
+          <summary style="color: var(--ink-muted); cursor: pointer; font-size: 0.85rem;">Raw response</summary>
           <pre class="raw" id="raw">—</pre>
         </details>
       </section>
 
       <section class="status-card">
         <h2 style="margin-top: 0;">Configured infrastructure</h2>
-        <p style="color:#888; font-size:0.85rem; margin-top:0.2rem;">
+        <p style="color: var(--ink-muted); font-size:0.85rem; margin-top:0.2rem;">
           What flagshipserver.com tells daemons + browsers about where the
           data plane lives. Sourced from
           <code>/api/services/endpoints</code>; updated by deploying the
@@ -231,7 +231,7 @@
         </div>
       </section>
 
-      <p style="color:#666; font-size:0.8rem;">
+      <p style="color: var(--ink-faint); font-size:0.8rem;">
         This page calls <code>/api/_status/probe</code> on flagshipserver.com. The Worker performs a server-side fetch of <code>flagship.services/api/health</code> and returns timing and reachability — so what you see is what the edge sees, not what your local network sees.
       </p>
     </main>
