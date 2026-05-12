@@ -29,19 +29,15 @@ public struct PodPairScreen: View {
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
-                FSCard(padding: FS.space.s8) {
-                    VStack(spacing: FS.space.s4) {
-                        Image(systemName: "qrcode.viewfinder")
-                            .font(.system(size: 56))
-                            .foregroundColor(c.primary)
-                        Text("Scan QR")
-                            .font(FS.font.h3())
-                            .foregroundColor(c.text)
-                        Text("Camera permission needed (not yet wired)")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
-                    }
-                    .frame(maxWidth: .infinity)
+                FSCard(padding: 0) {
+                    QRScannerView(
+                        onScan: { code in
+                            pairCode = code
+                        },
+                        onError: { _ in }
+                    )
+                    .frame(height: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
                 }
 
                 VStack(alignment: .leading, spacing: FS.space.s3) {
