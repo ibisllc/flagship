@@ -1,6 +1,8 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  DaemonStatusRecord,
+  DaemonStatusStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   PendingUnlockApprovalRecord,
@@ -35,6 +37,8 @@ import type {
   UnlockKeyDeposit,
   UserIdentityRecord,
   UserIdentityRecordStorage,
+  UsernameAliasRecord,
+  UsernameAliasStorage,
   UsernameRecord,
   UsernameStorage,
 } from "./types.js";
