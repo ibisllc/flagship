@@ -63,6 +63,7 @@
         <li>Server boot requires a phone-signed approval over the network. A stolen server cannot self-unlock.</li>
         <li>The auth domain (<code>flagshipserver.com</code>) is separate from the user-content domain (<code>*.flagship.services</code>) so user apps cannot reach session cookies via subdomain confusion.</li>
         <li>flagshipserver.com is physically unable to read user-content TLS — bytes are routed by SNI and decrypted only on your own server.</li>
+        <li><strong>No KYC, ever.</strong> We do not collect, store, or expose any real-world identity attribute about any user — no legal name, no email, no phone, no government ID. <a href="https://github.com/harrywinner2/flagship/blob/main/docs/policy/no-kyc.md">Read the full policy →</a></li>
       </ul>
 
       <h2>Scope</h2>
