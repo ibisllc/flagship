@@ -1,102 +1,80 @@
 /**
- * S16 — build-relay E2E (#59).
+ * S16 — Compose draft + Deliver now (#24 + #59).
  *
- * Composes a server draft in the webapp peer, opens flagshipserver.com/build/
- * in a parallel browser context, scans the QR (we paste the session
- * code rather than scan), and confirms the relay forwards the encrypted
- * blob — without the relay being able to decrypt it.
+ * E2E smoke of the webapp's create-server view against the live origin.
  *
- * The match-code verification at both ends is the load-bearing security
- * property; we drive both ends headless and assert the codes agree
- * before the blob is sent.
+ *   - bootstraps a fresh identity (random UMK from the in-browser keystore)
+ *   - opens the create-server view via its module entry hook
+ *   - fills the form, saves the draft
+ *   - asserts the rendered card carries the typed server name
  *
- * Stubbed today: the Durable Object that backs the relay runs in
- * wrangler dev. If the test infra spins up wrangler dev for /api/build-
- * relay/sessions, this test runs end-to-end against it. If not, the
- * test skips with a clear message.
+ * The crypto surface (canonical-bytes, deriveMatchCode parity with the
+ * server-side Durable Object, sealForBrowserKey X25519 round-trip) is
+ * unit-tested in apps/web/tests/createServerView.test.ts — that's where
+ * the security-critical assertions live. This spec only proves the UI
+ * flow renders without regressions.
+ *
+ * The deliver-now leg requires a live build-relay Durable Object on
+ * the apex Worker plus a /build/ browser tab receiving the encrypted
+ * blob. We don't reproduce that infrastructure under Playwright; that
+ * scenario is exercised by the manual S16 walk-through in
+ * docs/e2e-test-plan.md.
  */
 
 import { test, expect } from "../fixtures/pod-sim.js";
 
-test.describe("S16 — build-relay (#59)", () => {
-  test.skip(({ wranglerDev }) => !wranglerDev?.relayReady, "wrangler dev relay path not provisioned in this run");
+const PASSPHRASE = "compose-deliver-test-passphrase-1234";
 
-  test("compose draft → open /build/ → match codes agree → blob forwarded", async ({
+test.describe("S16 — Compose draft (#24)", () => {
+  // Bootstrap + IDB ops + module imports add up against the live origin; give
+  // the test enough headroom that one slow asset fetch can't time it out.
+  test.setTimeout(60_000);
+
+  test("user composes a draft and the rendered card shows the server name", async ({
     page,
-    context,
   }) => {
-    // Bootstrap webapp + sign in.
+    // Capture page errors so silent JS crashes don't disguise themselves
+    // as 'view did not appear' Playwright timeouts.
+    page.on("pageerror", (e) => console.error("[page error]", e.message));
+
     await page.goto("/");
-    await page.fill("#bootstrap-passphrase", "build-relay-test-pass-1234");
-    await page.fill("#bootstrap-passphrase-2", "build-relay-test-pass-1234");
+    await expect(page.locator("#view-bootstrap")).toBeVisible();
+    await page.fill("#bootstrap-passphrase", PASSPHRASE);
+    await page.fill("#bootstrap-passphrase-2", PASSPHRASE);
     await page.click("#bootstrap-go");
     await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
 
-    // Compose a draft via the create-server view.
-    await page.click("[data-action='create-server']");
+    // Drive the view directly via its module entry hook. The hash
+    // router only listens to button clicks (no popstate handler), so
+    // page.goto("/#create-server") wouldn't fire the transition.
+    await page.evaluate(async () => {
+      const m = await import("/views/create-server.js");
+      await m.enterCreateServer();
+    });
     await expect(page.locator("#view-create-server")).toBeVisible();
-    await page.fill("#draft-server-name", "home");
-    await page.click("#draft-save");
-    await expect(page.locator(".draft.status-draft")).toBeVisible();
 
-    // Open the /build/ page in a parallel context (simulates the PC
-    // browser the user opens to flash the USB).
-    const buildPage = await context.newPage();
-    await buildPage.goto("/build/");
-    const matchCode = await buildPage.locator("#match-code").textContent({ timeout: 10_000 });
-    expect(matchCode).toMatch(/^\d{6}$/);
+    const serverName = `home-${Date.now().toString(36)}`;
+    await page.fill("#cs-server-name", serverName);
+    await page.selectOption("#cs-backup-policy", "phone-only");
+    await page.fill("#cs-llm-pref", "anthropic:claude-opus-4-7");
+    await page.click("#cs-save-draft");
 
-    // Phone-side: confirm match code.
-    await page.click("[data-action='deliver-draft']");
-    const phoneMatchCode = await page.locator("#deliver-match-code").textContent({ timeout: 10_000 });
-    expect(phoneMatchCode).toBe(matchCode);
-    await page.click("#deliver-confirm");
+    // The drafts list re-renders with the new card. The race-safe
+    // refreshDrafts (gen-counter) guarantees the latest render wins.
+    await expect(page.locator("#cs-drafts")).toContainText(serverName);
+    await expect(
+      page.locator("#cs-drafts .pill", { hasText: /draft/i }),
+    ).toBeVisible();
 
-    // Build page should show "received + decrypting" then "ISO ready"
-    // within a few seconds.
-    await expect(buildPage.locator("#status")).toContainText(/ISO ready|Build complete/i, {
-      timeout: 30_000,
-    });
-
-    // Key security assertion: at no point does the relay log the
-    // plaintext blob. We can't directly assert on Worker logs from
-    // Playwright, but we DO assert that the Durable Object never
-    // wrote anything to persistent storage (the DO is meant to be
-    // memory-only). A wrangler-dev inspection helper would confirm.
-  });
-
-  test("blob is rejected when match-codes disagree", async ({ page, context }) => {
-    // Two browsers, two sessions, two distinct match codes — phone
-    // confirming the wrong one should never deliver the blob.
-    await page.goto("/");
-    await page.fill("#bootstrap-passphrase", "mismatch-test-pass-1234");
-    await page.fill("#bootstrap-passphrase-2", "mismatch-test-pass-1234");
-    await page.click("#bootstrap-go");
-    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-
-    const buildPageA = await context.newPage();
-    const buildPageB = await context.newPage();
-    await buildPageA.goto("/build/");
-    await buildPageB.goto("/build/");
-
-    const codeA = await buildPageA.locator("#match-code").textContent({ timeout: 10_000 });
-    const codeB = await buildPageB.locator("#match-code").textContent({ timeout: 10_000 });
-    expect(codeA).not.toBe(codeB); // different sessions ⇒ different codes
-
-    // Phone is targeting session B's pubkey but the user looks at
-    // session A's code and types it — the deliver UI must refuse on
-    // match-code disagreement.
-    await page.click("[data-action='create-server']");
-    await page.fill("#draft-server-name", "home");
-    await page.click("#draft-save");
-    await page.click("[data-action='deliver-draft']");
-    // Type the WRONG match code:
-    await page.fill("#deliver-manual-match", codeB ?? "");
-    await page.fill("#deliver-session-id", "<sessionA-id-fake>");
-    await page.click("#deliver-confirm");
-
-    await expect(page.locator(".toast")).toContainText(/match.*mismatch|won't deliver/i, {
-      timeout: 5_000,
-    });
+    // Resume the draft — the form re-populates.
+    await page.click("#cs-new"); // clear the form first
+    await expect(page.locator("#cs-server-name")).toHaveValue("");
+    await page.click("#cs-drafts button[data-action='resume']");
+    await expect(page.locator("#cs-server-name")).toHaveValue(serverName);
+    // textarea — Playwright's toContainText checks textContent, which
+    // is empty for inputs; use toHaveValue for the typed string.
+    await expect(page.locator("#cs-llm-pref")).toHaveValue(
+      /anthropic:claude-opus-4-7/,
+    );
   });
 });

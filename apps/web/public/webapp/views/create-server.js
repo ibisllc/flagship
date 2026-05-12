@@ -49,6 +49,11 @@ const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 
 let activeDraftId = null;
 let activeRelay = null; // { ws, sessionId, abort() }
+// Generation counter so a stale-but-in-flight refreshDrafts can't
+// overwrite a fresher render. Each call grabs a generation number;
+// the renderDraftList step skips itself if a newer generation has
+// already started after it read from IndexedDB.
+let _refreshGen = 0;
 
 function genSerial() {
   const r = crypto.getRandomValues(new Uint8Array(10));
@@ -116,8 +121,10 @@ function renderDraftList(drafts) {
 }
 
 async function refreshDrafts() {
+  const myGen = ++_refreshGen;
   try {
     const drafts = await listDrafts();
+    if (myGen !== _refreshGen) return; // a newer refresh started while we awaited; skip stale render
     renderDraftList(drafts);
   } catch (e) {
     toast(String(e), "err");
@@ -435,7 +442,7 @@ export function initCreateServerView() {
   });
 }
 
-export function enterCreateServer() {
+export async function enterCreateServer() {
   show("view-create-server");
-  refreshDrafts().catch((e) => toast(String(e), "err"));
+  await refreshDrafts();
 }
