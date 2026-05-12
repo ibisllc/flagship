@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "maintainers — repo authority overlay",
+  "short_name": "maintainers",
+  "version": "0.1.0",
+  "description": "Verifies the chain of mandates published in a repo's .maintainers/ folder and overlays current authority on the page.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://github.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://codeberg.org/*",
+    "https://*.codeberg.page/*",
+    "https://gitlab.com/*",
+    "https://gitea.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "maintainers",
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://github.com/*",
+        "https://codeberg.org/*",
+        "https://gitlab.com/*",
+        "https://gitea.com/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["popup/popup.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

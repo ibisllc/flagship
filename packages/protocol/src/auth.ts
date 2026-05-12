@@ -2353,3 +2353,349 @@ export async function authorStableId(authorIrkPub: Bytes): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", authorIrkPub);
   return hex(new Uint8Array(digest).slice(0, 6)); // 6 bytes = 12 hex chars
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// PodIdentityBinding (#89) — IRK-signed attestation that a pod identity
+// pubkey is one of the user's pods. Issued at registration and stored
+// on the pod's encrypted disk; presented at sibling-WS handshakes so
+// other pods can verify locally (they know the same IRK pubkey via
+// their shared UMK derivation) without round-tripping .com.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface PodIdentityBinding {
+  username: string;
+  podIdentityPubKey: Bytes;
+  serverDomain: string;
+  registeredAt: number;
+}
+
+const TAG_POD_BINDING = "flagship/pod-binding/v1";
+
+function canonicalPodIdentityBinding(b: PodIdentityBinding): Bytes {
+  validateNoSepCtrl("username", b.username);
+  validateNoSepCtrl("serverDomain", b.serverDomain);
+  return new TextEncoder().encode(
+    [TAG_POD_BINDING, b.username, hex(b.podIdentityPubKey), b.serverDomain, b.registeredAt].join("|"),
+  );
+}
+
+export function signPodIdentityBinding(b: PodIdentityBinding, irk: Keypair): Bytes {
+  return ed.sign(canonicalPodIdentityBinding(b), irk.privateKey);
+}
+
+export function verifyPodIdentityBinding(b: PodIdentityBinding, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalPodIdentityBinding(b), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// AppAccessInvite (#79) — single-use access secret for inviting
+// specific people to a pod-resident app. Distinct from the legacy
+// InviteToken (used for membership / cross-pod app collaboration). The
+// access invite uses an opaqueTag to keep the recipient's identity off
+// the server; the owner's phone keeps the tag→displayName map locally.
+//
+// expectedIrkPubKey is optional: when set, only that exact IRK can
+// consume the invite. When null, first-IRK-to-redeem wins (bearer
+// model; combined with short TTL + atomic single-use, this is the
+// pattern users invoke when they don't yet know the recipient's IRK).
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AppAccessInvite {
+  /** Fresh UUID; consumers reject duplicates. */
+  inviteId: string;
+  /** App canonical (appName@authorStableId). */
+  appCanonical: string;
+  /** SHA-256 hex of the random secret embedded in the share-link fragment. */
+  secretHash: string;
+  /** Role granted on consumption (e.g. "admin", "reader"). */
+  role: string;
+  /** 16-byte opaque tag — issuer-private mapping to a human label. */
+  opaqueTag: Bytes;
+  /** Optional pre-binding to a known recipient. null = bearer. */
+  expectedIrkPubKey: Bytes | null;
+  /** Optional context note the consumer sees before consuming. */
+  contextNote: string | null;
+  issuedAt: number;
+  expiresAt: number;
+}
+
+const TAG_APP_INVITE = "flagship/app-invite/v1";
+
+function canonicalAppAccessInvite(i: AppAccessInvite): Bytes {
+  validateNoSepCtrl("inviteId", i.inviteId);
+  validateNoSepCtrl("appCanonical", i.appCanonical);
+  validateNoSepCtrl("role", i.role);
+  validateNoSepCtrl("secretHash", i.secretHash);
+  if (i.contextNote !== null) validateNoSepCtrl("contextNote", i.contextNote);
+  return new TextEncoder().encode(
+    [
+      TAG_APP_INVITE,
+      i.inviteId,
+      i.appCanonical,
+      i.secretHash,
+      i.role,
+      hex(i.opaqueTag),
+      i.expectedIrkPubKey ? hex(i.expectedIrkPubKey) : "",
+      i.contextNote ?? "",
+      i.issuedAt,
+      i.expiresAt,
+    ].join("|"),
+  );
+}
+
+export function signAppAccessInvite(i: AppAccessInvite, irk: Keypair): Bytes {
+  return ed.sign(canonicalAppAccessInvite(i), irk.privateKey);
+}
+
+export function verifyAppAccessInvite(i: AppAccessInvite, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalAppAccessInvite(i), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export interface AppAccessAcceptance {
+  inviteId: string;
+  /** SHA-256 hex of the actual secret bytes (must match invite.secretHash). */
+  secretHash: string;
+  /** Consumer's IRK pubkey — bound to the access record at consumption. */
+  consumerIrkPubKey: Bytes;
+  acceptedAt: number;
+  nonce: Bytes;
+}
+
+const TAG_APP_INVITE_ACCEPT = "flagship/app-invite-accept/v1";
+
+function canonicalAppAccessAcceptance(a: AppAccessAcceptance): Bytes {
+  validateNoSepCtrl("inviteId", a.inviteId);
+  validateNoSepCtrl("secretHash", a.secretHash);
+  return new TextEncoder().encode(
+    [
+      TAG_APP_INVITE_ACCEPT,
+      a.inviteId,
+      a.secretHash,
+      hex(a.consumerIrkPubKey),
+      a.acceptedAt,
+      hex(a.nonce),
+    ].join("|"),
+  );
+}
+
+export function signAppAccessAcceptance(a: AppAccessAcceptance, consumerIrk: Keypair): Bytes {
+  return ed.sign(canonicalAppAccessAcceptance(a), consumerIrk.privateKey);
+}
+
+export function verifyAppAccessAcceptance(
+  a: AppAccessAcceptance,
+  sig: Bytes,
+  consumerIrkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalAppAccessAcceptance(a), consumerIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// RCK rotation (#75) — two envelopes per Thread B:
+//
+// RotateRck: routine rotation. Signed by BOTH the old RCK AND the IRK
+// (batched under one biometric prompt on the phone). Takes effect
+// immediately. Used when the phone still holds the old RCK.
+//
+// RecoverRck: recovery-grace rotation. Signed by the new IRK only.
+// .com holds it pending for 24h; the old IRK (if recoverable) can
+// revoke during grace. Used after J.3 when the phone holding the old
+// RCK is gone.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface RotateRck {
+  subdomain: string;
+  newRckPubKey: Bytes;
+  oldRckPubKey: Bytes;
+  issuedAt: number;
+  nonce: Bytes;
+}
+
+const TAG_ROTATE_RCK = "flagship/rotate-rck/v1";
+
+function canonicalRotateRck(r: RotateRck): Bytes {
+  validateNoSepCtrl("subdomain", r.subdomain);
+  return new TextEncoder().encode(
+    [
+      TAG_ROTATE_RCK,
+      r.subdomain,
+      hex(r.newRckPubKey),
+      hex(r.oldRckPubKey),
+      r.issuedAt,
+      hex(r.nonce),
+    ].join("|"),
+  );
+}
+
+/** Sign with BOTH oldRck and IRK; both signatures returned. */
+export function signRotateRck(
+  r: RotateRck,
+  oldRck: Keypair,
+  irk: Keypair,
+): { sigOldRck: Bytes; sigIrk: Bytes } {
+  const b = canonicalRotateRck(r);
+  return { sigOldRck: ed.sign(b, oldRck.privateKey), sigIrk: ed.sign(b, irk.privateKey) };
+}
+
+export function verifyRotateRck(
+  r: RotateRck,
+  sigOldRck: Bytes,
+  sigIrk: Bytes,
+  oldRckPub: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    const b = canonicalRotateRck(r);
+    return ed.verify(sigOldRck, b, oldRckPub) && ed.verify(sigIrk, b, irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export interface RecoverRck {
+  subdomain: string;
+  newRckPubKey: Bytes;
+  newIrkPubKey: Bytes;
+  declaredAt: number;
+  /** = declaredAt + 24h hard minimum; .com enforces. */
+  effectiveAt: number;
+  nonce: Bytes;
+}
+
+const TAG_RECOVER_RCK = "flagship/recover-rck/v1";
+
+function canonicalRecoverRck(r: RecoverRck): Bytes {
+  validateNoSepCtrl("subdomain", r.subdomain);
+  return new TextEncoder().encode(
+    [
+      TAG_RECOVER_RCK,
+      r.subdomain,
+      hex(r.newRckPubKey),
+      hex(r.newIrkPubKey),
+      r.declaredAt,
+      r.effectiveAt,
+      hex(r.nonce),
+    ].join("|"),
+  );
+}
+
+export function signRecoverRck(r: RecoverRck, newIrk: Keypair): Bytes {
+  return ed.sign(canonicalRecoverRck(r), newIrk.privateKey);
+}
+
+export function verifyRecoverRck(r: RecoverRck, sig: Bytes, newIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalRecoverRck(r), newIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+export interface RevokeRecoverRck {
+  subdomain: string;
+  /** References the RecoverRck.declaredAt that should be cancelled. */
+  pendingDeclaredAt: number;
+  revokedAt: number;
+  nonce: Bytes;
+}
+
+const TAG_REVOKE_RECOVER_RCK = "flagship/revoke-recover-rck/v1";
+
+function canonicalRevokeRecoverRck(r: RevokeRecoverRck): Bytes {
+  validateNoSepCtrl("subdomain", r.subdomain);
+  return new TextEncoder().encode(
+    [
+      TAG_REVOKE_RECOVER_RCK,
+      r.subdomain,
+      r.pendingDeclaredAt,
+      r.revokedAt,
+      hex(r.nonce),
+    ].join("|"),
+  );
+}
+
+export function signRevokeRecoverRck(r: RevokeRecoverRck, oldIrk: Keypair): Bytes {
+  return ed.sign(canonicalRevokeRecoverRck(r), oldIrk.privateKey);
+}
+
+export function verifyRevokeRecoverRck(
+  r: RevokeRecoverRck,
+  sig: Bytes,
+  oldIrkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalRevokeRecoverRck(r), oldIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// MergeBack (#76) — for 7 days after a J.3 recovery binds, the old
+// IRK retains authority to sign exactly one envelope kind: a
+// MergeBack that surrenders to the new IRK and self-revokes. Handles
+// "I recovered then found my phone in the couch cushions." After 7
+// days, the old IRK is hard-revoked unconditionally.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface MergeBack {
+  username: string;
+  newIrkPubKey: Bytes;
+  /** Devices surrendering authority. */
+  surrenderingDevices: Bytes[];
+  issuedAt: number;
+}
+
+const TAG_MERGE_BACK = "flagship/merge-back/v1";
+
+function canonicalMergeBack(m: MergeBack): Bytes {
+  validateNoSepCtrl("username", m.username);
+  const devices = [...m.surrenderingDevices].map((b) => hex(b)).sort().join(",");
+  return new TextEncoder().encode(
+    [TAG_MERGE_BACK, m.username, hex(m.newIrkPubKey), devices, m.issuedAt].join("|"),
+  );
+}
+
+export function signMergeBack(m: MergeBack, oldIrk: Keypair): Bytes {
+  return ed.sign(canonicalMergeBack(m), oldIrk.privateKey);
+}
+
+export function verifyMergeBack(m: MergeBack, sig: Bytes, oldIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalMergeBack(m), oldIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Helper: reject '|' or control chars in any string field. Used by the
+// new envelopes above. (The legacy envelopes pre-date this guard; the
+// v2 framing migration #96 will harden them comprehensively.)
+// ──────────────────────────────────────────────────────────────────────
+
+function validateNoSepCtrl(name: string, value: string): void {
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c === 0x7c) {
+      throw new Error(`canonical-bytes field "${name}" contains separator '|' at index ${i}`);
+    }
+    if (c <= 0x1f || c === 0x7f) {
+      throw new Error(
+        `canonical-bytes field "${name}" contains control char 0x${c.toString(16)} at index ${i}`,
+      );
+    }
+  }
+}

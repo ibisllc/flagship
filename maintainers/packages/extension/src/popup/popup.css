@@ -1,0 +1,108 @@
+:root {
+  color-scheme: light;
+  --bg: #fbfbfa;
+  --fg: #1c1c1a;
+  --muted: #6a6a64;
+  --line: #ece9e2;
+  --accent: #1c1c1a;
+  --red-bg: #fdecea;
+  --red-fg: #88231b;
+  --yellow-bg: #fff4d6;
+  --yellow-fg: #6a4f0b;
+}
+* { box-sizing: border-box; }
+html, body {
+  width: 360px;
+  min-height: 200px;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+}
+.popup-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.popup-header .title { font-weight: 600; letter-spacing: -.01em; }
+.popup-header .repo {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+main { padding: 8px 14px; }
+.alarm {
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin: 6px 0;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+.alarm.red { background: var(--red-bg); border-color: #f3b6b1; color: var(--red-fg); }
+.alarm.yellow { background: var(--yellow-bg); border-color: #ead9a1; color: var(--yellow-fg); }
+.alarm.info { background: #eef3fb; border-color: #c8d6ee; color: #25457a; }
+.alarm a { color: inherit; }
+.track {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.track:first-of-type { border-top: none; }
+.track h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.person .avatar {
+  width: 28px; height: 28px; border-radius: 14px;
+  background: var(--line);
+  flex: 0 0 28px;
+  object-fit: cover;
+}
+.person .meta { min-width: 0; flex: 1 1 auto; }
+.person .name { font-weight: 500; }
+.person .email {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+.timeline { margin-top: 6px; }
+.timeline li {
+  list-style: none;
+  font-size: 11px;
+  color: var(--fg);
+  padding: 2px 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.muted { color: var(--muted); }
+.empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+}
+.popup-footer {
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.popup-footer button {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.popup-footer a { font-size: 11px; text-decoration: none; }

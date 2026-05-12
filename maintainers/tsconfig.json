@@ -1,6 +1,9 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/protocol" }
+    { "path": "./packages/protocol" },
+    { "path": "./packages/server-adapters/cloudflare-worker" },
+    { "path": "./packages/cli" },
+    { "path": "./packages/extension" }
   ]
 }
