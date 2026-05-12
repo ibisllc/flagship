@@ -1,0 +1,53 @@
+name: Predeploy guard (apps/com)
+
+# Smoke-tests the predeploy guard on any PR that touches apps/com/ or
+# the guard itself. The check is cheap — it just runs the vitest unit
+# tests for scripts/predeploy-com.sh — but it's deliberately a separate
+# workflow so a failure here is obviously about route safety, not a
+# generic CI hiccup.
+#
+# WHY: Cloudflare wrangler treats `--routes X` as a full reconciliation
+# and silently drops every route not in X. The guard rejects any deploy
+# command that smuggles in --route(s). See apps/com/wrangler.toml and
+# scripts/predeploy-com.sh for the full story.
+
+on:
+  pull_request:
+    paths:
+      - "apps/com/**"
+      - "scripts/predeploy-com.sh"
+      - "scripts/predeploy-com.test.ts"
+      - ".github/workflows/predeploy-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/com/**"
+      - "scripts/predeploy-com.sh"
+      - "scripts/predeploy-com.test.ts"
+
+jobs:
+  guard:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install workspace deps
+        run: npm install --no-audit --no-fund
+
+      - name: Run predeploy guard unit tests
+        run: npx vitest run scripts/predeploy-com.test.ts
+
+      - name: Smoke — the guard rejects --routes
+        run: |
+          if bash scripts/predeploy-com.sh --routes 'flagshipserver.com/*'; then
+            echo "::error::predeploy-com.sh did NOT reject --routes — guard is broken"
+            exit 1
+          fi
+          echo "Guard correctly rejected --routes"
+
+      - name: Smoke — the guard accepts a bare deploy
+        run: bash scripts/predeploy-com.sh deploy

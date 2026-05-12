@@ -17,7 +17,8 @@
     "typecheck": "tsc -b",
     "daemon": "npm --workspace=@flagship/server-daemon run start",
     "build-image": "npm --workspace=@flagship/bootkey-builder run start --",
-    "web": "npm --workspace=@flagship/web run dev"
+    "web": "npm --workspace=@flagship/web run dev",
+    "predeploy:check": "bash scripts/predeploy-com.sh"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
