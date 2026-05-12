@@ -339,7 +339,8 @@ describe("/webapp PWA static surface", () => {
     // v10 reads event.data.json() (RFC 8291 plaintext from .com) and
     // personalises the body with the requesting server FQDN.
     // v11 added an e2e simulate-push message shim; harmless in prod.
-    expect(r.body).toContain('SHELL_VERSION = "v11"');
+    // v12 dropped skipWaiting/clients.claim + adopted per-URL precache.
+    expect(r.body).toContain('SHELL_VERSION = "v12"');
     expect(r.body).toContain("event.data?.json");
     expect(r.body).toContain("serverFqdn");
     // Must keep the empty-payload fallback (some pushes have no body).

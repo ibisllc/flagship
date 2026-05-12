@@ -15,9 +15,25 @@
 //       personalises the notification with the requesting server FQDN.
 //  v11: added e2e simulate-push message shim (gated on flagship-e2e:
 //       prefix; harmless in prod since real clients never send it).
-const SHELL_VERSION = "v11";
+//  v12: rollback-safety overhaul.
+//       - Dropped skipWaiting() + clients.claim() so a bad deploy can
+//         no longer evict a live session mid-flight; the new SW waits
+//         until every controlled tab closes (or the page explicitly
+//         posts SKIP_WAITING after a user opt-in).
+//       - Replaced cache.addAll(SHELL) with a per-URL allSettled
+//         walk: optional SHELL entries are allowed to 404 (logged,
+//         not fatal) and only the ESSENTIAL_PATHS subset (index.html,
+//         app.js, style.css, manifest + icon, router/state/api libs)
+//         rejects install. A single missing view module no longer
+//         bricks every webapp install on the planet.
+const SHELL_VERSION = "v12";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
-const SHELL = [
+
+// ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
+// route to one of the home/bootstrap views. If any of these 404 we
+// abort the install — the browser keeps the previous SW active, which
+// is the desired safe-rollback behaviour.
+const ESSENTIAL_PATHS = [
   "/",
   "/index.html",
   "/app.js",
@@ -25,13 +41,21 @@ const SHELL = [
   "/manifest.json",
   "/icon.svg",
   "/keystore.js",
+  "/lib/router.js",
+  "/lib/state.js",
+  "/lib/api.js",
+  "/lib/toast.js",
+];
+
+// OPTIONAL_SHELL: everything else worth precaching. A 404 here is
+// logged but doesn't fail the install — the offending URL just isn't
+// in the precache; the runtime fetch handler will fall back to the
+// network (and then cache whatever it gets). Keeps the webapp's
+// offline launch path resilient while a deploy rolls forward.
+const OPTIONAL_SHELL = [
   "/providers.js",
   "/qrScanner.js",
-  "/lib/router.js",
-  "/lib/toast.js",
-  "/lib/state.js",
   "/lib/util.js",
-  "/lib/api.js",
   "/lib/podPair.js",
   "/lib/installApp.js",
   "/lib/leases.js",
@@ -57,12 +81,67 @@ const SHELL = [
   "/views/browser-viewer.js",
 ];
 
+// Combined list kept for the existing webappStatic test, which scans
+// the SW source for individual view paths. Order doesn't matter at
+// runtime — the install handler walks ESSENTIAL_PATHS + OPTIONAL_SHELL
+// separately so it can apply different failure semantics to each.
+const SHELL = [...ESSENTIAL_PATHS, ...OPTIONAL_SHELL];
+
+async function precacheEssential(cache) {
+  // Promise.all so any rejection trips install rejection.
+  await Promise.all(
+    ESSENTIAL_PATHS.map(async (path) => {
+      const res = await fetch(path, { cache: "reload" });
+      if (!res || !res.ok) {
+        throw new Error(
+          `essential precache failed: ${path} -> ${res ? res.status : "no response"}`,
+        );
+      }
+      await cache.put(path, res);
+    }),
+  );
+}
+
+async function precacheOptional(cache) {
+  // allSettled so a single missing view doesn't poison the install.
+  const settled = await Promise.allSettled(
+    OPTIONAL_SHELL.map(async (path) => {
+      const res = await fetch(path, { cache: "reload" });
+      if (!res || !res.ok) {
+        throw new Error(
+          `optional precache 404: ${path} -> ${res ? res.status : "no response"}`,
+        );
+      }
+      await cache.put(path, res);
+      return path;
+    }),
+  );
+  for (const r of settled) {
+    if (r.status === "rejected") {
+      // Visible in DevTools → Application → Service Workers logs.
+      console.warn("[flagship-sw] optional shell entry skipped:", String(r.reason));
+    }
+  }
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((c) => c.addAll(SHELL)));
-  self.skipWaiting();
+  // NOTE: no skipWaiting(). The new SW sits in `waiting` until every
+  // controlled tab closes or the page explicitly posts SKIP_WAITING.
+  // That way a deploy with a corrupted asset can't yank the rug out
+  // from under a live unlock / pairing / vibe-code session.
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(SHELL_CACHE);
+      await precacheEssential(cache);
+      await precacheOptional(cache);
+    })(),
+  );
 });
 
 self.addEventListener("activate", (event) => {
+  // NOTE: no clients.claim(). The new SW only takes over once existing
+  // controlled clients have all gone away (close + reopen, or user
+  // taps the "Update available" toast which posts SKIP_WAITING).
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
@@ -72,7 +151,6 @@ self.addEventListener("activate", (event) => {
       ),
     ),
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
@@ -222,7 +300,15 @@ self.addEventListener("notificationclick", (event) => {
 // SW's own scope storage at install time.
 self.addEventListener("message", (event) => {
   const data = event?.data;
-  if (!data || data.type !== "flagship-e2e:simulate-push") return;
+  if (!data) return;
+  // Update-acknowledgement: the page detected a waiting SW, asked the
+  // user, and the user opted in. Activate now. The page is responsible
+  // for re-loading itself after `controllerchange` fires.
+  if (data.type === "SKIP_WAITING" || data === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+  if (data.type !== "flagship-e2e:simulate-push") return;
   // Mirror the real push handler. The harness passes a JSON payload
   // matching what .com would send via RFC 8291.
   let serverFqdn = null;
