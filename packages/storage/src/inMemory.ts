@@ -1,8 +1,6 @@
 import type {
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
-  DaemonStatusRecord,
-  DaemonStatusStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   PendingUnlockApprovalRecord,
@@ -73,6 +71,40 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (r.irkPubHex.toLowerCase() !== expectedOldIrkPubHex.toLowerCase()) return false;
     this.byName.set(norm, { ...r, irkPubHex: newIrkPubHex, claimedAt: at });
     return true;
+  }
+}
+
+export class InMemoryUsernameAliasStorage implements UsernameAliasStorage {
+  private byOld = new Map<string, UsernameAliasRecord>();
+  async put(rec: UsernameAliasRecord) {
+    const oldNorm = rec.oldUsername.toLowerCase();
+    const newNorm = rec.newUsername.toLowerCase();
+    const existing = this.byOld.get(oldNorm);
+    if (existing && existing.newUsername.toLowerCase() !== newNorm) {
+      return { ok: false as const, reason: "alias already points elsewhere" };
+    }
+    this.byOld.set(oldNorm, { ...rec, oldUsername: oldNorm, newUsername: newNorm });
+    return { ok: true as const };
+  }
+  async resolve(username: string) {
+    const chain: string[] = [];
+    let current = username.toLowerCase();
+    chain.push(current);
+    for (let hops = 0; hops < 8; hops++) {
+      const next = this.byOld.get(current);
+      if (!next) break;
+      current = next.newUsername.toLowerCase();
+      chain.push(current);
+    }
+    return { current, chain };
+  }
+  async isConsumed(username: string) {
+    const norm = username.toLowerCase();
+    if (this.byOld.has(norm)) return true;
+    for (const v of this.byOld.values()) {
+      if (v.newUsername.toLowerCase() === norm) return true;
+    }
+    return false;
   }
 }
 
@@ -514,6 +546,7 @@ export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStor
 
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
+  usernameAliases = new InMemoryUsernameAliasStorage();
   authCodes = new InMemoryAuthCodeStorage();
   buildTickets = new InMemoryBuildTicketStorage();
   servers = new InMemoryServerStorage();

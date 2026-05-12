@@ -2711,3 +2711,39 @@ function validateNoSepCtrl(name: string, value: string): void {
     }
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// UsernameRename (#93) — IRK-signed account rename. Records a
+// permanent alias in .com's usernames_aliases table so old invite
+// links + URLs resolve indefinitely. The OLD name is forever consumed
+// — never re-issuable to anyone else (closes the "stolen-name →
+// someone-else-gets-it" attack).
+// ──────────────────────────────────────────────────────────────────────
+
+export interface UsernameRename {
+  oldUsername: string;
+  newUsername: string;
+  effectiveAt: number;
+}
+
+const TAG_USERNAME_RENAME = "flagship/username-rename/v1";
+
+function canonicalUsernameRename(r: UsernameRename): Bytes {
+  validateNoSepCtrl("oldUsername", r.oldUsername);
+  validateNoSepCtrl("newUsername", r.newUsername);
+  return new TextEncoder().encode(
+    [TAG_USERNAME_RENAME, r.oldUsername, r.newUsername, r.effectiveAt].join("|"),
+  );
+}
+
+export function signUsernameRename(r: UsernameRename, irk: Keypair): Bytes {
+  return ed.sign(canonicalUsernameRename(r), irk.privateKey);
+}
+
+export function verifyUsernameRename(r: UsernameRename, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalUsernameRename(r), irkPub);
+  } catch {
+    return false;
+  }
+}

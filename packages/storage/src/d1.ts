@@ -36,6 +36,8 @@ import type {
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
+  UsernameAliasRecord,
+  UsernameAliasStorage,
   UsernameStorage,
 } from "./types.js";
 
@@ -199,6 +201,56 @@ export class D1UsernameStorage implements UsernameStorage {
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+}
+
+export class D1UsernameAliasStorage implements UsernameAliasStorage {
+  constructor(private db: D1Database) {}
+  async put(rec: UsernameAliasRecord) {
+    const oldNorm = rec.oldUsername.toLowerCase();
+    const newNorm = rec.newUsername.toLowerCase();
+    const existing = await this.db
+      .prepare(`SELECT new_username FROM usernames_aliases WHERE old_username = ?1`)
+      .bind(oldNorm)
+      .first<{ new_username: string }>();
+    if (existing && existing.new_username.toLowerCase() !== newNorm) {
+      return { ok: false as const, reason: "alias already points elsewhere" };
+    }
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO usernames_aliases
+         (old_username, new_username, effective_at, signature_hex)
+         VALUES (?1, ?2, ?3, ?4)`,
+      )
+      .bind(oldNorm, newNorm, rec.effectiveAt, rec.signatureHex)
+      .run();
+    return { ok: true as const };
+  }
+  async resolve(username: string) {
+    const chain: string[] = [];
+    let current = username.toLowerCase();
+    chain.push(current);
+    for (let hops = 0; hops < 8; hops++) {
+      const next = await this.db
+        .prepare(`SELECT new_username FROM usernames_aliases WHERE old_username = ?1`)
+        .bind(current)
+        .first<{ new_username: string }>();
+      if (!next) break;
+      current = next.new_username.toLowerCase();
+      chain.push(current);
+    }
+    return { current, chain };
+  }
+  async isConsumed(username: string) {
+    const norm = username.toLowerCase();
+    const r = await this.db
+      .prepare(
+        `SELECT 1 AS hit FROM usernames_aliases
+         WHERE old_username = ?1 OR new_username = ?1 LIMIT 1`,
+      )
+      .bind(norm)
+      .first<{ hit: number }>();
+    return !!r;
   }
 }
 
@@ -1281,6 +1333,7 @@ export class D1UserIdentityRecordStorage implements UserIdentityRecordStorage {
 
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
+  usernameAliases: UsernameAliasStorage;
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;
@@ -1299,6 +1352,7 @@ export class D1Storage implements Storage {
   userIdentity: UserIdentityRecordStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
+    this.usernameAliases = new D1UsernameAliasStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
     this.buildTickets = new D1BuildTicketStorage(db);
     this.servers = new D1ServerStorage(db);

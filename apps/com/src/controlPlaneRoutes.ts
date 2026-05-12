@@ -49,6 +49,8 @@ import {
   handleSetRoutingTarget,
   handleUsernameClaim,
   handleUsernameLookup,
+  handlePostUsernameRename,
+  handleGetUsernameAlias,
   handleUserPubKeyCert,
   handleMarketplaceList,
   handleMarketplaceGet,
@@ -126,6 +128,8 @@ export interface ControlPlaneEnv {
 
 const ROUTE_RE = {
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
+  USERNAME_RENAME: /^\/api\/username\/rename$/,
+  USERNAME_ALIAS: /^\/api\/username\/alias\/([^/]+)$/,
   USERNAME_LOOKUP: /^\/api\/username\/([^/]+)$/,
   AUTH_CODE_ISSUE: /^\/api\/auth-code\/issue$/,
   AUTH_CODE_REVOKE: /^\/api\/auth-code\/([^/]+)\/revoke$/,
@@ -197,8 +201,24 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
     return finish(await handleUsernameClaim({ storage: storage.usernames }, await readJson(request)));
   }
+  if (method === "POST" && ROUTE_RE.USERNAME_RENAME.test(path)) {
+    return finish(
+      await handlePostUsernameRename(
+        { usernames: storage.usernames, aliases: storage.usernameAliases },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.USERNAME_ALIAS))) {
+    return finish(
+      await handleGetUsernameAlias(
+        { usernames: storage.usernames, aliases: storage.usernameAliases },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
   if (method === "GET" && (m = path.match(ROUTE_RE.USERNAME_LOOKUP))) {
-    if (m[1] === "claim") return null;
+    if (m[1] === "claim" || m[1] === "rename") return null;
     return finish(await handleUsernameLookup(storage.usernames, decodeURIComponent(m[1]!)));
   }
 
