@@ -216,25 +216,33 @@ describe("dns-broker Worker entry", () => {
     expect(JSON.stringify(resp)).not.toContain(SECRET_TOKEN);
   });
 
-  it("publishARecord refuses arbitrary IPs even when the signature is valid for that body", async () => {
+  it("publishARecord refuses arbitrary IPs even if the pod is registered", async () => {
     const podKey = kp(50);
     const serverId = `home.dave.${APEX}`;
     serverLookups.set(serverId, { identityPubKey: toHex(podKey.publicKey), revoked: null });
-    const evilIp = "192.0.2.5";
-    const issuedAt = Date.now();
-    // The daemon would never sign this in practice (its signing helper
-    // pins targetIp), but the test confirms the broker doesn't trust
-    // the caller's IP regardless of whether a sig is valid for it.
-    const { canonicalPublishABytes } = await import("../src/policy.js");
-    const msg = canonicalPublishABytes({ serverId, targetIp: evilIp, recordType: "A", issuedAt });
-    const sig = ed.sign(msg, podKey.privateKey);
     const body = {
       kind: "publishARecord",
       serverId,
       recordType: "A",
-      targetIp: evilIp,
-      issuedAt,
-      signatureHex: toHex(sig),
+      targetIp: "192.0.2.5", // not the allowlisted anycast IP
+      recordName: "pod-apex",
+    };
+    const r = await handler.fetch(
+      new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(403);
+    const cfCalls = calls.filter((c) => c.url.startsWith("https://api.cloudflare.com/"));
+    expect(cfCalls.length).toBe(0);
+  });
+
+  it("publishARecord refuses if the pod is unknown (registration proof fails)", async () => {
+    const body = {
+      kind: "publishARecord",
+      serverId: `home.ghost.${APEX}`,
+      recordType: "A",
+      targetIp: IPV4,
+      recordName: "pod-apex",
     };
     const r = await handler.fetch(
       new Request("https://b/rpc", { method: "POST", body: JSON.stringify(body) }),
@@ -249,17 +257,12 @@ describe("dns-broker Worker entry", () => {
     const podKey = kp(51);
     const serverId = `home.dave.${APEX}`;
     serverLookups.set(serverId, { identityPubKey: toHex(podKey.publicKey), revoked: null });
-    const issuedAt = Date.now();
-    const { canonicalPublishABytes } = await import("../src/policy.js");
-    const msg = canonicalPublishABytes({ serverId, targetIp: IPV4, recordType: "A", issuedAt });
-    const sig = ed.sign(msg, podKey.privateKey);
     const body = {
       kind: "publishARecord",
       serverId,
       recordType: "A",
       targetIp: IPV4,
-      issuedAt,
-      signatureHex: toHex(sig),
+      recordName: "pod-apex",
     };
     // List by name returns empty (no existing record), then create succeeds.
     cfNextResponse.push(
@@ -283,17 +286,12 @@ describe("dns-broker Worker entry", () => {
     const podKey = kp(52);
     const serverId = `home.f.${APEX}`;
     serverLookups.set(serverId, { identityPubKey: toHex(podKey.publicKey), revoked: null });
-    const issuedAt = Date.now();
-    const { canonicalPublishABytes } = await import("../src/policy.js");
-    const msg = canonicalPublishABytes({ serverId, targetIp: IPV4, recordType: "A", issuedAt });
-    const sig = ed.sign(msg, podKey.privateKey);
     const body = {
       kind: "publishARecord",
       serverId,
       recordType: "A",
       targetIp: IPV4,
-      issuedAt,
-      signatureHex: toHex(sig),
+      recordName: "pod-apex",
     };
     // List returns an existing record pointing at a different IP.
     cfNextResponse.push(

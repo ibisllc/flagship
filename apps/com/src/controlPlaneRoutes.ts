@@ -10,8 +10,11 @@
 
 import {
   authorizeAdmin,
+  BrokerDnsClient,
   caKeypairFromEnv,
   CloudflareDnsClient,
+  proxyDns01DeleteToBroker,
+  proxyDns01PublishToBroker,
   handleAuthCodeIssue,
   handleAuthCodeLookup,
   handleAuthCodeRevoke,
@@ -75,9 +78,21 @@ export interface ControlPlaneEnv {
   DB?: D1Database;
   FLAGSHIP_CA_PRIV_HEX?: string;
   FLAGSHIP_CA_ISSUER?: string;
-  /** API token with Zone:DNS:Edit on flagship.services. */
+  /**
+   * Public URL of the standalone dns-broker Worker (see
+   * `apps/dns-broker`). When set, the main Worker delegates ALL DNS
+   * mutations to the broker via RPC and does NOT use a direct CF API
+   * token. This is the production posture as of Task #13.
+   */
+  DNS_BROKER_URL?: string;
+  /**
+   * Legacy direct-CF mode. Kept only for the local-dev / test path
+   * where running the broker is overkill. PRODUCTION MUST USE THE
+   * BROKER: if `DNS_BROKER_URL` is set this secret is ignored even if
+   * present, and a predeploy check should flag the duplicate.
+   */
   CLOUDFLARE_DNS_API_TOKEN?: string;
-  /** Zone ID for flagship.services. */
+  /** Zone ID for flagship.services. Only used in the legacy direct mode. */
   CLOUDFLARE_SERVICES_ZONE_ID?: string;
   /** IPv4 of the .services SNI passthrough listener (Fly anycast). */
   SERVICES_PASSTHROUGH_IPV4?: string;
@@ -244,15 +259,21 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && ROUTE_RE.SERVER_REGISTER.test(path)) {
+    // Prefer the broker (production posture). Fall back to direct
+    // CloudflareDnsClient only when no broker URL is configured —
+    // typically the local-dev path.
+    const dnsClient = env.DNS_BROKER_URL
+      ? new BrokerDnsClient({ brokerUrl: env.DNS_BROKER_URL })
+      : env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+        ? new CloudflareDnsClient({
+            apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+            zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+          })
+        : null;
     const dns =
-      env.CLOUDFLARE_DNS_API_TOKEN &&
-      env.CLOUDFLARE_SERVICES_ZONE_ID &&
-      env.SERVICES_PASSTHROUGH_IPV4
+      dnsClient && env.SERVICES_PASSTHROUGH_IPV4
         ? {
-            client: new CloudflareDnsClient({
-              apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
-              zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
-            }),
+            client: dnsClient,
             servicesIpv4: env.SERVICES_PASSTHROUGH_IPV4,
             servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
           }
@@ -327,6 +348,19 @@ export async function tryControlPlane(
   }
 
   if (method === "POST" && (ROUTE_RE.DNS01_PUBLISH.test(path) || ROUTE_RE.DNS01_DELETE.test(path))) {
+    // Broker-first: the main Worker no longer holds the CF DNS API
+    // token in production. The daemon-signed envelope arrives here,
+    // gets translated into a typed broker RPC, and the broker
+    // independently re-verifies before talking to Cloudflare.
+    if (env.DNS_BROKER_URL) {
+      const body = await readJson(request);
+      const res = ROUTE_RE.DNS01_PUBLISH.test(path)
+        ? await proxyDns01PublishToBroker({ brokerUrl: env.DNS_BROKER_URL, body })
+        : await proxyDns01DeleteToBroker({ brokerUrl: env.DNS_BROKER_URL, body });
+      return finishPlain(res);
+    }
+    // Legacy dev/test fallback — direct CF API token. Production must
+    // configure `DNS_BROKER_URL` and drop this secret.
     if (
       !env.CLOUDFLARE_DNS_API_TOKEN ||
       !env.CLOUDFLARE_SERVICES_ZONE_ID

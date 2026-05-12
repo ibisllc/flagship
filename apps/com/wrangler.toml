@@ -120,11 +120,22 @@ SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::110:d2b6:0"
 # /api/services/endpoints so daemons can discover migrations silently
 # (no need to update each daemon's environment when we move the hub).
 TUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel"
-# Cloudflare zone ID for flagship.services (DNS API target).
+# Cloudflare zone ID for flagship.services. Used ONLY in the legacy
+# direct-CF-token mode below; production routes DNS through the
+# dns-broker Worker via DNS_BROKER_URL.
 CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
-# CLOUDFLARE_DNS_API_TOKEN is set via:
+# DnsBroker Worker (Task #13) — when set, the main Worker forwards ALL
+# DNS mutations to the broker. Production posture: drop
+# CLOUDFLARE_DNS_API_TOKEN from this Worker entirely and set this var
+# to the broker's public URL. The broker holds the only copy of the CF
+# DNS token. See `apps/dns-broker/README.md`.
+# DNS_BROKER_URL = "https://flagship-dns-broker.workers.dev"
+#
+# Legacy: CLOUDFLARE_DNS_API_TOKEN was set via:
 #   wrangler secret put CLOUDFLARE_DNS_API_TOKEN
 # (Cloudflare API token with Zone:DNS:Edit on flagship.services.)
+# Once DNS_BROKER_URL is set above, this secret can — and SHOULD — be
+# deleted from this Worker via `wrangler secret delete`.
 # Cloudflare Worker → Fly app shared secret. Set with:
 #   wrangler secret put SERVICES_HMAC_KEY
 # (NOT in this file — secrets live in CF dashboard.)

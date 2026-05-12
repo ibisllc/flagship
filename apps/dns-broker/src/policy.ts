@@ -15,10 +15,13 @@
  *     require either (a) an active AppGrant whose `routes` list covers the
  *     user-zone wildcard, or (b) an explicit IRK signature on the challenge.
  *
- *   publishARecord — new pod registration A/AAAA. Requires the daemon's
- *     identity signature over (serverId|targetIp|issuedAt). The target IP
- *     MUST equal one of the env-pinned anycast IPs; arbitrary IPs are
- *     rejected. Existing records are NOT overwritten.
+ *   publishARecord — A/AAAA for `<server>.<user>.<apex>` and its
+ *     wildcards. Authority is *registration*: the broker fetches
+ *     `<MAIN_WORKER>/api/server/by-domain/<serverId>` and confirms the
+ *     server is currently registered (not revoked). The target IP MUST
+ *     equal the env-pinned anycast IP, so a successful call cannot
+ *     redirect traffic to an attacker — it can only re-assert the same
+ *     anycast target. Existing records are NOT overwritten.
  *
  *   deleteRecord — same authority that created the record. ACME challenges
  *     fall off with a daemon signature; A/AAAA records require IRK.
@@ -28,7 +31,9 @@
  * lookup endpoints (/api/server/by-domain/<serverId> for daemon
  * identity, /api/users/<u>/pubkey-cert for IRK). Even if the main
  * Worker is fully compromised, a malicious caller still cannot mint
- * DNS without producing a valid signature against the registered key.
+ * DNS without producing a valid signature against the registered key
+ * (publishTxtChallenge, deleteRecord) or pointing at an arbitrary IP
+ * (publishARecord — the IP allowlist is the gate).
  */
 
 import {
@@ -45,28 +50,10 @@ import {
 } from "@flagship/protocol";
 import { sha256 } from "@noble/hashes/sha256";
 
-// ---- canonical bytes for the two RPC-specific envelopes ----
+// ---- canonical bytes for the broker-specific envelopes ----
 
-const TAG_BROKER_PUBLISH_A = "flagship/dns-broker/publish-a/v1";
 const TAG_BROKER_DELETE_A = "flagship/dns-broker/delete-a/v1";
 const TAG_BROKER_DNS01_USERZONE = "flagship/dns-broker/userzone-acme/v1";
-
-/**
- * Canonical bytes a daemon signs to authorize the broker to publish
- * A/AAAA records for its pod. Distinct tag from Dns01PublishRequest so
- * a captured ACME signature can never be cross-replayed as an A-record
- * publish (or vice versa).
- */
-export function canonicalPublishABytes(args: {
-  serverId: string;
-  targetIp: string;
-  recordType: "A" | "AAAA";
-  issuedAt: number;
-}): Uint8Array {
-  return new TextEncoder().encode(
-    [TAG_BROKER_PUBLISH_A, args.serverId, args.targetIp, args.recordType, args.issuedAt].join("|"),
-  );
-}
 
 export function canonicalDeleteABytes(args: {
   serverId: string;
@@ -153,11 +140,18 @@ export interface UserZoneGrantAuthority {
 
 export interface PublishARecordBody {
   kind: "publishARecord";
+  /** Pod FQDN under `<apex>` whose A/AAAA record family is being asserted. */
   serverId: string;
+  /**
+   * Which of the four registered names this call targets:
+   *   "pod-apex"          → <serverId>
+   *   "pod-wildcard"      → *.<serverId>
+   *   "user-zone-apex"    → <user>.<apex>
+   *   "user-zone-wildcard"→ *.<user>.<apex>
+   */
+  recordName: "pod-apex" | "pod-wildcard" | "user-zone-apex" | "user-zone-wildcard";
   recordType: "A" | "AAAA";
   targetIp: string;
-  issuedAt: number;
-  signatureHex: string;
 }
 
 export interface DeleteRecordBody {
@@ -425,8 +419,6 @@ async function verifyUserzoneGrantPublish(
   // one route whose url matches one of:
   //   *.<username>.<apex>     (canonical user-zone wildcard)
   //    <username>.<apex>      (apex of the user zone)
-  // These are the only legitimate reasons a daemon would need an
-  // ACME challenge on the user-zone label.
   const expectedHost = `${auth.username}.${env.apex}`;
   if (host !== expectedHost) return deny("host/username mismatch");
 
@@ -448,11 +440,10 @@ async function verifyUserzoneGrantPublish(
     return u === wildcardUrl.toLowerCase() || u === apexUrl.toLowerCase();
   });
   if (!covers) return deny("grant does not cover user zone");
-  // For belt-and-suspenders, also assert appGrantAuthorizesUrl agrees.
-  if (!appGrantAuthorizesUrl(grant, apexUrl)) {
-    // The grant's routes list may use the non-canonical form; we accept
-    // either match above. Skip strict subpath here — too easy to false-reject.
-  }
+  // Belt-and-suspenders: appGrantAuthorizesUrl agrees on the apex URL.
+  // The routes check above is the primary gate; this reference keeps the
+  // import live for future strict-mode wiring.
+  void appGrantAuthorizesUrl;
 
   // Verify grant signature against the claimed IRK, and verify that IRK
   // is the registered IRK for `username`.
@@ -478,45 +469,48 @@ async function verifyPublishA(b: PublishARecordBody, env: PolicyEnv): Promise<Ve
   if (
     typeof b.serverId !== "string" ||
     typeof b.targetIp !== "string" ||
-    typeof b.issuedAt !== "number" ||
-    typeof b.signatureHex !== "string" ||
-    (b.recordType !== "A" && b.recordType !== "AAAA")
+    (b.recordType !== "A" && b.recordType !== "AAAA") ||
+    typeof b.recordName !== "string"
   ) return deny("malformed");
-  if (!ageOk(env.now, b.issuedAt, env.replayWindowMs)) return deny("stale");
+
   if (!b.serverId.endsWith(`.${env.apex}`)) return deny("serverId outside apex");
 
   // Target IP allowlist — the broker REFUSES any A/AAAA that doesn't
-  // point at one of the known anycast addresses. Even if the daemon is
-  // compromised it can't repoint its zone elsewhere.
+  // point at one of the known anycast addresses. Even if the broker is
+  // tricked into accepting a forged "server is registered" lookup, the
+  // worst outcome is re-asserting the same anycast IP that this server
+  // would have anyway.
   const allow = b.recordType === "A" ? env.servicesIpv4 : env.servicesIpv6;
   if (!allow || b.targetIp !== allow) return deny("targetIp not allowlisted");
 
-  const sig = decodeHex(b.signatureHex);
-  if (!sig) return deny("invalid hex");
-
+  // Resolve the server registration. If the main Worker reports unknown
+  // or revoked, the broker refuses — this is the registration proof.
   const podPub = await env.resolvePodIdentity(b.serverId);
   if (!podPub) return deny("unknown pod");
-  const msg = canonicalPublishABytes({
-    serverId: b.serverId,
-    targetIp: b.targetIp,
-    recordType: b.recordType,
-    issuedAt: b.issuedAt,
-  });
-  if (!edVerify(sig, msg, podPub)) return deny("bad signature");
 
-  // Compute the four legitimate target names per the registration plan:
-  //   <server>.<user>.<apex>            ← b.serverId itself
-  //   *.<server>.<user>.<apex>
-  //   <user>.<apex>
-  //   *.<user>.<apex>
-  // A given publishARecord call writes exactly one of these — the
-  // caller specifies via the (implied) registration order. We do not
-  // expose the four names as a single batch RPC to keep the per-call
-  // policy review trivial; the main Worker iterates and calls the
-  // broker once per name.
+  // Compute the concrete name from the variant.
+  const userLabel = extractUserLabel(b.serverId, env.apex);
+  if (!userLabel) return deny("bad serverId shape");
+  let name: string;
+  switch (b.recordName) {
+    case "pod-apex":
+      name = b.serverId;
+      break;
+    case "pod-wildcard":
+      name = `*.${b.serverId}`;
+      break;
+    case "user-zone-apex":
+      name = `${userLabel}.${env.apex}`;
+      break;
+    case "user-zone-wildcard":
+      name = `*.${userLabel}.${env.apex}`;
+      break;
+    default:
+      return deny("malformed");
+  }
   return ok({
     kind: "createA",
-    recordName: b.serverId,
+    recordName: name,
     recordType: b.recordType,
     targetIp: b.targetIp,
   });

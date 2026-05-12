@@ -7,7 +7,21 @@ import {
 import type { AuthCodeStorage, RoutingStorage, ServerStorage } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
-import { CloudflareDnsClient } from "./cloudflareDns.js";
+/**
+ * Minimum DNS-client surface `handleServerRegister` needs. Both
+ * `CloudflareDnsClient` (direct CF token, dev/legacy) and
+ * `BrokerDnsClient` (RPCs to the dns-broker Worker, production) satisfy
+ * this; the difference is invisible to the registration handler.
+ */
+export interface DnsUpsertClient {
+  upsert(opts: {
+    name: string;
+    type: "A" | "AAAA" | "TXT" | "CNAME";
+    content: string;
+    ttl?: number;
+    proxied?: boolean;
+  }): Promise<{ id: string; type: string; name: string; content: string; proxied: boolean; ttl: number }>;
+}
 import { setRoutingTargetFromRegistration } from "./routing.js";
 import {
   conflict, forbidden, malformed, notFound, ok,
@@ -25,7 +39,7 @@ export interface ServerRegisterDeps {
    *  flagship.services anycast IP. */
   routing?: RoutingStorage;
   dns?: {
-    client: CloudflareDnsClient;
+    client: DnsUpsertClient;
     /** IPv4 address of .services SNI passthrough listener. */
     servicesIpv4: string;
     /** IPv6 address (optional). */

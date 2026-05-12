@@ -12,7 +12,6 @@ import {
 
 import {
   canonicalDeleteABytes,
-  canonicalPublishABytes,
   canonicalUserzoneAcmeBytes,
   verifyRpc,
   type AppGrantWire,
@@ -427,23 +426,18 @@ describe("publishARecord", () => {
   const podKey = kp(10);
   const serverId = `home.dave.${APEX}`;
 
-  function signed(targetIp: string, recordType: "A" | "AAAA", issuedAt = NOW): PublishARecordBody {
-    const msg = canonicalPublishABytes({ serverId, targetIp, recordType, issuedAt });
-    const sig = ed.sign(msg, podKey.privateKey);
-    return {
-      kind: "publishARecord",
-      serverId,
-      recordType,
-      targetIp,
-      issuedAt,
-      signatureHex: toHex(sig),
-    };
+  function body(
+    targetIp: string,
+    recordType: "A" | "AAAA",
+    recordName: PublishARecordBody["recordName"] = "pod-apex",
+  ): PublishARecordBody {
+    return { kind: "publishARecord", serverId, recordType, targetIp, recordName };
   }
 
-  it("accepts an A record with the allowlisted IPv4", async () => {
+  it("accepts an A record at the pod apex with the allowlisted IPv4", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(signed(IPV4, "A"), makeEnv(state));
+    const r = await verifyRpc(body(IPV4, "A", "pod-apex"), makeEnv(state));
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.effect).toEqual({
@@ -455,37 +449,39 @@ describe("publishARecord", () => {
     }
   });
 
+  it("accepts the four legitimate name variants", async () => {
+    const state = freshState();
+    state.pods[serverId] = podKey.publicKey;
+    const variants: Array<[PublishARecordBody["recordName"], string]> = [
+      ["pod-apex", serverId],
+      ["pod-wildcard", `*.${serverId}`],
+      ["user-zone-apex", `dave.${APEX}`],
+      ["user-zone-wildcard", `*.dave.${APEX}`],
+    ];
+    for (const [v, expected] of variants) {
+      const r = await verifyRpc(body(IPV4, "A", v), makeEnv(state));
+      expect(r.ok).toBe(true);
+      if (r.ok && r.effect.kind === "createA") expect(r.effect.recordName).toBe(expected);
+    }
+  });
+
   it("accepts an AAAA record with the allowlisted IPv6", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(signed(IPV6, "AAAA"), makeEnv(state));
+    const r = await verifyRpc(body(IPV6, "AAAA"), makeEnv(state));
     expect(r.ok).toBe(true);
   });
 
   it("rejects an A record pointing at an arbitrary IP", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(signed("1.2.3.4", "A"), makeEnv(state));
+    const r = await verifyRpc(body("1.2.3.4", "A"), makeEnv(state));
     expect(r.ok).toBe(false);
   });
 
-  it("rejects when daemon identity is unknown", async () => {
+  it("rejects when the pod is not registered (registration proof fails)", async () => {
     const state = freshState();
-    const r = await verifyRpc(signed(IPV4, "A"), makeEnv(state));
-    expect(r.ok).toBe(false);
-  });
-
-  it("rejects forged daemon signature", async () => {
-    const state = freshState();
-    state.pods[serverId] = kp(11).publicKey;
-    const r = await verifyRpc(signed(IPV4, "A"), makeEnv(state));
-    expect(r.ok).toBe(false);
-  });
-
-  it("rejects a stale envelope", async () => {
-    const state = freshState();
-    state.pods[serverId] = podKey.publicKey;
-    const r = await verifyRpc(signed(IPV4, "A", NOW - 10 * 60_000), makeEnv(state));
+    const r = await verifyRpc(body(IPV4, "A"), makeEnv(state));
     expect(r.ok).toBe(false);
   });
 
@@ -493,47 +489,20 @@ describe("publishARecord", () => {
     const state = freshState();
     const otherId = "evil.dave.example.com";
     state.pods[otherId] = podKey.publicKey;
-    const msg = canonicalPublishABytes({
-      serverId: otherId,
-      targetIp: IPV4,
-      recordType: "A",
-      issuedAt: NOW,
-    });
-    const body: PublishARecordBody = {
-      kind: "publishARecord",
-      serverId: otherId,
-      recordType: "A",
-      targetIp: IPV4,
-      issuedAt: NOW,
-      signatureHex: toHex(ed.sign(msg, podKey.privateKey)),
-    };
-    const r = await verifyRpc(body, makeEnv(state));
+    const r = await verifyRpc(
+      { kind: "publishARecord", serverId: otherId, recordType: "A", targetIp: IPV4, recordName: "pod-apex" },
+      makeEnv(state),
+    );
     expect(r.ok).toBe(false);
   });
 
-  it("rejects when a captured Dns01PublishRequest signature is replayed as a publishARecord", async () => {
-    // Cross-tag replay defense: a stolen ACME-publish signature must
-    // not double as an A-record publish.
+  it("rejects malformed recordName variant", async () => {
     const state = freshState();
     state.pods[serverId] = podKey.publicKey;
-    const issuedAt = NOW;
-    const hash = sha256(new TextEncoder().encode("acme-keyauth"));
-    const claim: Dns01PublishRequest = {
-      serverId,
-      recordName: `_acme-challenge.${serverId}`,
-      recordValueHash: hash,
-      issuedAt,
-    };
-    const stolenSig = signDns01Publish(claim, podKey);
-    const body: PublishARecordBody = {
-      kind: "publishARecord",
-      serverId,
-      recordType: "A",
-      targetIp: IPV4,
-      issuedAt,
-      signatureHex: toHex(stolenSig),
-    };
-    const r = await verifyRpc(body, makeEnv(state));
+    const r = await verifyRpc(
+      { kind: "publishARecord", serverId, recordType: "A", targetIp: IPV4, recordName: "bogus" },
+      makeEnv(state),
+    );
     expect(r.ok).toBe(false);
   });
 });
