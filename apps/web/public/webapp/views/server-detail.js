@@ -43,19 +43,19 @@ export async function renderServerDetail() {
         <div class="row"><span class="label">Daemon</span><span class="value">${escapeHtml(body.daemonVersion)}</span></div>
         <div class="row"><span class="label">Uptime</span><span class="value">${escapeHtml(fmtUptime(body.uptimeMs))}</span></div>
       </div>
-      <h2 style="margin-top: 1.2rem;">Cert</h2>
+      <h2 class="mt-4">Cert</h2>
       <div class="card">
         <div class="row"><span class="label">Not after</span><span class="value">${escapeHtml(fmtDate(body.certNotAfter))}</span></div>
-        <div class="row"><span class="label">SANs</span><span class="value" style="font-size:0.8rem;">${escapeHtml((body.certSans ?? []).join(", ") || "—")}</span></div>
+        <div class="row"><span class="label">SANs</span><span class="value text-xs">${escapeHtml((body.certSans ?? []).join(", ") || "—")}</span></div>
       </div>
-      <h2 style="margin-top: 1.2rem;">Counters</h2>
+      <h2 class="mt-4">Counters</h2>
       <div class="card">
         <div class="row"><span class="label">Apps installed</span><span class="value">${body.appCount}</span></div>
         <div class="row"><span class="label">Paired sessions</span><span class="value">${body.pairedSessionCount}</span></div>
       </div>
-      <h2 style="margin-top: 1.2rem;">Auto-unlock</h2>
+      <h2 class="mt-4">Auto-unlock</h2>
       <div class="card" id="auto-unlock-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <p style="margin:0 0 0.5rem; color:var(--fg-mute); font-size:0.85rem;">
+        <p class="note">
           Off by default — every reboot waits for you. Turn on a long-lived
           lease to let this server reboot freely (power blips, kernel
           updates) for up to a week. If you go offline longer than the
@@ -65,10 +65,10 @@ export async function renderServerDetail() {
           <span class="label">Status</span>
           <span class="pill" id="auto-unlock-pill">checking…</span>
         </div>
-        <div id="auto-unlock-leases-list" style="margin-top:0.4rem;"></div>
-        <button id="auto-unlock-enable" style="margin-top:0.6rem; width:100%;">Enable for 7 days</button>
+        <div id="auto-unlock-leases-list" class="mt-1"></div>
+        <button id="auto-unlock-enable" class="full-width mt-2">Enable for 7 days</button>
       </div>
-      <h2 style="margin-top: 1.2rem;">Recent install events</h2>
+      <h2 class="mt-4">Recent install events</h2>
       ${(body.recentInstallEvents ?? []).length === 0
         ? '<div class="card placeholder">none</div>'
         : (body.recentInstallEvents ?? []).map((e) => `
@@ -83,7 +83,7 @@ export async function renderServerDetail() {
     wireAutoUnlock(body.serverFqdn);
   } catch (e) {
     if (e instanceof ScreensError) {
-      root.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
       throw e;
     }
@@ -134,12 +134,12 @@ async function refreshLeases(serverFqdn) {
   }
   pill.textContent = "on";
   list.innerHTML = longLived.map((l) => `
-    <div class="row" style="margin-top:0.4rem; align-items:center;">
-      <span class="value" style="font-size:0.78rem;">
+    <div class="row mt-1">
+      <span class="value text-xs">
         ${escapeHtml(l.leaseId.slice(0, 12))}…
         · until ${escapeHtml(fmtDate(l.expiresAt))}
       </span>
-      <button class="secondary" data-action="revoke-lease" data-lease-id="${escapeHtml(l.leaseId)}" style="font-size:0.75rem; padding:0.3rem 0.6rem;">Revoke</button>
+      <button class="secondary btn-xs" data-action="revoke-lease" data-lease-id="${escapeHtml(l.leaseId)}">Revoke</button>
     </div>
   `).join("");
   list.querySelectorAll('[data-action="revoke-lease"]').forEach((btn) => {

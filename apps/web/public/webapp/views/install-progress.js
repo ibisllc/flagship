@@ -50,9 +50,9 @@ function render() {
   root.innerHTML = seenEvents.map((e) => {
     const cls = e.kind === "failed" ? "err" : e.kind === "ready" ? "ok" : "";
     const detail = e.kind === "failed" && e.reason
-      ? `<div style="color:var(--err); font-size:0.78rem;">${escapeHtml(e.reason)}</div>`
+      ? `<div class="err-detail">${escapeHtml(e.reason)}</div>`
       : e.kind === "ready" && e.serverFqdn
-      ? `<div class="value" style="font-size:0.78rem;">${escapeHtml(e.serverFqdn)}</div>`
+      ? `<div class="value text-xs">${escapeHtml(e.serverFqdn)}</div>`
       : "";
     return `
       <div class="card">
@@ -92,7 +92,7 @@ async function poll() {
     }
   } catch (e) {
     if (e instanceof ScreensError) {
-      $("install-progress-content").innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      $("install-progress-content").innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
       clearPoll();
       return;
     }

@@ -34,17 +34,17 @@ export async function renderUnlockApprovals() {
     }
     root.innerHTML = body.pending.map((p) => `
       <div class="card">
-        <div style="font-weight:600;">${escapeHtml(p.serverFqdn)}</div>
-        <div class="value" style="font-size:0.78rem; margin-top:0.2rem;">${escapeHtml(p.requestId)}</div>
-        <div style="color:var(--fg-mute); font-size:0.78rem;">
+        <div class="weight-600">${escapeHtml(p.serverFqdn)}</div>
+        <div class="value text-xs mt-1">${escapeHtml(p.requestId)}</div>
+        <div class="faint-sm">
           requested ${escapeHtml(new Date(p.requestedAt).toLocaleString())}
           ${p.ip ? `· from ${escapeHtml(p.ip)}` : ""}
         </div>
-        ${p.userAgent ? `<div style="color:var(--fg-mute); font-size:0.78rem;">${escapeHtml(p.userAgent)}</div>` : ""}
+        ${p.userAgent ? `<div class="faint-sm">${escapeHtml(p.userAgent)}</div>` : ""}
         <button data-action="approve"
                 data-server-fqdn="${escapeHtml(p.serverFqdn)}"
                 data-request-id="${escapeHtml(p.requestId)}"
-                style="margin-top:0.5rem; width:100%;">Approve</button>
+                class="full-width mt-2">Approve</button>
       </div>
     `).join("");
     root.querySelectorAll('[data-action="approve"]').forEach((b) => {
@@ -56,7 +56,7 @@ export async function renderUnlockApprovals() {
     });
   } catch (e) {
     if (e instanceof ScreensError) {
-      root.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
       throw e;
     }

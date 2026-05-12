@@ -45,12 +45,12 @@ export async function renderProviders() {
     const cta = document.createElement("div");
     cta.className = "card";
     cta.innerHTML = `
-      <div style="font-weight: 600;">Flagship free credits</div>
-      <div style="color: var(--fg-mute); font-size: 0.85rem; margin-top: 0.25rem;">
+      <div class="weight-600">Flagship free credits</div>
+      <div class="note mt-2">
         500k tokens / 100k per day on our hosted coding model. Verify a phone number to claim once.
         Once issued, the key lives on this device — flagshipserver.com cannot read your prompts.
       </div>
-      <button id="promo-claim-go" style="margin-top: 0.7rem; width: 100%;">Get free credits</button>
+      <button id="promo-claim-go" class="full-width mt-3">Get free credits</button>
     `;
     list.appendChild(cta);
   }
@@ -58,18 +58,16 @@ export async function renderProviders() {
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
     const card = document.createElement("div");
-    card.className = "card";
-    card.style.borderLeft = `3px solid ${isActive ? "var(--accent)" : "transparent"}`;
-    card.style.marginTop = "0.6rem";
+    card.className = `card mt-2 provider-entry${isActive ? " is-active" : ""}`;
     const promoBadge = isPromoEntry(e) ? '<span class="pill ok">free credits</span>' : "";
     card.innerHTML = `
-      <div class="row" style="align-items: flex-start;">
+      <div class="row row-top">
         <div>
-          <div style="font-weight: 600;">${escapeHtml(e.label)} ${promoBadge} <span class="pill">${escapeHtml(e.provider)}</span></div>
-          <div class="value" style="font-size: 0.78rem; margin-top: 0.25rem;">${escapeHtml(maskKey(e.apiKey))}</div>
-          ${e.defaultModel ? `<div style="color: var(--fg-mute); font-size: 0.78rem;">default: ${escapeHtml(e.defaultModel)}</div>` : ""}
+          <div class="weight-600">${escapeHtml(e.label)} ${promoBadge} <span class="pill">${escapeHtml(e.provider)}</span></div>
+          <div class="value text-xs mt-1">${escapeHtml(maskKey(e.apiKey))}</div>
+          ${e.defaultModel ? `<div class="faint-sm">default: ${escapeHtml(e.defaultModel)}</div>` : ""}
         </div>
-        <div style="display:flex; gap: 0.4rem;">
+        <div class="btn-row-sm">
           <button class="${isActive ? "" : "secondary"}" data-action="set-active" data-id="${escapeHtml(e.id)}">${isActive ? "active" : "use"}</button>
           <button class="secondary" data-action="remove" data-id="${escapeHtml(e.id)}">remove</button>
         </div>

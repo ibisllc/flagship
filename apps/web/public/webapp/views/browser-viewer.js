@@ -43,8 +43,8 @@ async function renderTabs() {
       <div class="card">
         <div class="row">
           <div>
-            <div style="font-weight:600;">${escapeHtml(t.title || t.tabId)}</div>
-            ${t.currentUrl ? `<div class="value" style="font-size:0.78rem;">${escapeHtml(t.currentUrl)}</div>` : ""}
+            <div class="weight-600">${escapeHtml(t.title || t.tabId)}</div>
+            ${t.currentUrl ? `<div class="value text-xs">${escapeHtml(t.currentUrl)}</div>` : ""}
           </div>
           <button data-action="open" data-tab-id="${escapeHtml(t.tabId)}">Stream</button>
         </div>
@@ -55,7 +55,7 @@ async function renderTabs() {
     });
   } catch (e) {
     if (e instanceof ScreensError) {
-      root.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
       throw e;
     }

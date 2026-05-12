@@ -547,6 +547,7 @@ section:not(.hidden) {
 .text-sm  { font-size: 13px; }
 .text-xs  { font-size: 12px; }
 .weight-600 { font-weight: 600; }
+.mt-1 { margin-top: var(--space-1); }
 .mt-2 { margin-top: var(--space-2); }
 .mt-3 { margin-top: var(--space-3); }
 .mt-4 { margin-top: var(--space-4); }
@@ -624,6 +625,54 @@ section:not(.hidden) {
   margin-top: var(--space-3);
 }
 .row-gap-3 > * { flex: 1; }
+
+/* Bolder card title (used in app-detail header). */
+.card-title { font-weight: 600; font-size: 17px; }
+
+/* Inline checkbox-and-label row. */
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+}
+
+/* JSON manifest dump inside a card. */
+.json-block {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* Provider entry — active entry gets a left-edge accent strip. */
+.provider-entry { border-left: 3px solid transparent; }
+.provider-entry.is-active { border-left-color: var(--accent); }
+
+/* Tighter button-row used inside list-card actions. */
+.btn-row-sm { display: flex; gap: var(--space-1); }
+
+/* Extra-small button (revoke-lease, tab actions). */
+.btn-xs {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+/* Compact card (file rows, etc.) with tighter padding. */
+.card-compact { padding: 8px 12px; }
+
+/* File-summary row used inside <details> in the vibe-code view. */
+.file-summary { cursor: pointer; font-weight: 600; }
+.file-summary-meta { color: var(--ink-muted); font-weight: 400; }
+.file-body {
+  margin: var(--space-1) 0 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* Install-progress per-event error detail. */
+.err-detail { color: var(--err); font-size: 12px; }
 
 /* Slim progress bar (tier-status dispatcher relay). */
 .progress-track {

@@ -191,10 +191,10 @@ function renderSession(body) {
     filesRoot.innerHTML = '<div class="card placeholder">files appear here as the LLM emits them…</div>';
   } else {
     filesRoot.innerHTML = paths.map((p) => `
-      <div class="card" style="padding: 0.4rem 0.7rem;">
+      <div class="card card-compact">
         <details>
-          <summary style="cursor: pointer; font-weight: 600;">${escapeHtml(p)} <span style="color:var(--fg-mute); font-weight: 400;">(${files[p].length} chars)</span></summary>
-          <pre style="margin: 0.4rem 0 0; white-space: pre-wrap; font-size: 0.78rem; color: var(--fg-mute);">${escapeHtml(files[p])}</pre>
+          <summary class="file-summary">${escapeHtml(p)} <span class="file-summary-meta">(${files[p].length} chars)</span></summary>
+          <pre class="file-body">${escapeHtml(files[p])}</pre>
         </details>
       </div>
     `).join("");
@@ -213,8 +213,8 @@ function renderSession(body) {
   if (body.deployedUrl) {
     resultBox.innerHTML = `
       <div class="card">
-        <div style="font-weight:600;">deployed ✓</div>
-        <div class="value" style="font-size:0.85rem; margin-top:0.2rem;">
+        <div class="weight-600">deployed ✓</div>
+        <div class="value text-sm mt-1">
           <a href="${escapeHtml(body.deployedUrl)}" target="_blank" rel="noopener">${escapeHtml(body.deployedUrl)}</a>
         </div>
       </div>
@@ -222,7 +222,7 @@ function renderSession(body) {
     resultBox.classList.remove("hidden");
   } else if (body.errorReason) {
     resultBox.innerHTML = `
-      <div class="card"><p style="margin:0; color:var(--err);">${escapeHtml(body.errorReason)}</p></div>
+      <div class="card"><p class="err-text">${escapeHtml(body.errorReason)}</p></div>
     `;
     resultBox.classList.remove("hidden");
   } else {

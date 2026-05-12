@@ -70,13 +70,13 @@ function renderFields() {
   const shape = ORDER_SHAPES[kind];
   const root = $("od-fields");
   if (!shape || shape.fields.length === 0) {
-    root.innerHTML = '<p style="margin:0; color:var(--fg-mute); font-size:0.82rem;">no extra fields</p>';
+    root.innerHTML = '<p class="note">no extra fields</p>';
     return;
   }
   root.innerHTML = shape.fields.map((f) => `
-    <label style="display:block; font-size:0.78rem; color:var(--fg-mute); text-transform:uppercase; margin-top:0.5rem;">${escapeHtml(f.name)}</label>
+    <label>${escapeHtml(f.name)}</label>
     ${f.type === "bool"
-      ? `<select id="od-${escapeHtml(f.name)}" style="width:100%; padding: 0.5rem; background: var(--bg); color: var(--fg); border: 1px solid #ffffff20; border-radius: 8px; font: inherit;">
+      ? `<select id="od-${escapeHtml(f.name)}">
           <option value="false">false</option>
           <option value="true">true</option>
         </select>`
@@ -151,12 +151,12 @@ async function sendOrder() {
         kind: fullRequest.type,
       }),
     });
-    resultEl.innerHTML = `<pre style="margin:0; white-space: pre-wrap; font-size: 0.78rem;">${escapeHtml(JSON.stringify(r, null, 2))}</pre>`;
+    resultEl.innerHTML = `<pre class="json-block">${escapeHtml(JSON.stringify(r, null, 2))}</pre>`;
   } catch (e) {
     if (e instanceof ScreensError) {
-      resultEl.innerHTML = `<p style="margin:0; color: var(--err);">${escapeHtml(e.message)}</p>`;
+      resultEl.innerHTML = `<p class="err-text">${escapeHtml(e.message)}</p>`;
     } else {
-      resultEl.innerHTML = `<p style="margin:0; color: var(--err);">${escapeHtml(String(e))}</p>`;
+      resultEl.innerHTML = `<p class="err-text">${escapeHtml(String(e))}</p>`;
     }
   }
 }
