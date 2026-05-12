@@ -1,6 +1,7 @@
 import SwiftUI
 import FlagshipCore
 import FlagshipAPI
+import Flagship
 
 public struct ActivityTab: View {
     @Environment(\.screensClient) private var client
@@ -43,6 +44,8 @@ public struct ActivityTab: View {
 struct UnlockApprovalsContainer: View {
     @Environment(\.screensClient) private var client
     @State private var state: LoadingState<[PendingUnlockApproval]> = .idle
+    @State private var inFlightRequestId: String?
+    @State private var statusBanner: String?
 
     var body: some View {
         ScrollView {
@@ -57,14 +60,17 @@ struct UnlockApprovalsContainer: View {
                         FSCard { Text("No pending approvals.") }
                     } else {
                         ForEach(approvals, id: \.requestId) { r in
-                            FSCard {
-                                VStack(alignment: .leading) {
-                                    Text(r.serverFqdn).font(FS.font.mono())
-                                    if let ip = r.ip { Text("from \(ip)").font(FS.font.caption()) }
-                                    FSPrimaryButton("Approve", block: true) {}
-                                }
-                            }
+                            ApprovalCard(
+                                approval: r,
+                                isInFlight: inFlightRequestId == r.requestId,
+                                onApprove: { await approve(r) }
+                            )
                         }
+                    }
+                }
+                if let statusBanner {
+                    FSCard {
+                        Text(statusBanner).font(FS.font.bodySm())
                     }
                 }
             }
@@ -72,13 +78,75 @@ struct UnlockApprovalsContainer: View {
         }
         .navigationTitle("Approvals")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            state = .loading
-            do {
-                let r = try await client.unlockApprovalsPending()
-                state = .loaded(r.pending)
-            } catch {
-                state = .failed(error.localizedDescription)
+        .task { await reload() }
+    }
+
+    private func reload() async {
+        state = .loading
+        do {
+            let r = try await client.unlockApprovalsPending()
+            state = .loaded(r.pending)
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Sign the BootApproval canonical bytes with the BAK derived from
+    /// the phone-held UMK, then ship the envelope through the
+    /// approveUnlock endpoint. On success the request disappears from
+    /// the list on the next reload.
+    private func approve(_ r: PendingUnlockApproval) async {
+        inFlightRequestId = r.requestId
+        defer { inFlightRequestId = nil }
+        do {
+            let bak = try await Keystore.deriveBAK(
+                serverId: r.serverFqdn,
+                reason: "Authorize unlock of \(r.serverFqdn)"
+            )
+            let claim = BootApproval(
+                requestId: r.requestId,
+                serverFqdn: r.serverFqdn,
+                requestedAt: r.requestedAt,
+                approvedAt: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+            let signed = try claim.sign(with: bak)
+            try await client.approveUnlock(
+                requestId: r.requestId,
+                body: UnlockApprovalApproveRequest(
+                    signature: signed.signatureHex,
+                    envelope: signed.envelopeBase64
+                )
+            )
+            statusBanner = "Unlock approved for \(r.serverFqdn)."
+            await reload()
+        } catch {
+            statusBanner = "Approval failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+private struct ApprovalCard: View {
+    @Environment(\.colorScheme) private var scheme
+    let approval: PendingUnlockApproval
+    let isInFlight: Bool
+    let onApprove: () async -> Void
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text(approval.serverFqdn).font(FS.font.mono()).foregroundColor(c.text)
+                if let ip = approval.ip {
+                    Text("from \(ip)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+                FSPrimaryButton(
+                    isInFlight ? "Signing…" : "Approve with Face ID",
+                    enabled: !isInFlight,
+                    block: true,
+                    large: true
+                ) {
+                    Task { await onApprove() }
+                }
             }
         }
     }
