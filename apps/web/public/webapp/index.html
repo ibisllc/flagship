@@ -621,6 +621,20 @@
             reloaded = true;
             window.location.reload();
           });
+          // #29 — deep-link push notifications. SW posts { type: "DEEP_LINK",
+          // target: "/?view=..." } when a notification click hits an already-
+          // open tab. We don't have a single SPA router for the whole webapp;
+          // honor it by setting location.href, which the existing
+          // ?view= query handler in app.js picks up at boot.
+          navigator.serviceWorker.addEventListener("message", (ev) => {
+            const data = ev.data;
+            if (!data || data.type !== "DEEP_LINK" || typeof data.target !== "string") return;
+            try {
+              const url = new URL(data.target, window.location.origin);
+              if (url.origin !== window.location.origin) return; // never honor cross-origin
+              window.location.href = url.pathname + url.search + url.hash;
+            } catch (_e) { /* malformed deep-link */ }
+          });
         })().catch(() => { /* SW registration is best-effort */ });
       }
     </script>

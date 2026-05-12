@@ -260,6 +260,12 @@ self.addEventListener("push", (event) => {
   const body = serverFqdn
     ? `${serverFqdn} is asking to boot — tap to review.`
     : "A server is asking to boot — tap to review.";
+  // #29 — pre-compute the deep-link so the click handler can navigate
+  // straight to the unlock-approvals view (or whichever surface the
+  // push targets) without bouncing through the home screen.
+  const deepLink = serverFqdn
+    ? `/?view=unlock-approvals&serverFqdn=${encodeURIComponent(serverFqdn)}`
+    : "/?view=unlock-approvals";
   event.waitUntil(
     self.registration.showNotification("Flagship", {
       body,
@@ -267,13 +273,26 @@ self.addEventListener("push", (event) => {
       renotify: true,
       requireInteraction: false,
       icon: "/icon.svg",
-      data: { kind: "unlock-request", serverFqdn },
+      data: { kind: "unlock-request", serverFqdn, deepLink },
     }),
   );
 });
 
+// #29 — deep-link push notifications. The push handler attaches a
+// `deepLink` field to notification.data when the payload knows where
+// the click should land (e.g. unlock-approvals view + a specific
+// serverId). On notificationclick we:
+//   - Focus an existing webapp tab if one is open AND navigate it to
+//     the deep-link via a postMessage the page listens for.
+//   - Otherwise open `/?view=<view>&...` directly so the SPA router
+//     picks up the slot.
+//
+// If no deepLink is set, the existing behavior holds: focus or open
+// the root.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const data = event.notification.data;
+  const deepLink = data && typeof data.deepLink === "string" ? data.deepLink : null;
   event.waitUntil(
     (async () => {
       const all = await self.clients.matchAll({
@@ -283,9 +302,17 @@ self.addEventListener("notificationclick", (event) => {
       const same = all.find((c) => new URL(c.url).origin === self.location.origin);
       if (same) {
         await same.focus();
+        if (deepLink) {
+          try {
+            same.postMessage({ type: "DEEP_LINK", target: deepLink });
+          } catch (_e) {
+            /* postMessage may fail across origins; swallow */
+          }
+        }
         return;
       }
-      await self.clients.openWindow("/");
+      const target = deepLink ? new URL(deepLink, self.location.origin).toString() : "/";
+      await self.clients.openWindow(target);
     })(),
   );
 });
