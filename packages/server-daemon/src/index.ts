@@ -835,6 +835,19 @@ export {
 } from "./labelBook.js";
 export type { LabelBook, LabelEntry } from "./labelBook.js";
 export {
+  buildAccessModeHandler,
+  canonicalAccessMode,
+  denialResponse,
+  evaluateAccess,
+  InMemoryAccessModeStore,
+  signAccessMode,
+} from "./appAccessGate.js";
+export type {
+  AccessGateDecision,
+  AccessGateDeps,
+  AccessModeStore,
+} from "./appAccessGate.js";
+export {
   resolveServicesEndpoints,
   parseServicesEndpoints,
   defaultEndpointsCachePath,
