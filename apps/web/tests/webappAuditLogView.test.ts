@@ -87,6 +87,14 @@ describe("webapp /views/audit-log.js — Activity-tab audit log (task #34)", () 
     expect(r.body).toMatch(/audit log not yet available/);
   });
 
+  it("exports kindFamily + KNOWN_EVENT_KINDS for shell deep-links + tests", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/audit-log.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("export function kindFamily");
+    expect(r.body).toContain("export const KNOWN_EVENT_KINDS");
+  });
+
   it("style.css declares the audit-envelope-pre primitive", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/style.css" });

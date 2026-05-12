@@ -78,6 +78,26 @@ const KIND_FILTERS = [
   { value: "recovery", label: "Recovery" },
 ];
 
+/**
+ * Map a fine-grained kind like "lease.consume" onto its top-level
+ * family ("lease"). Useful for tests, future filter chips, and the
+ * shell's deep-link router. Exported so the shell can drive a
+ * `?view=view-audit-log&kind=lease` filter without duplicating the
+ * family list.
+ */
+export function kindFamily(kind) {
+  if (typeof kind !== "string") return "";
+  const dot = kind.indexOf(".");
+  return dot < 0 ? kind : kind.slice(0, dot);
+}
+
+/**
+ * Public list of every event family the view knows how to display.
+ * Tests assert against this so the spec's coverage list stays in
+ * lockstep with what we actually render.
+ */
+export const KNOWN_EVENT_KINDS = Object.freeze(Object.keys(KIND_LABELS));
+
 function fmtDate(unixMs) {
   if (typeof unixMs !== "number") return "—";
   return new Date(unixMs).toLocaleString();
