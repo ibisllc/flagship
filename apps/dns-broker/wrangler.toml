@@ -1,0 +1,45 @@
+name = "flagship-dns-broker"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# This Worker holds a Cloudflare API token with Zone:DNS:Edit on
+# flagship.services. Cloudflare's permission groups do NOT allow
+# per-record-type scoping, so the token is unavoidably broad: this Worker
+# is the entire security perimeter for that capability.
+#
+# Posture:
+#   * No D1 binding. No R2 binding. No assets. Single POST /rpc endpoint.
+#   * No CORS — only the main flagshipserver.com Worker calls in, via
+#     server-to-server fetch().
+#   * Token is held as a Worker secret (wrangler secret put). It is never
+#     returned in any response body and never logged.
+#   * Every RPC is gated by a signature (daemon identity, IRK, or
+#     AppGrant) that the broker verifies BEFORE talking to CF.
+#   * For publishARecord, the target IP is pinned to one of the env-var
+#     anycast IPs — arbitrary IPs are rejected.
+#   * Per-IP in-memory rate limit on /rpc.
+#
+# Secrets (wrangler secret put):
+#   CLOUDFLARE_DNS_API_TOKEN   API token with Zone:DNS:Edit on flagship.services
+#
+# Public env (this file):
+#   MAIN_WORKER_URL            base URL used to fetch the public
+#                              /api/server/by-domain/<serverId> and
+#                              /api/users/<username>/pubkey-cert from .com
+#                              (independent verification — the broker does
+#                              not trust whoever called it)
+#   CLOUDFLARE_SERVICES_ZONE_ID  zone id of flagship.services
+#   FLAGSHIP_APEX              "flagship.services" — apex this broker manages
+#   SERVICES_PASSTHROUGH_IPV4  allowlisted A target
+#   SERVICES_PASSTHROUGH_IPV6  allowlisted AAAA target
+#   RPC_REPLAY_WINDOW_MS       max age (ms) for signed RPC envelopes; default 300000
+
+[vars]
+MAIN_WORKER_URL = "https://flagshipserver.com"
+CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
+FLAGSHIP_APEX = "flagship.services"
+SERVICES_PASSTHROUGH_IPV4 = "149.248.216.86"
+SERVICES_PASSTHROUGH_IPV6 = "2a09:8280:1::110:d2b6:0"
+RPC_REPLAY_WINDOW_MS = "300000"
