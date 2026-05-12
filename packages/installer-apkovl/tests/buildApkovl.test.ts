@@ -90,6 +90,7 @@ describe("buildApkovl", () => {
     // step catches it — but we'd rather catch the regression here in
     // the unit suite where the failure mode is obvious.
     const inputs = {
+      mtime: 1700000000,
       files: [
         { name: "etc/local.d/01-a.start", content: new Uint8Array([0x01, 0x02, 0x03]), mode: 0o755 },
         { name: "usr/local/bin/helper", content: new Uint8Array(64).fill(0xab), mode: 0o755 },
@@ -104,5 +105,66 @@ describe("buildApkovl", () => {
         throw new Error(`apkovl bytes diverge at offset ${i}: ${a[i]} vs ${b[i]}`);
       }
     }
+  });
+
+  it("respects an explicit mtime (no Date.now() leakage into the tar mtime field)", () => {
+    // Regression: prior code used Math.floor(Date.now() / 1000) for the
+    // tar mtime field. Two builds in the same wall-second produced the
+    // same bytes, but a build before and after a second boundary did
+    // not — silently breaking the GHA "build twice and compare" check.
+    const inputs = {
+      files: [
+        { name: "etc/local.d/01-mtime.start", content: new Uint8Array([0x42]), mode: 0o755 },
+      ],
+    };
+    const a = buildApkovl({ ...inputs, mtime: 1700000000 });
+    const b = buildApkovl({ ...inputs, mtime: 1700000000 });
+    const c = buildApkovl({ ...inputs, mtime: 1800000000 });
+
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(c);
+
+    const tarA = new Uint8Array(gunzipSync(a));
+    const entryA = untar(tarA)[0]!;
+    // tar mtime field is at offset 136 length 12 (octal). Decode and
+    // confirm it matches what we passed in, not Date.now().
+    const mtimeStr = decodeOctal(tarA.subarray(0, 512), 136, 12);
+    expect(parseInt(mtimeStr, 8)).toBe(1700000000);
+    void entryA; // suppress lint
+  });
+
+  it("falls back to SOURCE_DATE_EPOCH when no explicit mtime is given", () => {
+    const prior = process.env.SOURCE_DATE_EPOCH;
+    try {
+      process.env.SOURCE_DATE_EPOCH = "1700000000";
+      const a = buildApkovl({
+        files: [{ name: "x", content: new Uint8Array([0x01]), mode: 0o644 }],
+      });
+      process.env.SOURCE_DATE_EPOCH = "1800000000";
+      const b = buildApkovl({
+        files: [{ name: "x", content: new Uint8Array([0x01]), mode: 0o644 }],
+      });
+      expect(a).not.toEqual(b);
+    } finally {
+      if (prior === undefined) delete process.env.SOURCE_DATE_EPOCH;
+      else process.env.SOURCE_DATE_EPOCH = prior;
+    }
+  });
+
+  it("buildFlagshipApkovl threads mtime through to the tar header", () => {
+    const a = buildFlagshipApkovl(
+      { bootstrap: "#!/bin/sh\n", trailerProbe: "p\n", trailerValidate: "v\n" },
+      { mtime: 1700000000 },
+    );
+    const b = buildFlagshipApkovl(
+      { bootstrap: "#!/bin/sh\n", trailerProbe: "p\n", trailerValidate: "v\n" },
+      { mtime: 1700000000 },
+    );
+    const c = buildFlagshipApkovl(
+      { bootstrap: "#!/bin/sh\n", trailerProbe: "p\n", trailerValidate: "v\n" },
+      { mtime: 1800000000 },
+    );
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(c);
   });
 });

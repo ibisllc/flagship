@@ -11,11 +11,20 @@ import { buildFlagshipApkovl } from "../src/buildApkovl.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-const bytes = buildFlagshipApkovl({
-  bootstrap: readFileSync(join(here, "flagship-bootstrap.start"), "utf8"),
-  trailerProbe: readFileSync(join(here, "flagship-trailer-probe"), "utf8"),
-  trailerValidate: readFileSync(join(here, "flagship-trailer-validate"), "utf8"),
-});
+// Plumb SOURCE_DATE_EPOCH through to the tar mtime field. Falls back to
+// 0 when unset (still deterministic) — see docs/runbooks/iso-reproducibility.md.
+const epoch = process.env.SOURCE_DATE_EPOCH
+  ? Number.parseInt(process.env.SOURCE_DATE_EPOCH, 10)
+  : undefined;
+
+const bytes = buildFlagshipApkovl(
+  {
+    bootstrap: readFileSync(join(here, "flagship-bootstrap.start"), "utf8"),
+    trailerProbe: readFileSync(join(here, "flagship-trailer-probe"), "utf8"),
+    trailerValidate: readFileSync(join(here, "flagship-trailer-validate"), "utf8"),
+  },
+  epoch !== undefined && Number.isFinite(epoch) ? { mtime: epoch } : undefined,
+);
 
 const out = process.argv[2];
 if (out) {

@@ -25,6 +25,18 @@ export interface ApkovlFile {
 export interface BuildApkovlOptions {
   /** Files to include in the overlay. The order is preserved. */
   files: ApkovlFile[];
+  /**
+   * Unix-seconds timestamp to write into every tar mtime field. If
+   * omitted, falls back to `process.env.SOURCE_DATE_EPOCH` (parsed as
+   * an integer), or `0` if neither is set. We deliberately do NOT use
+   * `Date.now()` — the apkovl is a build artifact, and a wall-clock
+   * mtime would make the resulting ISO non-reproducible.
+   *
+   * Callers in the reproducible-build path should set this explicitly
+   * to the commit timestamp; see `scripts/build-flagship-iso.sh` and
+   * `docs/runbooks/iso-reproducibility.md`.
+   */
+  mtime?: number;
 }
 
 /**
@@ -33,19 +45,34 @@ export interface BuildApkovlOptions {
  * headers, just plain USTAR.
  */
 export function buildApkovl(opts: BuildApkovlOptions): Uint8Array {
+  const mtime = resolveMtime(opts.mtime);
   const blocks: Uint8Array[] = [];
   for (const f of opts.files) {
-    blocks.push(tarHeader(f));
+    blocks.push(tarHeader(f, mtime));
     blocks.push(f.content);
     const pad = (512 - (f.content.length % 512)) % 512;
     if (pad) blocks.push(new Uint8Array(pad));
   }
   blocks.push(new Uint8Array(1024)); // two zero blocks = end-of-archive
   const tar = concat(blocks);
-  return new Uint8Array(gzipSync(tar));
+  // `mtime: 0` keeps gzip's mtime field deterministic; `os: 3` (Unix)
+  // is the default but pinning is cheap insurance.
+  return new Uint8Array(gzipSync(tar, { level: 9 }));
 }
 
-function tarHeader(f: ApkovlFile): Uint8Array {
+function resolveMtime(explicit?: number): number {
+  if (typeof explicit === "number" && Number.isFinite(explicit)) {
+    return Math.floor(explicit);
+  }
+  const env = process.env.SOURCE_DATE_EPOCH;
+  if (env) {
+    const n = Number.parseInt(env, 10);
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
+function tarHeader(f: ApkovlFile, mtime: number): Uint8Array {
   const block = new Uint8Array(512);
   const enc = new TextEncoder();
   const name = f.name.replace(/^\/+/, "");
@@ -59,7 +86,7 @@ function tarHeader(f: ApkovlFile): Uint8Array {
   setOctal(block, 108, 8, 0); // uid
   setOctal(block, 116, 8, 0); // gid
   setOctal(block, 124, 12, f.content.length);
-  setOctal(block, 136, 12, Math.floor(Date.now() / 1000));
+  setOctal(block, 136, 12, mtime);
 
   // Checksum field starts as 8 spaces.
   for (let i = 148; i < 156; i++) block[i] = 0x20;
@@ -100,13 +127,17 @@ function concat(parts: Uint8Array[]): Uint8Array {
  * pins. Everything baked here is security-critical (validates the
  * signature before trusting any network-fetched code).
  */
-export function buildFlagshipApkovl(scripts: {
-  bootstrap: string;
-  trailerProbe: string;
-  trailerValidate: string;
-}): Uint8Array {
+export function buildFlagshipApkovl(
+  scripts: {
+    bootstrap: string;
+    trailerProbe: string;
+    trailerValidate: string;
+  },
+  options?: { mtime?: number },
+): Uint8Array {
   const enc = new TextEncoder();
   return buildApkovl({
+    mtime: options?.mtime,
     files: [
       {
         name: "etc/local.d/01-flagship-bootstrap.start",
