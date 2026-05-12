@@ -228,6 +228,54 @@ describe("POST /api/auth-code/:serial/revoke", () => {
     expect(JSON.parse(lookup.body).status).toBe("revoked");
   });
 
+  it("returns 403 for unknown serial (no 404 — closes existence oracle)", async () => {
+    const app = buildServer({ surface: "com" });
+    await claimHarry(app);
+    const revocation: AuthCodeRevocation = {
+      serial: "01NEVERISSUED0001",
+      username: "harry",
+      issuedAt: Date.now(),
+    };
+    const sig = signAuthCodeRevocation(revocation, harryIrk);
+    const r = await app.inject({
+      method: "POST",
+      url: `/api/auth-code/${revocation.serial}/revoke`,
+      payload: {
+        request: revocation,
+        signature: bytesToHex(sig),
+      },
+    });
+    expect(r.statusCode).toBe(403);
+    expect(JSON.parse(r.body).error).toBe("authentication failed");
+  });
+
+  it("returns 403 for unknown username (uniform body — closes enumeration oracle)", async () => {
+    const app = buildServer({ surface: "com" });
+    await claimHarry(app);
+    const { code, signature } = buildSignedCode();
+    await app.inject({
+      method: "POST",
+      url: "/api/auth-code/issue",
+      payload: { ...asJson(code), signature: bytesToHex(signature) },
+    });
+    const revocation: AuthCodeRevocation = {
+      serial: code.serial,
+      username: "no-such-user",
+      issuedAt: Date.now(),
+    };
+    const sig = signAuthCodeRevocation(revocation, harryIrk);
+    const r = await app.inject({
+      method: "POST",
+      url: `/api/auth-code/${code.serial}/revoke`,
+      payload: {
+        request: revocation,
+        signature: bytesToHex(sig),
+      },
+    });
+    expect(r.statusCode).toBe(403);
+    expect(JSON.parse(r.body).error).toBe("authentication failed");
+  });
+
   it("rejects revocation from a different user's IRK", async () => {
     const app = buildServer({ surface: "com" });
     await claimHarry(app);

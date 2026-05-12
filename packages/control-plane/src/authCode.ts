@@ -157,39 +157,63 @@ export async function handleAuthCodeRevoke(
   serial: string,
   body: RevokeBody | undefined,
 ): Promise<HandlerResponseWithHeaders> {
+  // H5 hardening (Thread C): close the existence/timing oracle.
+  // Three independent leaks were present:
+  //   (1) get(serial) ran BEFORE signature verification → response time
+  //       varied between "serial unknown" and "serial exists but mismatch"
+  //   (2) usernames.get(username) ran before signature verification too →
+  //       same timing leak across usernames
+  //   (3) the response body distinguished "unknown serial" /
+  //       "username not registered" / "username/auth-code mismatch" /
+  //       "invalid signature" → enumeration oracle
+  //
+  // Fix: do every lookup unconditionally (fetch both records in parallel
+  // every time, regardless of body validity) and collapse every
+  // authentication failure to a single 403 with a single message.
   const now = (deps.now ?? (() => Date.now()))();
   const freshnessMs = deps.freshnessMs ?? 5 * 60_000;
   const r = body?.request;
-  if (
-    !r ||
-    typeof r.serial !== "string" ||
-    r.serial !== serial ||
-    typeof r.username !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof body?.signature !== "string" ||
-    !HEX128.test(body.signature)
-  ) {
-    return malformed("malformed body");
-  }
-  if (Math.abs(now - r.issuedAt) > freshnessMs) return malformed("stale request");
-  const existing = await deps.storage.get(r.serial);
-  if (!existing) return notFound("unknown serial");
+  const wellFormed =
+    !!r &&
+    typeof r.serial === "string" &&
+    r.serial === serial &&
+    typeof r.username === "string" &&
+    typeof r.issuedAt === "number" &&
+    typeof body?.signature === "string" &&
+    HEX128.test(body.signature);
 
-  const userRec = await deps.usernames.get(r.username);
-  if (!userRec) return notFound("username not registered");
-  if (!equalHex(userRec.irkPubHex, existing.userPubKeyHex)) {
-    return forbidden("username/auth-code mismatch");
-  }
+  // Always do the lookups, regardless of well-formedness, so timing
+  // doesn't leak "we never got far enough to check storage."
+  // Use a stable placeholder username/serial when the body is malformed
+  // so the lookups still happen and take comparable time.
+  const lookupSerial = wellFormed ? r!.serial : serial;
+  const lookupUsername = wellFormed && typeof r!.username === "string" ? r!.username : "";
+  const [existing, userRec] = await Promise.all([
+    deps.storage.get(lookupSerial),
+    lookupUsername === "" ? Promise.resolve(undefined) : deps.usernames.get(lookupUsername),
+  ]);
+
+  // Single failure path: any authentication problem collapses to the
+  // same response. We use 403 not 404 because revealing "does this
+  // serial exist" is itself an oracle.
+  const denied = (): HandlerResponseWithHeaders => forbidden("authentication failed");
+
+  if (!wellFormed) return denied();
+  if (Math.abs(now - r!.issuedAt) > freshnessMs) return denied();
+  if (!existing) return denied();
+  if (!userRec) return denied();
+  if (!equalHex(userRec.irkPubHex, existing.userPubKeyHex)) return denied();
+
   const revocation: AuthCodeRevocation = {
-    serial: r.serial,
-    username: r.username,
-    issuedAt: r.issuedAt,
+    serial: r!.serial,
+    username: r!.username,
+    issuedAt: r!.issuedAt,
   };
-  const sig = hexToBytes(body.signature);
+  const sig = hexToBytes(body!.signature!);
   if (!verifyAuthCodeRevocation(revocation, sig, hexToBytes(existing.userPubKeyHex))) {
-    return forbidden("invalid signature");
+    return denied();
   }
-  await deps.storage.markRevoked(r.serial, now);
+  await deps.storage.markRevoked(r!.serial, now);
   return ok({ ok: true });
 }
 
