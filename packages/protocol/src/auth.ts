@@ -2169,3 +2169,187 @@ export function verifyTunnelHelloV2(
     return false;
   }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// AppGrant — the unified envelope replacing RootEntitlement +
+// AppEntitlement + ClaimUrlCapability.
+//
+// One grant covers all four authorization concerns for a single app:
+//   - WHO authorized: the user, via IRK signature
+//   - WHO may run: one or more pod identities (failover/sibling group)
+//   - WHAT they may run: an app, identified by appName@authorStableId
+//   - WHERE they may serve from: a list of serverDomains + routes
+//   - HOW LONG: issuedAt → expiresAt (7 days by convention)
+//
+// Renewal is a fresh AppGrant with a new grantId, distributed to
+// siblings via the sibling-WS routine sync. Individual revocation by
+// grantId is supported via the revocation list (see #88).
+//
+// Discrimination from older entitlements:
+//   - 7-day TTL (vs 90-day AppEntitlement) → phone-loss blast radius
+//     bounded to one week
+//   - per-app rather than per-pod-listing-many-apps → multi-pod
+//     failover is natural
+//   - explicit allowedPodIdentities → cross-pod cert escalation closed
+//     at the AppGrant verification layer
+// ──────────────────────────────────────────────────────────────────────
+
+export type AppGrantRouteScope = "canonical" | "non-canonical" | "subpath";
+
+export interface AppGrantRoute {
+  /** Lower-case FQDN (and optional path prefix for "subpath" scope). */
+  url: string;
+  scope: AppGrantRouteScope;
+}
+
+export interface AppGrant {
+  /** Fresh v4 UUID; consumers reject duplicates within the active window. */
+  grantId: string;
+  /** Username at issuance time. Renames produce new grants under the new name. */
+  username: string;
+  /**
+   * App canonical name in the form `appName@authorStableId` where
+   * authorStableId is a 12-char SHA-256 prefix of the author's IRK pubkey.
+   * Stable across author renames.
+   */
+  appCanonical: string;
+  /** Optional discriminator for multi-instance installs of the same app. */
+  appInstanceId?: string;
+  /** Pod canonical FQDNs covered by this grant (sorted at canonicalization). */
+  serverDomains: string[];
+  /** Pod identity pubkeys authorized to serve (sorted at canonicalization). */
+  serverIdentities: Bytes[];
+  /** Explicit list of URLs (canonical + non-canonical + subpath) covered. */
+  routes: AppGrantRoute[];
+  /** ms since epoch. */
+  issuedAt: number;
+  /** ms since epoch; SHOULD be issuedAt + 7*24*3600*1000 by convention. */
+  expiresAt: number;
+}
+
+const TAG_APP_GRANT = "flagship/app-grant/v1";
+
+/**
+ * Validate that no string field in an AppGrant contains the
+ * canonical-bytes separator '|' or any control byte (H1 hardening).
+ * Throws on violation.
+ */
+function validateAppGrantFields(g: AppGrant): void {
+  const fields: Array<[string, string]> = [
+    ["grantId", g.grantId],
+    ["username", g.username],
+    ["appCanonical", g.appCanonical],
+  ];
+  if (g.appInstanceId) fields.push(["appInstanceId", g.appInstanceId]);
+  for (const d of g.serverDomains) fields.push(["serverDomain", d]);
+  for (const r of g.routes) fields.push([`route(${r.scope})`, r.url]);
+  for (const [name, value] of fields) {
+    for (let i = 0; i < value.length; i++) {
+      const c = value.charCodeAt(i);
+      if (c === 0x7c) throw new Error(`AppGrant field "${name}" contains separator '|'`);
+      if (c <= 0x1f || c === 0x7f) {
+        throw new Error(
+          `AppGrant field "${name}" contains control char 0x${c.toString(16)} at index ${i}`,
+        );
+      }
+    }
+  }
+  if (g.expiresAt <= g.issuedAt) {
+    throw new Error("AppGrant: expiresAt must be strictly after issuedAt");
+  }
+  if (g.serverIdentities.length === 0) {
+    throw new Error("AppGrant: serverIdentities must have at least one entry");
+  }
+  if (g.routes.length === 0) {
+    throw new Error("AppGrant: routes must have at least one entry");
+  }
+}
+
+function canonicalAppGrant(g: AppGrant): Bytes {
+  validateAppGrantFields(g);
+  const domains = [...g.serverDomains].map((d) => d.toLowerCase()).sort().join(",");
+  const identities = [...g.serverIdentities].map((b) => hex(b)).sort().join(",");
+  const routes = [...g.routes]
+    .map((r) => `${r.scope}:${r.url.toLowerCase()}`)
+    .sort()
+    .join(",");
+  return new TextEncoder().encode(
+    [
+      TAG_APP_GRANT,
+      g.grantId,
+      g.username,
+      g.appCanonical,
+      g.appInstanceId ?? "",
+      domains,
+      identities,
+      routes,
+      g.issuedAt,
+      g.expiresAt,
+    ].join("|"),
+  );
+}
+
+export function signAppGrant(g: AppGrant, irk: Keypair): Bytes {
+  return ed.sign(canonicalAppGrant(g), irk.privateKey);
+}
+
+export function verifyAppGrant(g: AppGrant, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalAppGrant(g), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stable identifier for an AppGrant — SHA-256 hex of its canonical
+ * bytes. Used as the lookup key in revocation lists and the cert-sync
+ * inventory.
+ */
+export async function appGrantId(g: AppGrant): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", canonicalAppGrant(g));
+  return hex(new Uint8Array(digest));
+}
+
+/**
+ * Check whether a specific pod identity is authorized under this grant.
+ * The verifier MUST also confirm the grant's signature, that it is not
+ * revoked, and that the current time is within [issuedAt, expiresAt).
+ */
+export function appGrantAuthorizesPod(g: AppGrant, podPubKey: Bytes): boolean {
+  const target = hex(podPubKey);
+  for (const id of g.serverIdentities) {
+    if (hex(id) === target) return true;
+  }
+  return false;
+}
+
+/**
+ * Check whether a URL is in the grant's routes list.
+ * Comparison is case-insensitive on the host portion.
+ */
+export function appGrantAuthorizesUrl(g: AppGrant, url: string): boolean {
+  const target = url.toLowerCase();
+  for (const r of g.routes) {
+    if (r.url.toLowerCase() === target) return true;
+    if (r.scope === "subpath" && target.startsWith(r.url.toLowerCase() + "/")) return true;
+  }
+  return false;
+}
+
+/**
+ * Check whether `now` falls inside the grant's active window. The
+ * window is half-open: [issuedAt, expiresAt).
+ */
+export function appGrantActiveAt(g: AppGrant, now: number): boolean {
+  return now >= g.issuedAt && now < g.expiresAt;
+}
+
+/**
+ * Derive the author stable ID (12-char SHA-256 prefix) from an IRK
+ * pubkey. The author identifier is what survives username renames.
+ */
+export async function authorStableId(authorIrkPub: Bytes): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", authorIrkPub);
+  return hex(new Uint8Array(digest).slice(0, 6)); // 6 bytes = 12 hex chars
+}
