@@ -210,11 +210,17 @@ function attachTunnel(
         ws.close(auth.closeCode, "auth failed");
         return;
       }
-      // Build the canonical list from the validated entitlements.
+      // Build the canonical list from the validated entitlements +
+      // the validated AppGrants' route hosts (#6). The hub's SNI
+      // allowlist is the UNION of every authorized source. We use the
+      // VALIDATED grants (auth.validatedGrants) rather than the
+      // raw helloOk.appGrants so an unverified grant can never
+      // contribute a host to the allowlist.
       const canonicals: string[] = [helloOk.rootEntitlement.podCanonical];
       if (helloOk.appEntitlement) {
         for (const c of helloOk.appEntitlement.canonicals) canonicals.push(c);
       }
+      for (const host of appGrantHosts(auth.validatedGrants)) canonicals.push(host);
       const tunnel: RegisteredTunnel = {
         podCanonical: helloOk.rootEntitlement.podCanonical.toLowerCase(),
         send,
@@ -263,6 +269,7 @@ function attachTunnel(
       if (helloOk.appEntitlement) {
         for (const c of helloOk.appEntitlement.canonicals) canonicals.push(c);
       }
+      for (const host of appGrantHosts(auth.validatedGrants)) canonicals.push(host);
       const reg = registry.register({ tunnel: registered, canonicals });
       lastHelloIssuedAt = helloOk.issuedAt;
       send(helloAckFrame(true));
@@ -711,6 +718,27 @@ function broadcastSnapshot(registry: TunnelRegistry, key: import("./allocator.js
       try { t.send(f); } catch { /* swallow */ }
     }
   }
+}
+
+/**
+ * Extract the unique host portion of every route URL across a set of
+ * validated AppGrants. `subpath`-scoped routes encode their path after
+ * the first '/', which we strip for SNI-allowlist purposes (TLS doesn't
+ * see paths). Callers MUST pass only grants that have been verified by
+ * `authenticateHello` — this function performs no validation of its own.
+ *
+ * Exported only for the `__internal__` test surface below.
+ */
+export function appGrantHosts(grants: AppGrant[]): string[] {
+  const hosts = new Set<string>();
+  for (const g of grants) {
+    for (const route of g.routes) {
+      const slash = route.url.indexOf("/");
+      const host = (slash === -1 ? route.url : route.url.slice(0, slash)).toLowerCase();
+      if (host.length > 0) hosts.add(host);
+    }
+  }
+  return Array.from(hosts);
 }
 
 function extractMiddleLabel(serverId: string): string | null {
