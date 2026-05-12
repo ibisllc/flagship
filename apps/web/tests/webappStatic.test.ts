@@ -395,6 +395,19 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain('from "./icons.js"');
   });
 
+  it("/webapp/index.html exposes the toast as a live region (#46)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/" });
+    expect(r.statusCode).toBe(200);
+    // Sanity: the toast container exists at all.
+    expect(r.body).toMatch(/<div[^>]+id="toast"[^>]*>/);
+    // Both attributes must be present so screen-readers actually
+    // announce toast updates (aria-live polite + role=status).
+    // Regex tolerates the two possible attribute orderings.
+    expect(r.body).toMatch(/id="toast"[^>]*role="status"|role="status"[^>]*id="toast"/);
+    expect(r.body).toMatch(/id="toast"[^>]*aria-live="polite"|aria-live="polite"[^>]*id="toast"/);
+  });
+
   it("never accidentally serves /webapp resources from the root scope", async () => {
     const app = buildServer();
     // Confirm the marketing root is NOT a manifest
