@@ -12,8 +12,8 @@
     <style>
       .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
       .scope-grid .col { padding: 1rem 1.1rem; border-radius: var(--radius); border: 1px solid var(--line); }
-      .scope-grid .col.in { background: #4ad29508; border-color: var(--accent); }
-      .scope-grid .col.out { background: #d34a4a08; border-color: var(--err); opacity: 0.8; }
+      .scope-grid .col.in { background: var(--ok-soft); border-color: var(--accent); }
+      .scope-grid .col.out { background: var(--err-soft); border-color: var(--err); opacity: 0.8; }
       .scope-grid h3 { margin-top: 0; }
       .scope-grid ul { margin: 0; padding-left: 1.2rem; }
       .scope-grid li { margin: 0.3rem 0; }
@@ -105,7 +105,7 @@
           </tr>
         </tbody>
       </table>
-      <p style="color: var(--fg-mute); font-size: 0.9rem;">
+      <p style="color: var(--ink-muted); font-size: 0.9rem;">
         Final amount depends on impact, exploitability, the quality of the
         report, and whether you provided a working PoC. We reserve the right
         to award above the listed range for exceptional reports. Payouts are
@@ -165,7 +165,7 @@
       </ul>
 
       <h2>Hall of fame</h2>
-      <p style="color: var(--fg-mute);">
+      <p style="color: var(--ink-muted);">
         No reports yet — be first. Once we accept a report, your name (or
         handle) goes here with a link of your choice.
       </p>
