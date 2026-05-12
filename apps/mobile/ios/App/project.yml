@@ -6,6 +6,12 @@ options:
   developmentLanguage: en
   createIntermediateGroups: true
   generateEmptyDirectories: true
+  groupSortPosition: top
+
+# Register flagship:// URL scheme so external taps and notification
+# payloads can deep-link into specific in-app destinations.
+fileGroups:
+  - .
 
 packages:
   FlagshipPkg:
@@ -31,6 +37,17 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_NSCameraUsageDescription: "Flagship uses the camera to scan a pairing QR shown by your server."
+    info:
+      path: Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.flagship.deeplink
+            CFBundleURLSchemes: [flagship]
+        UIBackgroundModes: [remote-notification]
+    entitlements:
+      path: FlagshipApp.entitlements
+      properties:
+        aps-environment: development
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
