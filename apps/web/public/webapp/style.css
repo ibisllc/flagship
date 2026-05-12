@@ -10,7 +10,35 @@
  * many of them by selector. Add styles; don't remove existing markup.
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap");
+/* Webapp uses the same self-hosted fonts as the marketing surface (#38). */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/Geist-Variable.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/InstrumentSerif-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/InstrumentSerif-Italic.woff2") format("woff2");
+}
 
 :root {
   /* Webapp defaults to ink surface (paired dark) regardless of system
