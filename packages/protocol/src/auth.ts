@@ -402,19 +402,57 @@ function canonicalRevoke(r: ServerRevocation): Bytes {
   );
 }
 
+/**
+ * #12 — per-field separator-rejection helper retrofitted into the
+ * legacy canonical-bytes functions below. Rejects '|' and control
+ * characters (0x00-0x1F, 0x7F) at sign-time AND verify-time, so any
+ * envelope whose user-controlled field contains the canonical-bytes
+ * separator is refused before it can canonicalize ambiguously.
+ *
+ * Exported so external callers (rare) can spot-check field shape
+ * before constructing an envelope. Verifiers call this implicitly
+ * via the legacy canonicals — a tampered envelope whose canonical
+ * bytes differ from the signed bytes simply fails Ed25519 verify.
+ */
+export function legacyFieldGuard(name: string, value: string): void {
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c === 0x7c) {
+      throw new Error(
+        `canonical-bytes field "${name}" contains separator '|' at index ${i}`,
+      );
+    }
+    if (c <= 0x1f || c === 0x7f) {
+      throw new Error(
+        `canonical-bytes field "${name}" contains control char 0x${c.toString(
+          16,
+        )} at index ${i}`,
+      );
+    }
+  }
+}
+
 function canonicalMembership(m: MembershipMutation): Bytes {
+  legacyFieldGuard("appId", m.appId);
+  legacyFieldGuard("role", m.role ?? "REMOVE");
   return new TextEncoder().encode(
     `${TAG_MEMBERSHIP}|${m.appId}|${hex(m.targetIrkPub)}|${m.role ?? "REMOVE"}|${m.issuedAt}`,
   );
 }
 
 function canonicalMigration(m: MigrationRequest): Bytes {
+  legacyFieldGuard("appId", m.appId);
+  legacyFieldGuard("fromUser", m.fromUser);
+  legacyFieldGuard("toUser", m.toUser);
+  legacyFieldGuard("mode", m.mode);
   return new TextEncoder().encode(
     `${TAG_MIGRATION}|${m.appId}|${m.fromUser}|${m.toUser}|${m.mode}|${m.withData ? "1" : "0"}|${m.issuedAt}`,
   );
 }
 
 function canonicalInvite(t: InviteToken): Bytes {
+  legacyFieldGuard("appId", t.appId);
+  legacyFieldGuard("role", t.role);
   return new TextEncoder().encode(
     `${TAG_INVITE}|${t.appId}|${t.role}|${hex(t.nonce)}|${t.issuedAt}|${t.expiresAt}`,
   );
@@ -427,6 +465,8 @@ function canonicalInviteAcceptance(a: InviteAcceptance): Bytes {
 }
 
 function canonicalTunnelHello(h: TunnelHello): Bytes {
+  legacyFieldGuard("serverId", h.serverId);
+  for (const d of h.controlledDomains) legacyFieldGuard("controlledDomain", d);
   // Sort the FQDN list so signing is independent of array ordering.
   const list = [...h.controlledDomains].sort().join(",");
   return new TextEncoder().encode(
@@ -435,12 +475,16 @@ function canonicalTunnelHello(h: TunnelHello): Bytes {
 }
 
 function canonicalRegisterServer(r: RegisterServer): Bytes {
+  legacyFieldGuard("userId", r.userId);
+  legacyFieldGuard("serverId", r.serverId);
   return new TextEncoder().encode(
     `${TAG_REGISTER_SERVER}|${r.userId}|${r.serverId}|${hex(r.stkPub)}|${r.issuedAt}`,
   );
 }
 
 function canonicalAccountRecovery(r: AccountRecovery): Bytes {
+  legacyFieldGuard("userId", r.userId);
+  legacyFieldGuard("platform", r.platform);
   return new TextEncoder().encode(
     `${TAG_ACCOUNT_RECOVERY}|${r.userId}|${hex(r.newPushTokenHash)}|${r.platform}|${r.issuedAt}`,
   );
@@ -517,6 +561,7 @@ function canonicalDns01Delete(r: Dns01DeleteRequest): Bytes {
 }
 
 function canonicalClaimUsername(c: ClaimUsername): Bytes {
+  legacyFieldGuard("username", c.username);
   return new TextEncoder().encode(
     [TAG_CLAIM_USERNAME, c.username, hex(c.irkPub), c.issuedAt].join("|"),
   );
@@ -942,12 +987,15 @@ export function verifyUserPubKeyBinding(
 }
 
 function canonicalRegisterRck(r: RegisterRck): Bytes {
+  legacyFieldGuard("username", r.username);
+  legacyFieldGuard("subdomain", r.subdomain);
   return new TextEncoder().encode(
     [TAG_RCK_REGISTER, r.username, r.subdomain, hex(r.rckPubKey), r.issuedAt].join("|"),
   );
 }
 
 function canonicalSetRoutingTarget(r: SetRoutingTarget): Bytes {
+  legacyFieldGuard("subdomain", r.subdomain);
   return new TextEncoder().encode(
     [
       TAG_RCK_SET_TARGET,
