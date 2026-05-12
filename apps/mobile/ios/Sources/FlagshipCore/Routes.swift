@@ -6,10 +6,6 @@ import Foundation
 public enum HomeRoute: Hashable, Sendable {
     case serverDetail(podId: String)
     case addServer
-    case podPair
-    case createServer
-    case pairedSessions
-    case tierStatus
 }
 
 public enum AppsRoute: Hashable, Sendable {
@@ -30,10 +26,7 @@ public enum SettingsRoute: Hashable, Sendable {
     case providers
     case recovery
     case about
-    case addServer
-    case podPair
-    case createServer
-    case serverDetail(podId: String)
+    case addControlDevice
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad

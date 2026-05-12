@@ -30,7 +30,6 @@ public struct ActivityTab: View {
                 ActivityScreen(
                     state: vm.state,
                     onApproveUnlock: { _ in path.append(.unlockApprovals) },
-                    onRevokeSession: { _ in },
                     onRefresh: { await vm.load() }
                 )
             } else {

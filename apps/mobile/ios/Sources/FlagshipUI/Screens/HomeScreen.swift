@@ -278,22 +278,30 @@ public struct PodCard: View {
                         .foregroundColor(c.primary)
                 }
                 .frame(width: 40, height: 40)
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: FS.space.s2) {
-                        Text(pod.name).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                        Text(pod.name)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    }
+                    HStack(spacing: FS.space.s2) {
                         FSPill(statusLabel, kind: statusKind)
                         if isLeader { LeaderBadge() }
+                        Spacer(minLength: 0)
                     }
                     if let desc = pod.description, !desc.isEmpty {
                         Text(desc)
                             .font(FS.font.bodySm())
                             .foregroundColor(c.textMuted)
-                            .lineLimit(1)
+                            .lineLimit(2)
                             .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Spacer()
-                Image(systemName: "chevron.right").foregroundColor(c.textMuted)
             }
         }
     }

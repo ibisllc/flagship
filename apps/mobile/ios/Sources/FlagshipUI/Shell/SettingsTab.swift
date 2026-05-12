@@ -27,12 +27,10 @@ public struct SettingsTab: View {
             if let vm {
                 SettingsScreen(
                     username: app.currentUser ?? "",
-                    pods: app.pods,
-                    leaderPodId: app.leaderPodId,
                     tier: vm.tier,
-                    onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
-                    onAddServer: { path.append(.addServer) },
-                    onSetLeader: { pod in app.setLeader(pod.podId) },
+                    controlDevices: vm.controlDevices,
+                    onAddControlDevice: { path.append(.addControlDevice) },
+                    onRevokeDevice: { session in Task { await vm.revoke(session) } },
                     onSignOut: { app.signOut() },
                     onOpenProviders: { path.append(.providers) },
                     onOpenRecovery: { path.append(.recovery) },
@@ -58,46 +56,8 @@ public struct SettingsTab: View {
             RecoveryStub()
         case .about:
             AboutStub()
-        case .addServer:
-            AddServerChooserScreen(
-                mode: .inApp,
-                onProvision: { path.append(.createServer) },
-                onPair:      { path.append(.podPair) }
-            )
-        case .podPair:
-            PodPairScreen(
-                onSubmit: { _, name, description in
-                    let user = app.currentUser ?? "you"
-                    let pod = PodInfo(
-                        podId: "paired-\(UUID().uuidString.prefix(6).lowercased())",
-                        name: name,
-                        description: description.isEmpty ? nil : description,
-                        fqdn: "\(SlugUtil.slugify(name)).\(user).flagship.services",
-                        status: .online
-                    )
-                    app.addPod(pod)
-                    path.removeAll()
-                },
-                onCancel: { path.removeLast() }
-            )
-        case .createServer:
-            CreateServerStubScreen(
-                username: app.currentUser ?? "",
-                onDemoComplete: { name, description in
-                    let user = app.currentUser ?? "you"
-                    let pod = PodInfo(
-                        podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
-                        name: name,
-                        description: description.isEmpty ? nil : description,
-                        fqdn: "\(SlugUtil.slugify(name)).\(user).flagship.services",
-                        status: .online
-                    )
-                    app.addPod(pod)
-                    path.removeAll()
-                }
-            )
-        case .serverDetail(let podId):
-            ServerDetailContainer(podId: podId)
+        case .addControlDevice:
+            AddControlDeviceScreen()
         }
     }
 }

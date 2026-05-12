@@ -16,6 +16,7 @@ public final class ServerMetricsViewModel {
         self.client = client
     }
 
+
     public func load() async {
         state = .loading
         do {

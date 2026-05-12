@@ -7,18 +7,15 @@ public struct ActivityScreen: View {
     @Environment(\.colorScheme) private var scheme
     let state: LoadingState<ActivityFeed>
     var onApproveUnlock: (String) -> Void = { _ in }
-    var onRevokeSession: (String) -> Void = { _ in }
     var onRefresh: () async -> Void = {}
 
     public init(
         state: LoadingState<ActivityFeed>,
         onApproveUnlock: @escaping (String) -> Void = { _ in },
-        onRevokeSession: @escaping (String) -> Void = { _ in },
         onRefresh: @escaping () async -> Void = {}
     ) {
         self.state = state
         self.onApproveUnlock = onApproveUnlock
-        self.onRevokeSession = onRevokeSession
         self.onRefresh = onRefresh
     }
 
@@ -65,13 +62,6 @@ public struct ActivityScreen: View {
                             }
                         }
                     }
-                    section("DEVICES", c: c) {
-                        VStack(spacing: FS.space.s3) {
-                            ForEach(feed.pairedSessions, id: \.tokenPrefix) { s in
-                                sessionRow(s: s, c: c)
-                            }
-                        }
-                    }
                 }
                 Spacer().frame(height: FS.space.s12)
             }
@@ -110,29 +100,6 @@ public struct ActivityScreen: View {
             }
             Spacer()
             Text(relative(ms: event.at)).font(FS.font.caption()).foregroundColor(c.textMuted)
-        }
-    }
-
-    private func sessionRow(s: PairedSessionSummary, c: FSColors) -> some View {
-        FSCard {
-            HStack {
-                Image(systemName: s.current ? "iphone.gen3" : "laptopcomputer")
-                    .foregroundColor(s.current ? c.success : c.textMuted)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.label).foregroundColor(c.text)
-                    Text("paired \(relative(ms: s.addedAt))")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                }
-                Spacer()
-                if s.current {
-                    FSPill("This device", kind: .online)
-                } else {
-                    Button("Revoke") { onRevokeSession(s.tokenPrefix) }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(c.danger)
-                }
-            }
         }
     }
 

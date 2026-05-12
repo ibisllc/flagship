@@ -54,29 +54,10 @@ public struct HomeTab: View {
         case .serverDetail(let podId):
             ServerDetailContainer(podId: podId)
         case .addServer:
-            AddServerChooserScreen(
-                mode: .inApp,
-                onProvision: { path.append(.createServer) },
-                onPair:      { path.append(.podPair) }
-            )
-        case .podPair:
-            PodPairScreen(
-                onSubmit: { _, name, description in
-                    let user = app.currentUser ?? "you"
-                    let slug = SlugUtil.slugify(name)
-                    let pod = PodInfo(
-                        podId: "paired-\(UUID().uuidString.prefix(6).lowercased())",
-                        name: name,
-                        description: description.isEmpty ? nil : description,
-                        fqdn: "\(slug).\(user).flagship.services",
-                        status: .online
-                    )
-                    app.addPod(pod)
-                    path.removeAll()
-                },
-                onCancel: { path.removeLast() }
-            )
-        case .createServer:
+            // In-app add-server only ever means "provision a new box."
+            // Pairing an existing server is an onboarding-only path
+            // (this app on a fresh phone joining an account that
+            // already has servers running elsewhere).
             CreateServerStubScreen(
                 username: app.currentUser ?? "",
                 onDemoComplete: { name, description in
@@ -93,10 +74,6 @@ public struct HomeTab: View {
                     path.removeAll()
                 }
             )
-        case .pairedSessions:
-            PairedSessionsContainer()
-        case .tierStatus:
-            TierStatusContainer()
         }
     }
 }
@@ -130,11 +107,19 @@ struct ServerDetailContainer: View {
         }
         .navigationTitle("Server")
         .navigationBarTitleDisplayMode(.inline)
+        // `.task` cancels the closure automatically on view removal —
+        // which catches the case where `.onDisappear` doesn't fire
+        // reliably during navigation churn on iPad.
         .task {
             if detailVm == nil { detailVm = HomeViewModel(client: client) }
             if metricsVm == nil { metricsVm = ServerMetricsViewModel(podId: podId, client: client) }
             await detailVm?.load()
             metricsVm?.startPolling(every: 15)
+            // Park the task here so polling stops when the view goes
+            // away. Without this `.task` would return immediately and
+            // the polling-task ref would only get cancelled via the
+            // less-reliable .onDisappear.
+            for await _ in AsyncStream<Never> { _ in } { }
         }
         .onDisappear { metricsVm?.stopPolling() }
     }
