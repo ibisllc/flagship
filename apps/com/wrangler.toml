@@ -51,6 +51,24 @@ run_worker_first = ["/*"]
 binding = "ISO_BUCKET"
 bucket_name = "flagship-iso"
 
+# D1 → R2 backup destination. Separate bucket from flagship-iso so a
+# blast-radius event on user-facing ISO serving doesn't compromise the
+# backup tail. Provision once via:
+#   npx wrangler r2 bucket create flagship-backups
+# Hourly snapshots are pruned by the scheduled handler after 30 days;
+# monthly snapshots are kept indefinitely. If you'd rather enforce the
+# 30-day window with a bucket-level lifecycle rule, point the rule at
+# the `d1/hourly/` prefix only — never `d1/monthly/`.
+[[r2_buckets]]
+binding = "BACKUPS_BUCKET"
+bucket_name = "flagship-backups"
+
+# Cron triggers. Every 6h runs the scheduled() handler in src/index.ts,
+# which dumps D1 → R2 as gzipped JSONL. The first run of each calendar
+# month (UTC) also writes a monthly snapshot kept forever.
+[triggers]
+crons = ["0 */6 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state"
