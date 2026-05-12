@@ -9,7 +9,8 @@
     "apps/web",
     "apps/web/e2e",
     "apps/com",
-    "apps/dns-broker"
+    "apps/dns-broker",
+    "maintainers/packages/protocol"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

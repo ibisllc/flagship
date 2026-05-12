@@ -1,0 +1,10 @@
+{
+  "track": "release",
+  "description": "Flagship release track — 60-day cadence; 1-of-N approval (one signature from any authorized signer).",
+  "defaultMandateDuration": "60d",
+  "approvalRule": {
+    "kind": "threshold",
+    "threshold": 1,
+    "of": "anyAuthorizedSigner"
+  }
+}

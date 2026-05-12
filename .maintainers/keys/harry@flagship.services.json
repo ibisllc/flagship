@@ -1,0 +1,21 @@
+{
+  "kind": "KeyFile",
+  "version": 1,
+  "pubkey": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+  "displayName": "Harry Winner Kamdem",
+  "currentEmail": "harry@flagship.services",
+  "emailHistory": [
+    {
+      "email": "harry@flagship.services",
+      "from": "2026-05-11T00:00:00.000Z",
+      "to": null
+    }
+  ],
+  "metadata": {
+    "photo": null,
+    "github": null,
+    "role": "maintainer placeholder (deterministic test pubkey — replace with real Yubikey pubkey before public release)"
+  },
+  "introductionMandate": "8ef8724e-8666-428c-8480-1966d31e9a5c",
+  "signature": "db6bd3aa9d24f242b280de62991fcd54eada9f8bece1e512a12d15cf0d249aec0c1fee7bd4f20a85419dd9be27eb3ad02e49010fe6d647162792279979201f09"
+}

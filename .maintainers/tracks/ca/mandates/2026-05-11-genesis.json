@@ -1,0 +1,20 @@
+{
+  "kind": "Mandate",
+  "version": 1,
+  "mandateId": "d4bb165a-fc7d-41a3-b143-1e1550405b5b",
+  "track": "ca",
+  "holder": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+  "issuedAt": "2026-05-11T00:00:00.000Z",
+  "expiresAt": "2026-11-07T00:00:00.000Z",
+  "successors": [
+    "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+    "b70a7996945a98a884f70172655128624316c2dce9d4124126197058cae27fca"
+  ],
+  "signedBy": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+  "signatures": [
+    {
+      "pubkey": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+      "sig": "4922a32d65db4d4545df8a50bcf20b7588f913e4acb657e20968ff20571cda4158fb70b0668e1f266b8b68787babf6b66b5abda6dfe0faec135362475354db0c"
+    }
+  ]
+}

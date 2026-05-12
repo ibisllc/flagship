@@ -1,0 +1,20 @@
+{
+  "kind": "Mandate",
+  "version": 1,
+  "mandateId": "8ef8724e-8666-428c-8480-1966d31e9a5c",
+  "track": "release",
+  "holder": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+  "issuedAt": "2026-05-11T00:00:00.000Z",
+  "expiresAt": "2026-07-10T00:00:00.000Z",
+  "successors": [
+    "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+    "b70a7996945a98a884f70172655128624316c2dce9d4124126197058cae27fca"
+  ],
+  "signedBy": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+  "signatures": [
+    {
+      "pubkey": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
+      "sig": "7fa59f6729053579f929b7b384091a2b854f4f0e2ff2c2228f1c3ae353e7f19adf024b6e12fdb440cbf229af40bb05b845dc73e7abded1caf4d24081cc605a0b"
+    }
+  ]
+}
