@@ -18,11 +18,11 @@ export async function renderAppsList() {
     }
     root.innerHTML = body.apps.map((a) => `
       <div class="card" data-app-id="${escapeHtml(a.appId)}">
-        <div class="row" style="align-items:flex-start;">
+        <div class="row row-top">
           <div>
-            <div style="font-weight:600;">${escapeHtml(a.slug)} ${a.creator !== a.urlLabel.split("-").pop() ? "" : ""}<span class="pill">${escapeHtml(a.version || "")}</span></div>
-            <div style="color:var(--fg-mute); font-size:0.82rem;">${escapeHtml(a.summary || "")}</div>
-            <div class="value" style="font-size:0.78rem;"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.url)}</a></div>
+            <div class="weight-600">${escapeHtml(a.slug)} ${a.creator !== a.urlLabel.split("-").pop() ? "" : ""}<span class="pill">${escapeHtml(a.version || "")}</span></div>
+            <div class="muted-sm">${escapeHtml(a.summary || "")}</div>
+            <div class="value text-xs"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.url)}</a></div>
           </div>
           <button class="secondary" data-action="open" data-id="${escapeHtml(a.appId)}">open</button>
         </div>
@@ -36,7 +36,7 @@ export async function renderAppsList() {
     });
   } catch (e) {
     if (e instanceof ScreensError) {
-      root.innerHTML = `<div class="card"><p style="margin:0;color:var(--err);font-size:0.9rem;">${escapeHtml(e.message)}</p></div>`;
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
     } else {
       throw e;
     }
