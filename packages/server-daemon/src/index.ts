@@ -746,12 +746,21 @@ export { BackupLoop } from "./backupLoop.js";
 export { AppRunner } from "./appRunner.js";
 export { loadConfig, parseConfig } from "./config.js";
 export type { ServerConfig } from "./config.js";
-export { startTunnelClient } from "./tunnel/tunnelClient.js";
+export {
+  startTunnelClient,
+  superviseTunnelClient,
+  defaultWebSocketFactory,
+} from "./tunnel/tunnelClient.js";
 export type {
   TunnelClient,
   TunnelClientOptions,
   BackendTarget,
   BackendResolver,
+  SupervisedTunnelClient,
+  SupervisorOptions,
+  SuperviseTunnelClientOptions,
+  TunnelWebSocketLike,
+  WebSocketFactory,
 } from "./tunnel/tunnelClient.js";
 export { MembershipStore, InviteStore, AppMembership } from "./membership.js";
 export type {

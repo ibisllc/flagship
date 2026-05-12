@@ -16,7 +16,10 @@ import {
 import { LetsEncryptIssuer, type LeEnvironment } from "./acme/letsEncryptIssuer.js";
 import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
-import { startTunnelClient, type TunnelClient } from "./tunnel/tunnelClient.js";
+import {
+  superviseTunnelClient,
+  type SupervisedTunnelClient,
+} from "./tunnel/tunnelClient.js";
 import { buildOrdersHandler, type OrderExecutor } from "./orders.js";
 import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
@@ -98,6 +101,14 @@ export interface DaemonRuntimeOptions {
    * PhoneOrders; tests mint an in-test bundle with a fake IRK.
    */
   entitlements?: () => import("./tunnel/tunnelClient.js").EntitlementBundle | Promise<import("./tunnel/tunnelClient.js").EntitlementBundle>;
+  /**
+   * Optional supervisor overrides for the tunnel client. Production
+   * uses the defaults (30s initial jitter, 1s→60s full-jitter
+   * exponential backoff, 30s keep-alive, 3 missed pongs); tests pass
+   * `initialJitterMs: 0` + injected `setTimeoutImpl` / `wsFactory` to
+   * drive reconnect synthetically.
+   */
+  tunnelSupervisor?: import("./tunnel/tunnelClient.js").SupervisorOptions;
   /**
    * Called when a fresh ACME account key is generated. Fires AFTER
    * persistence. Useful for tests / observability.
@@ -536,7 +547,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         "Production loads from disk; tests inject a mint-on-the-fly bundle.",
     );
   }
-  const tunnel = startTunnelClient({
+  // Supervised tunnel client: reconnects on any WS close with full-jitter
+  // exponential backoff (capped at 60s), and runs a 30s ping/pong keep-
+  // alive so a half-open connection (Fly cycled the TCP without telling
+  // us) gets force-closed and reconnected within ~90s.
+  const tunnel: SupervisedTunnelClient = superviseTunnelClient({
     hubUrl: opts.tunnelHubUrl,
     signingKey: identity,
     getEntitlements: opts.entitlements,
@@ -548,6 +563,10 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       });
       opts.onDomainGranted?.(e);
     },
+    // Defaults: initialJitterMs=30s, baseReconnectMs=1s, maxReconnectMs=60s,
+    // keepAliveIntervalMs=30s, maxMissedPongs=3. Tests can override via
+    // opts.tunnelSupervisor if they need deterministic timing.
+    ...(opts.tunnelSupervisor ?? {}),
   });
   void tunnelInitialDomains;
   await tunnel.ready();
