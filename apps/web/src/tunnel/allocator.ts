@@ -95,6 +95,29 @@ interface SetEntry {
   members: Map<string, string>;
   /** shortened FQDN → podCanonical (current holder). */
   slotHolders: Map<string, string>;
+  /**
+   * Per-slot priority queue of candidates (#87).
+   *
+   * Active-passive failover model:
+   *   - Head of the list = current active receiver (the same value
+   *     stored in slotHolders).
+   *   - Tail = pods that joined later and are waiting to inherit the
+   *     slot if every pod ahead of them disconnects.
+   *   - When the head disconnects, the next entry promotes to head
+   *     (deterministic FIFO; first to claim wins). When a previously-
+   *     disconnected head reconnects, it rejoins at the TAIL — it has
+   *     to wait its turn again. This is the safer side of the trade-
+   *     off (no flap on a pod that briefly drops) at the cost of
+   *     "longest-running pod stays active" — which was the de facto
+   *     behavior before #87 but wasn't strictly enforced.
+   *
+   * Active-active (round-robin across multiple connected pods) is
+   * deferred to v2 — see hub.activeActive flag in the design notes.
+   * The hook is the candidate queue: a future loadbalancer would
+   * iterate it on outbound SNI lookup rather than always returning
+   * head.
+   */
+  candidateQueue: Map<string, string[]>;
 }
 
 export class AppUserAllocator {
@@ -147,7 +170,12 @@ export class AppUserAllocator {
       const setKeyStr = encodeSetKey(key);
       let set = this.sets.get(setKeyStr);
       if (!set) {
-        set = { key, members: new Map(), slotHolders: new Map() };
+        set = {
+          key,
+          members: new Map(),
+          slotHolders: new Map(),
+          candidateQueue: new Map(),
+        };
         this.sets.set(setKeyStr, set);
       }
       // members[podCanonical] = the canonical that placed this pod here.
@@ -157,6 +185,13 @@ export class AppUserAllocator {
       }
       entry.setKeys.add(setKeyStr);
       affected.add(setKeyStr);
+      // Per-SNI candidate queue: the pod's own canonical IS a slot
+      // (the pod's root URL); track its entry so a future failover
+      // off the root canonical promotes the next-registered pod that
+      // happens to also serve this set. The pod-root canonical is
+      // additionally the slot the SNI router walks for direct pod
+      // URLs (no shortening).
+      enqueueCandidate(set, canonical, podCanonical);
     }
 
     // Try to allocate any free derivable shortened. The shortened may
@@ -172,13 +207,23 @@ export class AppUserAllocator {
       const setKeyStr = encodeSetKey(key);
       let set = this.sets.get(setKeyStr);
       if (!set) {
-        set = { key, members: new Map(), slotHolders: new Map() };
+        set = {
+          key,
+          members: new Map(),
+          slotHolders: new Map(),
+          candidateQueue: new Map(),
+        };
         this.sets.set(setKeyStr, set);
       }
       if (!set.members.has(podCanonical)) {
         set.members.set(podCanonical, shortened);
       }
       entry.setKeys.add(setKeyStr);
+      // Append to the slot's candidate queue. The slot's HEAD is the
+      // current holder; we only promote on holder-disconnect, so a
+      // new pod joining never preempts the head — it goes to the tail
+      // and waits.
+      enqueueCandidate(set, shortened, podCanonical);
       if (!set.slotHolders.has(shortened)) {
         set.slotHolders.set(shortened, podCanonical);
         shortenedsHeld.push(shortened);
@@ -219,11 +264,27 @@ export class AppUserAllocator {
       return { ok: false, reason: "fqdn not parseable" };
     }
     const previousHolder = set.slotHolders.get(fqdn) ?? null;
+    // Explicit transfer: move the requesting pod to the HEAD of the
+    // slot's candidate queue. This is a phone-authorized takeover and
+    // is the ONE place where the new arrival preempts the head.
+    promoteToHead(set, fqdn, podCanonical);
     set.slotHolders.set(fqdn, podCanonical);
     return { ok: true, affectedSet: key, previousHolder };
   }
 
-  /** Pod's socket died. Drop it from every set; redistribute its slots. */
+  /**
+   * Pod's socket died. Drop it from every set; redistribute its slots
+   * using the per-slot candidate queue (#87): pop the dying pod from
+   * every queue it was in, then if it was the head of any slot,
+   * promote the next entry.
+   *
+   * Atomicity: the whole operation runs synchronously within this
+   * method. A concurrent disconnect of the newly-promoted head
+   * cannot interleave — Node's single-threaded event loop guarantees
+   * the next `removePod` runs only after this one completes. The
+   * candidate-queue mutation + slotHolder reassignment are paired
+   * inside the same tick.
+   */
   removePod(podCanonical: string): RemovePodResult {
     const pc = podCanonical.toLowerCase();
     const pod = this.pods.get(pc);
@@ -236,7 +297,16 @@ export class AppUserAllocator {
       if (!set) continue;
       set.members.delete(pc);
       affected.add(setKeyStr);
-      // Redistribute every slot this pod held.
+      // Drop this pod from every per-slot candidate queue first.
+      // This is the priority-list maintenance step (#87): regardless
+      // of whether the pod was head, tail, or somewhere in between,
+      // its entry is removed so future promotions skip it.
+      for (const [slot, queue] of [...set.candidateQueue.entries()]) {
+        const next = queue.filter((p) => p !== pc);
+        if (next.length === 0) set.candidateQueue.delete(slot);
+        else set.candidateQueue.set(slot, next);
+      }
+      // Redistribute every slot this pod HELD (was head of).
       for (const [slot, holder] of [...set.slotHolders.entries()]) {
         if (holder !== pc) continue;
         const heir = this.pickHeir(set, slot);
@@ -338,12 +408,25 @@ export class AppUserAllocator {
   }
 
   /**
-   * Pick the heir for a slot whose holder just left. Currently:
-   * longest-running socket among the set's surviving members. Falls
-   * back to alphabetical pod-canonical for ties. Returns null if no
-   * surviving member exists.
+   * Pick the heir for a slot whose holder just left.
+   *
+   * Strategy (#87 — per-slot priority queue):
+   *   1. Walk the slot's candidateQueue head-to-tail. The first entry
+   *      that is still a registered, live member of the set wins.
+   *   2. If no entry survives (queue empty or every entry has since
+   *      disconnected), fall back to the legacy "longest-running
+   *      socket among set members" heir-picker so we never strand a
+   *      slot when there's still a willing pod.
    */
-  private pickHeir(set: SetEntry, _slot: string): string | null {
+  private pickHeir(set: SetEntry, slot: string): string | null {
+    const queue = set.candidateQueue.get(slot);
+    if (queue) {
+      for (const cand of queue) {
+        if (this.pods.has(cand) && set.members.has(cand)) {
+          return cand;
+        }
+      }
+    }
     let best: { canonical: string; firstRegisteredAt: number } | null = null;
     for (const memberCanonical of set.members.keys()) {
       const pod = this.pods.get(memberCanonical);
@@ -359,6 +442,33 @@ export class AppUserAllocator {
     }
     return best?.canonical ?? null;
   }
+
+  /**
+   * Snapshot of the per-slot candidate queue. Exported for tests +
+   * future status-page wiring; the wire snapshot (`snapshotByKey`)
+   * only carries the current head per slot.
+   */
+  candidatesFor(key: AppUserSetKey, slot: string): string[] {
+    const set = this.sets.get(encodeSetKey(key));
+    if (!set) return [];
+    return [...(set.candidateQueue.get(slot) ?? [])];
+  }
+}
+
+function enqueueCandidate(set: SetEntry, slot: string, pod: string): void {
+  const cur = set.candidateQueue.get(slot);
+  if (!cur) {
+    set.candidateQueue.set(slot, [pod]);
+    return;
+  }
+  if (cur.includes(pod)) return;
+  cur.push(pod);
+}
+
+function promoteToHead(set: SetEntry, slot: string, pod: string): void {
+  const cur = set.candidateQueue.get(slot) ?? [];
+  const without = cur.filter((p) => p !== pod);
+  set.candidateQueue.set(slot, [pod, ...without]);
 }
 
 // ────────────────────────────────────────────────────────────────────
