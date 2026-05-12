@@ -16,6 +16,17 @@ WORKDIR /app
 # is good-enough for a small monorepo.)
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json vitest.config.ts ./
 COPY packages packages/
+# maintainers/ is a workspace member declared in the root package.json and
+# is referenced from packages/server-daemon/tsconfig.json; `tsc -b` from
+# the repo root fails to resolve it without these source files in the
+# build context. We don't ship maintainers/ in the runtime stage (it's a
+# separate project; the runtime only needs the compiled apps/web bundle
+# plus its transitive @flagship/* deps).
+COPY maintainers maintainers/
+# services/marketplace-scanner is referenced from root tsconfig.json so
+# `tsc -b` walks into it. Same story — needed only at build time, not
+# runtime.
+COPY services services/
 COPY apps/web/package.json apps/web/tsconfig.json apps/web/
 COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/

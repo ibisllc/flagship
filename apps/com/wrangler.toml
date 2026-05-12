@@ -110,7 +110,13 @@ class_name = "BuildRelaySession"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["BuildRelaySession"]
+# Cloudflare's free plan requires SQLite-backed Durable Objects (not the
+# legacy KV-backed shape). new_sqlite_classes works on both free and paid
+# plans, so it's the right default. Switched from new_classes 2026-05-12
+# after a deploy was rejected with: "In order to use Durable Objects with
+# a free plan, you must create a namespace using a new_sqlite_classes
+# migration. [code: 10097]".
+new_sqlite_classes = ["BuildRelaySession"]
 
 [vars]
 # Fly's TLS-term endpoint (port 8443). The flagship.services apex itself
