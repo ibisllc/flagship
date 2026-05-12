@@ -142,6 +142,41 @@ describe("sansEqual", () => {
   });
 });
 
+describe("shouldReuseCert + isCertFresh — default 60-day window", () => {
+  const day = 24 * 60 * 60_000;
+  const now = 2_000_000_000_000;
+
+  it("isCertFresh uses 60d default — 90d notAfter is fresh; 30d is not", () => {
+    expect(
+      isCertFresh(
+        { certPem: "", privateKeyPem: "", names: [], notAfter: now + 90 * day, issuedAt: now },
+        undefined,
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isCertFresh(
+        { certPem: "", privateKeyPem: "", names: [], notAfter: now + 30 * day, issuedAt: now },
+        undefined,
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("shouldReuseCert uses 60d default — reuses an 80d cert, re-issues a 50d cert", () => {
+    const sans = ["home.alice.flagship.services"];
+    const cert = (notAfter: number) => ({
+      certPem: "x",
+      privateKeyPem: "y",
+      names: sans,
+      notAfter,
+      issuedAt: now - 30 * day,
+    });
+    expect(shouldReuseCert(cert(now + 80 * day), sans, undefined, now)).toBe(true);
+    expect(shouldReuseCert(cert(now + 50 * day), sans, undefined, now)).toBe(false);
+  });
+});
+
 describe("shouldReuseCert (renewal decision)", () => {
   const fqdn = "home.alice.flagship.services";
   const wildcard = `*.${fqdn}`;

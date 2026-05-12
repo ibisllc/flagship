@@ -68,10 +68,12 @@ export class CertManager implements AlpnChallengeServer {
 
   /**
    * True if the cert is missing or has less than `windowMs` left until
-   * expiry. Default window: 30 days, matching Let's Encrypt's renewal
-   * recommendation.
+   * expiry. Default window: 60 days. LE issues 90-day certs, so a
+   * 60-day-remaining gate means "renew once the cert is ~30 days old".
+   * Wide on purpose to tolerate daemons that sleep, travel, or sit
+   * behind flaky residential ISPs for weeks at a time.
    */
-  needsRenewal(windowMs = 30 * 24 * 60 * 60 * 1000, now = Date.now()): boolean {
+  needsRenewal(windowMs = 60 * 24 * 60 * 60 * 1000, now = Date.now()): boolean {
     if (!this.real) return true;
     return this.notAfterMs - now < windowMs;
   }

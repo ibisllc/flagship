@@ -61,16 +61,30 @@ describe("CertManager", () => {
     expect(m.contextFor(sni)).not.toBeNull();
   });
 
-  it("needsRenewal flips when within 30 days of expiry", () => {
+  it("needsRenewal flips when within 60 days of expiry (default window)", () => {
     const m = new CertManager();
     expect(m.needsRenewal()).toBe(true);
     const now = 1_000_000_000_000;
-    const farFuture = now + 60 * 24 * 60 * 60_000;
-    m.install({ certPem: "cert", privateKeyPem: "key" }, farFuture);
+    const day = 24 * 60 * 60_000;
+    // 70 days remaining → outside the 60-day window, no renewal needed.
+    m.install({ certPem: "cert", privateKeyPem: "key" }, now + 70 * day);
     expect(m.needsRenewal(undefined, now)).toBe(false);
-    const soon = now + 10 * 24 * 60 * 60_000;
-    m.install({ certPem: "cert", privateKeyPem: "key" }, soon);
+    // 59 days remaining → inside the window, renewal triggers.
+    m.install({ certPem: "cert", privateKeyPem: "key" }, now + 59 * day);
     expect(m.needsRenewal(undefined, now)).toBe(true);
+    // Boundary: exactly 60 days remaining is NOT in the window
+    // (`needsRenewal` uses strict <).
+    m.install({ certPem: "cert", privateKeyPem: "key" }, now + 60 * day);
+    expect(m.needsRenewal(undefined, now)).toBe(false);
+  });
+
+  it("needsRenewal honors an explicit window override (e.g. 30d for operators who prefer LE's recommendation)", () => {
+    const m = new CertManager();
+    const now = 1_000_000_000_000;
+    const day = 24 * 60 * 60_000;
+    m.install({ certPem: "cert", privateKeyPem: "key" }, now + 45 * day);
+    expect(m.needsRenewal(30 * day, now)).toBe(false);
+    expect(m.needsRenewal(60 * day, now)).toBe(true);
   });
 
   it("msUntilExpiry returns 0 with no cert and a positive value once installed", () => {

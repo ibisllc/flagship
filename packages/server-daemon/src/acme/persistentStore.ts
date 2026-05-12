@@ -118,8 +118,14 @@ async function atomicWrite(path: string, content: string): Promise<void> {
   await rename(tmp, path);
 }
 
-/** True if the cert has at least `windowMs` remaining before expiry. */
-export function isCertFresh(cert: PersistedCert, windowMs = 30 * 24 * 60 * 60 * 1000, now = Date.now()): boolean {
+/**
+ * True if the cert has at least `windowMs` remaining before expiry.
+ * Default window: 60 days. LE issues 90-day certs, so a 60-day-remaining
+ * gate means "renew once the cert is ~30 days old". Wide on purpose: a
+ * daemon offline for a couple of weeks still has weeks of margin before
+ * expiry on next boot.
+ */
+export function isCertFresh(cert: PersistedCert, windowMs = 60 * 24 * 60 * 60 * 1000, now = Date.now()): boolean {
   return cert.notAfter - now > windowMs;
 }
 
@@ -140,7 +146,7 @@ export function sansEqual(a: ReadonlyArray<string>, b: ReadonlyArray<string>): b
 export function shouldReuseCert(
   existing: PersistedCert | null,
   desiredSans: ReadonlyArray<string>,
-  windowMs = 30 * 24 * 60 * 60 * 1000,
+  windowMs = 60 * 24 * 60 * 60 * 1000,
   now = Date.now(),
 ): boolean {
   if (!existing) return false;

@@ -62,7 +62,10 @@ export interface DaemonRuntimeOptions {
    * Renewal window in ms. The runtime re-issues the cert when the live
    * one has less than this remaining. Same value gates the startup
    * "reuse-disk-cert" decision and the periodic renewal scheduler.
-   * Default: 30 days (matching Let's Encrypt's renewal recommendation).
+   * Default: 60 days. LE issues 90-day certs, so 60d-remaining means the
+   * cert is ~30 days old; the wide safety margin tolerates daemons that
+   * sleep, travel, or sit behind flaky residential ISPs for weeks at a
+   * time and still recover before expiry.
    */
   renewalWindowMs?: number;
   /**
@@ -577,21 +580,24 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // demo: a fresh LE account on every restart and no renewal continuity.
   const store: PersistentAcmeStore | null =
     opts.persistentStore ?? (opts.dataDir ? new PersistentAcmeStore(opts.dataDir) : null);
-  const renewalWindowMs = opts.renewalWindowMs ?? 30 * 24 * 60 * 60 * 1000;
+  // LE issues 90-day certs; we renew when ≤60 days remain (i.e. once the
+  // cert is ~30 days old). The wide safety margin means the daemon can be
+  // offline for weeks and still recover before expiry — important for
+  // boxes that travel, sleep, or sit behind flaky residential ISPs.
+  // Operators who specifically want LE's published 30-day-recommendation
+  // can override via `renewalWindowMs`.
+  const renewalWindowMs = opts.renewalWindowMs ?? 60 * 24 * 60 * 60 * 1000;
   const renewalCheckIntervalMs = opts.renewalCheckIntervalMs ?? 6 * 60 * 60 * 1000;
 
   // Resolve the ACME account key once: env-supplied → on-disk → fresh.
   // We need it for both initial issuance AND periodic renewal, so do it
   // up front rather than only on the issuance path.
-  let accountKeyPem = opts.accountKeyPem;
-  if (!accountKeyPem && store) {
-    accountKeyPem = (await store.loadAccountKey()) ?? undefined;
-  }
-  if (!accountKeyPem) {
-    accountKeyPem = (await acme.crypto.createPrivateKey()).toString();
-    if (store) await store.saveAccountKey(accountKeyPem);
-    opts.onAccountKeyGenerated?.(accountKeyPem);
-  }
+  const accountKeyPem = await resolveAccountKey({
+    explicitPem: opts.accountKeyPem,
+    store,
+    createPrivateKey: () => acme.crypto.createPrivateKey().then((b) => b.toString()),
+    onGenerated: opts.onAccountKeyGenerated,
+  });
 
   const dns = new RemoteDnsChallengeWriter({
     controlPlaneBaseUrl: opts.controlPlaneBaseUrl,
@@ -627,7 +633,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     });
   }
 
-  // Periodic renewal. With the default 30-day window + 6-hour cadence,
+  // Periodic renewal. With the default 60-day window + 6-hour cadence,
   // a daemon that's online any reasonable fraction of the time renews
   // with weeks to spare. setInterval timers don't keep Node alive on
   // their own once `unref`'d, so the tunnel and TLS server are still
@@ -881,6 +887,47 @@ async function issueAndInstall(deps: IssueDeps): Promise<void> {
     result.notAfter,
     deps.sans,
   );
+}
+
+/**
+ * Resolve the ACME account key:
+ *   1. Use `explicitPem` if supplied (env var / test injection).
+ *   2. Else, if a `store` is configured, load `account.pem` from disk.
+ *   3. Else, mint a fresh key, persist it (if a store is configured),
+ *      and call `onGenerated` for observability.
+ *
+ * CRITICAL: when we mint a fresh account key, `store.saveAccountKey()`
+ * MUST succeed before we return. A daemon that crashed between mint and
+ * first issuance with an unpersisted account key would burn a fresh LE
+ * account on every restart loop, ultimately tripping LE's per-IP cap
+ * and locking the box out of issuance entirely. We turn the persistence
+ * failure into a hard boot error so the operator sees it immediately
+ * rather than silently leaking accounts in the background.
+ */
+export async function resolveAccountKey(deps: {
+  explicitPem: string | undefined;
+  store: { loadAccountKey(): Promise<string | null>; saveAccountKey(pem: string): Promise<void> } | null;
+  createPrivateKey: () => Promise<string>;
+  onGenerated?: (pem: string) => void;
+}): Promise<string> {
+  if (deps.explicitPem) return deps.explicitPem;
+  if (deps.store) {
+    const loaded = await deps.store.loadAccountKey();
+    if (loaded) return loaded;
+  }
+  const fresh = await deps.createPrivateKey();
+  if (deps.store) {
+    try {
+      await deps.store.saveAccountKey(fresh);
+    } catch (e) {
+      throw new Error(
+        `[runtime] failed to persist fresh ACME account key — refusing to boot to avoid burning LE accounts on a restart loop. Underlying error: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
+  }
+  deps.onGenerated?.(fresh);
+  return fresh;
 }
 
 /**

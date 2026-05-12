@@ -74,7 +74,7 @@ export class EncryptedCertStore {
     return this.store.has(name);
   }
 
-  needsRenewal(name: string, beforeMs: number = 30 * 24 * 60 * 60 * 1000): boolean {
+  needsRenewal(name: string, beforeMs: number = 60 * 24 * 60 * 60 * 1000): boolean {
     const e = this.store.get(name);
     if (!e) return true;
     return e.notAfter - Date.now() < beforeMs;
