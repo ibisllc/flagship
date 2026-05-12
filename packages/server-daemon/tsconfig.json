@@ -9,6 +9,7 @@
   "references": [
     { "path": "../protocol" },
     { "path": "../tunnel-protocol" },
-    { "path": "../llm-providers" }
+    { "path": "../llm-providers" },
+    { "path": "../../maintainers/packages/protocol" }
   ]
 }

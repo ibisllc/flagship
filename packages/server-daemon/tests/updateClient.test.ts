@@ -388,6 +388,49 @@ describe("UpdateClient", () => {
     expect(res).toMatchObject({ kind: "error" });
     expect(restartCount).toBe(0);
   });
+
+  it("releaseGate: halts the pull when the upstream tip is not endorsed", async () => {
+    const store = new MemStore();
+    await store.put(APP_ID, {
+      canonicalUrl: "game1.alice.flagship.services",
+      lineageAnchor: firstCommit,
+      currentTip: firstCommit,
+      lastAppliedMigration: "",
+      updatePolicy: "auto",
+    });
+    const bundle = await makeBundle(upstream, `${firstCommit}..main`);
+    const client = new UpdateClient({
+      identity,
+      pullerServerId: "home.bob.flagship.services",
+      state: store,
+      appWorkingDir: () => subscriber,
+      fetch: async () =>
+        new Response(bundle, {
+          status: 200,
+          headers: { "content-type": "application/x-git-bundle" },
+        }),
+      runMigration: async () => {},
+      restartContainer: async () => {
+        restartCount++;
+      },
+      emitPhoneAlert: (a) => alerts.push(a),
+      releaseGate: {
+        assertCommitEndorsed: (commitHash) => {
+          throw new Error(`no endorsement for ${commitHash}`);
+        },
+      },
+    });
+    const res = await client.pullOne({ appId: APP_ID });
+    expect(res.kind).toBe("halted-unendorsed");
+    if (res.kind === "halted-unendorsed") {
+      expect(res.upstreamTip).toBe(secondCommit);
+      expect(res.reason).toMatch(/no endorsement/);
+    }
+    expect(restartCount).toBe(0);
+    // The working tree must not have advanced.
+    const readme = await readFile(join(subscriber, "README.md"), "utf8");
+    expect(readme).toBe("v1\n");
+  });
 });
 
 describe("FileAppPullStateStore", () => {

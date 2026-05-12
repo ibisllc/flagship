@@ -83,9 +83,28 @@ export type PhoneUpdateAlert =
       reason: string;
     };
 
+/**
+ * Gate consulted before applying any pulled commit. When supplied,
+ * `assertCommitEndorsed` MUST throw if the commit lacks a valid
+ * release endorsement. Used by Flagship's self-update path against
+ * its own `.maintainers/` folder. Leave unset for per-app pulls,
+ * which trust the canonical-creator pod by lineage anchor + identity
+ * signature (not by maintainers-protocol endorsement).
+ */
+export interface ReleaseGate {
+  assertCommitEndorsed(commitHash: string): void;
+}
+
 export interface UpdateClientDeps {
   /** This box's server identity keypair. Pulls are signed with this. */
   identity: Keypair;
+  /**
+   * Optional release gate. When set, every pulled commit is checked
+   * against the gate before the working tree is advanced. The gate is
+   * typically a thin wrapper over `releaseVerifier` for Flagship's
+   * own self-updates.
+   */
+  releaseGate?: ReleaseGate;
   /** This box's FQDN (e.g. `home.bob.flagship.services`) — sent as `pullerServerId`. */
   pullerServerId: string;
   /** Per-app on-disk pull state. */
@@ -128,6 +147,7 @@ export type PullResult =
   | { kind: "halted-lineage-break"; lineageAnchor: string; upstreamTip: string }
   | { kind: "halted-manual-pending"; from: string; to: string }
   | { kind: "halted-migration-failed"; failingFile: string; reason: string }
+  | { kind: "halted-unendorsed"; upstreamTip: string; reason: string }
   | { kind: "error"; reason: string };
 
 export class UpdateClient {
@@ -216,6 +236,24 @@ export class UpdateClient {
         return { kind: "no-op", reason: "already-current" };
       }
 
+      // Release gate: if a maintainers-protocol gate is configured, the
+      // pulled commit must carry a valid ReleaseEndorsement signed by
+      // the current release authority. Per-app pulls leave this unset
+      // (their trust roots in lineage-anchor + identity signature);
+      // Flagship's self-update wires this against the in-repo
+      // `.maintainers/` folder.
+      if (this.deps.releaseGate) {
+        try {
+          this.deps.releaseGate.assertCommitEndorsed(upstreamTip);
+        } catch (err) {
+          return {
+            kind: "halted-unendorsed",
+            upstreamTip,
+            reason: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+
       // Lineage check: is our anchor reachable from the upstream tip?
       const isAncestor = await this.isAncestor(workDir, state.lineageAnchor, upstreamTip);
       if (!isAncestor) {
@@ -270,6 +308,17 @@ export class UpdateClient {
     if (!state) return { kind: "error", reason: "no state" };
     if (!state.pendingPullCommit) return { kind: "no-op", reason: "already-current" };
     const workDir = this.deps.appWorkingDir(args.appId);
+    if (this.deps.releaseGate) {
+      try {
+        this.deps.releaseGate.assertCommitEndorsed(state.pendingPullCommit);
+      } catch (err) {
+        return {
+          kind: "halted-unendorsed",
+          upstreamTip: state.pendingPullCommit,
+          reason: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
     return await this.advanceAndMigrate({
       appId: args.appId,
       workDir,

@@ -270,3 +270,59 @@ export interface AppBackupStartResponse {
   bytes: number;
   encrypted: boolean;
 }
+
+// ---------- /api/screens/release-status --------------------------------
+//
+// Surfaces the daemon's offline-verified view of Flagship's own
+// `.maintainers/` folder (see packages/server-daemon/src/releaseVerifier.ts).
+// The webapp + phone-app render this so users can see:
+//   - which commit + semver tag the current authority has endorsed
+//   - the list of valid endorsements (chain history)
+//   - a takeover-alarm banner when the release track changed hands
+
+export interface ReleaseStatusTrackSummary {
+  track: string;
+  hasPolicy: boolean;
+  totalMandates: number;
+  validMandates: number;
+  currentHolderPubkey: string | null;
+  currentMandateExpiresAt: string | null;
+  /** First-12-chars-of-hex view, mirroring the cli's `status` UI. */
+  successorPubkeyPrefixes: string[];
+  rejectionReasons: string[];
+}
+
+export interface ReleaseStatusEndorsementSummary {
+  releaseId: string;
+  semverTag: string;
+  commitHash: string;
+  previousReleaseId: string | null;
+  previousCommitHash: string | null;
+  intermediateCount: number;
+  issuedAt: string;
+  signedByPubkey: string;
+}
+
+export interface ReleaseStatusTakeoverAlarm {
+  track: string;
+  previousMandateId: string;
+  newMandateId: string;
+  previousHolder: { displayName: string; email: string; pubkey: string };
+  newHolder: { displayName: string; email: string; pubkey: string };
+  detectedAt: string;
+}
+
+export interface ReleaseStatusResponse {
+  /** True if `.maintainers/policy.json` was readable on disk. */
+  rootPolicyPresent: boolean;
+  /** Per-track summary. Always includes release/ca/ops when present. */
+  tracks: ReleaseStatusTrackSummary[];
+  /** Most-recent VALID endorsement, or null if none exists yet. */
+  currentRelease: ReleaseStatusEndorsementSummary | null;
+  /** Full chain of valid endorsements, oldest-first. */
+  validEndorsements: ReleaseStatusEndorsementSummary[];
+  /** Endorsements rejected during verification, with reason. */
+  endorsementErrors: Array<{ releaseId: string; reason: string; detail?: string }>;
+  /** Set when the release track changed hands; null otherwise. */
+  pendingTakeoverAlarm: ReleaseStatusTakeoverAlarm | null;
+}

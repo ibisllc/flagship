@@ -35,6 +35,7 @@ import type {
   PairedSessionsListResponse,
   PendingUnlockApproval,
   RecentInstallEvent,
+  ReleaseStatusResponse,
   ServerDetailResponse,
   TierStatusResponse,
   UnlockApprovalApproveRequest,
@@ -45,6 +46,10 @@ import type {
   VibeCodeStartResponse,
   VibeCodeStatusResponse,
 } from "./types.js";
+import {
+  toReleaseStatusResponse,
+  type ReleaseStatusProvider,
+} from "../releaseStatusProvider.js";
 
 const J = { "content-type": "application/json" } as const;
 
@@ -94,6 +99,13 @@ export interface ScreensHttpDeps {
   resolveCallerToken?: (req: HttpRequest) => string | null;
   /** Test seam — clock for any timing-sensitive responses. */
   now?: () => number;
+  /**
+   * Optional offline-verified view of Flagship's own `.maintainers/`
+   * folder. Powers GET /api/screens/release-status. When unset, the
+   * endpoint reports an empty status — the daemon may have been
+   * deployed outside a git clone with `.maintainers/`.
+   */
+  releaseStatus?: ReleaseStatusProvider | null;
 }
 
 export interface VibeCodeRuntime {
@@ -443,6 +455,33 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         },
         body: JSON.stringify({ redirect: `/api/backups/${id}` }),
       };
+    }
+
+    // ---- GET /api/screens/release-status
+    //
+    // Offline-verified view of Flagship's own .maintainers/ folder.
+    // The webapp + phone-app render this so users can see who is
+    // currently authorized to ship Flagship updates, the most recent
+    // valid release endorsement, and a takeover-alarm banner when the
+    // release track changed hands.
+    if (path === "/api/screens/release-status" && method === "GET") {
+      if (!deps.releaseStatus) {
+        const empty: ReleaseStatusResponse = {
+          rootPolicyPresent: false,
+          tracks: [],
+          currentRelease: null,
+          validEndorsements: [],
+          endorsementErrors: [],
+          pendingTakeoverAlarm: null,
+        };
+        return jok(empty);
+      }
+      try {
+        const verdict = deps.releaseStatus.status();
+        return jok(toReleaseStatusResponse(verdict));
+      } catch (e) {
+        return jerr(502, `release-status failed: ${(e as Error).message}`);
+      }
     }
 
     // ---- P1.10 GET /api/screens/browser-tabs/list/:appId
