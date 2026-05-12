@@ -13,7 +13,8 @@
     "maintainers/packages/protocol"
   ],
   "scripts": {
-    "preinstall": "bash scripts/pull-maintainers.sh",
+    "preinstall": "bash scripts/pull-maintainers.sh pull",
+    "postinstall": "bash scripts/pull-maintainers.sh bundle",
     "pull-maintainers": "bash scripts/pull-maintainers.sh",
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",

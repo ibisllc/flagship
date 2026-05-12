@@ -46,9 +46,18 @@ test-results/
 # Local IDE / agent settings — personal to each contributor
 .claude/
 
-# maintainers/ is NOT vendored — it's pulled at build time from
+# /maintainers/ is NOT vendored — it's pulled at build time from
 # github.com/ibisllc/maintainers at the SHA pinned in
 # scripts/maintainers.pinned-sha. The pull is wired through
 # scripts/pull-maintainers.sh (npm preinstall + Dockerfile + CI).
-# See docs/maintainers-deployment.md for the rationale.
-maintainers/
+# See docs/maintainers-deployment.md for the rationale. The leading
+# slash anchors this to the repo root so other directories named
+# `maintainers/` (notably apps/web/public/maintainers/ for the
+# hosted UI) are NOT affected.
+/maintainers/
+
+# The maintainers web-ui bundle is emitted by pull-maintainers.sh into
+# apps/web/public/maintainers/lib/ alongside the host HTML (which IS
+# checked in). The bundle is regenerated on every build — tracking it
+# would just churn the diff.
+apps/web/public/maintainers/lib/

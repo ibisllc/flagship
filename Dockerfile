@@ -24,7 +24,10 @@ RUN apk add --no-cache git bash
 # Pull the maintainers tree from ibisllc/maintainers at the pinned SHA
 # (docs/maintainers-deployment.md). It's gitignored locally; the
 # Dockerfile is the canonical place this fetches in CI.
-RUN bash scripts/pull-maintainers.sh
+# The bundle step is gated on esbuild being installed; it runs as
+# part of the npm install postinstall hook a few lines below, AFTER
+# node_modules/.bin/esbuild is on disk.
+RUN bash scripts/pull-maintainers.sh pull
 # services/marketplace-scanner is referenced from root tsconfig.json so
 # `tsc -b` walks into it. Same story as maintainers/ — needed only at
 # build time, not runtime.
@@ -34,13 +37,15 @@ COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/
 COPY apps/com/package.json apps/com/
 
-# The npm preinstall hook re-runs pull-maintainers; SKIP_PULL_MAINTAINERS=1
-# tells it to no-op since we just pulled. Saves a network round-trip.
-# /bin/sh in alpine is busybox sh, which doesn't grok subshell parens — chain
-# with ||/&& and repeat the env var to avoid the grouping.
+# npm install runs preinstall (pull — fast-path, already pulled above)
+# and postinstall (bundle — esbuild present after deps install).
+# `npm ci` runs lifecycle scripts unless --ignore-scripts is passed;
+# we WANT them to run here so the bundle gets emitted. Fallback to
+# `npm install` (no --ignore-scripts) if `npm ci` fails for any
+# reason (e.g. lockfile drift).
 RUN --mount=type=cache,target=/root/.npm \
-    SKIP_PULL_MAINTAINERS=1 npm ci --workspaces --include-workspace-root --no-audit --no-fund --ignore-scripts \
- || SKIP_PULL_MAINTAINERS=1 npm install --workspaces --include-workspace-root --no-audit --no-fund
+    npm ci --workspaces --include-workspace-root --no-audit --no-fund \
+ || npm install --workspaces --include-workspace-root --no-audit --no-fund
 
 RUN npx tsc -b
 

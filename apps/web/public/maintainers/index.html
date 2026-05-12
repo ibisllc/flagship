@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maintainers — Flagship</title>
+  <meta name="description" content="Cryptographic authority management for ibisllc/flagship, powered by the maintainers protocol.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="canonical" href="https://flagshipserver.com/maintainers/">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <style>
+    body { padding: var(--space-6) 22px; max-width: 980px; margin: 0 auto; }
+    .preamble { margin-bottom: var(--space-6); }
+    .preamble h1 { margin-top: 0; }
+    .preamble p { color: var(--ink-muted); line-height: 1.55; }
+    #maintainers-app { min-height: 480px; }
+    .loading, .fallback {
+      color: var(--ink-muted);
+      padding: var(--space-6) 0;
+      text-align: center;
+    }
+    .fallback code { background: var(--ink-overlay-soft); padding: 2px 6px; border-radius: 4px; }
+    .pin {
+      font-family: var(--font-mono, monospace);
+      font-size: 0.85em;
+      color: var(--ink-muted);
+      letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="preamble">
+      <h1>Maintainers</h1>
+      <p>
+        Cryptographic authority for <code>ibisllc/flagship</code>'s
+        <code>.maintainers/</code> folder, served from this site. The protocol
+        and UI live at
+        <a href="https://github.com/ibisllc/maintainers">github.com/ibisllc/maintainers</a>;
+        Flagship pulls them at build time and serves the bundle below.
+        See <a href="/docs">docs</a> for the deployment model.
+      </p>
+      <p class="pin" id="pin-line">Sourced from ibisllc/maintainers @ <span id="pin-sha">…</span></p>
+    </section>
+    <section id="maintainers-app">
+      <p class="loading">Loading the maintainers UI…</p>
+    </section>
+  </main>
+
+  <script type="module">
+    // Surface the pinned SHA we built against. The bundle is committed
+    // alongside this page (apps/web/public/maintainers/lib/) so the
+    // SHA is the most useful provenance signal a visitor can check.
+    fetch("/maintainers/lib/PIN.txt").then(r => r.ok ? r.text() : "unknown").then(sha => {
+      const el = document.getElementById("pin-sha");
+      if (el) el.textContent = sha.trim() || "unknown";
+    }).catch(() => {});
+
+    try {
+      const m = await import("/maintainers/lib/web-ui.js");
+      const root = document.getElementById("maintainers-app");
+      root.innerHTML = "";
+      m.mountApp(root, {
+        adapter: m.staticAdapter(),
+        rpName: "Flagship Maintainers",
+      });
+    } catch (e) {
+      const root = document.getElementById("maintainers-app");
+      root.innerHTML = `
+        <div class="fallback">
+          <p>The maintainers UI failed to mount. The protocol library is still
+             available at <a href="https://github.com/ibisllc/maintainers">github.com/ibisllc/maintainers</a>.</p>
+          <p><code>${(e && e.message) ? String(e.message).replace(/[<>&]/g, "") : "unknown error"}</code></p>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
