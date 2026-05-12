@@ -4,8 +4,15 @@
 // pointer / keyboard input back. Used to drive a paired-app's
 // browser-resident login flow from the user's webapp.
 //
+// #32 — only reachable from views/app-detail.js's "Open browser viewer"
+// button (rendered when the manifest declares a browser bundle or the
+// app already has open tabs). The legacy home-grid entry point — which
+// fell back to a window.prompt() for the appId — is gone. Calling
+// enterBrowserViewer() without an appId now toasts an error and bails
+// instead of prompting.
+//
 // Lookup flow:
-//   1. User picks an appId (passed via enterBrowserViewer(appId)).
+//   1. app-detail invokes enterBrowserViewer(appId).
 //   2. We poll P1.10 for the app's tab list.
 //   3. User picks a tab → we open a WS to P1.11 and start streaming.
 

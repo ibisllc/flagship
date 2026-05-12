@@ -64,6 +64,13 @@ export const unlockIcon = `<svg ${COMMON}><rect x="3" y="11" width="18" height="
  * Map of home-grid button id → icon. Centralised so the wiring below
  * is data-driven; the icon for each surface is chosen to mirror its
  * verb (Send order → arrow, Recovery → shield, Vibe-code → sparkles).
+ *
+ * Post-#23 the home grid is gone — these mappings remain so the
+ * decorate helper is a no-op on the new IA but doesn't error if a
+ * fork keeps the old layout. The browser-viewer mapping is
+ * intentionally retained (the icon is now reused elsewhere) even
+ * though the legacy "open-browser-viewer" id is no longer in the
+ * markup; see views/app-detail.js for the only entry point (#32).
  */
 export const HOME_BUTTON_ICONS = {
   "open-pod-pair":          keyIcon,
@@ -76,6 +83,9 @@ export const HOME_BUTTON_ICONS = {
   "open-tier-status":       activityIcon,
   "open-install-progress":  downloadIcon,
   "open-orders-debug":      sendIcon,
+  // #32 — only entry point is app-detail.js; legacy id kept so a
+  // pinned fork's CSS still resolves the icon. New code should not
+  // reference "open-browser-viewer" — bind to ad-open-browser instead.
   "open-browser-viewer":    monitorIcon,
   "open-recovery":          shieldIcon,
 };
