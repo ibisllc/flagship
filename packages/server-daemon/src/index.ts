@@ -824,6 +824,17 @@ export type {
   InviteHandlerDeps,
 } from "./inviteHandler.js";
 export {
+  addLabel,
+  appIds as labelBookAppIds,
+  deserialize as deserializeLabelBook,
+  emptyLabelBook,
+  entriesForApp,
+  lookup as lookupLabel,
+  removeLabel,
+  serialize as serializeLabelBook,
+} from "./labelBook.js";
+export type { LabelBook, LabelEntry } from "./labelBook.js";
+export {
   resolveServicesEndpoints,
   parseServicesEndpoints,
   defaultEndpointsCachePath,
