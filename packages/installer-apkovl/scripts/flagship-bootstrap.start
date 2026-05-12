@@ -25,9 +25,50 @@ mkdir -p /var/flagship /var/log
 exec >>"$LOG" 2>&1
 date
 
+# Validate that an installer ref string is safe to interpolate into the
+# GitHub raw URL. Rejects:
+#   - empty / "null"
+#   - "..", ".../...", "/..", "../" — defeats any attempt at directory
+#     traversal turning the GitHub raw URL into a different repo's tree
+#   - characters outside [A-Za-z0-9._/-] — branch + tag names, SHAs, and
+#     dotted release tags all live inside this charset; anything outside
+#     is either a URL-encoding attack or shell-metacharacter injection
+#
+# Caller convention: `validate_ref <ref> <label>` — label is printed in
+# the error message so the operator sees which source rejected.
+validate_ref() {
+    _ref="$1"
+    _label="${2:-ref}"
+    if [ -z "$_ref" ] || [ "$_ref" = "null" ]; then
+        echo "flagship: ${_label} is empty or null — refusing to install"
+        return 1
+    fi
+    # Reject any '..' substring outright. This catches "..", "../foo",
+    # "foo/..", and "foo/../bar" — busybox sh has no built-in regex,
+    # but `case` with a glob covers it.
+    case "$_ref" in
+        *..*)
+            echo "flagship: ${_label} contains '..' (\"$_ref\") — refusing to install"
+            return 1
+            ;;
+    esac
+    # Reject anything outside [A-Za-z0-9._/-]. We test by stripping the
+    # allowed character class and checking the remainder is empty. The
+    # tr fallback is POSIX; busybox tr supports the same syntax.
+    _stripped=$(printf '%s' "$_ref" | tr -d 'A-Za-z0-9._/-')
+    if [ -n "$_stripped" ]; then
+        echo "flagship: ${_label} contains disallowed characters (\"$_ref\") — refusing to install"
+        return 1
+    fi
+    return 0
+}
+
 if [ -f "$INSTALLED_FLAG" ]; then
     echo "flagship: previously installed; pulling boot-stage and handing off"
     REF="$(cat /boot/installer-ref 2>/dev/null || echo "$DEFAULT_REF")"
+    if ! validate_ref "$REF" "installer-ref"; then
+        exit 1
+    fi
     curl -fsSL "$GITHUB_RAW/$REF/installer/boot-stage.sh" | sh
     exit 0
 fi
@@ -58,6 +99,9 @@ fi
 REF="$(jq -r .installerGitRef "$BLOB")"
 if [ -z "$REF" ] || [ "$REF" = "null" ]; then
     REF="$DEFAULT_REF"
+fi
+if ! validate_ref "$REF" "installerGitRef"; then
+    exit 1
 fi
 echo "flagship: installer pinned to git ref: $REF"
 
