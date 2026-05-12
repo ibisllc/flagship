@@ -37,6 +37,26 @@ export const FRAME_DATA = 0x02;
 export const FRAME_CLOSE = 0x03;
 export const FRAME_CLOSE_REMOTE = 0x04;
 
+/**
+ * Hub → tunnel: "I'm about to go away. Reconnect now."
+ *
+ * Sent by the SNI router when its Fly machine receives a shutdown
+ * signal (rolling deploy, scale-down). Payload is JSON
+ * `{ graceMs: number }`. Daemons handle by:
+ *   1. Opening a second tunnel to wss://flagship-services… (DNS
+ *      round-robin lands on a different machine).
+ *   2. Re-sending HELLO with the same identity + AppGrants on the
+ *      new connection.
+ *   3. Migrating in-flight streams via FRAME_DATA on the new tunnel
+ *      (best-effort; long-lived streams that can't migrate get
+ *      FRAME_CLOSE_REMOTE through the old tunnel).
+ *   4. Closing the old WS once migration is acknowledged.
+ *
+ * Combined with min_machines_running = 2 in fly.toml and the reconnect
+ * supervisor (#7), rolling deploys are invisible to traffic.
+ */
+export const FRAME_DRAIN_NOTICE = 0x05;
+
 // Peer-backup frames (RFC: roadmap.md §1)
 export const FRAME_PB_PUT = 0x20;
 export const FRAME_PB_PUT_ACK = 0x21;
@@ -55,6 +75,7 @@ export type FrameType =
   | typeof FRAME_DATA
   | typeof FRAME_CLOSE
   | typeof FRAME_CLOSE_REMOTE
+  | typeof FRAME_DRAIN_NOTICE
   | typeof FRAME_PB_PUT
   | typeof FRAME_PB_PUT_ACK
   | typeof FRAME_PB_GET
