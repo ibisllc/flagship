@@ -42,7 +42,7 @@ describe("create-server view — static structure (#24)", () => {
 
   it("exports both entry hooks the app shell wires", () => {
     expect(VIEW_SRC).toMatch(/export function initCreateServerView\(/);
-    expect(VIEW_SRC).toMatch(/export function enterCreateServer\(/);
+    expect(VIEW_SRC).toMatch(/export (async )?function enterCreateServer\(/);
   });
 
   it("provides the inputs the user fills in", () => {
