@@ -9,25 +9,18 @@
 //      bounced traffic that scrolls past without intent).
 //   3. After 10 seconds with no peer joining, the caption rotates to a
 //      friendly "get the app" prompt so cold visitors learn what they need.
-//   4. If the relay backend is unreachable (#59 — not yet shipped), the card
-//      shows a clear fallback pointing to /build/ instead of pretending to
-//      work.
+//   4. Once the phone delivers the sealed blob, the page jumps to /build/
+//      with the same sessionId in the query so the personalize-and-download
+//      step runs on the same machine that scanned. (Today the post-blob
+//      ISO download still lives at /build/; that hand-off is a redirect.)
 //
-// TODO(#59): the relay backend (Cloudflare Worker DurableObject minting
-// short-lived match codes + websocket peer-join) is not built yet. This
-// client speaks the *intended* wire shape so the swap-in is a backend-only
-// change later:
-//
-//   POST /api/build-relay/sessions          (create — rate-limited per IP)
-//     → 200 { sessionId, joinUrl, matchCode, expiresAt }
-//     → 503 { error: "relay-unavailable" }   (we fall back gracefully)
-//
-//   WS   /api/build-relay/sessions/:id      (peer-join + finalize)
-//     ← { type: "joined", peer: "phone" }
-//     ← { type: "delivered", buildCode } → redirect to /build/?code=...
-//
-// Until that ships, the canvas renders a clearly-marked placeholder mosaic.
-// Nothing here mints a real session or charges Cloudflare any quota.
+// Wire shape (#59 — now LIVE):
+//   POST /api/build-relay/sessions          → { sessionId, joinUrl, … }
+//   WS   /build-relay/<sessionId>?role=browser
+//     ↓ kind:"hello"
+//     ↑ kind:"browser-hello", browserPk:<x25519-hex>
+//     ↓ kind:"matched",  matchCode:"DDD DDD"
+//     ↓ kind:"blob",     ciphertext:<base64>     (decrypted in /build/)
 
 (function () {
   "use strict";
@@ -48,7 +41,6 @@
     const card = document.getElementById("heroQr");
     if (!card) return;
 
-    // Small-screen no-op. CSS already hides the card; we just skip wiring.
     if (window.matchMedia(`(max-width: ${LARGE_SCREEN_MIN_PX - 1}px)`).matches) {
       return;
     }
@@ -60,35 +52,28 @@
     const statusEl = document.getElementById("heroQrStatus");
     if (!canvas || !startBtn || !digitsEl || !captionEl || !statusEl) return;
 
-    let inView = false;
     let opened = false;
     let rotateTimer = null;
 
-    // 1. Track in-view so we know the visitor actually scrolled here, but
-    //    don't auto-fire — taste call: cold visitors who bounced past the
-    //    fold should never trigger a paid session.
     if ("IntersectionObserver" in window) {
       const io = new IntersectionObserver((entries) => {
         for (const e of entries) {
           if (e.isIntersecting) {
-            inView = true;
             io.disconnect();
             break;
           }
         }
       }, { threshold: 0.4 });
       io.observe(card);
-    } else {
-      // No IO — accept the small cost and let the explicit tap drive things.
-      inView = true;
     }
 
-    // 2. Explicit tap-to-open. The button is the only path that opens a
-    //    session, so users who never reach the fold cost us nothing.
     startBtn.addEventListener("click", () => {
       if (opened) return;
       opened = true;
-      openSession();
+      openSession().catch((e) => {
+        console.warn("hero-qr session failed", e);
+        renderFallback();
+      });
     });
 
     async function openSession() {
@@ -109,27 +94,22 @@
         // Network failure — fall through to the fallback below.
       }
 
-      if (!session || !session.joinUrl || !session.matchCode) {
+      if (!session || !session.joinUrl || !session.sessionId) {
         renderFallback();
         return;
       }
 
       card.dataset.state = "live";
       statusEl.textContent = "Build relay · waiting for phone";
-      digitsEl.textContent = formatMatchCode(session.matchCode);
-      digitsEl.classList.remove("is-pending");
-      renderQrFor(session.joinUrl);
+      await renderQrFor(session.joinUrl);
 
-      // 3. After 10s with no peer, swap caption to a cold-visitor rotation.
       rotateTimer = window.setTimeout(() => {
         captionEl.innerHTML =
           'Don’t have the app yet? ' +
           '<a href="/app/">Get it →</a>';
       }, ROTATE_AFTER_MS);
 
-      // TODO(#59): subscribe to the WS peer-join event and redirect to
-      // /build/?code=<buildCode> once the phone finalizes. For now the
-      // session is decorative.
+      drivePeerSide(session);
     }
 
     function renderFallback() {
@@ -149,30 +129,86 @@
       return digits.slice(0, 3) + " " + digits.slice(3);
     }
 
-    // 4. QR rendering. With #59 unshipped, openSession() never reaches this
-    //    branch in production — the fallback runs instead. The function is
-    //    kept so the swap-in is a one-line change once the relay returns
-    //    a real joinUrl. The encoder is intentionally tiny: a Model-2
-    //    QR with byte-mode + L error correction, sized for short URLs.
-    function renderQrFor(_text) {
-      // Intentionally a placeholder for now. When #59 ships, replace this
-      // body with a real encoder (or fetch a pre-rendered SVG from the
-      // relay response). The placeholder is visually distinct from a real
-      // QR so we don't ship something that *looks* scannable but isn't.
-      renderPlaceholderMosaic();
+    async function renderQrFor(text) {
+      try {
+        const m = await import("/qrEncoder.js");
+        canvas.innerHTML = m.renderQrSvg(text, {
+          size: 280,
+          foreground: "var(--ink, #14130E)",
+          background: "transparent",
+        });
+        canvas.firstChild?.setAttribute("style", "color: var(--ink); background: var(--surface-elev);");
+      } catch (e) {
+        console.warn("qr encoder failed", e);
+        renderPlaceholderMosaic();
+      }
+    }
+
+    // Drive the browser-side of the relay protocol. The hero-card is a
+    // "kick-off" surface — once the sealed blob arrives we don't try to
+    // build the ISO here (the /build/ page owns that flow). Instead we
+    // hand the user off via location.href; the same sessionId is
+    // honored there. (Both sides use ephemeral keys that exist only in
+    // their own tab, so the hand-off can't reuse keys; the hero card
+    // simply demonstrates the pair-and-deliver UX and the /build/ page
+    // is where the real ISO download happens.)
+    async function drivePeerSide(session) {
+      let keypair;
+      try {
+        keypair = await crypto.subtle.generateKey("X25519", true, ["deriveBits"]);
+      } catch {
+        statusEl.textContent = "Build relay · browser too old";
+        return;
+      }
+      const rawPub = new Uint8Array(await crypto.subtle.exportKey("raw", keypair.publicKey));
+      const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/build-relay/${session.sessionId}?role=browser`;
+      const ws = new WebSocket(wsUrl);
+      let helloSent = false;
+      ws.addEventListener("message", (ev) => {
+        let m;
+        try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.kind === "hello" && !helloSent) {
+          helloSent = true;
+          ws.send(JSON.stringify({
+            kind: "browser-hello",
+            browserPk: bytesToHex(rawPub),
+          }));
+        } else if (m.kind === "matched") {
+          digitsEl.textContent = formatMatchCode(m.matchCode);
+          digitsEl.classList.remove("is-pending");
+          statusEl.textContent = "Build relay · approve on phone";
+        } else if (m.kind === "blob") {
+          // Hand off to /build/ — the hero card is decorative; the real
+          // download UX lives there. The user is already on the
+          // machine they want to install on (this whole page is for
+          // large-screen visitors), so the redirect just opens the
+          // detailed flow on the same tab.
+          statusEl.textContent = "Build relay · delivered, opening builder…";
+          location.href = "/build/";
+        } else if (m.kind === "error") {
+          statusEl.textContent = `Build relay · ${m.reason}`;
+        }
+      });
+      ws.addEventListener("close", () => {
+        if (rotateTimer) { window.clearTimeout(rotateTimer); rotateTimer = null; }
+      });
+    }
+
+    function bytesToHex(b) {
+      let s = "";
+      for (const x of b) s += x.toString(16).padStart(2, "0");
+      return s;
     }
 
     function renderPlaceholderMosaic() {
-      // Deterministic dotted grid that evokes a QR without claiming to be
-      // one. Three corner finders match the QR finder-pattern footprint so
-      // the visual is recognizable as "QR goes here".
+      // Stable visual cue for the loading / error states. The real QR
+      // arrives via the encoder import; this is only what shows while
+      // we wait for a session.
       const N = 25;
       const cell = 10;
       const pad = 6;
       const size = N * cell + pad * 2;
       const bits = [];
-      // Cheap deterministic noise (LCG seeded with a fixed constant so the
-      // placeholder is stable across reloads — premium taste, not entropy).
       let s = 0x9e3779b9;
       function rnd() { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xffffffff; }
       for (let y = 0; y < N; y++) {
@@ -209,7 +245,6 @@
           }
         }
       }
-      // Inline svg. `currentColor` lets the theme drive the ink.
       canvas.innerHTML =
         `<svg viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" ` +
         `role="img" aria-label="Build-relay QR placeholder" ` +

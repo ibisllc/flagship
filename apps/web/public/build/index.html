@@ -118,43 +118,55 @@
     <main class="wrap">
       <h1>Build a Flagship server</h1>
       <p class="lede">
-        Enter the build code your phone gave you. Your phone holds the keys; this page just assembles the installer.
+        Open this page on the machine you want to install Flagship on, then deliver the install blob from your phone or webapp. flagshipserver.com just relays opaque bytes — it cannot read your keys.
       </p>
 
-      <section class="step active" id="step-form">
-        <h3>1. Build code</h3>
-        <p>From the Flagship app: <em>Create a new server → Save</em>.</p>
-        <input
-          type="text"
-          id="codeInput"
-          class="code-input"
-          placeholder="ABCD-EFGH-JKMN"
-          autocomplete="off"
-          spellcheck="false"
-          maxlength="14"
-        />
+      <section class="step active" id="step-session">
+        <h3>1. Open a build session</h3>
+        <p id="step-session-detail">Generates a one-time ephemeral keypair in this browser. The private half never leaves this tab.</p>
         <div style="margin-top: 1rem; display: flex; gap: 0.6rem; align-items: center;">
-          <button id="goBtn" type="button" disabled>Build my installer</button>
+          <button id="startBtn" type="button">Start build session</button>
           <span class="meta" id="formStatus"></span>
         </div>
         <div class="help-tip">
-          Don't have the app yet? Use the <a href="/dev/create-server">phone simulator</a> to mint a code.
+          Don't have the app yet? Use the <a href="/dev/create-server">phone simulator</a> to mint and deliver a blob.
         </div>
       </section>
 
-      <section class="step pending" id="step-redeem">
-        <h3>2. Redeem the code</h3>
-        <p>Calls /api/build-tickets/redeem to fetch the signed install blob.</p>
+      <section class="step pending" id="step-pair">
+        <h3>2. Pair with your phone</h3>
+        <p id="step-pair-detail">Scan the QR or copy the join URL into your phone or webapp.</p>
+        <div id="pairUi" hidden>
+          <div id="qrHolder" style="display:flex; justify-content:center; padding: 1rem 0;"></div>
+          <div class="meta" style="text-align:center; margin-top: 0.5rem;">
+            <div>
+              Match code:
+              <strong id="matchDigits" style="letter-spacing: 0.3em; font-size: 1.4em; color: var(--accent-press);">— — —  — — —</strong>
+            </div>
+            <div style="margin-top: 0.4rem; font-size: 0.85em;">
+              Verify these digits also show on your phone before approving.
+            </div>
+          </div>
+          <details style="margin-top: 0.75rem;">
+            <summary style="color: var(--ink-muted); cursor: pointer; font-size: 0.85rem;">manual join URL</summary>
+            <code id="joinUrl" class="raw" style="display:block;"></code>
+          </details>
+        </div>
+      </section>
+
+      <section class="step pending" id="step-deliver">
+        <h3>3. Receive the sealed install blob</h3>
+        <p id="step-deliver-detail">Waiting for your phone to send the signed InstallBlob. flagshipserver.com sees only opaque ciphertext.</p>
       </section>
 
       <section class="step pending" id="step-iso">
-        <h3>3. Download &amp; personalize the ISO</h3>
+        <h3>4. Download &amp; personalize the ISO</h3>
         <p id="step-iso-detail">Streams the base ISO from the CDN, appends the trailer, saves to disk.</p>
         <div class="progress-bar"><div class="progress-fill" id="isoProgress" style="width: 0;"></div></div>
       </section>
 
       <section class="step pending" id="step-done">
-        <h3>4. Done</h3>
+        <h3>5. Done</h3>
         <p id="step-done-detail">Flash the .iso to a USB stick (Balena Etcher, Rufus, dd), boot the target machine, the rest is automatic.</p>
       </section>
 
