@@ -1025,3 +1025,166 @@ describe("screens HTTP — P1.8 / P1.9 unlock approvals (proxy)", () => {
   });
 });
 
+describe("screens HTTP — /api/screens/lineage-resolve", () => {
+  function fakeResolver(initial: Array<{
+    appId: string;
+    creator: string;
+    slug: string;
+    canonicalUrl: string;
+    detectedAt: number;
+    lineageAnchor: string;
+    priorTip: string;
+    upstreamTip: string;
+    reason: string;
+    detail: string;
+  }>) {
+    const accepted: string[] = [];
+    const revoked: string[] = [];
+    return {
+      accepted,
+      revoked,
+      list: async () => initial.slice(),
+      accept: async (appId: string) => {
+        accepted.push(appId);
+        return { ok: true as const, outcome: "accepted" as const };
+      },
+      revoke: async (appId: string) => {
+        revoked.push(appId);
+        return { ok: true };
+      },
+    };
+  }
+
+  it("GET returns the paused list", async () => {
+    const resolver = fakeResolver([
+      {
+        appId: "alice--game1",
+        creator: "alice",
+        slug: "game1",
+        canonicalUrl: "game1.alice.flagship.services",
+        detectedAt: 12345,
+        lineageAnchor: "anchor1",
+        priorTip: "prior1",
+        upstreamTip: "evil1",
+        reason: "anchor-unreachable",
+        detail: "rebuilt repo detected",
+      },
+    ]);
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      lineageResolver: resolver,
+    });
+    const r = await handle(req({
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good" },
+    }));
+    expect(r?.status).toBe(200);
+    const body = JSON.parse(r!.body as string);
+    expect(body.paused).toHaveLength(1);
+    expect(body.paused[0].appId).toBe("alice--game1");
+    expect(body.paused[0].reason).toBe("anchor-unreachable");
+  });
+
+  it("GET returns empty list when resolver unset", async () => {
+    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
+    const r = await handle(req({
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good" },
+    }));
+    expect(r?.status).toBe(200);
+    expect(JSON.parse(r!.body as string)).toEqual({ paused: [] });
+  });
+
+  it("POST accept routes to resolver.accept", async () => {
+    const resolver = fakeResolver([]);
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      lineageResolver: resolver,
+    });
+    const r = await handle(req({
+      method: "POST",
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "accept" })),
+    }));
+    expect(r?.status).toBe(200);
+    const body = JSON.parse(r!.body as string);
+    expect(body).toEqual({ ok: true, outcome: "accepted" });
+    expect(resolver.accepted).toEqual(["alice--game1"]);
+  });
+
+  it("POST revoke routes to resolver.revoke", async () => {
+    const resolver = fakeResolver([]);
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      lineageResolver: resolver,
+    });
+    const r = await handle(req({
+      method: "POST",
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "revoke" })),
+    }));
+    expect(r?.status).toBe(200);
+    const body = JSON.parse(r!.body as string);
+    expect(body).toEqual({ ok: true, outcome: "revoked" });
+    expect(resolver.revoked).toEqual(["alice--game1"]);
+  });
+
+  it("POST returns 400 on missing appId / bad decision", async () => {
+    const resolver = fakeResolver([]);
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      lineageResolver: resolver,
+    });
+    const noAppId = await handle(req({
+      method: "POST",
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ decision: "accept" })),
+    }));
+    expect(noAppId?.status).toBe(400);
+    const badDecision = await handle(req({
+      method: "POST",
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "burn-it-down" })),
+    }));
+    expect(badDecision?.status).toBe(400);
+  });
+
+  it("POST returns 503 when resolver unset", async () => {
+    const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
+    const r = await handle(req({
+      method: "POST",
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "accept" })),
+    }));
+    expect(r?.status).toBe(503);
+  });
+
+  it("POST surfaces resolver.accept failure as 502", async () => {
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(),
+      lineageResolver: {
+        list: async () => [],
+        accept: async () => ({ ok: false, outcome: "already-clear" as const, reason: "no state" }),
+        revoke: async () => ({ ok: true }),
+      },
+    });
+    const r = await handle(req({
+      method: "POST",
+      path: "/api/screens/lineage-resolve",
+      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "accept" })),
+    }));
+    expect(r?.status).toBe(502);
+  });
+});
+

@@ -28,6 +28,10 @@ import type {
   AppSummary,
   BrowserTab,
   BrowserTabsListResponse,
+  LineagePausedListResponse,
+  LineagePauseSummary,
+  LineageResolveRequest,
+  LineageResolveResponse,
   MarketplaceBrowseResponse,
   OrdersSendRequest,
   OrdersSendResponse,
@@ -62,6 +66,27 @@ export interface UrlControllerLike {
 export interface InstallEventLog {
   /** Most-recent first; capped to N at the source. */
   recent(): RecentInstallEvent[];
+}
+
+/**
+ * Phone-tap resolver for the update-pack lineage-break auto-pause.
+ *
+ * The daemon's update-puller marks an app `lineagePaused: true` when
+ * the lineage verifier refuses a new pack. The phone view fetches the
+ * paused list, then POSTs `{ appId, decision }` to roll the anchor
+ * forward (`accept`) or uninstall the app entirely (`revoke`).
+ *
+ * Wiring: production daemon supplies an adapter that:
+ *   - `list()` walks the AppPullStateStore for entries with `lineagePaused`
+ *   - `accept(appId)` delegates to `UpdateClient.acceptLineageBreak`
+ *   - `revoke(appId)` calls `AppPlatform.uninstall` directly (it's a
+ *     phone-gated action; the BFF's paired-session check is the trust
+ *     equivalent of the host's IRK signature in this context)
+ */
+export interface LineageResolverLike {
+  list(): Promise<LineagePauseSummary[]>;
+  accept(appId: string): Promise<{ ok: boolean; outcome: "accepted" | "already-clear"; reason?: string }>;
+  revoke(appId: string): Promise<{ ok: boolean; reason?: string }>;
 }
 
 export interface ScreensHttpDeps {
@@ -106,6 +131,20 @@ export interface ScreensHttpDeps {
    * deployed outside a git clone with `.maintainers/`.
    */
   releaseStatus?: ReleaseStatusProvider | null;
+  /**
+   * Snapshot provider for the J.4 post-recovery membership re-attach
+   * report. The webapp polls this after a recovery completes; the
+   * daemon-side runner stashes the latest ReissuanceReport in a slot
+   * that this thunk reads. Null when no recovery has happened on this
+   * daemon since boot.
+   */
+  postRecoveryStatus?: (() => unknown | null) | null;
+  /**
+   * Resolver for the update-pack lineage-break auto-pause. Powers
+   * `GET + POST /api/screens/lineage-resolve`. When unset, the GET
+   * returns an empty list and POST returns 503.
+   */
+  lineageResolver?: LineageResolverLike | null;
 }
 
 export interface VibeCodeRuntime {
@@ -457,6 +496,58 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       };
     }
 
+    // ---- GET /api/screens/lineage-resolve
+    //
+    // List every app currently auto-paused by the update-pack lineage
+    // verifier. The phone view renders one card per paused app showing
+    // creator name, prior tip, new tip, and the verifier reason so the
+    // user can investigate before tapping accept-or-revoke.
+    if (path === "/api/screens/lineage-resolve" && method === "GET") {
+      if (!deps.lineageResolver) {
+        const empty: LineagePausedListResponse = { paused: [] };
+        return jok(empty);
+      }
+      try {
+        const paused = await deps.lineageResolver.list();
+        const out: LineagePausedListResponse = { paused };
+        return jok(out);
+      } catch (e) {
+        return jerr(502, `lineage-resolve list failed: ${(e as Error).message}`);
+      }
+    }
+
+    // ---- POST /api/screens/lineage-resolve
+    //
+    // Phone tap on a paused app. `accept` rolls the lineage anchor
+    // forward to the upstream tip the puller refused — subsequent
+    // pulls will trust that chain going forward. `revoke` uninstalls
+    // the app entirely. The paired-session gate has already
+    // authenticated; in webapp world the token IS the PSK equivalent.
+    if (path === "/api/screens/lineage-resolve" && method === "POST") {
+      if (!deps.lineageResolver) return jerr(503, "lineage-resolver not configured");
+      const body = parseJson(req.body) as LineageResolveRequest | null;
+      if (!body || typeof body.appId !== "string" || body.appId.length === 0) {
+        return jerr(400, "appId required");
+      }
+      if (body.decision !== "accept" && body.decision !== "revoke") {
+        return jerr(400, "decision must be 'accept' or 'revoke'");
+      }
+      try {
+        if (body.decision === "accept") {
+          const r = await deps.lineageResolver.accept(body.appId);
+          if (!r.ok) return jerr(502, r.reason ?? "accept failed");
+          const out: LineageResolveResponse = { ok: true, outcome: r.outcome };
+          return jok(out);
+        }
+        const r = await deps.lineageResolver.revoke(body.appId);
+        if (!r.ok) return jerr(502, r.reason ?? "revoke failed");
+        const out: LineageResolveResponse = { ok: true, outcome: "revoked" };
+        return jok(out);
+      } catch (e) {
+        return jerr(502, `lineage-resolve failed: ${(e as Error).message}`);
+      }
+    }
+
     // ---- GET /api/screens/release-status
     //
     // Offline-verified view of Flagship's own .maintainers/ folder.
@@ -546,6 +637,16 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       );
       if (!r.ok) return jerr(502, `approve failed: ${r.status}`);
       return jok({ ok: true });
+    }
+
+    // ---- J.4 GET /api/screens/post-recovery/status
+    // Webapp's reattach-progress screen polls this every ~1s after a
+    // recovery binds. Returns 200 + `{ report: null }` when no recovery
+    // has run on this daemon since boot — the view treats that as "all
+    // done, nothing to show."
+    if (path === "/api/screens/post-recovery/status" && method === "GET") {
+      const report = deps.postRecoveryStatus ? deps.postRecoveryStatus() : null;
+      return jok({ report: report ?? null });
     }
 
     return jerr(404, "screen route not found");

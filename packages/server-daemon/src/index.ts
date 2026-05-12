@@ -51,6 +51,7 @@ import {
   FileAppPullStateStore,
   UpdateClient,
 } from "./updateClient.js";
+import { buildLineageResolverAdapter } from "./updatePack/lineageResolverAdapter.js";
 import { UpdateScheduler } from "./updateScheduler.js";
 import { UpdateServer } from "./updateServer.js";
 import {
@@ -383,6 +384,30 @@ async function main(): Promise<void> {
     });
     runtime.addHandler(vibeCodeHandle);
 
+    const lineageResolver = buildLineageResolverAdapter({
+      store: pullStateStore,
+      client: updateClient,
+      // Production uninstall walks the AppPlatform path which already
+      // drops pull state + container + data stores + tabs. The BFF's
+      // paired-session gate has already authenticated the caller, so
+      // this is the trust equivalent of a host-IRK-signed uninstall.
+      uninstall: async (appId) => {
+        try {
+          const ap = runtime.appPlatform;
+          const app = ap?.byAppId(appId);
+          if (!app) return { ok: true };
+          // Drop pull state so the scheduler stops pestering the canonical
+          // home, even if container-stop is best-effort and may fail in
+          // ways we don't surface here.
+          if (pullStateStore.delete) {
+            await pullStateStore.delete(appId).catch(() => {});
+          }
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, reason: (e as Error).message };
+        }
+      },
+    });
     const screensHandle = buildScreensHttp({
       gate: pairedSessions,
       serverFqdn: env.serverFqdn!,
@@ -402,6 +427,7 @@ async function main(): Promise<void> {
           }
         : null,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
+      lineageResolver,
     });
     runtime.addHandler(screensHandle);
     runtime.addUpgradeHandler(

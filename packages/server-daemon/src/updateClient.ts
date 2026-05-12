@@ -31,6 +31,7 @@ import {
   type Keypair,
   type UpdatePullRequest,
 } from "@flagship/protocol";
+import { LineageVerifier, type LineageVerdict } from "./updatePack/lineageVerifier.js";
 
 const execFileP = promisify(execFile);
 
@@ -51,6 +52,45 @@ export interface AppPullState {
   updatePolicy: UpdatePolicy;
   /** Filled when a pending update is awaiting phone approval. */
   pendingPullCommit?: string;
+  /**
+   * Durable auto-pause flag — set when the puller detects a lineage
+   * break, cleared when the phone taps "accept" (which rolls the
+   * anchor forward to the new tip) or the app is uninstalled. While
+   * set, `pullOne` is a hard no-op: the daemon keeps running the
+   * current installed version indefinitely.
+   *
+   * Persistence: the state store is written to disk via
+   * `FileAppPullStateStore`, so this flag survives daemon restarts.
+   * That's load-bearing — we don't want a reboot to silently consent
+   * to a new lineage on the user's behalf.
+   */
+  lineagePaused?: boolean;
+  /**
+   * Snapshot of the break that caused `lineagePaused`. Carries enough
+   * context for the phone view to render an "investigate" screen —
+   * who the canonical creator is, where we were, and where the
+   * upstream is trying to take us.
+   */
+  lineagePauseInfo?: LineagePauseInfo;
+}
+
+export interface LineagePauseInfo {
+  /** When the break was detected. */
+  detectedAt: number;
+  /** `<creator>--<slug>` form. */
+  creator: string;
+  slug: string;
+  canonicalUrl: string;
+  /** The trust root — what we anchored to at install time. */
+  lineageAnchor: string;
+  /** The commit we were running when the break was detected. */
+  priorTip: string;
+  /** The upstream tip the puller refused to apply. */
+  upstreamTip: string;
+  /** Why the verifier rejected the pack. */
+  reason: string;
+  /** Human-readable detail; safe for the phone-view "more info" panel. */
+  detail: string;
 }
 
 export interface AppPullStateStore {
@@ -69,6 +109,17 @@ export type PhoneUpdateAlert =
       canonicalUrl: string;
       lineageAnchor: string;
       upstreamTip: string;
+      /** New fields — phone view renders these for context. */
+      creator: string;
+      slug: string;
+      /** The locally-applied commit before the break. */
+      priorTip: string;
+      /** Verifier rejection reason — narrow set, safe to switch on. */
+      reason: string;
+      /** Human-readable detail. */
+      detail: string;
+      /** When the break was detected (unix-ms). */
+      detectedAt: number;
     }
   | {
       kind: "manual-pending";
@@ -142,23 +193,42 @@ export interface UpdateClientDeps {
 }
 
 export type PullResult =
-  | { kind: "no-op"; reason: "frozen-policy" | "no-canonical-state" | "already-current" }
+  | {
+      kind: "no-op";
+      reason:
+        | "frozen-policy"
+        | "no-canonical-state"
+        | "already-current"
+        | "lineage-paused";
+    }
   | { kind: "applied"; from: string; to: string; migrationsApplied: string[] }
-  | { kind: "halted-lineage-break"; lineageAnchor: string; upstreamTip: string }
+  | {
+      kind: "halted-lineage-break";
+      lineageAnchor: string;
+      upstreamTip: string;
+      /** Verifier reason (anchor-unreachable | prior-tip-not-ancestor | ...). */
+      reason: string;
+    }
   | { kind: "halted-manual-pending"; from: string; to: string }
   | { kind: "halted-migration-failed"; failingFile: string; reason: string }
   | { kind: "halted-unendorsed"; upstreamTip: string; reason: string }
   | { kind: "error"; reason: string };
 
+export type LineageResolveResult =
+  | { ok: true; outcome: "accepted" | "already-clear" }
+  | { ok: false; reason: string };
+
 export class UpdateClient {
   private readonly gitBinary: string;
   private readonly now: () => number;
   private readonly fetcher: (url: string, init: RequestInit) => Promise<Response>;
+  private readonly lineageVerifier: LineageVerifier;
 
   constructor(private readonly deps: UpdateClientDeps) {
     this.gitBinary = deps.gitBinary ?? "git";
     this.now = deps.now ?? Date.now;
     this.fetcher = deps.fetch ?? ((u, i) => fetch(u, i));
+    this.lineageVerifier = new LineageVerifier({ gitBinary: this.gitBinary });
   }
 
   /**
@@ -176,6 +246,14 @@ export class UpdateClient {
     }
     if (state.updatePolicy === "frozen") {
       return { kind: "no-op", reason: "frozen-policy" };
+    }
+    // Durable auto-pause: a previous tick detected a lineage break and
+    // the phone hasn't resolved it yet. Refuse to even fetch — we
+    // don't want to re-emit an alert every 6h, and we definitely don't
+    // want to advance the working tree. The current installed version
+    // keeps running indefinitely.
+    if (state.lineagePaused) {
+      return { kind: "no-op", reason: "lineage-paused" };
     }
 
     const workDir = this.deps.appWorkingDir(args.appId);
@@ -254,22 +332,57 @@ export class UpdateClient {
         }
       }
 
-      // Lineage check: is our anchor reachable from the upstream tip?
-      const isAncestor = await this.isAncestor(workDir, state.lineageAnchor, upstreamTip);
-      if (!isAncestor) {
-        // Don't merge; surface to phone.
+      // Lineage check via the dedicated verifier — catches:
+      //   - anchor severed (force-push of a rebuilt repo)
+      //   - history rewrite above where we already are
+      //   - unresolvable tips (empty / malformed bundles)
+      const verdict: LineageVerdict = await this.lineageVerifier.verify({
+        workDir,
+        lineageAnchor: state.lineageAnchor,
+        previouslyAppliedTip: state.currentTip,
+        newPackTip: upstreamTip,
+      });
+      if (!verdict.ok) {
+        // Durably pause the app + persist the break context so a daemon
+        // restart doesn't silently retry. The current installed version
+        // keeps running until the phone resolves.
+        const [creator, slug] = parseAppId(args.appId);
+        const info: LineagePauseInfo = {
+          detectedAt: this.now(),
+          creator,
+          slug,
+          canonicalUrl: state.canonicalUrl,
+          lineageAnchor: state.lineageAnchor,
+          priorTip: state.currentTip,
+          upstreamTip,
+          reason: verdict.reason,
+          detail: verdict.detail,
+        };
+        const paused: AppPullState = {
+          ...state,
+          lineagePaused: true,
+          lineagePauseInfo: info,
+        };
+        await this.deps.state.put(args.appId, paused);
         const alert: PhoneUpdateAlert = {
           kind: "lineage-break",
           appId: args.appId,
           canonicalUrl: state.canonicalUrl,
           lineageAnchor: state.lineageAnchor,
           upstreamTip,
+          creator,
+          slug,
+          priorTip: state.currentTip,
+          reason: verdict.reason,
+          detail: verdict.detail,
+          detectedAt: info.detectedAt,
         };
         this.deps.emitPhoneAlert(alert);
         return {
           kind: "halted-lineage-break",
           lineageAnchor: state.lineageAnchor,
           upstreamTip,
+          reason: verdict.reason,
         };
       }
 
@@ -298,6 +411,45 @@ export class UpdateClient {
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
+  }
+
+  /**
+   * Phone tap "accept" the new lineage. Clears the durable pause and
+   * rolls the lineage anchor forward to the upstream tip the puller
+   * refused. Subsequent pulls will trust that lineage going forward.
+   *
+   * The webapp BFF (`POST /api/screens/lineage-resolve`) calls this
+   * after gating on a paired-session token (which IS the phone's PSK
+   * equivalent on the daemon's HTTP surface — see
+   * `bff_screens_discipline.md`).
+   *
+   * Idempotent: calling on a non-paused app is `outcome: already-clear`.
+   */
+  async acceptLineageBreak(args: { appId: string }): Promise<LineageResolveResult> {
+    const state = await this.deps.state.get(args.appId);
+    if (!state) return { ok: false, reason: "no state" };
+    if (!state.lineagePaused || !state.lineagePauseInfo) {
+      return { ok: true, outcome: "already-clear" };
+    }
+    const next: AppPullState = {
+      ...state,
+      lineageAnchor: state.lineagePauseInfo.upstreamTip,
+      lineagePaused: false,
+      lineagePauseInfo: undefined,
+    };
+    await this.deps.state.put(args.appId, next);
+    return { ok: true, outcome: "accepted" };
+  }
+
+  /**
+   * Read-only view of the current pause status. Used by the BFF
+   * endpoint to surface "what's the current state?" before the phone
+   * decides accept-or-revoke. Returns null if not paused.
+   */
+  async lineagePauseInfo(args: { appId: string }): Promise<LineagePauseInfo | null> {
+    const state = await this.deps.state.get(args.appId);
+    if (!state?.lineagePaused || !state.lineagePauseInfo) return null;
+    return { ...state.lineagePauseInfo };
   }
 
   /**
@@ -421,16 +573,6 @@ export class UpdateClient {
       .filter((name) => /^[0-9]+_/.test(name));
     files.sort();
     return files.filter((f) => f > args.lastApplied);
-  }
-
-  private async isAncestor(workDir: string, ancestor: string, descendant: string): Promise<boolean> {
-    try {
-      // exit 0 → is ancestor; exit 1 → not; exit other → error.
-      await this.git(workDir, ["merge-base", "--is-ancestor", ancestor, descendant]);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   private async refExists(workDir: string, ref: string): Promise<boolean> {

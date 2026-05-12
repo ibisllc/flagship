@@ -271,6 +271,62 @@ export interface AppBackupStartResponse {
   encrypted: boolean;
 }
 
+// ---------- /api/screens/lineage-resolve -------------------------------
+//
+// Resolves an update-pack lineage-break. The daemon's update-puller
+// auto-pauses any app whose new pack fails the lineage check, then
+// emits a phone alert with `kind: "lineage-break"`. The phone view
+// shows the break context (creator, prior tip, new tip, verifier
+// reason) and offers two choices:
+//
+//   accept — the user has verified the new chain is legitimate (e.g.
+//            the creator publicly announced a key rotation). The
+//            daemon rolls the lineage anchor forward to the new tip
+//            and unpauses; subsequent pulls trust this lineage going
+//            forward.
+//
+//   revoke — the user no longer trusts the canonical home; the app
+//            is uninstalled (container stopped, data dropped, pull
+//            state cleared) per the existing uninstall path.
+//
+// Both decisions require the paired-session token gate to be open.
+// In webapp world, the paired-session token IS the PSK-equivalent;
+// the same gate guards every /api/screens/* endpoint.
+
+export interface LineagePauseSummary {
+  appId: string;
+  creator: string;
+  slug: string;
+  canonicalUrl: string;
+  /** When the puller detected the break (unix-ms). */
+  detectedAt: number;
+  /** The trust root — what this pod anchored to at install time. */
+  lineageAnchor: string;
+  /** The commit the pod is currently running. */
+  priorTip: string;
+  /** The upstream tip the puller refused. */
+  upstreamTip: string;
+  /** Verifier reason (anchor-unreachable | prior-tip-not-ancestor | ...). */
+  reason: string;
+  /** Human-readable detail; safe to surface in the "more info" panel. */
+  detail: string;
+}
+
+export interface LineagePausedListResponse {
+  paused: LineagePauseSummary[];
+}
+
+export interface LineageResolveRequest {
+  appId: string;
+  /** "accept" rolls the anchor forward; "revoke" uninstalls. */
+  decision: "accept" | "revoke";
+}
+
+export interface LineageResolveResponse {
+  ok: boolean;
+  outcome: "accepted" | "revoked" | "already-clear";
+}
+
 // ---------- /api/screens/release-status --------------------------------
 //
 // Surfaces the daemon's offline-verified view of Flagship's own
