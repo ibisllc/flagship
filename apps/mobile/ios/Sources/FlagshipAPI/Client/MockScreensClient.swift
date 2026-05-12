@@ -306,6 +306,72 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         )
     }
 
+    // MARK: - P1.15 install-events (mock SSE)
+
+    public func installEvents(serial: String) -> AsyncStream<InstallEvent> {
+        AsyncStream { continuation in
+            let task = Task { [serial] in
+                let timeline: [(TimeInterval, InstallEvent)] = [
+                    (0.0,  .registered(serial: serial, at: ts())),
+                    (1.5,  .boot(at: ts())),
+                    (4.0,  .tunnelOnline(at: ts())),
+                    (9.5,  .certIssued(at: ts())),
+                    (11.0, .ready(serverFqdn: "newbox.harry.flagship.services", at: ts()))
+                ]
+                var elapsed: TimeInterval = 0
+                for (delay, event) in timeline {
+                    let wait = delay - elapsed
+                    if wait > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                    }
+                    if Task.isCancelled { break }
+                    let stamped = event.restamped(ts())
+                    continuation.yield(stamped)
+                    elapsed = delay
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    // MARK: - P1.6 vibe-code stream (mock WS)
+
+    public func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame> {
+        AsyncStream { continuation in
+            let task = Task {
+                let tokens = [
+                    "Sketching ", "schema. ", "Two tables: ", "habits, ", "check_ins.\n",
+                    "Building manifest…\n",
+                    "Creating Docker image…\n",
+                    "Deploying to ", "home pod…\n",
+                    "Live. 🎉"
+                ]
+                for t in tokens {
+                    if Task.isCancelled { break }
+                    continuation.yield(.token(text: t))
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                }
+                if !Task.isCancelled {
+                    continuation.yield(.manifestEmit(manifestJson: "{\"name\":\"habits\",\"datastore\":\"postgres\"}"))
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    continuation.yield(.buildStart)
+                    for log in ["FROM node:20-alpine", "RUN apk add postgresql-client", "COPY . /app", "Build ok in 8.4s"] {
+                        if Task.isCancelled { break }
+                        continuation.yield(.buildLog(line: log))
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                    }
+                    continuation.yield(.deploy(appId: "habits", url: "https://habits.harry.flagship.services/"))
+                    continuation.yield(.done)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func ts() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
     public func appBackupStart(_ req: AppBackupStartRequest) async throws -> AppBackupStartResponse {
         try await tick()
         let now = Int64(Date().timeIntervalSince1970 * 1000)

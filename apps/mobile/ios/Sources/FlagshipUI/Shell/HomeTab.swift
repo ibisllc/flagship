@@ -55,25 +55,55 @@ public struct HomeTab: View {
             ServerDetailContainer(podId: podId)
         case .addServer:
             // In-app add-server only ever means "provision a new box."
-            // Pairing an existing server is an onboarding-only path
-            // (this app on a fresh phone joining an account that
-            // already has servers running elsewhere).
+            // Pairing an existing server is an onboarding-only path.
             CreateServerStubScreen(
                 username: app.currentUser ?? "",
+                onStartProvisioning: { serial, name, description in
+                    path.append(.installProgress(serial: serial, name: name, description: description))
+                },
                 onDemoComplete: { name, description in
-                    let user = app.currentUser ?? "you"
-                    let slug = SlugUtil.slugify(name)
-                    let pod = PodInfo(
-                        podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
-                        name: name,
-                        description: description.isEmpty ? nil : description,
-                        fqdn: "\(slug).\(user).flagship.services",
-                        status: .online
-                    )
-                    app.addPod(pod)
-                    path.removeAll()
+                    addPodAndDismiss(name: name, description: description)
                 }
             )
+        case .installProgress(let serial, let name, let description):
+            InstallProgressContainer(serial: serial) { fqdn in
+                addPodAndDismiss(name: name, description: description, fqdn: fqdn)
+            }
+        }
+    }
+
+    private func addPodAndDismiss(name: String, description: String, fqdn: String? = nil) {
+        let user = app.currentUser ?? "you"
+        let slug = SlugUtil.slugify(name)
+        let pod = PodInfo(
+            podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
+            name: name,
+            description: description.isEmpty ? nil : description,
+            fqdn: fqdn ?? "\(slug).\(user).flagship.services",
+            status: .online
+        )
+        app.addPod(pod)
+        path.removeAll()
+    }
+}
+
+struct InstallProgressContainer: View {
+    let serial: String
+    let onFinish: (String) -> Void
+    @Environment(\.screensClient) private var client
+    @State private var vm: InstallProgressViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                InstallProgressScreen(vm: vm, onFinish: onFinish)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil { vm = InstallProgressViewModel(serial: serial, client: client) }
         }
     }
 }

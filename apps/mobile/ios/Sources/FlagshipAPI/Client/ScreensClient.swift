@@ -59,6 +59,15 @@ public protocol ScreensClient: Sendable {
 
     // P1.21 server-metrics (extension; daemon side pending)
     func serverMetrics(podId: String) async throws -> ServerMetricsResponse
+
+    // P1.15 install-events (SSE) — streams provisioning progress for a
+    // freshly-minted build code as it boots, registers, gets a cert,
+    // and goes ready. AsyncStream ends with the terminal event.
+    func installEvents(serial: String) -> AsyncStream<InstallEvent>
+
+    // P1.6 vibe-code stream — streams build progress (tokens, manifest
+    // emit, repo create, deploy) for a vibe-code session.
+    func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame>
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {

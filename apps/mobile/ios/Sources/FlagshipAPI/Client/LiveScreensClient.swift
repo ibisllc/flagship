@@ -109,6 +109,96 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serverMetrics(podId: String) async throws -> ServerMetricsResponse {
         try await request("/api/screens/server-metrics/\(podId)")
     }
+
+    /// SSE stream of `InstallEvent`s. Each `data:` frame is a JSON
+    /// `InstallEvent`; the stream finishes on the daemon's
+    /// `event: end` line or when the underlying URLSession bytes
+    /// stream closes.
+    public func installEvents(serial: String) -> AsyncStream<InstallEvent> {
+        AsyncStream { continuation in
+            let task = Task { [self] in
+                guard let base = await store.podBaseUrl,
+                      let token = await store.sessionToken,
+                      let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/install-events/\(serial)")
+                else {
+                    continuation.finish()
+                    return
+                }
+                var req = URLRequest(url: url)
+                req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+                req.setValue("text/event-stream", forHTTPHeaderField: "accept")
+                do {
+                    let (bytes, _) = try await urlSession.bytes(for: req)
+                    var buffer = ""
+                    for try await line in bytes.lines {
+                        if line.isEmpty {
+                            buffer = ""
+                            continue
+                        }
+                        guard line.hasPrefix("data:") else { continue }
+                        buffer = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        if let data = buffer.data(using: .utf8),
+                           let event = try? JSONDecoder().decode(InstallEvent.self, from: data) {
+                            continuation.yield(event)
+                            if case .ready = event { break }
+                            if case .failed = event { break }
+                        }
+                    }
+                } catch {
+                    // network error → end the stream
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// WebSocket stream of vibe-code frames. The daemon currently
+    /// stubs this to a poll-driven proxy; we model the SDK-level
+    /// API as a true AsyncStream so the UI doesn't care.
+    public func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame> {
+        AsyncStream { continuation in
+            let task = Task { [self] in
+                guard let base = await store.podBaseUrl,
+                      let token = await store.sessionToken,
+                      var comps = URLComponents(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/screens/vibe-code/\(sessionId)/stream")
+                else {
+                    continuation.finish()
+                    return
+                }
+                comps.scheme = comps.scheme?.hasSuffix("s") == true ? "wss" : "ws"
+                guard let url = comps.url else {
+                    continuation.finish()
+                    return
+                }
+                var req = URLRequest(url: url)
+                req.setValue(token, forHTTPHeaderField: "x-flagship-session")
+                let ws = urlSession.webSocketTask(with: req)
+                ws.resume()
+                while !Task.isCancelled {
+                    do {
+                        let msg = try await ws.receive()
+                        let data: Data
+                        switch msg {
+                        case .data(let d): data = d
+                        case .string(let s): data = Data(s.utf8)
+                        @unknown default: continue
+                        }
+                        if let frame = try? JSONDecoder().decode(VibeCodeFrame.self, from: data) {
+                            continuation.yield(frame)
+                            if case .done = frame { break }
+                            if case .error = frame { break }
+                        }
+                    } catch {
+                        break
+                    }
+                }
+                ws.cancel(with: .normalClosure, reason: nil)
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 private struct EmptyResponse: Decodable {}

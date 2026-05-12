@@ -1,4 +1,5 @@
 import SwiftUI
+import FlagshipAPI
 
 /// D.6.1 — VibeCodeProviderPickScreen.
 public struct VibeCodeProviderPickScreen: View {
@@ -97,10 +98,8 @@ public struct VibeCodeDescribeScreen: View {
                             .font(FS.font.body()).foregroundColor(c.textMuted)
                     }
 
-                    // Textarea
                     PromptArea(prompt: $prompt)
 
-                    // Examples
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: FS.space.s2) {
                             ForEach(["Habit tracker", "Family wishlist", "Recipe jar", "Sleep journal"], id: \.self) { ex in
@@ -113,15 +112,6 @@ public struct VibeCodeDescribeScreen: View {
                         LabeledRow(label: "Name", value: name)
                         LabeledRow(label: "Visible to", value: "Just me")
                         LabeledRow(label: "AI", value: "Claude (Flagship credits)")
-                    }
-
-                    FSCard {
-                        FSColorReader { c in
-                            Text("It'll ask for these:").font(FS.font.caption()).foregroundColor(c.textMuted)
-                            Text("· Postgres (a 'plants' table)\n· Object store (photos)\n· Push notifications")
-                                .font(.system(size: 14))
-                                .foregroundColor(c.text)
-                        }
                     }
 
                     FSPrimaryButton("Build it", block: true, large: true, action: { onBuild(prompt) })
@@ -194,59 +184,106 @@ private struct LabeledRow: View {
     }
 }
 
-/// D.6.4 — VibeCodeGeneratingScreen.
+/// D.6.4 — Live vibe-code generation screen. Subscribes to the
+/// WebSocket-driven frame stream and renders the running transcript +
+/// build logs + final deploy URL.
 public struct VibeCodeGeneratingScreen: View {
-    public init() {}
+    @Environment(\.colorScheme) private var scheme
+    @Bindable var vm: VibeCodeStreamViewModel
+    var onOpenApp: (String) -> Void = { _ in }
+    var onInterrupt: () -> Void = {}
+
+    public init(
+        vm: VibeCodeStreamViewModel,
+        onOpenApp: @escaping (String) -> Void = { _ in },
+        onInterrupt: @escaping () -> Void = {}
+    ) {
+        self.vm = vm
+        self.onOpenApp = onOpenApp
+        self.onInterrupt = onInterrupt
+    }
+
     public var body: some View {
-        FSScreen {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
+                header(c: c)
+                transcriptCard(c: c)
+                if !vm.buildLogs.isEmpty {
+                    logsCard(c: c)
+                }
+                if let url = vm.deployedUrl, let appId = vm.deployedAppId {
+                    deployedCard(url: url, appId: appId, c: c)
+                }
+                if let err = vm.errorMessage {
+                    ErrorCard(message: err)
+                }
                 Spacer().frame(height: FS.space.s12)
-                Text("Building plants…").font(FS.font.h2())
-                FSColorReader { c in
-                    Text("Streaming live. You can interrupt with a follow-up at any time.")
-                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                }
-
-                FSCard(padding: FS.space.s4) {
-                    StreamPreview()
-                }
-
-                Spacer()
-
-                HStack(spacing: FS.space.s2) {
-                    FSGhostButton("Interrupt", action: {})
-                    FSSecondaryButton("Save & continue later", block: true, action: {})
-                }
-                Spacer().frame(height: FS.space.s8)
             }
             .padding(.horizontal, FS.space.s6)
+            .padding(.top, FS.space.s4)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .task { vm.start() }
+        .onDisappear { vm.cancel() }
+        .navigationTitle("Building")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func header(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text(headlineText).font(FS.font.h2()).foregroundColor(c.text)
+            Text("Session \(vm.sessionId)").font(FS.font.mono()).foregroundColor(c.textMuted)
         }
     }
-}
 
-private struct StreamPreview: View {
-    @Environment(\.colorScheme) private var scheme
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Sketching the schema. One table for plants, one for waterings.")
-                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-            Text("── flagship.app.json ──")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundColor(c.primary)
-                .padding(.top, FS.space.s2)
-            Text("{\n  \"schema_version\": 1,\n  \"name\": \"plants\",\n  ...\n}")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(c.text)
-            Text("── Dockerfile ──")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundColor(c.primary)
-                .padding(.top, FS.space.s2)
-            Text("FROM node:20-alpine\nWORKDIR /app\n...")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(c.text)
-            Spacer()
+    private var headlineText: String {
+        switch vm.status {
+        case .streaming: return "Generating…"
+        case .building:  return "Building…"
+        case .deployed:  return "Live."
+        case .done:      return "Done."
+        case .failed:    return "Stopped."
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func transcriptCard(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("ASSISTANT").font(FS.font.caption()).tracking(1).foregroundColor(c.textMuted)
+                Text(vm.transcript.isEmpty ? "…" : vm.transcript)
+                    .font(.system(size: 15))
+                    .foregroundColor(c.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func logsCard(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("BUILD LOGS").font(FS.font.caption()).tracking(1).foregroundColor(c.textMuted)
+                ForEach(vm.buildLogs.indices, id: \.self) { i in
+                    Text(vm.buildLogs[i])
+                        .font(FS.font.mono())
+                        .foregroundColor(c.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private func deployedCard(url: String, appId: String, c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
+                    Text("Deployed").font(FS.font.h4()).foregroundColor(c.text)
+                }
+                Text(url).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
+                FSPrimaryButton("Open \(appId)", block: true) { onOpenApp(appId) }
+            }
+        }
     }
 }

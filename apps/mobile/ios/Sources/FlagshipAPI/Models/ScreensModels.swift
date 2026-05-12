@@ -280,6 +280,19 @@ public enum InstallEvent: Codable, Equatable {
             try c.encode("failed", forKey: .kind); try c.encode(r, forKey: .reason); try c.encode(at, forKey: .at)
         }
     }
+
+    /// Returns a copy with the timestamp replaced — used by mock
+    /// streaming so emitted events carry the real wall-clock time.
+    public func restamped(_ at: Int64) -> InstallEvent {
+        switch self {
+        case .registered(let s, _): return .registered(serial: s, at: at)
+        case .boot:                  return .boot(at: at)
+        case .tunnelOnline:          return .tunnelOnline(at: at)
+        case .certIssued:            return .certIssued(at: at)
+        case .ready(let f, _):       return .ready(serverFqdn: f, at: at)
+        case .failed(let r, _):      return .failed(reason: r, at: at)
+        }
+    }
 }
 
 // MARK: - P1.16 tier-status

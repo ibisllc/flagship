@@ -1,17 +1,14 @@
 import SwiftUI
 
-/// Placeholder for the "Create a new server" provisioning flow. Real
-/// impl mints a build code on flagshipserver.com, hands the user the
-/// ISO download link, then waits on /api/install-events for the freshly
-/// booted box to phone home. Mirrors `views/create-server.js` +
-/// `install-progress` in the webapp.
-///
-/// The user supplies a short name + one-line description at this step
-/// so the server has friendly identification from the moment it
-/// appears in the pod list — never an FQDN-only entry.
+/// Provisioning flow entry point. The user supplies a short name +
+/// one-line description so the server is identified from the moment
+/// it appears in the pod list (never an FQDN-only entry). Tapping
+/// "Mint a build code" advances the parent to a live install-progress
+/// screen that subscribes to the daemon's SSE stream.
 public struct CreateServerStubScreen: View {
     @Environment(\.colorScheme) private var scheme
     let username: String
+    var onStartProvisioning: (_ serial: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onDemoComplete: (_ name: String, _ description: String) -> Void = { _, _ in }
 
     @State private var name: String = ""
@@ -19,9 +16,11 @@ public struct CreateServerStubScreen: View {
 
     public init(
         username: String,
+        onStartProvisioning: @escaping (_ serial: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDemoComplete: @escaping (_ name: String, _ description: String) -> Void = { _, _ in }
     ) {
         self.username = username
+        self.onStartProvisioning = onStartProvisioning
         self.onDemoComplete = onDemoComplete
     }
 
@@ -55,29 +54,37 @@ public struct CreateServerStubScreen: View {
                     }
                 }
 
-                FSCard {
-                    HStack(alignment: .top, spacing: FS.space.s2) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundColor(c.warning)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Not yet wired to flagshipserver.com.").font(FS.font.bodySm()).foregroundColor(c.text)
-                            Text("For development you can mint a build code from the webapp at /dev/create-server.").font(FS.font.caption()).foregroundColor(c.textMuted)
-                        }
-                    }
-                }
-
                 FSPrimaryButton(
-                    "I've provisioned a server (use mock data)",
+                    "Mint a build code & watch boot",
                     enabled: !name.isEmpty,
                     block: true,
                     large: true
                 ) {
-                    onDemoComplete(name, description)
+                    let serial = mintMockSerial()
+                    onStartProvisioning(serial, name, description)
+                }
+
+                if !name.isEmpty {
+                    FSGhostButton(
+                        "Skip — pretend it's already running",
+                        block: true
+                    ) {
+                        onDemoComplete(name, description)
+                    }
                 }
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
+    }
+
+    private func mintMockSerial() -> String {
+        // Real impl POSTs to flagshipserver.com/api/build-codes/mint and
+        // gets back a 12-char build code. Here we synthesize a similar
+        // shape so the SSE stream feels real.
+        let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        return String((0..<12).map { _ in alphabet.randomElement()! })
     }
 
     private func step(n: Int, title: String, body: String, c: FSColors) -> some View {

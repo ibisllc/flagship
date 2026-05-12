@@ -63,8 +63,8 @@ public struct AppsTab: View {
             )
         case .vibeCodeDescribe:
             VibeCodeDescribeContainer(path: $path)
-        case .vibeCodeGenerating:
-            VibeCodeGeneratingScreen()
+        case .vibeCodeGenerating(let sessionId):
+            VibeCodeGeneratingContainer(sessionId: sessionId)
         }
     }
 
@@ -351,5 +351,25 @@ struct VibeCodeDescribeContainer: View {
                 }
             }
         })
+    }
+}
+
+struct VibeCodeGeneratingContainer: View {
+    let sessionId: String
+    @Environment(\.screensClient) private var client
+    @State private var vm: VibeCodeStreamViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                VibeCodeGeneratingScreen(vm: vm)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil { vm = VibeCodeStreamViewModel(sessionId: sessionId, client: client) }
+        }
     }
 }

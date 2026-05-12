@@ -6,6 +6,7 @@ import Foundation
 public enum HomeRoute: Hashable, Sendable {
     case serverDetail(podId: String)
     case addServer
+    case installProgress(serial: String, name: String, description: String)
 }
 
 public enum AppsRoute: Hashable, Sendable {
