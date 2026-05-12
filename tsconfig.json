@@ -13,6 +13,7 @@
     { "path": "./packages/control-plane" },
     { "path": "./packages/hello-daemon" },
     { "path": "./apps/web" },
+    { "path": "./services/marketplace-scanner" },
     { "path": "./maintainers/packages/protocol" }
   ]
 }

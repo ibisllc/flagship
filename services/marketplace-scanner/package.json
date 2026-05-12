@@ -1,0 +1,21 @@
+{
+  "name": "@flagship/marketplace-scanner",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "bin": {
+    "flagship-marketplace-scanner": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@flagship/protocol": "*",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^1.5.0"
+  },
+  "license": "BUSL-1.1"
+}
