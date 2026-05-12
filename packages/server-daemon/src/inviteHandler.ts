@@ -217,7 +217,11 @@ export function buildInviteHandler(deps: InviteHandlerDeps) {
       return invitePage();
     }
     if (!req.path.startsWith("/.flagship/app/")) return null;
-    const tail = req.path.slice("/.flagship/app/".length);
+    // Strip a query string before path-segment matching; the preview
+    // endpoint uses ?h=<sha256hex> as its sole input.
+    const qIdx = req.path.indexOf("?");
+    const pathOnly = qIdx === -1 ? req.path : req.path.slice(0, qIdx);
+    const tail = pathOnly.slice("/.flagship/app/".length);
     const parts = tail.split("/");
     const appId = parts[0];
     if (!appId) return null;
@@ -231,11 +235,54 @@ export function buildInviteHandler(deps: InviteHandlerDeps) {
     if (parts[1] === "invite" && parts[2] === "accept" && parts.length === 3 && req.method === "POST") {
       return acceptInvite(deps, appId, req, { now, rand, maxAgeMs });
     }
+    if (parts[1] === "invite" && parts[2] === "preview" && parts.length === 3 && req.method === "GET") {
+      // #83.3: serve the contextNote BEFORE the consumer is allowed to
+      // accept, so the page can render the issuer's own pseudonym /
+      // memo. The endpoint reads the secret hash from a query param
+      // (`?h=<sha256hex>`) — the consumer's browser computes the hash
+      // client-side from the secret in the URL fragment, so the secret
+      // itself never crosses the wire to the daemon.
+      const q = req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "";
+      const params = new URLSearchParams(q);
+      const h = params.get("h");
+      if (!h || !/^[0-9a-f]{64}$/i.test(h)) return jerr(400, "h required (sha256 hex)");
+      return previewInvite(deps, appId, h.toLowerCase(), now);
+    }
     if (parts[1] === "access" && parts[3] === "revoke" && parts.length === 4 && req.method === "POST") {
       const irkHex = parts[2]!;
       return revokeAccess(deps, appId, irkHex, req, { now, maxAgeMs });
     }
     return null;
+  };
+}
+
+async function previewInvite(
+  deps: InviteHandlerDeps,
+  appId: string,
+  secretHash: string,
+  now: () => number,
+): Promise<HttpResponse> {
+  const invite = await deps.store.findInviteBySecretHash(appId, secretHash);
+  if (!invite) return jerr(404, "unknown invite");
+  // Don't leak status (consumed/revoked vs pending) on preview — the
+  // accept call surfaces that. We do gate on expiry so a stale preview
+  // doesn't mislead the consumer into spending a redemption attempt.
+  if (now() > invite.expiresAt) return jerr(410, "invite expired");
+  return {
+    status: 200,
+    headers: J,
+    body: JSON.stringify({
+      appId,
+      role: invite.role,
+      contextNote: invite.contextNote,
+      issuedAt: invite.issuedAt,
+      expiresAt: invite.expiresAt,
+      // Pre-binding boolean is safe to surface (it's already implied by
+      // the rejection message on accept); we surface it on preview so
+      // the page can tell the user "this link is bound to a specific
+      // identity" before they fire the signed acceptance envelope.
+      preBound: invite.expectedIrkPubKey !== null,
+    }),
   };
 }
 
@@ -325,12 +372,19 @@ async function issueInvite(
     if (expectedIrkPubKey.length !== 32) return jerr(400, "expectedIrkPubKey must be 32 bytes");
   }
 
-  const contextNote =
-    r.contextNote === undefined || r.contextNote === null
-      ? null
-      : typeof r.contextNote === "string"
-        ? r.contextNote.slice(0, 280)
-        : null;
+  let contextNote: string | null;
+  if (r.contextNote === undefined || r.contextNote === null) {
+    contextNote = null;
+  } else if (typeof r.contextNote === "string") {
+    // Reject (not silently clamp) overlong notes: clamping would break
+    // signature verification — the issuer signed the original bytes,
+    // not the truncated form. Keep the hard cap small enough that no
+    // legitimate "from harry's phone — work" note ever hits it.
+    if (r.contextNote.length > 280) return jerr(400, "contextNote too long (max 280 chars)");
+    contextNote = r.contextNote;
+  } else {
+    return jerr(400, "contextNote must be a string or null");
+  }
 
   if (typeof r.issuedAt !== "number") return jerr(400, "issuedAt must be a number");
   if (Math.abs(rb.now() - r.issuedAt) > rb.maxAgeMs) return jerr(403, "stale request");
@@ -670,12 +724,16 @@ const INVITE_HTML = `<!doctype html>
   .status { margin-top: 1rem; font-size: .9rem; }
   .status.ok { color: #6ee7a8; }
   .status.err { color: var(--danger); }
+  #context-note { font-weight: 600; }
 </style>
 </head>
 <body>
 <h1>You've been invited.</h1>
-<p id="lede">Someone shared an access link with you for this app.</p>
-<div id="context" class="note" hidden></div>
+<p id="lede">Loading invite details…</p>
+<div id="context" class="note" hidden>
+  <div>Issuer's note to you:</div>
+  <div id="context-note"></div>
+</div>
 <div class="caution">
   <strong>Before you accept</strong>: only consume this invite if you got it
   from the person you trust. Anyone holding this link can claim access — the
@@ -684,7 +742,7 @@ const INVITE_HTML = `<!doctype html>
   recovery if you accidentally consume the wrong one).
 </div>
 <div class="row">
-  <button id="accept">Accept and continue</button>
+  <button id="accept" disabled>Accept and continue</button>
   <button id="cancel" style="background:#333;color:#eee">Cancel</button>
 </div>
 <div class="status" id="status"></div>
@@ -693,33 +751,47 @@ const INVITE_HTML = `<!doctype html>
   const frag = new URLSearchParams(location.hash.slice(1));
   const secret = frag.get("k") || "";
   const appId = frag.get("a") || "";
+  const status = document.getElementById("status");
   if (!secret || !appId) {
     document.getElementById("lede").textContent = "This invite link is missing required parameters.";
-    document.getElementById("accept").disabled = true;
     return;
   }
-  // The context note is encoded in the fragment too (so the page
-  // works without a server round-trip). The owner's phone wrote it
-  // when generating the share-link.
-  const note = frag.get("n");
-  if (note) {
-    const el = document.getElementById("context");
-    el.textContent = decodeURIComponent(note);
-    el.hidden = false;
-  }
   document.getElementById("cancel").onclick = () => {
-    document.getElementById("status").textContent = "Cancelled.";
+    status.textContent = "Cancelled.";
   };
+  async function sha256Hex(hex) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i*2, i*2+2), 16);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+  // Fetch the issuer's contextNote from the daemon BEFORE allowing
+  // the consumer to accept. The secret never leaves the browser —
+  // we send only its SHA-256.
+  (async () => {
+    try {
+      const h = await sha256Hex(secret);
+      const r = await fetch("/.flagship/app/" + encodeURIComponent(appId) + "/invite/preview?h=" + h);
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || ("HTTP " + r.status));
+      }
+      const j = await r.json();
+      document.getElementById("lede").textContent = "You've been invited to " + j.appId + " as " + j.role + ".";
+      if (j.contextNote) {
+        document.getElementById("context-note").textContent = j.contextNote;
+        document.getElementById("context").hidden = false;
+      }
+      document.getElementById("accept").disabled = false;
+    } catch (e) {
+      status.className = "status err";
+      status.textContent = "Could not load invite: " + (e && e.message || e);
+    }
+  })();
   document.getElementById("accept").onclick = async () => {
-    const status = document.getElementById("status");
     status.className = "status";
     status.textContent = "Computing acceptance…";
     document.getElementById("accept").disabled = true;
-    // The browser doesn't hold an IRK by itself — the consumer's
-    // Flagship device hooks this page via a postMessage / native
-    // bridge. For now we surface a JSON body the device fetches and
-    // signs out-of-band. The webapp/phone is expected to inject the
-    // signature via window.flagshipSignAcceptance(secret, appId).
     const handoff = (window).flagshipSignAcceptance;
     if (typeof handoff !== "function") {
       status.className = "status err";
