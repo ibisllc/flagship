@@ -27,6 +27,8 @@ import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
 import { initAppsListView, enterAppsList } from "./views/apps-list.js";
 import { initAppDetailView } from "./views/app-detail.js";
+import { initInviteIssueView } from "./views/invite-issue.js";
+import { initInviteManageView } from "./views/invite-manage.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
@@ -54,6 +56,8 @@ const SUB_VIEW_TABS = {
   "view-create-server": "home",
   "view-apps-list": "apps",
   "view-app-detail": "apps",
+  "view-invite-issue": "apps",
+  "view-invite-manage": "apps",
   "view-marketplace": "apps",
   "view-vibe-code": "apps",
   "view-browser-viewer": "apps",
@@ -177,6 +181,8 @@ async function boot() {
   initServerDetailView();
   initAppsListView();
   initAppDetailView();
+  initInviteIssueView();
+  initInviteManageView();
   initPairedSessionsView();
   initTierStatusView();
   initMarketplaceView();

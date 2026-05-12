@@ -1,0 +1,183 @@
+// #82 — Invite manage view.
+//
+// Per-app pending invites + active accesses + revoke. Labels for both
+// lists are resolved client-side from the local label-book (#82) — the
+// daemon's response only carries opaque tags + IRK pubkey prefixes;
+// the human-readable "John (work)" mapping never leaves this device.
+//
+// Cross-worker dependency: the daemon's screens BFF surface for
+// `/api/screens/app-invite/list/:appId` and `/api/screens/app-invite/revoke`
+// is stubbed for now (the inviteHandler primitives exist server-side
+// at /.flagship/app/<id>/invite/* but a paired-session-gated BFF
+// wrapper isn't shipped yet). This view degrades to a "no data" state
+// when the endpoints aren't configured, so the rest of #82 (issue +
+// labels) can land while the BFF wrapper follows.
+
+import { $, registerView, show } from "../lib/router.js";
+import { screensFetch, ScreensError } from "../lib/api.js";
+import { toast } from "../lib/toast.js";
+import { escapeHtml } from "../lib/util.js";
+import { listLabelsForApp, removeLabel } from "../lib/labelBook.js";
+
+registerView("view-invite-manage");
+
+let currentApp = null;
+
+export async function renderInviteManage(app) {
+  currentApp = app;
+  const root = $("invite-manage-content");
+  root.innerHTML = `
+    <div class="card">
+      <div class="card-title">${escapeHtml(app.slug ?? app.appId)}</div>
+      <div class="muted-sm">${escapeHtml(app.url ?? "")}</div>
+    </div>
+    <h3 class="mt-4">Pending invites</h3>
+    <div id="im-pending" class="mt-2"><div class="card placeholder">loading…</div></div>
+    <h3 class="mt-4">Active accesses</h3>
+    <div id="im-active" class="mt-2"><div class="card placeholder">loading…</div></div>
+  `;
+
+  const labels = await listLabelsForApp(app.appId);
+  const labelByTag = new Map(labels.map((l) => [l.opaqueTagHex, l]));
+
+  await renderPending(app, labelByTag);
+  await renderActive(app, labelByTag);
+}
+
+async function renderPending(app, labelByTag) {
+  const root = $("im-pending");
+  try {
+    const body = await screensFetch(
+      `/api/screens/app-invite/list/${encodeURIComponent(app.appId)}`,
+    );
+    const pending = body.pending ?? [];
+    if (pending.length === 0) {
+      root.innerHTML = '<div class="card placeholder">no pending invites</div>';
+      return;
+    }
+    root.innerHTML = pending.map((inv) => {
+      const label = labelByTag.get((inv.opaqueTag ?? "").toLowerCase());
+      const labelText = label ? label.displayName : "unknown";
+      return `
+        <div class="card">
+          <div class="row row-top">
+            <div>
+              <div class="weight-600">${escapeHtml(labelText)}</div>
+              <div class="muted-sm">role: ${escapeHtml(inv.role ?? "")} · expires ${escapeHtml(new Date(inv.expiresAt ?? 0).toLocaleString())}</div>
+              <div class="value text-xs">tag ${escapeHtml((inv.opaqueTag ?? "").slice(0, 12))}…</div>
+            </div>
+            <button class="secondary" data-action="revoke-invite" data-tag="${escapeHtml(inv.opaqueTag ?? "")}" data-id="${escapeHtml(inv.inviteId ?? "")}">Revoke</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+    root.querySelectorAll('[data-action="revoke-invite"]').forEach((b) => {
+      b.addEventListener("click", () => onRevokeInvite(app, b.getAttribute("data-id"), b.getAttribute("data-tag")));
+    });
+  } catch (e) {
+    if (e instanceof ScreensError && e.status === 404) {
+      // BFF wrapper not yet wired — show the locally-known labels so
+      // the user still gets utility from this screen.
+      const local = [...labelByTag.values()];
+      if (local.length === 0) {
+        root.innerHTML = '<div class="card placeholder">no pending invites tracked locally</div>';
+        return;
+      }
+      root.innerHTML = local.map((l) => `
+        <div class="card">
+          <div class="weight-600">${escapeHtml(l.displayName)}</div>
+          <div class="muted-sm">channel: ${escapeHtml(l.channel)} · sent ${escapeHtml(new Date(l.sentAt).toLocaleString())}</div>
+          <div class="value text-xs">tag ${escapeHtml((l.opaqueTagHex ?? "").slice(0, 12))}…</div>
+        </div>
+      `).join("");
+    } else {
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(String(e))}</p></div>`;
+    }
+  }
+}
+
+async function renderActive(app, labelByTag) {
+  const root = $("im-active");
+  try {
+    const body = await screensFetch(
+      `/api/screens/app-invite/access/${encodeURIComponent(app.appId)}`,
+    );
+    const access = body.access ?? [];
+    if (access.length === 0) {
+      root.innerHTML = '<div class="card placeholder">no active access</div>';
+      return;
+    }
+    root.innerHTML = access.map((a) => {
+      const label = labelByTag.get((a.opaqueTag ?? "").toLowerCase());
+      const labelText = label ? label.displayName : "unknown";
+      return `
+        <div class="card">
+          <div class="row row-top">
+            <div>
+              <div class="weight-600">${escapeHtml(labelText)}</div>
+              <div class="muted-sm">role: ${escapeHtml(a.role ?? "")} · since ${escapeHtml(new Date(a.grantedAt ?? 0).toLocaleString())}</div>
+              <div class="value text-xs">IRK ${escapeHtml((a.irkPubHex ?? "").slice(0, 12))}…</div>
+            </div>
+            <button class="secondary" data-action="revoke-access" data-irk="${escapeHtml(a.irkPubHex ?? "")}" data-tag="${escapeHtml(a.opaqueTag ?? "")}">Revoke</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+    root.querySelectorAll('[data-action="revoke-access"]').forEach((b) => {
+      b.addEventListener("click", () => onRevokeAccess(app, b.getAttribute("data-irk"), b.getAttribute("data-tag")));
+    });
+  } catch (e) {
+    if (e instanceof ScreensError && e.status === 404) {
+      root.innerHTML = '<div class="card placeholder">access list not available in this build</div>';
+    } else {
+      root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(String(e))}</p></div>`;
+    }
+  }
+}
+
+async function onRevokeInvite(app, inviteId, tag) {
+  try {
+    await screensFetch(`/api/screens/app-invite/revoke`, {
+      method: "POST",
+      body: JSON.stringify({ appId: app.appId, inviteId, scope: "invite" }),
+    });
+    if (tag) await removeLabel(app.appId, tag);
+    toast("invite revoked", "ok");
+    await renderInviteManage(app);
+  } catch (e) {
+    toast(String(e), "err");
+  }
+}
+
+async function onRevokeAccess(app, irkPubHex, tag) {
+  try {
+    await screensFetch(`/api/screens/app-invite/revoke`, {
+      method: "POST",
+      body: JSON.stringify({ appId: app.appId, irkPubKey: irkPubHex, scope: "access" }),
+    });
+    if (tag) await removeLabel(app.appId, tag);
+    toast("access revoked", "ok");
+    await renderInviteManage(app);
+  } catch (e) {
+    toast(String(e), "err");
+  }
+}
+
+export function initInviteManageView() {
+  $("invite-manage-back")?.addEventListener("click", async () => {
+    if (currentApp) {
+      const { enterAppDetail } = await import("./app-detail.js");
+      await enterAppDetail(currentApp.appId);
+    } else {
+      show("view-home");
+    }
+  });
+  $("invite-manage-refresh")?.addEventListener("click", () => {
+    if (currentApp) renderInviteManage(currentApp).catch((e) => toast(String(e), "err"));
+  });
+}
+
+export async function enterInviteManage(app) {
+  show("view-invite-manage");
+  await renderInviteManage(app);
+}
