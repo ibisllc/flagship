@@ -1,0 +1,22 @@
+Business Source License 1.1
+
+Parameters
+
+Licensor:             Ibis LLC
+Licensed Work:        maintainers
+                      The Licensed Work is (c) 2026 Ibis LLC.
+Additional Use Grant: You may use, copy, run, and modify the Licensed Work
+                      for any purpose, including embedding it in your own
+                      projects and operating services that incorporate it.
+                      You may NOT offer the Licensed Work itself, or a
+                      modified version of it, as a hosted or managed
+                      maintainers-protocol service that competes with
+                      Ibis LLC's commercial offerings.
+Change Date:          2030-05-03
+Change License:       Apache License, Version 2.0
+
+For the full text of the Business Source License 1.1, see:
+https://mariadb.com/bsl11/
+
+This file is a parameters block; the canonical BSL-1.1 terms apply
+unmodified except for the parameters above.

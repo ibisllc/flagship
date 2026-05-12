@@ -14,11 +14,10 @@ every copy.
 
 ## Status
 
-This subtree is being developed inside the Flagship monorepo for
-convenience. It will be extracted to its own repository at
-`github.com/<TBD>/maintainers` before any external announcement.
-All code, specs, and packages here are designed for standalone use;
-none of them depend on Flagship internals.
+This project is developed in the Flagship monorepo and mirrored to
+its standalone home at `github.com/ibisllc/maintainers`. All code,
+specs, and packages are designed for standalone use; none depend on
+Flagship internals.
 
 ## Structure
 
@@ -39,4 +38,5 @@ maintainers/
 
 ## License
 
-BUSL-1.1, Change Date 2030-05-03 → Apache 2.0. Same terms as Flagship.
+BUSL-1.1, Change Date 2030-05-03 → Apache 2.0. See [LICENSE](./LICENSE).
+Copyright (c) 2026 Ibis LLC.
