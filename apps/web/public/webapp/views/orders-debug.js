@@ -9,7 +9,7 @@
 // the dedicated UI.
 
 import { bytesToHex, signWithIrk } from "../keystore.js";
-import { $, registerView, show } from "../lib/router.js";
+import { $, registerView, show, isDebug } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -168,6 +168,14 @@ export function initOrdersDebugView() {
 }
 
 export function enterOrdersDebug() {
+  // #33 — developer surface. Gated behind Settings → Advanced → Show
+  // developer tools OR ?debug=1. Calling enterOrdersDebug() without
+  // either set bounces back to Settings with a toast.
+  if (!isDebug()) {
+    toast("enable developer tools in Settings → Advanced", "warn");
+    show("view-settings-tab");
+    return;
+  }
   show("view-orders-debug");
   renderFields();
   $("od-result").innerHTML = "";

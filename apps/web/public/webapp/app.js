@@ -87,6 +87,21 @@ async function enterSettingsTab() {
   }
 }
 
+/**
+ * #33 — promote ?debug=1 in the URL to a sticky localStorage flag the
+ * first time we see it. Power users can curl-style enable the
+ * developer surfaces by reloading with ?debug=1; subsequent reloads
+ * remember the setting until they untick it from Settings → Advanced.
+ */
+function persistDebugFlagFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("debug") === "1") {
+      localStorage.setItem("flagship.debug", "1");
+    }
+  } catch { /* ignore */ }
+}
+
 function wireTabBar() {
   // Lucide icons rendered into the tab strip — matches the existing
   // home-grid decoration pattern so colour cascades on hover/active.
@@ -166,6 +181,7 @@ function wireAppsTabEntries() {
 }
 
 async function boot() {
+  persistDebugFlagFromUrl();
   initBootstrapView();
   initUnlockView();
   initHomeView({
