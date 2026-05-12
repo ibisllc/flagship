@@ -184,6 +184,16 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   ) {
     return "recovery-by-username";
   }
+  // Task #74 — the Argon2id-gated wrappedUmk fetch sits under the same
+  // budget as the metadata GET (3-per-15min per usernameHash). Combining
+  // them keeps a passphrase-guesser from rotating between paths to
+  // double their attempts.
+  if (
+    m === "POST" &&
+    /^\/api\/recovery\/by-username\/[^/]+\/fetch$/.test(pathname)
+  ) {
+    return "recovery-by-username";
+  }
   return null;
 }
 
@@ -211,9 +221,11 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
     : undefined;
 }
 
-/** Pull the username hash out of the recovery path (`/api/recovery/by-username/<hash>`). */
+/** Pull the username hash out of the recovery path (`/api/recovery/by-username/<hash>[/fetch]`). */
 export function extractUsernameHash(pathname: string): string | undefined {
-  const m = pathname.match(/^\/api\/recovery\/by-username\/([^/]+)$/);
+  const m =
+    pathname.match(/^\/api\/recovery\/by-username\/([^/]+)$/) ??
+    pathname.match(/^\/api\/recovery\/by-username\/([^/]+)\/fetch$/);
   return m ? decodeURIComponent(m[1]!) : undefined;
 }
 

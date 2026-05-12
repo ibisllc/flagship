@@ -12,13 +12,20 @@ import type { HandlerResponse } from "./types.js";
 /**
  * Webapp cloud-shard recovery (WebAuthn PRF).
  *
- * `POST /api/recovery`                      IRK-signed; upserts the record
- * `GET  /api/recovery/by-username/:username` public; returns the ciphertext
- * `DELETE /api/recovery/by-username/:username` IRK-signed; kill switch
+ * `POST   /api/recovery`                            IRK-signed; upserts the record
+ * `GET    /api/recovery/by-username/:username`       public metadata only — returns
+ *                                                  credentialId + the SHA-256 of the
+ *                                                  stored ciphertext, NOT the ciphertext
+ *                                                  itself (Task #74).
+ * `POST   /api/recovery/by-username/:username/fetch` Argon2id-gated; releases the
+ *                                                  ciphertext only when the caller
+ *                                                  presents a fetchToken whose
+ *                                                  SHA-256 matches the stored hash.
+ * `DELETE /api/recovery/by-username/:username`       IRK-signed; kill switch.
  *
- * `.com` only ever stores ciphertext + the credentialId pointer. The
- * unwrap key is the user's WebAuthn passkey PRF output, which never
- * leaves the browser.
+ * `.com` only ever stores ciphertext + the credentialId pointer + the
+ * passphrase-derived hashes. The unwrap key is the user's WebAuthn
+ * passkey PRF output, which never leaves the browser.
  */
 
 export interface WebauthnRecoveryDeps {
@@ -86,6 +93,22 @@ export async function handleUploadWebauthnRecovery(
   if (!/^[0-9a-fA-F]{16,512}$/.test(r.credentialId)) {
     return { status: 400, body: { error: "credentialId must be 8-256 hex bytes" } };
   }
+  // Task #74: passphrase-derived hashes — optional on the wire to keep
+  // the canonical-bytes type stable (the protocol hashes only the
+  // wrappedUmk bytes, not these new fields), but the recovery sub-origin
+  // page always sends them. We accept-if-present + validate shape; rows
+  // without them remain readable via the legacy presence GET but cannot
+  // serve out the ciphertext through the new gated POST.
+  if (r.fetchTokenHash !== undefined && r.fetchTokenHash !== null) {
+    if (typeof r.fetchTokenHash !== "string" || !/^[0-9a-f]{64}$/.test(r.fetchTokenHash)) {
+      return { status: 400, body: { error: "fetchTokenHash must be 64 hex chars (SHA-256)" } };
+    }
+  }
+  if (r.prfSaltHash !== undefined && r.prfSaltHash !== null) {
+    if (typeof r.prfSaltHash !== "string" || !/^[0-9a-f]{64}$/.test(r.prfSaltHash)) {
+      return { status: 400, body: { error: "prfSaltHash must be 64 hex chars (SHA-256)" } };
+    }
+  }
   // Wrapped UMK is base64; decode to recompute the signed hash, then
   // store as base64. Cap at 16 KiB ciphertext to keep D1 row size sane.
   const wrappedBytes = base64DecodeBytes(r.wrappedUmk);
@@ -127,6 +150,8 @@ export async function handleUploadWebauthnRecovery(
     credentialIdHex: r.credentialId,
     wrappedUmkB64: r.wrappedUmk,
     irkPubHex: userRec.irkPubHex,
+    ...(typeof r.fetchTokenHash === "string" ? { fetchTokenHashHex: r.fetchTokenHash.toLowerCase() } : {}),
+    ...(typeof r.prfSaltHash === "string" ? { prfSaltHashHex: r.prfSaltHash.toLowerCase() } : {}),
     createdAt: existing?.createdAt ?? t,
     updatedAt: t,
   });
@@ -134,10 +159,20 @@ export async function handleUploadWebauthnRecovery(
 }
 
 /**
- * Public fetch of the recovery record. Returns ciphertext + credentialId
- * so the recovering browser can do `navigator.credentials.get()` scoped
- * to that specific passkey, then PRF-unwrap. No signature gate — the
- * payload is opaque ciphertext, useless without the user's authenticator.
+ * Public metadata fetch — returns presence + credentialId + the
+ * SHA-256 of the stored ciphertext. Used by:
+ *
+ *   - `hasCloudRecovery` (webapp UI hint)
+ *   - the delete pre-flight (the webapp needs the bytes-hash to pin
+ *     the kill-switch signature; it gets the hash here without ever
+ *     pulling the ciphertext).
+ *
+ * Task #74: the ciphertext itself is NO LONGER returned here — fetching
+ * it requires `POST /api/recovery/by-username/<u>/fetch` with the
+ * passphrase-derived fetchToken. Legacy records (uploaded before the
+ * migration) have no fetchTokenHash; those rows still surface presence
+ * + credentialId here but cannot be unwrapped through the gated POST
+ * until the user re-enrols.
  */
 export async function handleFetchWebauthnRecovery(
   deps: WebauthnRecoveryDeps,
@@ -145,12 +180,84 @@ export async function handleFetchWebauthnRecovery(
 ): Promise<HandlerResponse> {
   const rec = await deps.webauthnRecovery.get(username);
   if (!rec) return { status: 404, body: { error: "no recovery record" } };
+  const wrappedBytes = base64DecodeBytes(rec.wrappedUmkB64) ?? new Uint8Array();
+  const wrappedUmkHash = await sha256Hex(wrappedBytes);
+  return {
+    status: 200,
+    body: {
+      username: rec.username,
+      credentialId: rec.credentialIdHex,
+      wrappedUmkHash,
+      // Surfaces whether the gated-fetch path is available for this row.
+      // Pre-migration rows return `false` — the webapp shows a "re-enrol
+      // to unlock cloud recovery" hint instead of attempting the fetch.
+      hasFetchTokenGate: !!rec.fetchTokenHashHex,
+      updatedAt: rec.updatedAt,
+    },
+  };
+}
+
+/**
+ * Argon2id-gated fetch (Task #74). The webapp posts
+ *
+ *   { fetchToken: <hex>, issuedAt: <ms> }
+ *
+ * after deriving fetchToken locally from the user's passphrase via
+ * Argon2id + HKDF. We hash it and compare to the stored
+ * `fetchTokenHashHex`. Only on match do we hand out the wrappedUmk.
+ *
+ * Rate-limiting happens upstream in apps/com/src/rateLimit.ts
+ * (3-per-15min per usernameHash). The endpoint is also called per-IP
+ * so a single passphrase-guessing attacker burns out their budget
+ * almost immediately; combined with Argon2id's per-attempt cost on
+ * the client side, this brings the brute-force cost to "infeasible
+ * for any but a state-level attacker, even with a leaked rows dump"
+ * — see project's threat-model.md for the math.
+ */
+export async function handleFetchWrappedUmkWithToken(
+  deps: WebauthnRecoveryDeps,
+  username: string,
+  body: unknown,
+): Promise<HandlerResponse> {
+  const now = deps.now ?? (() => Date.now());
+  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
+  const b = body as Record<string, unknown> | null;
+  if (!b || typeof b !== "object") {
+    return { status: 400, body: { error: "malformed body" } };
+  }
+  if (typeof b.fetchToken !== "string" || !/^[0-9a-fA-F]{32,512}$/.test(b.fetchToken)) {
+    return { status: 400, body: { error: "fetchToken must be hex" } };
+  }
+  if (typeof b.issuedAt !== "number" || Math.abs(now() - b.issuedAt) > maxAgeMs) {
+    return { status: 403, body: { error: "stale request" } };
+  }
+  const rec = await deps.webauthnRecovery.get(username);
+  if (!rec) return { status: 404, body: { error: "no recovery record" } };
+  if (!rec.fetchTokenHashHex) {
+    // Legacy row uploaded before the migration. Refuse the gated fetch
+    // — the user must re-enrol via the recovery sub-origin to acquire
+    // a fetchToken hash on the stored row.
+    return {
+      status: 409,
+      body: { error: "record predates passphrase gate — re-enrol cloud recovery" },
+    };
+  }
+  const fetchTokenBytes = hexToBytes(b.fetchToken.toLowerCase());
+  const presentedHashHex = await sha256Hex(fetchTokenBytes);
+  if (presentedHashHex !== rec.fetchTokenHashHex.toLowerCase()) {
+    return { status: 403, body: { error: "invalid fetch token" } };
+  }
   return {
     status: 200,
     body: {
       username: rec.username,
       credentialId: rec.credentialIdHex,
       wrappedUmk: rec.wrappedUmkB64,
+      // The PRF salt hash is returned so the client can verify it
+      // re-derives the same value from the passphrase locally — a
+      // defense against a malicious .com swapping the salt to coerce
+      // a different PRF output.
+      ...(rec.prfSaltHashHex ? { prfSaltHash: rec.prfSaltHashHex } : {}),
       updatedAt: rec.updatedAt,
     },
   };

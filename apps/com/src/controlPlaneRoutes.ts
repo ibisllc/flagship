@@ -67,6 +67,7 @@ import {
   handleLlmPromoStatus,
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
+  handleFetchWrappedUmkWithToken,
   handleUploadWebauthnRecovery,
   handleGetUserIdentity,
   handlePutUserIdentity,
@@ -172,6 +173,7 @@ const ROUTE_RE = {
   CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
   REVOCATIONS_LIST: /^\/api\/revocations$/,
   RECOVERY_UPLOAD: /^\/api\/recovery$/,
+  RECOVERY_FETCH_GATED: /^\/api\/recovery\/by-username\/([^/]+)\/fetch$/,
   RECOVERY_BY_USERNAME: /^\/api\/recovery\/by-username\/([^/]+)$/,
   USER_IDENTITY_PUT: /^\/api\/user-identity$/,
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
@@ -515,6 +517,21 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           webauthnRecovery: storage.webauthnRecovery,
         },
+        await readJson(request),
+      ),
+    );
+  }
+  // Task #74 — Argon2id-gated fetch. The more-specific `/fetch` path
+  // must precede the `/by-username/<u>` regex below or it would never
+  // match (the catch-all regex would short-circuit first).
+  if (method === "POST" && (m = path.match(ROUTE_RE.RECOVERY_FETCH_GATED))) {
+    return finishPlain(
+      await handleFetchWrappedUmkWithToken(
+        {
+          usernames: storage.usernames,
+          webauthnRecovery: storage.webauthnRecovery,
+        },
+        decodeURIComponent(m[1]!),
         await readJson(request),
       ),
     );

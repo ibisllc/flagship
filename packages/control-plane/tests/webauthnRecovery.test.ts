@@ -4,6 +4,7 @@ import { InMemoryStorage } from "@flagship/storage";
 import {
   handleDeleteWebauthnRecovery,
   handleFetchWebauthnRecovery,
+  handleFetchWrappedUmkWithToken,
   handleUploadWebauthnRecovery,
 } from "../src/webauthnRecovery.js";
 
@@ -46,6 +47,8 @@ async function upload(opts: {
   credentialId?: string;
   wrappedUmk?: Uint8Array;
   issuedAt?: number;
+  fetchTokenHashHex?: string;
+  prfSaltHashHex?: string;
 }) {
   const username = opts.username ?? USERNAME;
   const credentialId = opts.credentialId ?? "deadbeef".repeat(4);
@@ -57,15 +60,17 @@ async function upload(opts: {
     { username, credentialIdHex: credentialId, wrappedUmkHashHex, issuedAt },
     opts.irk,
   );
+  const request: Record<string, unknown> = {
+    username, credentialId, wrappedUmk: wrappedB64, issuedAt,
+  };
+  if (opts.fetchTokenHashHex) request.fetchTokenHash = opts.fetchTokenHashHex;
+  if (opts.prfSaltHashHex) request.prfSaltHash = opts.prfSaltHashHex;
   return handleUploadWebauthnRecovery(
     {
       usernames: opts.storage.usernames,
       webauthnRecovery: opts.storage.webauthnRecovery,
     },
-    {
-      request: { username, credentialId, wrappedUmk: wrappedB64, issuedAt },
-      signature: bytesToHex(sig),
-    },
+    { request, signature: bytesToHex(sig) },
   );
 }
 
@@ -154,8 +159,8 @@ describe("webauthn recovery — upload", () => {
   });
 });
 
-describe("webauthn recovery — fetch", () => {
-  it("returns ciphertext + credentialId for a known username", async () => {
+describe("webauthn recovery — metadata fetch (Task #74)", () => {
+  it("returns presence + credentialId + wrappedUmkHash WITHOUT the ciphertext", async () => {
     const irk = makeKey();
     const storage = await setup(irk);
     await upload({ storage, irk });
@@ -164,9 +169,37 @@ describe("webauthn recovery — fetch", () => {
       USERNAME,
     );
     expect(res.status).toBe(200);
-    const body = res.body as { credentialId: string; wrappedUmk: string };
+    const body = res.body as {
+      credentialId: string;
+      wrappedUmk?: string;
+      wrappedUmkHash: string;
+      hasFetchTokenGate: boolean;
+    };
     expect(body.credentialId).toBe("deadbeef".repeat(4));
-    expect(body.wrappedUmk.length).toBeGreaterThan(0);
+    // Task #74: the ciphertext is no longer surfaced through the
+    // unauthenticated GET — fetching it requires the fetchToken via
+    // POST /fetch. A regression here would let a victim's
+    // username-hash-knower exfiltrate the wrapped UMK without ever
+    // proving knowledge of the passphrase.
+    expect(body.wrappedUmk).toBeUndefined();
+    expect(typeof body.wrappedUmkHash).toBe("string");
+    expect(body.wrappedUmkHash.length).toBe(64);
+    // Legacy upload (no fetchTokenHash provided) → gate flag is false.
+    expect(body.hasFetchTokenGate).toBe(false);
+  });
+
+  it("surfaces hasFetchTokenGate=true for rows uploaded with the new hashes", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchTokenHashHex = await sha256Hex(new Uint8Array([1, 2, 3]));
+    const prfSaltHashHex = await sha256Hex(new Uint8Array([9, 9, 9]));
+    await upload({ storage, irk, fetchTokenHashHex, prfSaltHashHex });
+    const res = await handleFetchWebauthnRecovery(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+    );
+    const body = res.body as { hasFetchTokenGate: boolean };
+    expect(body.hasFetchTokenGate).toBe(true);
   });
 
   it("404s when no record exists for the username", async () => {
@@ -278,3 +311,153 @@ describe("webauthn recovery — delete (kill switch)", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("webauthn recovery — Argon2id-gated fetch (Task #74)", () => {
+  it("releases the wrappedUmk only when fetchToken's SHA-256 matches the stored hash", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32);
+    crypto.getRandomValues(fetchToken);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    const prfSaltHashHex = await sha256Hex(new Uint8Array([7, 7, 7]));
+    const wrapped = new Uint8Array([0xa, 0xb, 0xc, 0xd]);
+    await upload({ storage, irk, wrappedUmk: wrapped, fetchTokenHashHex, prfSaltHashHex });
+
+    const res = await handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as {
+      wrappedUmk: string;
+      credentialId: string;
+      prfSaltHash: string;
+    };
+    expect(body.wrappedUmk).toBe(bytesToB64(wrapped));
+    expect(body.credentialId).toBe("deadbeef".repeat(4));
+    expect(body.prfSaltHash).toBe(prfSaltHashHex);
+  });
+
+  it("returns 403 for the wrong fetchToken (passphrase guess)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(1);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex });
+
+    const wrong = new Uint8Array(32).fill(2);
+    const res = await handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(wrong), issuedAt: Date.now() },
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toBe("invalid fetch token");
+  });
+
+  it("returns 404 when no record exists", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(3);
+    const res = await handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      "ghost",
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 409 for legacy rows without a fetchTokenHash (re-enrol required)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk }); // legacy upload — no fetchTokenHash
+    const fetchToken = new Uint8Array(32).fill(4);
+    const res = await handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toMatch(/re-enrol/i);
+  });
+
+  it("rejects malformed bodies (400)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk });
+    for (const bad of [
+      null,
+      "not-an-object",
+      {},
+      { fetchToken: "not-hex", issuedAt: Date.now() },
+      { fetchToken: "ab", issuedAt: Date.now() }, // too short
+      { fetchToken: "aa".repeat(32) }, // missing issuedAt
+    ]) {
+      const res = await handleFetchWrappedUmkWithToken(
+        { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+        USERNAME,
+        bad,
+      );
+      expect([400, 403]).toContain(res.status);
+    }
+  });
+
+  it("rejects stale issuedAt (403)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32).fill(5);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex });
+    const res = await handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() - 10 * 60_000 },
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("webauthn recovery — upload accepts the new Argon2 hashes (Task #74)", () => {
+  it("stores fetchTokenHash + prfSaltHash on upsert when supplied", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchTokenHashHex = await sha256Hex(new Uint8Array([1]));
+    const prfSaltHashHex = await sha256Hex(new Uint8Array([2]));
+    const res = await upload({ storage, irk, fetchTokenHashHex, prfSaltHashHex });
+    expect(res.status).toBe(200);
+    const stored = await storage.webauthnRecovery.get(USERNAME);
+    expect(stored?.fetchTokenHashHex).toBe(fetchTokenHashHex);
+    expect(stored?.prfSaltHashHex).toBe(prfSaltHashHex);
+  });
+
+  it("rejects a malformed fetchTokenHash on upload (400)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    // Sign over the legitimate canonical-bytes (the new hashes aren't
+    // part of the signed payload — they ride the same upload-record sig).
+    const wrappedUmk = new Uint8Array([1, 2, 3]);
+    const issuedAt = Date.now();
+    const wrappedB64 = bytesToB64(wrappedUmk);
+    const wrappedUmkHashHex = await sha256Hex(wrappedUmk);
+    const sig = signUploadRecoveryRecord(
+      { username: USERNAME, credentialIdHex: "deadbeef".repeat(4), wrappedUmkHashHex, issuedAt },
+      irk,
+    );
+    const res = await handleUploadWebauthnRecovery(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      {
+        request: {
+          username: USERNAME,
+          credentialId: "deadbeef".repeat(4),
+          wrappedUmk: wrappedB64,
+          issuedAt,
+          fetchTokenHash: "not-hex",
+        },
+        signature: bytesToHex(sig),
+      },
+    );
+    expect(res.status).toBe(400);
+  });
+});
+

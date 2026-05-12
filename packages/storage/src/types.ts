@@ -94,6 +94,51 @@ export interface UsernameStorage {
   ): Promise<boolean>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Username aliases (#93 — username handover)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * A single permanent mapping `oldUsername → newUsername`. Rows are
+ * write-once: once `old_username` is mapped, neither it nor any new
+ * alias from it can ever be re-issued. The old name is consumed FOREVER.
+ *
+ * `effectiveAt` is informational (clients use it for soft-redirect
+ * decisions during the operational overlap window); the alias itself
+ * is authoritative the moment the row is written.
+ */
+export interface UsernameAliasRecord {
+  oldUsername: string;
+  newUsername: string;
+  effectiveAt: number;
+  /** Hex of the IRK signature over the UsernameRename canonical bytes. */
+  signatureHex: string;
+}
+
+export interface UsernameAliasStorage {
+  /**
+   * Insert a fresh alias row. Returns ok=false if `oldUsername`
+   * already has an alias — the old name is one-shot. Callers MUST
+   * NOT update the row in place; renames out of a renamed name are
+   * a fresh oldUsername=current → newUsername=fresh edge, not an
+   * edit of the existing alias.
+   */
+  insert(rec: UsernameAliasRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Read a single alias by its old-username key. */
+  get(oldUsername: string): Promise<UsernameAliasRecord | undefined>;
+  /**
+   * Resolve a stale-link username to its current name by walking the
+   * alias chain. Returns the input unchanged when no alias exists.
+   * Cycle-safe — stops after `maxHops` (default 8) and returns the
+   * last-visited name; cycles cannot occur in a write-once table but
+   * the bound is a defensive shield against data corruption.
+   */
+  resolve(username: string, maxHops?: number): Promise<{
+    resolved: string;
+    hops: string[];
+  }>;
+}
+
 export interface AuthCodeStorage {
   put(rec: AuthCodeRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
   get(serial: string): Promise<AuthCodeRecord | undefined>;
@@ -187,6 +232,20 @@ export interface WebauthnRecoveryRecord {
   /** Opaque AES-GCM ciphertext (base64). `.com` cannot decrypt — only the user's passkey can. */
   wrappedUmkB64: string;
   irkPubHex: string;
+  /**
+   * Task #74 — passphrase-derived fetch-token gate (hex SHA-256).
+   * `.com` only releases the ciphertext when the caller presents a
+   * token whose SHA-256 matches this hash. Nullable for legacy rows
+   * uploaded before the migration; new rows MUST set it.
+   */
+  fetchTokenHashHex?: string;
+  /**
+   * Task #74 — passphrase-derived PRF-salt hash (hex SHA-256). The
+   * stored hash binds the PRF salt the client used during enrolment
+   * so a tampered .com cannot swap the salt and trick the client into
+   * deriving a different PRF output.
+   */
+  prfSaltHashHex?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -296,6 +355,7 @@ export interface AutoUnlockLeaseStorage {
 
 export interface Storage {
   usernames: UsernameStorage;
+  usernameAliases: UsernameAliasStorage;
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   servers: ServerStorage;
@@ -312,6 +372,39 @@ export interface Storage {
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
   userIdentity: UserIdentityRecordStorage;
+  daemonStatus: DaemonStatusStorage;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Daemon status reports (#21 — pod inventory cert reconciliation)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Most-recent cert + apps snapshot reported by a user's daemon. Written
+ * by the daemon's HELLO bridge (POST /api/daemon-status, signed by the
+ * server identity key registered in the `servers` table) and read by
+ * the pod-inventory handler for the user's phone/webapp to reconcile
+ * "what does my daemon say it's serving" against "what does .com have
+ * routed there".
+ */
+export interface DaemonStatusRecord {
+  serverDomain: string;
+  /** Hex SHA-256 of the daemon's current TLS leaf cert (DER). */
+  certSha256?: string;
+  /** Unix ms — leaf cert's NotAfter. */
+  certValidUntil?: number;
+  /** Issuer DN string (e.g. "Let's Encrypt R3"). */
+  certIssuer?: string;
+  /** JSON array of `appName@authorStableId` strings — what's actively served. */
+  appsServedJson?: string;
+  lastReported: number;
+}
+
+export interface DaemonStatusStorage {
+  put(rec: DaemonStatusRecord): Promise<void>;
+  get(serverDomain: string): Promise<DaemonStatusRecord | undefined>;
+  /** Bulk read for the pod-inventory handler — one round-trip per user. */
+  getMany(serverDomains: string[]): Promise<Map<string, DaemonStatusRecord>>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

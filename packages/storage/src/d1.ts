@@ -815,12 +815,15 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
     await this.db
       .prepare(
         `INSERT INTO webauthn_recovery_records
-           (username, credential_id_hex, wrapped_umk_b64, irk_pub_hex, created_at, updated_at)
-         VALUES (?,?,?,?,?,?)
+           (username, credential_id_hex, wrapped_umk_b64, irk_pub_hex,
+            fetch_token_hash, prf_salt_hash, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?)
          ON CONFLICT(username) DO UPDATE SET
            credential_id_hex = excluded.credential_id_hex,
            wrapped_umk_b64 = excluded.wrapped_umk_b64,
            irk_pub_hex = excluded.irk_pub_hex,
+           fetch_token_hash = excluded.fetch_token_hash,
+           prf_salt_hash = excluded.prf_salt_hash,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -828,6 +831,8 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         rec.credentialIdHex,
         rec.wrappedUmkB64,
         rec.irkPubHex,
+        rec.fetchTokenHashHex ?? null,
+        rec.prfSaltHashHex ?? null,
         rec.createdAt,
         rec.updatedAt,
       )
@@ -843,6 +848,8 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         credential_id_hex: string;
         wrapped_umk_b64: string;
         irk_pub_hex: string;
+        fetch_token_hash: string | null;
+        prf_salt_hash: string | null;
         created_at: number;
         updated_at: number;
       }>();
@@ -852,6 +859,8 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
       credentialIdHex: r.credential_id_hex,
       wrappedUmkB64: r.wrapped_umk_b64,
       irkPubHex: r.irk_pub_hex,
+      ...(r.fetch_token_hash ? { fetchTokenHashHex: r.fetch_token_hash } : {}),
+      ...(r.prf_salt_hash ? { prfSaltHashHex: r.prf_salt_hash } : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     };
