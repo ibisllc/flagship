@@ -209,7 +209,7 @@ public struct AppDetailScreen: View {
                 }
 
                 FSPrimaryButton("Save", block: true) { onSave(policy, siblingsEnabled) }
-                FSGhostButton("Uninstall", block: true, action: onUninstall)
+                FSGhostButton("Remove", block: true, action: onUninstall)
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)

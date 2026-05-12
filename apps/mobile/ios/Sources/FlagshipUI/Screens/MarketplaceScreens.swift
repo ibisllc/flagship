@@ -30,7 +30,7 @@ public struct MarketplaceListScreen: View {
                     Text("Marketplace")
                         .font(.system(size: 32, weight: .medium))
                         .foregroundColor(c.text)
-                    Text("Apps your neighbours built. One tap to install on any of your boxes.")
+                    Text("Apps your neighbours built. One tap to deploy on any of your boxes.")
                         .font(.system(size: 17))
                         .foregroundColor(c.textMuted)
                 }
@@ -121,7 +121,7 @@ public struct MarketplaceDetailScreen: View {
                 }
 
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text("INSTALL ON")
+                    Text("DEPLOY TO")
                         .font(.system(size: 12, weight: .semibold))
                         .tracking(1)
                         .foregroundColor(c.textMuted)
@@ -150,7 +150,7 @@ public struct MarketplaceDetailScreen: View {
                     }
                 }
 
-                FSPrimaryButton("Install", enabled: selectedPodId != nil, block: true) {
+                FSPrimaryButton("Deploy", enabled: selectedPodId != nil, block: true) {
                     if let pod = selectedPodId { onInstall(pod) }
                 }
                 FSGhostButton("View source", block: true, action: onViewSource)

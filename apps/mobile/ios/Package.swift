@@ -2,12 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "Flagship",
+    name: "FlagshipMobile",
     platforms: [
         .iOS(.v17)
     ],
     products: [
         .library(name: "Flagship", targets: ["Flagship"]),
+        .library(name: "FlagshipAPI", targets: ["FlagshipAPI"]),
+        .library(name: "FlagshipCore", targets: ["FlagshipCore"]),
         .library(name: "FlagshipUI", targets: ["FlagshipUI"])
     ],
     dependencies: [],
@@ -17,14 +19,18 @@ let package = Package(
             path: "Sources/Flagship"
         ),
         .target(
-            name: "FlagshipUI",
-            dependencies: ["Flagship"],
-            path: "Sources/FlagshipUI"
+            name: "FlagshipAPI",
+            path: "Sources/FlagshipAPI"
         ),
-        .testTarget(
-            name: "FlagshipTests",
-            dependencies: ["Flagship"],
-            path: "Tests/FlagshipTests"
+        .target(
+            name: "FlagshipCore",
+            dependencies: ["FlagshipAPI"],
+            path: "Sources/FlagshipCore"
+        ),
+        .target(
+            name: "FlagshipUI",
+            dependencies: ["Flagship", "FlagshipAPI", "FlagshipCore"],
+            path: "Sources/FlagshipUI"
         )
     ]
 )

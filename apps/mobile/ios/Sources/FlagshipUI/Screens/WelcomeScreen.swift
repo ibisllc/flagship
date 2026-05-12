@@ -18,7 +18,7 @@ public struct WelcomeScreen: View {
                     Text("Your stuff,\non your hardware.")
                         .font(FS.font.h1())
                     FSColorReader { c in
-                        Text("A personal cloud you actually own. Your phone holds the keys; your box runs the apps.")
+                        Text("A personal cloud you actually own. Your phone holds the keys, your box runs the apps.")
                             .font(.system(size: 17))
                             .foregroundColor(c.textMuted)
                     }

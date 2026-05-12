@@ -1,0 +1,378 @@
+import SwiftUI
+import FlagshipCore
+import FlagshipAPI
+
+/// Apps tab: list → detail; marketplace; vibe-code launcher. Owns its
+/// own NavigationStack with AppsRoute as the path element type.
+public struct AppsTab: View {
+    @Environment(\.screensClient) private var client
+    @Environment(\.colorScheme) private var scheme
+
+    @State private var path: [AppsRoute] = []
+    @State private var vm: AppsListViewModel?
+
+    public init() {}
+
+    public var body: some View {
+        NavigationStack(path: $path) {
+            content
+                .navigationDestination(for: AppsRoute.self) { route in destination(for: route) }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        let c = FSColors.scheme(scheme)
+        Group {
+            if let vm {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: FS.space.s4) {
+                        header(c: c)
+                        searchBar(vm: vm)
+                        emptyOrList(vm: vm, c: c)
+                        marketplaceCard(c: c)
+                        Spacer().frame(height: FS.space.s12)
+                    }
+                    .padding(.horizontal, FS.space.s6)
+                }
+                .background(c.bg.ignoresSafeArea())
+                .refreshable { await vm.load() }
+                .task(id: "apps-initial") { if case .idle = vm.state { await vm.load() } }
+            }
+        }
+        .onAppear { if vm == nil { vm = AppsListViewModel(client: client) } }
+    }
+
+    @ViewBuilder
+    private func destination(for route: AppsRoute) -> some View {
+        switch route {
+        case .appDetail(let id):
+            AppDetailContainer(appId: id)
+        case .marketplace:
+            MarketplaceContainer(path: $path)
+        case .marketplaceDetail(let creator, let slug):
+            MarketplaceDetailContainer(creator: creator, slug: slug)
+        case .vibeCodeProviderPick:
+            VibeCodeProviderPickScreen(
+                onPickPromo: { path.append(.vibeCodeDescribe) },
+                onPickBYOK: { path.append(.vibeCodeDescribe) }
+            )
+        case .vibeCodeDescribe:
+            VibeCodeDescribeContainer(path: $path)
+        case .vibeCodeGenerating:
+            VibeCodeGeneratingScreen()
+        }
+    }
+
+    @ViewBuilder
+    private func header(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text("Apps")
+                .font(.system(size: 32, weight: .medium))
+                .foregroundColor(c.text)
+            Text(headerSubtitle)
+                .font(.system(size: 17))
+                .foregroundColor(c.textMuted)
+        }
+        .padding(.top, FS.space.s10)
+    }
+
+    private var headerSubtitle: String {
+        guard let apps = vm?.state.value else { return " " }
+        return apps.isEmpty ? "Nothing installed yet." : "\(apps.count) installed"
+    }
+
+    @ViewBuilder
+    private func searchBar(vm: AppsListViewModel) -> some View {
+        @Bindable var bindable = vm
+        FSField(value: $bindable.searchQuery, label: "", placeholder: "Search apps")
+    }
+
+    @ViewBuilder
+    private func emptyOrList(vm: AppsListViewModel, c: FSColors) -> some View {
+        switch vm.state {
+        case .idle, .loading:
+            VStack(spacing: FS.space.s3) {
+                ForEach(0..<3) { _ in ServerCardSkeleton() }
+            }
+        case .failed(let msg):
+            ErrorCard(message: msg)
+        case .loaded:
+            if vm.filteredApps.isEmpty {
+                FSCard {
+                    VStack(alignment: .leading, spacing: FS.space.s3) {
+                        Text("Build your first app").font(FS.font.h3()).foregroundColor(c.text)
+                        Text("Describe it in plain English. The AI writes it, the daemon runs it.")
+                            .font(FS.font.body()).foregroundColor(c.textMuted)
+                        FSPrimaryButton("Vibe-code an app", block: true) {
+                            path.append(.vibeCodeProviderPick)
+                        }
+                    }
+                }
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
+                    ForEach(vm.filteredApps, id: \.appId) { app in
+                        Button(action: { path.append(.appDetail(appId: app.appId)) }) {
+                            AppRow(app: app)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Button(action: { path.append(.vibeCodeProviderPick) }) {
+                    FSCard {
+                        HStack(spacing: FS.space.s3) {
+                            Image(systemName: "sparkles").foregroundColor(c.primary)
+                            Text("Build another app").foregroundColor(c.text)
+                            Spacer()
+                            Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
+                        }
+                    }
+                }.buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func marketplaceCard(c: FSColors) -> some View {
+        Button(action: { path.append(.marketplace) }) {
+            FSCard {
+                HStack(spacing: FS.space.s3) {
+                    Image(systemName: "square.grid.2x2").foregroundColor(c.success)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Marketplace").foregroundColor(c.text)
+                        Text("Apps your neighbours built").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }.buttonStyle(.plain)
+    }
+}
+
+// MARK: - Rows + containers
+
+private struct AppRow: View {
+    @Environment(\.colorScheme) private var scheme
+    let app: FlagshipAPI.AppSummary
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        FSCard {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(app.slug.capitalized).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                    Text(app.urlLabel).font(FS.font.mono()).foregroundColor(c.textMuted).lineLimit(1).truncationMode(.middle)
+                    if let summary = app.summary {
+                        Text(summary).font(FS.font.bodySm()).foregroundColor(c.textMuted).lineLimit(2)
+                    }
+                    HStack(spacing: FS.space.s2) {
+                        FSPill(app.status == "running" ? "Running" : "Stopped", kind: app.status == "running" ? .online : .idle)
+                        if let v = app.version { FSPill("v\(v)", kind: .idle) }
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+            }
+        }
+    }
+}
+
+struct AppDetailContainer: View {
+    let appId: String
+    @Environment(\.screensClient) private var client
+    @Environment(\.colorScheme) private var scheme
+    @State private var vm: AppDetailViewModel?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                if let vm {
+                    switch vm.state {
+                    case .idle, .loading:
+                        ServerCardSkeleton()
+                    case .failed(let msg):
+                        ErrorCard(message: msg)
+                    case .loaded(let d):
+                        appHeader(d: d.app, c: c)
+                        if !d.recentLogs.isEmpty {
+                            section("RECENT LOGS", c: c) {
+                                FSCard {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        ForEach(d.recentLogs, id: \.self) { line in
+                                            Text(line).font(FS.font.mono()).foregroundColor(c.text)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let backup = d.lastBackup {
+                            section("BACKUP", c: c) {
+                                FSCard {
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text("Last backup").foregroundColor(c.text)
+                                            Text("\(backup.bytes / 1024 / 1024) MB · \(relative(ms: backup.createdAt))")
+                                                .font(FS.font.caption())
+                                                .foregroundColor(c.textMuted)
+                                        }
+                                        Spacer()
+                                        FSGhostButton("Back up now") {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("App")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if vm == nil { vm = AppDetailViewModel(appId: appId, client: client) }
+            await vm?.load()
+        }
+    }
+
+    @ViewBuilder
+    private func appHeader(d: FlagshipAPI.AppSummary, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text(d.slug.capitalized).font(FS.font.h2()).foregroundColor(c.text)
+            Text("by \(d.creator)").foregroundColor(c.textMuted)
+            HStack(spacing: FS.space.s2) {
+                FSPill(d.status == "running" ? "Running" : "Stopped", kind: d.status == "running" ? .online : .idle)
+                if let v = d.version { FSPill("v\(v)", kind: .idle) }
+            }
+            Text(d.urlLabel).font(FS.font.mono()).foregroundColor(c.textMuted).padding(.top, FS.space.s2)
+        }
+    }
+
+    @ViewBuilder
+    private func section<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text(label).font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+            content()
+        }
+    }
+
+    private func relative(ms: Int64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
+        let fmt = RelativeDateTimeFormatter()
+        fmt.unitsStyle = .abbreviated
+        return fmt.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+struct MarketplaceContainer: View {
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @Environment(\.colorScheme) private var scheme
+    @State private var vm: MarketplaceViewModel?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Marketplace").font(.system(size: 32, weight: .medium)).foregroundColor(c.text)
+                Text("Apps your neighbours built. One tap to install.")
+                    .font(.system(size: 17)).foregroundColor(c.textMuted)
+                if let vm {
+                    @Bindable var bindable = vm
+                    FSField(value: $bindable.searchQuery, label: "", placeholder: "Search marketplace")
+                    switch vm.state {
+                    case .idle, .loading:
+                        VStack { ForEach(0..<3) { _ in ServerCardSkeleton() } }
+                    case .failed(let msg):
+                        ErrorCard(message: msg)
+                    case .loaded:
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
+                            ForEach(vm.filtered, id: \.slug) { listing in
+                                Button(action: { path.append(.marketplaceDetail(creator: listing.creator, slug: listing.slug)) }) {
+                                    listingRow(listing: listing, c: c)
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if vm == nil { vm = MarketplaceViewModel(client: client) }
+            if case .idle = vm?.state { await vm?.load() }
+        }
+    }
+
+    private func listingRow(listing: MarketplaceListing, c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text(listing.title).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
+                Text("by \(listing.creator)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                Text(listing.summary).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                HStack(spacing: FS.space.s2) {
+                    FSPill("\(listing.installCount) deploys", kind: listing.installCount > 0 ? .online : .idle)
+                    if listing.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
+                    if listing.alreadyInstalled { FSPill("Deployed", kind: .idle) }
+                }
+            }
+        }
+    }
+}
+
+struct MarketplaceDetailContainer: View {
+    let creator: String
+    let slug: String
+    @Environment(\.screensClient) private var client
+    @Environment(\.colorScheme) private var scheme
+    @State private var listing: MarketplaceListing?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                if let l = listing {
+                    Text(l.title).font(FS.font.h2()).foregroundColor(c.text)
+                    Text("by \(l.creator)").foregroundColor(c.textMuted)
+                    FSCard { Text(l.summary).foregroundColor(c.text) }
+                    HStack {
+                        FSPill("\(l.installCount) deploys", kind: .online)
+                        if l.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
+                    }
+                    FSPrimaryButton("Deploy", block: true, large: true) {}
+                    FSGhostButton("View source", block: true) {}
+                } else {
+                    ServerCardSkeleton()
+                }
+            }
+            .padding(FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            let resp = (try? await client.marketplaceBrowse())?.listings ?? []
+            listing = resp.first(where: { $0.creator == creator && $0.slug == slug })
+        }
+    }
+}
+
+struct VibeCodeDescribeContainer: View {
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    var body: some View {
+        VibeCodeDescribeScreen(onBuild: { prompt in
+            Task {
+                do {
+                    let resp = try await client.vibeCodeStart(VibeCodeStartRequest(prompt: prompt, model: nil))
+                    path.append(.vibeCodeGenerating(sessionId: resp.sessionId))
+                } catch {
+                    // surface error toast later
+                }
+            }
+        })
+    }
+}

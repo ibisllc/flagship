@@ -102,6 +102,10 @@ public struct MarketplaceBrowseResponse: Codable, Equatable {
 public struct VibeCodeStartRequest: Codable, Equatable {
     public let prompt: String
     public let model: String?
+    public init(prompt: String, model: String?) {
+        self.prompt = prompt
+        self.model = model
+    }
 }
 
 public struct VibeCodeStartResponse: Codable, Equatable {
@@ -187,6 +191,10 @@ public struct UnlockApprovalsPendingResponse: Codable, Equatable {
 public struct UnlockApprovalApproveRequest: Codable, Equatable {
     public let signature: String  // hex
     public let envelope: String   // base64
+    public init(signature: String, envelope: String) {
+        self.signature = signature
+        self.envelope = envelope
+    }
 }
 
 // MARK: - P1.10 / P1.11 browser-tabs
@@ -222,6 +230,10 @@ public struct PairedSessionsListResponse: Codable, Equatable {
 public struct OrdersSendRequest: Codable, Equatable {
     public let envelope: String   // base64
     public let kind: String
+    public init(envelope: String, kind: String) {
+        self.envelope = envelope
+        self.kind = kind
+    }
 }
 
 public struct OrdersSendResponse: Codable {
@@ -296,10 +308,78 @@ public struct UrlControllerOwnedResponse: Codable, Equatable {
 
 public struct UrlControllerClaimRequest: Codable, Equatable {
     public let fqdn: String
+    public init(fqdn: String) { self.fqdn = fqdn }
 }
 
 public struct UrlControllerClaimResponse: Codable, Equatable {
     public let ok: Bool
+}
+
+// MARK: - P1.21 server-metrics (extension; not yet daemon-side)
+//
+// Returns the current instantaneous resource numbers plus a 60-sample
+// trailing window at 1-minute granularity for the things the daemon
+// can cheaply expose (CPU%, mem, disk, I/O, network). The contract
+// is iOS-driven for now; daemon implementation will follow.
+
+public struct ServerMetricsResponse: Codable, Equatable {
+    public let collectedAt: Int64
+    public let cpuPercent: Double           // 0–100, instantaneous
+    public let loadAvg1: Double
+    public let loadAvg5: Double
+    public let loadAvg15: Double
+    public let memUsedBytes: Int64
+    public let memTotalBytes: Int64
+    public let diskUsedBytes: Int64
+    public let diskTotalBytes: Int64
+    public let diskIOReadBytesPerSec: Double
+    public let diskIOWriteBytesPerSec: Double
+    public let netRxBytesPerSec: Double
+    public let netTxBytesPerSec: Double
+    public let cpuHistory: [TimedSample]    // up to 60 samples, 1-min interval
+    public let memHistory: [TimedSample]    // bytes used over time
+    public let ioHistory: [IOSample]
+    public let netHistory: [IOSample]
+
+    public init(
+        collectedAt: Int64,
+        cpuPercent: Double,
+        loadAvg1: Double, loadAvg5: Double, loadAvg15: Double,
+        memUsedBytes: Int64, memTotalBytes: Int64,
+        diskUsedBytes: Int64, diskTotalBytes: Int64,
+        diskIOReadBytesPerSec: Double, diskIOWriteBytesPerSec: Double,
+        netRxBytesPerSec: Double, netTxBytesPerSec: Double,
+        cpuHistory: [TimedSample], memHistory: [TimedSample],
+        ioHistory: [IOSample], netHistory: [IOSample]
+    ) {
+        self.collectedAt = collectedAt
+        self.cpuPercent = cpuPercent
+        self.loadAvg1 = loadAvg1; self.loadAvg5 = loadAvg5; self.loadAvg15 = loadAvg15
+        self.memUsedBytes = memUsedBytes; self.memTotalBytes = memTotalBytes
+        self.diskUsedBytes = diskUsedBytes; self.diskTotalBytes = diskTotalBytes
+        self.diskIOReadBytesPerSec = diskIOReadBytesPerSec
+        self.diskIOWriteBytesPerSec = diskIOWriteBytesPerSec
+        self.netRxBytesPerSec = netRxBytesPerSec
+        self.netTxBytesPerSec = netTxBytesPerSec
+        self.cpuHistory = cpuHistory; self.memHistory = memHistory
+        self.ioHistory = ioHistory; self.netHistory = netHistory
+    }
+
+    public struct TimedSample: Codable, Equatable, Identifiable, Sendable {
+        public let at: Int64
+        public let value: Double
+        public var id: Int64 { at }
+        public init(at: Int64, value: Double) { self.at = at; self.value = value }
+    }
+    public struct IOSample: Codable, Equatable, Identifiable, Sendable {
+        public let at: Int64
+        public let read: Double
+        public let write: Double
+        public var id: Int64 { at }
+        public init(at: Int64, read: Double, write: Double) {
+            self.at = at; self.read = read; self.write = write
+        }
+    }
 }
 
 // MARK: - P1.19 / P1.20 app-backup
@@ -308,6 +388,11 @@ public struct AppBackupStartRequest: Codable, Equatable {
     public let appId: String
     public let password: String?
     public let includeUserData: Bool?
+    public init(appId: String, password: String? = nil, includeUserData: Bool? = nil) {
+        self.appId = appId
+        self.password = password
+        self.includeUserData = includeUserData
+    }
 }
 
 public struct AppBackupStartResponse: Codable, Equatable {
