@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  __resetRoutingReplayRing,
   handleRegisterRck,
   handleRoutingLookup,
   handleSetRoutingTarget,
@@ -53,6 +54,10 @@ async function setUpClaimedHarry() {
   return storage;
 }
 
+// Reset module-level ring before each test so the replay-defense state
+// doesn't leak across cases.
+beforeEach(() => __resetRoutingReplayRing());
+
 describe("POST /api/routing/register-rck", () => {
   it("happy path: IRK-signed registration creates the routing record", async () => {
     const storage = await setUpClaimedHarry();
@@ -105,6 +110,58 @@ describe("POST /api/routing/register-rck", () => {
       },
     );
     expect(r.status).toBe(403);
+  });
+
+  it("400 when the server-label segment is malformed (M5 hardening)", async () => {
+    const storage = await setUpClaimedHarry();
+    const rck = freshKeypair(4);
+    // Leading dash violates RFC 1035 label rules.
+    const claim: RegisterRck = {
+      username: "harry",
+      subdomain: "-bad.harry.flagship.services",
+      rckPubKey: rck.publicKey,
+      issuedAt: Date.now(),
+    };
+    const sig = signRegisterRck(claim, harryIrk);
+    const r = await handleRegisterRck(
+      { routing: storage.routing, usernames: storage.usernames },
+      {
+        request: {
+          username: claim.username,
+          subdomain: claim.subdomain,
+          rckPubKey: bytesToHex(claim.rckPubKey),
+          issuedAt: claim.issuedAt,
+        },
+        signature: bytesToHex(sig),
+      },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("400 when the server label is empty (no leftmost segment) (M5)", async () => {
+    const storage = await setUpClaimedHarry();
+    const rck = freshKeypair(5);
+    // ".harry.flagship.services" — leftmost segment is empty.
+    const claim: RegisterRck = {
+      username: "harry",
+      subdomain: ".harry.flagship.services",
+      rckPubKey: rck.publicKey,
+      issuedAt: Date.now(),
+    };
+    const sig = signRegisterRck(claim, harryIrk);
+    const r = await handleRegisterRck(
+      { routing: storage.routing, usernames: storage.usernames },
+      {
+        request: {
+          username: claim.username,
+          subdomain: claim.subdomain,
+          rckPubKey: bytesToHex(claim.rckPubKey),
+          issuedAt: claim.issuedAt,
+        },
+        signature: bytesToHex(sig),
+      },
+    );
+    expect(r.status).toBe(400);
   });
 
   it("400 when subdomain doesn't match the username segment", async () => {
@@ -211,6 +268,37 @@ describe("POST /api/routing/set-target", () => {
       },
     );
     expect(r.status).toBe(403);
+  });
+
+  it("rejects in-window replay of the SAME nonce (M6 ring buffer)", async () => {
+    const storage = await setUpClaimedHarry();
+    const rck = await registerForTarget(storage);
+    const target = freshKeypair(16);
+    const setReq: SetRoutingTarget = {
+      subdomain: "home.harry.flagship.services",
+      newTargetIdentityPubKey: target.publicKey,
+      issuedAt: Date.now(),
+      nonce: new Uint8Array(16).fill(0xab),
+    };
+    const sig = signSetRoutingTarget(setReq, rck);
+    const send = () =>
+      handleSetRoutingTarget(
+        { routing: storage.routing, usernames: storage.usernames },
+        {
+          request: {
+            subdomain: setReq.subdomain,
+            newTargetIdentityPubKey: bytesToHex(setReq.newTargetIdentityPubKey),
+            issuedAt: setReq.issuedAt,
+            nonce: bytesToHex(setReq.nonce),
+          },
+          signature: bytesToHex(sig),
+        },
+      );
+    expect((await send()).status).toBe(200);
+    // Identical envelope replayed: the ring catches it before storage.
+    const replay = await send();
+    expect(replay.status).toBe(409);
+    expect(typeof replay.body === "object" && replay.body !== null && "error" in replay.body).toBe(true);
   });
 
   it("rejects replay of an older nonce", async () => {

@@ -6,10 +6,44 @@ import {
 } from "@flagship/protocol";
 import type { RoutingStorage, UsernameStorage } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
+import { validateAppLabel } from "./labels.js";
 import {
   conflict, forbidden, malformed, notFound, ok,
   type HandlerResponseWithHeaders,
 } from "./types.js";
+
+// M6 (Thread G): ring-buffer of recently-seen (subdomain, nonce) pairs
+// for SetRoutingTarget replay defense. The freshness window already
+// rejects requests older than 5min, but within that window an attacker
+// who captured a valid signed envelope could replay it. The ring
+// catches in-window duplicates with O(1) lookups.
+//
+// 256 slots × ~50 bytes per entry = 13 KB max — negligible memory
+// across a Worker instance. Module-level state intentionally;
+// per-process is the right scope (replay defense is best-effort across
+// CF Workers' isolate ephemerality, but combined with the storage-level
+// monotonic nonce check it's belt + suspenders).
+const REPLAY_RING_SIZE = 256;
+const seenRoutingNonces: Array<string> = [];
+const seenRoutingNonceSet = new Set<string>();
+
+function rememberRoutingNonce(subdomain: string, nonce: string): boolean {
+  const key = `${subdomain}|${nonce}`;
+  if (seenRoutingNonceSet.has(key)) return false; // duplicate, reject
+  seenRoutingNonces.push(key);
+  seenRoutingNonceSet.add(key);
+  while (seenRoutingNonces.length > REPLAY_RING_SIZE) {
+    const evicted = seenRoutingNonces.shift();
+    if (evicted !== undefined) seenRoutingNonceSet.delete(evicted);
+  }
+  return true;
+}
+
+/** Test-only: reset the in-process ring (used by vitest to isolate cases). */
+export function __resetRoutingReplayRing(): void {
+  seenRoutingNonces.length = 0;
+  seenRoutingNonceSet.clear();
+}
 
 export interface RoutingDeps {
   routing: RoutingStorage;
@@ -86,6 +120,15 @@ export async function handleRegisterRck(
     return malformed(`subdomain must end with ${expectedSuffix}`);
   }
 
+  // M5 (Thread G): validate the leftmost <server> label's shape — RFC-1035
+  // appish constraint, same as auth-code serverName. Catches trailing-dot,
+  // empty-leftmost, or unicode-in-label attempts before they reach storage.
+  const serverLabel = r.subdomain.slice(0, r.subdomain.length - expectedSuffix.length);
+  const labelV = validateAppLabel(serverLabel);
+  if (!labelV.ok) {
+    return malformed(`invalid server label: ${labelV.reason}`);
+  }
+
   const out = await deps.routing.register({
     subdomain: r.subdomain,
     username: r.username,
@@ -133,6 +176,13 @@ export async function handleSetRoutingTarget(
   const sig = hexToBytes(body.signature);
   if (!verifySetRoutingTarget(claim, sig, hexToBytes(route.rckPubKeyHex))) {
     return forbidden("invalid signature");
+  }
+
+  // M6: reject in-window replays. The storage layer's monotonic
+  // lastTargetNonce already rejects regressions, but a single signed
+  // envelope used twice in quick succession could otherwise toggle state.
+  if (!rememberRoutingNonce(r.subdomain, r.nonce)) {
+    return conflict("nonce already seen in window");
   }
 
   const out = await deps.routing.setTarget(
