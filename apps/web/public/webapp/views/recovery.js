@@ -184,6 +184,12 @@ export function initRecoveryView() {
   });
   $("recovery-cloud-setup")?.addEventListener("click", runSetupCloud);
   $("recovery-cloud-remove")?.addEventListener("click", runRemoveCloud);
+  // J.4 integration: after a recovery binds, the user lands here. The
+  // "reattach progress" button opens the per-app re-issuance summary.
+  $("recovery-open-reattach")?.addEventListener("click", async () => {
+    const { enterPostRecovery } = await import("./post-recovery.js");
+    enterPostRecovery();
+  });
 }
 
 export function enterRecovery() {

@@ -185,6 +185,16 @@ export class MembershipStore {
     return existed ? "updated" : "added";
   }
 
+  /**
+   * Used by the J.4 post-recovery rewrite (#72). After a row is added
+   * under the new IRK, the old IRK row must be removed atomically; we
+   * key by hex because the caller is rewriting from a stored snapshot
+   * and doesn't necessarily hold the raw pubkey bytes.
+   */
+  internalRemoveByHex(irkPubHex: string): boolean {
+    return this.members.delete(irkPubHex.toLowerCase());
+  }
+
   getRole(irkPub: Bytes): string | null {
     return this.members.get(bytesToHex(irkPub))?.role ?? null;
   }
