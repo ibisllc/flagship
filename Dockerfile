@@ -36,10 +36,11 @@ COPY apps/com/package.json apps/com/
 
 # The npm preinstall hook re-runs pull-maintainers; SKIP_PULL_MAINTAINERS=1
 # tells it to no-op since we just pulled. Saves a network round-trip.
+# /bin/sh in alpine is busybox sh, which doesn't grok subshell parens — chain
+# with ||/&& and repeat the env var to avoid the grouping.
 RUN --mount=type=cache,target=/root/.npm \
-    SKIP_PULL_MAINTAINERS=1 \
-    (npm ci --workspaces --include-workspace-root --no-audit --no-fund --ignore-scripts || \
-     npm install --workspaces --include-workspace-root --no-audit --no-fund)
+    SKIP_PULL_MAINTAINERS=1 npm ci --workspaces --include-workspace-root --no-audit --no-fund --ignore-scripts \
+ || SKIP_PULL_MAINTAINERS=1 npm install --workspaces --include-workspace-root --no-audit --no-fund
 
 RUN npx tsc -b
 
