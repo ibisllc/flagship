@@ -113,6 +113,62 @@ if ! validate_ref "$REF" "installerGitRef"; then
 fi
 echo "flagship: installer pinned to git ref: $REF"
 
+# Maintainers-protocol endorsement gate.
+#
+# Before we curl-and-execute install.sh as root, we require that the
+# Flagship repo's HEAD-at-REF is endorsed by the current release-track
+# authority in the repo's own `.maintainers/` folder. This closes the
+# loop between "Harry's Yubikey signs a release manifest" and "the
+# first-boot installer refuses to apply a tampered tree."
+#
+# Strategy: shallow-clone the repo into /run/flagship-verify, resolve
+# HEAD to a commit hash, then shell out to scripts/verify-endorsement.mjs
+# (which uses @maintainers/protocol). If the gate passes, install.sh
+# runs normally; otherwise we exit non-zero and the box stays unprovisioned.
+#
+# A path-to-pure-shell exists (bundle a single statically-linked verify
+# binary into the apkovl so we don't need node here) — out of scope for
+# v1 alpha. Documented in scripts/verify-endorsement.mjs.
+VERIFY_DIR=/run/flagship-verify
+rm -rf "$VERIFY_DIR"
+echo "flagship: shallow-cloning $REPO_URL@$REF for endorsement verification"
+if ! git clone --depth 50 --no-tags --quiet --branch "$REF" "$REPO_URL" "$VERIFY_DIR" \
+        2>/dev/null; then
+    # The trailer's installerGitRef may be a commit SHA rather than a
+    # branch/tag; fall back to a full-fetch-then-checkout in that case.
+    if ! { git clone --depth 50 --no-tags --quiet "$REPO_URL" "$VERIFY_DIR" \
+            && git -C "$VERIFY_DIR" fetch --depth 50 --quiet origin "$REF" \
+            && git -C "$VERIFY_DIR" checkout --quiet "$REF"; }; then
+        echo "flagship: failed to clone $REPO_URL at ref $REF — refusing to install"
+        exit 1
+    fi
+fi
+HEAD_SHA="$(git -C "$VERIFY_DIR" rev-parse HEAD | tr -d '\n')"
+case "$HEAD_SHA" in
+    *[!0-9a-f]*|"") echo "flagship: bad HEAD sha (\"$HEAD_SHA\") — refusing to install"; exit 1;;
+esac
+echo "flagship: HEAD = $HEAD_SHA"
+
+# Install just enough deps for the verifier to import @maintainers/protocol.
+# `npm ci --omit=optional --no-audit --no-fund` is the lightest viable
+# install: it walks the workspace graph (so the @maintainers/protocol
+# symlink lands in node_modules/), but skips heavy optional deps.
+if ! (cd "$VERIFY_DIR" && npm ci --omit=optional --no-audit --no-fund --silent); then
+    echo "flagship: npm ci failed in verify clone — refusing to install"
+    exit 1
+fi
+# The verifier itself is .mjs but imports a .ts entry point in
+# @maintainers/protocol; we invoke via tsx (a devDep installed by the
+# previous step) so the helper can resolve the bare specifier.
+if ! (cd "$VERIFY_DIR" && \
+      node --import tsx scripts/verify-endorsement.mjs \
+        --git-repo-path "$VERIFY_DIR" \
+        --commit-hash "$HEAD_SHA"); then
+    echo "flagship: endorsement verification FAILED — refusing to install"
+    exit 1
+fi
+echo "flagship: endorsement OK — proceeding to install"
+
 # Fetch the install script from the public repo and run it. The script
 # is responsible for LUKS provisioning, fetching the daemon code, etc.
 INSTALLER_URL="$GITHUB_RAW/$REF/installer/install.sh"
