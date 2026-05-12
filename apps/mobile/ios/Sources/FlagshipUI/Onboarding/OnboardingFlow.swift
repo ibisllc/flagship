@@ -47,7 +47,7 @@ public struct OnboardingFlow: View {
 
     private func completeMockPair(username: String, name: String, description: String) {
         let label = name.isEmpty ? "Home" : name
-        let slug = slugify(label)
+        let slug = SlugUtil.slugify(label)
         let pods = [
             PodInfo(
                 podId: "home",

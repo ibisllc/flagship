@@ -62,7 +62,7 @@ public struct HomeTab: View {
             PodPairScreen(
                 onSubmit: { _, name, description in
                     let user = app.currentUser ?? "you"
-                    let slug = slugify(name)
+                    let slug = SlugUtil.slugify(name)
                     let pod = PodInfo(
                         podId: "paired-\(UUID().uuidString.prefix(6).lowercased())",
                         name: name,
@@ -80,7 +80,7 @@ public struct HomeTab: View {
                 username: app.currentUser ?? "",
                 onDemoComplete: { name, description in
                     let user = app.currentUser ?? "you"
-                    let slug = slugify(name)
+                    let slug = SlugUtil.slugify(name)
                     let pod = PodInfo(
                         podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
                         name: name,
@@ -98,17 +98,6 @@ public struct HomeTab: View {
             TierStatusContainer()
         }
     }
-}
-
-func slugify(_ name: String) -> String {
-    let allowed = CharacterSet.lowercaseLetters.union(.decimalDigits).union(CharacterSet(charactersIn: "-"))
-    let lower = name.lowercased()
-        .replacingOccurrences(of: " ", with: "-")
-        .unicodeScalars
-        .filter { allowed.contains($0) }
-        .map(String.init)
-        .joined()
-    return lower.isEmpty ? "server" : lower
 }
 
 /// Drill-down server detail. Owns its own detail VM AND its metrics VM

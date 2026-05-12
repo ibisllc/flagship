@@ -67,7 +67,7 @@ public struct SettingsTab: View {
                         podId: "paired-\(UUID().uuidString.prefix(6).lowercased())",
                         name: name,
                         description: description.isEmpty ? nil : description,
-                        fqdn: "\(slugify(name)).\(user).flagship.services",
+                        fqdn: "\(SlugUtil.slugify(name)).\(user).flagship.services",
                         status: .online
                     )
                     app.addPod(pod)
@@ -84,7 +84,7 @@ public struct SettingsTab: View {
                         podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
                         name: name,
                         description: description.isEmpty ? nil : description,
-                        fqdn: "\(slugify(name)).\(user).flagship.services",
+                        fqdn: "\(SlugUtil.slugify(name)).\(user).flagship.services",
                         status: .online
                     )
                     app.addPod(pod)

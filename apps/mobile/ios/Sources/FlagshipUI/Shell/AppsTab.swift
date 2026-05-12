@@ -180,87 +180,60 @@ struct AppDetailContainer: View {
     let appId: String
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
     @State private var vm: AppDetailViewModel?
+    @State private var saveBanner: String?
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s4) {
-                if let vm {
-                    switch vm.state {
-                    case .idle, .loading:
-                        ServerCardSkeleton()
-                    case .failed(let msg):
-                        ErrorCard(message: msg)
-                    case .loaded(let d):
-                        appHeader(d: d.app, c: c)
-                        if !d.recentLogs.isEmpty {
-                            section("RECENT LOGS", c: c) {
-                                FSCard {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        ForEach(d.recentLogs, id: \.self) { line in
-                                            Text(line).font(FS.font.mono()).foregroundColor(c.text)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if let backup = d.lastBackup {
-                            section("BACKUP", c: c) {
-                                FSCard {
-                                    HStack {
-                                        VStack(alignment: .leading) {
-                                            Text("Last backup").foregroundColor(c.text)
-                                            Text("\(backup.bytes / 1024 / 1024) MB · \(relative(ms: backup.createdAt))")
-                                                .font(FS.font.caption())
-                                                .foregroundColor(c.textMuted)
-                                        }
-                                        Spacer()
-                                        FSGhostButton("Back up now") {}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        ZStack(alignment: .top) {
+            c.bg.ignoresSafeArea()
+            if let vm {
+                AppDetailScreen(
+                    vm: vm,
+                    username: app.currentUser,
+                    pods: app.pods,
+                    globalLeaderPodId: app.leaderPodId,
+                    onSave: { Task { await save(vm: vm) } },
+                    onRemove: {}
+                )
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(FS.space.s6)
+            if let saveBanner {
+                Text(saveBanner)
+                    .font(FS.font.bodySm())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, FS.space.s4)
+                    .padding(.vertical, FS.space.s2)
+                    .background(c.success)
+                    .clipShape(Capsule())
+                    .padding(.top, FS.space.s4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
-        .background(c.bg.ignoresSafeArea())
-        .navigationTitle("App")
-        .navigationBarTitleDisplayMode(.inline)
         .task {
-            if vm == nil { vm = AppDetailViewModel(appId: appId, client: client) }
+            if vm == nil {
+                vm = AppDetailViewModel(
+                    appId: appId,
+                    client: client,
+                    allPods: app.pods,
+                    globalLeaderPodId: app.leaderPodId
+                )
+            }
             await vm?.load()
         }
     }
 
-    @ViewBuilder
-    private func appHeader(d: FlagshipAPI.AppSummary, c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text(d.slug.capitalized).font(FS.font.h2()).foregroundColor(c.text)
-            Text("by \(d.creator)").foregroundColor(c.textMuted)
-            HStack(spacing: FS.space.s2) {
-                FSPill(d.status == "running" ? "Running" : "Stopped", kind: d.status == "running" ? .online : .idle)
-                if let v = d.version { FSPill("v\(v)", kind: .idle) }
-            }
-            Text(d.urlLabel).font(FS.font.mono()).foregroundColor(c.textMuted).padding(.top, FS.space.s2)
+    private func save(vm: AppDetailViewModel) async {
+        do {
+            try await vm.save()
+            withAnimation { saveBanner = "Saved" }
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            withAnimation { saveBanner = nil }
+        } catch {
+            withAnimation { saveBanner = "Save failed: \(error.localizedDescription)" }
         }
-    }
-
-    @ViewBuilder
-    private func section<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(label).font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
-            content()
-        }
-    }
-
-    private func relative(ms: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000)
-        let fmt = RelativeDateTimeFormatter()
-        fmt.unitsStyle = .abbreviated
-        return fmt.localizedString(for: date, relativeTo: Date())
     }
 }
 
