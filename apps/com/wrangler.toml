@@ -25,9 +25,16 @@ workers_dev = true
 # reconciles to ONLY `X`, dropping every previously-attached route.
 # Always pass the full set, or just trust the `routes` array here.
 routes = [
-  { pattern = "flagshipserver.com/*",     zone_name = "flagshipserver.com" },
-  { pattern = "www.flagshipserver.com/*", zone_name = "flagshipserver.com" },
-  { pattern = "web.flagshipserver.com/*", zone_name = "flagshipserver.com" },
+  { pattern = "flagshipserver.com/*",          zone_name = "flagshipserver.com" },
+  { pattern = "www.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
+  { pattern = "web.flagshipserver.com/*",      zone_name = "flagshipserver.com" },
+  # Dedicated origin for WebAuthn-PRF recovery (C3/B1 fix). Putting the
+  # passkey behind its own sub-origin gives WebAuthn rpId =
+  # "recovery.flagshipserver.com" — different from the apex — so any XSS
+  # on the marketing or webapp surface cannot reach the recovery
+  # credential. The page is intentionally tiny and ships under a strict
+  # CSP; runbook lives at docs/runbooks/recovery-subdomain.md.
+  { pattern = "recovery.flagshipserver.com/*", zone_name = "flagshipserver.com" },
 ]
 
 # Static assets — marketing pages, the webapp source under /webapp/
@@ -89,6 +96,21 @@ binding = "DB"
 database_name = "flagship-state"
 database_id = "d6f3bc03-0168-4988-8742-83346fdc923c"
 migrations_dir = "../../packages/storage/migrations"
+
+# Build-relay (task #59) — in-memory Durable Object that brokers a
+# short-lived WebSocket session between the browser at /build/ and the
+# user's phone/webapp. The DO sees only the browser's ephemeral
+# X25519 public key (used to derive the visual match-code) and the
+# opaque crypto_box_seal ciphertext on its way through. It never
+# persists state — sessions live entirely in instance memory and
+# self-destroy on disconnect or after a 5-minute TTL.
+[[durable_objects.bindings]]
+name = "BUILD_RELAY"
+class_name = "BuildRelaySession"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["BuildRelaySession"]
 
 [vars]
 # Fly's TLS-term endpoint (port 8443). The flagship.services apex itself

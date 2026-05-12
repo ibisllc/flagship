@@ -32,6 +32,50 @@ const WEBAPP_HOST = "web.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
 /**
+ * Dedicated origin for the WebAuthn-PRF recovery flow (Tasks #73 + #74).
+ *
+ * The passkey credential lives at rpId = "recovery.flagshipserver.com",
+ * which is a different origin from both the marketing apex and the
+ * webapp. WebAuthn's same-origin policy enforces that a passkey created
+ * here can only be exercised by a page served from this same origin —
+ * so an XSS on flagshipserver.com or web.flagshipserver.com cannot
+ * silently call `navigator.credentials.get()` and exfiltrate the UMK.
+ *
+ * Disk layout: apps/web/public/recovery/* serves at the root of this
+ * origin (same trick we use for `web.` and the /webapp tree). Only the
+ * single-purpose recovery page lives here — no shared JS, no shared
+ * fonts (except via 'self'), no analytics.
+ */
+const RECOVERY_HOST = "recovery.flagshipserver.com";
+const RECOVERY_ORIGIN = `https://${RECOVERY_HOST}`;
+
+/**
+ * CSP applied to every response served from `recovery.flagshipserver.com`.
+ *
+ * - `default-src 'self'`: no third-party anything.
+ * - `script-src 'self'`: no inline scripts, no eval. Argon2 ships as a
+ *   self-hosted module.
+ * - `style-src 'self'`: no inline styles either; the CSS is self-hosted.
+ * - `connect-src` is locked to flagshipserver.com (where the
+ *   `/api/recovery/*` endpoints live) plus self.
+ * - `frame-ancestors 'none'`: this origin cannot be iframed, full stop.
+ * - `form-action 'self'`: no submit-to-attacker tricks.
+ * - `base-uri 'none'`: prevents <base> injection from re-pointing
+ *   relative URLs.
+ */
+const RECOVERY_CSP =
+  "default-src 'self'; " +
+  "script-src 'self'; " +
+  "style-src 'self'; " +
+  "img-src 'self' data:; " +
+  "font-src 'self'; " +
+  "connect-src 'self' https://flagshipserver.com; " +
+  "frame-ancestors 'none'; " +
+  "form-action 'self'; " +
+  "base-uri 'none'; " +
+  "object-src 'none'";
+
+/**
  * Origins allowed to call /api/* on the apex via cross-origin XHR.
  * The webapp lives on web.flagshipserver.com; the marketing/identity
  * site on flagshipserver.com is same-origin (no preflight); local dev
@@ -44,6 +88,7 @@ const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
  */
 const CORS_ALLOWED_ORIGINS = new Set<string>([
   WEBAPP_ORIGIN,
+  RECOVERY_ORIGIN,
   "https://flagshipserver.com",
   "https://www.flagshipserver.com",
   "http://localhost:8787",
@@ -72,6 +117,18 @@ export interface RouteEnv {
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Cloudflare rate-limit binding shared by all four mutating control-plane endpoints. */
   RATE_LIMITER?: RateLimitBinding;
+  /**
+   * Build-relay Durable Object namespace (task #59). Tests pass a
+   * lightweight stub; production wiring is in wrangler.toml.
+   */
+  BUILD_RELAY?: BuildRelayNamespaceLike;
+}
+
+export interface BuildRelayNamespaceLike {
+  newUniqueId(): { toString(): string };
+  idFromName(name: string): { toString(): string };
+  idFromString(id: string): { toString(): string };
+  get(id: { toString(): string }): { fetch(req: Request): Promise<Response> };
 }
 
 export interface R2BucketLike {
@@ -92,6 +149,8 @@ const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
 const HEALTH_PATH = "/api/health";
 const SERVICES_ENDPOINTS_PATH = "/api/services/endpoints";
 const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
+const BUILD_RELAY_SESSIONS_PATH = "/api/build-relay/sessions";
+const BUILD_RELAY_WS_PREFIX = "/build-relay/";
 
 /**
  * Default tunnel hub URL when TUNNEL_HUB_URL env var isn't set. Matches
@@ -234,6 +293,15 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return serveWebapp(request, url, env);
   }
 
+  // ---- recovery.flagshipserver.com ----
+  // Single-purpose sub-origin for the WebAuthn-PRF recovery flow. Every
+  // response carries the strict CSP defined in RECOVERY_CSP plus a
+  // X-Frame-Options: DENY belt-and-braces against legacy browsers that
+  // ignore frame-ancestors. Disk path: apps/web/public/recovery/*.
+  if (url.hostname === RECOVERY_HOST) {
+    return serveRecovery(request, url, env);
+  }
+
   // Worker-resident probe: never forwarded upstream as-is. The Worker does
   // the timed fetch itself so /status/ shows what flagshipserver.com sees,
   // not what the user's browser sees.
@@ -257,6 +325,24 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return streamIsoFromR2(url.pathname.slice(BUILD_ISO_STREAM_PREFIX.length), env);
   }
 
+  // Build-relay session mint (task #59). Browser POSTs here to open a
+  // fresh DO instance; response carries the sessionId + joinUrl the
+  // user shows to the phone via QR.
+  if (url.pathname === BUILD_RELAY_SESSIONS_PATH) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "method not allowed" }, 405);
+    }
+    return mintBuildRelaySession(env, url);
+  }
+
+  // Build-relay WS upgrade. /build-relay/<sessionId>?role=browser|sender
+  // forwards the upgrade to the existing DO. The DO is identified by
+  // its idFromString-encoded id; we use the string the mint endpoint
+  // emitted.
+  if (url.pathname.startsWith(BUILD_RELAY_WS_PREFIX)) {
+    return forwardBuildRelayUpgrade(request, env, url);
+  }
+
   // P3.6 — /og?title=...&subtitle=...
   // Returns an SVG poster with the title baked in. SVG is acceptable
   // for Twitter / Discord previews; some OG validators want PNG —
@@ -274,6 +360,22 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return new Response(null, {
       status: 308,
       headers: { location: `${WEBAPP_ORIGIN}/${url.search}` },
+    });
+  }
+
+  // `/recovery/*` paths on the apex 308-redirect to the dedicated
+  // sub-origin. The recovery page must only ever be served from
+  // `recovery.flagshipserver.com` — that's the whole point of putting
+  // the WebAuthn passkey behind a different rpId. Without this redirect
+  // the asset binding would happily serve the same HTML at
+  // flagshipserver.com/recovery/, and a user who landed there could
+  // create a passkey scoped to the apex rpId — defeating the isolation.
+  if (url.pathname === "/recovery" || url.pathname.startsWith("/recovery/")) {
+    const tail = url.pathname.slice("/recovery".length); // "" or "/X"
+    const target = `${RECOVERY_ORIGIN}${tail || "/"}${url.search}`;
+    return new Response(null, {
+      status: 308,
+      headers: { location: target },
     });
   }
 
@@ -427,6 +529,53 @@ async function streamIsoFromR2(filename: string, env: RouteEnv): Promise<Respons
   if (obj.httpEtag) headers.set("etag", obj.httpEtag);
   if (obj.writeHttpMetadata) obj.writeHttpMetadata(headers);
   return new Response(obj.body, { status: 200, headers });
+}
+
+async function mintBuildRelaySession(env: RouteEnv, url: URL): Promise<Response> {
+  if (!env.BUILD_RELAY) {
+    return jsonResponse({ error: "build-relay not configured" }, 503);
+  }
+  const id = env.BUILD_RELAY.newUniqueId();
+  const stub = env.BUILD_RELAY.get(id);
+  const inner = new URL(`https://do.internal/${id.toString()}/create`);
+  inner.searchParams.set("host", url.host);
+  const r = await stub.fetch(new Request(inner.toString(), { method: "POST" }));
+  if (!r.ok) {
+    const text = await r.text();
+    return new Response(text, {
+      status: r.status,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  return new Response(r.body, {
+    status: 200,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
+
+async function forwardBuildRelayUpgrade(
+  request: Request,
+  env: RouteEnv,
+  url: URL,
+): Promise<Response> {
+  if (!env.BUILD_RELAY) {
+    return jsonResponse({ error: "build-relay not configured" }, 503);
+  }
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return jsonResponse({ error: "websocket upgrade required" }, 426);
+  }
+  const sessionId = url.pathname.slice(BUILD_RELAY_WS_PREFIX.length).split("/")[0] ?? "";
+  if (!sessionId) {
+    return jsonResponse({ error: "sessionId required" }, 400);
+  }
+  let id: { toString(): string };
+  try {
+    id = env.BUILD_RELAY.idFromString(sessionId);
+  } catch {
+    return jsonResponse({ error: "invalid sessionId" }, 400);
+  }
+  const stub = env.BUILD_RELAY.get(id);
+  return stub.fetch(request);
 }
 
 async function buildIsoInfo(env: RouteEnv): Promise<Response> {
@@ -744,6 +893,70 @@ async function serveWebapp(
   return env.ASSETS.fetch(assetReq);
 }
 
+/**
+ * Serve `recovery.flagshipserver.com` from `apps/web/public/recovery/*`.
+ *
+ * Method is GET/HEAD only — every recovery write (POST upload, POST
+ * fetch, DELETE) goes cross-origin to the apex `/api/recovery/*`
+ * endpoints. The page itself is pure static HTML + a small JS module.
+ *
+ * Every response gets the strict CSP + framing protections. This is the
+ * single line of defense against an attacker getting their page injected
+ * into the recovery origin via, e.g., a future asset-binding bug.
+ */
+async function serveRecovery(
+  request: Request,
+  url: URL,
+  env: RouteEnv,
+): Promise<Response> {
+  const method = request.method.toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    return withRecoveryHeaders(
+      new Response(
+        JSON.stringify({ error: "method not allowed", host: RECOVERY_HOST }),
+        { status: 405, headers: { "content-type": "application/json", allow: "GET, HEAD" } },
+      ),
+    );
+  }
+  // Disk layout:  apps/web/public/recovery/<file>
+  // Public root:  /           → ASSETS /recovery/  (binding serves index.html)
+  // Public path:  /<file>     → ASSETS /recovery/<file>
+  const rewrittenPath = url.pathname === "/" ? "/recovery/" : `/recovery${url.pathname}`;
+  const rewritten = new URL(rewrittenPath + url.search, "https://flagshipserver.com");
+  const assetReq = new Request(rewritten.toString(), {
+    method,
+    headers: request.headers,
+  });
+  const asset = await env.ASSETS.fetch(assetReq);
+  return withRecoveryHeaders(asset);
+}
+
+/**
+ * Wrap a Response with the strict-CSP + framing-protection headers used
+ * on the recovery sub-origin. Asset-binding responses come back with
+ * immutable headers; we copy into a fresh Response to attach ours.
+ */
+function withRecoveryHeaders(res: Response): Response {
+  const headers = new Headers(res.headers);
+  headers.set("content-security-policy", RECOVERY_CSP);
+  headers.set("x-frame-options", "DENY");
+  headers.set("referrer-policy", "no-referrer");
+  headers.set("x-content-type-options", "nosniff");
+  // Recovery is a one-shot interactive flow; never let an intermediary
+  // cache the HTML and serve a stale-credential version to a different
+  // user. Static assets (favicon, fonts) can still cache via their own
+  // headers — we only set this on the wrapped Response, which the asset
+  // binding may override with its own asset-level cache directives.
+  if (!headers.has("cache-control")) {
+    headers.set("cache-control", "no-store");
+  }
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
 export const _internal = {
   PROXY_PREFIX,
   STATUS_PROBE_PATH,
@@ -751,6 +964,8 @@ export const _internal = {
   HEALTH_PATH,
   SERVICES_ENDPOINTS_PATH,
   BUILD_ISO_STREAM_PREFIX,
+  BUILD_RELAY_SESSIONS_PATH,
+  BUILD_RELAY_WS_PREFIX,
   DEFAULT_BASE_ISO_URL,
   DEFAULT_BASE_ISO_VERSION,
   DEFAULT_TUNNEL_HUB_URL,
@@ -759,4 +974,7 @@ export const _internal = {
   STRIP_RES_HEADERS,
   WEBAPP_HOST,
   WEBAPP_ORIGIN,
+  RECOVERY_HOST,
+  RECOVERY_ORIGIN,
+  RECOVERY_CSP,
 };
