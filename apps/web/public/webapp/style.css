@@ -877,6 +877,66 @@ body.no-tabs .tab-bar { display: none; }
   .tab-bar-btn.is-active::before { top: auto; bottom: 0; }
 }
 
+/* ── Skeleton loading primitive (#37) ──────────────────────────
+ *
+ * Pulses an accent-soft gradient across a surface-sunken background.
+ * Use as a CSS class on the same element you'd otherwise fill with
+ * "loading…" text. Compose to fake a card body via .skeleton-row
+ * (mono-shaped line) + .skeleton-pill (status pill stub).
+ *
+ * @media (prefers-reduced-motion: reduce) drops the animation so
+ * vestibular-sensitive users don't see the wave; the gradient still
+ * provides a "not-yet" visual cue.
+ */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  color: transparent !important;
+  border-color: var(--border-soft) !important;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+.skeleton-row {
+  height: 12px;
+  margin: 6px 0;
+  border-radius: 4px;
+}
+.skeleton-row.short { width: 40%; }
+.skeleton-row.medium { width: 65%; }
+.skeleton-row.long { width: 90%; }
+.skeleton-pill {
+  display: inline-block;
+  width: 56px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+}
+.skeleton-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 10px;
+}
+@keyframes skeleton-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+}
+
 /* ── Server card status indicators (#31) ────────────────────────
  *
  * Each card on the home view carries a 6px live dot (color encodes

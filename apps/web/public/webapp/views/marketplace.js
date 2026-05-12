@@ -11,7 +11,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { installFromMarketplace } from "../lib/installApp.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-marketplace");
 
@@ -39,7 +39,7 @@ export function scanGradePill(grade) {
 
 export async function renderMarketplace() {
   const root = $("marketplace-content");
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = skeletonCards(4);
   try {
     const body = await screensFetch("/api/screens/marketplace-browse");
     if (!body.listings?.length) {

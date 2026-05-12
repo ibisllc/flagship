@@ -7,7 +7,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
 import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-app-detail");
 
@@ -29,7 +29,7 @@ function hasBrowserBundle(body) {
 export async function renderAppDetail(appId) {
   currentAppId = appId;
   const root = $("app-detail-content");
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = skeletonCards(3);
   try {
     const body = await screensFetch(
       `/api/screens/app-detail/${encodeURIComponent(appId)}`,

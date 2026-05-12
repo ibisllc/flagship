@@ -9,7 +9,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { approveOneShot } from "../lib/leases.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-unlock-approvals");
 
@@ -25,7 +25,7 @@ function clearPoll() {
 
 export async function renderUnlockApprovals() {
   const root = $("unlock-approvals-content");
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = skeletonCards(2);
   try {
     const body = await screensFetch("/api/screens/unlock-approvals/pending");
     if (!body.pending?.length) {

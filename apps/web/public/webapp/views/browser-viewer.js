@@ -19,7 +19,7 @@
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, getSessionToken } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-browser-viewer");
 
@@ -37,7 +37,7 @@ function closeSocket() {
 async function renderTabs() {
   if (!activeAppId) return;
   const root = $("bv-tabs");
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = skeletonCards(2);
   try {
     const body = await screensFetch(
       `/api/screens/browser-tabs/list/${encodeURIComponent(activeAppId)}`,

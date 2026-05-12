@@ -3,7 +3,7 @@
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-tier-status");
 
@@ -14,7 +14,7 @@ function pct(used, quota) {
 
 export async function renderTierStatus() {
   const root = $("tier-status-content");
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = skeletonCards(2);
   try {
     const body = await screensFetch("/api/screens/tier-status");
     const tierBadge = body.tier === "free"

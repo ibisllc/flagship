@@ -3,13 +3,13 @@
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-apps-list");
 
 export async function renderAppsList() {
   const root = $("apps-list-content");
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = skeletonCards(3);
   try {
     const body = await screensFetch("/api/screens/apps-list");
     if (!body.apps?.length) {

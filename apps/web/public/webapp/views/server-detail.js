@@ -9,7 +9,7 @@ import {
   revokeLease,
 } from "../lib/leases.js";
 import { toast } from "../lib/toast.js";
-import { escapeHtml } from "../lib/util.js";
+import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 registerView("view-server-detail");
 
@@ -33,7 +33,7 @@ function fmtDate(unixMs) {
 
 export async function renderServerDetail() {
   const root = $("server-detail-content");
-  root.innerHTML = '<div class="card placeholder">loading…</div>';
+  root.innerHTML = skeletonCards(2);
   try {
     const body = await screensFetch("/api/screens/server-detail");
     root.innerHTML = `
