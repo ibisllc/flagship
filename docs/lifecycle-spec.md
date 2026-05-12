@@ -230,7 +230,7 @@ User plugs the USB in, powers on the box. From this moment:
    (`flagship-bootstrap.start`).
 2. Bootstrap finds the trailer on the boot medium → validates the
    user signature locally → fetches `installer/install.sh` from
-   `harrywinner2/flagship` at the trailer's pinned `installerGitRef`
+   `ibisllc/flagship` at the trailer's pinned `installerGitRef`
    over HTTPS.
 3. install.sh runs (~5 min):
    - Picks a target disk (largest non-removable >8GiB).
@@ -238,7 +238,7 @@ User plugs the USB in, powers on the box. From this moment:
    - Generates STK (Ed25519) → writes priv/pub hex + boot PEM.
    - **Seals the LUKS unlock key** against the phone's delegated
      Ed25519 pubkey (Flagship sealed-box: ephemeral X25519 + AES-GCM).
-   - `git clone https://github.com/harrywinner2/flagship` into the
+   - `git clone https://github.com/ibisllc/flagship` into the
      LUKS-mounted root. Builds workspaces with `npm ci && npx tsc -b`.
    - POSTs `ServerRegisterRequest` (signed by STK + carrying the
      auth-code's user signature) to `flagshipserver.com/api/server/register`.

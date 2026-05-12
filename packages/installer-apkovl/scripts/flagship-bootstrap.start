@@ -18,7 +18,7 @@ set -eu
 
 LOG=/var/log/flagship-bootstrap.log
 INSTALLED_FLAG=/var/flagship/installed.flag
-GITHUB_RAW="https://raw.githubusercontent.com/harrywinner2/flagship"
+GITHUB_RAW="https://raw.githubusercontent.com/ibisllc/flagship"
 DEFAULT_REF="main"
 
 mkdir -p /var/flagship /var/log

@@ -57,7 +57,7 @@ form is reorganized, the *content* still maps over.
 | Contact email | `harry@flagship.services` (role-based; see `memory/role_based_addresses.md`) |
 | Project URL | <https://flagshipserver.com> |
 | Project documentation | <https://flagshipserver.com/docs/> |
-| Source repository | <https://github.com/harrywinner2/flagship> |
+| Source repository | <https://github.com/ibisllc/flagship> |
 | License | BUSL-1.1 (Change Date 2030-05-03 → Apache 2.0) |
 
 ### Subscriber relationship

@@ -24,7 +24,7 @@ BLOB_JSON="$2"
 GIT_REF="${3:-main}"
 LOG=/var/log/flagship-install.log
 INSTALLED_FLAG=/var/flagship/installed.flag
-REPO_URL="https://github.com/harrywinner2/flagship.git"
+REPO_URL="https://github.com/ibisllc/flagship.git"
 
 exec >>"$LOG" 2>&1
 date

@@ -27,7 +27,7 @@ curl -sLO https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_6
 sha256sum -c flagship-base-alpine-3.21.0-x86_64.iso.sha256
 
 # 3. Build the ISO yourself from source at the matching git tag.
-git clone https://github.com/harrywinner2/flagship.git
+git clone https://github.com/ibisllc/flagship.git
 cd flagship
 git checkout iso-v3.21.0   # tag the workflow ran on
 npm install

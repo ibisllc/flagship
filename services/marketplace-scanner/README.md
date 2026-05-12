@@ -43,7 +43,7 @@ Worker — running Trivy needs filesystem access + a Docker daemon.
 # One-time:
 sudo apt install -y trivy docker.io
 npm install -g tsx
-git clone https://github.com/harrywinner2/flagship
+git clone https://github.com/ibisllc/flagship
 cd flagship/services/marketplace-scanner
 
 # Configure env:
