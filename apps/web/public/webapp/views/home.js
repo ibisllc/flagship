@@ -27,6 +27,110 @@ const PENNANT_SVG = `
 </svg>
 `;
 
+/**
+ * #31 — fetch per-pod liveness + cert state from .com's public pod
+ * inventory endpoint. Returns a map keyed by lower-cased serverDomain.
+ * Best-effort: any error resolves to an empty map so the home view
+ * still renders the base card.
+ */
+async function fetchPodStatusMap(username, servers) {
+  const out = new Map();
+  if (!username || !servers?.length) return out;
+  try {
+    const r = await fetch(
+      `https://flagshipserver.com/api/users/${encodeURIComponent(username)}/pods`,
+    );
+    if (!r.ok) return out;
+    const body = await r.json();
+    for (const p of body.pods ?? []) {
+      out.set(String(p.serverDomain ?? "").toLowerCase(), p);
+    }
+  } catch {
+    /* offline / cors — fall back to bare cards */
+  }
+  return out;
+}
+
+/** Classify the server's live status into one of three buckets. */
+function classifyServer(server, pod) {
+  if (server.revoked) return { kind: "revoked", label: `revoked: ${server.revoked.reason}` };
+  if (!pod || pod.lastReported == null) return { kind: "never-seen", label: "never seen" };
+  const ageMs = Date.now() - pod.lastReported;
+  // Daemons HELLO at least every 5 minutes; tolerate a 15-minute
+  // staleness before flipping the dot off — handles a transient
+  // tunnel hiccup without lighting up the home screen.
+  if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `offline (${formatAge(ageMs)} ago)` };
+  // Cert expiry within 30d — surface as warning even when daemon is online.
+  if (pod.currentCert?.validUntil) {
+    const msToExpiry = pod.currentCert.validUntil - Date.now();
+    if (msToExpiry < 0) return { kind: "cert-expired", label: "cert expired" };
+    if (msToExpiry < 30 * 86400_000) {
+      return { kind: "cert-expiring-soon", label: `cert renews in ${formatDays(msToExpiry)}` };
+    }
+  }
+  return { kind: "online", label: "online" };
+}
+
+function formatAge(ms) {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3600_000) return `${Math.round(ms / 60_000)}m`;
+  if (ms < 86400_000) return `${Math.round(ms / 3600_000)}h`;
+  return `${Math.round(ms / 86400_000)}d`;
+}
+
+function formatDays(ms) {
+  const d = Math.max(1, Math.round(ms / 86400_000));
+  return `${d}d`;
+}
+
+/**
+ * Build the inner HTML of one server card. The header row shows the
+ * server label + live dot; the meta row lists app count, cert expiry
+ * countdown (if <30d), and the auto-unlock state.
+ *
+ * Auto-unlock state isn't in `/api/users/:u/pods` directly — the lease
+ * records live on .com per-server but aren't aggregated into the pod
+ * inventory yet. We hint at it via the routing target (long-lived
+ * leases mean the daemon is reachable without phone tap) and otherwise
+ * label the row as "phone-tap only" — accurate to the default.
+ */
+function renderServerCard(server, pod) {
+  const c = classifyServer(server, pod);
+  const dot = `<span class="server-dot server-dot--${c.kind}" aria-hidden="true"></span>`;
+  const pillClass = c.kind === "online" ? "pill ok"
+    : c.kind === "revoked" || c.kind === "cert-expired" ? "pill err"
+    : c.kind === "cert-expiring-soon" ? "pill warn"
+    : "pill";
+  const apps = pod?.appsServed ?? [];
+  const appCount = Array.isArray(apps) ? apps.length : 0;
+  const certCountdown = pod?.currentCert?.validUntil
+    ? formatCertCountdown(pod.currentCert.validUntil) : "";
+  const autoUnlock = pod?.routingTarget
+    ? "auto-unlock on"
+    : "phone-tap only";
+  return `
+    <div class="row row-top">
+      <div class="server-card-head">
+        ${dot}
+        <span class="value server-fqdn">${escapeHtml(server.serverId)}</span>
+      </div>
+      <span class="${pillClass}">${escapeHtml(c.label)}</span>
+    </div>
+    <div class="server-card-meta mt-2">
+      <span class="server-meta-chip">${appCount} app${appCount === 1 ? "" : "s"}</span>
+      ${certCountdown ? `<span class="server-meta-chip">${escapeHtml(certCountdown)}</span>` : ""}
+      <span class="server-meta-chip">${escapeHtml(autoUnlock)}</span>
+    </div>
+  `;
+}
+
+function formatCertCountdown(validUntilMs) {
+  const ms = validUntilMs - Date.now();
+  if (ms < 0) return "cert expired";
+  if (ms < 30 * 86400_000) return `cert renews ${formatDays(ms)}`;
+  return ""; // omit chip when comfortably valid — reduces visual noise
+}
+
 /** Render the zero-state card when the user has no servers yet. */
 function renderEmptyServersList(root, { reason } = {}) {
   const hint = reason === "unpaired"
@@ -103,13 +207,15 @@ export async function renderHome() {
       renderEmptyServersList(list, { reason: "no-servers" });
       return;
     }
+    // #31 — fan-out to /api/users/:u/pods on .com (no auth, public
+    // read of server registration + daemon-status). Failures here are
+    // non-fatal: the cards fall back to the bare label + active/revoked
+    // pill if the fetch can't complete.
+    const podStatusByDomain = await fetchPodStatusMap(session.username, body.servers);
     for (const s of body.servers) {
       const card = document.createElement("div");
-      card.className = "card";
-      const status = s.revoked
-        ? `<span class="pill err">revoked: ${escapeHtml(s.revoked.reason)}</span>`
-        : '<span class="pill ok">active</span>';
-      card.innerHTML = `<div class="row"><span class="value">${escapeHtml(s.serverId)}</span>${status}</div>`;
+      card.className = "card server-card";
+      card.innerHTML = renderServerCard(s, podStatusByDomain.get(s.serverId.toLowerCase()));
       list.appendChild(card);
     }
     // Silent auto-renewal of long-lived leases. Fires on every home

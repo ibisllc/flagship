@@ -877,6 +877,69 @@ body.no-tabs .tab-bar { display: none; }
   .tab-bar-btn.is-active::before { top: auto; bottom: 0; }
 }
 
+/* ── Server card status indicators (#31) ────────────────────────
+ *
+ * Each card on the home view carries a 6px live dot (color encodes
+ * the bucket: online = ok, offline = ink-muted, cert-warn = warn,
+ * revoked / cert-expired = err) and a wrap-friendly meta row of
+ * mono-tinted chips (#apps, cert renewal countdown, auto-unlock).
+ *
+ * The dot pulses subtly when online so it reads as "live" without
+ * stealing visual attention from the rest of the page.
+ */
+.server-card .server-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.server-fqdn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.server-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 0 transparent;
+}
+.server-dot--online {
+  background: var(--ok);
+  animation: server-dot-pulse 2.2s ease-out infinite;
+}
+.server-dot--never-seen { background: var(--ink-faint); }
+.server-dot--offline { background: var(--ink-muted); }
+.server-dot--cert-expiring-soon { background: var(--warn); }
+.server-dot--cert-expired { background: var(--err); }
+.server-dot--revoked { background: var(--err); }
+@keyframes server-dot-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 50%, transparent); }
+  60%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.server-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.server-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  border: 1px solid var(--border-soft);
+}
+
 /* ── Empty state (#36) ──────────────────────────────────────────
  *
  * Used when the user has zero servers. Stacks an inline-SVG pennant
