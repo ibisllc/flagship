@@ -110,3 +110,82 @@ describe("webapp lib/recovery.js — drives the sub-origin", () => {
     expect(r.body).toContain("flagship-recovery-hello");
   });
 });
+
+describe("Task #74 — Argon2id-gated wrappedUmk fetch (sub-origin code)", () => {
+  it("/recovery/recovery.js imports argon2id from the vendored noble module", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    // The CSP forbids external scripts, so Argon2 must be self-hosted.
+    expect(r.body).toMatch(/import\s*\{\s*argon2id\s*\}\s*from\s*["'].\/vendor\/noble-hashes\/argon2.js["']/);
+  });
+
+  it("vendored noble argon2 module is reachable + minified-but-readable", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/vendor/noble-hashes/argon2.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("export ");
+    // Cheap shape check — RFC 9106 references the t/m/p params.
+    expect(r.body).toContain("argon2id");
+  });
+
+  it("recovery.js documents the Argon2 parameter choice + Pixel-6 budget", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("ARGON2_M_KB");
+    expect(r.body).toContain("ARGON2_T");
+    expect(r.body).toContain("ARGON2_P");
+    // Document the OWASP-aligned choice so future reviewers can audit
+    // the parameter selection without spelunking docs.
+    expect(r.body).toContain("OWASP");
+  });
+
+  it("recovery.js splits Argon2 output into fetchToken + prfSalt via HKDF (domain-separated)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("flagship.recovery.fetch.v1");
+    expect(r.body).toContain("flagship.recovery.salt.v1");
+    expect(r.body).toContain("HKDF");
+  });
+
+  it("recovery.js POSTs to the gated fetch endpoint (not the legacy GET ciphertext path)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("/api/recovery/by-username/");
+    expect(r.body).toContain("/fetch");
+    // Sub-origin verifies server's prfSaltHash against its locally-
+    // derived prfSalt — defense against a tampered .com swapping salts.
+    expect(r.body).toContain("prfSaltHash");
+  });
+
+  it("recovery.js wipes the Argon2 master key from memory after splitting", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/recovery/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    // .fill(0) the masterKey buffer — best-effort hygiene; documented
+    // as best-effort in the source itself.
+    expect(r.body).toMatch(/masterKey\.fill\(0\)/);
+  });
+});
+
+describe("Task #74 — webapp delegates passphrase hashes through postMessage", () => {
+  it("lib/recovery.js forwards fetchTokenHashHex + prfSaltHashHex to the upload envelope", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("fetchTokenHashHex");
+    expect(r.body).toContain("prfSaltHashHex");
+    expect(r.body).toContain("fetchTokenHash");
+    expect(r.body).toContain("prfSaltHash");
+  });
+
+  it("lib/recovery.js refuses to upload when the sub-origin omitted the hashes", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/recovery.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("sub-origin omitted the passphrase hashes");
+  });
+});

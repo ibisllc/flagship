@@ -56,12 +56,21 @@ export async function setupCloudRecovery(username) {
   if (result.type !== "flagship-recovery-enroll-result") {
     throw new Error(`enroll: ${result.reason ?? "no result"}`);
   }
-  const { credentialIdHex, wrappedUmkB64 } = result;
+  const { credentialIdHex, wrappedUmkB64, fetchTokenHashHex, prfSaltHashHex } = result;
   if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {
     throw new Error("enroll: bad payload from sub-origin");
   }
+  // Task #74 — the sub-origin computed Argon2id over the user's
+  // passphrase and split the result into a fetchToken (gates the
+  // wrappedUmk fetch on .com) and a prfSalt (binds WebAuthn's PRF
+  // input to the passphrase). The hashes ride the IRK-signed upload
+  // envelope; .com persists them next to the ciphertext.
+  if (typeof fetchTokenHashHex !== "string" || typeof prfSaltHashHex !== "string") {
+    throw new Error("enroll: sub-origin omitted the passphrase hashes");
+  }
   return await uploadRecord({
     session, username, credentialIdHex, wrappedUmkB64,
+    fetchTokenHashHex, prfSaltHashHex,
   });
 }
 
@@ -93,12 +102,17 @@ export async function recoverFromCloud(username) {
 export async function deleteCloudRecovery(username) {
   const session = getSession();
   if (!session.umk) throw new Error("unlock first");
+  // After Task #74 the metadata GET returns wrappedUmkHash directly —
+  // no ciphertext, no Argon2 round-trip required. The IRK signature is
+  // the only auth needed to delete.
   const r = await fetch(`${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`);
   if (r.status === 404) return { deleted: false };
   if (!r.ok) throw new Error(`fetch recovery failed: ${r.status}`);
   const body = await r.json();
-  const wrapped = base64ToBytes(body.wrappedUmk);
-  const wrappedHash = await sha256Hex(wrapped);
+  const wrappedHash = body.wrappedUmkHash;
+  if (typeof wrappedHash !== "string") {
+    throw new Error("metadata missing wrappedUmkHash");
+  }
   const issuedAt = Date.now();
   const canonical = canonicalUpload({
     username,
@@ -209,10 +223,22 @@ async function runSubOriginFlow(mode, payload) {
   });
 }
 
-async function uploadRecord({ session, username, credentialIdHex, wrappedUmkB64 }) {
+async function uploadRecord({
+  session, username, credentialIdHex, wrappedUmkB64,
+  fetchTokenHashHex, prfSaltHashHex,
+}) {
   const wrappedBytes = base64ToBytes(wrappedUmkB64);
   const wrappedUmkHashHex = await sha256Hex(wrappedBytes);
   const issuedAt = Date.now();
+  // canonical-bytes still cover only the original signed fields; the
+  // new hashes ride the upload-envelope body, are validated server-side
+  // for shape, and are stored alongside the row. We don't extend the
+  // signed payload because the upload-record canonical shape is part
+  // of @flagship/protocol; bumping its version would force a protocol
+  // migration across every device. The IRK signature still guarantees
+  // .com isn't fed attacker-substituted ciphertext under a victim's
+  // passkey; the extra hashes are *additional* gates the IRK signer
+  // controls (since they come from a passphrase only the user knows).
   const canonical = canonicalUpload({
     username,
     credentialIdHex,
@@ -229,6 +255,8 @@ async function uploadRecord({ session, username, credentialIdHex, wrappedUmkB64 
         credentialId: credentialIdHex,
         wrappedUmk: wrappedUmkB64,
         issuedAt,
+        ...(fetchTokenHashHex ? { fetchTokenHash: fetchTokenHashHex } : {}),
+        ...(prfSaltHashHex ? { prfSaltHash: prfSaltHashHex } : {}),
       },
       signature: bytesToHex(sig),
     }),
