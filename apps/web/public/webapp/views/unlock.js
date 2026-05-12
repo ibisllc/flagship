@@ -1,8 +1,9 @@
 import { unlockUmk, hasWrappedUmk, resetDevice } from "../keystore.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
+import { dispatchInitialView } from "../lib/deepLink.js";
 import { unlockSession, lockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
-import { enterHome, stopRenewals } from "./home.js";
+import { stopRenewals } from "./home.js";
 
 registerView("view-unlock");
 
@@ -11,7 +12,7 @@ async function handleUnlock() {
   try {
     const seed = await unlockUmk(a);
     await unlockSession(seed);
-    await enterHome();
+    await dispatchInitialView();
     toast("unlocked");
   } catch {
     toast("wrong passphrase", "err");

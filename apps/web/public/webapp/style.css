@@ -179,7 +179,20 @@ header .subtitle {
   text-align: right;
 }
 
-main { padding: var(--space-5) 22px calc(var(--space-8) + env(safe-area-inset-bottom, 0px)); }
+main {
+  padding: var(--space-5) 22px calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
+  /* Tab bar fixed at the bottom of the viewport on ≤768px — pad main
+   * so the last card of every view never sits under it. The 80px figure
+   * is tab-bar height (64) + a 16px optical breathing room. */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 769px) {
+  main {
+    /* On desktop the tab strip is at the top, not the bottom — the
+     * bottom-bar padding above isn't needed and would leave a void. */
+    padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
+  }
+}
 
 section { margin-bottom: var(--space-8); }
 section h2 {
@@ -753,6 +766,117 @@ section:not(.hidden) {
   border-color: color-mix(in srgb, var(--warn) 30%, transparent);
 }
 
+/* ── Tab bar (#23) ─────────────────────────────────────────────────
+ *
+ * Mobile (≤768px): bottom-fixed, glued to the bottom safe-area inset
+ * so the iOS home indicator never overlaps an icon. Top-stroke shows
+ * the active tab; we deliberately use the accent only on the active
+ * label/icon (not the whole pill) so the bar stays calm in the
+ * peripheral vision while the user reads the screen above.
+ *
+ * Desktop (≥769px): the same nav becomes a horizontal top strip
+ * underneath the header. The strip pins to the same `position: sticky`
+ * as the header so it scrolls with the page on overflow-y pages but
+ * sticks to the top once anchored — same behaviour as Mail.app.
+ *
+ * Interaction model: tap-only. Swipe-between-tabs was considered and
+ * dropped — would fight the horizontal scrolls inside transcripts /
+ * JSON dumps, and on iOS PWAs would steal the system back-swipe.
+ */
+.tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--canvas) 92%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border-top: 1px solid var(--border-soft);
+  /* Inset the bar slightly on the sides so corner-rounded phones don't
+   * clip the first/last icon; on tablets it stays edge-to-edge. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.tab-bar-btn {
+  background: transparent;
+  border: none;
+  color: var(--ink-faint);
+  padding: 8px 6px 6px;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  cursor: pointer;
+  position: relative;
+  transition: color var(--motion-state);
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-bar-btn .icon {
+  width: 22px;
+  height: 22px;
+  color: inherit;
+}
+.tab-bar-btn:hover {
+  background: transparent;
+  color: var(--ink-muted);
+}
+.tab-bar-btn.is-active {
+  color: var(--accent);
+}
+.tab-bar-btn.is-active::before {
+  /* Thin top-stroke on mobile, bottom-stroke on desktop. */
+  content: "";
+  position: absolute;
+  left: 30%;
+  right: 30%;
+  top: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.tab-bar-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+  border-radius: 4px;
+}
+/* Hide the tab bar entirely when the user is on bootstrap/unlock — no
+ * paired identity yet so the tabs would be empty surfaces. The router
+ * adds `.no-tabs` to body in app.js when those views are showing. */
+body.no-tabs .tab-bar { display: none; }
+
+@media (min-width: 769px) {
+  .tab-bar {
+    position: sticky;
+    top: 62px; /* sit under the header — matches header h:~62px */
+    bottom: auto;
+    max-width: 640px;
+    margin: 0 auto;
+    border-top: none;
+    border-bottom: 1px solid var(--border-soft);
+    padding: 6px env(safe-area-inset-right, 0px) 6px env(safe-area-inset-left, 0px);
+  }
+  .tab-bar-btn {
+    flex-direction: row;
+    min-height: 44px;
+    font-size: 11px;
+    gap: 8px;
+  }
+  .tab-bar-btn::before { top: auto; bottom: 0; }
+  .tab-bar-btn.is-active::before { top: auto; bottom: 0; }
+}
+
 /* Slim progress bar (tier-status dispatcher relay). */
 .progress-track {
   height: 8px;
@@ -765,4 +889,19 @@ section:not(.hidden) {
   height: 100%;
   background: var(--accent);
   transition: width var(--motion-state);
+}
+
+/* Task #34 — Audit log: envelope JSON pre-block, scrollable and
+ * monospace, with a fixed max-height so long envelopes don't push
+ * the back button off-screen. */
+.audit-envelope-pre {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-all;
 }

@@ -1,9 +1,9 @@
 import { bootstrapNewIdentity, bootstrapFromExistingSeed } from "../keystore.js";
 import { $, registerView } from "../lib/router.js";
+import { dispatchInitialView } from "../lib/deepLink.js";
 import { recoverFromCloud } from "../lib/recovery.js";
 import { unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
-import { enterHome } from "./home.js";
 
 registerView("view-bootstrap");
 
@@ -15,7 +15,7 @@ async function handleBootstrap() {
   try {
     const seed = await bootstrapNewIdentity(a);
     await unlockSession(seed);
-    await enterHome();
+    await dispatchInitialView();
     toast("device key generated");
   } catch (e) {
     toast(String(e), "err");
@@ -37,7 +37,7 @@ async function handleRecover() {
     await bootstrapFromExistingSeed(passA, seed);
     localStorage.setItem("flagship.username", username);
     await unlockSession(seed, username);
-    await enterHome();
+    await dispatchInitialView();
     toast(`recovered ${username}`, "ok");
   } catch (e) {
     toast(`recover failed: ${e.message ?? e}`, "err");

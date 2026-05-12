@@ -6,7 +6,7 @@ import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { loadProviders } from "../providers.js";
 
-registerView("view-home");
+registerView("view-home", { tab: "home" });
 
 // 30-minute cadence for the silent lease renewer. The renewer also
 // fires opportunistically on every home-view enter, so this interval

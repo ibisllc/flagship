@@ -51,9 +51,24 @@
         </div>
       </section>
 
-      <!-- View 3: Paired — show servers / apps -->
-      <section id="view-home" class="hidden">
-        <h2>Identity</h2>
+      <!-- View 3a: Home tab — identity + servers + AI provider chip -->
+      <section id="view-home" class="hidden" data-tab="home">
+        <h2>Servers</h2>
+        <div id="servers-list"></div>
+
+        <h2 class="mt-5">Session</h2>
+        <div class="card">
+          <div class="row">
+            <span class="label">Status</span>
+            <span class="pill" id="session-status">unpaired</span>
+          </div>
+          <div class="row-2">
+            <button class="secondary" id="pair-with-server">Pair to a server</button>
+            <button class="secondary" id="open-pod-pair">Pod pairing</button>
+          </div>
+        </div>
+
+        <h2 class="mt-5">Identity</h2>
         <div class="card">
           <div class="row">
             <span class="label">Username</span>
@@ -65,45 +80,68 @@
           </div>
         </div>
 
-        <h2 class="mt-5">Servers</h2>
-        <div id="servers-list"></div>
-
-        <h2 class="mt-5">Session</h2>
-        <div class="card">
-          <div class="row">
-            <span class="label">Status</span>
-            <span class="pill" id="session-status">unpaired</span>
-          </div>
-          <div class="row">
-            <button class="secondary" id="pair-with-server">Pair to a server</button>
-            <button class="secondary" id="open-settings">Settings</button>
-          </div>
-        </div>
-
-        <h2 class="mt-5">My pod</h2>
-        <div class="card">
-          <p class="note">
-            Connect to your Flagship server to manage apps + sessions from here.
-          </p>
-          <div class="home-grid">
-            <button class="secondary" id="open-pod-pair">Pod pairing</button>
-            <button class="secondary" id="open-server-detail">Server detail</button>
-            <button class="secondary" id="open-apps-list">Apps</button>
-            <button class="secondary" id="open-marketplace">Marketplace</button>
-            <button class="secondary" id="open-vibe-code">Vibe-code</button>
-            <button class="secondary" id="open-unlock-approvals">Unlock requests</button>
-            <button class="secondary" id="open-paired-sessions">Sessions</button>
-            <button class="secondary" id="open-tier-status">Tier &amp; usage</button>
-            <button class="secondary" id="open-install-progress">Install progress</button>
-            <button class="secondary" id="open-orders-debug">Send order</button>
-            <button class="secondary span-2" id="open-browser-viewer">Browser viewer</button>
-            <button class="secondary span-2" id="open-recovery">Recovery</button>
-          </div>
-        </div>
-
         <h2 class="mt-5">AI providers</h2>
         <div class="card" id="home-active-provider">
           <p class="note">loading…</p>
+        </div>
+      </section>
+
+      <!-- View 3b: Activity tab — unlock approvals + install progress + audit log -->
+      <section id="view-activity" class="hidden" data-tab="activity">
+        <h2>Pending unlock requests</h2>
+        <div class="card">
+          <p class="note">
+            Tap to approve a server that's asking to boot. Approvals are
+            one-shot by default; enable long-lived auto-unlock per server.
+          </p>
+          <button class="secondary full-width" id="activity-open-unlock-approvals">Review unlock requests</button>
+        </div>
+
+        <h2 class="mt-5">Install progress</h2>
+        <div class="card">
+          <p class="note">
+            Watch a fresh build come online. Enter a serial to start streaming
+            install events from the control plane.
+          </p>
+          <button class="secondary full-width" id="activity-open-install-progress">Open install tracker</button>
+        </div>
+
+        <h2 class="mt-5" id="activity-audit-log-heading">Audit log</h2>
+        <div id="activity-audit-log">
+          <div class="card placeholder">audit-log view ships in #34</div>
+        </div>
+      </section>
+
+      <!-- View 3c: Settings tab — providers, push, recovery, tier, identity, danger zone -->
+      <!-- Detail panel (view-settings) below renders the actual content; the Settings
+           tab itself is the entry strip linking to its sub-sections. -->
+      <section id="view-settings-tab" class="hidden" data-tab="settings">
+        <h2>Account</h2>
+        <div class="card stack-md">
+          <button class="secondary full-width" id="settings-tab-providers">AI providers</button>
+          <button class="secondary full-width" id="settings-tab-push">Browser notifications</button>
+          <button class="secondary full-width" id="settings-tab-recovery">Recovery</button>
+          <button class="secondary full-width" id="settings-tab-tier">Tier &amp; usage</button>
+          <button class="secondary full-width" id="settings-tab-sessions">Paired sessions</button>
+        </div>
+
+        <h2 class="mt-5">Advanced</h2>
+        <div class="card stack-md">
+          <label class="inline-check">
+            <input type="checkbox" id="settings-debug-toggle" /> Show developer tools
+          </label>
+          <p class="faint-sm" id="settings-debug-hint">
+            Enables the "Send order" debug panel and other developer surfaces.
+          </p>
+          <div id="settings-developer-row" class="hidden">
+            <button class="secondary full-width" id="settings-tab-orders-debug">Send order (debug)</button>
+            <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server (draft composer)</button>
+          </div>
+        </div>
+
+        <h2 class="mt-5">Danger zone</h2>
+        <div class="card danger-zone">
+          <button class="secondary full-width" id="settings-tab-reset">Reset device</button>
         </div>
       </section>
 
@@ -134,10 +172,20 @@
         </div>
       </section>
 
-      <!-- View 8: Apps list (P2.2) -->
-      <section id="view-apps-list" class="hidden">
-        <h2>Apps</h2>
+      <!-- View 8: Apps list (P2.2) — also acts as the "Apps" tab landing. -->
+      <section id="view-apps-list" class="hidden" data-tab="apps">
+        <h2>Installed</h2>
         <div id="apps-list-content"></div>
+        <div class="card mt-3">
+          <p class="note">
+            Browse the marketplace, vibe-code a new app, or share-install one
+            from a creator.
+          </p>
+          <div class="row-2">
+            <button class="secondary" id="apps-list-open-marketplace">Marketplace</button>
+            <button class="secondary" id="apps-list-open-vibe-code">Vibe-code</button>
+          </div>
+        </div>
         <div class="row-2">
           <button class="secondary" id="apps-list-refresh">Refresh</button>
           <button class="secondary" id="apps-list-back">← Back</button>
@@ -336,6 +384,21 @@
         <button class="secondary full-width mt-2" id="create-server-back">← Back</button>
       </section>
 
+      <!-- View 20: Post-recovery reattach progress (J.4) -->
+      <section id="view-post-recovery" class="hidden">
+        <h2>Reattach progress</h2>
+        <div class="card warning">
+          <p class="note">
+            After a recovery rebinds your identity, the daemon walks every installed app and rewrites membership rows from the OLD IRK to the NEW one. The OLD pubkey is then wiped from app data; a 7-day encrypted journal lets you undo the rewrite if needed.
+          </p>
+        </div>
+        <div id="post-recovery-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="post-recovery-refresh">Refresh</button>
+          <button class="secondary" id="post-recovery-back">← Back</button>
+        </div>
+      </section>
+
       <!-- View 15: Recovery (P2.12) -->
       <section id="view-recovery" class="hidden">
         <h2>Recovery</h2>
@@ -354,6 +417,12 @@
           <button id="recovery-export" class="full-width mt-2">Export wrapped UMK</button>
           <label class="mt-3">Import wrapped UMK</label>
           <input type="file" id="recovery-import-input" accept="application/json" />
+        </div>
+        <div class="card mt-2">
+          <p class="note">
+            <strong>After recovery (J.4):</strong> if you've recently rebooted your identity, the daemon walks every installed app and rewrites memberships from the OLD IRK to the NEW one. Watch progress + see the 7-day undo window.
+          </p>
+          <button class="secondary full-width mt-2" id="recovery-open-reattach">Open reattach progress</button>
         </div>
         <button class="secondary full-width mt-2" id="recovery-back">← Back</button>
       </section>
@@ -455,6 +524,34 @@
         <button class="secondary full-width mt-2" id="pair-cancel">Cancel</button>
       </section>
     </main>
+
+    <!--
+      Task #23 — 4-tab IA shell.
+
+      Bottom-fixed on ≤768px (the dominant mobile case — daily-use surface),
+      top-strip under the header on ≥769px. Tap-only switches (no swipe);
+      see commit body for the rationale (collides with the horizontal scrolls
+      inside transcripts + JSON dumps and steals iOS back-swipe). The active
+      tab is highlighted by the router via syncTabBar() reacting to show().
+    -->
+    <nav id="tab-bar" class="tab-bar" role="tablist" aria-label="Primary">
+      <button class="tab-bar-btn" data-tab-target="home" role="tab" aria-label="Home">
+        <span class="icon" data-tab-icon="home"></span>
+        <span class="tab-bar-label">Home</span>
+      </button>
+      <button class="tab-bar-btn" data-tab-target="apps" role="tab" aria-label="Apps">
+        <span class="icon" data-tab-icon="apps"></span>
+        <span class="tab-bar-label">Apps</span>
+      </button>
+      <button class="tab-bar-btn" data-tab-target="activity" role="tab" aria-label="Activity">
+        <span class="icon" data-tab-icon="activity"></span>
+        <span class="tab-bar-label">Activity</span>
+      </button>
+      <button class="tab-bar-btn" data-tab-target="settings" role="tab" aria-label="Settings">
+        <span class="icon" data-tab-icon="settings"></span>
+        <span class="tab-bar-label">Settings</span>
+      </button>
+    </nav>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
