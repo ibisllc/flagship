@@ -4,7 +4,8 @@ import PackageDescription
 let package = Package(
     name: "FlagshipMobile",
     platforms: [
-        .iOS(.v17)
+        .iOS(.v17),
+        .macOS(.v14)
     ],
     products: [
         .library(name: "Flagship", targets: ["Flagship"]),
@@ -31,6 +32,11 @@ let package = Package(
             name: "FlagshipUI",
             dependencies: ["Flagship", "FlagshipAPI", "FlagshipCore"],
             path: "Sources/FlagshipUI"
+        ),
+        .testTarget(
+            name: "FlagshipMobileTests",
+            dependencies: ["Flagship", "FlagshipAPI", "FlagshipCore"],
+            path: "Tests/FlagshipMobileTests"
         )
     ]
 )

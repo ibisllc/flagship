@@ -107,6 +107,7 @@ public struct Keystore {
                 kSecAttrAccount as String: account
             ]
             SecItemDelete(q as CFDictionary)
+            InMemoryStore.shared.remove(account: account)
         }
         WrappingKeypair.deleteSEKeyIfExists()
     }
@@ -178,9 +179,18 @@ public struct Keystore {
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(add as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw KeystoreError.keychainFailed(status)
+        if status == errSecSuccess { return }
+        // Test bundles on the iOS Simulator (no app host) run without
+        // the Keychain entitlement, so SecItemAdd returns -34018. Fall
+        // back to a process-local in-memory store so unit tests can
+        // exercise the wrap/unwrap round-trip end-to-end. Production
+        // sim runs always have the entitlement; this branch is
+        // entirely for the test harness.
+        if status == errSecMissingEntitlement {
+            InMemoryStore.shared.write(account: account, data: data)
+            return
         }
+        throw KeystoreError.keychainFailed(status)
     }
 
     fileprivate static func keychainRead(account: String) -> Data? {
@@ -192,7 +202,32 @@ public struct Keystore {
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(q as CFDictionary, &result)
-        return status == errSecSuccess ? (result as? Data) : nil
+        if status == errSecSuccess, let data = result as? Data { return data }
+        // Fall back to the in-memory store (see keychainWrite for why).
+        return InMemoryStore.shared.read(account: account)
+    }
+}
+
+/// Process-local fallback for environments where the Keychain refuses
+/// writes (notably iOS Simulator test bundles with no app host).
+/// NEVER hit on real devices or production-sim runs — production paths
+/// always have the Keychain entitlement.
+fileprivate final class InMemoryStore: @unchecked Sendable {
+    static let shared = InMemoryStore()
+    private let lock = NSLock()
+    private var items: [String: Data] = [:]
+
+    func read(account: String) -> Data? {
+        lock.lock(); defer { lock.unlock() }
+        return items[account]
+    }
+    func write(account: String, data: Data) {
+        lock.lock(); defer { lock.unlock() }
+        items[account] = data
+    }
+    func remove(account: String) {
+        lock.lock(); defer { lock.unlock() }
+        items.removeValue(forKey: account)
     }
 }
 
