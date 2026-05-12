@@ -15,11 +15,17 @@ import {
 } from "@flagship/tunnel-protocol";
 import {
   appEntitlementCertId,
+  appGrantActiveAt,
+  appGrantAuthorizesPod,
+  appGrantId,
   rootEntitlementCertId,
   verifyAppEntitlement,
+  verifyAppGrant,
   verifyRootEntitlement,
   verifyTunnelHelloV2,
   type AppEntitlement,
+  type AppGrant,
+  type AppGrantRoute,
   type Bytes,
   type RootEntitlement,
   type TunnelHelloV2,
@@ -308,6 +314,21 @@ interface ParsedHelloV2 {
   nonce: Bytes;
   issuedAt: number;
   signature: Bytes;
+  /**
+   * Optional list of AppGrants the daemon also presents (#6). Each
+   * grant carries its IRK signature; the hub verifies it against the
+   * user's known IRK pubkey and, if this pod is in serverIdentities
+   * and not revoked/expired, unions the grant's route URLs into the
+   * SNI allowlist.
+   */
+  appGrants: ParsedAppGrant[];
+}
+
+interface ParsedAppGrant {
+  grant: AppGrant;
+  signature: Bytes;
+  /** SHA-256 hex of the grant's canonical bytes. */
+  grantIdHash: string;
 }
 
 type HelloParse = ({ ok: true } & ParsedHelloV2) | { ok: false; reason: string };
@@ -366,6 +387,35 @@ function parseHello(payload: Uint8Array): HelloParse {
     appCertId = o.appEntitlementCertId;
   }
 
+  // #6 — optional AppGrant list. Each entry: { grant, signatureHex }.
+  const appGrants: ParsedAppGrant[] = [];
+  if (o.appGrants !== undefined) {
+    if (!Array.isArray(o.appGrants)) {
+      return { ok: false, reason: "HELLO.appGrants must be an array" };
+    }
+    for (const raw of o.appGrants) {
+      if (typeof raw !== "object" || raw === null) {
+        return { ok: false, reason: "HELLO.appGrants entry not object" };
+      }
+      const r = raw as Record<string, unknown>;
+      const wire = r.grant;
+      if (typeof wire !== "object" || wire === null) {
+        return { ok: false, reason: "HELLO.appGrants entry missing grant" };
+      }
+      const wireG = wire as Record<string, unknown>;
+      if (typeof r.signatureHex !== "string" || !/^[0-9a-f]{128}$/.test(r.signatureHex)) {
+        return { ok: false, reason: "HELLO.appGrants entry signatureHex must be 64-byte hex" };
+      }
+      const parsed = inflateAppGrantWire(wireG);
+      if (!parsed.ok) return { ok: false, reason: parsed.reason };
+      appGrants.push({
+        grant: parsed.value,
+        signature: hexToBytes(r.signatureHex),
+        grantIdHash: "", // computed in authenticate after we verify the signature
+      });
+    }
+  }
+
   return {
     ok: true,
     serverId: o.serverId,
@@ -378,7 +428,60 @@ function parseHello(payload: Uint8Array): HelloParse {
     nonce: hexToBytes(o.nonce),
     issuedAt: o.issuedAt,
     signature: hexToBytes(o.signature),
+    appGrants,
   };
+}
+
+/**
+ * Inflate a wire AppGrant (with `serverIdentitiesHex`) into the
+ * in-memory shape (with `serverIdentities: Bytes[]`). Validates basic
+ * field shapes; signature verification is the caller's job.
+ */
+function inflateAppGrantWire(
+  o: Record<string, unknown>,
+): { ok: true; value: AppGrant } | { ok: false; reason: string } {
+  if (typeof o.grantId !== "string") return { ok: false, reason: "AppGrant.grantId missing" };
+  if (typeof o.username !== "string") return { ok: false, reason: "AppGrant.username missing" };
+  if (typeof o.appCanonical !== "string") return { ok: false, reason: "AppGrant.appCanonical missing" };
+  if (!Array.isArray(o.serverDomains)) return { ok: false, reason: "AppGrant.serverDomains must be an array" };
+  if (!Array.isArray(o.serverIdentitiesHex)) return { ok: false, reason: "AppGrant.serverIdentitiesHex must be an array" };
+  if (!Array.isArray(o.routes)) return { ok: false, reason: "AppGrant.routes must be an array" };
+  if (typeof o.issuedAt !== "number") return { ok: false, reason: "AppGrant.issuedAt must be a number" };
+  if (typeof o.expiresAt !== "number") return { ok: false, reason: "AppGrant.expiresAt must be a number" };
+  for (const d of o.serverDomains) {
+    if (typeof d !== "string") return { ok: false, reason: "AppGrant.serverDomains must be strings" };
+  }
+  const serverIdentities: Bytes[] = [];
+  for (const h of o.serverIdentitiesHex) {
+    if (typeof h !== "string" || !/^[0-9a-f]{64}$/.test(h)) {
+      return { ok: false, reason: "AppGrant.serverIdentitiesHex must be 32-byte hex" };
+    }
+    serverIdentities.push(hexToBytes(h));
+  }
+  const routes: AppGrantRoute[] = [];
+  for (const r of o.routes) {
+    if (typeof r !== "object" || r === null) {
+      return { ok: false, reason: "AppGrant.route not object" };
+    }
+    const rr = r as Record<string, unknown>;
+    if (typeof rr.url !== "string") return { ok: false, reason: "AppGrant.route.url missing" };
+    if (rr.scope !== "canonical" && rr.scope !== "non-canonical" && rr.scope !== "subpath") {
+      return { ok: false, reason: "AppGrant.route.scope invalid" };
+    }
+    routes.push({ url: rr.url, scope: rr.scope });
+  }
+  const out: AppGrant = {
+    grantId: o.grantId,
+    username: o.username,
+    appCanonical: o.appCanonical,
+    serverDomains: o.serverDomains as string[],
+    serverIdentities,
+    routes,
+    issuedAt: o.issuedAt,
+    expiresAt: o.expiresAt,
+  };
+  if (typeof o.appInstanceId === "string") out.appInstanceId = o.appInstanceId;
+  return { ok: true, value: out };
 }
 
 function parseRootEntitlement(o: unknown): { ok: true; value: RootEntitlement } | { ok: false; reason: string } {
@@ -431,7 +534,10 @@ async function authenticateHello(
   opts: TunnelHubOptions,
   now: () => number,
   maxHelloAgeMs: number,
-): Promise<{ ok: true } | { ok: false; reason: string; closeCode: number }> {
+): Promise<
+  | { ok: true; validatedGrants: AppGrant[] }
+  | { ok: false; reason: string; closeCode: number }
+> {
   const age = now() - hello.issuedAt;
   if (age > maxHelloAgeMs || age < -60_000) {
     return { ok: false, reason: "HELLO issuedAt is stale or in the future", closeCode: 1008 };
@@ -521,7 +627,71 @@ async function authenticateHello(
       return { ok: false, reason: "HELLO STK signature failed verification", closeCode: 1008 };
     }
   }
-  return { ok: true };
+
+  // #6 — AppGrant gate. Verify each presented AppGrant against the
+  // user's IRK, confirm this pod is in serverIdentities, confirm
+  // the grant is active (issuedAt ≤ now < expiresAt) and not on
+  // the revocation list. The union of validated grants' route URLs
+  // becomes the SNI allowlist along with the legacy entitlement
+  // canonicals (caller does the union).
+  //
+  // FAIL CLOSED: if AppGrants are present and the IRK lookup or
+  // revocation lookup fails, reject the HELLO. Better to refuse a
+  // legitimate connection than to silently accept a hostile grant.
+  const validatedGrants: AppGrant[] = [];
+  if (hello.appGrants.length > 0) {
+    if (!opts.irkLookup) {
+      return {
+        ok: false,
+        reason: "AppGrants presented but no irkLookup configured",
+        closeCode: 1008,
+      };
+    }
+    const irkPub = await opts.irkLookup(hello.rootEntitlement.username);
+    if (!irkPub) {
+      return {
+        ok: false,
+        reason: "AppGrants username not registered with .com",
+        closeCode: 1008,
+      };
+    }
+    const revoked = opts.revocationLookup
+      ? await opts.revocationLookup(hello.rootEntitlement.username)
+      : null;
+    for (const pg of hello.appGrants) {
+      if (!verifyAppGrant(pg.grant, pg.signature, irkPub)) {
+        return {
+          ok: false,
+          reason: "AppGrant signature failed verification",
+          closeCode: 1008,
+        };
+      }
+      if (!appGrantActiveAt(pg.grant, now())) {
+        return {
+          ok: false,
+          reason: "AppGrant outside active window",
+          closeCode: 1008,
+        };
+      }
+      if (!appGrantAuthorizesPod(pg.grant, hello.rootEntitlement.podPubKey)) {
+        return {
+          ok: false,
+          reason: "AppGrant does not authorize this pod",
+          closeCode: 1008,
+        };
+      }
+      const computedId = await appGrantId(pg.grant);
+      if (revoked && revoked.has(computedId)) {
+        return {
+          ok: false,
+          reason: "AppGrant is revoked",
+          closeCode: 1008,
+        };
+      }
+      validatedGrants.push(pg.grant);
+    }
+  }
+  return { ok: true, validatedGrants };
 }
 
 /**
