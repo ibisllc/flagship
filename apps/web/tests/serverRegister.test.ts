@@ -160,11 +160,13 @@ describe("POST /api/server/register", () => {
     expect(body.username).toBe("harry");
     expect(body.identityPubKey).toBe(bytesToHex(serverIdentity.publicKey));
 
-    const used = await app.inject({
-      method: "POST",
-      url: `/api/auth-code/${code.serial}/use`,
+    // After register, the auth-code should be consumed: lookup status="used".
+    const consumed = await app.inject({
+      method: "GET",
+      url: `/api/auth-code/${code.serial}`,
     });
-    expect(used.statusCode).toBe(409);
+    expect(consumed.statusCode).toBe(200);
+    expect(JSON.parse(consumed.body).status).toBe("used");
   });
 
   it("409 on second register with the same serial (single-use)", async () => {

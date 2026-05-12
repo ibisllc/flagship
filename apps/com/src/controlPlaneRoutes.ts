@@ -15,7 +15,6 @@ import {
   handleAuthCodeIssue,
   handleAuthCodeLookup,
   handleAuthCodeRevoke,
-  handleAuthCodeUse,
   handleBuildTicketIssue,
   handleBuildTicketLookup,
   handleBuildTicketRedeem,
@@ -110,7 +109,6 @@ const ROUTE_RE = {
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
   USERNAME_LOOKUP: /^\/api\/username\/([^/]+)$/,
   AUTH_CODE_ISSUE: /^\/api\/auth-code\/issue$/,
-  AUTH_CODE_USE: /^\/api\/auth-code\/([^/]+)\/use$/,
   AUTH_CODE_REVOKE: /^\/api\/auth-code\/([^/]+)\/revoke$/,
   AUTH_CODE_LOOKUP: /^\/api\/auth-code\/([^/]+)$/,
   BUILD_TICKET_ISSUE: /^\/api\/build-tickets\/issue$/,
@@ -186,14 +184,6 @@ export async function tryControlPlane(
       await handleAuthCodeIssue(
         { storage: storage.authCodes, usernames: storage.usernames },
         await readJson(request),
-      ),
-    );
-  }
-  if (method === "POST" && (m = path.match(ROUTE_RE.AUTH_CODE_USE))) {
-    return finish(
-      await handleAuthCodeUse(
-        { storage: storage.authCodes, usernames: storage.usernames },
-        decodeURIComponent(m[1]!),
       ),
     );
   }

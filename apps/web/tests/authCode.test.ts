@@ -188,37 +188,9 @@ describe("POST /api/auth-code/issue", () => {
   });
 });
 
-describe("POST /api/auth-code/:serial/use", () => {
-  it("first call wins, second call returns 409", async () => {
-    const app = buildServer({ surface: "com" });
-    await claimHarry(app);
-    const { code, signature } = buildSignedCode();
-    await app.inject({
-      method: "POST",
-      url: "/api/auth-code/issue",
-      payload: { ...asJson(code), signature: bytesToHex(signature) },
-    });
-    const r1 = await app.inject({
-      method: "POST",
-      url: `/api/auth-code/${code.serial}/use`,
-    });
-    expect(r1.statusCode).toBe(200);
-    const r2 = await app.inject({
-      method: "POST",
-      url: `/api/auth-code/${code.serial}/use`,
-    });
-    expect(r2.statusCode).toBe(409);
-  });
-
-  it("404 on unknown serial", async () => {
-    const app = buildServer({ surface: "com" });
-    const r = await app.inject({
-      method: "POST",
-      url: "/api/auth-code/01NEVERISSUED0001/use",
-    });
-    expect(r.statusCode).toBe(404);
-  });
-});
+// POST /api/auth-code/:serial/use was removed (Thread G G2): the
+// register-time atomic consumption is the only legitimate consumer.
+// Single-use semantics are covered by the server-register tests.
 
 describe("POST /api/auth-code/:serial/revoke", () => {
   it("user can revoke; subsequent /use rejects", async () => {
@@ -247,11 +219,13 @@ describe("POST /api/auth-code/:serial/revoke", () => {
     });
     expect(r.statusCode).toBe(200);
 
-    const use = await app.inject({
-      method: "POST",
-      url: `/api/auth-code/${code.serial}/use`,
+    // Confirm revocation took effect: lookup returns status "revoked".
+    const lookup = await app.inject({
+      method: "GET",
+      url: `/api/auth-code/${code.serial}`,
     });
-    expect(use.statusCode).toBe(409);
+    expect(lookup.statusCode).toBe(200);
+    expect(JSON.parse(lookup.body).status).toBe("revoked");
   });
 
   it("rejects revocation from a different user's IRK", async () => {

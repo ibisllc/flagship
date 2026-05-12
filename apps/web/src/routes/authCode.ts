@@ -3,7 +3,6 @@ import {
   handleAuthCodeIssue,
   handleAuthCodeLookup,
   handleAuthCodeRevoke,
-  handleAuthCodeUse,
 } from "@flagship/control-plane";
 import {
   InMemoryAuthCodeStorage,
@@ -47,15 +46,6 @@ export function registerAuthCode(app: FastifyInstance, opts: AuthCodeOptions): v
     "/api/auth-code/:serial",
     async (req, reply) => {
       const r = await handleAuthCodeLookup(deps, req.params.serial);
-      if (r.headers) for (const [k, v] of Object.entries(r.headers)) reply.header(k, v);
-      return reply.status(r.status).send(r.body);
-    },
-  );
-
-  app.post<{ Params: { serial: string } }>(
-    "/api/auth-code/:serial/use",
-    async (req, reply) => {
-      const r = await handleAuthCodeUse(deps, req.params.serial);
       if (r.headers) for (const [k, v] of Object.entries(r.headers)) reply.header(k, v);
       return reply.status(r.status).send(r.body);
     },

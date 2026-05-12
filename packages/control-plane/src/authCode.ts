@@ -140,16 +140,12 @@ export async function handleAuthCodeLookup(
   });
 }
 
-export async function handleAuthCodeUse(
-  deps: AuthCodeDeps,
-  serial: string,
-): Promise<HandlerResponseWithHeaders> {
-  const out = await deps.storage.markUsed(serial, (deps.now ?? (() => Date.now()))());
-  if (!out.ok) {
-    return out.reason === "unknown serial" ? notFound(out.reason) : conflict(out.reason);
-  }
-  return ok({ ok: true });
-}
+// handleAuthCodeUse REMOVED (Thread G G2). The standalone POST
+// /api/auth-code/:serial/use endpoint was vestigial: the real path
+// (validateAndUseAuthCode inside /api/server/register) already marks
+// the code used atomically. Keeping a separate, unsigned /use endpoint
+// gave anyone who knew a serial the ability to burn it, locking out
+// the legitimate user — a cheap DoS with no defensive value. Removed.
 
 interface RevokeBody {
   request?: { serial?: string; username?: string; issuedAt?: number };
