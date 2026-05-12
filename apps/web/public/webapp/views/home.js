@@ -8,6 +8,56 @@ import { loadProviders } from "../providers.js";
 
 registerView("view-home", { tab: "home" });
 
+// #36 — empty-state pennant illustration. Inline SVG so we don't add
+// a network round-trip for a single decorative asset; sized to ~140px
+// tall so it reads as "illustration", not "icon", on mobile.
+const PENNANT_SVG = `
+<svg viewBox="0 0 240 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="empty-pennant">
+  <defs>
+    <linearGradient id="pennant-flag" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="var(--accent)" stop-opacity="0.95" />
+      <stop offset="1" stop-color="var(--accent-press)" stop-opacity="0.85" />
+    </linearGradient>
+  </defs>
+  <line x1="60" y1="20" x2="60" y2="150" stroke="var(--ink-muted)" stroke-width="3" stroke-linecap="round" />
+  <circle cx="60" cy="20" r="4" fill="var(--ink-muted)" />
+  <path d="M60 32 L180 38 L150 64 L180 90 L60 96 Z" fill="url(#pennant-flag)"
+        stroke="var(--accent-press)" stroke-width="1.5" stroke-linejoin="round" />
+  <line x1="40" y1="150" x2="200" y2="150" stroke="var(--border)" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 6" />
+</svg>
+`;
+
+/** Render the zero-state card when the user has no servers yet. */
+function renderEmptyServersList(root, { reason } = {}) {
+  const hint = reason === "unpaired"
+    ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
+    : "Plug in a USB drive, paste a build code on a target machine, and you're a few taps from your own cloud.";
+  root.innerHTML = `
+    <div class="card empty-state">
+      ${PENNANT_SVG}
+      <h3 class="empty-headline">Your first server is one tap away</h3>
+      <p class="note empty-message">${escapeHtml(hint)}</p>
+      <button class="primary full-width" id="empty-create-server">Create a server</button>
+      <a class="pill mt-2" href="https://flagshipserver.com/build/" target="_blank" rel="noopener">
+        Open flagshipserver.com/build/ →
+      </a>
+    </div>
+  `;
+  $("empty-create-server")?.addEventListener("click", async () => {
+    // Step 5 of the first-run wizard (#25) — opens build/ in a new tab
+    // and surfaces the draft composer locally. If the wizard module
+    // isn't loaded yet (e.g. user is mid-pair), fall back to the
+    // create-server view directly.
+    try {
+      const { enterWizard } = await import("./wizard.js");
+      await enterWizard({ step: "create-server" });
+    } catch {
+      const { enterCreateServer } = await import("./create-server.js");
+      await enterCreateServer();
+    }
+  });
+}
+
 // 30-minute cadence for the silent lease renewer. The renewer also
 // fires opportunistically on every home-view enter, so this interval
 // is a safety net for users who leave the webapp open all day.
@@ -36,8 +86,11 @@ export async function renderHome() {
   if (!sid) {
     sessionStatusEl.textContent = "unpaired";
     sessionStatusEl.classList.remove("ok");
-    list.innerHTML =
-      '<div class="card"><p class="note">No paired session yet. Tap "Pair to a server" to start.</p></div>';
+    // #36 — real empty state, not a "no paired session" stub. The user
+    // hasn't paired AND probably doesn't have a server yet — the CTA
+    // sends them straight into the wizard (step 5 creates the first
+    // server), which is the same destination as the empty server list.
+    renderEmptyServersList(list, { reason: "unpaired" });
     return;
   }
   try {
@@ -47,8 +100,7 @@ export async function renderHome() {
     sessionStatusEl.textContent = "paired";
     sessionStatusEl.classList.add("ok");
     if (!body.servers.length) {
-      list.innerHTML =
-        '<div class="card"><p class="note">No servers registered yet.</p></div>';
+      renderEmptyServersList(list, { reason: "no-servers" });
       return;
     }
     for (const s of body.servers) {
