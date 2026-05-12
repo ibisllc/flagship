@@ -19,8 +19,8 @@ import {
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 
-const harryUmk = { seed: new Uint8Array(32).fill(11) };
-const harryIrk = deriveIRK(harryUmk);
+const trentUmk = { seed: new Uint8Array(32).fill(11) };
+const trentIrk = deriveIRK(trentUmk);
 const malloryUmk = { seed: new Uint8Array(32).fill(99) };
 const malloryIrk = deriveIRK(malloryUmk);
 
@@ -30,7 +30,7 @@ function bytesToHex(b: Uint8Array): string {
   return s;
 }
 
-async function claim(storage: InMemoryStorage, username: string, irk = harryIrk) {
+async function claim(storage: InMemoryStorage, username: string, irk = trentIrk) {
   const claimRec = {
     username,
     irkPub: irk.publicKey,
@@ -54,13 +54,13 @@ async function claim(storage: InMemoryStorage, username: string, irk = harryIrk)
 describe("POST /api/username/rename (#93)", () => {
   it("happy path: rename succeeds; new lookup resolves; alias map records the chain", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     const r: UsernameRename = {
-      oldUsername: "harry",
-      newUsername: "harrywinner",
+      oldUsername: "trent",
+      newUsername: "wendy",
       effectiveAt: Date.now(),
     };
-    const sig = signUsernameRename(r, harryIrk);
+    const sig = signUsernameRename(r, trentIrk);
     const out = await handlePostUsernameRename(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
       { request: r, signature: bytesToHex(sig) },
@@ -68,25 +68,25 @@ describe("POST /api/username/rename (#93)", () => {
     expect(out.status).toBe(200);
 
     // New username resolves
-    const newRec = await storage.usernames.get("harrywinner");
-    expect(newRec?.irkPubHex).toBe(bytesToHex(harryIrk.publicKey));
+    const newRec = await storage.usernames.get("wendy");
+    expect(newRec?.irkPubHex).toBe(bytesToHex(trentIrk.publicKey));
 
     // Alias chain present
     const alias = await handleGetUsernameAlias(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
-      "harry",
+      "trent",
     );
     const body = alias.body as { resolved: string; isAlias: boolean; chain: string[] };
-    expect(body.resolved).toBe("harrywinner");
+    expect(body.resolved).toBe("wendy");
     expect(body.isAlias).toBe(true);
-    expect(body.chain).toEqual(["harry", "harrywinner"]);
+    expect(body.chain).toEqual(["trent", "wendy"]);
   });
 
   it("rejects rename signed by a different IRK", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     const r: UsernameRename = {
-      oldUsername: "harry",
+      oldUsername: "trent",
       newUsername: "evil",
       effectiveAt: Date.now(),
     };
@@ -100,14 +100,14 @@ describe("POST /api/username/rename (#93)", () => {
 
   it("rejects rename to an already-claimed username", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     await claim(storage, "alice", malloryIrk);
     const r: UsernameRename = {
-      oldUsername: "harry",
+      oldUsername: "trent",
       newUsername: "alice",
       effectiveAt: Date.now(),
     };
-    const sig = signUsernameRename(r, harryIrk);
+    const sig = signUsernameRename(r, trentIrk);
     const out = await handlePostUsernameRename(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
       { request: r, signature: bytesToHex(sig) },
@@ -117,22 +117,22 @@ describe("POST /api/username/rename (#93)", () => {
 
   it("PERMANENT CONSUMPTION: rename then attempt to re-issue old name → conflict", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     const r1: UsernameRename = {
-      oldUsername: "harry",
-      newUsername: "harrywinner",
+      oldUsername: "trent",
+      newUsername: "wendy",
       effectiveAt: Date.now(),
     };
     await handlePostUsernameRename(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
-      { request: r1, signature: bytesToHex(signUsernameRename(r1, harryIrk)) },
+      { request: r1, signature: bytesToHex(signUsernameRename(r1, trentIrk)) },
     );
 
-    // Try to rename someone else INTO the consumed name "harry".
+    // Try to rename someone else INTO the consumed name "trent".
     await claim(storage, "bob", malloryIrk);
     const r2: UsernameRename = {
       oldUsername: "bob",
-      newUsername: "harry",
+      newUsername: "trent",
       effectiveAt: Date.now(),
     };
     const sig = signUsernameRename(r2, malloryIrk);
@@ -149,30 +149,30 @@ describe("POST /api/username/rename (#93)", () => {
 
   it("rejects rename to the same name", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     const r: UsernameRename = {
-      oldUsername: "harry",
-      newUsername: "harry",
+      oldUsername: "trent",
+      newUsername: "trent",
       effectiveAt: Date.now(),
     };
     const out = await handlePostUsernameRename(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
-      { request: r, signature: bytesToHex(signUsernameRename(r, harryIrk)) },
+      { request: r, signature: bytesToHex(signUsernameRename(r, trentIrk)) },
     );
     expect(out.status).toBe(400);
   });
 
   it("rejects stale effectiveAt", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     const r: UsernameRename = {
-      oldUsername: "harry",
-      newUsername: "harrywinner",
+      oldUsername: "trent",
+      newUsername: "wendy",
       effectiveAt: Date.now() - 1000 * 60 * 60,
     };
     const out = await handlePostUsernameRename(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
-      { request: r, signature: bytesToHex(signUsernameRename(r, harryIrk)) },
+      { request: r, signature: bytesToHex(signUsernameRename(r, trentIrk)) },
     );
     expect(out.status).toBe(400);
   });
@@ -181,35 +181,35 @@ describe("POST /api/username/rename (#93)", () => {
 describe("GET /api/username/alias/<u> (#93)", () => {
   it("returns no-alias for a never-renamed name", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     const out = await handleGetUsernameAlias(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
-      "harry",
+      "trent",
     );
     const body = out.body as { resolved: string; isAlias: boolean; chain: string[] };
     expect(body.isAlias).toBe(false);
-    expect(body.chain).toEqual(["harry"]);
+    expect(body.chain).toEqual(["trent"]);
   });
 
-  it("walks a multi-hop chain (harry → harrywinner → harry.winner)", async () => {
+  it("walks a multi-hop chain (trent → wendy → peggy)", async () => {
     const storage = new InMemoryStorage();
-    await claim(storage, "harry");
+    await claim(storage, "trent");
     for (const [from, to] of [
-      ["harry", "harrywinner"],
-      ["harrywinner", "harry.winner"],
+      ["trent", "wendy"],
+      ["wendy", "peggy"],
     ] as const) {
       const r: UsernameRename = { oldUsername: from, newUsername: to, effectiveAt: Date.now() };
       await handlePostUsernameRename(
         { usernames: storage.usernames, aliases: storage.usernameAliases },
-        { request: r, signature: bytesToHex(signUsernameRename(r, harryIrk)) },
+        { request: r, signature: bytesToHex(signUsernameRename(r, trentIrk)) },
       );
     }
     const out = await handleGetUsernameAlias(
       { usernames: storage.usernames, aliases: storage.usernameAliases },
-      "harry",
+      "trent",
     );
     const body = out.body as { resolved: string; chain: string[] };
-    expect(body.resolved).toBe("harry.winner");
-    expect(body.chain).toEqual(["harry", "harrywinner", "harry.winner"]);
+    expect(body.resolved).toBe("peggy");
+    expect(body.chain).toEqual(["trent", "wendy", "peggy"]);
   });
 });

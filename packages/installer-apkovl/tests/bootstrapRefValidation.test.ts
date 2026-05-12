@@ -80,7 +80,7 @@ describe("validate_ref — accepts well-formed refs", () => {
     "feature/my-branch",
     "abc123def456",
     "9e3f1a2b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f", // 40-char SHA
-    "harrywinner/feat-x",
+    "wendy/feat-x",
     "release-1.0",
   ]) {
     it(`accepts ${JSON.stringify(ref)}`, () => {

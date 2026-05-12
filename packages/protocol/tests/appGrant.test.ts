@@ -26,13 +26,13 @@ function baseGrant(overrides: Partial<AppGrant> = {}): AppGrant {
   const stkA = deriveSTK(deriveSWK(umk, "home"));
   return {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
-    username: "harry",
+    username: "trent",
     appCanonical: "notes@abc123def456",
-    serverDomains: ["home.harry.flagship.services"],
+    serverDomains: ["home.trent.flagship.services"],
     serverIdentities: [stkA.publicKey],
     routes: [
-      { url: "home.harry.flagship.services", scope: "canonical" },
-      { url: "notes.harry.flagship.services", scope: "non-canonical" },
+      { url: "home.trent.flagship.services", scope: "canonical" },
+      { url: "notes.trent.flagship.services", scope: "non-canonical" },
     ],
     issuedAt: 1_780_000_000_000,
     expiresAt: 1_780_604_800_000, // +7 days
@@ -60,7 +60,7 @@ describe("AppGrant — sign + verify", () => {
     const irk = deriveIRK(umk);
     const g = baseGrant();
     const sig = signAppGrant(g, irk);
-    const tampered: AppGrant = { ...g, username: "harrywinner" };
+    const tampered: AppGrant = { ...g, username: "wendy" };
     expect(verifyAppGrant(tampered, sig, irk.publicKey)).toBe(false);
   });
 
@@ -70,7 +70,7 @@ describe("AppGrant — sign + verify", () => {
     const sig = signAppGrant(g, irk);
     const tampered: AppGrant = {
       ...g,
-      routes: [...g.routes, { url: "evil.harry.flagship.services", scope: "non-canonical" }],
+      routes: [...g.routes, { url: "evil.trent.flagship.services", scope: "non-canonical" }],
     };
     expect(verifyAppGrant(tampered, sig, irk.publicKey)).toBe(false);
   });
@@ -98,21 +98,21 @@ describe("AppGrant — sign + verify", () => {
     const stkB = deriveSTK(deriveSWK(umk, "work"));
     const a = await appGrantId(
       baseGrant({
-        serverDomains: ["home.harry.flagship.services", "work.harry.flagship.services"],
+        serverDomains: ["home.trent.flagship.services", "work.trent.flagship.services"],
         serverIdentities: [stkA.publicKey, stkB.publicKey],
         routes: [
-          { url: "notes.harry.flagship.services", scope: "non-canonical" },
-          { url: "home.harry.flagship.services", scope: "canonical" },
+          { url: "notes.trent.flagship.services", scope: "non-canonical" },
+          { url: "home.trent.flagship.services", scope: "canonical" },
         ],
       }),
     );
     const b = await appGrantId(
       baseGrant({
-        serverDomains: ["work.harry.flagship.services", "home.harry.flagship.services"],
+        serverDomains: ["work.trent.flagship.services", "home.trent.flagship.services"],
         serverIdentities: [stkB.publicKey, stkA.publicKey],
         routes: [
-          { url: "home.harry.flagship.services", scope: "canonical" },
-          { url: "notes.harry.flagship.services", scope: "non-canonical" },
+          { url: "home.trent.flagship.services", scope: "canonical" },
+          { url: "notes.trent.flagship.services", scope: "non-canonical" },
         ],
       }),
     );
@@ -136,7 +136,7 @@ describe("AppGrant — separator + control-char rejection (H1 hardening)", () =>
   it("rejects newline in serverDomains at sign time", () => {
     const irk = deriveIRK(umk);
     expect(() =>
-      signAppGrant(baseGrant({ serverDomains: ["home.harry.flagship.services\n"] }), irk),
+      signAppGrant(baseGrant({ serverDomains: ["home.trent.flagship.services\n"] }), irk),
     ).toThrow(/control char/);
   });
 
@@ -144,7 +144,7 @@ describe("AppGrant — separator + control-char rejection (H1 hardening)", () =>
     const irk = deriveIRK(umk);
     expect(() =>
       signAppGrant(
-        baseGrant({ routes: [{ url: "bad|url.harry.flagship.services", scope: "non-canonical" }] }),
+        baseGrant({ routes: [{ url: "bad|url.trent.flagship.services", scope: "non-canonical" }] }),
         irk,
       ),
     ).toThrow(/separator/);
@@ -191,23 +191,23 @@ describe("AppGrant — query helpers", () => {
 
   it("appGrantAuthorizesUrl matches exact (case-insensitive) URL", () => {
     const g = baseGrant({
-      routes: [{ url: "Notes.Harry.Flagship.Services", scope: "non-canonical" }],
+      routes: [{ url: "Notes.Trent.Flagship.Services", scope: "non-canonical" }],
     });
-    expect(appGrantAuthorizesUrl(g, "notes.harry.flagship.services")).toBe(true);
-    expect(appGrantAuthorizesUrl(g, "NOTES.HARRY.FLAGSHIP.SERVICES")).toBe(true);
+    expect(appGrantAuthorizesUrl(g, "notes.trent.flagship.services")).toBe(true);
+    expect(appGrantAuthorizesUrl(g, "NOTES.TRENT.FLAGSHIP.SERVICES")).toBe(true);
   });
 
   it("appGrantAuthorizesUrl rejects an unlisted URL", () => {
     const g = baseGrant();
-    expect(appGrantAuthorizesUrl(g, "other.harry.flagship.services")).toBe(false);
+    expect(appGrantAuthorizesUrl(g, "other.trent.flagship.services")).toBe(false);
   });
 
   it("appGrantAuthorizesUrl matches subpath scope", () => {
     const g = baseGrant({
-      routes: [{ url: "home.harry.flagship.services/notes", scope: "subpath" }],
+      routes: [{ url: "home.trent.flagship.services/notes", scope: "subpath" }],
     });
-    expect(appGrantAuthorizesUrl(g, "home.harry.flagship.services/notes/page-1")).toBe(true);
-    expect(appGrantAuthorizesUrl(g, "home.harry.flagship.services/other")).toBe(false);
+    expect(appGrantAuthorizesUrl(g, "home.trent.flagship.services/notes/page-1")).toBe(true);
+    expect(appGrantAuthorizesUrl(g, "home.trent.flagship.services/other")).toBe(false);
   });
 
   it("appGrantActiveAt is true inside the window, false outside", () => {
