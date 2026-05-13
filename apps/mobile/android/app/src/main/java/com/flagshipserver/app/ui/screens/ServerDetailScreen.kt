@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -120,30 +122,92 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
 
 @Composable
 fun MetricsSection(metrics: ServerMetricsResponse) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+        MetricCard(
+            title = "CPU ${"%.1f".format(metrics.cpuPercent)}%",
+            chart = { MetricLineChart(metrics.cpuHistory.map { it.value }) },
+        )
+        MetricCard(
+            title = "Mem ${humanBytes(metrics.memUsedBytes)} / ${humanBytes(metrics.memTotalBytes)}",
+            chart = { MetricLineChart(metrics.memHistory.map { it.value }) },
+        )
+        MetricCard(
+            title = "Disk I/O ↓ ${humanBytes(metrics.diskIOReadBytesPerSec.toLong())}/s · ↑ ${humanBytes(metrics.diskIOWriteBytesPerSec.toLong())}/s",
+            chart = {
+                MetricDualLineChart(
+                    a = metrics.ioHistory.map { it.read },
+                    b = metrics.ioHistory.map { it.write },
+                )
+            },
+        )
+        MetricCard(
+            title = "Net ↓ ${humanBytes(metrics.netRxBytesPerSec.toLong())}/s · ↑ ${humanBytes(metrics.netTxBytesPerSec.toLong())}/s",
+            chart = {
+                MetricDualLineChart(
+                    a = metrics.netHistory.map { it.read },
+                    b = metrics.netHistory.map { it.write },
+                )
+            },
+        )
+        Text(
+            "Disk ${humanBytes(metrics.diskUsedBytes)} / ${humanBytes(metrics.diskTotalBytes)}",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp),
+        )
+    }
+}
+
+@Composable
+private fun MetricCard(title: String, chart: @Composable () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
-                "CPU ${"%.1f".format(metrics.cpuPercent)}%",
+                title,
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
             )
-            Text(
-                "Mem ${humanBytes(metrics.memUsedBytes)} / ${humanBytes(metrics.memTotalBytes)}",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp),
-            )
-            Text(
-                "Disk ${humanBytes(metrics.diskUsedBytes)} / ${humanBytes(metrics.diskTotalBytes)}",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp),
-            )
-            Text(
-                "Net ↓ ${humanBytes(metrics.netRxBytesPerSec.toLong())}/s · ↑ ${humanBytes(metrics.netTxBytesPerSec.toLong())}/s",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
+            chart()
         }
     }
+}
+
+@Composable
+private fun MetricLineChart(values: List<Double>) {
+    if (values.isEmpty()) return
+    val entries = values.mapIndexed { i, v ->
+        com.patrykandpatrick.vico.core.entry.entryOf(i.toFloat(), v.toFloat())
+    }
+    val producer = androidx.compose.runtime.remember(values) {
+        com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer(entries)
+    }
+    com.patrykandpatrick.vico.compose.chart.Chart(
+        chart = com.patrykandpatrick.vico.compose.chart.line.lineChart(),
+        chartModelProducer = producer,
+        modifier = androidx.compose.ui.Modifier
+            .fillMaxWidth()
+            .height(96.dp),
+    )
+}
+
+@Composable
+private fun MetricDualLineChart(a: List<Double>, b: List<Double>) {
+    if (a.isEmpty() || b.isEmpty()) return
+    val entriesA = a.mapIndexed { i, v ->
+        com.patrykandpatrick.vico.core.entry.entryOf(i.toFloat(), v.toFloat())
+    }
+    val entriesB = b.mapIndexed { i, v ->
+        com.patrykandpatrick.vico.core.entry.entryOf(i.toFloat(), v.toFloat())
+    }
+    val producer = androidx.compose.runtime.remember(a, b) {
+        com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer(entriesA, entriesB)
+    }
+    com.patrykandpatrick.vico.compose.chart.Chart(
+        chart = com.patrykandpatrick.vico.compose.chart.line.lineChart(),
+        chartModelProducer = producer,
+        modifier = androidx.compose.ui.Modifier
+            .fillMaxWidth()
+            .height(96.dp),
+    )
 }
 
 private fun humanBytes(bytes: Long): String {

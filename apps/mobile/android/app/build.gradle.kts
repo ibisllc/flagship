@@ -19,7 +19,7 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.flagshipserver.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.flagshipserver.app"
@@ -111,6 +111,10 @@ dependencies {
 
     // Image loading (marketplace screenshots)
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Charts for ServerDetail metrics — CPU/mem/disk/net time series.
+    implementation("com.patrykandpatrick.vico:compose:1.16.1")
+    implementation("com.patrykandpatrick.vico:compose-m3:1.16.1")
 
     // Push notifications
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
