@@ -27,3 +27,16 @@ public extension EnvironmentValues {
         set { self[FlagshipServerClientKey.self] = newValue }
     }
 }
+
+/// QR-relay WebSocket peer of `flagshipserver.com/qr-pipe/<sid>`.
+/// Used by the v2 create-server flow.
+private struct QrRelayClientKey: EnvironmentKey {
+    static let defaultValue: any QrRelayClient = MockQrRelayClient()
+}
+
+public extension EnvironmentValues {
+    var qrRelayClient: any QrRelayClient {
+        get { self[QrRelayClientKey.self] }
+        set { self[QrRelayClientKey.self] = newValue }
+    }
+}

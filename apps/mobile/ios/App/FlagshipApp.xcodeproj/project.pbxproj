@@ -32,10 +32,10 @@
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
 		CF58F7F531BA9B5914B63CA1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		"TEMP_7053EE72-0950-49F1-8213-793B96D3F844" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_72C283D9-7814-4B34-B550-F29D97B0B6FA" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_B79FC429-7990-4488-847E-37874D1D57BE" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_BBA72B10-E27E-41AB-9B55-F632C7130518" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_594C00AB-72E2-4DE1-A311-82B7ADDE7DCB" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_8BD4AFD9-BFA6-4240-BE82-33E4021E8B4E" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_BE3AC142-48F2-4098-8809-F847053484EF" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_F8B2354C-BA83-4AB3-AAAB-D1CAB624F769" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,13 +103,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_D4836752-805C-4D80-8412-92E7B95BA431" /* . */ = {
+		"TEMP_9685C351-42B0-47E5-9B44-77204C4A13F6" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_7053EE72-0950-49F1-8213-793B96D3F844" /* project.yml */,
-				"TEMP_B79FC429-7990-4488-847E-37874D1D57BE" /* FlagshipApp.xcodeproj */,
-				"TEMP_72C283D9-7814-4B34-B550-F29D97B0B6FA" /* FlagshipApp.entitlements */,
-				"TEMP_BBA72B10-E27E-41AB-9B55-F632C7130518" /* Info.plist */,
+				"TEMP_8BD4AFD9-BFA6-4240-BE82-33E4021E8B4E" /* project.yml */,
+				"TEMP_F8B2354C-BA83-4AB3-AAAB-D1CAB624F769" /* FlagshipApp.xcodeproj */,
+				"TEMP_594C00AB-72E2-4DE1-A311-82B7ADDE7DCB" /* FlagshipApp.entitlements */,
+				"TEMP_BE3AC142-48F2-4098-8809-F847053484EF" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				7A32690FE07864A771E99F82 /* Resources */,
 				1B2A4CB3BFA9C1404E8FC705 /* Sources */,

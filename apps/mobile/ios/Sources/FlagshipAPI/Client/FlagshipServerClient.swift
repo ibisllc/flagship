@@ -1,15 +1,24 @@
 import Foundation
 
-/// Client for the *pre-pairing* endpoints on flagshipserver.com (the
-/// Cloudflare Worker at `apps/com/`). These are the calls a phone
-/// makes BEFORE it has a paired pod and a session token — minting a
-/// build code, downloading a personalized ISO, registering a recovery
-/// envelope, etc.
+/// Client for the pre-pairing endpoints on flagshipserver.com (the
+/// Cloudflare Worker at `apps/com/`). The phone hits these BEFORE it has
+/// a paired pod and a session token.
 ///
-/// Distinct from `ScreensClient` which talks to `<server>.<user>.flagship.services`
-/// (the user's own daemon) and is paired-session gated.
+/// As of relay-v2 (apps/com `41a126e`), the mint-build-code flow is
+/// retired. The phone instead drives a three-step control-plane sequence
+/// to mint an InstallBlob, then delivers the blob to a desktop browser
+/// over the QR-relay WebSocket (see QrRelayClient + create-server.js).
+///
+///   1. POST /api/username/claim       (idempotent; 409 on collision OK)
+///   2. POST /api/auth-code/issue      (issues a signed AuthCode)
+///   3. POST /api/routing/register-rck (registers the routing-control key)
+///
+/// Each request body is a signed canonical-bytes envelope using the
+/// device's IRK (derived via Flagship/Keystore.deriveIRK).
 public protocol FlagshipServerClient: Sendable {
-    func mintBuildCode(_ req: MintBuildCodeRequest) async throws -> MintBuildCodeResponse
+    func claimUsername(_ req: UsernameClaimRequest) async throws
+    func issueAuthCode(_ req: AuthCodeIssueRequest) async throws
+    func registerRck(_ req: RckRegisterRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
@@ -17,24 +26,74 @@ public protocol FlagshipServerClient: Sendable {
 
 // MARK: - Wire types
 
-public struct MintBuildCodeRequest: Codable, Equatable, Sendable {
-    public let username: String
-    public let podName: String
-    public let podDescription: String?
-    public init(username: String, podName: String, podDescription: String?) {
-        self.username = username
-        self.podName = podName
-        self.podDescription = podDescription
+/// POST /api/username/claim — idempotent. The Worker checks the IRK
+/// signature and persists the binding {username → irkPub}. A 409 means
+/// the same IRK already owns this username (still success on retry).
+public struct UsernameClaimRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let username: String
+        public let irkPub: String       // hex
+        public let issuedAt: Int64
+        public init(username: String, irkPub: String, issuedAt: Int64) {
+            self.username = username; self.irkPub = irkPub; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String        // hex, IRK over canonical bytes
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
     }
 }
 
-public struct MintBuildCodeResponse: Codable, Equatable, Sendable {
-    public let buildCode: String
+/// POST /api/auth-code/issue — registers a serial-keyed AuthCode that
+/// authorizes the freshly-booted server to register itself.
+public struct AuthCodeIssueRequest: Codable, Equatable, Sendable {
+    public let code: AuthCodeWire
+    public let signature: String        // hex, IRK over canonical bytes
+    public init(code: AuthCodeWire, signature: String) {
+        self.code = code; self.signature = signature
+    }
+}
+
+public struct AuthCodeWire: Codable, Equatable, Sendable {
+    public let version: Int
     public let serial: String
-    public let isoUrl: String
+    public let username: String
+    public let serverName: String
+    public let serverDomain: String
+    public let delegatedPubKey: String   // hex
+    public let userPubKey: String        // hex (the IRK's public key)
+    public let issuedAt: Int64
     public let expiresAt: Int64
-    public init(buildCode: String, serial: String, isoUrl: String, expiresAt: Int64) {
-        self.buildCode = buildCode; self.serial = serial; self.isoUrl = isoUrl; self.expiresAt = expiresAt
+    public init(
+        version: Int, serial: String, username: String, serverName: String,
+        serverDomain: String, delegatedPubKey: String, userPubKey: String,
+        issuedAt: Int64, expiresAt: Int64
+    ) {
+        self.version = version; self.serial = serial; self.username = username
+        self.serverName = serverName; self.serverDomain = serverDomain
+        self.delegatedPubKey = delegatedPubKey; self.userPubKey = userPubKey
+        self.issuedAt = issuedAt; self.expiresAt = expiresAt
+    }
+}
+
+/// POST /api/routing/register-rck — binds an Ed25519 routing-control
+/// key to the server's subdomain.
+public struct RckRegisterRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let username: String
+        public let subdomain: String
+        public let rckPubKey: String     // hex
+        public let issuedAt: Int64
+        public init(username: String, subdomain: String, rckPubKey: String, issuedAt: Int64) {
+            self.username = username; self.subdomain = subdomain
+            self.rckPubKey = rckPubKey; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String         // hex, IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
     }
 }
 
@@ -48,9 +107,9 @@ public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
 }
 
 public struct RecoveryEnvelopeRequest: Codable, Equatable, Sendable {
-    public let credentialId: String        // WebAuthn credentialID (base64url)
-    public let wrappedUmkBase64: String    // UMK encrypted under the PRF-derived key
-    public let nonceBase64: String         // AES-GCM nonce
+    public let credentialId: String
+    public let wrappedUmkBase64: String
+    public let nonceBase64: String
     public init(credentialId: String, wrappedUmkBase64: String, nonceBase64: String) {
         self.credentialId = credentialId
         self.wrappedUmkBase64 = wrappedUmkBase64
@@ -77,11 +136,16 @@ public struct RecoveryEnvelope: Codable, Equatable, Sendable {
 // MARK: - Mock
 
 public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Sendable {
-    public var simulatedLatency: TimeInterval = 0.25
+    public var simulatedLatency: TimeInterval = 0.2
     public var shouldFail: Bool = false
-    /// Reserved names. Mirrors the Worker-side reservation list.
     public var reservedUsernames: Set<String> = ["root", "admin", "flagship", "system", "support"]
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
+
+    /// Tracks usernames that have been claimed so the mock can return
+    /// 409 on a second different-IRK claim (idempotent under same IRK).
+    public private(set) var claimedUsernames: [String: String] = [:]   // username → irkPub
+    public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
+    public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
 
     public init() {}
 
@@ -94,18 +158,23 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         }
     }
 
-    public func mintBuildCode(_ req: MintBuildCodeRequest) async throws -> MintBuildCodeResponse {
+    public func claimUsername(_ req: UsernameClaimRequest) async throws {
         try await tick()
-        let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        let code = String((0..<12).map { _ in alphabet.randomElement()! })
-        let serial = String((0..<10).map { _ in alphabet.randomElement()! })
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        return MintBuildCodeResponse(
-            buildCode: code,
-            serial: serial,
-            isoUrl: "https://flagshipserver.com/build/\(code)/flagship-personalized.iso",
-            expiresAt: now + 30 * 60 * 1000     // 30 min TTL
-        )
+        let u = req.request.username.lowercased()
+        if let prior = claimedUsernames[u], prior != req.request.irkPub {
+            throw ScreensClientError.http(status: 409, message: "username taken")
+        }
+        claimedUsernames[u] = req.request.irkPub
+    }
+
+    public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
+        try await tick()
+        issuedAuthCodes[req.code.serial] = req.code
+    }
+
+    public func registerRck(_ req: RckRegisterRequest) async throws {
+        try await tick()
+        registeredRcks[req.request.subdomain] = req.request.rckPubKey
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
@@ -119,6 +188,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         }
         if lower.range(of: "^[a-z0-9]+$", options: .regularExpression) == nil {
             return .init(username: lower, available: false, reason: "Letters and digits only.")
+        }
+        if let prior = claimedUsernames[lower], prior != "_self" {
+            return .init(username: lower, available: false, reason: "Already claimed.")
         }
         return .init(username: lower, available: true, reason: nil)
     }
@@ -153,30 +225,56 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         self.baseUrl = baseUrl
     }
 
-    private func request<Req: Encodable, Resp: Decodable>(_ path: String, body: Req) async throws -> Resp {
+    private func postJson(_ path: String, body: Data, acceptStatuses: Set<Int> = [200, 201, 204]) async throws {
         var req = URLRequest(url: baseUrl.appendingPathComponent(path))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
-        req.httpBody = try JSONEncoder().encode(body)
+        req.httpBody = body
         let (data, resp) = try await urlSession.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if acceptStatuses.contains(status) { return }
+        let text = String(data: data, encoding: .utf8) ?? ""
+        throw ScreensClientError.http(status: status, message: text)
+    }
+
+    private func postJsonReturning<Resp: Decodable>(_ path: String, body: Data) async throws -> Resp {
+        var req = URLRequest(url: baseUrl.appendingPathComponent(path))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = body
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(Resp.self, from: data)
     }
 
-    public func mintBuildCode(_ req: MintBuildCodeRequest) async throws -> MintBuildCodeResponse {
-        try await request("/api/build-codes/mint", body: req)
+    public func claimUsername(_ req: UsernameClaimRequest) async throws {
+        let body = try JSONEncoder().encode(req)
+        // 409 = idempotent retake under same IRK; treat as success.
+        try await postJson("/api/username/claim", body: body, acceptStatuses: [200, 201, 204, 409])
+    }
+
+    public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
+        let body = try JSONEncoder().encode(req)
+        try await postJson("/api/auth-code/issue", body: body)
+    }
+
+    public func registerRck(_ req: RckRegisterRequest) async throws {
+        let body = try JSONEncoder().encode(req)
+        try await postJson("/api/routing/register-rck", body: body)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
-        try await request("/api/users/check", body: ["username": username])
+        let body = try JSONEncoder().encode(["username": username])
+        return try await postJsonReturning("/api/users/check", body: body)
     }
 
     public func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse {
-        try await request("/api/recovery/register", body: req)
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/recovery/register", body: body)
     }
 
     public func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope {
@@ -185,8 +283,8 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
         let (data, resp) = try await urlSession.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ScreensClientError.http(status: status, message: text)
         }

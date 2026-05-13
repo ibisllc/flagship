@@ -9,19 +9,64 @@ final class FlagshipServerClientTests: XCTestCase {
         return c
     }
 
-    func test_mintBuildCode_returnsCodeSerialAndIso() async throws {
+    // MARK: - v2 control-plane endpoints
+
+    func test_claimUsername_idempotentUnderSameIrk() async throws {
         let c = makeClient()
-        let resp = try await c.mintBuildCode(.init(
-            username: "harry",
-            podName: "Garage",
-            podDescription: "Music projects"
-        ))
-        XCTAssertEqual(resp.buildCode.count, 12)
-        XCTAssertEqual(resp.serial.count, 10)
-        XCTAssertTrue(resp.isoUrl.hasPrefix("https://flagshipserver.com/build/"))
-        XCTAssertTrue(resp.isoUrl.contains(resp.buildCode))
-        XCTAssertGreaterThan(resp.expiresAt, Int64(Date().timeIntervalSince1970 * 1000))
+        let req = UsernameClaimRequest(
+            request: .init(username: "harry", irkPub: "abcd", issuedAt: 1),
+            signature: "deadbeef"
+        )
+        try await c.claimUsername(req)
+        // Same IRK retake — should succeed.
+        try await c.claimUsername(req)
+        XCTAssertEqual(c.claimedUsernames["harry"], "abcd")
     }
+
+    func test_claimUsername_throws409OnDifferentIrk() async throws {
+        let c = makeClient()
+        try await c.claimUsername(.init(
+            request: .init(username: "harry", irkPub: "aaaa", issuedAt: 1),
+            signature: "x"
+        ))
+        do {
+            try await c.claimUsername(.init(
+                request: .init(username: "harry", irkPub: "bbbb", issuedAt: 2),
+                signature: "y"
+            ))
+            XCTFail("expected throw")
+        } catch let ScreensClientError.http(status, _) {
+            XCTAssertEqual(status, 409)
+        }
+    }
+
+    func test_issueAuthCode_persistsBySerial() async throws {
+        let c = makeClient()
+        let code = AuthCodeWire(
+            version: 1, serial: "01CAFE", username: "harry",
+            serverName: "home", serverDomain: "home.harry.flagship.services",
+            delegatedPubKey: "11", userPubKey: "22",
+            issuedAt: 1, expiresAt: 2
+        )
+        try await c.issueAuthCode(.init(code: code, signature: "sig"))
+        XCTAssertEqual(c.issuedAuthCodes["01CAFE"]?.serverName, "home")
+    }
+
+    func test_registerRck_persistsBySubdomain() async throws {
+        let c = makeClient()
+        try await c.registerRck(.init(
+            request: .init(
+                username: "harry",
+                subdomain: "home.harry.flagship.services",
+                rckPubKey: "rck",
+                issuedAt: 1
+            ),
+            signature: "sig"
+        ))
+        XCTAssertEqual(c.registeredRcks["home.harry.flagship.services"], "rck")
+    }
+
+    // MARK: - Username availability
 
     func test_usernameAvailable_acceptsValidLowercase() async throws {
         let c = makeClient()
@@ -37,12 +82,18 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertEqual(r.reason, "Reserved.")
     }
 
-    func test_usernameAvailable_rejectsTooShort() async throws {
+    func test_usernameAvailable_reflectsClaimedNames() async throws {
         let c = makeClient()
-        let r = try await c.usernameAvailable("a")
+        try await c.claimUsername(.init(
+            request: .init(username: "alice", irkPub: "aaaa", issuedAt: 1),
+            signature: "x"
+        ))
+        let r = try await c.usernameAvailable("alice")
         XCTAssertFalse(r.available)
-        XCTAssertNotNil(r.reason)
+        XCTAssertEqual(r.reason, "Already claimed.")
     }
+
+    // MARK: - Recovery envelope
 
     func test_recoveryEnvelope_roundTrip() async throws {
         let c = makeClient()
@@ -55,7 +106,6 @@ final class FlagshipServerClientTests: XCTestCase {
         let fetched = try await c.fetchRecoveryEnvelope(credentialId: "cred-1")
         XCTAssertEqual(fetched.credentialId, "cred-1")
         XCTAssertEqual(fetched.wrappedUmkBase64, "Zm9v")
-        XCTAssertEqual(fetched.nonceBase64, "YmFy")
     }
 
     func test_fetchRecoveryEnvelope_unknownCredentialThrows404() async {

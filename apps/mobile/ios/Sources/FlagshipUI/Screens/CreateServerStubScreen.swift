@@ -1,24 +1,26 @@
 import SwiftUI
-import FlagshipAPI
+import Flagship
 
-/// Real provisioning flow. The user supplies a short name + description,
-/// the screen mints a build code via FlagshipServerClient
-/// (POST /api/build-codes/mint on flagshipserver.com), then shows the
-/// build code + ISO download URL so the user can flash it to a box.
-/// "Watch boot" advances to the install-events SSE stream.
+/// Phone-side v2 create-server flow.
+///
+/// User pastes / scans the QR URL shown on `flagshipserver.com`, the
+/// app derives the SAS match code, user confirms the code shows the
+/// same digits on both screens, the app mints + signs an InstallBlob
+/// and delivers it through the QR-relay. The browser receives the
+/// AEAD-decrypted recipe and writes the personalized ISO.
 public struct CreateServerStubScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: CreateServerViewModel
-    var onStartProvisioning: (_ serial: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
+    var onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onDemoComplete: (_ name: String, _ description: String) -> Void = { _, _ in }
 
     public init(
         vm: CreateServerViewModel,
-        onStartProvisioning: @escaping (_ serial: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
+        onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDemoComplete: @escaping (_ name: String, _ description: String) -> Void = { _, _ in }
     ) {
         self.vm = vm
-        self.onStartProvisioning = onStartProvisioning
+        self.onDelivered = onDelivered
         self.onDemoComplete = onDemoComplete
     }
 
@@ -28,22 +30,21 @@ public struct CreateServerStubScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 Spacer().frame(height: FS.space.s12)
                 Text("Provision a new server").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Flagship hands your phone a one-time build code keyed to your identity. Use it to grab a personalized Alpine ISO, flash a USB, and boot any commodity box.")
+                Text("Open flagshipserver.com on your desktop. Scan or paste the QR code into this app — the page will start writing your personalized ISO once you confirm the match codes line up.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
                 switch vm.phase {
-                case .form:
-                    form(c: c)
-                case .minting:
-                    mintingCard(c: c)
-                case .codeReady(let resp):
-                    codeCard(resp: resp, c: c)
+                case .parseQr:               formCard(c: c)
+                case .connecting:            spinnerCard("Connecting to flagshipserver.com…", c: c)
+                case .matching(let code, let armed):
+                    matchCard(code: code, gateOpen: armed, c: c)
+                case .minting:               spinnerCard("Minting install blob…", c: c)
+                case .delivering:            spinnerCard("Delivering through the relay…", c: c)
+                case .delivered(let serial, let serverDomain):
+                    deliveredCard(serial: serial, serverDomain: serverDomain, c: c)
                 case .failed(let msg):
-                    ErrorCard(message: msg)
-                    FSGhostButton("Try again", block: true) {
-                        vm.phase = .form
-                    }
+                    failureCard(msg: msg, c: c)
                 }
 
                 Spacer().frame(height: FS.space.s12)
@@ -53,7 +54,9 @@ public struct CreateServerStubScreen: View {
         .background(c.bg.ignoresSafeArea())
     }
 
-    private func form(c: FSColors) -> some View {
+    // MARK: - Phase cards
+
+    private func formCard(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
@@ -62,35 +65,52 @@ public struct CreateServerStubScreen: View {
                         .tracking(1)
                         .foregroundColor(c.textMuted)
                     FSField(value: $vm.name, label: "Short name", placeholder: "Home, Office, Garage")
+                        .accessibilityIdentifier("cs-name-field")
                     FSField(value: $vm.description, label: "One-line description", placeholder: "Failover for work · Music projects", helper: "Shown wherever the FQDN used to be.")
+                        .accessibilityIdentifier("cs-description-field")
                 }
             }
 
-            FSPrimaryButton(
-                "Mint a build code",
-                enabled: vm.canSubmit,
-                block: true,
-                large: true
-            ) {
-                Task { await vm.mint() }
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text("PASTE THE QR URL")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(1)
+                        .foregroundColor(c.textMuted)
+                    Text("On your desktop, open flagshipserver.com. Copy the URL behind the QR (long-press the QR), and paste it here. Or tap the camera button to scan.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                    FSField(
+                        value: $vm.qrUrl,
+                        label: "",
+                        placeholder: "https://flagshipserver.com/qr?s=…&k=…"
+                    )
+                    .accessibilityIdentifier("cs-qr-field")
+                }
             }
 
-            if vm.canSubmit {
+            FSPrimaryButton("Connect", enabled: vm.canSubmit, block: true, large: true) {
+                Task { await vm.connectAndMatch() }
+            }
+            .accessibilityIdentifier("cs-connect-button")
+
+            if !vm.name.trimmingCharacters(in: .whitespaces).isEmpty {
                 FSGhostButton(
                     "Skip — pretend it's already running",
                     block: true
                 ) {
                     onDemoComplete(vm.name, vm.description)
                 }
+                .accessibilityIdentifier("cs-skip-button")
             }
         }
     }
 
-    private func mintingCard(c: FSColors) -> some View {
+    private func spinnerCard(_ message: String, c: FSColors) -> some View {
         FSCard(padding: FS.space.s8) {
             VStack(spacing: FS.space.s4) {
                 ProgressView()
-                Text("Asking flagshipserver.com for a build code…")
+                Text(message)
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
             }
@@ -98,59 +118,79 @@ public struct CreateServerStubScreen: View {
         }
     }
 
-    private func codeCard(resp: MintBuildCodeResponse, c: FSColors) -> some View {
+    private func matchCard(code: String, gateOpen: Bool, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
             FSCard(padding: FS.space.s6) {
-                VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text("BUILD CODE")
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("VERIFY MATCH CODE")
                         .font(.system(size: 12, weight: .semibold))
                         .tracking(1)
                         .foregroundColor(c.textMuted)
-                    Text(resp.buildCode)
-                        .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                        .accessibilityIdentifier("cs-match-label")
+                    Text(QrRelay.formatMatchCode(code))
+                        .font(.system(size: 40, weight: .semibold, design: .monospaced))
                         .foregroundColor(c.text)
-                        .tracking(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Paste this at flagshipserver.com/build to download your personalized ISO. Expires in 30 minutes.")
+                        .tracking(6)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, FS.space.s2)
+                    Text("Look at the desktop screen. These six digits must match exactly. If they don't, someone is in the middle — cancel.")
                         .font(FS.font.bodySm())
                         .foregroundColor(c.textMuted)
                 }
             }
+            FSPrimaryButton(
+                gateOpen ? "Codes match — confirm" : "Reading…",
+                enabled: gateOpen,
+                block: true,
+                large: true
+            ) {
+                Task { await vm.confirmAndDeliver() }
+            }
+            FSGhostButton("Cancel", block: true) {
+                Task { await vm.cancel() }
+            }
+        }
+    }
 
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("OR DOWNLOAD DIRECTLY").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
-                    Text(resp.isoUrl)
-                        .font(FS.font.mono())
-                        .foregroundColor(c.text)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                    Link(destination: URL(string: resp.isoUrl)!) {
-                        HStack {
-                            Image(systemName: "arrow.down.circle.fill")
-                            Text("Download personalized ISO")
-                        }
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(c.primary)
+    private func deliveredCard(serial: String, serverDomain: String, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            FSCard(padding: FS.space.s6) {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
+                        Text("Delivered").font(FS.font.h3()).foregroundColor(c.text)
                     }
+                    labeled("Server", serverDomain, mono: true, c: c)
+                    labeled("Serial", serial, mono: true, c: c)
+                    Text("The flagshipserver.com page is writing your personalized ISO now. Once you flash + boot, the server will phone home and appear in your pod list.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
                 }
             }
-
-            FSCard {
-                HStack(alignment: .top, spacing: FS.space.s2) {
-                    Image(systemName: "info.circle.fill").foregroundColor(c.primary)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Flash, boot, watch it phone home.").font(FS.font.bodySm()).foregroundColor(c.text)
-                        Text("The next screen subscribes to live install-events as your new box boots, gets a TLS cert, and goes ready.")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
-                    }
-                }
+            FSPrimaryButton("Done", block: true, large: true) {
+                onDelivered(serverDomain, vm.name, vm.description)
             }
+        }
+    }
 
-            FSPrimaryButton("Watch it boot →", block: true, large: true) {
-                onStartProvisioning(resp.serial, vm.name, vm.description)
+    private func failureCard(msg: String, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            ErrorCard(message: msg)
+            FSGhostButton("Try again", block: true) {
+                vm.phase = .parseQr
             }
+        }
+    }
+
+    private func labeled(_ label: String, _ value: String, mono: Bool = false, c: FSColors) -> some View {
+        HStack(alignment: .top) {
+            Text(label).font(FS.font.caption()).foregroundColor(c.textMuted)
+            Spacer()
+            Text(value)
+                .font(mono ? FS.font.mono() : FS.font.body())
+                .foregroundColor(c.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
     }
 }

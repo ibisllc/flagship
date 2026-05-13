@@ -95,6 +95,7 @@ struct CreateServerContainer: View {
     let onStartProvisioning: (String, String, String) -> Void
     let onDemoComplete: (String, String) -> Void
     @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(\.qrRelayClient) private var qrRelay
     @Environment(AppState.self) private var app
     @State private var vm: CreateServerViewModel?
 
@@ -104,7 +105,14 @@ struct CreateServerContainer: View {
             if let vm {
                 CreateServerStubScreen(
                     vm: vm,
-                    onStartProvisioning: onStartProvisioning,
+                    onDelivered: { serverDomain, name, description in
+                        // The new flow delivered the InstallBlob to
+                        // the desktop browser. The phone doesn't watch
+                        // the ISO write — it just shows success and
+                        // returns to home, where the new pod will
+                        // appear once the server phones home.
+                        onDemoComplete(name, description)
+                    },
                     onDemoComplete: onDemoComplete
                 )
             } else {
@@ -115,7 +123,8 @@ struct CreateServerContainer: View {
             if vm == nil {
                 vm = CreateServerViewModel(
                     username: app.currentUser ?? "you",
-                    client: serverClient
+                    server: serverClient,
+                    relay: qrRelay
                 )
             }
         }

@@ -20,8 +20,13 @@ struct FlagshipApp: App {
         self.liveClient = LiveScreensClient(store: KeychainSessionStore())
     }
     private let serverClient: any FlagshipServerClient = MockFlagshipServerClient()
+    private let mockRelay = MockQrRelayClient()
+    private let liveRelay: any QrRelayClient = LiveQrRelayClient()
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
+    }
+    private var activeRelay: any QrRelayClient {
+        dev.useLiveClient ? liveRelay : mockRelay
     }
 
     var body: some Scene {
@@ -33,6 +38,7 @@ struct FlagshipApp: App {
                 .environment(dev)
                 .environment(\.screensClient, activeClient)
                 .environment(\.flagshipServerClient, serverClient)
+                .environment(\.qrRelayClient, activeRelay)
                 .onAppear { appDelegate.linker = linker }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }

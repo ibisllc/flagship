@@ -51,6 +51,7 @@ private struct OnboardingCreateServer: View {
     let username: String
     let onComplete: (String, String) -> Void
     @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(\.qrRelayClient) private var qrRelay
     @State private var vm: CreateServerViewModel?
 
     var body: some View {
@@ -59,13 +60,19 @@ private struct OnboardingCreateServer: View {
             if let vm {
                 CreateServerStubScreen(
                     vm: vm,
-                    onStartProvisioning: { _, n, d in onComplete(n, d) },
+                    onDelivered: { _, n, d in onComplete(n, d) },
                     onDemoComplete: onComplete
                 )
             } else { ProgressView() }
         }
         .task {
-            if vm == nil { vm = CreateServerViewModel(username: username, client: serverClient) }
+            if vm == nil {
+                vm = CreateServerViewModel(
+                    username: username,
+                    server: serverClient,
+                    relay: qrRelay
+                )
+            }
         }
     }
 }
