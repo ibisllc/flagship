@@ -8,6 +8,13 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// google-services applies only when google-services.json is present.
+// Lets fresh checkouts build cleanly before someone has wired up
+// Firebase, while light-up automatic once the file lands.
+if (rootProject.file("app/google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Read the signing keystore credentials from a gitignored file so we
 // can produce signed APKs locally without leaking secrets into the
 // repo. The release variant falls back to debug signing if the file
