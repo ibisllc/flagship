@@ -57,3 +57,21 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
+
+  FlagshipAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: UITests
+    dependencies:
+      - target: FlagshipApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.flagship.FlagshipApp.UITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: FlagshipApp
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        SWIFT_VERSION: "5.0"
