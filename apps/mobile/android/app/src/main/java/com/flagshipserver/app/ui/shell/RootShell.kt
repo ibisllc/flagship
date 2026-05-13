@@ -25,6 +25,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,10 +47,29 @@ enum class WindowWidthSizeClass { COMPACT, MEDIUM, EXPANDED }
 
 /** Root entry point invoked from MainActivity once the user is paired.
  *  The compact-vs-expanded branch lets the same code run on phones,
- *  foldables, and tablets without a second layout. */
+ *  foldables, and tablets without a second layout. Also consumes the
+ *  DeepLinker queue and rebalances tab selection so an incoming push
+ *  or app-link lands on the right surface. */
 @Composable
 fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPACT) {
     var selected by remember { mutableStateOf(RootDestination.HOME) }
+    val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
+    val pending by deepLinker.pending.collectAsState()
+
+    androidx.compose.runtime.LaunchedEffect(pending) {
+        val link = pending ?: return@LaunchedEffect
+        selected = when (link) {
+            is com.flagshipserver.app.core.DeepLink.UnlockApprove -> RootDestination.ACTIVITY
+            is com.flagshipserver.app.core.DeepLink.ServerDetail -> RootDestination.HOME
+            is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS
+            com.flagshipserver.app.core.DeepLink.Marketplace -> RootDestination.APPS
+            com.flagshipserver.app.core.DeepLink.CreateServer -> RootDestination.HOME
+        }
+        // The tab's NavHost picks the link up via its own LaunchedEffect
+        // on LocalDeepLinker.pending. We leave the queue populated so
+        // both layers can see it; the tab clears via deepLinker.consume().
+    }
+
     if (widthSizeClass == WindowWidthSizeClass.EXPANDED) {
         ExpandedShell(selected) { selected = it }
     } else {

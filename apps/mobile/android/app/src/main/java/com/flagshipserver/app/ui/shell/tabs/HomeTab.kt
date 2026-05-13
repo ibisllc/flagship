@@ -19,7 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.screens.HomeScreen
 import com.flagshipserver.app.ui.screens.PendingServerScreen
@@ -41,6 +43,23 @@ fun HomeTab() {
     val vm = remember { HomeViewModel(client) }
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
+
+    // Consume any deep link the shell already steered at this tab.
+    val deepLinker = LocalDeepLinker.current
+    val pending by deepLinker.pending.collectAsState()
+    LaunchedEffect(pending) {
+        when (val link = pending) {
+            is DeepLink.ServerDetail -> {
+                deepLinker.consume()
+                nav.navigate("server-detail/${link.podId}")
+            }
+            DeepLink.CreateServer -> {
+                deepLinker.consume()
+                nav.navigate("create-server")
+            }
+            else -> { /* not for this tab */ }
+        }
+    }
 
     NavHost(navController = nav, startDestination = "home-root") {
         composable("home-root") {

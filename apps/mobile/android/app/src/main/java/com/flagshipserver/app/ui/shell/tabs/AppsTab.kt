@@ -3,9 +3,14 @@
 package com.flagshipserver.app.ui.shell.tabs
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.flagshipserver.app.core.DeepLink
+import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.AppDetailScreen
 import com.flagshipserver.app.ui.screens.AppsListScreen
 import com.flagshipserver.app.ui.screens.MarketplaceListScreen
@@ -17,6 +22,21 @@ import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
 @Composable
 fun AppsTab() {
     val nav = rememberNavController()
+    val deepLinker = LocalDeepLinker.current
+    val pending by deepLinker.pending.collectAsState()
+    LaunchedEffect(pending) {
+        when (val link = pending) {
+            is DeepLink.AppDetail -> {
+                deepLinker.consume()
+                nav.navigate("app-detail/${link.appId}")
+            }
+            DeepLink.Marketplace -> {
+                deepLinker.consume()
+                nav.navigate("marketplace")
+            }
+            else -> { /* not for this tab */ }
+        }
+    }
     NavHost(navController = nav, startDestination = "apps-list") {
         composable("apps-list") { AppsListScreen(nav) }
         composable("app-detail/{appId}") { entry ->
