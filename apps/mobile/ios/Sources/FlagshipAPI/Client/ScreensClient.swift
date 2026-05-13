@@ -68,6 +68,11 @@ public protocol ScreensClient: Sendable {
     // P1.6 vibe-code stream — streams build progress (tokens, manifest
     // emit, repo create, deploy) for a vibe-code session.
     func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame>
+
+    // P1.22 custom-domain verify (extension; daemon-side pending) —
+    // ask the daemon to resolve the _flagship.<fqdn> TXT record and
+    // confirm the user-claimed custom URL is pointing at us.
+    func verifyCustomDomain(_ req: VerifyCustomDomainRequest) async throws -> VerifyCustomDomainResponse
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {

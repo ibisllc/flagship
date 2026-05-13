@@ -65,6 +65,11 @@ public final class AppDetailViewModel {
         }
     }
 
+    /// Verification state for each custom URL the user has added.
+    /// Drives the AppDetail UI: pending shows a "Verify" CTA + the
+    /// expected TXT record; verified shows a green pill.
+    public var customDomainStatus: [String: VerifyCustomDomainResponse] = [:]
+
     public func togglePod(_ podId: String) {
         if runOnPodIds.contains(podId) { runOnPodIds.remove(podId) }
         else { runOnPodIds.insert(podId) }
@@ -72,6 +77,23 @@ public final class AppDetailViewModel {
         // takes back over.
         if leadPodId == podId && !runOnPodIds.contains(podId) {
             leadPodId = nil
+        }
+    }
+
+    public func verifyCustomDomain(_ fqdn: String) async {
+        do {
+            let r = try await client.verifyCustomDomain(.init(fqdn: fqdn))
+            customDomainStatus[fqdn] = r
+        } catch {
+            // surface via a synthetic "failed" status so the UI shows
+            // an error pill instead of staying spinning.
+            customDomainStatus[fqdn] = VerifyCustomDomainResponse(
+                fqdn: fqdn,
+                status: .failed,
+                expectedTxtRecord: "",
+                observedTxtRecord: nil,
+                reason: error.localizedDescription
+            )
         }
     }
 

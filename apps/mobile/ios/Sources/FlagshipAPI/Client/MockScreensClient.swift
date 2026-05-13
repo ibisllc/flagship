@@ -315,6 +315,37 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         )
     }
 
+    // MARK: - P1.22 custom-domain verify (mock)
+
+    /// Mock domain verification state. Keyed by fqdn so calls converge
+    /// — first call returns .pending, subsequent calls return
+    /// .verified, mimicking the typical "register then check DNS"
+    /// flow with propagation delay.
+    private var verifyCallCount: [String: Int] = [:]
+
+    public func verifyCustomDomain(_ req: VerifyCustomDomainRequest) async throws -> VerifyCustomDomainResponse {
+        try await tick()
+        let count = (verifyCallCount[req.fqdn] ?? 0) + 1
+        verifyCallCount[req.fqdn] = count
+        let expected = "flagship-verify=\(req.fqdn.hashValue.magnitude)"
+        if count == 1 {
+            return VerifyCustomDomainResponse(
+                fqdn: req.fqdn,
+                status: .pending,
+                expectedTxtRecord: expected,
+                observedTxtRecord: nil,
+                reason: "Waiting for DNS propagation (typical: 1–5 minutes)."
+            )
+        }
+        return VerifyCustomDomainResponse(
+            fqdn: req.fqdn,
+            status: .verified,
+            expectedTxtRecord: expected,
+            observedTxtRecord: expected,
+            reason: nil
+        )
+    }
+
     // MARK: - P1.15 install-events (mock SSE)
 
     public func installEvents(serial: String) -> AsyncStream<InstallEvent> {

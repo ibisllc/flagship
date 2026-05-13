@@ -328,6 +328,29 @@ public struct UrlControllerClaimResponse: Codable, Equatable {
     public let ok: Bool
 }
 
+// MARK: - P1.22 custom-domain verify (extension)
+
+public struct VerifyCustomDomainRequest: Codable, Equatable, Sendable {
+    public let fqdn: String
+    public init(fqdn: String) { self.fqdn = fqdn }
+}
+
+public struct VerifyCustomDomainResponse: Codable, Equatable, Sendable {
+    public enum Status: String, Codable, Sendable { case pending, verified, failed }
+    public let fqdn: String
+    public let status: Status
+    public let expectedTxtRecord: String   // _flagship.<fqdn> TXT value the daemon expects
+    public let observedTxtRecord: String?  // what DNS actually returned, if anything
+    public let reason: String?
+    public init(fqdn: String, status: Status, expectedTxtRecord: String, observedTxtRecord: String?, reason: String?) {
+        self.fqdn = fqdn
+        self.status = status
+        self.expectedTxtRecord = expectedTxtRecord
+        self.observedTxtRecord = observedTxtRecord
+        self.reason = reason
+    }
+}
+
 // MARK: - P1.21 server-metrics (extension; not yet daemon-side)
 //
 // Returns the current instantaneous resource numbers plus a 60-sample

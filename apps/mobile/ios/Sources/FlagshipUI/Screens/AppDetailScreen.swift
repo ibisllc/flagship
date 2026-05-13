@@ -176,14 +176,7 @@ public struct AppDetailScreen: View {
                     )
                 }
                 ForEach(vm.customUrls, id: \.self) { url in
-                    domainRow(
-                        fqdn: url,
-                        kindLabel: "Custom",
-                        kindPillKind: .provisioning,
-                        resolvesTo: "Anywhere this app runs",
-                        action: { vm.removeCustomUrl(url) },
-                        c: c
-                    )
+                    customDomainCard(url: url, c: c)
                 }
                 addCustomDomain(c: c)
             }
@@ -225,6 +218,54 @@ public struct AppDetailScreen: View {
             }
         }
     }
+
+    private func customDomainCard(url: String, c: FSColors) -> some View {
+        let status = vm.customDomainStatus[url]
+        return FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s3) {
+                    Image(systemName: "globe").foregroundColor(c.textMuted)
+                    Text(url).font(FS.font.mono()).foregroundColor(c.text)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button { vm.removeCustomUrl(url) } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(c.textMuted)
+                    }.buttonStyle(.plain)
+                }
+                statusPill(for: status, c: c)
+                if let status, let expected = nonEmpty(status.expectedTxtRecord) {
+                    VStack(alignment: .leading, spacing: FS.space.s1) {
+                        Text("Add this TXT record on _flagship.\(url):").font(FS.font.caption()).foregroundColor(c.textMuted)
+                        Text(expected).font(FS.font.mono()).foregroundColor(c.text)
+                            .textSelection(.enabled)
+                    }
+                }
+                if let reason = status?.reason {
+                    Text(reason).font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+                HStack(spacing: FS.space.s2) {
+                    FSGhostButton(status?.status == .pending ? "Re-check DNS" : "Verify DNS") {
+                        Task { await vm.verifyCustomDomain(url) }
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func statusPill(for status: VerifyCustomDomainResponse?, c: FSColors) -> some View {
+        let label: String
+        let kind: FSPillKind
+        switch status?.status {
+        case .verified: label = "Verified"; kind = .online
+        case .pending:  label = "Pending DNS"; kind = .renewing
+        case .failed:   label = "Failed"; kind = .offline
+        case .none:     label = "Not yet checked"; kind = .idle
+        }
+        return FSPill(label, kind: kind)
+    }
+
+    private func nonEmpty(_ s: String) -> String? { s.isEmpty ? nil : s }
 
     private func addCustomDomain(c: FSColors) -> some View {
         FSCard {
