@@ -1,0 +1,85 @@
+// Kotlin mirror of FlagshipAPI/Client/ScreensClient.swift.
+//
+// All paired-session-gated endpoints on the user's pod
+// (`<server>.<user>.flagship.services`). Two implementations:
+//   - MockScreensClient — in-memory fixtures, used in tests + previews
+//   - LiveScreensClient — OkHttp + `x-flagship-session` header (stub)
+//
+// MIRRORS: packages/server-daemon/src/screens/screensHttp.ts
+// When the contract changes, update both this file AND
+// apps/mobile/ios/Sources/FlagshipAPI/Client/ScreensClient.swift in
+// the same commit.
+
+package com.flagship.api
+
+import kotlinx.coroutines.flow.Flow
+
+interface ScreensClient {
+    // P1.1 server-detail
+    suspend fun serverDetail(): ServerDetailResponse
+
+    // P1.2 apps-list
+    suspend fun appsList(): AppsListResponse
+
+    // P1.3 app-detail
+    suspend fun appDetail(appId: String): AppDetailResponse
+
+    // P1.4 marketplace-browse
+    suspend fun marketplaceBrowse(): MarketplaceBrowseResponse
+
+    // P1.5 vibe-code/start
+    suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse
+
+    // P1.7 vibe-code/:id
+    suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse
+
+    // P1.8 unlock-approvals/pending
+    suspend fun unlockApprovalsPending(): UnlockApprovalsPendingResponse
+
+    // P1.9 unlock-approvals/:requestId/approve
+    suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest)
+
+    // P1.10 browser-tabs/list/:appId
+    suspend fun browserTabsList(appId: String): BrowserTabsListResponse
+
+    // P1.12 paired-sessions/list
+    suspend fun pairedSessionsList(): PairedSessionsListResponse
+
+    // P1.13 paired-sessions/:tokenPrefix
+    suspend fun revokePairedSession(tokenPrefix: String)
+
+    // P1.14 orders/send
+    suspend fun ordersSend(req: OrdersSendRequest): OrdersSendResponse
+
+    // P1.16 tier-status
+    suspend fun tierStatus(): TierStatusResponse
+
+    // P1.17 url-controller/owned
+    suspend fun urlControllerOwned(): UrlControllerOwnedResponse
+
+    // P1.18 url-controller/claim
+    suspend fun urlControllerClaim(req: UrlControllerClaimRequest): UrlControllerClaimResponse
+
+    // P1.19 app-backup/start
+    suspend fun appBackupStart(req: AppBackupStartRequest): AppBackupStartResponse
+
+    // P1.21 server-metrics (extension)
+    suspend fun serverMetrics(podId: String): ServerMetricsResponse
+
+    // P1.22 custom-domain verify (extension)
+    suspend fun verifyCustomDomain(req: VerifyCustomDomainRequest): VerifyCustomDomainResponse
+
+    // P1.15 install-events SSE — streams provisioning progress
+    fun installEvents(serial: String): Flow<InstallEvent>
+
+    // P1.6 vibe-code stream — token/build-log/deploy events
+    fun vibeCodeStream(sessionId: String): Flow<VibeCodeFrame>
+}
+
+sealed class ScreensError(message: String) : Throwable(message) {
+    object NotPaired : ScreensError("Not paired to a server yet.")
+    object NoSessionToken : ScreensError("No session token; re-pair.")
+    data class Http(val status: Int, val body: String) : ScreensError("HTTP $status: $body")
+    data class Decoding(val cause: String) : ScreensError("Could not parse response: $cause")
+    data class NotImplemented(val feature: String) : ScreensError("Not implemented yet: $feature")
+}

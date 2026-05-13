@@ -261,3 +261,57 @@ data class AppBackupStartResponse(
     val bytes: Long,
     val encrypted: Boolean,
 )
+
+// ---------- P1.21 server-metrics (extension) ---------------------------
+//
+// CPU% / memory / disk / I/O / network with a 60-sample 1-min trailing
+// window for each. Daemon side is pending — contract is iOS-driven for
+// now; this Kotlin mirror keeps the two clients identical.
+
+@Serializable
+data class ServerMetricsResponse(
+    val collectedAt: Long,
+    val cpuPercent: Double,
+    val loadAvg1: Double,
+    val loadAvg5: Double,
+    val loadAvg15: Double,
+    val memUsedBytes: Long,
+    val memTotalBytes: Long,
+    val diskUsedBytes: Long,
+    val diskTotalBytes: Long,
+    val diskIOReadBytesPerSec: Double,
+    val diskIOWriteBytesPerSec: Double,
+    val netRxBytesPerSec: Double,
+    val netTxBytesPerSec: Double,
+    val cpuHistory: List<TimedSample>,
+    val memHistory: List<TimedSample>,
+    val ioHistory: List<IOSample>,
+    val netHistory: List<IOSample>,
+) {
+    @Serializable
+    data class TimedSample(val at: Long, val value: Double)
+
+    @Serializable
+    data class IOSample(val at: Long, val read: Double, val write: Double)
+}
+
+// ---------- P1.22 custom-domain verify (extension) ---------------------
+
+@Serializable
+data class VerifyCustomDomainRequest(val fqdn: String)
+
+@Serializable
+data class VerifyCustomDomainResponse(
+    val fqdn: String,
+    val status: Status,
+    val expectedTxtRecord: String,
+    val observedTxtRecord: String? = null,
+    val reason: String? = null,
+) {
+    @Serializable
+    enum class Status {
+        @SerialName("pending")  PENDING,
+        @SerialName("verified") VERIFIED,
+        @SerialName("failed")   FAILED,
+    }
+}
