@@ -19,18 +19,21 @@ public protocol FlagshipServerClient: Sendable {
     func claimUsername(_ req: UsernameClaimRequest) async throws
     func issueAuthCode(_ req: AuthCodeIssueRequest) async throws
     func registerRck(_ req: RckRegisterRequest) async throws
-    /// Cancel an outstanding auth-code so a server that hasn't phoned
-    /// home yet can't register with this serial. 404 is treated as
+    /// Revoke an outstanding auth-code so a server that hasn't phoned
+    /// home yet can't register with this serial. User-facing this is
+    /// the "Cancel order" action on a pending pod. 404 is treated as
     /// success by both Mock + Live impls.
-    func cancelAuthCode(_ req: AuthCodeCancelRequest) async throws
+    func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
 }
 
-/// POST /api/auth-code/cancel — IRK-signed cancellation. The phone
-/// fires this when the user taps Cancel order on a pending pod.
-public struct AuthCodeCancelRequest: Codable, Equatable, Sendable {
+/// POST /api/auth-code/<serial>/revoke — IRK-signed revocation. The
+/// phone fires this when the user taps Cancel order on a pending pod.
+/// Mirrors the canonical-bytes tag `flagship/auth-code-revoke/v1` +
+/// the existing handler in packages/control-plane/src/authCode.ts.
+public struct AuthCodeRevokeRequest: Codable, Equatable, Sendable {
     public struct Inner: Codable, Equatable, Sendable {
         public let serial: String
         public let username: String
@@ -167,7 +170,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// 409 on a second different-IRK claim (idempotent under same IRK).
     public private(set) var claimedUsernames: [String: String] = [:]   // username → irkPub
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
-    public private(set) var cancelledAuthCodes: Set<String> = []       // serial set
+    public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
 
     public init() {}
@@ -200,9 +203,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         registeredRcks[req.request.subdomain] = req.request.rckPubKey
     }
 
-    public func cancelAuthCode(_ req: AuthCodeCancelRequest) async throws {
+    public func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws {
         try await tick()
-        cancelledAuthCodes.insert(req.request.serial)
+        revokedAuthCodes.insert(req.request.serial)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
@@ -295,11 +298,20 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await postJson("/api/routing/register-rck", body: body)
     }
 
-    public func cancelAuthCode(_ req: AuthCodeCancelRequest) async throws {
+    public func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws {
         let body = try JSONEncoder().encode(req)
-        // 404 = already cancelled / never issued; treat as success so
-        // retries are safe.
-        try await postJson("/api/auth-code/cancel", body: body, acceptStatuses: [200, 201, 204, 404])
+        // The serial lives in the path; the body still carries it so
+        // the Worker can refuse mismatched envelopes. 403 covers every
+        // authentication-or-existence failure (the Worker collapses
+        // these to one response to avoid an enumeration oracle). We
+        // accept 200/204 and treat 403/404 as "already gone" so the
+        // user's UI experience stays consistent.
+        let encodedSerial = req.request.serial.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? req.request.serial
+        try await postJson(
+            "/api/auth-code/\(encodedSerial)/revoke",
+            body: body,
+            acceptStatuses: [200, 201, 204, 403, 404]
+        )
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {

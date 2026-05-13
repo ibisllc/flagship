@@ -963,3 +963,58 @@ describe("recovery.flagshipserver.com — dedicated WebAuthn-PRF origin (Task #7
     expect(r.status).toBe(200);
   });
 });
+
+describe("/.well-known/apple-app-site-association — Universal Link binding", () => {
+  it("rewrites Content-Type to application/json + sets a short cache header", async () => {
+    const aasaJson = JSON.stringify({
+      applinks: { details: [{ appIDs: ["8G8RHBU9BN.com.flagshipserver.app"] }] },
+    });
+    const env = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          // The Worker asks the asset binding for the file verbatim;
+          // here we hand it back with the wrong default content-type
+          // Cloudflare actually serves it as (extension-less file).
+          expect(new URL(req.url).pathname).toBe("/.well-known/apple-app-site-association");
+          return new Response(aasaJson, {
+            status: 200,
+            headers: { "content-type": "application/octet-stream" },
+          });
+        },
+      },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/.well-known/apple-app-site-association"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("application/json");
+    expect(r.headers.get("cache-control")).toMatch(/public/);
+    expect(await r.json()).toEqual(JSON.parse(aasaJson));
+  });
+
+  it("propagates upstream status when the file is missing", async () => {
+    const env = makeEnv({
+      ASSETS: {
+        async fetch() {
+          return new Response("not found", { status: 404 });
+        },
+      },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/.well-known/apple-app-site-association"),
+      env,
+    );
+    expect(r.status).toBe(404);
+    expect(r.headers.get("content-type")).toBe("application/json");
+  });
+
+  it("does not hit the proxy fall-through (no upstream fetch call)", async () => {
+    await route(
+      new Request("https://flagshipserver.com/.well-known/apple-app-site-association"),
+      makeEnv(),
+    );
+    // proxyToServices uses globalThis.fetch — should never fire.
+    expect(calls).toEqual([]);
+  });
+});

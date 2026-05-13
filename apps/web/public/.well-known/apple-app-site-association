@@ -1,0 +1,24 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["8G8RHBU9BN.com.flagshipserver.app"],
+        "components": [
+          {
+            "/": "/qr",
+            "?": { "s": "?*", "k": "?*" },
+            "comment": "Apex QR-relay URLs. When the user scans /qr?s=...&k=... with their phone camera, the OS routes the URL into the installed Flagship app (Universal Link) before Safari ever loads the fallback page."
+          },
+          {
+            "/": "/qr/",
+            "?": { "s": "?*", "k": "?*" },
+            "comment": "Trailing-slash variant of the same QR-relay URL."
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["8G8RHBU9BN.com.flagshipserver.app"]
+  }
+}

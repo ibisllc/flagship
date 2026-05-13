@@ -2,25 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>ASSETCATALOG_COMPILER_APPICON_NAME</key>
-	<string>AppIcon</string>
-	<key>ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME</key>
-	<string>AccentColor</string>
-	<key>CODE_SIGNING_ALLOWED</key>
-	<false/>
-	<key>CODE_SIGNING_REQUIRED</key>
-	<false/>
-	<key>CODE_SIGN_STYLE</key>
-	<string>Automatic</string>
-	<key>ENABLE_PREVIEWS</key>
-	<true/>
-	<key>INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad</key>
-	<string>UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight</string>
-	<key>INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone</key>
-	<string>UIInterfaceOrientationPortrait</string>
-	<key>SWIFT_VERSION</key>
-	<string>5.0</string>
 	<key>aps-environment</key>
 	<string>development</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:flagshipserver.com</string>
+		<string>webcredentials:flagshipserver.com</string>
+	</array>
 </dict>
 </plist>

@@ -32,10 +32,10 @@
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
 		CF58F7F531BA9B5914B63CA1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		"TEMP_0149B2E4-59A7-4240-A11A-EB64613102FB" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_B0736D7D-726C-46E3-A539-42B48C7A4B2A" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_B18B74F5-D779-4424-8596-49AD184446B3" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_B730C5D1-46AD-4395-BA28-3C50BE1B8D4B" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_3818540B-AEBD-49D4-9E10-BFFDAA1F8003" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_47810B5D-8AA9-4848-9EBC-B4A1BE5C9A85" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_786259EC-C627-49A9-9CCF-5C191BBB2406" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_96C309B7-C7ED-4978-94CF-0C1124F1A0A5" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,13 +103,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_ACF16661-7734-4119-A8E3-5AE01513BD26" /* . */ = {
+		"TEMP_A7786DCA-55CD-45B0-9E40-460F7BBDFB1D" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_B730C5D1-46AD-4395-BA28-3C50BE1B8D4B" /* project.yml */,
-				"TEMP_B0736D7D-726C-46E3-A539-42B48C7A4B2A" /* FlagshipApp.xcodeproj */,
-				"TEMP_B18B74F5-D779-4424-8596-49AD184446B3" /* FlagshipApp.entitlements */,
-				"TEMP_0149B2E4-59A7-4240-A11A-EB64613102FB" /* Info.plist */,
+				"TEMP_3818540B-AEBD-49D4-9E10-BFFDAA1F8003" /* project.yml */,
+				"TEMP_786259EC-C627-49A9-9CCF-5C191BBB2406" /* FlagshipApp.xcodeproj */,
+				"TEMP_47810B5D-8AA9-4848-9EBC-B4A1BE5C9A85" /* FlagshipApp.entitlements */,
+				"TEMP_96C309B7-C7ED-4978-94CF-0C1124F1A0A5" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				7A32690FE07864A771E99F82 /* Resources */,
 				1B2A4CB3BFA9C1404E8FC705 /* Sources */,
@@ -168,7 +168,12 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					852E625851F523D0A0F60658 = {
+						DevelopmentTeam = 8G8RHBU9BN;
+						ProvisioningStyle = Automatic;
+					};
 					A16BAA0B8A46E60C20043C5A = {
+						DevelopmentTeam = 8G8RHBU9BN;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 852E625851F523D0A0F60658;
 					};
@@ -241,21 +246,30 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = FlagshipApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8G8RHBU9BN;
+				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flagship;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flagship.FlagshipApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app;
 				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -383,21 +397,30 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = FlagshipApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8G8RHBU9BN;
+				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flagship;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flagship.FlagshipApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app;
 				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -409,6 +432,7 @@
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8G8RHBU9BN;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -416,7 +440,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flagship.FlagshipApp.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app.UITests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -431,6 +455,7 @@
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8G8RHBU9BN;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -438,7 +463,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flagship.FlagshipApp.UITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app.UITests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -142,10 +142,12 @@ public enum RckRegister {
     }
 }
 
-/// Cancel-order — revokes a previously issued auth-code so a freshly-
-/// booted box that presents that serial gets rejected by `.com`.
-public enum AuthCodeCancel {
-    public static let canonicalTag = "flagship/auth-code-cancel/v1"
+/// Revoke a previously issued auth-code so a freshly-booted box that
+/// presents that serial gets rejected by `.com`. User-facing this is
+/// the "Cancel order" action on a pending pod. The protocol-level
+/// tag matches packages/protocol/src/auth.ts `TAG_AUTH_CODE_REVOKE`.
+public enum AuthCodeRevoke {
+    public static let canonicalTag = "flagship/auth-code-revoke/v1"
     public static func canonicalBytes(serial: String, username: String, issuedAt: Int64) -> Data {
         Data([canonicalTag, serial, username, String(issuedAt)].joined(separator: "|").utf8)
     }

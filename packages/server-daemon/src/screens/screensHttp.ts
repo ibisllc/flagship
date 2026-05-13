@@ -46,10 +46,15 @@ import type {
   UnlockApprovalsPendingResponse,
   UrlControllerClaimRequest,
   UrlControllerOwnedResponse,
+  VerifyCustomDomainRequest,
+  VerifyCustomDomainResponse,
+  ServerMetricsResponse,
   VibeCodeStartRequest,
   VibeCodeStartResponse,
   VibeCodeStatusResponse,
 } from "./types.js";
+import { collectServerMetrics, type ServerMetricsProvider } from "./serverMetrics.js";
+import { verifyCustomDomain, type DnsResolver } from "./verifyCustomDomain.js";
 import {
   toReleaseStatusResponse,
   type ReleaseStatusProvider,
@@ -145,6 +150,17 @@ export interface ScreensHttpDeps {
    * returns an empty list and POST returns 503.
    */
   lineageResolver?: LineageResolverLike | null;
+  /**
+   * Snapshot provider for /api/screens/server-metrics/:podId. The
+   * default reads from /proc on Linux and returns zero-valued
+   * placeholders on darwin. Tests inject a deterministic provider.
+   */
+  serverMetrics?: ServerMetricsProvider | null;
+  /**
+   * DNS resolver for /api/screens/url-controller/verify. The default
+   * uses Cloudflare DoH (no native dependency); tests inject a stub.
+   */
+  dnsResolver?: DnsResolver | null;
 }
 
 export interface VibeCodeRuntime {
@@ -330,6 +346,36 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         return jerr(502, `claim failed: ${(e as Error).message}`);
       }
       return jok({ ok: true });
+    }
+
+    // ---- P1.22 POST /api/screens/url-controller/verify
+    if (path === "/api/screens/url-controller/verify" && method === "POST") {
+      const body = parseJson(req.body) as VerifyCustomDomainRequest | null;
+      if (!body || typeof body.fqdn !== "string" || body.fqdn.length === 0) {
+        return jerr(400, "fqdn required");
+      }
+      const result = await verifyCustomDomain({
+        fqdn: body.fqdn,
+        serverFqdn: deps.serverFqdn,
+        resolver: deps.dnsResolver ?? null,
+        fetchImpl: deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike),
+      });
+      const out: VerifyCustomDomainResponse = result;
+      return jok(out);
+    }
+
+    // ---- P1.21 GET /api/screens/server-metrics/:podId
+    if (path.startsWith("/api/screens/server-metrics/") && method === "GET") {
+      const podId = decodeURIComponent(
+        path.slice("/api/screens/server-metrics/".length),
+      );
+      if (!podId) return jerr(400, "podId required");
+      const snapshot = await collectServerMetrics({
+        provider: deps.serverMetrics ?? null,
+        now,
+      });
+      const out: ServerMetricsResponse = snapshot;
+      return jok(out);
     }
 
     // ---- P1.4 GET /api/screens/marketplace-browse (proxied to .com)

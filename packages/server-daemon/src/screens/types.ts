@@ -254,6 +254,64 @@ export interface UrlControllerClaimResponse {
   ok: boolean;
 }
 
+// ---------- P1.22 — /api/screens/url-controller/verify -----------------
+//
+// Phone asks the daemon to confirm a user-claimed custom FQDN is
+// actually pointing at this pod. The daemon resolves
+// `_flagship.<fqdn>` TXT records and matches the expected token. The
+// expected token is a per-(serverFqdn, customFqdn) digest so the user
+// can pre-publish the value before claiming.
+
+export interface VerifyCustomDomainRequest {
+  fqdn: string;
+}
+
+export interface VerifyCustomDomainResponse {
+  fqdn: string;
+  status: "pending" | "verified" | "failed";
+  expectedTxtRecord: string;
+  observedTxtRecord?: string;
+  reason?: string;
+}
+
+// ---------- P1.21 — /api/screens/server-metrics/:podId -----------------
+//
+// CPU% / load / mem used / disk used / I/O + network rates with a
+// 60-sample 1-min trailing window for each. Reads from /proc on Linux
+// (the daemon's production substrate); falls back to a degraded zero-
+// values response on darwin so the dev cycle still works.
+
+export interface ServerMetricsTimedSample {
+  at: number;
+  value: number;
+}
+
+export interface ServerMetricsIOSample {
+  at: number;
+  read: number;
+  write: number;
+}
+
+export interface ServerMetricsResponse {
+  collectedAt: number;
+  cpuPercent: number;
+  loadAvg1: number;
+  loadAvg5: number;
+  loadAvg15: number;
+  memUsedBytes: number;
+  memTotalBytes: number;
+  diskUsedBytes: number;
+  diskTotalBytes: number;
+  diskIOReadBytesPerSec: number;
+  diskIOWriteBytesPerSec: number;
+  netRxBytesPerSec: number;
+  netTxBytesPerSec: number;
+  cpuHistory: ServerMetricsTimedSample[];
+  memHistory: ServerMetricsTimedSample[];
+  ioHistory: ServerMetricsIOSample[];
+  netHistory: ServerMetricsIOSample[];
+}
+
 // ---------- P1.19 / P1.20 — /api/screens/app-backup --------------------
 
 export interface AppBackupStartRequest {

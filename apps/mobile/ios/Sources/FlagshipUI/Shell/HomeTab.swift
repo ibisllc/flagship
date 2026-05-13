@@ -198,9 +198,9 @@ struct PendingPodContainer: View {
             do {
                 let irk = try await Keystore.deriveIRK(reason: "Cancel order for \(pod.name)")
                 let now = Int64(Date().timeIntervalSince1970 * 1000)
-                let bytes = AuthCodeCancel.canonicalBytes(serial: serial, username: username, issuedAt: now)
+                let bytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
                 let sig = try irk.signature(for: bytes)
-                try await serverClient.cancelAuthCode(.init(
+                try await serverClient.revokeAuthCode(.init(
                     request: .init(serial: serial, username: username, issuedAt: now),
                     signature: HexUtil.encode(sig)
                 ))

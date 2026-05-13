@@ -328,6 +328,15 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return jsonServicesEndpoints(env);
   }
 
+  // Universal Links — Apple insists on Content-Type: application/json for
+  // /.well-known/apple-app-site-association even though the file has no
+  // extension. Cloudflare's assets binding serves it as
+  // application/octet-stream by default; we fetch it ourselves and rewrite
+  // the response headers so iOS accepts the bind on first install.
+  if (url.pathname === "/.well-known/apple-app-site-association") {
+    return serveAasa(env);
+  }
+
   if (url.pathname.startsWith(BUILD_ISO_STREAM_PREFIX)) {
     return streamIsoFromR2(url.pathname.slice(BUILD_ISO_STREAM_PREFIX.length), env);
   }
@@ -464,6 +473,39 @@ interface ProbeResult {
   checkedAt: string;
   error?: string;
   health?: unknown;
+}
+
+/**
+ * Serve the apple-app-site-association file for Universal Link binding.
+ *
+ * The file lives on disk at apps/web/public/.well-known/apple-app-site-association
+ * with no extension (Apple is finicky about that). Cloudflare's assets
+ * binding serves it but defaults to application/octet-stream because
+ * there's no extension to dispatch on. iOS rejects anything that isn't
+ * application/json on first install — so we fetch from the binding and
+ * rewrite the response headers ourselves.
+ */
+async function serveAasa(env: RouteEnv): Promise<Response> {
+  const upstream = await env.ASSETS.fetch(
+    new Request("https://flagshipserver.com/.well-known/apple-app-site-association"),
+  );
+  if (!upstream.ok) {
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  const body = await upstream.text();
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      // AASA is allowed to be cached aggressively by clients;
+      // Apple's CDN poll uses a 24h interval. 5 minutes is a sensible
+      // operator-side cap so we can re-roll quickly during setup.
+      "cache-control": "public, max-age=300",
+    },
+  });
 }
 
 async function statusProbe(env: RouteEnv): Promise<Response> {
