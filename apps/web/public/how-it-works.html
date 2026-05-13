@@ -77,12 +77,11 @@
     <nav class="nav-links" aria-label="Primary">
       <a href="/how-it-works" aria-current="page">How it works</a>
       <a href="/marketplace">Apps</a>
-      <a href="/pricing">Pricing</a>
       <a href="/docs">Docs</a>
       <a href="/status/">Status</a>
     </nav>
     <div class="nav-cta">
-      <a href="/build/" class="btn btn--primary">Get started</a>
+      <a href="/" class="btn btn--primary">Install</a>
     </div>
   </div>
 </header>
@@ -112,15 +111,15 @@
   <section class="stage">
     <div>
       <div class="stage-num">STAGE 02</div>
-      <strong style="display:block; margin-top: var(--space-2);">Mint a build code</strong>
+      <strong style="display:block; margin-top: var(--space-2);">Shows a QR scan</strong>
     </div>
     <div class="body">
       <h2>One-time blob the box trusts.</h2>
-      <p>Your phone mints a build code: a small JSON containing the serverDomain you picked, your phone's delegated pubkey (so the box can verify orders later), and a 24-hour expiry. The phone signs it with your master identity key.</p>
-      <p>You can paste the build code at <a href="/build/">flagshipserver.com/build</a> in your browser to download a personalized installer ISO. Or, if you ordered a pre-built box from us, the box fetches it automatically when you plug it in.</p>
+      <p>Your phone shows a QR scan: a small JSON containing the serverDomain you picked, your phone's delegated pubkey (so the box can verify orders later), and a 24-hour expiry. The phone signs it with your master identity key.</p>
+      <p>You can paste the QR scan at the QR on the <a href="/">homepage</a> in your browser to download a personalized installer ISO. Or, if you ordered a pre-built box from us, the box fetches it automatically when you plug it in.</p>
       <div class="seq">
         <span><span class="who">phone</span><span class="arrow"> → </span>auth-code blob (signed)<span class="note"># 24h, single-use</span></span>
-        <span><span class="who">browser</span><span class="arrow"> → </span>/build/ → ISO with trailer<span class="note"># personalized</span></span>
+        <span><span class="who">browser</span><span class="arrow"> → </span>// → ISO with trailer<span class="note"># personalized</span></span>
       </div>
     </div>
   </section>
@@ -192,7 +191,7 @@
     <div class="card" style="text-align: center;">
       <h3 style="margin-bottom: var(--space-3);">Ready to set yours up?</h3>
       <p style="color: var(--text-muted); margin-bottom: var(--space-6);">About ten minutes start to finish.</p>
-      <a href="/build/" class="btn btn--primary btn--lg">Get a build code</a>
+      <a href="/" class="btn btn--primary btn--lg">Get the mobile app</a>
     </div>
   </section>
 </main>
@@ -208,8 +207,7 @@
       <ul>
         <li><a href="/how-it-works">How it works</a></li>
         <li><a href="/marketplace">Apps</a></li>
-        <li><a href="/pricing">Pricing</a></li>
-        <li><a href="/build/">Build code</a></li>
+        <li></li>
       </ul>
     </div>
     <div class="footer-col">

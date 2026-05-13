@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Flagship — get the app</title>
+  <meta name="description" content="Open this link from the Flagship mobile app to deliver a server to your browser.">
+  <meta name="theme-color" content="#0A0A09">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <!-- Universal Link / App Link hints: the OS will intercept this URL
+       and route into the installed app before this page ever loads.
+       This page is the fallback for users who don't have the app yet
+       and for desktop visitors who scanned the QR with their phone
+       camera (and the OS sent the URL to Safari/Chrome instead of the
+       app store).
+
+       NOTE on detection: we keep it strictly UA-based. No fingerprinting,
+       no JS-only logic that fails for users with JS off — the install
+       links work even without scripting; JS only tightens the headline. -->
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--gutter);
+      min-height: 100dvh;
+      text-align: center;
+    }
+    .qr-card {
+      max-width: 460px;
+      width: 100%;
+      border: 1px solid var(--rule-strong);
+      background: var(--canvas-2);
+      border-radius: 8px;
+      padding: clamp(24px, 4vw, 40px);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .qr-wordmark {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--ink);
+      display: inline-flex;
+      align-items: baseline;
+      gap: 10px;
+      justify-content: center;
+      border-bottom: none;
+    }
+    .qr-wordmark .glyph {
+      display: inline-block;
+      width: 4px; height: 13px;
+      background: var(--teal);
+      transform: translateY(2px);
+    }
+    .qr-card h1 {
+      font-size: clamp(22px, 3vw, 28px);
+      line-height: 1.18;
+      letter-spacing: -0.014em;
+      margin: 0;
+      color: var(--ink);
+      text-wrap: balance;
+    }
+    .qr-card p {
+      color: var(--ink-soft);
+      font-size: 14px;
+      max-width: 40ch;
+      margin: 0 auto;
+    }
+    .install-row {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .install-row[data-platform="desktop"] { display: none; }
+    .install-row a.install {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      height: 48px;
+      padding: 0 22px;
+      background: var(--teal);
+      color: var(--canvas);
+      border: 1px solid var(--teal);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background var(--motion-state);
+      border-bottom: none;
+    }
+    .install-row a.install:hover { background: var(--teal-bright); }
+    .install-row a.install svg { width: 18px; height: 18px; }
+    .desktop-msg {
+      display: none;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      letter-spacing: 0.04em;
+      color: var(--ink-muted);
+      background: var(--canvas);
+      border: 1px dashed var(--rule-strong);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+    }
+    body[data-platform="desktop"] .desktop-msg { display: block; }
+    body[data-platform="desktop"] .install-row { display: none; }
+    body[data-platform="ios"] .install-android { display: none; }
+    body[data-platform="android"] .install-ios { display: none; }
+
+    .session-line {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.1em;
+      color: var(--ink-faint);
+      word-break: break-all;
+    }
+    .home-link {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-top: var(--space-4);
+      border-bottom: none;
+    }
+    .home-link:hover { color: var(--teal-bright); border-bottom: none; }
+  </style>
+</head>
+<body>
+  <main class="qr-card" role="main">
+    <a href="/" class="qr-wordmark" aria-label="Flagship — home">
+      <span class="glyph" aria-hidden="true"></span>
+      <span>Flagship</span>
+    </a>
+
+    <h1 id="hl">Open this link in the Flagship app.</h1>
+    <p id="sub">If your phone or tablet has the app installed, it will open automatically. Otherwise, install it and try again.</p>
+
+    <div class="install-row" aria-label="Install Flagship">
+      <a class="install install-ios" href="#install-ios" aria-label="Install for iOS">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 13.27c-.02-2.36 1.93-3.49 2.02-3.55-1.1-1.61-2.81-1.83-3.42-1.85-1.45-.15-2.85.85-3.59.85-.74 0-1.89-.83-3.11-.81-1.6.02-3.08.93-3.9 2.36-1.67 2.89-.43 7.16 1.2 9.51.8 1.15 1.74 2.45 2.97 2.4 1.2-.05 1.65-.78 3.1-.78s1.85.78 3.11.75c1.28-.02 2.09-1.17 2.87-2.33.91-1.33 1.29-2.63 1.31-2.7-.03-.01-2.52-.97-2.55-3.85zM14.66 5.66c.66-.8 1.1-1.91.98-3.02-.95.04-2.1.63-2.78 1.43-.61.7-1.14 1.83-1 2.92 1.06.08 2.14-.54 2.8-1.33z"/></svg>
+        <span>Install for iOS</span>
+      </a>
+      <a class="install install-android" href="#install-android" aria-label="Install for Android">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18a.4.4 0 0 0-.69-.4l-1.87 3.22a11.34 11.34 0 0 0-9.76 0L5.25 5.9a.4.4 0 0 0-.69.4L6.4 9.48A10.83 10.83 0 0 0 1 18h22a10.83 10.83 0 0 0-5.4-8.52zM7 15.25a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96zm10 0a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96z"/></svg>
+        <span>Install for Android</span>
+      </a>
+    </div>
+
+    <p class="desktop-msg">
+      You're on a desktop. The Flagship apps are for phone and tablet only.
+      Pick up your phone, open the Flagship app, and scan the QR code on the
+      <a href="/">homepage</a>.
+    </p>
+
+    <p class="session-line" id="sline" aria-live="polite"></p>
+
+    <a class="home-link" href="/">← back to flagshipserver.com</a>
+  </main>
+
+  <script>
+    /*
+     * UA detection is the simplest correct thing here. We do NOT do
+     * fingerprinting — the install links work without JS; this script
+     * only tightens the visible message based on platform.
+     */
+    (function () {
+      "use strict";
+      const ua = navigator.userAgent;
+      let platform = "desktop";
+      if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) platform = "ios";
+      else if (/Android/i.test(ua)) platform = "android";
+      // Treat iPadOS-as-Mac (iPadOS 13+) as iOS too.
+      if (platform === "desktop" &&
+          navigator.maxTouchPoints && navigator.maxTouchPoints > 1 &&
+          /Macintosh/.test(ua)) platform = "ios";
+      document.body.dataset.platform = platform;
+
+      // Optionally show the sid if it's in the URL — purely for trust
+      // ("I'm on the right page"). We never log it; it's already in the
+      // URL bar.
+      const params = new URLSearchParams(location.search);
+      const s = params.get("s");
+      if (s) {
+        const line = document.getElementById("sline");
+        if (line) line.textContent = "session " + s.slice(0, 10) + "…";
+      }
+
+      // Small UX win: if the user lands here on a phone, suggest they
+      // open the Flagship app directly if they have it.
+      if (platform === "ios" || platform === "android") {
+        const hl = document.getElementById("hl");
+        if (hl) hl.textContent = "Open in the Flagship app.";
+        const sub = document.getElementById("sub");
+        if (sub) sub.textContent =
+          "If the app is installed, it should have opened automatically. " +
+          "If not, install it below and tap the link again.";
+      }
+    })();
+  </script>
+</body>
+</html>

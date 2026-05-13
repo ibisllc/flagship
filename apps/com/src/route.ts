@@ -149,8 +149,14 @@ const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
 const HEALTH_PATH = "/api/health";
 const SERVICES_ENDPOINTS_PATH = "/api/services/endpoints";
 const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
+/**
+ * Legacy POST endpoint for v1 of the build-relay protocol. v2 is
+ * WebSocket-only and uses client-derived session IDs; this endpoint
+ * exists only as a graceful 410 for old clients that still POST here.
+ */
 const BUILD_RELAY_SESSIONS_PATH = "/api/build-relay/sessions";
-const BUILD_RELAY_WS_PREFIX = "/build-relay/";
+/** v2: WebSocket pipe for the QR relay. /qr-pipe/<sid>?role=browser|phone */
+const QR_PIPE_WS_PREFIX = "/qr-pipe/";
 
 /**
  * Default tunnel hub URL when TUNNEL_HUB_URL env var isn't set. Matches
@@ -326,22 +332,21 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     return streamIsoFromR2(url.pathname.slice(BUILD_ISO_STREAM_PREFIX.length), env);
   }
 
-  // Build-relay session mint (task #59). Browser POSTs here to open a
-  // fresh DO instance; response carries the sessionId + joinUrl the
-  // user shows to the phone via QR.
+  // v1 mint endpoint — kept as a 410 for graceful failure of any old
+  // client that still tries to POST here. v2 is WebSocket-only.
   if (url.pathname === BUILD_RELAY_SESSIONS_PATH) {
-    if (request.method !== "POST") {
-      return jsonResponse({ error: "method not allowed" }, 405);
-    }
-    return mintBuildRelaySession(env, url);
+    return jsonResponse(
+      { error: "v1 relay retired; use ws://<host>/qr-pipe/<sid> directly" },
+      410,
+    );
   }
 
-  // Build-relay WS upgrade. /build-relay/<sessionId>?role=browser|sender
-  // forwards the upgrade to the existing DO. The DO is identified by
-  // its idFromString-encoded id; we use the string the mint endpoint
-  // emitted.
-  if (url.pathname.startsWith(BUILD_RELAY_WS_PREFIX)) {
-    return forwardBuildRelayUpgrade(request, env, url);
+  // v2 QR-relay WS upgrade. /qr-pipe/<sid>?role=browser|phone forwards
+  // the upgrade to the DO addressed by the CLIENT-DERIVED sid. The DO
+  // is looked up by name (idFromName), so any string the client picks
+  // (a base64url random ~22 chars) resolves to a stable DO.
+  if (url.pathname.startsWith(QR_PIPE_WS_PREFIX)) {
+    return forwardQrPipeUpgrade(request, env, url);
   }
 
   // P3.6 — /og?title=...&subtitle=...
@@ -532,49 +537,32 @@ async function streamIsoFromR2(filename: string, env: RouteEnv): Promise<Respons
   return new Response(obj.body, { status: 200, headers });
 }
 
-async function mintBuildRelaySession(env: RouteEnv, url: URL): Promise<Response> {
-  if (!env.BUILD_RELAY) {
-    return jsonResponse({ error: "build-relay not configured" }, 503);
-  }
-  const id = env.BUILD_RELAY.newUniqueId();
-  const stub = env.BUILD_RELAY.get(id);
-  const inner = new URL(`https://do.internal/${id.toString()}/create`);
-  inner.searchParams.set("host", url.host);
-  const r = await stub.fetch(new Request(inner.toString(), { method: "POST" }));
-  if (!r.ok) {
-    const text = await r.text();
-    return new Response(text, {
-      status: r.status,
-      headers: { "content-type": "application/json" },
-    });
-  }
-  return new Response(r.body, {
-    status: 200,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
-  });
-}
-
-async function forwardBuildRelayUpgrade(
+/**
+ * v2 QR relay: forward a /qr-pipe/<sid>?role=… upgrade to the DO
+ * addressed by `idFromName(sid)`. Any well-formed sid works; the
+ * Cloudflare runtime hashes the name into a stable DO id, so the
+ * same sid from two different clients always lands on the same DO.
+ *
+ * Validation is intentionally minimal: we enforce a length range and
+ * a URL-safe alphabet, but we don't restrict the value beyond that —
+ * the DO itself arbitrates "already taken" and "already consumed".
+ */
+async function forwardQrPipeUpgrade(
   request: Request,
   env: RouteEnv,
   url: URL,
 ): Promise<Response> {
   if (!env.BUILD_RELAY) {
-    return jsonResponse({ error: "build-relay not configured" }, 503);
+    return jsonResponse({ error: "qr-pipe not configured" }, 503);
   }
   if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return jsonResponse({ error: "websocket upgrade required" }, 426);
   }
-  const sessionId = url.pathname.slice(BUILD_RELAY_WS_PREFIX.length).split("/")[0] ?? "";
-  if (!sessionId) {
-    return jsonResponse({ error: "sessionId required" }, 400);
+  const sid = url.pathname.slice(QR_PIPE_WS_PREFIX.length).split("/")[0] ?? "";
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
+    return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
   }
-  let id: { toString(): string };
-  try {
-    id = env.BUILD_RELAY.idFromString(sessionId);
-  } catch {
-    return jsonResponse({ error: "invalid sessionId" }, 400);
-  }
+  const id = env.BUILD_RELAY.idFromName(sid);
   const stub = env.BUILD_RELAY.get(id);
   return stub.fetch(request);
 }
@@ -966,7 +954,7 @@ export const _internal = {
   SERVICES_ENDPOINTS_PATH,
   BUILD_ISO_STREAM_PREFIX,
   BUILD_RELAY_SESSIONS_PATH,
-  BUILD_RELAY_WS_PREFIX,
+  QR_PIPE_WS_PREFIX,
   DEFAULT_BASE_ISO_URL,
   DEFAULT_BASE_ISO_VERSION,
   DEFAULT_TUNNEL_HUB_URL,

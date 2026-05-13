@@ -778,84 +778,38 @@ describe("/api/build/iso-info", () => {
   });
 });
 
-describe("build-relay routes (task #59)", () => {
+describe("qr-pipe relay routes (v2 protocol)", () => {
   function makeRelayStub() {
-    const minted: { sessionId: string }[] = [];
     const upgraded: Request[] = [];
     const stub: any = {
-      newUniqueId: () => ({ toString: () => "id-deadbeef" }),
-      idFromName: (n: string) => ({ toString: () => n }),
-      idFromString: (s: string) => {
-        if (!/^[a-z0-9-]+$/i.test(s)) throw new Error("invalid id");
-        return { toString: () => s };
-      },
+      newUniqueId: () => ({ toString: () => "do-from-uniq" }),
+      idFromName: (n: string) => ({ toString: () => `do-by-name-${n}` }),
+      idFromString: (s: string) => ({ toString: () => s }),
       get: (id: any) => ({
         async fetch(req: Request) {
-          const u = new URL(req.url);
-          if (u.pathname.endsWith("/create")) {
-            minted.push({ sessionId: id.toString() });
-            return new Response(
-              JSON.stringify({
-                sessionId: id.toString(),
-                joinUrl: `wss://${u.searchParams.get("host")}/build-relay/${id.toString()}?role=sender`,
-                matchCode: "",
-                expiresAt: Date.now() + 300_000,
-              }),
-              { status: 200, headers: { "content-type": "application/json" } },
-            );
-          }
           upgraded.push(req);
           return new Response("upgraded", { status: 200 });
         },
       }),
-      _minted: minted,
       _upgraded: upgraded,
     };
     return stub;
   }
 
-  it("POST /api/build-relay/sessions mints a session via the DO and returns the body", async () => {
-    const BUILD_RELAY = makeRelayStub();
-    const r = await route(
-      new Request("https://flagshipserver.com/api/build-relay/sessions", {
-        method: "POST",
-        body: JSON.stringify({ surface: "landing-hero" }),
-        headers: { "content-type": "application/json" },
-      }),
-      makeEnv({ BUILD_RELAY }),
-    );
-    expect(r.status).toBe(200);
-    const body = JSON.parse(await r.text());
-    expect(body.sessionId).toBe("id-deadbeef");
-    expect(body.joinUrl).toBe(
-      "wss://flagshipserver.com/build-relay/id-deadbeef?role=sender",
-    );
-    expect(body.expiresAt).toBeGreaterThan(Date.now());
-    expect(BUILD_RELAY._minted).toHaveLength(1);
-  });
-
-  it("503 when BUILD_RELAY is not bound", async () => {
+  it("/api/build-relay/sessions is retired with 410 (was the v1 mint POST)", async () => {
     const r = await route(
       new Request("https://flagshipserver.com/api/build-relay/sessions", {
         method: "POST",
       }),
-      makeEnv(),
-    );
-    expect(r.status).toBe(503);
-  });
-
-  it("405 on a non-POST to /api/build-relay/sessions", async () => {
-    const r = await route(
-      new Request("https://flagshipserver.com/api/build-relay/sessions"),
       makeEnv({ BUILD_RELAY: makeRelayStub() }),
     );
-    expect(r.status).toBe(405);
+    expect(r.status).toBe(410);
   });
 
-  it("/build-relay/<id> forwards a websocket upgrade to the DO", async () => {
+  it("/qr-pipe/<sid> forwards a browser-role upgrade to the DO addressed by name", async () => {
     const BUILD_RELAY = makeRelayStub();
     const r = await route(
-      new Request("https://flagshipserver.com/build-relay/id-deadbeef?role=browser", {
+      new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
         headers: { upgrade: "websocket" },
       }),
       makeEnv({ BUILD_RELAY }),
@@ -865,26 +819,44 @@ describe("build-relay routes (task #59)", () => {
     expect(BUILD_RELAY._upgraded[0].url).toMatch(/role=browser/);
   });
 
-  it("/build-relay/<id> without upgrade header returns 426", async () => {
+  it("/qr-pipe/<sid> forwards a phone-role upgrade", async () => {
+    const BUILD_RELAY = makeRelayStub();
     const r = await route(
-      new Request("https://flagshipserver.com/build-relay/anything"),
+      new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=phone", {
+        headers: { upgrade: "websocket" },
+      }),
+      makeEnv({ BUILD_RELAY }),
+    );
+    expect(r.status).toBe(200);
+    expect(BUILD_RELAY._upgraded[0].url).toMatch(/role=phone/);
+  });
+
+  it("/qr-pipe/<sid> without upgrade header returns 426", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-"),
       makeEnv({ BUILD_RELAY: makeRelayStub() }),
     );
     expect(r.status).toBe(426);
   });
 
-  it("/build-relay/<bad-id> returns 400", async () => {
+  it("/qr-pipe/<bad-sid> returns 400", async () => {
     const r = await route(
-      new Request("https://flagshipserver.com/build-relay/has/slash?role=browser", {
+      new Request("https://flagshipserver.com/qr-pipe/short?role=browser", {
         headers: { upgrade: "websocket" },
       }),
       makeEnv({ BUILD_RELAY: makeRelayStub() }),
     );
-    // The split on /build-relay/ yields "has" + "slash" — first segment
-    // is valid hex-ish, but the stub's idFromString rejects empty so
-    // we just verify routing doesn't 5xx and the upgrade still falls
-    // through to the DO (which would then reject).
-    expect([200, 400, 410]).toContain(r.status);
+    expect(r.status).toBe(400);
+  });
+
+  it("503 when BUILD_RELAY binding is missing", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
+        headers: { upgrade: "websocket" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(503);
   });
 });
 

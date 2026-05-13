@@ -385,11 +385,11 @@
         <div class="card mt-2">
           <h3>Deliver now</h3>
           <p class="note">
-            Open <a href="https://flagshipserver.com/build/" target="_blank" rel="noopener">flagshipserver.com/build/</a> on the target machine, tap <em>Start build session</em>, and paste the displayed session id here. Verify the six-digit code matches on both surfaces before approving.
+            Open <a href="https://flagshipserver.com/" target="_blank" rel="noopener">flagshipserver.com</a> on the target machine — the homepage renders a one-time QR. Paste the URL the QR encodes (or scan it from the camera) below. Verify the six-digit code matches on both screens before confirming.
           </p>
-          <button class="secondary full-width mt-2" id="cs-open-build">Open /build/ in a new tab</button>
-          <label class="mt-3">Session id (from /build/)</label>
-          <input id="cs-relay-session" type="text" placeholder="paste sessionId" autocomplete="off" />
+          <button class="secondary full-width mt-2" id="cs-open-build">Open the homepage in a new tab</button>
+          <label class="mt-3">QR URL (from the homepage)</label>
+          <input id="cs-relay-session" type="text" placeholder="https://flagshipserver.com/qr?s=…&amp;k=…" autocomplete="off" />
           <div class="row mt-2">
             <span class="label">Match code</span>
             <strong id="cs-match-code" class="value" style="letter-spacing:0.3em;">— — —</strong>
@@ -398,7 +398,7 @@
             <span class="label">Status</span>
             <span class="pill" id="cs-status">idle</span>
           </div>
-          <button id="cs-deliver" class="full-width mt-2">Deliver to /build/</button>
+          <button id="cs-deliver" class="full-width mt-2">Deliver to homepage</button>
         </div>
 
         <h2 class="mt-5">Drafts</h2>

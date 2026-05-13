@@ -94,12 +94,11 @@
     <nav class="nav-links" aria-label="Primary">
       <a href="/how-it-works">How it works</a>
       <a href="/marketplace">Apps</a>
-      <a href="/pricing">Pricing</a>
       <a href="/docs">Docs</a>
       <a href="/status/">Status</a>
     </nav>
     <div class="nav-cta">
-      <a href="/build/" class="btn btn--primary">Get started</a>
+      <a href="/" class="btn btn--primary">Install</a>
     </div>
   </div>
 </header>
@@ -131,7 +130,7 @@
       <details class="q">
         <summary>How long does install take?</summary>
         <div class="answer">
-          <p>About ten minutes from inserting the USB stick to a real green padlock at <code>you.flagship.services</code>. Most of that is the kernel booting and Let's Encrypt issuing your cert. The personalized installer is one file you download from <a href="/build/">/build/</a> after pasting the build code your phone minted.</p>
+          <p>About ten minutes from inserting the USB stick to a real green padlock at <code>you.flagship.services</code>. Most of that is the kernel booting and Let's Encrypt issuing your cert. The personalized installer is one file you download from the QR on the <a href="/">homepage</a> after pasting the QR scan your phone minted.</p>
         </div>
       </details>
       <details class="q">
@@ -153,9 +152,9 @@
         </div>
       </details>
       <details class="q">
-        <summary>What's a "build code"?</summary>
+        <summary>How does the QR scan work?</summary>
         <div class="answer">
-          <p>A short, single-use, time-limited token your phone signs and hands you. You paste it into <a href="/build/">/build/</a> and we stream you a personalized ISO with your server's identity baked in. The code expires in 24 hours and is invalidated the moment it's used. Lost it? Mint another from the phone.</p>
+          <p>Open the homepage on the machine you want to install on. The page renders a one-time QR. Scan it from the mobile app — the app composes a sealed install blob, signs it with your master identity key, and pushes it through the relay to your browser. The browser stitches it onto a personalized ISO; you write it to a USB stick and boot. The QR and its session are single-use; if you reload, you get a new one.</p>
         </div>
       </details>
       <details class="q">
@@ -253,7 +252,7 @@
       <details class="q">
         <summary>Which AI providers can apps use?</summary>
         <div class="answer">
-          <p>Whichever you've configured. BYOK to Anthropic, OpenAI, Mistral, anyone with an API. Keys live on your daemon, encrypted at rest, scoped per app. Apps never see the raw key. We also ship a one-shot promo path that mints a fresh key at first run for the supported providers — useful for "try Flagship without a credit card" but cosmetically rate-limited.</p>
+          <p>Whichever you've configured. BYOK to Anthropic, OpenAI, Mistral, anyone with an API. Keys live on your daemon, encrypted at rest, scoped per app. Apps never see the raw key. We also ship a one-shot promo path that shows a fresh key at first run for the supported providers — useful for "try Flagship without a credit card" but cosmetically rate-limited.</p>
         </div>
       </details>
       <details class="q">
@@ -272,7 +271,7 @@
       <details class="q">
         <summary>What does Flagship cost?</summary>
         <div class="answer">
-          <p>Bring-your-own-hardware: $0. Pre-built box: $199 / $349 / $699 one-time. Optional subscription for things we run on your behalf (push notifications at scale, peer-backup matchmaking, the AI promo path): a flat monthly fee that depends on which add-ons you turn on. Full breakdown at <a href="/pricing">/pricing</a>.</p>
+          <p>Bring-your-own-hardware: $0. We're not selling boxes or subscriptions yet — when we are, we'll publish the details and they'll be opt-in for power-user surfaces only. Most people pay nothing, forever.</p>
         </div>
       </details>
       <details class="q">
@@ -358,8 +357,7 @@
       <ul>
         <li><a href="/how-it-works">How it works</a></li>
         <li><a href="/marketplace">Apps</a></li>
-        <li><a href="/pricing">Pricing</a></li>
-        <li><a href="/build/">Build code</a></li>
+        <li></li>
       </ul>
     </div>
     <div class="footer-col">

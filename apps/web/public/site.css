@@ -1,301 +1,38 @@
 /*
- * Flagship — legacy alias shim.
+ * Flagship — legacy shim.
  *
- * This file used to define its own dark-green palette + system fonts. It
- * now layers on top of /tokens.css + /components.css so every page that
- * still loads /site.css picks up the unified design system without any
- * markup change. Old class names (.topbar, .brand, .lede, .cta,
- * .cta-secondary, .feature-grid, .feature, .callout, .bullets,
- * footer.site, .scope-grid, .payout-table…) all map onto the new tokens.
+ * Older pages load /site.css. This file imports the canonical v2
+ * tokens + components and adds a reading-column layout for <main>
+ * so legacy markup keeps the right line length without an HTML
+ * change.
  *
- * New pages should NOT load this file. Use /tokens.css + /components.css.
+ * NEW pages should load /tokens.css + /components.css directly and
+ * use .container / .reading from components.css.
  */
 
 @import url("/tokens.css");
 @import url("/components.css");
 
-/* ── Topbar (legacy) → matches the unified .nav ──────────────────── */
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-3) var(--gutter);
-  background: color-mix(in srgb, var(--canvas) 78%, transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid var(--border-soft);
-}
-.topbar .brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.topbar .brand .logo {
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  background:
-    linear-gradient(135deg, var(--accent), var(--accent-press)) padding-box,
-    var(--ink) border-box;
-  border: 1.5px solid var(--ink);
-  position: relative;
-}
-.topbar .brand .logo::before {
-  content: "";
-  position: absolute;
-  inset: 3px auto 3px 4px;
-  width: 1.5px;
-  background: var(--canvas);
-  border-radius: 1px;
-}
-.topbar .brand .name { font-size: 16px; }
-.topbar nav {
-  margin-left: auto;
-  display: flex;
-  gap: var(--space-6);
-  align-items: center;
-}
-.topbar nav a {
-  color: var(--ink-muted);
-  font-size: var(--body-sm-size);
-  font-weight: 500;
-  background-size: 0 1px;
-}
-.topbar nav a:hover { color: var(--ink); background-size: 0 1px; }
-
-/* ── Page chrome ─────────────────────────────────────────────────── */
-main {
+/* Default reading layout for <main> on pages that load /site.css.
+   Pages that want a wider canvas should add class="wide" to <main>. */
+body > main:not(.wide):not(.full) {
   max-width: 760px;
   margin: 0 auto;
   padding: var(--space-12) var(--gutter) var(--space-20);
 }
-main.wide { max-width: 1080px; }
+body > main.wide {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--gutter) var(--space-20);
+}
 
-h1 {
-  font-size: clamp(40px, 6vw, 64px);
-  margin: 0 0 var(--space-4);
+/* Legacy h1 sizing some pages relied on. */
+main h1:first-child {
+  font-size: clamp(34px, 5vw, 56px);
+  line-height: 1.06;
   letter-spacing: -0.025em;
-  line-height: 1.04;
-  font-weight: 500;
-  color: var(--ink);
+  margin: 0 0 var(--space-4);
 }
-h1 .accent { color: var(--accent); font-style: italic; font-family: var(--font-display); font-weight: 400; }
-h2 {
-  font-size: var(--h2-size);
-  line-height: var(--h2-line);
-  margin: var(--space-12) 0 var(--space-4);
-  letter-spacing: var(--h2-track);
-  font-weight: 500;
-  color: var(--ink);
-}
-h3 {
-  font-size: var(--h3-size);
-  line-height: var(--h3-line);
-  margin: var(--space-6) 0 var(--space-2);
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.lede {
-  font-size: 19px;
-  line-height: 30px;
-  color: var(--ink-muted);
-  margin: 0 0 var(--space-10);
-  max-width: 56ch;
-}
-
-a { color: var(--ink); }
-a:hover { color: var(--ink); }
-
-p { color: var(--ink-soft); line-height: 1.65; max-width: 60ch; }
-
-ul.bullets { padding-left: 1.1rem; margin: var(--space-4) 0; }
-ul.bullets li { margin: var(--space-2) 0; color: var(--ink-soft); }
-
-/* ── CTAs (legacy class names) ───────────────────────────────────── */
-.cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin: var(--space-4) 0 var(--space-12);
-}
-.cta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 48px;
-  padding: 0 22px;
-  background: var(--ink);
-  color: var(--canvas);
-  border-radius: var(--radius-pill);
-  font-weight: 600;
-  font-size: var(--body-sm-size);
-  border: 1px solid var(--ink);
-  cursor: pointer;
-  transition: background var(--motion-state), transform 120ms var(--ease-out),
-              box-shadow var(--motion-state);
-  text-decoration: none;
-  box-shadow: var(--shadow-resting);
-}
-.cta:hover {
-  background: var(--ink-soft);
-  color: var(--canvas);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-lift);
-  text-decoration: none;
-}
-.cta:active { transform: scale(0.97); }
-.cta-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 48px;
-  padding: 0 22px;
-  background: var(--surface);
-  color: var(--ink);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-weight: 500;
-  font-size: var(--body-sm-size);
-  text-decoration: none;
-  transition: border-color var(--motion-state), background var(--motion-state);
-}
-.cta-secondary:hover {
-  border-color: var(--ink-muted);
-  background: var(--surface-elev);
-  color: var(--ink);
-  text-decoration: none;
-}
-
-/* ── Feature grid (legacy) ───────────────────────────────────────── */
-.feature-grid {
-  display: grid;
-  gap: var(--space-4);
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  margin: var(--space-8) 0;
-}
-.feature {
-  background: var(--surface);
-  border: 1px solid var(--border-soft);
-  padding: var(--space-6) var(--space-6);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-flat);
-  transition: border-color var(--motion-state), box-shadow var(--motion-state);
-}
-.feature:hover {
-  border-color: var(--border);
-  box-shadow: var(--shadow-resting);
-}
-.feature h3 { margin-top: 0; }
-.feature p {
-  color: var(--ink-muted);
-  font-size: var(--body-sm-size);
-  line-height: var(--body-sm-line);
-  margin: var(--space-2) 0 0;
-}
-
-.callout {
-  background: var(--surface);
-  border: 1px solid var(--border-soft);
-  border-left: 3px solid var(--accent);
-  padding: var(--space-4) var(--space-5);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  margin: var(--space-6) 0;
-  color: var(--ink-soft);
-}
-.callout strong { color: var(--ink); }
-.callout.warn { border-left-color: var(--warn); }
-.callout.warn strong { color: var(--warn); }
-
-/* ── Forms (legacy) ──────────────────────────────────────────────── */
-label {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: var(--caption-size);
-  letter-spacing: 0.04em;
-  color: var(--ink-muted);
-  margin: var(--space-4) 0 var(--space-2);
-  text-transform: uppercase;
-  font-weight: 500;
-}
-input[type="text"], input[type="email"], input[type="url"],
-input[type="password"], input[type="tel"], textarea, select {
-  width: 100%;
-  background: var(--surface);
-  color: var(--ink);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  font: inherit;
-  font-family: var(--font-sans);
-  min-height: 44px;
-  transition: border-color var(--motion-state), box-shadow var(--motion-state);
-}
-textarea {
-  min-height: 6rem;
-  font-family: var(--font-mono);
-  font-size: var(--mono-size);
-  line-height: var(--mono-line);
-  padding: 12px 14px;
-}
-input:focus, textarea:focus, select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
-
-/* Legacy buttons inside legacy pages — most pages still use bare
-   <button>. Style as the ink pill. */
-button:not(.btn):not(.cta):not(.cta-secondary) {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--ink);
-  color: var(--canvas);
-  border: 1px solid var(--ink);
-  font: inherit;
-  font-weight: 600;
-  padding: 12px 22px;
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: background var(--motion-state), transform 120ms var(--ease-out);
-}
-button:not(.btn):not(.cta):not(.cta-secondary):hover { background: var(--ink-soft); }
-button:not(.btn):not(.cta):not(.cta-secondary):active { transform: scale(0.97); }
-button:disabled { opacity: 0.4; cursor: not-allowed; }
-button.secondary {
-  background: var(--surface);
-  color: var(--ink);
-  border-color: var(--border);
-}
-button.secondary:hover { border-color: var(--ink-muted); background: var(--surface-elev); }
-
-/* ── Footer (legacy) ─────────────────────────────────────────────── */
-footer.site {
-  border-top: 1px solid var(--border-soft);
-  padding: var(--space-12) var(--gutter);
-  color: var(--ink-muted);
-  font-family: var(--font-mono);
-  font-size: var(--caption-size);
-  text-align: center;
-  letter-spacing: 0.02em;
-}
-footer.site a {
-  color: var(--ink-muted);
-  margin: 0 var(--space-3);
-  background-size: 0 1px;
-}
-footer.site a:hover { color: var(--ink); background-size: 100% 1px; }
-
-code, .mono {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-}
+main h1 .accent { color: var(--teal-bright); }
+main h2 { margin: var(--space-12) 0 var(--space-4); }
+main h3 { margin: var(--space-6) 0 var(--space-2); }
