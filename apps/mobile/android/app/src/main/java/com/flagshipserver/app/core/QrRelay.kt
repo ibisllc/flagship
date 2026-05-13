@@ -127,16 +127,18 @@ object QrRelay {
 }
 
 /// base64url (RFC 4648 §5) helpers — no padding. Mirrors the Swift
-/// Base64URL enum + heroQr.js b64urlEncode/decode.
+/// Base64URL enum + heroQr.js b64urlEncode/decode. Uses java.util.Base64
+/// (API 26+; ours is minSdk 28) so the helper is reachable from plain-
+/// JVM unit tests as well as Android.
 object Base64URL {
-    fun encode(data: ByteArray): String {
-        val raw = android.util.Base64.encodeToString(
-            data,
-            android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE
-        )
-        return raw
-    }
+    private val encoder = java.util.Base64.getUrlEncoder().withoutPadding()
+    private val decoder = java.util.Base64.getUrlDecoder()
+
+    fun encode(data: ByteArray): String = encoder.encodeToString(data)
+
     fun decode(s: String): ByteArray? = try {
-        android.util.Base64.decode(s, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING)
-    } catch (e: IllegalArgumentException) { null }
+        decoder.decode(s)
+    } catch (_: IllegalArgumentException) {
+        null
+    }
 }

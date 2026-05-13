@@ -1,12 +1,21 @@
-// Phone-side of the create-a-new-server flow. The user picks a name +
-// description, then scans the QR shown on flagshipserver.com/dev or
-// the homepage hero. The phone derives the AEAD key, ships the signed
-// InstallBlob over /qr-pipe, and hands control back to Home with a
-// Pending pod in AppState.
+// Phone-side of the create-a-new-server flow.
 //
-// MIRRORS: FlagshipUI/Screens/CreateServerStubScreen.swift +
-// CreateServerViewModel. Crypto wiring is intentionally light here —
-// the real X25519 / AEAD round-trip lives in QrRelay + Keystore.
+// 1.  Design: user picks a name + description.
+// 2.  Scan/paste: user scans the QR shown on flagshipserver.com.
+//     We parse sid + browserPubKey; mint our own X25519 keypair;
+//     locally derive (kEnc, matchCode) via HKDF.
+// 3.  Mint the on-wire install-blob bundle: IRK-signed AuthCode +
+//     IRK-signed InstallBlob. Posts /api/auth-code/issue +
+//     /api/routing/register-rck + /api/username/claim to .com so the
+//     freshly-booted box can register itself once it phones home.
+// 4.  Confirm: show the matchCode so the user can compare against the
+//     browser screen, then on tap, AEAD-seal the bundle under kEnc and
+//     push through /qr-pipe.
+// 5.  Hand back to Home with a Pending pod row.
+//
+// MIRRORS: apps/mobile/ios/Sources/FlagshipUI/Screens/CreateServerStubScreen.swift
+//          + CreateServerViewModel.swift
+//          + apps/web/public/webapp/views/create-server.js
 
 package com.flagshipserver.app.ui.screens
 
@@ -25,24 +34,44 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.flagshipserver.app.api.AuthCodeIssueRequest
+import com.flagshipserver.app.api.AuthCodeWire
+import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.RckRegisterRequest
+import com.flagshipserver.app.api.UsernameClaimRequest
+import com.flagshipserver.app.core.AuthCode as AuthCodeBytes
+import com.flagshipserver.app.core.Base64URL
+import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.InstallBlob as InstallBlobBytes
+import com.flagshipserver.app.core.InstallBlobBundle
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalQrRelayClient
+import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.QrRelay
+import com.flagshipserver.app.core.QrSession
+import com.flagshipserver.app.core.RckRegister
+import com.flagshipserver.app.core.SerialGen
 import com.flagshipserver.app.core.SlugUtil
+import com.flagshipserver.app.core.UsernameClaim
+import com.flagshipserver.app.core.WireAuthCode
+import com.flagshipserver.app.core.WireBlob
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.launch
-import java.util.Locale
-import java.util.UUID
+import kotlinx.serialization.json.Json
 
-private enum class Phase { Design, Scan, Pending }
+private enum class Phase { Design, Scan, Match }
 
 @Composable
 fun CreateServerScreen(
@@ -52,12 +81,15 @@ fun CreateServerScreen(
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
     val qrRelay = LocalQrRelayClient.current
+    val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
 
     var phase by remember { mutableStateOf(Phase.Design) }
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var qrText by remember { mutableStateOf("") }
+    var matchCode by remember { mutableStateOf<String?>(null) }
+    var pendingDelivery by remember { mutableStateOf<PendingDelivery?>(null) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -77,87 +109,365 @@ fun CreateServerScreen(
         Spacer(Modifier.height(FS.space.s2))
 
         when (phase) {
-            Phase.Design -> {
-                Text(
-                    "Pick a short name (used as the subdomain) + a one-liner so the card on Home reads well.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                )
-                Spacer(Modifier.height(FS.space.s4))
-                FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Column {
-                        FSField(value = name, onValueChange = { name = it }, label = "Name")
-                        Spacer(Modifier.height(FS.space.s2))
-                        FSField(value = description, onValueChange = { description = it }, label = "Description")
-                        Spacer(Modifier.height(FS.space.s2))
-                        Text(
-                            "Subdomain preview: ${SlugUtil.slugify(name).ifEmpty { "name" }}.${(app.currentUser.value ?: "you")}.flagship.services",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp),
-                        )
-                    }
-                }
-                Spacer(Modifier.height(FS.space.s4))
-                FSPrimaryButton(
-                    label = "Continue",
-                    onClick = {
-                        if (name.isBlank()) { error = "Name required."; return@FSPrimaryButton }
-                        error = null
-                        phase = Phase.Scan
-                    },
-                    block = true,
-                )
-                FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
-            }
-            Phase.Scan -> {
-                Text(
-                    "Scan or paste the code shown on flagshipserver.com. Both screens stay open until the browser confirms delivery.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                )
-                Spacer(Modifier.height(FS.space.s4))
-                QRScanner(
-                    onScanned = { scanned ->
-                        qrText = scanned
-                        if (!working) {
-                            scope.launch {
-                                working = true
-                                try {
-                                    val parsed = com.flagshipserver.app.core.QrRelay.parseQrUrl(scanned)
-                                    val phonePub = "" // X25519 pub bytes; stubbed for now
-                                    qrRelay.openAndHello(parsed.sid, phonePub)
-                                    // Stub deliver — real impl crafts the AEAD ciphertext
-                                    qrRelay.deliver("", "")
-                                    val serial = com.flagshipserver.app.core.SerialGen.random()
-                                    val slug = SlugUtil.slugify(name)
-                                    val username = app.currentUser.value ?: "you"
-                                    val fqdn = "$slug.$username.flagship.services"
-                                    onDelivered(fqdn, serial, name, description)
-                                } catch (t: Throwable) {
-                                    error = t.message
-                                } finally {
-                                    working = false
-                                }
-                            }
+            Phase.Design -> DesignPhase(
+                name = name,
+                onName = { name = it },
+                description = description,
+                onDescription = { description = it },
+                username = app.currentUser.value ?: "you",
+                error = error,
+                onContinue = {
+                    if (name.isBlank()) { error = "Name required."; return@DesignPhase }
+                    error = null
+                    phase = Phase.Scan
+                },
+                onCancel = onCancel,
+            )
+            Phase.Scan -> ScanPhase(
+                qrText = qrText,
+                onQrText = { qrText = it },
+                error = error,
+                onCancel = onCancel,
+                onScanned = { scanned ->
+                    if (working) return@ScanPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val username = app.currentUser.value
+                                ?: throw IllegalStateException("not paired yet")
+                            val delivery = prepareDelivery(
+                                rawQr = scanned,
+                                username = username,
+                                serverName = name,
+                            )
+                            qrRelay.openAndHello(
+                                sid = delivery.sid,
+                                phonePkBase64Url = delivery.phonePubKeyB64u,
+                            )
+                            matchCode = delivery.matchCode
+                            pendingDelivery = delivery
+                            phase = Phase.Match
+                            error = null
+                        } catch (t: Throwable) {
+                            error = t.message ?: "couldn't pair"
+                        } finally {
+                            working = false
                         }
-                    },
-                )
-                Spacer(Modifier.height(FS.space.s4))
-                FSField(value = qrText, onValueChange = { qrText = it }, label = "Or paste code manually")
-                if (error != null) {
-                    Spacer(Modifier.height(FS.space.s2))
-                    Text(
-                        error!!,
-                        color = FS.colors.danger,
-                        style = TextStyle(fontSize = 13.sp),
-                    )
-                }
-                FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
-            }
-            Phase.Pending -> {
-                Text("Delivered. Watch Home for the new pod.", color = FS.colors.text)
-            }
+                    }
+                },
+            )
+            Phase.Match -> MatchPhase(
+                matchCode = matchCode ?: "",
+                error = error,
+                onConfirm = {
+                    val delivery = pendingDelivery ?: return@MatchPhase
+                    scope.launch {
+                        working = true
+                        try {
+                            val plainJson = Json.encodeToString(
+                                InstallBlobBundle.serializer(),
+                                delivery.bundle,
+                            )
+                            val sealed = delivery.session.seal(plainJson.toByteArray())
+                            qrRelay.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
+                            registerControlPlane(
+                                flagshipServer = flagshipServer,
+                                bundle = delivery.bundle,
+                                irkPubHex = delivery.irkPubHex,
+                                authCodeUserSig = delivery.bundle.blob.authCodeUserSignature,
+                            )
+                            toasts.success("Delivered. Watch Home for the new server.")
+                            onDelivered(
+                                delivery.bundle.blob.serverDomain,
+                                delivery.bundle.blob.authCode.serial,
+                                name,
+                                description,
+                            )
+                        } catch (t: Throwable) {
+                            error = t.message ?: "deliver failed"
+                        } finally {
+                            qrRelay.close()
+                            working = false
+                        }
+                    }
+                },
+                onCancel = {
+                    qrRelay.close()
+                    pendingDelivery = null
+                    matchCode = null
+                    phase = Phase.Scan
+                },
+            )
         }
         Spacer(Modifier.height(FS.space.s12))
     }
+}
+
+@Composable
+private fun DesignPhase(
+    name: String,
+    onName: (String) -> Unit,
+    description: String,
+    onDescription: (String) -> Unit,
+    username: String,
+    error: String?,
+    onContinue: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Text(
+        "Pick a short name (used as the subdomain) + a one-liner so the Home card reads well.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    )
+    Spacer(Modifier.height(FS.space.s4))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column {
+            FSField(value = name, onValueChange = onName, label = "Name")
+            Spacer(Modifier.height(FS.space.s2))
+            FSField(value = description, onValueChange = onDescription, label = "Description")
+            Spacer(Modifier.height(FS.space.s2))
+            Text(
+                "Subdomain preview: ${SlugUtil.slugify(name).ifEmpty { "name" }}.$username.flagship.services",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp),
+            )
+        }
+    }
+    if (error != null) {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+    }
+    Spacer(Modifier.height(FS.space.s4))
+    FSPrimaryButton(label = "Continue", onClick = onContinue, block = true)
+    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+}
+
+@Composable
+private fun ScanPhase(
+    qrText: String,
+    onQrText: (String) -> Unit,
+    error: String?,
+    onScanned: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    Text(
+        "Scan the code shown on flagshipserver.com. Both screens stay open until the browser acks.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    )
+    Spacer(Modifier.height(FS.space.s4))
+    QRScanner(onScanned = onScanned)
+    Spacer(Modifier.height(FS.space.s4))
+    FSField(value = qrText, onValueChange = onQrText, label = "Or paste code manually")
+    if (qrText.isNotBlank()) {
+        FSGhostButton(label = "Use this code", onClick = { onScanned(qrText) }, block = true)
+    }
+    if (error != null) {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+    }
+    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+}
+
+@Composable
+private fun MatchPhase(
+    matchCode: String,
+    error: String?,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Text(
+        "Compare the code on this phone and the one shown on the browser. Confirm only if they match exactly — otherwise the relay has been tampered with.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    )
+    Spacer(Modifier.height(FS.space.s4))
+    FSCard(padding = PaddingValues(FS.space.s8)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                QrRelay.formatMatchCode(matchCode),
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 44.sp, lineHeight = 56.sp, fontWeight = FontWeight.SemiBold),
+            )
+        }
+    }
+    if (error != null) {
+        Spacer(Modifier.height(FS.space.s2))
+        Text(error, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+    }
+    Spacer(Modifier.height(FS.space.s6))
+    FSPrimaryButton(label = "Codes match — deliver", onClick = onConfirm, block = true)
+    FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+}
+
+// ── Plumbing ──────────────────────────────────────────────────────
+
+private data class PendingDelivery(
+    val sid: String,
+    val phonePubKeyB64u: String,
+    val matchCode: String,
+    val session: QrSession,
+    val bundle: InstallBlobBundle,
+    val irkPubHex: String,
+)
+
+/**
+ * Run the half of the protocol that happens on the phone: parse the
+ * QR, mint a fresh X25519 keypair, derive (kEnc, matchCode), build +
+ * sign the install-blob, and return everything the deliver step needs.
+ */
+private suspend fun prepareDelivery(
+    rawQr: String,
+    username: String,
+    serverName: String,
+): PendingDelivery {
+    val parsed = QrRelay.parseQrUrl(rawQr)
+    val session = QrSession.fresh()
+    val matchCode = session.pair(parsed.browserPublicKey)
+
+    val slug = SlugUtil.slugify(serverName)
+    val serverDomain = "$slug.$username.flagship.services"
+    val serial = SerialGen.random()
+    val now = System.currentTimeMillis()
+    val expiresAt = now + 60 * 60 * 1000L  // 1 hour
+
+    val irk = Keystore.deriveIRK("Create server $serverName")
+    val irkPubHex = Keystore.irkPubHex()
+    val irkPubBytes = HexUtil.decode(irkPubHex) ?: error("corrupt IRK pub")
+
+    val delegated = Ed25519Sign.KeyPair.newKeyPair()
+    val delegatedPubHex = HexUtil.encode(delegated.publicKey)
+
+    val rck = Ed25519Sign.KeyPair.newKeyPair()
+    val rckPubHex = HexUtil.encode(rck.publicKey)
+
+    val authCodeBytesObj = AuthCodeBytes(
+        version = 1,
+        serial = serial,
+        username = username,
+        serverName = serverName,
+        serverDomain = serverDomain,
+        delegatedPubKey = delegated.publicKey,
+        userPubKey = irkPubBytes,
+        issuedAt = now,
+        expiresAt = expiresAt,
+    )
+    val authCodeUserSig = irk.sign(authCodeBytesObj.canonicalBytes())
+    val authCodeUserSigHex = HexUtil.encode(authCodeUserSig)
+
+    val installBlobBytesObj = InstallBlobBytes(
+        serverDomain = serverDomain,
+        username = username,
+        serverName = serverName,
+        phoneDelegatedPubKey = delegated.publicKey,
+        authCode = authCodeBytesObj,
+        authCodeUserSignature = authCodeUserSig,
+        issuedAt = now,
+        expiresAt = expiresAt,
+        rckPubKey = rck.publicKey,
+    )
+    val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
+
+    val bundle = InstallBlobBundle(
+        blob = WireBlob(
+            serverDomain = serverDomain,
+            username = username,
+            serverName = serverName,
+            phoneDelegatedPubKey = delegatedPubHex,
+            authCode = WireAuthCode(
+                serial = serial,
+                username = username,
+                serverName = serverName,
+                serverDomain = serverDomain,
+                delegatedPubKey = delegatedPubHex,
+                userPubKey = irkPubHex,
+                issuedAt = now,
+                expiresAt = expiresAt,
+            ),
+            authCodeUserSignature = authCodeUserSigHex,
+            issuedAt = now,
+            expiresAt = expiresAt,
+            rckPubKey = rckPubHex,
+        ),
+        blobSignature = blobSigHex,
+    )
+
+    return PendingDelivery(
+        sid = parsed.sid,
+        phonePubKeyB64u = Base64URL.encode(session.phonePubKey),
+        matchCode = matchCode,
+        session = session,
+        bundle = bundle,
+        irkPubHex = irkPubHex,
+    )
+}
+
+/**
+ * Pre-publish the auth-code + RCK + username claim on .com so the
+ * freshly-booted box can register itself on first phone-home. All
+ * three are IRK-signed canonical-bytes envelopes the Worker verifies.
+ */
+private suspend fun registerControlPlane(
+    flagshipServer: FlagshipServerClient,
+    bundle: InstallBlobBundle,
+    irkPubHex: String,
+    authCodeUserSig: String,
+) {
+    val now = System.currentTimeMillis()
+    val irk = Keystore.deriveIRK("Register on flagshipserver.com")
+
+    val claimSig = HexUtil.encode(irk.sign(
+        UsernameClaim.canonicalBytes(
+            username = bundle.blob.username,
+            irkPubHex = irkPubHex,
+            issuedAt = now,
+        ),
+    ))
+    flagshipServer.claimUsername(
+        UsernameClaimRequest(
+            request = UsernameClaimRequest.Inner(
+                username = bundle.blob.username,
+                irkPub = irkPubHex,
+                issuedAt = now,
+            ),
+            signature = claimSig,
+        ),
+    )
+
+    val rckSig = HexUtil.encode(irk.sign(
+        RckRegister.canonicalBytes(
+            username = bundle.blob.username,
+            subdomain = bundle.blob.serverDomain,
+            rckPubHex = bundle.blob.rckPubKey,
+            issuedAt = now,
+        ),
+    ))
+    flagshipServer.registerRck(
+        RckRegisterRequest(
+            request = RckRegisterRequest.Inner(
+                username = bundle.blob.username,
+                subdomain = bundle.blob.serverDomain,
+                rckPubKey = bundle.blob.rckPubKey,
+                issuedAt = now,
+            ),
+            signature = rckSig,
+        ),
+    )
+
+    flagshipServer.issueAuthCode(
+        AuthCodeIssueRequest(
+            code = AuthCodeWire(
+                version = bundle.blob.authCode.version,
+                serial = bundle.blob.authCode.serial,
+                username = bundle.blob.authCode.username,
+                serverName = bundle.blob.authCode.serverName,
+                serverDomain = bundle.blob.authCode.serverDomain,
+                delegatedPubKey = bundle.blob.authCode.delegatedPubKey,
+                userPubKey = bundle.blob.authCode.userPubKey,
+                issuedAt = bundle.blob.authCode.issuedAt,
+                expiresAt = bundle.blob.authCode.expiresAt,
+            ),
+            signature = authCodeUserSig,
+        ),
+    )
 }
