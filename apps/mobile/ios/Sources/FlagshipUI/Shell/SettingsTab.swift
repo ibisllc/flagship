@@ -109,7 +109,14 @@ struct RecoveryContainer: View {
             } else { ProgressView() }
         }
         .task {
-            if vm == nil { vm = RecoveryViewModel(client: serverClient) }
+            if vm == nil {
+                // Wire the platform-backed provider on device; the
+                // simulator path falls back to a stable HKDF derivation.
+                vm = RecoveryViewModel(
+                    client: serverClient,
+                    webAuthn: PlatformWebAuthnProvider()
+                )
+            }
         }
     }
 }

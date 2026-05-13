@@ -35,7 +35,7 @@ let package = Package(
         ),
         .testTarget(
             name: "FlagshipMobileTests",
-            dependencies: ["Flagship", "FlagshipAPI", "FlagshipCore"],
+            dependencies: ["Flagship", "FlagshipAPI", "FlagshipCore", "FlagshipUI"],
             path: "Tests/FlagshipMobileTests"
         )
     ]
