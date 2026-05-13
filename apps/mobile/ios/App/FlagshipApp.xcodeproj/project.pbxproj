@@ -32,10 +32,10 @@
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
 		CF58F7F531BA9B5914B63CA1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		"TEMP_3818540B-AEBD-49D4-9E10-BFFDAA1F8003" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_47810B5D-8AA9-4848-9EBC-B4A1BE5C9A85" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_786259EC-C627-49A9-9CCF-5C191BBB2406" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_96C309B7-C7ED-4978-94CF-0C1124F1A0A5" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_2ABCFEB8-15DA-4491-BD39-17836E39528A" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_74DC0E1E-54ED-4575-856D-4ADC862DC0EC" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_D5FD6499-392F-4D03-BD7D-225754A6E6A9" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_F4C2894A-0427-4FE4-9E79-366E0E84845A" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,13 +103,13 @@
 			path = UITests;
 			sourceTree = "<group>";
 		};
-		"TEMP_A7786DCA-55CD-45B0-9E40-460F7BBDFB1D" /* . */ = {
+		"TEMP_A92AC14F-F849-4D8B-B7E0-E0DB9D86EEB5" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_3818540B-AEBD-49D4-9E10-BFFDAA1F8003" /* project.yml */,
-				"TEMP_786259EC-C627-49A9-9CCF-5C191BBB2406" /* FlagshipApp.xcodeproj */,
-				"TEMP_47810B5D-8AA9-4848-9EBC-B4A1BE5C9A85" /* FlagshipApp.entitlements */,
-				"TEMP_96C309B7-C7ED-4978-94CF-0C1124F1A0A5" /* Info.plist */,
+				"TEMP_2ABCFEB8-15DA-4491-BD39-17836E39528A" /* project.yml */,
+				"TEMP_D5FD6499-392F-4D03-BD7D-225754A6E6A9" /* FlagshipApp.xcodeproj */,
+				"TEMP_F4C2894A-0427-4FE4-9E79-366E0E84845A" /* FlagshipApp.entitlements */,
+				"TEMP_74DC0E1E-54ED-4575-856D-4ADC862DC0EC" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				7A32690FE07864A771E99F82 /* Resources */,
 				1B2A4CB3BFA9C1404E8FC705 /* Sources */,
@@ -245,6 +245,7 @@
 		0CA6F1D31BF51AD8E594F1AB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGNING_ALLOWED = NO;
@@ -396,6 +397,7 @@
 		55F58111300FB7BE0F331AC7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGNING_ALLOWED = NO;

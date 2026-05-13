@@ -50,6 +50,11 @@ targets:
         # `xcodebuild -allowProvisioningUpdates` at archive time.
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGNING_REQUIRED: NO
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
     info:
       path: Info.plist
       properties:
@@ -60,7 +65,12 @@ targets:
     entitlements:
       path: FlagshipApp.entitlements
       properties:
-        aps-environment: development
+        # Xcode's "Process Entitlements" build phase expands $() refs
+        # to build settings — so Debug → development, Release →
+        # production. Required for App Store / TestFlight (the
+        # production APNs gateway only accepts production-environment
+        # device tokens).
+        aps-environment: $(APS_ENVIRONMENT)
         com.apple.developer.associated-domains:
           - applinks:flagshipserver.com
           - webcredentials:flagshipserver.com
