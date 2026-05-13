@@ -45,10 +45,12 @@ android {
 
     buildTypes {
         release {
-            // Minify on once the proguard rules ship; today the rule
-            // file is empty + Compose + kotlinx.serialization both
-            // need explicit keep rules.
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }

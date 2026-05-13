@@ -162,11 +162,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun buildOkHttp(): OkHttpClient =
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
-            .build()
+        com.flagshipserver.app.core.HttpClientFactory.build()
 
     private fun mapWidth(w: MaterialWindowWidthSizeClass): WindowWidthSizeClass = when (w) {
         MaterialWindowWidthSizeClass.Expanded -> WindowWidthSizeClass.EXPANDED
