@@ -549,14 +549,31 @@
     .qr-host-actions {
       display: flex;
       justify-content: flex-end;
+      align-items: center;
       gap: 8px;
       min-height: 32px;
+    }
+    .qr-host-actions.has-title { justify-content: space-between; }
+    .qr-host-actions .qr-action-btn + .qr-action-btn { margin-left: 0; }
+    .qr-host-actions .qr-overlay-title {
+      font-family: var(--type-sans);
+      font-weight: 500;
+      font-size: 17px;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      margin: 0;
+    }
+    .qr-host-actions .qr-action-btn-group {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      margin-left: auto;
     }
     .qr-action-btn {
       width: 32px; height: 32px;
       border-radius: 4px;
       background: transparent;
-      border: 1px solid var(--rule-strong);
+      border: 1px solid transparent;
       color: var(--muted);
       cursor: pointer;
       display: inline-flex;
@@ -568,9 +585,14 @@
       line-height: 1;
       transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
     }
-    .qr-action-btn:hover { color: var(--teal-bright); border-color: var(--teal); }
+    .qr-action-btn:hover { color: var(--teal-bright); }
     .qr-action-btn svg { width: 14px; height: 14px; display: block; }
-    .qr-copy-btn.is-copied { color: var(--teal-bright); border-color: var(--teal); }
+    .qr-copy-btn.is-copied { color: var(--teal-bright); }
+    /* Inside the overlay, both buttons get a visible border so the
+       title + buttons row reads as a unified header strip. */
+    #qrOverlayHost .qr-action-btn { border-color: var(--rule-strong); }
+    #qrOverlayHost .qr-action-btn:hover { border-color: var(--teal); }
+    #qrOverlayHost .qr-copy-btn.is-copied { border-color: var(--teal); }
     .qr-url-box {
       width: 100%;
       box-sizing: border-box;
@@ -927,6 +949,7 @@
       box-shadow: 0 30px 80px rgba(0,0,0,0.6);
     }
     .qr-overlay-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .qr-overlay-head:empty { display: none; }
     .qr-overlay-head h2 {
       font-family: var(--type-sans);
       font-weight: 500;
@@ -1061,12 +1084,14 @@
         <aside class="hero-qr" id="heroQr" data-state="loading" aria-label="Deliver a server from the Flagship app">
           <div id="qrHost" class="qr-host">
             <div class="qr-host-actions" id="heroQrActions">
-              <button type="button" class="qr-action-btn qr-copy-btn" id="heroQrCopyBtn" aria-label="Copy QR URL" title="Copy URL">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.4"/>
-                  <path d="M3 10.5V3.4a1.4 1.4 0 0 1 1.4-1.4H10.5"/>
-                </svg>
-              </button>
+              <div class="qr-action-btn-group" id="heroQrActionsGroup">
+                <button type="button" class="qr-action-btn qr-copy-btn" id="heroQrCopyBtn" aria-label="Copy QR URL" title="Copy URL">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.4"/>
+                    <path d="M3 10.5V3.4a1.4 1.4 0 0 1 1.4-1.4H10.5"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <textarea class="qr-url-box" id="heroQrUrlBox" readonly aria-label="QR URL"></textarea>
             <div class="hero-qr-canvas" id="heroQrCanvas" aria-hidden="true">
@@ -1378,7 +1403,7 @@
   <div class="qr-overlay-inner">
     <div class="qr-overlay-card">
       <div class="qr-overlay-head">
-        <h2 id="qrOverlayTitle">Scan from the app</h2>
+        <h2 id="qrOverlayTitle" class="qr-overlay-title">Scan from app</h2>
       </div>
       <button type="button" class="qr-action-btn qr-overlay-close" id="qrOverlayClose" aria-label="Close" title="Close" hidden>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
@@ -1403,6 +1428,8 @@
     const overlay      = document.getElementById("qrOverlay");
     const overlayClose = document.getElementById("qrOverlayClose");
     const overlayCloseHome = overlayClose?.parentElement ?? null;
+    const overlayTitle = document.getElementById("qrOverlayTitle");
+    const overlayTitleHome = overlayTitle?.parentElement ?? null;
     const homeHost     = document.getElementById("qrHost");
     const overlayHost  = document.getElementById("qrOverlayHost");
     const heroCard     = document.getElementById("heroQr");
@@ -1416,26 +1443,38 @@
       // The action row lives inside qr-host, so it follows the move.
       return document.getElementById("heroQrActions");
     }
-    function showClose(inOverlay) {
-      if (!overlayClose) return;
+    function actionsGroup() {
+      return document.getElementById("heroQrActionsGroup");
+    }
+    function dressOverlayChrome(inOverlay) {
+      const row = actionsRow();
+      const group = actionsGroup();
       if (inOverlay) {
-        actionsRow()?.appendChild(overlayClose);
-        overlayClose.removeAttribute("hidden");
+        if (row && overlayTitle) row.insertBefore(overlayTitle, row.firstChild);
+        if (group && overlayClose) {
+          group.appendChild(overlayClose);
+          overlayClose.removeAttribute("hidden");
+        }
+        row?.classList.add("has-title");
       } else {
-        if (overlayCloseHome) overlayCloseHome.appendChild(overlayClose);
-        overlayClose.setAttribute("hidden", "");
+        if (overlayTitleHome && overlayTitle) overlayTitleHome.appendChild(overlayTitle);
+        if (overlayCloseHome && overlayClose) {
+          overlayCloseHome.appendChild(overlayClose);
+          overlayClose.setAttribute("hidden", "");
+        }
+        row?.classList.remove("has-title");
       }
     }
 
     function open() {
       moveTo(overlayHost);
-      showClose(true);
+      dressOverlayChrome(true);
       if (typeof overlay.showModal === "function") overlay.showModal();
       else overlay.setAttribute("open", "");
       navBtn?.setAttribute("aria-expanded", "true");
     }
     function close() {
-      showClose(false);
+      dressOverlayChrome(false);
       if (typeof overlay.close === "function") overlay.close();
       else overlay.removeAttribute("open");
       moveTo(homeHost);
@@ -1448,7 +1487,7 @@
     // Native <dialog> closes via Escape and that fires the 'close' event
     // but doesn't run our handler — listen and move the node back too.
     overlay.addEventListener("close", () => {
-      showClose(false);
+      dressOverlayChrome(false);
       moveTo(homeHost);
       navBtn?.setAttribute("aria-expanded", "false");
     });
