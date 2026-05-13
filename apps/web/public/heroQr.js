@@ -42,12 +42,13 @@
     if (document.readyState !== "loading") fn();
     else document.addEventListener("DOMContentLoaded", fn, { once: true });
   }
-  ready(init);
 
   let card, canvas, digits;
   /** @type {WebSocket|null} */ let ws = null;
   let renewTimer = null;
   let session = null; // { sid, sk, pk, kEnc?, matchCode? }
+
+  ready(init);
 
   function init() {
     card = document.getElementById("heroQr");
