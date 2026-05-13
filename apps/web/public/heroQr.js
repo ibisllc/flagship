@@ -43,10 +43,12 @@
     else document.addEventListener("DOMContentLoaded", fn, { once: true });
   }
 
-  let card, canvas, digits;
+  let card, canvas, digits, copyBtn, urlBox;
   /** @type {WebSocket|null} */ let ws = null;
   let renewTimer = null;
   let session = null; // { sid, sk, pk, kEnc?, matchCode? }
+  let currentUrl = null;
+  let copyResetTimer = null;
 
   ready(init);
 
@@ -54,10 +56,37 @@
     card = document.getElementById("heroQr");
     canvas = document.getElementById("heroQrCanvas");
     digits = document.getElementById("heroQrDigits");
+    copyBtn = document.getElementById("heroQrCopyBtn");
+    urlBox = document.getElementById("heroQrUrlBox");
     if (!card || !canvas || !digits) return;
 
+    copyBtn?.addEventListener("click", onCopyClick);
     renderPlaceholderMosaic(); // never paint empty
     void renew("init");
+  }
+
+  async function onCopyClick() {
+    if (!currentUrl) return;
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(currentUrl);
+        ok = true;
+      }
+    } catch (_) { /* fall through to manual select */ }
+    if (urlBox) {
+      urlBox.value = currentUrl;
+      urlBox.classList.add("is-visible");
+      if (!ok) {
+        urlBox.focus();
+        urlBox.select();
+      }
+    }
+    if (ok && copyBtn) {
+      copyBtn.classList.add("is-copied");
+      if (copyResetTimer) clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => copyBtn.classList.remove("is-copied"), 1400);
+    }
   }
 
   // Generate a fresh sid + keypair, re-render the QR, open a WS.
@@ -81,7 +110,10 @@
     session = s;
 
     // Render the QR from sid + pk_b locally. No network needed.
-    await renderQrFor(joinUrl(s.sid, s.pkB64u));
+    const url = joinUrl(s.sid, s.pkB64u);
+    currentUrl = url;
+    if (urlBox) urlBox.value = url;
+    await renderQrFor(url);
 
     // Open the relay WS in the background.
     try {
