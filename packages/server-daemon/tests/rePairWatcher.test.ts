@@ -2,7 +2,15 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { InMemoryAlertInbox } from "../src/alertInbox.js";
+import type { ReissuanceAlert } from "../src/phoneAlerts.js";
 import { RePairWatcher, type RePairPendingRow } from "../src/postRecovery/rePairWatcher.js";
+import {
+  InMemoryJournalStore,
+  type ReissuerDeps,
+} from "../src/postRecovery/stableIdReissuer.js";
+import type { AppPlatform } from "../src/appPlatform.js";
+import type { MemberRecord } from "../src/membership.js";
 
 const USERNAME = "alice";
 const OLD_HEX = "11".repeat(32);
@@ -234,6 +242,151 @@ describe("RePairWatcher", () => {
     expect(reborn.currentIrkPubHex).toBe(PROBE);
     await reborn.load();
     expect(reborn.currentIrkPubHex).toBe(NEW_HEX);
+  });
+});
+
+/**
+ * Minimal AppPlatform fake — enough for reissueStableIds to walk its
+ * .list() output, mutate members.internalAdd/internalRemoveByHex, and
+ * produce a non-zero rewrittenCount we can assert on. Real platform
+ * machinery (DataProvisioner, AppRunner, dataLayer) is overkill for
+ * the alert-emission path under test here.
+ */
+function fakePlatform(
+  apps: Array<{
+    appId: string;
+    slug: string;
+    initialMembers: Array<{ irkPubHex: string; role: string }>;
+  }>,
+): AppPlatform {
+  const installed = apps.map((cfg) => {
+    const store = new Map(cfg.initialMembers.map((m) => [
+      m.irkPubHex.toLowerCase(),
+      { irkPubHex: m.irkPubHex.toLowerCase(), role: m.role, addedAt: 0, addedBy: "x" } as MemberRecord,
+    ]));
+    const members = {
+      list: () => Array.from(store.values()),
+      internalAdd: (irk: Uint8Array, role: string) => {
+        const hex = Array.from(irk).map((b) => b.toString(16).padStart(2, "0")).join("");
+        const existed = store.has(hex);
+        store.set(hex, { irkPubHex: hex, role, addedAt: 0, addedBy: "x" } as MemberRecord);
+        return existed ? "updated" : "added";
+      },
+      internalRemoveByHex: (hex: string) => store.delete(hex.toLowerCase()),
+    };
+    return {
+      appId: cfg.appId,
+      slug: cfg.slug,
+      membership: { members },
+    };
+  });
+  return { list: () => installed } as unknown as AppPlatform;
+}
+
+describe("RePairWatcher → AlertInbox emission (J.4)", () => {
+  it("emits one membership-reissued alert per app with non-zero rewrites", async () => {
+    const platform = fakePlatform([
+      {
+        appId: "alice--app1",
+        slug: "app1",
+        initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }],
+      },
+      {
+        appId: "alice--app2",
+        slug: "app2",
+        initialMembers: [{ irkPubHex: OLD_HEX, role: "viewer" }],
+      },
+      // Third app has no row for the old IRK — should NOT emit.
+      {
+        appId: "alice--app3",
+        slug: "app3",
+        initialMembers: [{ irkPubHex: PROBE, role: "viewer" }],
+      },
+    ]);
+    const reissuerDeps: ReissuerDeps = {
+      appPlatform: platform,
+      swk: new Uint8Array(32).fill(7),
+      journal: new InMemoryJournalStore(),
+    };
+    const inbox = new InMemoryAlertInbox();
+    const dir = mkdtempSync(join(tmpdir(), "repair-alerts-"));
+    const pending: RePairPendingRow = {
+      newIrkPub: NEW_HEX, oldIrkPub: OLD_HEX,
+      initiatedAt: 1, completesAt: 2, objectedAt: null,
+    };
+    const { fetchImpl } = makeFetchSequence([{ pending }, { pending: null }]);
+    const watcher = new RePairWatcher({
+      username: USERNAME,
+      currentIrkPubHex: OLD_HEX,
+      comBaseUrl: "https://flagshipserver.com",
+      fetchImpl,
+      statePath: join(dir, "watcher.json"),
+      now: () => 1_000,
+      pollIntervalMs: 60_000,
+      clearPairedSessions: async () => 0,
+      reissuerDeps,
+      alertInbox: inbox,
+    });
+    expect(await watcher.pollOnce()).toBe("initiated");
+    expect(await watcher.pollOnce()).toBe("completed");
+
+    const events = inbox.list();
+    expect(events).toHaveLength(2);
+    const apps = events.map((e) => (e.alert as ReissuanceAlert).appId).sort();
+    expect(apps).toEqual(["alice--app1", "alice--app2"]);
+    const first = events[0]!.alert as ReissuanceAlert;
+    expect(first.kind).toBe("membership-reissued");
+    expect(first.rewrittenCount).toBe(1);
+    expect(first.oldIrkPrefix).toHaveLength(12);
+    expect(first.newIrkPrefix).toHaveLength(12);
+    expect(first.oldIrkPrefix).not.toBe(first.newIrkPrefix);
+  });
+
+  it("dedupes a second swap to the same target", async () => {
+    const platform = fakePlatform([
+      { appId: "alice--app1", slug: "app1", initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }] },
+    ]);
+    const inbox = new InMemoryAlertInbox();
+    const dir = mkdtempSync(join(tmpdir(), "repair-alerts-"));
+    const pending: RePairPendingRow = {
+      newIrkPub: NEW_HEX, oldIrkPub: OLD_HEX,
+      initiatedAt: 1, completesAt: 2, objectedAt: null,
+    };
+    const { fetchImpl } = makeFetchSequence([
+      { pending }, { pending: null },
+    ]);
+    const reissuerDeps: ReissuerDeps = {
+      appPlatform: platform,
+      swk: new Uint8Array(32).fill(7),
+      journal: new InMemoryJournalStore(),
+    };
+    const watcher = new RePairWatcher({
+      username: USERNAME,
+      currentIrkPubHex: OLD_HEX,
+      comBaseUrl: "https://flagshipserver.com",
+      fetchImpl,
+      statePath: join(dir, "watcher.json"),
+      now: () => 1_000,
+      pollIntervalMs: 60_000,
+      clearPairedSessions: async () => 0,
+      reissuerDeps,
+      alertInbox: inbox,
+    });
+    await watcher.pollOnce();
+    await watcher.pollOnce();
+    expect(inbox.size()).toBe(1);
+    // A second emission to the same newIrkPrefix should be deduped.
+    inbox.emit({
+      kind: "membership-reissued",
+      appId: "alice--app1",
+      slug: "app1",
+      rewrittenCount: 1,
+      oldIrkPrefix: (inbox.list()[0]!.alert as ReissuanceAlert).oldIrkPrefix,
+      newIrkPrefix: (inbox.list()[0]!.alert as ReissuanceAlert).newIrkPrefix,
+      completedAt: 0,
+      undoWindowExpiresAt: 0,
+    });
+    expect(inbox.size()).toBe(1);
   });
 });
 

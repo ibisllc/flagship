@@ -49,6 +49,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { AlertInbox } from "../alertInbox.js";
+import type { ReissuanceAlert } from "../phoneAlerts.js";
 import type { ReissuanceReport, ReissuerDeps } from "./stableIdReissuer.js";
 import { reissueStableIds } from "./stableIdReissuer.js";
 
@@ -121,6 +123,14 @@ export interface RePairWatcherDeps {
    * to skip (tests that don't exercise membership rewriting).
    */
   reissuerDeps: ReissuerDeps | null;
+  /**
+   * Phone alert inbox. When the reissuer reports per-app rewrites,
+   * the watcher emits one `membership-reissued` alert per app with a
+   * non-zero rewritten count so the phone can show a per-app review
+   * screen. Optional — pass null in tests that don't care about
+   * alert emission.
+   */
+  alertInbox?: AlertInbox | null;
 }
 
 const FIVE_MIN_MS = 5 * 60_000;
@@ -246,6 +256,22 @@ export class RePairWatcher {
         oldIrkPubHex: oldHex,
         newIrkPubHex: newHex,
       });
+      if (this.deps.alertInbox) {
+        for (const app of reissue.apps) {
+          if (app.rewrittenCount === 0) continue;
+          const alert: ReissuanceAlert = {
+            kind: "membership-reissued",
+            appId: app.appId,
+            slug: app.slug,
+            rewrittenCount: app.rewrittenCount,
+            oldIrkPrefix: reissue.oldIrkPrefix,
+            newIrkPrefix: reissue.newIrkPrefix,
+            completedAt: app.completedAt,
+            undoWindowExpiresAt: reissue.undoWindowExpiresAt,
+          };
+          this.deps.alertInbox.emit(alert);
+        }
+      }
     }
 
     this._currentIrkPubHex = newHex;

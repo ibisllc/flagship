@@ -110,5 +110,11 @@ function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
     // (different inputKind) or a different tab focuses something.
     return a.tabId === b.tabId && a.inputKind === b.inputKind;
   }
+  if (a.kind === "membership-reissued" && b.kind === "membership-reissued") {
+    // One alert per (appId, newIrkPrefix) — repeated re-issuance walks
+    // for the same target shouldn't fan out, but a second swap to a
+    // different IRK pubkey is genuinely a new event.
+    return a.newIrkPrefix === b.newIrkPrefix;
+  }
   return false;
 }
