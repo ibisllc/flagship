@@ -84,8 +84,9 @@ data class PodInfo(
     val description: String? = null,
     val fqdn: String,
     val status: Status = Status.UNKNOWN,
+    val pendingAuthCodeSerial: String? = null,
 ) {
-    enum class Status { ONLINE, OFFLINE, UNKNOWN }
+    enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
 }
 
 /// Tiny utility for normalizing a user-supplied server name into a DNS
