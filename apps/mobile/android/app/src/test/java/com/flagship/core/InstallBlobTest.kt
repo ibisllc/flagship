@@ -61,6 +61,22 @@ class InstallBlobTest {
         assertEquals("flagship/claim-username/v1|harry|abcd|42", s)
     }
 
+    @Test fun pushTokenRegister_canonicalBytes() {
+        val s = String(PushTokenRegister.canonicalBytes(
+            "harry", "fcm", "deadbeef", "ab".repeat(32), 1700000000L
+        ))
+        assertEquals(
+            "flagship/push-token-register/v1|harry|fcm|deadbeef|" +
+                "ab".repeat(32) + "|1700000000",
+            s
+        )
+    }
+
+    @Test fun authCodeRevoke_canonicalBytes() {
+        val s = String(AuthCodeRevoke.canonicalBytes("01ABCD", "harry", 7))
+        assertEquals("flagship/auth-code-revoke/v1|01ABCD|harry|7", s)
+    }
+
     @Test fun rckRegister_canonicalBytes() {
         val s = String(RckRegister.canonicalBytes(
             "harry", "home.harry.flagship.services", "deadbeef", 99

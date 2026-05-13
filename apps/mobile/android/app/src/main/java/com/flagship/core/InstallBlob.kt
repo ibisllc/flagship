@@ -90,6 +90,26 @@ object RckRegister {
             .joinToString("|").toByteArray()
 }
 
+object AuthCodeRevoke {
+    const val CANONICAL_TAG = "flagship/auth-code-revoke/v1"
+    fun canonicalBytes(serial: String, username: String, issuedAt: Long): ByteArray =
+        listOf(CANONICAL_TAG, serial, username, issuedAt.toString())
+            .joinToString("|").toByteArray()
+}
+
+object PushTokenRegister {
+    const val CANONICAL_TAG = "flagship/push-token-register/v1"
+    fun canonicalBytes(
+        username: String,
+        platform: String,
+        providerToken: String,
+        pushX25519PubHex: String,
+        issuedAt: Long
+    ): ByteArray = listOf(
+        CANONICAL_TAG, username, platform, providerToken, pushX25519PubHex, issuedAt.toString()
+    ).joinToString("|").toByteArray()
+}
+
 object HexUtil {
     fun encode(data: ByteArray): String {
         val sb = StringBuilder(data.size * 2)
