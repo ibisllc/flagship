@@ -3,8 +3,8 @@ package com.flagshipserver.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -42,6 +42,7 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.MockQrRelayClient
 import com.flagshipserver.app.core.QrRelayClient
 import com.flagshipserver.app.core.ToastCenter
+import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.push.FlagshipFcmService
 import com.flagshipserver.app.push.PushHolder
@@ -55,16 +56,19 @@ import com.flagshipserver.app.ui.theme.FlagshipTheme
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private lateinit var deepLinker: DeepLinker
     private lateinit var appState: AppState
+    private lateinit var biometric: BiometricAuthority
 
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Keystore.attach(applicationContext)
         FlagshipFcmService.ensureChannel(applicationContext)
+        biometric = BiometricAuthority(this)
+        BiometricAuthority.set(biometric)
 
         appState = AppState()
         val sessionStore = EncryptedSessionStore.create(applicationContext)
@@ -127,6 +131,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         PushHolder.registrar = null
+        BiometricAuthority.set(null)
     }
 
     /** Parse incoming launch intents (`flagship://...` and the

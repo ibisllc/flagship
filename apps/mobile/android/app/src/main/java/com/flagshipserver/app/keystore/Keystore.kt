@@ -95,11 +95,19 @@ object Keystore {
         return seed
     }
 
-    /** Derive (and cache) the IRK Ed25519 keypair. `reason` is logged
-     *  by the iOS side for biometric prompts; here it's surfaced for
-     *  later wiring to BiometricPrompt — currently unused. */
+    /** Derive (and cache) the IRK Ed25519 keypair. `reason` surfaces
+     *  in the biometric prompt subtitle so the user sees what they're
+     *  authorizing. When a BiometricAuthority is registered (the app
+     *  is in the foreground), this triggers a prompt unless the cached
+     *  freshness window is still open — see
+     *  BiometricAuthority.ensureFresh. Background callers (FCM service)
+     *  proceed without a prompt; the authority returns null in that
+     *  scope so the call is a no-op. */
     suspend fun deriveIRK(reason: String = "Sign Flagship request"): Ed25519Sign {
-        @Suppress("UNUSED_VARIABLE") val _r = reason
+        BiometricAuthority.current()?.ensureFresh(
+            title = "Authorize Flagship",
+            subtitle = reason,
+        )
         val p = requirePrefs()
         val seedHex = p.getString(KEY_IRK_SEED, null)
         val seed = if (seedHex != null) {
