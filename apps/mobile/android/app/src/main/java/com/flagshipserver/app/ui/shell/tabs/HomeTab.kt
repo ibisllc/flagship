@@ -23,8 +23,11 @@ import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.ui.screens.AddServerChooserScreen
+import com.flagshipserver.app.ui.screens.AddServerMode
 import com.flagshipserver.app.ui.screens.HomeScreen
 import com.flagshipserver.app.ui.screens.PendingServerScreen
+import com.flagshipserver.app.ui.screens.PodPairScreen
 import com.flagshipserver.app.ui.screens.ServerDetailScreen
 import com.flagshipserver.app.ui.screens.CreateServerScreen
 import com.flagshipserver.app.ui.screens.InstallProgressScreen
@@ -71,7 +74,7 @@ fun HomeTab() {
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },
-                onAddServer = { nav.navigate("create-server") },
+                onAddServer = { nav.navigate("add-server-chooser") },
                 onSetLeader = { app.setLeader(it.podId) },
                 onRefresh = { scope.launch { vm.load() } },
             )
@@ -92,11 +95,38 @@ fun HomeTab() {
                 ServerDetailScreen(podId = podId, onBack = { nav.popBackStack() })
             }
         }
+        composable("add-server-chooser") {
+            AddServerChooserScreen(
+                mode = AddServerMode.IN_APP,
+                onProvision = { nav.navigate("create-server") },
+                onPair = { nav.navigate("pod-pair") },
+                onCancel = { nav.popBackStack() },
+            )
+        }
         composable("create-server") {
             CreateServerScreen(
                 onDelivered = { serverDomain, serial, name, description ->
                     val encoded = URLEncoder.encode(name, "UTF-8")
                     nav.navigate("install-progress/$serial?name=$encoded&fqdn=${URLEncoder.encode(serverDomain, "UTF-8")}")
+                },
+                onCancel = { nav.popBackStack() },
+            )
+        }
+        composable("pod-pair") {
+            PodPairScreen(
+                onSubmit = { code, name, description ->
+                    val slug = com.flagshipserver.app.core.SlugUtil.slugify(name)
+                    val user = app.currentUser.value ?: "you"
+                    val pod = com.flagshipserver.app.core.PodInfo(
+                        podId = "pod-" + java.util.UUID.randomUUID().toString().take(6),
+                        name = name,
+                        description = description.ifEmpty { null },
+                        fqdn = "$slug.$user.flagship.services",
+                        status = com.flagshipserver.app.core.PodInfo.Status.PENDING,
+                        pendingAuthCodeSerial = code,
+                    )
+                    app.addPod(pod)
+                    nav.popBackStack(route = "home-root", inclusive = false)
                 },
                 onCancel = { nav.popBackStack() },
             )

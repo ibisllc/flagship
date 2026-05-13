@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import com.flagshipserver.app.ui.screens.AddControlDeviceScreen
 import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
+import com.flagshipserver.app.ui.screens.ProvidersScreen
 import com.flagshipserver.app.ui.screens.RecoveryScreen
 import com.flagshipserver.app.ui.screens.SettingsScreen
 
@@ -21,5 +22,6 @@ fun SettingsTab() {
         composable("add-control-device") { AddControlDeviceScreen(nav) }
         composable("recovery") { RecoveryScreen(nav) }
         composable("developer") { DeveloperScreen(nav) }
+        composable("providers") { ProvidersScreen(nav) }
     }
 }

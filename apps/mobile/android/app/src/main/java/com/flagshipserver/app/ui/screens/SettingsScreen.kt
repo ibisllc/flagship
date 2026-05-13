@@ -58,6 +58,9 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s6))
 
+        SettingsRow(label = "AI providers", description = "BYO LLM provider keys (Anthropic, OpenAI, Google, Groq, Ollama).") {
+            nav.navigate("providers")
+        }
         SettingsRow(label = "Paired devices", description = "Browsers + tablets paired to this account.") {
             nav.navigate("paired-sessions")
         }
