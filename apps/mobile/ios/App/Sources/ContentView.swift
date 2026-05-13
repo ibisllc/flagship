@@ -34,8 +34,14 @@ struct ContentView: View {
     /// Lazy push registration — only after the user has a paired pod
     /// to receive notifications on. Re-enters every time we transition
     /// from unpaired → paired (post-recovery, fresh signup, etc.).
+    ///
+    /// The PushNotifications instance + PushRegistrar are owned by the
+    /// App scope (see FlagshipApp.body), so the device-token callback
+    /// can route through to .com regardless of which view triggered
+    /// `registerForRemoteNotifications`.
     private func registerPush() async {
-        let push = PushNotifications(linker: linker)
+        guard let delegate = UIApplication.shared.delegate as? AppDelegate,
+              let push = delegate.push else { return }
         if await push.requestAuthorization() {
             await MainActor.run {
                 UIApplication.shared.registerForRemoteNotifications()

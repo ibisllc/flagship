@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import FlagshipCore
 import FlagshipAPI
+import FlagshipUI
 
 @main
 struct FlagshipApp: App {
@@ -19,11 +20,15 @@ struct FlagshipApp: App {
         // in Keychain with WhenUnlockedThisDeviceOnly access.
         self.liveClient = LiveScreensClient(store: KeychainSessionStore())
     }
-    private let serverClient: any FlagshipServerClient = MockFlagshipServerClient()
+    private let mockServerClient: any FlagshipServerClient = MockFlagshipServerClient()
+    private let liveServerClient: any FlagshipServerClient = LiveFlagshipServerClient()
     private let mockRelay = MockQrRelayClient()
     private let liveRelay: any QrRelayClient = LiveQrRelayClient()
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
+    }
+    private var activeServerClient: any FlagshipServerClient {
+        dev.useLiveClient ? liveServerClient : mockServerClient
     }
     private var activeRelay: any QrRelayClient {
         dev.useLiveClient ? liveRelay : mockRelay
@@ -37,9 +42,18 @@ struct FlagshipApp: App {
                 .environment(toasts)
                 .environment(dev)
                 .environment(\.screensClient, activeClient)
-                .environment(\.flagshipServerClient, serverClient)
+                .environment(\.flagshipServerClient, activeServerClient)
                 .environment(\.qrRelayClient, activeRelay)
-                .onAppear { appDelegate.linker = linker }
+                .onAppear {
+                    appDelegate.linker = linker
+                    let push = PushNotifications(linker: linker)
+                    let registrar = PushRegistrar(appState: appState, client: activeServerClient)
+                    push.onDeviceTokenChange = { token in
+                        Task { @MainActor in await registrar.handle(deviceToken: token) }
+                    }
+                    appDelegate.push = push
+                    appDelegate.pushRegistrar = registrar
+                }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }
                 }
@@ -53,6 +67,7 @@ struct FlagshipApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate {
     var linker: DeepLinker?
     var push: PushNotifications?
+    var pushRegistrar: PushRegistrar?
 
     func application(
         _ application: UIApplication,

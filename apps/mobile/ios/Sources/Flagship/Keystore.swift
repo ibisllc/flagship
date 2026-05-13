@@ -98,10 +98,47 @@ public struct Keystore {
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
+    /// Per-device X25519 push key. Generated on first call and persisted
+    /// as raw 32-byte private key in the Keychain. The matching public
+    /// key is registered with .com at /api/push/register; senders seal
+    /// payloads to this pubkey, the device's daemon-side relay unwraps
+    /// them with the private half. Per-device (not UMK-derived) so a
+    /// second phone added to the account has its own push channel.
+    public static func loadOrCreatePushX25519() throws -> Curve25519.KeyAgreement.PrivateKey {
+        if let raw = keychainRead(account: KCKey.pushX25519Priv),
+           let pk = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: raw) {
+            return pk
+        }
+        let pk = Curve25519.KeyAgreement.PrivateKey()
+        try keychainWrite(account: KCKey.pushX25519Priv, data: pk.rawRepresentation)
+        return pk
+    }
+
+    /// Last-registered push token-id, returned by .com from
+    /// /api/push/register. Stored so we can DELETE on sign-out.
+    public static func setPushTokenId(_ id: String?) throws {
+        if let id, let bytes = id.data(using: .utf8) {
+            try keychainWrite(account: KCKey.pushTokenId, data: bytes)
+        } else {
+            let q: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: KCKey.pushTokenId,
+            ]
+            SecItemDelete(q as CFDictionary)
+            InMemoryStore.shared.remove(account: KCKey.pushTokenId)
+        }
+    }
+
+    public static func pushTokenId() -> String? {
+        guard let d = keychainRead(account: KCKey.pushTokenId) else { return nil }
+        return String(data: d, encoding: .utf8)
+    }
+
     // MARK: - Wipe (sign-out / tests)
 
     public static func wipe() {
-        for account in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv] {
+        for account in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
+                        KCKey.pushX25519Priv, KCKey.pushTokenId] {
             let q: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrAccount as String: account
@@ -162,10 +199,12 @@ public struct Keystore {
     // MARK: - Keychain helpers
 
     fileprivate enum KCKey {
-        static let wrappedUmk   = "com.flagship.umk.wrapped"
-        static let ephemeralPub = "com.flagship.umk.ephemeralpub"
-        static let simWrapPriv  = "com.flagship.umk.simwrap"
-        static let seKeyTag     = "com.flagship.umk.se"
+        static let wrappedUmk     = "com.flagship.umk.wrapped"
+        static let ephemeralPub   = "com.flagship.umk.ephemeralpub"
+        static let simWrapPriv    = "com.flagship.umk.simwrap"
+        static let seKeyTag       = "com.flagship.umk.se"
+        static let pushX25519Priv = "com.flagship.push.x25519priv"
+        static let pushTokenId    = "com.flagship.push.tokenid"
     }
 
     fileprivate static func keychainWrite(account: String, data: Data) throws {

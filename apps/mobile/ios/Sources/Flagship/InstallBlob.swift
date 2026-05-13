@@ -153,6 +153,26 @@ public enum AuthCodeRevoke {
     }
 }
 
+/// Push-token registration claim. Mirrors
+/// packages/protocol/src/auth.ts `TAG_PUSH_TOKEN_REGISTER` so the Worker
+/// can `verifyPushTokenRegister` over the exact same bytes the phone
+/// signed. Platform is one of `apns`, `fcm`, `webpush`; `providerToken`
+/// is opaque to .com (APNs hex token or FCM registration ID).
+public enum PushTokenRegister {
+    public static let canonicalTag = "flagship/push-token-register/v1"
+    public static func canonicalBytes(
+        username: String,
+        platform: String,
+        providerToken: String,
+        pushX25519PubHex: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag, username, platform, providerToken, pushX25519PubHex, String(issuedAt)
+        ].joined(separator: "|").utf8)
+    }
+}
+
 /// Helper — every byte → 2 lowercase hex chars. Matches the JS side's
 /// `bytesToHex`.
 public enum HexUtil {

@@ -119,4 +119,101 @@ final class FlagshipServerClientTests: XCTestCase {
             XCTFail("wrong error: \(error)")
         }
     }
+
+    // MARK: - Push-token registration
+
+    func test_registerPushToken_mintsTokenIdAndPersists() async throws {
+        let c = makeClient()
+        let resp = try await c.registerPushToken(.init(
+            request: .init(
+                username: "harry",
+                platform: "apns",
+                providerToken: "deadbeef",
+                pushX25519Pub: String(repeating: "ab", count: 32),
+                issuedAt: 7
+            ),
+            signature: "sig"
+        ))
+        XCTAssertTrue(resp.ok)
+        XCTAssertFalse(resp.tokenId.isEmpty)
+        XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.username, "harry")
+        XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.platform, "apns")
+    }
+
+    func test_liveClient_registerPushToken_postsToApiPushRegister() async throws {
+        StubURLProtocol.handler = { req in
+            XCTAssertEqual(req.httpMethod, "POST")
+            XCTAssertEqual(req.url?.path, "/api/push/register")
+            let bodyData = req.httpBodyStreamData() ?? req.httpBody ?? Data()
+            let body = try JSONDecoder().decode(PushTokenRegisterRequest.self, from: bodyData)
+            XCTAssertEqual(body.request.platform, "apns")
+            XCTAssertEqual(body.request.providerToken, "deadbeef")
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 201, httpVersion: "HTTP/2", headerFields: nil
+            )!
+            let payload = try JSONEncoder().encode(
+                PushTokenRegisterResponse(ok: true, tokenId: "tok_real_123")
+            )
+            return (resp, payload)
+        }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: cfg)
+        let client = LiveFlagshipServerClient(
+            urlSession: session,
+            baseUrl: URL(string: "https://flagshipserver.com")!
+        )
+        let resp = try await client.registerPushToken(.init(
+            request: .init(
+                username: "harry", platform: "apns", providerToken: "deadbeef",
+                pushX25519Pub: String(repeating: "ab", count: 32), issuedAt: 7
+            ),
+            signature: "sig"
+        ))
+        XCTAssertEqual(resp.tokenId, "tok_real_123")
+        StubURLProtocol.handler = nil
+    }
+}
+
+// MARK: - URLProtocol stub
+
+final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { handler != nil }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let h = StubURLProtocol.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
+            return
+        }
+        do {
+            let (resp, data) = try h(request)
+            client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+    override func stopLoading() {}
+}
+
+private extension URLRequest {
+    /// URLSession sometimes hands a stream-backed body to URLProtocol
+    /// instead of an inline Data; read it back synchronously for tests.
+    func httpBodyStreamData() -> Data? {
+        guard let stream = self.httpBodyStream else { return nil }
+        stream.open(); defer { stream.close() }
+        var data = Data()
+        let bufSize = 1024
+        let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: bufSize)
+        defer { buf.deallocate() }
+        while stream.hasBytesAvailable {
+            let n = stream.read(buf, maxLength: bufSize)
+            if n <= 0 { break }
+            data.append(buf, count: n)
+        }
+        return data
+    }
 }

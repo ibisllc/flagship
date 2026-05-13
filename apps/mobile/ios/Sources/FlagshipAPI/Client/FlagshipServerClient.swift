@@ -27,6 +27,44 @@ public protocol FlagshipServerClient: Sendable {
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
+    /// Register an APNs device token with .com so the Worker can relay
+    /// (or retry) encrypted push payloads to this device. The returned
+    /// tokenId is the handle to later revoke the registration.
+    func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse
+}
+
+/// POST /api/push/register — IRK-signed registration of an APNs (or FCM,
+/// or webpush) provider token + a per-device X25519 pubkey. Canonical
+/// bytes spec lives in packages/protocol/src/auth.ts
+/// `TAG_PUSH_TOKEN_REGISTER`; iOS computes the same string via
+/// `PushTokenRegister.canonicalBytes(...)` in Flagship/InstallBlob.swift.
+public struct PushTokenRegisterRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let username: String
+        public let platform: String            // "apns" | "fcm" | "webpush"
+        public let providerToken: String       // APNs hex token (lowercased)
+        public let pushX25519Pub: String       // hex
+        public let issuedAt: Int64
+        public init(
+            username: String, platform: String, providerToken: String,
+            pushX25519Pub: String, issuedAt: Int64
+        ) {
+            self.username = username; self.platform = platform
+            self.providerToken = providerToken
+            self.pushX25519Pub = pushX25519Pub; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String               // hex, IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
+public struct PushTokenRegisterResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let tokenId: String
+    public init(ok: Bool, tokenId: String) { self.ok = ok; self.tokenId = tokenId }
 }
 
 /// POST /api/auth-code/<serial>/revoke — IRK-signed revocation. The
@@ -172,6 +210,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
+    public private(set) var registeredPushTokens: [String: PushTokenRegisterRequest.Inner] = [:] // tokenId → inner
+    private var nextPushTokenId = 1
 
     public init() {}
 
@@ -240,6 +280,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         if let env = recoveryStore[credentialId] { return env }
         throw ScreensClientError.http(status: 404, message: "no envelope")
+    }
+
+    public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {
+        try await tick()
+        let id = String(format: "tok_%06d", nextPushTokenId); nextPushTokenId += 1
+        registeredPushTokens[id] = req.request
+        return PushTokenRegisterResponse(ok: true, tokenId: id)
     }
 }
 
@@ -336,5 +383,10 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(RecoveryEnvelope.self, from: data)
+    }
+
+    public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await postJsonReturning("/api/push/register", body: body)
     }
 }

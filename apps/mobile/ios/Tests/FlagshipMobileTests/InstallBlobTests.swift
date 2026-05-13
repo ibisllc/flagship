@@ -64,6 +64,32 @@ final class InstallBlobTests: XCTestCase {
         XCTAssertEqual(s, "flagship/claim-username/v1|harry|abcd|42")
     }
 
+    func test_pushTokenRegisterCanonicalBytes_followsV1Format() {
+        let s = String(
+            data: PushTokenRegister.canonicalBytes(
+                username: "harry",
+                platform: "apns",
+                providerToken: "deadbeef",
+                pushX25519PubHex: String(repeating: "ab", count: 32),
+                issuedAt: 1700000000
+            ),
+            encoding: .utf8
+        )!
+        XCTAssertEqual(
+            s,
+            "flagship/push-token-register/v1|harry|apns|deadbeef|" +
+            String(repeating: "ab", count: 32) + "|1700000000"
+        )
+    }
+
+    func test_authCodeRevokeCanonicalBytes_followsV1Format() {
+        let s = String(
+            data: AuthCodeRevoke.canonicalBytes(serial: "01ABCD", username: "harry", issuedAt: 7),
+            encoding: .utf8
+        )!
+        XCTAssertEqual(s, "flagship/auth-code-revoke/v1|01ABCD|harry|7")
+    }
+
     func test_rckRegisterCanonicalBytes_followsV1Format() {
         let s = String(
             data: RckRegister.canonicalBytes(
