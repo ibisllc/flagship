@@ -59,6 +59,21 @@ export class FilePairedSessionStore implements PairedSessionGate {
     }
   }
 
+  /**
+   * Drop every paired session. Used by the J.3 re-pair watcher after a
+   * successful IRK swap — paired sessions were authorized by the OLD
+   * phone, so a recovered/replaced phone must re-pair every browser
+   * before it can act again. Returns the count of removed entries so
+   * the watcher can include it in its report.
+   */
+  async removeAll(): Promise<number> {
+    const n = this.byToken.size;
+    if (n === 0) return 0;
+    this.byToken.clear();
+    await this.flush();
+    return n;
+  }
+
   list(): Array<{ token: string; label: string; addedAt: number }> {
     return [...this.byToken.entries()].map(([token, info]) => ({
       token,
