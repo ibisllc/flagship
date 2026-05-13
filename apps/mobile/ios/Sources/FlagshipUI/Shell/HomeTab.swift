@@ -56,8 +56,7 @@ public struct HomeTab: View {
         case .addServer:
             // In-app add-server only ever means "provision a new box."
             // Pairing an existing server is an onboarding-only path.
-            CreateServerStubScreen(
-                username: app.currentUser ?? "",
+            CreateServerContainer(
                 onStartProvisioning: { serial, name, description in
                     path.append(.installProgress(serial: serial, name: name, description: description))
                 },
@@ -84,6 +83,37 @@ public struct HomeTab: View {
         )
         app.addPod(pod)
         path.removeAll()
+    }
+}
+
+struct CreateServerContainer: View {
+    let onStartProvisioning: (String, String, String) -> Void
+    let onDemoComplete: (String, String) -> Void
+    @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(AppState.self) private var app
+    @State private var vm: CreateServerViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                CreateServerStubScreen(
+                    vm: vm,
+                    onStartProvisioning: onStartProvisioning,
+                    onDemoComplete: onDemoComplete
+                )
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil {
+                vm = CreateServerViewModel(
+                    username: app.currentUser ?? "you",
+                    client: serverClient
+                )
+            }
+        }
     }
 }
 

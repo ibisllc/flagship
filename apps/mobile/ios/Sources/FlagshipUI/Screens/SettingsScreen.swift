@@ -17,35 +17,41 @@ public struct SettingsScreen: View {
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
+    let showDeveloper: Bool
     var onAddControlDevice: () -> Void = {}
     var onRevokeDevice: (PairedSessionSummary) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onOpenProviders: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
     var onOpenAbout: () -> Void = {}
+    var onOpenDeveloper: () -> Void = {}
     var onRefresh: () async -> Void = {}
 
     public init(
         username: String,
         tier: LoadingState<TierStatusResponse>,
         controlDevices: LoadingState<[PairedSessionSummary]>,
+        showDeveloper: Bool = false,
         onAddControlDevice: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
+        onOpenDeveloper: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {}
     ) {
         self.username = username
         self.tier = tier
         self.controlDevices = controlDevices
+        self.showDeveloper = showDeveloper
         self.onAddControlDevice = onAddControlDevice
         self.onRevokeDevice = onRevokeDevice
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
         self.onOpenRecovery = onOpenRecovery
         self.onOpenAbout = onOpenAbout
+        self.onOpenDeveloper = onOpenDeveloper
         self.onRefresh = onRefresh
     }
 
@@ -177,6 +183,9 @@ public struct SettingsScreen: View {
             VStack(spacing: FS.space.s3) {
                 linkRow("Recovery setup", subtitle: "If you lose this phone", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
                 linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)
+                if showDeveloper {
+                    linkRow("Developer", subtitle: "Mock/live toggle, latency knob", icon: "hammer.fill", c: c, action: onOpenDeveloper)
+                }
             }
         }
     }

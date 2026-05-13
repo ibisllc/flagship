@@ -1,25 +1,23 @@
 import SwiftUI
+import FlagshipAPI
 
-/// Provisioning flow entry point. The user supplies a short name +
-/// one-line description so the server is identified from the moment
-/// it appears in the pod list (never an FQDN-only entry). Tapping
-/// "Mint a build code" advances the parent to a live install-progress
-/// screen that subscribes to the daemon's SSE stream.
+/// Real provisioning flow. The user supplies a short name + description,
+/// the screen mints a build code via FlagshipServerClient
+/// (POST /api/build-codes/mint on flagshipserver.com), then shows the
+/// build code + ISO download URL so the user can flash it to a box.
+/// "Watch boot" advances to the install-events SSE stream.
 public struct CreateServerStubScreen: View {
     @Environment(\.colorScheme) private var scheme
-    let username: String
+    @Bindable var vm: CreateServerViewModel
     var onStartProvisioning: (_ serial: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onDemoComplete: (_ name: String, _ description: String) -> Void = { _, _ in }
 
-    @State private var name: String = ""
-    @State private var description: String = ""
-
     public init(
-        username: String,
+        vm: CreateServerViewModel,
         onStartProvisioning: @escaping (_ serial: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDemoComplete: @escaping (_ name: String, _ description: String) -> Void = { _, _ in }
     ) {
-        self.username = username
+        self.vm = vm
         self.onStartProvisioning = onStartProvisioning
         self.onDemoComplete = onDemoComplete
     }
@@ -30,48 +28,24 @@ public struct CreateServerStubScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 Spacer().frame(height: FS.space.s12)
                 Text("Provision a new server").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Welcome, \(username). Here's the rough idea:")
+                Text("Flagship hands your phone a one-time build code keyed to your identity. Use it to grab a personalized Alpine ISO, flash a USB, and boot any commodity box.")
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
-                FSCard(padding: FS.space.s6) {
-                    VStack(alignment: .leading, spacing: FS.space.s4) {
-                        step(n: 1, title: "Mint a build code", body: "Flagship hands you a one-time code keyed to your phone's identity.", c: c)
-                        step(n: 2, title: "Download the personalized ISO", body: "Paste the code on flagshipserver.com/build to download an Alpine ISO with your trust roots baked in.", c: c)
-                        step(n: 3, title: "Boot the box", body: "Flash a USB stick. Boot any commodity machine. LUKS unlock happens on every boot via your phone.", c: c)
-                        step(n: 4, title: "Cert + apps", body: "The daemon runs ACME locally, gets a real Let's Encrypt cert, and you're live.", c: c)
+                switch vm.phase {
+                case .form:
+                    form(c: c)
+                case .minting:
+                    mintingCard(c: c)
+                case .codeReady(let resp):
+                    codeCard(resp: resp, c: c)
+                case .failed(let msg):
+                    ErrorCard(message: msg)
+                    FSGhostButton("Try again", block: true) {
+                        vm.phase = .form
                     }
                 }
 
-                FSCard {
-                    VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("NAME THIS SERVER")
-                            .font(.system(size: 12, weight: .semibold))
-                            .tracking(1)
-                            .foregroundColor(c.textMuted)
-                        FSField(value: $name, label: "Short name", placeholder: "Home, Office, Garage")
-                        FSField(value: $description, label: "One-line description", placeholder: "Failover for work · Music projects · Family photos", helper: "Up to ~40 characters. Shown wherever the FQDN used to be.")
-                    }
-                }
-
-                FSPrimaryButton(
-                    "Mint a build code & watch boot",
-                    enabled: !name.isEmpty,
-                    block: true,
-                    large: true
-                ) {
-                    let serial = mintMockSerial()
-                    onStartProvisioning(serial, name, description)
-                }
-
-                if !name.isEmpty {
-                    FSGhostButton(
-                        "Skip — pretend it's already running",
-                        block: true
-                    ) {
-                        onDemoComplete(name, description)
-                    }
-                }
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
@@ -79,23 +53,103 @@ public struct CreateServerStubScreen: View {
         .background(c.bg.ignoresSafeArea())
     }
 
-    private func mintMockSerial() -> String {
-        // Real impl POSTs to flagshipserver.com/api/build-codes/mint and
-        // gets back a 12-char build code. Here we synthesize a similar
-        // shape so the SSE stream feels real.
-        let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        return String((0..<12).map { _ in alphabet.randomElement()! })
+    private func form(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text("NAME THIS SERVER")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(1)
+                        .foregroundColor(c.textMuted)
+                    FSField(value: $vm.name, label: "Short name", placeholder: "Home, Office, Garage")
+                    FSField(value: $vm.description, label: "One-line description", placeholder: "Failover for work · Music projects", helper: "Shown wherever the FQDN used to be.")
+                }
+            }
+
+            FSPrimaryButton(
+                "Mint a build code",
+                enabled: vm.canSubmit,
+                block: true,
+                large: true
+            ) {
+                Task { await vm.mint() }
+            }
+
+            if vm.canSubmit {
+                FSGhostButton(
+                    "Skip — pretend it's already running",
+                    block: true
+                ) {
+                    onDemoComplete(vm.name, vm.description)
+                }
+            }
+        }
     }
 
-    private func step(n: Int, title: String, body: String, c: FSColors) -> some View {
-        HStack(alignment: .top, spacing: FS.space.s3) {
-            ZStack {
-                Circle().fill(c.primary.opacity(0.12)).frame(width: 28, height: 28)
-                Text("\(n)").font(.system(size: 13, weight: .semibold)).foregroundColor(c.primary)
+    private func mintingCard(c: FSColors) -> some View {
+        FSCard(padding: FS.space.s8) {
+            VStack(spacing: FS.space.s4) {
+                ProgressView()
+                Text("Asking flagshipserver.com for a build code…")
+                    .font(FS.font.body())
+                    .foregroundColor(c.textMuted)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(c.text)
-                Text(body).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func codeCard(resp: MintBuildCodeResponse, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            FSCard(padding: FS.space.s6) {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text("BUILD CODE")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(1)
+                        .foregroundColor(c.textMuted)
+                    Text(resp.buildCode)
+                        .font(.system(size: 28, weight: .semibold, design: .monospaced))
+                        .foregroundColor(c.text)
+                        .tracking(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Paste this at flagshipserver.com/build to download your personalized ISO. Expires in 30 minutes.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+            }
+
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("OR DOWNLOAD DIRECTLY").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundColor(c.textMuted)
+                    Text(resp.isoUrl)
+                        .font(FS.font.mono())
+                        .foregroundColor(c.text)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                    Link(destination: URL(string: resp.isoUrl)!) {
+                        HStack {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Download personalized ISO")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(c.primary)
+                    }
+                }
+            }
+
+            FSCard {
+                HStack(alignment: .top, spacing: FS.space.s2) {
+                    Image(systemName: "info.circle.fill").foregroundColor(c.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Flash, boot, watch it phone home.").font(FS.font.bodySm()).foregroundColor(c.text)
+                        Text("The next screen subscribes to live install-events as your new box boots, gets a TLS cert, and goes ready.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                    }
+                }
+            }
+
+            FSPrimaryButton("Watch it boot →", block: true, large: true) {
+                onStartProvisioning(resp.serial, vm.name, vm.description)
             }
         }
     }

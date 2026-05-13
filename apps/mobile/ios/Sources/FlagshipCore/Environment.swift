@@ -14,3 +14,16 @@ public extension EnvironmentValues {
         set { self[ScreensClientKey.self] = newValue }
     }
 }
+
+/// Pre-pairing endpoints on flagshipserver.com (the Cloudflare Worker).
+/// Used by onboarding + recovery flows before a session token exists.
+private struct FlagshipServerClientKey: EnvironmentKey {
+    static let defaultValue: any FlagshipServerClient = MockFlagshipServerClient()
+}
+
+public extension EnvironmentValues {
+    var flagshipServerClient: any FlagshipServerClient {
+        get { self[FlagshipServerClientKey.self] }
+        set { self[FlagshipServerClientKey.self] = newValue }
+    }
+}

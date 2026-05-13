@@ -5,6 +5,7 @@ import FlagshipAPI
 public struct SettingsTab: View {
     @Environment(\.screensClient) private var client
     @Environment(AppState.self) private var app
+    @Environment(DeveloperSettings.self) private var dev
 
     @State private var path: [SettingsRoute] = []
     @State private var vm: SettingsViewModel?
@@ -29,12 +30,14 @@ public struct SettingsTab: View {
                     username: app.currentUser ?? "",
                     tier: vm.tier,
                     controlDevices: vm.controlDevices,
+                    showDeveloper: dev.unlocked,
                     onAddControlDevice: { path.append(.addControlDevice) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
                     onSignOut: { app.signOut() },
                     onOpenProviders: { path.append(.providers) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenAbout: { path.append(.about) },
+                    onOpenDeveloper: { path.append(.developer) },
                     onRefresh: { await vm.load() }
                 )
             } else {
@@ -58,6 +61,10 @@ public struct SettingsTab: View {
             AboutStub()
         case .addControlDevice:
             AddControlDeviceScreen()
+        case .developer:
+            DeveloperScreen(dev: dev, onWipeIdentity: {
+                app.signOut()
+            })
         }
     }
 }
@@ -98,6 +105,10 @@ struct RecoveryStub: View {
 
 struct AboutStub: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(DeveloperSettings.self) private var dev
+    @Environment(ToastCenter.self) private var toasts
+    @State private var tapCount: Int = 0
+
     var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
@@ -107,9 +118,22 @@ struct AboutStub: View {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         labeled("Version", "0.1.0 (dev)", c: c)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                tapCount += 1
+                                if tapCount >= 3 && !dev.unlocked {
+                                    dev.unlocked = true
+                                    toasts.success("Developer menu unlocked.")
+                                }
+                            }
                         labeled("License", "BUSL-1.1 → Apache 2.0 (2030)", c: c)
                         labeled("Source", "github.com/ibisllc/flagship", c: c, mono: true)
                     }
+                }
+                if dev.unlocked {
+                    Text("Developer menu is in Settings.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
                 }
             }
             .padding(FS.space.s6)

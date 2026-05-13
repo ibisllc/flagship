@@ -30,9 +30,9 @@ public struct OnboardingFlow: View {
                         path.append(.createServer(username: username))
                     })
                 case .createServer(let username):
-                    CreateServerStubScreen(username: username, onDemoComplete: { name, description in
+                    OnboardingCreateServer(username: username) { name, description in
                         completeMockPair(username: username, name: name, description: description)
-                    })
+                    }
                 case .podPair:
                     PodPairScreen(
                         onSubmit: { _, name, description in
@@ -45,7 +45,33 @@ public struct OnboardingFlow: View {
         }
     }
 
-    private func completeMockPair(username: String, name: String, description: String) {
+}
+
+private struct OnboardingCreateServer: View {
+    let username: String
+    let onComplete: (String, String) -> Void
+    @Environment(\.flagshipServerClient) private var serverClient
+    @State private var vm: CreateServerViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                CreateServerStubScreen(
+                    vm: vm,
+                    onStartProvisioning: { _, n, d in onComplete(n, d) },
+                    onDemoComplete: onComplete
+                )
+            } else { ProgressView() }
+        }
+        .task {
+            if vm == nil { vm = CreateServerViewModel(username: username, client: serverClient) }
+        }
+    }
+}
+
+extension OnboardingFlow {
+    fileprivate func completeMockPair(username: String, name: String, description: String) {
         let label = name.isEmpty ? "Home" : name
         let slug = SlugUtil.slugify(label)
         let pods = [
