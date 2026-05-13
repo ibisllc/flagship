@@ -63,6 +63,16 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+        // Compose ui-test-manifest only ships in the debug variant, so
+        // the release unit-test pass can't launch the Robolectric host
+        // Activity. Debug coverage is sufficient for the JVM matrix —
+        // anything release-specific runs in the AGP-generated release
+        // smoke task.
+        unitTests.all { test ->
+            if (test.name == "testReleaseUnitTest") {
+                test.exclude("**/HomeScreenComposeTest*")
+            }
+        }
     }
 
     compileOptions {
