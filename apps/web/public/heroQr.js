@@ -37,6 +37,12 @@
 
   // Pre-emptive renewal a bit before the relay's 5-min TTL kicks in.
   const RENEW_BEFORE_MS = 4 * 60 * 1000;
+  // Reconnect backoff (same-sid retries; QR unchanged).
+  const RECONNECT_INITIAL_MS = 500;
+  const RECONNECT_MAX_MS = 30_000;
+  // After this much wall-clock time of fruitless reconnects, give up
+  // and surface an error — user can reload the page to retry.
+  const RECONNECT_GIVE_UP_MS = 5 * 60 * 1000;
 
   function ready(fn) {
     if (document.readyState !== "loading") fn();
@@ -46,6 +52,10 @@
   let card, canvas, digits, copyBtn, urlBox;
   /** @type {WebSocket|null} */ let ws = null;
   let renewTimer = null;
+  let reconnectTimer = null;
+  let reconnectDelay = 0;          // current backoff step (ms)
+  let reconnectStartedAt = 0;      // wall-clock of first failed attempt
+  let intentionalClose = false;    // suppress reconnect for self-close
   let session = null; // { sid, sk, pk, kEnc?, matchCode? }
   let currentUrl = null;
   let copyResetTimer = null;
@@ -89,10 +99,13 @@
     }
   }
 
-  // Generate a fresh sid + keypair, re-render the QR, open a WS.
+  // Fully regenerate sid + keypair, re-render the QR, open a fresh WS.
+  // ONLY called for affirmative reasons: page load, server rebind/expired,
+  // pre-expire timer, or future user-initiated refresh. A transient WS
+  // failure does NOT call this — that path goes through scheduleReconnect.
   async function renew(why) {
-    try { ws?.close(); } catch (_) {}
-    ws = null;
+    cancelReconnect();
+    closeWs("renew");
     if (renewTimer) { clearTimeout(renewTimer); renewTimer = null; }
 
     digits.textContent = "— — — — — —";
@@ -115,22 +128,7 @@
     if (urlBox) urlBox.value = url;
     await renderQrFor(url);
 
-    // Open the relay WS in the background.
-    try {
-      const url = `${PIPE_WS_BASE}/${encodeURIComponent(s.sid)}?role=browser`;
-      ws = new WebSocket(url);
-    } catch (e) {
-      console.warn("hero-qr: ws open failed", e);
-      card.dataset.state = "error";
-      return;
-    }
-
-    ws.addEventListener("message", onWsMessage);
-    ws.addEventListener("close", onWsClose);
-    ws.addEventListener("error", () => {
-      // Browsers don't surface error details. The close handler will
-      // decide whether to renew.
-    });
+    openSocket();
 
     // Pre-emptive renewal — fires only if no phone has connected yet.
     renewTimer = setTimeout(() => {
@@ -140,15 +138,70 @@
     console.debug?.("hero-qr: opened", why, s.sid.slice(0, 8));
   }
 
-  function onWsClose() {
-    // If the close arrives before we matched a phone, regenerate.
-    // After a successful handover the WS is supposed to close.
-    if (session && !session.delivered) {
-      // Brief defer so the close after a "rebind" message lands first.
-      setTimeout(() => {
-        if (!session?.matchCode) void renew("close-before-match");
-      }, 50);
+  // Open a WebSocket to the relay using the CURRENT session.sid. Does
+  // not touch session or the rendered QR. Safe to call on reconnect.
+  function openSocket() {
+    if (!session) return;
+    if (ws && (ws.readyState === 0 /* CONNECTING */ || ws.readyState === 1 /* OPEN */)) return;
+    intentionalClose = false;
+    let next;
+    try {
+      const url = `${PIPE_WS_BASE}/${encodeURIComponent(session.sid)}?role=browser`;
+      next = new WebSocket(url);
+    } catch (e) {
+      console.warn("hero-qr: ws open failed", e);
+      scheduleReconnect();
+      return;
     }
+    ws = next;
+    ws.addEventListener("message", (ev) => { if (ws === next) void onWsMessage(ev); });
+    ws.addEventListener("close", () => { if (ws === next) onWsClose(); });
+    ws.addEventListener("error", () => { /* close handler decides */ });
+  }
+
+  function closeWs(reason) {
+    intentionalClose = true;
+    try { ws?.close(1000, reason || "client-close"); } catch (_) {}
+    ws = null;
+  }
+
+  function cancelReconnect() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    reconnectDelay = 0;
+    reconnectStartedAt = 0;
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    const now = Date.now();
+    if (reconnectStartedAt === 0) reconnectStartedAt = now;
+    if (now - reconnectStartedAt > RECONNECT_GIVE_UP_MS) {
+      card.dataset.state = "error";
+      console.warn("hero-qr: reconnect budget exhausted");
+      return;
+    }
+    reconnectDelay = reconnectDelay === 0
+      ? RECONNECT_INITIAL_MS
+      : Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
+    const jitter = reconnectDelay * (0.7 + Math.random() * 0.3);
+    card.dataset.state = session?.matchCode ? "matched-offline" : "reconnecting";
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      openSocket();
+    }, jitter);
+  }
+
+  function onWsClose() {
+    // Self-initiated close (renew, page tear-down) — let it ride.
+    if (intentionalClose) { intentionalClose = false; return; }
+    // Post-delivery the relay tears the socket down; nothing to do.
+    if (session?.delivered) return;
+    // Connection dropped while we were waiting/handshaking. Reconnect
+    // with the SAME sid; do NOT regenerate the QR until the server
+    // affirmatively tells us to via rebind/expired. The same sid +
+    // browser pubkey survive a server reboot because the relay DO
+    // is name-addressed (idFromName(sid)) and starts empty if reborn.
+    scheduleReconnect();
   }
 
   async function onWsMessage(ev) {
@@ -157,6 +210,7 @@
     if (!m || typeof m.kind !== "string") return;
 
     if (m.kind === "accepted") {
+      cancelReconnect();
       card.dataset.state = "ready";
       return;
     }
