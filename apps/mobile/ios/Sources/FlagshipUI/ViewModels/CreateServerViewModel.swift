@@ -5,22 +5,32 @@ import Flagship
 import FlagshipAPI
 import FlagshipCore
 
-/// Orchestrates the v2 create-server flow:
+/// Orchestrates the v2 create-server flow.
 ///
-///   1. parseQr      User pastes / scans the QR URL from flagshipserver.com.
-///   2. connecting   Open the relay WS as role=phone, send hello.
-///   3. matching     Show 6-digit SAS code. User compares with browser
-///                   screen; 600 ms gate before Confirm is tappable.
-///   4. minting      Hit /api/username/claim + /api/auth-code/issue +
-///                   /api/routing/register-rck on flagshipserver.com,
-///                   sign canonical InstallBlob with IRK.
-///   5. delivering   AEAD-seal the bundle, push through the relay.
-///   6. delivered    Browser AEAD-opened it; ISO write happens there.
+/// User-facing sequence:
+///
+///   1. design       Name + description.
+///   2. scanQr       Camera viewfinder pointing at the QR shown on
+///                   flagshipserver.com. A small "Copy the QR link
+///                   instead?" link below swaps to pasteQr.
+///   3. pasteQr      Input box + Submit. Back button returns to scanQr.
+///   4. connecting   Opens the relay WS as role=phone, sends hello.
+///   5. matching     Shows the 6-digit SAS match code. 600ms gate
+///                   before the Confirm button is tappable.
+///   6. minting      Three IRK-signed POSTs to flagshipserver.com.
+///   7. delivering   AEAD-seal the InstallBlob, push through the relay.
+///   8. delivered    Boot-disk-download placeholder. From here on, the
+///                   pod sits in AppState with status=.pending until
+///                   the freshly-booted box phones home.
+///
+/// Cancel collapses any open relay socket + resets to .design.
 @Observable
 @MainActor
 public final class CreateServerViewModel {
     public enum Phase: Sendable {
-        case parseQr
+        case design
+        case scanQr
+        case pasteQr
         case connecting
         case matching(matchCode: String, gateExpired: Bool)
         case minting
@@ -29,7 +39,7 @@ public final class CreateServerViewModel {
         case failed(String)
     }
 
-    public var phase: Phase = .parseQr
+    public var phase: Phase = .design
     public var name: String = ""
     public var description: String = ""
     public var qrUrl: String = ""
@@ -48,16 +58,33 @@ public final class CreateServerViewModel {
         self.relay = relay
     }
 
-    public var canSubmit: Bool {
+    public var canAdvanceFromDesign: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
-            && !qrUrl.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// Step 1 → 3. Parses the QR, opens the relay, derives the match
-    /// code. Returns when the relay has acked + the match code is
-    /// visible to the user.
-    public func connectAndMatch() async {
-        guard canSubmit else { return }
+    public var canSubmitPaste: Bool {
+        !qrUrl.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    public func continueToScan() {
+        guard canAdvanceFromDesign else { return }
+        phase = .scanQr
+    }
+
+    public func switchToPaste() { phase = .pasteQr }
+    public func switchToScan()  { phase = .scanQr }
+
+    public func qrDetected(_ raw: String) async {
+        qrUrl = raw
+        await connectAndMatch()
+    }
+
+    public func submitPaste() async {
+        guard canSubmitPaste else { return }
+        await connectAndMatch()
+    }
+
+    private func connectAndMatch() async {
         phase = .connecting
         do {
             let session = try QrRelay.parseQrUrl(qrUrl)
@@ -69,9 +96,7 @@ public final class CreateServerViewModel {
             let phonePkB64u = Base64URL.encode(phoneSk.publicKey.rawRepresentation)
             try await relay.openAndHello(sid: session.sid, phonePkBase64Url: phonePkB64u)
             phase = .matching(matchCode: derived.matchCode, gateExpired: false)
-            // Stash for the deliver step.
             pendingBundle = .init(session: session, aeadKey: derived.aeadKey)
-            // 600 ms confirm gate.
             Task {
                 try? await Task.sleep(nanoseconds: 600_000_000)
                 if case .matching(let m, _) = phase {
@@ -84,15 +109,12 @@ public final class CreateServerViewModel {
         }
     }
 
-    /// Step 4 → 6. After the user has confirmed the SAS match.
     public func confirmAndDeliver() async {
         guard case .matching(_, true) = phase, let bundle = pendingBundle else { return }
         phase = .minting
         do {
             let blob = try await mintInstallBlob()
             phase = .delivering
-            // Wire-format payload: { blob, blobSignature } base64-encoded
-            // ciphertext over `JSON.stringify({blob: <onWireBlob>, blobSignature: <hex>})`.
             let onWire = blob.onWire()
             let payload = try JSONEncoder().encode(onWire)
             let sealed = try QrRelay.seal(payload: payload, with: bundle.aeadKey)
@@ -113,10 +135,13 @@ public final class CreateServerViewModel {
 
     public func cancel() async {
         await relay.close()
-        phase = .parseQr
+        phase = .design
     }
 
-    // MARK: - Internals
+    public func resetToDesign() {
+        Task { await relay.close() }
+        phase = .design
+    }
 
     private struct PendingBundle {
         let session: QrRelay.QrSession
@@ -124,8 +149,6 @@ public final class CreateServerViewModel {
     }
     private var pendingBundle: PendingBundle?
 
-    /// Three sequential `.com` POSTs + an IRK-signed canonical
-    /// InstallBlob. Matches `mintInstallBlobBundle` in create-server.js.
     private func mintInstallBlob() async throws -> SignedInstallBlob {
         let irk = try await Keystore.deriveIRK(reason: "Mint installer for \(name)")
         let irkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
@@ -133,7 +156,6 @@ public final class CreateServerViewModel {
         let serverDomain = "\(serverNameSlug).\(username).flagship.services"
         let now = Int64(Date().timeIntervalSince1970 * 1000)
 
-        // 1. claim username (idempotent).
         let claimBytes = UsernameClaim.canonicalBytes(
             username: username, irkPubHex: irkPubHex, issuedAt: now
         )
@@ -143,10 +165,9 @@ public final class CreateServerViewModel {
             signature: HexUtil.encode(claimSig)
         ))
 
-        // 2. issue auth-code.
         let delegated = Curve25519.Signing.PrivateKey()
         let acIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        let acExpiresAt = acIssuedAt + 60 * 60_000   // 1 hour
+        let acExpiresAt = acIssuedAt + 60 * 60_000
         let authCode = AuthCode(
             serial: SerialGen.random(),
             username: username,
@@ -173,7 +194,6 @@ public final class CreateServerViewModel {
             signature: HexUtil.encode(acSig)
         ))
 
-        // 3. register RCK.
         let rck = Curve25519.Signing.PrivateKey()
         let rckIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let rckBytes = RckRegister.canonicalBytes(
@@ -193,7 +213,6 @@ public final class CreateServerViewModel {
             signature: HexUtil.encode(rckSig)
         ))
 
-        // 4. Build + sign InstallBlob.
         let blob = InstallBlob(
             serverDomain: serverDomain,
             username: username,
@@ -210,9 +229,6 @@ public final class CreateServerViewModel {
     }
 }
 
-/// Bound pair shipped through the relay. `OnWireBlob` is the hex-coded
-/// JSON shape the browser side expects (matches `onWireBlob` in
-/// create-server.js).
 public struct SignedInstallBlob: Sendable {
     public let blob: InstallBlob
     public let signatureHex: String

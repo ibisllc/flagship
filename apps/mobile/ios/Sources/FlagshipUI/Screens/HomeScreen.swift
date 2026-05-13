@@ -310,6 +310,7 @@ public struct PodCard: View {
         case .online:  return "Online"
         case .offline: return "Offline"
         case .unknown: return "Checking"
+        case .pending: return "Pending"
         }
     }
     private var statusKind: FSPillKind {
@@ -317,6 +318,7 @@ public struct PodCard: View {
         case .online:  return .online
         case .offline: return .offline
         case .unknown: return .idle
+        case .pending: return .provisioning
         }
     }
 }

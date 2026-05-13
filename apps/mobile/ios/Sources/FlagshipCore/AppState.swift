@@ -87,7 +87,13 @@ public final class AppState {
 /// work", "Music projects") shown wherever the FQDN used to live.
 /// The FQDN itself is technical and lives only in detail views.
 public struct PodInfo: Identifiable, Hashable, Sendable {
-    public enum Status: String, Sendable, Hashable { case online, offline, unknown }
+    public enum Status: String, Sendable, Hashable {
+        case online, offline, unknown
+        /// Order has been delivered through the QR relay but the box
+        /// hasn't booted + phoned home yet. Renders with a Pending pill
+        /// and a placeholder detail page (instructions + cancel).
+        case pending
+    }
 
     public let podId: String
     public let name: String

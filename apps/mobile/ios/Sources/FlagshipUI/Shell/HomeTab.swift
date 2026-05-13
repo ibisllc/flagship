@@ -57,26 +57,43 @@ public struct HomeTab: View {
     private func destination(for route: HomeRoute) -> some View {
         switch route {
         case .serverDetail(let podId):
-            ServerDetailContainer(podId: podId)
+            // Pending pods get the placeholder detail page; online pods
+            // get the full ServerDetail with monitoring + access.
+            if let pod = app.pods.first(where: { $0.podId == podId }), pod.status == .pending {
+                PendingServerScreen(pod: pod) {
+                    app.removePod(pod.podId)
+                    path.removeAll()
+                }
+            } else {
+                ServerDetailContainer(podId: podId)
+            }
         case .addServer:
             // In-app add-server only ever means "provision a new box."
             // Pairing an existing server is an onboarding-only path.
             CreateServerContainer(
-                onStartProvisioning: { serial, name, description in
-                    path.append(.installProgress(serial: serial, name: name, description: description))
+                onDelivered: { serverDomain, name, description in
+                    // QR-relay delivered. Add the pod to AppState with
+                    // .pending status — Home now shows it as Pending,
+                    // tapping it opens PendingServerScreen.
+                    addPendingPod(name: name, description: description, fqdn: serverDomain)
                 },
                 onDemoComplete: { name, description in
-                    addPodAndDismiss(name: name, description: description)
+                    addOnlinePodAndDismiss(name: name, description: description)
+                },
+                onCancel: {
+                    // User backed out before delivering — drop any
+                    // pending state and head home.
+                    path.removeAll()
                 }
             )
         case .installProgress(let serial, let name, let description):
             InstallProgressContainer(serial: serial) { fqdn in
-                addPodAndDismiss(name: name, description: description, fqdn: fqdn)
+                addOnlinePodAndDismiss(name: name, description: description, fqdn: fqdn)
             }
         }
     }
 
-    private func addPodAndDismiss(name: String, description: String, fqdn: String? = nil) {
+    private func addOnlinePodAndDismiss(name: String, description: String, fqdn: String? = nil) {
         let user = app.currentUser ?? "you"
         let slug = SlugUtil.slugify(name)
         let pod = PodInfo(
@@ -89,15 +106,38 @@ public struct HomeTab: View {
         app.addPod(pod)
         path.removeAll()
     }
+
+    private func addPendingPod(name: String, description: String, fqdn: String) {
+        let pod = PodInfo(
+            podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
+            name: name,
+            description: description.isEmpty ? nil : description,
+            fqdn: fqdn,
+            status: .pending
+        )
+        app.addPod(pod)
+        path.removeAll()
+    }
 }
 
 struct CreateServerContainer: View {
-    let onStartProvisioning: (String, String, String) -> Void
-    let onDemoComplete: (String, String) -> Void
+    let onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void
+    let onDemoComplete: (_ name: String, _ description: String) -> Void
+    let onCancel: () -> Void
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.qrRelayClient) private var qrRelay
     @Environment(AppState.self) private var app
     @State private var vm: CreateServerViewModel?
+
+    init(
+        onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void,
+        onDemoComplete: @escaping (_ name: String, _ description: String) -> Void,
+        onCancel: @escaping () -> Void = {}
+    ) {
+        self.onDelivered = onDelivered
+        self.onDemoComplete = onDemoComplete
+        self.onCancel = onCancel
+    }
 
     var body: some View {
         ZStack {
@@ -105,15 +145,9 @@ struct CreateServerContainer: View {
             if let vm {
                 CreateServerStubScreen(
                     vm: vm,
-                    onDelivered: { serverDomain, name, description in
-                        // The new flow delivered the InstallBlob to
-                        // the desktop browser. The phone doesn't watch
-                        // the ISO write — it just shows success and
-                        // returns to home, where the new pod will
-                        // appear once the server phones home.
-                        onDemoComplete(name, description)
-                    },
-                    onDemoComplete: onDemoComplete
+                    onDelivered: onDelivered,
+                    onDemoComplete: onDemoComplete,
+                    onCancel: onCancel
                 )
             } else {
                 ProgressView()

@@ -61,7 +61,8 @@ private struct OnboardingCreateServer: View {
                 CreateServerStubScreen(
                     vm: vm,
                     onDelivered: { _, n, d in onComplete(n, d) },
-                    onDemoComplete: onComplete
+                    onDemoComplete: onComplete,
+                    onCancel: {}
                 )
             } else { ProgressView() }
         }
