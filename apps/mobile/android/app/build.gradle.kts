@@ -131,6 +131,13 @@ dependencies {
     // Block Store (for cloud-recovery wrapped UMK)
     implementation("com.google.android.gms:play-services-auth-blockstore:16.4.0")
 
+    // CredentialManager (passkey-PRF cloud recovery)
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+
+    // kotlinx.coroutines-play-services for Task.await()
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
     // Tests
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
