@@ -1,4 +1,5 @@
 import SwiftUI
+import CryptoKit
 import FlagshipCore
 import FlagshipAPI
 
@@ -56,7 +57,7 @@ public struct SettingsTab: View {
         case .providers:
             ProvidersStub()
         case .recovery:
-            RecoveryStub()
+            RecoveryContainer()
         case .about:
             AboutStub()
         case .addControlDevice:
@@ -78,28 +79,38 @@ struct ProvidersStub: View {
     }
 }
 
-struct RecoveryStub: View {
-    @Environment(\.colorScheme) private var scheme
+struct RecoveryContainer: View {
+    @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(ToastCenter.self) private var toasts
+    @State private var vm: RecoveryViewModel?
+
     var body: some View {
-        let c = FSColors.scheme(scheme)
-        ScrollView {
-            VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("If you lose this phone").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Your User Master Key (UMK) is what owns your account. Without it, no one can take over your servers, including Flagship. That's also why recovery matters.")
-                    .font(FS.font.body()).foregroundColor(c.textMuted)
-                FSCard {
-                    VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("WebAuthn-PRF cloud recovery").font(FS.font.h4())
-                        Text("Set up a security key or passkey to wrap a recovery copy of your UMK. You'll need to do this from the webapp for now.")
-                            .font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                        FSGhostButton("Open webapp instructions") {}
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                RecoveryScreen(
+                    vm: vm,
+                    onRunSetup: {
+                        // Fresh UMK seed for the demo. Real call site
+                        // passes the live UMK derived from Keystore.
+                        let seed = SymmetricKey(size: .bits256)
+                        await vm.setup(umkSeed: seed)
+                        if case .registered = vm.phase {
+                            toasts.success("Recovery is active.")
+                        }
+                    },
+                    onRunRecover: {
+                        let recovered = await vm.recover()
+                        if recovered != nil {
+                            toasts.success("UMK recovered.")
+                        }
                     }
-                }
-            }
-            .padding(FS.space.s6)
+                )
+            } else { ProgressView() }
         }
-        .navigationTitle("Recovery")
-        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            if vm == nil { vm = RecoveryViewModel(client: serverClient) }
+        }
     }
 }
 
