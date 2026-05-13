@@ -99,7 +99,7 @@ export function startJournalPruner(opts: {
   ttlMs?: number;
   now?: () => number;
   onPrune?: (removed: number) => void;
-}): { stop: () => void } {
+}): { stop: () => void; firstPrune: Promise<number> } {
   const intervalMs = opts.intervalMs ?? 60 * 60_000;       // 1h
   const ttlMs = opts.ttlMs ?? 7 * 24 * 60 * 60_000;        // 7d
   const now = opts.now ?? (() => Date.now());
@@ -107,12 +107,17 @@ export function startJournalPruner(opts: {
     try {
       const removed = await opts.store.deleteOlderThan(now() - ttlMs);
       opts.onPrune?.(removed);
+      return removed;
     } catch {
       // Best-effort; a transient FS error shouldn't kill the loop.
+      return 0;
     }
   };
   // Fire once on start so a daemon that's been off for >7d catches up.
-  void tick();
+  // Returning the first-tick promise lets tests await prune completion
+  // without sleeping (the previous setTimeout-based wait was flaky
+  // under full-suite contention).
+  const firstPrune = tick();
   const timer = setInterval(() => { void tick(); }, intervalMs);
-  return { stop: () => clearInterval(timer) };
+  return { stop: () => clearInterval(timer), firstPrune };
 }

@@ -111,8 +111,9 @@ describe("startJournalPruner", () => {
       now: () => now,
       onPrune: (n) => { reported = n; },
     });
-    // Pruner fires the first tick asynchronously; give it a beat.
-    await new Promise((r) => setTimeout(r, 25));
+    // Await the deterministic first-prune handle instead of sleeping —
+    // the old 25ms timeout flaked under full-suite contention.
+    await handle.firstPrune;
     handle.stop();
     // cutoff = now - ttl = 999_900; rows at 100 + 200 are both < cutoff
     expect(reported).toBe(2);
