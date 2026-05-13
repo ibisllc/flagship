@@ -31,7 +31,11 @@ import {
   defaultRePairWatcherPath,
   RePairWatcher,
 } from "./postRecovery/rePairWatcher.js";
-import { InMemoryJournalStore } from "./postRecovery/stableIdReissuer.js";
+import {
+  defaultJournalPath,
+  FileJournalStore,
+  startJournalPruner,
+} from "./postRecovery/fileJournalStore.js";
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
@@ -413,6 +417,10 @@ async function main(): Promise<void> {
         }
       },
     });
+    // Forward ref the screens handler reads on each /post-recovery/status
+    // request. The watcher constructed later assigns itself here so the
+    // status endpoint returns the live snapshot.
+    const rePairWatcherRef: { current: import("./postRecovery/rePairWatcher.js").RePairWatcher | null } = { current: null };
     const screensHandle = buildScreensHttp({
       gate: pairedSessions,
       serverFqdn: env.serverFqdn!,
@@ -433,6 +441,7 @@ async function main(): Promise<void> {
         : null,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
       lineageResolver,
+      postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
     });
     runtime.addHandler(screensHandle);
     runtime.addUpgradeHandler(
@@ -458,6 +467,15 @@ async function main(): Promise<void> {
       const reissuerJournalSwk = swkHex
         ? hexToBytes(swkHex.trim())
         : new Uint8Array(32);   // no SWK yet → journal can't be decrypted
+      const journalStore = new FileJournalStore(defaultJournalPath(dataDir));
+      const journalPruner = startJournalPruner({
+        store: journalStore,
+        onPrune: (n) => {
+          if (n > 0) console.log(`[daemon] pruned ${n} post-recovery journal rows`);
+        },
+      });
+      process.once("SIGTERM", () => journalPruner.stop());
+      process.once("SIGINT", () => journalPruner.stop());
       const watcher = new RePairWatcher({
         username: cfg.userId,
         currentIrkPubHex: irkHexFromCfg,
@@ -470,7 +488,7 @@ async function main(): Promise<void> {
           ? {
               appPlatform: runtime.appPlatform,
               swk: reissuerJournalSwk,
-              journal: new InMemoryJournalStore(),
+              journal: journalStore,
             }
           : null,
         alertInbox,
@@ -494,6 +512,7 @@ async function main(): Promise<void> {
       });
       await watcher.load();
       watcher.start();
+      rePairWatcherRef.current = watcher;
       process.once("SIGTERM", () => watcher.stop());
       process.once("SIGINT", () => watcher.stop());
       console.log(`[daemon] re-pair watcher started (poll every 5 min)`);
