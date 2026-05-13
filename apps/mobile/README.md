@@ -87,22 +87,52 @@ specific iOS surfaces; both mobile mirrors have them already:
 |---|---|---|
 | P1.21 | GET /api/screens/server-metrics/:podId | ServerDetail monitoring panel (CPU/mem/disk/I/O) |
 | P1.22 | POST /api/screens/url-controller/verify | AppDetail custom-domain verify flow |
+| P1.23 | GET /api/screens/post-recovery/status | Post-recovery report (J.3/J.4 reattach snapshot) |
 
 When the daemon implements them, no client change should be required
 — just `types.ts` in lockstep.
 
 ## Kotlin client status (2026-05-13)
 
-Mirror is current with the Swift side:
-- `ScreensModels.kt` covers P1.1–P1.20 plus the iOS-driven P1.21 and
-  P1.22.
-- `ScreensClient.kt` declares the full async + Flow-based interface
-  (Kotlin Flow ≡ Swift AsyncStream for the streaming endpoints).
-- `MockScreensClient.kt` provides in-memory fixtures + SSE/WS
-  simulations via `kotlinx.coroutines.flow.flow { … }`.
-- `com.flagship.core.AppState` mirrors the iOS @Observable AppState
-  with StateFlow surfaces, including currentPodId / leaderPodId
-  semantics and SlugUtil.
+Package is `com.flagshipserver.app` (matches the iOS bundle id
+`com.flagshipserver.app`). Build: `./gradlew :app:assembleDebug` /
+`:app:assembleRelease` (R8 + signing wired). Tests:
+`./gradlew :app:test`.
 
-Tests live under `app/src/test/java/com/flagship/` and run via
-`./gradlew :app:test` from Android Studio.
+Mirror is current with the Swift side and shipped end-to-end:
+
+- **Client surface** — `ScreensModels.kt` covers P1.1–P1.23.
+  `ScreensClient.kt` is the async + Flow-based interface (Kotlin
+  Flow ≡ Swift AsyncStream for streaming endpoints).
+  `LiveScreensClient.kt` is the OkHttp-backed live impl
+  (SSE for install-events, WebSocket for vibe-code).
+  `MockScreensClient.kt` provides realistic in-memory fixtures.
+- **Pre-pairing surface** — `FlagshipServerClient.kt` declares the
+  Worker endpoints; `LiveFlagshipServerClient` posts canonical-bytes
+  envelopes; `MockFlagshipServerClient` simulates the same shape.
+- **QR relay** — `QrSession.kt` does X25519 ECDH + HKDF →
+  (kEnc, matchCode) and AES-256-GCM seals the install-blob bundle.
+  `QrRelayClient.kt` (Mock + Live OkHttp WebSocket impl).
+- **AppState** — StateFlow surfaces, currentPodId / leaderPodId
+  semantics, SlugUtil. Mirrors iOS @Observable AppState.
+- **Push** — `push/PushRegistrar` signs canonical bytes with the
+  IRK and POSTs to /api/push/register; FCM service forwards taps
+  through the DeepLinker.
+- **Recovery** — `keystore/Recovery` (wrap/unwrap) +
+  `PasskeyRecoveryManager` (CredentialManager + PRF extension) +
+  `BlockStoreUmkStore` (Google Block Store envelope).
+- **Live charts** — Vico (`com.patrykandpatrick.vico`) renders CPU/
+  mem/disk/net time series on ServerDetail.
+- **Hardening** — BiometricPrompt-gated IRK derivation,
+  EncryptedSharedPreferences for session token + UMK seed,
+  CertificatePinner for flagshipserver.com, R8 + proguard rules.
+
+Test layout under `app/src/test/java/com/flagshipserver/app/`:
+- pure JVM: Mock clients, QrSession crypto, ToastCenter, AppState,
+  InstallBlob canonical-bytes, Recovery wrap/unwrap, HomeViewModel.
+- Robolectric (no emulator): QrRelay.parseQrUrl, Base64URL.decode,
+  DeepLink.parse(Uri), Compose UI tests for HomeScreen.
+- MockWebServer: LiveScreensClient, LiveFlagshipServerClient.
+
+Run `./gradlew :app:test` from Android Studio or the CLI; 86 tests
+green at the last refresh.
