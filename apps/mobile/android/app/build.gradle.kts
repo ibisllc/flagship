@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.flagship"
+    namespace = "com.flagshipserver.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.flagship"
+        applicationId = "com.flagshipserver.app"
         minSdk = 28
         targetSdk = 34
         versionCode = 1
