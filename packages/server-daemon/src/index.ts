@@ -27,6 +27,11 @@ import {
   defaultPairedSessionPath,
   FilePairedSessionStore,
 } from "./pairedSessionStore.js";
+import {
+  defaultRePairWatcherPath,
+  RePairWatcher,
+} from "./postRecovery/rePairWatcher.js";
+import { InMemoryJournalStore } from "./postRecovery/stableIdReissuer.js";
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
@@ -443,6 +448,56 @@ async function main(): Promise<void> {
     // Start the pull scheduler now that the cert is up + tunnel reachable.
     updateScheduler.start();
     console.log(`[daemon] update-pack scheduler started (6h jittered)`);
+
+    // ---- J.3 / J.4 — Re-pair watcher ----
+    // Production-only (requires the on-disk config so we have an
+    // authoritative starting IRK + a path to persist the rotated one).
+    // Dev daemons that ship without FLAGSHIP_CONFIG skip the watcher.
+    if (cfg) {
+      const irkHexFromCfg = bytesToHexStr(cfg.irkPublicKey);
+      const reissuerJournalSwk = swkHex
+        ? hexToBytes(swkHex.trim())
+        : new Uint8Array(32);   // no SWK yet → journal can't be decrypted
+      const watcher = new RePairWatcher({
+        username: cfg.userId,
+        currentIrkPubHex: irkHexFromCfg,
+        comBaseUrl: env.controlPlaneBaseUrl!,
+        fetchImpl: fetch,
+        statePath: defaultRePairWatcherPath(dataDir),
+        pollIntervalMs: 5 * 60_000,
+        clearPairedSessions: () => pairedSessions.removeAll(),
+        reissuerDeps: runtime.appPlatform
+          ? {
+              appPlatform: runtime.appPlatform,
+              swk: reissuerJournalSwk,
+              journal: new InMemoryJournalStore(),
+            }
+          : null,
+        alertInbox,
+        onIrkSwapped: async (event) => {
+          const configPath = process.env.FLAGSHIP_CONFIG;
+          if (configPath) {
+            try {
+              await persistRotatedIrk(configPath, event.newIrkPubHex);
+            } catch (e) {
+              console.warn(
+                `[daemon] failed to update ${configPath} with rotated IRK: ${(e as Error).message}`,
+              );
+            }
+          }
+          console.log(
+            `[daemon] J.3 re-pair complete: old=${event.oldIrkPubHex.slice(0, 12)} → new=${event.newIrkPubHex.slice(0, 12)} ` +
+              `(${event.pairedSessionsCleared} paired sessions cleared; ` +
+              `${event.reissue?.totalRewritten ?? 0} membership rows re-anchored)`,
+          );
+        },
+      });
+      await watcher.load();
+      watcher.start();
+      process.once("SIGTERM", () => watcher.stop());
+      process.once("SIGINT", () => watcher.stop());
+      console.log(`[daemon] re-pair watcher started (poll every 5 min)`);
+    }
   } catch (e) {
     console.error(`[daemon] runtime startup failed: ${(e as Error).stack ?? e}`);
     process.exit(1);
@@ -757,6 +812,25 @@ function hexToBytes(hex: string): Uint8Array {
     out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return out;
+}
+
+function bytesToHexStr(b: Uint8Array): string {
+  return bytesToHexLocal(b);
+}
+
+/**
+ * Atomically replace the `irkPublicKey` field of the on-disk config so
+ * a daemon restart picks up the rotated user IRK. The rest of the file
+ * is preserved as-is. Write-then-rename keeps the file readable if we
+ * crash mid-update.
+ */
+async function persistRotatedIrk(configPath: string, newIrkHex: string): Promise<void> {
+  const raw = await readFile(configPath, "utf8");
+  const obj = JSON.parse(raw) as Record<string, unknown>;
+  obj.irkPublicKey = newIrkHex;
+  const tmp = `${configPath}.tmp`;
+  await writeFile(tmp, JSON.stringify(obj, null, 2));
+  await rename(tmp, configPath);
 }
 
 const invokedDirectly = import.meta.url === `file://${process.argv[1]}`;
