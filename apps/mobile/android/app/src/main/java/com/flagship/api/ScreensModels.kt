@@ -315,3 +315,65 @@ data class VerifyCustomDomainResponse(
         @SerialName("failed")   FAILED,
     }
 }
+
+// ---------- P1.23 post-recovery status --------------------------------
+//
+// After the user recovers on a new device and a J.3 IRK swap completes,
+// the daemon rewrites membership rows from the old IRK to the new one.
+// This endpoint surfaces that walk so the post-recovery confirmation
+// screen can show a per-app readout + a single Undo CTA for the 7-day
+// window.
+
+@Serializable
+data class PostRecoveryStatusResponse(val report: PostRecoverySnapshot? = null)
+
+@Serializable
+data class PostRecoverySnapshot(
+    val currentIrkPubHex: String,
+    val state: WatcherState,
+    val lastReissue: ReissuanceReportPayload? = null,
+)
+
+@Serializable
+data class WatcherState(
+    val lastSeen: PendingRePair? = null,
+    val lastSwapTo: String? = null,
+    val lastSwapAt: Long? = null,
+    val lastPolledAt: Long,
+    val lastError: String? = null,
+)
+
+@Serializable
+data class PendingRePair(
+    val newIrkPub: String,
+    val oldIrkPub: String,
+    val initiatedAt: Long,
+    val completesAt: Long,
+    val objectedAt: Long? = null,
+)
+
+@Serializable
+data class ReissuanceReportPayload(
+    val startedAt: Long,
+    val completedAt: Long? = null,
+    /** "pending" | "running" | "complete" | "failed" — raw string for
+     *  forward-compat with daemon-side enum additions. */
+    val status: String,
+    val oldIrkPrefix: String,
+    val newIrkPrefix: String,
+    val apps: List<AppReissuanceSummary>,
+    val totalRewritten: Int,
+    val reattachedCount: Int,
+    val unchangedCount: Int,
+    val undoWindowExpiresAt: Long,
+)
+
+@Serializable
+data class AppReissuanceSummary(
+    val appId: String,
+    val slug: String,
+    val rewrittenCount: Int,
+    val unchangedCount: Int,
+    val error: String? = null,
+    val completedAt: Long,
+)

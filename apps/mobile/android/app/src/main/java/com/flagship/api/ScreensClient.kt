@@ -69,6 +69,9 @@ interface ScreensClient {
     // P1.22 custom-domain verify (extension)
     suspend fun verifyCustomDomain(req: VerifyCustomDomainRequest): VerifyCustomDomainResponse
 
+    // P1.23 post-recovery status — daemon's J.3/J.4 reattach snapshot
+    suspend fun postRecoveryStatus(): PostRecoveryStatusResponse
+
     // P1.15 install-events SSE — streams provisioning progress
     fun installEvents(serial: String): Flow<InstallEvent>
 
@@ -80,6 +83,6 @@ sealed class ScreensError(message: String) : Throwable(message) {
     object NotPaired : ScreensError("Not paired to a server yet.")
     object NoSessionToken : ScreensError("No session token; re-pair.")
     data class Http(val status: Int, val body: String) : ScreensError("HTTP $status: $body")
-    data class Decoding(val cause: String) : ScreensError("Could not parse response: $cause")
+    data class Decoding(val reason: String) : ScreensError("Could not parse response: $reason")
     data class NotImplemented(val feature: String) : ScreensError("Not implemented yet: $feature")
 }

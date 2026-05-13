@@ -263,6 +263,46 @@ class MockScreensClient(
         }
     }
 
+    override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse {
+        tick()
+        val day = 24L * 3600 * 1000
+        return PostRecoveryStatusResponse(
+            report = PostRecoverySnapshot(
+                currentIrkPubHex = "abcdef0123456789".repeat(4),
+                state = WatcherState(
+                    lastSeen = null,
+                    lastSwapTo = "feedbeef".repeat(8),
+                    lastSwapAt = now() - 2 * day,
+                    lastPolledAt = now() - 30_000,
+                    lastError = null,
+                ),
+                lastReissue = ReissuanceReportPayload(
+                    startedAt = now() - 2 * day,
+                    completedAt = now() - 2 * day + 4_500,
+                    status = "complete",
+                    oldIrkPrefix = "0123456789ab",
+                    newIrkPrefix = "feedbeef0123",
+                    apps = listOf(
+                        AppReissuanceSummary(
+                            appId = "plants", slug = "plants",
+                            rewrittenCount = 1, unchangedCount = 0,
+                            error = null, completedAt = now() - 2 * day + 1_500,
+                        ),
+                        AppReissuanceSummary(
+                            appId = "wiki", slug = "wiki",
+                            rewrittenCount = 3, unchangedCount = 1,
+                            error = null, completedAt = now() - 2 * day + 3_500,
+                        ),
+                    ),
+                    totalRewritten = 4,
+                    reattachedCount = 2,
+                    unchangedCount = 1,
+                    undoWindowExpiresAt = now() + 5 * day,
+                ),
+            ),
+        )
+    }
+
     override fun installEvents(serial: String): Flow<InstallEvent> = flow {
         val timeline = listOf<Pair<Long, InstallEvent>>(
             0L  to InstallEvent.Registered(serial, now()),
