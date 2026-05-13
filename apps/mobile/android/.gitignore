@@ -6,3 +6,4 @@
 *.iml
 /keystore/keystore.properties
 /keystore/*.jks
+/app/google-services.json
