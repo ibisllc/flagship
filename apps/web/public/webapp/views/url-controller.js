@@ -202,6 +202,9 @@ async function runClaim() {
     toast(`claimed ${fqdn}`);
     if (input) input.value = "";
     await renderOwned();
+    // Auto-kick a verify request so the user sees the TXT record they
+    // need to publish without having to find a "verify" button.
+    void runVerify(fqdn);
   } catch (e) {
     toast(e.message ?? String(e), "err");
   } finally {
@@ -209,6 +212,41 @@ async function runClaim() {
       btn.disabled = false;
       btn.textContent = "Claim";
     }
+  }
+}
+
+/**
+ * P1.22 — POST /api/screens/url-controller/verify. The daemon resolves
+ * `_flagship.<fqdn>` TXT and reports back PENDING / VERIFIED / FAILED.
+ * On PENDING the daemon also returns the exact `expectedTxtRecord` the
+ * user needs to publish.
+ */
+async function runVerify(fqdn) {
+  try {
+    const body = await screensFetch("/api/screens/url-controller/verify", {
+      method: "POST",
+      body: JSON.stringify({ fqdn }),
+    });
+    if (body.status === "verified") {
+      toast(`verified ${fqdn}`);
+      return;
+    }
+    if (body.status === "pending") {
+      toast(
+        `pending: publish TXT _flagship.${fqdn} = ${body.expectedTxtRecord}`,
+        "warn",
+        8_000,
+      );
+      return;
+    }
+    toast(`verify failed: ${body.reason ?? "unknown"}`, "err");
+  } catch (e) {
+    if (e.status === 404) {
+      // Daemon hasn't shipped /verify yet — silently skip rather than
+      // confuse the user. iOS surfaces the same case as a noop.
+      return;
+    }
+    toast(`verify error: ${e.message ?? e}`, "err");
   }
 }
 

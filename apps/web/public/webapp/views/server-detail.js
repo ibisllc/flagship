@@ -68,6 +68,14 @@ export async function renderServerDetail() {
         <div id="auto-unlock-leases-list" class="mt-1"></div>
         <button id="auto-unlock-enable" class="full-width mt-2">Enable for 7 days</button>
       </div>
+      <h2 class="mt-4">Live metrics</h2>
+      <div class="card" id="server-metrics-card">
+        <div class="row"><span class="label">CPU</span><span class="value" id="metrics-cpu">…</span></div>
+        <div class="row"><span class="label">Memory</span><span class="value" id="metrics-mem">…</span></div>
+        <div class="row"><span class="label">Disk</span><span class="value" id="metrics-disk">…</span></div>
+        <div class="row"><span class="label">Network</span><span class="value" id="metrics-net">…</span></div>
+        <p class="note small" id="metrics-collected-at">Loading…</p>
+      </div>
       <h2 class="mt-4">Recent install events</h2>
       ${(body.recentInstallEvents ?? []).length === 0
         ? '<div class="card placeholder">none</div>'
@@ -81,6 +89,7 @@ export async function renderServerDetail() {
         `).join("")}
     `;
     wireAutoUnlock(body.serverFqdn);
+    startMetricsPolling(body.serverFqdn);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -157,6 +166,53 @@ async function refreshLeases(serverFqdn) {
       }
     });
   });
+}
+
+// Format bytes → human (1.4 GB / 312 KB / ...). Mirrors the
+// `humanBytes` helper in iOS/Android ServerDetailScreen.
+function humanBytes(n) {
+  if (typeof n !== "number" || !isFinite(n) || n < 0) return "—";
+  const k = 1024;
+  if (n < k) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = n / k;
+  let i = 0;
+  while (v >= k && i < units.length - 1) { v /= k; i++; }
+  return `${v.toFixed(1)} ${units[i]}`;
+}
+
+let metricsTimer = null;
+function startMetricsPolling(serverFqdn) {
+  // Cancel any prior poller (back+forward navigation re-enters this).
+  if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; }
+  const tick = async () => {
+    // Stop polling when the user navigates away.
+    if ($("view-server-detail")?.classList.contains("hidden")) {
+      if (metricsTimer) { clearInterval(metricsTimer); metricsTimer = null; }
+      return;
+    }
+    try {
+      const m = await screensFetch(
+        `/api/screens/server-metrics/${encodeURIComponent(serverFqdn)}`,
+      );
+      const cpu = $("metrics-cpu");
+      const mem = $("metrics-mem");
+      const disk = $("metrics-disk");
+      const net = $("metrics-net");
+      const at = $("metrics-collected-at");
+      if (cpu) cpu.textContent = `${(m.cpuPercent ?? 0).toFixed(1)}%`;
+      if (mem) mem.textContent = `${humanBytes(m.memUsedBytes)} / ${humanBytes(m.memTotalBytes)}`;
+      if (disk) disk.textContent = `${humanBytes(m.diskUsedBytes)} / ${humanBytes(m.diskTotalBytes)}`;
+      if (net) net.textContent =
+        `↓ ${humanBytes(m.netRxBytesPerSec)}/s · ↑ ${humanBytes(m.netTxBytesPerSec)}/s`;
+      if (at) at.textContent = `Collected ${new Date(m.collectedAt).toLocaleTimeString()}`;
+    } catch (e) {
+      const at = $("metrics-collected-at");
+      if (at) at.textContent = `Couldn't reach daemon: ${e.message ?? e}`;
+    }
+  };
+  void tick();
+  metricsTimer = setInterval(tick, 15_000);
 }
 
 export function initServerDetailView() {
