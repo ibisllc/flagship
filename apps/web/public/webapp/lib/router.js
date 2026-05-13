@@ -39,6 +39,9 @@ export function show(id) {
   const noTabs = id === "view-bootstrap" || id === "view-unlock"
     || id === "view-wizard";
   document.body.classList.toggle("no-tabs", noTabs);
+  // Side-channel so views can lazy-refresh on activation without
+  // wiring per-route callbacks into the shell.
+  document.dispatchEvent(new CustomEvent("flagship:view-shown", { detail: { id } }));
 }
 
 export function currentViewId() {

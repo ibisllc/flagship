@@ -39,10 +39,11 @@ import { initInstallProgressView, enterInstallProgress } from "./views/install-p
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 import { initBrowserViewerView } from "./views/browser-viewer.js";
 import { initCreateServerView, enterCreateServer } from "./views/create-server.js";
+import { initActivityView, renderActivity } from "./views/activity.js";
+import { initPendingServerView, enterPendingServer } from "./views/pending-server.js";
 
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
-registerView("view-activity", { tab: "activity" });
 registerView("view-settings-tab", { tab: "settings" });
 
 // Sub-views inherit a parent tab so the tab bar lights up the right
@@ -215,6 +216,8 @@ async function boot() {
   initOrdersDebugView();
   initBrowserViewerView();
   initCreateServerView();
+  initActivityView();
+  initPendingServerView();
 
   // Home-tab → in-tab nav (the legacy home-grid is gone; what remains
   // are the two session-row buttons "pair-with-server" + "open-pod-pair").

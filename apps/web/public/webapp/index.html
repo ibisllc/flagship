@@ -106,9 +106,9 @@
           <button class="secondary full-width" id="activity-open-install-progress">Open install tracker</button>
         </div>
 
-        <h2 class="mt-5" id="activity-audit-log-heading">Audit log</h2>
-        <div id="activity-audit-log">
-          <div class="card placeholder">audit-log view ships in #34</div>
+        <h2 class="mt-5">Live feed</h2>
+        <div id="activity-feed">
+          <div class="card placeholder">loading…</div>
         </div>
       </section>
 
@@ -405,6 +405,24 @@
         <div id="cs-drafts"></div>
 
         <button class="secondary full-width mt-2" id="create-server-back">← Back</button>
+      </section>
+
+      <!-- View 20b: Pending server placeholder (in-flight order) -->
+      <section id="view-pending-server" class="hidden">
+        <h2 id="pending-server-name">Pending server</h2>
+        <div class="card">
+          <p class="note" id="pending-server-note">
+            We've delivered the signed install blob, but the new box hasn't
+            phoned home yet. Plug in the USB, power on, and this card will
+            flip to Online.
+          </p>
+          <div class="row"><span class="label">Subdomain</span><span class="value text-xs" id="pending-server-fqdn">—</span></div>
+          <div class="row"><span class="label">Auth-code serial</span><span class="value text-xs" id="pending-server-serial">—</span></div>
+        </div>
+        <div class="row-2">
+          <button class="danger" id="pending-server-cancel">Cancel order</button>
+          <button class="secondary" id="pending-server-back">← Back</button>
+        </div>
       </section>
 
       <!-- View 20: Post-recovery reattach progress (J.4) -->
