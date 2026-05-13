@@ -77,3 +77,32 @@ The webapp's `lib/api.js` doesn't have hardcoded model types
 (everything's `JSON.parse(...)` into untyped JS), so it floats with
 schema changes — but the mobile mirrors are typed and **must** be
 updated.
+
+## iOS-driven contract extensions
+
+A handful of endpoints were added ahead of daemon-side work to power
+specific iOS surfaces; both mobile mirrors have them already:
+
+| ID | Endpoint | Surface |
+|---|---|---|
+| P1.21 | GET /api/screens/server-metrics/:podId | ServerDetail monitoring panel (CPU/mem/disk/I/O) |
+| P1.22 | POST /api/screens/url-controller/verify | AppDetail custom-domain verify flow |
+
+When the daemon implements them, no client change should be required
+— just `types.ts` in lockstep.
+
+## Kotlin client status (2026-05-13)
+
+Mirror is current with the Swift side:
+- `ScreensModels.kt` covers P1.1–P1.20 plus the iOS-driven P1.21 and
+  P1.22.
+- `ScreensClient.kt` declares the full async + Flow-based interface
+  (Kotlin Flow ≡ Swift AsyncStream for the streaming endpoints).
+- `MockScreensClient.kt` provides in-memory fixtures + SSE/WS
+  simulations via `kotlinx.coroutines.flow.flow { … }`.
+- `com.flagship.core.AppState` mirrors the iOS @Observable AppState
+  with StateFlow surfaces, including currentPodId / leaderPodId
+  semantics and SlugUtil.
+
+Tests live under `app/src/test/java/com/flagship/` and run via
+`./gradlew :app:test` from Android Studio.
