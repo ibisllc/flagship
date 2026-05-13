@@ -43,6 +43,10 @@ public final class CreateServerViewModel {
     public var name: String = ""
     public var description: String = ""
     public var qrUrl: String = ""
+    /// Set after the .delivered transition. Container reads this so
+    /// the new pending pod records the auth-code serial that Cancel-
+    /// order will revoke.
+    public var lastDeliveredSerial: String?
 
     private let username: String
     private let server: any FlagshipServerClient
@@ -122,6 +126,7 @@ public final class CreateServerViewModel {
                 ciphertextBase64Url: sealed.ciphertextBase64Url,
                 nonceBase64Url: sealed.nonceBase64Url
             )
+            lastDeliveredSerial = blob.blob.authCode.serial
             phase = .delivered(
                 serial: blob.blob.authCode.serial,
                 serverDomain: blob.blob.serverDomain

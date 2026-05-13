@@ -19,9 +19,31 @@ public protocol FlagshipServerClient: Sendable {
     func claimUsername(_ req: UsernameClaimRequest) async throws
     func issueAuthCode(_ req: AuthCodeIssueRequest) async throws
     func registerRck(_ req: RckRegisterRequest) async throws
+    /// Cancel an outstanding auth-code so a server that hasn't phoned
+    /// home yet can't register with this serial. 404 is treated as
+    /// success by both Mock + Live impls.
+    func cancelAuthCode(_ req: AuthCodeCancelRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
+}
+
+/// POST /api/auth-code/cancel — IRK-signed cancellation. The phone
+/// fires this when the user taps Cancel order on a pending pod.
+public struct AuthCodeCancelRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let serial: String
+        public let username: String
+        public let issuedAt: Int64
+        public init(serial: String, username: String, issuedAt: Int64) {
+            self.serial = serial; self.username = username; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String         // hex, IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
 }
 
 // MARK: - Wire types
@@ -145,6 +167,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// 409 on a second different-IRK claim (idempotent under same IRK).
     public private(set) var claimedUsernames: [String: String] = [:]   // username → irkPub
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
+    public private(set) var cancelledAuthCodes: Set<String> = []       // serial set
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
 
     public init() {}
@@ -175,6 +198,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func registerRck(_ req: RckRegisterRequest) async throws {
         try await tick()
         registeredRcks[req.request.subdomain] = req.request.rckPubKey
+    }
+
+    public func cancelAuthCode(_ req: AuthCodeCancelRequest) async throws {
+        try await tick()
+        cancelledAuthCodes.insert(req.request.serial)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
@@ -265,6 +293,13 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func registerRck(_ req: RckRegisterRequest) async throws {
         let body = try JSONEncoder().encode(req)
         try await postJson("/api/routing/register-rck", body: body)
+    }
+
+    public func cancelAuthCode(_ req: AuthCodeCancelRequest) async throws {
+        let body = try JSONEncoder().encode(req)
+        // 404 = already cancelled / never issued; treat as success so
+        // retries are safe.
+        try await postJson("/api/auth-code/cancel", body: body, acceptStatuses: [200, 201, 204, 404])
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {

@@ -100,6 +100,10 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     public let description: String?
     public let fqdn: String
     public let status: Status
+    /// For pods in `.pending` status, the auth-code serial issued at
+    /// CreateServer time. Lets Cancel-order revoke the auth-code on
+    /// flagshipserver.com instead of just removing the pod locally.
+    public let pendingAuthCodeSerial: String?
     public var id: String { podId }
 
     public init(
@@ -107,12 +111,14 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         name: String,
         description: String? = nil,
         fqdn: String,
-        status: Status = .unknown
+        status: Status = .unknown,
+        pendingAuthCodeSerial: String? = nil
     ) {
         self.podId = podId
         self.name = name
         self.description = description
         self.fqdn = fqdn
         self.status = status
+        self.pendingAuthCodeSerial = pendingAuthCodeSerial
     }
 }

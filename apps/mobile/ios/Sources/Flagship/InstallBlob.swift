@@ -142,6 +142,15 @@ public enum RckRegister {
     }
 }
 
+/// Cancel-order — revokes a previously issued auth-code so a freshly-
+/// booted box that presents that serial gets rejected by `.com`.
+public enum AuthCodeCancel {
+    public static let canonicalTag = "flagship/auth-code-cancel/v1"
+    public static func canonicalBytes(serial: String, username: String, issuedAt: Int64) -> Data {
+        Data([canonicalTag, serial, username, String(issuedAt)].joined(separator: "|").utf8)
+    }
+}
+
 /// Helper — every byte → 2 lowercase hex chars. Matches the JS side's
 /// `bytesToHex`.
 public enum HexUtil {

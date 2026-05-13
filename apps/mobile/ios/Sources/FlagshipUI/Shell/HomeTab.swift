@@ -1,4 +1,5 @@
 import SwiftUI
+import Flagship
 import FlagshipCore
 import FlagshipAPI
 
@@ -60,8 +61,7 @@ public struct HomeTab: View {
             // Pending pods get the placeholder detail page; online pods
             // get the full ServerDetail with monitoring + access.
             if let pod = app.pods.first(where: { $0.podId == podId }), pod.status == .pending {
-                PendingServerScreen(pod: pod) {
-                    app.removePod(pod.podId)
+                PendingPodContainer(pod: pod) {
                     path.removeAll()
                 }
             } else {
@@ -71,11 +71,11 @@ public struct HomeTab: View {
             // In-app add-server only ever means "provision a new box."
             // Pairing an existing server is an onboarding-only path.
             CreateServerContainer(
-                onDelivered: { serverDomain, name, description in
+                onDelivered: { serverDomain, serial, name, description in
                     // QR-relay delivered. Add the pod to AppState with
                     // .pending status — Home now shows it as Pending,
                     // tapping it opens PendingServerScreen.
-                    addPendingPod(name: name, description: description, fqdn: serverDomain)
+                    addPendingPod(name: name, description: description, fqdn: serverDomain, serial: serial)
                 },
                 onDemoComplete: { name, description in
                     addOnlinePodAndDismiss(name: name, description: description)
@@ -107,13 +107,14 @@ public struct HomeTab: View {
         path.removeAll()
     }
 
-    private func addPendingPod(name: String, description: String, fqdn: String) {
+    private func addPendingPod(name: String, description: String, fqdn: String, serial: String) {
         let pod = PodInfo(
             podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
             name: name,
             description: description.isEmpty ? nil : description,
             fqdn: fqdn,
-            status: .pending
+            status: .pending,
+            pendingAuthCodeSerial: serial
         )
         app.addPod(pod)
         path.removeAll()
@@ -121,7 +122,7 @@ public struct HomeTab: View {
 }
 
 struct CreateServerContainer: View {
-    let onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void
+    let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onDemoComplete: (_ name: String, _ description: String) -> Void
     let onCancel: () -> Void
     @Environment(\.flagshipServerClient) private var serverClient
@@ -130,7 +131,7 @@ struct CreateServerContainer: View {
     @State private var vm: CreateServerViewModel?
 
     init(
-        onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void,
+        onDelivered: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void,
         onDemoComplete: @escaping (_ name: String, _ description: String) -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
@@ -145,7 +146,13 @@ struct CreateServerContainer: View {
             if let vm {
                 CreateServerStubScreen(
                     vm: vm,
-                    onDelivered: onDelivered,
+                    onDelivered: { serverDomain, name, description in
+                        // The serial is recorded inside the VM after
+                        // minting; pass it back so the new pod row
+                        // knows which auth-code to cancel.
+                        let serial = vm.lastDeliveredSerial ?? ""
+                        onDelivered(serverDomain, serial, name, description)
+                    },
                     onDemoComplete: onDemoComplete,
                     onCancel: onCancel
                 )
@@ -162,6 +169,48 @@ struct CreateServerContainer: View {
                 )
             }
         }
+    }
+}
+
+/// Wraps PendingServerScreen so the Cancel-order tap reaches
+/// flagshipserver.com (auth-code revoke) before dropping the pod
+/// from AppState. The container surfaces success/failure as toasts.
+struct PendingPodContainer: View {
+    let pod: PodInfo
+    let onAfterCancel: () -> Void
+    @Environment(\.flagshipServerClient) private var serverClient
+    @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
+    @State private var cancelling: Bool = false
+
+    var body: some View {
+        PendingServerScreen(pod: pod) {
+            Task { await cancelOrder() }
+        }
+    }
+
+    private func cancelOrder() async {
+        guard !cancelling else { return }
+        cancelling = true
+        defer { cancelling = false }
+        if let serial = pod.pendingAuthCodeSerial,
+           let username = app.currentUser {
+            do {
+                let irk = try await Keystore.deriveIRK(reason: "Cancel order for \(pod.name)")
+                let now = Int64(Date().timeIntervalSince1970 * 1000)
+                let bytes = AuthCodeCancel.canonicalBytes(serial: serial, username: username, issuedAt: now)
+                let sig = try irk.signature(for: bytes)
+                try await serverClient.cancelAuthCode(.init(
+                    request: .init(serial: serial, username: username, issuedAt: now),
+                    signature: HexUtil.encode(sig)
+                ))
+                toasts.success("Order cancelled.")
+            } catch {
+                toasts.warning("Couldn't reach flagshipserver.com — the order is removed locally; the box (if it ever boots) will be rejected on first phone-home.")
+            }
+        }
+        app.removePod(pod.podId)
+        onAfterCancel()
     }
 }
 

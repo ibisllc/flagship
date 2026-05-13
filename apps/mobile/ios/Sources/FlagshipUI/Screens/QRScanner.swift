@@ -1,10 +1,14 @@
 import SwiftUI
 import AVFoundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// SwiftUI wrapper over an AVCaptureSession configured to detect QR
 /// codes. Calls `onScan` with the decoded string the first time a
-/// metadata object resolves; the consumer is expected to dismiss the
-/// view (or `cancel()` the session) after handling the result.
+/// metadata object passes the optional `validate` predicate; if
+/// `validate` is supplied and rejects a frame, the scanner plays an
+/// error haptic, briefly flashes a red reticle, and keeps scanning.
 ///
 /// On the iOS Simulator there is no camera; this view renders a
 /// "Camera unavailable in simulator" placeholder so the surrounding
@@ -12,16 +16,23 @@ import AVFoundation
 public struct QRScannerView: UIViewControllerRepresentable {
     let onScan: (String) -> Void
     let onError: (String) -> Void
+    let validate: (String) -> Bool
 
-    public init(onScan: @escaping (String) -> Void, onError: @escaping (String) -> Void = { _ in }) {
+    public init(
+        onScan: @escaping (String) -> Void,
+        onError: @escaping (String) -> Void = { _ in },
+        validate: @escaping (String) -> Bool = { _ in true }
+    ) {
         self.onScan = onScan
         self.onError = onError
+        self.validate = validate
     }
 
     public func makeUIViewController(context: Context) -> QRScannerController {
         let vc = QRScannerController()
         vc.onScan = onScan
         vc.onError = onError
+        vc.validate = validate
         return vc
     }
 
@@ -31,10 +42,19 @@ public struct QRScannerView: UIViewControllerRepresentable {
 public final class QRScannerController: UIViewController {
     var onScan: ((String) -> Void)?
     var onError: ((String) -> Void)?
+    var validate: ((String) -> Bool)?
 
     private var session: AVCaptureSession?
     private var previewLayer: AVCaptureVideoPreviewLayer?
+    private var reticle: UIView?
     private var didEmit = false
+    /// When a frame fails validation we throttle further "bad QR"
+    /// haptics for a short window so the scanner doesn't buzz on
+    /// every video frame while the user is still aiming.
+    private var rejectionCooldownUntil: Date = .distantPast
+
+    private let successHaptic = UINotificationFeedbackGenerator()
+    private let errorHaptic = UINotificationFeedbackGenerator()
 
     public override func viewDidLoad() {
         super.viewDidLoad()
@@ -51,6 +71,8 @@ public final class QRScannerController: UIViewController {
         if let session, !session.isRunning {
             DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
         }
+        successHaptic.prepare()
+        errorHaptic.prepare()
     }
 
     public override func viewWillDisappear(_ animated: Bool) {
@@ -89,7 +111,6 @@ public final class QRScannerController: UIViewController {
         view.layer.addSublayer(preview)
         self.previewLayer = preview
 
-        // Reticle overlay
         let reticleSize: CGFloat = 240
         let reticle = UIView(frame: CGRect(
             x: (view.bounds.width - reticleSize) / 2,
@@ -102,11 +123,12 @@ public final class QRScannerController: UIViewController {
         reticle.backgroundColor = .clear
         reticle.autoresizingMask = [.flexibleTopMargin, .flexibleBottomMargin, .flexibleLeftMargin, .flexibleRightMargin]
         view.addSubview(reticle)
+        self.reticle = reticle
     }
 
     private func showSimulatorPlaceholder() {
         let label = UILabel()
-        label.text = "Camera isn't available in the simulator.\nUse the pair code field below."
+        label.text = "Camera isn't available in the simulator.\nUse the \"copy the QR link instead\" path below."
         label.textColor = .white.withAlphaComponent(0.85)
         label.numberOfLines = 0
         label.textAlignment = .center
@@ -120,6 +142,38 @@ public final class QRScannerController: UIViewController {
             label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24)
         ])
     }
+
+    fileprivate func handleDetected(_ payload: String) {
+        guard !didEmit else { return }
+        let accepts = validate?(payload) ?? true
+        if accepts {
+            didEmit = true
+            successHaptic.notificationOccurred(.success)
+            AudioServicesPlaySystemSound(SystemSoundID(1057))
+            session?.stopRunning()
+            onScan?(payload)
+        } else {
+            // Stay live. Throttle the buzz so a steadily-aimed bad QR
+            // doesn't vibrate the device continuously.
+            let now = Date()
+            guard now >= rejectionCooldownUntil else { return }
+            rejectionCooldownUntil = now.addingTimeInterval(1.5)
+            errorHaptic.notificationOccurred(.error)
+            flashReticleRed()
+            onError?("That QR doesn't look like a Flagship invite.")
+        }
+    }
+
+    private func flashReticleRed() {
+        guard let reticle else { return }
+        UIView.animate(withDuration: 0.15, animations: {
+            reticle.layer.borderColor = UIColor.systemRed.cgColor
+        }) { _ in
+            UIView.animate(withDuration: 0.4, delay: 0.15, options: []) {
+                reticle.layer.borderColor = UIColor.white.withAlphaComponent(0.85).cgColor
+            }
+        }
+    }
 }
 
 extension QRScannerController: AVCaptureMetadataOutputObjectsDelegate {
@@ -128,13 +182,9 @@ extension QRScannerController: AVCaptureMetadataOutputObjectsDelegate {
         didOutput metadataObjects: [AVMetadataObject],
         from connection: AVCaptureConnection
     ) {
-        guard !didEmit,
-              let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+        guard let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
               obj.type == .qr,
               let payload = obj.stringValue else { return }
-        didEmit = true
-        AudioServicesPlaySystemSound(SystemSoundID(1057))   // brief tap
-        session?.stopRunning()
-        onScan?(payload)
+        handleDetected(payload)
     }
 }

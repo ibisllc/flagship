@@ -108,7 +108,16 @@ public struct CreateServerStubScreen: View {
             FSCard(padding: 0) {
                 QRScannerView(
                     onScan: { code in Task { await vm.qrDetected(code) } },
-                    onError: { _ in }
+                    onError: { _ in
+                        // The scanner reticle flashes red + buzzes on
+                        // a bad QR — no separate toast needed.
+                    },
+                    validate: { payload in
+                        // Only accept QRs that parse cleanly as a v2
+                        // relay URL. Anything else keeps the scanner
+                        // live so the user can re-aim.
+                        (try? QrRelay.parseQrUrl(payload)) != nil
+                    }
                 )
                 .frame(height: 300)
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
