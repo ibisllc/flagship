@@ -6,13 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
-}
-
-// google-services applies only when google-services.json is present.
-// Lets fresh checkouts build cleanly before someone has wired up
-// Firebase, while light-up automatic once the file lands.
-if (rootProject.file("app/google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
+    id("com.google.gms.google-services")
 }
 
 // Read the signing keystore credentials from a gitignored file so we
@@ -141,9 +135,11 @@ dependencies {
     implementation("com.patrykandpatrick.vico:compose:1.16.1")
     implementation("com.patrykandpatrick.vico:compose-m3:1.16.1")
 
-    // Push notifications
-    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
-    implementation("com.google.firebase:firebase-messaging-ktx")
+    // Push notifications. firebase-bom 34.x folded the -ktx artifacts
+    // into the main artifact; firebase-messaging now ships Kotlin
+    // extensions inline (release notes: 2024-12-09 BoM 33.7+).
+    implementation(platform("com.google.firebase:firebase-bom:34.13.0"))
+    implementation("com.google.firebase:firebase-messaging")
 
     // Block Store (for cloud-recovery wrapped UMK)
     implementation("com.google.android.gms:play-services-auth-blockstore:16.4.0")
