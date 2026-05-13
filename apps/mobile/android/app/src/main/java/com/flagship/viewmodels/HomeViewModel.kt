@@ -21,14 +21,12 @@ class HomeViewModel(
     private val _state = MutableStateFlow<LoadingState<ServerDetailResponse>>(LoadingState.Idle)
     val state: StateFlow<LoadingState<ServerDetailResponse>> = _state.asStateFlow()
 
-    fun load() {
-        scope.launch {
-            _state.value = LoadingState.Loading
-            try {
-                _state.value = LoadingState.Loaded(client.serverDetail())
-            } catch (t: Throwable) {
-                _state.value = LoadingState.Failed(t.message ?: "failed to load")
-            }
+    fun load() = scope.launch {
+        _state.value = LoadingState.Loading
+        try {
+            _state.value = LoadingState.Loaded(client.serverDetail())
+        } catch (t: Throwable) {
+            _state.value = LoadingState.Failed(t.message ?: "failed to load")
         }
     }
 }
