@@ -1,32 +1,55 @@
 import SwiftUI
 import FlagshipAPI
+import FlagshipCore
 
 /// Activity-tab landing. Three sections: pending unlock requests
 /// (push-driven, top priority), recent install events, paired sessions.
 public struct ActivityScreen: View {
     @Environment(\.colorScheme) private var scheme
     let state: LoadingState<ActivityFeed>
+    let pods: [PodInfo]
+    let currentPodId: String?
+    let leaderPodId: String?
+    var onPickPod: (PodInfo) -> Void = { _ in }
     var onApproveUnlock: (String) -> Void = { _ in }
     var onRefresh: () async -> Void = {}
 
     public init(
         state: LoadingState<ActivityFeed>,
+        pods: [PodInfo] = [],
+        currentPodId: String? = nil,
+        leaderPodId: String? = nil,
+        onPickPod: @escaping (PodInfo) -> Void = { _ in },
         onApproveUnlock: @escaping (String) -> Void = { _ in },
         onRefresh: @escaping () async -> Void = {}
     ) {
         self.state = state
+        self.pods = pods
+        self.currentPodId = currentPodId
+        self.leaderPodId = leaderPodId
+        self.onPickPod = onPickPod
         self.onApproveUnlock = onApproveUnlock
         self.onRefresh = onRefresh
+    }
+
+    @ViewBuilder private var podSwitcherIfMulti: some View {
+        if pods.count > 1 {
+            PodSwitcher(pods: pods, currentPodId: currentPodId, leaderPodId: leaderPodId, onPick: onPickPod)
+        }
     }
 
     public var body: some View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Activity")
-                    .font(.system(size: 32, weight: .medium))
-                    .foregroundColor(c.text)
-                    .padding(.top, FS.space.s4)
+                HStack {
+                    Text("Activity")
+                        .font(.system(size: 32, weight: .medium))
+                        .foregroundColor(c.text)
+                    Spacer()
+                    podSwitcherIfMulti
+                }
+                .padding(.top, FS.space.s4)
 
                 switch state {
                 case .idle, .loading:

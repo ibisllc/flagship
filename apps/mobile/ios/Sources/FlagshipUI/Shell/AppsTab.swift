@@ -7,6 +7,7 @@ import FlagshipAPI
 public struct AppsTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
 
     @State private var path: [AppsRoute] = []
     @State private var vm: AppsListViewModel?
@@ -71,9 +72,20 @@ public struct AppsTab: View {
     @ViewBuilder
     private func header(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Apps")
-                .font(.system(size: 32, weight: .medium))
-                .foregroundColor(c.text)
+            HStack {
+                Text("Apps")
+                    .font(.system(size: 32, weight: .medium))
+                    .foregroundColor(c.text)
+                Spacer()
+                if app.pods.count > 1 {
+                    PodSwitcher(
+                        pods: app.pods,
+                        currentPodId: app.currentPodId,
+                        leaderPodId: app.leaderPodId,
+                        onPick: { pod in app.setCurrentPod(pod.podId) }
+                    )
+                }
+            }
             Text(headerSubtitle)
                 .font(.system(size: 17))
                 .foregroundColor(c.textMuted)

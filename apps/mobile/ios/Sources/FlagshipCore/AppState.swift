@@ -14,17 +14,23 @@ public final class AppState {
     public var currentUser: String?
     public var pods: [PodInfo]
     public var leaderPodId: String?
+    /// Which pod's daemon the screens-client points at. Drives the
+    /// per-pod-scoped lists (Apps, Activity, Server detail). Defaults
+    /// to the leader. UI exposes the switcher only when pods.count > 1.
+    public var currentPodId: String?
 
     public init(
         isPaired: Bool = false,
         currentUser: String? = nil,
         pods: [PodInfo] = [],
-        leaderPodId: String? = nil
+        leaderPodId: String? = nil,
+        currentPodId: String? = nil
     ) {
         self.isPaired = isPaired
         self.currentUser = currentUser
         self.pods = pods
         self.leaderPodId = leaderPodId
+        self.currentPodId = currentPodId ?? leaderPodId ?? pods.first?.podId
     }
 
     public var leaderPod: PodInfo? {
@@ -32,16 +38,23 @@ public final class AppState {
         return pods.first(where: { $0.podId == id })
     }
 
+    public var currentPod: PodInfo? {
+        if let id = currentPodId, let p = pods.first(where: { $0.podId == id }) { return p }
+        return leaderPod ?? pods.first
+    }
+
     public func completeOnboarding(username: String, pods: [PodInfo]) {
         self.currentUser = username
         self.pods = pods
         self.leaderPodId = pods.first?.podId
+        self.currentPodId = pods.first?.podId
         self.isPaired = true
     }
 
     public func addPod(_ pod: PodInfo) {
         pods.append(pod)
         if leaderPodId == nil { leaderPodId = pod.podId }
+        if currentPodId == nil { currentPodId = pod.podId }
     }
 
     public func setLeader(_ podId: String) {
@@ -49,9 +62,15 @@ public final class AppState {
         leaderPodId = podId
     }
 
+    public func setCurrentPod(_ podId: String) {
+        guard pods.contains(where: { $0.podId == podId }) else { return }
+        currentPodId = podId
+    }
+
     public func removePod(_ podId: String) {
         pods.removeAll { $0.podId == podId }
         if leaderPodId == podId { leaderPodId = pods.first?.podId }
+        if currentPodId == podId { currentPodId = leaderPodId ?? pods.first?.podId }
     }
 
     public func signOut() {
@@ -59,6 +78,7 @@ public final class AppState {
         self.currentUser = nil
         self.pods = []
         self.leaderPodId = nil
+        self.currentPodId = nil
     }
 }
 

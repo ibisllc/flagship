@@ -5,6 +5,7 @@ import Flagship
 
 public struct ActivityTab: View {
     @Environment(\.screensClient) private var client
+    @Environment(AppState.self) private var app
     @State private var path: [ActivityRoute] = []
     @State private var vm: ActivityViewModel?
 
@@ -29,6 +30,10 @@ public struct ActivityTab: View {
             if let vm {
                 ActivityScreen(
                     state: vm.state,
+                    pods: app.pods,
+                    currentPodId: app.currentPodId,
+                    leaderPodId: app.leaderPodId,
+                    onPickPod: { pod in app.setCurrentPod(pod.podId) },
                     onApproveUnlock: { _ in path.append(.unlockApprovals) },
                     onRefresh: { await vm.load() }
                 )
