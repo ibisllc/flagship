@@ -43,8 +43,13 @@ public struct HomeTab: View {
             }
         }
         .task {
-            if vm == nil { vm = HomeViewModel(client: client) }
+            if vm == nil {
+                vm = HomeViewModel(client: client, podContext: app.currentPodId ?? app.leaderPodId)
+            }
             if case .idle = vm?.detail { await vm?.load() }
+        }
+        .onChange(of: app.currentPodId) { _, _ in
+            Task { await vm?.load() }
         }
     }
 
@@ -171,14 +176,16 @@ struct ServerDetailContainer: View {
         // which catches the case where `.onDisappear` doesn't fire
         // reliably during navigation churn on iPad.
         .task {
-            if detailVm == nil { detailVm = HomeViewModel(client: client) }
-            if metricsVm == nil { metricsVm = ServerMetricsViewModel(podId: podId, client: client) }
+            if detailVm == nil {
+                detailVm = HomeViewModel(client: client, podContext: podId)
+            }
+            if metricsVm == nil {
+                metricsVm = ServerMetricsViewModel(podId: podId, client: client)
+            }
             await detailVm?.load()
             metricsVm?.startPolling(every: 15)
             // Park the task here so polling stops when the view goes
-            // away. Without this `.task` would return immediately and
-            // the polling-task ref would only get cancelled via the
-            // less-reliable .onDisappear.
+            // away.
             for await _ in AsyncStream<Never> { _ in } { }
         }
         .onDisappear { metricsVm?.stopPolling() }

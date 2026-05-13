@@ -21,22 +21,31 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
     }
 
+    /// Set by callers (typically a container view) to pivot the mock
+    /// responses on the active pod context. Real LiveScreensClient
+    /// achieves the same by swapping `SessionStore.podBaseUrl`.
+    public var podContext: String = "home"
+
     // MARK: - P1.1 server-detail
 
     public func serverDetail() async throws -> ServerDetailResponse {
         try await tick()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let oneDay: Int64 = 24 * 3600 * 1000
+        // Vary fixture per current pod so the switcher visibly
+        // changes what the screens render.
+        let podName = podContext
+        let appCount = abs(podContext.hashValue) % 5 + 1   // 1–5 apps
         return ServerDetailResponse(
-            serverFqdn: "home.harry.flagship.services",
+            serverFqdn: "\(podName).harry.flagship.services",
             username: "harry",
             daemonVersion: "0.18.4",
-            startedAt: now - 11 * oneDay,
-            uptimeMs: 11 * oneDay,
+            startedAt: now - Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
+            uptimeMs: Int64(abs(podContext.hashValue) % 30 + 1) * oneDay,
             certNotAfter: now + 67 * oneDay,
             certNotBefore: now - 23 * oneDay,
-            certSans: ["home.harry.flagship.services", "*.home.harry.flagship.services"],
-            appCount: 3,
+            certSans: ["\(podName).harry.flagship.services", "*.\(podName).harry.flagship.services"],
+            appCount: appCount,
             pairedSessionCount: 2,
             recentInstallEvents: [
                 RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", appId: "plants", detail: "via vibe-code"),
