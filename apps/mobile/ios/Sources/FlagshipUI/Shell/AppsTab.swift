@@ -185,8 +185,8 @@ struct AppDetailContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
     @State private var vm: AppDetailViewModel?
-    @State private var saveBanner: String?
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -199,21 +199,10 @@ struct AppDetailContainer: View {
                     pods: app.pods,
                     globalLeaderPodId: app.leaderPodId,
                     onSave: { Task { await save(vm: vm) } },
-                    onRemove: {}
+                    onRemove: { toasts.warning("Remove flow not wired yet.") }
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            if let saveBanner {
-                Text(saveBanner)
-                    .font(FS.font.bodySm())
-                    .foregroundColor(.white)
-                    .padding(.horizontal, FS.space.s4)
-                    .padding(.vertical, FS.space.s2)
-                    .background(c.success)
-                    .clipShape(Capsule())
-                    .padding(.top, FS.space.s4)
-                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .task {
@@ -232,11 +221,9 @@ struct AppDetailContainer: View {
     private func save(vm: AppDetailViewModel) async {
         do {
             try await vm.save()
-            withAnimation { saveBanner = "Saved" }
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            withAnimation { saveBanner = nil }
+            toasts.success("Saved \(vm.appId).")
         } catch {
-            withAnimation { saveBanner = "Save failed: \(error.localizedDescription)" }
+            toasts.error("Save failed: \(error.localizedDescription)")
         }
     }
 }

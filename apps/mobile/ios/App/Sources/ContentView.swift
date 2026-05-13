@@ -6,6 +6,7 @@ import FlagshipUI
 struct ContentView: View {
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
+    @Environment(ToastCenter.self) private var toasts
 
     var body: some View {
         ZStack {
@@ -14,6 +15,7 @@ struct ContentView: View {
             } else {
                 Color.clear
             }
+            Toaster()
         }
         .fullScreenCover(isPresented: Binding(
             get: { !app.isPaired },
@@ -22,6 +24,7 @@ struct ContentView: View {
             OnboardingFlow()
                 .environment(app)
                 .environment(linker)
+                .environment(toasts)
         }
         .onChange(of: app.isPaired) { _, paired in
             if paired { Task { await registerPush() } }

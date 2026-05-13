@@ -45,9 +45,9 @@ public struct ActivityTab: View {
 
 struct UnlockApprovalsContainer: View {
     @Environment(\.screensClient) private var client
+    @Environment(ToastCenter.self) private var toasts
     @State private var state: LoadingState<[PendingUnlockApproval]> = .idle
     @State private var inFlightRequestId: String?
-    @State private var statusBanner: String?
 
     var body: some View {
         ScrollView {
@@ -70,16 +70,12 @@ struct UnlockApprovalsContainer: View {
                         }
                     }
                 }
-                if let statusBanner {
-                    FSCard {
-                        Text(statusBanner).font(FS.font.bodySm())
-                    }
-                }
             }
             .padding(FS.space.s6)
         }
         .navigationTitle("Approvals")
         .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await reload() }
         .task { await reload() }
     }
 
@@ -119,10 +115,10 @@ struct UnlockApprovalsContainer: View {
                     envelope: signed.envelopeBase64
                 )
             )
-            statusBanner = "Unlock approved for \(r.serverFqdn)."
+            toasts.success("Unlock approved for \(r.serverFqdn).")
             await reload()
         } catch {
-            statusBanner = "Approval failed: \(error.localizedDescription)"
+            toasts.error("Approval failed: \(error.localizedDescription)")
         }
     }
 }

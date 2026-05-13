@@ -8,6 +8,7 @@ struct FlagshipApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
     @State private var linker = DeepLinker()
+    @State private var toasts = ToastCenter()
     private let client: any ScreensClient = MockScreensClient()
 
     var body: some Scene {
@@ -15,6 +16,7 @@ struct FlagshipApp: App {
             ContentView()
                 .environment(appState)
                 .environment(linker)
+                .environment(toasts)
                 .environment(\.screensClient, client)
                 .onAppear { appDelegate.linker = linker }
                 .onOpenURL { url in
