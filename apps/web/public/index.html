@@ -219,6 +219,15 @@
     }
     .nav-links a { color: var(--muted); border-bottom: none; }
     .nav-links a:hover { color: var(--teal-bright); border-bottom: none; }
+    .ext-arrow {
+      display: inline-block;
+      width: 9px; height: 9px;
+      margin-left: 4px;
+      vertical-align: 1px;
+      opacity: 0.65;
+      transition: opacity 120ms;
+    }
+    a:hover .ext-arrow { opacity: 1; }
     .nav-cta { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; min-height: 36px; }
     @media (max-width: 880px) { .nav-links { display: none; } }
 
@@ -935,8 +944,8 @@
       <a href="#trust">Trust</a>
       <a href="#apps">Apps</a>
       <a href="#faq">FAQ</a>
-      <a href="/security.html">Security</a>
-      <a href="/docs/">Docs</a>
+      <a href="/security.html" target="_blank" rel="noopener">Security<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      <a href="/docs/" target="_blank" rel="noopener">Docs<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
     </nav>
     <div class="nav-cta">
       <button type="button" id="navQrBtn" class="qr-btn" aria-controls="qrOverlay" aria-expanded="false">
@@ -965,8 +974,8 @@
     <a href="#trust">Trust</a>
     <a href="#apps">Apps</a>
     <a href="#faq">FAQ</a>
-    <a href="/security.html">Security</a>
-    <a href="/docs/">Docs</a>
+    <a href="/security.html" target="_blank" rel="noopener">Security<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <a href="/docs/" target="_blank" rel="noopener">Docs<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
   </nav>
 </header>
 
