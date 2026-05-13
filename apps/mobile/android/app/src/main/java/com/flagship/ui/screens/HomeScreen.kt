@@ -1,3 +1,7 @@
+// Home screen — account-wide overview + drill-down into each pod.
+// Mirrors iOS HomeScreen with a Kotlin-idiomatic signature (the
+// caller passes data + callbacks rather than reaching into Environment).
+
 package com.flagship.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -9,133 +13,201 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
+import com.flagship.api.ServerDetailResponse
+import com.flagship.core.PodInfo
 import com.flagship.ui.components.FSCard
 import com.flagship.ui.components.FSGhostButton
 import com.flagship.ui.components.FSPill
 import com.flagship.ui.components.FSPillKind
 import com.flagship.ui.components.FSPrimaryButton
 import com.flagship.ui.theme.FS
+import com.flagship.viewmodels.LoadingState
 
-/**
- * D.3.1 — ServerListView (HomeScreen here, since this is the start
- * destination after login). Empty state on first run; populated rows
- * once the user adds a server.
- */
 @Composable
-fun HomeScreen(nav: NavController) {
-    val servers by remember { mutableStateOf(sampleServers()) }
-
+fun HomeScreen(
+    state: LoadingState<ServerDetailResponse>,
+    username: String,
+    pods: List<PodInfo>,
+    leaderPodId: String?,
+    onOpenPod: (PodInfo) -> Unit,
+    onAddServer: () -> Unit,
+    onSetLeader: (PodInfo) -> Unit,
+    onRefresh: () -> Unit,
+) {
+    val scroll = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(scroll)
             .padding(horizontal = FS.space.s6),
     ) {
         Spacer(Modifier.height(FS.space.s12))
-
-        // Greeting
         Text(
-            text = "Hi, harry.",
+            text = "Hi${if (username.isNotEmpty()) ", $username." else "."}",
             color = FS.colors.text,
             style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = if (servers.isEmpty()) "No servers yet." else "Everything is online.",
+            text = when {
+                pods.isEmpty() -> "No servers yet."
+                pods.any { it.status == PodInfo.Status.OFFLINE } -> "One server is offline."
+                else -> "Everything is online."
+            },
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
 
         Spacer(Modifier.height(FS.space.s8))
 
-        if (servers.isEmpty()) {
-            FSCard(padding = PaddingValues(FS.space.s6)) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text(
-                        text = "Add your first server",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                    Text(
-                        text = "Order a pre-built box (~$199) or flash any old PC. Either way, about ten minutes.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-                    )
-                    Spacer(Modifier.height(FS.space.s2))
-                    FSPrimaryButton(
-                        label = "Order a server",
-                        onClick = { /* TODO: nav.navigate("order") */ },
-                        block = true,
-                    )
-                    FSGhostButton(
-                        label = "Build my own",
-                        onClick = { nav.navigate("build-code") },
-                        block = true,
-                    )
-                }
-            }
+        if (pods.isEmpty()) {
+            EmptyServerCard(onAddServer = onAddServer)
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                servers.forEach { ServerRow(it) }
+                pods.forEach { pod ->
+                    PodCard(
+                        pod = pod,
+                        isLeader = pod.podId == leaderPodId,
+                        onTap = { onOpenPod(pod) },
+                        onSetLeader = { onSetLeader(pod) },
+                    )
+                }
+                FSGhostButton(
+                    label = "Add a server",
+                    onClick = onAddServer,
+                    block = true,
+                )
             }
         }
 
+        Spacer(Modifier.height(FS.space.s6))
+
+        when (state) {
+            is LoadingState.Loaded -> ServerOverviewCard(state.value, onRefresh = onRefresh)
+            is LoadingState.Failed -> ErrorCard(message = state.message, onRetry = onRefresh)
+            else -> ServerCardSkeleton()
+        }
         Spacer(Modifier.height(FS.space.s12))
     }
 }
 
 @Composable
-private fun ServerRow(server: ServerSummary) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s4)) {
-                Text(
-                    text = server.fqdn,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Spacer(Modifier.height(FS.space.s1))
-                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = Alignment.CenterVertically) {
-                    FSPill(
-                        label = when (server.status) {
-                            ServerStatus.Online -> "Online"
-                            ServerStatus.Renewing -> "Cert renewing"
-                            ServerStatus.Offline -> "Offline"
-                            ServerStatus.Provisioning -> "Provisioning"
-                        },
-                        kind = when (server.status) {
-                            ServerStatus.Online -> FSPillKind.Online
-                            ServerStatus.Renewing -> FSPillKind.Renewing
-                            ServerStatus.Offline -> FSPillKind.Offline
-                            ServerStatus.Provisioning -> FSPillKind.Provisioning
-                        },
-                    )
-                    Text(
-                        text = server.tldDescription,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
-                    )
-                }
-            }
+private fun EmptyServerCard(onAddServer: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s6)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(
+                "Add your first server",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                "Order a pre-built box (~$199) or flash any old PC. Either way, about ten minutes.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            )
+            Spacer(Modifier.height(FS.space.s2))
+            FSPrimaryButton(label = "Add a server", onClick = onAddServer, block = true)
         }
     }
 }
 
-private fun sampleServers() = emptyList<ServerSummary>()
+@Composable
+fun PodCard(
+    pod: PodInfo,
+    isLeader: Boolean,
+    onTap: () -> Unit,
+    onSetLeader: () -> Unit,
+) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s4)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                ) {
+                    Text(
+                        pod.name,
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    if (isLeader) FSPill("Leader", kind = FSPillKind.Online)
+                }
+                if (!pod.description.isNullOrEmpty()) {
+                    Text(
+                        pod.description!!,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                }
+                Spacer(Modifier.height(FS.space.s1))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FSPill(
+                        label = pod.status.name.lowercase().replaceFirstChar { it.uppercase() },
+                        kind = when (pod.status) {
+                            PodInfo.Status.ONLINE -> FSPillKind.Online
+                            PodInfo.Status.PENDING -> FSPillKind.Provisioning
+                            PodInfo.Status.OFFLINE -> FSPillKind.Offline
+                            PodInfo.Status.UNKNOWN -> FSPillKind.Offline
+                        },
+                    )
+                }
+            }
+            FSGhostButton(label = "Open", onClick = onTap)
+        }
+        if (!isLeader && pod.status == PodInfo.Status.ONLINE) {
+            Spacer(Modifier.height(FS.space.s2))
+            FSGhostButton(label = "Make leader", onClick = onSetLeader)
+        }
+    }
+}
 
-enum class ServerStatus { Online, Renewing, Offline, Provisioning }
+@Composable
+private fun ServerOverviewCard(detail: ServerDetailResponse, onRefresh: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                detail.serverFqdn,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
+            )
+            Text(
+                "${detail.appCount} apps · daemon ${detail.daemonVersion}",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            FSGhostButton(label = "Refresh", onClick = onRefresh)
+        }
+    }
+}
 
-data class ServerSummary(
-    val fqdn: String,
-    val status: ServerStatus,
-    val tldDescription: String,
-)
+@Composable
+fun ServerCardSkeleton() {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text("…", color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp))
+            Text("Loading…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+        }
+    }
+}
+
+@Composable
+fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text("Couldn't load", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+            Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            if (onRetry != null) FSGhostButton(label = "Retry", onClick = onRetry)
+        }
+    }
+}

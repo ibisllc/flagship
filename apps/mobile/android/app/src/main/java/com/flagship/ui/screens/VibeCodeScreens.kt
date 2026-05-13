@@ -291,7 +291,8 @@ private fun LabelRow(label: String, value: String) {
  * (sends a follow-up message).
  */
 @Composable
-fun VibeCodeGeneratingScreen(nav: NavController) {
+fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
+    @Suppress("UNUSED_VARIABLE") val _sid = sessionId
     val events by remember { mutableStateOf(sampleStream()) }
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6)) {
