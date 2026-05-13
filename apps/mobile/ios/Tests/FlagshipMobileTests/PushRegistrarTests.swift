@@ -83,4 +83,34 @@ final class PushRegistrarTests: XCTestCase {
         let b = try Keystore.loadOrCreatePushX25519()
         XCTAssertEqual(a.publicKey.rawRepresentation, b.publicKey.rawRepresentation)
     }
+
+    func test_revoke_deletesTokenIdAndWipesKeychain() async throws {
+        let state = AppState(isPaired: true, currentUser: "harry", pods: [])
+        let mock = MockFlagshipServerClient()
+        mock.simulatedLatency = 0
+        let registrar = PushRegistrar(appState: state, client: mock)
+
+        // 1) Register a token so there's something to revoke.
+        await registrar.handle(deviceToken: Data(repeating: 0x33, count: 32))
+        let id = registrar.lastRegisteredTokenId
+        XCTAssertNotNil(id)
+        XCTAssertEqual(mock.registeredPushTokens.count, 1)
+        XCTAssertEqual(Keystore.pushTokenId(), id)
+
+        // 2) Revoke clears both server-side + Keychain.
+        await registrar.revoke()
+        XCTAssertEqual(mock.registeredPushTokens.count, 0)
+        XCTAssertNil(Keystore.pushTokenId())
+        XCTAssertNil(registrar.lastRegisteredTokenId)
+    }
+
+    func test_revoke_isNoOpWhenNothingRegistered() async {
+        let state = AppState(isPaired: true, currentUser: "harry", pods: [])
+        let mock = MockFlagshipServerClient()
+        mock.simulatedLatency = 0
+        let registrar = PushRegistrar(appState: state, client: mock)
+        await registrar.revoke()
+        XCTAssertNil(registrar.lastRegisteredTokenId)
+        XCTAssertNil(Keystore.pushTokenId())
+    }
 }

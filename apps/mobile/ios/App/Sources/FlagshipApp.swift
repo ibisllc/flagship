@@ -11,6 +11,7 @@ struct FlagshipApp: App {
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
     @State private var dev = DeveloperSettings()
+    @State private var pushRegistrar: PushRegistrar?
     private let mockClient = MockScreensClient()
     private let liveClient: any ScreensClient
 
@@ -44,6 +45,7 @@ struct FlagshipApp: App {
                 .environment(\.screensClient, activeClient)
                 .environment(\.flagshipServerClient, activeServerClient)
                 .environment(\.qrRelayClient, activeRelay)
+                .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     appDelegate.linker = linker
                     let push = PushNotifications(linker: linker)
@@ -53,6 +55,7 @@ struct FlagshipApp: App {
                     }
                     appDelegate.push = push
                     appDelegate.pushRegistrar = registrar
+                    pushRegistrar = registrar
                 }
                 .onOpenURL { url in
                     if let link = DeepLink.parse(url) { linker.enqueue(link) }

@@ -31,6 +31,10 @@ public protocol FlagshipServerClient: Sendable {
     /// (or retry) encrypted push payloads to this device. The returned
     /// tokenId is the handle to later revoke the registration.
     func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse
+    /// Drop a previously-registered push token. 404 (already gone) is
+    /// treated as success by both Mock + Live implementations so a
+    /// sign-out path doesn't surface "already cleaned up" as an error.
+    func revokePushToken(tokenId: String) async throws
 }
 
 /// POST /api/push/register — IRK-signed registration of an APNs (or FCM,
@@ -288,6 +292,14 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         registeredPushTokens[id] = req.request
         return PushTokenRegisterResponse(ok: true, tokenId: id)
     }
+
+    public func revokePushToken(tokenId: String) async throws {
+        try await tick()
+        // 404 is intentionally success: revoking an already-revoked
+        // (or never-registered) token shouldn't fail the caller's
+        // sign-out flow.
+        registeredPushTokens.removeValue(forKey: tokenId)
+    }
 }
 
 // MARK: - Live
@@ -388,5 +400,16 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {
         let body = try JSONEncoder().encode(req)
         return try await postJsonReturning("/api/push/register", body: body)
+    }
+
+    public func revokePushToken(tokenId: String) async throws {
+        let encoded = tokenId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tokenId
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/push/\(encoded)"))
+        req.httpMethod = "DELETE"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 200 || status == 204 || status == 404 { return }
+        let text = String(data: data, encoding: .utf8) ?? ""
+        throw ScreensClientError.http(status: status, message: text)
     }
 }

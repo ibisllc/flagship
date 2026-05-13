@@ -5,6 +5,7 @@ import FlagshipAPI
 
 public struct SettingsTab: View {
     @Environment(\.screensClient) private var client
+    @Environment(\.pushRegistrar) private var pushRegistrar
     @Environment(AppState.self) private var app
     @Environment(DeveloperSettings.self) private var dev
 
@@ -34,7 +35,12 @@ public struct SettingsTab: View {
                     showDeveloper: dev.unlocked,
                     onAddControlDevice: { path.append(.addControlDevice) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
-                    onSignOut: { app.signOut() },
+                    onSignOut: {
+                        Task { @MainActor in
+                            await pushRegistrar?.revoke()
+                            app.signOut()
+                        }
+                    },
                     onOpenProviders: { path.append(.providers) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenAbout: { path.append(.about) },
@@ -64,7 +70,10 @@ public struct SettingsTab: View {
             AddControlDeviceScreen()
         case .developer:
             DeveloperScreen(dev: dev, onWipeIdentity: {
-                app.signOut()
+                Task { @MainActor in
+                    await pushRegistrar?.revoke()
+                    app.signOut()
+                }
             })
         }
     }
