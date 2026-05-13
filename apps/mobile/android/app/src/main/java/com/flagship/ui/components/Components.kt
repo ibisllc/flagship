@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -162,7 +162,7 @@ private fun FSButtonBase(
             .let { if (border != null) it.border(BorderStroke(1.dp, border.copy(alpha = border.alpha * alpha)), RoundedCornerShape(FS.radius.md)) else it }
             .clickable(
                 interactionSource = interaction,
-                indication = rememberRipple(bounded = true, color = fg),
+                indication = ripple(bounded = true, color = fg),
                 enabled = enabled,
                 onClick = onClick,
             )

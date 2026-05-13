@@ -10,9 +10,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.googlefonts.Font
 import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,8 +83,10 @@ object FSSpace {
     val s2  = 8.dp
     val s3  = 12.dp
     val s4  = 16.dp
+    val s5  = 20.dp
     val s6  = 24.dp
     val s8  = 32.dp
+    val s10 = 40.dp
     val s12 = 48.dp
     val s16 = 64.dp
 }

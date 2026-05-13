@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
 }
 
@@ -16,6 +17,8 @@ android {
         versionCode = 1
         versionName = "0.0.1"
         vectorDrawables { useSupportLibrary = true }
+        // Keep APK lean (English only); reproducible-build prerequisite.
+        resourceConfigurations += setOf("en")
     }
 
     buildTypes {
@@ -33,9 +36,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-
-    // Reproducible-ish APK: deterministic timestamps + sorted entries.
-    androidResources { localeFilters += listOf("en") }
 }
 
 dependencies {
@@ -84,7 +84,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Push notifications
-    implementation("com.google.firebase:firebase-bom:33.5.1")
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
     implementation("com.google.firebase:firebase-messaging-ktx")
 
     // Block Store (for cloud-recovery wrapped UMK)
@@ -92,6 +92,8 @@ dependencies {
 
     // Tests
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="flagship_canvas">#0B0B10</color>
+    <color name="flagship_ink">#F4F4F5</color>
+    <color name="flagship_accent">#5EEAD4</color>
+</resources>
