@@ -10,12 +10,14 @@ struct FlagshipApp: App {
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
     @State private var dev = DeveloperSettings()
-    @State private var sessionStore = KeychainSessionStore()
     private let mockClient = MockScreensClient()
     private let liveClient: any ScreensClient
 
     init() {
-        self.liveClient = LiveScreensClient(store: KeychainSessionStore())
+        // Real token persistence lives in KeychainSessionStore; the
+        // Live client still expects the (older) SessionStore for now,
+        // so use that until the SessionStoring protocol unifies them.
+        self.liveClient = LiveScreensClient(store: SessionStore())
     }
     private let serverClient: any FlagshipServerClient = MockFlagshipServerClient()
     private var activeClient: any ScreensClient {
