@@ -26,6 +26,7 @@ public enum ActivityRoute: Hashable, Sendable {
 public enum SettingsRoute: Hashable, Sendable {
     case providers
     case recovery
+    case postRecoveryProgress
     case about
     case addControlDevice
     case developer

@@ -87,4 +87,40 @@ final class MockScreensClientTests: XCTestCase {
             XCTFail("wrong error: \(error)")
         }
     }
+
+    // P1.23 post-recovery status
+
+    func test_postRecoveryStatus_defaultIsNullReport() async throws {
+        let c = makeClient()
+        let r = try await c.postRecoveryStatus()
+        XCTAssertNil(r.report)
+    }
+
+    func test_postRecoveryStatus_reflectsInjectedSnapshot() async throws {
+        let c = makeClient()
+        let report = ReissuanceReportPayload(
+            startedAt: 1, completedAt: 2, status: "complete",
+            oldIrkPrefix: "aaaaaaaaaaaa", newIrkPrefix: "bbbbbbbbbbbb",
+            apps: [
+                AppReissuanceSummary(
+                    appId: "alice--demo", slug: "demo",
+                    rewrittenCount: 3, unchangedCount: 0, error: nil, completedAt: 2
+                ),
+            ],
+            totalRewritten: 3, reattachedCount: 1, unchangedCount: 0,
+            undoWindowExpiresAt: 99
+        )
+        c.postRecoveryReport = PostRecoverySnapshot(
+            currentIrkPubHex: "dd".replacingOccurrences(of: " ", with: "") + String(repeating: "dd", count: 31),
+            state: WatcherState(
+                lastSeen: nil, lastSwapTo: "ee", lastSwapAt: 5,
+                lastPolledAt: 6, lastError: nil
+            ),
+            lastReissue: report
+        )
+        let r = try await c.postRecoveryStatus()
+        XCTAssertNotNil(r.report)
+        XCTAssertEqual(r.report?.lastReissue?.totalRewritten, 3)
+        XCTAssertEqual(r.report?.lastReissue?.apps.first?.slug, "demo")
+    }
 }

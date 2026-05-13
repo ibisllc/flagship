@@ -158,6 +158,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         return try await request("/api/screens/url-controller/verify", method: "POST", body: body)
     }
 
+    public func postRecoveryStatus() async throws -> PostRecoveryStatusResponse {
+        try await request("/api/screens/post-recovery/status")
+    }
+
     /// WebSocket stream of vibe-code frames. The daemon currently
     /// stubs this to a poll-driven proxy; we model the SDK-level
     /// API as a true AsyncStream so the UI doesn't care.

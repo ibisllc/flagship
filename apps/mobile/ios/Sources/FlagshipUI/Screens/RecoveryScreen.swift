@@ -9,15 +9,18 @@ public struct RecoveryScreen: View {
     @Bindable var vm: RecoveryViewModel
     var onRunSetup: () async -> Void = {}
     var onRunRecover: () async -> Void = {}
+    var onShowReattachProgress: () -> Void = {}
 
     public init(
         vm: RecoveryViewModel,
         onRunSetup: @escaping () async -> Void = {},
-        onRunRecover: @escaping () async -> Void = {}
+        onRunRecover: @escaping () async -> Void = {},
+        onShowReattachProgress: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.onRunSetup = onRunSetup
         self.onRunRecover = onRunRecover
+        self.onShowReattachProgress = onShowReattachProgress
     }
 
     public var body: some View {
@@ -69,6 +72,22 @@ public struct RecoveryScreen: View {
                         }
                     }
                 }
+
+                Button(action: onShowReattachProgress) {
+                    FSCard {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Re-attach progress").foregroundColor(c.text)
+                                Text("See per-app re-anchoring after a recovery.")
+                                    .font(FS.font.bodySm())
+                                    .foregroundColor(c.textMuted)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
             }
             .padding(FS.space.s6)
         }

@@ -393,6 +393,50 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
 describe("RePairWatcher integration with paired sessions + reissuer", () => {
   beforeEach(() => {/* no shared state */});
 
+  it("snapshot() reflects the latest swap + reissue", async () => {
+    const platform = fakePlatform([
+      { appId: "alice--app1", slug: "app1", initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }] },
+    ]);
+    const reissuerDeps: ReissuerDeps = {
+      appPlatform: platform,
+      swk: new Uint8Array(32).fill(7),
+      journal: new InMemoryJournalStore(),
+    };
+    const inbox = new InMemoryAlertInbox();
+    const dir = mkdtempSync(join(tmpdir(), "repair-snap-"));
+    const pending: RePairPendingRow = {
+      newIrkPub: NEW_HEX, oldIrkPub: OLD_HEX,
+      initiatedAt: 1, completesAt: 2, objectedAt: null,
+    };
+    const { fetchImpl } = makeFetchSequence([{ pending }, { pending: null }]);
+    const watcher = new RePairWatcher({
+      username: USERNAME,
+      currentIrkPubHex: OLD_HEX,
+      comBaseUrl: "https://flagshipserver.com",
+      fetchImpl,
+      statePath: join(dir, "watcher.json"),
+      now: () => 1_000,
+      pollIntervalMs: 60_000,
+      clearPairedSessions: async () => 0,
+      reissuerDeps,
+      alertInbox: inbox,
+    });
+    // Before any poll: snapshot returns the starting IRK + null reissue.
+    let snap = watcher.snapshot();
+    expect(snap.currentIrkPubHex).toBe(OLD_HEX);
+    expect(snap.lastReissue).toBeNull();
+    expect(snap.state.lastSwapTo).toBeNull();
+
+    await watcher.pollOnce();
+    await watcher.pollOnce();
+
+    snap = watcher.snapshot();
+    expect(snap.currentIrkPubHex).toBe(NEW_HEX);
+    expect(snap.state.lastSwapTo).toBe(NEW_HEX);
+    expect(snap.lastReissue).not.toBeNull();
+    expect(snap.lastReissue!.totalRewritten).toBe(1);
+  });
+
   it("end-to-end: a real paired-session store + a no-op reissuer", async () => {
     const { FilePairedSessionStore } = await import("../src/pairedSessionStore.js");
     const dir = mkdtempSync(join(tmpdir(), "repair-int-"));

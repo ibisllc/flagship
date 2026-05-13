@@ -346,6 +346,18 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         )
     }
 
+    // MARK: - P1.23 post-recovery status
+
+    /// Drives the SwiftUI preview + dev loop without a real swap.
+    /// Defaults to "no recovery in progress"; tests can flip this
+    /// directly to exercise the with-report path.
+    public var postRecoveryReport: PostRecoverySnapshot? = nil
+
+    public func postRecoveryStatus() async throws -> PostRecoveryStatusResponse {
+        try await tick()
+        return PostRecoveryStatusResponse(report: postRecoveryReport)
+    }
+
     // MARK: - P1.15 install-events (mock SSE)
 
     public func installEvents(serial: String) -> AsyncStream<InstallEvent> {

@@ -63,7 +63,9 @@ public struct SettingsTab: View {
         case .providers:
             ProvidersStub()
         case .recovery:
-            RecoveryContainer()
+            RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
+        case .postRecoveryProgress:
+            PostRecoveryContainer()
         case .about:
             AboutStub()
         case .addControlDevice:
@@ -92,6 +94,7 @@ struct RecoveryContainer: View {
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(ToastCenter.self) private var toasts
     @State private var vm: RecoveryViewModel?
+    var onShowPostRecoveryProgress: () -> Void = {}
 
     var body: some View {
         ZStack {
@@ -113,7 +116,8 @@ struct RecoveryContainer: View {
                         if recovered != nil {
                             toasts.success("UMK recovered.")
                         }
-                    }
+                    },
+                    onShowReattachProgress: onShowPostRecoveryProgress
                 )
             } else { ProgressView() }
         }
@@ -126,6 +130,27 @@ struct RecoveryContainer: View {
                     webAuthn: PlatformWebAuthnProvider()
                 )
             }
+        }
+    }
+}
+
+/// Embeds the post-recovery polling view-model + screen. Lives in the
+/// shell so the SettingsTab can navigate to it without leaking the
+/// screens-client dependency into Routes.swift (which is FlagshipCore,
+/// and FlagshipCore can't import FlagshipAPI).
+struct PostRecoveryContainer: View {
+    @Environment(\.screensClient) private var client
+    @State private var vm: PostRecoveryViewModel?
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                PostRecoveryScreen(vm: vm)
+            } else { ProgressView() }
+        }
+        .task {
+            if vm == nil { vm = PostRecoveryViewModel(client: client) }
         }
     }
 }

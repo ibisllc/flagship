@@ -485,3 +485,118 @@ extension AnyCodable: Equatable {
         return false
     }
 }
+
+// MARK: - GET /api/screens/post-recovery/status (J.4)
+//
+// After the user recovers on a new phone and a J.3 IRK swap completes,
+// the daemon walks every installed app and rewrites membership rows
+// from the old IRK to the new one. This endpoint surfaces what
+// happened so the post-recovery confirmation screen can show a
+// per-app readout + a single Undo CTA for the 7-day window.
+
+public struct PostRecoveryStatusResponse: Codable, Equatable, Sendable {
+    /// Null when no swap has completed on this daemon since boot —
+    /// the iOS view treats that as "no recovery in progress."
+    public let report: PostRecoverySnapshot?
+
+    public init(report: PostRecoverySnapshot?) { self.report = report }
+}
+
+public struct PostRecoverySnapshot: Codable, Equatable, Sendable {
+    /// The IRK pubkey the daemon currently honors (hex).
+    public let currentIrkPubHex: String
+    public let state: WatcherState
+    /// Null until at least one J.3 swap has fired since daemon boot.
+    public let lastReissue: ReissuanceReportPayload?
+
+    public init(currentIrkPubHex: String, state: WatcherState, lastReissue: ReissuanceReportPayload?) {
+        self.currentIrkPubHex = currentIrkPubHex
+        self.state = state
+        self.lastReissue = lastReissue
+    }
+}
+
+public struct WatcherState: Codable, Equatable, Sendable {
+    public let lastSeen: PendingRePair?
+    public let lastSwapTo: String?
+    public let lastSwapAt: Int64?
+    public let lastPolledAt: Int64
+    public let lastError: String?
+
+    public init(
+        lastSeen: PendingRePair?, lastSwapTo: String?, lastSwapAt: Int64?,
+        lastPolledAt: Int64, lastError: String?
+    ) {
+        self.lastSeen = lastSeen; self.lastSwapTo = lastSwapTo; self.lastSwapAt = lastSwapAt
+        self.lastPolledAt = lastPolledAt; self.lastError = lastError
+    }
+}
+
+public struct PendingRePair: Codable, Equatable, Sendable {
+    public let newIrkPub: String
+    public let oldIrkPub: String
+    public let initiatedAt: Int64
+    public let completesAt: Int64
+    public let objectedAt: Int64?
+
+    public init(newIrkPub: String, oldIrkPub: String, initiatedAt: Int64, completesAt: Int64, objectedAt: Int64?) {
+        self.newIrkPub = newIrkPub; self.oldIrkPub = oldIrkPub
+        self.initiatedAt = initiatedAt; self.completesAt = completesAt
+        self.objectedAt = objectedAt
+    }
+}
+
+public struct ReissuanceReportPayload: Codable, Equatable, Sendable {
+    public let startedAt: Int64
+    public let completedAt: Int64?
+    /// "pending" | "running" | "complete" | "failed" — daemon enum
+    /// surfaced as a raw string so iOS adds new states forward-
+    /// compatibly without a decode break.
+    public let status: String
+    /// 12-char SHA-256 prefix of the IRK pubkey being rotated away.
+    public let oldIrkPrefix: String
+    /// 12-char SHA-256 prefix of the new IRK pubkey.
+    public let newIrkPrefix: String
+    public let apps: [AppReissuanceSummary]
+    public let totalRewritten: Int
+    public let reattachedCount: Int
+    public let unchangedCount: Int
+    public let undoWindowExpiresAt: Int64
+
+    public init(
+        startedAt: Int64, completedAt: Int64?, status: String,
+        oldIrkPrefix: String, newIrkPrefix: String,
+        apps: [AppReissuanceSummary],
+        totalRewritten: Int, reattachedCount: Int, unchangedCount: Int,
+        undoWindowExpiresAt: Int64
+    ) {
+        self.startedAt = startedAt; self.completedAt = completedAt
+        self.status = status
+        self.oldIrkPrefix = oldIrkPrefix; self.newIrkPrefix = newIrkPrefix
+        self.apps = apps
+        self.totalRewritten = totalRewritten
+        self.reattachedCount = reattachedCount
+        self.unchangedCount = unchangedCount
+        self.undoWindowExpiresAt = undoWindowExpiresAt
+    }
+}
+
+public struct AppReissuanceSummary: Codable, Equatable, Sendable, Identifiable {
+    public let appId: String
+    public let slug: String
+    public let rewrittenCount: Int
+    public let unchangedCount: Int
+    public let error: String?
+    public let completedAt: Int64
+
+    public var id: String { appId }
+
+    public init(
+        appId: String, slug: String, rewrittenCount: Int, unchangedCount: Int,
+        error: String?, completedAt: Int64
+    ) {
+        self.appId = appId; self.slug = slug
+        self.rewrittenCount = rewrittenCount; self.unchangedCount = unchangedCount
+        self.error = error; self.completedAt = completedAt
+    }
+}

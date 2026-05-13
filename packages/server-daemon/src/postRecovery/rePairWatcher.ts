@@ -144,6 +144,13 @@ export class RePairWatcher {
     lastError: null,
   };
 
+  /**
+   * Latest ReissuanceReport from the most recent completed swap on
+   * this daemon. The screens HTTP `/post-recovery/status` snapshot
+   * pulls from here; null until a swap has actually fired.
+   */
+  lastReissue: ReissuanceReport | null = null;
+
   /** Updated after a successful swap; readable by the rest of the daemon. */
   private _currentIrkPubHex: string;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -154,6 +161,24 @@ export class RePairWatcher {
 
   get currentIrkPubHex(): string {
     return this._currentIrkPubHex;
+  }
+
+  /**
+   * JSON-safe snapshot for the phone-facing
+   * /api/screens/post-recovery/status endpoint. Returns enough for
+   * the iOS reattach-progress screen to render without a second
+   * fetch.
+   */
+  snapshot(): {
+    currentIrkPubHex: string;
+    state: RePairWatcherState;
+    lastReissue: ReissuanceReport | null;
+  } {
+    return {
+      currentIrkPubHex: this._currentIrkPubHex,
+      state: { ...this.state },
+      lastReissue: this.lastReissue,
+    };
   }
 
   async load(): Promise<void> {
@@ -256,6 +281,7 @@ export class RePairWatcher {
         oldIrkPubHex: oldHex,
         newIrkPubHex: newHex,
       });
+      this.lastReissue = reissue;
       if (this.deps.alertInbox) {
         for (const app of reissue.apps) {
           if (app.rewrittenCount === 0) continue;

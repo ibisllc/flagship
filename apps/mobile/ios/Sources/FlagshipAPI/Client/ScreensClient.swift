@@ -73,6 +73,11 @@ public protocol ScreensClient: Sendable {
     // ask the daemon to resolve the _flagship.<fqdn> TXT record and
     // confirm the user-claimed custom URL is pointing at us.
     func verifyCustomDomain(_ req: VerifyCustomDomainRequest) async throws -> VerifyCustomDomainResponse
+
+    // P1.23 post-recovery status — snapshot of the J.3/J.4 reattach
+    // walk so the phone's recovery confirmation screen can render
+    // per-app re-anchoring counts + the undo deadline.
+    func postRecoveryStatus() async throws -> PostRecoveryStatusResponse
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {
