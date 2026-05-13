@@ -1,20 +1,14 @@
 /*
- * Flagship — unified design tokens.
+ * Flagship — unified design tokens (v2: dark-canvas + teal).
  *
- * One palette, one type system, one motion language. Every surface in the
- * product (marketing site, build flow, status page, deck, webapp PWA) pulls
- * from this file. Never hard-code a hex.
+ * One palette across every public surface. Dark canvas, warm cream type,
+ * teal accent. Sober technical-document aesthetic.
  *
- * Two surface modes:
- *   - bone (default for marketing + identity surfaces — light canvas)
- *   - ink  (default for the webapp + deck — paired dark canvas, same accent)
- *
- * Toggle via `data-surface="ink"` on <html>, or via media query for the
- * webapp where ink mode is the default regardless of system preference.
+ * Legacy variable names from v1 (--bg, --fg, --accent, --primary, …) are
+ * preserved as aliases at the bottom so pages that haven't migrated keep
+ * working with the new look.
  */
 
-/* Self-hosted brand fonts (#38). The bytes ship from our own origin so
- * a privacy-claim product doesn't leak first-paint requests to Google. */
 @font-face {
   font-family: "Geist";
   font-style: normal;
@@ -29,81 +23,70 @@
   font-display: swap;
   src: url("/fonts/GeistMono-Variable.woff2") format("woff2-variations");
 }
-@font-face {
-  font-family: "Instrument Serif";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/InstrumentSerif-Regular.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Instrument Serif";
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/InstrumentSerif-Italic.woff2") format("woff2");
-}
 
 :root {
-  /* ── Bone (light, default for marketing) ───────────────────────── */
-  --canvas:           #F4F1E8;
-  --canvas-tinted:    #EDE9DC;
-  --surface:          #FBF9F2;
-  --surface-sunken:   #E8E4D6;
-  --surface-elev:     #FFFFFF;
-  --border:           #DAD5C5;
-  --border-soft:      #E6E2D4;
-  --ink:              #14130E;
-  --ink-soft:         #2A2823;
-  --ink-muted:        #6C685D;
-  --ink-faint:        #948F80;
+  /* ── Surfaces ────────────────────────────────────────────────── */
+  --canvas:          #0A0A09;
+  --canvas-2:        #14130F;
+  --surface:         #1A1916;
+  --surface-elev:    #232118;
+  --surface-sunken:  #14130F;
 
-  /* The single accent. Signal amber — warm rust. Saturation kept under
-     80% so it reads as a considered material, not a glow. Replaces both
-     the old blue (#3B5BFF) and the old green (#4ad295). */
-  --accent:           #B26016;
-  --accent-press:     #8E4B0E;
-  --accent-soft:      rgba(178, 96, 22, 0.10);
-  --accent-on:        #FBF9F2;
+  /* ── Ink ─────────────────────────────────────────────────────── */
+  --ink:             #ECE7D6;
+  --ink-soft:        #C8C2B0;
+  --ink-muted:       #8A8478;
+  --ink-faint:       #565249;
 
-  --ok:               #2F6A48;
-  --warn:             #8A5612;
-  --err:              #9B342B;
-  --ok-soft:          rgba(47, 106, 72, 0.10);
-  --warn-soft:        rgba(138, 86, 18, 0.10);
-  --err-soft:         rgba(155, 52, 43, 0.10);
+  /* ── Rules / borders ─────────────────────────────────────────── */
+  --rule:            #25231C;
+  --rule-strong:     #3A372F;
+  --border:          #25231C;
+  --border-soft:     #1F1D17;
 
-  /* ── Type ──────────────────────────────────────────────────────── */
-  --font-display: "Instrument Serif", "Lyon Text", Georgia, ui-serif, serif;
-  --font-sans:    "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text",
-                  ui-sans-serif, system-ui, sans-serif;
-  --font-mono:    "Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono",
-                  Menlo, Consolas, monospace;
+  /* ── Teal accent ─────────────────────────────────────────────── */
+  --teal:            #14B8A6;
+  --teal-bright:     #2DD4BF;
+  --teal-deep:       #0F8B7E;
+  --teal-soft:       rgba(20,184,166,0.10);
+  --teal-glow:       rgba(45,212,191,0.18);
 
-  /* Legacy aliases. Some pages still reference these names. */
-  --font-heading: var(--font-sans);
-  --font-body:    var(--font-sans);
+  /* ── Status ──────────────────────────────────────────────────── */
+  --ok:              #4ADE80;
+  --warn:            #FBBF24;
+  --err:             #F87171;
+  --ok-soft:         rgba(74,222,128,0.10);
+  --warn-soft:       rgba(251,191,36,0.10);
+  --err-soft:        rgba(248,113,113,0.10);
 
-  /* Editorial scale. The display size is fluid; everything else fixed. */
-  --display-size:   clamp(48px, 8vw, 92px);
-  --display-line:   1.02;
-  --display-track:  -0.025em;
-  --h1-size:        clamp(36px, 5vw, 56px);
-  --h1-line:        1.06;
-  --h1-track:       -0.022em;
-  --h2-size:        clamp(28px, 3.4vw, 36px);
-  --h2-line:        1.15;
-  --h2-track:       -0.014em;
-  --h3-size:        22px;       --h3-line: 30px;
-  --h4-size:        18px;       --h4-line: 26px;
-  --body-size:      17px;       --body-line: 28px;
-  --body-sm-size:   15px;       --body-sm-line: 24px;
-  --caption-size:   13px;       --caption-line: 18px;
-  --mono-size:      14px;       --mono-line: 22px;
-  --eyebrow-size:   11px;       --eyebrow-line: 14px;
-  --eyebrow-track:  0.18em;
+  /* ── Type ────────────────────────────────────────────────────── */
+  --font-sans:       "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                     ui-sans-serif, system-ui, sans-serif;
+  --font-mono:       "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display:    var(--font-sans);
+  --font-heading:    var(--font-sans);
+  --font-body:       var(--font-sans);
 
-  /* ── Spacing — 4px grid ────────────────────────────────────────── */
+  /* Fluid type scale */
+  --display-size:    clamp(40px, 6vw, 68px);
+  --display-line:    1.04;
+  --display-track:   -0.026em;
+  --h1-size:         clamp(30px, 4.8vw, 52px);
+  --h1-line:         1.05;
+  --h1-track:        -0.026em;
+  --h2-size:         clamp(22px, 2.8vw, 30px);
+  --h2-line:         1.14;
+  --h2-track:        -0.018em;
+  --h3-size:         18px;     --h3-line: 26px;
+  --h4-size:         16px;     --h4-line: 24px;
+  --body-size:       15.5px;   --body-line: 1.55;
+  --body-sm-size:    14px;     --body-sm-line: 1.55;
+  --caption-size:    12px;     --caption-line: 1.55;
+  --mono-size:       13px;     --mono-line: 1.55;
+  --eyebrow-size:    11px;     --eyebrow-line: 1.4;
+  --eyebrow-track:   0.18em;
+
+  /* ── Spacing — 4px grid ──────────────────────────────────────── */
   --space-1:  4px;
   --space-2:  8px;
   --space-3:  12px;
@@ -118,141 +101,63 @@
   --space-16: 64px;
   --space-20: 80px;
   --space-24: 96px;
-  --space-32: 128px;
-  --space-40: 160px;
 
-  /* ── Radii — concentric, exaggerated for the bezel pattern ─────── */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 28px;
-  --radius-2xl: 36px;
-  --radius-pill: 999px;
+  /* ── Radii ───────────────────────────────────────────────────── */
+  --radius-xs:   2px;
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:  12px;
+  --radius-2xl: 18px;
+  --radius-pill:999px;
 
-  /* ── Shadows — tinted toward the canvas hue, never pure black ──── */
-  --shadow-flat:     0 1px 0 rgba(20, 19, 14, 0.04);
-  --shadow-resting:  0 1px 2px rgba(20, 19, 14, 0.04),
-                     0 6px 18px rgba(20, 19, 14, 0.06);
-  --shadow-lift:     0 2px 4px rgba(20, 19, 14, 0.06),
-                     0 16px 40px rgba(20, 19, 14, 0.10);
-  --shadow-modal:    0 24px 80px rgba(20, 19, 14, 0.22);
-  --shadow-inset:    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  /* ── Shadows — kept subtle on dark canvas ────────────────────── */
+  --shadow-flat:     0 1px 0 rgba(0,0,0,0.6);
+  --shadow-resting:  0 2px 6px rgba(0,0,0,0.35), 0 10px 28px rgba(0,0,0,0.45);
+  --shadow-lift:     0 4px 12px rgba(0,0,0,0.4), 0 18px 48px rgba(0,0,0,0.55);
+  --shadow-modal:    0 30px 80px rgba(0,0,0,0.6);
+  --shadow-inset:    inset 0 1px 0 rgba(255,255,255,0.04);
 
-  /* ── Layout ────────────────────────────────────────────────────── */
-  --content-width:  1240px;
-  --reading-width:  64ch;
-  --gutter:         clamp(20px, 4vw, 48px);
+  /* ── Layout ──────────────────────────────────────────────────── */
+  --content-width:   1180px;
+  --reading-width:   60ch;
+  --gutter:          clamp(20px, 4vw, 56px);
+  --nav-h:           60px;
 
-  /* ── Motion — premium spring-y bezier, used everywhere ─────────── */
-  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1.4);
-  --ease-flat:   cubic-bezier(0.4, 0, 0.2, 1);
-  --motion-state:  220ms var(--ease-out);
-  --motion-layout: 380ms var(--ease-out);
-  --motion-reveal: 700ms var(--ease-out);
-
-  color-scheme: light;
-
-  /* ── Legacy compatibility aliases ──────────────────────────────────
-     Pages that still load /site.css (and any inline rules referencing
-     these older variable names) keep working. Map them onto the unified
-     palette so the visual identity is one. */
-  --bg:               var(--canvas);
-  --bg-elev:          var(--surface);
-  --bg-elev-2:        var(--surface-sunken);
-  --fg:               var(--ink);
-  --fg-mute:          var(--ink-muted);
-  --line:             var(--border);
-  --primary:          var(--accent);
-  --primary-hover:    var(--accent-press);
-  --success:          var(--ok);
-  --warning:          var(--warn);
-  --danger:           var(--err);
-  --text:             var(--ink);
-  --text-muted:       var(--ink-muted);
-  --accent-deep:      var(--accent-press);
-  --radius:           var(--radius-md);
-}
-
-/* ── Ink (paired dark — webapp, deck, opt-in) ─────────────────────── */
-:root[data-surface="ink"],
-html[data-surface="ink"] {
-  --canvas:           #14120D;
-  --canvas-tinted:    #1B1813;
-  --surface:          #1F1C16;
-  --surface-sunken:   #18150F;
-  --surface-elev:     #26221A;
-  --border:           #2E2A21;
-  --border-soft:      #25221A;
-  --ink:              #EFE9D6;
-  --ink-soft:         #D7D0BC;
-  --ink-muted:        #948E7C;
-  --ink-faint:        #5F5B4F;
-
-  --accent:           #D38347;
-  --accent-press:     #B26016;
-  --accent-soft:      rgba(211, 131, 71, 0.14);
-  --accent-on:        #14120D;
-
-  --ok:               #6BB088;
-  --warn:             #D9A85A;
-  --err:              #D87463;
-  --ok-soft:          rgba(107, 176, 136, 0.14);
-  --warn-soft:        rgba(217, 168, 90, 0.14);
-  --err-soft:         rgba(216, 116, 99, 0.14);
-
-  --shadow-flat:     0 1px 0 rgba(0, 0, 0, 0.4);
-  --shadow-resting:  0 1px 2px rgba(0, 0, 0, 0.3),
-                     0 6px 22px rgba(0, 0, 0, 0.4);
-  --shadow-lift:     0 2px 6px rgba(0, 0, 0, 0.35),
-                     0 18px 48px rgba(0, 0, 0, 0.5);
-  --shadow-modal:    0 30px 90px rgba(0, 0, 0, 0.7);
-  --shadow-inset:    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  /* ── Motion ──────────────────────────────────────────────────── */
+  --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:     cubic-bezier(0.32, 0.72, 0, 1.4);
+  --ease-flat:       cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-state:    160ms var(--ease-out);
+  --motion-layout:   320ms var(--ease-out);
+  --motion-reveal:   600ms var(--ease-out);
 
   color-scheme: dark;
+
+  /* ── Legacy aliases (v1 → v2) ────────────────────────────────── */
+  --bg:              var(--canvas);
+  --bg-elev:         var(--surface);
+  --bg-elev-2:       var(--surface-elev);
+  --fg:              var(--ink);
+  --fg-mute:         var(--ink-muted);
+  --line:            var(--rule-strong);
+  --accent:          var(--teal);
+  --accent-bright:   var(--teal-bright);
+  --accent-press:    var(--teal-deep);
+  --accent-deep:     var(--teal-deep);
+  --accent-soft:     var(--teal-soft);
+  --accent-on:       var(--canvas);
+  --primary:         var(--teal);
+  --primary-hover:   var(--teal-bright);
+  --success:         var(--ok);
+  --warning:         var(--warn);
+  --danger:          var(--err);
+  --text:            var(--ink);
+  --text-muted:      var(--ink-muted);
+  --radius:          var(--radius-md);
+  --canvas-tinted:   var(--canvas-2);
 }
 
-/* Auto-pair: respect system preference unless explicit override. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-surface="bone"]) {
-    --canvas:           #14120D;
-    --canvas-tinted:    #1B1813;
-    --surface:          #1F1C16;
-    --surface-sunken:   #18150F;
-    --surface-elev:     #26221A;
-    --border:           #2E2A21;
-    --border-soft:      #25221A;
-    --ink:              #EFE9D6;
-    --ink-soft:         #D7D0BC;
-    --ink-muted:        #948E7C;
-    --ink-faint:        #5F5B4F;
-
-    --accent:           #D38347;
-    --accent-press:     #B26016;
-    --accent-soft:      rgba(211, 131, 71, 0.14);
-    --accent-on:        #14120D;
-
-    --ok:               #6BB088;
-    --warn:             #D9A85A;
-    --err:              #D87463;
-    --ok-soft:          rgba(107, 176, 136, 0.14);
-    --warn-soft:        rgba(217, 168, 90, 0.14);
-    --err-soft:         rgba(216, 116, 99, 0.14);
-
-    --shadow-flat:     0 1px 0 rgba(0, 0, 0, 0.4);
-    --shadow-resting:  0 1px 2px rgba(0, 0, 0, 0.3),
-                       0 6px 22px rgba(0, 0, 0, 0.4);
-    --shadow-lift:     0 2px 6px rgba(0, 0, 0, 0.35),
-                       0 18px 48px rgba(0, 0, 0, 0.5);
-    --shadow-modal:    0 30px 90px rgba(0, 0, 0, 0.7);
-    --shadow-inset:    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-
-    color-scheme: dark;
-  }
-}
-
-/* Reduced motion — collapse the spring choreography down. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-state:  0.01ms linear;

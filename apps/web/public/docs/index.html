@@ -35,12 +35,11 @@
     <nav class="nav-links">
       <a href="/how-it-works">How it works</a>
       <a href="/marketplace">Apps</a>
-      <a href="/pricing">Pricing</a>
       <a href="/docs" aria-current="page">Docs</a>
       <a href="/status/">Status</a>
     </nav>
     <div class="nav-cta">
-      <a href="/build/" class="btn btn--primary">Get started</a>
+      <a href="/" class="btn btn--primary">Install</a>
     </div>
   </div>
 </header>
@@ -65,7 +64,7 @@
       <h2>Quick start</h2>
       <p>Three steps. About ten minutes.</p>
       <p><strong>1.</strong> Install the phone app. Pick a username. Approve biometrics. Your master key never leaves the phone.</p>
-      <p><strong>2.</strong> Generate a build code. Either order a pre-built box or paste the code at <a href="/build/">/build</a> to download a personalized installer ISO. Flash, plug in, boot.</p>
+      <p><strong>2.</strong> Generate a QR scan. Either order a pre-built box or paste the code at the QR on the <a href="/">homepage</a> to download a personalized installer ISO. Flash, plug in, boot.</p>
       <p><strong>3.</strong> Vibe-code your first app from the phone. Or <a href="/marketplace">install someone else's</a>. Done.</p>
       <a class="next" href="/how-it-works">Walk through the full flow →</a>
     </section>
@@ -79,14 +78,14 @@
 
     <section class="doc-section" id="install">
       <h2>Install &amp; first boot</h2>
-      <p>The installer is a public shell script in our open-source repo. It's pinned by hash inside the build code blob. The installer formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com.</p>
+      <p>The installer is a public shell script in our open-source repo. It's pinned by hash inside the QR scan blob. The installer formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com.</p>
       <p>Every subsequent boot, the phone has to approve the LUKS unlock. A stolen box without your phone is a brick.</p>
       <a class="next" href="/help">Stuck on install? →</a>
     </section>
 
     <section class="doc-section" id="pair">
       <h2>Phone pairing</h2>
-      <p>To use the web console you scan a QR code from the phone. The phone mints a 32-byte session token, signs an <code>add-paired-session</code> order, and the daemon stores the token. The browser holds it as a cookie; every admin call carries it.</p>
+      <p>To use the web console you scan a QR code from the phone. The phone shows a 32-byte session token, signs an <code>add-paired-session</code> order, and the daemon stores the token. The browser holds it as a cookie; every admin call carries it.</p>
       <p>Pairings are listed in <em>Settings → Paired devices</em>. Revoke any time.</p>
     </section>
 
@@ -100,7 +99,7 @@
     <section class="doc-section" id="multiplexing">
       <h2>URL multiplexing</h2>
       <p>When you have one install of <code>game</code>, the URL <code>game.john.flagship.services</code> just works. When you have two installs of <code>game</code> on different boxes, that short URL is ambiguous and we serve a disambiguation page. The full long form (<code>game.home.john.flagship.services</code>) always works.</p>
-      <p>You declare and release short-URL aliases from the phone. <a href="/docs/multiplexing">Full design →</a></p>
+      <p>You declare and release short-URL aliases from the phone. <a href="/docs/">Full design →</a></p>
     </section>
 
     <section class="doc-section" id="recovery">
@@ -111,7 +110,7 @@
 
     <section class="doc-section" id="api">
       <h2>API reference</h2>
-      <p>The .com Worker exposes an extensive API for build codes, server registration, marketplace, push, LLM-promo, and aliases. The daemon exposes a per-app surface (browser, alerts, identity rotation, app install/uninstall).</p>
+      <p>The .com Worker exposes an extensive API for QR scan, server registration, marketplace, push, LLM-promo, and aliases. The daemon exposes a per-app surface (browser, alerts, identity rotation, app install/uninstall).</p>
       <p>Reference: TODO. For now, the source is the spec — see <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a> and start at <code>packages/control-plane/src/index.ts</code>.</p>
     </section>
   </section>
@@ -123,7 +122,7 @@
       <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
       <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you.</p>
     </div>
-    <div class="footer-col"><h4>Product</h4><ul><li><a href="/how-it-works">How it works</a></li><li><a href="/marketplace">Apps</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/build/">Build code</a></li></ul></div>
+    <div class="footer-col"><h4>Product</h4><ul><li><a href="/how-it-works">How it works</a></li><li><a href="/marketplace">Apps</a></li><li></li></ul></div>
     <div class="footer-col"><h4>Trust</h4><ul><li><a href="/security">Architecture</a></li><li><a href="/privacy">Privacy</a></li><li><a href="/terms">Terms</a></li><li><a href="/abuse">Abuse</a></li></ul></div>
     <div class="footer-col"><h4>Open</h4><ul><li><a href="https://github.com/ibisllc/flagship">Source</a></li><li><a href="/status/">Status</a></li><li><a href="/faq">FAQ</a></li><li><a href="/help">Help</a></li></ul></div>
   </div>

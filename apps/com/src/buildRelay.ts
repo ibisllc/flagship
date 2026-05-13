@@ -1,113 +1,82 @@
 /**
- * Build-relay Durable Object — task #59.
+ * QR relay Durable Object — v2 protocol.
  *
- * Real-time E2E-encrypted relay between a browser at /build/ (the
- * "browser" peer) and a phone or webapp (the "sender" peer) that holds
- * the user's IRK. Replaces the deleted build_tickets system with a
- * push-style flow: the phone constructs the InstallBlob, encrypts it
- * with crypto_box_seal under the browser's ephemeral X25519 public
- * key, and ships the opaque ciphertext through the DO. The browser
- * decrypts in-process and assembles the personalized ISO.
+ * Phone-to-browser pipe for delivering an encrypted server-creation
+ * recipe. Compared to v1, this is a *dumb pipe*:
  *
- * Wire shape:
+ *  - Sessions are addressed by a CLIENT-DERIVED 128-bit `sid`. The DO is
+ *    looked up by name `=sid`; there's no `POST /sessions` to mint one.
+ *  - The match code is NEVER computed or transmitted by the relay. Both
+ *    peers derive it locally from an ECDH shared secret (X25519). The
+ *    SAS comparison protects against a malicious or compromised relay.
+ *  - The DO sees only opaque routing state: "is a browser registered?",
+ *    "has a delivery happened?". No pubkeys, no ciphertext kept after
+ *    forwarding, no recipe.
  *
- *   POST /api/build-relay/sessions
- *     → 200 { sessionId, joinUrl, matchCode, expiresAt }
+ * Wire surface (registered in apps/com/src/route.ts):
  *
- *   wss://<host>/build-relay/<sessionId>?role=browser
- *     ← { kind: "hello", role: "browser" }
- *     → { kind: "browser-hello", browserPk: <x25519-hex> }
- *     ← { kind: "matched", matchCode: <6-digit> }
- *     ← { kind: "blob", ciphertext: <base64> }    // delivered by sender
+ *   wss://<host>/qr-pipe/<sid>?role=browser
+ *     ← { kind: "accepted" }                              // sid is free
+ *     ← { kind: "rebind" }                                // sid taken / consumed; client regenerates
+ *     ← { kind: "peer-hello", phonePk: <base64url> }      // when phone sends hello
+ *     ← { kind: "peer-deliver", ciphertext: <base64url>, nonce: <base64url> }
+ *     ← { kind: "expired" }                               // TTL fired
+ *     ← { kind: "error", reason: <string> }
  *
- *   wss://<host>/build-relay/<sessionId>?role=sender
- *     ← { kind: "browser-key", browserPk: <hex>, matchCode: <6-digit> }
- *     → { kind: "blob", ciphertext: <base64> }
+ *   wss://<host>/qr-pipe/<sid>?role=phone
+ *     → { kind: "hello", phonePk: <base64url> }
+ *     ← { kind: "ack" }
+ *     ← { kind: "peer-missing" }                          // browser not connected
+ *     → { kind: "deliver", ciphertext: <base64url>, nonce: <base64url> }
  *     ← { kind: "delivered" }
+ *     ← { kind: "error", reason: <string> }
  *
- * The DO sees only:
- *   - the browser's ephemeral X25519 public key (used to derive the
- *     match-code)
- *   - opaque ciphertext on the way through
+ * After a successful delivery the DO marks itself consumed and tears
+ * down both sockets. Any subsequent browser upgrade attempt sees
+ * `rebind`; the client generates a fresh sid + ephemeral keypair and
+ * tries again.
  *
- * It cannot read the InstallBlob — that is the entire point. We
- * explicitly never log the ciphertext field. State is in-memory only;
- * `state.storage` is intentionally never touched.
- *
- * Match-code derivation (load-bearing — the phone derives the same
- * digits independently from browserPk + sessionId and shows them, the
- * user visually compares both surfaces):
- *
- *   ikm = sessionId-bytes || browserPk-bytes
- *   prk = HKDF-Extract(SHA-256, salt = "flagship/build-relay/v1", ikm)
- *   okm = HKDF-Expand(prk, info = "match-code", L = 4) -> 32-bit uint
- *   code = (okm-uint32 mod 1_000_000).toString().padStart(6, "0")
- *
- * Encoded as base-10 digits because that's what the user visually
- * compares; 20 bits of search space (≈1e6) is the OWASP recommendation
- * for short MITM-resistant verification codes when the relay can be
- * walked away from instantly on mismatch.
+ * Confidentiality of the recipe is unconditional against the relay
+ * (kEnc = HKDF(X25519(sk_phone, pk_browser), …); the DO never sees a
+ * private key). Authenticity / MitM resistance is provided by the SAS
+ * pattern client-side. See:
+ *   memory/project_qr_relay_protocol_v2.md
  */
 
 const SESSION_TTL_MS = 5 * 60 * 1000;
 const MAX_CIPHERTEXT_BYTES = 64 * 1024;
-const HKDF_SALT = "flagship/build-relay/v1";
-const HKDF_INFO = "match-code";
+const B64URL_RE = /^[A-Za-z0-9_-]+={0,2}$/;
 
 export interface BuildRelayBrowserHello {
-  kind: "browser-hello";
-  browserPk: string;
+  kind: "hello";
+  phonePk: string;
 }
-
-export interface BuildRelayBlob {
-  kind: "blob";
+export interface BuildRelayDeliver {
+  kind: "deliver";
   ciphertext: string;
+  nonce: string;
 }
-
-export type BuildRelayMessage = BuildRelayBrowserHello | BuildRelayBlob;
-
-export interface CreateSessionResponse {
-  sessionId: string;
-  joinUrl: string;
-  matchCode: string;
-  expiresAt: number;
-}
+export type BuildRelayPhoneMessage = BuildRelayBrowserHello | BuildRelayDeliver;
 
 interface SessionState {
   sessionId: string;
   createdAt: number;
   browserSocket: WebSocket | null;
-  senderSocket: WebSocket | null;
-  browserPk: string | null;
-  matchCode: string | null;
-  delivered: boolean;
+  phoneSocket: WebSocket | null;
+  /** Set when the phone successfully delivered an encrypted recipe.
+   *  Any subsequent browser upgrade attempt for this sid is rebound. */
+  consumed: boolean;
 }
 
 export interface BuildRelayDurableObjectState {
   id: { toString(): string };
-  /**
-   * Cloudflare's DurableObjectState provides storage, but we
-   * intentionally never touch it — sessions are in-memory only.
-   */
 }
 
-/**
- * Tiny shim around the Workers `WebSocketPair` global so the same
- * code path works under wrangler dev and in unit tests (where we
- * inject a polyfill). Production never hits the polyfill branch.
- */
 function createWebSocketPair(): { client: WebSocket; server: WebSocket } {
   const pair = new WebSocketPair();
   return { client: pair[0], server: pair[1] };
 }
 
-/**
- * Build a 101-upgrade Response with the client WebSocket attached.
- * The Workers runtime supports this natively; Node's `Response`
- * rejects 101, so under tests we synthesize an object that quacks
- * like a Response (`status`, `webSocket`, `text`) and the test
- * harness reads `response.webSocket` directly.
- */
 function makeUpgradeResponse(client: WebSocket): Response {
   try {
     return new Response(null, {
@@ -119,9 +88,7 @@ function makeUpgradeResponse(client: WebSocket): Response {
       status: 101,
       webSocket: client,
       ok: false,
-      async text() {
-        return "";
-      },
+      async text() { return ""; },
     };
     return fake as unknown as Response;
   }
@@ -136,50 +103,28 @@ export class BuildRelaySession implements DurableObject {
       sessionId: state.id.toString(),
       createdAt: Date.now(),
       browserSocket: null,
-      senderSocket: null,
-      browserPk: null,
-      matchCode: null,
-      delivered: false,
+      phoneSocket: null,
+      consumed: false,
     };
     this.scheduleTtl();
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method === "POST" && url.pathname.endsWith("/create")) {
-      return this.handleCreate(url);
-    }
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       return this.handleUpgrade(url);
     }
-    return new Response(JSON.stringify({ error: "not found" }), {
-      status: 404,
-      headers: { "content-type": "application/json" },
-    });
-  }
-
-  private handleCreate(url: URL): Response {
-    const host = url.searchParams.get("host") ?? "flagshipserver.com";
-    const proto = host.startsWith("localhost") ? "ws" : "wss";
-    const body: CreateSessionResponse = {
-      sessionId: this.session.sessionId,
-      joinUrl: `${proto}://${host}/build-relay/${this.session.sessionId}?role=sender`,
-      // matchCode is unknown until the browser presents its key; phone
-      // derives the same digits client-side once it has browserPk.
-      matchCode: "",
-      expiresAt: this.session.createdAt + SESSION_TTL_MS,
-    };
-    return new Response(JSON.stringify(body), {
-      status: 200,
+    return new Response(JSON.stringify({ error: "websocket only" }), {
+      status: 400,
       headers: { "content-type": "application/json" },
     });
   }
 
   private handleUpgrade(url: URL): Response {
     const role = url.searchParams.get("role");
-    if (role !== "browser" && role !== "sender") {
+    if (role !== "browser" && role !== "phone") {
       return new Response(
-        JSON.stringify({ error: "role must be browser or sender" }),
+        JSON.stringify({ error: "role must be browser or phone" }),
         { status: 400, headers: { "content-type": "application/json" } },
       );
     }
@@ -189,127 +134,102 @@ export class BuildRelaySession implements DurableObject {
         { status: 410, headers: { "content-type": "application/json" } },
       );
     }
-    if (role === "browser" && this.session.browserSocket) {
-      return new Response(
-        JSON.stringify({ error: "browser slot already taken" }),
-        { status: 409, headers: { "content-type": "application/json" } },
-      );
-    }
-    if (role === "sender" && this.session.senderSocket) {
-      return new Response(
-        JSON.stringify({ error: "sender slot already taken" }),
-        { status: 409, headers: { "content-type": "application/json" } },
-      );
-    }
     const { client, server } = createWebSocketPair();
     (server as unknown as { accept(): void }).accept();
     if (role === "browser") this.attachBrowser(server);
-    else this.attachSender(server);
-    // Workers runtime accepts status 101 with a `webSocket` init field
-    // and surfaces the client half via `response.webSocket`. Node's
-    // baseline `Response` constructor rejects 101, so under tests we
-    // return a shimmed Response-like object exposing the client.
+    else this.attachPhone(server);
     return makeUpgradeResponse(client);
   }
 
   private attachBrowser(ws: WebSocket): void {
+    // Arbitration: a browser may only occupy a session that has neither
+    // been consumed nor is currently held by another browser.
+    if (this.session.consumed) {
+      this.send(ws, { kind: "rebind" });
+      queueMicrotask(() => this.closeQuiet(ws));
+      return;
+    }
+    if (this.session.browserSocket) {
+      this.send(ws, { kind: "rebind" });
+      queueMicrotask(() => this.closeQuiet(ws));
+      return;
+    }
     this.session.browserSocket = ws;
+    ws.addEventListener("close", () => this.detachBrowser());
+    ws.addEventListener("error", () => this.detachBrowser());
+    // No incoming messages expected from the browser — it's a listener.
+    // We could ignore them, but reject loudly to keep the protocol tight.
+    ws.addEventListener("message", () => {
+      this.send(ws, { kind: "error", reason: "browser sends nothing" });
+    });
+    this.send(ws, { kind: "accepted" });
+  }
+
+  private attachPhone(ws: WebSocket): void {
+    if (this.session.consumed) {
+      this.send(ws, { kind: "error", reason: "session already consumed" });
+      queueMicrotask(() => this.closeQuiet(ws));
+      return;
+    }
+    if (this.session.phoneSocket) {
+      this.send(ws, { kind: "error", reason: "phone slot taken" });
+      queueMicrotask(() => this.closeQuiet(ws));
+      return;
+    }
+    this.session.phoneSocket = ws;
     ws.addEventListener("message", (e: MessageEvent) => {
-      void this.onBrowserMessage(e.data);
+      void this.onPhoneMessage(e.data);
     });
-    ws.addEventListener("close", () => this.tearDown("browser-close"));
-    ws.addEventListener("error", () => this.tearDown("browser-error"));
-    this.send(ws, { kind: "hello", role: "browser" });
-    if (this.session.senderSocket && this.session.browserPk && this.session.matchCode) {
-      // Sender arrived first then browser sent its key — re-fire the
-      // browser-key event to the sender now that we have both halves.
-      this.send(this.session.senderSocket, {
-        kind: "browser-key",
-        browserPk: this.session.browserPk,
-        matchCode: this.session.matchCode,
+    ws.addEventListener("close", () => this.detachPhone());
+    ws.addEventListener("error", () => this.detachPhone());
+  }
+
+  private async onPhoneMessage(data: string | ArrayBuffer): Promise<void> {
+    const msg = this.parsePhone(data);
+    if (!msg) return this.failPhone("malformed");
+
+    if (msg.kind === "hello") {
+      if (!isB64Url(msg.phonePk)) return this.failPhone("phonePk must be base64url");
+      if (!this.session.browserSocket) {
+        // The browser hasn't connected yet (or has dropped). Tell the
+        // phone explicitly so it can wait/retry rather than guess.
+        this.send(this.session.phoneSocket!, { kind: "peer-missing" });
+        return;
+      }
+      this.send(this.session.browserSocket, {
+        kind: "peer-hello",
+        phonePk: msg.phonePk,
       });
+      this.send(this.session.phoneSocket!, { kind: "ack" });
+      return;
     }
-  }
 
-  private attachSender(ws: WebSocket): void {
-    this.session.senderSocket = ws;
-    ws.addEventListener("message", (e: MessageEvent) => {
-      void this.onSenderMessage(e.data);
-    });
-    ws.addEventListener("close", () => this.tearDown("sender-close"));
-    ws.addEventListener("error", () => this.tearDown("sender-error"));
-    this.send(ws, { kind: "hello", role: "sender" });
-    if (this.session.browserPk && this.session.matchCode) {
-      this.send(ws, {
-        kind: "browser-key",
-        browserPk: this.session.browserPk,
-        matchCode: this.session.matchCode,
+    if (msg.kind === "deliver") {
+      if (!isB64Url(msg.ciphertext)) return this.failPhone("ciphertext must be base64url");
+      if (!isB64Url(msg.nonce)) return this.failPhone("nonce must be base64url");
+      if (msg.ciphertext.length > MAX_CIPHERTEXT_BYTES) {
+        return this.failPhone("ciphertext too large");
+      }
+      if (!this.session.browserSocket) return this.failPhone("browser not connected");
+      if (this.session.consumed) return this.failPhone("already delivered");
+
+      // Forward the opaque ciphertext untouched. We do not log it — it
+      // is end-to-end-encrypted user content and .com must not see it.
+      this.send(this.session.browserSocket, {
+        kind: "peer-deliver",
+        ciphertext: msg.ciphertext,
+        nonce: msg.nonce,
       });
+      this.send(this.session.phoneSocket!, { kind: "delivered" });
+      this.session.consumed = true;
+      queueMicrotask(() => this.tearDown("delivered"));
+      return;
     }
+
+    return this.failPhone("unknown kind");
   }
 
-  private async onBrowserMessage(data: string | ArrayBuffer): Promise<void> {
-    const msg = this.parse(data);
-    if (!msg) return this.fail("browser", "malformed");
-    if (msg.kind !== "browser-hello") {
-      return this.fail("browser", "expected browser-hello");
-    }
-    if (!/^[0-9a-f]{64}$/.test(msg.browserPk)) {
-      return this.fail("browser", "browserPk must be 32 bytes hex");
-    }
-    if (this.session.browserPk) {
-      return this.fail("browser", "browser-hello already received");
-    }
-    this.session.browserPk = msg.browserPk;
-    this.session.matchCode = await deriveMatchCode(
-      this.session.sessionId,
-      msg.browserPk,
-    );
-    this.send(this.session.browserSocket!, {
-      kind: "matched",
-      matchCode: this.session.matchCode,
-    });
-    if (this.session.senderSocket) {
-      this.send(this.session.senderSocket, {
-        kind: "browser-key",
-        browserPk: this.session.browserPk,
-        matchCode: this.session.matchCode,
-      });
-    }
-  }
-
-  private async onSenderMessage(data: string | ArrayBuffer): Promise<void> {
-    const msg = this.parse(data);
-    if (!msg) return this.fail("sender", "malformed");
-    if (msg.kind !== "blob") {
-      return this.fail("sender", "expected blob");
-    }
-    if (!msg.ciphertext || typeof msg.ciphertext !== "string") {
-      return this.fail("sender", "ciphertext required");
-    }
-    if (msg.ciphertext.length > MAX_CIPHERTEXT_BYTES) {
-      return this.fail("sender", "ciphertext too large");
-    }
-    if (!this.session.browserSocket) {
-      return this.fail("sender", "browser not connected");
-    }
-    if (this.session.delivered) {
-      return this.fail("sender", "already delivered");
-    }
-    // Forward the opaque ciphertext untouched. We do not log it — it
-    // is end-to-end-encrypted user content and .com must not see it.
-    this.send(this.session.browserSocket, {
-      kind: "blob",
-      ciphertext: msg.ciphertext,
-    });
-    this.send(this.session.senderSocket!, { kind: "delivered" });
-    this.session.delivered = true;
-    // Close both peers cleanly so neither tries to send a second blob
-    // (the DO never replays).
-    queueMicrotask(() => this.tearDown("delivered"));
-  }
-
-  private parse(data: string | ArrayBuffer): BuildRelayMessage | null {
+  private parsePhone(data: string | ArrayBuffer): BuildRelayPhoneMessage | null {
     let text: string;
     if (typeof data === "string") text = data;
     else if (data instanceof ArrayBuffer) text = new TextDecoder().decode(data);
@@ -317,7 +237,9 @@ export class BuildRelaySession implements DurableObject {
     try {
       const parsed = JSON.parse(text);
       if (parsed && typeof parsed === "object" && typeof parsed.kind === "string") {
-        return parsed as BuildRelayMessage;
+        if (parsed.kind === "hello" || parsed.kind === "deliver") {
+          return parsed as BuildRelayPhoneMessage;
+        }
       }
     } catch {
       // fall through
@@ -333,17 +255,27 @@ export class BuildRelaySession implements DurableObject {
     }
   }
 
-  private fail(role: "browser" | "sender", reason: string): void {
-    const target =
-      role === "browser" ? this.session.browserSocket : this.session.senderSocket;
-    if (target) {
-      this.send(target, { kind: "error", reason });
+  private failPhone(reason: string): void {
+    const ws = this.session.phoneSocket;
+    if (ws) this.send(ws, { kind: "error", reason });
+    queueMicrotask(() => this.tearDown(`phone:${reason}`));
+  }
+
+  private detachBrowser(): void {
+    this.session.browserSocket = null;
+    // If the phone is mid-handshake and the browser drops, surface that
+    // so the phone can show a helpful "open the homepage again" prompt.
+    if (this.session.phoneSocket && !this.session.consumed) {
+      this.send(this.session.phoneSocket, { kind: "peer-missing" });
     }
-    // Defer teardown by a microtask so the error frame above lands on
-    // the peer's listeners before the close event tears the pair
-    // down. Workers' WebSocket implementation flushes in-flight sends
-    // ahead of a close; the Node test polyfill doesn't.
-    queueMicrotask(() => this.tearDown(`${role}:${reason}`));
+  }
+  private detachPhone(): void {
+    this.session.phoneSocket = null;
+  }
+
+  private closeQuiet(s: WebSocket | null): void {
+    if (!s) return;
+    try { s.close(1000, "session over"); } catch { /* already closed */ }
   }
 
   private tearDown(_why: string): void {
@@ -351,18 +283,10 @@ export class BuildRelaySession implements DurableObject {
       clearTimeout(this.ttlTimer);
       this.ttlTimer = null;
     }
-    const closeQuiet = (s: WebSocket | null): void => {
-      if (!s) return;
-      try {
-        s.close(1000, "session over");
-      } catch {
-        // already closed
-      }
-    };
-    closeQuiet(this.session.browserSocket);
-    closeQuiet(this.session.senderSocket);
+    this.closeQuiet(this.session.browserSocket);
+    this.closeQuiet(this.session.phoneSocket);
     this.session.browserSocket = null;
-    this.session.senderSocket = null;
+    this.session.phoneSocket = null;
   }
 
   private isExpired(): boolean {
@@ -371,61 +295,21 @@ export class BuildRelaySession implements DurableObject {
 
   private scheduleTtl(): void {
     this.ttlTimer = setTimeout(() => {
-      // 5-minute hard cap. If no peer joined the session ends here
-      // and any subsequent upgrade attempt sees 410.
+      // Notify any listener before tearing down.
+      const b = this.session.browserSocket;
+      const p = this.session.phoneSocket;
+      if (b) this.send(b, { kind: "expired" });
+      if (p) this.send(p, { kind: "expired" });
       this.tearDown("ttl");
     }, SESSION_TTL_MS);
   }
 }
 
-/**
- * Derive a 6-digit base-10 match code from the session id and the
- * browser's X25519 public key. Pure function — exported so the phone
- * (and the unit tests) can derive the same digits client-side.
- */
-export async function deriveMatchCode(
-  sessionId: string,
-  browserPkHex: string,
-): Promise<string> {
-  if (!/^[0-9a-f]{64}$/.test(browserPkHex)) {
-    throw new Error("browserPk must be 32 bytes hex");
-  }
-  const sessionBytes = new TextEncoder().encode(sessionId);
-  const pkBytes = hexToBytes(browserPkHex);
-  const ikm = new Uint8Array(sessionBytes.length + pkBytes.length);
-  ikm.set(sessionBytes, 0);
-  ikm.set(pkBytes, sessionBytes.length);
-  const salt = new TextEncoder().encode(HKDF_SALT);
-  const info = new TextEncoder().encode(HKDF_INFO);
-  const baseKey = await crypto.subtle.importKey(
-    "raw",
-    ikm,
-    "HKDF",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt, info },
-    baseKey,
-    32,
-  );
-  const view = new DataView(bits);
-  const u32 = view.getUint32(0, false);
-  const digits = (u32 % 1_000_000).toString().padStart(6, "0");
-  return digits;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
+function isB64Url(s: unknown): s is string {
+  return typeof s === "string" && s.length > 0 && B64URL_RE.test(s);
 }
 
 export const _internal = {
   SESSION_TTL_MS,
   MAX_CIPHERTEXT_BYTES,
-  HKDF_SALT,
-  HKDF_INFO,
 };

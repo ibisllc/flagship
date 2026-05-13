@@ -57,9 +57,7 @@ describe("self-hosted fonts (task #38)", () => {
     for (const css of [tokens, webapp]) {
       expect(css).toMatch(/@font-face[\s\S]+font-family:\s*["']Geist["']/);
       expect(css).toMatch(/@font-face[\s\S]+font-family:\s*["']Geist Mono["']/);
-      expect(css).toMatch(
-        /@font-face[\s\S]+font-family:\s*["']Instrument Serif["']/,
-      );
+      // Instrument Serif was retired from the v2 dark+teal palette.
       expect(css).toMatch(/font-display:\s*swap/);
     }
   });
@@ -69,18 +67,17 @@ describe("self-hosted fonts (task #38)", () => {
     expect(html).toMatch(
       /<link\s+rel="preload"[^>]+href="\/fonts\/Geist-Variable\.woff2"[^>]+as="font"/,
     );
+    // GeistMono is the secondary preload now that Instrument Serif is gone.
     expect(html).toMatch(
-      /<link\s+rel="preload"[^>]+href="\/fonts\/InstrumentSerif-Regular\.woff2"[^>]+as="font"/,
+      /<link\s+rel="preload"[^>]+href="\/fonts\/GeistMono-Variable\.woff2"[^>]+as="font"/,
     );
     expect(html).toMatch(/crossorigin/);
   });
 
-  it("ships the four woff2 files under /public/fonts/ (tolerant if missing)", () => {
+  it("ships the bundled woff2 files under /public/fonts/ (tolerant if missing)", () => {
     const expected = [
       "Geist-Variable.woff2",
       "GeistMono-Variable.woff2",
-      "InstrumentSerif-Regular.woff2",
-      "InstrumentSerif-Italic.woff2",
     ];
     if (!existsSync(fontsDir)) {
       // Wiring landed but binaries not dropped in yet. Soft-pass with a
