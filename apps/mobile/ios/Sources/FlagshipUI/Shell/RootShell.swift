@@ -59,7 +59,7 @@ private struct iPadShell: View {
         HStack(spacing: 0) {
             Sidebar(selected: $selected, app: app, c: c)
                 .frame(width: 280)
-                .background(c.surfaceSunken.opacity(0.5))
+                .background(c.sidebar)
             Divider()
             destinationContent(selected)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -107,6 +107,7 @@ private struct Sidebar: View {
                 }
             }
             .padding(.horizontal, FS.space.s3)
+            .background(Color.clear)
 
             Spacer()
         }
@@ -132,7 +133,7 @@ private struct SidebarRow: View {
             }
             .padding(.horizontal, FS.space.s3)
             .padding(.vertical, FS.space.s2)
-            .background(isSelected ? c.surface : Color.clear)
+            .background(isSelected ? Color.white.opacity(0.85) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
         }
         .buttonStyle(.plain)

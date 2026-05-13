@@ -20,6 +20,7 @@ public struct FSColors {
     public let bg: Color
     public let surface: Color
     public let surfaceSunken: Color
+    public let sidebar: Color
     public let border: Color
     public let text: Color
     public let textMuted: Color
@@ -33,6 +34,7 @@ public struct FSColors {
         bg: Color(red: 0.980, green: 0.980, blue: 0.969),
         surface: .white,
         surfaceSunken: Color(red: 0.949, green: 0.945, blue: 0.925),
+        sidebar: Color(red: 0.918, green: 0.929, blue: 0.961),
         border: Color(red: 0.902, green: 0.894, blue: 0.867),
         text: Color(red: 0.078, green: 0.078, blue: 0.059),
         textMuted: Color(red: 0.420, green: 0.416, blue: 0.388),
@@ -47,6 +49,7 @@ public struct FSColors {
         bg: Color(red: 0.055, green: 0.059, blue: 0.071),
         surface: Color(red: 0.086, green: 0.094, blue: 0.110),
         surfaceSunken: Color(red: 0.110, green: 0.122, blue: 0.141),
+        sidebar: Color(red: 0.075, green: 0.090, blue: 0.130),
         border: Color(red: 0.165, green: 0.176, blue: 0.200),
         text: Color(red: 0.949, green: 0.945, blue: 0.925),
         textMuted: Color(red: 0.604, green: 0.604, blue: 0.576),
