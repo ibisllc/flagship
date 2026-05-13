@@ -9,9 +9,9 @@ import Foundation
 /// the daemon contract in `packages/server-daemon/src/screens/types.ts`.
 public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     private let urlSession: URLSession
-    private let store: SessionStore
+    private let store: any SessionStoring
 
-    public init(urlSession: URLSession = .shared, store: SessionStore) {
+    public init(urlSession: URLSession = .shared, store: any SessionStoring) {
         self.urlSession = urlSession
         self.store = store
     }

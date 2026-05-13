@@ -14,10 +14,10 @@ struct FlagshipApp: App {
     private let liveClient: any ScreensClient
 
     init() {
-        // Real token persistence lives in KeychainSessionStore; the
-        // Live client still expects the (older) SessionStore for now,
-        // so use that until the SessionStoring protocol unifies them.
-        self.liveClient = LiveScreensClient(store: SessionStore())
+        // Keychain-backed token persistence: pod base URL stays in
+        // UserDefaults (non-secret), the 32-byte session token lives
+        // in Keychain with WhenUnlockedThisDeviceOnly access.
+        self.liveClient = LiveScreensClient(store: KeychainSessionStore())
     }
     private let serverClient: any FlagshipServerClient = MockFlagshipServerClient()
     private var activeClient: any ScreensClient {
