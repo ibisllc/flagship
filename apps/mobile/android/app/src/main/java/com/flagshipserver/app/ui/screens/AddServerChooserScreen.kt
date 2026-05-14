@@ -72,6 +72,7 @@ fun AddServerChooserScreen(
             accent = FS.colors.primary,
             title = "Provision a new box",
             body = "Mint a build code, download a personalized Alpine ISO, flash it to commodity hardware. Cert + tunnel come up automatically.",
+            cta = "Provision →",
             onClick = onProvision,
         )
         Spacer(Modifier.height(FS.space.s3))
@@ -80,6 +81,7 @@ fun AddServerChooserScreen(
             accent = FS.colors.success,
             title = "Pair an existing box",
             body = "Already have a Flagship server running somewhere? Scan its pairing QR or paste the 6-character code.",
+            cta = "Pair →",
             onClick = onPair,
         )
         if (onCancel != null) {
@@ -96,6 +98,7 @@ private fun ChooserCard(
     accent: androidx.compose.ui.graphics.Color,
     title: String,
     body: String,
+    cta: String,
     onClick: () -> Unit,
 ) {
     FSCard(padding = PaddingValues(FS.space.s6)) {
@@ -117,7 +120,7 @@ private fun ChooserCard(
             }
             Text(title, color = FS.colors.text, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
             Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-            FSGhostButton(label = "Continue →", onClick = onClick, block = true)
+            FSGhostButton(label = cta, onClick = onClick, block = true)
         }
     }
 }
