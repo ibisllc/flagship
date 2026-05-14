@@ -428,8 +428,29 @@ export class BuildRelaySession implements DurableObject {
     if (phone && !this.session.consumed) {
       this.send(phone, { kind: "peer-missing" });
     }
+    this.tearDownIfEmpty();
   }
-  private detachPhone(): void { /* no peer notification needed */ }
+  private detachPhone(): void {
+    this.tearDownIfEmpty();
+  }
+
+  /**
+   * When both peers have disconnected without delivering, release the
+   * DO immediately instead of waiting 5 minutes for the alarm. The
+   * unconsumed session has no chance of completing — the SAS code is
+   * derived from per-connection ephemeral keys, so a returning peer
+   * would have to start a fresh sid anyway.
+   *
+   * Skipped when consumed=true because the delivery path already
+   * queued its own tearDown; calling deleteAll twice is harmless but
+   * the second pass is wasted work.
+   */
+  private tearDownIfEmpty(): void {
+    if (this.session.consumed) return;
+    if (this.getBrowserSocket()) return;
+    if (this.getPhoneSocket()) return;
+    this.tearDown("empty");
+  }
 
   private closeQuiet(s: WebSocket | null | undefined): void {
     if (!s) return;

@@ -518,3 +518,89 @@ describe("QR relay v2 — WebSocket Hibernation (P1.2)", () => {
     expect(src).not.toMatch(/\b\(server as unknown as \{ accept\(\): void \}\)\.accept\(\)/);
   });
 });
+
+describe("QR relay v2 — eager empty-session teardown (P1.3)", () => {
+  /**
+   * When both peers disconnect without delivering, the DO has nothing
+   * to do until its alarm fires 5 minutes later. Without an eager
+   * tearDown the DO sits alive paying duration; with one, storage is
+   * wiped and the runtime can evict immediately.
+   */
+  it("browser-then-phone close (no delivery) wipes storage + clears alarm", async () => {
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    const phone = await upgrade(obj, "phone");
+
+    // Browser leaves first; phone is told peer-missing.
+    browser.close(1000, "test");
+    await phone.waitFor((m) => m.kind === "peer-missing");
+    // Storage still present — phone is still there.
+    expect(state.storage._state.kv.size).toBeGreaterThan(0);
+    expect(state.storage._state.alarm).not.toBeNull();
+
+    // Phone then leaves. Empty + unconsumed → eager tearDown fires.
+    phone.close(1000, "test");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(state.storage._state.kv.size).toBe(0);
+    expect(state.storage._state.alarm).toBeNull();
+  });
+
+  it("phone-then-browser close (no delivery) wipes storage + clears alarm", async () => {
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    const phone = await upgrade(obj, "phone");
+
+    phone.close(1000, "test");
+    await new Promise((r) => setTimeout(r, 5));
+    // Browser still there → no teardown yet.
+    expect(state.storage._state.kv.size).toBeGreaterThan(0);
+
+    browser.close(1000, "test");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(state.storage._state.kv.size).toBe(0);
+    expect(state.storage._state.alarm).toBeNull();
+  });
+
+  it("lone-browser close (phone never arrived) wipes storage immediately", async () => {
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    expect(state.storage._state.kv.size).toBeGreaterThan(0);
+
+    browser.close(1000, "test");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(state.storage._state.kv.size).toBe(0);
+    expect(state.storage._state.alarm).toBeNull();
+  });
+
+  it("does not re-tear-down a session that already delivered", async () => {
+    // A consumed session has already wiped its storage via the
+    // delivery path. The detach handlers must not re-fire tearDown
+    // (harmless functionally, but a wasted deleteAll() — and a sign
+    // someone broke the invariant).
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    const phone = await upgrade(obj, "phone");
+    phone.push(JSON.stringify({ kind: "hello", phonePk: "QUJD" }));
+    await phone.waitFor((m) => m.kind === "ack");
+    phone.push(JSON.stringify({ kind: "deliver", ciphertext: "T1BBUVVF", nonce: "Tk9OQ0U" }));
+    await phone.waitFor((m) => m.kind === "delivered");
+    await new Promise((r) => setTimeout(r, 20));
+
+    const deleteSpy = vi.fn();
+    const origDeleteAll = state.storage.deleteAll;
+    state.storage.deleteAll = async () => {
+      deleteSpy();
+      return origDeleteAll.call(state.storage);
+    };
+    // Trigger detach on the (already-closed) phone/browser sockets —
+    // detach path should bail because consumed=true.
+    phone.close(1000, "test");
+    browser.close(1000, "test");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+});
