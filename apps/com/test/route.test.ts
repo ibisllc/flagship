@@ -1018,3 +1018,45 @@ describe("/.well-known/apple-app-site-association — Universal Link binding", (
     expect(calls).toEqual([]);
   });
 });
+
+describe("/.well-known/assetlinks.json — Android App Links binding", () => {
+  it("falls through to the ASSETS binding (no manual route handler needed)", async () => {
+    const assetlinks = JSON.stringify([{
+      relation: ["delegate_permission/common.handle_all_urls"],
+      target: {
+        namespace: "android_app",
+        package_name: "com.flagshipserver.app",
+        sha256_cert_fingerprints: ["3C:BF:B3:A6:75:A9:E0:73:91:D6:1C:25:58:D9:91:0C:E0:1D:A9:7C:2D:F3:55:9E:58:02:A2:94:ED:8F:7C:DD"],
+      },
+    }]);
+    const env = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          // .json extension means Cloudflare's asset binding serves
+          // application/json by default — we don't need a manual
+          // handler, unlike AASA.
+          expect(new URL(req.url).pathname).toBe("/.well-known/assetlinks.json");
+          return new Response(assetlinks, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+    });
+    const r = await route(
+      new Request("https://flagshipserver.com/.well-known/assetlinks.json"),
+      env,
+    );
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("application/json");
+    expect(await r.json()).toEqual(JSON.parse(assetlinks));
+  });
+
+  it("does not hit the proxy fall-through", async () => {
+    await route(
+      new Request("https://flagshipserver.com/.well-known/assetlinks.json"),
+      makeEnv(),
+    );
+    expect(calls).toEqual([]);
+  });
+});

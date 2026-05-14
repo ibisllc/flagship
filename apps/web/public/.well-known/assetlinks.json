@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.flagshipserver.app",
+      "sha256_cert_fingerprints": [
+        "3C:BF:B3:A6:75:A9:E0:73:91:D6:1C:25:58:D9:91:0C:E0:1D:A9:7C:2D:F3:55:9E:58:02:A2:94:ED:8F:7C:DD",
+        "AC:A5:B6:B8:82:16:7C:01:1A:96:C4:46:33:03:65:EB:11:94:80:5C:2D:97:0A:7C:6D:CA:31:0F:C6:69:43:96"
+      ]
+    }
+  }
+]
