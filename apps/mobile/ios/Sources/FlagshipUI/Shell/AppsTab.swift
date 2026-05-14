@@ -8,6 +8,7 @@ public struct AppsTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
+    @Environment(DeepLinker.self) private var linker
 
     @State private var path: [AppsRoute] = []
     @State private var vm: AppsListViewModel?
@@ -18,6 +19,26 @@ public struct AppsTab: View {
         NavigationStack(path: $path) {
             content
                 .navigationDestination(for: AppsRoute.self) { route in destination(for: route) }
+        }
+        .onChange(of: linker.pending) { _, link in consume(link) }
+        .task(id: linker.pending) { consume(linker.pending) }
+    }
+
+    private func consume(_ link: DeepLink?) {
+        guard let link else { return }
+        switch link {
+        case .appDetail(let id):
+            if path.last != .appDetail(appId: id) {
+                path.append(.appDetail(appId: id))
+            }
+            _ = linker.consume()
+        case .marketplace:
+            if !path.contains(.marketplace) {
+                path.append(.marketplace)
+            }
+            _ = linker.consume()
+        default:
+            break
         }
     }
 

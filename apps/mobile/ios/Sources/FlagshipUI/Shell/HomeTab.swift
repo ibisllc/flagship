@@ -7,6 +7,7 @@ import FlagshipAPI
 public struct HomeTab: View {
     @Environment(\.screensClient) private var client
     @Environment(AppState.self) private var app
+    @Environment(DeepLinker.self) private var linker
 
     @State private var path: [HomeRoute] = []
     @State private var vm: HomeViewModel?
@@ -19,6 +20,31 @@ public struct HomeTab: View {
                 .navigationDestination(for: HomeRoute.self) { route in
                     destination(for: route)
                 }
+        }
+        .onChange(of: linker.pending) { _, link in consume(link) }
+        .task(id: linker.pending) { consume(linker.pending) }
+    }
+
+    /// Pop or push onto the home stack when a DeepLink lands on this
+    /// tab. RootShell already switches the tab to .home for these
+    /// cases; we just resolve the route inside the stack.
+    private func consume(_ link: DeepLink?) {
+        guard let link else { return }
+        switch link {
+        case .serverDetail(let podId):
+            // Only push if not already at this server's detail —
+            // tapping the same push twice shouldn't stack pages.
+            if path.last != .serverDetail(podId: podId) {
+                path.append(.serverDetail(podId: podId))
+            }
+            _ = linker.consume()
+        case .createServer:
+            if !path.contains(.addServer) {
+                path.append(.addServer)
+            }
+            _ = linker.consume()
+        default:
+            break
         }
     }
 
