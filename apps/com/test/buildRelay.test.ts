@@ -103,9 +103,37 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-interface DoState { id: { toString(): string }; }
+/**
+ * In-memory `storage` stub matching the slice of DurableObjectStorage
+ * the DO relies on (see BuildRelayStorage in src/buildRelay.ts).
+ *
+ * Tracks alarms as plain timestamps; tests assert on `_state.alarm`
+ * to verify the DO armed (and later cleared) its TTL alarm correctly.
+ */
+function makeStorage() {
+  const kv = new Map<string, unknown>();
+  let alarmAt: number | null = null;
+  return {
+    async get<T>(k: string): Promise<T | undefined> { return kv.get(k) as T | undefined; },
+    async put(k: string, v: unknown): Promise<void> { kv.set(k, v); },
+    async deleteAll(): Promise<void> { kv.clear(); alarmAt = null; },
+    async setAlarm(t: number | Date): Promise<void> {
+      alarmAt = typeof t === "number" ? t : t.getTime();
+    },
+    async getAlarm(): Promise<number | null> { return alarmAt; },
+    async deleteAlarm(): Promise<void> { alarmAt = null; },
+    /** Test-only escape hatch. */
+    _state: { kv, get alarm() { return alarmAt; } },
+  };
+}
+type TestStorage = ReturnType<typeof makeStorage>;
+
+interface DoState {
+  id: { toString(): string };
+  storage: TestStorage;
+}
 function makeState(id = "test-session-aaaaaaaaaaaaaaaa"): DoState {
-  return { id: { toString: () => id } };
+  return { id: { toString: () => id }, storage: makeStorage() };
 }
 
 async function upgrade(
@@ -250,6 +278,10 @@ describe("QR relay v2 — TTL", () => {
   it("refuses upgrades after the configured TTL", async () => {
     vi.useFakeTimers();
     const obj = new BuildRelaySession(makeState() as any, {});
+    // Let loadOrInit run to completion before we advance time so it
+    // captures the real `createdAt`. Otherwise the awaited storage
+    // writes never settle under fake timers.
+    await Promise.resolve();
     vi.advanceTimersByTime(_internal.SESSION_TTL_MS + 1_000);
     const r = await obj.fetch(
       new Request("https://do.internal/x?role=browser", {
@@ -258,5 +290,72 @@ describe("QR relay v2 — TTL", () => {
       }),
     );
     expect(r.status).toBe(410);
+  });
+});
+
+describe("QR relay v2 — alarm-based TTL (P1.1: no setTimeout pinning)", () => {
+  /**
+   * The DO MUST NOT use setTimeout in its constructor to schedule the
+   * TTL. setTimeout keeps the DO resident in memory for the full
+   * 5-minute window — that's the bug that burned the free-tier
+   * duration budget. The fix uses state.storage.setAlarm, which
+   * persists the wake-up time and lets the DO be evicted in between.
+   */
+  it("arms a storage alarm on first construction, not a setTimeout", async () => {
+    const state = makeState();
+    const before = Date.now();
+    const obj = new BuildRelaySession(state as any, {});
+    // Block until loadOrInit settles.
+    await obj.fetch(new Request("https://do.internal/x"));
+    const alarm = state.storage._state.alarm;
+    expect(alarm).not.toBeNull();
+    // Alarm should be ~SESSION_TTL_MS in the future from construction.
+    expect(alarm!).toBeGreaterThanOrEqual(before + _internal.SESSION_TTL_MS - 1_000);
+    expect(alarm!).toBeLessThanOrEqual(Date.now() + _internal.SESSION_TTL_MS + 1_000);
+  });
+
+  it("persists createdAt so a hibernated/reconstructed DO honours the same TTL", async () => {
+    const state = makeState();
+    const obj1 = new BuildRelaySession(state as any, {});
+    // Force initial setup.
+    await obj1.fetch(new Request("https://do.internal/x"));
+    const firstCreatedAt = state.storage._state.kv.get("createdAt");
+    expect(typeof firstCreatedAt).toBe("number");
+
+    // Simulate hibernation: a brand-new DO instance backed by the
+    // same storage. createdAt must be preserved.
+    const obj2 = new BuildRelaySession(state as any, {});
+    await obj2.fetch(new Request("https://do.internal/x"));
+    expect(state.storage._state.kv.get("createdAt")).toBe(firstCreatedAt);
+  });
+
+  it("alarm() notifies any open sockets with {expired} and wipes storage", async () => {
+    const state = makeState();
+    const obj = new BuildRelaySession(state as any, {});
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    expect(state.storage._state.kv.size).toBeGreaterThan(0);
+
+    await obj.alarm();
+    const expired = await browser.waitFor((m) => m.kind === "expired");
+    expect(expired.kind).toBe("expired");
+    expect(state.storage._state.kv.size).toBe(0);
+    expect(state.storage._state.alarm).toBeNull();
+  });
+
+  it("delivery tears down + wipes storage (no resident state after consumption)", async () => {
+    const state = makeState();
+    const obj = new BuildRelaySession(state as any, {});
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    const phone = await upgrade(obj, "phone");
+    phone.push(JSON.stringify({ kind: "hello", phonePk: "QUJD" }));
+    await phone.waitFor((m) => m.kind === "ack");
+    phone.push(JSON.stringify({ kind: "deliver", ciphertext: "T1BBUVVF", nonce: "Tk9OQ0U" }));
+    await phone.waitFor((m) => m.kind === "delivered");
+    // Tear-down queued via microtask + an async deleteAll — wait for both.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(state.storage._state.kv.size).toBe(0);
+    expect(state.storage._state.alarm).toBeNull();
   });
 });

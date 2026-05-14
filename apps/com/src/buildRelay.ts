@@ -68,8 +68,28 @@ interface SessionState {
   consumed: boolean;
 }
 
+/**
+ * Minimal slice of `DurableObjectStorage` we depend on. Real Workerd
+ * provides the full surface; tests provide an in-memory stub.
+ *
+ * Alarms replace the constructor-side `setTimeout` that used to pin
+ * every DO to memory for 5 minutes. Alarms persist in storage and
+ * wake a hibernated DO at the scheduled time without keeping it
+ * resident in the meantime — which is the difference between zero
+ * idle-cost and 5 GB-seconds-per-spawn.
+ */
+export interface BuildRelayStorage {
+  get<T = unknown>(key: string): Promise<T | undefined>;
+  put(key: string, value: unknown): Promise<void>;
+  deleteAll(): Promise<void>;
+  setAlarm(scheduledTime: number | Date): Promise<void>;
+  getAlarm(): Promise<number | null>;
+  deleteAlarm(): Promise<void>;
+}
+
 export interface BuildRelayDurableObjectState {
   id: { toString(): string };
+  storage: BuildRelayStorage;
 }
 
 function createWebSocketPair(): { client: WebSocket; server: WebSocket } {
@@ -96,20 +116,51 @@ function makeUpgradeResponse(client: WebSocket): Response {
 
 export class BuildRelaySession implements DurableObject {
   private session: SessionState;
-  private ttlTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly state: BuildRelayDurableObjectState;
+  /**
+   * Resolves once createdAt has been loaded (or initialized) from
+   * persistent storage. Every public entry point awaits this so a DO
+   * that just woke up from hibernation sees the correct TTL window
+   * before handling its first request.
+   */
+  private readonly loaded: Promise<void>;
 
   constructor(state: BuildRelayDurableObjectState, _env: unknown) {
+    this.state = state;
     this.session = {
       sessionId: state.id.toString(),
-      createdAt: Date.now(),
+      createdAt: 0,
       browserSocket: null,
       phoneSocket: null,
       consumed: false,
     };
-    this.scheduleTtl();
+    this.loaded = this.loadOrInit();
+  }
+
+  /**
+   * On first construction, write `createdAt` to storage and arm the
+   * TTL alarm. On wake-from-hibernation, just hydrate from storage.
+   *
+   * Using `state.storage.setAlarm` instead of `setTimeout` is the
+   * single biggest DO-duration fix: the alarm persists across
+   * eviction, so the DO doesn't have to stay resident to honour it.
+   */
+  private async loadOrInit(): Promise<void> {
+    const stored = await this.state.storage.get<number>("createdAt");
+    if (typeof stored === "number") {
+      this.session.createdAt = stored;
+      const consumed = await this.state.storage.get<boolean>("consumed");
+      if (consumed === true) this.session.consumed = true;
+      return;
+    }
+    const now = Date.now();
+    this.session.createdAt = now;
+    await this.state.storage.put("createdAt", now);
+    await this.state.storage.setAlarm(now + SESSION_TTL_MS);
   }
 
   async fetch(request: Request): Promise<Response> {
+    await this.loaded;
     const url = new URL(request.url);
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       return this.handleUpgrade(url);
@@ -118,6 +169,31 @@ export class BuildRelaySession implements DurableObject {
       status: 400,
       headers: { "content-type": "application/json" },
     });
+  }
+
+  /**
+   * Fired by the Workerd runtime when the TTL alarm scheduled in
+   * `loadOrInit` comes due. The DO may have been hibernated up to
+   * this point; the alarm is what wakes it. We notify any listeners
+   * and wipe storage so the DO can be fully evicted.
+   */
+  async alarm(): Promise<void> {
+    await this.loaded;
+    const b = this.session.browserSocket;
+    const p = this.session.phoneSocket;
+    if (b) this.send(b, { kind: "expired" });
+    if (p) this.send(p, { kind: "expired" });
+    this.session.browserSocket = null;
+    this.session.phoneSocket = null;
+    // Let the `expired` frames flush to the network before closing.
+    // Mirrors the queueMicrotask pattern used after a successful
+    // delivery (see tearDown("delivered")) — otherwise a same-tick
+    // close races the send and the client loses the signal.
+    queueMicrotask(() => {
+      this.closeQuiet(b);
+      this.closeQuiet(p);
+    });
+    await this.state.storage.deleteAll();
   }
 
   private handleUpgrade(url: URL): Response {
@@ -279,29 +355,18 @@ export class BuildRelaySession implements DurableObject {
   }
 
   private tearDown(_why: string): void {
-    if (this.ttlTimer) {
-      clearTimeout(this.ttlTimer);
-      this.ttlTimer = null;
-    }
     this.closeQuiet(this.session.browserSocket);
     this.closeQuiet(this.session.phoneSocket);
     this.session.browserSocket = null;
     this.session.phoneSocket = null;
+    // Fire-and-forget: clear persisted state so the DO can be fully
+    // evicted. The alarm is wiped by deleteAll() per Workerd contract.
+    void this.state.storage.deleteAll().catch(() => { /* idempotent */ });
   }
 
   private isExpired(): boolean {
+    if (this.session.createdAt === 0) return false; // not yet loaded
     return Date.now() - this.session.createdAt >= SESSION_TTL_MS;
-  }
-
-  private scheduleTtl(): void {
-    this.ttlTimer = setTimeout(() => {
-      // Notify any listener before tearing down.
-      const b = this.session.browserSocket;
-      const p = this.session.phoneSocket;
-      if (b) this.send(b, { kind: "expired" });
-      if (p) this.send(p, { kind: "expired" });
-      this.tearDown("ttl");
-    }, SESSION_TTL_MS);
   }
 }
 
