@@ -3,18 +3,24 @@
 // Behaviour:
 //   1. Generate a 128-bit random sessionId AND an ephemeral X25519
 //      keypair on page load. No network roundtrip — the QR renders
-//      immediately from (sid, pk_b).
-//   2. Open a WebSocket to /qr-pipe/<sid>?role=browser. The relay DO
+//      immediately from (sid, pk_b). The QR is fully scannable from
+//      this moment, even though no WebSocket is open yet.
+//   2. The relay WebSocket is opened LAZILY — only once the QR card
+//      has been intersected for ENGAGE_DELAY_MS continuously, OR the
+//      user explicitly clicks the card. This is what keeps a marketing
+//      drive-by from spawning a Durable Object for every visitor.
+//      Background tabs and visitors that scroll past pay zero DO duration.
+//   3. Once engaged: open /qr-pipe/<sid>?role=browser. The relay DO
 //      responds with {kind:"accepted"} (free sid) or {kind:"rebind"}
 //      (collision/consumed). On rebind we regenerate the sid+keys,
 //      re-render the QR, and reconnect — invisible to the user except
 //      for a one-frame QR swap.
-//   3. When the phone connects and sends its public key, the relay
+//   4. When the phone connects and sends its public key, the relay
 //      forwards {kind:"peer-hello", phonePk}. We derive the X25519
 //      shared secret locally; HKDF gives us the 256-bit AEAD key and
 //      the 6-digit SAS match code. The match code is never on the wire
 //      — both peers compute the same value or detect a MitM mismatch.
-//   4. The phone, after the user verifies the codes match, sends a
+//   5. The phone, after the user verifies the codes match, sends a
 //      {kind:"deliver", ciphertext, nonce} frame which the relay
 //      forwards as {kind:"peer-deliver", …}. We AEAD-decrypt; on
 //      tag-fail we discard. On success we stash the recipe in
@@ -43,6 +49,16 @@
   // After this much wall-clock time of fruitless reconnects, give up
   // and surface an error — user can reload the page to retry.
   const RECONNECT_GIVE_UP_MS = 5 * 60 * 1000;
+  // How long the QR card has to be in-viewport (intersected) before we
+  // upgrade from "rendered locally, no DO spawned" to "WS open." This
+  // is the gate that protects against drive-by visits, link-preview
+  // bots, and crawlers from spawning a 5-minute Durable Object per
+  // page load. Set to a value short enough that a real user reaching
+  // for their phone never notices, long enough that fast-scroll past
+  // the hero costs nothing.
+  const ENGAGE_DELAY_MS = 1200;
+  // Minimum intersection ratio that counts toward ENGAGE_DELAY_MS.
+  const ENGAGE_THRESHOLD = 0.5;
 
   function ready(fn) {
     if (document.readyState !== "loading") fn();
@@ -59,6 +75,9 @@
   let session = null; // { sid, sk, pk, kEnc?, matchCode? }
   let currentUrl = null;
   let copyResetTimer = null;
+  let engaged = false;             // becomes true after IO + dwell or click
+  let engageTimer = null;          // pending dwell timer (waiting for it to fire)
+  /** @type {IntersectionObserver|null} */ let io = null;
 
   ready(init);
 
@@ -71,8 +90,25 @@
     if (!card || !canvas || !digits) return;
 
     copyBtn?.addEventListener("click", onCopyClick);
+    // Treat any user gesture on the card as explicit intent — open the
+    // WS without waiting for the dwell timer. Pointerdown covers mouse,
+    // touch, pen; keyboard activation via Enter/Space fires "click" too.
+    card.addEventListener("pointerdown", onUserIntent, { once: false });
+    card.addEventListener("click", onUserIntent, { once: false });
+    // Backgrounded tabs don't get to keep a DO alive. If the user
+    // switches away before engaging, we never opened a WS; if they
+    // switch away mid-session, close it. We don't auto-reopen — they
+    // can click the card to re-engage.
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     renderPlaceholderMosaic(); // never paint empty
-    void renew("init");
+    // Stage 1: prepare the session + render a fully-scannable QR. No
+    // network. No DO spawn. The page is now functionally complete for
+    // visitors who never engage.
+    void prepareSession("init");
+    // Stage 2: arm the engagement detector. The WS opens lazily when
+    // the user demonstrates intent (viewport dwell or click).
+    armEngagement();
   }
 
   async function onCopyClick() {
@@ -99,18 +135,18 @@
     }
   }
 
-  // Fully regenerate sid + keypair, re-render the QR, open a fresh WS.
-  // ONLY called for affirmative reasons: page load, server rebind/expired,
-  // pre-expire timer, or future user-initiated refresh. A transient WS
-  // failure does NOT call this — that path goes through scheduleReconnect.
-  async function renew(why) {
+  // Generate sid + keypair and render the QR. Does NOT open the WS —
+  // that's deferred until engagement. Safe to call on rebind/expired
+  // to swap to a fresh session: it will tear down any existing WS and,
+  // if still engaged, reopen with the new sid.
+  async function prepareSession(why) {
     cancelReconnect();
     closeWs("renew");
     if (renewTimer) { clearTimeout(renewTimer); renewTimer = null; }
 
     digits.textContent = "— — — — — —";
     digits.classList.add("is-pending");
-    card.dataset.state = "loading";
+    card.dataset.state = engaged ? "loading" : "idle";
 
     let s;
     try {
@@ -122,20 +158,102 @@
     }
     session = s;
 
-    // Render the QR from sid + pk_b locally. No network needed.
+    // Render the QR from sid + pk_b locally. No network needed. The
+    // phone can already scan this — when the user actually engages,
+    // the browser-side WS will open at the same sid and find the
+    // (possibly already-waiting) phone via name-addressed DO.
     const url = joinUrl(s.sid, s.pkB64u);
     currentUrl = url;
     if (urlBox) urlBox.value = url;
     await renderQrFor(url);
 
+    // If we were already engaged when prepareSession ran (e.g. rebind
+    // after the user clicked), immediately open the WS for the fresh
+    // sid. Otherwise wait — armEngagement is the trigger.
+    if (engaged) openSocketAndArmRenewal(why);
+
+    console.debug?.("hero-qr: prepared", why, s.sid.slice(0, 8));
+  }
+
+  function openSocketAndArmRenewal(why) {
     openSocket();
-
-    // Pre-emptive renewal — fires only if no phone has connected yet.
+    if (renewTimer) clearTimeout(renewTimer);
+    // Pre-emptive renewal — fires only if no phone has connected yet
+    // AND the user is still engaged. A backgrounded / scrolled-away
+    // visitor doesn't get a fresh DO every 4 minutes.
     renewTimer = setTimeout(() => {
-      if (!session?.matchCode) void renew("pre-expire");
+      if (!engaged) return;
+      if (!session?.matchCode) void prepareSession("pre-expire");
     }, RENEW_BEFORE_MS);
+    console.debug?.("hero-qr: ws-opened", why);
+  }
 
-    console.debug?.("hero-qr: opened", why, s.sid.slice(0, 8));
+  // The engagement detector. Watches for either:
+  //   1. The QR card being ≥ENGAGE_THRESHOLD visible for ≥ENGAGE_DELAY_MS
+  //      continuously (a user reaching for their phone naturally has
+  //      the card in focus the whole time);
+  //   2. A user gesture on the card (pointerdown/click).
+  // Either signal flips `engaged = true` exactly once and opens the WS.
+  function armEngagement() {
+    if (engaged) return;
+    if (typeof IntersectionObserver === "undefined") {
+      // No IO support (very old browsers / test harnesses): fall back
+      // to opening on first user gesture only. Don't auto-open — that
+      // would defeat the whole point of the gate.
+      card.dataset.state = "idle";
+      return;
+    }
+    let dwellTimer = null;
+    io = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.intersectionRatio >= ENGAGE_THRESHOLD) {
+          if (dwellTimer || engaged) continue;
+          dwellTimer = setTimeout(() => {
+            dwellTimer = null;
+            engageTimer = null;
+            engage("viewport-dwell");
+          }, ENGAGE_DELAY_MS);
+          engageTimer = dwellTimer;
+        } else {
+          // Scrolled away before dwell completed — cancel; don't engage.
+          if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; engageTimer = null; }
+        }
+      }
+    }, { threshold: [0, ENGAGE_THRESHOLD, 1] });
+    io.observe(card);
+  }
+
+  function onUserIntent() {
+    if (engaged) return;
+    engage("user-intent");
+  }
+
+  function engage(why) {
+    if (engaged) return;
+    engaged = true;
+    if (engageTimer) { clearTimeout(engageTimer); engageTimer = null; }
+    if (io) { try { io.disconnect(); } catch (_) {} io = null; }
+    if (!session) {
+      // The session is still being prepared; prepareSession will see
+      // engaged === true and call openSocketAndArmRenewal itself.
+      card.dataset.state = "loading";
+      return;
+    }
+    openSocketAndArmRenewal(why);
+  }
+
+  function onVisibilityChange() {
+    if (document.visibilityState === "hidden") {
+      // Backgrounded — release the DO. Keep the rendered QR; the phone
+      // may still arrive, but it'll briefly see peer-missing and retry.
+      // We don't auto-reopen when the tab comes back: requiring a click
+      // keeps the gate honest if the user toggles between tabs all day.
+      if (renewTimer) { clearTimeout(renewTimer); renewTimer = null; }
+      cancelReconnect();
+      closeWs("tab-hidden");
+      engaged = false;
+      armEngagement();
+    }
   }
 
   // Open a WebSocket to the relay using the CURRENT session.sid. Does
@@ -215,11 +333,11 @@
       return;
     }
     if (m.kind === "rebind") {
-      void renew("rebind");
+      void prepareSession("rebind");
       return;
     }
     if (m.kind === "expired") {
-      void renew("expired");
+      void prepareSession("expired");
       return;
     }
     if (m.kind === "error") {
@@ -432,5 +550,9 @@
     sid: () => session?.sid ?? null,
     pkB64u: () => session?.pkB64u ?? null,
     matchCode: () => session?.matchCode ?? null,
+    engaged: () => engaged,
+    wsState: () => ws ? ws.readyState : null,
+    // Manual engage for tests / future "refresh QR" buttons. Idempotent.
+    engage: (why) => engage(why ?? "manual"),
   };
 })();
