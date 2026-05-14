@@ -934,6 +934,174 @@ describe("qr-pipe relay routes (v2 protocol)", () => {
       expect(calls).toHaveLength(0);
     });
   });
+
+  describe("qr-pipe metrics (P3 — D1-backed daily counters)", () => {
+    /**
+     * Captures every D1 prepare()+bind()+run() call against the
+     * Worker's DB so we can assert that the qr_pipe_metrics row was
+     * incremented on the right path. The route handler awaits the
+     * increment, so by the time `route()` returns the run() has
+     * already been observed by this stub.
+     */
+    function makeDbSpy() {
+      const runs: { query: string; bound: unknown[] }[] = [];
+      const db = {
+        prepare(query: string) {
+          let bound: unknown[] = [];
+          const stmt: any = {
+            bind(...values: unknown[]) {
+              bound = values;
+              return stmt;
+            },
+            async run() {
+              runs.push({ query, bound });
+              return { success: true, meta: { changes: 1 } };
+            },
+            async all() {
+              return { results: [], success: true, meta: {} };
+            },
+            async first() { return null; },
+          };
+          return stmt;
+        },
+        async batch() { return []; },
+      };
+      return { db, runs };
+    }
+
+    it("a successful upgrade records an upgrade_count increment for today's bucket", async () => {
+      const BUILD_RELAY = makeRelayStub();
+      const { db, runs } = makeDbSpy();
+      const r = await route(
+        new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
+          headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
+        }),
+        makeEnv({ BUILD_RELAY, DB: db as unknown as import("@flagship/storage").D1Database }),
+      );
+      expect(r.status).toBe(200);
+      const insert = runs.find((x) => /upgrade_count = upgrade_count \+ 1/.test(x.query));
+      expect(insert).toBeDefined();
+      // First bound value is the UTC bucket key — must look like a date.
+      expect(insert!.bound[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it("a rate-limited upgrade records rate_limited_count, not upgrade_count", async () => {
+      const BUILD_RELAY = makeRelayStub();
+      const { db, runs } = makeDbSpy();
+      const { binding } = (() => {
+        return {
+          binding: {
+            async limit() { return { success: false }; },
+          },
+        };
+      })();
+      const r = await route(
+        new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
+          headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
+        }),
+        makeEnv({
+          BUILD_RELAY,
+          RATE_LIMITER_QR_PIPE: binding,
+          DB: db as unknown as import("@flagship/storage").D1Database,
+        }),
+      );
+      expect(r.status).toBe(429);
+      expect(runs.some((x) => /rate_limited_count = rate_limited_count \+ 1/.test(x.query))).toBe(true);
+      expect(runs.some((x) => /upgrade_count = upgrade_count \+ 1/.test(x.query))).toBe(false);
+    });
+
+    it("works when DB binding is absent (metrics is best-effort)", async () => {
+      const BUILD_RELAY = makeRelayStub();
+      const r = await route(
+        new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
+          headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
+        }),
+        makeEnv({ BUILD_RELAY /* DB omitted */ }),
+      );
+      // Upgrade still succeeds; the response is unaffected by the
+      // metrics path. A missing DB is normal in local dev.
+      expect(r.status).toBe(200);
+    });
+
+    it("/api/_status/relay returns recent buckets as JSON", async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      const db = {
+        prepare(query: string) {
+          let bound: unknown[] = [];
+          const stmt: any = {
+            bind(...vals: unknown[]) { bound = vals; return stmt; },
+            async first() { return null; },
+            async all() {
+              if (!/SELECT bucket_day.*qr_pipe_metrics/s.test(query)) {
+                throw new Error(`unexpected: ${query}`);
+              }
+              expect(typeof bound[0]).toBe("number"); // LIMIT bound
+              return {
+                results: [
+                  { bucket_day: today,     upgrade_count: 42, rate_limited_count: 3, updated_at: 1 },
+                  { bucket_day: yesterday, upgrade_count: 17, rate_limited_count: 1, updated_at: 2 },
+                ],
+                success: true,
+                meta: {},
+              };
+            },
+            async run() { return { success: true, meta: {} }; },
+          };
+          return stmt;
+        },
+        async batch() { return []; },
+      };
+      const r = await route(
+        new Request("https://flagshipserver.com/api/_status/relay"),
+        makeEnv({ DB: db as unknown as import("@flagship/storage").D1Database }),
+      );
+      expect(r.status).toBe(200);
+      const body = JSON.parse(await r.text());
+      expect(body.buckets).toHaveLength(2);
+      expect(body.buckets[0]).toEqual({ day: today, upgrades: 42, rateLimited: 3, updatedAt: 1 });
+      expect(body.buckets[1]).toEqual({ day: yesterday, upgrades: 17, rateLimited: 1, updatedAt: 2 });
+      expect(typeof body.now).toBe("string");
+    });
+
+    it("/api/_status/relay honours ?days=N", async () => {
+      let seenLimit: unknown = null;
+      const db = {
+        prepare(query: string) {
+          let bound: unknown[] = [];
+          const stmt: any = {
+            bind(...vals: unknown[]) { bound = vals; return stmt; },
+            async first() { return null; },
+            async all() {
+              if (/SELECT bucket_day/.test(query)) {
+                seenLimit = bound[0];
+                return { results: [], success: true, meta: {} };
+              }
+              throw new Error(`unexpected: ${query}`);
+            },
+            async run() { return { success: true, meta: {} }; },
+          };
+          return stmt;
+        },
+        async batch() { return []; },
+      };
+      await route(
+        new Request("https://flagshipserver.com/api/_status/relay?days=7"),
+        makeEnv({ DB: db as unknown as import("@flagship/storage").D1Database }),
+      );
+      expect(seenLimit).toBe(7);
+    });
+
+    it("/api/_status/relay returns an empty buckets array when DB is unbound", async () => {
+      const r = await route(
+        new Request("https://flagshipserver.com/api/_status/relay"),
+        makeEnv(),
+      );
+      expect(r.status).toBe(200);
+      const body = JSON.parse(await r.text());
+      expect(body.buckets).toEqual([]);
+    });
+  });
 });
 
 describe("recovery.flagshipserver.com — dedicated WebAuthn-PRF origin (Task #73)", () => {

@@ -19,6 +19,11 @@
 
 import { tryControlPlane } from "./controlPlaneRoutes.js";
 import {
+  recordRateLimited,
+  recordUpgrade,
+  readRecent as readRelayMetrics,
+} from "./qrPipeMetrics.js";
+import {
   checkQrPipeUpgrade,
   checkRateLimit,
   clientIp,
@@ -152,6 +157,7 @@ export interface R2ObjectLike {
 
 const PROXY_PREFIX = "/api/";
 const STATUS_PROBE_PATH = "/api/_status/probe";
+const STATUS_RELAY_PATH = "/api/_status/relay";
 const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
 const HEALTH_PATH = "/api/health";
 const SERVICES_ENDPOINTS_PATH = "/api/services/endpoints";
@@ -321,6 +327,10 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // not what the user's browser sees.
   if (url.pathname === STATUS_PROBE_PATH) {
     return statusProbe(env);
+  }
+
+  if (url.pathname === STATUS_RELAY_PATH) {
+    return statusRelay(url, env);
   }
 
   if (url.pathname === BUILD_ISO_INFO_PATH) {
@@ -515,6 +525,36 @@ async function serveAasa(env: RouteEnv): Promise<Response> {
   });
 }
 
+/**
+ * /api/_status/relay — daily /qr-pipe upgrade counts.
+ *
+ * Returns up to ?days=N (default 14, max 90) most-recent buckets from
+ * the `qr_pipe_metrics` table. Each row carries `upgrades` (requests
+ * that materialised a DO) and `rateLimited` (requests turned away at
+ * the IP gate before reaching the DO). The /status/ page renders this
+ * so a duration-runaway is visible before it trips the ceiling.
+ *
+ * Returns an empty array when DB isn't bound — the endpoint is
+ * deliberately tolerant of dev/test environments.
+ */
+async function statusRelay(url: URL, env: RouteEnv): Promise<Response> {
+  const requested = Number(url.searchParams.get("days") ?? "14");
+  const days = Number.isFinite(requested) ? requested : 14;
+  const records = await readRelayMetrics(env.DB, days);
+  return jsonResponse(
+    {
+      buckets: records.map((r) => ({
+        day: r.bucketDay,
+        upgrades: r.upgradeCount,
+        rateLimited: r.rateLimitedCount,
+        updatedAt: r.updatedAt,
+      })),
+      now: new Date().toISOString(),
+    },
+    200,
+  );
+}
+
 async function statusProbe(env: RouteEnv): Promise<Response> {
   let base: URL;
   try {
@@ -616,7 +656,17 @@ async function forwardQrPipeUpgrade(
   // source can fan out enough DOs to refill the free-tier duration
   // bucket before throttling notices.
   const rl = await checkQrPipeUpgrade(env, clientIp(request));
-  if (rl.limited) return rateLimitedResponse(rl);
+  if (rl.limited) {
+    // P3 — count it so /status/ can flag a runaway before the next
+    // billing email. recordRateLimited is awaited so the row commits;
+    // the D1 hit is ~ms and a 429 response is already an error path.
+    await recordRateLimited(env.DB);
+    return rateLimitedResponse(rl);
+  }
+  // P3 — count successful spawns. This is the canary for free-tier
+  // duration runaway: /status/ surfaces the daily totals so we see a
+  // climb before it trips the ceiling.
+  await recordUpgrade(env.DB);
   const id = env.BUILD_RELAY.idFromName(sid);
   const stub = env.BUILD_RELAY.get(id);
   return stub.fetch(request);
@@ -1004,6 +1054,7 @@ function withRecoveryHeaders(res: Response): Response {
 export const _internal = {
   PROXY_PREFIX,
   STATUS_PROBE_PATH,
+  STATUS_RELAY_PATH,
   BUILD_ISO_INFO_PATH,
   HEALTH_PATH,
   SERVICES_ENDPOINTS_PATH,
