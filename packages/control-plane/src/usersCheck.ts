@@ -86,7 +86,7 @@ export async function handleUsersCheck(
   }
 
   // 3. Real claim lookup.
-  const existing = await deps.storage.getUsername(norm);
+  const existing = await deps.storage.get(norm);
   if (existing) {
     return ok<UsersCheckResponse>({
       username: norm,

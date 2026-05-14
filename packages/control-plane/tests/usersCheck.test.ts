@@ -15,12 +15,12 @@ import type { UsernameStorage } from "@flagship/storage";
 
 function fakeStorage(claimed: Record<string, string> = {}): UsernameStorage {
   return {
-    async getUsername(name: string) {
+    async get(name: string) {
       const irkPub = claimed[name];
       return irkPub ? { username: name, irkPub, issuedAt: 1, signature: "00" } : undefined;
     },
-    async setUsername() { /* unused */ },
-    async listAll() { return []; },
+    async put() { return { ok: true } as const; },
+    async list() { return []; },
   } as unknown as UsernameStorage;
 }
 
