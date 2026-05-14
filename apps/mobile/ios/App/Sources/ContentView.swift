@@ -11,7 +11,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             if app.isPaired {
-                RootShell()
+                RootShell(initialDestination: smokeInitialDestination ?? .home)
             } else {
                 Color.clear
             }
@@ -47,6 +47,24 @@ struct ContentView: View {
     /// App scope (see FlagshipApp.body), so the device-token callback
     /// can route through to .com regardless of which view triggered
     /// `registerForRemoteNotifications`.
+    /// Smoke-test plumbing: launch with `-smoke-tab <home|apps|activity|settings>`
+    /// to land on a specific tab on first paint. Production builds never
+    /// pass this arg, so the optional stays nil and `.home` is used.
+    private var smokeInitialDestination: RootDestination? {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-smoke-mode"),
+              let idx = args.firstIndex(of: "-smoke-tab"),
+              idx + 1 < args.count
+        else { return nil }
+        switch args[idx + 1] {
+        case "home":     return .home
+        case "apps":     return .apps
+        case "activity": return .activity
+        case "settings": return .settings
+        default:         return nil
+        }
+    }
+
     private func registerPush() async {
         guard let delegate = UIApplication.shared.delegate as? AppDelegate,
               let push = delegate.push else { return }

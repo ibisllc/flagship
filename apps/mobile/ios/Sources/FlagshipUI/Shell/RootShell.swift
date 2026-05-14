@@ -16,9 +16,11 @@ public struct RootShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(DeepLinker.self) private var linker
 
-    @State private var selected: RootDestination = .home
+    @State private var selected: RootDestination
 
-    public init() {}
+    public init(initialDestination: RootDestination = .home) {
+        _selected = State(initialValue: initialDestination)
+    }
 
     public var body: some View {
         Group {

@@ -51,7 +51,7 @@ public struct ChooseUsernameScreen: View {
                 .keyboardType(.asciiCapable)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
-                .onChange(of: username) { newValue in
+                .onChange(of: username) { _, newValue in
                     let lower = newValue.lowercased()
                     if lower != newValue { username = lower }
                 }

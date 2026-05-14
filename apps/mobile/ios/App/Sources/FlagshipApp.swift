@@ -24,6 +24,21 @@ struct FlagshipApp: App {
         Self.wirePendingApprovalsBroadcast()
     }
 
+    /// Smoke-test entry point: when launched with `-smoke-mode YES`
+    /// the app skips onboarding and lands directly on the paired
+    /// shell with DemoFixtures sample pods. ContentView pairs this
+    /// with `-smoke-tab` to pre-route the shell to a tab. Production
+    /// builds ignore the flag — `ProcessInfo.arguments` is only
+    /// populated when the launcher sets it.
+    @MainActor
+    private static func applySmokeModeIfRequested(_ app: AppState, linker: DeepLinker) {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-smoke-mode") else { return }
+        if !app.isPaired {
+            DemoFixtures.activate(app, username: "smoketest")
+        }
+    }
+
     /// Wire FlagshipUI's PendingApprovalsBroadcast to the WatchBridge
     /// — every refresh of the unlock-approval list mirrors to the
     /// paired Apple Watch via WCSession applicationContext.
@@ -98,6 +113,7 @@ struct FlagshipApp: App {
                 .environment(\.qrRelayClient, activeRelay)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
+                    Self.applySmokeModeIfRequested(appState, linker: linker)
                     appDelegate.linker = linker
                     WatchBridge.shared.activate(client: activeClient)
                     let push = PushNotifications(linker: linker)

@@ -171,7 +171,7 @@ struct FlagshipAppShortcuts: AppShortcutsProvider {
             intent: ShowPodIntent(),
             phrases: [
                 "Show my \(.applicationName) pod",
-                "Open \(\.$pod) on \(.applicationName)",
+                "Open a pod on \(.applicationName)",
             ],
             shortTitle: "Show pod",
             systemImageName: "house.fill"
