@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,25 +64,32 @@ class ActivityViewModel(
 
     fun load() = scope.launch {
         _state.value = LoadingState.Loading
-        try {
-            // Fan out the three feeds and stitch them once they all return.
-            val approvalsJob = async { client.unlockApprovalsPending().pending }
-            val detailJob = async { runCatching { client.serverDetail().recentInstallEvents }.getOrDefault(emptyList()) }
-            val recoveryJob = async { runCatching { client.postRecoveryStatus().report }.getOrNull() }
-            val (approvals, recents, snapshot) =
+        // coroutineScope contains the structured-concurrency tree so a
+        // sibling async{} failure cancels its siblings cleanly and
+        // bubbles out as a single throw the outer try{} catches — no
+        // dangling uncaught exceptions in the parent scope.
+        val outcome = runCatching {
+            coroutineScope {
+                val approvalsJob = async { client.unlockApprovalsPending().pending }
+                val detailJob = async { runCatching { client.serverDetail().recentInstallEvents }.getOrDefault(emptyList()) }
+                val recoveryJob = async { runCatching { client.postRecoveryStatus().report }.getOrNull() }
                 Triple(approvalsJob.await(), detailJob.await(), recoveryJob.await())
-
-            val items = buildList {
-                approvals.forEach { add(ActivityItem.UnlockApprove(it)) }
-                recents.forEach { add(ActivityItem.InstallEvent(it)) }
-                snapshot?.let { add(ActivityItem.RecoverySnapshot(it)) }
-            }.sortedByDescending { it.at }
-
-            _state.value = LoadingState.Loaded(
-                ActivityFeed(pendingApprovals = approvals, items = items),
-            )
-        } catch (t: Throwable) {
-            _state.value = LoadingState.Failed(t.message ?: "couldn't load activity")
+            }
         }
+        outcome.fold(
+            onSuccess = { (approvals, recents, snapshot) ->
+                val items = buildList {
+                    approvals.forEach { add(ActivityItem.UnlockApprove(it)) }
+                    recents.forEach { add(ActivityItem.InstallEvent(it)) }
+                    snapshot?.let { add(ActivityItem.RecoverySnapshot(it)) }
+                }.sortedByDescending { it.at }
+                _state.value = LoadingState.Loaded(
+                    ActivityFeed(pendingApprovals = approvals, items = items),
+                )
+            },
+            onFailure = { t ->
+                _state.value = LoadingState.Failed(t.message ?: "couldn't load activity")
+            },
+        )
     }
 }
