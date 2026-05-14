@@ -425,6 +425,20 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     });
   }
 
+  // Pre-launch stealth gate: the public marketing surface is replaced by
+  // a "coming soon" page so operational detail (build flow, dev tools,
+  // status, docs, etc.) isn't exposed before the mobile apps ship.
+  //
+  // `/wip_` and `/wip_/*` strip the prefix, serve the real asset, and
+  // drop a `flagship_preview` cookie so internal links (which point at
+  // un-prefixed paths like /faq.html) continue to resolve to the real
+  // pages on subsequent navigations. /api/*, /og, /me/*, /webapp/*,
+  // /recovery/*, /build/iso/*, and /.well-known/* are handled above
+  // and never hit this gate — the apps keep working unchanged.
+  if (url.pathname === "/wip_" || url.pathname.startsWith("/wip_/")) {
+    return serveWipPreview(request, url, env);
+  }
+
   // Rate-limit the four mutating control-plane endpoints. Runs BEFORE
   // dispatch but AFTER body buffering so we can pull the IRK pubkey
   // out of signed requests for the per-IRK axis. When the limit trips
@@ -476,6 +490,16 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
 
   if (url.pathname.startsWith(PROXY_PREFIX)) {
     return proxyToServices(buffered, env, url);
+  }
+
+  // Pre-launch stealth gate. By this point every explicit Worker handler
+  // (api, build/iso, og, me/webapp/recovery redirects, .well-known/aasa)
+  // has already returned — so the only requests reaching here are
+  // static-asset fallbacks (marketing HTML, /docs, /blog, /status, /qr,
+  // /deck, CSS/JS/fonts). Show coming-soon to those unless the request
+  // carries the preview cookie set by /wip_.
+  if (!hasPreviewCookie(request) && !isComingSoonExempt(url.pathname)) {
+    return serveComingSoon(env);
   }
 
   // Static asset path — let the assets binding handle it.
@@ -1051,6 +1075,108 @@ function withRecoveryHeaders(res: Response): Response {
   });
 }
 
+/**
+ * Pre-launch stealth gate.
+ *
+ * - WIP_PREVIEW_COOKIE: set by `/wip_` so that a tester who lands on the
+ *   preview path can navigate the real marketing surface (links from
+ *   the original landing point at un-prefixed paths like /faq.html).
+ *   Path=/ so it covers every apex path; SameSite=Lax keeps it off
+ *   third-party iframes; Max-Age caps the bypass at 7 days.
+ * - COMING_SOON_EXEMPT_PATHS / COMING_SOON_EXEMPT_PREFIXES: paths that
+ *   reach the static-asset fallback but must always serve their real
+ *   content (favicon, AT icon, the coming-soon page itself, /404.html,
+ *   `/.well-known/*` for security.txt and friends).
+ */
+const WIP_PREVIEW_COOKIE_NAME = "flagship_preview";
+const WIP_PREVIEW_COOKIE = `${WIP_PREVIEW_COOKIE_NAME}=1; Path=/; SameSite=Lax; Max-Age=604800`;
+const WIP_PREFIX = "/wip_";
+const COMING_SOON_PATH = "/coming-soon.html";
+
+const COMING_SOON_EXEMPT_PATHS = new Set<string>([
+  COMING_SOON_PATH,
+  "/favicon.svg",
+  "/apple-touch-icon.svg",
+  "/404.html",
+  "/robots.txt",
+]);
+const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/"];
+
+function hasPreviewCookie(request: Request): boolean {
+  const header = request.headers.get("cookie");
+  if (!header) return false;
+  for (const part of header.split(/;\s*/)) {
+    const [name, value] = part.split("=");
+    if (name === WIP_PREVIEW_COOKIE_NAME && value === "1") return true;
+  }
+  return false;
+}
+
+function isComingSoonExempt(pathname: string): boolean {
+  if (COMING_SOON_EXEMPT_PATHS.has(pathname)) return true;
+  for (const p of COMING_SOON_EXEMPT_PREFIXES) {
+    if (pathname.startsWith(p)) return true;
+  }
+  return false;
+}
+
+/**
+ * Serve the coming-soon page. The asset binding holds the HTML at
+ * /coming-soon.html; we fetch it through the binding so any future
+ * branding tweak is a pure static-file change.
+ *
+ * `cache-control: no-store` so the moment the gate is lifted the
+ * cached preview doesn't linger in clients.
+ */
+async function serveComingSoon(env: RouteEnv): Promise<Response> {
+  const upstream = await env.ASSETS.fetch(
+    new Request(`https://flagshipserver.com${COMING_SOON_PATH}`),
+  );
+  const headers = new Headers(upstream.headers);
+  if (!headers.get("content-type")) {
+    headers.set("content-type", "text/html; charset=utf-8");
+  }
+  headers.set("cache-control", "no-store");
+  return new Response(upstream.body, {
+    status: 200,
+    statusText: "OK",
+    headers,
+  });
+}
+
+/**
+ * `/wip_` and `/wip_/<path>` serve the real marketing assets. The
+ * prefix is stripped before handing off to the asset binding so the
+ * underlying file tree is unchanged — `/wip_/faq.html` reads from
+ * apps/web/public/faq.html.
+ *
+ * Sets the preview cookie on the response so the next navigation
+ * (to un-prefixed paths the original index.html links at) bypasses
+ * the coming-soon gate too. Without this the tester would land back
+ * on coming-soon as soon as they clicked any link.
+ */
+async function serveWipPreview(
+  request: Request,
+  url: URL,
+  env: RouteEnv,
+): Promise<Response> {
+  const tail = url.pathname.slice(WIP_PREFIX.length); // "" or "/X"
+  const realPath = !tail || tail === "/" ? "/" : tail;
+  const rewritten = new URL(realPath + url.search, "https://flagshipserver.com");
+  const assetReq = new Request(rewritten.toString(), {
+    method: request.method,
+    headers: request.headers,
+  });
+  const upstream = await env.ASSETS.fetch(assetReq);
+  const headers = new Headers(upstream.headers);
+  headers.append("set-cookie", WIP_PREVIEW_COOKIE);
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers,
+  });
+}
+
 export const _internal = {
   PROXY_PREFIX,
   STATUS_PROBE_PATH,
@@ -1072,4 +1198,7 @@ export const _internal = {
   RECOVERY_HOST,
   RECOVERY_ORIGIN,
   RECOVERY_CSP,
+  WIP_PREFIX,
+  WIP_PREVIEW_COOKIE_NAME,
+  COMING_SOON_PATH,
 };

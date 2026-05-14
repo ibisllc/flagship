@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Flagship — coming soon</title>
+  <meta name="description" content="Flagship is coming soon.">
+  <meta name="theme-color" content="#0A0A09">
+  <meta name="robots" content="noindex">
+  <meta property="og:title" content="Flagship — coming soon">
+  <meta property="og:description" content="A personal cloud, coming soon.">
+  <meta property="og:url" content="https://flagshipserver.com/">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.svg">
+  <style>
+    :root {
+      --canvas: #0A0A09;
+      --ink:    #ECE7D6;
+      --muted:  #8A8478;
+      --rule:   #25231C;
+      --teal:   #2DD4BF;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    ::selection { background: var(--teal); color: var(--canvas); }
+    main {
+      max-width: 480px;
+      text-align: center;
+    }
+    .mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 28px;
+    }
+    .mark .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 12px var(--teal);
+    }
+    h1 {
+      font-weight: 500;
+      font-size: clamp(34px, 6vw, 56px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin: 0 0 18px;
+      color: var(--ink);
+    }
+    .accent { color: var(--teal); }
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+    footer {
+      position: fixed;
+      bottom: 24px;
+      left: 0; right: 0;
+      text-align: center;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="mark"><span class="dot" aria-hidden="true"></span>Flagship</p>
+    <h1>Coming <span class="accent">soon</span>.</h1>
+    <p>Something new is on the way.</p>
+  </main>
+  <footer>flagshipserver.com</footer>
+</body>
+</html>

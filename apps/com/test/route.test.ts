@@ -49,11 +49,19 @@ function makeEnv(overrides: Partial<RouteEnv> = {}): RouteEnv {
 }
 
 describe("flagshipserver.com Worker — routing", () => {
-  it("non-/api paths are served by the asset binding (marketing, /deck, /.well-known)", async () => {
+  it("non-/api paths are served by the asset binding when the preview cookie is set", async () => {
     // /webapp/* used to fall through here too, but as of the
     // web.flagshipserver.com migration it 308-redirects to the new
     // origin — see the dedicated `/me + /webapp redirects` describe.
-    const r = await route(new Request("https://flagshipserver.com/"), makeEnv());
+    // Pre-launch the apex marketing surface is gated behind a
+    // coming-soon page (see the "Pre-launch stealth gate" describe);
+    // setting the flagship_preview cookie bypasses the gate so the
+    // existing asset-fallback behaviour is observable.
+    const cookie = { cookie: "flagship_preview=1" };
+    const r = await route(
+      new Request("https://flagshipserver.com/", { headers: cookie }),
+      makeEnv(),
+    );
     expect(r.status).toBe(200);
     expect(await r.text()).toBe("asset:/");
     const r2 = await route(
@@ -62,7 +70,7 @@ describe("flagshipserver.com Worker — routing", () => {
     );
     expect(await r2.text()).toBe("asset:/.well-known/security.txt");
     const r3 = await route(
-      new Request("https://flagshipserver.com/deck/"),
+      new Request("https://flagshipserver.com/deck/", { headers: cookie }),
       makeEnv(),
     );
     expect(await r3.text()).toBe("asset:/deck/");
@@ -582,7 +590,9 @@ describe("/me + /webapp redirects to web.flagshipserver.com", () => {
 
   it("/messages (similar prefix to /me) is NOT redirected — falls through to assets", async () => {
     const r = await route(
-      new Request("https://flagshipserver.com/messages"),
+      new Request("https://flagshipserver.com/messages", {
+        headers: { cookie: "flagship_preview=1" },
+      }),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -591,7 +601,9 @@ describe("/me + /webapp redirects to web.flagshipserver.com", () => {
 
   it("/webappish (similar prefix to /webapp) is NOT redirected — falls through to assets", async () => {
     const r = await route(
-      new Request("https://flagshipserver.com/webappish"),
+      new Request("https://flagshipserver.com/webappish", {
+        headers: { cookie: "flagship_preview=1" },
+      }),
       makeEnv(),
     );
     expect(r.status).toBe(200);
@@ -1302,5 +1314,153 @@ describe("/.well-known/assetlinks.json — Android App Links binding", () => {
       makeEnv(),
     );
     expect(calls).toEqual([]);
+  });
+});
+
+describe("Pre-launch stealth gate (/wip_ + coming-soon)", () => {
+  it("apex / returns coming-soon HTML when the preview cookie is missing", async () => {
+    const env = makeEnv();
+    const r = await route(new Request("https://flagshipserver.com/"), env);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("cache-control")).toBe("no-store");
+    expect(await r.text()).toBe("asset:/coming-soon.html");
+  });
+
+  it("apex marketing paths (/faq.html, /deck/, /blog/, /docs/) all return coming-soon", async () => {
+    for (const p of ["/faq.html", "/deck/", "/blog/", "/docs/", "/marketplace/", "/status/"]) {
+      const r = await route(new Request(`https://flagshipserver.com${p}`), makeEnv());
+      expect(r.status, p).toBe(200);
+      expect(await r.text(), p).toBe("asset:/coming-soon.html");
+    }
+  });
+
+  it("preview cookie bypasses the gate so the real asset is served", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/faq.html", {
+        headers: { cookie: "x=1; flagship_preview=1; y=2" },
+      }),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/faq.html");
+  });
+
+  it("exempt static essentials are always served even without the cookie", async () => {
+    for (const p of [
+      "/coming-soon.html",
+      "/favicon.svg",
+      "/apple-touch-icon.svg",
+      "/404.html",
+      "/.well-known/security.txt",
+      "/.well-known/assetlinks.json",
+    ]) {
+      const r = await route(new Request(`https://flagshipserver.com${p}`), makeEnv());
+      expect(await r.text(), p).toBe(`asset:${p}`);
+    }
+  });
+
+  it("/api/* still proxies to .services even without the cookie (apps keep working)", async () => {
+    await route(
+      new Request("https://flagshipserver.com/api/me/servers"),
+      makeEnv(),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://flagship.services/api/me/servers");
+  });
+
+  it("/og and /api/health still work without the cookie", async () => {
+    const og = await route(
+      new Request("https://flagshipserver.com/og?title=hi"),
+      makeEnv(),
+    );
+    expect(og.headers.get("content-type")).toMatch(/image\/svg/);
+    const health = await route(
+      new Request("https://flagshipserver.com/api/health"),
+      makeEnv(),
+    );
+    const body = await health.json() as { ok: boolean; surface: string };
+    expect(body.ok).toBe(true);
+    expect(body.surface).toBe("com");
+  });
+
+  it("/me/* and /webapp/* 308-redirects still fire without the cookie", async () => {
+    const me = await route(new Request("https://flagshipserver.com/me/profile"), makeEnv());
+    expect(me.status).toBe(308);
+    expect(me.headers.get("location")).toMatch(/^https:\/\/web\.flagshipserver\.com/);
+    const webapp = await route(new Request("https://flagshipserver.com/webapp/foo"), makeEnv());
+    expect(webapp.status).toBe(308);
+  });
+
+  it("/wip_ serves the real index.html and sets the preview cookie", async () => {
+    const r = await route(new Request("https://flagshipserver.com/wip_"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/");
+    const setCookie = r.headers.get("set-cookie") ?? "";
+    expect(setCookie).toMatch(/flagship_preview=1/);
+    expect(setCookie).toMatch(/Path=\//);
+    expect(setCookie).toMatch(/SameSite=Lax/);
+  });
+
+  it("/wip_/ (trailing slash) is canonicalised to /", async () => {
+    const r = await route(new Request("https://flagshipserver.com/wip_/"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/");
+    expect(r.headers.get("set-cookie") ?? "").toMatch(/flagship_preview=1/);
+  });
+
+  it("/wip_/<path> strips the prefix and serves the underlying asset", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/wip_/faq.html"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/faq.html");
+    expect(r.headers.get("set-cookie") ?? "").toMatch(/flagship_preview=1/);
+  });
+
+  it("/wip_/deck/ preserves the trailing slash so the binding serves index.html", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/wip_/deck/"),
+      makeEnv(),
+    );
+    expect(await r.text()).toBe("asset:/deck/");
+  });
+
+  it("/wip_/<path>?x=1 preserves the query string", async () => {
+    let captured = "";
+    const env = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          captured = req.url;
+          return new Response(`asset:${new URL(req.url).pathname}`, { status: 200 });
+        },
+      },
+    });
+    await route(
+      new Request("https://flagshipserver.com/wip_/faq.html?x=1"),
+      env,
+    );
+    expect(new URL(captured).search).toBe("?x=1");
+  });
+
+  it("/wipx (no underscore) is NOT a preview path — gated as usual", async () => {
+    const r = await route(new Request("https://flagshipserver.com/wipx"), makeEnv());
+    expect(await r.text()).toBe("asset:/coming-soon.html");
+  });
+
+  it("the gate does not affect web.flagshipserver.com (webapp origin)", async () => {
+    const r = await route(
+      new Request("https://web.flagshipserver.com/"),
+      makeEnv(),
+    );
+    expect(await r.text()).toBe("asset:/webapp/");
+  });
+
+  it("the gate does not affect recovery.flagshipserver.com (recovery origin)", async () => {
+    const r = await route(
+      new Request("https://recovery.flagshipserver.com/"),
+      makeEnv(),
+    );
+    expect(await r.text()).toBe("asset:/recovery/");
   });
 });
