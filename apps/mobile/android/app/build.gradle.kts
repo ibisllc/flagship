@@ -25,7 +25,7 @@ android {
     defaultConfig {
         applicationId = "com.flagshipserver.app"
         minSdk = 28
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "0.0.1"
         vectorDrawables { useSupportLibrary = true }
