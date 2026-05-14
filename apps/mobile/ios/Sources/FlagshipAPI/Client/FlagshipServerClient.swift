@@ -280,17 +280,26 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if let meta = testAccounts[lower] {
             return .init(username: lower, available: false, reason: "test account", testAccount: meta)
         }
-        if lower.count < 2 || lower.count > 32 {
-            return .init(username: lower, available: false, reason: "Must be 2–32 chars.")
+        // RFC 1035 label rules. Mirrors the Worker's labels.ts so the
+        // Mock's wire shape (reason strings + ordering) matches what a
+        // real Worker would return — keep these in sync.
+        let labelRe = "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+        if lower.range(of: labelRe, options: .regularExpression) == nil {
+            return .init(
+                username: lower,
+                available: false,
+                reason: "username must match RFC 1035 label rules (1–63 chars, [a-z0-9-], not starting/ending with hyphen)"
+            )
         }
         if reservedUsernames.contains(lower) {
-            return .init(username: lower, available: false, reason: "Reserved.")
-        }
-        if lower.range(of: "^[a-z0-9]+$", options: .regularExpression) == nil {
-            return .init(username: lower, available: false, reason: "Letters and digits only.")
+            return .init(
+                username: lower,
+                available: false,
+                reason: "username \"\(lower)\" is reserved"
+            )
         }
         if let prior = claimedUsernames[lower], prior != "_self" {
-            return .init(username: lower, available: false, reason: "Already claimed.")
+            return .init(username: lower, available: false, reason: "already claimed")
         }
         return .init(username: lower, available: true, reason: nil)
     }

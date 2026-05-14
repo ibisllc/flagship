@@ -21,6 +21,10 @@ public enum AppsRoute: Hashable, Sendable {
 public enum ActivityRoute: Hashable, Sendable {
     case unlockApprovals
     case installProgress(serial: String)
+    /// Activity-feed shortcut into Settings → Recovery → Re-attach
+    /// progress. Separate path-stack entry so back-nav lands the user
+    /// on Activity, not Settings.
+    case postRecovery
 }
 
 public enum SettingsRoute: Hashable, Sendable {

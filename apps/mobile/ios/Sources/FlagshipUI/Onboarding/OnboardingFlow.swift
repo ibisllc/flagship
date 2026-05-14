@@ -1,11 +1,13 @@
 import SwiftUI
 import FlagshipCore
+import FlagshipAPI
 
 /// Onboarding stack presented as a fullScreenCover over the RootShell
 /// when AppState.isPaired == false.
 ///
 ///   Welcome
 ///     ├─ Create your account → ChooseUsername → CreateServer (stub)
+///     │                       └─ (test-account hit) → DemoFixtures.activate
 ///     └─ I already have a server → PodPair (stub)
 ///
 /// Both leaf flows currently call `mockPair(...)` on AppState to drop
@@ -26,9 +28,14 @@ public struct OnboardingFlow: View {
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .chooseUsername:
-                    ChooseUsernameScreen(onContinue: { username in
-                        path.append(.createServer(username: username))
-                    })
+                    ChooseUsernameScreen(
+                        onContinue: { username in
+                            path.append(.createServer(username: username))
+                        },
+                        onDemoActivate: { username, _ in
+                            DemoFixtures.activate(app, username: username)
+                        }
+                    )
                 case .createServer(let username):
                     OnboardingCreateServer(username: username) { name, description in
                         completeMockPair(username: username, name: name, description: description)

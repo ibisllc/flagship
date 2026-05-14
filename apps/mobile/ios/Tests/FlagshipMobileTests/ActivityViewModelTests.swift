@@ -1,0 +1,135 @@
+import XCTest
+@testable import FlagshipAPI
+@testable import FlagshipUI
+
+@MainActor
+final class ActivityViewModelTests: XCTestCase {
+
+    private func makeClient() -> MockScreensClient {
+        let c = MockScreensClient()
+        c.simulatedLatency = 0
+        return c
+    }
+
+    func test_load_idleSnapshotHasNilPostRecovery() async {
+        let client = makeClient()
+        let vm = ActivityViewModel(client: client)
+        await vm.load()
+        guard case .loaded(let feed) = vm.state else {
+            XCTFail("expected loaded, got \(vm.state)"); return
+        }
+        XCTAssertNil(feed.postRecovery)
+    }
+
+    func test_load_surfacesPostRecoveryReport_whenDaemonReturnsOne() async {
+        let client = makeClient()
+        client.postRecoveryReport = PostRecoverySnapshot(
+            currentIrkPubHex: "abcd",
+            state: WatcherState(
+                lastSeen: nil,
+                lastSwapTo: "abcd",
+                lastSwapAt: 1_700_000_000_000,
+                lastPolledAt: 1_700_000_001_000,
+                lastError: nil
+            ),
+            lastReissue: ReissuanceReportPayload(
+                startedAt: 1_700_000_002_000,
+                completedAt: 1_700_000_003_000,
+                status: "complete",
+                oldIrkPrefix: "old123456789",
+                newIrkPrefix: "new123456789",
+                apps: [],
+                totalRewritten: 7,
+                reattachedCount: 3,
+                unchangedCount: 0,
+                undoWindowExpiresAt: 1_700_604_802_000
+            )
+        )
+        let vm = ActivityViewModel(client: client)
+        await vm.load()
+        guard case .loaded(let feed) = vm.state else {
+            XCTFail("expected loaded, got \(vm.state)"); return
+        }
+        XCTAssertNotNil(feed.postRecovery)
+        XCTAssertEqual(feed.postRecovery?.lastReissue?.totalRewritten, 7)
+        XCTAssertEqual(feed.postRecovery?.lastReissue?.reattachedCount, 3)
+    }
+
+    func test_load_isResilientToPostRecoveryFailure() async {
+        // A daemon that doesn't ship P1.23 returns non-2xx for the
+        // post-recovery endpoint. The feed should still load — the
+        // other three calls (detail/unlocks/sessions) carry the
+        // primary content. Mirrors the try/catch in webapp's
+        // activity.js fan-out.
+        let client = FailingPostRecoveryClient(real: makeClient())
+        let vm = ActivityViewModel(client: client)
+        await vm.load()
+        guard case .loaded(let feed) = vm.state else {
+            XCTFail("expected loaded despite recovery failure, got \(vm.state)"); return
+        }
+        XCTAssertNil(feed.postRecovery)
+        XCTAssertFalse(feed.recentInstalls.isEmpty, "real install events should still flow")
+    }
+}
+
+/// Test double that proxies to a real MockScreensClient but throws
+/// from postRecoveryStatus(). Confirms the ViewModel's fan-out
+/// tolerates a daemon without P1.23.
+private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendable {
+    let real: MockScreensClient
+    init(real: MockScreensClient) { self.real = real }
+
+    func serverDetail() async throws -> ServerDetailResponse { try await real.serverDetail() }
+    func appsList() async throws -> AppsListResponse { try await real.appsList() }
+    func appDetail(appId: String) async throws -> AppDetailResponse { try await real.appDetail(appId: appId) }
+    func marketplaceBrowse() async throws -> MarketplaceBrowseResponse { try await real.marketplaceBrowse() }
+    func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse {
+        try await real.vibeCodeStart(req)
+    }
+    func vibeCodeStatus(sessionId: String) async throws -> VibeCodeStatusResponse {
+        try await real.vibeCodeStatus(sessionId: sessionId)
+    }
+    func unlockApprovalsPending() async throws -> UnlockApprovalsPendingResponse {
+        try await real.unlockApprovalsPending()
+    }
+    func approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) async throws {
+        try await real.approveUnlock(requestId: requestId, body: body)
+    }
+    func browserTabsList(appId: String) async throws -> BrowserTabsListResponse {
+        try await real.browserTabsList(appId: appId)
+    }
+    func pairedSessionsList() async throws -> PairedSessionsListResponse {
+        try await real.pairedSessionsList()
+    }
+    func revokePairedSession(tokenPrefix: String) async throws {
+        try await real.revokePairedSession(tokenPrefix: tokenPrefix)
+    }
+    func ordersSend(_ req: OrdersSendRequest) async throws -> OrdersSendResponse {
+        try await real.ordersSend(req)
+    }
+    func tierStatus() async throws -> TierStatusResponse { try await real.tierStatus() }
+    func urlControllerOwned() async throws -> UrlControllerOwnedResponse {
+        try await real.urlControllerOwned()
+    }
+    func urlControllerClaim(_ req: UrlControllerClaimRequest) async throws -> UrlControllerClaimResponse {
+        try await real.urlControllerClaim(req)
+    }
+    func appBackupStart(_ req: AppBackupStartRequest) async throws -> AppBackupStartResponse {
+        try await real.appBackupStart(req)
+    }
+    func serverMetrics(podId: String) async throws -> ServerMetricsResponse {
+        try await real.serverMetrics(podId: podId)
+    }
+    func installEvents(serial: String) -> AsyncStream<InstallEvent> {
+        real.installEvents(serial: serial)
+    }
+    func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame> {
+        real.vibeCodeStream(sessionId: sessionId)
+    }
+    func verifyCustomDomain(_ req: VerifyCustomDomainRequest) async throws -> VerifyCustomDomainResponse {
+        try await real.verifyCustomDomain(req)
+    }
+    func postRecoveryStatus() async throws -> PostRecoveryStatusResponse {
+        throw ScreensClientError.http(status: 503, message: "daemon does not implement P1.23")
+    }
+}

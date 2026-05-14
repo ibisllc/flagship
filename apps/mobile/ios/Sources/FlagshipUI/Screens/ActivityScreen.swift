@@ -12,6 +12,7 @@ public struct ActivityScreen: View {
     let leaderPodId: String?
     var onPickPod: (PodInfo) -> Void = { _ in }
     var onApproveUnlock: (String) -> Void = { _ in }
+    var onOpenPostRecovery: () -> Void = {}
     var onRefresh: () async -> Void = {}
 
     public init(
@@ -21,6 +22,7 @@ public struct ActivityScreen: View {
         leaderPodId: String? = nil,
         onPickPod: @escaping (PodInfo) -> Void = { _ in },
         onApproveUnlock: @escaping (String) -> Void = { _ in },
+        onOpenPostRecovery: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {}
     ) {
         self.state = state
@@ -29,6 +31,7 @@ public struct ActivityScreen: View {
         self.leaderPodId = leaderPodId
         self.onPickPod = onPickPod
         self.onApproveUnlock = onApproveUnlock
+        self.onOpenPostRecovery = onOpenPostRecovery
         self.onRefresh = onRefresh
     }
 
@@ -64,6 +67,11 @@ public struct ActivityScreen: View {
                                     pendingUnlockCard(req, c: c)
                                 }
                             }
+                        }
+                    }
+                    if let snap = feed.postRecovery {
+                        section("POST-RECOVERY", c: c) {
+                            postRecoveryCard(snap, c: c)
                         }
                     }
                     section("RECENT DEPLOYS", c: c) {
@@ -108,6 +116,36 @@ public struct ActivityScreen: View {
                 FSPrimaryButton("Approve unlock", block: true) { onApproveUnlock(req.requestId) }
             }
         }
+    }
+
+    private func postRecoveryCard(_ snap: PostRecoverySnapshot, c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s2) {
+                    if snap.lastReissue != nil {
+                        Image(systemName: "checkmark.seal.fill").foregroundColor(c.success)
+                    } else if snap.state.lastSeen != nil {
+                        Image(systemName: "clock.fill").foregroundColor(c.primary)
+                    } else {
+                        Image(systemName: "info.circle.fill").foregroundColor(c.textMuted)
+                    }
+                    Text(postRecoveryHeadline(snap)).foregroundColor(c.text)
+                    Spacer()
+                }
+                if let r = snap.lastReissue {
+                    Text("\(r.totalRewritten) row\(r.totalRewritten == 1 ? "" : "s") rewritten · \(r.reattachedCount) app\(r.reattachedCount == 1 ? "" : "s")")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+                FSPrimaryButton("View report", block: true, action: onOpenPostRecovery)
+            }
+        }
+    }
+
+    private func postRecoveryHeadline(_ snap: PostRecoverySnapshot) -> String {
+        if snap.lastReissue != nil { return "Re-attach finished." }
+        if snap.state.lastSeen != nil { return "Re-attach in progress." }
+        return "Snapshot ready."
     }
 
     private func installRow(event: RecentInstallEvent, c: FSColors) -> some View {

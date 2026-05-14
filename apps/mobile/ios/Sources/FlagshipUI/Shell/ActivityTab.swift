@@ -18,6 +18,7 @@ public struct ActivityTab: View {
                     switch route {
                     case .unlockApprovals: UnlockApprovalsContainer()
                     case .installProgress(let serial): InstallProgressStub(serial: serial)
+                    case .postRecovery: PostRecoveryContainer()
                     }
                 }
         }
@@ -35,6 +36,7 @@ public struct ActivityTab: View {
                     leaderPodId: app.leaderPodId,
                     onPickPod: { pod in app.setCurrentPod(pod.podId) },
                     onApproveUnlock: { _ in path.append(.unlockApprovals) },
+                    onOpenPostRecovery: { path.append(.postRecovery) },
                     onRefresh: { await vm.load() }
                 )
             } else {

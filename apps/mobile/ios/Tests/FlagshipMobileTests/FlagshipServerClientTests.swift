@@ -79,7 +79,10 @@ final class FlagshipServerClientTests: XCTestCase {
         let c = makeClient()
         let r = try await c.usernameAvailable("root")
         XCTAssertFalse(r.available)
-        XCTAssertEqual(r.reason, "Reserved.")
+        // Mock + Worker share wire format; reserved-reason string is
+        // structured so the screen can detect it without locale-
+        // matching against a translated phrase.
+        XCTAssertEqual(r.reason, "username \"root\" is reserved")
     }
 
     func test_usernameAvailable_reflectsClaimedNames() async throws {
@@ -90,7 +93,23 @@ final class FlagshipServerClientTests: XCTestCase {
         ))
         let r = try await c.usernameAvailable("alice")
         XCTAssertFalse(r.available)
-        XCTAssertEqual(r.reason, "Already claimed.")
+        XCTAssertEqual(r.reason, "already claimed")
+    }
+
+    func test_usernameAvailable_acceptsHyphenatedRFC1035() async throws {
+        // Worker's labels.ts allows /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/ —
+        // hyphens are legal mid-label. iOS Mock must agree.
+        let c = makeClient()
+        let r = try await c.usernameAvailable("play-q2")
+        XCTAssertTrue(r.available)
+    }
+
+    func test_usernameAvailable_rejectsLeadingOrTrailingHyphen() async throws {
+        let c = makeClient()
+        let lead = try await c.usernameAvailable("-harry")
+        XCTAssertFalse(lead.available)
+        let trail = try await c.usernameAvailable("harry-")
+        XCTAssertFalse(trail.available)
     }
 
     // MARK: - Recovery envelope
