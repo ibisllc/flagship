@@ -145,7 +145,7 @@ data class PushTokenRegisterResponse(
 class MockFlagshipServerClient(
     var simulatedLatencyMs: Long = 200,
     var shouldFail: Boolean = false,
-    var reservedUsernames: Set<String> = setOf("root", "admin", "flagship", "system", "support"),
+    var reservedUsernames: Set<String> = setOf("root", "admin", "flagship", "system", "support", "demo"),
 ) : FlagshipServerClient {
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub

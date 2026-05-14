@@ -13,6 +13,11 @@ const RESERVED_USER_LABELS = new Set([
   "status", "ops", "ns1", "ns2", "mail", "email", "smtp", "imap", "pop",
   "static", "cdn", "assets", "files", "git", "tunnel", "control",
   "control-plane", "console", "dashboard", "blog", "docs",
+  // `demo` is the magic username the mobile clients use to enter a
+  // sandbox without provisioning real hardware. Reserve it on the
+  // Worker side so nobody can claim it as a real account and
+  // accidentally collide with the demo experience.
+  "demo",
 ]);
 
 export type LabelValidation =

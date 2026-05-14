@@ -18,6 +18,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.core.DemoFixtures
+import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -30,15 +33,27 @@ private val usernameRegex = Regex("^[a-z0-9]{1,32}$")
  *
  * Live availability check (debounced 350ms). Username is permanent;
  * surfaced clearly in the helper text.
+ *
+ * Magic username `demo` short-circuits the real onboarding flow and
+ * loads pre-baked fixtures so Play Store reviewers + curious users
+ * can explore the app without provisioning real hardware. See
+ * DemoFixtures for the contract.
  */
 @Composable
 fun ChooseUsernameScreen(nav: NavController) {
+    val app = LocalAppState.current
+    val toasts = LocalToastCenter.current
     var username by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<UsernameCheck>(UsernameCheck.Empty) }
 
     LaunchedEffect(username) {
         if (username.isEmpty()) {
             status = UsernameCheck.Empty
+            return@LaunchedEffect
+        }
+        if (DemoFixtures.isDemoUsername(username)) {
+            // Don't run the network check — `demo` is reserved.
+            status = UsernameCheck.Demo
             return@LaunchedEffect
         }
         if (!usernameRegex.matches(username)) {
@@ -79,6 +94,7 @@ fun ChooseUsernameScreen(nav: NavController) {
                 UsernameCheck.Checking -> "Checking…"
                 UsernameCheck.Available -> "Available."
                 UsernameCheck.Taken -> null
+                UsernameCheck.Demo -> "Demo mode — loads sample data without creating a real account."
             },
             error = when (status) {
                 UsernameCheck.Invalid -> "Letters and digits only. No spaces or punctuation."
@@ -90,13 +106,20 @@ fun ChooseUsernameScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s8))
 
         FSPrimaryButton(
-            label = "Continue",
-            onClick = { nav.navigate("biometric") },
+            label = if (status == UsernameCheck.Demo) "Enter demo" else "Continue",
+            onClick = {
+                if (status == UsernameCheck.Demo) {
+                    DemoFixtures.activate(app)
+                    toasts.info("Demo mode active. Sign out to leave.")
+                } else {
+                    nav.navigate("biometric")
+                }
+            },
             block = true,
             large = true,
-            enabled = status == UsernameCheck.Available,
+            enabled = status == UsernameCheck.Available || status == UsernameCheck.Demo,
         )
     }
 }
 
-private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken }
+private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken, Demo }
