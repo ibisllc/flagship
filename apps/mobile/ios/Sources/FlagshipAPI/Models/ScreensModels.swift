@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Shared
 
-public struct AppSummary: Codable, Equatable {
+public struct AppSummary: Codable, Equatable, Sendable {
     public let appId: String
     public let creator: String
     public let slug: String
@@ -21,7 +21,7 @@ public struct AppSummary: Codable, Equatable {
     public let installedAt: Int64
 }
 
-public struct RecentInstallEvent: Codable, Equatable {
+public struct RecentInstallEvent: Codable, Equatable, Sendable {
     public let at: Int64
     public let kind: String     // "installed" | "uninstalled" | "deploy" | "update-pulled"
     public let appId: String
@@ -30,7 +30,7 @@ public struct RecentInstallEvent: Codable, Equatable {
 
 // MARK: - P1.1 server-detail
 
-public struct ServerDetailResponse: Codable, Equatable {
+public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public let serverFqdn: String
     public let username: String
     public let daemonVersion: String
@@ -46,7 +46,7 @@ public struct ServerDetailResponse: Codable, Equatable {
 
 // MARK: - P1.2 apps-list
 
-public struct AppsListResponse: Codable, Equatable {
+public struct AppsListResponse: Codable, Equatable, Sendable {
     public let apps: [AppSummary]
 }
 
@@ -82,7 +82,7 @@ public struct AppDetailResponse: Codable {
 
 // MARK: - P1.4 marketplace-browse
 
-public struct MarketplaceListing: Codable, Equatable {
+public struct MarketplaceListing: Codable, Equatable, Sendable {
     public let creator: String
     public let slug: String
     public let title: String
@@ -93,13 +93,13 @@ public struct MarketplaceListing: Codable, Equatable {
     public let alreadyInstalled: Bool
 }
 
-public struct MarketplaceBrowseResponse: Codable, Equatable {
+public struct MarketplaceBrowseResponse: Codable, Equatable, Sendable {
     public let listings: [MarketplaceListing]
 }
 
 // MARK: - P1.5 vibe-code/start
 
-public struct VibeCodeStartRequest: Codable, Equatable {
+public struct VibeCodeStartRequest: Codable, Equatable, Sendable {
     public let prompt: String
     public let model: String?
     public init(prompt: String, model: String?) {
@@ -108,7 +108,7 @@ public struct VibeCodeStartRequest: Codable, Equatable {
     }
 }
 
-public struct VibeCodeStartResponse: Codable, Equatable {
+public struct VibeCodeStartResponse: Codable, Equatable, Sendable {
     public let sessionId: String
 }
 
@@ -176,7 +176,7 @@ public struct VibeCodeStatusResponse: Codable {
 
 // MARK: - P1.8 / P1.9 unlock-approvals
 
-public struct PendingUnlockApproval: Codable, Equatable {
+public struct PendingUnlockApproval: Codable, Equatable, Sendable {
     public let serverFqdn: String
     public let requestId: String
     public let requestedAt: Int64
@@ -184,11 +184,11 @@ public struct PendingUnlockApproval: Codable, Equatable {
     public let userAgent: String?
 }
 
-public struct UnlockApprovalsPendingResponse: Codable, Equatable {
+public struct UnlockApprovalsPendingResponse: Codable, Equatable, Sendable {
     public let pending: [PendingUnlockApproval]
 }
 
-public struct UnlockApprovalApproveRequest: Codable, Equatable {
+public struct UnlockApprovalApproveRequest: Codable, Equatable, Sendable {
     public let signature: String  // hex
     public let envelope: String   // base64
     public init(signature: String, envelope: String) {
@@ -199,7 +199,7 @@ public struct UnlockApprovalApproveRequest: Codable, Equatable {
 
 // MARK: - P1.10 / P1.11 browser-tabs
 
-public struct BrowserTab: Codable, Equatable {
+public struct BrowserTab: Codable, Equatable, Sendable {
     public let tabId: String
     public let appId: String
     public let currentUrl: String?
@@ -208,26 +208,26 @@ public struct BrowserTab: Codable, Equatable {
     public let needsField: String?  // "password" | "text" | "code"
 }
 
-public struct BrowserTabsListResponse: Codable, Equatable {
+public struct BrowserTabsListResponse: Codable, Equatable, Sendable {
     public let tabs: [BrowserTab]
 }
 
 // MARK: - P1.12 / P1.13 paired-sessions
 
-public struct PairedSessionSummary: Codable, Equatable {
+public struct PairedSessionSummary: Codable, Equatable, Sendable {
     public let tokenPrefix: String
     public let label: String
     public let addedAt: Int64
     public let current: Bool
 }
 
-public struct PairedSessionsListResponse: Codable, Equatable {
+public struct PairedSessionsListResponse: Codable, Equatable, Sendable {
     public let sessions: [PairedSessionSummary]
 }
 
 // MARK: - P1.14 orders/send
 
-public struct OrdersSendRequest: Codable, Equatable {
+public struct OrdersSendRequest: Codable, Equatable, Sendable {
     public let envelope: String   // base64
     public let kind: String
     public init(envelope: String, kind: String) {
@@ -297,7 +297,7 @@ public enum InstallEvent: Codable, Equatable {
 
 // MARK: - P1.16 tier-status
 
-public struct TierStatusResponse: Codable, Equatable {
+public struct TierStatusResponse: Codable, Equatable, Sendable {
     public let tier: String   // "free" | "promo" | "byok"
     public let llmCreditsRemainingDay: Int64?
     public let llmCreditsRemainingTotal: Int64?
@@ -309,22 +309,22 @@ public struct TierStatusResponse: Codable, Equatable {
 
 // MARK: - P1.17 / P1.18 url-controller
 
-public struct OwnedUrl: Codable, Equatable {
+public struct OwnedUrl: Codable, Equatable, Sendable {
     public let fqdn: String
     public let kind: String   // "canonical" | "alias" | "custom"
     public let claimedAt: Int64
 }
 
-public struct UrlControllerOwnedResponse: Codable, Equatable {
+public struct UrlControllerOwnedResponse: Codable, Equatable, Sendable {
     public let urls: [OwnedUrl]
 }
 
-public struct UrlControllerClaimRequest: Codable, Equatable {
+public struct UrlControllerClaimRequest: Codable, Equatable, Sendable {
     public let fqdn: String
     public init(fqdn: String) { self.fqdn = fqdn }
 }
 
-public struct UrlControllerClaimResponse: Codable, Equatable {
+public struct UrlControllerClaimResponse: Codable, Equatable, Sendable {
     public let ok: Bool
 }
 
@@ -358,7 +358,7 @@ public struct VerifyCustomDomainResponse: Codable, Equatable, Sendable {
 // can cheaply expose (CPU%, mem, disk, I/O, network). The contract
 // is iOS-driven for now; daemon implementation will follow.
 
-public struct ServerMetricsResponse: Codable, Equatable {
+public struct ServerMetricsResponse: Codable, Equatable, Sendable {
     public let collectedAt: Int64
     public let cpuPercent: Double           // 0–100, instantaneous
     public let loadAvg1: Double
@@ -420,7 +420,7 @@ public struct ServerMetricsResponse: Codable, Equatable {
 
 // MARK: - P1.19 / P1.20 app-backup
 
-public struct AppBackupStartRequest: Codable, Equatable {
+public struct AppBackupStartRequest: Codable, Equatable, Sendable {
     public let appId: String
     public let password: String?
     public let includeUserData: Bool?
@@ -431,7 +431,7 @@ public struct AppBackupStartRequest: Codable, Equatable {
     }
 }
 
-public struct AppBackupStartResponse: Codable, Equatable {
+public struct AppBackupStartResponse: Codable, Equatable, Sendable {
     public let backupId: String
     public let fetchPath: String
     public let expiresAt: Int64
