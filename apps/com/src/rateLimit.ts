@@ -35,6 +35,15 @@ export interface RateLimitBinding {
 export interface RateLimitEnv {
   /** Cloudflare RATE_LIMITER namespace binding (configured in wrangler.toml). */
   RATE_LIMITER?: RateLimitBinding;
+  /**
+   * Dedicated namespace for the /qr-pipe WebSocket upgrade endpoint
+   * (Task P2 — bound DO spawn rate per IP). Configured with a much
+   * higher threshold than the mutating control-plane namespace
+   * because each legitimate landing-page visit may trigger one
+   * spawn — and `pre-expire` renewals add ~1 per 4 minutes per
+   * engaged tab.
+   */
+  RATE_LIMITER_QR_PIPE?: RateLimitBinding;
 }
 
 /** Endpoint identifier — drives the per-endpoint thresholds + 429 body. */
@@ -42,7 +51,8 @@ export type RateLimitEndpoint =
   | "username-claim"
   | "auth-code-issue"
   | "server-register"
-  | "recovery-by-username";
+  | "recovery-by-username"
+  | "qr-pipe-upgrade";
 
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
@@ -227,6 +237,45 @@ export function extractUsernameHash(pathname: string): string | undefined {
     pathname.match(/^\/api\/recovery\/by-username\/([^/]+)$/) ??
     pathname.match(/^\/api\/recovery\/by-username\/([^/]+)\/fetch$/);
   return m ? decodeURIComponent(m[1]!) : undefined;
+}
+
+/**
+ * Bound `/qr-pipe` WebSocket upgrades per client IP. Each accepted
+ * upgrade materialises a Durable Object that pays storage + alarm
+ * overhead even with hibernation; unauthenticated /qr-pipe traffic
+ * is what burned the DO free-tier duration before the hibernation
+ * fix landed. Keep this generous enough for legitimate users (page
+ * reloads, ~4-minute pre-expire renewals while engaged) and tight
+ * enough that one source can't fan out thousands of DOs.
+ *
+ * Returns the same shape as `checkRateLimit` so callers can pipe
+ * straight into `rateLimitedResponse`.
+ *
+ * The binding is keyed independently from the mutating-control-plane
+ * RATE_LIMITER namespace so the two budgets don't fight; today this
+ * is a separate `RATE_LIMITER_QR_PIPE` binding in wrangler.toml.
+ *
+ * When the binding isn't present (dev / tests that don't wire it),
+ * this is a no-op — matching the rest of the rate-limit module's
+ * "fail open" posture for missing bindings.
+ */
+export async function checkQrPipeUpgrade(
+  env: RateLimitEnv,
+  ip: string | null,
+): Promise<RateLimitedResult | AllowedResult> {
+  if (!env.RATE_LIMITER_QR_PIPE) return { limited: false };
+  if (!ip) return { limited: false };
+  const key = `qr-pipe-upgrade|ip|${ip}`;
+  const outcome = await env.RATE_LIMITER_QR_PIPE.limit({ key });
+  if (!outcome.success) {
+    return {
+      limited: true,
+      endpoint: "qr-pipe-upgrade",
+      axis: "ip",
+      retryAfterSec: 60,
+    };
+  }
+  return { limited: false };
 }
 
 /** Read the client IP from CF-Connecting-IP, falling back to X-Forwarded-For first hop. */

@@ -91,6 +91,19 @@ type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 3, period = 900 }
 
+# Dedicated namespace for /qr-pipe WebSocket upgrades (task P2). Each
+# upgrade materialises a Durable Object (BUILD_RELAY) that pays the
+# alarm + storage round-trip even with hibernation; left unbounded,
+# the marketing apex's hero QR alone burned the free-tier DO duration
+# budget. 30 upgrades per minute per IP comfortably covers a real
+# user's reloads + the ~1-per-4-min pre-expire renewals while still
+# capping a single source's fan-out to ~43k/day.
+[[unsafe.bindings]]
+name = "RATE_LIMITER_QR_PIPE"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 30, period = 60 }
+
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-state"

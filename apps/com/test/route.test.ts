@@ -858,6 +858,82 @@ describe("qr-pipe relay routes (v2 protocol)", () => {
     );
     expect(r.status).toBe(503);
   });
+
+  describe("rate-limit (P2)", () => {
+    function makeQrPipeRateBinding(allow: boolean) {
+      const calls: string[] = [];
+      return {
+        binding: {
+          async limit({ key }: { key: string }) {
+            calls.push(key);
+            return { success: allow };
+          },
+        },
+        calls,
+      };
+    }
+
+    it("returns 429 when RATE_LIMITER_QR_PIPE rejects, never reaches the DO", async () => {
+      const BUILD_RELAY = makeRelayStub();
+      const { binding, calls } = makeQrPipeRateBinding(false);
+      const r = await route(
+        new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
+          headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
+        }),
+        makeEnv({ BUILD_RELAY, RATE_LIMITER_QR_PIPE: binding }),
+      );
+      expect(r.status).toBe(429);
+      const body = JSON.parse(await r.text());
+      expect(body.endpoint).toBe("qr-pipe-upgrade");
+      expect(body.limit).toBe("ip");
+      // Most importantly — the DO upgrade never fired. The whole point
+      // of the gate is that throttled requests don't spawn DOs.
+      expect(BUILD_RELAY._upgraded).toHaveLength(0);
+      expect(calls).toEqual(["qr-pipe-upgrade|ip|9.9.9.9"]);
+    });
+
+    it("passes through when the binding allows and the DO upgrade runs as before", async () => {
+      const BUILD_RELAY = makeRelayStub();
+      const { binding } = makeQrPipeRateBinding(true);
+      const r = await route(
+        new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=phone", {
+          headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
+        }),
+        makeEnv({ BUILD_RELAY, RATE_LIMITER_QR_PIPE: binding }),
+      );
+      expect(r.status).toBe(200);
+      expect(BUILD_RELAY._upgraded).toHaveLength(1);
+    });
+
+    it("is a no-op when the binding isn't configured (defense-in-depth, not a hard requirement)", async () => {
+      const BUILD_RELAY = makeRelayStub();
+      const r = await route(
+        new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
+          headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
+        }),
+        makeEnv({ BUILD_RELAY /* RATE_LIMITER_QR_PIPE deliberately omitted */ }),
+      );
+      expect(r.status).toBe(200);
+      expect(BUILD_RELAY._upgraded).toHaveLength(1);
+    });
+
+    it("invalid-sid 400 short-circuits BEFORE the rate-limit check (no budget waste)", async () => {
+      const BUILD_RELAY = makeRelayStub();
+      const { binding, calls } = makeQrPipeRateBinding(true);
+      const r = await route(
+        new Request("https://flagshipserver.com/qr-pipe/short?role=browser", {
+          headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
+        }),
+        makeEnv({ BUILD_RELAY, RATE_LIMITER_QR_PIPE: binding }),
+      );
+      expect(r.status).toBe(400);
+      // The limiter should NOT have been hit — sid validation is a
+      // free, deterministic gate. Burning rate-limit budget on
+      // obvious garbage would let attackers exhaust the limiter for
+      // legitimate users.
+      expect(calls).toHaveLength(0);
+    });
+  });
 });
 
 describe("recovery.flagshipserver.com — dedicated WebAuthn-PRF origin (Task #73)", () => {

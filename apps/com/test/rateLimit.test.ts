@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  checkQrPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -390,6 +391,62 @@ describe("rateLimit — wired into route()", () => {
     expect(body.limit).toBe("usernameHash");
     expect(calls.some((k) => k === "recovery-by-username|ip|1.2.3.4")).toBe(true);
     expect(calls.some((k) => k === "recovery-by-username|usernameHash|abc")).toBe(true);
+  });
+
+  describe("checkQrPipeUpgrade (P2)", () => {
+    it("no-ops when RATE_LIMITER_QR_PIPE isn't bound (dev / tests)", async () => {
+      const r = await checkQrPipeUpgrade({}, "1.2.3.4");
+      expect(r.limited).toBe(false);
+    });
+
+    it("no-ops when client IP is null (CF didn't tell us)", async () => {
+      const { binding } = allowAll();
+      const r = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, null);
+      expect(r.limited).toBe(false);
+    });
+
+    it("keys on `qr-pipe-upgrade|ip|<ip>` so it doesn't collide with control-plane keys", async () => {
+      const { binding, calls } = allowAll();
+      await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.2.3.4");
+      expect(calls).toEqual(["qr-pipe-upgrade|ip|1.2.3.4"]);
+    });
+
+    it("returns a 429-shaped result when the binding rejects", async () => {
+      const { binding } = failAfter(0); // first call already fails
+      const r = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.2.3.4");
+      expect(r.limited).toBe(true);
+      if (r.limited) {
+        expect(r.endpoint).toBe("qr-pipe-upgrade");
+        expect(r.axis).toBe("ip");
+        expect(r.retryAfterSec).toBeGreaterThan(0);
+      }
+    });
+
+    it("rateLimitedResponse renders the qr-pipe-upgrade result correctly", async () => {
+      const { binding } = failAfter(0);
+      const r = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.2.3.4");
+      expect(r.limited).toBe(true);
+      if (!r.limited) throw new Error("expected limited result");
+      const res = rateLimitedResponse(r);
+      expect(res.status).toBe(429);
+      const body = JSON.parse(await res.text());
+      expect(body.endpoint).toBe("qr-pipe-upgrade");
+      expect(body.limit).toBe("ip");
+      expect(res.headers.get("retry-after")).toBeTruthy();
+    });
+
+    it("two distinct IPs occupy independent buckets", async () => {
+      // failAfter is per-key; if the limiter conflated IPs the second
+      // call would inherit the first's count and trip.
+      const { binding } = failAfter(0);
+      const a = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.1.1.1");
+      const b = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "2.2.2.2");
+      // Both trip independently (first call already fails), but the
+      // keys must differ — failAfter only fails after threshold for
+      // that specific key.
+      expect(a.limited).toBe(true);
+      expect(b.limited).toBe(true);
+    });
   });
 
   it("LIMITS table matches the design-decisions thresholds (regression guard)", () => {

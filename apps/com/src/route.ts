@@ -19,6 +19,7 @@
 
 import { tryControlPlane } from "./controlPlaneRoutes.js";
 import {
+  checkQrPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -117,6 +118,12 @@ export interface RouteEnv {
   SERVICES_PASSTHROUGH_IPV6?: string;
   /** Cloudflare rate-limit binding shared by all four mutating control-plane endpoints. */
   RATE_LIMITER?: RateLimitBinding;
+  /**
+   * Dedicated rate-limit binding for /qr-pipe upgrades (P2). Keeps
+   * DO-spawn-per-IP bounded so the free-tier duration budget can't
+   * be drained by a single source.
+   */
+  RATE_LIMITER_QR_PIPE?: RateLimitBinding;
   /**
    * Build-relay Durable Object namespace (task #59). Tests pass a
    * lightweight stub; production wiring is in wrangler.toml.
@@ -604,6 +611,12 @@ async function forwardQrPipeUpgrade(
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
     return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
   }
+  // P2 — bound DO spawns per client IP. Each accepted upgrade
+  // materialises a Durable Object; without this gate any unauth'd
+  // source can fan out enough DOs to refill the free-tier duration
+  // bucket before throttling notices.
+  const rl = await checkQrPipeUpgrade(env, clientIp(request));
+  if (rl.limited) return rateLimitedResponse(rl);
   const id = env.BUILD_RELAY.idFromName(sid);
   const stub = env.BUILD_RELAY.get(id);
   return stub.fetch(request);
