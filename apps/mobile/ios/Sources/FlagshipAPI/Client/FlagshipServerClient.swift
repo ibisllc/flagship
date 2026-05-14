@@ -35,6 +35,36 @@ public protocol FlagshipServerClient: Sendable {
     /// treated as success by both Mock + Live implementations so a
     /// sign-out path doesn't surface "already cleaned up" as an error.
     func revokePushToken(tokenId: String) async throws
+    /// Poll-based read of install-events the Worker has accumulated
+    /// for a given auth-code serial. Use `since: 0` to read from
+    /// the beginning; subsequent polls pass the response's
+    /// `cursor`. Worker side: GET /api/install-events/<serial>?since=N.
+    func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse
+}
+
+/// Worker-side install-event row. The daemon (and the Alpine
+/// installer scripts) POST these as `{ event, detail }`; the Worker
+/// assigns a `seq` and `postedAt` and lists them back.
+public struct InstallEventRecord: Codable, Equatable, Sendable {
+    public let seq: Int
+    public let eventName: String       // "registered" | "boot" | "tunnel-online" | "cert-issued" | "ready" | "failed" …
+    public let detail: String          // for "ready" carries serverFqdn; for "failed" carries the reason
+    public let postedAt: Int64
+
+    public init(seq: Int, eventName: String, detail: String, postedAt: Int64) {
+        self.seq = seq; self.eventName = eventName
+        self.detail = detail; self.postedAt = postedAt
+    }
+}
+
+public struct InstallEventsPollResponse: Codable, Equatable, Sendable {
+    public let serial: String
+    public let events: [InstallEventRecord]
+    public let cursor: Int
+
+    public init(serial: String, events: [InstallEventRecord], cursor: Int) {
+        self.serial = serial; self.events = events; self.cursor = cursor
+    }
 }
 
 /// POST /api/push/register — IRK-signed registration of an APNs (or FCM,
@@ -334,6 +364,34 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // sign-out flow.
         registeredPushTokens.removeValue(forKey: tokenId)
     }
+
+    /// Scripted install-event log per serial. Tests configure
+    /// `installEventScripts[serial]` with a sequence of (eventName,
+    /// detail, postedAt) tuples; each `getInstallEvents` call serves
+    /// from index `since` onward and rolls the cursor forward by the
+    /// number of new events.
+    public var installEventScripts: [String: [(eventName: String, detail: String, postedAt: Int64)]] = [:]
+
+    public func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse {
+        try await tick()
+        let script = installEventScripts[serial] ?? []
+        let starting = max(since, 0)
+        let slice = script.enumerated()
+            .filter { $0.offset >= starting }
+            .map { idx, e in
+                InstallEventRecord(
+                    seq: idx + 1,
+                    eventName: e.eventName,
+                    detail: e.detail,
+                    postedAt: e.postedAt
+                )
+            }
+        return InstallEventsPollResponse(
+            serial: serial,
+            events: slice,
+            cursor: starting + slice.count
+        )
+    }
 }
 
 // MARK: - Live
@@ -445,5 +503,20 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if status == 200 || status == 204 || status == 404 { return }
         let text = String(data: data, encoding: .utf8) ?? ""
         throw ScreensClientError.http(status: status, message: text)
+    }
+
+    public func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse {
+        let encoded = serial.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serial
+        var comps = URLComponents(url: baseUrl.appendingPathComponent("/api/install-events/\(encoded)"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "since", value: String(since))]
+        var req = URLRequest(url: comps.url!)
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(InstallEventsPollResponse.self, from: data)
     }
 }

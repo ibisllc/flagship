@@ -1,12 +1,15 @@
 import SwiftUI
 import UIKit
 import FlagshipCore
+import FlagshipAPI
 import FlagshipUI
 
 struct ContentView: View {
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.flagshipServerClient) private var serverClient
+    @State private var pendingWatchers: PendingPodWatcherRegistry?
 
     var body: some View {
         ZStack {
@@ -29,14 +32,30 @@ struct ContentView: View {
         .onChange(of: app.isPaired) { _, paired in
             if paired { Task { await registerPush() } }
             PodStatusPublisher(app: app).publish()
+            syncPendingWatchers()
         }
         .onChange(of: app.pods) { _, _ in
             PodStatusPublisher(app: app).publish()
+            syncPendingWatchers()
         }
         .onChange(of: app.leaderPodId) { _, _ in
             PodStatusPublisher(app: app).publish()
         }
-        .task { PodStatusPublisher(app: app).publish() }
+        .task {
+            PodStatusPublisher(app: app).publish()
+            syncPendingWatchers()
+        }
+    }
+
+    /// Lazily wire the registry on first use, then re-sync on every
+    /// pod-list change. Watchers are idempotent: a sync after the
+    /// list is unchanged is a no-op.
+    @MainActor
+    private func syncPendingWatchers() {
+        if pendingWatchers == nil {
+            pendingWatchers = PendingPodWatcherRegistry(app: app, server: serverClient)
+        }
+        pendingWatchers?.sync()
     }
 
     /// Lazy push registration — only after the user has a paired pod

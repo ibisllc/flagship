@@ -159,6 +159,59 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.platform, "apns")
     }
 
+    // MARK: - Install-events poller
+
+    func test_installEvents_decodesWorkerShape() throws {
+        // Pin the wire contract. Worker:
+        //   handleGetInstallEvents → { serial, events[], cursor }
+        //   InstallEvent storage shape: { seq, eventName, detail, postedAt }
+        // iOS Mock + Live MUST decode this verbatim — any rename
+        // here breaks the poller silently.
+        let json = """
+        {
+            "serial": "AC-01CAFE",
+            "events": [
+                { "seq": 1, "eventName": "registered", "detail": "", "postedAt": 1700000000000 },
+                { "seq": 2, "eventName": "ready", "detail": "home.harry.flagship.services", "postedAt": 1700000060000 }
+            ],
+            "cursor": 2
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(InstallEventsPollResponse.self, from: json)
+        XCTAssertEqual(decoded.serial, "AC-01CAFE")
+        XCTAssertEqual(decoded.events.count, 2)
+        XCTAssertEqual(decoded.events[0].eventName, "registered")
+        XCTAssertEqual(decoded.events[1].detail, "home.harry.flagship.services")
+        XCTAssertEqual(decoded.cursor, 2)
+    }
+
+    func test_liveClient_installEvents_hitsApiInstallEvents_withSinceQuery() async throws {
+        StubURLProtocol.handler = { req in
+            XCTAssertEqual(req.httpMethod, "GET")
+            XCTAssertEqual(req.url?.path, "/api/install-events/AC-01CAFE")
+            // since=7 from caller; URLComponents preserves it.
+            XCTAssertEqual(req.url?.query, "since=7")
+            let resp = HTTPURLResponse(
+                url: req.url!, statusCode: 200, httpVersion: "HTTP/2", headerFields: nil
+            )!
+            let body = try JSONEncoder().encode(InstallEventsPollResponse(
+                serial: "AC-01CAFE", events: [], cursor: 7
+            ))
+            return (resp, body)
+        }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        let session = URLSession(configuration: cfg)
+        let client = LiveFlagshipServerClient(
+            urlSession: session,
+            baseUrl: URL(string: "https://flagshipserver.com")!
+        )
+        let r = try await client.getInstallEvents(serial: "AC-01CAFE", since: 7)
+        XCTAssertEqual(r.serial, "AC-01CAFE")
+        XCTAssertEqual(r.cursor, 7)
+        StubURLProtocol.handler = nil
+    }
+
     func test_liveClient_registerPushToken_postsToApiPushRegister() async throws {
         StubURLProtocol.handler = { req in
             XCTAssertEqual(req.httpMethod, "POST")

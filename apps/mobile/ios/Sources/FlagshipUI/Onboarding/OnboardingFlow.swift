@@ -6,13 +6,16 @@ import FlagshipAPI
 /// when AppState.isPaired == false.
 ///
 ///   Welcome
-///     ├─ Create your account → ChooseUsername → CreateServer (stub)
-///     │                       └─ (test-account hit) → DemoFixtures.activate
+///     ├─ Create your account → ChooseUsername → CreateServer
+///     │     ├─ real flow:  mintInstallBlob + relay deliver
+///     │     │              → pod lands in AppState with status=.pending
+///     │     │              → PendingPodWatcher polls install-events
+///     │     │                until the freshly-booted box phones home,
+///     │     │                then flips status to .online.
+///     │     ├─ demo skip:   "pretend it's already running" — pod
+///     │     │              lands as .online with no real provisioning
+///     │     └─ test-account: DemoFixtures.activate (3 sample pods)
 ///     └─ I already have a server → PodPair (stub)
-///
-/// Both leaf flows currently call `mockPair(...)` on AppState to drop
-/// the user into the main shell with fixture data. Real impls land
-/// once the provisioning + pairing wire formats are wired through.
 public struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @State private var path: [OnboardingRoute] = []
@@ -37,13 +40,34 @@ public struct OnboardingFlow: View {
                         }
                     )
                 case .createServer(let username):
-                    OnboardingCreateServer(username: username) { name, description in
-                        completeMockPair(username: username, name: name, description: description)
-                    }
+                    OnboardingCreateServer(
+                        username: username,
+                        onDelivered: { name, description, serverDomain, serial in
+                            completePendingPair(
+                                username: username,
+                                name: name,
+                                description: description,
+                                serverDomain: serverDomain,
+                                serial: serial
+                            )
+                        },
+                        onSkipDemo: { name, description in
+                            completeOnlinePair(
+                                username: username,
+                                name: name,
+                                description: description
+                            )
+                        }
+                    )
                 case .podPair:
                     PodPairScreen(
                         onSubmit: { _, name, description in
-                            completeMockPair(username: "guest", name: name, description: description)
+                            // PodPair (linking the phone to an existing
+                            // server) is still a stub; flip back to a
+                            // mock-paired state with the user's chosen
+                            // label until the real pairing wire format
+                            // lands.
+                            completeOnlinePair(username: "guest", name: name, description: description)
                         },
                         onCancel: { path.removeLast() }
                     )
@@ -52,11 +76,56 @@ public struct OnboardingFlow: View {
         }
     }
 
+    // MARK: - State writes
+
+    /// Real-flow completion. After the QR-relay deliver succeeds, the
+    /// CreateServerViewModel has minted + delivered the InstallBlob;
+    /// the freshly-flashed box hasn't booted yet. Add the pod with
+    /// status=.pending + auth-code serial recorded. PendingPodWatcher
+    /// (spawned by RootShell) polls /api/install-events/<serial>
+    /// until `ready` arrives, then flips status to .online.
+    fileprivate func completePendingPair(
+        username: String, name: String, description: String,
+        serverDomain: String, serial: String
+    ) {
+        let label = name.isEmpty ? "Home" : name
+        let pod = PodInfo(
+            podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
+            name: label,
+            description: description.isEmpty ? nil : description,
+            fqdn: serverDomain,
+            status: .pending,
+            pendingAuthCodeSerial: serial.isEmpty ? nil : serial
+        )
+        app.completeOnboarding(username: username, pods: [pod])
+    }
+
+    /// Demo-skip completion ("pretend it's already running") and the
+    /// PodPair stub. No real pod; show one as online so the rest of
+    /// the surfaces have something to render.
+    fileprivate func completeOnlinePair(username: String, name: String, description: String) {
+        let label = name.isEmpty ? "Home" : name
+        let slug = SlugUtil.slugify(label)
+        let pod = PodInfo(
+            podId: "home",
+            name: label,
+            description: description.isEmpty ? nil : description,
+            fqdn: "\(slug).\(username).flagship.services",
+            status: .online
+        )
+        app.completeOnboarding(username: username, pods: [pod])
+    }
 }
 
 private struct OnboardingCreateServer: View {
     let username: String
-    let onComplete: (String, String) -> Void
+    /// Real flow: the QR-relay delivered. Carries the chosen name +
+    /// description AND the server-side data the VM produced so the
+    /// caller can record the pending pod accurately.
+    let onDelivered: (_ name: String, _ description: String, _ serverDomain: String, _ serial: String) -> Void
+    /// Demo skip — "Skip — pretend it's already running."
+    let onSkipDemo: (_ name: String, _ description: String) -> Void
+
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.qrRelayClient) private var qrRelay
     @State private var vm: CreateServerViewModel?
@@ -67,8 +136,11 @@ private struct OnboardingCreateServer: View {
             if let vm {
                 CreateServerStubScreen(
                     vm: vm,
-                    onDelivered: { _, n, d in onComplete(n, d) },
-                    onDemoComplete: onComplete,
+                    onDelivered: { serverDomain, name, description in
+                        let serial = vm.lastDeliveredSerial ?? ""
+                        onDelivered(name, description, serverDomain, serial)
+                    },
+                    onDemoComplete: onSkipDemo,
                     onCancel: {}
                 )
             } else { ProgressView() }
@@ -82,22 +154,5 @@ private struct OnboardingCreateServer: View {
                 )
             }
         }
-    }
-}
-
-extension OnboardingFlow {
-    fileprivate func completeMockPair(username: String, name: String, description: String) {
-        let label = name.isEmpty ? "Home" : name
-        let slug = SlugUtil.slugify(label)
-        let pods = [
-            PodInfo(
-                podId: "home",
-                name: label,
-                description: description.isEmpty ? nil : description,
-                fqdn: "\(slug).\(username).flagship.services",
-                status: .online
-            )
-        ]
-        app.completeOnboarding(username: username, pods: pods)
     }
 }

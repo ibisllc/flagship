@@ -64,160 +64,311 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		00F65F123A15C8693BB96343 /* PodStatusSnapshot.swiftdeps */ = {isa = PBXFileReference; path = PodStatusSnapshot.swiftdeps; sourceTree = "<group>"; };
 		00FD448EA89E02E3EC94E310 /* WidgetBundleEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBundleEntry.swift; sourceTree = "<group>"; };
 		0257E69AE45D2265F100E0F5 /* WatchApproval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApproval.swift; sourceTree = "<group>"; };
 		0374639F93E88A932D10ECE4 /* FlagshipWatchApp */ = {isa = PBXFileReference; path = FlagshipWatchApp; sourceTree = "<group>"; };
+		03C4708AD52E626348ED87A3 /* PodStatusWidget.dia */ = {isa = PBXFileReference; path = PodStatusWidget.dia; sourceTree = "<group>"; };
+		04D35ED9A6CEE50FCE80125E /* FlagshipWidgets_const_extract_protocols.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWidgets_const_extract_protocols.json; sourceTree = "<group>"; };
+		04DBD2A22C9A1D99C4CB2064 /* WatchApproval.swiftdeps */ = {isa = PBXFileReference; path = WatchApproval.swiftdeps; sourceTree = "<group>"; };
+		061EA7C40DF7E653F13D7564 /* InstallProgressAttributes.swiftdeps */ = {isa = PBXFileReference; path = InstallProgressAttributes.swiftdeps; sourceTree = "<group>"; };
+		063F078725619E063A59D6C0 /* InstallProgressAttributes.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = InstallProgressAttributes.o; sourceTree = "<group>"; };
+		0717441157B5D2FDCC4265E0 /* PodStatusSnapshot.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = PodStatusSnapshot.d; sourceTree = "<group>"; };
 		085A39406BE19EF400615D34 /* WatchConnectivityClient.dia */ = {isa = PBXFileReference; path = WatchConnectivityClient.dia; sourceTree = "<group>"; };
 		09635F95195187A216F71B79 /* FlagshipWatchApp.swiftdeps */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftdeps; sourceTree = "<group>"; };
+		0A21AF5127D08654278E624E /* af49c9a5e38c52fb57e6bd5a60bc220d */ = {isa = PBXFileReference; path = af49c9a5e38c52fb57e6bd5a60bc220d; sourceTree = "<group>"; };
 		0AC6B3E8EDAA545D1956F272 /* 0cc6e979965b640c90cc4b9190bfad95 */ = {isa = PBXFileReference; path = 0cc6e979965b640c90cc4b9190bfad95; sourceTree = "<group>"; };
+		0D3FF40C99B5A9F5E44132F8 /* InstallProgressLiveActivity.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = InstallProgressLiveActivity.d; sourceTree = "<group>"; };
 		0DBD4427FCBB29AE7BA63877 /* description.msgpack */ = {isa = PBXFileReference; path = description.msgpack; sourceTree = "<group>"; };
+		0E0FFE26815339624AA3FE1C /* FlagshipWidgets.swiftdoc */ = {isa = PBXFileReference; path = FlagshipWidgets.swiftdoc; sourceTree = "<group>"; };
 		0E4070D8054C842EC144FE01 /* WatchApproval.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchApproval.d; sourceTree = "<group>"; };
 		0E92F347C17C416F51472147 /* FlagshipWatchApp.dia */ = {isa = PBXFileReference; path = FlagshipWatchApp.dia; sourceTree = "<group>"; };
+		0F74E30A150F65EA169E8027 /* FlagshipWidgets.swiftmodule */ = {isa = PBXFileReference; path = FlagshipWidgets.swiftmodule; sourceTree = "<group>"; };
 		1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
+		1137F52B6E319A393FD4BB93 /* FlagshipWidgets.SwiftConstValuesFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.SwiftConstValuesFileList; sourceTree = "<group>"; };
+		125385C2B3DFD5CE983A18FC /* FlagshipWidgets-master-emit-module.dia */ = {isa = PBXFileReference; path = "FlagshipWidgets-master-emit-module.dia"; sourceTree = "<group>"; };
 		128B7D6FF3809847F917CAF1 /* FlagshipWatchApp.hmap */ = {isa = PBXFileReference; path = FlagshipWatchApp.hmap; sourceTree = "<group>"; };
 		12A2D6220EDEB16CADA62152 /* FlagshipWatchApp.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = FlagshipWatchApp.d; sourceTree = "<group>"; };
+		153DBCA8F8816CC283AFAABE /* 8bba4233626f64a7ea772bb94a08a1a9 */ = {isa = PBXFileReference; path = 8bba4233626f64a7ea772bb94a08a1a9; sourceTree = "<group>"; };
+		158002F1E9576E8B09A909A5 /* PodStatusSnapshot.dia */ = {isa = PBXFileReference; path = PodStatusSnapshot.dia; sourceTree = "<group>"; };
 		18228F6FC29CE54070FADEB7 /* e98c97cd6bb74e46ba29156641f67e71 */ = {isa = PBXFileReference; path = e98c97cd6bb74e46ba29156641f67e71; sourceTree = "<group>"; };
 		1A666D3C176ED6BC3BEE201B /* cee8d3ca65a9018c3f2f0bab491c9987 */ = {isa = PBXFileReference; path = cee8d3ca65a9018c3f2f0bab491c9987; sourceTree = "<group>"; };
+		1BE68EE311B61C1F35A28FD3 /* FlagshipWidgets.swiftsourceinfo */ = {isa = PBXFileReference; path = FlagshipWidgets.swiftsourceinfo; sourceTree = "<group>"; };
 		1C054651D0DD53D1D5ADBECE /* WatchApproval.swiftdeps */ = {isa = PBXFileReference; path = WatchApproval.swiftdeps; sourceTree = "<group>"; };
 		1C0D1211427BA68CBB10EA03 /* WatchConnectivityClient.swiftconstvalues */ = {isa = PBXFileReference; path = WatchConnectivityClient.swiftconstvalues; sourceTree = "<group>"; };
+		1C29CF1F893432BA1A2534C7 /* FlagshipWidgets.SwiftFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.SwiftFileList; sourceTree = "<group>"; };
 		1D910C9D784AB5B452282197 /* FlagshipWatchApp.LinkFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.LinkFileList; sourceTree = "<group>"; };
+		1DDE8C05EDC8A62B88D52D77 /* InstallProgressAttributes.swiftconstvalues */ = {isa = PBXFileReference; path = InstallProgressAttributes.swiftconstvalues; sourceTree = "<group>"; };
+		1E0C711F08824A591F2B5359 /* WidgetBundleEntry.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WidgetBundleEntry.d; sourceTree = "<group>"; };
 		1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusSnapshot.swift; sourceTree = "<group>"; };
+		1F7089815345A74F17EB9739 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		204FDC3288DB7F81DE149D1E /* FlagshipWatchApp.LinkFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.LinkFileList; sourceTree = "<group>"; };
 		243EB4F8499A51989CEE9126 /* 0cc6e979965b640c90cc4b9190bfad95 */ = {isa = PBXFileReference; path = 0cc6e979965b640c90cc4b9190bfad95; sourceTree = "<group>"; };
 		24434820EA3279415BB159B1 /* build-request.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "build-request.json"; sourceTree = "<group>"; };
+		25D215E560CE8D8DE85CA8DB /* description.msgpack */ = {isa = PBXFileReference; path = description.msgpack; sourceTree = "<group>"; };
+		28CED2479DFC3F588893AED9 /* d41d8cd98f00b204e9800998ecf8427e */ = {isa = PBXFileReference; path = d41d8cd98f00b204e9800998ecf8427e; sourceTree = "<group>"; };
 		2A65BA73C27946520F56AD77 /* FlagshipWatchApp-generated-files.hmap */ = {isa = PBXFileReference; path = "FlagshipWatchApp-generated-files.hmap"; sourceTree = "<group>"; };
 		2B84CB821903E4EE8D42C6FC /* d41d8cd98f00b204e9800998ecf8427e */ = {isa = PBXFileReference; path = d41d8cd98f00b204e9800998ecf8427e; sourceTree = "<group>"; };
 		2C671F7AC9787B31DC9FE63B /* e98c97cd6bb74e46ba29156641f67e71 */ = {isa = PBXFileReference; path = e98c97cd6bb74e46ba29156641f67e71; sourceTree = "<group>"; };
+		2D2EF5E3B392E914E49A3663 /* WatchApproval.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchApproval.o; sourceTree = "<group>"; };
+		2D6B583C7247F320258767F9 /* FlagshipWidgets.DependencyMetadataFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.DependencyMetadataFileList; sourceTree = "<group>"; };
+		2D89392DBE64365D311DE807 /* InstallProgressLiveActivity.swiftconstvalues */ = {isa = PBXFileReference; path = InstallProgressLiveActivity.swiftconstvalues; sourceTree = "<group>"; };
+		2DA23937883C4E7A1CAB0106 /* FlagshipWidgets-Swift.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FlagshipWidgets-Swift.h"; sourceTree = "<group>"; };
+		2E16DCF84629D83C29E98DBF /* x86_64-apple-ios-simulator.swiftsourceinfo */ = {isa = PBXFileReference; path = "x86_64-apple-ios-simulator.swiftsourceinfo"; sourceTree = "<group>"; };
 		2E5677AB09B4323613B96CD4 /* FlagshipWatchApp-master-emit-module.dia */ = {isa = PBXFileReference; path = "FlagshipWatchApp-master-emit-module.dia"; sourceTree = "<group>"; };
+		2F5326D2E78032DCAD2DD33E /* InstallProgressLiveActivity.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = InstallProgressLiveActivity.d; sourceTree = "<group>"; };
+		303181B52DCF67DB1945429F /* task-store.msgpack */ = {isa = PBXFileReference; path = "task-store.msgpack"; sourceTree = "<group>"; };
 		320466AFB364B4CE4A1DB396 /* FlagshipWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = FlagshipWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		326C16DCAF85144B89ED0304 /* FlagshipWidgets-master-emit-module.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = "FlagshipWidgets-master-emit-module.d"; sourceTree = "<group>"; };
 		34948C7BA997EB2DCD52AEDA /* FlagshipWatchApp.dia */ = {isa = PBXFileReference; path = FlagshipWatchApp.dia; sourceTree = "<group>"; };
+		357DDC5205DEE20B8F4EC7EC /* FlagshipWidgets-all-non-framework-target-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWidgets-all-non-framework-target-headers.hmap"; sourceTree = "<group>"; };
 		358AFC87FBA9DD274F112C5A /* FlagshipApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlagshipApp.swift; sourceTree = "<group>"; };
 		35A7CF9005DFBA00AB42586B /* FlagshipAppUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FlagshipAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlagshipWatchApp.swift; sourceTree = "<group>"; };
+		36DDC31B66E3A83CF8A55FF5 /* 03a422cf8c2a4873414c972fe8c1b523 */ = {isa = PBXFileReference; path = 03a422cf8c2a4873414c972fe8c1b523; sourceTree = "<group>"; };
 		378E57D6EA8CCCF38A83A0D3 /* InstallProgressLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallProgressLiveActivity.swift; sourceTree = "<group>"; };
 		37FF4080E3FF55E9B2D2E6AA /* ExtractedAppShortcutsMetadata.stringsdata */ = {isa = PBXFileReference; path = ExtractedAppShortcutsMetadata.stringsdata; sourceTree = "<group>"; };
+		3914DC433C35D16293510016 /* a1c3bd06566b1fe84c0327cbc089ddb9 */ = {isa = PBXFileReference; path = a1c3bd06566b1fe84c0327cbc089ddb9; sourceTree = "<group>"; };
+		3D87115BBE08AAB5222F0880 /* cee8d3ca65a9018c3f2f0bab491c9987 */ = {isa = PBXFileReference; path = cee8d3ca65a9018c3f2f0bab491c9987; sourceTree = "<group>"; };
 		3DFC795E790025F293C1861A /* bf8fd9d8e7e39764702cd6f2baafc996 */ = {isa = PBXFileReference; path = bf8fd9d8e7e39764702cd6f2baafc996; sourceTree = "<group>"; };
 		3F5F082A20ECE4FB54820835 /* 5e0c2ec7ba67bd76aa70f1bfa0d2df1b */ = {isa = PBXFileReference; path = 5e0c2ec7ba67bd76aa70f1bfa0d2df1b; sourceTree = "<group>"; };
 		4050D91C1A76B12D804925FA /* FlagshipAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlagshipAppIntents.swift; sourceTree = "<group>"; };
+		40ECD9B86F2078B9F1776356 /* 5e0c2ec7ba67bd76aa70f1bfa0d2df1b */ = {isa = PBXFileReference; path = 5e0c2ec7ba67bd76aa70f1bfa0d2df1b; sourceTree = "<group>"; };
 		4375E56B446572035D018FC9 /* FlagshipWatchApp.swiftconstvalues */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftconstvalues; sourceTree = "<group>"; };
+		447E9DC5086395DD5E55B7F9 /* InstallProgressAttributes.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = InstallProgressAttributes.d; sourceTree = "<group>"; };
 		44B13DD4E1E7A5D951F14761 /* WatchConnectivityClient.dia */ = {isa = PBXFileReference; path = WatchConnectivityClient.dia; sourceTree = "<group>"; };
 		44DDFE33646DA95D9556C970 /* FlagshipWatchApp.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWatchApp.abi.json; sourceTree = "<group>"; };
 		44F28592FDFF729D9FF0E542 /* FlagshipWatchApp.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWatchApp.abi.json; sourceTree = "<group>"; };
 		45BA7B1C7115AE0E233EFDE7 /* FlagshipWatchApp_dependency_info.dat */ = {isa = PBXFileReference; path = FlagshipWatchApp_dependency_info.dat; sourceTree = "<group>"; };
+		45D8A2B22B1973A959F24FB1 /* PodStatusWidget.swiftconstvalues */ = {isa = PBXFileReference; path = PodStatusWidget.swiftconstvalues; sourceTree = "<group>"; };
+		46EF6418A8D12E91D9C7A609 /* FlagshipWidgets.swiftsourceinfo */ = {isa = PBXFileReference; path = FlagshipWidgets.swiftsourceinfo; sourceTree = "<group>"; };
+		487F42333F15437FB14EF473 /* e98c97cd6bb74e46ba29156641f67e71 */ = {isa = PBXFileReference; path = e98c97cd6bb74e46ba29156641f67e71; sourceTree = "<group>"; };
+		4897899291BA5446183AFF48 /* FlagshipWidgets.SwiftFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.SwiftFileList; sourceTree = "<group>"; };
 		48ADBC6852B53503FC3C8C0A /* WatchApproval.dia */ = {isa = PBXFileReference; path = WatchApproval.dia; sourceTree = "<group>"; };
+		48CF7CCE9AF540D875C63844 /* InstallProgressAttributes.swiftdeps */ = {isa = PBXFileReference; path = InstallProgressAttributes.swiftdeps; sourceTree = "<group>"; };
+		492404805EF912C7751DFE0E /* InstallProgressLiveActivity.dia */ = {isa = PBXFileReference; path = InstallProgressLiveActivity.dia; sourceTree = "<group>"; };
+		49B2D73E60269D9BCC0F0FCB /* build-request.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "build-request.json"; sourceTree = "<group>"; };
 		49B95F8A87E32CB436970120 /* target-graph.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "target-graph.txt"; sourceTree = "<group>"; };
 		4B25A209234D2D96AA6EE057 /* bf8fd9d8e7e39764702cd6f2baafc996 */ = {isa = PBXFileReference; path = bf8fd9d8e7e39764702cd6f2baafc996; sourceTree = "<group>"; };
 		4BCF8466537CDEBE460F85A8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4E05BEA23E33D996944AFA65 /* FlagshipWatchApp.swiftdoc */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftdoc; sourceTree = "<group>"; };
 		5095FA6FEDBC5F6FF5FCD1AC /* WatchRootView.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchRootView.o; sourceTree = "<group>"; };
+		50AF10C5CD2AE085E3A4F183 /* fd8314defc70a8778956f026c0ddfd19 */ = {isa = PBXFileReference; path = fd8314defc70a8778956f026c0ddfd19; sourceTree = "<group>"; };
 		50C6826A7480279E92D3A738 /* x86_64-apple-watchos-simulator.swiftdoc */ = {isa = PBXFileReference; path = "x86_64-apple-watchos-simulator.swiftdoc"; sourceTree = "<group>"; };
 		514EFF8F10209FA1549EB8C8 /* FlagshipWatchApp_dependency_info.dat */ = {isa = PBXFileReference; path = FlagshipWatchApp_dependency_info.dat; sourceTree = "<group>"; };
+		5175DC8B3F26EBBD559D2EA2 /* WidgetBundleEntry.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WidgetBundleEntry.o; sourceTree = "<group>"; };
 		530210E1B7C00E29DCEA4486 /* FlagshipWatchApp-all-target-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWatchApp-all-target-headers.hmap"; sourceTree = "<group>"; };
 		53DC1F6C7BF320CB9AB7CB8F /* all-product-headers.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "all-product-headers.yaml"; sourceTree = "<group>"; };
+		54DCBCF40723D72E562842BC /* PodStatusWidget.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = PodStatusWidget.o; sourceTree = "<group>"; };
+		55442C21C14BE06A47E14AA3 /* WatchRootView.swiftdeps~ */ = {isa = PBXFileReference; path = "WatchRootView.swiftdeps~"; sourceTree = "<group>"; };
+		555F77AC0D78BFAEF472726C /* PodStatusSnapshot.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = PodStatusSnapshot.o; sourceTree = "<group>"; };
+		56B8F512D7EB3B6095183D77 /* PodStatusWidget.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = PodStatusWidget.d; sourceTree = "<group>"; };
+		578901AD6328D2D5A149D942 /* WatchApproval.swiftdeps */ = {isa = PBXFileReference; path = WatchApproval.swiftdeps; sourceTree = "<group>"; };
 		5789F6BAEB83CFC8C323360A /* FlagshipWatchApp.app */ = {isa = PBXFileReference; lastKnownFileType = wrapper.application; path = FlagshipWatchApp.app; sourceTree = "<group>"; };
 		58184311620C2498C3013779 /* x86_64-apple-watchos-simulator.swiftsourceinfo */ = {isa = PBXFileReference; path = "x86_64-apple-watchos-simulator.swiftsourceinfo"; sourceTree = "<group>"; };
 		58D336E1FB13DD8051448F1B /* 687e88543a73d759948de2f40cfa3cc5 */ = {isa = PBXFileReference; path = 687e88543a73d759948de2f40cfa3cc5; sourceTree = "<group>"; };
 		59CC355063958E222ADBA8E9 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		59F8BFBF81B2B9719E6CE4E5 /* FlagshipWatchApp-master-emit-module.dia */ = {isa = PBXFileReference; path = "FlagshipWatchApp-master-emit-module.dia"; sourceTree = "<group>"; };
+		5A12A4BA4F6094FCA3D60452 /* FlagshipWidgets-OutputFileMap.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "FlagshipWidgets-OutputFileMap.json"; sourceTree = "<group>"; };
 		5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusPublisher.swift; sourceTree = "<group>"; };
 		5B1E6F54D6FF2CAEA9EB48F5 /* 687e88543a73d759948de2f40cfa3cc5 */ = {isa = PBXFileReference; path = 687e88543a73d759948de2f40cfa3cc5; sourceTree = "<group>"; };
 		5C1FB6EE1213AA46A4A8704A /* FlagshipWatchApp.SwiftConstValuesFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.SwiftConstValuesFileList; sourceTree = "<group>"; };
+		5D5BAFEEA27B5593AB4EE7EB /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		5DBEE9833A548FF6A04E121A /* FlagshipWatchApp_const_extract_protocols.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWatchApp_const_extract_protocols.json; sourceTree = "<group>"; };
+		5E6DBE2C04E0C6A6E2802646 /* InstallProgressLiveActivity.swiftdeps */ = {isa = PBXFileReference; path = InstallProgressLiveActivity.swiftdeps; sourceTree = "<group>"; };
+		5FDBEDCB68383AFDB2F5A459 /* FlagshipWidgets-all-target-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWidgets-all-target-headers.hmap"; sourceTree = "<group>"; };
 		62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallProgressAttributes.swift; sourceTree = "<group>"; };
+		6308B564AA27E154FBB7257D /* WatchConnectivityClient.swiftdeps~ */ = {isa = PBXFileReference; path = "WatchConnectivityClient.swiftdeps~"; sourceTree = "<group>"; };
 		63D6BE1058DE48FFDF56D4FA /* x86_64-apple-watchos-simulator.swiftmodule */ = {isa = PBXFileReference; path = "x86_64-apple-watchos-simulator.swiftmodule"; sourceTree = "<group>"; };
+		63D8D3799408765F2315DC5A /* task-store.msgpack */ = {isa = PBXFileReference; path = "task-store.msgpack"; sourceTree = "<group>"; };
+		65429E0BA446F4943690EB35 /* FlagshipWidgets.swiftdoc */ = {isa = PBXFileReference; path = FlagshipWidgets.swiftdoc; sourceTree = "<group>"; };
+		66C52AB4FB6E09830BED0148 /* ab592e1e3ec7ac8375a56caae9aed0f6 */ = {isa = PBXFileReference; path = ab592e1e3ec7ac8375a56caae9aed0f6; sourceTree = "<group>"; };
+		67C81FE2E9FE1EB8725E46BF /* FlagshipWatchApp.swiftdeps~ */ = {isa = PBXFileReference; path = "FlagshipWatchApp.swiftdeps~"; sourceTree = "<group>"; };
 		67EFECFBD5A02D1C845F5858 /* 0b9c3c01bd063d3007d085025396a9d6 */ = {isa = PBXFileReference; path = 0b9c3c01bd063d3007d085025396a9d6; sourceTree = "<group>"; };
 		685C1016D50DACA15F654C44 /* FlagshipWatchApp.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = FlagshipWatchApp.o; sourceTree = "<group>"; };
+		69FCA27ECCAB735E6FC83444 /* InstallProgressLiveActivity.swiftconstvalues */ = {isa = PBXFileReference; path = InstallProgressLiveActivity.swiftconstvalues; sourceTree = "<group>"; };
 		6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchConnectivityClient.swift; sourceTree = "<group>"; };
 		6C7B5EB899651C1133537740 /* fd8314defc70a8778956f026c0ddfd19 */ = {isa = PBXFileReference; path = fd8314defc70a8778956f026c0ddfd19; sourceTree = "<group>"; };
 		6CAA95C3B1B7C5134E93D7D0 /* SwiftStdLibToolInputDependencies.dep */ = {isa = PBXFileReference; path = SwiftStdLibToolInputDependencies.dep; sourceTree = "<group>"; };
+		6D37DCAED60B328CDA8D9442 /* WidgetBundleEntry.swiftdeps */ = {isa = PBXFileReference; path = WidgetBundleEntry.swiftdeps; sourceTree = "<group>"; };
+		6D45DA09457623C0B8BA5E92 /* FlagshipWidgets-generated-files.hmap */ = {isa = PBXFileReference; path = "FlagshipWidgets-generated-files.hmap"; sourceTree = "<group>"; };
+		6D66DD4A8D0E8A730C99A852 /* PodStatusSnapshot.swiftconstvalues */ = {isa = PBXFileReference; path = PodStatusSnapshot.swiftconstvalues; sourceTree = "<group>"; };
 		6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FlagshipWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodStatusWidget.swift; sourceTree = "<group>"; };
+		719E635D52194D6E079E87E8 /* WidgetBundleEntry.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WidgetBundleEntry.d; sourceTree = "<group>"; };
+		72FDB2ACFD7818ACC7B2D9E0 /* arm64-apple-ios-simulator.swiftmodule */ = {isa = PBXFileReference; path = "arm64-apple-ios-simulator.swiftmodule"; sourceTree = "<group>"; };
+		731F33028B308FFB3430E34D /* FlagshipWidgets.hmap */ = {isa = PBXFileReference; path = FlagshipWidgets.hmap; sourceTree = "<group>"; };
 		740A87D5EAA9B9AB6239F8BA /* x86_64-apple-watchos-simulator.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "x86_64-apple-watchos-simulator.abi.json"; sourceTree = "<group>"; };
 		75143691D5CB7B278B559253 /* FlagshipWatchApp-master.priors */ = {isa = PBXFileReference; path = "FlagshipWatchApp-master.priors"; sourceTree = "<group>"; };
+		7669CF2C018A8A94E283489B /* FlagshipWidgets-Swift.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FlagshipWidgets-Swift.h"; sourceTree = "<group>"; };
+		77C906FE009440C8A0BEA969 /* FlagshipWidgets.LinkFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.LinkFileList; sourceTree = "<group>"; };
 		77D2640AF87F34067B1C47F1 /* WatchRootView.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchRootView.d; sourceTree = "<group>"; };
 		787ABB919C3BF60E7E2E8F82 /* FlagshipWatchApp-OutputFileMap.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "FlagshipWatchApp-OutputFileMap.json"; sourceTree = "<group>"; };
+		7947B13E50625C72C27E47B6 /* 1e1276f59a9af25647294d6a7126f0c3 */ = {isa = PBXFileReference; path = 1e1276f59a9af25647294d6a7126f0c3; sourceTree = "<group>"; };
 		796847E8A9B9A29FDF10F301 /* FlagshipWatchApp-own-target-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWatchApp-own-target-headers.hmap"; sourceTree = "<group>"; };
 		7AEDB69295B2E2E9C50657E9 /* FlagshipWatchApp-master.priors */ = {isa = PBXFileReference; path = "FlagshipWatchApp-master.priors"; sourceTree = "<group>"; };
+		7B32A484A3B7088435150E63 /* target-graph.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "target-graph.txt"; sourceTree = "<group>"; };
+		7C4AF9E786E3B69773076977 /* d41d8cd98f00b204e9800998ecf8427e */ = {isa = PBXFileReference; path = d41d8cd98f00b204e9800998ecf8427e; sourceTree = "<group>"; };
+		7C7D3A6206769337C4EF03F7 /* FlagshipWidgets.LinkFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.LinkFileList; sourceTree = "<group>"; };
 		7C8F1461ACDE4E4C3F44B3A8 /* WatchRootView.swiftconstvalues */ = {isa = PBXFileReference; path = WatchRootView.swiftconstvalues; sourceTree = "<group>"; };
+		7C8F7FFD07677F50994C98A6 /* PodStatusSnapshot.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = PodStatusSnapshot.o; sourceTree = "<group>"; };
 		7C957D4DBC6FAC5FB751012D /* FlagshipWatchApp.swiftmodule */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftmodule; sourceTree = "<group>"; };
+		7CE602CE31066454465CB8B6 /* WidgetBundleEntry.swiftdeps */ = {isa = PBXFileReference; path = WidgetBundleEntry.swiftdeps; sourceTree = "<group>"; };
 		7D7D3857E0F4F2FA6EB6CDA9 /* WatchApproval.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchApproval.d; sourceTree = "<group>"; };
+		7E1B0D11578B36F6A28E3132 /* FlagshipWidgets_dependency_info.dat */ = {isa = PBXFileReference; path = FlagshipWidgets_dependency_info.dat; sourceTree = "<group>"; };
+		7E5AFA69156D2906834B4F83 /* FlagshipWidgets.appex */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.app-extension"; path = FlagshipWidgets.appex; sourceTree = "<group>"; };
 		7E7316C5D20A9E772B9E0CB8 /* WatchRootView.swiftdeps */ = {isa = PBXFileReference; path = WatchRootView.swiftdeps; sourceTree = "<group>"; };
 		7E95C8ECD721DA1FD3D1C13C /* FlagshipWatchApp-all-non-framework-target-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWatchApp-all-non-framework-target-headers.hmap"; sourceTree = "<group>"; };
 		7EC7CC211EA9C4A7B66B83E4 /* FlagshipWatchApp-Swift.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FlagshipWatchApp-Swift.h"; sourceTree = "<group>"; };
 		7ED49267D90FA2CA42454C84 /* cee8d3ca65a9018c3f2f0bab491c9987 */ = {isa = PBXFileReference; path = cee8d3ca65a9018c3f2f0bab491c9987; sourceTree = "<group>"; };
 		7EF0CEC27D50D46932E2EB8B /* FlagshipWatchApp.swiftdeps */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftdeps; sourceTree = "<group>"; };
+		8104AB6F4110D50A383DAAB3 /* WatchApproval.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchApproval.d; sourceTree = "<group>"; };
 		8244C999BD14526332DF6099 /* WatchApproval.swiftconstvalues */ = {isa = PBXFileReference; path = WatchApproval.swiftconstvalues; sourceTree = "<group>"; };
+		828CE984EAE168756CE87461 /* WidgetBundleEntry.swiftconstvalues */ = {isa = PBXFileReference; path = WidgetBundleEntry.swiftconstvalues; sourceTree = "<group>"; };
+		82E91BA81D386C84DEA5B7E7 /* FlagshipWidgets-own-target-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWidgets-own-target-headers.hmap"; sourceTree = "<group>"; };
+		85881F686377CC10FC46AA0C /* x86_64-apple-ios-simulator.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "x86_64-apple-ios-simulator.abi.json"; sourceTree = "<group>"; };
 		85F18F55051AD7CDBB8AE837 /* WatchConnectivityClient.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchConnectivityClient.d; sourceTree = "<group>"; };
 		86F0B654801BD3FF9322F942 /* WatchConnectivityClient.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchConnectivityClient.d; sourceTree = "<group>"; };
+		875404F9916069823DBC4545 /* PodStatusWidget.dia */ = {isa = PBXFileReference; path = PodStatusWidget.dia; sourceTree = "<group>"; };
+		885B47ED596C0C530057ED30 /* target-graph.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "target-graph.txt"; sourceTree = "<group>"; };
 		8AB626C273D22599FB5455E5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		8B175C36513A21199517E842 /* WidgetBundleEntry.dia */ = {isa = PBXFileReference; path = WidgetBundleEntry.dia; sourceTree = "<group>"; };
+		8B57F5C93FA51F0A9F62FC22 /* PodStatusWidget.swiftdeps */ = {isa = PBXFileReference; path = PodStatusWidget.swiftdeps; sourceTree = "<group>"; };
 		8C3CF3ED5FF4149714F5DB5E /* WatchRootView.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchRootView.d; sourceTree = "<group>"; };
+		8C938C1090168AD686980AB2 /* FlagshipWidgets-master.priors */ = {isa = PBXFileReference; path = "FlagshipWidgets-master.priors"; sourceTree = "<group>"; };
 		8CDD5005BBD09F56837E8ACA /* FlagshipWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWidgets.entitlements; sourceTree = "<group>"; };
 		8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSmokeTests.swift; sourceTree = "<group>"; };
 		9009F399BC4D6274347003F8 /* WatchApproval.swiftdeps */ = {isa = PBXFileReference; path = WatchApproval.swiftdeps; sourceTree = "<group>"; };
 		9211D96FF437A4A999C2BA91 /* FlagshipWatchApp.swiftsourceinfo */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftsourceinfo; sourceTree = "<group>"; };
+		923C4AE67AD7F1ADC77111BC /* PodStatusSnapshot.swiftdeps */ = {isa = PBXFileReference; path = PodStatusSnapshot.swiftdeps; sourceTree = "<group>"; };
 		9438F2AF4C997B05A0C98FDE /* WatchConnectivityClient.swiftdeps */ = {isa = PBXFileReference; path = WatchConnectivityClient.swiftdeps; sourceTree = "<group>"; };
 		948A761D9E8829F360B383FD /* 8bba4233626f64a7ea772bb94a08a1a9 */ = {isa = PBXFileReference; path = 8bba4233626f64a7ea772bb94a08a1a9; sourceTree = "<group>"; };
 		953B12A43E97BF6D148FA14E /* task-store.msgpack */ = {isa = PBXFileReference; path = "task-store.msgpack"; sourceTree = "<group>"; };
 		974C638BE24336866A48EE99 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		9A2568E49A733C817A05FDB0 /* WatchApproval.swiftdeps~ */ = {isa = PBXFileReference; path = "WatchApproval.swiftdeps~"; sourceTree = "<group>"; };
+		9A69A2029AE96CE474E4F9EB /* PodStatusWidget.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = PodStatusWidget.o; sourceTree = "<group>"; };
+		9C683DAEE62D0240A11E97C3 /* FlagshipWidgets-master-emit-module.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = "FlagshipWidgets-master-emit-module.d"; sourceTree = "<group>"; };
 		9DAF9CE7E0B3ECC12270BF89 /* WatchApproval.dia */ = {isa = PBXFileReference; path = WatchApproval.dia; sourceTree = "<group>"; };
+		9E252594E2B098320439C5CD /* WatchApproval.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = WatchApproval.d; sourceTree = "<group>"; };
 		9E36E8FE15B57958FEE75905 /* FlagshipWatchApp */ = {isa = PBXFileReference; path = FlagshipWatchApp; sourceTree = "<group>"; };
 		9F68D947839A57011A3860AA /* task-store.msgpack */ = {isa = PBXFileReference; path = "task-store.msgpack"; sourceTree = "<group>"; };
 		A230E277D7736DCBAEC12508 /* 0de2d7e205afc2b864a56ea8c2de4335 */ = {isa = PBXFileReference; path = 0de2d7e205afc2b864a56ea8c2de4335; sourceTree = "<group>"; };
 		A2B21879A6EF4ABA4BB9772C /* WatchConnectivityClient.swiftconstvalues */ = {isa = PBXFileReference; path = WatchConnectivityClient.swiftconstvalues; sourceTree = "<group>"; };
 		A3FA70702397918D3FF3AC09 /* d41d8cd98f00b204e9800998ecf8427e */ = {isa = PBXFileReference; path = d41d8cd98f00b204e9800998ecf8427e; sourceTree = "<group>"; };
+		A5433F1A7CB075526F0CC44D /* InstallProgressLiveActivity.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = InstallProgressLiveActivity.o; sourceTree = "<group>"; };
 		A55F6378076EDAD76BB27634 /* WatchRootView.swiftdeps */ = {isa = PBXFileReference; path = WatchRootView.swiftdeps; sourceTree = "<group>"; };
 		A6482A1CACCD25AACCB9C011 /* WatchRootView.dia */ = {isa = PBXFileReference; path = WatchRootView.dia; sourceTree = "<group>"; };
 		A69E5DE28CE5FF0F43FC9AAE /* FlagshipWatchApp.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = FlagshipWatchApp.d; sourceTree = "<group>"; };
+		A6A30A847B1E0EA3902B6FAF /* FlagshipWidgets-OutputFileMap.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "FlagshipWidgets-OutputFileMap.json"; sourceTree = "<group>"; };
+		A747DDF0EE058507B58C5245 /* WatchApproval.swiftconstvalues */ = {isa = PBXFileReference; path = WatchApproval.swiftconstvalues; sourceTree = "<group>"; };
+		A7922803CD29537935CE4557 /* PodStatusWidget.swiftconstvalues */ = {isa = PBXFileReference; path = PodStatusWidget.swiftconstvalues; sourceTree = "<group>"; };
 		A86E57A7846BB874D6C1AB44 /* FlagshipWatchApp-Swift.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FlagshipWatchApp-Swift.h"; sourceTree = "<group>"; };
+		A89716E997832E97087CDAF5 /* 5e0c2ec7ba67bd76aa70f1bfa0d2df1b */ = {isa = PBXFileReference; path = 5e0c2ec7ba67bd76aa70f1bfa0d2df1b; sourceTree = "<group>"; };
 		A915089A062B56B8AB7C2577 /* WatchApproval.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchApproval.o; sourceTree = "<group>"; };
+		A98E29572AE629F4760BA069 /* WidgetBundleEntry.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WidgetBundleEntry.o; sourceTree = "<group>"; };
+		AAA5EA24FB00BE9D364041D7 /* WatchConnectivityClient.swiftdeps~ */ = {isa = PBXFileReference; path = "WatchConnectivityClient.swiftdeps~"; sourceTree = "<group>"; };
 		AC644708931B6CC8A4F4273F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AE6A0E28F3D85D8D0DE6C9DB /* WatchRootView.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchRootView.o; sourceTree = "<group>"; };
 		AE83C60C5621848FBBA262A1 /* 0de2d7e205afc2b864a56ea8c2de4335 */ = {isa = PBXFileReference; path = 0de2d7e205afc2b864a56ea8c2de4335; sourceTree = "<group>"; };
 		AF4CB4F11A34D6E614A0C521 /* FlagshipWatchApp.DependencyMetadataFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.DependencyMetadataFileList; sourceTree = "<group>"; };
 		AF829141BC6444FD1BDC1F32 /* FlagshipWatchApp.swiftconstvalues */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftconstvalues; sourceTree = "<group>"; };
+		AFC8D567F8D8D219B22EA583 /* WatchApproval.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchApproval.o; sourceTree = "<group>"; };
+		B234C08B5F4ABF3089D8E26D /* FlagshipWidgets.SwiftConstValuesFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.SwiftConstValuesFileList; sourceTree = "<group>"; };
 		B2491A51E3B833C99CCD3132 /* FlagshipWatchApp-project-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWatchApp-project-headers.hmap"; sourceTree = "<group>"; };
+		B413706C7FB820593B163822 /* FlagshipWidgets.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWidgets.abi.json; sourceTree = "<group>"; };
 		B4914DD9335F681DE640D91A /* FlagshipWatchApp.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = FlagshipWatchApp.o; sourceTree = "<group>"; };
 		B573B5B9FB9099DB9C5F4A30 /* WatchRootView.dia */ = {isa = PBXFileReference; path = WatchRootView.dia; sourceTree = "<group>"; };
 		B917B895BC07F2040E45F3DF /* FlagshipWatchApp.SwiftConstValuesFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.SwiftConstValuesFileList; sourceTree = "<group>"; };
 		B9EFB3D016F3CD115235BFE1 /* WatchApproval.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchApproval.o; sourceTree = "<group>"; };
+		BA8EB97359EA8921AD818B2B /* InstallProgressAttributes.swiftconstvalues */ = {isa = PBXFileReference; path = InstallProgressAttributes.swiftconstvalues; sourceTree = "<group>"; };
 		BB049DC7D51647B9302AAC3A /* FlagshipWatchApp.DependencyStaticMetadataFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.DependencyStaticMetadataFileList; sourceTree = "<group>"; };
+		BB5705CE2AE1514A6ADC1865 /* InstallProgressLiveActivity.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = InstallProgressLiveActivity.o; sourceTree = "<group>"; };
 		BBE3D83E9D35A2A23978E5FD /* arm64-apple-watchos-simulator.swiftsourceinfo */ = {isa = PBXFileReference; path = "arm64-apple-watchos-simulator.swiftsourceinfo"; sourceTree = "<group>"; };
 		BDCF53D5039434FB1B451DF9 /* FlagshipWatchApp-OutputFileMap.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "FlagshipWatchApp-OutputFileMap.json"; sourceTree = "<group>"; };
 		BEE03455F261624FDAE4793E /* FlagshipWatchApp_const_extract_protocols.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWatchApp_const_extract_protocols.json; sourceTree = "<group>"; };
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1A965E66F2728BE5FAB9C52 /* WatchConnectivityClient.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchConnectivityClient.o; sourceTree = "<group>"; };
 		C1E9154622955F5BDE45EB96 /* FlagshipWatchApp.SwiftFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.SwiftFileList; sourceTree = "<group>"; };
+		C1F7E097134F51E54BE16FF6 /* FlagshipWidgets */ = {isa = PBXFileReference; path = FlagshipWidgets; sourceTree = "<group>"; };
+		C29CD390914E9ABAF9D88B4C /* FlagshipWidgets-project-headers.hmap */ = {isa = PBXFileReference; path = "FlagshipWidgets-project-headers.hmap"; sourceTree = "<group>"; };
+		C2B2CC33F18F65DA14A0AC24 /* InstallProgressAttributes.dia */ = {isa = PBXFileReference; path = InstallProgressAttributes.dia; sourceTree = "<group>"; };
+		C2B3D81CDAE400014E03010F /* PodStatusSnapshot.swiftconstvalues */ = {isa = PBXFileReference; path = PodStatusSnapshot.swiftconstvalues; sourceTree = "<group>"; };
+		C46879472EFFFAA5183F3969 /* 9451aafd7b85bec84bff135be3a8c002 */ = {isa = PBXFileReference; path = 9451aafd7b85bec84bff135be3a8c002; sourceTree = "<group>"; };
+		C49C6ACC980156FE42C400D5 /* InstallProgressLiveActivity.dia */ = {isa = PBXFileReference; path = InstallProgressLiveActivity.dia; sourceTree = "<group>"; };
 		C5131F1E93E7F7DFEC0EA84B /* FlagshipWatchApp-master-emit-module.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = "FlagshipWatchApp-master-emit-module.d"; sourceTree = "<group>"; };
+		C5619ADD74C611E857032310 /* 0b9c3c01bd063d3007d085025396a9d6 */ = {isa = PBXFileReference; path = 0b9c3c01bd063d3007d085025396a9d6; sourceTree = "<group>"; };
+		C6243F4A1FEB4FC72E4EEBCE /* e0134fb6873412c5613e3e8d6e43ece8 */ = {isa = PBXFileReference; path = e0134fb6873412c5613e3e8d6e43ece8; sourceTree = "<group>"; };
+		C6E2C87CB1840A19F46507FF /* WidgetBundleEntry.dia */ = {isa = PBXFileReference; path = WidgetBundleEntry.dia; sourceTree = "<group>"; };
 		C6FA3C5F97353A43E56078CC /* 8bba4233626f64a7ea772bb94a08a1a9 */ = {isa = PBXFileReference; path = 8bba4233626f64a7ea772bb94a08a1a9; sourceTree = "<group>"; };
+		C6FAE5247F4F0F1CF0849BED /* WatchApproval.swiftconstvalues */ = {isa = PBXFileReference; path = WatchApproval.swiftconstvalues; sourceTree = "<group>"; };
+		C73489B6C974E2FB9CFFF4BC /* FlagshipWatchApp.swiftdeps~ */ = {isa = PBXFileReference; path = "FlagshipWatchApp.swiftdeps~"; sourceTree = "<group>"; };
+		C73A02E0160053F5CC9BF050 /* build-request.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "build-request.json"; sourceTree = "<group>"; };
+		C8CD99D5A5523FDEBDE01F67 /* InstallProgressAttributes.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = InstallProgressAttributes.o; sourceTree = "<group>"; };
+		C9EF8B5A21F6B047A9FCB56A /* FlagshipWidgets.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWidgets.abi.json; sourceTree = "<group>"; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
+		CA6EF2711DD9DC2721394A6D /* fd8314defc70a8778956f026c0ddfd19 */ = {isa = PBXFileReference; path = fd8314defc70a8778956f026c0ddfd19; sourceTree = "<group>"; };
+		CADB61F92468D624A81FAC96 /* 0de2d7e205afc2b864a56ea8c2de4335 */ = {isa = PBXFileReference; path = 0de2d7e205afc2b864a56ea8c2de4335; sourceTree = "<group>"; };
+		CC92E8E5236B166480ED34D9 /* 0b9c3c01bd063d3007d085025396a9d6 */ = {isa = PBXFileReference; path = 0b9c3c01bd063d3007d085025396a9d6; sourceTree = "<group>"; };
+		CD87328F18B65AAD0275F189 /* WatchApproval.dia */ = {isa = PBXFileReference; path = WatchApproval.dia; sourceTree = "<group>"; };
+		CDB267ABEF131671E6EF50D5 /* x86_64-apple-ios-simulator.swiftmodule */ = {isa = PBXFileReference; path = "x86_64-apple-ios-simulator.swiftmodule"; sourceTree = "<group>"; };
+		CDF2E1C7563A7A9FF873B2DE /* PodStatusWidget.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = PodStatusWidget.d; sourceTree = "<group>"; };
 		CF58F7F531BA9B5914B63CA1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CF5CE7D547B5CC6F1718B0C9 /* arm64-apple-watchos-simulator.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "arm64-apple-watchos-simulator.abi.json"; sourceTree = "<group>"; };
 		D04462E484658D722FCF30C7 /* FlagshipWatchApp-Swift.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FlagshipWatchApp-Swift.h"; sourceTree = "<group>"; };
 		D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallProgressLiveActivityCenter.swift; sourceTree = "<group>"; };
+		D339C7F44018C0B75891575F /* FlagshipWidgets-master.priors */ = {isa = PBXFileReference; path = "FlagshipWidgets-master.priors"; sourceTree = "<group>"; };
 		D892294DB628376B8BEB866D /* build.db */ = {isa = PBXFileReference; path = build.db; sourceTree = "<group>"; };
+		DB0846A2BC78A6CEF1239441 /* WatchRootView.swiftdeps~ */ = {isa = PBXFileReference; path = "WatchRootView.swiftdeps~"; sourceTree = "<group>"; };
+		DD07A0D83C7B0BD613E1340D /* arm64-apple-ios-simulator.swiftsourceinfo */ = {isa = PBXFileReference; path = "arm64-apple-ios-simulator.swiftsourceinfo"; sourceTree = "<group>"; };
 		E0DEEAACF4653D4DEC5BB1A8 /* target-graph.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "target-graph.txt"; sourceTree = "<group>"; };
+		E1184ECC830E7B6F1C423CA7 /* arm64-apple-ios-simulator.abi.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "arm64-apple-ios-simulator.abi.json"; sourceTree = "<group>"; };
 		E15EC2B811DC27DA6F39243F /* description.msgpack */ = {isa = PBXFileReference; path = description.msgpack; sourceTree = "<group>"; };
 		E211428417B982DC3D690241 /* FlagshipWatchApp.swiftmodule */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftmodule; sourceTree = "<group>"; };
+		E2F2FCA527983B4E5F380898 /* PodStatusSnapshot.dia */ = {isa = PBXFileReference; path = PodStatusSnapshot.dia; sourceTree = "<group>"; };
+		E41D6B256F5D2115D1E249A7 /* InstallProgressLiveActivity.swiftdeps */ = {isa = PBXFileReference; path = InstallProgressLiveActivity.swiftdeps; sourceTree = "<group>"; };
+		E6B6FDB1F97D5C2783E5D3EE /* WatchApproval.swiftdeps~ */ = {isa = PBXFileReference; path = "WatchApproval.swiftdeps~"; sourceTree = "<group>"; };
+		E8F01BF0F33E07B5DE5D5A74 /* FlagshipWidgets-Swift.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FlagshipWidgets-Swift.h"; sourceTree = "<group>"; };
 		E971C85589EC413EBF992B95 /* WatchConnectivityClient.swiftdeps */ = {isa = PBXFileReference; path = WatchConnectivityClient.swiftdeps; sourceTree = "<group>"; };
+		E9D0FF4FC56CB3BADF6F5D38 /* description.msgpack */ = {isa = PBXFileReference; path = description.msgpack; sourceTree = "<group>"; };
+		E9D18247B650CA8A93305349 /* x86_64-apple-ios-simulator.swiftdoc */ = {isa = PBXFileReference; path = "x86_64-apple-ios-simulator.swiftdoc"; sourceTree = "<group>"; };
 		EA35BF39206378728D34AE65 /* WatchBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchBridge.swift; sourceTree = "<group>"; };
 		ED33C8A64D06E1D5F778CAA4 /* arm64-apple-watchos-simulator.swiftdoc */ = {isa = PBXFileReference; path = "arm64-apple-watchos-simulator.swiftdoc"; sourceTree = "<group>"; };
+		ED5CDBC716ED4994743BA496 /* InstallProgressAttributes.dia */ = {isa = PBXFileReference; path = InstallProgressAttributes.dia; sourceTree = "<group>"; };
 		EE28AAAE134060CCB5D30F7F /* FlagshipWatchApp.swiftdoc */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftdoc; sourceTree = "<group>"; };
+		EE38FBBB9980281E57C42E87 /* WatchApproval.dia */ = {isa = PBXFileReference; path = WatchApproval.dia; sourceTree = "<group>"; };
+		EF0EE5B9AA8D84DD6F6894E2 /* FlagshipWidgets */ = {isa = PBXFileReference; path = FlagshipWidgets; sourceTree = "<group>"; };
 		EFCDF59BD92BC06D630D3C34 /* af49c9a5e38c52fb57e6bd5a60bc220d */ = {isa = PBXFileReference; path = af49c9a5e38c52fb57e6bd5a60bc220d; sourceTree = "<group>"; };
+		EFEA4A16B80B43EFDAF91FF0 /* PodStatusWidget.swiftdeps */ = {isa = PBXFileReference; path = PodStatusWidget.swiftdeps; sourceTree = "<group>"; };
+		F08D2B3B8137DEBAB765C4CA /* ExtractedAppShortcutsMetadata.stringsdata */ = {isa = PBXFileReference; path = ExtractedAppShortcutsMetadata.stringsdata; sourceTree = "<group>"; };
+		F0B18B07BDD2AC2D25FBE40F /* FlagshipWidgets-master-emit-module.dia */ = {isa = PBXFileReference; path = "FlagshipWidgets-master-emit-module.dia"; sourceTree = "<group>"; };
 		F10B1F01679AD79D8E75F2EA /* FlagshipWatchApp-master-emit-module.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = "FlagshipWatchApp-master-emit-module.d"; sourceTree = "<group>"; };
 		F169F633E9DAC3EF7FB6BC47 /* WatchApproval.swiftconstvalues */ = {isa = PBXFileReference; path = WatchApproval.swiftconstvalues; sourceTree = "<group>"; };
+		F177DBDD4536D958265A9454 /* FlagshipWidgets.DependencyStaticMetadataFileList */ = {isa = PBXFileReference; path = FlagshipWidgets.DependencyStaticMetadataFileList; sourceTree = "<group>"; };
 		F1B7FC0F5A199A6B5ABC7102 /* arm64-apple-watchos-simulator.swiftmodule */ = {isa = PBXFileReference; path = "arm64-apple-watchos-simulator.swiftmodule"; sourceTree = "<group>"; };
+		F1D25D10C5599A161D1F3808 /* 8bba4233626f64a7ea772bb94a08a1a9 */ = {isa = PBXFileReference; path = 8bba4233626f64a7ea772bb94a08a1a9; sourceTree = "<group>"; };
+		F2A4D75BC4471911AE4E9BE8 /* bf8fd9d8e7e39764702cd6f2baafc996 */ = {isa = PBXFileReference; path = bf8fd9d8e7e39764702cd6f2baafc996; sourceTree = "<group>"; };
 		F5C5DEE44C259D37FB73D235 /* 0b9c3c01bd063d3007d085025396a9d6 */ = {isa = PBXFileReference; path = 0b9c3c01bd063d3007d085025396a9d6; sourceTree = "<group>"; };
 		F6AB3A5C805A3F314203C390 /* af49c9a5e38c52fb57e6bd5a60bc220d */ = {isa = PBXFileReference; path = af49c9a5e38c52fb57e6bd5a60bc220d; sourceTree = "<group>"; };
+		F88BB35312FC6EEF8360BAF6 /* 0cc6e979965b640c90cc4b9190bfad95 */ = {isa = PBXFileReference; path = 0cc6e979965b640c90cc4b9190bfad95; sourceTree = "<group>"; };
 		F971C8709816B9FFDAF180E5 /* FlagshipWatchApp.swiftsourceinfo */ = {isa = PBXFileReference; path = FlagshipWatchApp.swiftsourceinfo; sourceTree = "<group>"; };
+		F9C467AF20A7AA01BA13D5C0 /* arm64-apple-ios-simulator.swiftdoc */ = {isa = PBXFileReference; path = "arm64-apple-ios-simulator.swiftdoc"; sourceTree = "<group>"; };
+		FA43ED8F74D2D0AB9477B625 /* PodStatusSnapshot.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = PodStatusSnapshot.d; sourceTree = "<group>"; };
+		FA4A5CFD551FFCFB6005D9CF /* 687e88543a73d759948de2f40cfa3cc5 */ = {isa = PBXFileReference; path = 687e88543a73d759948de2f40cfa3cc5; sourceTree = "<group>"; };
 		FA74FB6E3B4D2D99A563174A /* build-request.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "build-request.json"; sourceTree = "<group>"; };
 		FA9B5BFEF777D5B5DED42D12 /* FlagshipWatchApp.SwiftFileList */ = {isa = PBXFileReference; path = FlagshipWatchApp.SwiftFileList; sourceTree = "<group>"; };
 		FC4E4879CF9885CFC95D5146 /* fd8314defc70a8778956f026c0ddfd19 */ = {isa = PBXFileReference; path = fd8314defc70a8778956f026c0ddfd19; sourceTree = "<group>"; };
+		FD61F58AF1A9BE828C4E454F /* ffa97d82f1684f6a553b386943467306 */ = {isa = PBXFileReference; path = ffa97d82f1684f6a553b386943467306; sourceTree = "<group>"; };
+		FDA8528BA9E82C7ADC4EDDED /* InstallProgressAttributes.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = InstallProgressAttributes.d; sourceTree = "<group>"; };
 		FDD0C78258604D6F5A0B6538 /* WatchConnectivityClient.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = WatchConnectivityClient.o; sourceTree = "<group>"; };
+		FE9BCCED08601157A586282A /* FlagshipWidgets_const_extract_protocols.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = FlagshipWidgets_const_extract_protocols.json; sourceTree = "<group>"; };
+		FEB3B2F3E91E5D1A71CD80F4 /* WidgetBundleEntry.swiftconstvalues */ = {isa = PBXFileReference; path = WidgetBundleEntry.swiftconstvalues; sourceTree = "<group>"; };
+		FEBAA3DBCA91BF8A8E484185 /* FlagshipWidgets.swiftmodule */ = {isa = PBXFileReference; path = FlagshipWidgets.swiftmodule; sourceTree = "<group>"; };
+		FEE04E7B4E6FAF28C4415BF6 /* FlagshipWidgets_dependency_info.dat */ = {isa = PBXFileReference; path = FlagshipWidgets_dependency_info.dat; sourceTree = "<group>"; };
 		FF4E38F6A4D2D78CBDC6EF2F /* WatchRootView.swiftconstvalues */ = {isa = PBXFileReference; path = WatchRootView.swiftconstvalues; sourceTree = "<group>"; };
-		"TEMP_55BF0C59-BAE9-4898-9998-AAF946BF6C05" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_B0D4B7CE-AC55-4364-AFD4-C6C38140D4F1" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_F0FFE002-F6FF-4A9C-9A43-3CCB8D0DD4CE" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
-		"TEMP_F5BB4ECD-9977-46FE-A1EA-CAEACBF3EEC3" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_2E2FDB80-7EDA-4AAD-A265-774FB3FBE8AA" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_45F2793A-E735-46BD-AF1A-9BF9AC2730CE" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_9C98A33A-5D90-403B-84C3-0F62BD05DFF8" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_D4B1239D-929F-46E3-82E3-1963168F8A70" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -232,9 +383,70 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		011899AA570E268B9307E267 /* Debug-iphonesimulator */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = "Debug-iphonesimulator";
+			sourceTree = "<group>";
+		};
+		0A11E0E2C97F9E6AC812E007 /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+				860D7C2D68482AEB52EF81A8 /* Binary */,
+				F08D2B3B8137DEBAB765C4CA /* ExtractedAppShortcutsMetadata.stringsdata */,
+				FE9BCCED08601157A586282A /* FlagshipWidgets_const_extract_protocols.json */,
+				7E1B0D11578B36F6A28E3132 /* FlagshipWidgets_dependency_info.dat */,
+				326C16DCAF85144B89ED0304 /* FlagshipWidgets-master-emit-module.d */,
+				125385C2B3DFD5CE983A18FC /* FlagshipWidgets-master-emit-module.dia */,
+				D339C7F44018C0B75891575F /* FlagshipWidgets-master.priors */,
+				5A12A4BA4F6094FCA3D60452 /* FlagshipWidgets-OutputFileMap.json */,
+				7669CF2C018A8A94E283489B /* FlagshipWidgets-Swift.h */,
+				B413706C7FB820593B163822 /* FlagshipWidgets.abi.json */,
+				77C906FE009440C8A0BEA969 /* FlagshipWidgets.LinkFileList */,
+				1137F52B6E319A393FD4BB93 /* FlagshipWidgets.SwiftConstValuesFileList */,
+				65429E0BA446F4943690EB35 /* FlagshipWidgets.swiftdoc */,
+				1C29CF1F893432BA1A2534C7 /* FlagshipWidgets.SwiftFileList */,
+				FEBAA3DBCA91BF8A8E484185 /* FlagshipWidgets.swiftmodule */,
+				46EF6418A8D12E91D9C7A609 /* FlagshipWidgets.swiftsourceinfo */,
+				447E9DC5086395DD5E55B7F9 /* InstallProgressAttributes.d */,
+				ED5CDBC716ED4994743BA496 /* InstallProgressAttributes.dia */,
+				C8CD99D5A5523FDEBDE01F67 /* InstallProgressAttributes.o */,
+				BA8EB97359EA8921AD818B2B /* InstallProgressAttributes.swiftconstvalues */,
+				061EA7C40DF7E653F13D7564 /* InstallProgressAttributes.swiftdeps */,
+				2F5326D2E78032DCAD2DD33E /* InstallProgressLiveActivity.d */,
+				C49C6ACC980156FE42C400D5 /* InstallProgressLiveActivity.dia */,
+				BB5705CE2AE1514A6ADC1865 /* InstallProgressLiveActivity.o */,
+				2D89392DBE64365D311DE807 /* InstallProgressLiveActivity.swiftconstvalues */,
+				5E6DBE2C04E0C6A6E2802646 /* InstallProgressLiveActivity.swiftdeps */,
+				FA43ED8F74D2D0AB9477B625 /* PodStatusSnapshot.d */,
+				E2F2FCA527983B4E5F380898 /* PodStatusSnapshot.dia */,
+				7C8F7FFD07677F50994C98A6 /* PodStatusSnapshot.o */,
+				6D66DD4A8D0E8A730C99A852 /* PodStatusSnapshot.swiftconstvalues */,
+				923C4AE67AD7F1ADC77111BC /* PodStatusSnapshot.swiftdeps */,
+				56B8F512D7EB3B6095183D77 /* PodStatusWidget.d */,
+				875404F9916069823DBC4545 /* PodStatusWidget.dia */,
+				9A69A2029AE96CE474E4F9EB /* PodStatusWidget.o */,
+				45D8A2B22B1973A959F24FB1 /* PodStatusWidget.swiftconstvalues */,
+				EFEA4A16B80B43EFDAF91FF0 /* PodStatusWidget.swiftdeps */,
+				8104AB6F4110D50A383DAAB3 /* WatchApproval.d */,
+				EE38FBBB9980281E57C42E87 /* WatchApproval.dia */,
+				2D2EF5E3B392E914E49A3663 /* WatchApproval.o */,
+				C6FAE5247F4F0F1CF0849BED /* WatchApproval.swiftconstvalues */,
+				04DBD2A22C9A1D99C4CB2064 /* WatchApproval.swiftdeps */,
+				1E0C711F08824A591F2B5359 /* WidgetBundleEntry.d */,
+				8B175C36513A21199517E842 /* WidgetBundleEntry.dia */,
+				5175DC8B3F26EBBD559D2EA2 /* WidgetBundleEntry.o */,
+				828CE984EAE168756CE87461 /* WidgetBundleEntry.swiftconstvalues */,
+				7CE602CE31066454465CB8B6 /* WidgetBundleEntry.swiftdeps */,
+			);
+			path = x86_64;
+			sourceTree = "<group>";
+		};
 		15EFE9D22B724D06FFC50F85 /* build */ = {
 			isa = PBXGroup;
 			children = (
+				861BEF4162392E7D58F9EE07 /* Debug-iphonesimulator */,
 				AF66BDCEAB95165DB4BE75B2 /* Debug-watchsimulator */,
 				8D811C10B1C0FB42D48D563B /* EagerLinkingTBDs */,
 				8F4282B2226F7597670ADD92 /* FlagshipApp.build */,
@@ -256,14 +468,60 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		1EE12A7D54A57C3C67C030DF /* FlagshipWidgets.build */ = {
+			isa = PBXGroup;
+			children = (
+				BEBBD652FF168A48DCDEC0EB /* DerivedSources */,
+				A16C40163F24117A6BA5556B /* Objects-normal */,
+				39733852BD64C4CA79A902A1 /* ssu */,
+				357DDC5205DEE20B8F4EC7EC /* FlagshipWidgets-all-non-framework-target-headers.hmap */,
+				5FDBEDCB68383AFDB2F5A459 /* FlagshipWidgets-all-target-headers.hmap */,
+				6D45DA09457623C0B8BA5E92 /* FlagshipWidgets-generated-files.hmap */,
+				82E91BA81D386C84DEA5B7E7 /* FlagshipWidgets-own-target-headers.hmap */,
+				C29CD390914E9ABAF9D88B4C /* FlagshipWidgets-project-headers.hmap */,
+				2D6B583C7247F320258767F9 /* FlagshipWidgets.DependencyMetadataFileList */,
+				F177DBDD4536D958265A9454 /* FlagshipWidgets.DependencyStaticMetadataFileList */,
+				731F33028B308FFB3430E34D /* FlagshipWidgets.hmap */,
+			);
+			path = FlagshipWidgets.build;
+			sourceTree = "<group>";
+		};
+		1F2D228373A42B0354CE9C3D /* attachments */ = {
+			isa = PBXGroup;
+			children = (
+				CC92E8E5236B166480ED34D9 /* 0b9c3c01bd063d3007d085025396a9d6 */,
+				F88BB35312FC6EEF8360BAF6 /* 0cc6e979965b640c90cc4b9190bfad95 */,
+				CADB61F92468D624A81FAC96 /* 0de2d7e205afc2b864a56ea8c2de4335 */,
+				40ECD9B86F2078B9F1776356 /* 5e0c2ec7ba67bd76aa70f1bfa0d2df1b */,
+				F1D25D10C5599A161D1F3808 /* 8bba4233626f64a7ea772bb94a08a1a9 */,
+				FA4A5CFD551FFCFB6005D9CF /* 687e88543a73d759948de2f40cfa3cc5 */,
+				0A21AF5127D08654278E624E /* af49c9a5e38c52fb57e6bd5a60bc220d */,
+				F2A4D75BC4471911AE4E9BE8 /* bf8fd9d8e7e39764702cd6f2baafc996 */,
+				3D87115BBE08AAB5222F0880 /* cee8d3ca65a9018c3f2f0bab491c9987 */,
+				7C4AF9E786E3B69773076977 /* d41d8cd98f00b204e9800998ecf8427e */,
+				487F42333F15437FB14EF473 /* e98c97cd6bb74e46ba29156641f67e71 */,
+				CA6EF2711DD9DC2721394A6D /* fd8314defc70a8778956f026c0ddfd19 */,
+			);
+			path = attachments;
+			sourceTree = "<group>";
+		};
 		2496585CDA88734CD619E111 /* XCBuildData */ = {
 			isa = PBXGroup;
 			children = (
 				5B74D020C881FF57772A6198 /* 3ae84d45ca4a89f840b5ceb27b24392f.xcbuilddata */,
+				902ABE82D19B5C563E8DD0A4 /* 71a2f4f2ca9f51579bb84f0eddb1a205.xcbuilddata */,
 				ED708B78910A6A6E0E47C331 /* 76536416e1fb2fe3701956723847d7b6.xcbuilddata */,
+				ED270AE338CE3F54E9780ABE /* f54bf17cadc8e7f7153e72266cfcd417.xcbuilddata */,
 				D892294DB628376B8BEB866D /* build.db */,
 			);
 			path = XCBuildData;
+			sourceTree = "<group>";
+		};
+		39733852BD64C4CA79A902A1 /* ssu */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = ssu;
 			sourceTree = "<group>";
 		};
 		3DF1DFFD74D7DB4A370D5FCB /* x86_64 */ = {
@@ -286,6 +544,7 @@
 				4375E56B446572035D018FC9 /* FlagshipWatchApp.swiftconstvalues */,
 				5C1FB6EE1213AA46A4A8704A /* FlagshipWatchApp.SwiftConstValuesFileList */,
 				7EF0CEC27D50D46932E2EB8B /* FlagshipWatchApp.swiftdeps */,
+				C73489B6C974E2FB9CFFF4BC /* FlagshipWatchApp.swiftdeps~ */,
 				EE28AAAE134060CCB5D30F7F /* FlagshipWatchApp.swiftdoc */,
 				FA9B5BFEF777D5B5DED42D12 /* FlagshipWatchApp.SwiftFileList */,
 				7C957D4DBC6FAC5FB751012D /* FlagshipWatchApp.swiftmodule */,
@@ -295,16 +554,19 @@
 				A915089A062B56B8AB7C2577 /* WatchApproval.o */,
 				8244C999BD14526332DF6099 /* WatchApproval.swiftconstvalues */,
 				9009F399BC4D6274347003F8 /* WatchApproval.swiftdeps */,
+				E6B6FDB1F97D5C2783E5D3EE /* WatchApproval.swiftdeps~ */,
 				85F18F55051AD7CDBB8AE837 /* WatchConnectivityClient.d */,
 				085A39406BE19EF400615D34 /* WatchConnectivityClient.dia */,
 				FDD0C78258604D6F5A0B6538 /* WatchConnectivityClient.o */,
 				A2B21879A6EF4ABA4BB9772C /* WatchConnectivityClient.swiftconstvalues */,
 				E971C85589EC413EBF992B95 /* WatchConnectivityClient.swiftdeps */,
+				6308B564AA27E154FBB7257D /* WatchConnectivityClient.swiftdeps~ */,
 				77D2640AF87F34067B1C47F1 /* WatchRootView.d */,
 				A6482A1CACCD25AACCB9C011 /* WatchRootView.dia */,
 				5095FA6FEDBC5F6FF5FCD1AC /* WatchRootView.o */,
 				FF4E38F6A4D2D78CBDC6EF2F /* WatchRootView.swiftconstvalues */,
 				A55F6378076EDAD76BB27634 /* WatchRootView.swiftdeps */,
+				55442C21C14BE06A47E14AA3 /* WatchRootView.swiftdeps~ */,
 			);
 			path = x86_64;
 			sourceTree = "<group>";
@@ -352,6 +614,7 @@
 				AF829141BC6444FD1BDC1F32 /* FlagshipWatchApp.swiftconstvalues */,
 				B917B895BC07F2040E45F3DF /* FlagshipWatchApp.SwiftConstValuesFileList */,
 				09635F95195187A216F71B79 /* FlagshipWatchApp.swiftdeps */,
+				67C81FE2E9FE1EB8725E46BF /* FlagshipWatchApp.swiftdeps~ */,
 				4E05BEA23E33D996944AFA65 /* FlagshipWatchApp.swiftdoc */,
 				C1E9154622955F5BDE45EB96 /* FlagshipWatchApp.SwiftFileList */,
 				E211428417B982DC3D690241 /* FlagshipWatchApp.swiftmodule */,
@@ -361,16 +624,19 @@
 				B9EFB3D016F3CD115235BFE1 /* WatchApproval.o */,
 				F169F633E9DAC3EF7FB6BC47 /* WatchApproval.swiftconstvalues */,
 				1C054651D0DD53D1D5ADBECE /* WatchApproval.swiftdeps */,
+				9A2568E49A733C817A05FDB0 /* WatchApproval.swiftdeps~ */,
 				86F0B654801BD3FF9322F942 /* WatchConnectivityClient.d */,
 				44B13DD4E1E7A5D951F14761 /* WatchConnectivityClient.dia */,
 				C1A965E66F2728BE5FAB9C52 /* WatchConnectivityClient.o */,
 				1C0D1211427BA68CBB10EA03 /* WatchConnectivityClient.swiftconstvalues */,
 				9438F2AF4C997B05A0C98FDE /* WatchConnectivityClient.swiftdeps */,
+				AAA5EA24FB00BE9D364041D7 /* WatchConnectivityClient.swiftdeps~ */,
 				8C3CF3ED5FF4149714F5DB5E /* WatchRootView.d */,
 				B573B5B9FB9099DB9C5F4A30 /* WatchRootView.dia */,
 				AE6A0E28F3D85D8D0DE6C9DB /* WatchRootView.o */,
 				7C8F1461ACDE4E4C3F44B3A8 /* WatchRootView.swiftconstvalues */,
 				7E7316C5D20A9E772B9E0CB8 /* WatchRootView.swiftdeps */,
+				DB0846A2BC78A6CEF1239441 /* WatchRootView.swiftdeps~ */,
 			);
 			path = arm64;
 			sourceTree = "<group>";
@@ -408,6 +674,14 @@
 				953B12A43E97BF6D148FA14E /* task-store.msgpack */,
 			);
 			path = 3ae84d45ca4a89f840b5ceb27b24392f.xcbuilddata;
+			sourceTree = "<group>";
+		};
+		5BFFA40437B5C70D1C8AB68B /* Binary */ = {
+			isa = PBXGroup;
+			children = (
+				C1F7E097134F51E54BE16FF6 /* FlagshipWidgets */,
+			);
+			path = Binary;
 			sourceTree = "<group>";
 		};
 		5CF8EDCC7B10031CC29BBC79 /* attachments */ = {
@@ -458,6 +732,42 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		7A88AD1303DC0F1CFB3EB089 /* attachments */ = {
+			isa = PBXGroup;
+			children = (
+				C5619ADD74C611E857032310 /* 0b9c3c01bd063d3007d085025396a9d6 */,
+				7947B13E50625C72C27E47B6 /* 1e1276f59a9af25647294d6a7126f0c3 */,
+				36DDC31B66E3A83CF8A55FF5 /* 03a422cf8c2a4873414c972fe8c1b523 */,
+				A89716E997832E97087CDAF5 /* 5e0c2ec7ba67bd76aa70f1bfa0d2df1b */,
+				153DBCA8F8816CC283AFAABE /* 8bba4233626f64a7ea772bb94a08a1a9 */,
+				C46879472EFFFAA5183F3969 /* 9451aafd7b85bec84bff135be3a8c002 */,
+				3914DC433C35D16293510016 /* a1c3bd06566b1fe84c0327cbc089ddb9 */,
+				66C52AB4FB6E09830BED0148 /* ab592e1e3ec7ac8375a56caae9aed0f6 */,
+				28CED2479DFC3F588893AED9 /* d41d8cd98f00b204e9800998ecf8427e */,
+				C6243F4A1FEB4FC72E4EEBCE /* e0134fb6873412c5613e3e8d6e43ece8 */,
+				50AF10C5CD2AE085E3A4F183 /* fd8314defc70a8778956f026c0ddfd19 */,
+				FD61F58AF1A9BE828C4E454F /* ffa97d82f1684f6a553b386943467306 */,
+			);
+			path = attachments;
+			sourceTree = "<group>";
+		};
+		860D7C2D68482AEB52EF81A8 /* Binary */ = {
+			isa = PBXGroup;
+			children = (
+				EF0EE5B9AA8D84DD6F6894E2 /* FlagshipWidgets */,
+			);
+			path = Binary;
+			sourceTree = "<group>";
+		};
+		861BEF4162392E7D58F9EE07 /* Debug-iphonesimulator */ = {
+			isa = PBXGroup;
+			children = (
+				E1F3B6AE2808C85F15C0A431 /* FlagshipWidgets.swiftmodule */,
+				7E5AFA69156D2906834B4F83 /* FlagshipWidgets.appex */,
+			);
+			path = "Debug-iphonesimulator";
+			sourceTree = "<group>";
+		};
 		86A5C47DEEA2C67E7F39AFFA /* attachments */ = {
 			isa = PBXGroup;
 			children = (
@@ -480,6 +790,7 @@
 		8D811C10B1C0FB42D48D563B /* EagerLinkingTBDs */ = {
 			isa = PBXGroup;
 			children = (
+				011899AA570E268B9307E267 /* Debug-iphonesimulator */,
 				9E099E5190CE94C418E0CAB2 /* Debug-watchsimulator */,
 			);
 			path = EagerLinkingTBDs;
@@ -488,9 +799,23 @@
 		8F4282B2226F7597670ADD92 /* FlagshipApp.build */ = {
 			isa = PBXGroup;
 			children = (
+				A431C6CE00FC61F0A5CED6F9 /* Debug-iphonesimulator */,
 				AAD98335304E4799E269894A /* Debug-watchsimulator */,
 			);
 			path = FlagshipApp.build;
+			sourceTree = "<group>";
+		};
+		902ABE82D19B5C563E8DD0A4 /* 71a2f4f2ca9f51579bb84f0eddb1a205.xcbuilddata */ = {
+			isa = PBXGroup;
+			children = (
+				7A88AD1303DC0F1CFB3EB089 /* attachments */,
+				C73A02E0160053F5CC9BF050 /* build-request.json */,
+				E9D0FF4FC56CB3BADF6F5D38 /* description.msgpack */,
+				5D5BAFEEA27B5593AB4EE7EB /* manifest.json */,
+				885B47ED596C0C530057ED30 /* target-graph.txt */,
+				63D8D3799408765F2315DC5A /* task-store.msgpack */,
+			);
+			path = 71a2f4f2ca9f51579bb84f0eddb1a205.xcbuilddata;
 			sourceTree = "<group>";
 		};
 		919B325873A5D2F97196E9B5 /* Intents */ = {
@@ -521,6 +846,24 @@
 			children = (
 			);
 			path = "Debug-watchsimulator";
+			sourceTree = "<group>";
+		};
+		A16C40163F24117A6BA5556B /* Objects-normal */ = {
+			isa = PBXGroup;
+			children = (
+				AD59C33D1B2985BEC2659381 /* arm64 */,
+				0A11E0E2C97F9E6AC812E007 /* x86_64 */,
+			);
+			path = "Objects-normal";
+			sourceTree = "<group>";
+		};
+		A431C6CE00FC61F0A5CED6F9 /* Debug-iphonesimulator */ = {
+			isa = PBXGroup;
+			children = (
+				E6617BFE93677A242B6F5838 /* FlagshipApp-461750dabca6bc776861f30fb39f777d-VFS-iphonesimulator */,
+				1EE12A7D54A57C3C67C030DF /* FlagshipWidgets.build */,
+			);
+			path = "Debug-iphonesimulator";
 			sourceTree = "<group>";
 		};
 		AAD98335304E4799E269894A /* Debug-watchsimulator */ = {
@@ -560,6 +903,58 @@
 			path = Project;
 			sourceTree = "<group>";
 		};
+		AD59C33D1B2985BEC2659381 /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+				5BFFA40437B5C70D1C8AB68B /* Binary */,
+				04D35ED9A6CEE50FCE80125E /* FlagshipWidgets_const_extract_protocols.json */,
+				FEE04E7B4E6FAF28C4415BF6 /* FlagshipWidgets_dependency_info.dat */,
+				9C683DAEE62D0240A11E97C3 /* FlagshipWidgets-master-emit-module.d */,
+				F0B18B07BDD2AC2D25FBE40F /* FlagshipWidgets-master-emit-module.dia */,
+				8C938C1090168AD686980AB2 /* FlagshipWidgets-master.priors */,
+				A6A30A847B1E0EA3902B6FAF /* FlagshipWidgets-OutputFileMap.json */,
+				E8F01BF0F33E07B5DE5D5A74 /* FlagshipWidgets-Swift.h */,
+				C9EF8B5A21F6B047A9FCB56A /* FlagshipWidgets.abi.json */,
+				7C7D3A6206769337C4EF03F7 /* FlagshipWidgets.LinkFileList */,
+				B234C08B5F4ABF3089D8E26D /* FlagshipWidgets.SwiftConstValuesFileList */,
+				0E0FFE26815339624AA3FE1C /* FlagshipWidgets.swiftdoc */,
+				4897899291BA5446183AFF48 /* FlagshipWidgets.SwiftFileList */,
+				0F74E30A150F65EA169E8027 /* FlagshipWidgets.swiftmodule */,
+				1BE68EE311B61C1F35A28FD3 /* FlagshipWidgets.swiftsourceinfo */,
+				FDA8528BA9E82C7ADC4EDDED /* InstallProgressAttributes.d */,
+				C2B2CC33F18F65DA14A0AC24 /* InstallProgressAttributes.dia */,
+				063F078725619E063A59D6C0 /* InstallProgressAttributes.o */,
+				1DDE8C05EDC8A62B88D52D77 /* InstallProgressAttributes.swiftconstvalues */,
+				48CF7CCE9AF540D875C63844 /* InstallProgressAttributes.swiftdeps */,
+				0D3FF40C99B5A9F5E44132F8 /* InstallProgressLiveActivity.d */,
+				492404805EF912C7751DFE0E /* InstallProgressLiveActivity.dia */,
+				A5433F1A7CB075526F0CC44D /* InstallProgressLiveActivity.o */,
+				69FCA27ECCAB735E6FC83444 /* InstallProgressLiveActivity.swiftconstvalues */,
+				E41D6B256F5D2115D1E249A7 /* InstallProgressLiveActivity.swiftdeps */,
+				0717441157B5D2FDCC4265E0 /* PodStatusSnapshot.d */,
+				158002F1E9576E8B09A909A5 /* PodStatusSnapshot.dia */,
+				555F77AC0D78BFAEF472726C /* PodStatusSnapshot.o */,
+				C2B3D81CDAE400014E03010F /* PodStatusSnapshot.swiftconstvalues */,
+				00F65F123A15C8693BB96343 /* PodStatusSnapshot.swiftdeps */,
+				CDF2E1C7563A7A9FF873B2DE /* PodStatusWidget.d */,
+				03C4708AD52E626348ED87A3 /* PodStatusWidget.dia */,
+				54DCBCF40723D72E562842BC /* PodStatusWidget.o */,
+				A7922803CD29537935CE4557 /* PodStatusWidget.swiftconstvalues */,
+				8B57F5C93FA51F0A9F62FC22 /* PodStatusWidget.swiftdeps */,
+				9E252594E2B098320439C5CD /* WatchApproval.d */,
+				CD87328F18B65AAD0275F189 /* WatchApproval.dia */,
+				AFC8D567F8D8D219B22EA583 /* WatchApproval.o */,
+				A747DDF0EE058507B58C5245 /* WatchApproval.swiftconstvalues */,
+				578901AD6328D2D5A149D942 /* WatchApproval.swiftdeps */,
+				719E635D52194D6E079E87E8 /* WidgetBundleEntry.d */,
+				C6E2C87CB1840A19F46507FF /* WidgetBundleEntry.dia */,
+				A98E29572AE629F4760BA069 /* WidgetBundleEntry.o */,
+				FEB3B2F3E91E5D1A71CD80F4 /* WidgetBundleEntry.swiftconstvalues */,
+				6D37DCAED60B328CDA8D9442 /* WidgetBundleEntry.swiftdeps */,
+			);
+			path = arm64;
+			sourceTree = "<group>";
+		};
 		AF66BDCEAB95165DB4BE75B2 /* Debug-watchsimulator */ = {
 			isa = PBXGroup;
 			children = (
@@ -567,6 +962,23 @@
 				5789F6BAEB83CFC8C323360A /* FlagshipWatchApp.app */,
 			);
 			path = "Debug-watchsimulator";
+			sourceTree = "<group>";
+		};
+		BEBBD652FF168A48DCDEC0EB /* DerivedSources */ = {
+			isa = PBXGroup;
+			children = (
+				2DA23937883C4E7A1CAB0106 /* FlagshipWidgets-Swift.h */,
+			);
+			path = DerivedSources;
+			sourceTree = "<group>";
+		};
+		C491336316B9E5C0D46D3243 /* Project */ = {
+			isa = PBXGroup;
+			children = (
+				DD07A0D83C7B0BD613E1340D /* arm64-apple-ios-simulator.swiftsourceinfo */,
+				2E16DCF84629D83C29E98DBF /* x86_64-apple-ios-simulator.swiftsourceinfo */,
+			);
+			path = Project;
 			sourceTree = "<group>";
 		};
 		D18DA5554F47DFAA52FA22EE /* Products */ = {
@@ -596,6 +1008,40 @@
 				6CAA95C3B1B7C5134E93D7D0 /* SwiftStdLibToolInputDependencies.dep */,
 			);
 			path = FlagshipWatchApp.build;
+			sourceTree = "<group>";
+		};
+		E1F3B6AE2808C85F15C0A431 /* FlagshipWidgets.swiftmodule */ = {
+			isa = PBXGroup;
+			children = (
+				C491336316B9E5C0D46D3243 /* Project */,
+				E1184ECC830E7B6F1C423CA7 /* arm64-apple-ios-simulator.abi.json */,
+				F9C467AF20A7AA01BA13D5C0 /* arm64-apple-ios-simulator.swiftdoc */,
+				72FDB2ACFD7818ACC7B2D9E0 /* arm64-apple-ios-simulator.swiftmodule */,
+				85881F686377CC10FC46AA0C /* x86_64-apple-ios-simulator.abi.json */,
+				E9D18247B650CA8A93305349 /* x86_64-apple-ios-simulator.swiftdoc */,
+				CDB267ABEF131671E6EF50D5 /* x86_64-apple-ios-simulator.swiftmodule */,
+			);
+			path = FlagshipWidgets.swiftmodule;
+			sourceTree = "<group>";
+		};
+		E6617BFE93677A242B6F5838 /* FlagshipApp-461750dabca6bc776861f30fb39f777d-VFS-iphonesimulator */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = "FlagshipApp-461750dabca6bc776861f30fb39f777d-VFS-iphonesimulator";
+			sourceTree = "<group>";
+		};
+		ED270AE338CE3F54E9780ABE /* f54bf17cadc8e7f7153e72266cfcd417.xcbuilddata */ = {
+			isa = PBXGroup;
+			children = (
+				1F2D228373A42B0354CE9C3D /* attachments */,
+				49B2D73E60269D9BCC0F0FCB /* build-request.json */,
+				25D215E560CE8D8DE85CA8DB /* description.msgpack */,
+				1F7089815345A74F17EB9739 /* manifest.json */,
+				7B32A484A3B7088435150E63 /* target-graph.txt */,
+				303181B52DCF67DB1945429F /* task-store.msgpack */,
+			);
+			path = f54bf17cadc8e7f7153e72266cfcd417.xcbuilddata;
 			sourceTree = "<group>";
 		};
 		ED708B78910A6A6E0E47C331 /* 76536416e1fb2fe3701956723847d7b6.xcbuilddata */ = {
@@ -628,13 +1074,13 @@
 			path = "Objects-normal";
 			sourceTree = "<group>";
 		};
-		"TEMP_9017AF72-A4BE-43C4-9888-C3C635B9D113" /* . */ = {
+		"TEMP_2B3E7197-B22F-4C14-A089-5C68B8625AEF" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_F0FFE002-F6FF-4A9C-9A43-3CCB8D0DD4CE" /* project.yml */,
-				"TEMP_B0D4B7CE-AC55-4364-AFD4-C6C38140D4F1" /* FlagshipApp.xcodeproj */,
-				"TEMP_F5BB4ECD-9977-46FE-A1EA-CAEACBF3EEC3" /* FlagshipApp.entitlements */,
-				"TEMP_55BF0C59-BAE9-4898-9998-AAF946BF6C05" /* Info.plist */,
+				"TEMP_9C98A33A-5D90-403B-84C3-0F62BD05DFF8" /* project.yml */,
+				"TEMP_D4B1239D-929F-46E3-82E3-1963168F8A70" /* FlagshipApp.xcodeproj */,
+				"TEMP_2E2FDB80-7EDA-4AAD-A265-774FB3FBE8AA" /* FlagshipApp.entitlements */,
+				"TEMP_45F2793A-E735-46BD-AF1A-9BF9AC2730CE" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				7A32690FE07864A771E99F82 /* Resources */,
