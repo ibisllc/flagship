@@ -31,8 +31,16 @@ public final class PushNotifications: NSObject {
 
     public func requestAuthorization() async -> Bool {
         do {
+            // .criticalAlert lets unlock-approval pushes bypass Focus /
+            // Do-Not-Disturb. The system silently downgrades it to a
+            // normal alert until Apple grants the
+            // com.apple.developer.usernotifications.critical-alerts
+            // entitlement (separate request via
+            // developer.apple.com/contact/request/notifications-critical-alerts-entitlement/).
+            // Shipping the option pre-grant is harmless and saves an
+            // app update once the entitlement lands.
             let granted = try await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .sound, .badge])
+                .requestAuthorization(options: [.alert, .sound, .badge, .criticalAlert])
             return granted
         } catch {
             return false

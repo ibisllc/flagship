@@ -20,6 +20,57 @@ struct FlagshipApp: App {
         // UserDefaults (non-secret), the 32-byte session token lives
         // in Keychain with WhenUnlockedThisDeviceOnly access.
         self.liveClient = LiveScreensClient(store: KeychainSessionStore())
+        Self.wireInstallProgressBridge()
+        Self.wirePendingApprovalsBroadcast()
+    }
+
+    /// Wire FlagshipUI's PendingApprovalsBroadcast to the WatchBridge
+    /// — every refresh of the unlock-approval list mirrors to the
+    /// paired Apple Watch via WCSession applicationContext.
+    @MainActor
+    private static func wirePendingApprovalsBroadcast() {
+        PendingApprovalsBroadcast.send = { approvals in
+            WatchBridge.shared.publishPending(approvals)
+        }
+    }
+
+    /// Wire the FlagshipUI InstallProgressBridge to the App-target
+    /// Live Activity. The bridge is set up once at @main init so
+    /// any InstallProgressViewModel — onboarding or in-app — drives
+    /// the Dynamic Island / Lock Screen without each call site
+    /// having to import ActivityKit.
+    @MainActor
+    private static func wireInstallProgressBridge() {
+        let b = InstallProgressBridge.shared
+        b.onStart = { serial, podName in
+            InstallProgressLiveActivityCenter.shared.start(
+                serial: serial,
+                podName: podName ?? "Provisioning"
+            )
+        }
+        b.onStep = { step in
+            Task { await InstallProgressLiveActivityCenter.shared.advance(to: bridge(step)) }
+        }
+        b.onComplete = { fqdn in
+            Task { await InstallProgressLiveActivityCenter.shared.complete(serverFqdn: fqdn) }
+        }
+        b.onFailed = { reason in
+            Task { await InstallProgressLiveActivityCenter.shared.fail(reason: reason) }
+        }
+    }
+
+    /// One-to-one translation from FlagshipUI's Step enum to the
+    /// widget-extension's ActivityAttributes.Step. They're separate
+    /// types because the widget extension can't import FlagshipUI.
+    @MainActor
+    private static func bridge(_ step: InstallProgressViewModel.Step) -> InstallProgressAttributes.Step {
+        switch step {
+        case .registered:   return .registered
+        case .boot:         return .boot
+        case .tunnelOnline: return .tunnelOnline
+        case .certIssued:   return .certIssued
+        case .ready:        return .ready
+        }
     }
     private let mockServerClient: any FlagshipServerClient = MockFlagshipServerClient()
     private let liveServerClient: any FlagshipServerClient = LiveFlagshipServerClient()
@@ -48,6 +99,7 @@ struct FlagshipApp: App {
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     appDelegate.linker = linker
+                    WatchBridge.shared.activate(client: activeClient)
                     let push = PushNotifications(linker: linker)
                     let registrar = PushRegistrar(appState: appState, client: activeServerClient)
                     push.onDeviceTokenChange = { token in

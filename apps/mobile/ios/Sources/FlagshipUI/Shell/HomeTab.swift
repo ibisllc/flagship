@@ -87,7 +87,7 @@ public struct HomeTab: View {
                 }
             )
         case .installProgress(let serial, let name, let description):
-            InstallProgressContainer(serial: serial) { fqdn in
+            InstallProgressContainer(serial: serial, podName: name) { fqdn in
                 addOnlinePodAndDismiss(name: name, description: description, fqdn: fqdn)
             }
         }
@@ -216,9 +216,16 @@ struct PendingPodContainer: View {
 
 struct InstallProgressContainer: View {
     let serial: String
+    let podName: String?
     let onFinish: (String) -> Void
     @Environment(\.screensClient) private var client
     @State private var vm: InstallProgressViewModel?
+
+    init(serial: String, podName: String? = nil, onFinish: @escaping (String) -> Void) {
+        self.serial = serial
+        self.podName = podName
+        self.onFinish = onFinish
+    }
 
     var body: some View {
         ZStack {
@@ -230,7 +237,7 @@ struct InstallProgressContainer: View {
             }
         }
         .task {
-            if vm == nil { vm = InstallProgressViewModel(serial: serial, client: client) }
+            if vm == nil { vm = InstallProgressViewModel(serial: serial, client: client, podName: podName) }
         }
     }
 }

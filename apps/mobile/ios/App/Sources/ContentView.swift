@@ -28,7 +28,15 @@ struct ContentView: View {
         }
         .onChange(of: app.isPaired) { _, paired in
             if paired { Task { await registerPush() } }
+            PodStatusPublisher(app: app).publish()
         }
+        .onChange(of: app.pods) { _, _ in
+            PodStatusPublisher(app: app).publish()
+        }
+        .onChange(of: app.leaderPodId) { _, _ in
+            PodStatusPublisher(app: app).publish()
+        }
+        .task { PodStatusPublisher(app: app).publish() }
     }
 
     /// Lazy push registration — only after the user has a paired pod

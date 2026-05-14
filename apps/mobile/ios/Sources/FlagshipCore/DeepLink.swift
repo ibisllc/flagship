@@ -6,6 +6,10 @@ import Foundation
 /// and pushes the right destination on the right tab.
 public enum DeepLink: Equatable, Sendable {
     case unlockApprove(requestId: String)
+    /// Show the activity tab's pending-approvals list (no specific
+    /// requestId). Used by the Siri/Shortcuts ApproveUnlockIntent
+    /// when the user asks generically rather than from a push.
+    case unlockApprovalsList
     case serverDetail(podId: String)
     case appDetail(appId: String)
     case marketplace
@@ -24,7 +28,12 @@ public enum DeepLink: Equatable, Sendable {
             }
         switch host {
         case "unlock-approve":
-            if let id = params["requestId"] { return .unlockApprove(requestId: id) }
+            if let id = params["requestId"], id != "latest", id != "any" {
+                return .unlockApprove(requestId: id)
+            }
+            return .unlockApprovalsList
+        case "unlock-approvals":
+            return .unlockApprovalsList
         case "server":
             if let id = params["podId"] { return .serverDetail(podId: id) }
         case "app":

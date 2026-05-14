@@ -170,13 +170,26 @@ async function sendApns(args: {
     state.mintedAt = now();
   }
   const url = `https://${cfg.host ?? "api.push.apple.com"}/3/device/${args.providerToken}`;
+  // Boot-approval pushes are time-critical (user is holding a freshly-
+  // booted box and the unlock window is short). Setting aps.sound as
+  // a critical-alert object asks APNs to bypass Focus / Do-Not-Disturb.
+  // The user-side iOS app must hold the
+  // `com.apple.developer.usernotifications.critical-alerts` entitlement
+  // AND the user must have opted in via permission prompt; otherwise
+  // APNs silently downgrades to a normal alert. So it's safe to set
+  // unconditionally on unlock-approve and let the device decide.
+  const isCritical = args.category === "unlock-approve";
+  const apsBody: Record<string, unknown> = {
+    "mutable-content": 1,
+    category: args.category,
+    "thread-id": args.category,
+  };
+  if (isCritical) {
+    apsBody.sound = { critical: 1, name: "default", volume: 1.0 };
+    apsBody["interruption-level"] = "critical";
+  }
   const body = JSON.stringify({
-    aps: {
-      "mutable-content": 1,
-      category: args.category,
-      // No alert body — the OS extension decrypts before display.
-      "thread-id": args.category,
-    },
+    aps: apsBody,
     "flagship-sealed": args.sealedPayloadHex,
   });
   const r = await args.fetchImpl(url, {

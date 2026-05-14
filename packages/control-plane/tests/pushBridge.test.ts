@@ -201,6 +201,50 @@ describe("buildPushForwarder — APNs", () => {
     });
     expect(calls[0]!.headers["authorization"]).not.toBe(calls[1]!.headers["authorization"]);
   });
+
+  it("unlock-approve category attaches critical-sound + interruption-level=critical", async () => {
+    const { f, calls } = fakeFetch([{ status: 200, body: "" }]);
+    const forward = buildPushForwarder({
+      apns: {
+        keyId: "ABC1234567",
+        teamId: "TEAM123456",
+        privateKeyPem: APNS_TEST_KEY,
+        bundleId: "com.flagship.app",
+      },
+      fetchImpl: f,
+      now: () => 1_700_000_000_000,
+    });
+    await forward({
+      targets: [{ tokenId: "u", platform: "apns", providerToken: "U" }],
+      category: "unlock-approve",
+      sealedPayloadHex: "00",
+    });
+    const body = JSON.parse(calls[0]!.body);
+    expect(body.aps.sound).toEqual({ critical: 1, name: "default", volume: 1.0 });
+    expect(body.aps["interruption-level"]).toBe("critical");
+  });
+
+  it("non-unlock-approve categories do NOT attach critical sound", async () => {
+    const { f, calls } = fakeFetch([{ status: 200, body: "" }]);
+    const forward = buildPushForwarder({
+      apns: {
+        keyId: "ABC1234567",
+        teamId: "TEAM123456",
+        privateKeyPem: APNS_TEST_KEY,
+        bundleId: "com.flagship.app",
+      },
+      fetchImpl: f,
+      now: () => 1_700_000_000_000,
+    });
+    await forward({
+      targets: [{ tokenId: "x", platform: "apns", providerToken: "X" }],
+      category: "install-event",
+      sealedPayloadHex: "00",
+    });
+    const body = JSON.parse(calls[0]!.body);
+    expect(body.aps.sound).toBeUndefined();
+    expect(body.aps["interruption-level"]).toBeUndefined();
+  });
 });
 
 describe("buildPushForwarder — Web Push (RFC 8030 + VAPID)", () => {

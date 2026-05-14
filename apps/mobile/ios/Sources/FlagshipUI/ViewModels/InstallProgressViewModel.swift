@@ -27,16 +27,23 @@ public final class InstallProgressViewModel {
     public private(set) var isDone: Bool = false
 
     public let serial: String
+    public let podName: String?
     private let client: any ScreensClient
     private var streamTask: Task<Void, Never>?
+    private var bridgeStarted = false
 
-    public init(serial: String, client: any ScreensClient) {
+    public init(serial: String, client: any ScreensClient, podName: String? = nil) {
         self.serial = serial
         self.client = client
+        self.podName = podName
     }
 
     public func start() {
         streamTask?.cancel()
+        if !bridgeStarted {
+            InstallProgressBridge.shared.onStart?(serial, podName)
+            bridgeStarted = true
+        }
         streamTask = Task { [weak self] in
             guard let stream = self?.client.installEvents(serial: self?.serial ?? "") else { return }
             for await event in stream {
@@ -50,9 +57,11 @@ public final class InstallProgressViewModel {
                     self?.serverFqdn = fqdn
                     self?.mark(.ready)
                     self?.isDone = true
+                    InstallProgressBridge.shared.onComplete?(fqdn)
                 case .failed(let reason, _):
                     self?.failedReason = reason
                     self?.isDone = true
+                    InstallProgressBridge.shared.onFailed?(reason)
                 }
             }
         }
@@ -63,5 +72,8 @@ public final class InstallProgressViewModel {
         streamTask = nil
     }
 
-    private func mark(_ step: Step) { completed.insert(step) }
+    private func mark(_ step: Step) {
+        let wasNew = completed.insert(step).inserted
+        if wasNew { InstallProgressBridge.shared.onStep?(step) }
+    }
 }

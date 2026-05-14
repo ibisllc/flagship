@@ -14,16 +14,40 @@ import FlagshipAPI
 /// sidestep the conflict by composing the layout manually.
 public struct RootShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(DeepLinker.self) private var linker
 
     @State private var selected: RootDestination = .home
 
     public init() {}
 
     public var body: some View {
-        if sizeClass == .regular {
-            iPadShell(selected: $selected)
-        } else {
-            iPhoneShell(selected: $selected)
+        Group {
+            if sizeClass == .regular {
+                iPadShell(selected: $selected)
+            } else {
+                iPhoneShell(selected: $selected)
+            }
+        }
+        .onChange(of: linker.pending) { _, link in
+            if let link {
+                selected = tab(for: link)
+            }
+        }
+        .task(id: linker.pending) {
+            if let link = linker.pending {
+                selected = tab(for: link)
+            }
+        }
+    }
+
+    /// Tab that owns a given deep-link target. Inner navigation
+    /// (NavigationStack push) is handled by the tab itself when it
+    /// reads the same `linker.pending` value.
+    private func tab(for link: DeepLink) -> RootDestination {
+        switch link {
+        case .unlockApprove, .unlockApprovalsList:   return .activity
+        case .serverDetail, .createServer:            return .home
+        case .appDetail, .marketplace:                return .apps
         }
     }
 }

@@ -6,6 +6,7 @@ import Flagship
 public struct ActivityTab: View {
     @Environment(\.screensClient) private var client
     @Environment(AppState.self) private var app
+    @Environment(DeepLinker.self) private var linker
     @State private var path: [ActivityRoute] = []
     @State private var vm: ActivityViewModel?
 
@@ -21,6 +22,24 @@ public struct ActivityTab: View {
                     case .postRecovery: PostRecoveryContainer()
                     }
                 }
+        }
+        .onChange(of: linker.pending) { _, link in
+            consume(link)
+        }
+        .task(id: linker.pending) { consume(linker.pending) }
+    }
+
+    /// Pop or push onto our path stack when a DeepLink lands on this
+    /// tab. Specific-requestId unlock approves still drop onto the
+    /// list (a per-id detail screen would be a future enhancement).
+    private func consume(_ link: DeepLink?) {
+        guard let link else { return }
+        switch link {
+        case .unlockApprove, .unlockApprovalsList:
+            if !path.contains(.unlockApprovals) { path.append(.unlockApprovals) }
+            _ = linker.consume()
+        default:
+            break
         }
     }
 
@@ -91,6 +110,7 @@ struct UnlockApprovalsContainer: View {
         do {
             let r = try await client.unlockApprovalsPending()
             state = .loaded(r.pending)
+            PendingApprovalsBroadcast.broadcast(r.pending)
         } catch {
             state = .failed(error.localizedDescription)
         }

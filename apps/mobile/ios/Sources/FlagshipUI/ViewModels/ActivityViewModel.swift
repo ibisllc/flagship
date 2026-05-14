@@ -45,6 +45,7 @@ public final class ActivityViewModel {
                 postRecovery: recovery
             )
             state = .loaded(feed)
+            PendingApprovalsBroadcast.broadcast(feed.pendingUnlocks)
         } catch {
             state = .failed(error.localizedDescription)
         }
