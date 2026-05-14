@@ -22,6 +22,8 @@ class FakeSocket {
   peer: FakeSocket | null = null;
   inbox: string[] = [];
   closed = false;
+  /** Attachment surface used by the Hibernation API. */
+  private attachment: unknown = undefined;
 
   addEventListener(type: string, cb: (e: FakeEvent) => void): void {
     (this.listeners[type] ??= []).push(cb);
@@ -33,6 +35,10 @@ class FakeSocket {
     if (idx >= 0) arr.splice(idx, 1);
   }
   accept(): void { /* no-op */ }
+  serializeAttachment(value: unknown): void {
+    this.attachment = value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  }
+  deserializeAttachment(): unknown { return this.attachment; }
 
   send(data: string): void {
     if (this.closed) return;
@@ -128,12 +134,63 @@ function makeStorage() {
 }
 type TestStorage = ReturnType<typeof makeStorage>;
 
-interface DoState {
-  id: { toString(): string };
-  storage: TestStorage;
+/**
+ * State stub that mirrors the slice of `DurableObjectState` used by
+ * the Hibernation-aware DO. acceptWebSocket records the socket + tag
+ * and wires the FakeSocket's events to the DO's class-level handlers
+ * (`webSocketMessage` / `webSocketClose` / `webSocketError`) — that
+ * dispatch is what Workerd does for real, but we have to do it
+ * manually in the harness. The DO is bound via `_bindDo` immediately
+ * after construction.
+ */
+function makeState(id = "test-session-aaaaaaaaaaaaaaaa") {
+  const storage = makeStorage();
+  let doRef: any = null;
+  const attached: { ws: FakeSocket; tags: string[]; closed: boolean }[] = [];
+  return {
+    id: { toString: () => id },
+    storage,
+    acceptWebSocket(ws: FakeSocket, tags?: string[]): void {
+      const entry = { ws, tags: tags ?? [], closed: false };
+      attached.push(entry);
+      ws.addEventListener("message", (e) => {
+        if (!doRef || entry.closed) return;
+        void doRef.webSocketMessage(ws as unknown as WebSocket, e.data as string);
+      });
+      ws.addEventListener("close", (e) => {
+        if (!doRef || entry.closed) return;
+        entry.closed = true;
+        void doRef.webSocketClose(
+          ws as unknown as WebSocket,
+          e.code ?? 1000,
+          e.reason ?? "",
+          e.wasClean ?? true,
+        );
+      });
+      ws.addEventListener("error", () => {
+        if (!doRef || entry.closed) return;
+        entry.closed = true;
+        void doRef.webSocketError(ws as unknown as WebSocket, new Error("ws error"));
+      });
+    },
+    getWebSockets(tag?: string): FakeSocket[] {
+      const live = attached.filter((a) => !a.closed && !a.ws.closed);
+      if (tag === undefined) return live.map((a) => a.ws);
+      return live.filter((a) => a.tags.includes(tag)).map((a) => a.ws);
+    },
+    /** Test-only — bind the DO after construction so acceptWebSocket can dispatch to it. */
+    _bindDo(d: BuildRelaySession): void { doRef = d; },
+    /** Test-only — current attachment table. */
+    _attached: attached,
+  };
 }
-function makeState(id = "test-session-aaaaaaaaaaaaaaaa"): DoState {
-  return { id: { toString: () => id }, storage: makeStorage() };
+type TestState = ReturnType<typeof makeState>;
+
+function makeBound(id?: string): { state: TestState; obj: BuildRelaySession } {
+  const state = makeState(id);
+  const obj = new BuildRelaySession(state as any, {});
+  state._bindDo(obj);
+  return { state, obj };
 }
 
 async function upgrade(
@@ -155,14 +212,14 @@ async function upgrade(
 
 describe("QR relay v2 — handshake", () => {
   it("sends {accepted} when the browser upgrades on a free session", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     const accepted = await browser.waitFor((m) => m.kind === "accepted");
     expect(accepted.kind).toBe("accepted");
   });
 
   it("forwards a phone hello as peer-hello to the browser, and acks the phone", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
 
@@ -176,7 +233,7 @@ describe("QR relay v2 — handshake", () => {
   });
 
   it("forwards opaque ciphertext as peer-deliver, sends {delivered} to phone, tears both down", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
     const phone = await upgrade(obj, "phone");
@@ -203,7 +260,7 @@ describe("QR relay v2 — handshake", () => {
 
 describe("QR relay v2 — arbitration", () => {
   it("rebinds a second browser claiming the same sid (slot taken)", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     await upgrade(obj, "browser");
     const second = await upgrade(obj, "browser");
     const rebind = await second.waitFor((m) => m.kind === "rebind");
@@ -213,7 +270,7 @@ describe("QR relay v2 — arbitration", () => {
   });
 
   it("rebinds any browser upgrade after the session is consumed", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
     const phone = await upgrade(obj, "phone");
@@ -231,7 +288,7 @@ describe("QR relay v2 — arbitration", () => {
   });
 
   it("tells the phone peer-missing when there's no browser registered", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const phone = await upgrade(obj, "phone");
     phone.push(JSON.stringify({ kind: "hello", phonePk: "QUJD" }));
     const m = await phone.waitFor((x) => x.kind === "peer-missing");
@@ -241,7 +298,7 @@ describe("QR relay v2 — arbitration", () => {
 
 describe("QR relay v2 — validation", () => {
   it("rejects malformed phonePk", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
     const phone = await upgrade(obj, "phone");
@@ -251,7 +308,7 @@ describe("QR relay v2 — validation", () => {
   });
 
   it("rejects ciphertext over the size cap", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
     const phone = await upgrade(obj, "phone");
@@ -264,7 +321,7 @@ describe("QR relay v2 — validation", () => {
   });
 
   it("rejects an unknown message kind from the phone", async () => {
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
     const phone = await upgrade(obj, "phone");
@@ -277,7 +334,7 @@ describe("QR relay v2 — validation", () => {
 describe("QR relay v2 — TTL", () => {
   it("refuses upgrades after the configured TTL", async () => {
     vi.useFakeTimers();
-    const obj = new BuildRelaySession(makeState() as any, {});
+    const { obj } = makeBound();
     // Let loadOrInit run to completion before we advance time so it
     // captures the real `createdAt`. Otherwise the awaited storage
     // writes never settle under fake timers.
@@ -302,9 +359,8 @@ describe("QR relay v2 — alarm-based TTL (P1.1: no setTimeout pinning)", () => 
    * persists the wake-up time and lets the DO be evicted in between.
    */
   it("arms a storage alarm on first construction, not a setTimeout", async () => {
-    const state = makeState();
     const before = Date.now();
-    const obj = new BuildRelaySession(state as any, {});
+    const { state, obj } = makeBound();
     // Block until loadOrInit settles.
     await obj.fetch(new Request("https://do.internal/x"));
     const alarm = state.storage._state.alarm;
@@ -315,8 +371,7 @@ describe("QR relay v2 — alarm-based TTL (P1.1: no setTimeout pinning)", () => 
   });
 
   it("persists createdAt so a hibernated/reconstructed DO honours the same TTL", async () => {
-    const state = makeState();
-    const obj1 = new BuildRelaySession(state as any, {});
+    const { state, obj: obj1 } = makeBound();
     // Force initial setup.
     await obj1.fetch(new Request("https://do.internal/x"));
     const firstCreatedAt = state.storage._state.kv.get("createdAt");
@@ -325,13 +380,13 @@ describe("QR relay v2 — alarm-based TTL (P1.1: no setTimeout pinning)", () => 
     // Simulate hibernation: a brand-new DO instance backed by the
     // same storage. createdAt must be preserved.
     const obj2 = new BuildRelaySession(state as any, {});
+    state._bindDo(obj2);
     await obj2.fetch(new Request("https://do.internal/x"));
     expect(state.storage._state.kv.get("createdAt")).toBe(firstCreatedAt);
   });
 
   it("alarm() notifies any open sockets with {expired} and wipes storage", async () => {
-    const state = makeState();
-    const obj = new BuildRelaySession(state as any, {});
+    const { state, obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
     expect(state.storage._state.kv.size).toBeGreaterThan(0);
@@ -344,8 +399,7 @@ describe("QR relay v2 — alarm-based TTL (P1.1: no setTimeout pinning)", () => 
   });
 
   it("delivery tears down + wipes storage (no resident state after consumption)", async () => {
-    const state = makeState();
-    const obj = new BuildRelaySession(state as any, {});
+    const { state, obj } = makeBound();
     const browser = await upgrade(obj, "browser");
     await browser.waitFor((m) => m.kind === "accepted");
     const phone = await upgrade(obj, "phone");
@@ -357,5 +411,110 @@ describe("QR relay v2 — alarm-based TTL (P1.1: no setTimeout pinning)", () => 
     await new Promise((r) => setTimeout(r, 20));
     expect(state.storage._state.kv.size).toBe(0);
     expect(state.storage._state.alarm).toBeNull();
+  });
+});
+
+describe("QR relay v2 — WebSocket Hibernation (P1.2)", () => {
+  /**
+   * The DO must use state.acceptWebSocket(ws, [role]) — NOT
+   * ws.accept() + addEventListener — so the Workerd runtime can evict
+   * the DO from memory while WebSockets are idle. Without this, every
+   * open connection is billed for wallclock duration regardless of
+   * whether any frames are flowing.
+   */
+  it("registers accepted sockets with state.acceptWebSocket and a role tag", async () => {
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    expect(state._attached).toHaveLength(1);
+    expect(state._attached[0]!.tags).toContain("browser");
+
+    const phone = await upgrade(obj, "phone");
+    // Probe message so we know the test harness wired phone's events.
+    phone.push(JSON.stringify({ kind: "hello", phonePk: "QUJD" }));
+    await browser.waitFor((m) => m.kind === "peer-hello");
+    expect(state._attached).toHaveLength(2);
+    expect(state._attached[1]!.tags).toContain("phone");
+  });
+
+  it("dispatches phone frames via webSocketMessage (Hibernation API)", async () => {
+    // The class-level handler must be wired — direct addEventListener
+    // on the WS would pin the DO to memory and skip the runtime's
+    // hibernation lifecycle. We confirm by calling webSocketMessage
+    // directly and asserting peer-hello is forwarded.
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    const phone = await upgrade(obj, "phone");
+    const phoneServer = state._attached[1]!.ws;
+    await obj.webSocketMessage(
+      phoneServer as unknown as WebSocket,
+      JSON.stringify({ kind: "hello", phonePk: "QUJD" }),
+    );
+    const peer = await browser.waitFor((m) => m.kind === "peer-hello");
+    expect(peer.phonePk).toBe("QUJD");
+    expect(phone.closed).toBe(false);
+  });
+
+  it("persists each socket's role via serializeAttachment for wake-from-hibernation", async () => {
+    const { state, obj } = makeBound();
+    await upgrade(obj, "browser");
+    await upgrade(obj, "phone");
+    expect(state._attached).toHaveLength(2);
+    const [b, p] = state._attached;
+    expect((b!.ws as FakeSocket).deserializeAttachment()).toEqual({ role: "browser" });
+    expect((p!.ws as FakeSocket).deserializeAttachment()).toEqual({ role: "phone" });
+  });
+
+  it("looks up live sockets via state.getWebSockets (no in-memory cache)", async () => {
+    // Source-level guarantee: the DO must not rely on member-variable
+    // socket caches that wouldn't survive hibernation. We check by
+    // peeking at state.getWebSockets after attaching, plus verifying
+    // detachBrowser still finds the phone via the runtime list.
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    const phone = await upgrade(obj, "phone");
+
+    expect(state.getWebSockets("browser")).toHaveLength(1);
+    expect(state.getWebSockets("phone")).toHaveLength(1);
+    expect(state.getWebSockets()).toHaveLength(2);
+
+    // Browser drops; phone-side close handler must find phone via
+    // state.getWebSockets and tell it peer-missing.
+    browser.close(1000, "test");
+    const missing = await phone.waitFor((m) => m.kind === "peer-missing");
+    expect(missing.kind).toBe("peer-missing");
+    // Browser is no longer live.
+    expect(state.getWebSockets("browser")).toHaveLength(0);
+  });
+
+  it("webSocketClose detaches the right role (browser → peer-missing to phone)", async () => {
+    const { state, obj } = makeBound();
+    const browser = await upgrade(obj, "browser");
+    await browser.waitFor((m) => m.kind === "accepted");
+    const phone = await upgrade(obj, "phone");
+
+    // Simulate the runtime invoking webSocketClose directly (instead of
+    // the FakeSocket dispatch we already exercise) — both paths must
+    // reach the same detach logic.
+    const browserServer = state._attached[0]!.ws;
+    (browserServer as FakeSocket).closed = true;
+    state._attached[0]!.closed = true;
+    await obj.webSocketClose(browserServer as unknown as WebSocket, 1000, "test", true);
+    const missing = await phone.waitFor((m) => m.kind === "peer-missing");
+    expect(missing.kind).toBe("peer-missing");
+  });
+
+  it("source: uses state.acceptWebSocket, not the legacy ws.accept() path", async () => {
+    // A regression guard. If anyone reverts to (server).accept(), the
+    // file ships with a non-hibernation DO and the duration bug returns.
+    const fs = await import("fs/promises");
+    const url = new URL("../src/buildRelay.ts", import.meta.url);
+    const src = await fs.readFile(url, "utf8");
+    expect(src).toContain("state.acceptWebSocket");
+    expect(src).toContain("webSocketMessage");
+    expect(src).toContain("webSocketClose");
+    expect(src).not.toMatch(/\b\(server as unknown as \{ accept\(\): void \}\)\.accept\(\)/);
   });
 });

@@ -41,11 +41,27 @@
  * private key). Authenticity / MitM resistance is provided by the SAS
  * pattern client-side. See:
  *   memory/project_qr_relay_protocol_v2.md
+ *
+ * Runtime shape (free-tier-friendly):
+ *   - WebSockets are accepted via `state.acceptWebSocket(ws, [role])`,
+ *     not `ws.accept()`. This opts into the Hibernation API: the DO
+ *     can be evicted from memory while the WSes are idle, and Workerd
+ *     wakes it on the next frame. Without this, the DO is billed for
+ *     wallclock duration across the entire connection lifetime.
+ *   - TTL is enforced by `state.storage.setAlarm` + `async alarm()`,
+ *     not `setTimeout`. setTimeout pinned the DO to memory for the
+ *     full 5-minute window even when it was otherwise idle.
+ *   - The DO holds NO in-memory references to its WebSockets; every
+ *     handler looks them up via `state.getWebSockets(role)` so it
+ *     works after wake-from-hibernation.
  */
 
 const SESSION_TTL_MS = 5 * 60 * 1000;
 const MAX_CIPHERTEXT_BYTES = 64 * 1024;
 const B64URL_RE = /^[A-Za-z0-9_-]+={0,2}$/;
+
+const ROLE_BROWSER = "browser";
+const ROLE_PHONE = "phone";
 
 export interface BuildRelayBrowserHello {
   kind: "hello";
@@ -58,25 +74,20 @@ export interface BuildRelayDeliver {
 }
 export type BuildRelayPhoneMessage = BuildRelayBrowserHello | BuildRelayDeliver;
 
-interface SessionState {
+interface SessionMeta {
   sessionId: string;
   createdAt: number;
-  browserSocket: WebSocket | null;
-  phoneSocket: WebSocket | null;
   /** Set when the phone successfully delivered an encrypted recipe.
-   *  Any subsequent browser upgrade attempt for this sid is rebound. */
+   *  Any subsequent browser upgrade attempt for this sid is rebound.
+   *  In-memory only — once the DO hibernates and is re-created, this
+   *  is reset; the SAS check on the client side is the authoritative
+   *  protection against replay. */
   consumed: boolean;
 }
 
 /**
  * Minimal slice of `DurableObjectStorage` we depend on. Real Workerd
  * provides the full surface; tests provide an in-memory stub.
- *
- * Alarms replace the constructor-side `setTimeout` that used to pin
- * every DO to memory for 5 minutes. Alarms persist in storage and
- * wake a hibernated DO at the scheduled time without keeping it
- * resident in the meantime — which is the difference between zero
- * idle-cost and 5 GB-seconds-per-spawn.
  */
 export interface BuildRelayStorage {
   get<T = unknown>(key: string): Promise<T | undefined>;
@@ -87,9 +98,30 @@ export interface BuildRelayStorage {
   deleteAlarm(): Promise<void>;
 }
 
+/**
+ * Subset of `DurableObjectState` we depend on. The hibernation-aware
+ * API is the critical part: acceptWebSocket lets the runtime evict
+ * the DO between frames, and getWebSockets is how we recover the
+ * still-open sockets after a wake.
+ */
 export interface BuildRelayDurableObjectState {
   id: { toString(): string };
   storage: BuildRelayStorage;
+  acceptWebSocket(ws: WebSocket, tags?: string[]): void;
+  getWebSockets(tag?: string): WebSocket[];
+}
+
+/**
+ * Per-socket attachment persisted by Workerd across hibernation.
+ * Small JSON payload — keep it tight; the runtime caps it.
+ */
+interface SocketAttachment {
+  role: typeof ROLE_BROWSER | typeof ROLE_PHONE;
+}
+
+interface AttachableSocket extends WebSocket {
+  serializeAttachment?(value: unknown): void;
+  deserializeAttachment?(): unknown;
 }
 
 function createWebSocketPair(): { client: WebSocket; server: WebSocket } {
@@ -114,8 +146,23 @@ function makeUpgradeResponse(client: WebSocket): Response {
   }
 }
 
+function readAttachment(ws: WebSocket): SocketAttachment | undefined {
+  const fn = (ws as AttachableSocket).deserializeAttachment;
+  if (typeof fn !== "function") return undefined;
+  const v = fn.call(ws);
+  if (v && typeof v === "object" && "role" in (v as object)) {
+    return v as SocketAttachment;
+  }
+  return undefined;
+}
+
+function writeAttachment(ws: WebSocket, attachment: SocketAttachment): void {
+  const fn = (ws as AttachableSocket).serializeAttachment;
+  if (typeof fn === "function") fn.call(ws, attachment);
+}
+
 export class BuildRelaySession implements DurableObject {
-  private session: SessionState;
+  private session: SessionMeta;
   private readonly state: BuildRelayDurableObjectState;
   /**
    * Resolves once createdAt has been loaded (or initialized) from
@@ -130,8 +177,6 @@ export class BuildRelaySession implements DurableObject {
     this.session = {
       sessionId: state.id.toString(),
       createdAt: 0,
-      browserSocket: null,
-      phoneSocket: null,
       consumed: false,
     };
     this.loaded = this.loadOrInit();
@@ -149,8 +194,6 @@ export class BuildRelaySession implements DurableObject {
     const stored = await this.state.storage.get<number>("createdAt");
     if (typeof stored === "number") {
       this.session.createdAt = stored;
-      const consumed = await this.state.storage.get<boolean>("consumed");
-      if (consumed === true) this.session.consumed = true;
       return;
     }
     const now = Date.now();
@@ -179,26 +222,60 @@ export class BuildRelaySession implements DurableObject {
    */
   async alarm(): Promise<void> {
     await this.loaded;
-    const b = this.session.browserSocket;
-    const p = this.session.phoneSocket;
-    if (b) this.send(b, { kind: "expired" });
-    if (p) this.send(p, { kind: "expired" });
-    this.session.browserSocket = null;
-    this.session.phoneSocket = null;
-    // Let the `expired` frames flush to the network before closing.
-    // Mirrors the queueMicrotask pattern used after a successful
-    // delivery (see tearDown("delivered")) — otherwise a same-tick
-    // close races the send and the client loses the signal.
+    const browser = this.getBrowserSocket();
+    const phone = this.getPhoneSocket();
+    if (browser) this.send(browser, { kind: "expired" });
+    if (phone) this.send(phone, { kind: "expired" });
+    // Let the `expired` frames flush before closing. Same pattern as
+    // tearDown("delivered"): a same-tick close races the send.
     queueMicrotask(() => {
-      this.closeQuiet(b);
-      this.closeQuiet(p);
+      this.closeQuiet(browser);
+      this.closeQuiet(phone);
     });
     await this.state.storage.deleteAll();
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // Hibernation-aware handlers. Workerd dispatches these for each
+  // accepted WebSocket; the DO can be evicted between calls.
+  // ─────────────────────────────────────────────────────────────────
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    await this.loaded;
+    const att = readAttachment(ws);
+    if (att?.role === ROLE_PHONE) {
+      await this.onPhoneMessage(ws, message);
+      return;
+    }
+    if (att?.role === ROLE_BROWSER) {
+      // Browsers are listeners; any inbound frame is a protocol violation.
+      this.send(ws, { kind: "error", reason: "browser sends nothing" });
+    }
+  }
+
+  async webSocketClose(
+    ws: WebSocket,
+    _code: number,
+    _reason: string,
+    _wasClean: boolean,
+  ): Promise<void> {
+    await this.loaded;
+    const att = readAttachment(ws);
+    if (att?.role === ROLE_BROWSER) this.detachBrowser();
+    else if (att?.role === ROLE_PHONE) this.detachPhone();
+  }
+
+  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+    await this.webSocketClose(ws, 1011, "error", false);
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Internals.
+  // ─────────────────────────────────────────────────────────────────
+
   private handleUpgrade(url: URL): Response {
     const role = url.searchParams.get("role");
-    if (role !== "browser" && role !== "phone") {
+    if (role !== ROLE_BROWSER && role !== ROLE_PHONE) {
       return new Response(
         JSON.stringify({ error: "role must be browser or phone" }),
         { status: 400, headers: { "content-type": "application/json" } },
@@ -211,8 +288,7 @@ export class BuildRelaySession implements DurableObject {
       );
     }
     const { client, server } = createWebSocketPair();
-    (server as unknown as { accept(): void }).accept();
-    if (role === "browser") this.attachBrowser(server);
+    if (role === ROLE_BROWSER) this.attachBrowser(server);
     else this.attachPhone(server);
     return makeUpgradeResponse(client);
   }
@@ -221,88 +297,97 @@ export class BuildRelaySession implements DurableObject {
     // Arbitration: a browser may only occupy a session that has neither
     // been consumed nor is currently held by another browser.
     if (this.session.consumed) {
-      this.send(ws, { kind: "rebind" });
-      queueMicrotask(() => this.closeQuiet(ws));
+      this.acceptForRebind(ws);
       return;
     }
-    if (this.session.browserSocket) {
-      this.send(ws, { kind: "rebind" });
-      queueMicrotask(() => this.closeQuiet(ws));
+    if (this.getBrowserSocket()) {
+      this.acceptForRebind(ws);
       return;
     }
-    this.session.browserSocket = ws;
-    ws.addEventListener("close", () => this.detachBrowser());
-    ws.addEventListener("error", () => this.detachBrowser());
-    // No incoming messages expected from the browser — it's a listener.
-    // We could ignore them, but reject loudly to keep the protocol tight.
-    ws.addEventListener("message", () => {
-      this.send(ws, { kind: "error", reason: "browser sends nothing" });
-    });
+    this.state.acceptWebSocket(ws, [ROLE_BROWSER]);
+    writeAttachment(ws, { role: ROLE_BROWSER });
     this.send(ws, { kind: "accepted" });
   }
 
   private attachPhone(ws: WebSocket): void {
     if (this.session.consumed) {
+      // Accept just long enough to deliver the error; the runtime
+      // requires acceptance before send().
+      this.state.acceptWebSocket(ws, [ROLE_PHONE]);
+      writeAttachment(ws, { role: ROLE_PHONE });
       this.send(ws, { kind: "error", reason: "session already consumed" });
       queueMicrotask(() => this.closeQuiet(ws));
       return;
     }
-    if (this.session.phoneSocket) {
+    if (this.getPhoneSocket()) {
+      this.state.acceptWebSocket(ws, [ROLE_PHONE]);
+      writeAttachment(ws, { role: ROLE_PHONE });
       this.send(ws, { kind: "error", reason: "phone slot taken" });
       queueMicrotask(() => this.closeQuiet(ws));
       return;
     }
-    this.session.phoneSocket = ws;
-    ws.addEventListener("message", (e: MessageEvent) => {
-      void this.onPhoneMessage(e.data);
-    });
-    ws.addEventListener("close", () => this.detachPhone());
-    ws.addEventListener("error", () => this.detachPhone());
+    this.state.acceptWebSocket(ws, [ROLE_PHONE]);
+    writeAttachment(ws, { role: ROLE_PHONE });
   }
 
-  private async onPhoneMessage(data: string | ArrayBuffer): Promise<void> {
+  /**
+   * Accept a browser long enough to send `{kind:"rebind"}`, then close.
+   * Equivalent to the legacy non-hibernation path's accept + send +
+   * close — we just have to acceptWebSocket first so the runtime
+   * allows the send.
+   */
+  private acceptForRebind(ws: WebSocket): void {
+    this.state.acceptWebSocket(ws, [ROLE_BROWSER]);
+    writeAttachment(ws, { role: ROLE_BROWSER });
+    this.send(ws, { kind: "rebind" });
+    queueMicrotask(() => this.closeQuiet(ws));
+  }
+
+  private async onPhoneMessage(
+    phoneWs: WebSocket,
+    data: string | ArrayBuffer,
+  ): Promise<void> {
     const msg = this.parsePhone(data);
-    if (!msg) return this.failPhone("malformed");
+    if (!msg) return this.failPhone(phoneWs, "malformed");
 
     if (msg.kind === "hello") {
-      if (!isB64Url(msg.phonePk)) return this.failPhone("phonePk must be base64url");
-      if (!this.session.browserSocket) {
+      if (!isB64Url(msg.phonePk)) return this.failPhone(phoneWs, "phonePk must be base64url");
+      const browser = this.getBrowserSocket();
+      if (!browser) {
         // The browser hasn't connected yet (or has dropped). Tell the
         // phone explicitly so it can wait/retry rather than guess.
-        this.send(this.session.phoneSocket!, { kind: "peer-missing" });
+        this.send(phoneWs, { kind: "peer-missing" });
         return;
       }
-      this.send(this.session.browserSocket, {
-        kind: "peer-hello",
-        phonePk: msg.phonePk,
-      });
-      this.send(this.session.phoneSocket!, { kind: "ack" });
+      this.send(browser, { kind: "peer-hello", phonePk: msg.phonePk });
+      this.send(phoneWs, { kind: "ack" });
       return;
     }
 
     if (msg.kind === "deliver") {
-      if (!isB64Url(msg.ciphertext)) return this.failPhone("ciphertext must be base64url");
-      if (!isB64Url(msg.nonce)) return this.failPhone("nonce must be base64url");
+      if (!isB64Url(msg.ciphertext)) return this.failPhone(phoneWs, "ciphertext must be base64url");
+      if (!isB64Url(msg.nonce)) return this.failPhone(phoneWs, "nonce must be base64url");
       if (msg.ciphertext.length > MAX_CIPHERTEXT_BYTES) {
-        return this.failPhone("ciphertext too large");
+        return this.failPhone(phoneWs, "ciphertext too large");
       }
-      if (!this.session.browserSocket) return this.failPhone("browser not connected");
-      if (this.session.consumed) return this.failPhone("already delivered");
+      const browser = this.getBrowserSocket();
+      if (!browser) return this.failPhone(phoneWs, "browser not connected");
+      if (this.session.consumed) return this.failPhone(phoneWs, "already delivered");
 
       // Forward the opaque ciphertext untouched. We do not log it — it
       // is end-to-end-encrypted user content and .com must not see it.
-      this.send(this.session.browserSocket, {
+      this.send(browser, {
         kind: "peer-deliver",
         ciphertext: msg.ciphertext,
         nonce: msg.nonce,
       });
-      this.send(this.session.phoneSocket!, { kind: "delivered" });
+      this.send(phoneWs, { kind: "delivered" });
       this.session.consumed = true;
       queueMicrotask(() => this.tearDown("delivered"));
       return;
     }
 
-    return this.failPhone("unknown kind");
+    return this.failPhone(phoneWs, "unknown kind");
   }
 
   private parsePhone(data: string | ArrayBuffer): BuildRelayPhoneMessage | null {
@@ -331,34 +416,29 @@ export class BuildRelaySession implements DurableObject {
     }
   }
 
-  private failPhone(reason: string): void {
-    const ws = this.session.phoneSocket;
-    if (ws) this.send(ws, { kind: "error", reason });
+  private failPhone(phoneWs: WebSocket, reason: string): void {
+    this.send(phoneWs, { kind: "error", reason });
     queueMicrotask(() => this.tearDown(`phone:${reason}`));
   }
 
   private detachBrowser(): void {
-    this.session.browserSocket = null;
     // If the phone is mid-handshake and the browser drops, surface that
     // so the phone can show a helpful "open the homepage again" prompt.
-    if (this.session.phoneSocket && !this.session.consumed) {
-      this.send(this.session.phoneSocket, { kind: "peer-missing" });
+    const phone = this.getPhoneSocket();
+    if (phone && !this.session.consumed) {
+      this.send(phone, { kind: "peer-missing" });
     }
   }
-  private detachPhone(): void {
-    this.session.phoneSocket = null;
-  }
+  private detachPhone(): void { /* no peer notification needed */ }
 
-  private closeQuiet(s: WebSocket | null): void {
+  private closeQuiet(s: WebSocket | null | undefined): void {
     if (!s) return;
     try { s.close(1000, "session over"); } catch { /* already closed */ }
   }
 
   private tearDown(_why: string): void {
-    this.closeQuiet(this.session.browserSocket);
-    this.closeQuiet(this.session.phoneSocket);
-    this.session.browserSocket = null;
-    this.session.phoneSocket = null;
+    this.closeQuiet(this.getBrowserSocket());
+    this.closeQuiet(this.getPhoneSocket());
     // Fire-and-forget: clear persisted state so the DO can be fully
     // evicted. The alarm is wiped by deleteAll() per Workerd contract.
     void this.state.storage.deleteAll().catch(() => { /* idempotent */ });
@@ -367,6 +447,19 @@ export class BuildRelaySession implements DurableObject {
   private isExpired(): boolean {
     if (this.session.createdAt === 0) return false; // not yet loaded
     return Date.now() - this.session.createdAt >= SESSION_TTL_MS;
+  }
+
+  /**
+   * Find the currently-attached socket for a given role. Returns
+   * undefined if none — runtime auto-removes closed sockets from the
+   * `getWebSockets` list, so this is also our "is the peer still
+   * here?" probe.
+   */
+  private getBrowserSocket(): WebSocket | undefined {
+    return this.state.getWebSockets(ROLE_BROWSER)[0];
+  }
+  private getPhoneSocket(): WebSocket | undefined {
+    return this.state.getWebSockets(ROLE_PHONE)[0];
   }
 }
 
@@ -377,4 +470,6 @@ function isB64Url(s: unknown): s is string {
 export const _internal = {
   SESSION_TTL_MS,
   MAX_CIPHERTEXT_BYTES,
+  ROLE_BROWSER,
+  ROLE_PHONE,
 };
