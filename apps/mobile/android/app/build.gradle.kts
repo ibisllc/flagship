@@ -71,7 +71,12 @@ android {
         // smoke task.
         unitTests.all { test ->
             if (test.name == "testReleaseUnitTest") {
+                // ui-test-manifest only ships in the debug variant, so
+                // every Compose UI test that calls createComposeRule
+                // needs to skip the release pass.
                 test.exclude("**/HomeScreenComposeTest*")
+                test.exclude("**/AddServerChooserComposeTest*")
+                test.exclude("**/ProvidersComposeTest*")
             }
         }
     }

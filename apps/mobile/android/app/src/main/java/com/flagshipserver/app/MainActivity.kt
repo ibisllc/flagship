@@ -1,7 +1,6 @@
 package com.flagshipserver.app
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
@@ -28,7 +27,6 @@ import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SessionStoring
 import com.flagshipserver.app.core.AppState
-import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.DeepLinker
 import com.flagshipserver.app.core.DeveloperSettings
 import com.flagshipserver.app.core.LiveQrRelayClient
@@ -136,29 +134,13 @@ class MainActivity : FragmentActivity() {
 
     /** Parse incoming launch intents (`flagship://...` and the
      *  https://flagshipserver.com/app/<…> universal-link form). Push
-     *  notifications surface their deepLink via the same path. */
+     *  notifications surface their deepLink via the same path. The
+     *  actual URI→DeepLink translation lives in core.AppLink so it
+     *  can be unit-tested without an activity. */
     private fun handleIntent(intent: Intent) {
         val uri = intent.data ?: return
-        val link = parseLink(uri) ?: return
+        val link = com.flagshipserver.app.core.AppLink.resolve(uri) ?: return
         deepLinker.enqueue(link)
-    }
-
-    private fun parseLink(uri: Uri): DeepLink? {
-        // 1. flagship://<host>?<params> — primary scheme.
-        DeepLink.parse(uri)?.let { return it }
-        // 2. https://flagshipserver.com/app/<host>?<params> — app-link.
-        if (uri.scheme in setOf("http", "https") && uri.host == "flagshipserver.com") {
-            val segments = uri.pathSegments
-            if (segments.size >= 2 && segments[0] == "app") {
-                val translated = Uri.Builder()
-                    .scheme("flagship")
-                    .authority(segments[1])
-                    .encodedQuery(uri.encodedQuery)
-                    .build()
-                return DeepLink.parse(translated)
-            }
-        }
-        return null
     }
 
     private fun buildOkHttp(): OkHttpClient =
