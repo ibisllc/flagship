@@ -18,8 +18,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.TestAccountMeta
 import com.flagshipserver.app.core.DemoFixtures
 import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -31,39 +33,50 @@ private val usernameRegex = Regex("^[a-z0-9]{1,32}$")
 /**
  * D.2.2 — ChooseUsernameScreen.
  *
- * Live availability check (debounced 350ms). Username is permanent;
- * surfaced clearly in the helper text.
- *
- * Magic username `demo` short-circuits the real onboarding flow and
- * loads pre-baked fixtures so Play Store reviewers + curious users
- * can explore the app without provisioning real hardware. See
- * DemoFixtures for the contract.
+ * Live availability check (debounced 350ms) against the Worker's
+ * /api/users/check. The response carries an optional `testAccount`
+ * block; when present the typed username unlocks a sandboxed demo
+ * flow without hitting the real claim path. The list of test-account
+ * usernames LIVES OFF THE OPEN SOURCE (Worker env secret); mobile
+ * never bakes them in.
  */
 @Composable
 fun ChooseUsernameScreen(nav: NavController) {
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
+    val flagshipServer = LocalFlagshipServerClient.current
     var username by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<UsernameCheck>(UsernameCheck.Empty) }
+    var testHit by remember { mutableStateOf<TestAccountMeta?>(null) }
 
     LaunchedEffect(username) {
+        testHit = null
         if (username.isEmpty()) {
             status = UsernameCheck.Empty
             return@LaunchedEffect
         }
-        if (DemoFixtures.isDemoUsername(username)) {
-            // Don't run the network check — `demo` is reserved.
-            status = UsernameCheck.Demo
-            return@LaunchedEffect
-        }
-        if (!usernameRegex.matches(username)) {
-            status = UsernameCheck.Invalid
-            return@LaunchedEffect
-        }
         status = UsernameCheck.Checking
         delay(350)
-        // TODO: GET /api/users/check?u=<name>; for now optimistically Available.
-        status = UsernameCheck.Available
+        // Worker round-trip. If it fails, fall back to a regex check so
+        // the screen still moves; the real claim will retry with a
+        // proper error once the network recovers.
+        val resp = try {
+            flagshipServer.usernameAvailable(username)
+        } catch (_: Throwable) { null }
+        if (resp == null) {
+            status = if (usernameRegex.matches(username)) UsernameCheck.Available else UsernameCheck.Invalid
+            return@LaunchedEffect
+        }
+        if (resp.testAccount != null) {
+            testHit = resp.testAccount
+            status = UsernameCheck.TestAccount
+            return@LaunchedEffect
+        }
+        status = when {
+            resp.available -> UsernameCheck.Available
+            resp.reason == "already claimed" -> UsernameCheck.Taken
+            else -> UsernameCheck.Invalid
+        }
     }
 
     Column(
@@ -94,7 +107,9 @@ fun ChooseUsernameScreen(nav: NavController) {
                 UsernameCheck.Checking -> "Checking…"
                 UsernameCheck.Available -> "Available."
                 UsernameCheck.Taken -> null
-                UsernameCheck.Demo -> "Demo mode — loads sample data without creating a real account."
+                UsernameCheck.TestAccount -> testHit?.let {
+                    "Sandboxed test mode (${it.display}). State resets every ${it.ttlHours} h."
+                }
             },
             error = when (status) {
                 UsernameCheck.Invalid -> "Letters and digits only. No spaces or punctuation."
@@ -105,21 +120,25 @@ fun ChooseUsernameScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s8))
 
+        val isTest = status == UsernameCheck.TestAccount
         FSPrimaryButton(
-            label = if (status == UsernameCheck.Demo) "Enter demo" else "Continue",
+            label = when {
+                isTest -> "Enter ${testHit?.display ?: "test mode"}"
+                else -> "Continue"
+            },
             onClick = {
-                if (status == UsernameCheck.Demo) {
-                    DemoFixtures.activate(app)
-                    toasts.info("Demo mode active. Sign out to leave.")
+                if (isTest) {
+                    DemoFixtures.activate(app, username)
+                    toasts.info("Sandboxed test mode. Sign out to leave.")
                 } else {
                     nav.navigate("biometric")
                 }
             },
             block = true,
             large = true,
-            enabled = status == UsernameCheck.Available || status == UsernameCheck.Demo,
+            enabled = status == UsernameCheck.Available || isTest,
         )
     }
 }
 
-private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken, Demo }
+private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken, TestAccount }

@@ -168,8 +168,23 @@ public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
     public let username: String
     public let available: Bool
     public let reason: String?
-    public init(username: String, available: Bool, reason: String?) {
+    /// When non-nil, the typed username matched a Worker-side test
+    /// account (env.TEST_ACCOUNTS). iOS branches on this BEFORE
+    /// looking at `available` — a test-account hit returns
+    /// available=false to keep accidental claims impossible, while
+    /// this field tells the client to enter the sandbox demo flow.
+    public let testAccount: TestAccountMeta?
+    public init(username: String, available: Bool, reason: String?, testAccount: TestAccountMeta? = nil) {
         self.username = username; self.available = available; self.reason = reason
+        self.testAccount = testAccount
+    }
+}
+
+public struct TestAccountMeta: Codable, Equatable, Sendable {
+    public let display: String
+    public let ttlHours: Int
+    public init(display: String, ttlHours: Int = 24) {
+        self.display = display; self.ttlHours = ttlHours
     }
 }
 
@@ -206,6 +221,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public var simulatedLatency: TimeInterval = 0.2
     public var shouldFail: Bool = false
     public var reservedUsernames: Set<String> = ["root", "admin", "flagship", "system", "support"]
+    /// Mirror of the Worker's env.TEST_ACCOUNTS map. Set in tests to
+    /// exercise the test-account branch; production talks to the real
+    /// Worker which reads its own off-git secret.
+    public var testAccounts: [String: TestAccountMeta] = [:]
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
 
     /// Tracks usernames that have been claimed so the mock can return
@@ -255,6 +274,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         try await tick()
         let lower = username.lowercased()
+        // Test-account match precedes every other rule so a value
+        // that would otherwise look invalid still surfaces the
+        // testAccount block (Worker side does the same).
+        if let meta = testAccounts[lower] {
+            return .init(username: lower, available: false, reason: "test account", testAccount: meta)
+        }
         if lower.count < 2 || lower.count > 32 {
             return .init(username: lower, available: false, reason: "Must be 2–32 chars.")
         }

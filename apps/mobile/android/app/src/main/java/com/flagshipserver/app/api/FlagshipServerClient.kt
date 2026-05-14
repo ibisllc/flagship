@@ -98,6 +98,22 @@ data class UsernameAvailabilityResponse(
     val username: String,
     val available: Boolean,
     val reason: String? = null,
+    /** When non-null, the typed username matched a Worker-side test-
+     *  account entry (env.TEST_ACCOUNTS). Mobile clients branch on
+     *  this BEFORE checking `available` — a test-account hit returns
+     *  available=false to keep accidental claims impossible, while
+     *  this field tells the client to enter the sandbox demo flow. */
+    val testAccount: TestAccountMeta? = null,
+)
+
+@Serializable
+data class TestAccountMeta(
+    /** Human-readable label rendered in the "Enter <X>" CTA. */
+    val display: String,
+    /** Informational: every how-many-hours the sandbox state resets.
+     *  The actual reset cron lives on the Worker; mobile just tooltips
+     *  this so reviewers know what they're walking into. */
+    val ttlHours: Int = 24,
 )
 
 @Serializable
@@ -145,7 +161,12 @@ data class PushTokenRegisterResponse(
 class MockFlagshipServerClient(
     var simulatedLatencyMs: Long = 200,
     var shouldFail: Boolean = false,
-    var reservedUsernames: Set<String> = setOf("root", "admin", "flagship", "system", "support", "demo"),
+    var reservedUsernames: Set<String> = setOf("root", "admin", "flagship", "system", "support"),
+    /** Mirror of the Worker's env.TEST_ACCOUNTS map. Mock tests can
+     *  populate this to drive the test-account branch of the
+     *  availability check; production uses the real Worker which reads
+     *  its own off-git secret. */
+    var testAccounts: Map<String, TestAccountMeta> = emptyMap(),
 ) : FlagshipServerClient {
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
@@ -192,6 +213,18 @@ class MockFlagshipServerClient(
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
         tick()
         val lower = username.lowercase()
+        // Test-account match precedes every other rule so a typed
+        // value that looks "invalid" by length / regex (e.g. has
+        // hyphens) still surfaces the testAccount block when the
+        // Worker has it on the secret list.
+        testAccounts[lower]?.let {
+            return UsernameAvailabilityResponse(
+                username = lower,
+                available = false,
+                reason = "test account",
+                testAccount = it,
+            )
+        }
         if (lower.length < 2 || lower.length > 32) {
             return UsernameAvailabilityResponse(lower, false, "Must be 2–32 chars.")
         }

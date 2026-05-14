@@ -48,6 +48,8 @@ import {
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
   handleUsernameClaim,
+  handleUsersCheck,
+  parseTestAccountsEnv,
   handleUsernameLookup,
   handlePostUsernameRename,
   handleGetUsernameAlias,
@@ -126,10 +128,23 @@ export interface ControlPlaneEnv {
   /** FCM HTTP v1 service-account JSON (full file content). */
   FCM_SERVICE_ACCOUNT_JSON?: string;
   FCM_PROJECT_ID?: string;
+
+  /**
+   * Test-account list. JSON object: `{ "<username>": { "display": "...",
+   * "ttlHours": 6 } }`. NOT in git — set via `wrangler secret put
+   * TEST_ACCOUNTS`. Matching usernames return testAccount metadata on
+   * POST /api/users/check so mobile clients enter a sandboxed demo
+   * mode. The full list is never exposed; the handler only returns
+   * the entry the caller asked about. See
+   * packages/control-plane/src/usersCheck.ts and the
+   * future-test-account-architecture memory note.
+   */
+  TEST_ACCOUNTS?: string;
 }
 
 const ROUTE_RE = {
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
+  USERS_CHECK: /^\/api\/users\/check$/,
   USERNAME_RENAME: /^\/api\/username\/rename$/,
   USERNAME_ALIAS: /^\/api\/username\/alias\/([^/]+)$/,
   USERNAME_LOOKUP: /^\/api\/username\/([^/]+)$/,
@@ -204,6 +219,17 @@ export async function tryControlPlane(
   let m: RegExpMatchArray | null;
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
     return finish(await handleUsernameClaim({ storage: storage.usernames }, await readJson(request)));
+  }
+  if (method === "POST" && ROUTE_RE.USERS_CHECK.test(path)) {
+    return finish(
+      await handleUsersCheck(
+        {
+          storage: storage.usernames,
+          testAccounts: parseTestAccountsEnv(env.TEST_ACCOUNTS),
+        },
+        await readJson(request),
+      ),
+    );
   }
   if (method === "POST" && ROUTE_RE.USERNAME_RENAME.test(path)) {
     return finish(
