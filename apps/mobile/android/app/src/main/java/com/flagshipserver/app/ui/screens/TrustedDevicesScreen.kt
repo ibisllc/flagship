@@ -159,6 +159,24 @@ fun TrustedDevicesScreen(nav: NavController) {
                 TextButton(onClick = { /* C7 */ }, enabled = false) {
                     Text("Replace device", color = FS.colors.textMuted)
                 }
+                // Wipe & restart — v1.1 (E5). Visible-but-dimmed so a
+                // security-conscious user can see the nuclear option
+                // exists. Tap shows an in-place "Coming soon" note
+                // instead of a system snackbar (which would dismiss
+                // the sheet on Android).
+                var wipeNote by remember { mutableStateOf<String?>(null) }
+                TextButton(
+                    onClick = {
+                        wipeNote = "Wipe & restart ships in the next update. Use Replace device for now."
+                    },
+                    enabled = false,
+                    modifier = Modifier.semantics { contentDescription = "trusted-device-wipe" },
+                ) {
+                    Text("Wipe & restart", color = FS.colors.textMuted)
+                }
+                wipeNote?.let {
+                    Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                }
                 Spacer(Modifier.height(FS.space.s4))
             }
         }
