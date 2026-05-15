@@ -43,6 +43,10 @@ import type {
   UsernameStorage,
   DaemonStatusRecord,
   DaemonStatusStorage,
+  UserAppAliasRecord,
+  UserAppAliasStorage,
+  VoiciLinkRecord,
+  VoiciLinkStorage,
 } from "./types.js";
 
 /**
@@ -610,6 +614,125 @@ export class D1AuditEventStorage implements AuditEventStorage {
       devicePrefix: row.device_prefix,
       postedAt: row.posted_at,
     }));
+  }
+}
+
+export class D1UserAppAliasStorage implements UserAppAliasStorage {
+  constructor(private db: D1Database) {}
+  async upsert(rec: UserAppAliasRecord): Promise<void> {
+    const u = rec.username.toLowerCase();
+    await this.db
+      .prepare(
+        `INSERT INTO user_app_aliases (username, app_id, display_label, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(username, app_id) DO UPDATE SET
+           display_label = excluded.display_label,
+           updated_at    = excluded.updated_at`,
+      )
+      .bind(u, rec.appId, rec.displayLabel, rec.createdAt, rec.updatedAt)
+      .run();
+  }
+  async get(username: string, appId: string): Promise<UserAppAliasRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        `SELECT username, app_id, display_label, created_at, updated_at
+         FROM user_app_aliases WHERE username = ? AND app_id = ?`,
+      )
+      .bind(username.toLowerCase(), appId)
+      .first<{ username: string; app_id: string; display_label: string; created_at: number; updated_at: number }>();
+    return r ? {
+      username: r.username,
+      appId: r.app_id,
+      displayLabel: r.display_label,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    } : undefined;
+  }
+  async listForUser(username: string): Promise<UserAppAliasRecord[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT username, app_id, display_label, created_at, updated_at
+         FROM user_app_aliases WHERE username = ?`,
+      )
+      .bind(username.toLowerCase())
+      .all<{ username: string; app_id: string; display_label: string; created_at: number; updated_at: number }>();
+    return (r.results ?? []).map((row) => ({
+      username: row.username,
+      appId: row.app_id,
+      displayLabel: row.display_label,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+  async delete(username: string, appId: string): Promise<boolean> {
+    const r = await this.db
+      .prepare("DELETE FROM user_app_aliases WHERE username = ? AND app_id = ?")
+      .bind(username.toLowerCase(), appId)
+      .run();
+    return (r.meta?.changes ?? 0) > 0;
+  }
+}
+
+export class D1VoiciLinkStorage implements VoiciLinkStorage {
+  constructor(private db: D1Database) {}
+  async insert(rec: VoiciLinkRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO voici_links (code, username, app_id, target_url, created_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          rec.code,
+          rec.username.toLowerCase(),
+          rec.appId ?? null,
+          rec.targetUrl,
+          rec.createdAt,
+          rec.expiresAt ?? null,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // D1 surfaces UNIQUE constraint failures as "SQLITE_CONSTRAINT_PRIMARYKEY"
+      // / "constraint failed". Treat any insert failure as a collision —
+      // the handler retries with a fresh code.
+      return { ok: false as const, reason: msg };
+    }
+  }
+  async get(code: string): Promise<VoiciLinkRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        `SELECT code, username, app_id, target_url, created_at, expires_at
+         FROM voici_links WHERE code = ?`,
+      )
+      .bind(code)
+      .first<{
+        code: string; username: string; app_id: string | null;
+        target_url: string; created_at: number; expires_at: number | null;
+      }>();
+    return r ? {
+      code: r.code,
+      username: r.username,
+      ...(r.app_id ? { appId: r.app_id } : {}),
+      targetUrl: r.target_url,
+      createdAt: r.created_at,
+      ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
+    } : undefined;
+  }
+  async deleteByApp(username: string, appId: string): Promise<number> {
+    const r = await this.db
+      .prepare("DELETE FROM voici_links WHERE username = ? AND app_id = ?")
+      .bind(username.toLowerCase(), appId)
+      .run();
+    return r.meta?.changes ?? 0;
+  }
+  async deleteExpired(before: number): Promise<number> {
+    const r = await this.db
+      .prepare("DELETE FROM voici_links WHERE expires_at IS NOT NULL AND expires_at <= ?")
+      .bind(before)
+      .run();
+    return r.meta?.changes ?? 0;
   }
 }
 
@@ -1465,6 +1588,8 @@ export class D1Storage implements Storage {
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
   userIdentity: UserIdentityRecordStorage;
+  userAppAliases: UserAppAliasStorage;
+  voiciLinks: VoiciLinkStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -1486,5 +1611,7 @@ export class D1Storage implements Storage {
     this.tiers = new D1TierStorage(db);
     this.entitlementRevocations = new D1EntitlementRevocationStorage(db);
     this.userIdentity = new D1UserIdentityRecordStorage(db);
+    this.userAppAliases = new D1UserAppAliasStorage(db);
+    this.voiciLinks = new D1VoiciLinkStorage(db);
   }
 }

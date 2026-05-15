@@ -43,6 +43,10 @@ import type {
   UsernameStorage,
   DaemonStatusRecord,
   DaemonStatusStorage,
+  UserAppAliasRecord,
+  UserAppAliasStorage,
+  VoiciLinkRecord,
+  VoiciLinkStorage,
 } from "./types.js";
 
 /**
@@ -589,6 +593,59 @@ export class InMemoryAuditEventStorage implements AuditEventStorage {
   }
 }
 
+export class InMemoryUserAppAliasStorage implements UserAppAliasStorage {
+  private rows = new Map<string, UserAppAliasRecord>();
+  private key(u: string, app: string) { return `${u.toLowerCase()}|${app}`; }
+  async upsert(rec: UserAppAliasRecord): Promise<void> {
+    this.rows.set(this.key(rec.username, rec.appId), { ...rec, username: rec.username.toLowerCase() });
+  }
+  async get(username: string, appId: string) {
+    const r = this.rows.get(this.key(username, appId));
+    return r ? { ...r } : undefined;
+  }
+  async listForUser(username: string) {
+    const u = username.toLowerCase();
+    return [...this.rows.values()].filter((r) => r.username === u).map((r) => ({ ...r }));
+  }
+  async delete(username: string, appId: string) {
+    return this.rows.delete(this.key(username, appId));
+  }
+}
+
+export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
+  private rows = new Map<string, VoiciLinkRecord>();
+  async insert(rec: VoiciLinkRecord) {
+    if (this.rows.has(rec.code)) return { ok: false as const, reason: "code already taken" };
+    this.rows.set(rec.code, { ...rec, username: rec.username.toLowerCase() });
+    return { ok: true as const };
+  }
+  async get(code: string) {
+    const r = this.rows.get(code);
+    return r ? { ...r } : undefined;
+  }
+  async deleteByApp(username: string, appId: string) {
+    const u = username.toLowerCase();
+    let n = 0;
+    for (const [code, r] of this.rows) {
+      if (r.username === u && r.appId === appId) {
+        this.rows.delete(code);
+        n++;
+      }
+    }
+    return n;
+  }
+  async deleteExpired(before: number) {
+    let n = 0;
+    for (const [code, r] of this.rows) {
+      if (r.expiresAt !== undefined && r.expiresAt <= before) {
+        this.rows.delete(code);
+        n++;
+      }
+    }
+    return n;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -610,4 +667,6 @@ export class InMemoryStorage implements Storage {
   tiers = new InMemoryTierStorage();
   entitlementRevocations = new InMemoryEntitlementRevocationStorage();
   userIdentity = new InMemoryUserIdentityRecordStorage();
+  userAppAliases = new InMemoryUserAppAliasStorage();
+  voiciLinks = new InMemoryVoiciLinkStorage();
 }

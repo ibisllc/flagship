@@ -377,6 +377,60 @@ export interface DaemonStatusStorage {
   listForUser(username: string, serverFilter?: (sd: string) => boolean): Promise<DaemonStatusRecord[]>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// App URL aliases (voi.ci-aware rename — migration 0019)
+// ──────────────────────────────────────────────────────────────────────
+
+/** Per (username, appId) override of the URL stem the app surfaces
+ *  at. Absent row → fall back to the slug-creator derived default.
+ *  The internal `appId` stays stable across renames; only the
+ *  user-visible `displayLabel` changes. */
+export interface UserAppAliasRecord {
+  username: string;
+  appId: string;
+  /** DNS-safe label. Validated by the handler before write. */
+  displayLabel: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface UserAppAliasStorage {
+  /** Insert or update — atomic. */
+  upsert(rec: UserAppAliasRecord): Promise<void>;
+  get(username: string, appId: string): Promise<UserAppAliasRecord | undefined>;
+  /** Every alias for the user — drives the apps-list BFF join. */
+  listForUser(username: string): Promise<UserAppAliasRecord[]>;
+  /** Delete by composite key. Returns whether a row existed. */
+  delete(username: string, appId: string): Promise<boolean>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// voi.ci short-link table (migration 0019)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface VoiciLinkRecord {
+  code: string;
+  username: string;
+  /** Optional — when present, deleting the app's links cascades here. */
+  appId?: string;
+  targetUrl: string;
+  createdAt: number;
+  /** Optional soft TTL. NULL on app-bound links; set on one-offs. */
+  expiresAt?: number;
+}
+
+export interface VoiciLinkStorage {
+  /** Mint a fresh row. Collision on `code` returns ok=false so the
+   *  caller can pick another short code. */
+  insert(rec: VoiciLinkRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Redirect-path lookup. */
+  get(code: string): Promise<VoiciLinkRecord | undefined>;
+  /** Cascade-delete on app rename / uninstall. Returns count deleted. */
+  deleteByApp(username: string, appId: string): Promise<number>;
+  /** Periodic GC for expired one-offs. */
+  deleteExpired(before: number): Promise<number>;
+}
+
 export interface Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -398,6 +452,8 @@ export interface Storage {
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
   userIdentity: UserIdentityRecordStorage;
+  userAppAliases: UserAppAliasStorage;
+  voiciLinks: VoiciLinkStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
