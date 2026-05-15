@@ -232,3 +232,46 @@ command, run it, report the result; don't silently skip).
 **Recommended start next session:** Phase 1 (#84) — smallest, unblocks the demo line —
 unless the user wants Phase 6 (Android/web parity, fully independent) done in parallel
 first.
+
+**Decision (2026-05-15, user):** execute Phases 1→6 strictly in order. This doc is the
+single durable launch tracker (extended below to cover the non-external-domain v1 work).
+
+---
+
+## 7. Cross-track sequencing — the rest of v1 launch
+
+The Phase 1–6 spine above is **Track A**. Two more tracks complete v1; this section
+folds them into the same timeline so nothing is lost when external-domains ships.
+
+### Track B — CLI-doable, runs alongside Track A
+
+| Item | What | When (relative to Track A) |
+|---|---|---|
+| **B-tsc** | 5 single-line fixes in `apps/web/e2e/` (missing `dom` lib + module paths: `s11`/`s14`/`s15`/`s16`, `pod-sim.ts`). One tidy commit. | Free standalone — land anytime, ideally before the E2E rig. |
+| **B-A2** | Replace-device `complete()` "Take over now" UI (iOS + Android). VM exists (`ReplaceDeviceViewModel`), no button; optional post-24h-grace foreground poll. | After Phase 6 (touches the same client surfaces). |
+| **B-A3** | Webapp full Wipe ceremony: IndexedDB UMK rotation + `navigator.credentials.create()` PRF + `Recovery.wrap` over new UMK + OLD-IRK-signed `flagship/wipe-restart/v1` POST. | After Phase 6 (webapp client work). |
+| **B-scan** | Marketplace security-scan service (§L): separate Fly app, pull docker image, Trivy + custom checks, post grade + R2 report via authed Worker webhook. Protocol type `TAG_MARKETPLACE_SCAN_RESULT` + `marketplace_listings.scan_grade` already wired. | Independent — schedule after Phase 4 (frees the deploy pipeline). |
+| **B-e2e** | The E2E rig itself (`docs/e2e-test-plan.md`): Playwright + pod-sim, 13 scenarios, chromium-first. **Largest single v1 piece.** | Big parallel investment — start once the Track A backend (Phases 2–4) is stable enough to assert against. B-tsc is a prerequisite. |
+
+### Track C — needs a human, a device, or a live multi-day exercise
+
+Cannot be *completed* from this session. Track A/B should leave each in a "one human
+step from done" state and document that step.
+
+- **C-A1** Live `WebAuthnProvider` wrappers — iOS `ASAuthorizationPlatformPublicKeyCredentialRegistrationRequest` + PRF, Android `CredentialManager` + PRF JSON. Orchestration above the seam is tested against the Mock; only the platform binding remains. Needs a real authenticator.
+- **C-iOS** TestFlight chain (`project_testflight_blockers.md`): `wrangler login` + 4 `APNS_*` secrets, Associated-Domains capability checkbox, Xcode archive, ASC metadata, 5 external testers.
+- **C-Android** Play internal track — no JDK on this Mac; Kotlin is review-only here. Build/sign/FCM/upload happens off-Mac.
+- **C-exercise** Live multi-day exercises: recovery J.3/J.4 cross-device walk; peer-backup 7-day cross-pod; update-pack pull (2 pods, 7 days); lineage-break re-anchor; STK rotation; lost-phone→new-phone. Each = "run on real infra, document failure modes."
+- **C-iso** Reproducible-ISO CI — likely **already exists** (`.github/workflows/build-iso.yml` with a double-build byte-identity check, per `project_v1_alpha_progress`). Action is *verify + tick `build-tasks.md §S`*, not build. `CLAUDE.md`'s outstanding list is stale here.
+
+### Critical path to v1 alpha
+
+```
+Phase 1–4 (Track A backend) ──┐
+B-tsc ──→ B-e2e ──────────────┼──→ confidence to ship
+Phase 6 ──→ B-A2 / B-A3 ──────┘
+C-iso (verify) ─── quick win, do early
+C-A1 ──→ C-iOS / C-Android ──→ C-exercise   (gated on a human; surface the punch list each session)
+```
+
+`build-tasks.md §S` stays the authoritative ☐→☑ tracker; tick it in the landing commit.
