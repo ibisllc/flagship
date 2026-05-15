@@ -105,6 +105,17 @@ public protocol FlagshipServerClient: Sendable {
         username: String,
         appId: String
     ) async throws -> AppLinksResponse
+
+    /// Bind an external domain to the app (the fqdn-service-binding
+    /// order). Replaces any existing one. Returns the refreshed links
+    /// so callers can reflect it immediately. The real routing-claim +
+    /// cert path is the staged backend; today the Mock stores it and
+    /// the Live client reports it's not yet available.
+    func setCustomDomain(
+        username: String,
+        appId: String,
+        fqdn: String
+    ) async throws -> AppLinksResponse
 }
 
 public struct AppRenameRequest: Encodable, Sendable {
@@ -154,18 +165,24 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
     /// V4 — lazy-minted by handleGetAppLinks on first call; preserved
     /// across calls until the next Replace cascade-deletes it.
     public let shortUrl: String?
+    /// The attached external domain, if the user has bound one. A
+    /// Replace never touches it. Surfaced at the top of WEB DOMAINS
+    /// and, in the apps list, IN PLACE OF the short link.
+    public let customDomain: String?
     public init(
         appId: String,
         displayLabel: String,
         canonicalUrl: String,
         instances: [AppLinkInstance],
-        shortUrl: String?
+        shortUrl: String?,
+        customDomain: String? = nil
     ) {
         self.appId = appId
         self.displayLabel = displayLabel
         self.canonicalUrl = canonicalUrl
         self.instances = instances
         self.shortUrl = shortUrl
+        self.customDomain = customDomain
     }
 }
 
@@ -761,6 +778,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// Scripted alias map per (username, appId). The links endpoint
     /// returns these; the rename endpoint writes into them.
     public var appAliasByUser: [String: [String: (displayLabel: String, canonicalUrl: String)]] = [:]
+    /// Bound external domains, keyed [user][appId]. A Replace never
+    /// clears this — it's deliberately a separate store from aliases.
+    public var customDomainByUser: [String: [String: String]] = [:]
 
     public func renameApp(
         username: String,
@@ -829,8 +849,20 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                     url: canonical
                 ),
             ],
-            shortUrl: "https://voi.ci/\(shortCode)"
+            shortUrl: "https://voi.ci/\(shortCode)",
+            customDomain: customDomainByUser[username.lowercased()]?[appId]
         )
+    }
+
+    public func setCustomDomain(
+        username: String,
+        appId: String,
+        fqdn: String
+    ) async throws -> AppLinksResponse {
+        try await tick()
+        customDomainByUser[username.lowercased(), default: [:]][appId] =
+            fqdn.trimmingCharacters(in: .whitespaces).lowercased()
+        return try await getAppLinks(username: username, appId: appId)
     }
 
     /// FNV-1a over (appId|label) → first 6 hex digits, lowercased.
@@ -1164,6 +1196,21 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(AppLinksResponse.self, from: data)
+    }
+
+    public func setCustomDomain(
+        username: String,
+        appId: String,
+        fqdn: String
+    ) async throws -> AppLinksResponse {
+        // The routing-claim + fleet-cert binding is the staged backend
+        // (see project_external_domains memory / task #79). No live
+        // endpoint yet — fail clearly rather than pretend success.
+        _ = (username, appId, fqdn)
+        throw ScreensClientError.http(
+            status: 501,
+            message: "Custom-domain binding isn't available yet."
+        )
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

@@ -37,9 +37,13 @@ public final class AppDetailViewModel {
     /// Pod that gets the canonical short domain for this app. nil = use
     /// the global leader.
     public var leadPodId: String?
-    /// Custom FQDNs the user has added beyond the canonical/per-pod ones.
-    public var customUrls: [String] = []
-    public var newCustomUrlDraft: String = ""
+    /// Draft in the "Set custom domain" field.
+    public var customDomainDraft: String = ""
+    /// One-at-a-time alert that drives the set-custom-domain flow.
+    public var customDomainPrompt: CustomDomainPrompt?
+    /// The bound external domain, sourced from the links bundle so the
+    /// detail screen and the apps list agree. A Replace never clears it.
+    public var customDomain: String? { appLinks.value?.customDomain }
 
     public let appId: String
     private let client: any ScreensClient
@@ -92,11 +96,6 @@ public final class AppDetailViewModel {
         }
     }
 
-    /// Verification state for each custom URL the user has added.
-    /// Drives the AppDetail UI: pending shows a "Verify" CTA + the
-    /// expected TXT record; verified shows a green pill.
-    public var customDomainStatus: [String: VerifyCustomDomainResponse] = [:]
-
     public func togglePod(_ podId: String) {
         if runOnPodIds.contains(podId) { runOnPodIds.remove(podId) }
         else { runOnPodIds.insert(podId) }
@@ -107,37 +106,101 @@ public final class AppDetailViewModel {
         }
     }
 
-    public func verifyCustomDomain(_ fqdn: String) async {
-        do {
-            let r = try await client.verifyCustomDomain(.init(fqdn: fqdn))
-            customDomainStatus[fqdn] = r
-        } catch {
-            // surface via a synthetic "failed" status so the UI shows
-            // an error pill instead of staying spinning.
-            customDomainStatus[fqdn] = VerifyCustomDomainResponse(
-                fqdn: fqdn,
-                status: .failed,
-                expectedTxtRecord: "",
-                observedTxtRecord: nil,
-                reason: error.localizedDescription
-            )
-        }
-    }
-
     public func setLead(_ podId: String) {
         runOnPodIds.insert(podId)
         leadPodId = podId
     }
 
-    public func addCustomUrl() {
-        let url = newCustomUrlDraft.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !url.isEmpty, !customUrls.contains(url) else { return }
-        customUrls.append(url)
-        newCustomUrlDraft = ""
+    /// One-at-a-time alert for the set-custom-domain flow.
+    public struct CustomDomainPrompt: Identifiable {
+        public let id = UUID()
+        public let title: String
+        public let message: String
+        /// When set, the alert shows this button + a Cancel. When nil,
+        /// the alert is informational (single dismiss button).
+        public let confirmTitle: String?
+        public let destructive: Bool
+        public let onConfirm: (() -> Void)?
     }
 
-    public func removeCustomUrl(_ fqdn: String) {
-        customUrls.removeAll { $0 == fqdn }
+    /// Validates the draft and either raises an explanatory alert or
+    /// issues the binding order. `rootDomain` is the user's stub
+    /// (`<user>.flagship.services`) shown in the CNAME guidance.
+    public func submitCustomDomain(rootDomain: String) async {
+        let fqdn = customDomainDraft
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
+            .replacingOccurrences(of: "https://", with: "")
+            .replacingOccurrences(of: "http://", with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !fqdn.isEmpty else { return }
+
+        // (a) Apex / no subdomain — fewer than 3 labels means there's
+        // no subdomain to CNAME (example.com). Offer the www form.
+        if fqdn.split(separator: ".").count < 3 {
+            let suggested = "www.\(fqdn)"
+            customDomainPrompt = CustomDomainPrompt(
+                title: "Subdomains only",
+                message: "This only supports subdomains — an apex like \(fqdn) can't take a CNAME. Use \(suggested)?",
+                confirmTitle: "Use \(suggested)",
+                destructive: false,
+                onConfirm: { [weak self] in
+                    guard let self else { return }
+                    self.customDomainDraft = suggested
+                    Task { await self.submitCustomDomain(rootDomain: rootDomain) }
+                }
+            )
+            return
+        }
+
+        // (b) CNAME must already resolve to the user's stub.
+        let ok = (try? await client.verifyCustomDomain(.init(fqdn: fqdn)))?.status == .verified
+        if !ok {
+            customDomainPrompt = CustomDomainPrompt(
+                title: "CNAME not found",
+                message: "Set a CNAME record for \(fqdn) targeting \(rootDomain), then try again.",
+                confirmTitle: nil,
+                destructive: false,
+                onConfirm: nil
+            )
+            return
+        }
+
+        // (c) Replacing an existing binding — confirm first.
+        if let existing = customDomain, existing != fqdn {
+            customDomainPrompt = CustomDomainPrompt(
+                title: "Replace custom domain?",
+                message: "This will replace your existing custom URL \(existing).",
+                confirmTitle: "Replace",
+                destructive: true,
+                onConfirm: { [weak self] in
+                    Task { await self?.bindCustomDomain(fqdn) }
+                }
+            )
+            return
+        }
+
+        // (d) Clean path — issue the binding order.
+        await bindCustomDomain(fqdn)
+    }
+
+    private func bindCustomDomain(_ fqdn: String) async {
+        guard let server, let user = username(), !user.isEmpty else { return }
+        do {
+            let r = try await server.setCustomDomain(
+                username: user, appId: appId, fqdn: fqdn
+            )
+            appLinks = .loaded(r)
+            customDomainDraft = ""
+        } catch {
+            customDomainPrompt = CustomDomainPrompt(
+                title: "Couldn't set custom domain",
+                message: error.localizedDescription,
+                confirmTitle: nil,
+                destructive: false,
+                onConfirm: nil
+            )
+        }
     }
 
     public func canonicalUrlPreview(for username: String?) -> String? {
@@ -275,7 +338,7 @@ public final class AppDetailViewModel {
             "appId": appId,
             "runOnPodIds": Array(runOnPodIds),
             "leadPodId": leadPodId as Any,
-            "customUrls": customUrls
+            "customDomain": customDomain as Any
         ]
         let json = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         let envelope = json.base64EncodedString()

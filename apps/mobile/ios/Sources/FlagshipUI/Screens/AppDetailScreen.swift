@@ -218,6 +218,12 @@ public struct AppDetailScreen: View {
 
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
+                    // CUSTOM DOMAIN sits at the very top, only when one
+                    // is bound. It's the user's own name — show it first.
+                    if let cd = vm.customDomain {
+                        customDomainGroup(fqdn: cd, c: c)
+                        Divider().background(c.border)
+                    }
                     shortRedirectGroup(c: c)
                     Divider().background(c.border)
                     canonicalGroup(c: c, defaultLabel: d.app.urlLabel)
@@ -226,19 +232,26 @@ public struct AppDetailScreen: View {
                 }
             }
 
-            // V7 — Add a custom domain. Lives back under WEB DOMAINS
-            // so the affordance stays visible (we don't want users
-            // forgetting that custom domains are possible at all).
-            // Each custom domain renders its own card with a Verify
-            // CTA + the expected TXT record hint.
-            if !vm.customUrls.isEmpty {
-                VStack(spacing: FS.space.s3) {
-                    ForEach(vm.customUrls, id: \.self) { url in
-                        customDomainCard(url: url, c: c)
-                    }
+            setCustomDomainSection(c: c)
+        }
+        .alert(
+            vm.customDomainPrompt?.title ?? "",
+            isPresented: Binding(
+                get: { vm.customDomainPrompt != nil },
+                set: { if !$0 { vm.customDomainPrompt = nil } }
+            ),
+            presenting: vm.customDomainPrompt
+        ) { prompt in
+            if let confirmTitle = prompt.confirmTitle, let onConfirm = prompt.onConfirm {
+                Button(confirmTitle, role: prompt.destructive ? .destructive : nil) {
+                    onConfirm()
                 }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("OK", role: .cancel) {}
             }
-            addCustomDomain(c: c)
+        } message: { prompt in
+            Text(prompt.message)
         }
         .sheet(isPresented: $showReplaceSheet) {
             ReplaceAppStemSheet(
@@ -415,67 +428,28 @@ public struct AppDetailScreen: View {
         }
     }
 
-    private func customDomainCard(url: String, c: FSColors) -> some View {
-        let status = vm.customDomainStatus[url]
-        return FSCard {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                HStack(spacing: FS.space.s3) {
-                    Image(systemName: "globe").foregroundColor(c.textMuted)
-                    Text(url).font(FS.font.mono()).foregroundColor(c.text)
-                        .lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button { vm.removeCustomUrl(url) } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundColor(c.textMuted)
-                    }.buttonStyle(.plain)
-                }
-                statusPill(for: status, c: c)
-                if let status, let expected = nonEmpty(status.expectedTxtRecord) {
-                    VStack(alignment: .leading, spacing: FS.space.s1) {
-                        Text("Add this TXT record on _flagship.\(url):").font(FS.font.caption()).foregroundColor(c.textMuted)
-                        Text(expected).font(FS.font.mono()).foregroundColor(c.text)
-                            .textSelection(.enabled)
-                    }
-                }
-                if let reason = status?.reason {
-                    Text(reason).font(FS.font.caption()).foregroundColor(c.textMuted)
-                }
-                HStack(spacing: FS.space.s2) {
-                    FSGhostButton(status?.status == .pending ? "Re-check DNS" : "Verify DNS") {
-                        Task { await vm.verifyCustomDomain(url) }
-                    }
-                    Spacer()
-                }
-            }
+    /// Top group in WEB DOMAINS — only when a domain is bound. Same
+    /// row treatment (wrap-at-dots + copy) as the other groups.
+    private func customDomainGroup(fqdn: String, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            sectionLabel("CUSTOM DOMAIN", c: c)
+            urlRow(url: "https://\(fqdn)", style: .prominent, c: c)
         }
     }
 
-    private func statusPill(for status: VerifyCustomDomainResponse?, c: FSColors) -> some View {
-        let label: String
-        let kind: FSPillKind
-        switch status?.status {
-        case .verified: label = "Verified"; kind = .online
-        case .pending:  label = "Pending DNS"; kind = .renewing
-        case .failed:   label = "Failed"; kind = .offline
-        case .none:     label = "Not yet checked"; kind = .idle
-        }
-        return FSPill(label, kind: kind)
-    }
+    private var customDomainRoot: String { "\(username ?? "you").flagship.services" }
 
-    private func nonEmpty(_ s: String) -> String? { s.isEmpty ? nil : s }
-
-    private func addCustomDomain(c: FSColors) -> some View {
+    private func setCustomDomainSection(c: FSColors) -> some View {
         FSCard {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Add a custom domain").font(.system(size: 13, weight: .semibold)).foregroundColor(c.text)
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                sectionLabel("SET CUSTOM DOMAIN", c: c)
                 HStack(spacing: FS.space.s2) {
-                    FSField(value: $vm.newCustomUrlDraft, label: "", placeholder: "www.mydomain.com")
-                    FSGhostButton("Add") { vm.addCustomUrl() }
+                    FSField(value: $vm.customDomainDraft, label: "", placeholder: "www.mydomain.com")
+                    FSPrimaryButton("Add", block: false) {
+                        Task { await vm.submitCustomDomain(rootDomain: customDomainRoot) }
+                    }
                 }
-                Text("Point a subdomain you own at Flagship with a single DNS CNAME — set ")
-                    .font(FS.font.caption()).foregroundColor(c.textMuted)
-                + Text("www.mydomain.com → \(username ?? "you").flagship.services")
-                    .font(FS.font.mono()).foregroundColor(c.text)
-                + Text(".  No registrar transfer, no IP to point at. Your apex (mydomain.com) can't take a CNAME — keep it on www and redirect the apex to it (a free Cloudflare/registrar redirect). The short link and app URLs are unaffected, and a Replace never touches an attached domain.")
+                Text("Prior to claiming a FQDN, you must set a CNAME record targeting \(customDomainRoot).")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
             }
         }
