@@ -178,20 +178,25 @@ public final class AppDetailViewModel {
                 confirmTitle: "Replace",
                 destructive: true,
                 onConfirm: { [weak self] in
-                    Task { await self?.bindCustomDomain(fqdn, rootDomain: rootDomain) }
+                    Task { await self?.bindCustomDomain(fqdn) }
                 }
             )
             return
         }
 
-        // (c) Clean path — issue the binding order (server tests the
-        // CNAME inline and confirms in the response).
-        await bindCustomDomain(fqdn, rootDomain: rootDomain)
+        // (c) Clean path — issue the request. Request is DECOUPLED
+        // from confirmation: a 200 only means "recorded, .com will
+        // verify the CNAME out-of-band and push the outcome later".
+        await bindCustomDomain(fqdn)
     }
 
-    private func bindCustomDomain(_ fqdn: String, rootDomain: String) async {
+    private func bindCustomDomain(_ fqdn: String) async {
         guard let server, let user = username(), !user.isEmpty else { return }
         do {
+            // 200 = recorded (NOT yet confirmed). We optimistically
+            // surface the domain; the set/fail outcome arrives later
+            // as a pushed alert (server backend, task #79). No
+            // pending/unconfirmed state in the UI by design.
             let r = try await server.setCustomDomain(
                 username: user, appId: appId, fqdn: fqdn
             )
@@ -200,11 +205,12 @@ public final class AppDetailViewModel {
             customDomainCooldownUntil = Date()
                 .addingTimeInterval(Self.customDomainCooldown)
         } catch {
-            // The server tests the CNAME inline, so a failure here is
-            // most often "CNAME not pointing at us" (or rate-limited).
+            // Non-200 is the ONLY synchronous denial — rate-limit or
+            // server-busy, never a CNAME verdict (that's async). Show
+            // the server's reason verbatim.
             customDomainPrompt = CustomDomainPrompt(
-                title: "Couldn't set custom domain",
-                message: "\(error.localizedDescription)\n\nMake sure \(fqdn) has a CNAME record targeting \(rootDomain).",
+                title: "Couldn't request custom domain",
+                message: error.localizedDescription,
                 confirmTitle: nil,
                 destructive: false,
                 onConfirm: nil
