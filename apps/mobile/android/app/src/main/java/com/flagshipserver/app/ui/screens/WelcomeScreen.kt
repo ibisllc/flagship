@@ -82,8 +82,13 @@ fun WelcomeScreen(nav: NavController) {
                 large = true,
             )
             FSGhostButton(
-                label = "I already have a server",
-                onClick = { /* TODO: re-pair flow */ },
+                // Drives the WebAuthn-PRF recovery flow (wired in C3).
+                // Replaces the old "I already have a server" copy that
+                // misleadingly implied you could claim another user's
+                // pod by scanning a QR — you can't; you can only
+                // recover your own account.
+                label = "I already have an account",
+                onClick = { nav.navigate("recover") },
                 block = true,
                 large = true,
             )

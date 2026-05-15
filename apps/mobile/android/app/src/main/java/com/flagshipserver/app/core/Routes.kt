@@ -55,5 +55,11 @@ enum class RootDestination(val key: String, val label: String) {
 sealed interface OnboardingRoute {
     data object ChooseUsername : OnboardingRoute
     data class CreateServer(val username: String) : OnboardingRoute
-    data object PodPair : OnboardingRoute
+
+    /** WebAuthn-PRF recovery on a fresh install. Replaces the old
+     *  [PodPair] route which implied that scanning a QR could claim
+     *  another user's pod; this one fetches the wrapped UMK off
+     *  flagshipserver.com using the user's passkey (Google Credential
+     *  Manager on Android, or a hardware authenticator). */
+    data object RecoverFromWelcome : OnboardingRoute
 }
