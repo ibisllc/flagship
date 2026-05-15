@@ -11,6 +11,7 @@ struct FlagshipApp: App {
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
     @State private var dev = DeveloperSettings()
+    @State private var privacy = PrivacySettings()
     @State private var pushRegistrar: PushRegistrar?
     private let mockClient = MockScreensClient()
     private let liveClient: any ScreensClient
@@ -108,12 +109,22 @@ struct FlagshipApp: App {
                 .environment(linker)
                 .environment(toasts)
                 .environment(dev)
+                .environment(privacy)
                 .environment(\.screensClient, activeClient)
                 .environment(\.flagshipServerClient, activeServerClient)
                 .environment(\.qrRelayClient, activeRelay)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker)
+                    // B12 — hydrate the AppState gate from persisted
+                    // user preference. Done in onAppear (not init) so
+                    // SmokeMode runs first and can leave isPaired
+                    // false (in which case requireBiometricAtLaunch
+                    // is moot — Welcome is unauthenticated anyway).
+                    appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
+                    if privacy.requireBiometricAtLaunch && appState.isPaired {
+                        appState.isUnlocked = false
+                    }
                     appDelegate.linker = linker
                     WatchBridge.shared.activate(client: activeClient)
                     let push = PushNotifications(linker: linker)

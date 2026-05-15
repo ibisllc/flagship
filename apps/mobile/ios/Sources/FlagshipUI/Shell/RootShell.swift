@@ -14,7 +14,9 @@ import FlagshipAPI
 /// sidestep the conflict by composing the layout manually.
 public struct RootShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(DeepLinker.self) private var linker
+    @Environment(AppState.self) private var app
 
     @State private var selected: RootDestination
 
@@ -23,11 +25,23 @@ public struct RootShell: View {
     }
 
     public var body: some View {
-        Group {
-            if sizeClass == .regular {
-                iPadShell(selected: $selected)
-            } else {
-                iPhoneShell(selected: $selected)
+        ZStack {
+            Group {
+                if sizeClass == .regular {
+                    iPadShell(selected: $selected)
+                } else {
+                    iPhoneShell(selected: $selected)
+                }
+            }
+            // B12 — top overlay. The lock screen renders ABOVE the
+            // shell whenever the user requires biometric-at-launch
+            // and the runtime latch is false. Putting it inside the
+            // shell's ZStack (not as a presentation-style overlay)
+            // means it traps interaction without a transition flash.
+            if app.requireBiometricAtLaunch && !app.isUnlocked {
+                BiometricLockScreen()
+                    .transition(.opacity)
+                    .zIndex(10)
             }
         }
         .onChange(of: linker.pending) { _, link in
@@ -38,6 +52,17 @@ public struct RootShell: View {
         .task(id: linker.pending) {
             if let link = linker.pending {
                 selected = tab(for: link)
+            }
+        }
+        // B12 — re-lock when the app moves to background. The .inactive
+        // intermediate state happens during transitions (notification
+        // pull-down, control center) — we DON'T relock on .inactive
+        // because that would dump the user back to Face ID mid-task.
+        // Only the hard .background transition (app actually backgrounded)
+        // re-arms the gate.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                app.relockForBackground()
             }
         }
     }

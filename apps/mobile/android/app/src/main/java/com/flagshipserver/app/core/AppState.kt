@@ -19,6 +19,8 @@ class AppState(
     hasCloudRecovery: Boolean = true,
     recoveryNudgeDismissedThisSession: Boolean = false,
     accountWasReset: Boolean = false,
+    requireBiometricAtLaunch: Boolean = false,
+    isUnlocked: Boolean? = null,
 ) {
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
@@ -64,6 +66,31 @@ class AppState(
     private val _accountWasReset = MutableStateFlow(accountWasReset)
     val accountWasReset: StateFlow<Boolean> = _accountWasReset.asStateFlow()
     fun setAccountWasReset(value: Boolean) { _accountWasReset.value = value }
+
+    /**
+     * C12 — when true, the app requires a successful BiometricPrompt
+     * evaluation at launch (and on resume from background) before any
+     * content beyond the lock screen renders. Hydrated from
+     * PrivacySettings at activity startup.
+     */
+    private val _requireBiometricAtLaunch = MutableStateFlow(requireBiometricAtLaunch)
+    val requireBiometricAtLaunch: StateFlow<Boolean> = _requireBiometricAtLaunch.asStateFlow()
+    fun setRequireBiometricAtLaunch(value: Boolean) {
+        _requireBiometricAtLaunch.value = value
+        if (!value) _isUnlocked.value = true
+    }
+
+    /**
+     * C12 — in-memory unlock latch. True after a successful biometric
+     * authentication; false when the app moves to background (if the
+     * gate is armed). Initial value depends on requireBiometricAtLaunch.
+     */
+    private val _isUnlocked = MutableStateFlow(isUnlocked ?: !requireBiometricAtLaunch)
+    val isUnlocked: StateFlow<Boolean> = _isUnlocked.asStateFlow()
+    fun markUnlocked() { _isUnlocked.value = true }
+    fun relockForBackground() {
+        if (_requireBiometricAtLaunch.value) _isUnlocked.value = false
+    }
 
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod
@@ -119,6 +146,9 @@ class AppState(
         _pods.value = emptyList()
         _leaderPodId.value = null
         _currentPodId.value = null
+        // Welcome doesn't need the gate (passkey auth coming up); the
+        // preference itself stays so a future re-pair re-arms.
+        _isUnlocked.value = true
     }
 }
 

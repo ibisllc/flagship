@@ -26,3 +26,7 @@ val LocalToastCenter = staticCompositionLocalOf<ToastCenter> { ToastCenter() }
 val LocalDeepLinker = staticCompositionLocalOf<DeepLinker> { DeepLinker() }
 
 val LocalDeveloperSettings = staticCompositionLocalOf<DeveloperSettings?> { null }
+
+/** C12 — PrivacySettings persistence handle. Null on previews and in
+ *  unit tests; the production MainActivity always installs a real one. */
+val LocalPrivacySettings = staticCompositionLocalOf<PrivacySettings?> { null }

@@ -42,6 +42,7 @@ public struct SettingsScreen: View {
     var onOpenRecovery: () -> Void = {}
     var onOpenAbout: () -> Void = {}
     var onOpenDeveloper: () -> Void = {}
+    var onOpenPrivacy: () -> Void = {}
     var onRefresh: () async -> Void = {}
     /// B6a — fired after the user confirms in the Remove sheet. The
     /// container is expected to: revoke this device's push token on
@@ -68,6 +69,7 @@ public struct SettingsScreen: View {
         onOpenRecovery: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
         onOpenDeveloper: @escaping () -> Void = {},
+        onOpenPrivacy: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true
@@ -85,6 +87,7 @@ public struct SettingsScreen: View {
         self.onOpenRecovery = onOpenRecovery
         self.onOpenAbout = onOpenAbout
         self.onOpenDeveloper = onOpenDeveloper
+        self.onOpenPrivacy = onOpenPrivacy
         self.onRefresh = onRefresh
         self.onRemoveFromAccount = onRemoveFromAccount
         self.hasCloudRecovery = hasCloudRecovery
@@ -366,6 +369,7 @@ public struct SettingsScreen: View {
         section("RECOVERY", c: c) {
             VStack(spacing: FS.space.s3) {
                 linkRow("Recovery setup", subtitle: "If you lose this phone", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
+                linkRow("Privacy", subtitle: "Face ID lock, app-level gating", icon: "lock.shield.fill", c: c, action: onOpenPrivacy)
                 linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)
                 if showDeveloper {
                     linkRow("Developer", subtitle: "Mock/live toggle, latency knob", icon: "hammer.fill", c: c, action: onOpenDeveloper)

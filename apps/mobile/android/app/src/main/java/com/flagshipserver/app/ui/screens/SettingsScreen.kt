@@ -86,6 +86,9 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "Recovery", description = "Cloud recovery + offline recovery codes.") {
             nav.navigate("recovery")
         }
+        SettingsRow(label = "Privacy", description = "Face unlock at launch, app-level gating.") {
+            nav.navigate("privacy")
+        }
         if (devUnlocked) {
             SettingsRow(label = "Developer", description = "Toggle the live screens client + dev fixtures.") {
                 nav.navigate("developer")

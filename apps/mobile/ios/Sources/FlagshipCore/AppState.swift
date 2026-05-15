@@ -40,6 +40,20 @@ public final class AppState {
     /// "Sign in again" CTA. Default false — set by the detector after
     /// a successful round-trip.
     public var accountWasReset: Bool
+    /// B12 — when true, the app requires a successful biometric
+    /// evaluation at launch (and on resume from cold-background)
+    /// before any content beyond the lock screen renders. Default
+    /// false on the new account-create path; the user opts in from
+    /// Settings → Privacy → Require Face ID. The setting is persisted
+    /// to UserDefaults out-of-band (the persistence layer hands it
+    /// in via the init).
+    public var requireBiometricAtLaunch: Bool
+    /// B12 — in-memory unlock latch. Flipped true after a successful
+    /// BiometricGate.evaluate; flipped back to false when the app
+    /// resigns active. Initial value depends on requireBiometricAtLaunch
+    /// — if biometric isn't required, this is true by default so the
+    /// content renders immediately.
+    public var isUnlocked: Bool
 
     public init(
         isPaired: Bool = false,
@@ -49,7 +63,9 @@ public final class AppState {
         currentPodId: String? = nil,
         hasCloudRecovery: Bool = true,
         recoveryNudgeDismissedThisSession: Bool = false,
-        accountWasReset: Bool = false
+        accountWasReset: Bool = false,
+        requireBiometricAtLaunch: Bool = false,
+        isUnlocked: Bool? = nil
     ) {
         self.isPaired = isPaired
         self.currentUser = currentUser
@@ -59,6 +75,10 @@ public final class AppState {
         self.hasCloudRecovery = hasCloudRecovery
         self.recoveryNudgeDismissedThisSession = recoveryNudgeDismissedThisSession
         self.accountWasReset = accountWasReset
+        self.requireBiometricAtLaunch = requireBiometricAtLaunch
+        // Default isUnlocked: if biometric isn't required, start
+        // unlocked. If required, start LOCKED (the gate view shows).
+        self.isUnlocked = isUnlocked ?? !requireBiometricAtLaunch
     }
 
     /// True when the recovery-setup nudge should be visible on Home /
@@ -120,6 +140,25 @@ public final class AppState {
         self.pods = []
         self.leaderPodId = nil
         self.currentPodId = nil
+        // Welcome doesn't need the lock-screen gate (the user is
+        // about to authenticate via passkey anyway). Keep the user
+        // preference for next launch; just unlock the runtime latch.
+        self.isUnlocked = true
+    }
+
+    /// B12 — call when the user successfully unlocks via biometric.
+    /// Doesn't mutate requireBiometricAtLaunch (that's user-pref);
+    /// flips the in-memory latch so content renders this session.
+    public func markUnlocked() {
+        isUnlocked = true
+    }
+
+    /// B12 — call from the SceneDelegate / SwiftUI .scenePhase change
+    /// when the app moves to .background. Re-locks the latch so the
+    /// next foreground re-shows the gate.
+    public func relockForBackground() {
+        guard requireBiometricAtLaunch else { return }
+        isUnlocked = false
     }
 }
 

@@ -34,10 +34,12 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.LocalPrivacySettings
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.MockQrRelayClient
+import com.flagshipserver.app.core.PrivacySettings
 import com.flagshipserver.app.core.QrRelayClient
 import com.flagshipserver.app.core.ToastCenter
 import com.flagshipserver.app.keystore.BiometricAuthority
@@ -68,7 +70,10 @@ class MainActivity : FragmentActivity() {
         biometric = BiometricAuthority(this)
         BiometricAuthority.set(biometric)
 
-        appState = AppState()
+        val privacy = PrivacySettings.fromContext(applicationContext)
+        appState = AppState(
+            requireBiometricAtLaunch = privacy.requireBiometricAtLaunch.value,
+        )
         val sessionStore = EncryptedSessionStore.create(applicationContext)
         val flagshipServer = MockFlagshipServerClient()
         val toasts = ToastCenter()
@@ -112,6 +117,7 @@ class MainActivity : FragmentActivity() {
                     LocalToastCenter provides toasts,
                     LocalDeepLinker provides deepLinker,
                     LocalDeveloperSettings provides devSettings,
+                    LocalPrivacySettings provides privacy,
                 ) {
                     Surface(color = FS.colors.bg, modifier = Modifier.fillMaxSize()) {
                         AppRoot(widthSizeClass = mapWidth(sizeClass.widthSizeClass))
@@ -130,6 +136,19 @@ class MainActivity : FragmentActivity() {
         super.onDestroy()
         PushHolder.registrar = null
         BiometricAuthority.set(null)
+    }
+
+    /** C12 — re-arm the lock-screen gate when the activity moves to
+     *  background. onPause fires on transient interruptions (e.g. a
+     *  pull-down notification center) which we DON'T want to lock on;
+     *  onStop fires only when the activity is genuinely backgrounded.
+     *  Tradeoff: locking on onPause is "more secure" but disruptive;
+     *  locking on onStop matches the iOS .background semantics. */
+    override fun onStop() {
+        super.onStop()
+        if (::appState.isInitialized) {
+            appState.relockForBackground()
+        }
     }
 
     /** Parse incoming launch intents (`flagship://...` and the
@@ -157,6 +176,8 @@ class MainActivity : FragmentActivity() {
 private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
     val app = LocalAppState.current
     val isPaired by app.isPaired.collectAsState()
+    val requireGate by app.requireBiometricAtLaunch.collectAsState()
+    val isUnlocked by app.isUnlocked.collectAsState()
     val toasts = LocalToastCenter.current
     val toastQueue by toasts.queue.collectAsState()
 
@@ -165,6 +186,12 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
             RootShell(widthSizeClass = widthSizeClass)
         } else {
             OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })
+        }
+        // C12 — lock overlay above EVERYTHING when armed + locked.
+        // Conditional on isPaired so the Welcome flow isn't gated
+        // (passkey auth is the gate on Welcome).
+        if (isPaired && requireGate && !isUnlocked) {
+            com.flagshipserver.app.ui.shell.BiometricLockScreen()
         }
         Toaster(queue = toastQueue, onDismiss = { toasts.dismiss(it) })
     }

@@ -34,6 +34,7 @@ public enum SettingsRoute: Hashable, Sendable {
     case about
     case addControlDevice
     case developer
+    case privacy
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad

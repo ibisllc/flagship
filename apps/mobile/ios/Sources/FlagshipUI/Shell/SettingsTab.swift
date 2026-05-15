@@ -11,6 +11,7 @@ public struct SettingsTab: View {
     @Environment(AppState.self) private var app
     @Environment(DeveloperSettings.self) private var dev
     @Environment(DeepLinker.self) private var linker
+    @Environment(PrivacySettings.self) private var privacy
 
     @State private var path: [SettingsRoute] = []
     @State private var vm: SettingsViewModel?
@@ -68,6 +69,7 @@ public struct SettingsTab: View {
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenAbout: { path.append(.about) },
                     onOpenDeveloper: { path.append(.developer) },
+                    onOpenPrivacy: { path.append(.privacy) },
                     onRefresh: { await vm.load() },
                     onRemoveFromAccount: {
                         // B6a — full self-revoke: drop push token on
@@ -122,6 +124,74 @@ public struct SettingsTab: View {
                     app.signOut()
                 }
             })
+        case .privacy:
+            PrivacyScreen()
+        }
+    }
+}
+
+/// B12 — privacy preferences. Today the single toggle is biometric
+/// at launch; gated behind a Face ID confirmation when turning ON
+/// (matches iOS Settings.app conventions for security-relevant flips).
+/// Turning OFF doesn't gate — the user is presumed authorized, the
+/// alternative would be an infinite "Enter biometrics to remove
+/// biometrics" loop.
+struct PrivacyScreen: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(PrivacySettings.self) private var privacy
+    @Environment(AppState.self) private var app
+    @State private var pendingError: String?
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s6) {
+                Text("Lock with Face ID")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(c.text)
+                Toggle(isOn: Binding(
+                    get: { privacy.requireBiometricAtLaunch },
+                    set: { newValue in toggle(to: newValue) },
+                )) {
+                    Text("Require Face ID when the app opens")
+                        .foregroundColor(c.text)
+                }
+                .tint(c.primary)
+                Text("When on, Flagship asks for Face ID each time the app launches or returns from the background. Apps stay running, your pods stay reachable — this just controls who can see and tap.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                if let msg = pendingError {
+                    Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
+                }
+                Spacer()
+            }
+            .padding(FS.space.s6)
+        }
+        .navigationTitle("Privacy")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func toggle(to newValue: Bool) {
+        pendingError = nil
+        if newValue {
+            // Enabling — challenge once so a malicious bystander
+            // can't silently enable lock-and-trap. On success, persist
+            // the preference + sync to AppState.
+            Task {
+                do {
+                    try await BiometricGate().evaluate(reason: "Enable Face ID lock")
+                    privacy.requireBiometricAtLaunch = true
+                    app.requireBiometricAtLaunch = true
+                    // Already past auth → stay unlocked this session.
+                    app.markUnlocked()
+                } catch {
+                    pendingError = "Couldn't enable: \(error.localizedDescription)"
+                }
+            }
+        } else {
+            // Disabling doesn't gate — see the docs above.
+            privacy.requireBiometricAtLaunch = false
+            app.requireBiometricAtLaunch = false
         }
     }
 }
