@@ -781,8 +781,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 ok: true,
                 displayLabel: newLabel,
                 canonicalUrl: canonical,
-                shortUrl: "https://voi.ci/\(String(newLabel.prefix(2)))mock1",
-                shortCode: "\(String(newLabel.prefix(2)))mock1",
+                shortUrl: "https://voi.ci/\(synthesizeMockShortCode(forAppId: appId, label: newLabel))",
+                shortCode: synthesizeMockShortCode(forAppId: appId, label: newLabel),
                 unchanged: false
             )
         }
@@ -794,8 +794,27 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> AppLinksResponse {
         try await tick()
         let alias = appAliasByUser[username.lowercased()]?[appId]
-        let label = alias?.displayLabel ?? "scratch"
+        // Default display label mirrors the Worker's deriveDefaultLabel
+        // when no alias is set — appId is `<creator>--<slug>`, so the
+        // user-visible default is `<slug>-<creator>`. For non-matching
+        // ids fall back to the appId verbatim (no '--' collapses).
+        let defaultLabel: String = {
+            if let m = try? NSRegularExpression(pattern: "^([a-z0-9-]+)--([a-z0-9-]+)$"),
+               let match = m.firstMatch(in: appId, range: NSRange(appId.startIndex..., in: appId)),
+               let creatorRange = Range(match.range(at: 1), in: appId),
+               let slugRange = Range(match.range(at: 2), in: appId) {
+                return "\(appId[slugRange])-\(appId[creatorRange])"
+            }
+            return appId.lowercased()
+        }()
+        let label = alias?.displayLabel ?? defaultLabel
         let canonical = alias?.canonicalUrl ?? "https://\(label).demo-pod.flagship.services"
+        // V6 — Mock now mirrors the Worker's lazy-mint contract:
+        // /links always returns a populated shortUrl. The code is a
+        // deterministic 6-char hex prefix of appId so the same app
+        // surfaces the same link across calls (so a copy-paste in
+        // demo mode is stable + previews stay snapshot-friendly).
+        let shortCode = synthesizeMockShortCode(forAppId: appId, label: label)
         return AppLinksResponse(
             appId: appId,
             displayLabel: label,
@@ -806,8 +825,27 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                     url: canonical
                 ),
             ],
-            shortUrl: nil
+            shortUrl: "https://voi.ci/\(shortCode)"
         )
+    }
+
+    /// FNV-1a over (appId|label) → first 6 hex digits, lowercased.
+    /// Deterministic + stable across calls; not crypto-strong (it
+    /// only feeds the Mock surface). The Worker's mintShortLink
+    /// uses crypto.getRandomValues so production codes are random.
+    private static func synthesizeMockShortCode(forAppId appId: String, label: String) -> String {
+        var h: UInt64 = 14695981039346656037
+        for byte in (appId + "|" + label).utf8 {
+            h ^= UInt64(byte)
+            h &*= 1099511628211
+        }
+        let hex = String(h, radix: 16)
+        // 6 chars; pad with the appId hash's own bits if short.
+        return String((hex + "000000").prefix(6))
+    }
+
+    private func synthesizeMockShortCode(forAppId appId: String, label: String) -> String {
+        Self.synthesizeMockShortCode(forAppId: appId, label: label)
     }
 
     public func listDevices(username: String) async throws -> TrustedDevicesListResponse {

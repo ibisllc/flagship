@@ -76,8 +76,21 @@ public struct AppDetailScreen: View {
                     FSPill(d.status == "running" ? "Running" : "Stopped", kind: d.status == "running" ? .online : .idle)
                 }
                 Text("by \(d.creator)").foregroundColor(c.textMuted)
-                if let v = d.version {
-                    Text("v\(v)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                // V6 — version + package id sit on one line so the
+                // user can tell which app this is even after they've
+                // renamed the URL stem (display label hides the
+                // package name elsewhere). `urlLabel` is the canonical
+                // package handle: `scratchpad` if the user is the
+                // creator, `scratchpad-meta` / `scratchpad-harry`
+                // otherwise.
+                HStack(spacing: FS.space.s2) {
+                    if let v = d.version {
+                        Text("v\(v)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                    Text("id: \(d.urlLabel)")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("app-detail-package-id")
                 }
                 if let summary = d.summary {
                     Text(summary).font(FS.font.bodySm()).foregroundColor(c.text)
@@ -251,19 +264,19 @@ public struct AppDetailScreen: View {
 
     @ViewBuilder
     private func instancesGroup(c: FSColors, defaultLabel: String) -> some View {
-        let instances = vm.appLinks.value?.instances ?? []
-        if !instances.isEmpty {
+        // V6 — reactively reflect the user's current pod selection from
+        // WHERE IT RUNS. The server-returned `appLinks.instances` is
+        // .com's view of which pods are live; here we want the
+        // instances list the user is actively shaping. Display label
+        // is the renamed stem when available, the daemon default
+        // otherwise.
+        let selected = pods.filter { vm.runOnPodIds.contains($0.podId) }
+        if !selected.isEmpty {
+            let stem = vm.appLinks.value?.displayLabel ?? defaultLabel
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 sectionLabel("INDIVIDUAL INSTANCES", c: c)
-                ForEach(instances) { inst in
-                    urlRow(url: inst.url, style: .muted, c: c)
-                }
-            }
-        } else if pods.count > 1 {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                sectionLabel("INDIVIDUAL INSTANCES", c: c)
-                ForEach(pods.filter { vm.runOnPodIds.contains($0.podId) }) { pod in
-                    let url = "https://\(defaultLabel).\(SlugUtil.slugify(pod.name)).\(username ?? "you").flagship.services"
+                ForEach(selected) { pod in
+                    let url = "https://\(stem).\(SlugUtil.slugify(pod.name)).\(username ?? "you").flagship.services"
                     urlRow(url: url, style: .muted, c: c)
                 }
             }
@@ -274,9 +287,16 @@ public struct AppDetailScreen: View {
 
     @ViewBuilder
     private func urlRow(url: String, style: UrlStyle, c: FSColors) -> some View {
-        HStack(spacing: FS.space.s2) {
+        // V6 — no truncation. The WEB DOMAINS card is the one place
+        // where URLs are allowed to wrap to multiple lines so the
+        // user can read the whole thing. The copy icon stays
+        // top-aligned so it doesn't ride along with line two.
+        HStack(alignment: .top, spacing: FS.space.s2) {
             Image(systemName: style == .prominent ? "link.circle.fill" : "globe")
                 .foregroundColor(style == .prominent ? c.primary : c.textMuted)
+                // Keep the icon pinned to the first line of the URL
+                // text so a wrapped URL doesn't vertically misalign.
+                .padding(.top, 1)
             Text(stripScheme(url))
                 .font(.system(
                     size: style == .prominent ? 16 : 14,
@@ -284,9 +304,10 @@ public struct AppDetailScreen: View {
                     design: .monospaced,
                 ))
                 .foregroundColor(style == .muted ? c.textMuted : c.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Wraps freely on word/character boundaries; no
+                // .lineLimit / .truncationMode here on purpose.
             if style != .muted {
                 Button {
                     #if canImport(UIKit)
