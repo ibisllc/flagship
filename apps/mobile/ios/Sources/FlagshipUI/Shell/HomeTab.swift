@@ -60,6 +60,7 @@ public struct HomeTab: View {
                     pods: app.pods,
                     leaderPodId: app.leaderPodId,
                     showRecoveryNudge: app.shouldShowRecoveryNudge,
+                    accountWasReset: app.accountWasReset,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onAddServer: { path.append(.addServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },
@@ -74,6 +75,13 @@ public struct HomeTab: View {
                     },
                     onDismissRecoveryNudge: {
                         app.recoveryNudgeDismissedThisSession = true
+                    },
+                    onSignInAgain: {
+                        // E7 — drop everything and head back to Welcome.
+                        // signOut() clears AppState; the recovery flow
+                        // then pulls the user's cloud-stored UMK to
+                        // re-pair on this device.
+                        app.signOut()
                     }
                 )
             } else {
@@ -104,16 +112,41 @@ public struct HomeTab: View {
         }
     }
 
-    /// Best-effort fetch of cloud-recovery presence. Treats any error
-    /// as "leave the local state alone" — we'd rather under-nudge than
-    /// flash a banner because of a transient network failure.
+    /// Best-effort fetch of cloud-recovery presence + E7 account-reset
+    /// detection. We fan out the two reads in parallel — the devices
+    /// list doubles as our peer-detection signal: if our local push
+    /// tokenId is absent, another device disconnected us.
+    /// Any failure is silent so a transient blip doesn't flash a
+    /// danger banner; the next successful round-trip will settle the
+    /// state correctly.
     private func refreshRecoveryStatus() async {
         guard let user = app.currentUser, !user.isEmpty else { return }
-        do {
-            let enrolled = try await server.hasCloudRecovery(username: user)
-            app.hasCloudRecovery = enrolled
-        } catch {
-            // Silent — keep previous app.hasCloudRecovery value.
+        // hasCloudRecovery — drives B9 nudge.
+        async let recoveryTask: Bool? = {
+            do { return try await server.hasCloudRecovery(username: user) }
+            catch { return nil }
+        }()
+        // listDevices — drives E7 account-reset detector.
+        async let devicesTask: [TrustedDevice]? = {
+            do { return try await server.listDevices(username: user).devices }
+            catch { return nil }
+        }()
+        let (recovery, devices) = await (recoveryTask, devicesTask)
+        if let recovery { app.hasCloudRecovery = recovery }
+        if let devices {
+            // We only flip accountWasReset when we have BOTH a
+            // confirmed devices fetch AND a local tokenId — a fresh
+            // install (no local token) shouldn't trigger E7.
+            if let localToken = Keystore.pushTokenId(), !localToken.isEmpty {
+                let present = devices.contains { $0.tokenId == localToken }
+                if !present {
+                    app.accountWasReset = true
+                } else if app.accountWasReset {
+                    // Recovered — the user must have re-registered.
+                    // Clear the flag so the banner disappears.
+                    app.accountWasReset = false
+                }
+            }
         }
     }
 

@@ -16,6 +16,10 @@ public struct HomeScreen: View {
     /// — HomeTab passes the resolved value rather than the app object
     /// so HomeScreen stays previewable in isolation.
     let showRecoveryNudge: Bool
+    /// E7 — when true, render the danger banner that says "your
+    /// account was reset on another device" + a "Sign in again" CTA
+    /// that drops the user to Welcome.
+    let accountWasReset: Bool
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
@@ -24,6 +28,7 @@ public struct HomeScreen: View {
     var onRefresh: () async -> Void = {}
     var onSetUpRecovery: () -> Void = {}
     var onDismissRecoveryNudge: () -> Void = {}
+    var onSignInAgain: () -> Void = {}
 
     public init(
         state: LoadingState<ServerDetailResponse>,
@@ -31,6 +36,7 @@ public struct HomeScreen: View {
         pods: [PodInfo],
         leaderPodId: String?,
         showRecoveryNudge: Bool = false,
+        accountWasReset: Bool = false,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
@@ -38,13 +44,15 @@ public struct HomeScreen: View {
         onBrowseMarketplace: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onSetUpRecovery: @escaping () -> Void = {},
-        onDismissRecoveryNudge: @escaping () -> Void = {}
+        onDismissRecoveryNudge: @escaping () -> Void = {},
+        onSignInAgain: @escaping () -> Void = {}
     ) {
         self.state = state
         self.username = username
         self.pods = pods
         self.leaderPodId = leaderPodId
         self.showRecoveryNudge = showRecoveryNudge
+        self.accountWasReset = accountWasReset
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
@@ -53,6 +61,7 @@ public struct HomeScreen: View {
         self.onRefresh = onRefresh
         self.onSetUpRecovery = onSetUpRecovery
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
+        self.onSignInAgain = onSignInAgain
     }
 
     public var body: some View {
@@ -60,7 +69,10 @@ public struct HomeScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 header(c: c)
-                if showRecoveryNudge {
+                if accountWasReset {
+                    accountResetBanner(c: c)
+                }
+                if showRecoveryNudge && !accountWasReset {
                     recoveryNudge(c: c)
                 }
                 quickActions(c: c)
@@ -79,6 +91,32 @@ public struct HomeScreen: View {
         }
         .background(c.bg.ignoresSafeArea())
         .refreshable { await onRefresh() }
+    }
+
+    /// E7 — "your account was reset on another device" danger banner.
+    /// Renders above everything else (including the recovery nudge,
+    /// which is suppressed while accountWasReset is true). Tapping
+    /// Sign-in-again drops the user back to Welcome via app.signOut.
+    private func accountResetBanner(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .imageScale(.large)
+                        .foregroundColor(c.danger)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("This device was removed from your account")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("Another device on this account ran Disconnect, Replace, or Wipe. Sign in again with your recovery passkey to get back in.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                    }
+                }
+                FSPrimaryButton("Sign in again", block: true, action: onSignInAgain)
+            }
+        }
+        .accessibilityIdentifier("account-reset-banner")
     }
 
     /// "Your phone is the only key" warning. Surfaces after the user

@@ -175,6 +175,80 @@ function isPromoEntry(e) {
   return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
 }
 
+const COM_BASE_FOR_E7 = "https://flagshipserver.com";
+const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
+
+/**
+ * E7 — peer "your account was reset on another device" detector.
+ *
+ * Signal: this device's local `flagship.pushTokenId` is no longer
+ * in `/api/users/:u/devices`. That can only happen if another device
+ * on the account ran a Disconnect / Replace / Wipe against us, or
+ * the Worker GC'd us as an orphan post-rotation.
+ *
+ * Effect: prepend a danger banner above #servers-list with a "Sign
+ * in again" button that clears local session state and reloads. The
+ * fresh load drops the user into the wizard / Welcome flow where
+ * they can recover with their passkey.
+ *
+ * Both fetches are tolerated as missing — silent failure is the
+ * right call (we'd rather under-warn than flash a banner on a
+ * transient network blip).
+ */
+async function detectAccountReset(username) {
+  if (!username) return;
+  const localToken = localStorage.getItem("flagship.pushTokenId");
+  if (!localToken) return; // fresh install, no token → never orphaned
+  let devices = [];
+  try {
+    const r = await fetch(
+      `${COM_BASE_FOR_E7}/api/users/${encodeURIComponent(username)}/devices`,
+      { cache: "no-store" },
+    );
+    if (!r.ok) return;
+    const body = await r.json();
+    devices = body.devices ?? [];
+  } catch {
+    return;
+  }
+  const present = devices.some((d) => d.tokenId === localToken);
+  const banner = document.getElementById(ACCOUNT_RESET_BANNER_ID);
+  if (present) {
+    // Recovered (or never lost) — clean up the banner if previous
+    // renders left one.
+    banner?.remove();
+    return;
+  }
+  // Insert the banner immediately above #servers-list. Replacing
+  // rather than appending so we don't stack copies across renders.
+  banner?.remove();
+  const host = document.createElement("div");
+  host.id = ACCOUNT_RESET_BANNER_ID;
+  host.className = "card";
+  host.style.borderLeft = "3px solid var(--danger, #d33)";
+  host.innerHTML = `
+    <div class="weight-600">This device was removed from your account</div>
+    <p class="note small">
+      Another device on this account ran Disconnect, Replace, or Wipe.
+      Sign in again with your recovery passkey to get back in.
+    </p>
+    <button class="danger" id="${ACCOUNT_RESET_BANNER_ID}-signin">Sign in again</button>
+  `;
+  const list = document.getElementById("servers-list");
+  list?.parentNode?.insertBefore(host, list);
+  document
+    .getElementById(`${ACCOUNT_RESET_BANNER_ID}-signin`)
+    ?.addEventListener("click", () => {
+      // Clear the per-device tokens + session so a reload drops the
+      // user into recovery. We deliberately keep the wrappedUmk so
+      // the recovery flow can re-bind without a fresh enrolment.
+      localStorage.removeItem("flagship.pushTokenId");
+      localStorage.removeItem("flagship.sessionId");
+      localStorage.removeItem("flagship.session.v1");
+      window.location.reload();
+    });
+}
+
 export async function renderHome() {
   const session = getSession();
   setSubtitle(session.username ? `signed in as ${session.username}` : "signed in");
@@ -182,6 +256,12 @@ export async function renderHome() {
   $("home-irkpub").textContent = session.irk
     ? bytesToHex(session.irk.publicKey).slice(0, 16) + "…" + bytesToHex(session.irk.publicKey).slice(-4)
     : "—";
+
+  // E7 — fire-and-forget account-reset detection. Renders a danger
+  // banner above the server list if our locally-stored push tokenId
+  // is no longer in /api/users/:u/devices. Silent on failure so a
+  // transient network blip doesn't flash a banner.
+  detectAccountReset(session.username).catch(() => {});
 
   const sid = localStorage.getItem("flagship.sessionId");
   const sessionStatusEl = $("session-status");

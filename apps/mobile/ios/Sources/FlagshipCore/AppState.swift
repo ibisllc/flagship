@@ -33,6 +33,13 @@ public final class AppState {
     /// Home doesn't disappear-then-reappear when the user switches
     /// to Activity and back.
     public var recoveryNudgeDismissedThisSession: Bool
+    /// E7 — true once we've observed that this device's local push
+    /// tokenId is no longer in /api/users/:u/devices, meaning another
+    /// device on the account ran a Disconnect / Replace / Wipe against
+    /// us. The Home banner uses this to render a danger card with a
+    /// "Sign in again" CTA. Default false — set by the detector after
+    /// a successful round-trip.
+    public var accountWasReset: Bool
 
     public init(
         isPaired: Bool = false,
@@ -41,7 +48,8 @@ public final class AppState {
         leaderPodId: String? = nil,
         currentPodId: String? = nil,
         hasCloudRecovery: Bool = true,
-        recoveryNudgeDismissedThisSession: Bool = false
+        recoveryNudgeDismissedThisSession: Bool = false,
+        accountWasReset: Bool = false
     ) {
         self.isPaired = isPaired
         self.currentUser = currentUser
@@ -50,6 +58,7 @@ public final class AppState {
         self.currentPodId = currentPodId ?? leaderPodId ?? pods.first?.podId
         self.hasCloudRecovery = hasCloudRecovery
         self.recoveryNudgeDismissedThisSession = recoveryNudgeDismissedThisSession
+        self.accountWasReset = accountWasReset
     }
 
     /// True when the recovery-setup nudge should be visible on Home /

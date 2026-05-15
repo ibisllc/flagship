@@ -48,16 +48,34 @@ fun HomeTab() {
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
 
-    // Refresh cloud-recovery enrolment state when the tab first
-    // appears AND whenever a pod transitions to online. Mirrors iOS
-    // HomeTab.refreshRecoveryStatus. Silent on failure — we'd rather
-    // under-nudge than flash a banner on a transient network blip.
+    // Refresh cloud-recovery enrolment state AND E7 account-reset
+    // detection when the tab first appears AND whenever a pod
+    // transitions to online. Mirrors iOS HomeTab.refreshRecoveryStatus.
+    // Silent on failure — we'd rather under-nudge / under-warn than
+    // flash a banner on a transient network blip.
     val hasOnlinePod = pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
     LaunchedEffect(hasOnlinePod, app.currentUser.value) {
         val u = app.currentUser.value
         if (!u.isNullOrEmpty()) {
             runCatching { server.hasCloudRecovery(u) }
                 .onSuccess { app.setHasCloudRecovery(it) }
+            // E7 — check whether our local push tokenId is still in
+            // the trusted-devices list. Absent = another device
+            // ran Disconnect/Replace/Wipe and we're orphaned.
+            runCatching { server.listDevices(u).devices }
+                .onSuccess { devices ->
+                    val localToken = com.flagshipserver.app.keystore.Keystore.pushTokenId()
+                    if (!localToken.isNullOrEmpty()) {
+                        val present = devices.any { it.tokenId == localToken }
+                        if (!present) {
+                            app.setAccountWasReset(true)
+                        } else if (app.accountWasReset.value) {
+                            // Recovered — clear the flag so the
+                            // banner disappears.
+                            app.setAccountWasReset(false)
+                        }
+                    }
+                }
         }
     }
 
@@ -86,6 +104,7 @@ fun HomeTab() {
             // completing on another tab) re-renders Home.
             val hasRecovery by app.hasCloudRecovery.collectAsState()
             val dismissed by app.recoveryNudgeDismissedThisSession.collectAsState()
+            val reset by app.accountWasReset.collectAsState()
             val showNudge = !hasRecovery && !dismissed && pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
             HomeScreen(
                 state = vm.state.collectAsState().value,
@@ -101,6 +120,8 @@ fun HomeTab() {
                 showRecoveryNudge = showNudge,
                 onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
+                accountWasReset = reset,
+                onSignInAgain = { app.signOut() },
             )
         }
         composable("server-detail/{podId}") { entry ->

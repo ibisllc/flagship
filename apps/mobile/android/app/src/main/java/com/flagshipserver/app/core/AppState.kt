@@ -18,6 +18,7 @@ class AppState(
     currentPodId: String? = null,
     hasCloudRecovery: Boolean = true,
     recoveryNudgeDismissedThisSession: Boolean = false,
+    accountWasReset: Boolean = false,
 ) {
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
@@ -52,6 +53,17 @@ class AppState(
     private val _recoveryNudgeDismissedThisSession = MutableStateFlow(recoveryNudgeDismissedThisSession)
     val recoveryNudgeDismissedThisSession: StateFlow<Boolean> = _recoveryNudgeDismissedThisSession.asStateFlow()
     fun dismissRecoveryNudgeForSession() { _recoveryNudgeDismissedThisSession.value = true }
+
+    /**
+     * E7 — true once we've observed that this device's local push
+     * tokenId is no longer in /api/users/:u/devices, meaning another
+     * device on the account ran a Disconnect / Replace / Wipe against
+     * us. The Home banner uses this to render a danger card with a
+     * "Sign in again" CTA.
+     */
+    private val _accountWasReset = MutableStateFlow(accountWasReset)
+    val accountWasReset: StateFlow<Boolean> = _accountWasReset.asStateFlow()
+    fun setAccountWasReset(value: Boolean) { _accountWasReset.value = value }
 
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod

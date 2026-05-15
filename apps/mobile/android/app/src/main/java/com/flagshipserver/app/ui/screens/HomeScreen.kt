@@ -49,6 +49,11 @@ fun HomeScreen(
     showRecoveryNudge: Boolean = false,
     onSetUpRecovery: () -> Unit = {},
     onDismissRecoveryNudge: () -> Unit = {},
+    /** E7 — renders the account-was-reset danger banner above
+     *  everything else. Suppresses the recovery nudge while shown so
+     *  the two banners don't stack. */
+    accountWasReset: Boolean = false,
+    onSignInAgain: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -73,7 +78,12 @@ fun HomeScreen(
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
 
-        if (showRecoveryNudge) {
+        if (accountWasReset) {
+            Spacer(Modifier.height(FS.space.s4))
+            AccountResetBanner(onSignInAgain = onSignInAgain)
+        }
+
+        if (showRecoveryNudge && !accountWasReset) {
             Spacer(Modifier.height(FS.space.s4))
             RecoveryNudgeCard(
                 onSetUp = onSetUpRecovery,
@@ -223,6 +233,30 @@ fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
             Text("Couldn't load", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
             if (onRetry != null) FSGhostButton(label = "Retry", onClick = onRetry)
+        }
+    }
+}
+
+/** E7 — "your account was reset on another device" danger banner.
+ *  Renders above everything else (including the recovery nudge,
+ *  which is suppressed while shown). Tapping Sign-in-again drops
+ *  the user back to Welcome via app.signOut(). */
+@Composable
+private fun AccountResetBanner(onSignInAgain: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(
+                "This device was removed from your account",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                "Another device on this account ran Disconnect, Replace, or " +
+                    "Wipe. Sign in again with your recovery passkey to get back in.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            )
+            FSPrimaryButton(label = "Sign in again", onClick = onSignInAgain, block = true)
         }
     }
 }
