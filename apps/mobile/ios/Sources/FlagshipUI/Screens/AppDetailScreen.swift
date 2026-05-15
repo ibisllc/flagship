@@ -155,16 +155,21 @@ public struct AppDetailScreen: View {
             }
             Spacer()
             if isOn {
-                // A bare house icon designates the lead pod — gray when
-                // it isn't lead, blue when it is. The word "Lead" used
-                // to sit here but collided with the "Leader" badge a
-                // few px to the left; the icon removes the ambiguity.
+                // Check-circle + house: the circle reads as the
+                // selectable radio (filled when chosen); the house
+                // says what it selects (this pod leads). The word
+                // "Lead" used to sit here but collided with the
+                // "Leader" badge a few px to the left.
                 Button {
                     vm.setLead(pod.podId)
                 } label: {
-                    Image(systemName: "house.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(isLead ? c.primary : c.textMuted)
+                    HStack(spacing: 4) {
+                        Image(systemName: isLead ? "largecircle.fill.circle" : "circle")
+                            .foregroundColor(isLead ? c.primary : c.textMuted)
+                        Image(systemName: "house.fill")
+                            .font(.system(size: 15))
+                            .foregroundColor(isLead ? c.primary : c.textMuted)
+                    }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isLead ? "Lead pod" : "Make lead pod")
