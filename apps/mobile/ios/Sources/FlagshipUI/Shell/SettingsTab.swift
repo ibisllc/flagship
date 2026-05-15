@@ -37,6 +37,7 @@ public struct SettingsTab: View {
                     showDeveloper: dev.unlocked,
                     onAddControlDevice: { path.append(.addControlDevice) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
+                    onDisconnectTrustedDevice: { device in await vm.disconnect(device) },
                     onSignOut: {
                         Task { @MainActor in
                             await pushRegistrar?.revoke()

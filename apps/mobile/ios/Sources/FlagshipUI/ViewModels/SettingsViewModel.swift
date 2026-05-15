@@ -83,6 +83,31 @@ public final class SettingsViewModel {
         }
     }
 
+    /// **Disconnect** — soft revoke of another trusted device's push
+    /// tether. Removes the row at .com so the device stops getting
+    /// alerts; the device's UMK in its Secure Enclave is unchanged.
+    /// Optimistic removal + revert on failure so the UI is responsive
+    /// on flaky networks.
+    ///
+    /// Returns true on success so the caller can surface a toast.
+    @discardableResult
+    public func disconnect(_ device: TrustedDevice) async -> Bool {
+        guard case .loaded(let original) = trustedDevices else { return false }
+        var working = original
+        working.removeAll { $0.tokenId == device.tokenId }
+        trustedDevices = .loaded(working)
+        do {
+            try await server.revokePushToken(tokenId: device.tokenId)
+            // Refresh ETag + verify the row really did disappear.
+            await loadTrustedDevices()
+            return true
+        } catch {
+            // Revert optimistic state so the row reappears.
+            trustedDevices = .loaded(original)
+            return false
+        }
+    }
+
     // Legacy alias — older call sites read .controlDevices. Kept so
     // SettingsScreen + tests build until B5's renames land.
     public var controlDevices: LoadingState<[PairedSessionSummary]> { browserSessions }

@@ -14,6 +14,8 @@ import FlagshipCore
 /// too was redundant.
 public struct SettingsScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @State private var disconnectTarget: TrustedDevice?
+    @State private var disconnectMessage: String?
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
@@ -21,6 +23,7 @@ public struct SettingsScreen: View {
     /// The new "Trusted devices" section. Empty list renders an
     /// explainer; .failed renders an error card.
     let trustedDevices: LoadingState<[TrustedDevice]>
+    var onDisconnectTrustedDevice: (TrustedDevice) async -> Bool = { _ in false }
     let showDeveloper: Bool
     var onAddControlDevice: () -> Void = {}
     var onRevokeDevice: (PairedSessionSummary) -> Void = { _ in }
@@ -39,6 +42,7 @@ public struct SettingsScreen: View {
         showDeveloper: Bool = false,
         onAddControlDevice: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
+        onDisconnectTrustedDevice: @escaping (TrustedDevice) async -> Bool = { _ in false },
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
@@ -50,6 +54,7 @@ public struct SettingsScreen: View {
         self.tier = tier
         self.controlDevices = controlDevices
         self.trustedDevices = trustedDevices
+        self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
         self.showDeveloper = showDeveloper
         self.onAddControlDevice = onAddControlDevice
         self.onRevokeDevice = onRevokeDevice
@@ -84,6 +89,39 @@ public struct SettingsScreen: View {
         }
         .background(c.bg.ignoresSafeArea())
         .refreshable { await onRefresh() }
+        .confirmationDialog(
+            disconnectTarget.map { "Disconnect \($0.label)?" } ?? "Disconnect device?",
+            isPresented: Binding(
+                get: { disconnectTarget != nil },
+                set: { if !$0 { disconnectTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: disconnectTarget
+        ) { target in
+            Button("Disconnect \(target.label)", role: .destructive) {
+                Task {
+                    let success = await onDisconnectTrustedDevice(target)
+                    if !success {
+                        disconnectMessage = "Couldn't disconnect — check your connection and try again."
+                    }
+                    disconnectTarget = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { disconnectTarget = nil }
+        } message: { target in
+            Text("We'll stop sending alerts to \(target.label). It can sign back in with your passkey.")
+        }
+        .alert(
+            "Disconnect failed",
+            isPresented: Binding(
+                get: { disconnectMessage != nil },
+                set: { if !$0 { disconnectMessage = nil } }
+            )
+        ) {
+            Button("OK") { disconnectMessage = nil }
+        } message: {
+            Text(disconnectMessage ?? "")
+        }
     }
 
     private func account(c: FSColors) -> some View {
@@ -158,9 +196,9 @@ public struct SettingsScreen: View {
         }
     }
 
-    /// One row per peer device. Tappable per-row in B6+ when the
-    /// Disconnect / Replace actions land; for B5 the row is
-    /// presentation-only.
+    /// One row per peer device. Carries the Disconnect / Replace
+    /// (B7) actions via a contextual Menu on iOS — feels native
+    /// versus a button stack and keeps the row visually clean.
     private func trustedDeviceRow(_ d: TrustedDevice, c: FSColors) -> some View {
         FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
@@ -181,6 +219,27 @@ public struct SettingsScreen: View {
                     }
                 }
                 Spacer()
+                Menu {
+                    Button(role: .destructive) {
+                        disconnectTarget = d
+                    } label: {
+                        Label("Disconnect", systemImage: "wifi.slash")
+                    }
+                    // Replace lives in B7; the menu entry slot is here
+                    // already so the UX shape doesn't shift between
+                    // commits.
+                    Button {
+                        // intentionally no-op until B7
+                    } label: {
+                        Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(true)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundColor(c.textMuted)
+                        .imageScale(.large)
+                }
+                .accessibilityIdentifier("trusted-device-menu-\(d.tokenPrefix)")
             }
         }
     }

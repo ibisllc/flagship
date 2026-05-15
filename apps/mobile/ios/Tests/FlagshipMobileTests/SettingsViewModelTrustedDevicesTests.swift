@@ -82,6 +82,60 @@ final class SettingsViewModelTrustedDevicesTests: XCTestCase {
         }
     }
 
+    // MARK: - Disconnect (B6)
+
+    func test_disconnect_optimisticallyRemovesRowAndReturnsTrueOnSuccess() async {
+        let server = makeServer()
+        server.devicesByUser["harry"] = [
+            .init(tokenId: "tA", tokenPrefix: "tA", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1),
+            .init(tokenId: "tB", tokenPrefix: "tB", label: "iPad",   platform: "apns", addedAt: 2, lastSeenAt: 2),
+        ]
+        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" })
+        await vm.loadTrustedDevices()
+
+        // Pre-register an artificial Mock push token row so the Mock
+        // revoke has something concrete to drop. (devicesByUser is
+        // separate from registeredPushTokens — the Mock's revoke just
+        // deletes from registeredPushTokens.) We also remove from
+        // devicesByUser so the refresh reflects the change.
+        server.devicesByUser["harry"]?.removeAll { $0.tokenId == "tA" }
+
+        let target = TrustedDevice(tokenId: "tA", tokenPrefix: "tA", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1)
+        let ok = await vm.disconnect(target)
+        XCTAssertTrue(ok)
+        if case .loaded(let devices) = vm.trustedDevices {
+            XCTAssertEqual(devices.map(\.tokenId), ["tB"])
+        } else { XCTFail("expected loaded after disconnect") }
+    }
+
+    func test_disconnect_revertsListOnServerError() async {
+        let server = makeServer()
+        server.devicesByUser["harry"] = [
+            .init(tokenId: "tA", tokenPrefix: "tA", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1),
+        ]
+        let vm = SettingsViewModel(client: makeScreens(), server: server, username: { "harry" })
+        await vm.loadTrustedDevices()
+        // After load, flip shouldFail so disconnect's revoke call errors.
+        server.shouldFail = true
+        let target = TrustedDevice(tokenId: "tA", tokenPrefix: "tA", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1)
+        let ok = await vm.disconnect(target)
+        XCTAssertFalse(ok)
+        // Row should reappear after rollback.
+        if case .loaded(let devices) = vm.trustedDevices {
+            XCTAssertEqual(devices.count, 1)
+        } else { XCTFail("expected list restored") }
+    }
+
+    func test_disconnect_isNoOpWhenListNotLoaded() async {
+        let vm = SettingsViewModel(client: makeScreens(), server: makeServer(), username: { "harry" })
+        // Never load.
+        let target = TrustedDevice(tokenId: "tA", tokenPrefix: "tA", label: "iPhone", platform: "apns", addedAt: 1, lastSeenAt: 1)
+        let ok = await vm.disconnect(target)
+        XCTAssertFalse(ok)
+    }
+
+    // MARK: - Legacy alias
+
     func test_legacyControlDevices_aliasesBrowserSessions() async {
         // Existing UI bits still read .controlDevices; the alias must
         // surface .browserSessions verbatim until rename lands.
