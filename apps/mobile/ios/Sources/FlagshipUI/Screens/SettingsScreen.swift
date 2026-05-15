@@ -17,6 +17,10 @@ public struct SettingsScreen: View {
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
+    /// Peer-class devices on this user's account (push-token holders).
+    /// The new "Trusted devices" section. Empty list renders an
+    /// explainer; .failed renders an error card.
+    let trustedDevices: LoadingState<[TrustedDevice]>
     let showDeveloper: Bool
     var onAddControlDevice: () -> Void = {}
     var onRevokeDevice: (PairedSessionSummary) -> Void = { _ in }
@@ -31,6 +35,7 @@ public struct SettingsScreen: View {
         username: String,
         tier: LoadingState<TierStatusResponse>,
         controlDevices: LoadingState<[PairedSessionSummary]>,
+        trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
         showDeveloper: Bool = false,
         onAddControlDevice: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
@@ -44,6 +49,7 @@ public struct SettingsScreen: View {
         self.username = username
         self.tier = tier
         self.controlDevices = controlDevices
+        self.trustedDevices = trustedDevices
         self.showDeveloper = showDeveloper
         self.onAddControlDevice = onAddControlDevice
         self.onRevokeDevice = onRevokeDevice
@@ -66,6 +72,7 @@ public struct SettingsScreen: View {
 
                 account(c: c)
                 subscription(c: c)
+                trustedDevicesSection(c: c)
                 controlDevicesSection(c: c)
                 links(c: c)
                 signOut(c: c)
@@ -114,6 +121,85 @@ public struct SettingsScreen: View {
                     }
                 }
             }
+        }
+    }
+
+    private func trustedDevicesSection(c: FSColors) -> some View {
+        section("TRUSTED DEVICES", c: c) {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text("Phones and tablets that hold your account keys.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                switch trustedDevices {
+                case .idle, .loading:
+                    ServerCardSkeleton()
+                case .failed(let msg):
+                    ErrorCard(message: msg)
+                case .loaded(let devices):
+                    if devices.isEmpty {
+                        FSCard {
+                            HStack(alignment: .top, spacing: FS.space.s2) {
+                                Image(systemName: "iphone").foregroundColor(c.textMuted)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Just this device").font(FS.font.bodySm()).foregroundColor(c.text)
+                                    Text("Sign in on another phone or tablet to add a trusted device.")
+                                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                                }
+                            }
+                        }
+                    } else {
+                        VStack(spacing: FS.space.s3) {
+                            ForEach(devices) { d in
+                                trustedDeviceRow(d, c: c)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// One row per peer device. Tappable per-row in B6+ when the
+    /// Disconnect / Replace actions land; for B5 the row is
+    /// presentation-only.
+    private func trustedDeviceRow(_ d: TrustedDevice, c: FSColors) -> some View {
+        FSCard {
+            HStack(alignment: .top, spacing: FS.space.s3) {
+                Image(systemName: platformIcon(d.platform))
+                    .foregroundColor(c.primary)
+                    .imageScale(.large)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(d.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                    HStack(spacing: 4) {
+                        Text(platformDisplay(d.platform))
+                        Text("·").foregroundColor(c.textMuted)
+                        Text("added \(relative(ms: d.addedAt))")
+                    }
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    if d.lastSeenAt > d.addedAt {
+                        Text("last seen \(relative(ms: d.lastSeenAt))")
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func platformIcon(_ raw: String) -> String {
+        switch raw {
+        case "apns":    return "iphone"
+        case "fcm":     return "antenna.radiowaves.left.and.right"
+        case "webpush": return "globe"
+        default:        return "questionmark.circle"
+        }
+    }
+
+    private func platformDisplay(_ raw: String) -> String {
+        switch raw {
+        case "apns":    return "iPhone / iPad"
+        case "fcm":     return "Android"
+        case "webpush": return "Web"
+        default:        return raw
         }
     }
 

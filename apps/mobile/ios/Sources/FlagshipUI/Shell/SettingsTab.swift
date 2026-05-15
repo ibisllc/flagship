@@ -5,6 +5,7 @@ import FlagshipAPI
 
 public struct SettingsTab: View {
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
     @Environment(\.pushRegistrar) private var pushRegistrar
     @Environment(AppState.self) private var app
     @Environment(DeveloperSettings.self) private var dev
@@ -32,6 +33,7 @@ public struct SettingsTab: View {
                     username: app.currentUser ?? "",
                     tier: vm.tier,
                     controlDevices: vm.controlDevices,
+                    trustedDevices: vm.trustedDevices,
                     showDeveloper: dev.unlocked,
                     onAddControlDevice: { path.append(.addControlDevice) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
@@ -52,7 +54,13 @@ public struct SettingsTab: View {
             }
         }
         .task {
-            if vm == nil { vm = SettingsViewModel(client: client) }
+            if vm == nil {
+                vm = SettingsViewModel(
+                    client: client,
+                    server: server,
+                    username: { [app] in app.currentUser }
+                )
+            }
             if case .idle = vm?.tier { await vm?.load() }
         }
     }

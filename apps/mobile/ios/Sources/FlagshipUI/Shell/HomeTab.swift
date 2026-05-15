@@ -375,6 +375,8 @@ struct PairedSessionRow: View {
 
 struct TierStatusContainer: View {
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
     @State private var vm: SettingsViewModel?
 
     var body: some View {
@@ -396,7 +398,13 @@ struct TierStatusContainer: View {
         .navigationTitle("Tier & usage")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if vm == nil { vm = SettingsViewModel(client: client) }
+            if vm == nil {
+                vm = SettingsViewModel(
+                    client: client,
+                    server: server,
+                    username: { [app] in app.currentUser }
+                )
+            }
             await vm?.load()
         }
     }
