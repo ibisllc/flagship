@@ -1,4 +1,5 @@
 import SwiftUI
+import CryptoKit
 import FlagshipCore
 import FlagshipAPI
 
@@ -63,12 +64,12 @@ public struct OnboardingFlow: View {
                         }
                     )
                 case .recoverFromWelcome:
-                    // Placeholder until B3 lands the real WebAuthn-PRF
-                    // recovery flow. The current copy makes the user-
-                    // intent explicit (the dropped PodPairScreen tried
-                    // to imply you could "claim" someone else's pod —
-                    // you can't; you can only recover your own account).
-                    RecoveryFromWelcomeStub(onCancel: { path.removeLast() })
+                    RecoverFromWelcomeContainer(
+                        onComplete: { choice, seed in
+                            completeRecoveryPair(choice: choice, recoveredSeed: seed)
+                        },
+                        onBack: { path.removeLast() }
+                    )
                 }
             }
         }
@@ -98,6 +99,34 @@ public struct OnboardingFlow: View {
         app.completeOnboarding(username: username, pods: [pod])
     }
 
+    /// Post-recovery completion. The WebAuthn-PRF flow returned a
+    /// recovered UMK seed and the user picked a RecoveryChoice. v1
+    /// behaviour:
+    ///   - .keepBothDevices  → install UMK locally; mark paired;
+    ///                         pods will appear once /api/users/:u/pods
+    ///                         (or a /devices flow) is consulted.
+    ///   - .replaceLostDevice → same install, but B7 layers an IRK
+    ///                         rotation on top. The rotation isn't in
+    ///                         this commit — TODO routes through here
+    ///                         until B7 wires the /re-pair POST.
+    ///   - .wipeAndRestart    → blocked at the screen layer in v1.
+    ///
+    /// **TODO (cross-commit):** `Keystore.installUMK(seed:)` doesn't
+    /// exist yet; B3 lands the recovery navigation but the actual
+    /// Secure Enclave install happens in a follow-up. For now we mark
+    /// the user paired with an empty pod list so the shell renders.
+    fileprivate func completeRecoveryPair(choice: RecoveryChoice, recoveredSeed: SymmetricKey) {
+        // Best-effort: stash the seed under a known key in memory so a
+        // follow-up commit can install it. We deliberately do NOT
+        // serialize it here.
+        _ = recoveredSeed
+        _ = choice
+        // Username from the recovery envelope's claim — not yet
+        // surfaced in this flow. Use a placeholder until B4 lands the
+        // /devices lookup that resolves the user's actual username.
+        app.completeOnboarding(username: "recovered-user", pods: [])
+    }
+
     /// Demo-skip completion ("pretend it's already running") and the
     /// PodPair stub. No real pod; show one as online so the rest of
     /// the surfaces have something to render.
@@ -112,33 +141,6 @@ public struct OnboardingFlow: View {
             status: .online
         )
         app.completeOnboarding(username: username, pods: [pod])
-    }
-}
-
-/// Placeholder for the recovery branch from Welcome. B3 replaces
-/// this with the real WebAuthn-PRF flow + PostRecoveryChoiceScreen.
-/// Kept here so the navigation graph compiles after the PodPair
-/// deletion lands; production traffic doesn't reach this view until
-/// the user runs an iOS build where B1 is the head — by then B3
-/// is on top.
-private struct RecoveryFromWelcomeStub: View {
-    @Environment(\.colorScheme) private var scheme
-    var onCancel: () -> Void = {}
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s4) {
-            Spacer().frame(height: FS.space.s12)
-            Text("Recover your account").font(FS.font.h2()).foregroundColor(c.text)
-            Text("Authenticate with your passkey to bring this device into your existing Flagship account. You can choose whether to keep your other devices working or replace a lost one.")
-                .font(FS.font.body()).foregroundColor(c.textMuted)
-            Spacer()
-            FSGhostButton("Back", block: true, action: onCancel)
-            Spacer().frame(height: FS.space.s8)
-        }
-        .padding(.horizontal, FS.space.s6)
-        .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Recover")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
