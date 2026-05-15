@@ -49,10 +49,22 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             BuildCodeScreen(nav)
         }
         composable("recover") {
-            // Phase C3 wires the real WebAuthn-PRF + PostRecoveryChoice
-            // here. C1 lays the placeholder so the navigation graph
-            // compiles + the Welcome CTA has somewhere to land.
-            RecoverFromWelcomeStub(onBack = { nav.popBackStack() })
+            RecoverFromWelcomeContainer(
+                onComplete = { choice, _seed ->
+                    // v1: mark paired with an empty pod list — a
+                    // follow-up commit alongside C4's /devices client
+                    // resolves the actual username + pod set. The
+                    // recovered seed isn't persisted yet
+                    // (Keystore.installUMK lands separately, mirror
+                    // of the iOS TODO).
+                    val user = "recovered-user"
+                    app.completeOnboarding(username = user, pods = emptyList())
+                    // Replace handling: the IRK rotation lands in C7.
+                    @Suppress("UNUSED_EXPRESSION") choice
+                    onFinished()
+                },
+                onBack = { nav.popBackStack() },
+            )
         }
         composable("done") {
             val user = app.currentUser.value ?: "you"
@@ -73,31 +85,3 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     }
 }
 
-/**
- * Placeholder for the WebAuthn-PRF recovery branch. C3 replaces this
- * with the real CredentialManager flow + PostRecoveryChoice screen.
- * Kept here so the navigation graph compiles after the PodPair
- * deletion lands without dangling references.
- */
-@Composable
-private fun RecoverFromWelcomeStub(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = FS.space.s6, vertical = FS.space.s12),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
-    ) {
-        Text(
-            text = "Recover your account",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            text = "Authenticate with your passkey to bring this device into your existing Flagship account. You can choose whether to keep your other devices working or replace a lost one.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-        )
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "Back", onClick = onBack, block = true)
-    }
-}
