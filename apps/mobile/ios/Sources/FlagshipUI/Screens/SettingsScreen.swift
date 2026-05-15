@@ -16,6 +16,11 @@ public struct SettingsScreen: View {
     @Environment(\.colorScheme) private var scheme
     @State private var disconnectTarget: TrustedDevice?
     @State private var disconnectMessage: String?
+    /// Drives the v1 "Wipe & restart — coming soon" info sheet. The
+    /// menu entry stays visible (rather than hidden) so users
+    /// understand the option exists and is being designed; tapping
+    /// it opens an explainer instead of running the ceremony.
+    @State private var showWipeComingSoon = false
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
@@ -121,6 +126,9 @@ public struct SettingsScreen: View {
             Button("OK") { disconnectMessage = nil }
         } message: {
             Text(disconnectMessage ?? "")
+        }
+        .sheet(isPresented: $showWipeComingSoon) {
+            WipeComingSoonSheet { showWipeComingSoon = false }
         }
     }
 
@@ -234,6 +242,17 @@ public struct SettingsScreen: View {
                         Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
                     }
                     .disabled(true)
+                    Divider()
+                    // Wipe & restart lives behind a v1.1 flag (E2/E3).
+                    // The menu entry is visible-but-disabled in v1 so
+                    // the user can see the option exists; tapping it
+                    // opens the "Coming soon" explainer rather than
+                    // running the ceremony.
+                    Button(role: .destructive) {
+                        showWipeComingSoon = true
+                    } label: {
+                        Label("Wipe & restart…", systemImage: "trash")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundColor(c.textMuted)
@@ -386,5 +405,40 @@ public struct SettingsScreen: View {
         let fmt = RelativeDateTimeFormatter()
         fmt.unitsStyle = .abbreviated
         return fmt.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+/// "Coming soon" explainer for the v1 Wipe & restart entry. Visible
+/// (rather than hidden) so users can see the v1.1 option exists and
+/// is being designed. The actual ceremony lands as E2/E3 on iOS.
+struct WipeComingSoonSheet: View {
+    @Environment(\.colorScheme) private var scheme
+    let onClose: () -> Void
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            HStack {
+                Image(systemName: "trash.circle.fill")
+                    .imageScale(.large)
+                    .foregroundColor(c.danger)
+                Text("Wipe & restart")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(c.text)
+                Spacer()
+            }
+            Text("Coming in v1.1.")
+                .font(FS.font.bodySm())
+                .foregroundColor(c.textMuted)
+            Text("This rotates your account's identity and recovery passkey in one shot — every other device gets disconnected and you re-pair each one fresh. Pods stay running, apps stay installed.")
+                .foregroundColor(c.text)
+            Text("For v1 you can still Disconnect a single device, and Replace device will land alongside the Keystore-rotation primitives. The full Wipe ceremony needs the new-IRK + new-UMK + new-passkey generation paths exercised end-to-end before we ship it.")
+                .font(FS.font.bodySm())
+                .foregroundColor(c.textMuted)
+            FSPrimaryButton("Got it", block: true, action: onClose)
+        }
+        .padding(FS.space.s6)
+        .background(c.bg)
+        .presentationDetents([.medium])
     }
 }
