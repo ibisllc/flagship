@@ -8,6 +8,7 @@ import { InMemoryStorage } from "@flagship/storage";
 import {
   handleAppRename,
   handleGetAppLinks,
+  handleListAppAliases,
 } from "../src/appRename.js";
 
 const USER = "alice";
@@ -289,6 +290,43 @@ describe("handleGetAppLinks", () => {
     // And the row is persisted so a second call returns the SAME url.
     const res2 = await handleGetAppLinks(makeDeps(s), USER, APP);
     expect((res2.body as { shortUrl: string }).shortUrl).toBe(b.shortUrl);
+  });
+
+  it("rejects malformed username on the alias-list endpoint", async () => {
+    const s = new InMemoryStorage();
+    const res = await handleListAppAliases({ userAppAliases: s.userAppAliases }, "BAD..NAME");
+    expect(res.status).toBe(400);
+  });
+
+  it("listAppAliases returns flat sorted rows for the daemon's reconciler", async () => {
+    const s = new InMemoryStorage();
+    await s.userAppAliases.upsert({
+      username: USER,
+      appId: "zzz--later",
+      displayLabel: "later",
+      createdAt: 2,
+      updatedAt: 2,
+    });
+    await s.userAppAliases.upsert({
+      username: USER,
+      appId: "aaa--first",
+      displayLabel: "first",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    // Different user shouldn't pollute the result.
+    await s.userAppAliases.upsert({
+      username: "bob",
+      appId: "x--y",
+      displayLabel: "y",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const res = await handleListAppAliases({ userAppAliases: s.userAppAliases }, USER);
+    expect(res.status).toBe(200);
+    const b = res.body as { aliases: Array<{ appId: string; displayLabel: string; updatedAt: number }> };
+    expect(b.aliases.map((a) => a.appId)).toEqual(["aaa--first", "zzz--later"]);
+    expect(b.aliases[0]).toEqual({ appId: "aaa--first", displayLabel: "first", updatedAt: 1 });
   });
 
   it("surfaces the rename-minted short link (no re-mint)", async () => {

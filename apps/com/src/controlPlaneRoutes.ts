@@ -36,6 +36,7 @@ import {
   handleWipeRestart,
   handleAppRename,
   handleGetAppLinks,
+  handleListAppAliases,
   handleVoiciShorten,
   handleRevokeAutoUnlockLease,
   handleDns01Delete,
@@ -190,6 +191,7 @@ const ROUTE_RE = {
   WIPE_RESTART: /^\/api\/users\/([^/]+)\/wipe-restart$/,
   APP_RENAME: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/rename$/,
   APP_LINKS: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/links$/,
+  APP_ALIASES: /^\/api\/users\/([^/]+)\/apps\/aliases$/,
   VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
@@ -782,6 +784,14 @@ export async function tryControlPlane(
       await handleVoiciShorten(
         { usernames: storage.usernames, voiciLinks: storage.voiciLinks },
         await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.APP_ALIASES))) {
+    return finish(
+      await handleListAppAliases(
+        { userAppAliases: storage.userAppAliases },
+        decodeURIComponent(m[1]!),
       ),
     );
   }

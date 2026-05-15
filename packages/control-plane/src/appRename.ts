@@ -303,6 +303,35 @@ export async function handleGetAppLinks(
   });
 }
 
+/** GET /api/users/:u/apps/aliases — flat map of every alias the
+ *  user has set. Public read (DNS-label data is already in the open
+ *  via the wildcard cert + .services zone). The user's daemon polls
+ *  this periodically and reconciles its in-memory urlLabel map +
+ *  reverse-proxy config (Caddy on the box).
+ *
+ *  Returns rows in the shape the daemon's AliasReconciler expects:
+ *  `{ aliases: [{ appId, displayLabel, updatedAt }, ...] }`. updatedAt
+ *  is a unix-ms timestamp so the daemon can short-circuit when
+ *  nothing has moved since its last reconcile tick. */
+export async function handleListAppAliases(
+  deps: Pick<AppRenameDeps, "userAppAliases">,
+  username: string,
+): Promise<HandlerResponseWithHeaders> {
+  const u = username.toLowerCase();
+  if (!USERNAME_RE.test(u)) return malformed("malformed username");
+  const rows = await deps.userAppAliases.listForUser(u);
+  return ok({
+    aliases: rows
+      .map((r) => ({
+        appId: r.appId,
+        displayLabel: r.displayLabel,
+        updatedAt: r.updatedAt,
+      }))
+      // Stable ordering for cache-friendliness on the daemon side.
+      .sort((a, b) => a.appId.localeCompare(b.appId)),
+  });
+}
+
 /** What the URL stem would be if no alias has been set. Mirrors the
  *  daemon's `AppSummary.urlLabel` derivation: slug if it's unique,
  *  else slug-creator. We can't know without listing every install,

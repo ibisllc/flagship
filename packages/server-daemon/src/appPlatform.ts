@@ -430,7 +430,58 @@ export class AppPlatform {
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());
     return { ok: true };
   }
+
+  /**
+   * V5 — apply a user-chosen URL stem alias to an already-installed
+   * app. The internal `appId` is preserved; only `urlLabel` flips +
+   * the reverse-proxy index is re-keyed under the new label.
+   *
+   * Returns `{ ok: false, reason }` when:
+   *   - the appId isn't installed (e.g., daemon hasn't pulled it yet)
+   *   - the new label is malformed
+   *   - the new label is already used by another app on this box
+   *
+   * Idempotent: applying the same label twice is a no-op. The
+   * AliasReconciler relies on this — on each tick it walks .com's
+   * authoritative alias map and calls setAlias for every entry,
+   * trusting setAlias to do the right thing whether the daemon was
+   * already in sync or not.
+   */
+  setAlias(appId: string, newLabel: string): SetAliasResult {
+    const app = this.apps.get(appId);
+    if (!app) return { ok: false, reason: "unknown appId" };
+    const lower = newLabel.toLowerCase();
+    if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(lower)) {
+      return { ok: false, reason: "invalid label (DNS-safe; 1..40 chars)" };
+    }
+    if (app.urlLabel.toLowerCase() === lower) {
+      return { ok: true, unchanged: true };
+    }
+    // Collision check — another installed app already owns this
+    // label on this box.
+    const existing = this.byUrlLabel.get(lower);
+    if (existing && existing.appId !== appId) {
+      return {
+        ok: false,
+        reason: `URL stem '${lower}' is already used by ${existing.appId}`,
+      };
+    }
+    const oldLabel = app.urlLabel.toLowerCase();
+    this.byUrlLabel.delete(oldLabel);
+    const updated: InstalledApp = { ...app, urlLabel: lower };
+    this.apps.set(appId, updated);
+    this.byUrlLabel.set(lower, updated);
+    // Domain gate, when present, is keyed by appId — no rebind
+    // needed there. Caddy / Fastify routing is driven off byLabel(),
+    // so the next inbound request to the new label will land in the
+    // updated entry.
+    return { ok: true, oldLabel, newLabel: lower };
+  }
 }
+
+export type SetAliasResult =
+  | { ok: true; unchanged?: boolean; oldLabel?: string; newLabel?: string }
+  | { ok: false; reason: string };
 
 export type InstallResult =
   | { ok: true; app: InstalledApp }

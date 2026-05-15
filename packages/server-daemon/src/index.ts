@@ -1051,3 +1051,7 @@ export type {
 } from "./sibling/siblingClient.js";
 export { acceptSyncUpgrade } from "./sibling/siblingServer.js";
 export type { AcceptSyncUpgradeArgs } from "./sibling/siblingServer.js";
+
+// V5 — voi.ci-aware alias reconciler.
+export { AliasReconciler } from "./aliasReconciler.js";
+export type { AliasReconcilerDeps } from "./aliasReconciler.js";
