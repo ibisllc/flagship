@@ -51,11 +51,8 @@ public struct AppsTab: View {
             if let vm {
                 ScrollView {
                     VStack(alignment: .leading, spacing: FS.space.s4) {
-                        header(c: c)
-                        HStack(spacing: FS.space.s2) {
-                            searchBar(vm: vm)
-                            serverFilterMenu(vm: vm, c: c)
-                        }
+                        header(c: c, vm: vm)
+                        searchBar(vm: vm)
                         emptyOrList(vm: vm, c: c)
                         marketplaceCard(c: c)
                         Spacer().frame(height: FS.space.s12)
@@ -109,19 +106,27 @@ public struct AppsTab: View {
     }
 
     @ViewBuilder
-    private func header(c: FSColors) -> some View {
+    private func header(c: FSColors, vm: AppsListViewModel) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             HStack {
                 Text("Apps")
                     .font(.system(size: 32, weight: .medium))
                     .foregroundColor(c.text)
                 Spacer()
+                // V8 — repurpose the existing top-right PodSwitcher on
+                // the Apps tab as the server filter. `currentPodId`
+                // tracks vm.serverFilter (nil = "All servers"); picking
+                // a pod sets the filter rather than mutating the
+                // global AppState pod context. The "All servers" entry
+                // sits at the top of the menu.
                 if app.pods.count > 1 {
                     PodSwitcher(
                         pods: app.pods,
-                        currentPodId: app.currentPodId,
+                        currentPodId: vm.serverFilter,
                         leaderPodId: app.leaderPodId,
-                        onPick: { pod in app.setCurrentPod(pod.podId) }
+                        onPick: { pod in vm.serverFilter = pod.podId },
+                        allLabel: "All servers",
+                        onPickAll: { vm.serverFilter = nil }
                     )
                 }
             }
@@ -141,57 +146,6 @@ public struct AppsTab: View {
     private func searchBar(vm: AppsListViewModel) -> some View {
         @Bindable var bindable = vm
         FSField(value: $bindable.searchQuery, label: "", placeholder: "Search apps")
-    }
-
-    /// V7 — server filter Menu. Default "All servers"; one entry per
-    /// pod the user owns. Hidden when there's only one pod (the
-    /// filter would degenerate to the same list either way) — but
-    /// still rendered as a single-entry menu so the gesture is
-    /// discoverable.
-    @ViewBuilder
-    private func serverFilterMenu(vm: AppsListViewModel, c: FSColors) -> some View {
-        Menu {
-            Button {
-                vm.serverFilter = nil
-            } label: {
-                Label("All servers", systemImage: vm.serverFilter == nil ? "checkmark" : "")
-            }
-            if !vm.availablePods.isEmpty {
-                Divider()
-                ForEach(vm.availablePods, id: \.podId) { pod in
-                    Button {
-                        vm.serverFilter = pod.podId
-                    } label: {
-                        Label(pod.name, systemImage: vm.serverFilter == pod.podId ? "checkmark" : "")
-                    }
-                }
-            }
-        } label: {
-            let selectedLabel: String = {
-                guard let id = vm.serverFilter,
-                      let p = vm.availablePods.first(where: { $0.podId == id })
-                else { return "All servers" }
-                return p.name
-            }()
-            HStack(spacing: 4) {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .imageScale(.small)
-                Text(selectedLabel)
-                    .font(.system(size: 13, weight: .medium))
-                Image(systemName: "chevron.down")
-                    .imageScale(.small)
-            }
-            .foregroundColor(c.text)
-            .padding(.horizontal, FS.space.s3)
-            .padding(.vertical, FS.space.s2)
-            .background(c.surface)
-            .overlay(
-                RoundedRectangle(cornerRadius: FS.radius.sm)
-                    .stroke(c.border, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
-        }
-        .accessibilityIdentifier("apps-server-filter")
     }
 
     @ViewBuilder
