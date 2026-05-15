@@ -83,17 +83,22 @@ public struct AppDetailScreen: View {
                 // package handle: `scratchpad` if the user is the
                 // creator, `scratchpad-meta` / `scratchpad-harry`
                 // otherwise.
-                // V7 — `ver:` + `id:` share the same label style with
-                // a middle dot between them. The middle-dot is the
-                // section-separator convention we already use across
-                // the design system (Recent pods, "running · v0.1.0",
-                // etc.) so this stays visually coherent.
+                // V9 — `id:` is the IMMUTABLE composite package id
+                // (`<creator>--<slug>`, double-dash), NOT the URL
+                // label. urlLabel rotates whenever the user hits
+                // Replace stem; appId stays put for the life of the
+                // package — it's what the manifest, the membership
+                // store, R2 backups, and the update-pack pull state
+                // are all keyed on. Showing urlLabel here (V6 bug)
+                // was wrong because a rename would silently change
+                // the "id" the user sees, when actually the only
+                // thing that changed is the user-facing URL stem.
                 HStack(spacing: FS.space.s2) {
                     if let v = d.version {
                         Text("ver: \(v)").font(FS.font.caption()).foregroundColor(c.textMuted)
                         Text("·").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
-                    Text("id: \(d.urlLabel)")
+                    Text("id: \(d.appId)")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                         .accessibilityIdentifier("app-detail-package-id")
