@@ -1,5 +1,8 @@
 package com.flagshipserver.app.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,8 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.ui.components.FSCard
@@ -90,6 +95,7 @@ fun AppsListScreen(nav: NavController) {
 
 @Composable
 private fun AppRow(app: AppSummary, onClick: () -> Unit) {
+    val ctx = LocalContext.current
     FSCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -125,33 +131,37 @@ private fun AppRow(app: AppSummary, onClick: () -> Unit) {
                     FSPill(label = "Siblings on", kind = FSPillKind.Provisioning)
                 }
             }
-            // V3 — URLs row. Short URL on the left (semibold), canonical
-            // on the right (muted, truncated). Placeholder when the
-            // server fetch hasn't landed yet so the row's vertical
-            // rhythm stays stable.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!app.shortUrl.isNullOrEmpty()) {
-                    Text(
-                        text = "🔗 ${stripScheme(app.shortUrl)}",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-                        modifier = Modifier.padding(end = FS.space.s2),
-                    )
-                } else {
-                    Text(
-                        text = "🔗 voi.ci/…",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
-                        modifier = Modifier.padding(end = FS.space.s2),
-                    )
+            // V7 — short link on its own line (semibold, no icon) with
+            // a copy control; canonical BELOW it, full-width, single-
+            // line truncate. The section the row sits in already says
+            // what these are, so no leading glyphs.
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!app.shortUrl.isNullOrEmpty()) {
+                        Text(
+                            text = stripScheme(app.shortUrl),
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = FS.space.s2),
+                        )
+                        FSGhostButton(label = "Copy", onClick = { copyToClipboard(ctx, app.shortUrl) })
+                    } else {
+                        Text(
+                            text = "voi.ci/…",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 12.sp),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
                 }
-                Spacer(Modifier.weight(1f))
                 if (!app.canonicalUrl.isNullOrEmpty()) {
                     Text(
                         text = stripScheme(app.canonicalUrl),
                         color = FS.colors.textMuted,
                         style = TextStyle(fontSize = 11.sp),
                         maxLines = 1,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -161,6 +171,11 @@ private fun AppRow(app: AppSummary, onClick: () -> Unit) {
 
 private fun stripScheme(s: String): String =
     s.removePrefix("https://").removePrefix("http://")
+
+private fun copyToClipboard(context: Context, text: String) {
+    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    cm?.setPrimaryClip(ClipData.newPlainText("flagship", text))
+}
 
 private fun sampleApps(): List<AppSummary> = emptyList()
 

@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -118,6 +119,19 @@ fun AppDetailScreen(nav: NavController, appId: String) {
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
+        // `id:` is the IMMUTABLE composite package id (`<creator>-<slug>`,
+        // single dash). It never changes — Replace only rotates the
+        // user-facing URL stem, not this. `ver:` rides on the same line
+        // with a middle-dot separator (design-system convention).
+        Text(
+            text = buildString {
+                app.version?.let { append("ver: ").append(it).append("  ·  ") }
+                append("id: ").append(app.appId)
+            },
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+            modifier = Modifier.padding(top = FS.space.s1),
+        )
 
         Spacer(Modifier.height(FS.space.s8))
 
@@ -201,14 +215,23 @@ fun AppDetailScreen(nav: NavController, appId: String) {
         Spacer(Modifier.height(FS.space.s6))
 
         // ── V3 — WEB DOMAINS section (shared space; replaces tabs).
+        // V6 — the INDIVIDUAL INSTANCES list reflects the pods the user
+        // has ticked in "Where should it run?" above, not .com's view.
+        val selectedPods = pods.filter {
+            policy.allCurrentAndFuture || policy.specificPods.contains(it.podId)
+        }
         WebDomainsSection(
             fallbackLabel = app.name.lowercase().replace(" ", "-"),
             links = appLinks,
+            selectedPods = selectedPods,
             onReplaceTap = {
                 replaceDraft = appLinks?.displayLabel ?: app.name.lowercase().replace(" ", "-")
                 showReplaceDialog = true
             },
         )
+
+        Spacer(Modifier.height(FS.space.s3))
+        CustomDomainsSection()
 
         if (showReplaceDialog) {
             ReplaceStemDialog(
@@ -284,6 +307,7 @@ private fun sampleApp(appId: String) = AppDetail(
     appId = appId,
     name = "Notes",
     creator = "alice",
+    version = "0.1.0",
     siblingsEnabled = false,
     policy = InstallPolicy(specificPods = setOf("home"), allCurrentAndFuture = false),
 )
@@ -310,8 +334,10 @@ private fun sampleUrls() = listOf(
 private fun WebDomainsSection(
     fallbackLabel: String,
     links: AppLinksResponse?,
+    selectedPods: List<PodSummary>,
     onReplaceTap: () -> Unit,
 ) {
+    val stem = links?.displayLabel ?: fallbackLabel
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = "WEB DOMAINS",
@@ -342,15 +368,75 @@ private fun WebDomainsSection(
             HorizontalRule()
 
             UrlGroupLabel("CANONICAL (SHARED BY ALL INSTANCES)")
-            UrlRowNormal(url = links?.canonicalUrl ?: "https://$fallbackLabel.flagship.services")
+            UrlRowNormal(url = links?.canonicalUrl ?: "https://$stem.flagship.services")
 
-            if (!links?.instances.isNullOrEmpty()) {
+            if (selectedPods.isNotEmpty()) {
                 HorizontalRule()
                 UrlGroupLabel("INDIVIDUAL INSTANCES")
-                links!!.instances.forEach { inst ->
-                    UrlRowMuted(url = inst.url)
+                selectedPods.forEach { pod ->
+                    UrlRowMuted(url = "https://$stem.${pod.fqdn}")
                 }
             }
+        }
+    }
+}
+
+/** V7 — "Add a custom domain" affordance, kept visible under WEB
+ *  DOMAINS so users don't forget custom domains are possible. Mirrors
+ *  the iOS box: a field + Add, each added domain on its own card with
+ *  a remove control + the DNS hint. The verify-DNS round trip is a
+ *  TODO on this surface (consistent with Save/Claim being stubbed). */
+@Composable
+private fun CustomDomainsSection() {
+    val domains = remember { mutableStateListOf<String>() }
+    var draft by remember { mutableStateOf("") }
+    if (domains.isNotEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            domains.forEach { d ->
+                FSCard(padding = PaddingValues(FS.space.s4)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = d,
+                            color = FS.colors.text,
+                            style = TextStyle(fontSize = 14.sp),
+                            modifier = Modifier.weight(1f),
+                        )
+                        FSGhostButton(label = "Remove", onClick = { domains.remove(d) })
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(FS.space.s2))
+    }
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                text = "Add a custom domain",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    label = { Text("app.mydomain.com") },
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.padding(start = FS.space.s2))
+                FSGhostButton(label = "Add", onClick = {
+                    val v = draft.trim().lowercase()
+                    if (v.isNotEmpty() && !domains.contains(v)) {
+                        domains.add(v)
+                        draft = ""
+                    }
+                })
+            }
+            Text(
+                text = "Custom domains need a DNS CNAME to your pod. Setup hints appear after you add.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 11.sp),
+            )
         }
     }
 }
@@ -378,9 +464,9 @@ private fun HorizontalRule() {
 @Composable
 private fun UrlRowProminent(url: String) {
     val ctx = LocalContext.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.Top) {
         Text(
-            text = stripScheme(url),
+            text = wrapAtDots(stripScheme(url)),
             color = FS.colors.text,
             style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
             modifier = Modifier.weight(1f),
@@ -392,9 +478,9 @@ private fun UrlRowProminent(url: String) {
 @Composable
 private fun UrlRowNormal(url: String) {
     val ctx = LocalContext.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.Top) {
         Text(
-            text = stripScheme(url),
+            text = wrapAtDots(stripScheme(url)),
             color = FS.colors.text,
             style = TextStyle(fontSize = 14.sp),
             modifier = Modifier.weight(1f),
@@ -406,12 +492,17 @@ private fun UrlRowNormal(url: String) {
 @Composable
 private fun UrlRowMuted(url: String) {
     Text(
-        text = stripScheme(url),
+        text = wrapAtDots(stripScheme(url)),
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 13.sp),
         modifier = Modifier.padding(start = FS.space.s2),
     )
 }
+
+// Insert a zero-width space after each dot so an FQDN wraps between
+// segments instead of mid-label. The clipboard path uses the raw url
+// (no ZWSP) so a paste is still clean — mirrors iOS wrapAtDots.
+private fun wrapAtDots(s: String): String = s.replace(".", ".\u200B")
 
 @Composable
 // Mirrors the Worker's DNS_LABEL_RE in appRename.ts. Keep in sync —
@@ -491,6 +582,7 @@ data class AppDetail(
     val appId: String,
     val name: String,
     val creator: String,
+    val version: String?,
     val siblingsEnabled: Boolean,
     val policy: InstallPolicy,
 )
