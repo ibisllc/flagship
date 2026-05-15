@@ -443,8 +443,24 @@ public struct AppDetailScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 sectionLabel("SET CUSTOM DOMAIN", c: c)
-                HStack(spacing: FS.space.s2) {
-                    FSField(value: $vm.customDomainDraft, label: "", placeholder: "www.mydomain.com")
+                // Inline input (not FSField) so there's no empty label
+                // row reserving height — that's what made the Add
+                // button sit a few px above the box. Both are h=40 and
+                // center-aligned, so they line up exactly.
+                HStack(alignment: .center, spacing: FS.space.s2) {
+                    TextField("www.mydomain.com", text: $vm.customDomainDraft)
+                        .font(FS.font.body())
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        .padding(.horizontal, 14)
+                        .frame(height: 40)
+                        .background(c.surfaceSunken)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: FS.radius.sm)
+                                .stroke(c.border, lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
                     FSPrimaryButton("Add", block: false) {
                         Task { await vm.submitCustomDomain(rootDomain: customDomainRoot) }
                     }
