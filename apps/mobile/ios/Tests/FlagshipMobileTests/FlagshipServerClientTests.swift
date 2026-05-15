@@ -96,12 +96,14 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertEqual(r.reason, "already claimed")
     }
 
-    func test_usernameAvailable_acceptsHyphenatedRFC1035() async throws {
-        // Worker's labels.ts allows /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/ —
-        // hyphens are legal mid-label. iOS Mock must agree.
+    func test_usernameAvailable_rejectsHyphen() async throws {
+        // Usernames are hyphen-free so appId `<creator>-<slug>` parses
+        // unambiguously. Worker's labels.ts USERNAME_RE is
+        // /^[a-z0-9]{1,63}$/ — the iOS Mock must agree.
         let c = makeClient()
         let r = try await c.usernameAvailable("play-q2")
-        XCTAssertTrue(r.available)
+        XCTAssertFalse(r.available)
+        XCTAssertTrue((r.reason ?? "").lowercased().contains("hyphen"))
     }
 
     func test_usernameAvailable_rejectsLeadingOrTrailingHyphen() async throws {

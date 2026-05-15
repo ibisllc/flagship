@@ -21,13 +21,17 @@ final class MockScreensClientTests: XCTestCase {
     func test_appsList_returnsKnownApps() async throws {
         let c = makeClient()
         let r = try await c.appsList()
-        XCTAssertEqual(r.apps.map(\.appId).sorted(), ["pad", "plants", "wiki"])
+        // appId is the immutable composite `<creator>-<slug>`.
+        XCTAssertEqual(
+            r.apps.map(\.appId).sorted(),
+            ["harry-plants", "harry-wiki", "trent-scratchpad"]
+        )
     }
 
     func test_appDetail_returnsRequestedApp() async throws {
         let c = makeClient()
-        let r = try await c.appDetail(appId: "plants")
-        XCTAssertEqual(r.app.appId, "plants")
+        let r = try await c.appDetail(appId: "harry-plants")
+        XCTAssertEqual(r.app.appId, "harry-plants")
         XCTAssertFalse(r.recentLogs.isEmpty)
     }
 

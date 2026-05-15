@@ -90,12 +90,14 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         XCTAssertTrue(vm.status.allowsContinue)
     }
 
-    func test_hyphenatedUsername_letWorkerDecide() async {
-        // Worker is authoritative — we don't pre-regex against
-        // a stricter local pattern. Mirrors Android.
+    func test_hyphenatedUsername_rejected() async {
+        // Usernames are hyphen-free now (so appId `<creator>-<slug>`
+        // parses unambiguously). A hyphenated handle is invalid.
         let vm = makeViewModel(makeServer())
         await vm.evaluate("play-q2")
-        XCTAssertEqual(vm.status, .available)
+        if case .invalid = vm.status {} else {
+            XCTFail("expected invalid status, got \(vm.status)")
+        }
     }
 
     func test_workerInvalidReason_surfaced_asIs() async {
@@ -105,7 +107,7 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         let vm = makeViewModel(makeServer())
         await vm.evaluate("-leading-hyphen")
         if case .invalid(let reason) = vm.status {
-            XCTAssertTrue(reason.contains("RFC 1035"), "expected RFC-1035 reason, got: \(reason)")
+            XCTAssertTrue(reason.lowercased().contains("hyphen"), "expected a no-hyphens reason, got: \(reason)")
         } else {
             XCTFail("expected invalid status, got \(vm.status)")
         }
