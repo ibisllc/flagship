@@ -213,6 +213,7 @@ fun AppDetailScreen(nav: NavController, appId: String) {
         if (showReplaceDialog) {
             ReplaceStemDialog(
                 draft = replaceDraft,
+                currentStem = appLinks?.displayLabel ?: app.name.lowercase().replace(" ", "-"),
                 onDraftChange = { replaceDraft = it },
                 phase = phase,
                 onCancel = { showReplaceDialog = false },
@@ -413,23 +414,31 @@ private fun UrlRowMuted(url: String) {
 }
 
 @Composable
+// Mirrors the Worker's DNS_LABEL_RE in appRename.ts. Keep in sync —
+// drift means the button enables for stems the server then rejects.
+private val STEM_RE = Regex("^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+
 private fun ReplaceStemDialog(
     draft: String,
+    currentStem: String,
     onDraftChange: (String) -> Unit,
     phase: RenameAppPhase,
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
     val busy = phase is RenameAppPhase.Signing || phase is RenameAppPhase.Posting
+    val trimmed = draft.trim()
+    val stemValid = STEM_RE.matches(trimmed) && trimmed != currentStem
     AlertDialog(
         onDismissRequest = { if (!busy) onCancel() },
-        title = { Text("Replace web stem") },
+        title = { Text("Replace access URLs") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
-                    text = "Rotates every URL for this app to a new stem you pick. " +
-                        "The current short link breaks immediately — anyone who saved " +
-                        "a voi.ci/… for this app will need a fresh one.",
+                    text = "This will update all the links to this service, replacing " +
+                        "“$currentStem” with a new stem. All existing links break " +
+                        "immediately, including the short link. If you have attached " +
+                        "external domains, those stay unaffected.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )
@@ -452,7 +461,7 @@ private fun ReplaceStemDialog(
         confirmButton = {
             TextButton(
                 onClick = onConfirm,
-                enabled = !busy && draft.isNotBlank(),
+                enabled = !busy && stemValid,
             ) {
                 Text(
                     when (phase) {

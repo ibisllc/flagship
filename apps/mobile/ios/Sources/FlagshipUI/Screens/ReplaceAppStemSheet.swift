@@ -22,9 +22,18 @@ import FlagshipCore
 struct ReplaceAppStemSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Binding var draft: String
+    /// The stem currently in every URL — interpolated into the body so
+    /// the user sees exactly what is being replaced.
+    let currentStem: String
     let phase: AppDetailViewModel.RenamePhase
     let onCancel: () -> Void
     let onConfirm: () -> Void
+
+    /// Mirrors the Worker's `DNS_LABEL_RE` in appRename.ts. Keep in
+    /// sync — drift means the button enables for stems the server
+    /// then rejects.
+    private static let stemRegex =
+        try! NSRegularExpression(pattern: "^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -33,12 +42,12 @@ struct ReplaceAppStemSheet: View {
                 Image(systemName: "arrow.triangle.2.circlepath")
                     .foregroundColor(c.danger)
                     .imageScale(.large)
-                Text("Replace web stem")
+                Text("Replace access URLs")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(c.text)
                 Spacer()
             }
-            Text("This rotates every URL for this app to a new stem you pick. The current short link **breaks immediately** — anyone who saved a `voi.ci/…` for this app will need a fresh one.")
+            Text("This will update all the links to this service, replacing **\(currentStem)** with a new stem. All existing links break immediately, including the short link. If you have attached external domains, those stay unaffected.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
 
@@ -84,11 +93,18 @@ struct ReplaceAppStemSheet: View {
     }
 
     private var canConfirm: Bool {
-        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let stem = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !stem.isEmpty, stem != currentStem, Self.isValidStem(stem) else { return false }
         switch phase {
         case .signing, .posting: return false
         default: return true
         }
+    }
+
+    /// True iff `stem` is a valid DNS-label fragment per the Worker rule.
+    static func isValidStem(_ stem: String) -> Bool {
+        let r = NSRange(stem.startIndex..., in: stem)
+        return stemRegex.firstMatch(in: stem, range: r) != nil
     }
 
     private var buttonLabel: String {

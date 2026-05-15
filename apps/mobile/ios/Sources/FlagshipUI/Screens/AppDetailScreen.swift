@@ -233,6 +233,7 @@ public struct AppDetailScreen: View {
         .sheet(isPresented: $showReplaceSheet) {
             ReplaceAppStemSheet(
                 draft: $replaceDraft,
+                currentStem: currentDisplayLabel ?? "the current stem",
                 phase: vm.renamePhase,
                 onCancel: { showReplaceSheet = false },
                 onConfirm: {

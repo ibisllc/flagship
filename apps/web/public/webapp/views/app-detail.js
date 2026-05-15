@@ -287,23 +287,28 @@ async function openReplaceModal(app) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const currentLabel = currentAppLinks?.displayLabel ?? app.urlLabel ?? "";
   const draft = window.prompt(
-    "Replace web stem.\n\n" +
-      "This rotates every URL for this app to a new stem you pick. " +
-      "The current short link breaks immediately — anyone who saved " +
-      "a voi.ci/… for this app will need a fresh one.\n\n" +
-      "New stem (lowercase letters, digits, hyphens; 1–40 chars):",
+    "Replace access URLs.\n\n" +
+      `This will update all the links to this service, replacing "${currentLabel}" ` +
+      "with a new stem. All existing links break immediately, including the short " +
+      "link. If you have attached external domains, those stay unaffected.\n\n" +
+      "New stem (lowercase letters, digits, hyphens; 1–40 chars; no leading/trailing hyphen):",
     currentLabel,
   );
   if (draft === null) return; // cancelled
   const trimmed = (draft || "").trim().toLowerCase();
   if (trimmed === "" || trimmed === currentLabel) return;
+  // Mirrors the Worker's DNS_LABEL_RE in appRename.ts.
+  if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(trimmed)) {
+    toast("Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.", "err");
+    return;
+  }
   // Final scare confirm before we fire the destructive op.
   const ok = await inlineConfirm({
     title: `Replace stem with '${trimmed}'?`,
     message:
-      "Other devices on this account will see the new URL on next refresh. " +
-      "The old short link stops working immediately. This can't be undone " +
-      "without another Replace.",
+      "Every link to this service changes immediately, including the short link. " +
+      "Attached external domains are unaffected. Other devices see the new URL " +
+      "on next refresh.",
     okLabel: "Replace",
     danger: true,
   });
