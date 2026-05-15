@@ -468,10 +468,14 @@ public struct AppDetailScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Text("Add a custom domain").font(.system(size: 13, weight: .semibold)).foregroundColor(c.text)
                 HStack(spacing: FS.space.s2) {
-                    FSField(value: $vm.newCustomUrlDraft, label: "", placeholder: "app.mydomain.com")
+                    FSField(value: $vm.newCustomUrlDraft, label: "", placeholder: "www.mydomain.com")
                     FSGhostButton("Add") { vm.addCustomUrl() }
                 }
-                Text("Custom domains need a DNS CNAME to your pod. Setup hints appear after you add.")
+                Text("Point a subdomain you own at Flagship with a single DNS CNAME — set ")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                + Text("www.mydomain.com → \(username ?? "you").flagship.services")
+                    .font(FS.font.mono()).foregroundColor(c.text)
+                + Text(".  No registrar transfer, no IP to point at. Your apex (mydomain.com) can't take a CNAME — keep it on www and redirect the apex to it (a free Cloudflare/registrar redirect). The short link and app URLs are unaffected, and a Replace never touches an attached domain.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
             }
         }

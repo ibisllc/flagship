@@ -231,7 +231,7 @@ fun AppDetailScreen(nav: NavController, appId: String) {
         )
 
         Spacer(Modifier.height(FS.space.s3))
-        CustomDomainsSection()
+        CustomDomainsSection(userStub = "${appState.currentUser.value ?: "you"}.flagship.services")
 
         if (showReplaceDialog) {
             ReplaceStemDialog(
@@ -387,7 +387,7 @@ private fun WebDomainsSection(
  *  a remove control + the DNS hint. The verify-DNS round trip is a
  *  TODO on this surface (consistent with Save/Claim being stubbed). */
 @Composable
-private fun CustomDomainsSection() {
+private fun CustomDomainsSection(userStub: String) {
     val domains = remember { mutableStateListOf<String>() }
     var draft by remember { mutableStateOf("") }
     if (domains.isNotEmpty()) {
@@ -420,7 +420,7 @@ private fun CustomDomainsSection() {
                     value = draft,
                     onValueChange = { draft = it },
                     singleLine = true,
-                    label = { Text("app.mydomain.com") },
+                    label = { Text("www.mydomain.com") },
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.padding(start = FS.space.s2))
@@ -433,7 +433,12 @@ private fun CustomDomainsSection() {
                 })
             }
             Text(
-                text = "Custom domains need a DNS CNAME to your pod. Setup hints appear after you add.",
+                text = "Point a subdomain you own at Flagship with one DNS CNAME: " +
+                    "www.mydomain.com → $userStub. No registrar transfer, no IP. " +
+                    "Your apex (mydomain.com) can't take a CNAME — keep it on www " +
+                    "and redirect the apex to it (free Cloudflare/registrar redirect). " +
+                    "The short link and app URLs are unaffected; a Replace never " +
+                    "touches an attached domain.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 11.sp),
             )

@@ -331,11 +331,17 @@ function renderCustomDomainsSection() {
     ${list}
     <div class="card">
       <div class="row">
-        <input id="ad-cd-input" placeholder="app.mydomain.com" autocomplete="off" style="flex:1;" />
+        <input id="ad-cd-input" placeholder="www.mydomain.com" autocomplete="off" style="flex:1;" />
         <button class="secondary" id="ad-cd-add">Add</button>
       </div>
       <div class="muted-sm text-xs mt-2">
-        Custom domains need a DNS CNAME to your pod. Setup hints appear after you add.
+        Point a subdomain you own at Flagship with one DNS CNAME:
+        <span class="mono">www.mydomain.com → ${escapeHtml(getSession().username || "you")}.flagship.services</span>.
+        No registrar transfer, no IP to point at. Your apex
+        (<span class="mono">mydomain.com</span>) can't take a CNAME — keep it on
+        <span class="mono">www</span> and redirect the apex to it (a free
+        Cloudflare/registrar redirect). The short link and app URLs are
+        unaffected, and a Replace never touches an attached domain.
       </div>
     </div>
   `;
