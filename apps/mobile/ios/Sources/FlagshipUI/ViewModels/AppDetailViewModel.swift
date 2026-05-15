@@ -205,7 +205,7 @@ public final class AppDetailViewModel {
             )
             appLinks = .loaded(r)
             customDomainDraft = ""
-            applyCooldown(from: r)
+            recordCustomDomainChangeLocally()
         } catch {
             // Non-200 is the ONLY synchronous denial — rate-limit or
             // server-busy, never a CNAME verdict (that's async). Show
@@ -247,18 +247,34 @@ public final class AppDetailViewModel {
         do {
             let r = try await server.getAppLinks(username: user, appId: appId)
             appLinks = .loaded(r)
-            // Rebuild the rate-limit countdown from the server's
-            // lastChanged so it survives an app reload / VM recreation.
-            applyCooldown(from: r)
+            // Rebuild the countdown from the on-device timestamp so it
+            // survives an app reload / VM recreation. The server keeps
+            // its own rate-limit timer and is the real backstop (429);
+            // we don't ask it for this simple numeric field.
+            restoreCooldownFromLocal()
         } catch {
             appLinks = .failed(error.localizedDescription)
         }
     }
 
-    /// Reconstruct the cooldown deadline from the server-sourced
-    /// last-request time so the countdown is durable.
-    private func applyCooldown(from r: AppLinksResponse) {
-        guard let ts = r.customDomainLastChangedAt else { return }
+    private var cdLastChangedKey: String {
+        "flagship.customDomain.lastChanged.\(appId)"
+    }
+
+    /// Persist the request time on-device + start the local cooldown.
+    private func recordCustomDomainChangeLocally() {
+        UserDefaults.standard.set(
+            Date().timeIntervalSince1970, forKey: cdLastChangedKey
+        )
+        customDomainCooldownUntil = Date()
+            .addingTimeInterval(Self.customDomainCooldown)
+    }
+
+    /// Reconstruct the cooldown from the on-device timestamp (no
+    /// network). Lost local state just means the server 429s instead.
+    private func restoreCooldownFromLocal() {
+        let ts = UserDefaults.standard.double(forKey: cdLastChangedKey)
+        guard ts > 0 else { return }
         let until = Date(timeIntervalSince1970: ts + Self.customDomainCooldown)
         customDomainCooldownUntil = until > Date() ? until : nil
     }

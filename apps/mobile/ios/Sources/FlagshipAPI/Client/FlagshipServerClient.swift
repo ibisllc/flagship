@@ -172,11 +172,9 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
     /// Whether .com has verified the CNAME. nil/false = requested but
     /// not yet confirmed. Drives the SUBTLE confirm signal: the apps
     /// list swaps the short link for the custom domain only once true.
+    /// (The last-change *time* is NOT here — that's stored on-device;
+    /// the server keeps its own rate-limit timer in its DB.)
     public let customDomainConfirmed: Bool?
-    /// Unix seconds of the last custom-domain request. Sourced from
-    /// the server so the rate-limit countdown survives an app reload
-    /// / VM recreation (the cooldown is reconstructed from this).
-    public let customDomainLastChangedAt: Double?
     public init(
         appId: String,
         displayLabel: String,
@@ -184,8 +182,7 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
         instances: [AppLinkInstance],
         shortUrl: String?,
         customDomain: String? = nil,
-        customDomainConfirmed: Bool? = nil,
-        customDomainLastChangedAt: Double? = nil
+        customDomainConfirmed: Bool? = nil
     ) {
         self.appId = appId
         self.displayLabel = displayLabel
@@ -194,7 +191,6 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
         self.shortUrl = shortUrl
         self.customDomain = customDomain
         self.customDomainConfirmed = customDomainConfirmed
-        self.customDomainLastChangedAt = customDomainLastChangedAt
     }
 }
 
@@ -862,6 +858,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let lastChanged = customDomainLastChangedByUser[username.lowercased()]?[appId]
         // Demo: .com "confirms" the CNAME customDomainConfirmDelay
         // seconds after the request (a real server pushes the outcome).
+        // The server keeps its own lastChanged timer for the rate
+        // limit; it is NOT echoed to the client (the client stores its
+        // own local timestamp for the countdown).
         let confirmed = lastChanged.map {
             Date().timeIntervalSince($0) >= customDomainConfirmDelay
         }
@@ -877,8 +876,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             ],
             shortUrl: "https://voi.ci/\(shortCode)",
             customDomain: customDomainByUser[username.lowercased()]?[appId],
-            customDomainConfirmed: confirmed,
-            customDomainLastChangedAt: lastChanged?.timeIntervalSince1970
+            customDomainConfirmed: confirmed
         )
     }
 
