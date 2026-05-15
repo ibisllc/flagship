@@ -62,7 +62,7 @@ export async function renderAppDetail(appId) {
         <div class="muted-sm text-xs mt-1">${
           a.version ? `ver: ${escapeHtml(a.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : ""
         }id: ${escapeHtml(a.appId)}</div>
-        <div class="muted-sm mt-2">${escapeHtml(a.summary || "")}</div>
+        <div class="muted-sm mt-2 truncate">${escapeHtml(a.summary || "")}</div>
         <div class="row mt-2">
           <span class="label">creator</span><span class="value">${escapeHtml(a.creator)}</span>
         </div>

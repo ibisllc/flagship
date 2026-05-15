@@ -46,7 +46,7 @@ function listingPayload(overrides: Partial<MarketplaceListRequest> = {}): Market
     creator: "alice",
     slug: "habit-tracker",
     name: "Habit Tracker",
-    tagline: "Tracks daily habits and streaks.",
+    tagline: "Track daily habit streaks",
     descriptionMd: "# Habits\n\nTrack your habits. Honestly.",
     category: "productivity",
     tagsCsv: "productivity,habits,streaks",
@@ -117,6 +117,20 @@ describe("handleMarketplaceList", () => {
     const irk = makeIrk();
     await seedUser(usernames, "alice", irk);
     const claim = listingPayload({ descriptionMd: "a".repeat(20_000) });
+    const sig = signMarketplaceList(claim, irk);
+    const r = await handleMarketplaceList(
+      { marketplace, usernames },
+      { request: { ...claim }, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects a tagline longer than the 30-char one-liner cap", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const irk = makeIrk();
+    await seedUser(usernames, "alice", irk);
+    const claim = listingPayload({ tagline: "a".repeat(31) });
     const sig = signMarketplaceList(claim, irk);
     const r = await handleMarketplaceList(
       { marketplace, usernames },

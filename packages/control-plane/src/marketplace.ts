@@ -16,6 +16,7 @@
 import {
   verifyMarketplaceList,
   verifyMarketplaceScanResult,
+  APP_ONELINER_MAX_LEN,
   type MarketplaceListRequest,
   type MarketplaceScanResult,
 } from "@flagship/protocol";
@@ -36,7 +37,7 @@ export interface MarketplaceDeps {
   now?: () => number;
   /** Cap descriptionMd at this many chars. Default 10_000. */
   maxDescriptionLength?: number;
-  /** Cap tagline at this many chars. Default 80. */
+  /** Cap tagline at this many chars. Default APP_ONELINER_MAX_LEN (30). */
   maxTaglineLength?: number;
   /** Max screenshots. Default 5. */
   maxScreenshots?: number;
@@ -67,7 +68,7 @@ export async function handleMarketplaceList(
 
   if (!SLUG_RE.test(r.slug!)) return malformed("invalid slug");
   if (!SLUG_RE.test(r.creator!)) return malformed("invalid creator");
-  if (r.tagline!.length > (deps.maxTaglineLength ?? 80)) return malformed("tagline too long");
+  if (r.tagline!.length > (deps.maxTaglineLength ?? APP_ONELINER_MAX_LEN)) return malformed("tagline too long");
   if (r.descriptionMd!.length > (deps.maxDescriptionLength ?? 10_000)) return malformed("description too long");
   if (r.screenshotKeys.length > (deps.maxScreenshots ?? 5)) return malformed("too many screenshots");
   for (const t of (r.tagsCsv ?? "").split(",").filter(Boolean)) {

@@ -8,6 +8,12 @@
 
 export const MANIFEST_SCHEMA_VERSION = 1;
 
+/** Repo-wide cap on the app one-liner (`manifest.description`, and the
+ *  marketplace `tagline` that mirrors it). It renders in tight rows
+ *  (apps list, app detail) right next to the equally-capped server
+ *  description — keep them symmetrical so neither wraps. */
+export const APP_ONELINER_MAX_LEN = 30;
+
 export interface AppManifest {
   schema_version: number;
   name: string;
@@ -237,6 +243,12 @@ export function parseManifest(input: unknown): ManifestParseResult {
   }
 
   optionalString(m, "description", e);
+  if (
+    typeof m.description === "string" &&
+    m.description.length > APP_ONELINER_MAX_LEN
+  ) {
+    e(`description must be at most ${APP_ONELINER_MAX_LEN} characters`);
+  }
 
   const runtime = parseRuntime(m.runtime, e);
   const data = parseData(m.data, e);

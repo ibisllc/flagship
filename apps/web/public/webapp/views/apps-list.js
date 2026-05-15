@@ -56,7 +56,7 @@ export async function renderAppsList() {
         <div class="row row-top">
           <div style="flex:1; min-width:0;">
             <div class="weight-600">${escapeHtml(a.slug)} <span class="pill">${escapeHtml(a.version || "")}</span></div>
-            <div class="muted-sm">${escapeHtml(a.summary || "")}</div>
+            <div class="muted-sm truncate">${escapeHtml(a.summary || "")}</div>
             <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
               <span class="pill ${a.status === "running" ? "ok" : ""}">${escapeHtml(a.status || "")}</span>
             </div>

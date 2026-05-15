@@ -49,7 +49,7 @@ If the user's request is ambiguous on something that materially changes the mani
 - \`schema_version\`: exactly \`1\`.
 - \`name\`: lowercase DNS label, 1-63 chars, [a-z0-9-]. Becomes the slug.
 - \`version\`: semver. Start at \`"0.1.0"\`.
-- \`description\`: one sentence, no marketing copy. The user already knows what they asked for.
+- \`description\`: a short label, **at most 30 characters**, no marketing copy. The user already knows what they asked for. Longer values are rejected by the manifest validator.
 - \`runtime.image\`: docker image reference. Use \`flagship/<name>:0.1.0\` — the daemon builds it locally from your Dockerfile and tags it.
 - \`runtime.port\`: integer, 1-65535. The container's listening port.
 - \`runtime.env\`: optional, string -> string. No \`FLAGSHIP_\` prefix.
@@ -108,7 +108,7 @@ Your response:
   "schema_version": 1,
   "name": "shopping",
   "version": "0.1.0",
-  "description": "A shared shopping list for the household.",
+  "description": "Household shopping list",
   "runtime": {
     "image": "flagship/shopping:0.1.0",
     "port": 8080
@@ -228,7 +228,7 @@ export interface ExistingAppSummary {
 }
 
 const DEFAULT_MANIFEST_SUMMARY =
-  "schema_version=1; required: name, version, description, runtime{image,port}, " +
+  "schema_version=1; required: name, version, description(<=30 chars), runtime{image,port}, " +
   "network{subdomain}, access{enabled:true, default_role}, migration{verification}; " +
   "optional: data.stores.{postgres,objects,kv}, browser.domains[], " +
   "access.public_routes[], access.custom_roles[], distribution.public.";

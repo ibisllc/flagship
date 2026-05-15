@@ -105,6 +105,7 @@ public struct AppDetailScreen: View {
                 }
                 if let summary = d.summary {
                     Text(summary).font(FS.font.bodySm()).foregroundColor(c.text)
+                        .lineLimit(2).truncationMode(.tail)
                 }
             }
         }

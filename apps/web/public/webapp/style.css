@@ -588,6 +588,7 @@ section:not(.hidden) {
 .text-sm  { font-size: 13px; }
 .text-xs  { font-size: 12px; }
 .weight-600 { font-weight: 600; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .mt-1 { margin-top: var(--space-1); }
 .mt-2 { margin-top: var(--space-2); }
 .mt-3 { margin-top: var(--space-3); }
