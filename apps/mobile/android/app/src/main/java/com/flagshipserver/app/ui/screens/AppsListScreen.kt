@@ -96,30 +96,71 @@ private fun AppRow(app: AppSummary, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         padding = PaddingValues(FS.space.s4),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.fillMaxWidth().padding(end = FS.space.s4)) {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            // Name (semibold).
+            Text(
+                text = app.name,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            )
+            // Short description (if any).
+            if (!app.summary.isNullOrEmpty()) {
                 Text(
-                    text = app.name,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                    text = app.summary,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    maxLines = 2,
                 )
-                Spacer(Modifier.height(FS.space.s1))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FSPill(
-                        label = if (app.runningPodCount > 0) "Running on ${app.runningPodCount}" else "Stopped",
-                        kind = if (app.runningPodCount > 0) FSPillKind.Online else FSPillKind.Idle,
+            }
+            // Status pills.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FSPill(
+                    label = if (app.runningPodCount > 0) "Running on ${app.runningPodCount}" else "Stopped",
+                    kind = if (app.runningPodCount > 0) FSPillKind.Online else FSPillKind.Idle,
+                )
+                if (app.siblingsEnabled) {
+                    FSPill(label = "Siblings on", kind = FSPillKind.Provisioning)
+                }
+            }
+            // V3 — URLs row. Short URL on the left (semibold), canonical
+            // on the right (muted, truncated). Placeholder when the
+            // server fetch hasn't landed yet so the row's vertical
+            // rhythm stays stable.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!app.shortUrl.isNullOrEmpty()) {
+                    Text(
+                        text = "🔗 ${stripScheme(app.shortUrl)}",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.padding(end = FS.space.s2),
                     )
-                    if (app.siblingsEnabled) {
-                        FSPill(label = "Siblings on", kind = FSPillKind.Provisioning)
-                    }
+                } else {
+                    Text(
+                        text = "🔗 voi.ci/…",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp),
+                        modifier = Modifier.padding(end = FS.space.s2),
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                if (!app.canonicalUrl.isNullOrEmpty()) {
+                    Text(
+                        text = stripScheme(app.canonicalUrl),
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 11.sp),
+                        maxLines = 1,
+                    )
                 }
             }
         }
     }
 }
+
+private fun stripScheme(s: String): String =
+    s.removePrefix("https://").removePrefix("http://")
 
 private fun sampleApps(): List<AppSummary> = emptyList()
 
@@ -128,4 +169,12 @@ data class AppSummary(
     val name: String,
     val runningPodCount: Int,
     val siblingsEnabled: Boolean,
+    /** Optional one-liner description shown under the name. */
+    val summary: String? = null,
+    /** V3 — voi.ci short URL surfaced to the row. Null while the
+     *  /links fan-out is in flight; the row renders a 'voi.ci/…'
+     *  placeholder so the vertical rhythm stays stable. */
+    val shortUrl: String? = null,
+    /** V3 — canonical FQDN; muted right-aligned text in the URL row. */
+    val canonicalUrl: String? = null,
 )

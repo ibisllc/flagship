@@ -75,7 +75,62 @@ interface FlagshipServerClient {
         body: WipeRestartRequest,
         ifMatch: String?,
     ): WipeRestartResponse
+
+    /** V3 — rename the user-visible URL stem for an app. Signed by
+     *  the user's current IRK. The Worker upserts the alias,
+     *  cascade-deletes old voi.ci codes, mints a fresh one. */
+    suspend fun renameApp(
+        username: String,
+        appId: String,
+        body: AppRenameRequest,
+    ): AppRenameResponse
+
+    /** V3 — read the per-user URL identity of an app:
+     *  { displayLabel, canonicalUrl, instances, shortUrl }. */
+    suspend fun getAppLinks(
+        username: String,
+        appId: String,
+    ): AppLinksResponse
 }
+
+@Serializable
+data class AppRenameRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val appId: String,
+        val newDisplayLabel: String,
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class AppRenameResponse(
+    val ok: Boolean,
+    val displayLabel: String? = null,
+    val canonicalUrl: String? = null,
+    val shortUrl: String? = null,
+    val shortCode: String? = null,
+    val unchanged: Boolean? = null,
+)
+
+@Serializable
+data class AppLinkInstance(
+    val serverDomain: String,
+    val url: String,
+)
+
+@Serializable
+data class AppLinksResponse(
+    val appId: String,
+    val displayLabel: String,
+    val canonicalUrl: String,
+    val instances: List<AppLinkInstance>,
+    val shortUrl: String? = null,
+)
 
 @Serializable
 data class WipeRestartRequest(
@@ -478,6 +533,64 @@ class MockFlagshipServerClient(
     var lastWipeRestart: Triple<String, WipeRestartRequest, String?>? = null
         private set
 
+    /** V3 — scripted Replace outcomes for tests. */
+    sealed interface AppRenameBehavior {
+        data object Ok : AppRenameBehavior
+        data object Collision : AppRenameBehavior
+        data object StaleSignature : AppRenameBehavior
+    }
+    var appRenameBehavior: AppRenameBehavior = AppRenameBehavior.Ok
+    var lastAppRename: Triple<String, String, AppRenameRequest>? = null
+        private set
+    /** Mock-side alias cache; getAppLinks reads it, renameApp writes
+     *  to it so test fixtures stay self-consistent across calls. */
+    var appAliasByUser: MutableMap<String, MutableMap<String, Pair<String, String>>> = mutableMapOf()
+
+    override suspend fun renameApp(
+        username: String,
+        appId: String,
+        body: AppRenameRequest,
+    ): AppRenameResponse {
+        tick()
+        lastAppRename = Triple(username, appId, body)
+        return when (appRenameBehavior) {
+            AppRenameBehavior.Collision -> throw IllegalStateException("409 label collision")
+            AppRenameBehavior.StaleSignature -> throw IllegalStateException("403 bad signature")
+            AppRenameBehavior.Ok -> {
+                val newLabel = body.request.newDisplayLabel
+                val canonical = "https://$newLabel.demo-pod.flagship.services"
+                appAliasByUser.getOrPut(username.lowercase()) { mutableMapOf() }[appId] = newLabel to canonical
+                AppRenameResponse(
+                    ok = true,
+                    displayLabel = newLabel,
+                    canonicalUrl = canonical,
+                    shortUrl = "https://voi.ci/${newLabel.take(2)}mock1",
+                    shortCode = "${newLabel.take(2)}mock1",
+                    unchanged = false,
+                )
+            }
+        }
+    }
+
+    override suspend fun getAppLinks(
+        username: String,
+        appId: String,
+    ): AppLinksResponse {
+        tick()
+        val alias = appAliasByUser[username.lowercase()]?.get(appId)
+        val label = alias?.first ?: "scratch"
+        val canonical = alias?.second ?: "https://$label.demo-pod.flagship.services"
+        return AppLinksResponse(
+            appId = appId,
+            displayLabel = label,
+            canonicalUrl = canonical,
+            instances = listOf(
+                AppLinkInstance(serverDomain = "demo-pod.flagship.services", url = canonical),
+            ),
+            shortUrl = null,
+        )
+    }
+
     override suspend fun wipeRestart(
         username: String,
         body: WipeRestartRequest,
@@ -705,6 +818,33 @@ class LiveFlagshipServerClient(
             serializer = WipeRestartRequest.serializer(),
             responseSerializer = WipeRestartResponse.serializer(),
             extraHeaders = ifMatch?.let { mapOf("If-Match" to it) } ?: emptyMap(),
+        )
+    }
+
+    override suspend fun renameApp(
+        username: String,
+        appId: String,
+        body: AppRenameRequest,
+    ): AppRenameResponse {
+        val u = java.net.URLEncoder.encode(username, "UTF-8")
+        val a = java.net.URLEncoder.encode(appId, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$u/apps/$a/rename",
+            body = body,
+            serializer = AppRenameRequest.serializer(),
+            responseSerializer = AppRenameResponse.serializer(),
+        )
+    }
+
+    override suspend fun getAppLinks(
+        username: String,
+        appId: String,
+    ): AppLinksResponse {
+        val u = java.net.URLEncoder.encode(username, "UTF-8")
+        val a = java.net.URLEncoder.encode(appId, "UTF-8")
+        return transport.getJson(
+            url = "$base/api/users/$u/apps/$a/links",
+            responseSerializer = AppLinksResponse.serializer(),
         )
     }
 }

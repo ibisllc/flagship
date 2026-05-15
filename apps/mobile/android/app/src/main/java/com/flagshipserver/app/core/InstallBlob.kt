@@ -97,6 +97,45 @@ object AuthCodeRevoke {
             .joinToString("|").toByteArray()
 }
 
+/** V3 — App URL-stem rename envelope. Signed by the user's CURRENT
+ *  IRK. The internal appId is preserved across renames; only the
+ *  user-visible newDisplayLabel changes. Mirrors
+ *  packages/protocol/src/auth.ts TAG_APP_RENAME. */
+object AppRenameClaim {
+    const val CANONICAL_TAG = "flagship/app-rename/v1"
+    fun canonicalBytes(
+        username: String,
+        appId: String,
+        newDisplayLabel: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        username,
+        appId,
+        newDisplayLabel.lowercase(),
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
+/** V3 — voi.ci one-off short link envelope. Signed by IRK. Optional
+ *  appId binds the link to a specific app so a rename can cascade-
+ *  delete it. Mirrors TAG_VOICI_SHORTEN. */
+object VoiciShortenClaim {
+    const val CANONICAL_TAG = "flagship/voici-shorten/v1"
+    fun canonicalBytes(
+        username: String,
+        appId: String?,
+        targetUrl: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        username,
+        appId ?: "",
+        targetUrl,
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
 /** C7 — Re-pair initiate envelope. Signed by the NEW IRK. Mirrors
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE. */
 object RePairInitiateClaim {
