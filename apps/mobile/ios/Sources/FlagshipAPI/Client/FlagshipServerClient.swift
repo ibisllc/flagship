@@ -140,6 +140,10 @@ public struct AppLinkInstance: Decodable, Equatable, Sendable, Identifiable {
     public let serverDomain: String
     public let url: String
     public var id: String { serverDomain }
+    public init(serverDomain: String, url: String) {
+        self.serverDomain = serverDomain
+        self.url = url
+    }
 }
 
 public struct AppLinksResponse: Decodable, Equatable, Sendable {
@@ -147,11 +151,22 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
     public let displayLabel: String
     public let canonicalUrl: String
     public let instances: [AppLinkInstance]
-    /// Worker may return nil today; the rename response is the
-    /// authoritative source for a freshly-rotated link, and the
-    /// follow-up will denormalize the latest code into the alias
-    /// row so this field is filled in on every read.
+    /// V4 — lazy-minted by handleGetAppLinks on first call; preserved
+    /// across calls until the next Replace cascade-deletes it.
     public let shortUrl: String?
+    public init(
+        appId: String,
+        displayLabel: String,
+        canonicalUrl: String,
+        instances: [AppLinkInstance],
+        shortUrl: String?
+    ) {
+        self.appId = appId
+        self.displayLabel = displayLabel
+        self.canonicalUrl = canonicalUrl
+        self.instances = instances
+        self.shortUrl = shortUrl
+    }
 }
 
 public struct WipeRestartRequest: Encodable, Sendable {

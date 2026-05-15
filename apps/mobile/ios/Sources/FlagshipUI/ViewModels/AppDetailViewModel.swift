@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import CryptoKit
 import Flagship
 import FlagshipAPI
 import FlagshipCore

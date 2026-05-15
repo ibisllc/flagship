@@ -90,31 +90,6 @@ public struct SettingsTab: View {
                             app.signOut()
                         }
                     },
-                    onWipeRestart: {
-                        // E2/E3 — drive the wipe ceremony. Uses
-                        // MockWebAuthnProvider by default; a future
-                        // commit can swap in a live ASAuthorizationController
-                        // wrapper without touching the VM.
-                        if wipeVm == nil {
-                            wipeVm = WipeRestartViewModel(
-                                server: server,
-                                username: { [app] in app.currentUser }
-                            )
-                        }
-                        await wipeVm?.run(currentEtag: vm?.devicesEtag)
-                        switch wipeVm?.phase {
-                        case .completed:
-                            wipeToast = "Done. All other devices are now disconnected. Re-pair them on next open."
-                            // Drop to Welcome — the user just rotated
-                            // identity; the in-memory session is stale.
-                            await pushRegistrar?.revoke()
-                            app.signOut()
-                        case .failed(let msg):
-                            wipeToast = msg
-                        default:
-                            wipeToast = nil
-                        }
-                    },
                     onReplaceDevice: {
                         // B7 — fire the ReplaceDeviceViewModel. We
                         // lazily construct the VM here (rather than
@@ -128,7 +103,7 @@ public struct SettingsTab: View {
                         }
                         // Reuse the most recent ETag we captured from
                         // the trusted-devices fetch (vm.devicesEtag).
-                        await replaceVm?.initiate(currentEtag: vm?.devicesEtag)
+                        await replaceVm?.initiate(currentEtag: vm.devicesEtag)
                         // Surface the outcome as a toast — the UI
                         // doesn't yet have a dedicated pending-status
                         // card; that's a v1.1 follow-up.
@@ -140,6 +115,31 @@ public struct SettingsTab: View {
                             replaceToast = msg
                         default:
                             replaceToast = nil
+                        }
+                    },
+                    onWipeRestart: {
+                        // E2/E3 — drive the wipe ceremony. Uses
+                        // MockWebAuthnProvider by default; a future
+                        // commit can swap in a live ASAuthorizationController
+                        // wrapper without touching the VM.
+                        if wipeVm == nil {
+                            wipeVm = WipeRestartViewModel(
+                                server: server,
+                                username: { [app] in app.currentUser }
+                            )
+                        }
+                        await wipeVm?.run(currentEtag: vm.devicesEtag)
+                        switch wipeVm?.phase {
+                        case .completed:
+                            wipeToast = "Done. All other devices are now disconnected. Re-pair them on next open."
+                            // Drop to Welcome — the user just rotated
+                            // identity; the in-memory session is stale.
+                            await pushRegistrar?.revoke()
+                            app.signOut()
+                        case .failed(let msg):
+                            wipeToast = msg
+                        default:
+                            wipeToast = nil
                         }
                     },
                     hasCloudRecovery: app.hasCloudRecovery
