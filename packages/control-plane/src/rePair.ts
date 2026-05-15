@@ -28,6 +28,21 @@ import type { HandlerResponse } from "./types.js";
  * an unauthorized takeover. Membership re-attach (J.4) is a daemon-
  * side concern and lives outside this handler — it walks installed
  * apps after a swap and emits per-app phone alerts for review.
+ *
+ * **Concurrency guarantees (SQL CAS at every mutation):**
+ *
+ *   - `pending_re_pairs` has `username` as PRIMARY KEY, so two
+ *     concurrent INITIATEs race-safely — one row wins, the other
+ *     returns 409 ("re-pair already pending").
+ *   - `usernames.swapIrkPub(...)` is a conditional UPDATE that
+ *     matches on `(username, current irk_pub_hex)` and returns
+ *     `meta.changes > 0`. Two concurrent COMPLETEs both call this;
+ *     only one matches the precondition. The loser sees the row
+ *     already moved, returns 409, and tidies up the pending row.
+ *   - The Replace-device UI flow on the client also passes the
+ *     observed devices ETag as `If-Match`, so any client whose
+ *     view of the device list is stale gets a 412 from the next
+ *     commit (A3) before even reaching the rotation. Belt + braces.
  */
 
 export const RE_PAIR_GRACE_MS = 24 * 60 * 60_000;

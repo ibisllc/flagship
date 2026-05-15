@@ -270,6 +270,32 @@ describe("re-pair complete (atomic IRK swap after grace)", () => {
     expect(res.status).toBe(404);
   });
 
+  it("two concurrent completes after grace: one succeeds, one 409s (SQL CAS in action)", async () => {
+    // The CAS guarantee on usernames.swapIrkPub is what stops two
+    // simultaneous rotations from both committing. The first
+    // complete wins; the second sees `swapIrkPub` return false
+    // (current IRK no longer matches expectedOld), returns 409,
+    // and tidies up the pending row.
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk);
+    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
+    const completeDeps = { ...deps, now: () => Date.now() + RE_PAIR_GRACE_MS + 1_000 };
+
+    const [a, b] = await Promise.all([
+      handleCompleteRePair(completeDeps, USERNAME),
+      handleCompleteRePair(completeDeps, USERNAME),
+    ]);
+    const statuses = [a.status, b.status].sort();
+    // One of {200, 409|404} — InMemory's atomic swap means the
+    // loser either sees 404 (row already deleted by the winner's
+    // tidy-up) or 409 (current IRK no longer matches). Both are
+    // acceptable as long as exactly one swap committed.
+    expect(statuses[0]).toBe(200);
+    expect(statuses[1] === 404 || statuses[1] === 409).toBe(true);
+  });
+
   it("409s when the username's IRK has rotated since the pending row was filed", async () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
