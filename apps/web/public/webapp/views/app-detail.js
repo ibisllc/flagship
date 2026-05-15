@@ -5,9 +5,16 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
+import { getSession } from "../lib/state.js";
+import { signWithIrk } from "../keystore.js";
 import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+
+const COM_BASE = "https://flagshipserver.com";
+
+/** V3 — cached app-links per appId for the current render. */
+let currentAppLinks = null;
 
 registerView("view-app-detail");
 
@@ -35,6 +42,14 @@ export async function renderAppDetail(appId) {
       `/api/screens/app-detail/${encodeURIComponent(appId)}`,
     );
     const a = body.app;
+    // V3 — fetch the per-app URL identity from .com in parallel with
+    // the daemon's detail. Tolerated as null if .com is unreachable;
+    // the WEB DOMAINS section falls back to the daemon-provided
+    // urlLabel in that case.
+    const session = getSession();
+    currentAppLinks = session.username
+      ? await fetchAppLinks(session.username, appId).catch(() => null)
+      : null;
     root.innerHTML = `
       <div class="card">
         <div class="card-title">${escapeHtml(a.slug)} <span class="pill">${escapeHtml(a.version || "")}</span></div>
@@ -43,13 +58,11 @@ export async function renderAppDetail(appId) {
           <span class="label">creator</span><span class="value">${escapeHtml(a.creator)}</span>
         </div>
         <div class="row">
-          <span class="label">url</span>
-          <span class="value text-xs"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.url)}</a></span>
-        </div>
-        <div class="row">
           <span class="label">app id</span><span class="value text-xs">${escapeHtml(a.appId)}</span>
         </div>
       </div>
+
+      ${renderWebDomainsSection(a, currentAppLinks)}
       <h2 class="mt-4">Manifest</h2>
       <div class="card">
         <pre class="json-block">${escapeHtml(JSON.stringify(body.manifest, null, 2))}</pre>
@@ -126,6 +139,7 @@ export async function renderAppDetail(appId) {
       const { enterInviteManage } = await import("./invite-manage.js");
       await enterInviteManage(a);
     });
+    bindWebDomainsHandlers(a);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -176,4 +190,206 @@ export function initAppDetailView() {
 export async function enterAppDetail(appId) {
   show("view-app-detail");
   await renderAppDetail(appId);
+}
+
+// ---------------------------------------------------------------
+// V3 — WEB DOMAINS section + Replace ceremony
+// ---------------------------------------------------------------
+
+/** Fetch the per-app links bundle from .com — { canonical, short,
+ *  instances }. Falls back to the daemon's urlLabel if .com is
+ *  unreachable so the section still renders. */
+async function fetchAppLinks(username, appId) {
+  const r = await fetch(
+    `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(appId)}/links`,
+    { cache: "no-store" },
+  );
+  if (!r.ok) return null;
+  return await r.json();
+}
+
+/** Three-group layout: SHORT (top, bold) → CANONICAL → INSTANCES.
+ *  Header carries a Replace button that fires the rename ceremony. */
+function renderWebDomainsSection(app, links) {
+  const stripScheme = (s) => s.replace(/^https?:\/\//, "");
+  const fallbackCanonical = `https://${app.urlLabel}.${getSession().username || "you"}.flagship.services`;
+  const shortUrl = links?.shortUrl ?? null;
+  const canonical = links?.canonicalUrl ?? fallbackCanonical;
+  const instances = links?.instances ?? [];
+
+  const shortRow = shortUrl
+    ? `
+        <div class="row" data-section="short">
+          <a class="weight-600 mono" href="${escapeHtml(shortUrl)}" target="_blank" rel="noopener">
+            🔗 ${escapeHtml(stripScheme(shortUrl))}
+          </a>
+          <button class="ghost" data-copy="${escapeHtml(shortUrl)}" aria-label="Copy short link">📋</button>
+        </div>`
+    : `
+        <div class="row" data-section="short">
+          <span class="muted-sm">No short link yet. Tap Replace to mint one.</span>
+        </div>`;
+
+  const canonicalRow = `
+    <div class="row" data-section="canonical">
+      <a class="mono" href="${escapeHtml(canonical)}" target="_blank" rel="noopener">
+        🌐 ${escapeHtml(stripScheme(canonical))}
+      </a>
+      <button class="ghost" data-copy="${escapeHtml(canonical)}" aria-label="Copy canonical">📋</button>
+    </div>`;
+
+  const instancesBlock = instances.length === 0 ? "" : `
+    <div class="mt-3">
+      <div class="label-tiny">INDIVIDUAL INSTANCES</div>
+      ${instances.map((i) => `
+        <div class="row muted-sm mono" data-section="instance">
+          ${escapeHtml(stripScheme(i.url))}
+        </div>
+      `).join("")}
+    </div>`;
+
+  return `
+    <div class="row mt-4" style="align-items:baseline;">
+      <h2 style="margin:0;">Web domains</h2>
+      <button class="danger small" id="ad-replace-stem">Replace</button>
+    </div>
+    <div class="card">
+      <div class="label-tiny">SHORT REDIRECT</div>
+      ${shortRow}
+      <div class="mt-3">
+        <div class="label-tiny">CANONICAL (SHARED BY ALL INSTANCES)</div>
+        ${canonicalRow}
+      </div>
+      ${instancesBlock}
+    </div>
+  `;
+}
+
+/** Wire copy buttons + the Replace flow. */
+function bindWebDomainsHandlers(app) {
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      const url = ev.currentTarget.getAttribute("data-copy");
+      try {
+        await navigator.clipboard.writeText(url);
+        toast("Copied.");
+      } catch (e) {
+        toast("Couldn't copy — long-press to copy manually.", "err");
+      }
+    });
+  });
+  $("ad-replace-stem")?.addEventListener("click", () => openReplaceModal(app));
+}
+
+/** Modal-style scare sheet for the Replace ceremony. Inline (no
+ *  external modal lib) so this view stays self-contained. */
+async function openReplaceModal(app) {
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const currentLabel = currentAppLinks?.displayLabel ?? app.urlLabel ?? "";
+  const draft = window.prompt(
+    "Replace web stem.\n\n" +
+      "This rotates every URL for this app to a new stem you pick. " +
+      "The current short link breaks immediately — anyone who saved " +
+      "a voi.ci/… for this app will need a fresh one.\n\n" +
+      "New stem (lowercase letters, digits, hyphens; 1–40 chars):",
+    currentLabel,
+  );
+  if (draft === null) return; // cancelled
+  const trimmed = (draft || "").trim().toLowerCase();
+  if (trimmed === "" || trimmed === currentLabel) return;
+  // Final scare confirm before we fire the destructive op.
+  const ok = await inlineConfirm({
+    title: `Replace stem with '${trimmed}'?`,
+    message:
+      "Other devices on this account will see the new URL on next refresh. " +
+      "The old short link stops working immediately. This can't be undone " +
+      "without another Replace.",
+    okLabel: "Replace",
+    danger: true,
+  });
+  if (!ok) return;
+  await runRename(app, trimmed);
+}
+
+/** Sign the canonical bytes with the user's IRK, POST to .com, swap
+ *  the surfaced URLs in place on success. */
+async function runRename(app, newLabel) {
+  const session = getSession();
+  if (!session.username || !session.umk) {
+    toast("Sign in first.", "err");
+    return;
+  }
+  toast("Renaming…");
+  const issuedAt = Date.now();
+  const canonical = canonicalAppRename(session.username, app.appId, newLabel, issuedAt);
+  let sig;
+  try {
+    sig = await signWithIrk(session.umk, canonical);
+  } catch (e) {
+    toast(`Couldn't sign: ${e.message ?? e}`, "err");
+    return;
+  }
+  try {
+    const r = await fetch(
+      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(app.appId)}/rename`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request: {
+            username: session.username,
+            appId: app.appId,
+            newDisplayLabel: newLabel,
+            issuedAt,
+          },
+          signature: bytesToHex(sig),
+        }),
+      },
+    );
+    if (!r.ok) {
+      const text = await r.text();
+      if (r.status === 409) {
+        toast("Another app already uses that name.", "err");
+      } else if (r.status === 400) {
+        toast("That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).", "err");
+      } else {
+        toast(`Couldn't rename: ${text}`, "err");
+      }
+      return;
+    }
+    const body = await r.json();
+    currentAppLinks = {
+      appId: app.appId,
+      displayLabel: body.displayLabel,
+      canonicalUrl: body.canonicalUrl,
+      instances: currentAppLinks?.instances ?? [],
+      shortUrl: body.shortUrl,
+    };
+    toast(`Renamed to ${body.displayLabel}. New short link minted.`);
+    // Re-render the section in place.
+    if (currentAppId === app.appId) {
+      await renderAppDetail(app.appId);
+    }
+  } catch (e) {
+    toast(`Couldn't rename: ${e.message ?? e}`, "err");
+  }
+}
+
+function canonicalAppRename(username, appId, newDisplayLabel, issuedAt) {
+  const enc = new TextEncoder();
+  return enc.encode(
+    [
+      "flagship/app-rename/v1",
+      username,
+      appId,
+      newDisplayLabel.toLowerCase(),
+      String(issuedAt),
+    ].join("|"),
+  );
+}
+
+function bytesToHex(b) {
+  let s = "";
+  for (const x of b) s += x.toString(16).padStart(2, "0");
+  return s;
 }

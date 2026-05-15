@@ -1,11 +1,44 @@
 // P2.2 — apps-list view. Calls /api/screens/apps-list (P1.2).
+// V3 — surfaces the per-app voi.ci short link + canonical alongside
+// the daemon's slug/summary/status. Each row fans out to
+// /api/users/:u/apps/:appId/links on .com after the initial list
+// renders, then patches the URL slot in place — keeps the first
+// paint snappy while the network catches up.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
+import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
+const COM_BASE = "https://flagshipserver.com";
+
 registerView("view-apps-list");
+
+function stripScheme(s) {
+  return s.replace(/^https?:\/\//, "");
+}
+
+/** Render the per-app row's URL slot. Short URL bold + copy on the
+ *  left, canonical muted on the right. Placeholder shape stays
+ *  vertically stable when links haven't loaded yet so the list
+ *  doesn't jump as fetches resolve. */
+function urlRowHtml(app, links) {
+  const canonical = links?.canonicalUrl ?? app.url;
+  const short = links?.shortUrl ?? null;
+  return `
+    <div class="row mt-1" data-section="urls">
+      ${short
+        ? `<a class="weight-600 mono text-xs" href="${escapeHtml(short)}" target="_blank" rel="noopener">
+              🔗 ${escapeHtml(stripScheme(short))}
+           </a>
+           <button class="ghost mini" data-copy="${escapeHtml(short)}" aria-label="Copy short link">📋</button>`
+        : `<span class="muted-sm mono text-xs">🔗 voi.ci/…</span>`
+      }
+      <span class="muted-sm mono text-xs truncate" style="margin-left:auto;">${escapeHtml(stripScheme(canonical))}</span>
+    </div>
+  `;
+}
 
 export async function renderAppsList() {
   const root = $("apps-list-content");
@@ -19,21 +52,22 @@ export async function renderAppsList() {
     root.innerHTML = body.apps.map((a) => `
       <div class="card" data-app-id="${escapeHtml(a.appId)}">
         <div class="row row-top">
-          <div>
-            <div class="weight-600">${escapeHtml(a.slug)} ${a.creator !== a.urlLabel.split("-").pop() ? "" : ""}<span class="pill">${escapeHtml(a.version || "")}</span></div>
+          <div style="flex:1; min-width:0;">
+            <div class="weight-600">${escapeHtml(a.slug)} <span class="pill">${escapeHtml(a.version || "")}</span></div>
             <div class="muted-sm">${escapeHtml(a.summary || "")}</div>
-            <div class="value text-xs"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.url)}</a></div>
+            <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
+              <span class="pill ${a.status === "running" ? "ok" : ""}">${escapeHtml(a.status || "")}</span>
+            </div>
+            <div data-url-slot="${escapeHtml(a.appId)}">${urlRowHtml(a, null)}</div>
           </div>
           <button class="secondary" data-action="open" data-id="${escapeHtml(a.appId)}">open</button>
         </div>
       </div>
     `).join("");
-    root.querySelectorAll('[data-action="open"]').forEach((b) => {
-      b.addEventListener("click", async () => {
-        const { enterAppDetail } = await import("./app-detail.js");
-        await enterAppDetail(b.getAttribute("data-id"));
-      });
-    });
+    bindAppsListHandlers();
+    // Fan out the per-app /links fetch in the background — patches
+    // each row's URL slot as the response lands.
+    void hydrateAppLinks(body.apps);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -41,6 +75,66 @@ export async function renderAppsList() {
       throw e;
     }
   }
+}
+
+function bindAppsListHandlers() {
+  document.querySelectorAll('[data-action="open"]').forEach((b) => {
+    b.addEventListener("click", async () => {
+      const { enterAppDetail } = await import("./app-detail.js");
+      await enterAppDetail(b.getAttribute("data-id"));
+    });
+  });
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      const url = ev.currentTarget.getAttribute("data-copy");
+      try {
+        await navigator.clipboard.writeText(url);
+        toast("Copied.");
+      } catch (e) {
+        toast("Couldn't copy.", "err");
+      }
+    });
+  });
+}
+
+async function hydrateAppLinks(apps) {
+  const username = getSession().username;
+  if (!username) return;
+  await Promise.all(apps.map(async (a) => {
+    try {
+      const r = await fetch(
+        `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(a.appId)}/links`,
+        { cache: "no-store" },
+      );
+      if (!r.ok) return;
+      const links = await r.json();
+      const slot = document.querySelector(`[data-url-slot="${cssEscape(a.appId)}"]`);
+      if (slot) {
+        slot.innerHTML = urlRowHtml(a, links);
+        // Re-bind copy buttons inside this slot.
+        slot.querySelectorAll("[data-copy]").forEach((btn) => {
+          btn.addEventListener("click", async (ev) => {
+            const url = ev.currentTarget.getAttribute("data-copy");
+            try {
+              await navigator.clipboard.writeText(url);
+              toast("Copied.");
+            } catch {
+              toast("Couldn't copy.", "err");
+            }
+          });
+        });
+      }
+    } catch {
+      // Per-app failure tolerated — leave the placeholder + canonical
+      // fallback in place rather than nuking the row.
+    }
+  }));
+}
+
+/** CSS.escape isn't on every browser version; this is a safe subset
+ *  for the alphanumerics + hyphens an appId actually contains. */
+function cssEscape(s) {
+  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
 }
 
 export function initAppsListView() {
