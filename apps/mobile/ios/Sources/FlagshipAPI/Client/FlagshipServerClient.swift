@@ -165,17 +165,27 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
     /// V4 — lazy-minted by handleGetAppLinks on first call; preserved
     /// across calls until the next Replace cascade-deletes it.
     public let shortUrl: String?
-    /// The attached external domain, if the user has bound one. A
-    /// Replace never touches it. Surfaced at the top of WEB DOMAINS
-    /// and, in the apps list, IN PLACE OF the short link.
+    /// The attached external domain, if the user has requested one. A
+    /// Replace never touches it. Shown optimistically at the top of
+    /// WEB DOMAINS as soon as it's requested.
     public let customDomain: String?
+    /// Whether .com has verified the CNAME. nil/false = requested but
+    /// not yet confirmed. Drives the SUBTLE confirm signal: the apps
+    /// list swaps the short link for the custom domain only once true.
+    public let customDomainConfirmed: Bool?
+    /// Unix seconds of the last custom-domain request. Sourced from
+    /// the server so the rate-limit countdown survives an app reload
+    /// / VM recreation (the cooldown is reconstructed from this).
+    public let customDomainLastChangedAt: Double?
     public init(
         appId: String,
         displayLabel: String,
         canonicalUrl: String,
         instances: [AppLinkInstance],
         shortUrl: String?,
-        customDomain: String? = nil
+        customDomain: String? = nil,
+        customDomainConfirmed: Bool? = nil,
+        customDomainLastChangedAt: Double? = nil
     ) {
         self.appId = appId
         self.displayLabel = displayLabel
@@ -183,6 +193,8 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
         self.instances = instances
         self.shortUrl = shortUrl
         self.customDomain = customDomain
+        self.customDomainConfirmed = customDomainConfirmed
+        self.customDomainLastChangedAt = customDomainLastChangedAt
     }
 }
 
@@ -785,6 +797,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public var customDomainLastChangedByUser: [String: [String: Date]] = [:]
     /// Min seconds between custom-domain changes (server-enforced).
     public var customDomainMinInterval: TimeInterval = 300
+    /// Demo only: how long after a request the Mock pretends .com
+    /// finished the out-of-band CNAME verification. A real server
+    /// pushes the outcome; the Mock just flips confirmed after this.
+    public var customDomainConfirmDelay: TimeInterval = 6
 
     public func renameApp(
         username: String,
@@ -843,6 +859,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // surfaces the same link across calls (so a copy-paste in
         // demo mode is stable + previews stay snapshot-friendly).
         let shortCode = synthesizeMockShortCode(forAppId: appId, label: label)
+        let lastChanged = customDomainLastChangedByUser[username.lowercased()]?[appId]
+        // Demo: .com "confirms" the CNAME customDomainConfirmDelay
+        // seconds after the request (a real server pushes the outcome).
+        let confirmed = lastChanged.map {
+            Date().timeIntervalSince($0) >= customDomainConfirmDelay
+        }
         return AppLinksResponse(
             appId: appId,
             displayLabel: label,
@@ -854,7 +876,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 ),
             ],
             shortUrl: "https://voi.ci/\(shortCode)",
-            customDomain: customDomainByUser[username.lowercased()]?[appId]
+            customDomain: customDomainByUser[username.lowercased()]?[appId],
+            customDomainConfirmed: confirmed,
+            customDomainLastChangedAt: lastChanged?.timeIntervalSince1970
         )
     }
 

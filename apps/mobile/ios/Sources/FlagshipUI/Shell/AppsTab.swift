@@ -262,9 +262,12 @@ private struct AppRow: View {
         // of the row + truncates with middle-ellipsis on overflow.
         // No icons either side; the section header tells us what
         // group each URL belongs to.
-        // A bound custom domain takes the short link's slot — that's
-        // the name the user actually wants to see for this app.
-        let short = links?.customDomain.map { "https://\($0)" } ?? links?.shortUrl
+        // A custom domain takes the short link's slot ONLY once .com
+        // has confirmed it — that swap is the subtle "it's live" cue.
+        let confirmedCustom = (links?.customDomainConfirmed == true)
+            ? links?.customDomain.map { "https://\($0)" }
+            : nil
+        let short = confirmedCustom ?? links?.shortUrl
         let canonical = links?.canonicalUrl ?? "https://\(app.urlLabel)…"
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: FS.space.s2) {

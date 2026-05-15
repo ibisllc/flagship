@@ -170,11 +170,14 @@ public final class AppDetailViewModel {
         // face value and lets the binding POST test it. A failed
         // CNAME comes back as the POST error below.
 
-        // (b) Replacing an existing binding — confirm first.
+        // (b) Replacing an existing binding — confirm first. The swap
+        // is destructive and irreversible: this device drops its memory
+        // of the old domain immediately, even if the new one never
+        // confirms (there's no "forget a domain" affordance otherwise).
         if let existing = customDomain, existing != fqdn {
             customDomainPrompt = CustomDomainPrompt(
                 title: "Replace custom domain?",
-                message: "This will replace your existing custom URL \(existing).",
+                message: "This will permanently replace the current custom domain (\(existing)). It can't be undone, even if the new one fails to verify.",
                 confirmTitle: "Replace",
                 destructive: true,
                 onConfirm: { [weak self] in
@@ -202,8 +205,7 @@ public final class AppDetailViewModel {
             )
             appLinks = .loaded(r)
             customDomainDraft = ""
-            customDomainCooldownUntil = Date()
-                .addingTimeInterval(Self.customDomainCooldown)
+            applyCooldown(from: r)
         } catch {
             // Non-200 is the ONLY synchronous denial — rate-limit or
             // server-busy, never a CNAME verdict (that's async). Show
@@ -245,9 +247,20 @@ public final class AppDetailViewModel {
         do {
             let r = try await server.getAppLinks(username: user, appId: appId)
             appLinks = .loaded(r)
+            // Rebuild the rate-limit countdown from the server's
+            // lastChanged so it survives an app reload / VM recreation.
+            applyCooldown(from: r)
         } catch {
             appLinks = .failed(error.localizedDescription)
         }
+    }
+
+    /// Reconstruct the cooldown deadline from the server-sourced
+    /// last-request time so the countdown is durable.
+    private func applyCooldown(from r: AppLinksResponse) {
+        guard let ts = r.customDomainLastChangedAt else { return }
+        let until = Date(timeIntervalSince1970: ts + Self.customDomainCooldown)
+        customDomainCooldownUntil = until > Date() ? until : nil
     }
 
     /// V2 — Replace ceremony. Signs the canonical bytes with the
