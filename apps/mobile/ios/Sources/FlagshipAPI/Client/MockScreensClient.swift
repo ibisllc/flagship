@@ -272,7 +272,16 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let interval: Int64 = 60_000  // 1-minute samples
         let memTotal: Int64 = 8 * 1024 * 1024 * 1024  // 8 GB
         let diskTotal: Int64 = 256 * 1024 * 1024 * 1024 // 256 GB
-        let seed = abs(podId.hashValue)
+        // Deterministic per-pod seed via FNV-1a over the podId bytes.
+        // String.hashValue uses a per-process random salt which made
+        // the previous `seed % 7` derivation collide ~14% of the time
+        // across two pod IDs — the "yieldsDistinctSeriesPerPod" tests
+        // failed flakily under that.
+        let seed: UInt64 = {
+            var h: UInt64 = 14695981039346656037
+            for b in podId.utf8 { h ^= UInt64(b); h &*= 1099511628211 }
+            return h
+        }()
 
         var cpu: [ServerMetricsResponse.TimedSample] = []
         var mem: [ServerMetricsResponse.TimedSample] = []
@@ -281,7 +290,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         for i in 0..<60 {
             let t = now - Int64(59 - i) * interval
             let phase = Double(i) / 60.0 * .pi * 2
-            let s = Double(seed % 7) / 7.0
+            // Stretch the seed across the full 0..2π range — using
+            // (seed % 360) / 360 gives 360 distinct curves which is
+            // plenty for visual distinction.
+            let s = Double(seed % 360) / 360.0 * .pi * 2
             cpu.append(.init(at: t, value: max(2, min(95, 18 + 14 * sin(phase + s) + 6 * cos(2 * phase + s)))))
             mem.append(.init(at: t, value: Double(memTotal) * (0.42 + 0.06 * sin(phase + s))))
             io.append(.init(
