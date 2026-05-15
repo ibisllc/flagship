@@ -781,6 +781,10 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// Bound external domains, keyed [user][appId]. A Replace never
     /// clears this — it's deliberately a separate store from aliases.
     public var customDomainByUser: [String: [String: String]] = [:]
+    /// Server-side rate limit mirror: [user][appId] → last change.
+    public var customDomainLastChangedByUser: [String: [String: Date]] = [:]
+    /// Min seconds between custom-domain changes (server-enforced).
+    public var customDomainMinInterval: TimeInterval = 300
 
     public func renameApp(
         username: String,
@@ -860,8 +864,26 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         fqdn: String
     ) async throws -> AppLinksResponse {
         try await tick()
-        customDomainByUser[username.lowercased(), default: [:]][appId] =
+        let u = username.lowercased()
+        // Server-side rate limit (the lastChanged column). The client
+        // mirrors this with a cooldown, but the server is the backstop.
+        if let last = customDomainLastChangedByUser[u]?[appId] {
+            let elapsed = Date().timeIntervalSince(last)
+            if elapsed < customDomainMinInterval {
+                let wait = Int((customDomainMinInterval - elapsed).rounded(.up))
+                throw ScreensClientError.http(
+                    status: 429,
+                    message: "Too soon — try again in \(wait)s."
+                )
+            }
+        }
+        // Synchronous confirmation: a real server fetches the CNAME
+        // here and only commits if it points at the user's stub. The
+        // Mock has no DNS, so it accepts the claim (the demo can't
+        // exercise a real failure path).
+        customDomainByUser[u, default: [:]][appId] =
             fqdn.trimmingCharacters(in: .whitespaces).lowercased()
+        customDomainLastChangedByUser[u, default: [:]][appId] = Date()
         return try await getAppLinks(username: username, appId: appId)
     }
 

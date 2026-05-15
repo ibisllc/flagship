@@ -41,6 +41,12 @@ public final class AppDetailViewModel {
     public var customDomainDraft: String = ""
     /// One-at-a-time alert that drives the set-custom-domain flow.
     public var customDomainPrompt: CustomDomainPrompt?
+    /// Client-side rate limit: after a successful set, the user must
+    /// wait until this instant before changing again. The server also
+    /// enforces it (lastChanged column) — this is just the UX mirror.
+    public var customDomainCooldownUntil: Date?
+    /// Cooldown after a successful custom-domain change.
+    public static let customDomainCooldown: TimeInterval = 300
     /// The bound external domain, sourced from the links bundle so the
     /// detail screen and the apps list agree. A Replace never clears it.
     public var customDomain: String? { appLinks.value?.customDomain }
@@ -135,8 +141,14 @@ public final class AppDetailViewModel {
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard !fqdn.isEmpty else { return }
 
+        // Rate limit (client mirror of the server's lastChanged).
+        if let until = customDomainCooldownUntil, until > Date() {
+            return
+        }
+
         // (a) Apex / no subdomain — fewer than 3 labels means there's
         // no subdomain to CNAME (example.com). Offer the www form.
+        // Structural (not a DNS check) so it stays instant + local.
         if fqdn.split(separator: ".").count < 3 {
             let suggested = "www.\(fqdn)"
             customDomainPrompt = CustomDomainPrompt(
@@ -153,20 +165,12 @@ public final class AppDetailViewModel {
             return
         }
 
-        // (b) CNAME must already resolve to the user's stub.
-        let ok = (try? await client.verifyCustomDomain(.init(fqdn: fqdn)))?.status == .verified
-        if !ok {
-            customDomainPrompt = CustomDomainPrompt(
-                title: "CNAME not found",
-                message: "Set a CNAME record for \(fqdn) targeting \(rootDomain), then try again.",
-                confirmTitle: nil,
-                destructive: false,
-                onConfirm: nil
-            )
-            return
-        }
+        // No phone-side CNAME check: the server re-validates
+        // authoritatively anyway, so the phone takes the claim at
+        // face value and lets the binding POST test it. A failed
+        // CNAME comes back as the POST error below.
 
-        // (c) Replacing an existing binding — confirm first.
+        // (b) Replacing an existing binding — confirm first.
         if let existing = customDomain, existing != fqdn {
             customDomainPrompt = CustomDomainPrompt(
                 title: "Replace custom domain?",
@@ -174,17 +178,18 @@ public final class AppDetailViewModel {
                 confirmTitle: "Replace",
                 destructive: true,
                 onConfirm: { [weak self] in
-                    Task { await self?.bindCustomDomain(fqdn) }
+                    Task { await self?.bindCustomDomain(fqdn, rootDomain: rootDomain) }
                 }
             )
             return
         }
 
-        // (d) Clean path — issue the binding order.
-        await bindCustomDomain(fqdn)
+        // (c) Clean path — issue the binding order (server tests the
+        // CNAME inline and confirms in the response).
+        await bindCustomDomain(fqdn, rootDomain: rootDomain)
     }
 
-    private func bindCustomDomain(_ fqdn: String) async {
+    private func bindCustomDomain(_ fqdn: String, rootDomain: String) async {
         guard let server, let user = username(), !user.isEmpty else { return }
         do {
             let r = try await server.setCustomDomain(
@@ -192,10 +197,14 @@ public final class AppDetailViewModel {
             )
             appLinks = .loaded(r)
             customDomainDraft = ""
+            customDomainCooldownUntil = Date()
+                .addingTimeInterval(Self.customDomainCooldown)
         } catch {
+            // The server tests the CNAME inline, so a failure here is
+            // most often "CNAME not pointing at us" (or rate-limited).
             customDomainPrompt = CustomDomainPrompt(
                 title: "Couldn't set custom domain",
-                message: error.localizedDescription,
+                message: "\(error.localizedDescription)\n\nMake sure \(fqdn) has a CNAME record targeting \(rootDomain).",
                 confirmTitle: nil,
                 destructive: false,
                 onConfirm: nil
