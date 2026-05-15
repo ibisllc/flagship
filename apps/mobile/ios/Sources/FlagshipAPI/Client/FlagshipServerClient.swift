@@ -776,7 +776,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: 403, message: "bad signature")
         case .ok:
             let newLabel = body.request.newDisplayLabel
-            let canonical = "https://\(newLabel).demo-pod.flagship.services"
+            let canonical = "https://\(newLabel).\(username.lowercased()).flagship.services"
             appAliasByUser[username.lowercased(), default: [:]][appId] = (newLabel, canonical)
             return AppRenameResponse(
                 ok: true,
@@ -811,7 +811,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             return appId.lowercased()
         }()
         let label = alias?.displayLabel ?? defaultLabel
-        let canonical = alias?.canonicalUrl ?? "https://\(label).demo-pod.flagship.services"
+        let host = "\(username.lowercased()).flagship.services"
+        let canonical = alias?.canonicalUrl ?? "https://\(label).\(host)"
         // V6 — Mock now mirrors the Worker's lazy-mint contract:
         // /links always returns a populated shortUrl. The code is a
         // deterministic 6-char hex prefix of appId so the same app
@@ -824,7 +825,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             canonicalUrl: canonical,
             instances: [
                 AppLinkInstance(
-                    serverDomain: "demo-pod.flagship.services",
+                    serverDomain: host,
                     url: canonical
                 ),
             ],

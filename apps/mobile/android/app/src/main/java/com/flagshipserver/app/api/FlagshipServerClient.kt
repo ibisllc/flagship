@@ -558,7 +558,7 @@ class MockFlagshipServerClient(
             AppRenameBehavior.StaleSignature -> throw IllegalStateException("403 bad signature")
             AppRenameBehavior.Ok -> {
                 val newLabel = body.request.newDisplayLabel
-                val canonical = "https://$newLabel.demo-pod.flagship.services"
+                val canonical = "https://$newLabel.${username.lowercase()}.flagship.services"
                 appAliasByUser.getOrPut(username.lowercase()) { mutableMapOf() }[appId] = newLabel to canonical
                 AppRenameResponse(
                     ok = true,
@@ -593,13 +593,14 @@ class MockFlagshipServerClient(
             }
         }
         val label = alias?.first ?: defaultLabel
-        val canonical = alias?.second ?: "https://$label.demo-pod.flagship.services"
+        val host = "${username.lowercase()}.flagship.services"
+        val canonical = alias?.second ?: "https://$label.$host"
         return AppLinksResponse(
             appId = appId,
             displayLabel = label,
             canonicalUrl = canonical,
             instances = listOf(
-                AppLinkInstance(serverDomain = "demo-pod.flagship.services", url = canonical),
+                AppLinkInstance(serverDomain = host, url = canonical),
             ),
             shortUrl = null,
         )
