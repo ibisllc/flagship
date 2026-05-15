@@ -122,7 +122,8 @@
           <button class="secondary full-width" id="settings-tab-push">Browser notifications</button>
           <button class="secondary full-width" id="settings-tab-recovery">Recovery</button>
           <button class="secondary full-width" id="settings-tab-tier">Tier &amp; usage</button>
-          <button class="secondary full-width" id="settings-tab-sessions">Paired sessions</button>
+          <button class="secondary full-width" id="settings-tab-trusted-devices">Trusted devices</button>
+          <button class="secondary full-width" id="settings-tab-sessions">Browser sessions</button>
         </div>
 
         <h2 class="mt-5">Advanced</h2>
@@ -441,6 +442,17 @@
       </section>
 
       <!-- View 15: Recovery (P2.12) -->
+      <!-- Trusted devices — peer-class devices on the account
+           (push-token holders). Read-managed from the webapp; the
+           webapp itself isn't a trusted device (it's a per-pod
+           browser session). -->
+      <section id="view-trusted-devices" class="hidden">
+        <h2>Trusted devices</h2>
+        <p class="note">Phones and tablets that hold your account keys.</p>
+        <div id="trusted-devices-list"></div>
+        <button class="secondary full-width mt-2" id="trusted-devices-back">← Back</button>
+      </section>
+
       <section id="view-recovery" class="hidden">
         <h2>Recovery</h2>
         <div class="card">
