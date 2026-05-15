@@ -62,10 +62,16 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
     }
 }
 
-/// Onboarding sub-routes. Welcome is the root; the two leaf flows are
-/// "create new server" and "pair to existing server."
+/// Onboarding sub-routes. Welcome is the root; the leaf flows are
+/// "create a new account" (Welcome → ChooseUsername → CreateServer)
+/// and "I already have an account" (Welcome → Recovery via WebAuthn-PRF
+/// → PostRecoveryChoice). Both leave the user on the paired RootShell.
 public enum OnboardingRoute: Hashable, Sendable {
     case chooseUsername
     case createServer(username: String)
-    case podPair
+    /// WebAuthn-PRF recovery on a fresh install. Fetches the
+    /// wrapped UMK from flagshipserver.com using the user's passkey
+    /// (iCloud Keychain on Apple-paired devices, or a hardware
+    /// authenticator). After unwrap, presents PostRecoveryChoice.
+    case recoverFromWelcome
 }

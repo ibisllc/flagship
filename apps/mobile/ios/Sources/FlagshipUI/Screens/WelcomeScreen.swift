@@ -27,7 +27,14 @@ public struct WelcomeScreen: View {
                 Spacer().frame(height: FS.space.s8)
                 VStack(spacing: FS.space.s3) {
                     FSPrimaryButton("Create your account", block: true, large: true, action: onCreate)
-                    FSGhostButton("I already have a server", block: true, large: true, action: onExisting)
+                    // Drives the WebAuthn-PRF recovery flow on a
+                    // fresh install — pulls the wrapped UMK off
+                    // flagshipserver.com using a passkey that's
+                    // either synced via iCloud Keychain or held on
+                    // a YubiKey / 1Password / etc. After unwrap,
+                    // the user chooses Keep-both-devices /
+                    // Replace-lost-device / Wipe-&-restart.
+                    FSGhostButton("I already have an account", block: true, large: true, action: onExisting)
                 }
                 Spacer().frame(height: FS.space.s8)
             }

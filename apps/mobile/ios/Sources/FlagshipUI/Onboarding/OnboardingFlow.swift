@@ -15,7 +15,10 @@ import FlagshipAPI
 ///     │     ├─ demo skip:   "pretend it's already running" — pod
 ///     │     │              lands as .online with no real provisioning
 ///     │     └─ test-account: DemoFixtures.activate (3 sample pods)
-///     └─ I already have a server → PodPair (stub)
+///     └─ I already have an account → RecoverFromWelcomeScreen
+///           (WebAuthn-PRF recovery via the user's passkey →
+///           PostRecoveryChoice: Keep both / Replace lost / Wipe)
+///           — wired in B3. B1 just lays the path entry.
 public struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @State private var path: [OnboardingRoute] = []
@@ -26,7 +29,7 @@ public struct OnboardingFlow: View {
         NavigationStack(path: $path) {
             WelcomeScreen(
                 onCreate:   { path.append(.chooseUsername) },
-                onExisting: { path.append(.podPair) }
+                onExisting: { path.append(.recoverFromWelcome) }
             )
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
@@ -59,18 +62,13 @@ public struct OnboardingFlow: View {
                             )
                         }
                     )
-                case .podPair:
-                    PodPairScreen(
-                        onSubmit: { _, name, description in
-                            // PodPair (linking the phone to an existing
-                            // server) is still a stub; flip back to a
-                            // mock-paired state with the user's chosen
-                            // label until the real pairing wire format
-                            // lands.
-                            completeOnlinePair(username: "guest", name: name, description: description)
-                        },
-                        onCancel: { path.removeLast() }
-                    )
+                case .recoverFromWelcome:
+                    // Placeholder until B3 lands the real WebAuthn-PRF
+                    // recovery flow. The current copy makes the user-
+                    // intent explicit (the dropped PodPairScreen tried
+                    // to imply you could "claim" someone else's pod —
+                    // you can't; you can only recover your own account).
+                    RecoveryFromWelcomeStub(onCancel: { path.removeLast() })
                 }
             }
         }
@@ -114,6 +112,33 @@ public struct OnboardingFlow: View {
             status: .online
         )
         app.completeOnboarding(username: username, pods: [pod])
+    }
+}
+
+/// Placeholder for the recovery branch from Welcome. B3 replaces
+/// this with the real WebAuthn-PRF flow + PostRecoveryChoiceScreen.
+/// Kept here so the navigation graph compiles after the PodPair
+/// deletion lands; production traffic doesn't reach this view until
+/// the user runs an iOS build where B1 is the head — by then B3
+/// is on top.
+private struct RecoveryFromWelcomeStub: View {
+    @Environment(\.colorScheme) private var scheme
+    var onCancel: () -> Void = {}
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            Spacer().frame(height: FS.space.s12)
+            Text("Recover your account").font(FS.font.h2()).foregroundColor(c.text)
+            Text("Authenticate with your passkey to bring this device into your existing Flagship account. You can choose whether to keep your other devices working or replace a lost one.")
+                .font(FS.font.body()).foregroundColor(c.textMuted)
+            Spacer()
+            FSGhostButton("Back", block: true, action: onCancel)
+            Spacer().frame(height: FS.space.s8)
+        }
+        .padding(.horizontal, FS.space.s6)
+        .background(c.bg.ignoresSafeArea())
+        .navigationTitle("Recover")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
