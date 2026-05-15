@@ -6,10 +6,12 @@ import {
 } from "@flagship/protocol";
 import type {
   PendingRePairStorage,
+  PushTokenStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import type { HandlerResponse } from "./types.js";
+import { computeDevicesEtag } from "./usersDevices.js";
 
 /**
  * Recovery re-pair endpoints (J.3).
@@ -50,6 +52,15 @@ export const RE_PAIR_GRACE_MS = 24 * 60 * 60_000;
 export interface RePairDeps {
   usernames: UsernameStorage;
   pendingRePairs: PendingRePairStorage;
+  /**
+   * Optional dep. When wired AND the caller supplies an `ifMatch`
+   * value to handleInitiateRePair, the handler validates that the
+   * supplied ETag still matches the current devices list — closes
+   * the "another device registered between fetch-list and submit-
+   * rotate" race. Older callers without the dep degrade to the
+   * existing un-fenced behavior.
+   */
+  pushTokens?: PushTokenStorage;
   graceMs?: number;
   maxAgeMs?: number;
   now?: () => number;
@@ -61,6 +72,16 @@ export async function handleInitiateRePair(
   deps: RePairDeps,
   username: string,
   body: unknown,
+  /**
+   * If-Match header value the client sent over the devices ETag it
+   * had cached when it initiated. Optional for backwards-compat:
+   *   - absent  → behaviour unchanged (old clients still work)
+   *   - present → must match the current /api/users/:u/devices ETag,
+   *               else 412 Precondition Failed.
+   * Both the deps.pushTokens AND this param must be set for the
+   * check to fire.
+   */
+  ifMatch?: string,
 ): Promise<HandlerResponse> {
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
@@ -82,6 +103,36 @@ export async function handleInitiateRePair(
   }
   if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
     return { status: 403, body: { error: "stale request" } };
+  }
+
+  // Optional ETag fence: only fires when the client opted in AND
+  // the deps include pushTokens. We compute the devices snapshot
+  // inline (same code path as the listing handler) so a renamed
+  // device or a new push token between fetch + initiate forces the
+  // client to refresh.
+  if (ifMatch !== undefined && deps.pushTokens) {
+    const rows = await deps.pushTokens.listByUser(r.username);
+    const currentEtag = await computeDevicesEtag(
+      rows
+        .map((p) => ({
+          tokenId: p.tokenId,
+          tokenPrefix: p.tokenId.slice(0, 8),
+          label: p.label || `Untitled ${p.platform}`,
+          platform: p.platform,
+          addedAt: p.registeredAt,
+          lastSeenAt: p.lastSeenAt,
+        }))
+        .sort((a, b) => a.addedAt - b.addedAt || a.tokenId.localeCompare(b.tokenId)),
+    );
+    if (currentEtag !== ifMatch) {
+      return {
+        status: 412,
+        body: {
+          error: "device list has shifted since you fetched it; refresh and retry",
+          currentEtag,
+        },
+      };
+    }
   }
 
   const userRec = await deps.usernames.get(r.username);

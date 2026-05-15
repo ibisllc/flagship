@@ -145,6 +145,79 @@ describe("re-pair initiate", () => {
     ).toBe(409);
   });
 
+  it("accepts an initiate when If-Match matches the current devices ETag", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk);
+    // Seed one device so the ETag isn't the empty-list ETag.
+    await storage.pushTokens.put({
+      tokenId: "deviceA",
+      username: USERNAME,
+      platform: "apns",
+      providerToken: "p",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "iPhone",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    const { handleGetUsersDevices } = await import("../src/usersDevices.js");
+    const { headers } = await handleGetUsersDevices({ pushTokens: storage.pushTokens }, USERNAME);
+    const goodEtag = headers!.etag!;
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs, pushTokens: storage.pushTokens },
+      USERNAME,
+      initBody({ newIrk, oldIrk }),
+      goodEtag,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("412s an initiate when If-Match is stale (race-loser)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk);
+    // Caller hands a fabricated ETag — must not match anything we'd compute.
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs, pushTokens: storage.pushTokens },
+      USERNAME,
+      initBody({ newIrk, oldIrk }),
+      'W/"deadbeefdeadbeef"',
+    );
+    expect(res.status).toBe(412);
+    expect((res.body as { error: string }).error).toMatch(/device list/i);
+    // currentEtag surfaced so the client knows what to refetch.
+    expect((res.body as { currentEtag: string }).currentEtag).toMatch(/^W\/"/);
+  });
+
+  it("ignores If-Match when pushTokens dep isn't wired (backwards-compat path)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk);
+    const res = await handleInitiateRePair(
+      // Note: NO pushTokens in deps. Older callers that haven't
+      // adopted the fence yet must still work.
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      initBody({ newIrk, oldIrk }),
+      'W/"whatever-this-isnt-checked"',
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("ignores If-Match when the client doesn't send it (backwards-compat)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk);
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs, pushTokens: storage.pushTokens },
+      USERNAME,
+      initBody({ newIrk, oldIrk }),
+      // No fourth arg → ifMatch = undefined.
+    );
+    expect(res.status).toBe(200);
+  });
+
   it("404s on an unknown username", async () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();

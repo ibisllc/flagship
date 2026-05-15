@@ -685,9 +685,14 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_INITIATE))) {
     return finishPlain(
       await handleInitiateRePair(
-        { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+        {
+          usernames: storage.usernames,
+          pendingRePairs: storage.pendingRePairs,
+          pushTokens: storage.pushTokens,
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
+        request.headers.get("if-match") ?? undefined,
       ),
     );
   }
