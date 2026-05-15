@@ -19,7 +19,8 @@
 // ---------- Shared shapes ----------------------------------------------
 
 export interface AppSummary {
-  /** Composite id `<creator>--<slug>`. Stable across re-deploys. */
+  /** Composite id `<creator>-<slug>`. Immutable for the life of the
+   *  package — survives re-deploys and URL-stem renames. */
   appId: string;
   creator: string;
   slug: string;

@@ -48,9 +48,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             appCount: appCount,
             pairedSessionCount: 2,
             recentInstallEvents: [
-                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", appId: "plants", detail: "via vibe-code"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", appId: "wiki", detail: "v1.4.0"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", appId: "wiki", detail: "marketplace"),
+                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", appId: "harry-plants", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", appId: "harry-wiki", detail: "v1.4.0"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", appId: "harry-wiki", detail: "marketplace"),
             ]
         )
     }
@@ -62,7 +62,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return AppsListResponse(apps: [
             AppSummary(
-                appId: "plants",
+                appId: "harry-plants",
                 creator: "harry",
                 slug: "plants",
                 urlLabel: "plants.harry.flagship.services",
@@ -73,7 +73,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 30
             ),
             AppSummary(
-                appId: "wiki",
+                appId: "harry-wiki",
                 creator: "harry",
                 slug: "wiki",
                 urlLabel: "wiki.harry.flagship.services",
@@ -84,7 +84,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 60 * 26
             ),
             AppSummary(
-                appId: "pad",
+                appId: "trent-scratchpad",
                 creator: "trent",
                 slug: "scratchpad",
                 urlLabel: "pad.harry.flagship.services",

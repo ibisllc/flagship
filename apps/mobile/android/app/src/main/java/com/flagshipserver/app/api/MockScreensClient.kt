@@ -47,9 +47,9 @@ class MockScreensClient(
             appCount = appCount,
             pairedSessionCount = 2,
             recentInstallEvents = listOf(
-                RecentInstallEvent(now() - 60_000L * 30, "installed", "plants", "via vibe-code"),
-                RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "wiki", "v1.4.0"),
-                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "wiki", "marketplace"),
+                RecentInstallEvent(now() - 60_000L * 30, "installed", "harry-plants", "via vibe-code"),
+                RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "harry-wiki", "v1.4.0"),
+                RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "harry-wiki", "marketplace"),
             ),
         )
     }
@@ -58,11 +58,11 @@ class MockScreensClient(
         tick()
         return AppsListResponse(
             apps = listOf(
-                AppSummary("plants", "harry", "plants", "plants.harry.flagship.services",
+                AppSummary("harry-plants", "harry", "plants", "plants.harry.flagship.services",
                     "Houseplant watering tracker", "https://plants.harry.flagship.services/", "running", "0.0.3", now() - 60_000 * 30),
-                AppSummary("wiki", "harry", "wiki", "wiki.harry.flagship.services",
+                AppSummary("harry-wiki", "harry", "wiki", "wiki.harry.flagship.services",
                     "Personal notes + recipes", "https://wiki.harry.flagship.services/", "running", "1.4.0", now() - 60_000 * 60 * 26),
-                AppSummary("pad", "trent", "scratchpad", "pad.harry.flagship.services",
+                AppSummary("trent-scratchpad", "trent", "scratchpad", "pad.harry.flagship.services",
                     "Markdown scratchpad", "https://pad.harry.flagship.services/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
             )
         )
@@ -284,12 +284,12 @@ class MockScreensClient(
                     newIrkPrefix = "feedbeef0123",
                     apps = listOf(
                         AppReissuanceSummary(
-                            appId = "plants", slug = "plants",
+                            appId = "harry-plants", slug = "plants",
                             rewrittenCount = 1, unchangedCount = 0,
                             error = null, completedAt = now() - 2 * day + 1_500,
                         ),
                         AppReissuanceSummary(
-                            appId = "wiki", slug = "wiki",
+                            appId = "harry-wiki", slug = "wiki",
                             rewrittenCount = 3, unchangedCount = 1,
                             error = null, completedAt = now() - 2 * day + 3_500,
                         ),
