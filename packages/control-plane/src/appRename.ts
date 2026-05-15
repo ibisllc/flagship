@@ -264,24 +264,47 @@ export async function handleGetAppLinks(
     url: `https://${displayLabel}.${s.serverDomain}`,
   }));
 
-  // Find the most recent app-bound short link. The rename handler
-  // cascade-deletes prior rows, so at most ONE row should match;
-  // but if a transient state means more than one, pick the newest.
-  // We don't have a "listByApp" on the storage facade — for now,
-  // scan the most-recent N codes via a single get-by-code lookup is
-  // overkill, so do nothing and surface the link in the rename
-  // response only. Future: add VoiciLinkStorage.getByApp(...) so the
-  // apps-list BFF reads it on every refresh.
+  // V4 — Active app-bound short link via the new getByApp index.
+  // handleAppRename cascade-deletes prior rows before minting the
+  // new one, so at most ONE row should match. If no row exists
+  // (newly installed app that hasn't been renamed), lazy-mint
+  // against the canonical so the first /links call already returns
+  // a shareable voi.ci/<code>.
+  let shortLink = await deps.voiciLinks.getByApp(u, appId);
+  let shortLinkError: string | undefined;
+  if (!shortLink && leader) {
+    const minted = await mintShortLink(
+      {
+        usernames: deps.usernames,
+        voiciLinks: deps.voiciLinks,
+        now: deps.now,
+        shortHost: deps.shortHost,
+      } satisfies VoiciDeps,
+      { username: u, appId, targetUrl: canonicalUrl },
+    );
+    if ("code" in minted) {
+      shortLink = {
+        code: minted.code,
+        username: u,
+        appId,
+        targetUrl: canonicalUrl,
+        createdAt: (deps.now ?? (() => Date.now()))(),
+      };
+    } else {
+      shortLinkError = minted.error;
+    }
+  }
+  const shortUrl = shortLink
+    ? `https://${deps.shortHost ?? "voi.ci"}/${shortLink.code}`
+    : null;
+
   return ok({
     appId,
     displayLabel,
     canonicalUrl,
     instances,
-    // shortUrl is omitted from the links response today; clients
-    // surface the value returned by the rename POST and cache it
-    // locally. The next iteration of this endpoint will denormalize
-    // the short code into user_app_aliases so it's readable here too.
-    shortUrl: null,
+    shortUrl,
+    ...(shortLinkError ? { shortLinkError } : {}),
   });
 }
 

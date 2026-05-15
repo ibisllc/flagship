@@ -276,6 +276,33 @@ describe("handleGetAppLinks", () => {
     expect(b.canonicalUrl).toBe("https://scratchpad-meta.home.alice.flagship.services");
   });
 
+  it("lazy-mints a short link on first call (V4 denormalization)", async () => {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seed(s, irk);
+    // No prior short link.
+    expect(await s.voiciLinks.getByApp(USER, APP)).toBeUndefined();
+    const res = await handleGetAppLinks(makeDeps(s), USER, APP);
+    const b = res.body as { shortUrl: string | null };
+    expect(b.shortUrl).toMatch(/^https:\/\/voi\.ci\/[a-z0-9]{6}$/);
+    // And the row is persisted so a second call returns the SAME url.
+    const res2 = await handleGetAppLinks(makeDeps(s), USER, APP);
+    expect((res2.body as { shortUrl: string }).shortUrl).toBe(b.shortUrl);
+  });
+
+  it("surfaces the rename-minted short link (no re-mint)", async () => {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seed(s, irk);
+    // Rename mints a fresh code.
+    await handleAppRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "renamed" }));
+    const row = await s.voiciLinks.getByApp(USER, APP);
+    expect(row).toBeDefined();
+    const res = await handleGetAppLinks(makeDeps(s), USER, APP);
+    const b = res.body as { shortUrl: string };
+    expect(b.shortUrl).toBe(`https://voi.ci/${row!.code}`);
+  });
+
   it("surfaces the alias when present + lists every live server as an instance", async () => {
     const s = new InMemoryStorage();
     const irk = makeKey();

@@ -425,6 +425,12 @@ export interface VoiciLinkStorage {
   insert(rec: VoiciLinkRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** Redirect-path lookup. */
   get(code: string): Promise<VoiciLinkRecord | undefined>;
+  /** Look up the active app-bound short link for a (user, app) pair.
+   *  At most ONE row should match — handleAppRename cascade-deletes
+   *  prior rows before minting the new one. Returns the most-recently
+   *  created row when more than one is present (defensive); undefined
+   *  if no app-bound short link has been minted. */
+  getByApp(username: string, appId: string): Promise<VoiciLinkRecord | undefined>;
   /** Cascade-delete on app rename / uninstall. Returns count deleted. */
   deleteByApp(username: string, appId: string): Promise<number>;
   /** Periodic GC for expired one-offs. */

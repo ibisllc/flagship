@@ -720,6 +720,29 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
       ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
     } : undefined;
   }
+  async getByApp(username: string, appId: string): Promise<VoiciLinkRecord | undefined> {
+    const r = await this.db
+      .prepare(
+        `SELECT code, username, app_id, target_url, created_at, expires_at
+         FROM voici_links
+         WHERE username = ? AND app_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+      .bind(username.toLowerCase(), appId)
+      .first<{
+        code: string; username: string; app_id: string | null;
+        target_url: string; created_at: number; expires_at: number | null;
+      }>();
+    return r ? {
+      code: r.code,
+      username: r.username,
+      ...(r.app_id ? { appId: r.app_id } : {}),
+      targetUrl: r.target_url,
+      createdAt: r.created_at,
+      ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
+    } : undefined;
+  }
   async deleteByApp(username: string, appId: string): Promise<number> {
     const r = await this.db
       .prepare("DELETE FROM voici_links WHERE username = ? AND app_id = ?")

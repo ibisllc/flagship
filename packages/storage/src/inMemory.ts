@@ -623,6 +623,17 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
     const r = this.rows.get(code);
     return r ? { ...r } : undefined;
   }
+  async getByApp(username: string, appId: string) {
+    const u = username.toLowerCase();
+    // Most-recently created wins on (defensively) duplicate rows.
+    let pick: VoiciLinkRecord | undefined;
+    for (const r of this.rows.values()) {
+      if (r.username === u && r.appId === appId) {
+        if (!pick || r.createdAt > pick.createdAt) pick = r;
+      }
+    }
+    return pick ? { ...pick } : undefined;
+  }
   async deleteByApp(username: string, appId: string) {
     const u = username.toLowerCase();
     let n = 0;
