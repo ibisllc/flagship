@@ -34,6 +34,7 @@ describe("/api/push/register", () => {
       platform: "apns" as const,
       providerToken: "apns-device-abc",
       pushX25519Pub: samplePushPub,
+      label: "Harry's iPhone",
       issuedAt: Date.now(),
     };
     const sig = signPushTokenRegister(claim, irk);
@@ -45,6 +46,7 @@ describe("/api/push/register", () => {
           platform: claim.platform,
           providerToken: claim.providerToken,
           pushX25519Pub: bytesToHex(claim.pushX25519Pub),
+          label: claim.label,
           issuedAt: claim.issuedAt,
         },
         signature: bytesToHex(sig),
@@ -68,6 +70,7 @@ describe("/api/push/register", () => {
       platform: "apns" as const,
       providerToken: "apns-device-abc",
       pushX25519Pub: samplePushPub,
+      label: "Harry's iPhone",
       issuedAt: Date.now(),
     };
     const sig = signPushTokenRegister(claim, evil); // wrong key
@@ -79,6 +82,7 @@ describe("/api/push/register", () => {
           platform: claim.platform,
           providerToken: claim.providerToken,
           pushX25519Pub: bytesToHex(claim.pushX25519Pub),
+          label: claim.label,
           issuedAt: claim.issuedAt,
         },
         signature: bytesToHex(sig),
@@ -96,6 +100,7 @@ describe("/api/push/register", () => {
       platform: "apns" as const,
       providerToken: "x",
       pushX25519Pub: samplePushPub,
+      label: "Harry's iPhone",
       issuedAt: Date.now(),
     };
     const sig = signPushTokenRegister(claim, irk);
@@ -107,6 +112,7 @@ describe("/api/push/register", () => {
           platform: claim.platform,
           providerToken: claim.providerToken,
           pushX25519Pub: bytesToHex(claim.pushX25519Pub),
+          label: claim.label,
           issuedAt: claim.issuedAt,
         },
         signature: bytesToHex(sig),
@@ -127,12 +133,171 @@ describe("/api/push/register", () => {
           platform: "apns",
           providerToken: "x",
           pushX25519Pub: "deadbeef", // not 32 bytes
+          label: "Test",
           issuedAt: Date.now(),
         },
         signature: "00".repeat(64),
       },
     );
     expect(r.status).toBe(400);
+  });
+
+  it("persists the user-facing label", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = {
+      username: "alice",
+      platform: "apns" as const,
+      providerToken: "apns-device-abc",
+      pushX25519Pub: samplePushPub,
+      label: "Harry's iPhone (kitchen)",
+      issuedAt: Date.now(),
+    };
+    const sig = signPushTokenRegister(claim, irk);
+    const r = await handlePushRegister(
+      { pushTokens, usernames },
+      {
+        request: {
+          username: claim.username,
+          platform: claim.platform,
+          providerToken: claim.providerToken,
+          pushX25519Pub: bytesToHex(claim.pushX25519Pub),
+          label: claim.label,
+          issuedAt: claim.issuedAt,
+        },
+        signature: bytesToHex(sig),
+      },
+    );
+    expect(r.status).toBe(200);
+    const all = await pushTokens.listByUser("alice");
+    expect(all[0]?.label).toBe("Harry's iPhone (kitchen)");
+  });
+
+  it("rejects a label longer than 64 bytes", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const r = await handlePushRegister(
+      { pushTokens, usernames },
+      {
+        request: {
+          username: "alice",
+          platform: "apns",
+          providerToken: "x",
+          pushX25519Pub: bytesToHex(samplePushPub),
+          label: "x".repeat(65),
+          issuedAt: Date.now(),
+        },
+        signature: "00".repeat(64),
+      },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects a label containing control characters", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const r = await handlePushRegister(
+      { pushTokens, usernames },
+      {
+        request: {
+          username: "alice",
+          platform: "apns",
+          providerToken: "x",
+          pushX25519Pub: bytesToHex(samplePushPub),
+          label: "BadLabel",       // BEL char
+          issuedAt: Date.now(),
+        },
+        signature: "00".repeat(64),
+      },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects a request missing the label field outright", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const r = await handlePushRegister(
+      { pushTokens, usernames },
+      {
+        request: {
+          username: "alice",
+          platform: "apns",
+          providerToken: "x",
+          pushX25519Pub: bytesToHex(samplePushPub),
+          // label intentionally omitted
+          issuedAt: Date.now(),
+        } as unknown as { username: string; platform: string },
+        signature: "00".repeat(64),
+      },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("re-registering the same token-id updates the label", async () => {
+    // The handler always mints a fresh tokenId, but at storage layer
+    // an idempotent `put` should respect ON CONFLICT semantics — confirm
+    // direct re-put updates label.
+    const pushTokens = new InMemoryPushTokenStorage();
+    await pushTokens.put({
+      tokenId: "tok1",
+      username: "alice",
+      platform: "apns",
+      providerToken: "p1",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "First",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    await pushTokens.put({
+      tokenId: "tok1",
+      username: "alice",
+      platform: "apns",
+      providerToken: "p1",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "Renamed",
+      registeredAt: 1,
+      lastSeenAt: 99,
+    });
+    const rec = await pushTokens.get("tok1");
+    expect(rec?.label).toBe("Renamed");
+  });
+
+  it("label is part of the IRK-signed canonical bytes — tampering with it post-sign is rejected", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const claim = {
+      username: "alice",
+      platform: "apns" as const,
+      providerToken: "apns-device-abc",
+      pushX25519Pub: samplePushPub,
+      label: "Original",
+      issuedAt: Date.now(),
+    };
+    const sig = signPushTokenRegister(claim, irk);
+    // Submit a tampered label with the original signature — signature
+    // verification must fail because label is in the canonical bytes.
+    const r = await handlePushRegister(
+      { pushTokens, usernames },
+      {
+        request: {
+          username: claim.username,
+          platform: claim.platform,
+          providerToken: claim.providerToken,
+          pushX25519Pub: bytesToHex(claim.pushX25519Pub),
+          label: "Tampered",
+          issuedAt: claim.issuedAt,
+        },
+        signature: bytesToHex(sig),
+      },
+    );
+    expect(r.status).toBe(403);
   });
 });
 
@@ -149,6 +314,7 @@ describe("/api/push/relay", () => {
       providerToken: "apns-x",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
+      label: "",
       registeredAt: 0,
       lastSeenAt: 0,
     });
@@ -193,6 +359,7 @@ describe("/api/push/relay", () => {
       providerToken: "apns-x",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
+      label: "",
       registeredAt: 0,
       lastSeenAt: 0,
     });
@@ -223,6 +390,7 @@ describe("/api/push/<token-id>", () => {
       providerToken: "x",
       pushX25519PubHex: "01".repeat(32),
       registrationSignatureHex: "00".repeat(64),
+      label: "",
       registeredAt: 0,
       lastSeenAt: 0,
     });

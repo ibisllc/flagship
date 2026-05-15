@@ -46,10 +46,18 @@ interface RegisterBody {
     platform?: string;
     providerToken?: string;
     pushX25519Pub?: string;
+    label?: string;
     issuedAt?: number;
   };
   signature?: string;
 }
+
+/** Maximum bytes of `label` we'll persist. Anything longer is rejected
+ *  at the handler so the .com storage doesn't grow unbounded if a
+ *  buggy / hostile client ships a 4 MB string. 64 is generous for
+ *  "Harry's iPhone (kitchen)" patterns. */
+const MAX_LABEL_LEN = 64;
+const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
 
 export async function handlePushRegister(
   deps: PushDeps,
@@ -62,6 +70,7 @@ export async function handlePushRegister(
     typeof r.platform !== "string" ||
     typeof r.providerToken !== "string" ||
     typeof r.pushX25519Pub !== "string" ||
+    typeof r.label !== "string" ||
     typeof r.issuedAt !== "number" ||
     typeof body?.signature !== "string"
   ) {
@@ -69,6 +78,12 @@ export async function handlePushRegister(
   }
   if (r.platform !== "apns" && r.platform !== "fcm" && r.platform !== "webpush") {
     return malformed("platform must be apns|fcm|webpush");
+  }
+  if (r.label.length > MAX_LABEL_LEN) {
+    return malformed(`label longer than ${MAX_LABEL_LEN} bytes`);
+  }
+  if (CONTROL_CHARS_RE.test(r.label)) {
+    return malformed("label contains control characters");
   }
   const userRec = await deps.usernames.get(r.username);
   if (!userRec) return notFound("username not registered");
@@ -90,6 +105,7 @@ export async function handlePushRegister(
     platform: r.platform,
     providerToken: r.providerToken,
     pushX25519Pub: pushPub,
+    label: r.label,
     issuedAt: r.issuedAt,
   };
   if (!verifyPushTokenRegister(claim, sig, irkPub)) return forbidden("invalid signature");
@@ -106,6 +122,7 @@ export async function handlePushRegister(
     providerToken: r.providerToken,
     pushX25519PubHex: r.pushX25519Pub,
     registrationSignatureHex: body.signature,
+    label: r.label,
     registeredAt: now,
     lastSeenAt: now,
   });

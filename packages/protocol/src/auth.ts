@@ -1875,6 +1875,15 @@ export interface PushTokenRegister {
   platform: PushPlatform;
   providerToken: string;        // opaque to .com
   pushX25519Pub: Bytes;         // 32 bytes — encryption key for relays
+  /**
+   * Human-readable device label surfaced in the user's "Trusted devices"
+   * list — e.g. "Harry's iPhone", "Pixel 8 — kitchen". The phone supplies
+   * this at registration; .com persists it so other devices can show a
+   * recognisable name rather than a token-id. Treated as opaque text:
+   * the Worker sanitizes length + control chars but never interprets
+   * the content.
+   */
+  label: string;
   issuedAt: number;
 }
 
@@ -1888,6 +1897,7 @@ function canonicalPushTokenRegister(r: PushTokenRegister): Bytes {
       r.platform,
       r.providerToken,
       hex(r.pushX25519Pub),
+      r.label,
       r.issuedAt,
     ].join("|"),
   );

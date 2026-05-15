@@ -1077,16 +1077,18 @@ export class D1PushTokenStorage implements PushTokenStorage {
   constructor(private readonly db: D1Database) {}
   async put(rec: PushTokenRecord): Promise<void> {
     await this.db.prepare(
-      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, registered_at, last_seen_at)
-       VALUES (?,?,?,?,?,?,?,?)
+      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, label, registered_at, last_seen_at)
+       VALUES (?,?,?,?,?,?,?,?,?)
        ON CONFLICT(token_id) DO UPDATE SET
          provider_token=excluded.provider_token,
          push_x25519_pub_hex=excluded.push_x25519_pub_hex,
          registration_signature_hex=excluded.registration_signature_hex,
+         label=excluded.label,
          last_seen_at=excluded.last_seen_at`,
     ).bind(
       rec.tokenId, rec.username, rec.platform, rec.providerToken,
       rec.pushX25519PubHex, rec.registrationSignatureHex,
+      rec.label,
       rec.registeredAt, rec.lastSeenAt,
     ).run();
   }
@@ -1109,6 +1111,7 @@ export class D1PushTokenStorage implements PushTokenStorage {
 interface RawPushRow {
   token_id: string; username: string; platform: string; provider_token: string;
   push_x25519_pub_hex: string; registration_signature_hex: string;
+  label: string | null;
   registered_at: number; last_seen_at: number;
 }
 function pushRowToRecord(r: RawPushRow): PushTokenRecord {
@@ -1119,6 +1122,7 @@ function pushRowToRecord(r: RawPushRow): PushTokenRecord {
     providerToken: r.provider_token,
     pushX25519PubHex: r.push_x25519_pub_hex,
     registrationSignatureHex: r.registration_signature_hex,
+    label: r.label ?? "",
     registeredAt: r.registered_at,
     lastSeenAt: r.last_seen_at,
   };

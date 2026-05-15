@@ -463,6 +463,12 @@ export interface PushTokenRecord {
   providerToken: string;                 // opaque
   pushX25519PubHex: string;
   registrationSignatureHex: string;
+  /**
+   * User-facing device name from the registration envelope. Surfaced
+   * verbatim in the "Trusted devices" list — the Worker sanitizes
+   * length + control chars at the registration handler boundary.
+   */
+  label: string;
   registeredAt: number;
   lastSeenAt: number;
 }
