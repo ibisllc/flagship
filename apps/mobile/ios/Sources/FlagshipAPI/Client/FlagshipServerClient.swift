@@ -45,6 +45,34 @@ public protocol FlagshipServerClient: Sendable {
     /// as If-Match on revocation / rotation requests. Worker side:
     /// GET /api/users/:u/devices.
     func listDevices(username: String) async throws -> TrustedDevicesListResponse
+
+    /// Account-level audit log surfaced via /api/users/:u/audit. Used
+    /// by the Activity feed to render device-disconnect / device-
+    /// replaced / wipe-restart / recovery-set-up events alongside
+    /// the daemon-side install events. `sinceSeq` is exclusive lower
+    /// bound; `limit` is clamped server-side to 50.
+    func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse
+}
+
+public struct AuditEvent: Codable, Equatable, Sendable, Identifiable {
+    public let seq: Int
+    public let eventKind: String   // "device-disconnected" | "device-replaced" | …
+    public let detail: String
+    public let devicePrefix: String
+    public let postedAt: Int64
+
+    public var id: Int { seq }
+
+    public init(seq: Int, eventKind: String, detail: String, devicePrefix: String, postedAt: Int64) {
+        self.seq = seq; self.eventKind = eventKind
+        self.detail = detail; self.devicePrefix = devicePrefix
+        self.postedAt = postedAt
+    }
+}
+
+public struct AuditEventListResponse: Codable, Equatable, Sendable {
+    public let events: [AuditEvent]
+    public init(events: [AuditEvent]) { self.events = events }
 }
 
 public struct TrustedDevice: Codable, Equatable, Sendable, Identifiable {
@@ -426,6 +454,19 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// If-Match flows can be exercised without the real Worker.
     public var devicesByUser: [String: [TrustedDevice]] = [:]
 
+    /// Scripted audit log per username. Tests configure the array
+    /// to drive ActivityViewModel renders without hitting the
+    /// Worker. Defaults to empty so unconfigured tests see a clean
+    /// (no Account events) section.
+    public var auditEventsByUser: [String: [AuditEvent]] = [:]
+
+    public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {
+        try await tick()
+        let all = auditEventsByUser[username.lowercased()] ?? []
+        let filtered = all.filter { $0.seq > sinceSeq }.sorted { $0.seq > $1.seq }
+        return AuditEventListResponse(events: Array(filtered.prefix(max(0, min(limit, 50)))))
+    }
+
     public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
         try await tick()
         let devices = devicesByUser[username.lowercased()] ?? []
@@ -633,5 +674,23 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // proxy strips it. Callers tolerate nil by skipping If-Match.
         let etag = http?.value(forHTTPHeaderField: "Etag") ?? http?.value(forHTTPHeaderField: "ETag")
         return TrustedDevicesListResponse(devices: body.devices, etag: etag)
+    }
+
+    public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var comps = URLComponents(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/audit"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [
+            URLQueryItem(name: "since", value: String(max(0, sinceSeq))),
+            URLQueryItem(name: "limit", value: String(max(1, min(limit, 50)))),
+        ]
+        var req = URLRequest(url: comps.url!)
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(AuditEventListResponse.self, from: data)
     }
 }

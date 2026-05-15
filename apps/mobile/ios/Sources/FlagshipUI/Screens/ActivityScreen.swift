@@ -74,6 +74,21 @@ public struct ActivityScreen: View {
                             postRecoveryCard(snap, c: c)
                         }
                     }
+                    if !feed.auditEvents.isEmpty {
+                        section("ACCOUNT EVENTS", c: c) {
+                            FSCard {
+                                VStack(spacing: FS.space.s3) {
+                                    ForEach(feed.auditEvents.indices, id: \.self) { i in
+                                        let e = feed.auditEvents[i]
+                                        auditRow(event: e, c: c)
+                                        if i < feed.auditEvents.count - 1 {
+                                            Divider().background(c.border)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     section("RECENT DEPLOYS", c: c) {
                         if feed.recentInstalls.isEmpty {
                             FSCard {
@@ -146,6 +161,57 @@ public struct ActivityScreen: View {
         if snap.lastReissue != nil { return "Re-attach finished." }
         if snap.state.lastSeen != nil { return "Re-attach in progress." }
         return "Snapshot ready."
+    }
+
+    /// Account-level audit event row. Mirrors webapp activity.js'
+    /// audit section + Android's pending C11 mirror.
+    private func auditRow(event: AuditEvent, c: FSColors) -> some View {
+        HStack(alignment: .top) {
+            Image(systemName: auditIcon(for: event.eventKind))
+                .foregroundColor(auditColor(for: event.eventKind, c: c))
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(auditLabel(for: event.eventKind)).foregroundColor(c.text)
+                if !event.detail.isEmpty {
+                    Text(event.detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                }
+            }
+            Spacer()
+            Text(relative(ms: event.postedAt)).font(FS.font.caption()).foregroundColor(c.textMuted)
+        }
+    }
+
+    private func auditIcon(for kind: String) -> String {
+        switch kind {
+        case "device-disconnected": return "lock.open.trianglebadge.exclamationmark"
+        case "device-replaced":     return "arrow.triangle.2.circlepath.circle"
+        case "device-added":        return "plus.circle"
+        case "wipe-restart":        return "trash.fill"
+        case "recovery-set-up":     return "key.horizontal.fill"
+        case "recovery-rotated":    return "arrow.triangle.2.circlepath"
+        default:                    return "circle.fill"
+        }
+    }
+
+    private func auditColor(for kind: String, c: FSColors) -> Color {
+        switch kind {
+        case "wipe-restart":        return c.danger
+        case "device-disconnected": return c.danger
+        case "device-replaced":     return c.primary
+        default:                    return c.textMuted
+        }
+    }
+
+    private func auditLabel(for kind: String) -> String {
+        switch kind {
+        case "device-disconnected": return "Disconnected device"
+        case "device-replaced":     return "Replaced device"
+        case "device-added":        return "Added device"
+        case "wipe-restart":        return "Wiped & restarted account"
+        case "recovery-set-up":     return "Set up recovery"
+        case "recovery-rotated":    return "Rotated recovery passkey"
+        default:                    return kind
+        }
     }
 
     private func installRow(event: RecentInstallEvent, c: FSColors) -> some View {

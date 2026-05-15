@@ -5,6 +5,7 @@ import Flagship
 
 public struct ActivityTab: View {
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
     @State private var path: [ActivityRoute] = []
@@ -63,7 +64,13 @@ public struct ActivityTab: View {
             }
         }
         .task {
-            if vm == nil { vm = ActivityViewModel(client: client) }
+            if vm == nil {
+                vm = ActivityViewModel(
+                    client: client,
+                    server: server,
+                    username: { [app] in app.currentUser }
+                )
+            }
             if case .idle = vm?.state { await vm?.load() }
         }
     }
