@@ -4,6 +4,7 @@ import acme from "acme-client";
 import { readFile } from "node:fs/promises";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
 import { AppPlatform, buildAppHttpHandlers } from "./appPlatform.js";
+import { AliasReconciler } from "./aliasReconciler.js";
 import { handleAppRequest } from "./appProxy.js";
 import { AppRunner } from "./appRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
@@ -206,6 +207,17 @@ export interface DaemonRuntimeOptions {
       appId: string;
       canonicalUrl: string;
     }) => Promise<{ currentTip: string }>;
+    /**
+     * V5 — base URL the AliasReconciler polls for the user's app
+     * aliases. Defaults to `https://flagshipserver.com` when the
+     * field is absent (production). Set to `false` to disable the
+     * reconciler entirely (tests + air-gapped dev). Set to an
+     * explicit string to point at a staging .com (e.g.
+     * `http://localhost:8787`).
+     */
+    aliasReconcilerComBase?: string | false;
+    /** V5 — override the 60-second default. */
+    aliasReconcilerIntervalMs?: number;
   };
 }
 
@@ -664,6 +676,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   );
 
   const apOpts = opts.appPlatform;
+  let aliasReconciler: AliasReconciler | null = null;
   if (apOpts?.hostUsername && apOpts.hostIrkPub && apOpts.swk) {
     appPlatformRef.current = new AppPlatform({
       host: { username: apOpts.hostUsername, irkPub: apOpts.hostIrkPub },
@@ -683,6 +696,30 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       `[runtime] AppPlatform ready for host ${apOpts.hostUsername}` +
         (extras.length ? ` (with ${extras.join(", ")})` : ""),
     );
+    // V5 — periodic poll of /api/users/:u/apps/aliases on .com so a
+    // phone-driven Replace stem flow rebinds the reverse-proxy index
+    // automatically. Opt-out via opts.appPlatform.aliasReconcilerComBase = false.
+    const reconcileBase = apOpts.aliasReconcilerComBase;
+    if (reconcileBase !== false) {
+      aliasReconciler = new AliasReconciler({
+        comBaseUrl: reconcileBase ?? "https://flagshipserver.com",
+        username: apOpts.hostUsername,
+        platform: appPlatformRef.current,
+        intervalMs: apOpts.aliasReconcilerIntervalMs ?? 60_000,
+        onApplied: (changes) => {
+          for (const c of changes) {
+            console.log(
+              `[runtime] alias applied: ${c.appId} ${c.oldLabel ?? "(new)"} → ${c.newLabel}`,
+            );
+          }
+        },
+        onError: (e) => {
+          console.warn(`[runtime] alias reconcile error: ${String(e)}`);
+        },
+      });
+      aliasReconciler.start();
+      console.log(`[runtime] AliasReconciler polling ${apOpts.hostUsername} → ${reconcileBase ?? "flagshipserver.com"}`);
+    }
   } else {
     console.log(`[runtime] AppPlatform skipped (host IRK / SWK not provided)`);
   }
@@ -785,6 +822,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ready: () => Promise.resolve(),
     close: async () => {
       if (renewalTimer) clearInterval(renewalTimer);
+      aliasReconciler?.stop();
       await tunnel.close();
       tls.close();
     },
