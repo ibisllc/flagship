@@ -16,6 +16,11 @@ const COM_BASE = "https://flagshipserver.com";
 /** V3 — cached app-links per appId for the current render. */
 let currentAppLinks = null;
 
+/** Custom domains the user has added in this view. Local-only — the
+ *  daemon's P1.22 verify endpoint checks DNS; there is no separate
+ *  "register" call. `{ fqdn, status, expectedTxtRecord, reason }`. */
+let customDomains = [];
+
 registerView("view-app-detail");
 
 let currentAppId = null;
@@ -35,6 +40,7 @@ function hasBrowserBundle(body) {
 
 export async function renderAppDetail(appId) {
   currentAppId = appId;
+  customDomains = [];
   const root = $("app-detail-content");
   root.innerHTML = skeletonCards(3);
   try {
@@ -52,17 +58,18 @@ export async function renderAppDetail(appId) {
       : null;
     root.innerHTML = `
       <div class="card">
-        <div class="card-title">${escapeHtml(a.slug)} <span class="pill">${escapeHtml(a.version || "")}</span></div>
+        <div class="card-title">${escapeHtml(a.slug)}</div>
+        <div class="muted-sm text-xs mt-1">${
+          a.version ? `ver: ${escapeHtml(a.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : ""
+        }id: ${escapeHtml(a.appId)}</div>
         <div class="muted-sm mt-2">${escapeHtml(a.summary || "")}</div>
         <div class="row mt-2">
           <span class="label">creator</span><span class="value">${escapeHtml(a.creator)}</span>
         </div>
-        <div class="row">
-          <span class="label">app id</span><span class="value text-xs">${escapeHtml(a.appId)}</span>
-        </div>
       </div>
 
       ${renderWebDomainsSection(a, currentAppLinks)}
+      <div id="ad-custom-domains">${renderCustomDomainsSection()}</div>
       <h2 class="mt-4">Manifest</h2>
       <div class="card">
         <pre class="json-block">${escapeHtml(JSON.stringify(body.manifest, null, 2))}</pre>
@@ -140,6 +147,7 @@ export async function renderAppDetail(appId) {
       await enterInviteManage(a);
     });
     bindWebDomainsHandlers(a);
+    bindCustomDomainsHandlers();
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -212,6 +220,12 @@ async function fetchAppLinks(username, appId) {
  *  Header carries a Replace button that fires the rename ceremony. */
 function renderWebDomainsSection(app, links) {
   const stripScheme = (s) => s.replace(/^https?:\/\//, "");
+  // Show the bare host (no scheme), HTML-escaped, with a zero-width
+  // space after each dot so a long FQDN wraps between segments rather
+  // than mid-label. href + data-copy keep the clean URL — only the
+  // visible text carries the ZWSP. Mirrors iOS/Android wrapAtDots.
+  const displayUrl = (s) =>
+    escapeHtml(stripScheme(s)).replace(/\./g, ".&#8203;");
   const fallbackCanonical = `https://${app.urlLabel}.${getSession().username || "you"}.flagship.services`;
   const shortUrl = links?.shortUrl ?? null;
   const canonical = links?.canonicalUrl ?? fallbackCanonical;
@@ -221,7 +235,7 @@ function renderWebDomainsSection(app, links) {
     ? `
         <div class="row" data-section="short">
           <a class="weight-600 mono" href="${escapeHtml(shortUrl)}" target="_blank" rel="noopener">
-            🔗 ${escapeHtml(stripScheme(shortUrl))}
+            ${displayUrl(shortUrl)}
           </a>
           <button class="ghost" data-copy="${escapeHtml(shortUrl)}" aria-label="Copy short link">📋</button>
         </div>`
@@ -233,7 +247,7 @@ function renderWebDomainsSection(app, links) {
   const canonicalRow = `
     <div class="row" data-section="canonical">
       <a class="mono" href="${escapeHtml(canonical)}" target="_blank" rel="noopener">
-        🌐 ${escapeHtml(stripScheme(canonical))}
+        ${displayUrl(canonical)}
       </a>
       <button class="ghost" data-copy="${escapeHtml(canonical)}" aria-label="Copy canonical">📋</button>
     </div>`;
@@ -243,7 +257,7 @@ function renderWebDomainsSection(app, links) {
       <div class="label-tiny">INDIVIDUAL INSTANCES</div>
       ${instances.map((i) => `
         <div class="row muted-sm mono" data-section="instance">
-          ${escapeHtml(stripScheme(i.url))}
+          ${displayUrl(i.url)}
         </div>
       `).join("")}
     </div>`;
@@ -279,6 +293,102 @@ function bindWebDomainsHandlers(app) {
     });
   });
   $("ad-replace-stem")?.addEventListener("click", () => openReplaceModal(app));
+}
+
+// ---------------------------------------------------------------
+// Custom domains — add locally, verify DNS via P1.22.
+// ---------------------------------------------------------------
+
+function statusPill(status) {
+  switch (status) {
+    case "verified": return '<span class="pill ok">Verified</span>';
+    case "pending":  return '<span class="pill">Pending DNS</span>';
+    case "failed":   return '<span class="pill err">Failed</span>';
+    default:         return '<span class="pill">Not yet checked</span>';
+  }
+}
+
+/** Card with the list of added custom domains (each with a Verify /
+ *  Remove control + TXT hint) and an add field. Kept visible so the
+ *  custom-domain affordance isn't forgotten. */
+function renderCustomDomainsSection() {
+  const list = customDomains.map((d, i) => `
+    <div class="card" data-cd-row="${i}">
+      <div class="row" style="align-items:baseline;">
+        <span class="mono text-xs" style="flex:1; min-width:0; word-break:break-all;">${escapeHtml(d.fqdn)}</span>
+        ${statusPill(d.status)}
+        <button class="ghost mini" data-cd-remove="${i}" aria-label="Remove">✕</button>
+      </div>
+      ${d.expectedTxtRecord ? `
+        <div class="muted-sm text-xs mt-1">Add this TXT record on <span class="mono">_flagship.${escapeHtml(d.fqdn)}</span>:</div>
+        <div class="mono text-xs">${escapeHtml(d.expectedTxtRecord)}</div>` : ""}
+      ${d.reason ? `<div class="muted-sm text-xs mt-1">${escapeHtml(d.reason)}</div>` : ""}
+      <button class="secondary small mt-2" data-cd-verify="${i}">${d.status === "pending" ? "Re-check DNS" : "Verify DNS"}</button>
+    </div>
+  `).join("");
+  return `
+    <h2 class="mt-4">Custom domain</h2>
+    ${list}
+    <div class="card">
+      <div class="row">
+        <input id="ad-cd-input" placeholder="app.mydomain.com" autocomplete="off" style="flex:1;" />
+        <button class="secondary" id="ad-cd-add">Add</button>
+      </div>
+      <div class="muted-sm text-xs mt-2">
+        Custom domains need a DNS CNAME to your pod. Setup hints appear after you add.
+      </div>
+    </div>
+  `;
+}
+
+function rerenderCustomDomains() {
+  const el = $("ad-custom-domains");
+  if (!el) return;
+  el.innerHTML = renderCustomDomainsSection();
+  bindCustomDomainsHandlers();
+}
+
+function bindCustomDomainsHandlers() {
+  $("ad-cd-add")?.addEventListener("click", () => {
+    const input = $("ad-cd-input");
+    const v = (input?.value || "").trim().toLowerCase();
+    if (!v || customDomains.some((d) => d.fqdn === v)) return;
+    customDomains.push({ fqdn: v, status: null, expectedTxtRecord: "", reason: "" });
+    rerenderCustomDomains();
+  });
+  document.querySelectorAll("[data-cd-remove]").forEach((b) => {
+    b.addEventListener("click", () => {
+      customDomains.splice(Number(b.getAttribute("data-cd-remove")), 1);
+      rerenderCustomDomains();
+    });
+  });
+  document.querySelectorAll("[data-cd-verify]").forEach((b) => {
+    b.addEventListener("click", () => verifyCustomDomain(Number(b.getAttribute("data-cd-verify"))));
+  });
+}
+
+async function verifyCustomDomain(idx) {
+  const d = customDomains[idx];
+  if (!d) return;
+  try {
+    const r = await screensFetch("/api/screens/url-controller/verify", {
+      method: "POST",
+      body: JSON.stringify({ fqdn: d.fqdn }),
+    });
+    customDomains[idx] = {
+      fqdn: r.fqdn,
+      status: r.status,
+      expectedTxtRecord: r.expectedTxtRecord || "",
+      reason: r.reason || "",
+    };
+  } catch (e) {
+    customDomains[idx] = {
+      ...d,
+      status: "failed",
+      reason: e instanceof ScreensError ? e.message : String(e),
+    };
+  }
+  rerenderCustomDomains();
 }
 
 /** Modal-style scare sheet for the Replace ceremony. Inline (no

@@ -19,23 +19,25 @@ function stripScheme(s) {
   return s.replace(/^https?:\/\//, "");
 }
 
-/** Render the per-app row's URL slot. Short URL bold + copy on the
- *  left, canonical muted on the right. Placeholder shape stays
- *  vertically stable when links haven't loaded yet so the list
- *  doesn't jump as fetches resolve. */
+/** V7 — short link on its own line (bold, no icon) with a copy
+ *  control; canonical BELOW it, full-width, single-line truncate.
+ *  Placeholder shape stays vertically stable when links haven't
+ *  loaded yet so the list doesn't jump as fetches resolve. */
 function urlRowHtml(app, links) {
   const canonical = links?.canonicalUrl ?? app.url;
   const short = links?.shortUrl ?? null;
   return `
-    <div class="row mt-1" data-section="urls">
-      ${short
-        ? `<a class="weight-600 mono text-xs" href="${escapeHtml(short)}" target="_blank" rel="noopener">
-              🔗 ${escapeHtml(stripScheme(short))}
-           </a>
-           <button class="ghost mini" data-copy="${escapeHtml(short)}" aria-label="Copy short link">📋</button>`
-        : `<span class="muted-sm mono text-xs">🔗 voi.ci/…</span>`
-      }
-      <span class="muted-sm mono text-xs truncate" style="margin-left:auto;">${escapeHtml(stripScheme(canonical))}</span>
+    <div class="mt-1" data-section="urls">
+      <div class="row">
+        ${short
+          ? `<a class="weight-600 mono text-xs truncate" href="${escapeHtml(short)}" target="_blank" rel="noopener" style="min-width:0;">
+                ${escapeHtml(stripScheme(short))}
+             </a>
+             <button class="ghost mini" data-copy="${escapeHtml(short)}" aria-label="Copy short link">📋</button>`
+          : `<span class="muted-sm mono text-xs">voi.ci/…</span>`
+        }
+      </div>
+      <div class="muted-sm mono text-xs truncate">${escapeHtml(stripScheme(canonical))}</div>
     </div>
   `;
 }
