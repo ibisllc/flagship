@@ -40,6 +40,48 @@ public protocol FlagshipServerClient: Sendable {
     /// the beginning; subsequent polls pass the response's
     /// `cursor`. Worker side: GET /api/install-events/<serial>?since=N.
     func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse
+    /// List the peer-class trusted devices on the user's account.
+    /// Returns the ETag the Worker computed so the caller can pass it
+    /// as If-Match on revocation / rotation requests. Worker side:
+    /// GET /api/users/:u/devices.
+    func listDevices(username: String) async throws -> TrustedDevicesListResponse
+}
+
+public struct TrustedDevice: Codable, Equatable, Sendable, Identifiable {
+    public let tokenId: String
+    public let tokenPrefix: String
+    public let label: String
+    public let platform: String   // "apns" | "fcm" | "webpush"
+    public let addedAt: Int64
+    public let lastSeenAt: Int64
+
+    public var id: String { tokenId }
+
+    public init(tokenId: String, tokenPrefix: String, label: String, platform: String, addedAt: Int64, lastSeenAt: Int64) {
+        self.tokenId = tokenId; self.tokenPrefix = tokenPrefix
+        self.label = label; self.platform = platform
+        self.addedAt = addedAt; self.lastSeenAt = lastSeenAt
+    }
+}
+
+/// Response wrapper that surfaces the ETag header alongside the body.
+/// Callers feed the ETag to subsequent /re-pair / Disconnect requests
+/// as If-Match to fence against another device joining mid-revoke.
+public struct TrustedDevicesListResponse: Equatable, Sendable {
+    public let devices: [TrustedDevice]
+    /// Server-supplied ETag for the snapshot (form `W/"hex"`). Nil
+    /// only when the Mock impl didn't compute one.
+    public let etag: String?
+
+    public init(devices: [TrustedDevice], etag: String?) {
+        self.devices = devices; self.etag = etag
+    }
+}
+
+/// On-wire body shape — separate from TrustedDevicesListResponse so
+/// the ETag (header, not body) doesn't leak into Codable.
+private struct TrustedDevicesWireBody: Codable {
+    let devices: [TrustedDevice]
 }
 
 /// Worker-side install-event row. The daemon (and the Alpine
@@ -372,6 +414,54 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// number of new events.
     public var installEventScripts: [String: [(eventName: String, detail: String, postedAt: Int64)]] = [:]
 
+    /// Scripted devices listing per username for tests + dev mode.
+    /// The Mock returns a synthesized ETag (sha-prefix of JSON) so
+    /// If-Match flows can be exercised without the real Worker.
+    public var devicesByUser: [String: [TrustedDevice]] = [:]
+
+    public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
+        try await tick()
+        let devices = devicesByUser[username.lowercased()] ?? []
+        let sorted = devices.sorted { a, b in
+            a.addedAt != b.addedAt ? a.addedAt < b.addedAt : a.tokenId < b.tokenId
+        }
+        let etag = Self.etagFor(sorted)
+        return TrustedDevicesListResponse(devices: sorted, etag: etag)
+    }
+
+    private static func etagFor(_ devices: [TrustedDevice]) -> String {
+        // Identity-significant subset only; lastSeenAt deliberately
+        // excluded so test push-delivery doesn't flutter the ETag.
+        // We hash the canonicalized bytes directly (FNV-1a) instead
+        // of going through JSONEncoder — Swift's synthesized Codable
+        // for a local struct nested inside a function doesn't
+        // guarantee stable byte output across calls, which made the
+        // ETag non-deterministic.
+        var hash: UInt64 = 14695981039346656037
+        func feedString(_ s: String) {
+            for b in s.utf8 { hash ^= UInt64(b); hash &*= 1099511628211 }
+            // Separator so concatenation collisions are impossible
+            // (e.g. {"abc"+"d"} vs {"ab"+"cd"}).
+            hash ^= 0x1f; hash &*= 1099511628211
+        }
+        func feedInt(_ n: Int64) {
+            let bits = UInt64(bitPattern: n)
+            for shift in stride(from: 0, through: 56, by: 8) {
+                hash ^= UInt64((bits >> UInt64(shift)) & 0xff)
+                hash &*= 1099511628211
+            }
+            hash ^= 0x1f; hash &*= 1099511628211
+        }
+        for d in devices {
+            feedString(d.tokenId)
+            feedString(d.label)
+            feedString(d.platform)
+            feedInt(d.addedAt)
+        }
+        let hex = String(hash, radix: 16, uppercase: false)
+        return "W/\"\(String(repeating: "0", count: max(0, 16 - hex.count)) + hex)\""
+    }
+
     public func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse {
         try await tick()
         let script = installEventScripts[serial] ?? []
@@ -518,5 +608,23 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(InstallEventsPollResponse.self, from: data)
+    }
+
+    public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/devices"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let http = resp as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        let body = try JSONDecoder().decode(TrustedDevicesWireBody.self, from: data)
+        // ETag header — case-insensitive lookup, may be missing if a
+        // proxy strips it. Callers tolerate nil by skipping If-Match.
+        let etag = http?.value(forHTTPHeaderField: "Etag") ?? http?.value(forHTTPHeaderField: "ETag")
+        return TrustedDevicesListResponse(devices: body.devices, etag: etag)
     }
 }
