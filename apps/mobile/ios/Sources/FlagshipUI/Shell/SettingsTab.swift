@@ -1,5 +1,6 @@
 import SwiftUI
 import CryptoKit
+import Flagship
 import FlagshipCore
 import FlagshipAPI
 
@@ -67,7 +68,23 @@ public struct SettingsTab: View {
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenAbout: { path.append(.about) },
                     onOpenDeveloper: { path.append(.developer) },
-                    onRefresh: { await vm.load() }
+                    onRefresh: { await vm.load() },
+                    onRemoveFromAccount: {
+                        // B6a — full self-revoke: drop push token on
+                        // .com, wipe Keystore (UMK / IRK / wrapped
+                        // UMK / push X25519 / pushTokenId), and sign
+                        // out. We tolerate the push revoke failing
+                        // (network down, server already lost track) —
+                        // local wipe still proceeds because the
+                        // server's GC will eventually catch the
+                        // orphan via E7's detector.
+                        await pushRegistrar?.revoke()
+                        await MainActor.run {
+                            Keystore.wipe()
+                            app.signOut()
+                        }
+                    },
+                    hasCloudRecovery: app.hasCloudRecovery
                 )
             } else {
                 ProgressView()

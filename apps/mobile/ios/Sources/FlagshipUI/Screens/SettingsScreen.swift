@@ -21,6 +21,11 @@ public struct SettingsScreen: View {
     /// understand the option exists and is being designed; tapping
     /// it opens an explainer instead of running the ceremony.
     @State private var showWipeComingSoon = false
+    /// B6a — confirmation modal for "Remove this device from account."
+    /// Two-stage UX: tap fires this state, sheet shows; sheet's primary
+    /// button calls onRemoveFromAccount. Sheet copy adapts based on
+    /// whether the user has cloud recovery enrolled.
+    @State private var showRemoveConfirm = false
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
@@ -38,6 +43,16 @@ public struct SettingsScreen: View {
     var onOpenAbout: () -> Void = {}
     var onOpenDeveloper: () -> Void = {}
     var onRefresh: () async -> Void = {}
+    /// B6a — fired after the user confirms in the Remove sheet. The
+    /// container is expected to: revoke this device's push token on
+    /// .com, wipe local Keystore, and call AppState.signOut so the
+    /// user drops back to Welcome.
+    var onRemoveFromAccount: () async -> Void = {}
+    /// Whether the user has cloud recovery enrolled — read by the
+    /// Remove confirmation sheet to surface a STRONGER warning when
+    /// not enrolled (no enrolment = removing this device permanently
+    /// loses account access).
+    var hasCloudRecovery: Bool = true
 
     public init(
         username: String,
@@ -53,7 +68,9 @@ public struct SettingsScreen: View {
         onOpenRecovery: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
         onOpenDeveloper: @escaping () -> Void = {},
-        onRefresh: @escaping () async -> Void = {}
+        onRefresh: @escaping () async -> Void = {},
+        onRemoveFromAccount: @escaping () async -> Void = {},
+        hasCloudRecovery: Bool = true
     ) {
         self.username = username
         self.tier = tier
@@ -69,6 +86,8 @@ public struct SettingsScreen: View {
         self.onOpenAbout = onOpenAbout
         self.onOpenDeveloper = onOpenDeveloper
         self.onRefresh = onRefresh
+        self.onRemoveFromAccount = onRemoveFromAccount
+        self.hasCloudRecovery = hasCloudRecovery
     }
 
     public var body: some View {
@@ -86,6 +105,7 @@ public struct SettingsScreen: View {
                 controlDevicesSection(c: c)
                 links(c: c)
                 signOut(c: c)
+                dangerZone(c: c)
                 about(c: c)
 
                 Spacer().frame(height: FS.space.s12)
@@ -355,8 +375,49 @@ public struct SettingsScreen: View {
     }
 
     private func signOut(c: FSColors) -> some View {
+        // Soft sign-out: clears runtime session + push token but
+        // preserves Keystore (UMK / IRK / wrapped UMK), so re-opening
+        // the app rebinds without a recovery round-trip. Distinct
+        // from "Remove this device from account" below, which is the
+        // permanent eviction.
         FSDangerButton("Sign out", block: true, large: true, action: onSignOut)
             .padding(.top, FS.space.s4)
+    }
+
+    /// B6a — danger zone. Strictly destructive: revokes this device's
+    /// push token on .com AND wipes local Keystore. The user must
+    /// recover (or, if they have no cloud recovery, re-create the
+    /// account from scratch) to come back. Two-stage confirm so a
+    /// fat-finger doesn't blow up the user's setup.
+    private func dangerZone(c: FSColors) -> some View {
+        section("DANGER ZONE", c: c) {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Text(hasCloudRecovery
+                    ? "Remove this device from your account. You'll need your recovery passkey to come back."
+                    : "Remove this device from your account. ⚠️ You have NO cloud recovery enrolled — this will permanently lose access.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                FSDangerButton("Remove this device from account", block: true) {
+                    showRemoveConfirm = true
+                }
+                .accessibilityIdentifier("remove-from-account-btn")
+            }
+        }
+        .confirmationDialog(
+            hasCloudRecovery
+                ? "Remove this device from your account?"
+                : "Permanently remove this device?",
+            isPresented: $showRemoveConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Remove this device", role: .destructive) {
+                Task { await onRemoveFromAccount() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(hasCloudRecovery
+                ? "We'll revoke this device's notification access and erase its local keys. Use your recovery passkey to sign in again later."
+                : "You have no cloud recovery on this account. After removal, no other device can take over — your account is gone for good. Set up recovery first if you might want to come back.")
+        }
     }
 
     private func about(c: FSColors) -> some View {

@@ -39,6 +39,11 @@ object Keystore {
     private const val KEY_IRK_SEED = "irk.seed"
     private const val KEY_PUSH_X25519_PRIV = "push.x25519.priv"
     private const val KEY_PUSH_TOKEN_ID = "push.tokenId"
+    /** Active IRK HKDF version counter (B7/C7). Stored as a string of
+     *  the integer; absent means v1 (the historical default). Bumped
+     *  by Replace device + Wipe & restart ceremonies so old-IRK
+     *  signatures stop verifying against the new registered IRK. */
+    private const val KEY_IRK_VERSION = "irk.version"
 
     private val rng = SecureRandom()
     @Volatile private var prefs: SharedPreferences? = null
@@ -156,6 +161,33 @@ object Keystore {
         val p = requirePrefs().edit()
         if (id == null) p.remove(KEY_PUSH_TOKEN_ID) else p.putString(KEY_PUSH_TOKEN_ID, id)
         p.apply()
+    }
+
+    /**
+     * B6a / E2-E5 — full local secret wipe. Drops every persisted
+     * key the Keystore knows about. Idempotent + irreversible: after
+     * this returns the app is in a fresh-install crypto state
+     * (deriveUmk + deriveIRK will mint new seeds next call).
+     *
+     * Used by:
+     *   - "Remove this device from account" (B6a) — followed by
+     *     server-side push revoke + AppState.signOut.
+     *   - Wipe & restart (E4/E5) — followed by re-init with the new
+     *     UMK + new IRK + new recovery passkey.
+     */
+    fun wipe() {
+        requirePrefs().edit().apply {
+            remove(KEY_UMK_SEED)
+            remove(KEY_IRK_SEED)
+            remove(KEY_PUSH_X25519_PRIV)
+            remove(KEY_PUSH_TOKEN_ID)
+            // Keystore version slot — when present, identifies the
+            // active HKDF-version counter used to derive IRK. We
+            // strip it here so a subsequent re-init starts cleanly
+            // at v1.
+            remove(KEY_IRK_VERSION)
+            apply()
+        }
     }
 
     // ---- HKDF-SHA256 ----------------------------------------------------
