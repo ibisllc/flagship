@@ -17,11 +17,21 @@ function fmtDate(unixMs) {
   return new Date(unixMs).toLocaleString();
 }
 
+const COM_BASE = "https://flagshipserver.com";
+
 async function fanOut() {
   // The fetch helpers throw ScreensError on non-2xx; recovery + detail
   // are tolerated as missing (a fresh pod has no install history yet,
-  // and not every daemon ships post-recovery).
-  const [approvals, detail, recovery] = await Promise.all([
+  // and not every daemon ships post-recovery). The audit feed lives
+  // on .com (not on the daemon) so it uses a separate fetch keyed
+  // by the user's username.
+  const username = (() => {
+    try {
+      const raw = localStorage.getItem("flagship.session.v1");
+      return raw ? JSON.parse(raw).username ?? "" : "";
+    } catch { return ""; }
+  })();
+  const [approvals, detail, recovery, audit] = await Promise.all([
     screensFetch("/api/screens/unlock-approvals/pending")
       .then((b) => b.pending ?? [])
       .catch((e) => { if (e instanceof ScreensError) return []; throw e; }),
@@ -31,8 +41,36 @@ async function fanOut() {
     screensFetch("/api/screens/post-recovery/status")
       .then((b) => b.report ?? null)
       .catch((e) => { if (e instanceof ScreensError) return null; throw e; }),
+    username
+      ? fetch(`${COM_BASE}/api/users/${encodeURIComponent(username)}/audit?since=0&limit=20`, { cache: "no-store" })
+          .then((r) => r.ok ? r.json() : { events: [] })
+          .then((b) => b.events ?? [])
+          .catch(() => [])
+      : Promise.resolve([]),
   ]);
-  return { approvals, detail, recovery };
+  return { approvals, detail, recovery, audit };
+}
+
+function eventKindIcon(kind) {
+  return ({
+    "device-disconnected": "🔌",
+    "device-replaced":     "🔄",
+    "device-added":        "➕",
+    "wipe-restart":        "🗑️",
+    "recovery-set-up":     "🔐",
+    "recovery-rotated":    "🔁",
+  })[kind] ?? "•";
+}
+
+function eventKindLabel(kind) {
+  return ({
+    "device-disconnected": "Disconnected",
+    "device-replaced":     "Replaced",
+    "device-added":        "Added device",
+    "wipe-restart":        "Wiped & restarted",
+    "recovery-set-up":     "Recovery set up",
+    "recovery-rotated":    "Recovery rotated",
+  })[kind] ?? kind;
 }
 
 export async function renderActivity() {
@@ -40,7 +78,7 @@ export async function renderActivity() {
   if (!root) return;  // shell renders the static section without the feed slot
   root.innerHTML = skeletonCards(2);
   try {
-    const { approvals, detail, recovery } = await fanOut();
+    const { approvals, detail, recovery, audit } = await fanOut();
 
     const approvalsCard = approvals.length === 0
       ? ""
@@ -80,9 +118,27 @@ export async function renderActivity() {
         </div>`)
       .join("") || '<div class="card placeholder">No recent activity.</div>';
 
+    const auditCard = audit.length === 0
+      ? ""
+      : `
+        <h2 class="mt-4">Account events</h2>
+        ${audit.map((e) => `
+          <div class="card">
+            <div class="row">
+              <span class="value">
+                <span aria-hidden="true">${eventKindIcon(e.eventKind)}</span>
+                ${escapeHtml(eventKindLabel(e.eventKind))}
+              </span>
+              <span class="pill">${escapeHtml(fmtDate(e.postedAt))}</span>
+            </div>
+            ${e.detail ? `<p class="note small">${escapeHtml(e.detail)}</p>` : ""}
+          </div>`).join("")}
+      `;
+
     root.innerHTML = `
       ${approvalsCard}
       ${recoveryCard}
+      ${auditCard}
       <h2 class="mt-4">Recent</h2>
       ${recentRows}
     `;
