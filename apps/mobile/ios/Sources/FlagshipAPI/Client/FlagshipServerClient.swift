@@ -87,6 +87,71 @@ public protocol FlagshipServerClient: Sendable {
         body: WipeRestartRequest,
         ifMatch: String?
     ) async throws -> WipeRestartResponse
+
+    /// V2 — rename the user-visible URL stem for an app. Signed by
+    /// the user's current IRK. The Worker upserts the alias,
+    /// cascade-deletes old voi.ci codes, mints a fresh one against
+    /// the new canonical URL, emits an audit row.
+    func renameApp(
+        username: String,
+        appId: String,
+        body: AppRenameRequest
+    ) async throws -> AppRenameResponse
+
+    /// V2 — read the per-user URL identity of an app: { displayLabel,
+    /// canonical, instances[] }. Public read; falls back to the
+    /// slug-creator default when no alias has been set.
+    func getAppLinks(
+        username: String,
+        appId: String
+    ) async throws -> AppLinksResponse
+}
+
+public struct AppRenameRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let appId: String
+        public let newDisplayLabel: String
+        public let issuedAt: Int64
+        public init(username: String, appId: String, newDisplayLabel: String, issuedAt: Int64) {
+            self.username = username
+            self.appId = appId
+            self.newDisplayLabel = newDisplayLabel
+            self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String   // hex; Ed25519 by the user's IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
+public struct AppRenameResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    public let displayLabel: String?
+    public let canonicalUrl: String?
+    public let shortUrl: String?
+    public let shortCode: String?
+    public let unchanged: Bool?
+}
+
+public struct AppLinkInstance: Decodable, Equatable, Sendable, Identifiable {
+    public let serverDomain: String
+    public let url: String
+    public var id: String { serverDomain }
+}
+
+public struct AppLinksResponse: Decodable, Equatable, Sendable {
+    public let appId: String
+    public let displayLabel: String
+    public let canonicalUrl: String
+    public let instances: [AppLinkInstance]
+    /// Worker may return nil today; the rename response is the
+    /// authoritative source for a freshly-rotated link, and the
+    /// follow-up will denormalize the latest code into the alias
+    /// row so this field is filled in on every read.
+    public let shortUrl: String?
 }
 
 public struct WipeRestartRequest: Encodable, Sendable {
@@ -664,6 +729,72 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         }
     }
 
+    /// V2 — scripted Replace behaviour. Same shape as the other
+    /// scripted enums.
+    public enum AppRenameBehavior: Sendable {
+        case ok
+        case collision
+        case staleSignature
+    }
+    public var appRenameBehavior: AppRenameBehavior = .ok
+    public private(set) var lastAppRename: (
+        username: String,
+        appId: String,
+        body: AppRenameRequest
+    )?
+    /// Scripted alias map per (username, appId). The links endpoint
+    /// returns these; the rename endpoint writes into them.
+    public var appAliasByUser: [String: [String: (displayLabel: String, canonicalUrl: String)]] = [:]
+
+    public func renameApp(
+        username: String,
+        appId: String,
+        body: AppRenameRequest
+    ) async throws -> AppRenameResponse {
+        try await tick()
+        lastAppRename = (username, appId, body)
+        switch appRenameBehavior {
+        case .collision:
+            throw ScreensClientError.http(status: 409, message: "label collision")
+        case .staleSignature:
+            throw ScreensClientError.http(status: 403, message: "bad signature")
+        case .ok:
+            let newLabel = body.request.newDisplayLabel
+            let canonical = "https://\(newLabel).demo-pod.flagship.services"
+            appAliasByUser[username.lowercased(), default: [:]][appId] = (newLabel, canonical)
+            return AppRenameResponse(
+                ok: true,
+                displayLabel: newLabel,
+                canonicalUrl: canonical,
+                shortUrl: "https://voi.ci/\(String(newLabel.prefix(2)))mock1",
+                shortCode: "\(String(newLabel.prefix(2)))mock1",
+                unchanged: false
+            )
+        }
+    }
+
+    public func getAppLinks(
+        username: String,
+        appId: String
+    ) async throws -> AppLinksResponse {
+        try await tick()
+        let alias = appAliasByUser[username.lowercased()]?[appId]
+        let label = alias?.displayLabel ?? "scratch"
+        let canonical = alias?.canonicalUrl ?? "https://\(label).demo-pod.flagship.services"
+        return AppLinksResponse(
+            appId: appId,
+            displayLabel: label,
+            canonicalUrl: canonical,
+            instances: [
+                AppLinkInstance(
+                    serverDomain: "demo-pod.flagship.services",
+                    url: canonical
+                ),
+            ],
+            shortUrl: nil
+        )
+    }
+
     public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
         try await tick()
         let devices = devicesByUser[username.lowercased()] ?? []
@@ -939,6 +1070,43 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(WipeRestartResponse.self, from: data)
+    }
+
+    public func renameApp(
+        username: String,
+        appId: String,
+        body: AppRenameRequest
+    ) async throws -> AppRenameResponse {
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let a = appId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? appId
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/rename"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(AppRenameResponse.self, from: data)
+    }
+
+    public func getAppLinks(
+        username: String,
+        appId: String
+    ) async throws -> AppLinksResponse {
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let a = appId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? appId
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/links"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(AppLinksResponse.self, from: data)
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

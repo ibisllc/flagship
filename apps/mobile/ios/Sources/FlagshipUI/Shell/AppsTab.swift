@@ -6,6 +6,7 @@ import FlagshipAPI
 /// own NavigationStack with AppsRoute as the path element type.
 public struct AppsTab: View {
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
@@ -64,7 +65,13 @@ public struct AppsTab: View {
             }
         }
         .task {
-            if vm == nil { vm = AppsListViewModel(client: client) }
+            if vm == nil {
+                vm = AppsListViewModel(
+                    client: client,
+                    server: server,
+                    username: { [app] in app.currentUser }
+                )
+            }
             if case .idle = vm?.state { await vm?.load() }
         }
     }
@@ -148,9 +155,9 @@ public struct AppsTab: View {
                 }
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
-                    ForEach(vm.filteredApps, id: \.appId) { app in
-                        Button(action: { path.append(.appDetail(appId: app.appId)) }) {
-                            AppRow(app: app)
+                    ForEach(vm.filteredApps, id: \.appId) { appItem in
+                        Button(action: { path.append(.appDetail(appId: appItem.appId)) }) {
+                            AppRow(app: appItem, links: vm.linksByAppId[appItem.appId])
                         }
                         .buttonStyle(.plain)
                     }
@@ -191,31 +198,100 @@ public struct AppsTab: View {
 private struct AppRow: View {
     @Environment(\.colorScheme) private var scheme
     let app: FlagshipAPI.AppSummary
+    /// V2 — per-app links (canonical + short + instances), loaded by
+    /// the AppsListViewModel after the daemon's apps-list returns.
+    /// `nil` while still in flight — the row falls back to the
+    /// daemon-provided urlLabel for the canonical hint.
+    let links: AppLinksResponse?
+
     var body: some View {
         let c = FSColors.scheme(scheme)
         FSCard {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(app.slug.capitalized).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
-                    Text(app.urlLabel).font(FS.font.mono()).foregroundColor(c.textMuted).lineLimit(1).truncationMode(.middle)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    // Name (semibold).
+                    Text(app.slug.capitalized)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(c.text)
+                    // Short description (if any). Muted, two lines max.
                     if let summary = app.summary {
-                        Text(summary).font(FS.font.bodySm()).foregroundColor(c.textMuted).lineLimit(2)
+                        Text(summary)
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .lineLimit(2)
                     }
+                    // Status pills.
                     HStack(spacing: FS.space.s2) {
-                        FSPill(app.status == "running" ? "Running" : "Stopped", kind: app.status == "running" ? .online : .idle)
+                        FSPill(
+                            app.status == "running" ? "Running" : "Stopped",
+                            kind: app.status == "running" ? .online : .idle
+                        )
                         if let v = app.version { FSPill("v\(v)", kind: .idle) }
                     }
+                    // URLs row: short URL (bold, with copy) + canonical
+                    // (muted, truncated). Short is what people share;
+                    // canonical is there for power-user verification.
+                    urlRow(c: c)
                 }
-                Spacer()
+                Spacer(minLength: FS.space.s2)
                 Image(systemName: "chevron.right").foregroundColor(c.textMuted)
             }
         }
+    }
+
+    @ViewBuilder
+    private func urlRow(c: FSColors) -> some View {
+        let short = links?.shortUrl
+        let canonical = links?.canonicalUrl ?? "https://\(app.urlLabel)…"
+        HStack(spacing: FS.space.s2) {
+            if let short, !short.isEmpty {
+                // Short link with copy icon — primary action target.
+                Image(systemName: "link.circle.fill")
+                    .foregroundColor(c.primary)
+                Text(stripScheme(short))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundColor(c.text)
+                    .lineLimit(1)
+                Button {
+                    #if canImport(UIKit)
+                    UIPasteboard.general.string = short
+                    #endif
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundColor(c.textMuted)
+                        .imageScale(.small)
+                }
+                .buttonStyle(.plain)
+            } else {
+                // No short link yet — show a muted placeholder so the
+                // row's vertical rhythm doesn't jump once links land.
+                Image(systemName: "link")
+                    .foregroundColor(c.textMuted)
+                Text("voi.ci/…")
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundColor(c.textMuted)
+            }
+            Spacer(minLength: FS.space.s2)
+            Text(stripScheme(canonical))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(c.textMuted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .layoutPriority(0)
+        }
+    }
+
+    private func stripScheme(_ s: String) -> String {
+        if s.hasPrefix("https://") { return String(s.dropFirst("https://".count)) }
+        if s.hasPrefix("http://") { return String(s.dropFirst("http://".count)) }
+        return s
     }
 }
 
 struct AppDetailContainer: View {
     let appId: String
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
@@ -244,10 +320,13 @@ struct AppDetailContainer: View {
                     appId: appId,
                     client: client,
                     allPods: app.pods,
-                    globalLeaderPodId: app.leaderPodId
+                    globalLeaderPodId: app.leaderPodId,
+                    server: server,
+                    username: { [app] in app.currentUser }
                 )
             }
             await vm?.load()
+            await vm?.loadAppLinks()
         }
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Flagship
 import FlagshipAPI
 import FlagshipCore
 
@@ -12,6 +13,22 @@ import FlagshipCore
 public final class AppDetailViewModel {
     public private(set) var detail: LoadingState<AppDetailResponse> = .idle
     public private(set) var ownedUrls: LoadingState<[OwnedUrl]> = .idle
+    /// V2 — { canonical, short, instances } loaded from .com. Drives
+    /// the WEB DOMAINS section that replaced the per-tab layout.
+    /// `.idle` on first render; `.loading` while the network fetch is
+    /// in flight; `.loaded` once .com responds (or a Replace returns).
+    public private(set) var appLinks: LoadingState<AppLinksResponse> = .idle
+    /// V2 — phase machine for the Replace ceremony. nil = no
+    /// rename in flight; .signing → .posting → .completed/.failed.
+    public private(set) var renamePhase: RenamePhase = .idle
+
+    public enum RenamePhase: Equatable, Sendable {
+        case idle
+        case signing
+        case posting
+        case completed(displayLabel: String, shortUrl: String?)
+        case failed(String)
+    }
 
     /// Pods the app should run on (server-set). Edited locally; reset
     /// by `cancelEdits()` and persisted by `save()`.
@@ -25,6 +42,11 @@ public final class AppDetailViewModel {
 
     public let appId: String
     private let client: any ScreensClient
+    /// V2 — flagshipServerClient for app-rename + app-links. Optional
+    /// so test fixtures that don't care about WEB DOMAINS keep
+    /// compiling against the existing (client, allPods, leader) init.
+    private let server: (any FlagshipServerClient)?
+    private let username: () -> String?
     private let allPods: [PodInfo]
     private let globalLeaderPodId: String?
 
@@ -32,12 +54,16 @@ public final class AppDetailViewModel {
         appId: String,
         client: any ScreensClient,
         allPods: [PodInfo],
-        globalLeaderPodId: String?
+        globalLeaderPodId: String?,
+        server: (any FlagshipServerClient)? = nil,
+        username: @escaping () -> String? = { nil }
     ) {
         self.appId = appId
         self.client = client
         self.allPods = allPods
         self.globalLeaderPodId = globalLeaderPodId
+        self.server = server
+        self.username = username
     }
 
     public var availablePods: [PodInfo] { allPods }
@@ -124,6 +150,118 @@ public final class AppDetailViewModel {
             return "\(d.app.slug).\(SlugUtil.slugify(podName)).\(user).flagship.services"
         }
         return ""
+    }
+
+    /// V2 — fetch the canonical / short / instances triplet from .com.
+    /// Called lazily on AppDetailScreen first appearance; updated
+    /// after each successful Replace.
+    public func loadAppLinks() async {
+        guard let server, let user = username(), !user.isEmpty else {
+            // Tests / preview without a real .com fall back to the
+            // legacy slug-based canonical so the view still renders
+            // something useful.
+            return
+        }
+        appLinks = .loading
+        do {
+            let r = try await server.getAppLinks(username: user, appId: appId)
+            appLinks = .loaded(r)
+        } catch {
+            appLinks = .failed(error.localizedDescription)
+        }
+    }
+
+    /// V2 — Replace ceremony. Signs the canonical bytes with the
+    /// user's CURRENT IRK, POSTs to /api/users/:u/apps/:appId/rename,
+    /// updates `appLinks` from the response on success.
+    ///
+    /// The caller is expected to have just shown a biometric scare
+    /// sheet — the IRK derivation below uses Keystore.deriveIRK
+    /// which itself triggers a Face ID prompt, providing the
+    /// second-factor confirmation. A subsequent re-prompt isn't
+    /// needed.
+    public func renameApp(to newLabel: String) async -> Bool {
+        guard let server, let user = username(), !user.isEmpty else {
+            renamePhase = .failed("No active account on this device.")
+            return false
+        }
+        let trimmed = newLabel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else {
+            renamePhase = .failed("Pick a non-empty label.")
+            return false
+        }
+        renamePhase = .signing
+        let irk: Curve25519.Signing.PrivateKey
+        do {
+            irk = try await Keystore.deriveIRK(reason: "Rename app URL stem")
+        } catch {
+            renamePhase = .failed("Couldn't access your account keys: \(error.localizedDescription)")
+            return false
+        }
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let canonical = AppRenameClaim.canonicalBytes(
+            username: user,
+            appId: appId,
+            newDisplayLabel: trimmed,
+            issuedAt: issuedAt,
+        )
+        let signature: Data
+        do {
+            signature = try irk.signature(for: canonical)
+        } catch {
+            renamePhase = .failed("Couldn't sign the rename: \(error.localizedDescription)")
+            return false
+        }
+        renamePhase = .posting
+        do {
+            let resp = try await server.renameApp(
+                username: user,
+                appId: appId,
+                body: AppRenameRequest(
+                    request: .init(
+                        username: user,
+                        appId: appId,
+                        newDisplayLabel: trimmed,
+                        issuedAt: issuedAt,
+                    ),
+                    signature: HexUtil.encode(signature),
+                ),
+            )
+            // Reflect the new state in appLinks without a separate
+            // network round-trip.
+            if let label = resp.displayLabel, let canonical = resp.canonicalUrl {
+                appLinks = .loaded(AppLinksResponse(
+                    appId: appId,
+                    displayLabel: label,
+                    canonicalUrl: canonical,
+                    // Instances are re-fetched on the next loadAppLinks
+                    // call; for now derive a minimal list from what
+                    // we know locally. The Replace button itself
+                    // triggers loadAppLinks anyway.
+                    instances: (appLinks.value?.instances ?? []).map { _ in
+                        AppLinkInstance(serverDomain: "", url: canonical)
+                    },
+                    shortUrl: resp.shortUrl,
+                ))
+            }
+            renamePhase = .completed(displayLabel: trimmed, shortUrl: resp.shortUrl)
+            // Refresh links from the server so the instances list
+            // catches up with reality.
+            await loadAppLinks()
+            return true
+        } catch ScreensClientError.http(let status, _) where status == 409 {
+            renamePhase = .failed("Another app already uses that name. Pick something else.")
+            return false
+        } catch ScreensClientError.http(let status, _) where status == 400 {
+            renamePhase = .failed("That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars).")
+            return false
+        } catch ScreensClientError.http(let status, _) where status == 403 {
+            renamePhase = .failed("Sign-in is needed. Re-open the app and try again.")
+            return false
+        } catch {
+            renamePhase = .failed("Couldn't rename: \(error.localizedDescription)")
+            return false
+        }
     }
 
     public func save() async throws {

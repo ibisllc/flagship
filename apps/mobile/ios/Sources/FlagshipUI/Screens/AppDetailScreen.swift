@@ -19,6 +19,9 @@ public struct AppDetailScreen: View {
     let username: String?
     let pods: [PodInfo]
     let globalLeaderPodId: String?
+    /// V2 — drives the Replace App sheet.
+    @State private var showReplaceSheet = false
+    @State private var replaceDraft = ""
     var onSave: () -> Void = {}
     var onRemove: () -> Void = {}
 
@@ -152,35 +155,164 @@ public struct AppDetailScreen: View {
     }
 
     private func webDomains(d: AppDetailResponse, c: FSColors) -> some View {
-        section("WEB DOMAINS", c: c) {
-            VStack(spacing: FS.space.s3) {
-                if let canonical = vm.canonicalUrlPreview(for: username) {
-                    domainRow(
-                        fqdn: canonical,
-                        kindLabel: "Canonical",
-                        kindPillKind: .online,
-                        resolvesTo: leadDestinationLabel,
-                        action: nil,
-                        c: c
-                    )
+        // V2 — single shared space (replaces the per-tab layout).
+        // Three labelled groups: short redirect (top, bold), canonical
+        // (shared by all instances), and individual instances. A
+        // Replace button floats top-right of the section header.
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("WEB DOMAINS")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1)
+                    .foregroundColor(c.textMuted)
+                Spacer()
+                Button {
+                    replaceDraft = currentDisplayLabel ?? ""
+                    showReplaceSheet = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                        Text("Replace")
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(c.danger)
+                    .padding(.horizontal, FS.space.s2)
+                    .padding(.vertical, 4)
                 }
-                ForEach(pods.filter { vm.runOnPodIds.contains($0.podId) }) { pod in
-                    let url = vm.perPodUrlPreview(for: username, podName: pod.name)
-                    domainRow(
-                        fqdn: url,
-                        kindLabel: "Pod alias",
-                        kindPillKind: .idle,
-                        resolvesTo: pod.name,
-                        action: nil,
-                        c: c
-                    )
+                .accessibilityIdentifier("app-replace-stem-btn")
+            }
+
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s4) {
+                    shortRedirectGroup(c: c)
+                    Divider().background(c.border)
+                    canonicalGroup(c: c, defaultLabel: d.app.urlLabel)
+                    Divider().background(c.border)
+                    instancesGroup(c: c, defaultLabel: d.app.urlLabel)
                 }
-                ForEach(vm.customUrls, id: \.self) { url in
-                    customDomainCard(url: url, c: c)
-                }
-                addCustomDomain(c: c)
             }
         }
+        .sheet(isPresented: $showReplaceSheet) {
+            ReplaceAppStemSheet(
+                draft: $replaceDraft,
+                phase: vm.renamePhase,
+                onCancel: { showReplaceSheet = false },
+                onConfirm: {
+                    Task {
+                        let ok = await vm.renameApp(to: replaceDraft)
+                        if ok {
+                            showReplaceSheet = false
+                            await vm.loadAppLinks()
+                        }
+                    }
+                }
+            )
+            .presentationDetents([.medium])
+        }
+    }
+
+    /// Display label currently surfaced — server-provided when
+    /// appLinks has loaded, falling back to the daemon's urlLabel.
+    private var currentDisplayLabel: String? {
+        if case .loaded(let links) = vm.appLinks { return links.displayLabel }
+        return vm.detail.value?.app.urlLabel
+    }
+
+    @ViewBuilder
+    private func shortRedirectGroup(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            sectionLabel("SHORT REDIRECT", c: c)
+            if let short = vm.appLinks.value?.shortUrl, !short.isEmpty {
+                urlRow(url: short, style: .prominent, c: c)
+            } else if vm.appLinks.isLoading {
+                Text("Generating short link…")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+            } else {
+                Text("No short link yet. Tap Replace to mint one.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func canonicalGroup(c: FSColors, defaultLabel: String) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            sectionLabel("CANONICAL (SHARED BY ALL INSTANCES)", c: c)
+            if let canonical = vm.appLinks.value?.canonicalUrl {
+                urlRow(url: canonical, style: .normal, c: c)
+            } else if let user = username {
+                let fallback = "https://\(defaultLabel).\(user).flagship.services"
+                urlRow(url: fallback, style: .normal, c: c)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func instancesGroup(c: FSColors, defaultLabel: String) -> some View {
+        let instances = vm.appLinks.value?.instances ?? []
+        if !instances.isEmpty {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                sectionLabel("INDIVIDUAL INSTANCES", c: c)
+                ForEach(instances) { inst in
+                    urlRow(url: inst.url, style: .muted, c: c)
+                }
+            }
+        } else if pods.count > 1 {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                sectionLabel("INDIVIDUAL INSTANCES", c: c)
+                ForEach(pods.filter { vm.runOnPodIds.contains($0.podId) }) { pod in
+                    let url = "https://\(defaultLabel).\(SlugUtil.slugify(pod.name)).\(username ?? "you").flagship.services"
+                    urlRow(url: url, style: .muted, c: c)
+                }
+            }
+        }
+    }
+
+    private enum UrlStyle { case prominent, normal, muted }
+
+    @ViewBuilder
+    private func urlRow(url: String, style: UrlStyle, c: FSColors) -> some View {
+        HStack(spacing: FS.space.s2) {
+            Image(systemName: style == .prominent ? "link.circle.fill" : "globe")
+                .foregroundColor(style == .prominent ? c.primary : c.textMuted)
+            Text(stripScheme(url))
+                .font(.system(
+                    size: style == .prominent ? 16 : 14,
+                    weight: style == .prominent ? .semibold : .regular,
+                    design: .monospaced,
+                ))
+                .foregroundColor(style == .muted ? c.textMuted : c.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 0)
+            if style != .muted {
+                Button {
+                    #if canImport(UIKit)
+                    UIPasteboard.general.string = url
+                    #endif
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundColor(c.textMuted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Copy \(url)")
+            }
+        }
+    }
+
+    private func sectionLabel(_ s: String, c: FSColors) -> some View {
+        Text(s)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(1)
+            .foregroundColor(c.textMuted)
+    }
+
+    private func stripScheme(_ s: String) -> String {
+        if s.hasPrefix("https://") { return String(s.dropFirst("https://".count)) }
+        if s.hasPrefix("http://") { return String(s.dropFirst("http://".count)) }
+        return s
     }
 
     private var leadDestinationLabel: String {

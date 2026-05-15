@@ -175,6 +175,49 @@ public enum RePairInitiate {
     }
 }
 
+/// V2 — App URL-stem rename envelope. Signed by the user's current
+/// IRK. The internal `appId` is preserved across renames; only the
+/// user-visible `newDisplayLabel` changes. Mirrors
+/// packages/protocol/src/auth.ts `TAG_APP_RENAME`.
+public enum AppRenameClaim {
+    public static let canonicalTag = "flagship/app-rename/v1"
+    public static func canonicalBytes(
+        username: String,
+        appId: String,
+        newDisplayLabel: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            username,
+            appId,
+            newDisplayLabel.lowercased(),
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
+/// V2 — voi.ci one-off short link envelope. Signed by IRK. Optional
+/// `appId` binds the link to a specific app so a future rename can
+/// cascade-delete it.
+public enum VoiciShortenClaim {
+    public static let canonicalTag = "flagship/voici-shorten/v1"
+    public static func canonicalBytes(
+        username: String,
+        appId: String?,
+        targetUrl: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            username,
+            appId ?? "",
+            targetUrl,
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
 /// E2 — Wipe & restart envelope. Signed by the OLD IRK over the
 /// new IRK + new credentialID + SHA-256 of the new wrapped UMK.
 /// Mirrors packages/protocol/src/auth.ts `TAG_WIPE_RESTART`.
