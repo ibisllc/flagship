@@ -50,6 +50,7 @@ public struct RootShell: View {
         case .unlockApprove, .unlockApprovalsList:   return .activity
         case .serverDetail, .createServer:            return .home
         case .appDetail, .marketplace:                return .apps
+        case .recoverySetup:                          return .settings
         }
     }
 }

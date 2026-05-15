@@ -14,6 +14,10 @@ public enum DeepLink: Equatable, Sendable {
     case appDetail(appId: String)
     case marketplace
     case createServer
+    /// Open the recovery-setup flow on the Settings tab. Triggered
+    /// in-app from the Home nudge (B9). Not parseable from a URL —
+    /// it's an internal-only deep link.
+    case recoverySetup
 
     /// Parse a `flagship://...` URL. Mirrors the webapp's `?view=...`
     /// scheme (apps/web/public/webapp/lib/router.js → parseViewQuery).

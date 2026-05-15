@@ -6,6 +6,7 @@ import FlagshipAPI
 /// Home tab. Account-wide overview + drill-down into individual servers.
 public struct HomeTab: View {
     @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
 
@@ -58,12 +59,22 @@ public struct HomeTab: View {
                     username: app.currentUser ?? "",
                     pods: app.pods,
                     leaderPodId: app.leaderPodId,
+                    showRecoveryNudge: app.shouldShowRecoveryNudge,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onAddServer: { path.append(.addServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },
                     onVibeCode: {},
                     onBrowseMarketplace: {},
-                    onRefresh: { await vm.load() }
+                    onRefresh: { await vm.load() },
+                    onSetUpRecovery: {
+                        // Drop the user onto the Settings tab's Recovery
+                        // route. We do that via DeepLinker so the tab
+                        // switch + nav-stack push happens atomically.
+                        linker.pending = .recoverySetup
+                    },
+                    onDismissRecoveryNudge: {
+                        app.recoveryNudgeDismissedThisSession = true
+                    }
                 )
             } else {
                 ProgressView()
@@ -74,9 +85,35 @@ public struct HomeTab: View {
                 vm = HomeViewModel(client: client, podContext: app.currentPodId ?? app.leaderPodId)
             }
             if case .idle = vm?.detail { await vm?.load() }
+            // Refresh cloud-recovery enrollment status when the tab
+            // first appears. A failed lookup is silent — better to
+            // suppress the nudge for one session than to surface a
+            // network blip on the landing screen.
+            await refreshRecoveryStatus()
         }
         .onChange(of: app.currentPodId) { _, _ in
             Task { await vm?.load() }
+        }
+        .onChange(of: app.pods.contains(where: { $0.status == .online })) { _, hasOnline in
+            // First time a pod transitions to online, re-check
+            // recovery state — the nudge should appear right then,
+            // not on the next launch.
+            if hasOnline {
+                Task { await refreshRecoveryStatus() }
+            }
+        }
+    }
+
+    /// Best-effort fetch of cloud-recovery presence. Treats any error
+    /// as "leave the local state alone" — we'd rather under-nudge than
+    /// flash a banner because of a transient network failure.
+    private func refreshRecoveryStatus() async {
+        guard let user = app.currentUser, !user.isEmpty else { return }
+        do {
+            let enrolled = try await server.hasCloudRecovery(username: user)
+            app.hasCloudRecovery = enrolled
+        } catch {
+            // Silent — keep previous app.hasCloudRecovery value.
         }
     }
 

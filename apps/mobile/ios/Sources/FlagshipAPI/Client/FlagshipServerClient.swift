@@ -52,6 +52,14 @@ public protocol FlagshipServerClient: Sendable {
     /// the daemon-side install events. `sinceSeq` is exclusive lower
     /// bound; `limit` is clamped server-side to 50.
     func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse
+
+    /// Returns true iff a cloud-stored recovery envelope exists for the
+    /// given username. Powers the Home recovery-setup nudge (B9). The
+    /// underlying endpoint is GET /api/recovery/by-username/:u — 200 +
+    /// metadata means yes, 404 means no, and any other status is
+    /// surfaced as an error so the caller can decide whether to retry
+    /// or just hide the nudge until next launch.
+    func hasCloudRecovery(username: String) async throws -> Bool
 }
 
 public struct AuditEvent: Codable, Equatable, Sendable, Identifiable {
@@ -467,6 +475,18 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return AuditEventListResponse(events: Array(filtered.prefix(max(0, min(limit, 50)))))
     }
 
+    /// Scripted recovery enrollment state per username. Tests set this
+    /// to drive the Home recovery-setup nudge (B9). Unconfigured users
+    /// default to `false` (no envelope on .com) — the "fresh install,
+    /// hasn't enrolled yet" baseline. Set to `true` to suppress the
+    /// nudge in tests that aren't exercising the B9 path.
+    public var cloudRecoveryByUser: [String: Bool] = [:]
+
+    public func hasCloudRecovery(username: String) async throws -> Bool {
+        try await tick()
+        return cloudRecoveryByUser[username.lowercased()] ?? false
+    }
+
     public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
         try await tick()
         let devices = devicesByUser[username.lowercased()] ?? []
@@ -674,6 +694,21 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // proxy strips it. Callers tolerate nil by skipping If-Match.
         let etag = http?.value(forHTTPHeaderField: "Etag") ?? http?.value(forHTTPHeaderField: "ETag")
         return TrustedDevicesListResponse(devices: body.devices, etag: etag)
+    }
+
+    public func hasCloudRecovery(username: String) async throws -> Bool {
+        // The .com endpoint is GET /api/recovery/by-username/<u>; 200
+        // means an envelope exists, 404 means it doesn't, anything
+        // else is a transient failure the caller should surface.
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/recovery/by-username/\(encoded)"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 200 { return true }
+        if status == 404 { return false }
+        let text = String(data: data, encoding: .utf8) ?? ""
+        throw ScreensClientError.http(status: status, message: text)
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

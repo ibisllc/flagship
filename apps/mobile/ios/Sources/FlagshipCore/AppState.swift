@@ -18,19 +18,51 @@ public final class AppState {
     /// per-pod-scoped lists (Apps, Activity, Server detail). Defaults
     /// to the leader. UI exposes the switcher only when pods.count > 1.
     public var currentPodId: String?
+    /// True once the user has uploaded a WebAuthn-PRF cloud recovery
+    /// envelope for the current account. Drives the Home / Activity
+    /// nudge banner (B9) — visible when we have at least one online
+    /// pod but no recovery yet. Stored in-memory rather than persisted
+    /// because it's cheap to refresh on launch from .com, and we want
+    /// the source of truth to be the server.
+    public var hasCloudRecovery: Bool
+    /// True once the user has tapped "Dismiss" on the recovery nudge
+    /// in this app session. Banner re-appears next launch — this is
+    /// not "permanent" dismiss; recovery is important enough that we
+    /// re-surface the nudge until the user actually enrolls. The
+    /// boolean lives in AppState (not the VM) so toggling it from
+    /// Home doesn't disappear-then-reappear when the user switches
+    /// to Activity and back.
+    public var recoveryNudgeDismissedThisSession: Bool
 
     public init(
         isPaired: Bool = false,
         currentUser: String? = nil,
         pods: [PodInfo] = [],
         leaderPodId: String? = nil,
-        currentPodId: String? = nil
+        currentPodId: String? = nil,
+        hasCloudRecovery: Bool = true,
+        recoveryNudgeDismissedThisSession: Bool = false
     ) {
         self.isPaired = isPaired
         self.currentUser = currentUser
         self.pods = pods
         self.leaderPodId = leaderPodId
         self.currentPodId = currentPodId ?? leaderPodId ?? pods.first?.podId
+        self.hasCloudRecovery = hasCloudRecovery
+        self.recoveryNudgeDismissedThisSession = recoveryNudgeDismissedThisSession
+    }
+
+    /// True when the recovery-setup nudge should be visible on Home /
+    /// Activity. Conditions:
+    ///   - at least one ONLINE pod (so the user is past day-0 onboarding
+    ///     and into "I'm running my own cloud" territory);
+    ///   - cloud recovery NOT yet enrolled;
+    ///   - the user hasn't dismissed the nudge this session.
+    /// The check is cheap and pure; UI calls it every render.
+    public var shouldShowRecoveryNudge: Bool {
+        guard !hasCloudRecovery else { return false }
+        guard !recoveryNudgeDismissedThisSession else { return false }
+        return pods.contains(where: { $0.status == .online })
     }
 
     public var leaderPod: PodInfo? {

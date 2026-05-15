@@ -9,6 +9,7 @@ public struct SettingsTab: View {
     @Environment(\.pushRegistrar) private var pushRegistrar
     @Environment(AppState.self) private var app
     @Environment(DeveloperSettings.self) private var dev
+    @Environment(DeepLinker.self) private var linker
 
     @State private var path: [SettingsRoute] = []
     @State private var vm: SettingsViewModel?
@@ -21,6 +22,24 @@ public struct SettingsTab: View {
                 .navigationDestination(for: SettingsRoute.self) { route in
                     settingsDestination(for: route)
                 }
+        }
+        .onChange(of: linker.pending) { _, link in consume(link) }
+        .task(id: linker.pending) { consume(linker.pending) }
+    }
+
+    /// Consume a DeepLink that targets the Settings tab. Today we
+    /// only handle `.recoverySetup` (Home → "Set it up" nudge); the
+    /// other links are handled by the tabs that actually own them.
+    private func consume(_ link: DeepLink?) {
+        guard let link else { return }
+        switch link {
+        case .recoverySetup:
+            if path.last != .recovery {
+                path.append(.recovery)
+            }
+            _ = linker.consume()
+        default:
+            break
         }
     }
 

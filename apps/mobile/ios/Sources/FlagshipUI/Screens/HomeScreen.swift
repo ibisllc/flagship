@@ -11,35 +11,48 @@ public struct HomeScreen: View {
     let username: String
     let pods: [PodInfo]
     let leaderPodId: String?
+    /// When true, render the recovery-setup nudge banner above quick
+    /// actions. Source-of-truth lives on AppState.shouldShowRecoveryNudge
+    /// — HomeTab passes the resolved value rather than the app object
+    /// so HomeScreen stays previewable in isolation.
+    let showRecoveryNudge: Bool
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
     var onVibeCode: () -> Void = {}
     var onBrowseMarketplace: () -> Void = {}
     var onRefresh: () async -> Void = {}
+    var onSetUpRecovery: () -> Void = {}
+    var onDismissRecoveryNudge: () -> Void = {}
 
     public init(
         state: LoadingState<ServerDetailResponse>,
         username: String,
         pods: [PodInfo],
         leaderPodId: String?,
+        showRecoveryNudge: Bool = false,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
         onVibeCode: @escaping () -> Void = {},
         onBrowseMarketplace: @escaping () -> Void = {},
-        onRefresh: @escaping () async -> Void = {}
+        onRefresh: @escaping () async -> Void = {},
+        onSetUpRecovery: @escaping () -> Void = {},
+        onDismissRecoveryNudge: @escaping () -> Void = {}
     ) {
         self.state = state
         self.username = username
         self.pods = pods
         self.leaderPodId = leaderPodId
+        self.showRecoveryNudge = showRecoveryNudge
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
         self.onVibeCode = onVibeCode
         self.onBrowseMarketplace = onBrowseMarketplace
         self.onRefresh = onRefresh
+        self.onSetUpRecovery = onSetUpRecovery
+        self.onDismissRecoveryNudge = onDismissRecoveryNudge
     }
 
     public var body: some View {
@@ -47,6 +60,9 @@ public struct HomeScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 header(c: c)
+                if showRecoveryNudge {
+                    recoveryNudge(c: c)
+                }
                 quickActions(c: c)
                 serversSection(c: c)
                 switch state {
@@ -63,6 +79,37 @@ public struct HomeScreen: View {
         }
         .background(c.bg.ignoresSafeArea())
         .refreshable { await onRefresh() }
+    }
+
+    /// "Your phone is the only key" warning. Surfaces after the user
+    /// has at least one online pod (so they're past day-0 and have
+    /// real state worth losing). Tap "Set it up" routes to the
+    /// RecoveryScreen on the Settings tab. The Not-now button toggles
+    /// session-scoped dismissal — banner re-appears next launch
+    /// because recovery is important enough to re-nudge.
+    private func recoveryNudge(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    Image(systemName: "key.horizontal.fill")
+                        .imageScale(.large)
+                        .foregroundColor(c.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Set up recovery")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("Right now this phone is the only way back into your account. Bank a passkey with Apple so you can recover if you lose this device.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                    }
+                }
+                HStack(spacing: FS.space.s2) {
+                    FSPrimaryButton("Set it up", block: false, action: onSetUpRecovery)
+                    FSGhostButton("Not now", block: false, action: onDismissRecoveryNudge)
+                }
+            }
+        }
+        .accessibilityIdentifier("recovery-nudge-card")
     }
 
     private func header(c: FSColors) -> some View {
