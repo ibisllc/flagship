@@ -61,7 +61,10 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "AI providers", description = "BYO LLM provider keys (Anthropic, OpenAI, Google, Groq, Ollama).") {
             nav.navigate("providers")
         }
-        SettingsRow(label = "Paired devices", description = "Browsers + tablets paired to this account.") {
+        SettingsRow(label = "Trusted devices", description = "Phones and tablets that hold your account keys.") {
+            nav.navigate("trusted-devices")
+        }
+        SettingsRow(label = "Browser sessions", description = "Per-pod browser tabs paired with this account.") {
             nav.navigate("paired-sessions")
         }
         SettingsRow(label = "Add a control device", description = "Pair a browser or tablet with the current account.") {

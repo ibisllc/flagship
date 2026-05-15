@@ -12,12 +12,14 @@ import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.ProvidersScreen
 import com.flagshipserver.app.ui.screens.RecoveryScreen
 import com.flagshipserver.app.ui.screens.SettingsScreen
+import com.flagshipserver.app.ui.screens.TrustedDevicesScreen
 
 @Composable
 fun SettingsTab() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = "settings-root") {
         composable("settings-root") { SettingsScreen(nav) }
+        composable("trusted-devices") { TrustedDevicesScreen(nav) }
         composable("paired-sessions") { PairedSessionsScreen(nav) }
         composable("add-control-device") { AddControlDeviceScreen(nav) }
         composable("recovery") { RecoveryScreen(nav) }
