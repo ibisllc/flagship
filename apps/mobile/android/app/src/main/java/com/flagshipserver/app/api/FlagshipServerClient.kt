@@ -66,7 +66,41 @@ interface FlagshipServerClient {
     /** C7 — finalize a pending re-pair after the 24-hour grace.
      *  Public read; 425 = grace not elapsed, 409 = objected, 200 = swap done. */
     suspend fun completeRePair(username: String): RePairCompleteResponse
+
+    /** E4 — atomic Wipe & restart. Rotates IRK + recovery envelope
+     *  in one server transaction. Body carries OLD-IRK signature
+     *  over canonical flagship/wipe-restart/v1 bytes. */
+    suspend fun wipeRestart(
+        username: String,
+        body: WipeRestartRequest,
+        ifMatch: String?,
+    ): WipeRestartResponse
 }
+
+@Serializable
+data class WipeRestartRequest(
+    val request: Inner,
+    val signature: String,
+    val idempotencyKey: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val oldIrkPub: String,
+        val newIrkPub: String,
+        val newCredentialId: String,
+        val newWrappedUmk: String,  // base64
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class WipeRestartResponse(
+    val ok: Boolean,
+    val auditSeq: Int,
+    val newIrkPub: String,
+    val etag: String? = null,
+)
 
 @Serializable
 data class RePairInitiateRequest(
@@ -434,6 +468,39 @@ class MockFlagshipServerClient(
         )
     }
 
+    sealed interface WipeRestartBehavior {
+        data object Ok : WipeRestartBehavior
+        data object RateLimited : WipeRestartBehavior
+        data class StaleEtag(val currentEtag: String) : WipeRestartBehavior
+        data object ConcurrentRotation : WipeRestartBehavior
+    }
+    var wipeRestartBehavior: WipeRestartBehavior = WipeRestartBehavior.Ok
+    var lastWipeRestart: Triple<String, WipeRestartRequest, String?>? = null
+        private set
+
+    override suspend fun wipeRestart(
+        username: String,
+        body: WipeRestartRequest,
+        ifMatch: String?,
+    ): WipeRestartResponse {
+        tick()
+        lastWipeRestart = Triple(username, body, ifMatch)
+        return when (wipeRestartBehavior) {
+            WipeRestartBehavior.Ok -> WipeRestartResponse(
+                ok = true,
+                auditSeq = 42,
+                newIrkPub = body.request.newIrkPub,
+                etag = "W/\"post-wipe\"",
+            )
+            WipeRestartBehavior.RateLimited ->
+                throw IllegalStateException("429 wipe-restart rate-limited")
+            is WipeRestartBehavior.StaleEtag ->
+                throw IllegalStateException("412 stale-etag")
+            WipeRestartBehavior.ConcurrentRotation ->
+                throw IllegalStateException("409 concurrent rotation")
+        }
+    }
+
     override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse {
         tick()
         val all = auditEventsByUser[username.lowercase()] ?: emptyList()
@@ -623,6 +690,21 @@ class LiveFlagshipServerClient(
         return transport.json.decodeFromString(
             RePairCompleteResponse.serializer(),
             resp.body.decodeToString(),
+        )
+    }
+
+    override suspend fun wipeRestart(
+        username: String,
+        body: WipeRestartRequest,
+        ifMatch: String?,
+    ): WipeRestartResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/wipe-restart",
+            body = body,
+            serializer = WipeRestartRequest.serializer(),
+            responseSerializer = WipeRestartResponse.serializer(),
+            extraHeaders = ifMatch?.let { mapOf("If-Match" to it) } ?: emptyMap(),
         )
     }
 }

@@ -90,11 +90,22 @@ fun TrustedDevicesScreen(nav: NavController) {
     var sheetTarget by remember { mutableStateOf<TrustedDevice?>(null) }
     var confirmDisconnect by remember { mutableStateOf<TrustedDevice?>(null) }
     var confirmReplace by remember { mutableStateOf(false) }
+    var confirmWipe by remember { mutableStateOf(false) }
     var snackbarMsg by remember { mutableStateOf<String?>(null) }
     val replaceVm: com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
                 com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel(
+                    server = server,
+                    username = { app.currentUser.value },
+                )
+            }
+        },
+    )
+    val wipeVm: com.flagshipserver.app.viewmodels.WipeRestartViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                com.flagshipserver.app.viewmodels.WipeRestartViewModel(
                     server = server,
                     username = { app.currentUser.value },
                 )
@@ -177,23 +188,15 @@ fun TrustedDevicesScreen(nav: NavController) {
                 ) {
                     Text("Replace device", color = FS.colors.danger)
                 }
-                // Wipe & restart — v1.1 (E5). Visible-but-dimmed so a
-                // security-conscious user can see the nuclear option
-                // exists. Tap shows an in-place "Coming soon" note
-                // instead of a system snackbar (which would dismiss
-                // the sheet on Android).
-                var wipeNote by remember { mutableStateOf<String?>(null) }
+                // E5 — Wipe & restart. Live ceremony.
                 TextButton(
                     onClick = {
-                        wipeNote = "Wipe & restart ships in the next update. Use Replace device for now."
+                        confirmWipe = true
+                        sheetTarget = null
                     },
-                    enabled = false,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-wipe" },
                 ) {
-                    Text("Wipe & restart", color = FS.colors.textMuted)
-                }
-                wipeNote?.let {
-                    Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                    Text("Wipe & restart", color = FS.colors.danger)
                 }
                 Spacer(Modifier.height(FS.space.s4))
             }
@@ -220,6 +223,46 @@ fun TrustedDevicesScreen(nav: NavController) {
             },
             dismissButton = {
                 TextButton(onClick = { confirmDisconnect = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // E5 — Wipe & restart scare dialog.
+    if (confirmWipe) {
+        AlertDialog(
+            onDismissRequest = { confirmWipe = false },
+            title = { Text("Wipe and start over?") },
+            text = {
+                Text(
+                    "Your account keeps the same username and your pods keep " +
+                        "their data. Every device currently on this account will " +
+                        "be disconnected — including this phone, which becomes " +
+                        "the new root of trust. You'll re-pair each one fresh.\n\n" +
+                        "This can't be undone from another device.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmWipe = false
+                    scope.launch {
+                        wipeVm.run(currentEtag = vm.etag.value)
+                        when (val phase = wipeVm.phase.value) {
+                            com.flagshipserver.app.viewmodels.WipeRestartPhase.Completed -> {
+                                snackbarMsg = "Done. All other devices are now disconnected. Re-pair them on next open."
+                                // Drop to Welcome — current session is stale.
+                                app.signOut()
+                            }
+                            is com.flagshipserver.app.viewmodels.WipeRestartPhase.Failed ->
+                                snackbarMsg = phase.message
+                            else -> Unit
+                        }
+                    }
+                }) {
+                    Text("Wipe and start over", color = FS.colors.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmWipe = false }) { Text("Cancel") }
             },
         )
     }

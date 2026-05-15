@@ -103,6 +103,42 @@ object Keystore {
         return seed
     }
 
+    /**
+     * E4 — atomically install a pre-existing UMK seed. Used by Wipe
+     * & restart: the caller has just generated a fresh 32-byte UMK
+     * (so the OLD IRK can sign the canonical bytes before we
+     * overwrite). After this returns, deriveIRK() / deriveBAK() /
+     * deriveSWK() all derive against the NEW UMK.
+     *
+     * Resets the IRK version slot to v1 and clears any pending
+     * rotation, and sweeps stale per-version IRK seed caches so
+     * subsequent deriveIRK calls re-mint from the new UMK.
+     */
+    fun installUmk(seed: ByteArray) {
+        require(seed.size == 32) { "UMK seed must be 32 bytes" }
+        val p = requirePrefs()
+        val editor = p.edit()
+        editor.putString(KEY_UMK_SEED, HexUtil.encode(seed))
+        // Reset version slots — fresh UMK ⇒ fresh v1 derivation.
+        editor.putString(KEY_IRK_VERSION, "1")
+        editor.remove(KEY_IRK_PENDING_VERSION)
+        // Sweep per-version IRK seed caches; they're derived from
+        // the OLD UMK and would otherwise survive into the new
+        // identity.
+        for (key in p.all.keys) {
+            if (key.startsWith("$KEY_IRK_SEED.v")) editor.remove(key)
+        }
+        // Also drop the legacy single-slot IRK seed if a pre-versioned
+        // install left it lying around — same correctness logic.
+        editor.remove(KEY_IRK_SEED)
+        editor.apply()
+    }
+
+    /** E4 — read the current UMK seed. Used by the Wipe ceremony to
+     *  derive the OLD IRK + sign before installing a new UMK. */
+    fun currentUmkSeed(): ByteArray =
+        loadOrCreateUmkSeed()
+
     /** Derive (and cache) the IRK Ed25519 keypair at the currently
      *  active version. See `deriveIRK(reason, version)` for the
      *  versioned variant used by Replace device (C7) and Wipe &
