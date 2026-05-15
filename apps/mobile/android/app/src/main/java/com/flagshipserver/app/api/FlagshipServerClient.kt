@@ -53,7 +53,48 @@ interface FlagshipServerClient {
      *  means yes, 404 means no, anything else surfaces as exception
      *  so the caller can decide retry vs. silent-skip. */
     suspend fun hasCloudRecovery(username: String): Boolean
+
+    /** C7 — initiate IRK rotation. POSTs the NEW-IRK-signed envelope
+     *  to /api/users/:u/re-pair. Optional `ifMatch` ETag fences the
+     *  concurrent-rotation race (Worker A3). */
+    suspend fun initiateRePair(
+        username: String,
+        body: RePairInitiateRequest,
+        ifMatch: String?,
+    ): RePairInitiateResponse
+
+    /** C7 — finalize a pending re-pair after the 24-hour grace.
+     *  Public read; 425 = grace not elapsed, 409 = objected, 200 = swap done. */
+    suspend fun completeRePair(username: String): RePairCompleteResponse
 }
+
+@Serializable
+data class RePairInitiateRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val newIrkPub: String,   // hex
+        val oldIrkPub: String,   // hex
+        val issuedAt: Long,      // ms
+    )
+}
+
+@Serializable
+data class RePairInitiateResponse(
+    val ok: Boolean,
+    val completesAt: Long,
+    val graceMs: Long,
+)
+
+@Serializable
+data class RePairCompleteResponse(
+    val ok: Boolean,
+    val newIrkPub: String,
+    val swappedAt: Long,
+)
 
 @Serializable
 data class AuditEvent(
@@ -354,6 +395,45 @@ class MockFlagshipServerClient(
         return cloudRecoveryByUser[username.lowercase()] ?: false
     }
 
+    /** Drives initiate outcomes in tests. */
+    sealed interface RePairBehavior {
+        data object Ok : RePairBehavior
+        data class StaleEtag(val currentEtag: String) : RePairBehavior
+        data object AlreadyPending : RePairBehavior
+    }
+    var rePairBehavior: RePairBehavior = RePairBehavior.Ok
+    var lastRePairInitiate: Triple<String, RePairInitiateRequest, String?>? = null
+        private set
+
+    override suspend fun initiateRePair(
+        username: String,
+        body: RePairInitiateRequest,
+        ifMatch: String?,
+    ): RePairInitiateResponse {
+        tick()
+        lastRePairInitiate = Triple(username, body, ifMatch)
+        return when (val b = rePairBehavior) {
+            is RePairBehavior.StaleEtag ->
+                throw IllegalStateException("412 currentEtag=${b.currentEtag}")
+            RePairBehavior.AlreadyPending ->
+                throw IllegalStateException("409 already-pending")
+            RePairBehavior.Ok -> RePairInitiateResponse(
+                ok = true,
+                completesAt = System.currentTimeMillis() + 24L * 3600 * 1000,
+                graceMs = 24L * 3600 * 1000,
+            )
+        }
+    }
+
+    override suspend fun completeRePair(username: String): RePairCompleteResponse {
+        tick()
+        return RePairCompleteResponse(
+            ok = true,
+            newIrkPub = "00",
+            swappedAt = System.currentTimeMillis(),
+        )
+    }
+
     override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse {
         tick()
         val all = auditEventsByUser[username.lowercase()] ?: emptyList()
@@ -516,6 +596,34 @@ class LiveFlagshipServerClient(
             accept = setOf(200, 404),
         )
         return resp.status == 200
+    }
+
+    override suspend fun initiateRePair(
+        username: String,
+        body: RePairInitiateRequest,
+        ifMatch: String?,
+    ): RePairInitiateResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/re-pair",
+            body = body,
+            serializer = RePairInitiateRequest.serializer(),
+            responseSerializer = RePairInitiateResponse.serializer(),
+            extraHeaders = ifMatch?.let { mapOf("If-Match" to it) } ?: emptyMap(),
+        )
+    }
+
+    override suspend fun completeRePair(username: String): RePairCompleteResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        val resp = transport.execute(
+            method = "POST",
+            url = "$base/api/users/$encoded/re-pair/complete",
+            accept = setOf(200),
+        )
+        return transport.json.decodeFromString(
+            RePairCompleteResponse.serializer(),
+            resp.body.decodeToString(),
+        )
     }
 }
 

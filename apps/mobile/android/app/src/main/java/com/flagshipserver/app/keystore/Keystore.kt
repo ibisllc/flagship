@@ -44,6 +44,9 @@ object Keystore {
      *  by Replace device + Wipe & restart ceremonies so old-IRK
      *  signatures stop verifying against the new registered IRK. */
     private const val KEY_IRK_VERSION = "irk.version"
+    /** Pending IRK rotation target (C7). Stored during the 24-hour
+     *  re-pair grace window; cleared on completion or abort. */
+    private const val KEY_IRK_PENDING_VERSION = "irk.pendingVersion"
 
     private val rng = SecureRandom()
     @Volatile private var prefs: SharedPreferences? = null
@@ -100,31 +103,70 @@ object Keystore {
         return seed
     }
 
-    /** Derive (and cache) the IRK Ed25519 keypair. `reason` surfaces
-     *  in the biometric prompt subtitle so the user sees what they're
-     *  authorizing. When a BiometricAuthority is registered (the app
-     *  is in the foreground), this triggers a prompt unless the cached
-     *  freshness window is still open — see
-     *  BiometricAuthority.ensureFresh. Background callers (FCM service)
-     *  proceed without a prompt; the authority returns null in that
-     *  scope so the call is a no-op. */
-    suspend fun deriveIRK(reason: String = "Sign Flagship request"): Ed25519Sign {
+    /** Derive (and cache) the IRK Ed25519 keypair at the currently
+     *  active version. See `deriveIRK(reason, version)` for the
+     *  versioned variant used by Replace device (C7) and Wipe &
+     *  restart (E4-E5). */
+    suspend fun deriveIRK(reason: String = "Sign Flagship request"): Ed25519Sign =
+        deriveIRK(reason, currentIrkVersion())
+
+    /** Explicit-version IRK derivation. Used by the rotation
+     *  ceremonies to derive BOTH the OLD (currentIrkVersion()) and
+     *  NEW (currentIrkVersion()+1) IRK from the shared UMK. Versions
+     *  >= 1; v1 is the legacy default that pre-dates this primitive.
+     *  Caches per-version so subsequent calls don't re-HKDF. */
+    suspend fun deriveIRK(reason: String, version: Int): Ed25519Sign {
+        require(version >= 1) { "IRK version must be >= 1" }
         BiometricAuthority.current()?.ensureFresh(
             title = "Authorize Flagship",
             subtitle = reason,
         )
         val p = requirePrefs()
-        val seedHex = p.getString(KEY_IRK_SEED, null)
+        val cacheKey = "$KEY_IRK_SEED.v$version"
+        val seedHex = p.getString(cacheKey, null)
         val seed = if (seedHex != null) {
-            HexUtil.decode(seedHex) ?: error("corrupt IRK seed")
+            HexUtil.decode(seedHex) ?: error("corrupt IRK seed (v$version)")
         } else {
             val umk = loadOrCreateUmkSeed()
-            val derived = hkdf(umk, salt = "flagship/irk/v1".toByteArray(),
-                info = "ed25519-seed".toByteArray(), length = 32)
-            p.edit().putString(KEY_IRK_SEED, HexUtil.encode(derived)).apply()
+            val derived = hkdf(
+                umk,
+                salt = "flagship/irk/v$version".toByteArray(),
+                info = "ed25519-seed".toByteArray(),
+                length = 32,
+            )
+            p.edit().putString(cacheKey, HexUtil.encode(derived)).apply()
             derived
         }
         return Ed25519Sign(seed)
+    }
+
+    /** Current IRK HKDF version active for sign/verify against
+     *  .com. Defaults to 1 if the slot is absent (covers legacy
+     *  installs). */
+    fun currentIrkVersion(): Int =
+        requirePrefs().getString(KEY_IRK_VERSION, null)?.toIntOrNull()?.takeIf { it >= 1 } ?: 1
+
+    /** Persist a new IRK version. Caller is expected to have just
+     *  successfully completed a server-side IRK swap via either
+     *  `/api/users/:u/re-pair/complete` or `/api/users/:u/wipe-restart`. */
+    fun setCurrentIrkVersion(version: Int) {
+        require(version >= 1)
+        requirePrefs().edit().putString(KEY_IRK_VERSION, version.toString()).apply()
+    }
+
+    /** Optional pending-rotation marker. Presence = a re-pair was
+     *  initiated; absent = no rotation in flight. */
+    fun pendingIrkRotationVersion(): Int? =
+        requirePrefs().getString(KEY_IRK_PENDING_VERSION, null)?.toIntOrNull()?.takeIf { it >= 1 }
+
+    fun setPendingIrkRotationVersion(version: Int?) {
+        val p = requirePrefs().edit()
+        if (version == null) p.remove(KEY_IRK_PENDING_VERSION)
+        else {
+            require(version >= 1)
+            p.putString(KEY_IRK_PENDING_VERSION, version.toString())
+        }
+        p.apply()
     }
 
     /** Public-key half of the IRK, hex-encoded. */
@@ -136,6 +178,18 @@ object Keystore {
         val seed = HexUtil.decode(seedHex)!!
         val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed)
         return HexUtil.encode(pair.publicKey)
+    }
+
+    /** C7 — read the cached IRK seed for a specific version. Used by
+     *  the ReplaceDeviceViewModel to compute pubkeys for OLD + NEW
+     *  versions during a rotation ceremony. Caller is expected to
+     *  have just called deriveIRK(version) so the cache slot is
+     *  populated; throws if the slot is missing. */
+    fun requireIrkSeedForVersion(version: Int): ByteArray {
+        val cacheKey = "$KEY_IRK_SEED.v$version"
+        val hex = requirePrefs().getString(cacheKey, null)
+            ?: error("no IRK seed cached for v$version — call deriveIRK first")
+        return HexUtil.decode(hex) ?: error("corrupt IRK seed (v$version)")
     }
 
     data class X25519KeyPair(val privateKey: ByteArray, val publicKey: ByteArray)
@@ -176,18 +230,20 @@ object Keystore {
      *     UMK + new IRK + new recovery passkey.
      */
     fun wipe() {
-        requirePrefs().edit().apply {
-            remove(KEY_UMK_SEED)
-            remove(KEY_IRK_SEED)
-            remove(KEY_PUSH_X25519_PRIV)
-            remove(KEY_PUSH_TOKEN_ID)
-            // Keystore version slot — when present, identifies the
-            // active HKDF-version counter used to derive IRK. We
-            // strip it here so a subsequent re-init starts cleanly
-            // at v1.
-            remove(KEY_IRK_VERSION)
-            apply()
+        val p = requirePrefs()
+        val editor = p.edit()
+        editor.remove(KEY_UMK_SEED)
+        editor.remove(KEY_IRK_SEED)
+        editor.remove(KEY_PUSH_X25519_PRIV)
+        editor.remove(KEY_PUSH_TOKEN_ID)
+        editor.remove(KEY_IRK_VERSION)
+        editor.remove(KEY_IRK_PENDING_VERSION)
+        // Per-version IRK caches (C7) — sweep every "irk.seed.vN"
+        // entry the rotation primitive might have written.
+        for (key in p.all.keys) {
+            if (key.startsWith("$KEY_IRK_SEED.v")) editor.remove(key)
         }
+        editor.apply()
     }
 
     // ---- HKDF-SHA256 ----------------------------------------------------

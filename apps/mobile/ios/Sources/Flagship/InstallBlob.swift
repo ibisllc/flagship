@@ -153,6 +153,53 @@ public enum AuthCodeRevoke {
     }
 }
 
+/// B7 — Re-pair initiate envelope. Signed by the NEW IRK over a
+/// claim that includes the OLD IRK pubkey (for .com's snapshot
+/// match) + the NEW pubkey + a freshness timestamp. Mirrors
+/// packages/protocol/src/auth.ts `TAG_RE_PAIR_INITIATE`.
+public enum RePairInitiate {
+    public static let canonicalTag = "flagship/re-pair-initiate/v1"
+    public static func canonicalBytes(
+        username: String,
+        newIrkPubHex: String,
+        oldIrkPubHex: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            username,
+            newIrkPubHex.lowercased(),
+            oldIrkPubHex.lowercased(),
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
+/// E2 — Wipe & restart envelope. Signed by the OLD IRK over the
+/// new IRK + new credentialID + SHA-256 of the new wrapped UMK.
+/// Mirrors packages/protocol/src/auth.ts `TAG_WIPE_RESTART`.
+public enum WipeRestartClaim {
+    public static let canonicalTag = "flagship/wipe-restart/v1"
+    public static func canonicalBytes(
+        username: String,
+        oldIrkPubHex: String,
+        newIrkPubHex: String,
+        newCredentialIdHex: String,
+        newWrappedUmkHashHex: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            username,
+            oldIrkPubHex.lowercased(),
+            newIrkPubHex.lowercased(),
+            newCredentialIdHex.lowercased(),
+            newWrappedUmkHashHex.lowercased(),
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
 /// Push-token registration claim. Mirrors
 /// packages/protocol/src/auth.ts `TAG_PUSH_TOKEN_REGISTER` so the Worker
 /// can `verifyPushTokenRegister` over the exact same bytes the phone

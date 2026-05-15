@@ -15,6 +15,8 @@ public struct SettingsTab: View {
 
     @State private var path: [SettingsRoute] = []
     @State private var vm: SettingsViewModel?
+    @State private var replaceVm: ReplaceDeviceViewModel?
+    @State private var replaceToast: String?
 
     public init() {}
 
@@ -86,8 +88,46 @@ public struct SettingsTab: View {
                             app.signOut()
                         }
                     },
+                    onReplaceDevice: {
+                        // B7 — fire the ReplaceDeviceViewModel. We
+                        // lazily construct the VM here (rather than
+                        // .task above) so the SettingsTab init stays
+                        // cheap.
+                        if replaceVm == nil {
+                            replaceVm = ReplaceDeviceViewModel(
+                                server: server,
+                                username: { [app] in app.currentUser }
+                            )
+                        }
+                        // Reuse the most recent ETag we captured from
+                        // the trusted-devices fetch (vm.devicesEtag).
+                        await replaceVm?.initiate(currentEtag: vm?.devicesEtag)
+                        // Surface the outcome as a toast — the UI
+                        // doesn't yet have a dedicated pending-status
+                        // card; that's a v1.1 follow-up.
+                        switch replaceVm?.phase {
+                        case .pending(let completesAt):
+                            let hours = max(1, (completesAt - Int64(Date().timeIntervalSince1970 * 1000)) / 3_600_000)
+                            replaceToast = "Replace initiated. Takes effect in ~\(hours)h unless another device objects."
+                        case .failed(let msg):
+                            replaceToast = msg
+                        default:
+                            replaceToast = nil
+                        }
+                    },
                     hasCloudRecovery: app.hasCloudRecovery
                 )
+                .alert(
+                    "Replace device",
+                    isPresented: Binding(
+                        get: { replaceToast != nil },
+                        set: { if !$0 { replaceToast = nil } }
+                    )
+                ) {
+                    Button("OK") { replaceToast = nil }
+                } message: {
+                    Text(replaceToast ?? "")
+                }
             } else {
                 ProgressView()
             }

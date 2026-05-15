@@ -92,10 +92,75 @@ public struct Keystore {
     }
 
     /// Account-level Ed25519 IRK keypair. Signs identity-rotation orders.
+    ///
+    /// Reads `currentIrkVersion()` from Keychain (defaulting to v1 on
+    /// first launch / legacy installs) and derives via
+    /// `HKDF(umk, "flagship/irk/v<N>")`. The version slot is bumped
+    /// by Replace device (B7) and Wipe & restart (E2), invalidating
+    /// any leaked-disk OLD IRK private key on a stolen peer device.
     public static func deriveIRK(reason: String) async throws -> Curve25519.Signing.PrivateKey {
+        return try await deriveIRK(reason: reason, version: currentIrkVersion())
+    }
+
+    /// Explicit-version variant. Used by the Replace device + Wipe
+    /// ceremonies to derive BOTH the OLD (current N) and the NEW
+    /// (N+1) IRK during a rotation, without first persisting the
+    /// new version (which only happens after the server CAS succeeds).
+    public static func deriveIRK(reason: String, version: Int) async throws -> Curve25519.Signing.PrivateKey {
         let umk = try await unwrappedUMK(reason: reason)
-        let seed = derive(umk: umk, info: "flagship/irk/v1")
+        let seed = derive(umk: umk, info: "flagship/irk/v\(version)")
         return try Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
+    }
+
+    /// Current IRK HKDF version. Defaults to 1 if the slot is absent
+    /// — covers legacy installs that pre-date the rotation primitive.
+    public static func currentIrkVersion() -> Int {
+        guard let d = keychainRead(account: KCKey.irkVersion),
+              let s = String(data: d, encoding: .utf8),
+              let n = Int(s),
+              n >= 1
+        else { return 1 }
+        return n
+    }
+
+    /// Persist a new IRK version. Caller is expected to have just
+    /// successfully completed a server-side IRK swap via either
+    /// `/api/users/:u/re-pair/complete` or `/api/users/:u/wipe-restart`.
+    /// Bumping locally before the server confirms would brick this
+    /// device's ability to sign — every operation would derive a
+    /// version the server doesn't know about.
+    public static func setCurrentIrkVersion(_ version: Int) throws {
+        precondition(version >= 1, "IRK version must be >= 1")
+        try keychainWrite(account: KCKey.irkVersion, data: Data(String(version).utf8))
+    }
+
+    // Optional "pending re-pair" marker — lets a future app launch
+    // see that a rotation is in flight (Replace device initiated but
+    // not yet completed) and decide whether to poll the server's
+    // complete endpoint. Stored as the pending version number; absent
+    // means no pending rotation.
+
+    public static func pendingIrkRotationVersion() -> Int? {
+        guard let d = keychainRead(account: KCKey.irkPendingVersion),
+              let s = String(data: d, encoding: .utf8),
+              let n = Int(s),
+              n >= 1
+        else { return nil }
+        return n
+    }
+
+    public static func setPendingIrkRotationVersion(_ version: Int?) throws {
+        if let version {
+            precondition(version >= 1, "pending IRK version must be >= 1")
+            try keychainWrite(account: KCKey.irkPendingVersion, data: Data(String(version).utf8))
+        } else {
+            let q: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: KCKey.irkPendingVersion,
+            ]
+            SecItemDelete(q as CFDictionary)
+            InMemoryStore.shared.remove(account: KCKey.irkPendingVersion)
+        }
     }
 
     /// Per-device X25519 push key. Generated on first call and persisted
@@ -138,7 +203,8 @@ public struct Keystore {
 
     public static func wipe() {
         for account in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
-                        KCKey.pushX25519Priv, KCKey.pushTokenId] {
+                        KCKey.pushX25519Priv, KCKey.pushTokenId,
+                        KCKey.irkVersion, KCKey.irkPendingVersion] {
             let q: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrAccount as String: account
@@ -199,12 +265,17 @@ public struct Keystore {
     // MARK: - Keychain helpers
 
     fileprivate enum KCKey {
-        static let wrappedUmk     = "com.flagship.umk.wrapped"
-        static let ephemeralPub   = "com.flagship.umk.ephemeralpub"
-        static let simWrapPriv    = "com.flagship.umk.simwrap"
-        static let seKeyTag       = "com.flagship.umk.se"
-        static let pushX25519Priv = "com.flagship.push.x25519priv"
-        static let pushTokenId    = "com.flagship.push.tokenid"
+        static let wrappedUmk          = "com.flagship.umk.wrapped"
+        static let ephemeralPub        = "com.flagship.umk.ephemeralpub"
+        static let simWrapPriv         = "com.flagship.umk.simwrap"
+        static let seKeyTag            = "com.flagship.umk.se"
+        static let pushX25519Priv      = "com.flagship.push.x25519priv"
+        static let pushTokenId         = "com.flagship.push.tokenid"
+        /// B7/E2 — HKDF version counter for IRK derivation. Absent → v1. */
+        static let irkVersion          = "com.flagship.irk.version"
+        /// B7 — pending re-pair target version while a rotation is
+        /// in flight. Cleared on completion or abort. */
+        static let irkPendingVersion   = "com.flagship.irk.pendingVersion"
     }
 
     fileprivate static func keychainWrite(account: String, data: Data) throws {

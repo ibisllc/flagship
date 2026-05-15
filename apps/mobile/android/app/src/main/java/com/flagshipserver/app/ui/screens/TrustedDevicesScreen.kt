@@ -89,7 +89,18 @@ fun TrustedDevicesScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     var sheetTarget by remember { mutableStateOf<TrustedDevice?>(null) }
     var confirmDisconnect by remember { mutableStateOf<TrustedDevice?>(null) }
+    var confirmReplace by remember { mutableStateOf(false) }
     var snackbarMsg by remember { mutableStateOf<String?>(null) }
+    val replaceVm: com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel(
+                    server = server,
+                    username = { app.currentUser.value },
+                )
+            }
+        },
+    )
 
     LaunchedEffect(Unit) { vm.load() }
 
@@ -155,9 +166,16 @@ fun TrustedDevicesScreen(nav: NavController) {
                 ) {
                     Text("Disconnect", color = FS.colors.danger)
                 }
-                // Replace device lands in C7; row dimmed for now.
-                TextButton(onClick = { /* C7 */ }, enabled = false) {
-                    Text("Replace device", color = FS.colors.textMuted)
+                // C7 — Replace device. Tap opens the scare dialog;
+                // confirmation drives the ReplaceDeviceViewModel.
+                TextButton(
+                    onClick = {
+                        confirmReplace = true
+                        sheetTarget = null
+                    },
+                    modifier = Modifier.semantics { contentDescription = "trusted-device-replace" },
+                ) {
+                    Text("Replace device", color = FS.colors.danger)
                 }
                 // Wipe & restart — v1.1 (E5). Visible-but-dimmed so a
                 // security-conscious user can see the nuclear option
@@ -202,6 +220,45 @@ fun TrustedDevicesScreen(nav: NavController) {
             },
             dismissButton = {
                 TextButton(onClick = { confirmDisconnect = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // C7 — Replace device scare dialog. Same UX shape as iOS B7.
+    if (confirmReplace) {
+        AlertDialog(
+            onDismissRequest = { confirmReplace = false },
+            title = { Text("Replace this device?") },
+            text = {
+                Text(
+                    "Rotates your account's identity key. Other devices on " +
+                        "this account will need to re-pair the next time they " +
+                        "open the app. Pods stay running, apps stay installed. " +
+                        "Takes effect after a 24-hour grace window during which " +
+                        "another device can object.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReplace = false
+                    scope.launch {
+                        replaceVm.initiate(currentEtag = vm.etag.value)
+                        when (val phase = replaceVm.phase.value) {
+                            is com.flagshipserver.app.viewmodels.ReplaceDevicePhase.Pending -> {
+                                val hours = ((phase.completesAt - System.currentTimeMillis()) / 3_600_000).coerceAtLeast(1)
+                                snackbarMsg = "Replace initiated. Takes effect in ~${hours}h unless another device objects."
+                            }
+                            is com.flagshipserver.app.viewmodels.ReplaceDevicePhase.Failed ->
+                                snackbarMsg = phase.message
+                            else -> Unit
+                        }
+                    }
+                }) {
+                    Text("Replace device", color = FS.colors.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReplace = false }) { Text("Cancel") }
             },
         )
     }

@@ -23,8 +23,8 @@ class KeystoreWipeTest {
     fun setUp() {
         // Robolectric's ApplicationProvider returns a usable Context
         // for SharedPreferences; the Keystore module's requirePrefs
-        // wires up against it once Keystore.init(ctx) is called.
-        Keystore.init(ApplicationProvider.getApplicationContext<Context>())
+        // wires up against it once Keystore.attach(ctx) is called.
+        Keystore.attach(ApplicationProvider.getApplicationContext<Context>())
         // Start each test from a clean slate — prior tests in the
         // same JVM may have written keys we need to ignore.
         Keystore.wipe()
@@ -32,19 +32,15 @@ class KeystoreWipeTest {
 
     @Test
     fun wipe_clearsUmkSeed() {
-        Keystore.deriveUmk()              // writes umk.seed
+        Keystore.loadOrCreateUmkSeed()    // writes umk.seed
         Keystore.wipe()
-        // After wipe, re-deriving should produce a NEW UMK — i.e.,
-        // the bytes don't match the old one. Cheap structural check:
-        // the seed was actually rewritten, not just preserved.
-        val before = ByteArray(0) // can't read old seed by design
-        val after = Keystore.deriveUmk()
+        // After wipe, re-deriving produces a NEW seed; cheap
+        // structural check: the seed is the right size and stable
+        // across repeated calls.
+        val after = Keystore.loadOrCreateUmkSeed()
         assertNotNull(after)
         assertEquals(32, after.size)
-        // We can't directly compare to "the previous wipe value"
-        // because deriveUmk regenerates randomly; what we CAN do is
-        // verify wipe didn't corrupt the derive path.
-        val secondAfter = Keystore.deriveUmk() // idempotent — same seed
+        val secondAfter = Keystore.loadOrCreateUmkSeed()
         assertEquals(after.toList(), secondAfter.toList())
     }
 
@@ -57,13 +53,13 @@ class KeystoreWipeTest {
     }
 
     @Test
-    fun wipe_clearsIrkSeedSoRotationStartsFresh() {
+    fun wipe_clearsIrkSeedSoRotationStartsFresh() = kotlinx.coroutines.runBlocking {
         // Cache an IRK so the seed slot is populated…
         Keystore.deriveIRK("init")
         // …wipe…
         Keystore.wipe()
-        // …and re-derive. The post-wipe IRK should be different
-        // from any seed that was already on disk (it just got wiped).
+        // …and re-derive. The post-wipe IRK should be a fresh seed
+        // (UMK was also wiped).
         val fresh = Keystore.deriveIRK("post-wipe")
         assertNotNull(fresh)
     }

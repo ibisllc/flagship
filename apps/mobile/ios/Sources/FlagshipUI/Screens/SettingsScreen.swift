@@ -26,6 +26,11 @@ public struct SettingsScreen: View {
     /// button calls onRemoveFromAccount. Sheet copy adapts based on
     /// whether the user has cloud recovery enrolled.
     @State private var showRemoveConfirm = false
+    /// B7 — drives the Replace device confirmation sheet. nil → not
+    /// asking; non-nil → ask the user to confirm rotating the IRK.
+    /// The container observes this and routes the action through
+    /// ReplaceDeviceViewModel.
+    @State private var replaceConfirm: Bool = false
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
@@ -49,6 +54,10 @@ public struct SettingsScreen: View {
     /// .com, wipe local Keystore, and call AppState.signOut so the
     /// user drops back to Welcome.
     var onRemoveFromAccount: () async -> Void = {}
+    /// B7 — fired after the user confirms the Replace device scare
+    /// sheet. The container drives ReplaceDeviceViewModel.initiate
+    /// with the captured devices ETag.
+    var onReplaceDevice: () async -> Void = {}
     /// Whether the user has cloud recovery enrolled — read by the
     /// Remove confirmation sheet to surface a STRONGER warning when
     /// not enrolled (no enrolment = removing this device permanently
@@ -72,6 +81,7 @@ public struct SettingsScreen: View {
         onOpenPrivacy: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
+        onReplaceDevice: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true
     ) {
         self.username = username
@@ -90,6 +100,7 @@ public struct SettingsScreen: View {
         self.onOpenPrivacy = onOpenPrivacy
         self.onRefresh = onRefresh
         self.onRemoveFromAccount = onRemoveFromAccount
+        self.onReplaceDevice = onReplaceDevice
         self.hasCloudRecovery = hasCloudRecovery
     }
 
@@ -152,6 +163,18 @@ public struct SettingsScreen: View {
         }
         .sheet(isPresented: $showWipeComingSoon) {
             WipeComingSoonSheet { showWipeComingSoon = false }
+        }
+        .confirmationDialog(
+            "Replace this device?",
+            isPresented: $replaceConfirm,
+            titleVisibility: .visible,
+        ) {
+            Button("Replace device", role: .destructive) {
+                Task { await onReplaceDevice() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, apps stay installed. The change takes effect after a 24-hour grace window during which another device can object.")
         }
     }
 
@@ -256,15 +279,14 @@ public struct SettingsScreen: View {
                     } label: {
                         Label("Disconnect", systemImage: "wifi.slash")
                     }
-                    // Replace lives in B7; the menu entry slot is here
-                    // already so the UX shape doesn't shift between
-                    // commits.
-                    Button {
-                        // intentionally no-op until B7
+                    // B7 — Replace device. Tap opens a two-stage scare
+                    // sheet; the container drives the actual IRK
+                    // rotation ceremony through ReplaceDeviceViewModel.
+                    Button(role: .destructive) {
+                        replaceConfirm = true
                     } label: {
                         Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .disabled(true)
                     Divider()
                     // Wipe & restart lives behind a v1.1 flag (E2/E3).
                     // The menu entry is visible-but-disabled in v1 so

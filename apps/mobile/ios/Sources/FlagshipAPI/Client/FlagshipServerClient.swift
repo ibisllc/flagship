@@ -60,6 +60,52 @@ public protocol FlagshipServerClient: Sendable {
     /// surfaced as an error so the caller can decide whether to retry
     /// or just hide the nudge until next launch.
     func hasCloudRecovery(username: String) async throws -> Bool
+
+    /// B7 — initiate IRK rotation. POSTs the NEW-IRK-signed re-pair
+    /// envelope to /api/users/:u/re-pair. Optional `ifMatch` ETag
+    /// (from a fresh listDevices call) fences the concurrent-rotation
+    /// race — see Worker A3. Returns the server's pending-grace info.
+    func initiateRePair(
+        username: String,
+        body: RePairInitiateRequest,
+        ifMatch: String?
+    ) async throws -> RePairInitiateResponse
+
+    /// B7 — finalize a pending re-pair. Public read (no signature gate);
+    /// the server checks completesAt + objectedAt before swapping the
+    /// stored IRK pubkey atomically. 425 = grace not elapsed; 409 =
+    /// objected; 200 = swap succeeded.
+    func completeRePair(username: String) async throws -> RePairCompleteResponse
+}
+
+public struct RePairInitiateRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let newIrkPub: String   // hex
+        public let oldIrkPub: String   // hex
+        public let issuedAt: Int64     // ms
+        public init(username: String, newIrkPub: String, oldIrkPub: String, issuedAt: Int64) {
+            self.username = username; self.newIrkPub = newIrkPub
+            self.oldIrkPub = oldIrkPub; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String      // hex; Ed25519 over canonical-bytes by NEW IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
+public struct RePairInitiateResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    public let completesAt: Int64
+    public let graceMs: Int64
+}
+
+public struct RePairCompleteResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    public let newIrkPub: String
+    public let swappedAt: Int64
 }
 
 public struct AuditEvent: Codable, Equatable, Sendable, Identifiable {
@@ -487,6 +533,45 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return cloudRecoveryByUser[username.lowercased()] ?? false
     }
 
+    /// Scripted re-pair behavior per username. Tests configure
+    /// `rePairBehavior` to drive happy-path / 412 / 409 outcomes
+    /// without spinning up a real Worker.
+    public enum RePairBehavior: Sendable {
+        case ok                        // initiate returns 200 + grace
+        case staleEtag(currentEtag: String) // 412 → throws as http(412)
+        case alreadyPending            // 409
+    }
+    public var rePairBehavior: RePairBehavior = .ok
+    /// Captures the last initiate call so tests can assert on the
+    /// signed request shape.
+    public private(set) var lastRePairInitiate: (
+        username: String,
+        body: RePairInitiateRequest,
+        ifMatch: String?
+    )?
+
+    public func initiateRePair(
+        username: String,
+        body: RePairInitiateRequest,
+        ifMatch: String?
+    ) async throws -> RePairInitiateResponse {
+        try await tick()
+        lastRePairInitiate = (username, body, ifMatch)
+        switch rePairBehavior {
+        case .staleEtag(let etag):
+            throw ScreensClientError.http(status: 412, message: "{\"error\":\"stale\",\"currentEtag\":\"\(etag)\"}")
+        case .alreadyPending:
+            throw ScreensClientError.http(status: 409, message: "already pending")
+        case .ok:
+            return RePairInitiateResponse(ok: true, completesAt: Int64(Date().timeIntervalSince1970 * 1000) + 24 * 3600 * 1000, graceMs: 24 * 3600 * 1000)
+        }
+    }
+
+    public func completeRePair(username: String) async throws -> RePairCompleteResponse {
+        try await tick()
+        return RePairCompleteResponse(ok: true, newIrkPub: "00", swappedAt: Int64(Date().timeIntervalSince1970 * 1000))
+    }
+
     public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
         try await tick()
         let devices = devicesByUser[username.lowercased()] ?? []
@@ -709,6 +794,39 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if status == 404 { return false }
         let text = String(data: data, encoding: .utf8) ?? ""
         throw ScreensClientError.http(status: status, message: text)
+    }
+
+    public func initiateRePair(
+        username: String,
+        body: RePairInitiateRequest,
+        ifMatch: String?
+    ) async throws -> RePairInitiateResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/re-pair"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let ifMatch { req.setValue(ifMatch, forHTTPHeaderField: "If-Match") }
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(RePairInitiateResponse.self, from: data)
+    }
+
+    public func completeRePair(username: String) async throws -> RePairCompleteResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/re-pair/complete"))
+        req.httpMethod = "POST"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(RePairCompleteResponse.self, from: data)
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

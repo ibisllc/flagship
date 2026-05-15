@@ -97,6 +97,46 @@ object AuthCodeRevoke {
             .joinToString("|").toByteArray()
 }
 
+/** C7 — Re-pair initiate envelope. Signed by the NEW IRK. Mirrors
+ *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE. */
+object RePairInitiateClaim {
+    const val CANONICAL_TAG = "flagship/re-pair-initiate/v1"
+    fun canonicalBytes(
+        username: String,
+        newIrkPubHex: String,
+        oldIrkPubHex: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        username,
+        newIrkPubHex.lowercase(),
+        oldIrkPubHex.lowercase(),
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
+/** E4 — Wipe & restart envelope. Signed by the OLD IRK. Mirrors
+ *  packages/protocol/src/auth.ts TAG_WIPE_RESTART. */
+object WipeRestartClaim {
+    const val CANONICAL_TAG = "flagship/wipe-restart/v1"
+    fun canonicalBytes(
+        username: String,
+        oldIrkPubHex: String,
+        newIrkPubHex: String,
+        newCredentialIdHex: String,
+        newWrappedUmkHashHex: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        username,
+        oldIrkPubHex.lowercase(),
+        newIrkPubHex.lowercase(),
+        newCredentialIdHex.lowercase(),
+        newWrappedUmkHashHex.lowercase(),
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
 object PushTokenRegister {
     const val CANONICAL_TAG = "flagship/push-token-register/v1"
 
