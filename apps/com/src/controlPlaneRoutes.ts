@@ -55,6 +55,7 @@ import {
   handleGetUsernameAlias,
   handleGetUserPods,
   handleGetUsersDevices,
+  handleGetAuditEvents,
   handlePostDaemonStatus,
   handleUserPubKeyCert,
   handleMarketplaceList,
@@ -176,6 +177,7 @@ const ROUTE_RE = {
   UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
   USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
+  USER_AUDIT: /^\/api\/users\/([^/]+)\/audit$/,
   DAEMON_STATUS: /^\/api\/daemon-status$/,
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
@@ -667,6 +669,18 @@ export async function tryControlPlane(
       await handleGetUsersDevices(
         { pushTokens: storage.pushTokens },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_AUDIT))) {
+    const since = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
+    const limit = parseInt(url.searchParams.get("limit") ?? "50", 10) || 50;
+    return finish(
+      await handleGetAuditEvents(
+        { auditEvents: storage.auditEvents },
+        decodeURIComponent(m[1]!),
+        since,
+        limit,
       ),
     );
   }

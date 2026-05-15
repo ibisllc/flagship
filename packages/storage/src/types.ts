@@ -157,6 +157,39 @@ export interface InstallEventStorage {
   list(serial: string, sinceSeq?: number): Promise<InstallEvent[]>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Audit events (account-level: disconnect, replace, wipe, etc.)
+// ──────────────────────────────────────────────────────────────────────
+
+/** Controlled vocabulary surfaced verbatim to the client UI. */
+export type AuditEventKind =
+  | "device-disconnected"
+  | "device-replaced"        // IRK rotation (Replace device)
+  | "device-added"           // new push-token registered
+  | "wipe-restart"           // v1.1 — full UMK + passkey rotation
+  | "recovery-set-up"
+  | "recovery-rotated";
+
+export interface AuditEventRecord {
+  seq: number;
+  username: string;
+  eventKind: AuditEventKind;
+  /** Short free-form description rendered next to the icon. */
+  detail: string;
+  /** Token-prefix of the device involved (empty when not device-scoped). */
+  devicePrefix: string;
+  postedAt: number;
+}
+
+export interface AuditEventStorage {
+  /** Insert one audit event. `seq` is assigned by the storage layer
+   *  and returned so callers can surface it to the user immediately. */
+  append(rec: Omit<AuditEventRecord, "seq">): Promise<AuditEventRecord>;
+  /** List the last N events for a user, descending by seq. `sinceSeq`
+   *  is exclusive lower bound; pass 0 to read from the start. */
+  list(username: string, sinceSeq: number, limit: number): Promise<AuditEventRecord[]>;
+}
+
 export interface RoutingStorage {
   /** Register a fresh RCK for a subdomain. Errors if the subdomain is taken
    *  by a different RCK; idempotent for the same RCK pubkey. */
@@ -353,6 +386,7 @@ export interface Storage {
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
+  auditEvents: AuditEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   pendingUnlockApprovals: PendingUnlockApprovalStorage;

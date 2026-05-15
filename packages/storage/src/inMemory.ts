@@ -1,4 +1,6 @@
 import type {
+  AuditEventRecord,
+  AuditEventStorage,
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
   PendingRePairRecord,
@@ -569,6 +571,24 @@ export class InMemoryDaemonStatusStorage implements DaemonStatusStorage {
   }
 }
 
+export class InMemoryAuditEventStorage implements AuditEventStorage {
+  private rows: AuditEventRecord[] = [];
+  private nextSeq = 1;
+  async append(rec: Omit<AuditEventRecord, "seq">): Promise<AuditEventRecord> {
+    const full: AuditEventRecord = { ...rec, seq: this.nextSeq++ };
+    this.rows.push(full);
+    return { ...full };
+  }
+  async list(username: string, sinceSeq: number, limit: number): Promise<AuditEventRecord[]> {
+    const u = username.toLowerCase();
+    return this.rows
+      .filter((r) => r.username.toLowerCase() === u && r.seq > sinceSeq)
+      .sort((a, b) => b.seq - a.seq)
+      .slice(0, limit)
+      .map((r) => ({ ...r }));
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -578,6 +598,7 @@ export class InMemoryStorage implements Storage {
   servers = new InMemoryServerStorage();
   routing = new InMemoryRoutingStorage();
   installEvents = new InMemoryInstallEventStorage();
+  auditEvents = new InMemoryAuditEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
   pendingUnlockApprovals = new InMemoryPendingUnlockApprovalStorage();

@@ -1,4 +1,6 @@
 import type {
+  AuditEventRecord,
+  AuditEventStorage,
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
   PendingRePairRecord,
@@ -569,6 +571,43 @@ export class D1InstallEventStorage implements InstallEventStorage {
       seq: row.seq,
       eventName: row.event_name,
       detail: row.detail,
+      postedAt: row.posted_at,
+    }));
+  }
+}
+
+export class D1AuditEventStorage implements AuditEventStorage {
+  constructor(private db: D1Database) {}
+  async append(rec: Omit<AuditEventRecord, "seq">): Promise<AuditEventRecord> {
+    const username = rec.username.toLowerCase();
+    const r = await this.db
+      .prepare(
+        `INSERT INTO audit_events (username, event_kind, detail, device_prefix, posted_at)
+         VALUES (?, ?, ?, ?, ?)
+         RETURNING seq`,
+      )
+      .bind(username, rec.eventKind, rec.detail, rec.devicePrefix, rec.postedAt)
+      .first<{ seq: number }>();
+    return { ...rec, username, seq: r?.seq ?? 0 };
+  }
+  async list(username: string, sinceSeq: number, limit: number): Promise<AuditEventRecord[]> {
+    const u = username.toLowerCase();
+    const r = await this.db
+      .prepare(
+        `SELECT seq, username, event_kind, detail, device_prefix, posted_at
+         FROM audit_events
+         WHERE username = ? AND seq > ?
+         ORDER BY seq DESC
+         LIMIT ?`,
+      )
+      .bind(u, sinceSeq, limit)
+      .all<{ seq: number; username: string; event_kind: string; detail: string; device_prefix: string; posted_at: number }>();
+    return (r.results ?? []).map((row) => ({
+      seq: row.seq,
+      username: row.username,
+      eventKind: row.event_kind as AuditEventRecord["eventKind"],
+      detail: row.detail,
+      devicePrefix: row.device_prefix,
       postedAt: row.posted_at,
     }));
   }
@@ -1414,6 +1453,7 @@ export class D1Storage implements Storage {
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
+  auditEvents: AuditEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
   pendingUnlockApprovals: PendingUnlockApprovalStorage;
@@ -1434,6 +1474,7 @@ export class D1Storage implements Storage {
     this.servers = new D1ServerStorage(db);
     this.routing = new D1RoutingStorage(db);
     this.installEvents = new D1InstallEventStorage(db);
+    this.auditEvents = new D1AuditEventStorage(db);
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
     this.pendingUnlockApprovals = new D1PendingUnlockApprovalStorage(db);
