@@ -32,7 +32,42 @@ interface FlagshipServerClient {
     /** Drop a previously-registered push token. 404 is success so
      *  sign-out doesn't surface "already cleaned up" as an error. */
     suspend fun revokePushToken(tokenId: String)
+
+    /** List the peer-class trusted devices on the user's account.
+     *  Returns the ETag the Worker computed so the caller can pass
+     *  it as `If-Match` on revocation / rotation requests, fencing
+     *  the device-list-changed-mid-action race (cf. Worker A3).
+     *  Worker side: GET /api/users/:u/devices. */
+    suspend fun listDevices(username: String): TrustedDevicesListResponse
 }
+
+@Serializable
+data class TrustedDevice(
+    val tokenId: String,
+    val tokenPrefix: String,
+    val label: String,
+    val platform: String,        // "apns" | "fcm" | "webpush"
+    val addedAt: Long,
+    val lastSeenAt: Long,
+)
+
+/**
+ * Response wrapper that surfaces the ETag header alongside the body.
+ * Callers feed the ETag to subsequent /re-pair and /api/push/<id>
+ * requests as If-Match so a Worker-side device-list change between
+ * fetch and action yields a 412 instead of a half-applied rotation.
+ */
+data class TrustedDevicesListResponse(
+    val devices: List<TrustedDevice>,
+    /** Server-supplied ETag for the snapshot (form `W/"hex"`).
+     *  Null only when the Mock impl didn't compute one. */
+    val etag: String?,
+)
+
+/** On-wire shape — separate from TrustedDevicesListResponse so the
+ *  header-only ETag doesn't bleed into the @Serializable body type. */
+@Serializable
+private data class TrustedDevicesWireBody(val devices: List<TrustedDevice>)
 
 @Serializable
 data class UsernameClaimRequest(
@@ -134,7 +169,9 @@ data class RecoveryEnvelope(
 )
 
 /** POST /api/push/register canonical-bytes envelope. Inner shape mirrors
- *  the protocol tag `flagship/push-token-register/v1` exactly. */
+ *  the protocol tag `flagship/push-token-register/v1` exactly. The
+ *  `label` field slots between `pushX25519Pub` and `issuedAt`, matching
+ *  the Worker side (packages/protocol/src/auth.ts). */
 @Serializable
 data class PushTokenRegisterRequest(
     val request: Inner,
@@ -146,6 +183,10 @@ data class PushTokenRegisterRequest(
         val platform: String,        // "apns" | "fcm" | "webpush"
         val providerToken: String,   // FCM token (verbatim) / APNs hex (lowercased)
         val pushX25519Pub: String,   // hex
+        /** User-facing device label ("Pixel 8 — kitchen"). Surfaced in
+         *  the Trusted-devices list on .com. Part of the canonical
+         *  bytes the IRK signs over. */
+        val label: String,
         val issuedAt: Long,
     )
 }
@@ -267,6 +308,44 @@ class MockFlagshipServerClient(
         tick()
         _registeredPushTokens.remove(tokenId)
     }
+
+    /** Scripted devices listing per username for tests + dev mode. */
+    var devicesByUser: Map<String, List<TrustedDevice>> = emptyMap()
+
+    override suspend fun listDevices(username: String): TrustedDevicesListResponse {
+        tick()
+        val rows = devicesByUser[username.lowercase()] ?: emptyList()
+        val sorted = rows.sortedWith(compareBy({ it.addedAt }, { it.tokenId }))
+        return TrustedDevicesListResponse(devices = sorted, etag = etagFor(sorted))
+    }
+
+    private fun etagFor(devices: List<TrustedDevice>): String {
+        // Identity-significant subset only; lastSeenAt deliberately
+        // excluded so test push-delivery doesn't flutter the ETag.
+        // FNV-1a over a byte-feed of the identity fields. Mirrors the
+        // Swift MockFlagshipServerClient.etagFor exactly so a future
+        // cross-client test can verify byte-for-byte parity.
+        var h: ULong = 14695981039346656037uL
+        fun feedString(s: String) {
+            for (b in s.toByteArray(Charsets.UTF_8)) {
+                h = h xor (b.toInt() and 0xff).toULong()
+                h *= 1099511628211uL
+            }
+            h = h xor 0x1fuL; h *= 1099511628211uL
+        }
+        fun feedLong(n: Long) {
+            for (shift in 0 until 64 step 8) {
+                h = h xor ((n.toULong() shr shift) and 0xffuL)
+                h *= 1099511628211uL
+            }
+            h = h xor 0x1fuL; h *= 1099511628211uL
+        }
+        for (d in devices) {
+            feedString(d.tokenId); feedString(d.label); feedString(d.platform); feedLong(d.addedAt)
+        }
+        val hex = h.toString(16).padStart(16, '0').takeLast(16)
+        return "W/\"$hex\""
+    }
 }
 
 // ── Live ──────────────────────────────────────────────────────────
@@ -346,6 +425,23 @@ class LiveFlagshipServerClient(
     override suspend fun revokePushToken(tokenId: String) {
         val encoded = java.net.URLEncoder.encode(tokenId, "UTF-8")
         transport.deleteJson("$base/api/push/$encoded", accept = setOf(200, 204, 404))
+    }
+
+    override suspend fun listDevices(username: String): TrustedDevicesListResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        // execute(...) so we can read the ETag header. The
+        // convenience getJson(...) only surfaces the body.
+        val resp = transport.execute(
+            method = "GET",
+            url = "$base/api/users/$encoded/devices",
+            accept = setOf(200),
+        )
+        val body = transport.json.decodeFromString(
+            TrustedDevicesWireBody.serializer(),
+            resp.body.decodeToString(),
+        )
+        val etag = resp.headers.entries.firstOrNull { it.key.equals("etag", ignoreCase = true) }?.value
+        return TrustedDevicesListResponse(devices = body.devices, etag = etag)
     }
 }
 

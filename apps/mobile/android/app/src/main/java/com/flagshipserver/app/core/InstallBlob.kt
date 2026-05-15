@@ -99,14 +99,22 @@ object AuthCodeRevoke {
 
 object PushTokenRegister {
     const val CANONICAL_TAG = "flagship/push-token-register/v1"
+
+    /**
+     * Field order must match the Worker's canonicalPushTokenRegister
+     * in packages/protocol/src/auth.ts. The `label` field was added
+     * pre-launch (no v2 bump needed); it slots between pushX25519Pub
+     * and issuedAt on both sides.
+     */
     fun canonicalBytes(
         username: String,
         platform: String,
         providerToken: String,
         pushX25519PubHex: String,
-        issuedAt: Long
+        label: String,
+        issuedAt: Long,
     ): ByteArray = listOf(
-        CANONICAL_TAG, username, platform, providerToken, pushX25519PubHex, issuedAt.toString()
+        CANONICAL_TAG, username, platform, providerToken, pushX25519PubHex, label, issuedAt.toString()
     ).joinToString("|").toByteArray()
 }
 

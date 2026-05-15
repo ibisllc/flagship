@@ -72,12 +72,14 @@ class MockFlagshipServerClientTest {
             request = PushTokenRegisterRequest.Inner(
                 username = "harry", platform = "fcm",
                 providerToken = "FCM:abc", pushX25519Pub = "ee",
+                label = "Pixel 8 — kitchen",
                 issuedAt = 100L,
             ),
             signature = "00",
         ))
         assertTrue(resp.ok)
         assertNotNull(c.registeredPushTokens[resp.tokenId])
+        assertEquals("Pixel 8 — kitchen", c.registeredPushTokens[resp.tokenId]?.label)
         c.revokePushToken(resp.tokenId)
         assertNull(c.registeredPushTokens[resp.tokenId])
         // revoking a missing tokenId is a no-op (no throw)

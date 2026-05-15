@@ -91,6 +91,7 @@ class LiveFlagshipServerClientTest {
                     platform = "fcm",
                     providerToken = "FCM:abc",
                     pushX25519Pub = "ee",
+                    label = "Pixel 8",
                     issuedAt = 1L,
                 ),
                 signature = "00",
