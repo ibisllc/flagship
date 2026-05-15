@@ -25,6 +25,7 @@ public struct PendingServerScreen: View {
                     Text(pod.name).font(FS.font.h2()).foregroundColor(c.text)
                     if let desc = pod.description, !desc.isEmpty {
                         Text(desc).font(FS.font.body()).foregroundColor(c.textMuted)
+                            .lineLimit(1).truncationMode(.tail)
                     }
                 }
 

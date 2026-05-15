@@ -41,7 +41,15 @@ public final class CreateServerViewModel {
 
     public var phase: Phase = .design
     public var name: String = ""
-    public var description: String = ""
+    /// Capped at `ServerLimits.maxDescription` on every keystroke so a
+    /// long one-liner can't wrap the tight rows it later renders in.
+    public var description: String = "" {
+        didSet {
+            if description.count > ServerLimits.maxDescription {
+                description = description.clampedServerDescription()
+            }
+        }
+    }
     public var qrUrl: String = ""
     /// Set after the .delivered transition. Container reads this so
     /// the new pending pod records the auth-code serial that Cancel-

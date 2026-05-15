@@ -52,6 +52,7 @@ import com.flagshipserver.app.core.InstallBlobBundle
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalQrRelayClient
+import com.flagshipserver.app.core.clampedServerDescription
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.QrSession
@@ -113,7 +114,7 @@ fun CreateServerScreen(
                 name = name,
                 onName = { name = it },
                 description = description,
-                onDescription = { description = it },
+                onDescription = { description = it.clampedServerDescription() },
                 username = app.currentUser.value ?: "you",
                 error = error,
                 onContinue = {

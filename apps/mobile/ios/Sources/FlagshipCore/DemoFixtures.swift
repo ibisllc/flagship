@@ -35,21 +35,21 @@ public enum DemoFixtures {
             PodInfo(
                 podId: "demo-home-\(suffix())",
                 name: "Home",
-                description: "Living-room mini-PC. Everyday workloads.",
+                description: "Living-room mini-PC",
                 fqdn: "home.\(username).flagship.services",
                 status: .online
             ),
             PodInfo(
                 podId: "demo-office-\(suffix())",
                 name: "Office",
-                description: "Office tower. Failover for work projects.",
+                description: "Office tower, work failover",
                 fqdn: "office.\(username).flagship.services",
                 status: .online
             ),
             PodInfo(
                 podId: "demo-music-\(suffix())",
                 name: "Music",
-                description: "Garage rack. Music production projects.",
+                description: "Garage rack, music studio",
                 fqdn: "music.\(username).flagship.services",
                 status: .offline
             ),

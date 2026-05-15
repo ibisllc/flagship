@@ -150,20 +150,24 @@ public struct AppDetailScreen: View {
                 }
                 if let desc = pod.description, !desc.isEmpty {
                     Text(desc).font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .lineLimit(1).truncationMode(.tail)
                 }
             }
             Spacer()
             if isOn {
+                // A bare house icon designates the lead pod — gray when
+                // it isn't lead, blue when it is. The word "Lead" used
+                // to sit here but collided with the "Leader" badge a
+                // few px to the left; the icon removes the ambiguity.
                 Button {
                     vm.setLead(pod.podId)
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: isLead ? "largecircle.fill.circle" : "circle")
-                            .foregroundColor(isLead ? c.primary : c.textMuted)
-                        Text("Lead").font(FS.font.caption()).foregroundColor(isLead ? c.primary : c.textMuted)
-                    }
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(isLead ? c.primary : c.textMuted)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isLead ? "Lead pod" : "Make lead pod")
             }
         }
     }
