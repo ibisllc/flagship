@@ -4,6 +4,8 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.AuditEvent
+import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.PendingUnlockApproval
 import com.flagshipserver.app.api.RecentInstallEvent
 import com.flagshipserver.app.api.ScreensClient
@@ -48,6 +50,27 @@ sealed interface ActivityItem {
         override val subtitle: String? =
             snapshot.lastReissue?.let { "${it.totalRewritten} rewrites · ${it.reattachedCount} reattached" },
     ) : ActivityItem
+
+    /** Account-level audit event — surfaced alongside install events
+     *  in the merged time-sorted feed. eventKind matches the Worker's
+     *  controlled vocabulary; subtitle carries the human-readable
+     *  detail string the Worker recorded ("Disconnected iPad (kitchen)"). */
+    data class AuditEntry(
+        val event: AuditEvent,
+        override val at: Long = event.postedAt,
+        override val title: String = auditLabel(event.eventKind),
+        override val subtitle: String? = event.detail.takeIf { it.isNotBlank() },
+    ) : ActivityItem
+}
+
+private fun auditLabel(kind: String): String = when (kind) {
+    "device-disconnected" -> "Disconnected device"
+    "device-replaced"     -> "Replaced device"
+    "device-added"        -> "Added device"
+    "wipe-restart"        -> "Wiped & restarted account"
+    "recovery-set-up"     -> "Set up recovery"
+    "recovery-rotated"    -> "Rotated recovery passkey"
+    else                  -> kind
 }
 
 data class ActivityFeed(
@@ -58,6 +81,15 @@ data class ActivityFeed(
 class ActivityViewModel(
     private val client: ScreensClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    /** Optional — only wired in production. When null, the audit
+     *  section silently stays empty so older callers + tests that
+     *  don't care about account-level events still work. Kept after
+     *  `scope` so existing `(client, scope)` positional callers
+     *  (the test fixtures) stay binding-compatible. */
+    private val server: FlagshipServerClient? = null,
+    /** Captured rather than stored so the VM picks up AppState
+     *  changes (post sign-in / sign-out) without a re-init. */
+    private val username: () -> String? = { null },
 ) {
     private val _state = MutableStateFlow<LoadingState<ActivityFeed>>(LoadingState.Idle)
     val state: StateFlow<LoadingState<ActivityFeed>> = _state.asStateFlow()
@@ -73,15 +105,31 @@ class ActivityViewModel(
                 val approvalsJob = async { client.unlockApprovalsPending().pending }
                 val detailJob = async { runCatching { client.serverDetail().recentInstallEvents }.getOrDefault(emptyList()) }
                 val recoveryJob = async { runCatching { client.postRecoveryStatus().report }.getOrNull() }
-                Triple(approvalsJob.await(), detailJob.await(), recoveryJob.await())
+                // Account-level audit feed. Lives on .com (not the
+                // daemon) so the fetch is tolerated as missing (a
+                // misconfigured Worker shouldn't break the rest of
+                // the feed).
+                val auditJob = async {
+                    val u = username()
+                    val s = server
+                    if (s == null || u.isNullOrEmpty()) emptyList()
+                    else runCatching { s.listAuditEvents(u, sinceSeq = 0, limit = 20).events }.getOrDefault(emptyList())
+                }
+                Quadruple(
+                    approvalsJob.await(),
+                    detailJob.await(),
+                    recoveryJob.await(),
+                    auditJob.await(),
+                )
             }
         }
         outcome.fold(
-            onSuccess = { (approvals, recents, snapshot) ->
+            onSuccess = { (approvals, recents, snapshot, audit) ->
                 val items = buildList {
                     approvals.forEach { add(ActivityItem.UnlockApprove(it)) }
                     recents.forEach { add(ActivityItem.InstallEvent(it)) }
                     snapshot?.let { add(ActivityItem.RecoverySnapshot(it)) }
+                    audit.forEach { add(ActivityItem.AuditEntry(it)) }
                 }.sortedByDescending { it.at }
                 _state.value = LoadingState.Loaded(
                     ActivityFeed(pendingApprovals = approvals, items = items),
@@ -93,3 +141,9 @@ class ActivityViewModel(
         )
     }
 }
+
+/** Internal because Kotlin's stdlib only ships Pair/Triple. Used
+ *  for the four-way fan-out destructure above. */
+private data class Quadruple<A, B, C, D>(
+    val first: A, val second: B, val third: C, val fourth: D,
+)

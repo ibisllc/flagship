@@ -44,7 +44,15 @@ import java.util.Locale
 @Composable
 fun ActivityScreen(nav: NavController) {
     val client = LocalScreensClient.current
-    val vm = remember { ActivityViewModel(client) }
+    val server = com.flagshipserver.app.core.LocalFlagshipServerClient.current
+    val app = com.flagshipserver.app.core.LocalAppState.current
+    val vm = remember {
+        ActivityViewModel(
+            client = client,
+            server = server,
+            username = { app.currentUser.value },
+        )
+    }
     val state by vm.state.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }

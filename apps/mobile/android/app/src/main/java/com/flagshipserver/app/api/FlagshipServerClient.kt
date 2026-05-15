@@ -39,7 +39,28 @@ interface FlagshipServerClient {
      *  the device-list-changed-mid-action race (cf. Worker A3).
      *  Worker side: GET /api/users/:u/devices. */
     suspend fun listDevices(username: String): TrustedDevicesListResponse
+
+    /** Account-level audit log surfaced via /api/users/:u/audit. Used
+     *  by the Activity feed to render device-disconnect / device-
+     *  replaced / wipe-restart / recovery-set-up events alongside
+     *  the daemon-side install events. `sinceSeq` is exclusive lower
+     *  bound; `limit` is clamped server-side to 50. */
+    suspend fun listAuditEvents(username: String, sinceSeq: Int = 0, limit: Int = 20): AuditEventListResponse
 }
+
+@Serializable
+data class AuditEvent(
+    val seq: Int,
+    val eventKind: String,    // "device-disconnected" | "device-replaced" | …
+    val detail: String,
+    val devicePrefix: String,
+    val postedAt: Long,
+)
+
+@Serializable
+data class AuditEventListResponse(
+    val events: List<AuditEvent>,
+)
 
 @Serializable
 data class TrustedDevice(
@@ -312,6 +333,18 @@ class MockFlagshipServerClient(
     /** Scripted devices listing per username for tests + dev mode. */
     var devicesByUser: Map<String, List<TrustedDevice>> = emptyMap()
 
+    /** Scripted audit log per username — tests configure to drive
+     *  Activity feed renders without hitting the Worker. */
+    var auditEventsByUser: Map<String, List<AuditEvent>> = emptyMap()
+
+    override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse {
+        tick()
+        val all = auditEventsByUser[username.lowercase()] ?: emptyList()
+        val filtered = all.filter { it.seq > sinceSeq }.sortedByDescending { it.seq }
+        val cappedLimit = limit.coerceIn(1, 50)
+        return AuditEventListResponse(events = filtered.take(cappedLimit))
+    }
+
     override suspend fun listDevices(username: String): TrustedDevicesListResponse {
         tick()
         val rows = devicesByUser[username.lowercase()] ?: emptyList()
@@ -442,6 +475,16 @@ class LiveFlagshipServerClient(
         )
         val etag = resp.headers.entries.firstOrNull { it.key.equals("etag", ignoreCase = true) }?.value
         return TrustedDevicesListResponse(devices = body.devices, etag = etag)
+    }
+
+    override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        val since = sinceSeq.coerceAtLeast(0)
+        val capped = limit.coerceIn(1, 50)
+        return transport.getJson(
+            "$base/api/users/$encoded/audit?since=$since&limit=$capped",
+            responseSerializer = AuditEventListResponse.serializer(),
+        )
     }
 }
 
