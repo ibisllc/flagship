@@ -22,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
+import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
 import com.flagshipserver.app.ui.screens.AddServerMode
@@ -40,11 +41,25 @@ fun HomeTab() {
     val nav = rememberNavController()
     val app = LocalAppState.current
     val client = LocalScreensClient.current
+    val server = LocalFlagshipServerClient.current
     val pods by app.pods.collectAsState()
     val scope = rememberCoroutineScope()
     val vm = remember { HomeViewModel(client) }
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
+
+    // Refresh cloud-recovery enrolment state when the tab first
+    // appears AND whenever a pod transitions to online. Mirrors iOS
+    // HomeTab.refreshRecoveryStatus. Silent on failure — we'd rather
+    // under-nudge than flash a banner on a transient network blip.
+    val hasOnlinePod = pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
+    LaunchedEffect(hasOnlinePod, app.currentUser.value) {
+        val u = app.currentUser.value
+        if (!u.isNullOrEmpty()) {
+            runCatching { server.hasCloudRecovery(u) }
+                .onSuccess { app.setHasCloudRecovery(it) }
+        }
+    }
 
     // Consume any deep link the shell already steered at this tab.
     val deepLinker = LocalDeepLinker.current
@@ -65,6 +80,13 @@ fun HomeTab() {
 
     NavHost(navController = nav, startDestination = "home-root") {
         composable("home-root") {
+            // shouldShowRecoveryNudgeNow is a pure getter off
+            // AppState; the StateFlows it reads are subscribed to via
+            // collectAsState here so a transition (e.g. an enrolment
+            // completing on another tab) re-renders Home.
+            val hasRecovery by app.hasCloudRecovery.collectAsState()
+            val dismissed by app.recoveryNudgeDismissedThisSession.collectAsState()
+            val showNudge = !hasRecovery && !dismissed && pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
             HomeScreen(
                 state = vm.state.collectAsState().value,
                 username = app.currentUser.collectAsState().value ?: "",
@@ -76,6 +98,9 @@ fun HomeTab() {
                 onAddServer = { nav.navigate("add-server-chooser") },
                 onSetLeader = { app.setLeader(it.podId) },
                 onRefresh = { scope.launch { vm.load() } },
+                showRecoveryNudge = showNudge,
+                onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },
+                onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
             )
         }
         composable("server-detail/{podId}") { entry ->

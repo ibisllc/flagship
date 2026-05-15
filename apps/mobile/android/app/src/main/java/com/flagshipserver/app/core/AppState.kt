@@ -16,6 +16,8 @@ class AppState(
     pods: List<PodInfo> = emptyList(),
     leaderPodId: String? = null,
     currentPodId: String? = null,
+    hasCloudRecovery: Boolean = true,
+    recoveryNudgeDismissedThisSession: Boolean = false,
 ) {
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
@@ -32,8 +34,42 @@ class AppState(
     private val _currentPodId = MutableStateFlow(currentPodId ?: _leaderPodId.value)
     val currentPodId: StateFlow<String?> = _currentPodId.asStateFlow()
 
+    /**
+     * True once the user has uploaded a WebAuthn-PRF cloud recovery
+     * envelope for the current account. Mirror of
+     * FlagshipCore/AppState.swift's hasCloudRecovery. Defaults true so
+     * the recovery nudge doesn't flash before the .com lookup completes.
+     */
+    private val _hasCloudRecovery = MutableStateFlow(hasCloudRecovery)
+    val hasCloudRecovery: StateFlow<Boolean> = _hasCloudRecovery.asStateFlow()
+    fun setHasCloudRecovery(value: Boolean) { _hasCloudRecovery.value = value }
+
+    /**
+     * Drives the Home recovery-setup nudge — when the user taps "Not
+     * now" we suppress it for this app session only; next launch
+     * re-surfaces it. Recovery is important enough to keep nudging.
+     */
+    private val _recoveryNudgeDismissedThisSession = MutableStateFlow(recoveryNudgeDismissedThisSession)
+    val recoveryNudgeDismissedThisSession: StateFlow<Boolean> = _recoveryNudgeDismissedThisSession.asStateFlow()
+    fun dismissRecoveryNudgeForSession() { _recoveryNudgeDismissedThisSession.value = true }
+
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod
+
+    /**
+     * True when the recovery-setup nudge should be visible on Home.
+     * Same gating truth-table as the iOS mirror:
+     *   - cloud recovery NOT yet enrolled, and
+     *   - the user hasn't dismissed the nudge this session, and
+     *   - at least one ONLINE pod (so they're past day-0 onboarding).
+     * Pure-derivation getter; UI calls it at render time off the
+     * underlying StateFlows.
+     */
+    fun shouldShowRecoveryNudgeNow(): Boolean {
+        if (_hasCloudRecovery.value) return false
+        if (_recoveryNudgeDismissedThisSession.value) return false
+        return _pods.value.any { it.status == PodInfo.Status.ONLINE }
+    }
 
     fun completeOnboarding(username: String, pods: List<PodInfo>) {
         _currentUser.value = username

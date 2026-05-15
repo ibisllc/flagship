@@ -18,6 +18,10 @@ sealed interface DeepLink {
     data class AppDetail(val appId: String) : DeepLink
     data object Marketplace : DeepLink
     data object CreateServer : DeepLink
+    /** Open the recovery-setup flow on the Settings tab. Triggered
+     *  in-app from the Home nudge (C9). Internal-only — not parsed
+     *  from a URI. */
+    data object RecoverySetup : DeepLink
 
     companion object {
         /// Parse a `flagship://...` URI. Keep in sync with iOS

@@ -64,6 +64,7 @@ fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPAC
             is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.Marketplace -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.CreateServer -> RootDestination.HOME
+            com.flagshipserver.app.core.DeepLink.RecoverySetup -> RootDestination.SETTINGS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so

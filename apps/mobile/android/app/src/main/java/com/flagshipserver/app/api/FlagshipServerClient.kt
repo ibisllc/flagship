@@ -46,6 +46,13 @@ interface FlagshipServerClient {
      *  the daemon-side install events. `sinceSeq` is exclusive lower
      *  bound; `limit` is clamped server-side to 50. */
     suspend fun listAuditEvents(username: String, sinceSeq: Int = 0, limit: Int = 20): AuditEventListResponse
+
+    /** Returns true iff a cloud-stored recovery envelope exists for
+     *  the given username. Powers the Home recovery-setup nudge (C9).
+     *  Underlying endpoint: GET /api/recovery/by-username/<u> — 200
+     *  means yes, 404 means no, anything else surfaces as exception
+     *  so the caller can decide retry vs. silent-skip. */
+    suspend fun hasCloudRecovery(username: String): Boolean
 }
 
 @Serializable
@@ -337,6 +344,16 @@ class MockFlagshipServerClient(
      *  Activity feed renders without hitting the Worker. */
     var auditEventsByUser: Map<String, List<AuditEvent>> = emptyMap()
 
+    /** Scripted recovery enrollment per username. Drives the C9 Home
+     *  nudge in tests. Unconfigured users default to `false` — the
+     *  "fresh install, no envelope yet" baseline. */
+    var cloudRecoveryByUser: Map<String, Boolean> = emptyMap()
+
+    override suspend fun hasCloudRecovery(username: String): Boolean {
+        tick()
+        return cloudRecoveryByUser[username.lowercase()] ?: false
+    }
+
     override suspend fun listAuditEvents(username: String, sinceSeq: Int, limit: Int): AuditEventListResponse {
         tick()
         val all = auditEventsByUser[username.lowercase()] ?: emptyList()
@@ -485,6 +502,20 @@ class LiveFlagshipServerClient(
             "$base/api/users/$encoded/audit?since=$since&limit=$capped",
             responseSerializer = AuditEventListResponse.serializer(),
         )
+    }
+
+    override suspend fun hasCloudRecovery(username: String): Boolean {
+        // GET /api/recovery/by-username/<u> — 200 means an envelope
+        // exists, 404 means it doesn't. The transport's `accept` set
+        // lets us treat both as success and inspect the status code
+        // after the call returns.
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        val resp = transport.execute(
+            method = "GET",
+            url = "$base/api/recovery/by-username/$encoded",
+            accept = setOf(200, 404),
+        )
+        return resp.status == 200
     }
 }
 

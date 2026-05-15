@@ -42,6 +42,13 @@ fun HomeScreen(
     onAddServer: () -> Unit,
     onSetLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
+    /** When true, renders the C9 recovery-setup nudge card above the
+     *  server list. Source-of-truth is AppState.shouldShowRecoveryNudgeNow();
+     *  the shell evaluates that and passes the resolved boolean so this
+     *  composable stays previewable without an AppState dependency. */
+    showRecoveryNudge: Boolean = false,
+    onSetUpRecovery: () -> Unit = {},
+    onDismissRecoveryNudge: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -65,6 +72,14 @@ fun HomeScreen(
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
+
+        if (showRecoveryNudge) {
+            Spacer(Modifier.height(FS.space.s4))
+            RecoveryNudgeCard(
+                onSetUp = onSetUpRecovery,
+                onDismiss = onDismissRecoveryNudge,
+            )
+        }
 
         Spacer(Modifier.height(FS.space.s8))
 
@@ -208,6 +223,37 @@ fun ErrorCard(message: String, onRetry: (() -> Unit)? = null) {
             Text("Couldn't load", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
             if (onRetry != null) FSGhostButton(label = "Retry", onClick = onRetry)
+        }
+    }
+}
+
+/** Home recovery-setup nudge — mirrors iOS HomeScreen.recoveryNudge.
+ *  Visible when the user has at least one online pod and hasn't yet
+ *  uploaded a cloud-recovery envelope. "Set it up" routes to the
+ *  RecoveryScreen on the Settings tab; "Not now" dismisses for this
+ *  session only (banner re-appears next launch by design — recovery
+ *  is important enough to keep nudging). */
+@Composable
+private fun RecoveryNudgeCard(onSetUp: () -> Unit, onDismiss: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(
+                "Set up recovery",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                "Right now this phone is the only way back into your account. " +
+                    "Bank a passkey so you can recover if you lose this device.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            ) {
+                FSPrimaryButton(label = "Set it up", onClick = onSetUp)
+                FSGhostButton(label = "Not now", onClick = onDismiss)
+            }
         }
     }
 }
