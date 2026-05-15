@@ -578,7 +578,21 @@ class MockFlagshipServerClient(
     ): AppLinksResponse {
         tick()
         val alias = appAliasByUser[username.lowercase()]?.get(appId)
-        val label = alias?.first ?: "scratch"
+        // Mirrors @flagship/protocol deriveUrlFragment: appId is
+        // `<creator>-<slug>` (FIRST hyphen splits — usernames are
+        // hyphen-free). Fragment is CONDITIONAL: `<slug>` when the
+        // running user authored it, else `<slug>-<creator>`.
+        val defaultLabel = run {
+            val i = appId.indexOf('-')
+            if (i > 0 && i < appId.length - 1) {
+                val creator = appId.substring(0, i).lowercase()
+                val slug = appId.substring(i + 1).lowercase()
+                if (creator == username.lowercase()) slug else "$slug-$creator"
+            } else {
+                appId.lowercase()
+            }
+        }
+        val label = alias?.first ?: defaultLabel
         val canonical = alias?.second ?: "https://$label.demo-pod.flagship.services"
         return AppLinksResponse(
             appId = appId,

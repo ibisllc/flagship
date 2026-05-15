@@ -58,12 +58,12 @@ class MockScreensClient(
         tick()
         return AppsListResponse(
             apps = listOf(
-                AppSummary("harry-plants", "harry", "plants", "plants.harry.flagship.services",
+                AppSummary("harry-plants", "harry", "plants", "plants",
                     "Houseplant watering tracker", "https://plants.harry.flagship.services/", "running", "0.0.3", now() - 60_000 * 30),
-                AppSummary("harry-wiki", "harry", "wiki", "wiki.harry.flagship.services",
+                AppSummary("harry-wiki", "harry", "wiki", "wiki",
                     "Personal notes + recipes", "https://wiki.harry.flagship.services/", "running", "1.4.0", now() - 60_000 * 60 * 26),
-                AppSummary("trent-scratchpad", "trent", "scratchpad", "pad.harry.flagship.services",
-                    "Markdown scratchpad", "https://pad.harry.flagship.services/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
+                AppSummary("trent-scratchpad", "trent", "scratchpad", "scratchpad-trent",
+                    "Markdown scratchpad", "https://scratchpad-trent.harry.flagship.services/", "stopped", "0.7.1", now() - 60_000L * 60 * 24 * 12),
             )
         )
     }

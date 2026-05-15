@@ -23,6 +23,7 @@
 
 import {
   verifyAppRename,
+  deriveUrlFragment,
   type AppRename,
 } from "@flagship/protocol";
 import type {
@@ -140,7 +141,7 @@ export async function handleAppRename(
   //  - tell the DNS publisher what to deprecate
   //  - emit an audit row that names both sides
   const existing = await deps.userAppAliases.get(u, r.appId);
-  const oldLabel = existing?.displayLabel ?? deriveDefaultLabel(r.appId);
+  const oldLabel = existing?.displayLabel ?? deriveUrlFragment(r.appId, u);
 
   // No-op fast path — if the user asked for the same label they
   // already have, skip the cascade so we don't churn voi.ci codes.
@@ -245,7 +246,7 @@ export async function handleGetAppLinks(
   if (!USERNAME_RE.test(u)) return malformed("malformed username");
 
   const alias = await deps.userAppAliases.get(u, appId);
-  const displayLabel = alias?.displayLabel ?? deriveDefaultLabel(appId);
+  const displayLabel = alias?.displayLabel ?? deriveUrlFragment(appId, u);
 
   const servers = await deps.servers.listForUser(u);
   const liveServers = servers.filter((s) => !s.revokedAt);
@@ -332,21 +333,3 @@ export async function handleListAppAliases(
   });
 }
 
-/** What the URL stem would be if no alias has been set. Mirrors the
- *  daemon's `AppSummary.urlLabel` derivation: `<slug>-<creator>`.
- *  We can't know without listing every install, so we derive it from
- *  the appId. The client side surfaces the actual default from the
- *  daemon's apps list when present. */
-function deriveDefaultLabel(appId: string): string {
-  // appId is `<creator>-<slug>` (single dash). Creator is a username
-  // and usernames are hyphen-free, so the FIRST hyphen is always the
-  // creator/slug boundary even when the slug itself contains hyphens.
-  // Default URL label flips the order: `<slug>-<creator>`.
-  const i = appId.indexOf("-");
-  if (i > 0 && i < appId.length - 1) {
-    const creator = appId.slice(0, i);
-    const slug = appId.slice(i + 1);
-    return `${slug}-${creator}`.toLowerCase();
-  }
-  return appId.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 40);
-}

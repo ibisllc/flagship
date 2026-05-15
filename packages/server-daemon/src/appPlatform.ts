@@ -16,6 +16,9 @@
 import {
   parseManifest,
   signMembershipMutation,
+  composeAppId,
+  parseAppId as parseAppIdShared,
+  deriveUrlFragment,
   type AppManifest,
   type Bytes,
   type InstallAppRequest,
@@ -126,15 +129,13 @@ export class AppPlatform {
    *  the slug itself contains hyphens. Stable for the life of the
    *  package — never rotates on a URL-stem Replace. */
   static appId(creator: string, slug: string): string {
-    return `${creator}-${slug}`;
+    return composeAppId(creator, slug);
   }
 
   /** Inverse of `appId`. Splits at the FIRST hyphen (creator is
    *  hyphen-free). Returns null when the id has no hyphen. */
   static parseAppId(appId: string): { creator: string; slug: string } | null {
-    const i = appId.indexOf("-");
-    if (i <= 0 || i >= appId.length - 1) return null;
-    return { creator: appId.slice(0, i), slug: appId.slice(i + 1) };
+    return parseAppIdShared(appId);
   }
 
   /**
@@ -142,9 +143,12 @@ export class AppPlatform {
    *
    *   creator === host →  "game1"
    *   creator !== host →  "game1-alice"
+   *
+   * Delegates to the shared protocol derivation so .com and the box
+   * can never drift on what URL a user sees.
    */
   static urlLabel(host: string, creator: string, slug: string): string {
-    return creator === host ? slug : `${slug}-${creator}`;
+    return deriveUrlFragment(composeAppId(creator, slug), host);
   }
 
   /**

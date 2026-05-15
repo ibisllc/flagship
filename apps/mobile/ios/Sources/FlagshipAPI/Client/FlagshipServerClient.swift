@@ -795,18 +795,18 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> AppLinksResponse {
         try await tick()
         let alias = appAliasByUser[username.lowercased()]?[appId]
-        // Default display label mirrors the Worker's deriveDefaultLabel:
-        // appId is `<creator>-<slug>` (single dash). Creator is a
-        // username and usernames are hyphen-free, so the FIRST hyphen
-        // is the creator/slug boundary even when the slug has hyphens.
-        // The user-visible default flips the order to `<slug>-<creator>`.
+        // Mirrors @flagship/protocol deriveUrlFragment: appId is
+        // `<creator>-<slug>` (single dash; FIRST hyphen splits, since
+        // usernames are hyphen-free). The fragment is CONDITIONAL on
+        // who runs it: just `<slug>` when the running user authored
+        // it, else `<slug>-<creator>`.
         let defaultLabel: String = {
             if let i = appId.firstIndex(of: "-"),
                i != appId.startIndex,
                appId.index(after: i) != appId.endIndex {
-                let creator = appId[appId.startIndex..<i]
-                let slug = appId[appId.index(after: i)...]
-                return "\(slug)-\(creator)".lowercased()
+                let creator = appId[appId.startIndex..<i].lowercased()
+                let slug = String(appId[appId.index(after: i)...]).lowercased()
+                return creator == username.lowercased() ? slug : "\(slug)-\(creator)"
             }
             return appId.lowercased()
         }()
