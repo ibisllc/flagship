@@ -168,7 +168,8 @@ export type AuditEventKind =
   | "device-added"           // new push-token registered
   | "wipe-restart"           // v1.1 — full UMK + passkey rotation
   | "recovery-set-up"
-  | "recovery-rotated";
+  | "recovery-rotated"
+  | "app-renamed";           // V2 — voi.ci-aware Replace stem
 
 export interface AuditEventRecord {
   seq: number;

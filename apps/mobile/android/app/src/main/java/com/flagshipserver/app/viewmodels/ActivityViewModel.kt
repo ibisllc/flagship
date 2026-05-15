@@ -70,6 +70,7 @@ private fun auditLabel(kind: String): String = when (kind) {
     "wipe-restart"        -> "Wiped & restarted account"
     "recovery-set-up"     -> "Set up recovery"
     "recovery-rotated"    -> "Rotated recovery passkey"
+    "app-renamed"         -> "Renamed app URL"
     else                  -> kind
 }
 

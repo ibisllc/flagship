@@ -155,13 +155,14 @@ describe("handleAppRename — happy path", () => {
     }
   });
 
-  it("emits a device-replaced audit row naming both labels", async () => {
+  it("emits an app-renamed audit row naming both labels", async () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
     await handleAppRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "newname" }));
     const audit = await s.auditEvents.list(USER, 0, 5);
     expect(audit.length).toBe(1);
+    expect(audit[0]?.eventKind).toBe("app-renamed");
     expect(audit[0]?.detail).toContain("scratchpad-meta");
     expect(audit[0]?.detail).toContain("newname");
   });

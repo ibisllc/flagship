@@ -201,12 +201,7 @@ export async function handleAppRename(
     { auditEvents: deps.auditEvents },
     {
       username: u,
-      // Reuse the existing 'device-replaced' event kind family —
-      // semantically this is a rename, not a key rotation, so we
-      // surface a fresh detail string and let the UI render it
-      // generically. (Adding a new AuditEventKind would require a
-      // protocol bump + client updates we defer to a follow-up.)
-      eventKind: "device-replaced",
+      eventKind: "app-renamed",
       detail: `Renamed app '${r.appId}': ${oldLabel} → ${newLabel}`,
       devicePrefix: "",
       postedAt: ts,

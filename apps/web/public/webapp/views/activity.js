@@ -59,6 +59,7 @@ function eventKindIcon(kind) {
     "wipe-restart":        "🗑️",
     "recovery-set-up":     "🔐",
     "recovery-rotated":    "🔁",
+    "app-renamed":         "🔗",
   })[kind] ?? "•";
 }
 
@@ -70,6 +71,7 @@ function eventKindLabel(kind) {
     "wipe-restart":        "Wiped & restarted",
     "recovery-set-up":     "Recovery set up",
     "recovery-rotated":    "Recovery rotated",
+    "app-renamed":         "Renamed app URL",
   })[kind] ?? kind;
 }
 

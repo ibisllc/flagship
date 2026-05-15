@@ -189,6 +189,7 @@ public struct ActivityScreen: View {
         case "wipe-restart":        return "trash.fill"
         case "recovery-set-up":     return "key.horizontal.fill"
         case "recovery-rotated":    return "arrow.triangle.2.circlepath"
+        case "app-renamed":         return "link.circle"
         default:                    return "circle.fill"
         }
     }
@@ -198,6 +199,7 @@ public struct ActivityScreen: View {
         case "wipe-restart":        return c.danger
         case "device-disconnected": return c.danger
         case "device-replaced":     return c.primary
+        case "app-renamed":         return c.primary
         default:                    return c.textMuted
         }
     }
@@ -210,6 +212,7 @@ public struct ActivityScreen: View {
         case "wipe-restart":        return "Wiped & restarted account"
         case "recovery-set-up":     return "Set up recovery"
         case "recovery-rotated":    return "Rotated recovery passkey"
+        case "app-renamed":         return "Renamed app URL"
         default:                    return kind
         }
     }
