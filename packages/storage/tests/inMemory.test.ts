@@ -41,6 +41,32 @@ describe("InMemoryStorage", () => {
     expect(await s.usernames.put({ username: "harry", irkPubHex: "bb".repeat(32), claimedAt: 3 })).toMatchObject({ ok: false });
   });
 
+  it("usernames: isDemo defaults false, setDemo flips it, re-put preserves it (#84)", async () => {
+    const s = new InMemoryStorage();
+    await s.usernames.put({ username: "demo", irkPubHex: "aa".repeat(32), claimedAt: 1 });
+    expect((await s.usernames.get("demo"))?.isDemo).toBe(false);
+
+    expect(await s.usernames.setDemo("demo", true)).toBe(true);
+    expect((await s.usernames.get("demo"))?.isDemo).toBe(true);
+
+    // A benign re-claim (same IRK, no isDemo on the record) must not
+    // silently un-demo the account.
+    await s.usernames.put({ username: "demo", irkPubHex: "aa".repeat(32), claimedAt: 2 });
+    expect((await s.usernames.get("demo"))?.isDemo).toBe(true);
+
+    expect(await s.usernames.setDemo("demo", false)).toBe(true);
+    expect((await s.usernames.get("demo"))?.isDemo).toBe(false);
+
+    // setDemo on an unknown username is a no-op false (not a throw).
+    expect(await s.usernames.setDemo("ghost", true)).toBe(false);
+  });
+
+  it("usernames: an explicit isDemo on put is honored on first claim (#84)", async () => {
+    const s = new InMemoryStorage();
+    await s.usernames.put({ username: "seed", irkPubHex: "cc".repeat(32), claimedAt: 1, isDemo: true });
+    expect((await s.usernames.get("seed"))?.isDemo).toBe(true);
+  });
+
   it("auth codes: markUsed once succeeds, twice fails (atomic single-use)", async () => {
     const s = new InMemoryStorage();
     await s.authCodes.put(authCode("S001"));

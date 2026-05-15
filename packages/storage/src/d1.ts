@@ -83,6 +83,8 @@ interface UsernameRow {
   username: string;
   irk_pub_hex: string;
   claimed_at: number;
+  /** 0/1; nullable so a pre-migration row (no column) decodes safely. */
+  is_demo?: number | null;
 }
 interface AuthCodeRow {
   serial: string;
@@ -121,7 +123,12 @@ interface ServerRow {
 }
 
 function rowToUsername(r: UsernameRow): UsernameRecord {
-  return { username: r.username, irkPubHex: r.irk_pub_hex, claimedAt: r.claimed_at };
+  return {
+    username: r.username,
+    irkPubHex: r.irk_pub_hex,
+    claimedAt: r.claimed_at,
+    isDemo: r.is_demo === 1,
+  };
 }
 function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
   return {
@@ -176,12 +183,16 @@ export class D1UsernameStorage implements UsernameStorage {
     if (existing && existing.irk_pub_hex !== rec.irkPubHex) {
       return { ok: false as const, reason: "username already claimed" };
     }
+    // ON CONFLICT deliberately updates only claimed_at — is_demo is
+    // never touched on a re-claim, so a benign re-put can't clear a
+    // flag set by the operator-gated provisioning path. setDemo() is
+    // the only way to change it after the first claim.
     await this.db
       .prepare(
-        "INSERT INTO usernames (username, irk_pub_hex, claimed_at) VALUES (?, ?, ?) " +
+        "INSERT INTO usernames (username, irk_pub_hex, claimed_at, is_demo) VALUES (?, ?, ?, ?) " +
           "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at",
       )
-      .bind(norm, rec.irkPubHex, rec.claimedAt)
+      .bind(norm, rec.irkPubHex, rec.claimedAt, rec.isDemo ? 1 : 0)
       .run();
     return { ok: true as const };
   }
@@ -206,6 +217,14 @@ export class D1UsernameStorage implements UsernameStorage {
         "WHERE username = ? AND lower(irk_pub_hex) = lower(?)",
       )
       .bind(newIrkPubHex, at, username.toLowerCase(), expectedOldIrkPubHex)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async setDemo(username: string, isDemo: boolean) {
+    const r = await this.db
+      .prepare("UPDATE usernames SET is_demo = ? WHERE username = ?")
+      .bind(isDemo ? 1 : 0, username.toLowerCase())
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;

@@ -62,7 +62,14 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (existing && existing.irkPubHex !== rec.irkPubHex) {
       return { ok: false as const, reason: "username already claimed" };
     }
-    this.byName.set(norm, { ...rec, username: norm });
+    // A re-claim (same IRK) must not silently clear an already-set
+    // demo flag: only an explicit isDemo on the incoming record, or
+    // setDemo(), changes it.
+    this.byName.set(norm, {
+      ...rec,
+      username: norm,
+      isDemo: rec.isDemo ?? existing?.isDemo ?? false,
+    });
     return { ok: true as const };
   }
   async get(username: string) {
@@ -78,6 +85,13 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     if (!r) return false;
     if (r.irkPubHex.toLowerCase() !== expectedOldIrkPubHex.toLowerCase()) return false;
     this.byName.set(norm, { ...r, irkPubHex: newIrkPubHex, claimedAt: at });
+    return true;
+  }
+  async setDemo(username: string, isDemo: boolean) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    this.byName.set(norm, { ...r, isDemo });
     return true;
   }
 }

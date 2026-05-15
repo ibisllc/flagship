@@ -115,6 +115,14 @@ export function adaptRegistryToStorage(
       });
       return true;
     },
+    async setDemo() {
+      // Same story as swapIrkPub: the demo-account flag (#84) is set
+      // only by the operator-gated provisioning path, which is .com
+      // (Worker) + CLI-side. The legacy sync UsernameRegistry has no
+      // is_demo slot and no Fastify route calls this; required only to
+      // satisfy the UsernameStorage interface.
+      return false;
+    },
   };
 }
 

@@ -12,6 +12,15 @@ export interface UsernameRecord {
   username: string;
   irkPubHex: string;
   claimedAt: number;
+  /**
+   * Demo account (task #84). A real claim with real keys, but login
+   * returns a platform-signed directive telling the client to route
+   * the *recovery* ceremony through the Mock (Apple Review can't
+   * exercise a real WebAuthn-PRF passkey). Everything else stays
+   * live. Absent / false = a normal account. Set only by the
+   * operator-gated provisionDemoUser path, never by the claim flow.
+   */
+  isDemo?: boolean;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";
@@ -112,6 +121,14 @@ export interface UsernameStorage {
     newIrkPubHex: string,
     at: number,
   ): Promise<boolean>;
+  /**
+   * Flip the demo flag on an existing claim (task #84). Returns false
+   * if the username doesn't exist. The claim flow never calls this;
+   * only the operator-gated provision/decommission tooling does. The
+   * `put` path must preserve an already-set flag (a benign re-claim
+   * must not silently un-demo an account).
+   */
+  setDemo(username: string, isDemo: boolean): Promise<boolean>;
 }
 
 export interface AuthCodeStorage {
