@@ -33,6 +33,7 @@ import {
   handleInitiateRePair,
   handleListAutoUnlockLeases,
   handleObjectRePair,
+  handleWipeRestart,
   handleRevokeAutoUnlockLease,
   handleDns01Delete,
   handleDns01Publish,
@@ -183,6 +184,7 @@ const ROUTE_RE = {
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
   RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
   RE_PAIR_GET: /^\/api\/users\/([^/]+)\/re-pair$/,
+  WIPE_RESTART: /^\/api\/users\/([^/]+)\/wipe-restart$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
@@ -715,6 +717,21 @@ export async function tryControlPlane(
       await handleGetRePair(
         { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.WIPE_RESTART))) {
+    return finish(
+      await handleWipeRestart(
+        {
+          usernames: storage.usernames,
+          webauthnRecovery: storage.webauthnRecovery,
+          auditEvents: storage.auditEvents,
+          pushTokens: storage.pushTokens,
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+        request.headers.get("if-match") ?? undefined,
       ),
     );
   }

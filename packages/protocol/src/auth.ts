@@ -1313,6 +1313,7 @@ const TAG_AUTO_UNLOCK_LEASE = "flagship/auto-unlock-lease/v1";
 const TAG_REVOKE_AUTO_UNLOCK_LEASE = "flagship/revoke-auto-unlock-lease/v1";
 const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
+const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 const TAG_MARKETPLACE_SCAN_RESULT = "flagship/marketplace-scan-result/v1";
 
 /**
@@ -1421,6 +1422,56 @@ export function signRePairObject(r: RePairObject, oldIrk: Keypair): Bytes {
 export function verifyRePairObject(r: RePairObject, sig: Bytes, oldIrkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalRePairObject(r), oldIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Wipe & restart (v1.1) — the user holds the OLD IRK + the recovered
+ * UMK but elects to nuke the account state instead of running the
+ * 24h-grace re-pair path. Signed by the OLD IRK (proving the caller
+ * is in possession of the displaced key, which is the same trust
+ * basis as the recovery envelope) AND, when delivered to the Worker,
+ * accompanied by the new recovery envelope that the Worker swaps in
+ * atomically.
+ *
+ * Distinct tag from RePairInitiate so a leaked RePair signature can't
+ * be replayed as a Wipe (different verbs, different effects).
+ */
+export interface WipeRestart {
+  username: string;
+  /** OLD IRK pubkey, included so .com can SQL-CAS on the current row. */
+  oldIrkPub: Bytes;
+  /** NEW IRK pubkey installed by this operation. */
+  newIrkPub: Bytes;
+  /** New WebAuthn credentialId (hex) for the rotated recovery passkey. */
+  newCredentialIdHex: string;
+  /** SHA-256 of the new wrappedUmk (so the canonical bytes don't bloat). */
+  newWrappedUmkHashHex: string;
+  issuedAt: number;
+}
+
+function canonicalWipeRestart(r: WipeRestart): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_WIPE_RESTART,
+      r.username,
+      hex(r.oldIrkPub),
+      hex(r.newIrkPub),
+      r.newCredentialIdHex.toLowerCase(),
+      r.newWrappedUmkHashHex.toLowerCase(),
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signWipeRestart(r: WipeRestart, oldIrk: Keypair): Bytes {
+  return ed.sign(canonicalWipeRestart(r), oldIrk.privateKey);
+}
+export function verifyWipeRestart(r: WipeRestart, sig: Bytes, oldIrkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalWipeRestart(r), oldIrkPub);
   } catch {
     return false;
   }
