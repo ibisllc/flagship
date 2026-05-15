@@ -38,6 +38,26 @@ const WEBAPP_HOST = "web.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
 /**
+ * voi.ci — Flagship's URL shortener (V1).
+ *
+ * Cloudflare routes voi.ci/* to this same Worker. A request to
+ * https://voi.ci/<code> hits the redirect handler below, which
+ * looks up the code in D1 and 302s to the target URL.
+ *
+ * The shortener API (POST /api/voici/shorten + cascades from the
+ * app-rename handler) lives on the apex (flagshipserver.com /api/*)
+ * — voi.ci itself ONLY serves redirects so a casual visitor can't
+ * enumerate codes or hit unrelated control-plane routes.
+ *
+ * Setup note: this requires the `voi.ci` zone to be onboarded to
+ * Cloudflare with a Worker route `voi.ci/*` bound to flagship-com.
+ * Without that the dispatch below never fires; existing traffic to
+ * flagshipserver.com is unaffected.
+ */
+const VOICI_HOST = "voi.ci";
+const VOICI_WWW_HOST = "www.voi.ci";
+
+/**
  * Dedicated origin for the WebAuthn-PRF recovery flow (Tasks #73 + #74).
  *
  * The passkey credential lives at rpId = "recovery.flagshipserver.com",
@@ -320,6 +340,16 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // ignore frame-ancestors. Disk path: apps/web/public/recovery/*.
   if (url.hostname === RECOVERY_HOST) {
     return serveRecovery(request, url, env);
+  }
+
+  // ---- voi.ci ----
+  // URL shortener. The only thing this hostname does is look up a
+  // 6-char base36 code in D1 and 302 to the stored target. Anything
+  // else (POST, longer paths, root, etc.) returns 404 to keep the
+  // surface tiny + un-enumerable. The actual mint API lives on the
+  // apex (POST /api/voici/shorten + cascades from rename).
+  if (url.hostname === VOICI_HOST || url.hostname === VOICI_WWW_HOST) {
+    return serveVoiciRedirect(request, url, env);
   }
 
   // Worker-resident probe: never forwarded upstream as-is. The Worker does
@@ -1022,6 +1052,62 @@ async function serveWebapp(
  * single line of defense against an attacker getting their page injected
  * into the recovery origin via, e.g., a future asset-binding bug.
  */
+/**
+ * voi.ci hostname dispatch. GET /<code> → 302 to the stored target,
+ * or 404 / 410 on miss / expired. Everything else (root path, POST,
+ * anything below /<code>) is 404 — the surface stays one-route only.
+ */
+async function serveVoiciRedirect(
+  request: Request,
+  url: URL,
+  env: RouteEnv,
+): Promise<Response> {
+  const method = request.method.toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    return new Response(
+      JSON.stringify({ error: "method not allowed", host: VOICI_HOST }),
+      { status: 405, headers: { "content-type": "application/json", allow: "GET, HEAD" } },
+    );
+  }
+  if (!env.DB) {
+    return new Response("storage not configured", { status: 503 });
+  }
+  // /<code> — strip the leading slash, reject anything with further
+  // segments so /a/b doesn't somehow match a code lookup.
+  const path = url.pathname.replace(/^\/+/, "");
+  if (path === "" || path.includes("/")) {
+    return new Response("not found", {
+      status: 404,
+      headers: { "content-type": "text/plain", "cache-control": "private, no-store" },
+    });
+  }
+  const { D1Storage } = await import("@flagship/storage");
+  const { handleVoiciRedirect } = await import("@flagship/control-plane");
+  const storage = new D1Storage(env.DB);
+  const res = await handleVoiciRedirect(
+    { usernames: storage.usernames, voiciLinks: storage.voiciLinks },
+    path,
+  );
+  // The handler returns a 302 with a `location` header attached; copy
+  // it through into a real Response.
+  const headers = new Headers({ "cache-control": "private, no-store" });
+  if (res.headers) {
+    for (const [k, v] of Object.entries(res.headers)) headers.set(k, v);
+  }
+  if (res.status === 302) {
+    return new Response(null, { status: 302, headers });
+  }
+  // 404 / 410 — surface a tiny plaintext body so curl users see a
+  // helpful hint without enumerating account details.
+  return new Response(
+    res.status === 410 ? "this short link was rotated; ask the sender for a fresh one" : "not found",
+    {
+      status: res.status,
+      headers: { "content-type": "text/plain", "cache-control": "private, no-store" },
+    },
+  );
+}
+
 async function serveRecovery(
   request: Request,
   url: URL,

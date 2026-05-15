@@ -34,6 +34,9 @@ import {
   handleListAutoUnlockLeases,
   handleObjectRePair,
   handleWipeRestart,
+  handleAppRename,
+  handleGetAppLinks,
+  handleVoiciShorten,
   handleRevokeAutoUnlockLease,
   handleDns01Delete,
   handleDns01Publish,
@@ -185,6 +188,9 @@ const ROUTE_RE = {
   RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
   RE_PAIR_GET: /^\/api\/users\/([^/]+)\/re-pair$/,
   WIPE_RESTART: /^\/api\/users\/([^/]+)\/wipe-restart$/,
+  APP_RENAME: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/rename$/,
+  APP_LINKS: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/links$/,
+  VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
   ADMIN_CLEANUP_APEX: /^\/api\/admin\/cleanup-apex$/,
   MARKETPLACE_LIST: /^\/api\/marketplace\/list$/,
@@ -732,6 +738,50 @@ export async function tryControlPlane(
         decodeURIComponent(m[1]!),
         await readJson(request),
         request.headers.get("if-match") ?? undefined,
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.APP_RENAME))) {
+    return finish(
+      await handleAppRename(
+        {
+          usernames: storage.usernames,
+          userAppAliases: storage.userAppAliases,
+          voiciLinks: storage.voiciLinks,
+          servers: storage.servers,
+          auditEvents: storage.auditEvents,
+          // publishDns hook intentionally omitted in the Worker
+          // wiring for now — the services-zone publisher integration
+          // is a follow-up. The alias + short-link cascade still
+          // completes; the daemon-side Caddy refresh will pick up
+          // the new label on the next status sync.
+        },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.APP_LINKS))) {
+    return finish(
+      await handleGetAppLinks(
+        {
+          usernames: storage.usernames,
+          userAppAliases: storage.userAppAliases,
+          voiciLinks: storage.voiciLinks,
+          servers: storage.servers,
+          auditEvents: storage.auditEvents,
+        },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.VOICI_SHORTEN.test(path)) {
+    return finish(
+      await handleVoiciShorten(
+        { usernames: storage.usernames, voiciLinks: storage.voiciLinks },
+        await readJson(request),
       ),
     );
   }

@@ -1315,6 +1315,8 @@ const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
 const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 const TAG_MARKETPLACE_SCAN_RESULT = "flagship/marketplace-scan-result/v1";
+const TAG_APP_RENAME = "flagship/app-rename/v1";
+const TAG_VOICI_SHORTEN = "flagship/voici-shorten/v1";
 
 /**
  * Result of the marketplace security scan, posted by the scanner
@@ -1472,6 +1474,75 @@ export function signWipeRestart(r: WipeRestart, oldIrk: Keypair): Bytes {
 export function verifyWipeRestart(r: WipeRestart, sig: Bytes, oldIrkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalWipeRestart(r), oldIrkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * App rename (voi.ci-aware). Replaces the user-visible URL stem
+ * the app surfaces at. The internal appId is preserved; only the
+ * displayLabel changes. Signed by the user's current IRK.
+ *
+ * The handler is responsible for:
+ *   - validating displayLabel against DNS label rules
+ *   - checking uniqueness within the user's zone
+ *   - deleting old voi.ci codes pointing at the previous stem
+ *   - re-publishing user-zone DNS labels (delegated to a hook)
+ *   - minting a fresh voi.ci code for the new canonical URL
+ */
+export interface AppRename {
+  username: string;
+  appId: string;
+  newDisplayLabel: string;
+  issuedAt: number;
+}
+
+function canonicalAppRename(r: AppRename): Bytes {
+  return new TextEncoder().encode(
+    [TAG_APP_RENAME, r.username, r.appId, r.newDisplayLabel.toLowerCase(), r.issuedAt].join("|"),
+  );
+}
+
+export function signAppRename(r: AppRename, irk: Keypair): Bytes {
+  return ed.sign(canonicalAppRename(r), irk.privateKey);
+}
+export function verifyAppRename(r: AppRename, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalAppRename(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * voi.ci short-link mint. The phone never signs this directly —
+ * Worker mints internally during AppRename. But surfacing the
+ * canonical-bytes type keeps the protocol layer's contract visible
+ * to anyone reading the package, and a future "mint a custom short
+ * link" UX (signed by IRK) can reuse the same envelope.
+ */
+export interface VoiciShorten {
+  username: string;
+  /** Optional binding to an appId — when omitted, the link is a
+   *  one-off (no cascade on rename). */
+  appId?: string;
+  targetUrl: string;
+  issuedAt: number;
+}
+
+function canonicalVoiciShorten(r: VoiciShorten): Bytes {
+  return new TextEncoder().encode(
+    [TAG_VOICI_SHORTEN, r.username, r.appId ?? "", r.targetUrl, r.issuedAt].join("|"),
+  );
+}
+
+export function signVoiciShorten(r: VoiciShorten, irk: Keypair): Bytes {
+  return ed.sign(canonicalVoiciShorten(r), irk.privateKey);
+}
+export function verifyVoiciShorten(r: VoiciShorten, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalVoiciShorten(r), irkPub);
   } catch {
     return false;
   }
