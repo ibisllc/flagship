@@ -83,9 +83,15 @@ public struct AppDetailScreen: View {
                 // package handle: `scratchpad` if the user is the
                 // creator, `scratchpad-meta` / `scratchpad-harry`
                 // otherwise.
+                // V7 — `ver:` + `id:` share the same label style with
+                // a middle dot between them. The middle-dot is the
+                // section-separator convention we already use across
+                // the design system (Recent pods, "running · v0.1.0",
+                // etc.) so this stays visually coherent.
                 HStack(spacing: FS.space.s2) {
                     if let v = d.version {
-                        Text("v\(v)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                        Text("ver: \(v)").font(FS.font.caption()).foregroundColor(c.textMuted)
+                        Text("·").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                     Text("id: \(d.urlLabel)")
                         .font(FS.font.caption())
@@ -204,6 +210,20 @@ public struct AppDetailScreen: View {
                     instancesGroup(c: c, defaultLabel: d.app.urlLabel)
                 }
             }
+
+            // V7 — Add a custom domain. Lives back under WEB DOMAINS
+            // so the affordance stays visible (we don't want users
+            // forgetting that custom domains are possible at all).
+            // Each custom domain renders its own card with a Verify
+            // CTA + the expected TXT record hint.
+            if !vm.customUrls.isEmpty {
+                VStack(spacing: FS.space.s3) {
+                    ForEach(vm.customUrls, id: \.self) { url in
+                        customDomainCard(url: url, c: c)
+                    }
+                }
+            }
+            addCustomDomain(c: c)
         }
         .sheet(isPresented: $showReplaceSheet) {
             ReplaceAppStemSheet(
@@ -287,17 +307,19 @@ public struct AppDetailScreen: View {
 
     @ViewBuilder
     private func urlRow(url: String, style: UrlStyle, c: FSColors) -> some View {
-        // V6 — no truncation. The WEB DOMAINS card is the one place
-        // where URLs are allowed to wrap to multiple lines so the
-        // user can read the whole thing. The copy icon stays
-        // top-aligned so it doesn't ride along with line two.
+        // V7 — no leading icon. The section header already names what
+        // group the URL belongs to; a per-row globe / link icon was
+        // visual noise.
+        //
+        // Wrap-at-dots: we insert a zero-width space after each `.` so
+        // the text layout engine treats them as preferred break
+        // opportunities. Without that, an FQDN is one giant unbroken
+        // "word" and wraps mid-segment. With it, lines break only
+        // between domain segments (e.g. `mynotes.harry.` / `flagship.services`).
+        // The clipboard path uses the original `url` (no ZWSP) so a
+        // copy still pastes a clean string.
         HStack(alignment: .top, spacing: FS.space.s2) {
-            Image(systemName: style == .prominent ? "link.circle.fill" : "globe")
-                .foregroundColor(style == .prominent ? c.primary : c.textMuted)
-                // Keep the icon pinned to the first line of the URL
-                // text so a wrapped URL doesn't vertically misalign.
-                .padding(.top, 1)
-            Text(stripScheme(url))
+            Text(wrapAtDots(stripScheme(url)))
                 .font(.system(
                     size: style == .prominent ? 16 : 14,
                     weight: style == .prominent ? .semibold : .regular,
@@ -306,8 +328,6 @@ public struct AppDetailScreen: View {
                 .foregroundColor(style == .muted ? c.textMuted : c.text)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                // Wraps freely on word/character boundaries; no
-                // .lineLimit / .truncationMode here on purpose.
             if style != .muted {
                 Button {
                     #if canImport(UIKit)
@@ -321,6 +341,13 @@ public struct AppDetailScreen: View {
                 .accessibilityLabel("Copy \(url)")
             }
         }
+    }
+
+    /// V7 — encourage line breaks between FQDN segments. ZWSP after
+    /// each dot is a soft break opportunity for Core Text; the
+    /// rendered text is otherwise identical.
+    private func wrapAtDots(_ s: String) -> String {
+        s.replacingOccurrences(of: ".", with: ".\u{200B}")
     }
 
     private func sectionLabel(_ s: String, c: FSColors) -> some View {

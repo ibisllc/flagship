@@ -52,7 +52,10 @@ public struct AppsTab: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: FS.space.s4) {
                         header(c: c)
-                        searchBar(vm: vm)
+                        HStack(spacing: FS.space.s2) {
+                            searchBar(vm: vm)
+                            serverFilterMenu(vm: vm, c: c)
+                        }
                         emptyOrList(vm: vm, c: c)
                         marketplaceCard(c: c)
                         Spacer().frame(height: FS.space.s12)
@@ -72,7 +75,15 @@ public struct AppsTab: View {
                     username: { [app] in app.currentUser }
                 )
             }
+            // V7 — keep the dropdown in sync with whatever pods the
+            // user currently owns; the source of truth lives on
+            // AppState, the VM just needs a snapshot so its filter
+            // can resolve podId → display name.
+            vm?.availablePods = app.pods.map { ($0.podId, $0.name) }
             if case .idle = vm?.state { await vm?.load() }
+        }
+        .onChange(of: app.pods) { _, newPods in
+            vm?.availablePods = newPods.map { ($0.podId, $0.name) }
         }
     }
 
@@ -130,6 +141,57 @@ public struct AppsTab: View {
     private func searchBar(vm: AppsListViewModel) -> some View {
         @Bindable var bindable = vm
         FSField(value: $bindable.searchQuery, label: "", placeholder: "Search apps")
+    }
+
+    /// V7 — server filter Menu. Default "All servers"; one entry per
+    /// pod the user owns. Hidden when there's only one pod (the
+    /// filter would degenerate to the same list either way) — but
+    /// still rendered as a single-entry menu so the gesture is
+    /// discoverable.
+    @ViewBuilder
+    private func serverFilterMenu(vm: AppsListViewModel, c: FSColors) -> some View {
+        Menu {
+            Button {
+                vm.serverFilter = nil
+            } label: {
+                Label("All servers", systemImage: vm.serverFilter == nil ? "checkmark" : "")
+            }
+            if !vm.availablePods.isEmpty {
+                Divider()
+                ForEach(vm.availablePods, id: \.podId) { pod in
+                    Button {
+                        vm.serverFilter = pod.podId
+                    } label: {
+                        Label(pod.name, systemImage: vm.serverFilter == pod.podId ? "checkmark" : "")
+                    }
+                }
+            }
+        } label: {
+            let selectedLabel: String = {
+                guard let id = vm.serverFilter,
+                      let p = vm.availablePods.first(where: { $0.podId == id })
+                else { return "All servers" }
+                return p.name
+            }()
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .imageScale(.small)
+                Text(selectedLabel)
+                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
+            }
+            .foregroundColor(c.text)
+            .padding(.horizontal, FS.space.s3)
+            .padding(.vertical, FS.space.s2)
+            .background(c.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: FS.radius.sm)
+                    .stroke(c.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+        }
+        .accessibilityIdentifier("apps-server-filter")
     }
 
     @ViewBuilder
@@ -241,43 +303,52 @@ private struct AppRow: View {
 
     @ViewBuilder
     private func urlRow(c: FSColors) -> some View {
+        // V7 — short link on top (single line + copy), canonical
+        // BELOW it on its own line. Canonical takes the full width
+        // of the row + truncates with middle-ellipsis on overflow.
+        // No icons either side; the section header tells us what
+        // group each URL belongs to.
         let short = links?.shortUrl
         let canonical = links?.canonicalUrl ?? "https://\(app.urlLabel)…"
-        HStack(spacing: FS.space.s2) {
-            if let short, !short.isEmpty {
-                // Short link with copy icon — primary action target.
-                Image(systemName: "link.circle.fill")
-                    .foregroundColor(c.primary)
-                Text(stripScheme(short))
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundColor(c.text)
-                    .lineLimit(1)
-                Button {
-                    #if canImport(UIKit)
-                    UIPasteboard.general.string = short
-                    #endif
-                } label: {
-                    Image(systemName: "doc.on.doc")
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: FS.space.s2) {
+                if let short, !short.isEmpty {
+                    Text(stripScheme(short))
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundColor(c.text)
+                        .lineLimit(1)
+                    Button {
+                        #if canImport(UIKit)
+                        UIPasteboard.general.string = short
+                        #endif
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .foregroundColor(c.textMuted)
+                            .imageScale(.small)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    // Fallback that should never actually render in
+                    // production — the Worker lazy-mints on first
+                    // /links call, and the Mock returns a populated
+                    // shortUrl. Kept so a transient network blip
+                    // doesn't show a blank row.
+                    Text("voi.ci/…")
+                        .font(.system(size: 13, design: .monospaced))
                         .foregroundColor(c.textMuted)
-                        .imageScale(.small)
                 }
-                .buttonStyle(.plain)
-            } else {
-                // No short link yet — show a muted placeholder so the
-                // row's vertical rhythm doesn't jump once links land.
-                Image(systemName: "link")
-                    .foregroundColor(c.textMuted)
-                Text("voi.ci/…")
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundColor(c.textMuted)
+                Spacer()
             }
-            Spacer(minLength: FS.space.s2)
+            // Canonical on a line of its own, full-width, middle-
+            // ellipsis on overflow. Single line is fine here — the
+            // user knows the rough shape; full URL lives on the
+            // detail screen.
             Text(stripScheme(canonical))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(c.textMuted)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .layoutPriority(0)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
