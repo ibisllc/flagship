@@ -113,6 +113,53 @@ function renderDeviceCard(device) {
   `;
 }
 
+/** Danger zone: visible-but-explanatory v1 Wipe & restart entry.
+ *  Mirrors the iOS B8 / Android C8 "Coming soon" pattern — the option
+ *  needs to be visible so users see it exists and is being designed
+ *  (hiding it leaves them wondering what their last-resort options
+ *  are), and the actual ceremony lands as E6's v1.1 follow-up. */
+function renderDangerZone() {
+  return `
+    <hr class="mt-4" />
+    <h3 class="mt-2">Danger zone</h3>
+    <p class="note small">
+      Lost a device or worried about a stolen one? These actions rotate
+      your account's identity keys, disconnecting every device on this
+      account in one shot.
+    </p>
+    <div class="card" data-section="wipe-restart">
+      <div class="row">
+        <div class="weight-600">
+          <span aria-hidden="true">🗑️</span>
+          Wipe &amp; restart
+        </div>
+        <button class="secondary" id="wipe-restart-btn">Learn more</button>
+      </div>
+      <p class="note small">
+        Coming in v1.1. Rotates your account identity + recovery passkey
+        in one ceremony. Pods stay running; apps stay installed; every
+        other device re-pairs fresh on next open.
+      </p>
+    </div>
+  `;
+}
+
+async function showWipeComingSoon() {
+  const { inlineConfirm } = await import("../lib/modal.js");
+  await inlineConfirm({
+    title: "Wipe & restart — coming in v1.1",
+    message:
+      "Rotates your account identity AND recovery passkey in one ceremony. " +
+      "Every device currently on this account — including this browser — " +
+      "gets disconnected and re-pairs fresh. Pods keep running; apps stay " +
+      "installed. Shipping in v1.1 once the ceremony has been live-exercised " +
+      "across iPhone, Android, and webapp. For now use Disconnect above, or " +
+      "wait for Replace device to land first.",
+    okLabel: "Got it",
+    danger: false,
+  });
+}
+
 async function renderTrustedDevices() {
   const root = $("trusted-devices-list");
   if (!root) return;
@@ -128,10 +175,12 @@ async function renderTrustedDevices() {
             sessions like this webapp aren't trusted devices — they're
             per-pod paired tokens, listed under "Browser sessions" instead.
           </p>
-        </div>`;
+        </div>
+        ${renderDangerZone()}`;
+      bindDangerZone();
       return;
     }
-    root.innerHTML = state.devices.map(renderDeviceCard).join("");
+    root.innerHTML = state.devices.map(renderDeviceCard).join("") + renderDangerZone();
     root.querySelectorAll("[data-disconnect]").forEach((btn) => {
       btn.addEventListener("click", async (ev) => {
         const tokenId = ev.currentTarget.getAttribute("data-disconnect");
@@ -154,9 +203,16 @@ async function renderTrustedDevices() {
         }
       });
     });
+    bindDangerZone();
   } catch (e) {
     root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? "Couldn't load devices")}</div>`;
   }
+}
+
+function bindDangerZone() {
+  document.getElementById("wipe-restart-btn")?.addEventListener("click", () => {
+    showWipeComingSoon().catch(() => {});
+  });
 }
 
 export function initTrustedDevicesView() {
