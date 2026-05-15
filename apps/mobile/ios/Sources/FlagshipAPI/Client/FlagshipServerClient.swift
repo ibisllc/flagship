@@ -76,6 +76,60 @@ public protocol FlagshipServerClient: Sendable {
     /// stored IRK pubkey atomically. 425 = grace not elapsed; 409 =
     /// objected; 200 = swap succeeded.
     func completeRePair(username: String) async throws -> RePairCompleteResponse
+
+    /// E2 — atomic Wipe & restart. Rotates IRK + recovery envelope in
+    /// one server transaction. Body carries OLD-IRK signature over
+    /// canonical flagship/wipe-restart/v1 bytes + the new envelope.
+    /// 429 = rate-limited (1/hour/username); 409 = lost the CAS race
+    /// (concurrent rotation); 412 = stale ETag.
+    func wipeRestart(
+        username: String,
+        body: WipeRestartRequest,
+        ifMatch: String?
+    ) async throws -> WipeRestartResponse
+}
+
+public struct WipeRestartRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let oldIrkPub: String         // hex
+        public let newIrkPub: String         // hex
+        public let newCredentialId: String   // hex
+        public let newWrappedUmk: String     // base64
+        public let issuedAt: Int64           // ms
+        public init(
+            username: String,
+            oldIrkPub: String,
+            newIrkPub: String,
+            newCredentialId: String,
+            newWrappedUmk: String,
+            issuedAt: Int64
+        ) {
+            self.username = username
+            self.oldIrkPub = oldIrkPub
+            self.newIrkPub = newIrkPub
+            self.newCredentialId = newCredentialId
+            self.newWrappedUmk = newWrappedUmk
+            self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    /// Hex Ed25519 signature by the OLD IRK over the canonical bytes.
+    public let signature: String
+    /// 32 hex chars (16 random bytes) — server dedupes within 5 min.
+    public let idempotencyKey: String
+
+    public init(request: Inner, signature: String, idempotencyKey: String) {
+        self.request = request; self.signature = signature
+        self.idempotencyKey = idempotencyKey
+    }
+}
+
+public struct WipeRestartResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    public let auditSeq: Int
+    public let newIrkPub: String
+    public let etag: String?
 }
 
 public struct RePairInitiateRequest: Encodable, Sendable {
@@ -572,6 +626,44 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return RePairCompleteResponse(ok: true, newIrkPub: "00", swappedAt: Int64(Date().timeIntervalSince1970 * 1000))
     }
 
+    /// Drives wipe-restart outcomes in tests.
+    public enum WipeRestartBehavior: Sendable {
+        case ok
+        case rateLimited
+        case staleEtag(String)
+        case concurrentRotation
+    }
+    public var wipeRestartBehavior: WipeRestartBehavior = .ok
+    public private(set) var lastWipeRestart: (
+        username: String,
+        body: WipeRestartRequest,
+        ifMatch: String?
+    )?
+
+    public func wipeRestart(
+        username: String,
+        body: WipeRestartRequest,
+        ifMatch: String?
+    ) async throws -> WipeRestartResponse {
+        try await tick()
+        lastWipeRestart = (username, body, ifMatch)
+        switch wipeRestartBehavior {
+        case .ok:
+            return WipeRestartResponse(
+                ok: true,
+                auditSeq: 42,
+                newIrkPub: body.request.newIrkPub,
+                etag: "W/\"post-wipe\""
+            )
+        case .rateLimited:
+            throw ScreensClientError.http(status: 429, message: "wipe-restart rate-limited")
+        case .staleEtag(let etag):
+            throw ScreensClientError.http(status: 412, message: "{\"currentEtag\":\"\(etag)\"}")
+        case .concurrentRotation:
+            throw ScreensClientError.http(status: 409, message: "concurrent rotation won")
+        }
+    }
+
     public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
         try await tick()
         let devices = devicesByUser[username.lowercased()] ?? []
@@ -827,6 +919,26 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(RePairCompleteResponse.self, from: data)
+    }
+
+    public func wipeRestart(
+        username: String,
+        body: WipeRestartRequest,
+        ifMatch: String?
+    ) async throws -> WipeRestartResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/wipe-restart"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let ifMatch { req.setValue(ifMatch, forHTTPHeaderField: "If-Match") }
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(WipeRestartResponse.self, from: data)
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

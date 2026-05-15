@@ -31,6 +31,8 @@ public struct SettingsScreen: View {
     /// The container observes this and routes the action through
     /// ReplaceDeviceViewModel.
     @State private var replaceConfirm: Bool = false
+    /// E3 — drives the Wipe & restart confirmation dialog.
+    @State private var wipeConfirm: Bool = false
     let username: String
     let tier: LoadingState<TierStatusResponse>
     let controlDevices: LoadingState<[PairedSessionSummary]>
@@ -58,6 +60,9 @@ public struct SettingsScreen: View {
     /// sheet. The container drives ReplaceDeviceViewModel.initiate
     /// with the captured devices ETag.
     var onReplaceDevice: () async -> Void = {}
+    /// E2/E3 — fired after the user confirms the Wipe scare sheet.
+    /// The container runs WipeRestartViewModel.run.
+    var onWipeRestart: () async -> Void = {}
     /// Whether the user has cloud recovery enrolled — read by the
     /// Remove confirmation sheet to surface a STRONGER warning when
     /// not enrolled (no enrolment = removing this device permanently
@@ -82,6 +87,7 @@ public struct SettingsScreen: View {
         onRefresh: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
         onReplaceDevice: @escaping () async -> Void = {},
+        onWipeRestart: @escaping () async -> Void = {},
         hasCloudRecovery: Bool = true
     ) {
         self.username = username
@@ -101,6 +107,7 @@ public struct SettingsScreen: View {
         self.onRefresh = onRefresh
         self.onRemoveFromAccount = onRemoveFromAccount
         self.onReplaceDevice = onReplaceDevice
+        self.onWipeRestart = onWipeRestart
         self.hasCloudRecovery = hasCloudRecovery
     }
 
@@ -175,6 +182,18 @@ public struct SettingsScreen: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Rotates your account's identity key. Other devices on this account will need to re-pair the next time they open the app — including this phone. Pods stay running, apps stay installed. The change takes effect after a 24-hour grace window during which another device can object.")
+        }
+        .confirmationDialog(
+            "Wipe and start over?",
+            isPresented: $wipeConfirm,
+            titleVisibility: .visible,
+        ) {
+            Button("Wipe and start over", role: .destructive) {
+                Task { await onWipeRestart() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your account keeps the same username and your pods keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
         }
     }
 
@@ -288,13 +307,11 @@ public struct SettingsScreen: View {
                         Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
                     }
                     Divider()
-                    // Wipe & restart lives behind a v1.1 flag (E2/E3).
-                    // The menu entry is visible-but-disabled in v1 so
-                    // the user can see the option exists; tapping it
-                    // opens the "Coming soon" explainer rather than
-                    // running the ceremony.
+                    // E2/E3 — Wipe & restart. Live ceremony. The
+                    // container observes onWipeRestart and routes
+                    // through WipeRestartViewModel.
                     Button(role: .destructive) {
-                        showWipeComingSoon = true
+                        wipeConfirm = true
                     } label: {
                         Label("Wipe & restart…", systemImage: "trash")
                     }

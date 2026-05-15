@@ -17,6 +17,8 @@ public struct SettingsTab: View {
     @State private var vm: SettingsViewModel?
     @State private var replaceVm: ReplaceDeviceViewModel?
     @State private var replaceToast: String?
+    @State private var wipeVm: WipeRestartViewModel?
+    @State private var wipeToast: String?
 
     public init() {}
 
@@ -88,6 +90,31 @@ public struct SettingsTab: View {
                             app.signOut()
                         }
                     },
+                    onWipeRestart: {
+                        // E2/E3 — drive the wipe ceremony. Uses
+                        // MockWebAuthnProvider by default; a future
+                        // commit can swap in a live ASAuthorizationController
+                        // wrapper without touching the VM.
+                        if wipeVm == nil {
+                            wipeVm = WipeRestartViewModel(
+                                server: server,
+                                username: { [app] in app.currentUser }
+                            )
+                        }
+                        await wipeVm?.run(currentEtag: vm?.devicesEtag)
+                        switch wipeVm?.phase {
+                        case .completed:
+                            wipeToast = "Done. All other devices are now disconnected. Re-pair them on next open."
+                            // Drop to Welcome — the user just rotated
+                            // identity; the in-memory session is stale.
+                            await pushRegistrar?.revoke()
+                            app.signOut()
+                        case .failed(let msg):
+                            wipeToast = msg
+                        default:
+                            wipeToast = nil
+                        }
+                    },
                     onReplaceDevice: {
                         // B7 — fire the ReplaceDeviceViewModel. We
                         // lazily construct the VM here (rather than
@@ -127,6 +154,17 @@ public struct SettingsTab: View {
                     Button("OK") { replaceToast = nil }
                 } message: {
                     Text(replaceToast ?? "")
+                }
+                .alert(
+                    "Wipe & restart",
+                    isPresented: Binding(
+                        get: { wipeToast != nil },
+                        set: { if !$0 { wipeToast = nil } }
+                    )
+                ) {
+                    Button("OK") { wipeToast = nil }
+                } message: {
+                    Text(wipeToast ?? "")
                 }
             } else {
                 ProgressView()

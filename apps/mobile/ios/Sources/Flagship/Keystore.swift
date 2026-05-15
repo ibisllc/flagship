@@ -53,15 +53,24 @@ public struct Keystore {
     /// Generate a fresh UMK seed, wrap it under a Secure-Enclave-derived
     /// key, and persist the ciphertext + ephemeral public key.
     public static func generateUMK(reason: String = "Create your Flagship account") async throws {
-        let umkSeed = SymmetricKey(size: .bits256)
-        let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
+        try await installUMK(SymmetricKey(size: .bits256), reason: reason)
+    }
 
+    /// E2 — atomically install a pre-existing UMK seed. Used by the
+    /// Wipe & restart ceremony: the caller has just generated a fresh
+    /// 32-byte UMK locally (so the ceremony can sign the canonical
+    /// bytes with the OLD IRK derived from the OLD UMK before we
+    /// overwrite). After this returns, deriveIRK() / deriveBAK() /
+    /// deriveSWK() all derive against the NEW UMK.
+    ///
+    /// Also resets the IRK version slot to v1 and clears any pending
+    /// rotation, so the new IRK is `HKDF(newUMK, "flagship/irk/v1")`.
+    public static func installUMK(_ umkSeed: SymmetricKey, reason: String) async throws {
+        let umkBytes = umkSeed.withUnsafeBytes { Data($0) }
         let ephemeral = P256.KeyAgreement.PrivateKey()
         let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
         let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeral.publicKey)
-
         let wrappingKey = hkdf(from: ecdhBytes, info: "flagship/umk-wrap/v1")
-
         do {
             let sealed = try AES.GCM.seal(umkBytes, using: wrappingKey)
             guard let combined = sealed.combined else {
@@ -69,11 +78,22 @@ public struct Keystore {
             }
             try keychainWrite(account: KCKey.wrappedUmk, data: combined)
             try keychainWrite(account: KCKey.ephemeralPub, data: ephemeral.publicKey.x963Representation)
+            // Reset the IRK version state — fresh UMK → fresh v1 IRK.
+            try setCurrentIrkVersion(1)
+            try setPendingIrkRotationVersion(nil)
         } catch let e as KeystoreError {
             throw e
         } catch {
             throw KeystoreError.wrapFailed(String(describing: error))
         }
+    }
+
+    /// E2 — read the current UMK as raw bytes. Used by the Wipe
+    /// ceremony to surface the OLD UMK seed for hashing / comparison
+    /// before installing a new one. The biometric prompt fires under
+    /// the hood since UMK lives behind WrappingKeypair.
+    public static func currentUMK(reason: String) async throws -> SymmetricKey {
+        return try await unwrappedUMK(reason: reason)
     }
 
     // MARK: - Derivation
