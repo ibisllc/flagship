@@ -62,7 +62,7 @@ const MAX_MINT_RETRIES = 5;
 const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 const ONE_OFF_TTL_MS = 365 * 24 * 60 * 60_000;
 
-const USERNAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const USERNAME_RE = /^[a-z0-9]{1,63}$/; // no hyphens — see labels.ts
 // Matches `^https://` — Worker rejects anything else so an attacker
 // can't mint a short code that redirects to `javascript:` etc.
 const TARGET_URL_RE = /^https:\/\/[^\s]+$/i;

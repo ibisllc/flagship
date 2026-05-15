@@ -6,14 +6,14 @@ describe("InMemoryAlertInbox", () => {
     const inbox = new InMemoryAlertInbox({ now: () => 1000 });
     const id1 = inbox.emit({
       kind: "lineage-break",
-      appId: "alice--game1",
+      appId: "alice-game1",
       canonicalUrl: "game1.alice.flagship.services",
       lineageAnchor: "anchor",
       upstreamTip: "tipA",
     });
     const id2 = inbox.emit({
       kind: "lineage-break",
-      appId: "alice--game2",
+      appId: "alice-game2",
       canonicalUrl: "game2.alice.flagship.services",
       lineageAnchor: "anchor2",
       upstreamTip: "tipB",
@@ -29,14 +29,14 @@ describe("InMemoryAlertInbox", () => {
     const inbox = new InMemoryAlertInbox();
     inbox.emit({
       kind: "lineage-break",
-      appId: "alice--game1",
+      appId: "alice-game1",
       canonicalUrl: "x",
       lineageAnchor: "a",
       upstreamTip: "tipA",
     });
     const dup = inbox.emit({
       kind: "lineage-break",
-      appId: "alice--game1",
+      appId: "alice-game1",
       canonicalUrl: "x",
       lineageAnchor: "a",
       upstreamTip: "tipA",
@@ -49,14 +49,14 @@ describe("InMemoryAlertInbox", () => {
     const inbox = new InMemoryAlertInbox();
     inbox.emit({
       kind: "lineage-break",
-      appId: "alice--game1",
+      appId: "alice-game1",
       canonicalUrl: "x",
       lineageAnchor: "a",
       upstreamTip: "tipA",
     });
     const id2 = inbox.emit({
       kind: "lineage-break",
-      appId: "alice--game1",
+      appId: "alice-game1",
       canonicalUrl: "x",
       lineageAnchor: "a",
       upstreamTip: "tipB",
@@ -68,20 +68,20 @@ describe("InMemoryAlertInbox", () => {
   it("dedupes manual-pending and migration-failed by salient field", () => {
     const inbox = new InMemoryAlertInbox();
     expect(
-      inbox.emit({ kind: "manual-pending", appId: "a--b", fromCommit: "x", toCommit: "y" }),
+      inbox.emit({ kind: "manual-pending", appId: "a-b", fromCommit: "x", toCommit: "y" }),
     ).toBe(1);
     expect(
-      inbox.emit({ kind: "manual-pending", appId: "a--b", fromCommit: "x", toCommit: "y" }),
+      inbox.emit({ kind: "manual-pending", appId: "a-b", fromCommit: "x", toCommit: "y" }),
     ).toBeNull();
-    expect(inbox.emit({ kind: "migration-failed", appId: "a--b", migrationFile: "0001.sql", reason: "x" })).toBe(2);
-    expect(inbox.emit({ kind: "migration-failed", appId: "a--b", migrationFile: "0001.sql", reason: "different reason" })).toBeNull();
-    expect(inbox.emit({ kind: "migration-failed", appId: "a--b", migrationFile: "0002.sql", reason: "x" })).toBe(3);
+    expect(inbox.emit({ kind: "migration-failed", appId: "a-b", migrationFile: "0001.sql", reason: "x" })).toBe(2);
+    expect(inbox.emit({ kind: "migration-failed", appId: "a-b", migrationFile: "0001.sql", reason: "different reason" })).toBeNull();
+    expect(inbox.emit({ kind: "migration-failed", appId: "a-b", migrationFile: "0002.sql", reason: "x" })).toBe(3);
   });
 
   it("ack(throughId) drops events with id <= throughId", () => {
     const inbox = new InMemoryAlertInbox();
-    const id1 = inbox.emit({ kind: "manual-pending", appId: "a--b", fromCommit: "x", toCommit: "y" });
-    const id2 = inbox.emit({ kind: "manual-pending", appId: "c--d", fromCommit: "x", toCommit: "y" });
+    const id1 = inbox.emit({ kind: "manual-pending", appId: "a-b", fromCommit: "x", toCommit: "y" });
+    const id2 = inbox.emit({ kind: "manual-pending", appId: "c-d", fromCommit: "x", toCommit: "y" });
     inbox.ack(id1!);
     expect(inbox.list()).toHaveLength(1);
     expect(inbox.list()[0]?.id).toBe(id2);
@@ -92,7 +92,7 @@ describe("InMemoryAlertInbox", () => {
     for (let i = 0; i < 105; i++) {
       inbox.emit({
         kind: "lineage-break",
-        appId: `a--${i}`,
+        appId: `a-${i}`,
         canonicalUrl: "x",
         lineageAnchor: "a",
         upstreamTip: `tip${i}`,
@@ -100,15 +100,15 @@ describe("InMemoryAlertInbox", () => {
     }
     expect(inbox.size()).toBe(100);
     // Newest survived; oldest was dropped.
-    expect(inbox.list().some((e) => e.alert.appId === "a--104")).toBe(true);
-    expect(inbox.list().some((e) => e.alert.appId === "a--0")).toBe(false);
+    expect(inbox.list().some((e) => e.alert.appId === "a-104")).toBe(true);
+    expect(inbox.list().some((e) => e.alert.appId === "a-0")).toBe(false);
   });
 
   it("browser-input-needed dedupes by (appId, tabId, inputKind)", () => {
     const inbox = new InMemoryAlertInbox();
     const id1 = inbox.emit({
       kind: "browser-input-needed",
-      appId: "alice--shopper",
+      appId: "alice-shopper",
       tabId: "tab-1",
       domain: "amazon.com",
       inputKind: "password",
@@ -118,7 +118,7 @@ describe("InMemoryAlertInbox", () => {
     // Same field still focused — re-detection should not flood the phone.
     const dup = inbox.emit({
       kind: "browser-input-needed",
-      appId: "alice--shopper",
+      appId: "alice-shopper",
       tabId: "tab-1",
       domain: "amazon.com",
       inputKind: "password",
@@ -128,7 +128,7 @@ describe("InMemoryAlertInbox", () => {
     // Page transitions to OTP step (different inputKind) — new alert is fine.
     const id2 = inbox.emit({
       kind: "browser-input-needed",
-      appId: "alice--shopper",
+      appId: "alice-shopper",
       tabId: "tab-1",
       domain: "amazon.com",
       inputKind: "otp",
@@ -138,7 +138,7 @@ describe("InMemoryAlertInbox", () => {
     // Different tab — new alert.
     const id3 = inbox.emit({
       kind: "browser-input-needed",
-      appId: "alice--shopper",
+      appId: "alice-shopper",
       tabId: "tab-2",
       domain: "amazon.com",
       inputKind: "password",

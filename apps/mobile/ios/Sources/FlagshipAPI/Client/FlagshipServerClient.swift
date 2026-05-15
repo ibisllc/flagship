@@ -575,15 +575,16 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if let meta = testAccounts[lower] {
             return .init(username: lower, available: false, reason: "test account", testAccount: meta)
         }
-        // RFC 1035 label rules. Mirrors the Worker's labels.ts so the
-        // Mock's wire shape (reason strings + ordering) matches what a
-        // real Worker would return — keep these in sync.
-        let labelRe = "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
-        if lower.range(of: labelRe, options: .regularExpression) == nil {
+        // Username rules. Mirrors the Worker's USERNAME_RE in
+        // labels.ts so the Mock's wire shape (reason strings +
+        // ordering) matches what a real Worker would return — keep
+        // these in sync. NO hyphens (alphanumerics only).
+        let usernameRe = "^[a-z0-9]{1,63}$"
+        if lower.range(of: usernameRe, options: .regularExpression) == nil {
             return .init(
                 username: lower,
                 available: false,
-                reason: "username must match RFC 1035 label rules (1–63 chars, [a-z0-9-], not starting/ending with hyphen)"
+                reason: "username must be 1–63 lowercase letters or digits (no hyphens)"
             )
         }
         if reservedUsernames.contains(lower) {
@@ -794,16 +795,18 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> AppLinksResponse {
         try await tick()
         let alias = appAliasByUser[username.lowercased()]?[appId]
-        // Default display label mirrors the Worker's deriveDefaultLabel
-        // when no alias is set — appId is `<creator>--<slug>`, so the
-        // user-visible default is `<slug>-<creator>`. For non-matching
-        // ids fall back to the appId verbatim (no '--' collapses).
+        // Default display label mirrors the Worker's deriveDefaultLabel:
+        // appId is `<creator>-<slug>` (single dash). Creator is a
+        // username and usernames are hyphen-free, so the FIRST hyphen
+        // is the creator/slug boundary even when the slug has hyphens.
+        // The user-visible default flips the order to `<slug>-<creator>`.
         let defaultLabel: String = {
-            if let m = try? NSRegularExpression(pattern: "^([a-z0-9-]+)--([a-z0-9-]+)$"),
-               let match = m.firstMatch(in: appId, range: NSRange(appId.startIndex..., in: appId)),
-               let creatorRange = Range(match.range(at: 1), in: appId),
-               let slugRange = Range(match.range(at: 2), in: appId) {
-                return "\(appId[slugRange])-\(appId[creatorRange])"
+            if let i = appId.firstIndex(of: "-"),
+               i != appId.startIndex,
+               appId.index(after: i) != appId.endIndex {
+                let creator = appId[appId.startIndex..<i]
+                let slug = appId[appId.index(after: i)...]
+                return "\(slug)-\(creator)".lowercased()
             }
             return appId.lowercased()
         }()

@@ -510,10 +510,12 @@ export function parseSetKey(fqdn: string): AppUserSetKey | null {
   const parts = head.split(".");
   if (parts.length < 2) return null;
   const user = parts[parts.length - 1]!;
-  if (!labelOk(user)) return null;
-  // Leftmost label may be `<slug>` or `<slug>-<author>`.
+  if (!userOk(user)) return null;
+  // Leftmost label may be `<slug>` or `<slug>-<author>`. The author
+  // is a username (hyphen-free), so split at the LAST hyphen — the
+  // slug itself may contain hyphens (`notes-app`), the author cannot.
   const leftmost = parts[0]!;
-  const dashIdx = leftmost.indexOf("-");
+  const dashIdx = leftmost.lastIndexOf("-");
   let slug: string;
   let author: string;
   if (dashIdx > 0 && dashIdx < leftmost.length - 1) {
@@ -523,7 +525,7 @@ export function parseSetKey(fqdn: string): AppUserSetKey | null {
     slug = leftmost;
     author = user; // self-authored
   }
-  if (!labelOk(slug) || !labelOk(author)) return null;
+  if (!labelOk(slug) || !userOk(author)) return null;
   return { slug, author, user };
 }
 
@@ -556,8 +558,9 @@ export function derivableShorteneds(canonical: string): string[] {
   // Always include the user-zone-level shortened (drop host).
   out.push(`${leftmost}.${user}.${APEX}`);
   // If the leftmost has a `-author` suffix, also include the
-  // bare-slug variants.
-  const dashIdx = leftmost.indexOf("-");
+  // bare-slug variants. Author is a hyphen-free username → split at
+  // the LAST hyphen so a hyphenated slug stays intact.
+  const dashIdx = leftmost.lastIndexOf("-");
   if (dashIdx > 0 && dashIdx < leftmost.length - 1) {
     const slug = leftmost.slice(0, dashIdx);
     out.push(`${slug}.${user}.${APEX}`);
@@ -566,8 +569,16 @@ export function derivableShorteneds(canonical: string): string[] {
   return out;
 }
 
+/** Slug / generic DNS label — hyphens allowed in the interior. */
 function labelOk(s: string): boolean {
   return /^[a-z0-9][a-z0-9-]{0,62}$/.test(s);
+}
+
+/** Username (user / author). Hyphen-free — this is what makes
+ *  `<slug>-<author>` and `<creator>-<slug>` parseable. Mirrors the
+ *  Worker's USERNAME_RE in packages/control-plane/src/labels.ts. */
+function userOk(s: string): boolean {
+  return /^[a-z0-9]{1,63}$/.test(s);
 }
 
 function encodeSetKey(k: AppUserSetKey): string {

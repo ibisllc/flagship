@@ -88,9 +88,24 @@ describe("AppPlatform — URL collapse", () => {
   it("cross-creator: creator!==host renders <slug>-<creator>", () => {
     expect(AppPlatform.urlLabel("bob", "alice", "game1")).toBe("game1-alice");
   });
-  it("appId composes (creator, slug) host-independently", () => {
-    expect(AppPlatform.appId("alice", "game1")).toBe("alice--game1");
-    expect(AppPlatform.appId("alice", "habit-tracker")).toBe("alice--habit-tracker");
+  it("appId composes (creator, slug) host-independently — single dash", () => {
+    expect(AppPlatform.appId("alice", "game1")).toBe("alice-game1");
+    // Slug with hyphens still composes; the FIRST dash is the
+    // creator/slug boundary (usernames are hyphen-free).
+    expect(AppPlatform.appId("alice", "habit-tracker")).toBe("alice-habit-tracker");
+  });
+
+  it("parseAppId is the exact inverse of appId, even for hyphenated slugs", () => {
+    expect(AppPlatform.parseAppId("alice-game1")).toEqual({ creator: "alice", slug: "game1" });
+    expect(AppPlatform.parseAppId("alice-habit-tracker")).toEqual({
+      creator: "alice",
+      slug: "habit-tracker",
+    });
+    // No hyphen → not a valid composite.
+    expect(AppPlatform.parseAppId("nodash")).toBeNull();
+    // Round-trip property over a hyphenated slug.
+    const id = AppPlatform.appId("bob", "multi-word-slug");
+    expect(AppPlatform.parseAppId(id)).toEqual({ creator: "bob", slug: "multi-word-slug" });
   });
 });
 
@@ -122,13 +137,13 @@ describe("AppPlatform.install", () => {
     if (!r.ok) throw new Error(r.reason);
     expect(r.app.urlLabel).toBe("game1"); // collapsed because alice authored on alice's box
     expect(r.app.containerPort).toBeGreaterThan(0);
-    expect(calls.some((c) => c.startsWith("docker run -d --name flagship-alice--game1"))).toBe(true);
+    expect(calls.some((c) => c.startsWith("docker run -d --name flagship-alice-game1"))).toBe(true);
     expect(calls.some((c) => c.includes("FLAGSHIP_PG_URL"))).toBe(true);
     expect(calls.some((c) => c.includes("ghcr.io/alice/game1:0.1.0"))).toBe(true);
 
     // Lookup paths the reverse proxy will use
-    expect(platform.byLabel("game1")?.appId).toBe("alice--game1");
-    expect(platform.byAppId("alice--game1")?.urlLabel).toBe("game1");
+    expect(platform.byLabel("game1")?.appId).toBe("alice-game1");
+    expect(platform.byAppId("alice-game1")?.urlLabel).toBe("game1");
   });
 
   it("cross-creator install renders <slug>-<creator> as the URL label and namespaces data under the creator", async () => {
@@ -304,7 +319,7 @@ describe("AppPlatform.uninstall (idempotent)", () => {
       verify: () => true,
     });
     expect(r1.ok).toBe(true);
-    expect(platform.byAppId("alice--game1")).toBeUndefined();
+    expect(platform.byAppId("alice-game1")).toBeUndefined();
     expect(platform.byLabel("game1")).toBeUndefined();
 
     // Idempotent retry returns ok with alreadyGone=true
@@ -363,12 +378,12 @@ describe("buildAppHttpHandlers", () => {
     );
     expect(installRes?.status).toBe(200);
     const installBody = JSON.parse(String(installRes?.body));
-    expect(installBody.appId).toBe("alice--game1");
+    expect(installBody.appId).toBe("alice-game1");
     expect(installBody.urlLabel).toBe("game1");
 
     // List now has it
     const list1 = await handle(asReq("GET", "/api/apps"));
-    expect(JSON.parse(String(list1?.body)).apps[0].appId).toBe("alice--game1");
+    expect(JSON.parse(String(list1?.body)).apps[0].appId).toBe("alice-game1");
 
     // Delete
     const uninstallReq = {
@@ -379,7 +394,7 @@ describe("buildAppHttpHandlers", () => {
     };
     const uninstallSig = signUninstallApp(uninstallReq, irk);
     const uninstallRes = await handle(
-      asReq("DELETE", "/api/apps/alice--game1", {
+      asReq("DELETE", "/api/apps/alice-game1", {
         request: uninstallReq,
         signature: bytesToHex(uninstallSig),
       }),
@@ -421,7 +436,7 @@ describe("buildAppHttpHandlers", () => {
       issuedAt: Date.now(),
     };
     const r = await handle(
-      asReq("DELETE", "/api/apps/wrong--app", {
+      asReq("DELETE", "/api/apps/wrong-app", {
         request: uninstallReq,
         signature: bytesToHex(signUninstallApp(uninstallReq, irk)),
       }),
@@ -456,9 +471,9 @@ describe("AppPlatform — per-app daemon-API auth token", () => {
       signature: new Uint8Array(64),
       verify: () => true,
     });
-    const stored = await tokens.tokenForApp("alice--game1");
+    const stored = await tokens.tokenForApp("alice-game1");
     expect(stored).toBeTruthy();
-    expect(await tokens.resolve(stored!)).toBe("alice--game1");
+    expect(await tokens.resolve(stored!)).toBe("alice-game1");
     // The docker run command line was built with `-e FLAGSHIP_APP_TOKEN=<token>`.
     const dockerLine = calls.find((c) => c.includes("docker run"));
     expect(dockerLine).toBeTruthy();
@@ -488,7 +503,7 @@ describe("AppPlatform — per-app daemon-API auth token", () => {
       signature: new Uint8Array(64),
       verify: () => true,
     });
-    const t = await tokens.tokenForApp("alice--game1");
+    const t = await tokens.tokenForApp("alice-game1");
     expect(t).toBeTruthy();
 
     await platform.uninstall({
@@ -502,7 +517,7 @@ describe("AppPlatform — per-app daemon-API auth token", () => {
       verify: () => true,
     });
     expect(await tokens.resolve(t!)).toBeNull();
-    expect(await tokens.tokenForApp("alice--game1")).toBeNull();
+    expect(await tokens.tokenForApp("alice-game1")).toBeNull();
   });
 
   it("install without appAuthTokens dep simply skips the env var (browser API stays disabled)", async () => {
@@ -585,9 +600,9 @@ describe("AppPlatform — browser-feature integration", () => {
       signature: new Uint8Array(64),
       verify: () => true,
     });
-    expect(gate?.hasGrant("alice--shopper")).toBe(true);
-    expect(gate?.check("alice--shopper", "https://www.amazon.com/")).toBe("allow");
-    expect(gate?.check("alice--shopper", "https://walmart.com/")).toBe("deny");
+    expect(gate?.hasGrant("alice-shopper")).toBe(true);
+    expect(gate?.check("alice-shopper", "https://www.amazon.com/")).toBe("allow");
+    expect(gate?.check("alice-shopper", "https://walmart.com/")).toBe("deny");
   });
 
   it("install of a manifest WITHOUT browser.domains does not touch the gate", async () => {
@@ -608,7 +623,7 @@ describe("AppPlatform — browser-feature integration", () => {
       signature: new Uint8Array(64),
       verify: () => true,
     });
-    expect(gate?.hasGrant("alice--shopper")).toBe(false);
+    expect(gate?.hasGrant("alice-shopper")).toBe(false);
   });
 
   it("uninstall closes app's tabs and revokes the grant", async () => {
@@ -625,7 +640,7 @@ describe("AppPlatform — browser-feature integration", () => {
       signature: new Uint8Array(64),
       verify: () => true,
     });
-    expect(gate?.hasGrant("alice--shopper")).toBe(true);
+    expect(gate?.hasGrant("alice-shopper")).toBe(true);
 
     await platform.uninstall({
       request: {
@@ -637,8 +652,8 @@ describe("AppPlatform — browser-feature integration", () => {
       signature: new Uint8Array(64),
       verify: () => true,
     });
-    expect(gate?.hasGrant("alice--shopper")).toBe(false);
-    expect(closedTabs).toEqual([{ appId: "alice--shopper", count: 1 }]);
+    expect(gate?.hasGrant("alice-shopper")).toBe(false);
+    expect(closedTabs).toEqual([{ appId: "alice-shopper", count: 1 }]);
   });
 
   it("install with no domainGate dep doesn't blow up on browser-declaring manifests", async () => {

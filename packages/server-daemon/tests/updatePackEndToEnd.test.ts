@@ -28,7 +28,7 @@ import type { InstalledApp } from "../src/appPlatform.js";
 import type { HttpRequest } from "../src/runtime.js";
 
 const execFileP = promisify(execFile);
-const APP_ID = "alice--game1";
+const APP_ID = "alice-game1";
 const PULLER_ID = "home.bob.flagship.services";
 const HOME_URL = "game1.alice.flagship.services";
 

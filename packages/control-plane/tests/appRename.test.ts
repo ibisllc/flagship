@@ -12,7 +12,7 @@ import {
 } from "../src/appRename.js";
 
 const USER = "alice";
-const APP = "meta--scratchpad"; // appId; default label: "scratchpad-meta"
+const APP = "meta-scratchpad"; // appId; default label: "scratchpad-meta"
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -109,7 +109,7 @@ describe("handleAppRename — happy path", () => {
     // Reach into the in-memory map via the public API: insert another
     // bogus row tied to a different appId and verify it doesn't get
     // deleted.
-    const ok = await s.voiciLinks.insert({ code: "preservd", username: USER, appId: "other--app", targetUrl: "https://x.example.com/", createdAt: 1 });
+    const ok = await s.voiciLinks.insert({ code: "preservd", username: USER, appId: "other-app", targetUrl: "https://x.example.com/", createdAt: 1 });
     expect(ok.ok).toBe(true);
 
     // Second rename — bumps the same app's codes.
@@ -248,10 +248,10 @@ describe("handleAppRename — validation", () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    // Pre-seed: app "other--note" has alias "taken".
+    // Pre-seed: app "other-note" has alias "taken".
     await s.userAppAliases.upsert({
       username: USER,
-      appId: "other--note",
+      appId: "other-note",
       displayLabel: "taken",
       createdAt: 1,
       updatedAt: 1,
@@ -278,6 +278,21 @@ describe("handleGetAppLinks", () => {
     expect(b.canonicalUrl).toBe("https://scratchpad-meta.home.alice.flagship.services");
   });
 
+  it("parses a HYPHENATED slug correctly (split at first dash only)", async () => {
+    // appId `meta-notes-app`: creator=meta (hyphen-free username),
+    // slug=notes-app (slug may contain hyphens). The default URL
+    // label flips the order → `notes-app-meta`. This is the case
+    // single-dash + the no-hyphen-username rule exists to make
+    // unambiguous; the old `--` form is gone.
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seed(s, irk);
+    const res = await handleGetAppLinks(makeDeps(s), USER, "meta-notes-app");
+    const b = res.body as { displayLabel: string; canonicalUrl: string };
+    expect(b.displayLabel).toBe("notes-app-meta");
+    expect(b.canonicalUrl).toBe("https://notes-app-meta.home.alice.flagship.services");
+  });
+
   it("lazy-mints a short link on first call (V4 denormalization)", async () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
@@ -302,14 +317,14 @@ describe("handleGetAppLinks", () => {
     const s = new InMemoryStorage();
     await s.userAppAliases.upsert({
       username: USER,
-      appId: "zzz--later",
+      appId: "zzz-later",
       displayLabel: "later",
       createdAt: 2,
       updatedAt: 2,
     });
     await s.userAppAliases.upsert({
       username: USER,
-      appId: "aaa--first",
+      appId: "aaa-first",
       displayLabel: "first",
       createdAt: 1,
       updatedAt: 1,
@@ -325,8 +340,8 @@ describe("handleGetAppLinks", () => {
     const res = await handleListAppAliases({ userAppAliases: s.userAppAliases }, USER);
     expect(res.status).toBe(200);
     const b = res.body as { aliases: Array<{ appId: string; displayLabel: string; updatedAt: number }> };
-    expect(b.aliases.map((a) => a.appId)).toEqual(["aaa--first", "zzz--later"]);
-    expect(b.aliases[0]).toEqual({ appId: "aaa--first", displayLabel: "first", updatedAt: 1 });
+    expect(b.aliases.map((a) => a.appId)).toEqual(["aaa-first", "zzz-later"]);
+    expect(b.aliases[0]).toEqual({ appId: "aaa-first", displayLabel: "first", updatedAt: 1 });
   });
 
   it("surfaces the rename-minted short link (no re-mint)", async () => {

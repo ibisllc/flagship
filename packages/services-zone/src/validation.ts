@@ -23,7 +23,10 @@
  * can't claim "api" and shadow flagshipserver.com routes), plus a small
  * list of names commonly mistaken for system endpoints.
  */
-const USERNAME_RE = /^[a-z0-9]{1,32}$/;
+// Canonical username rule (mirror of control-plane labels.ts): lower
+// alphanumerics only, no hyphens, up to the 63-octet DNS label cap.
+// Hyphen-free usernames keep `<creator>-<slug>` app ids unambiguous.
+const USERNAME_RE = /^[a-z0-9]{1,63}$/;
 const SLUG_RE = /^[a-z0-9](-?[a-z0-9])*$/;
 const SLUG_MAX = 32;
 /** Legacy DNS label regex retained for callers that do raw subdomain validation. */

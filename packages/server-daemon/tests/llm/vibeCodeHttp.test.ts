@@ -124,7 +124,7 @@ describe("vibe-code HTTP", () => {
       registry, gate, username: USER, serverFqdn: HOST,
       deploySession: async () => {
         calls++;
-        return { ok: true, appId: "alice--habits", url: "https://habits.alice.flagship.services" };
+        return { ok: true, appId: "alice-habits", url: "https://habits.alice.flagship.services" };
       },
     });
     const create = await handle(req({

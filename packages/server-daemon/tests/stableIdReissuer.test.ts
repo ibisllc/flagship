@@ -144,7 +144,7 @@ describe("J.4 stable-id re-issuer", () => {
     for (const row of rows) {
       // App ID is plaintext (the index keeps it queryable) but the
       // OLD→NEW pubkey mapping is not retrievable without SWK + salt.
-      expect(row.appId).toMatch(/^alice--/);
+      expect(row.appId).toMatch(/^alice-/);
       expect(row.ciphertextHex.length).toBeGreaterThan(0);
       expect(row.ivHex.length).toBe(24);
       expect(row.tagHex.length).toBe(32);

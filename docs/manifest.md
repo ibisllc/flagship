@@ -109,7 +109,7 @@ a phone-issued capability). See [docs/multiplexing.md](multiplexing.md).
   "default_role": "owner",
   "custom_roles": ["editor", "reader"],
   "public_routes": ["/", "/about"],
-  "queryable_by":  ["alice--journal"]
+  "queryable_by":  ["alice-journal"]
 }
 ```
 

@@ -235,7 +235,7 @@ function userZoneOf(podApex: string): string | null {
   const parts = head.split(".");
   if (parts.length < 2) return null;
   const user = parts[parts.length - 1]!;
-  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(user)) return null;
+  if (!/^[a-z0-9]{1,63}$/.test(user)) return null;
   return `${user}.flagship.services`;
 }
 

@@ -4,8 +4,8 @@ import { buildUrlHttpHandlers } from "../../src/sibling/urlHttpHandlers.js";
 import type { HttpRequest, UrlController } from "../../src/runtime.js";
 
 const POD = "home.alice.flagship.services";
-const APP_A = "alice--notes";
-const APP_B = "alice--tasks";
+const APP_A = "alice-notes";
+const APP_B = "alice-tasks";
 
 function inMemoryUrlController(): UrlController & { _list: Set<string> } {
   const set = new Set<string>();

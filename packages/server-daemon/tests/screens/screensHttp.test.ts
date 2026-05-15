@@ -87,7 +87,7 @@ function makeInstalledApp(over: Partial<InstalledApp> = {}): InstalledApp {
   return {
     creator: USERNAME,
     slug: "habits",
-    appId: "alice--habits",
+    appId: "alice-habits",
     manifest: {
       schema_version: 1,
       name: "habits",
@@ -151,7 +151,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
   it("returns server identity, uptime, app count, paired-session count, and cert info", async () => {
     const installEventLog: InstallEventLog = {
       recent: () => [
-        { at: 100, kind: "installed", appId: "alice--habits", detail: "" },
+        { at: 100, kind: "installed", appId: "alice-habits", detail: "" },
       ],
     };
     const handle = buildScreensHttp({
@@ -209,11 +209,11 @@ describe("screens HTTP — P1.2 apps-list", () => {
       ...COMMON,
       gate: fakeGate(),
       appPlatform: fakeAppPlatform([
-        makeInstalledApp({ slug: "habits", appId: "alice--habits", urlLabel: "habits" }),
+        makeInstalledApp({ slug: "habits", appId: "alice-habits", urlLabel: "habits" }),
         makeInstalledApp({
           slug: "game1",
           creator: "bob",
-          appId: "bob--game1",
+          appId: "bob-game1",
           urlLabel: "game1-bob",
         }),
       ]),
@@ -245,7 +245,7 @@ describe("screens HTTP — P1.3 app-detail/:appId", () => {
   it("returns 503 when no app-platform is wired", async () => {
     const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
     const r = await handle(req({
-      path: "/api/screens/app-detail/alice--habits",
+      path: "/api/screens/app-detail/alice-habits",
       headers: { "x-flagship-session": "tok-good" },
     }));
     expect(r?.status).toBe(503);
@@ -258,7 +258,7 @@ describe("screens HTTP — P1.3 app-detail/:appId", () => {
       appPlatform: fakeAppPlatform([]),
     });
     const r = await handle(req({
-      path: "/api/screens/app-detail/alice--nope",
+      path: "/api/screens/app-detail/alice-nope",
       headers: { "x-flagship-session": "tok-good" },
     }));
     expect(r?.status).toBe(404);
@@ -280,12 +280,12 @@ describe("screens HTTP — P1.3 app-detail/:appId", () => {
       } as unknown as ScreensHttpDeps["tabRegistry"],
     });
     const r = await handle(req({
-      path: "/api/screens/app-detail/alice--habits",
+      path: "/api/screens/app-detail/alice-habits",
       headers: { "x-flagship-session": "tok-good" },
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
-    expect(body.app.appId).toBe("alice--habits");
+    expect(body.app.appId).toBe("alice-habits");
     expect(body.manifest.name).toBe("habits");
     expect(body.browserTabs).toHaveLength(2);
     expect(body.members.length).toBeGreaterThan(0);
@@ -784,7 +784,7 @@ describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
       method: "POST",
       path: "/api/screens/app-backup/start",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice--habits", includeUserData: false })),
+      body: Buffer.from(JSON.stringify({ appId: "alice-habits", includeUserData: false })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
@@ -803,7 +803,7 @@ describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
       method: "POST",
       path: "/api/screens/app-backup/start",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "no-creator-separator" })),
+      body: Buffer.from(JSON.stringify({ appId: "nocreatorseparator" })),
     }));
     expect(r?.status).toBe(400);
   });
@@ -839,13 +839,13 @@ describe("screens HTTP — P1.10 browser-tabs/list/:appId", () => {
       } as unknown as ScreensHttpDeps["tabRegistry"],
     });
     const r = await handle(req({
-      path: "/api/screens/browser-tabs/list/alice--habits",
+      path: "/api/screens/browser-tabs/list/alice-habits",
       headers: { "x-flagship-session": "tok-good" },
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.tabs.map((t: { tabId: string }) => t.tabId)).toEqual(["t1", "t2"]);
-    expect(body.tabs[0].appId).toBe("alice--habits");
+    expect(body.tabs[0].appId).toBe("alice-habits");
   });
 
   it("returns an empty list when no tabRegistry is wired", async () => {
@@ -855,7 +855,7 @@ describe("screens HTTP — P1.10 browser-tabs/list/:appId", () => {
       appPlatform: fakeAppPlatform([makeInstalledApp()]),
     });
     const r = await handle(req({
-      path: "/api/screens/browser-tabs/list/alice--habits",
+      path: "/api/screens/browser-tabs/list/alice-habits",
       headers: { "x-flagship-session": "tok-good" },
     }));
     expect(r?.status).toBe(200);
@@ -1058,7 +1058,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
   it("GET returns the paused list", async () => {
     const resolver = fakeResolver([
       {
-        appId: "alice--game1",
+        appId: "alice-game1",
         creator: "alice",
         slug: "game1",
         canonicalUrl: "game1.alice.flagship.services",
@@ -1082,7 +1082,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.paused).toHaveLength(1);
-    expect(body.paused[0].appId).toBe("alice--game1");
+    expect(body.paused[0].appId).toBe("alice-game1");
     expect(body.paused[0].reason).toBe("anchor-unreachable");
   });
 
@@ -1107,12 +1107,12 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "accept" })),
+      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "accept" })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body).toEqual({ ok: true, outcome: "accepted" });
-    expect(resolver.accepted).toEqual(["alice--game1"]);
+    expect(resolver.accepted).toEqual(["alice-game1"]);
   });
 
   it("POST revoke routes to resolver.revoke", async () => {
@@ -1126,12 +1126,12 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "revoke" })),
+      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "revoke" })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body).toEqual({ ok: true, outcome: "revoked" });
-    expect(resolver.revoked).toEqual(["alice--game1"]);
+    expect(resolver.revoked).toEqual(["alice-game1"]);
   });
 
   it("POST returns 400 on missing appId / bad decision", async () => {
@@ -1152,7 +1152,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "burn-it-down" })),
+      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "burn-it-down" })),
     }));
     expect(badDecision?.status).toBe(400);
   });
@@ -1163,7 +1163,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "accept" })),
+      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "accept" })),
     }));
     expect(r?.status).toBe(503);
   });
@@ -1182,7 +1182,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice--game1", decision: "accept" })),
+      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "accept" })),
     }));
     expect(r?.status).toBe(502);
   });

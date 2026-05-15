@@ -75,7 +75,7 @@ function makeIdentity(seed: number): Keypair {
   return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
 }
 
-const APP_ID = "alice--game1";
+const APP_ID = "alice-game1";
 
 describe("UpdateClient", () => {
   let upstream: string;
@@ -438,7 +438,7 @@ describe("FileAppPullStateStore", () => {
     const dir = await mkdtemp(join(tmpdir(), "flagship-state-"));
     try {
       const store = new FileAppPullStateStore(dir);
-      expect(await store.get("alice--game1")).toBeNull();
+      expect(await store.get("alice-game1")).toBeNull();
       const s: AppPullState = {
         canonicalUrl: "game1.alice.flagship.services",
         lineageAnchor: "deadbeef",
@@ -446,8 +446,8 @@ describe("FileAppPullStateStore", () => {
         lastAppliedMigration: "0002_x.sql",
         updatePolicy: "manual",
       };
-      await store.put("alice--game1", s);
-      expect(await store.get("alice--game1")).toEqual(s);
+      await store.put("alice-game1", s);
+      expect(await store.get("alice-game1")).toEqual(s);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

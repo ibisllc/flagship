@@ -11,7 +11,7 @@ import {
 import { createHash } from "node:crypto";
 
 const SERVER_FQDN = "home.alice.flagship.services";
-const APP_ID = "alice--chat";
+const APP_ID = "alice-chat";
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);

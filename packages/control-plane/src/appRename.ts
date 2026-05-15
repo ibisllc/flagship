@@ -61,7 +61,7 @@ export interface AppRenameDeps {
   shortHost?: string;
 }
 
-const USERNAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const USERNAME_RE = /^[a-z0-9]{1,63}$/; // no hyphens — see labels.ts
 const DNS_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
 const RESERVED_LABELS = new Set([
   "www", "api", "admin", "root", "mail", "smtp", "imap", "pop", "ftp",
@@ -333,19 +333,19 @@ export async function handleListAppAliases(
 }
 
 /** What the URL stem would be if no alias has been set. Mirrors the
- *  daemon's `AppSummary.urlLabel` derivation: slug if it's unique,
- *  else slug-creator. We can't know without listing every install,
- *  so we conservatively use the appId verbatim (composite
- *  `<creator>--<slug>` collapsed to `<creator>-<slug>`). The client
- *  side surfaces the actual default from the daemon's apps list
- *  when present. */
+ *  daemon's `AppSummary.urlLabel` derivation: `<slug>-<creator>`.
+ *  We can't know without listing every install, so we derive it from
+ *  the appId. The client side surfaces the actual default from the
+ *  daemon's apps list when present. */
 function deriveDefaultLabel(appId: string): string {
-  // appId is `<creator>--<slug>`. Default label: `<slug>-<creator>`.
-  // If it doesn't match that shape, fall back to a sanitized version
-  // of the raw appId.
-  const m = /^([a-z0-9-]+)--([a-z0-9-]+)$/.exec(appId);
-  if (m) {
-    const [, creator, slug] = m;
+  // appId is `<creator>-<slug>` (single dash). Creator is a username
+  // and usernames are hyphen-free, so the FIRST hyphen is always the
+  // creator/slug boundary even when the slug itself contains hyphens.
+  // Default URL label flips the order: `<slug>-<creator>`.
+  const i = appId.indexOf("-");
+  if (i > 0 && i < appId.length - 1) {
+    const creator = appId.slice(0, i);
+    const slug = appId.slice(i + 1);
     return `${slug}-${creator}`.toLowerCase();
   }
   return appId.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 40);

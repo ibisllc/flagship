@@ -285,13 +285,13 @@ describe("orders-from-user handler", () => {
     const order: PhoneOrder = {
       type: "add-subscriber",
       serverId: SERVER_FQDN,
-      appId: "alice--game1",
+      appId: "alice-game1",
       fqdn: "home.bob.flagship.services",
       issuedAt: Date.now(),
     };
     const r = await h(makeReq(envelope(order, psk)));
     expect(r.status).toBe(200);
-    expect(calls).toEqual([{ appId: "alice--game1", fqdn: "home.bob.flagship.services" }]);
+    expect(calls).toEqual([{ appId: "alice-game1", fqdn: "home.bob.flagship.services" }]);
   });
 
   it("dispatches remove-subscriber", async () => {
@@ -306,7 +306,7 @@ describe("orders-from-user handler", () => {
     const order: PhoneOrder = {
       type: "remove-subscriber",
       serverId: SERVER_FQDN,
-      appId: "alice--game1",
+      appId: "alice-game1",
       fqdn: "home.bob.flagship.services",
       issuedAt: Date.now(),
     };

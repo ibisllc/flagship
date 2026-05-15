@@ -18,15 +18,15 @@ import type { InstalledApp } from "../src/appPlatform.js";
 describe("InMemorySubscriberRegistry", () => {
   it("starts empty", async () => {
     const r = new InMemorySubscriberRegistry();
-    expect(await r.list("a--x")).toEqual([]);
-    expect((await r.subscribersFor("a--x")).size).toBe(0);
+    expect(await r.list("a-x")).toEqual([]);
+    expect((await r.subscribersFor("a-x")).size).toBe(0);
   });
 
   it("add + list returns sorted FQDNs", async () => {
     const r = new InMemorySubscriberRegistry();
-    await r.add("a--x", "home.bob.flagship.services");
-    await r.add("a--x", "home.carol.flagship.services");
-    expect(await r.list("a--x")).toEqual([
+    await r.add("a-x", "home.bob.flagship.services");
+    await r.add("a-x", "home.carol.flagship.services");
+    expect(await r.list("a-x")).toEqual([
       "home.bob.flagship.services",
       "home.carol.flagship.services",
     ]);
@@ -34,33 +34,33 @@ describe("InMemorySubscriberRegistry", () => {
 
   it("add is case-normalized", async () => {
     const r = new InMemorySubscriberRegistry();
-    await r.add("a--x", "Home.Bob.Flagship.Services");
-    const s = await r.subscribersFor("a--x");
+    await r.add("a-x", "Home.Bob.Flagship.Services");
+    const s = await r.subscribersFor("a-x");
     expect(s.has("home.bob.flagship.services")).toBe(true);
   });
 
   it("rejects malformed FQDNs", async () => {
     const r = new InMemorySubscriberRegistry();
-    await expect(r.add("a--x", "not-a-fqdn")).rejects.toThrow(/invalid FQDN/);
-    await expect(r.add("a--x", "http://x.com/")).rejects.toThrow(/invalid FQDN/);
-    await expect(r.add("a--x", "x.com/path")).rejects.toThrow(/invalid FQDN/);
+    await expect(r.add("a-x", "not-a-fqdn")).rejects.toThrow(/invalid FQDN/);
+    await expect(r.add("a-x", "http://x.com/")).rejects.toThrow(/invalid FQDN/);
+    await expect(r.add("a-x", "x.com/path")).rejects.toThrow(/invalid FQDN/);
   });
 
   it("remove drops the entry; idempotent on missing", async () => {
     const r = new InMemorySubscriberRegistry();
-    await r.add("a--x", "home.bob.flagship.services");
-    await r.remove("a--x", "home.bob.flagship.services");
-    expect(await r.list("a--x")).toEqual([]);
-    await r.remove("a--x", "home.bob.flagship.services");
-    expect(await r.list("a--x")).toEqual([]);
+    await r.add("a-x", "home.bob.flagship.services");
+    await r.remove("a-x", "home.bob.flagship.services");
+    expect(await r.list("a-x")).toEqual([]);
+    await r.remove("a-x", "home.bob.flagship.services");
+    expect(await r.list("a-x")).toEqual([]);
   });
 
   it("subscribersFor returns a defensive copy", async () => {
     const r = new InMemorySubscriberRegistry();
-    await r.add("a--x", "home.bob.flagship.services");
-    const s = await r.subscribersFor("a--x");
+    await r.add("a-x", "home.bob.flagship.services");
+    const s = await r.subscribersFor("a-x");
     s.delete("home.bob.flagship.services");
-    expect((await r.subscribersFor("a--x")).has("home.bob.flagship.services")).toBe(true);
+    expect((await r.subscribersFor("a-x")).has("home.bob.flagship.services")).toBe(true);
   });
 });
 
@@ -76,39 +76,39 @@ describe("FileSubscriberRegistry", () => {
 
   it("persists across instances", async () => {
     const r1 = new FileSubscriberRegistry(dir);
-    await r1.add("a--x", "home.bob.flagship.services");
+    await r1.add("a-x", "home.bob.flagship.services");
     const r2 = new FileSubscriberRegistry(dir);
-    expect(await r2.list("a--x")).toEqual(["home.bob.flagship.services"]);
+    expect(await r2.list("a-x")).toEqual(["home.bob.flagship.services"]);
   });
 
   it("empty after last remove deletes the file", async () => {
     const r = new FileSubscriberRegistry(dir);
-    await r.add("a--x", "home.bob.flagship.services");
-    await r.remove("a--x", "home.bob.flagship.services");
-    expect(await r.list("a--x")).toEqual([]);
+    await r.add("a-x", "home.bob.flagship.services");
+    await r.remove("a-x", "home.bob.flagship.services");
+    expect(await r.list("a-x")).toEqual([]);
     expect(r.knownApps()).toEqual([]);
   });
 
   it("serial writes accumulate", async () => {
     const r = new FileSubscriberRegistry(dir);
-    await r.add("a--x", "home.bob.flagship.services");
-    await r.add("a--x", "home.carol.flagship.services");
-    await r.add("a--x", "home.dave.flagship.services");
-    const list = await r.list("a--x");
+    await r.add("a-x", "home.bob.flagship.services");
+    await r.add("a-x", "home.carol.flagship.services");
+    await r.add("a-x", "home.dave.flagship.services");
+    const list = await r.list("a-x");
     expect(list.sort()).toEqual([
       "home.bob.flagship.services",
       "home.carol.flagship.services",
       "home.dave.flagship.services",
     ]);
-    const buf = await readFile(join(dir, "a--x.json"), "utf8");
+    const buf = await readFile(join(dir, "a-x.json"), "utf8");
     expect(() => JSON.parse(buf)).not.toThrow();
   });
 
   it("knownApps lists every app with subscribers", async () => {
     const r = new FileSubscriberRegistry(dir);
-    await r.add("alice--game1", "home.bob.flagship.services");
-    await r.add("alice--game2", "home.carol.flagship.services");
-    expect(r.knownApps().sort()).toEqual(["alice--game1", "alice--game2"]);
+    await r.add("alice-game1", "home.bob.flagship.services");
+    await r.add("alice-game2", "home.carol.flagship.services");
+    expect(r.knownApps().sort()).toEqual(["alice-game1", "alice-game2"]);
   });
 });
 
@@ -144,20 +144,20 @@ describe("buildAppDistribution", () => {
       registry: reg,
       repoPath: () => "/tmp/repo",
     });
-    const r = await f(fakeApp({ appId: "alice--x", public: true }));
+    const r = await f(fakeApp({ appId: "alice-x", public: true }));
     expect(r?.publicDistribution).toBe(true);
     expect(r?.subscribers.size).toBe(0);
   });
 
   it("subscribers source from the registry", async () => {
     const reg = new InMemorySubscriberRegistry();
-    await reg.add("alice--x", "home.bob.flagship.services");
+    await reg.add("alice-x", "home.bob.flagship.services");
     const f = buildAppDistribution({
       platform: {} as never,
       registry: reg,
       repoPath: () => "/tmp/repo",
     });
-    const r = await f(fakeApp({ appId: "alice--x" }));
+    const r = await f(fakeApp({ appId: "alice-x" }));
     expect(r?.subscribers.has("home.bob.flagship.services")).toBe(true);
     expect(r?.publicDistribution).toBe(false);
   });
@@ -169,7 +169,7 @@ describe("buildAppDistribution", () => {
       registry: reg,
       repoPath: () => "",
     });
-    const r = await f(fakeApp({ appId: "alice--x" }));
+    const r = await f(fakeApp({ appId: "alice-x" }));
     expect(r).toBeNull();
   });
 });

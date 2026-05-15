@@ -109,14 +109,14 @@ async function main(): Promise<void> {
     const registry = new TabRegistry(browser);
     registry.start();
     const gate = new DomainGate();
-    gate.setGrant("smoke--shopper", ["example.com", "*.example.com"]);
-    gate.setGrant("smoke--mailer", ["other.test"]);
+    gate.setGrant("smoke-shopper", ["example.com", "*.example.com"]);
+    gate.setGrant("smoke-mailer", ["other.test"]);
     const inbox = new InMemoryAlertInbox();
     const pipe = new PhonePipe({ browser, tabRegistry: registry, inbox });
     pipe.start();
     const tokens = new InMemoryAppAuthTokens();
-    const shopperT = await tokens.mint("smoke--shopper");
-    const mailerT = await tokens.mint("smoke--mailer");
+    const shopperT = await tokens.mint("smoke-shopper");
+    const mailerT = await tokens.mint("smoke-mailer");
     const handle = buildBrowserApiHandlers({
       browser,
       tabRegistry: registry,

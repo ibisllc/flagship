@@ -13,13 +13,13 @@ class AppRenameCanonicalBytesTest {
     @Test fun matchesDocumentedFieldOrder() {
         val bytes = AppRenameClaim.canonicalBytes(
             username = "alice",
-            appId = "meta--scratchpad",
+            appId = "meta-scratchpad",
             newDisplayLabel = "MyNotes",
             issuedAt = 1700000000000L,
         )
         // tag | username | appId | newDisplayLabel(lowercased) | issuedAt
         assertEquals(
-            "flagship/app-rename/v1|alice|meta--scratchpad|mynotes|1700000000000",
+            "flagship/app-rename/v1|alice|meta-scratchpad|mynotes|1700000000000",
             String(bytes, Charsets.UTF_8),
         )
     }
@@ -45,12 +45,12 @@ class AppRenameCanonicalBytesTest {
         // byte-identical canonical bytes on both sides.
         val bytes = AppRenameClaim.canonicalBytes(
             username = "alice",
-            appId = "app--id",
+            appId = "app-id",
             newDisplayLabel = "stem",
             issuedAt = 9L,
         )
         assertEquals(
-            "flagship/app-rename/v1|alice|app--id|stem|9",
+            "flagship/app-rename/v1|alice|app-id|stem|9",
             String(bytes, Charsets.UTF_8),
         )
     }

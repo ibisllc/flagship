@@ -4,6 +4,17 @@
  * the control-plane package has zero runtime deps on Node-specific code.
  */
 
+// Usernames: lowercase alphanumerics only, 1–63 chars. NO hyphens —
+// this is deliberate. Banning '-' from usernames means the composite
+// app id `<creator>-<slug>` parses unambiguously by splitting at the
+// FIRST hyphen (the creator can't contain one), and the URL label
+// `<slug>-<creator>` parses by splitting at the LAST hyphen (slugs
+// may contain hyphens, creators can't). See docs/multi-device.md.
+const USERNAME_RE = /^[a-z0-9]{1,63}$/;
+
+// App slugs / pod names / arbitrary DNS labels still follow RFC 1035
+// (hyphens allowed in the interior, not at the ends). validateAppLabel
+// uses this; usernames do NOT.
 const LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const RESERVED_USER_LABELS = new Set([
@@ -27,8 +38,8 @@ export type LabelValidation =
 
 export function validateUserLabel(input: string): LabelValidation {
   const norm = String(input).toLowerCase();
-  if (!LABEL_RE.test(norm)) {
-    return { ok: false, reason: "username must match RFC 1035 label rules (1–63 chars, [a-z0-9-], not starting/ending with hyphen)" };
+  if (!USERNAME_RE.test(norm)) {
+    return { ok: false, reason: "username must be 1–63 lowercase letters or digits (no hyphens)" };
   }
   if (RESERVED_USER_LABELS.has(norm)) {
     return { ok: false, reason: `username "${norm}" is reserved` };
@@ -44,4 +55,4 @@ export function validateAppLabel(input: string): LabelValidation {
   return { ok: true, label: norm };
 }
 
-export const _labelInternal = { LABEL_RE, RESERVED_USER_LABELS };
+export const _labelInternal = { LABEL_RE, USERNAME_RE, RESERVED_USER_LABELS };

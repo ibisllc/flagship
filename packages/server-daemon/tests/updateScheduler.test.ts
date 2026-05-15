@@ -29,8 +29,8 @@ function fakeState(overrides: Partial<AppPullState> = {}): AppPullState {
 describe("UpdateScheduler.sweepNow", () => {
   it("walks every appId in the store and returns the pull result map", async () => {
     const store = new InMemoryAppPullStateStore();
-    await store.put("alice--game1", fakeState());
-    await store.put("bob--chat", fakeState());
+    await store.put("alice-game1", fakeState());
+    await store.put("bob-chat", fakeState());
 
     const calls: string[] = [];
     const client = {
@@ -42,19 +42,19 @@ describe("UpdateScheduler.sweepNow", () => {
 
     const sched = new UpdateScheduler({ client, store });
     const r = await sched.sweepNow();
-    expect(calls.sort()).toEqual(["alice--game1", "bob--chat"]);
+    expect(calls.sort()).toEqual(["alice-game1", "bob-chat"]);
     expect(r.size).toBe(2);
   });
 
   it("isolates per-app errors", async () => {
     const store = new InMemoryAppPullStateStore();
-    await store.put("alice--good", fakeState());
-    await store.put("bob--bad", fakeState());
+    await store.put("alice-good", fakeState());
+    await store.put("bob-bad", fakeState());
 
     const errors: string[] = [];
     const client = {
       pullOne: async ({ appId }: { appId: string }) => {
-        if (appId === "bob--bad") throw new Error("boom");
+        if (appId === "bob-bad") throw new Error("boom");
         return { kind: "no-op", reason: "already-current" } as PullResult;
       },
     } as unknown as UpdateClient;
@@ -65,8 +65,8 @@ describe("UpdateScheduler.sweepNow", () => {
       onError: (appId, e) => errors.push(`${appId}:${e.message}`),
     });
     const r = await sched.sweepNow();
-    expect(r.has("alice--good")).toBe(true);
-    expect(errors).toEqual(["bob--bad:boom"]);
+    expect(r.has("alice-good")).toBe(true);
+    expect(errors).toEqual(["bob-bad:boom"]);
   });
 
   it("returns empty map when store has no list() implementation", async () => {
@@ -83,7 +83,7 @@ describe("UpdateScheduler.sweepNow", () => {
 
   it("onResult fires per app", async () => {
     const store = new InMemoryAppPullStateStore();
-    await store.put("alice--x", fakeState());
+    await store.put("alice-x", fakeState());
     const seen: PullResult[] = [];
     const client = {
       pullOne: async () =>
@@ -119,7 +119,7 @@ describe("UpdateScheduler lifecycle", () => {
 
   it("stop() prevents further ticks", async () => {
     const store = new InMemoryAppPullStateStore();
-    await store.put("alice--x", fakeState());
+    await store.put("alice-x", fakeState());
 
     let calls = 0;
     const client = {
@@ -146,7 +146,7 @@ describe("UpdateScheduler lifecycle", () => {
 
   it("schedules subsequent ticks at intervalMs +/- jitter", async () => {
     const store = new InMemoryAppPullStateStore();
-    await store.put("alice--x", fakeState());
+    await store.put("alice-x", fakeState());
     let calls = 0;
     const client = {
       pullOne: async () => {

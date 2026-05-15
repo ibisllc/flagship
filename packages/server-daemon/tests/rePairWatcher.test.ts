@@ -287,18 +287,18 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
   it("emits one membership-reissued alert per app with non-zero rewrites", async () => {
     const platform = fakePlatform([
       {
-        appId: "alice--app1",
+        appId: "alice-app1",
         slug: "app1",
         initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }],
       },
       {
-        appId: "alice--app2",
+        appId: "alice-app2",
         slug: "app2",
         initialMembers: [{ irkPubHex: OLD_HEX, role: "viewer" }],
       },
       // Third app has no row for the old IRK — should NOT emit.
       {
-        appId: "alice--app3",
+        appId: "alice-app3",
         slug: "app3",
         initialMembers: [{ irkPubHex: PROBE, role: "viewer" }],
       },
@@ -333,7 +333,7 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
     const events = inbox.list();
     expect(events).toHaveLength(2);
     const apps = events.map((e) => (e.alert as ReissuanceAlert).appId).sort();
-    expect(apps).toEqual(["alice--app1", "alice--app2"]);
+    expect(apps).toEqual(["alice-app1", "alice-app2"]);
     const first = events[0]!.alert as ReissuanceAlert;
     expect(first.kind).toBe("membership-reissued");
     expect(first.rewrittenCount).toBe(1);
@@ -344,7 +344,7 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
 
   it("dedupes a second swap to the same target", async () => {
     const platform = fakePlatform([
-      { appId: "alice--app1", slug: "app1", initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }] },
+      { appId: "alice-app1", slug: "app1", initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }] },
     ]);
     const inbox = new InMemoryAlertInbox();
     const dir = mkdtempSync(join(tmpdir(), "repair-alerts-"));
@@ -378,7 +378,7 @@ describe("RePairWatcher → AlertInbox emission (J.4)", () => {
     // A second emission to the same newIrkPrefix should be deduped.
     inbox.emit({
       kind: "membership-reissued",
-      appId: "alice--app1",
+      appId: "alice-app1",
       slug: "app1",
       rewrittenCount: 1,
       oldIrkPrefix: (inbox.list()[0]!.alert as ReissuanceAlert).oldIrkPrefix,
@@ -395,7 +395,7 @@ describe("RePairWatcher integration with paired sessions + reissuer", () => {
 
   it("snapshot() reflects the latest swap + reissue", async () => {
     const platform = fakePlatform([
-      { appId: "alice--app1", slug: "app1", initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }] },
+      { appId: "alice-app1", slug: "app1", initialMembers: [{ irkPubHex: OLD_HEX, role: "owner" }] },
     ]);
     const reissuerDeps: ReissuerDeps = {
       appPlatform: platform,

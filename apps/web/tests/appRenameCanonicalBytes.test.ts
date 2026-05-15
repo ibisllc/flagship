@@ -21,8 +21,8 @@ function canonicalAppRename(username: string, appId: string, newDisplayLabel: st
 
 describe("V3 app-rename canonical bytes", () => {
   it("matches the documented field order", () => {
-    const bytes = canonicalAppRename("alice", "meta--scratchpad", "MyNotes", 1700000000000);
-    expect(bytes).toBe("flagship/app-rename/v1|alice|meta--scratchpad|mynotes|1700000000000");
+    const bytes = canonicalAppRename("alice", "meta-scratchpad", "MyNotes", 1700000000000);
+    expect(bytes).toBe("flagship/app-rename/v1|alice|meta-scratchpad|mynotes|1700000000000");
   });
 
   it("lowercases the display label only (not the username or appId)", () => {
@@ -39,8 +39,8 @@ describe("V3 app-rename canonical bytes", () => {
     // The iOS AppRenameClaim.canonicalBytes lowercases the display
     // label exactly the same way; mirror its output exactly so a
     // cross-platform recovery flow signs the same bytes.
-    const iosOutput = "flagship/app-rename/v1|alice|app--id|stem|9";
-    expect(canonicalAppRename("alice", "app--id", "stem", 9)).toBe(iosOutput);
+    const iosOutput = "flagship/app-rename/v1|alice|app-id|stem|9";
+    expect(canonicalAppRename("alice", "app-id", "stem", 9)).toBe(iosOutput);
   });
 });
 

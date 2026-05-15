@@ -185,8 +185,8 @@ describe("Browser feature — full-stack isolation", () => {
       verify: () => true,
     });
 
-    shopperToken = (await tokens.tokenForApp("alice--shopper"))!;
-    mailerToken = (await tokens.tokenForApp("alice--mailer"))!;
+    shopperToken = (await tokens.tokenForApp("alice-shopper"))!;
+    mailerToken = (await tokens.tokenForApp("alice-mailer"))!;
   });
   afterEach(async () => {
     pipe.stop();
@@ -212,11 +212,11 @@ describe("Browser feature — full-stack isolation", () => {
   }
 
   it("install wires both apps' grants on the gate", () => {
-    expect(gate.hasGrant("alice--shopper")).toBe(true);
-    expect(gate.hasGrant("alice--mailer")).toBe(true);
-    expect(gate.check("alice--shopper", "https://amazon.com/")).toBe("allow");
-    expect(gate.check("alice--mailer", "https://amazon.com/")).toBe("deny");
-    expect(gate.check("alice--mailer", "https://mail.google.com/")).toBe("allow");
+    expect(gate.hasGrant("alice-shopper")).toBe(true);
+    expect(gate.hasGrant("alice-mailer")).toBe(true);
+    expect(gate.check("alice-shopper", "https://amazon.com/")).toBe("allow");
+    expect(gate.check("alice-mailer", "https://amazon.com/")).toBe("deny");
+    expect(gate.check("alice-mailer", "https://mail.google.com/")).toBe("allow");
   });
 
   it("two apps each open tabs to their own domains; cross-domain navigation is blocked", async () => {
@@ -309,7 +309,7 @@ describe("Browser feature — full-stack isolation", () => {
       },
     });
     await new Promise((r) => setTimeout(r, 20));
-    expect(registry.appIdForTab("tab-shopper-popup")).toBe("alice--shopper");
+    expect(registry.appIdForTab("tab-shopper-popup")).toBe("alice-shopper");
     // mailer can't see the popup — 404.
     const r = await handle(
       req({
@@ -352,7 +352,7 @@ describe("Browser feature — full-stack isolation", () => {
     const alert = inbox.list()[0]?.alert;
     expect(alert).toMatchObject({
       kind: "browser-input-needed",
-      appId: "alice--shopper",
+      appId: "alice-shopper",
       tabId: "tab-shopper-1",
       domain: "amazon.com",
       inputKind: "password",
@@ -381,7 +381,7 @@ describe("Browser feature — full-stack isolation", () => {
         body: { url: "https://amazon.com/" },
       }),
     );
-    expect(registry.appIdForTab("tab-shopper-uninst")).toBe("alice--shopper");
+    expect(registry.appIdForTab("tab-shopper-uninst")).toBe("alice-shopper");
 
     await platform.uninstall({
       request: {
@@ -397,7 +397,7 @@ describe("Browser feature — full-stack isolation", () => {
       verify: () => true,
     });
 
-    expect(gate.hasGrant("alice--shopper")).toBe(false);
+    expect(gate.hasGrant("alice-shopper")).toBe(false);
     expect(registry.appIdForTab("tab-shopper-uninst")).toBeNull();
 
     // Old token → 401.

@@ -668,9 +668,13 @@ function bytesToHex(b: Bytes): string {
 }
 
 function parseAppId(appId: string): [string, string] {
-  const i = appId.indexOf("--");
-  if (i < 0) throw new Error(`appId ${appId} is not in <creator>--<slug> form`);
-  return [appId.slice(0, i), appId.slice(i + 2)];
+  // `<creator>-<slug>`, single dash. Split at the FIRST hyphen
+  // (creator is hyphen-free, so the first '-' is the boundary).
+  const i = appId.indexOf("-");
+  if (i <= 0 || i >= appId.length - 1) {
+    throw new Error(`appId ${appId} is not in <creator>-<slug> form`);
+  }
+  return [appId.slice(0, i), appId.slice(i + 1)];
 }
 
 // Used in tests; export so they can scan migrations directly.

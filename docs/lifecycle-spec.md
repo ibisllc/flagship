@@ -420,7 +420,7 @@ Daemon's LLM harness:
   1. Validate manifest with `parseManifest`.
   2. Create Forgejo repo at `git/<host>/<slug>.git`,
      initial commit + tag v0.1.0.
-  3. Build docker image (`docker build -t flagship/<host>--<slug>:v0.1.0`).
+  3. Build docker image (`docker build -t flagship/<host>-<slug>:v0.1.0`).
   4. Phone-side mints an InstallAppRequest → POST /api/apps with
      IRK sig.
   5. AppPlatform.install:

@@ -116,9 +116,15 @@ export function buildCloneApp(
 }
 
 function parseAppId(appId: string): [string, string] {
-  const i = appId.indexOf("--");
-  if (i < 0) throw new Error(`appId ${appId} not in <creator>--<slug> form`);
-  return [appId.slice(0, i), appId.slice(i + 2)];
+  // `<creator>-<slug>`, single dash. Split at the FIRST hyphen —
+  // the creator is a username and usernames are hyphen-free, so the
+  // first hyphen is always the creator/slug boundary even when the
+  // slug itself contains hyphens.
+  const i = appId.indexOf("-");
+  if (i <= 0 || i >= appId.length - 1) {
+    throw new Error(`appId ${appId} not in <creator>-<slug> form`);
+  }
+  return [appId.slice(0, i), appId.slice(i + 1)];
 }
 
 function bytesToHex(b: Uint8Array): string {

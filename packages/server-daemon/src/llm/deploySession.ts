@@ -87,7 +87,11 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     // would need a different signing path (the original creator's IRK).
     const creator = deps.hostUsername;
     const slug = manifest.name;
-    const appId = `${creator}--${slug}`;
+    // Single-dash composite (creator is hyphen-free → unambiguous).
+    // Kept inline rather than importing AppPlatform as a value just
+    // for the static; the format is pinned by appPlatform.appId +
+    // its test.
+    const appId = `${creator}-${slug}`;
     const appDir = join(deps.workingDir, appId);
 
     // 1. Write the source tree. We blow away any prior working tree

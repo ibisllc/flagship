@@ -37,10 +37,13 @@ public final class ChooseUsernameViewModel {
     }
 
     /// RFC 1035 label — mirrors packages/control-plane/src/labels.ts
-    /// LABEL_RE. Used ONLY as a network-down fallback to keep the
-    /// continue button useful when the Worker is unreachable; the
-    /// authoritative check is the Worker's response.
-    public nonisolated static let usernameFallbackRegex = #"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"#
+    /// Mirrors the Worker's USERNAME_RE (packages/control-plane/src/labels.ts).
+    /// Used ONLY as a network-down fallback to keep the continue
+    /// button useful when the Worker is unreachable; the
+    /// authoritative check is the Worker's response. NO hyphens —
+    /// usernames are alphanumerics only so `<creator>-<slug>` app ids
+    /// parse unambiguously.
+    public nonisolated static let usernameFallbackRegex = #"^[a-z0-9]{1,63}$"#
 
     /// 350ms matches Android (ChooseUsernameScreen.kt) so both clients
     /// rate-limit the Worker identically.

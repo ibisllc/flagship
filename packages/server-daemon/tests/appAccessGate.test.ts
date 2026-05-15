@@ -21,7 +21,7 @@ import {
 } from "../src/inviteHandler.js";
 
 const SERVER_FQDN = "home.alice.flagship.services";
-const APP_ID = "alice--chat";
+const APP_ID = "alice-chat";
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -211,11 +211,11 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const inviteStore = new InMemoryAppInviteStore();
     const modeStore = new InMemoryAccessModeStore();
     await modeStore.set(APP_ID, true);
-    await modeStore.set("alice--photos", true);
+    await modeStore.set("alice-photos", true);
     const token = await mintAccessToken(inviteStore, psk, consumer);
 
     const decision = await evaluateAccess({
-      appId: "alice--photos",
+      appId: "alice-photos",
       modeStore,
       inviteStore,
       headers: { authorization: `Flagship-App-Session ${token}` },
@@ -380,7 +380,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
 
     const wrongApp = {
       serverId: SERVER_FQDN,
-      appId: "different--app",
+      appId: "different-app",
       protectContent: true,
       issuedAt: Date.now(),
     };

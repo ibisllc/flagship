@@ -36,9 +36,9 @@ describe("validateUserLabel", () => {
     expect(validateUserLabel("HARRY!").ok).toBe(false);
   });
 
-  it("rejects names longer than 32 chars (kept short for URL ergonomics)", () => {
-    expect(validateUserLabel("a".repeat(33)).ok).toBe(false);
-    expect(validateUserLabel("a".repeat(32)).ok).toBe(true);
+  it("rejects names longer than 63 chars (DNS label cap)", () => {
+    expect(validateUserLabel("a".repeat(64)).ok).toBe(false);
+    expect(validateUserLabel("a".repeat(63)).ok).toBe(true);
   });
 
   it("rejects reserved usernames so users can't shadow control-plane endpoints", () => {

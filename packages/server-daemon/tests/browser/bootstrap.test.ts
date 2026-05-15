@@ -176,10 +176,10 @@ describe("bootstrapBrowserBundle", () => {
     });
 
     // Mint a token + verify it persists to disk under the expected path.
-    const token = await bundle.appAuthTokens.mint("creator--app");
+    const token = await bundle.appAuthTokens.mint("creator-app");
     expect(token.length).toBeGreaterThan(20);
     const resolved = await bundle.appAuthTokens.resolve(token);
-    expect(resolved).toBe("creator--app");
+    expect(resolved).toBe("creator-app");
 
     await bundle.close();
     await browser.stop();

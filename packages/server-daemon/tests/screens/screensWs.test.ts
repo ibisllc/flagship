@@ -185,7 +185,7 @@ describe("screensWs — vibe-code/:id/stream", () => {
     session.feedAssistant("=== END ===\n");
     session.endAssistant();
     // Then mark deployed.
-    session.markDeployed({ appId: "alice--x", url: "https://x.home.alice.flagship.services" });
+    session.markDeployed({ appId: "alice-x", url: "https://x.home.alice.flagship.services" });
 
     // Wait for the deploy frame to land, with a generous timeout.
     await new Promise<void>((resolve) => {
@@ -282,7 +282,7 @@ describe("screensWs — browser-tabs/:tabId/stream (P1.11)", () => {
     // it through.
     const tabRegistry = new TabRegistry(browser);
     tabRegistry.start();
-    tabRegistry.assignTab("tab-A", "alice--game");
+    tabRegistry.assignTab("tab-A", "alice-game");
 
     let attachedSession: string | null = null;
     cdp.on("Target.attachToTarget", (_p, _s) => {

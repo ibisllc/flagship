@@ -20,7 +20,7 @@ function fakeApp(args: { data?: AppDataCredentials | null }): InstalledApp {
   return {
     creator: "alice",
     slug: "x",
-    appId: "alice--x",
+    appId: "alice-x",
     manifest: {
       schema_version: 1,
       name: "x",
@@ -69,7 +69,7 @@ describe("buildRunMigration — .sql dispatch", () => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice--x", absPath: sqlPath, filename: "0001_init.sql" });
+    await run({ appId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" });
     expect(seen).toHaveLength(1);
     expect(seen[0]?.sql).toContain("CREATE TABLE");
     expect(seen[0]?.pgUrl).toBe(PG_CREDS.postgres!.default!.url);
@@ -82,7 +82,7 @@ describe("buildRunMigration — .sql dispatch", () => {
       appByAppId: () => fakeApp({ data: null }),
     });
     await expect(
-      run({ appId: "alice--x", absPath: sqlPath, filename: "0001_init.sql" }),
+      run({ appId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" }),
     ).rejects.toThrow(/has no postgres store/);
   });
 
@@ -93,7 +93,7 @@ describe("buildRunMigration — .sql dispatch", () => {
       appByAppId: () => null,
     });
     await expect(
-      run({ appId: "alice--x", absPath: sqlPath, filename: "0001_init.sql" }),
+      run({ appId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" }),
     ).rejects.toThrow(/unknown appId/);
   });
 });
@@ -115,10 +115,10 @@ describe("buildRunMigration — .ts/.js dispatch", () => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice--x", absPath: tsPath, filename: "0001_seed.ts" });
+    await run({ appId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
     expect(seen[0]?.cmd).toBe("tsx");
     expect(seen[0]?.args).toEqual([tsPath]);
-    expect(seen[0]?.env.FLAGSHIP_APP_ID).toBe("alice--x");
+    expect(seen[0]?.env.FLAGSHIP_APP_ID).toBe("alice-x");
     expect(seen[0]?.env.FLAGSHIP_CREATOR).toBe("alice");
     expect(seen[0]?.env.FLAGSHIP_PG_URL).toBe(PG_CREDS.postgres!.default!.url);
     expect(seen[0]?.env.FLAGSHIP_MIGRATION_FILE).toBe("0001_seed.ts");
@@ -135,7 +135,7 @@ describe("buildRunMigration — .ts/.js dispatch", () => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice--x", absPath: jsPath, filename: "0001_seed.js" });
+    await run({ appId: "alice-x", absPath: jsPath, filename: "0001_seed.js" });
     expect(seen[0]?.cmd).toBe("node");
   });
 
@@ -151,7 +151,7 @@ describe("buildRunMigration — .ts/.js dispatch", () => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice--x", absPath: tsPath, filename: "0001_seed.ts" });
+    await run({ appId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
     expect(seen[0]?.env.FLAGSHIP_LEAKED).toBeUndefined();
     delete process.env.FLAGSHIP_LEAKED;
   });
@@ -177,7 +177,7 @@ describe("buildRunMigration — unknown extensions", () => {
         scriptCalled = true;
       },
     });
-    await run({ appId: "alice--x", absPath: readmePath, filename: "0001_README.md" });
+    await run({ appId: "alice-x", absPath: readmePath, filename: "0001_README.md" });
     expect(sqlCalled).toBe(false);
     expect(scriptCalled).toBe(false);
   });

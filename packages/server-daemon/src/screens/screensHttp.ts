@@ -497,14 +497,19 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!body || typeof body.appId !== "string" || body.appId.length === 0) {
         return jerr(400, "appId required");
       }
-      const parts = body.appId.split("--");
-      if (parts.length !== 2 || !parts[0] || !parts[1]) {
-        return jerr(400, "appId must be '<creator>--<slug>'");
+      // `<creator>-<slug>`, single dash. Split at the FIRST hyphen —
+      // creator (a username) is hyphen-free, so everything after the
+      // first '-' is the slug (which itself may contain hyphens).
+      const dashIdx = body.appId.indexOf("-");
+      const creator = dashIdx > 0 ? body.appId.slice(0, dashIdx) : "";
+      const slug = dashIdx > 0 ? body.appId.slice(dashIdx + 1) : "";
+      if (!creator || !slug) {
+        return jerr(400, "appId must be '<creator>-<slug>'");
       }
       try {
         const record = await deps.appBackup.createBackup({
-          creator: parts[0],
-          slug: parts[1],
+          creator,
+          slug,
           includeUserData: !!body.includeUserData,
           password: body.password,
         });

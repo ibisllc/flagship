@@ -67,7 +67,7 @@ describe("PhonePipe", () => {
 
   it("focus event on an owned tab emits browser-input-needed and stashes the screenshot", async () => {
     await pipe.equipTab("tab-1");
-    registry.assignTab("tab-1", "alice--shopper");
+    registry.assignTab("tab-1", "alice-shopper");
 
     server.emitEvent("Runtime.bindingCalled", {
       name: "flagshipInputFocused",
@@ -79,7 +79,7 @@ describe("PhonePipe", () => {
     const events = inbox.list();
     expect(events[0]?.alert).toMatchObject({
       kind: "browser-input-needed",
-      appId: "alice--shopper",
+      appId: "alice-shopper",
       tabId: "tab-1",
       domain: "amazon.com",
       inputKind: "password",
@@ -125,7 +125,7 @@ describe("PhonePipe", () => {
   });
 
   it("requestInput (manual trigger) emits an alert + stores screenshot", async () => {
-    registry.assignTab("tab-1", "alice--shopper");
+    registry.assignTab("tab-1", "alice-shopper");
     const r = await pipe.requestInput({
       tabId: "tab-1",
       inputKind: "text",
@@ -155,7 +155,7 @@ describe("PhonePipe", () => {
       captured = { sessionId, text: p.text };
       return {};
     });
-    registry.assignTab("tab-1", "alice--shopper");
+    registry.assignTab("tab-1", "alice-shopper");
     const { screenshotRef } = await pipe.requestInput({
       tabId: "tab-1",
       inputKind: "password",
@@ -183,7 +183,7 @@ describe("PhonePipe", () => {
   });
 
   it("applyInputResponse rejects when tabId in response differs from the alert", async () => {
-    registry.assignTab("tab-1", "alice--shopper");
+    registry.assignTab("tab-1", "alice-shopper");
     const { screenshotRef } = await pipe.requestInput({
       tabId: "tab-1",
       inputKind: "password",
@@ -208,7 +208,7 @@ describe("PhonePipe", () => {
   });
 
   it("applyInputResponse rejects when inputKind differs from the alert", async () => {
-    registry.assignTab("tab-1", "alice--shopper");
+    registry.assignTab("tab-1", "alice-shopper");
     const { screenshotRef } = await pipe.requestInput({
       tabId: "tab-1",
       inputKind: "password",
@@ -234,7 +234,7 @@ describe("PhonePipe", () => {
       nextRef: () => "ref-x",
     });
     fakePipe.start();
-    registry.assignTab("tab-1", "alice--shopper");
+    registry.assignTab("tab-1", "alice-shopper");
     await fakePipe.requestInput({ tabId: "tab-1", inputKind: "password" });
     expect(fakePipe.getScreenshot("ref-x")).toBeTruthy();
     now = 2_000; // way past TTL
@@ -264,7 +264,7 @@ describe("PhonePipe", () => {
       })(),
     });
     fakePipe.start();
-    registry.assignTab("tab-1", "alice--shopper");
+    registry.assignTab("tab-1", "alice-shopper");
     await fakePipe.requestInput({ tabId: "tab-1", inputKind: "password" });
     await fakePipe.requestInput({ tabId: "tab-1", inputKind: "password" });
     expect(fakePipe.pendingCount()).toBe(2);

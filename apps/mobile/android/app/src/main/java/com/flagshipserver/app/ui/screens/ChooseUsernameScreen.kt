@@ -28,7 +28,10 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.delay
 
-private val usernameRegex = Regex("^[a-z0-9]{1,32}$")
+// Mirrors the Worker's USERNAME_RE (packages/control-plane/src/labels.ts):
+// lowercase alphanumerics only, no hyphens, 1–63 chars. Hyphen-free
+// usernames keep the composite app id `<creator>-<slug>` unambiguous.
+private val usernameRegex = Regex("^[a-z0-9]{1,63}$")
 
 /**
  * D.2.2 — ChooseUsernameScreen.

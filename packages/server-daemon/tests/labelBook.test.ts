@@ -11,8 +11,8 @@ import {
   type LabelEntry,
 } from "../src/labelBook.js";
 
-const APP_A = "alice--chat";
-const APP_B = "alice--photos";
+const APP_A = "alice-chat";
+const APP_B = "alice-photos";
 const TAG_1 = "00112233445566778899aabbccddeeff";
 const TAG_2 = "ffeeddccbbaa99887766554433221100";
 

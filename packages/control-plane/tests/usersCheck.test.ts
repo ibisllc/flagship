@@ -44,6 +44,23 @@ describe("handleUsersCheck", () => {
     expect((r.body as UsersCheckResponse).available).toBe(true);
   });
 
+  it("rejects usernames containing a hyphen (no-hyphen rule)", async () => {
+    // Hyphens are banned from usernames so the composite app id
+    // `<creator>-<slug>` parses unambiguously. A hyphenated handle
+    // must come back available=false with a clear reason.
+    const r = await handleUsersCheck({ storage: fakeStorage() }, { username: "maria-jose" });
+    expect(r.status).toBe(200);
+    const body = r.body as UsersCheckResponse;
+    expect(body.available).toBe(false);
+    expect(body.reason).toMatch(/no hyphens/i);
+  });
+
+  it("accepts a long all-alphanumeric username up to 63 chars", async () => {
+    const u = "a".repeat(63);
+    const r = await handleUsersCheck({ storage: fakeStorage() }, { username: u });
+    expect((r.body as UsersCheckResponse).available).toBe(true);
+  });
+
   it("returns taken=false + reason for a real existing claim", async () => {
     const r = await handleUsersCheck(
       { storage: fakeStorage({ harry: "deadbeef" }) },
@@ -58,9 +75,9 @@ describe("handleUsersCheck", () => {
     const r = await handleUsersCheck(
       {
         storage: fakeStorage(),
-        testAccounts: { "playreview-q2": { display: "Play Reviewer (Q2)", ttlHours: 6 } },
+        testAccounts: { "playreviewq2": { display: "Play Reviewer (Q2)", ttlHours: 6 } },
       },
-      { username: "playreview-q2" },
+      { username: "playreviewq2" },
     );
     const body = r.body as UsersCheckResponse;
     expect(body.available).toBe(false);
@@ -72,8 +89,8 @@ describe("handleUsersCheck", () => {
       {
         storage: fakeStorage(),
         testAccounts: {
-          "playreview-q2": { display: "Play Reviewer (Q2)", ttlHours: 6 },
-          "internal-tester": { display: "Internal", ttlHours: 24 },
+          "playreviewq2": { display: "Play Reviewer (Q2)", ttlHours: 6 },
+          "internaltester": { display: "Internal", ttlHours: 24 },
         },
       },
       { username: "harry" },
@@ -84,16 +101,16 @@ describe("handleUsersCheck", () => {
     // No reference to either configured test-account name in the body.
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain("playreview");
-    expect(serialized).not.toContain("internal-tester");
+    expect(serialized).not.toContain("internaltester");
   });
 
   it("is case-insensitive on the username", async () => {
     const r = await handleUsersCheck(
       {
         storage: fakeStorage(),
-        testAccounts: { "playreview-q2": { display: "Play Reviewer", ttlHours: 6 } },
+        testAccounts: { "playreviewq2": { display: "Play Reviewer", ttlHours: 6 } },
       },
-      { username: "PlayReview-Q2" },
+      { username: "PlayReviewQ2" },
     );
     expect((r.body as UsersCheckResponse).testAccount?.display).toBe("Play Reviewer");
   });

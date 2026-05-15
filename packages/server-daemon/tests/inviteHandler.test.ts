@@ -16,7 +16,7 @@ import {
 } from "../src/inviteHandler.js";
 
 const SERVER_FQDN = "home.alice.flagship.services";
-const APP_ID = "alice--chat";
+const APP_ID = "alice-chat";
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -497,7 +497,7 @@ describe("invite handler — issue → accept → revoke", () => {
       store: new InMemoryAppInviteStore(),
       isKnownApp: (id) => id === APP_ID,
     });
-    const r = await handler(makeReq("POST", `/.flagship/app/nope--app/invite`, {}));
+    const r = await handler(makeReq("POST", `/.flagship/app/nope-app/invite`, {}));
     expect(r?.status).toBe(404);
   });
 

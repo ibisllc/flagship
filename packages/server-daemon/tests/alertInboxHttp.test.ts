@@ -70,13 +70,13 @@ describe("AlertInbox HTTP — drain + ack", () => {
     const inbox = new InMemoryAlertInbox();
     inbox.emit({
       kind: "manual-pending",
-      appId: "alice--game1",
+      appId: "alice-game1",
       fromCommit: "a",
       toCommit: "b",
     });
     inbox.emit({
       kind: "manual-pending",
-      appId: "alice--game2",
+      appId: "alice-game2",
       fromCommit: "c",
       toCommit: "d",
     });
@@ -95,13 +95,13 @@ describe("AlertInbox HTTP — drain + ack", () => {
     const inbox = new InMemoryAlertInbox();
     const id1 = inbox.emit({
       kind: "manual-pending",
-      appId: "a--1",
+      appId: "a-1",
       fromCommit: "a",
       toCommit: "b",
     });
     inbox.emit({
       kind: "manual-pending",
-      appId: "a--2",
+      appId: "a-2",
       fromCommit: "c",
       toCommit: "d",
     });
@@ -116,20 +116,20 @@ describe("AlertInbox HTTP — drain + ack", () => {
     );
     const body = JSON.parse(r!.body.toString());
     expect(body.events).toHaveLength(1);
-    expect(body.events[0].alert.appId).toBe("a--2");
+    expect(body.events[0].alert.appId).toBe("a-2");
   });
 
   it("POST /ack removes events through the given id", async () => {
     const inbox = new InMemoryAlertInbox();
     const id1 = inbox.emit({
       kind: "manual-pending",
-      appId: "a--1",
+      appId: "a-1",
       fromCommit: "a",
       toCommit: "b",
     });
     inbox.emit({
       kind: "manual-pending",
-      appId: "a--2",
+      appId: "a-2",
       fromCommit: "c",
       toCommit: "d",
     });

@@ -321,7 +321,7 @@ interface IssueBody {
  *  {
  *    "request": {
  *      "serverId":   "<fqdn>",
- *      "appId":      "creator--slug",
+ *      "appId":      "creator-slug",
  *      "role":       "reader",
  *      "opaqueTag":  "<32 hex>",       // 16 bytes
  *      "expectedIrkPubKey": "<64 hex>" | null,

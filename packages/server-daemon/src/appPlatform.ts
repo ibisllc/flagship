@@ -38,7 +38,8 @@ import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClie
 export interface InstalledApp {
   creator: string;
   slug: string;
-  /** Composite app id: `<creator>--<slug>`. Container name + map key. */
+  /** Composite app id: `<creator>-<slug>` (single dash; creator is
+   *  hyphen-free so it parses unambiguously). Container name + map key. */
   appId: string;
   manifest: AppManifest;
   /** Host-relative URL label: `<slug>` if self-authored, else `<slug>-<creator>`. */
@@ -118,9 +119,22 @@ export class AppPlatform {
     this.now = deps.now ?? (() => Date.now());
   }
 
-  /** Composite app id used as the container name + registry key. */
+  /** Composite app id used as the container name + registry key.
+   *  `<creator>-<slug>` — single dash. Unambiguous because usernames
+   *  (the creator) are hyphen-free (see control-plane labels.ts), so
+   *  the FIRST hyphen always separates creator from slug even when
+   *  the slug itself contains hyphens. Stable for the life of the
+   *  package — never rotates on a URL-stem Replace. */
   static appId(creator: string, slug: string): string {
-    return `${creator}--${slug}`;
+    return `${creator}-${slug}`;
+  }
+
+  /** Inverse of `appId`. Splits at the FIRST hyphen (creator is
+   *  hyphen-free). Returns null when the id has no hyphen. */
+  static parseAppId(appId: string): { creator: string; slug: string } | null {
+    const i = appId.indexOf("-");
+    if (i <= 0 || i >= appId.length - 1) return null;
+    return { creator: appId.slice(0, i), slug: appId.slice(i + 1) };
   }
 
   /**

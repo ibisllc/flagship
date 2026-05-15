@@ -29,8 +29,8 @@ describe("Browser HTTP handlers", () => {
     registry = new TabRegistry(mgr);
     registry.start();
     gate = new DomainGate();
-    gate.setGrant("alice--shopper", ["amazon.com", "*.amazon.com"]);
-    gate.setGrant("bob--mailer", ["gmail.com"]);
+    gate.setGrant("alice-shopper", ["amazon.com", "*.amazon.com"]);
+    gate.setGrant("bob-mailer", ["gmail.com"]);
     inbox = new InMemoryAlertInbox();
     pipe = new PhonePipe({
       browser: mgr,
@@ -43,8 +43,8 @@ describe("Browser HTTP handlers", () => {
     });
     pipe.start();
     tokens = new InMemoryAppAuthTokens();
-    aliceToken = await tokens.mint("alice--shopper");
-    bobToken = await tokens.mint("bob--mailer");
+    aliceToken = await tokens.mint("alice-shopper");
+    bobToken = await tokens.mint("bob-mailer");
     handle = buildBrowserApiHandlers({
       browser: mgr,
       tabRegistry: registry,
@@ -92,7 +92,7 @@ describe("Browser HTTP handlers", () => {
 
   it("403 when the app has no browser grant (didn't declare browser.domains)", async () => {
     // Mint a token for an app with no grant.
-    const noGrantToken = await tokens.mint("carol--simple");
+    const noGrantToken = await tokens.mint("carol-simple");
     const r = await handle(
       req({ method: "POST", path: "/api/browser/tabs", token: noGrantToken, body: { url: "https://amazon.com/" } }),
     );
@@ -117,7 +117,7 @@ describe("Browser HTTP handlers", () => {
     expect(r?.status).toBe(200);
     expect(JSON.parse(String(r?.body)).tabId).toBe("tab-amzn");
     expect(createdUrl).toBe("https://www.amazon.com/");
-    expect(registry.appIdForTab("tab-amzn")).toBe("alice--shopper");
+    expect(registry.appIdForTab("tab-amzn")).toBe("alice-shopper");
   });
 
   it("POST /api/browser/tabs rejects URL outside the allowlist with 403", async () => {

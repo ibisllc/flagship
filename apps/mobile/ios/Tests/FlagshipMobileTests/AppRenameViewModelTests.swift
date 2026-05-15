@@ -22,12 +22,12 @@ final class AppRenameViewModelTests: XCTestCase {
         // Pin Worker contract: tag | username | appId | newLabel | issuedAt.
         let bytes = AppRenameClaim.canonicalBytes(
             username: "alice",
-            appId: "meta--scratchpad",
+            appId: "meta-scratchpad",
             newDisplayLabel: "mynotes",
             issuedAt: 1700000000000,
         )
         let s = String(data: bytes, encoding: .utf8)!
-        XCTAssertEqual(s, "flagship/app-rename/v1|alice|meta--scratchpad|mynotes|1700000000000")
+        XCTAssertEqual(s, "flagship/app-rename/v1|alice|meta-scratchpad|mynotes|1700000000000")
     }
 
     func test_renameApp_happyPath_postsSignedEnvelope_andUpdatesAppLinks() async throws {
@@ -36,7 +36,7 @@ final class AppRenameViewModelTests: XCTestCase {
         server.simulatedLatency = 0
         server.appRenameBehavior = .ok
         let vm = AppDetailViewModel(
-            appId: "meta--scratchpad",
+            appId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -59,7 +59,7 @@ final class AppRenameViewModelTests: XCTestCase {
         // the ed25519 signature.
         let last = try XCTUnwrap(server.lastAppRename)
         XCTAssertEqual(last.username, "alice")
-        XCTAssertEqual(last.appId, "meta--scratchpad")
+        XCTAssertEqual(last.appId, "meta-scratchpad")
         XCTAssertEqual(last.body.request.newDisplayLabel, "mynotes")
         XCTAssertEqual(last.body.signature.count, 128) // 64-byte sig in hex
     }
@@ -70,7 +70,7 @@ final class AppRenameViewModelTests: XCTestCase {
         server.simulatedLatency = 0
         server.appRenameBehavior = .collision
         let vm = AppDetailViewModel(
-            appId: "meta--scratchpad",
+            appId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -90,7 +90,7 @@ final class AppRenameViewModelTests: XCTestCase {
     func test_renameApp_emptyDraft_failsImmediately_withoutSigning() async {
         let server = MockFlagshipServerClient()
         let vm = AppDetailViewModel(
-            appId: "meta--scratchpad",
+            appId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -109,7 +109,7 @@ final class AppRenameViewModelTests: XCTestCase {
     func test_renameApp_noUsername_failsImmediately() async {
         let server = MockFlagshipServerClient()
         let vm = AppDetailViewModel(
-            appId: "meta--scratchpad",
+            appId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -124,7 +124,7 @@ final class AppRenameViewModelTests: XCTestCase {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
         let vm = AppDetailViewModel(
-            appId: "meta--scratchpad",
+            appId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -134,6 +134,6 @@ final class AppRenameViewModelTests: XCTestCase {
         await vm.loadAppLinks()
         // Mock returns a synthetic alias — verify we surfaced it.
         XCTAssertNotNil(vm.appLinks.value)
-        XCTAssertEqual(vm.appLinks.value?.appId, "meta--scratchpad")
+        XCTAssertEqual(vm.appLinks.value?.appId, "meta-scratchpad")
     }
 }
