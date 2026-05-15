@@ -120,14 +120,21 @@ public struct PushTokenRegisterRequest: Codable, Equatable, Sendable {
         public let platform: String            // "apns" | "fcm" | "webpush"
         public let providerToken: String       // APNs hex token (lowercased)
         public let pushX25519Pub: String       // hex
+        /// User-facing device label (e.g. "Harry's iPhone"). Surfaced
+        /// in the Trusted-devices list on .com. Must be part of the
+        /// canonical bytes the IRK signs — the field slots between
+        /// pushX25519Pub and issuedAt to match the Worker side.
+        public let label: String
         public let issuedAt: Int64
         public init(
             username: String, platform: String, providerToken: String,
-            pushX25519Pub: String, issuedAt: Int64
+            pushX25519Pub: String, label: String, issuedAt: Int64
         ) {
             self.username = username; self.platform = platform
             self.providerToken = providerToken
-            self.pushX25519Pub = pushX25519Pub; self.issuedAt = issuedAt
+            self.pushX25519Pub = pushX25519Pub
+            self.label = label
+            self.issuedAt = issuedAt
         }
     }
     public let request: Inner

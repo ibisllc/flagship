@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 import CryptoKit
 import Flagship
 import FlagshipAPI
@@ -76,6 +77,24 @@ public final class PushRegistrar: PushRegistrarHandle {
         self.lastRegisteredTokenId = nil
     }
 
+    /// Length-cap + strip control characters to match the Worker's
+    /// handler-side validation (control-plane/src/push.ts caps at 64
+    /// chars + rejects 0x00-0x1f + 0x7f). Exposed `static` so tests
+    /// can pin the contract.
+    static func sanitizeLabel(_ raw: String) -> String {
+        let stripped = raw.unicodeScalars
+            .filter { !($0.value < 0x20 || $0.value == 0x7f) }
+            .reduce(into: "") { acc, s in acc.unicodeScalars.append(s) }
+        let trimmed = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.utf8.count <= 64 { return trimmed }
+        // Truncate by UTF-8 bytes — not chars — since the server caps
+        // bytes. Step back until we're under the limit + on a valid
+        // boundary.
+        var out = trimmed
+        while out.utf8.count > 64, !out.isEmpty { out.removeLast() }
+        return out
+    }
+
     public func handle(deviceToken: Data?) async {
         guard let token = deviceToken, !token.isEmpty else {
             // OS revoked the token — leave the previous tokenId on file
@@ -96,11 +115,20 @@ public final class PushRegistrar: PushRegistrarHandle {
             let pushKeypair = try Keystore.loadOrCreatePushX25519()
             let pushPubHex = HexUtil.encode(pushKeypair.publicKey.rawRepresentation)
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+            // Device label = UIDevice.current.name unless the user
+            // has set a custom one in Settings (placeholder for now —
+            // a future commit adds an editable nickname).
+            // UIDevice.current.name on iOS 16+ returns the
+            // localized model ("iPhone") unless the user has
+            // explicitly named the device — but it's the cleanest
+            // out-of-the-box default we can ship without prompting.
+            let label = Self.sanitizeLabel(UIDevice.current.name)
             let bytes = PushTokenRegister.canonicalBytes(
                 username: username,
                 platform: "apns",
                 providerToken: providerTokenHex,
                 pushX25519PubHex: pushPubHex,
+                label: label,
                 issuedAt: issuedAt
             )
             let sig = try irk.signature(for: bytes)
@@ -110,6 +138,7 @@ public final class PushRegistrar: PushRegistrarHandle {
                     platform: "apns",
                     providerToken: providerTokenHex,
                     pushX25519Pub: pushPubHex,
+                    label: label,
                     issuedAt: issuedAt
                 ),
                 signature: HexUtil.encode(Data(sig))

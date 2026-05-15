@@ -52,10 +52,39 @@ final class PushRegistrarTests: XCTestCase {
             platform: inner.platform,
             providerToken: inner.providerToken,
             pushX25519PubHex: inner.pushX25519Pub,
+            label: inner.label,
             issuedAt: inner.issuedAt
         )
         let sig = try irk.signature(for: bytes)
         XCTAssertTrue(irk.publicKey.isValidSignature(sig, for: bytes))
+    }
+
+    // MARK: - sanitizeLabel
+
+    func test_sanitizeLabel_passesThroughNormalText() {
+        XCTAssertEqual(PushRegistrar.sanitizeLabel("Harry's iPhone"), "Harry's iPhone")
+    }
+
+    func test_sanitizeLabel_stripsControlChars() {
+        let raw = "Bad\u{07}Label\u{7f}!"
+        XCTAssertEqual(PushRegistrar.sanitizeLabel(raw), "BadLabel!")
+    }
+
+    func test_sanitizeLabel_trimsWhitespace() {
+        XCTAssertEqual(PushRegistrar.sanitizeLabel("  spacey  "), "spacey")
+    }
+
+    func test_sanitizeLabel_capsAt64Bytes() {
+        let long = String(repeating: "a", count: 200)
+        let result = PushRegistrar.sanitizeLabel(long)
+        XCTAssertLessThanOrEqual(result.utf8.count, 64)
+    }
+
+    func test_sanitizeLabel_truncatesMultibyteSafely() {
+        let long = String(repeating: "🚀", count: 30)
+        let result = PushRegistrar.sanitizeLabel(long)
+        XCTAssertLessThanOrEqual(result.utf8.count, 64)
+        XCTAssertNotNil(result.data(using: .utf8))
     }
 
     func test_handle_skipsWhenNoUsername() async throws {

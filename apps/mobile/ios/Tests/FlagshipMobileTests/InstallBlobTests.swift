@@ -71,14 +71,18 @@ final class InstallBlobTests: XCTestCase {
                 platform: "apns",
                 providerToken: "deadbeef",
                 pushX25519PubHex: String(repeating: "ab", count: 32),
+                label: "Harry's iPhone",
                 issuedAt: 1700000000
             ),
             encoding: .utf8
         )!
+        // Field order: tag | username | platform | providerToken |
+        // pushX25519Pub | label | issuedAt. Mirrors the Worker side
+        // in packages/protocol/src/auth.ts.
         XCTAssertEqual(
             s,
             "flagship/push-token-register/v1|harry|apns|deadbeef|" +
-            String(repeating: "ab", count: 32) + "|1700000000"
+            String(repeating: "ab", count: 32) + "|Harry's iPhone|1700000000"
         )
     }
 

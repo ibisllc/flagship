@@ -149,6 +149,7 @@ final class FlagshipServerClientTests: XCTestCase {
                 platform: "apns",
                 providerToken: "deadbeef",
                 pushX25519Pub: String(repeating: "ab", count: 32),
+                label: "Harry's iPhone",
                 issuedAt: 7
             ),
             signature: "sig"
@@ -157,6 +158,7 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertFalse(resp.tokenId.isEmpty)
         XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.username, "harry")
         XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.platform, "apns")
+        XCTAssertEqual(c.registeredPushTokens[resp.tokenId]?.label, "Harry's iPhone")
     }
 
     // MARK: - Install-events poller
@@ -311,7 +313,9 @@ final class FlagshipServerClientTests: XCTestCase {
         let resp = try await client.registerPushToken(.init(
             request: .init(
                 username: "harry", platform: "apns", providerToken: "deadbeef",
-                pushX25519Pub: String(repeating: "ab", count: 32), issuedAt: 7
+                pushX25519Pub: String(repeating: "ab", count: 32),
+                label: "test-label",
+                issuedAt: 7
             ),
             signature: "sig"
         ))

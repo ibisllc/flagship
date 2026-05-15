@@ -165,10 +165,15 @@ public enum PushTokenRegister {
         platform: String,
         providerToken: String,
         pushX25519PubHex: String,
+        label: String,
         issuedAt: Int64
     ) -> Data {
+        // Field order must match the Worker's canonicalPushTokenRegister
+        // in packages/protocol/src/auth.ts. The `label` field was added
+        // pre-launch (no v2 bump needed); it slots between pushX25519Pub
+        // and issuedAt on both sides.
         Data([
-            canonicalTag, username, platform, providerToken, pushX25519PubHex, String(issuedAt)
+            canonicalTag, username, platform, providerToken, pushX25519PubHex, label, String(issuedAt)
         ].joined(separator: "|").utf8)
     }
 }
