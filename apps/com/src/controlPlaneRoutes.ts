@@ -54,6 +54,7 @@ import {
   handlePostUsernameRename,
   handleGetUsernameAlias,
   handleGetUserPods,
+  handleGetUsersDevices,
   handlePostDaemonStatus,
   handleUserPubKeyCert,
   handleMarketplaceList,
@@ -174,6 +175,7 @@ const ROUTE_RE = {
   LUKS_LEASE_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases$/,
   UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
+  USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
   DAEMON_STATUS: /^\/api\/daemon-status$/,
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
@@ -656,6 +658,14 @@ export async function tryControlPlane(
           servers: storage.servers,
           routing: storage.routing,
         },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_DEVICES))) {
+    return finish(
+      await handleGetUsersDevices(
+        { pushTokens: storage.pushTokens },
         decodeURIComponent(m[1]!),
       ),
     );

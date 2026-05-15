@@ -19,6 +19,7 @@ export * from "./admin.js";
 export * from "./serverRevoke.js";
 export * from "./marketplace.js";
 export * from "./push.js";
+export * from "./usersDevices.js";
 export * from "./pushBridge.js";
 export * from "./entitlementRevocations.js";
 export * from "./llmPromo.js";
