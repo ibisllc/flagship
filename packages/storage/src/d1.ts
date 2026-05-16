@@ -1242,6 +1242,18 @@ export class D1MarketplaceStorage implements MarketplaceStorage {
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
+  async listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM marketplace_listings
+           WHERE status = 'listed'
+             AND (scan_completed_at IS NULL OR scan_completed_at < ?)
+         ORDER BY scan_completed_at ASC NULLS FIRST, listed_at ASC`,
+      )
+      .bind(staleBeforeMs)
+      .all<RawMarketplaceRow>();
+    return (result.results ?? []).map(rowToRecord);
+  }
 }
 
 interface RawMarketplaceRow {

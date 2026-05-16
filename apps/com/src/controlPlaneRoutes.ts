@@ -75,6 +75,7 @@ import {
   handleMarketplaceRemove,
   handleMarketplaceInstall,
   handleMarketplaceScanResult,
+  handleMarketplaceScanQueue,
   buildPushForwarder,
   handleGetEntitlementRevocations,
   handleListRevocations,
@@ -229,6 +230,7 @@ const ROUTE_RE = {
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
   INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
+  INTERNAL_MARKETPLACE_SCAN_QUEUE: /^\/api\/internal\/marketplace-scan-queue$/,
 };
 
 export async function tryControlPlane(
@@ -853,6 +855,17 @@ export async function tryControlPlane(
         bearer(request.headers.get("authorization")),
         env.SERVICES_CONTROL_SECRET,
         url.searchParams.get("fqdn"),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.INTERNAL_MARKETPLACE_SCAN_QUEUE.test(path)) {
+    const sd = parseInt(url.searchParams.get("staleDays") ?? "", 10);
+    return finish(
+      await handleMarketplaceScanQueue(
+        { marketplace: storage.marketplace },
+        bearer(request.headers.get("authorization")),
+        env.SERVICES_CONTROL_SECRET,
+        Number.isFinite(sd) ? sd : undefined,
       ),
     );
   }

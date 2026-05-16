@@ -28,6 +28,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
+import { constantTimeEqual } from "./customDomainRedirections.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
 
 export interface MarketplaceDeps {
@@ -278,6 +279,49 @@ export async function handleMarketplaceScanResult(
   );
   if (!updated) return notFound("listing not found");
   return ok({ ok: true, grade: r.grade });
+}
+
+/**
+ * GET /api/internal/marketplace-scan-queue?staleDays=N — the
+ * auto-trigger (#14). Same fail-closed constant-time bearer as the
+ * other /api/internal/* endpoints. Returns listed listings that are
+ * never-scanned OR whose last scan is older than `staleDays` (default
+ * 30) so the nightly CI runner drains them with
+ * scripts/scan-marketplace-listing.sh — closing the
+ * "scan_grade=NULL forever" gap. Returns only the identity needed to
+ * scan (no enumeration of private fields).
+ */
+export interface MarketplaceScanQueueDeps {
+  marketplace: MarketplaceStorage;
+  now?: () => number;
+}
+
+export async function handleMarketplaceScanQueue(
+  deps: MarketplaceScanQueueDeps,
+  presentedSecret: string | null,
+  expectedSecret: string | undefined,
+  staleDays: number | undefined,
+): Promise<HandlerResponse> {
+  if (!expectedSecret) {
+    return { status: 503, body: { error: "scan-queue not configured" } };
+  }
+  if (!presentedSecret || !constantTimeEqual(presentedSecret, expectedSecret)) {
+    return { status: 401, body: { error: "unauthorized" } };
+  }
+  const now = (deps.now ?? (() => Date.now()))();
+  const days = Number.isFinite(staleDays) && (staleDays as number) > 0 ? (staleDays as number) : 30;
+  const staleBefore = now - days * 24 * 60 * 60_000;
+  const listings = await deps.marketplace.listNeedingScan(staleBefore);
+  return ok({
+    staleDays: days,
+    queue: listings.map((l) => ({
+      creator: l.creator,
+      slug: l.slug,
+      canonicalUrl: l.canonicalUrl,
+      manifestHashHex: l.manifestHashHex,
+      scanCompletedAt: l.scanCompletedAt ?? null,
+    })),
+  });
 }
 
 function serializeListing(r: MarketplaceListingRecord) {

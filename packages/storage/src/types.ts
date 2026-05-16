@@ -566,6 +566,13 @@ export interface MarketplaceStorage {
     reportKey: string,
     completedAt: number,
   ): Promise<boolean>;
+  /**
+   * Listings that need a (re)scan (#14 auto-trigger): status='listed'
+   * AND (never scanned OR scanCompletedAt < `staleBeforeMs`). Powers
+   * the authed scan-queue endpoint the nightly CI runner drains so a
+   * listing never ships scan_grade=NULL indefinitely.
+   */
+  listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

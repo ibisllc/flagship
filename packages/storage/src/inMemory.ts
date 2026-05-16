@@ -374,6 +374,15 @@ export class InMemoryMarketplaceStorage implements MarketplaceStorage {
     r.rankScore = computeMarketplaceRank(r);
     return true;
   }
+  async listNeedingScan(staleBeforeMs: number): Promise<MarketplaceListingRecord[]> {
+    return [...this.listings.values()]
+      .filter(
+        (l) =>
+          l.status === "listed" &&
+          (l.scanCompletedAt === undefined || l.scanCompletedAt < staleBeforeMs),
+      )
+      .map((l) => ({ ...l }));
+  }
 }
 
 export function computeMarketplaceRank(l: MarketplaceListingRecord): number {

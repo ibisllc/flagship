@@ -18,6 +18,7 @@ import {
   handleMarketplaceInstall,
   handleMarketplaceList,
   handleMarketplaceScanResult,
+  handleMarketplaceScanQueue,
   handleMarketplaceSearch,
 } from "../src/marketplace.js";
 
@@ -383,5 +384,50 @@ describe("handleMarketplaceScanResult", () => {
       { request: claim, signature: bytesToHex(sig) },
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("handleMarketplaceScanQueue (#14 auto-trigger)", () => {
+  async function seeded() {
+    const usernames = new InMemoryUsernameStorage();
+    const marketplace = new InMemoryMarketplaceStorage();
+    const irk = makeIrk();
+    await seedUser(usernames, "alice", irk);
+    const claim = listingPayload();
+    await handleMarketplaceList(
+      { marketplace, usernames },
+      { request: { ...claim, irkPub: bytesToHex(irk.publicKey) }, signature: bytesToHex(signMarketplaceList(claim, irk)) },
+    );
+    return { marketplace };
+  }
+
+  it("fails closed: 503 no secret, 401 bad bearer", async () => {
+    const { marketplace } = await seeded();
+    expect((await handleMarketplaceScanQueue({ marketplace }, "x", undefined, undefined)).status).toBe(503);
+    expect((await handleMarketplaceScanQueue({ marketplace }, null, "S", undefined)).status).toBe(401);
+    expect((await handleMarketplaceScanQueue({ marketplace }, "nope", "S", undefined)).status).toBe(401);
+  });
+
+  it("queues a never-scanned listed listing; drops it once freshly scanned", async () => {
+    const { marketplace } = await seeded();
+    const NOW = 1_900_000_000_000;
+    const q1 = await handleMarketplaceScanQueue({ marketplace, now: () => NOW }, "S", "S", undefined);
+    expect(q1.status).toBe(200);
+    const b1 = q1.body as { queue: Array<{ creator: string; slug: string; scanCompletedAt: number | null }> };
+    expect(b1.queue).toHaveLength(1);
+    expect(b1.queue[0]).toMatchObject({ creator: "alice", slug: "habit-tracker", scanCompletedAt: null });
+
+    // A fresh scan result → drops out of the (default 30d) queue…
+    await marketplace.setScanResult("alice", "habit-tracker", "A", "k.json", NOW);
+    const q2 = await handleMarketplaceScanQueue({ marketplace, now: () => NOW }, "S", "S", undefined);
+    expect((q2.body as { queue: unknown[] }).queue).toHaveLength(0);
+
+    // …but re-enters once the scan is older than staleDays.
+    const later = NOW + 31 * 24 * 60 * 60_000;
+    const q3 = await handleMarketplaceScanQueue({ marketplace, now: () => later }, "S", "S", 30);
+    expect((q3.body as { queue: unknown[] }).queue).toHaveLength(1);
+    // A tighter window still excludes it.
+    const q4 = await handleMarketplaceScanQueue({ marketplace, now: () => later }, "S", "S", 365);
+    expect((q4.body as { queue: unknown[] }).queue).toHaveLength(0);
   });
 });
