@@ -218,18 +218,54 @@ command, run it, report the result; don't silently skip).
 > cron (D1Storage + real DoH + real push over the live channel;
 > no-ops unless DB+base+secret). 2428 vitest green; tsc clean.
 >
-> **OPEN — C4.1c (the one remaining piece, deliberately a separate
-> focused sub-pass):** daemon-side ACME TLS-ALPN-01 for the custom
-> FQDN on the lead pod, cert/key replicated over the **`sibling/`**
-> channel (NEVER `peerBackup` — catastrophic if wrong). server-daemon
-> code; its real validation is the **north-star live exercise** (a
-> real external subdomain CNAME'd → real green padlock; needs a real
-> pod + real DNS + real Let's Encrypt). Most security-critical code
-> in this workstream — gets its own attentive pass, not a session-tail
-> rush. Until it lands, a confirmed order routes (redirection pushed)
-> but the pod has no cert for the custom FQDN, so HTTPS to it won't
-> complete — i.e. #79B is "verified+routed" but not "serving" until
-> C4.1c.
+> **C4.1c SEAM DONE 2026-05-16** (`d738cac` protocol + `37a7cc9`
+> daemon). Built to the seam + tests + documented live step, exactly
+> as scoped (its end-to-end is inherently real-infra). Shipped:
+> protocol `CustomDomainCert` envelope (async canonical hashing the
+> PEMs; sign/verify; 6 tests); `CertManager` per-SNI `customReal`
+> map (wildcard path untouched); `acme/customDomainCert.ts` —
+> `ensureLeadCustomDomainCert` (lead ACMEs the non-wildcard FQDN via
+> the existing `AcmeIssuer`→TLS-ALPN-01, installs for the SNI,
+> persists encrypted, STK-signs, replicates) + `receiveCustomDomain
+> Cert` (fail-closed) + `CustomDomainCertStore` (fresher-wins);
+> siblings receive-only. **THE security rule** enforced 3 ways
+> (type-incompatible `SiblingCertSender` vs PeerBackupClient; no
+> peerBackup import + guard test; independent STK signature). 10
+> daemon tests; 2456 vitest green.
+>
+> **OPEN — C4.1c runtime wiring (the remaining focused real-infra
+> sub-pass).** The seam exists + is tested; what's left needs a real
+> pod + DNS + Let's Encrypt and so is deliberately NOT bolted into
+> the proven cert/grant planes blind:
+>   1. **Sibling-sync frame.** Add a cert-bundle frame family to
+>      `sibling/syncFrames.ts` (mirror OFFER/PULL/PUSH 0x10–0x12 →
+>      0x20–0x22) + handle it in `syncConnection.ts`, carrying the
+>      `CustomDomainCert` bundle + STK signature. The hello already
+>      fleet-authenticates the peer pod identity — pass that verified
+>      pubkey as `receiveCustomDomainCert`'s `signerPodIdentityPub`.
+>   2. **Lead election.** Reuse the existing renewal-leader notion
+>      (runtime.ts `controlledDomains`/lead pod). Only the lead calls
+>      `ensureLeadCustomDomainCert`; siblings only `receiveCustomDomain
+>      Cert` off the new frame.
+>   3. **Trigger.** When `.services` pushes an `add` redirection for a
+>      confirmed custom FQDN (Phase 3/4 channel), the lead pod learns
+>      it owns that FQDN → call `ensureLeadCustomDomainCert`. Hook the
+>      renewal loop (`renewIfNeeded`) to also walk active custom FQDNs
+>      via `certManager.customNeedsRenewal`.
+>   4. **`onCertIssued` reuse.** `issueAndInstall` already has an
+>      `onCertIssued` seam — the custom path is the analogous
+>      install+persist+replicate.
+>   **North-star live exercise (the done-when):** point a real test
+>   subdomain CNAME → `<user>.flagship.services`; set it in the app;
+>   watch the order go pending→active; on the LEAD pod confirm ACME
+>   TLS-ALPN-01 issues a real LE cert for the custom FQDN over the
+>   SNI-passthrough chain; `curl https://<custom-fqdn>/` → **real
+>   green padlock**; kill the lead pod, confirm a sibling already
+>   holds the replicated cert and serves instantly (no re-ACME);
+>   verify with `openssl s_client` that the sibling's cert chain ==
+>   the lead's (true fleet-scoped replication, not per-box re-issue).
+>   Until this wiring + exercise lands, #79B remains "verified+routed
+>   but not serving" for the custom FQDN.
 >
 > **Known follow-on:** replace-time `DELETE(old fqdn)` when an ACTIVE
 > domain is destructively replaced (the verifier only sees the new
