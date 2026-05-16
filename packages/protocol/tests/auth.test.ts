@@ -3,6 +3,8 @@ import {
   signBootApproval,
   signDemoDirective,
   verifyDemoDirective,
+  signSetCustomDomain,
+  verifySetCustomDomain,
   signInvite,
   signInviteAcceptance,
   signMembershipMutation,
@@ -20,6 +22,7 @@ import {
   verifyRevocation,
   type BootChallenge,
   type DemoDirective,
+  type SetCustomDomain,
   type ImageRebuildRequest,
   type MembershipMutation,
   type MigrationRequest,
@@ -744,5 +747,41 @@ describe("DemoDirective (#84)", () => {
     const sig = signDemoDirective(d, ca);
     const tampered: DemoDirective = { ...d, expiresAt: d.expiresAt + 1 };
     expect(verifyDemoDirective(tampered, sig, ca.publicKey)).toBe(false);
+  });
+});
+
+describe("SetCustomDomain (#79A)", () => {
+  const irk = deriveIRK(umk);
+  const base: SetCustomDomain = {
+    username: "harry",
+    appId: "harry-game1",
+    fqdn: "shop.example.com",
+    issuedAt: 1_700_000_000_000,
+  };
+
+  it("IRK-signed request verifies under the user's IRK", () => {
+    const sig = signSetCustomDomain(base, irk);
+    expect(verifySetCustomDomain(base, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("rejects a different signer (only the account IRK can attach)", () => {
+    const other = deriveIRK({ seed: new Uint8Array(32).fill(8) });
+    const sig = signSetCustomDomain(base, other);
+    expect(verifySetCustomDomain(base, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects a tampered fqdn (can't redirect the claim to another domain)", () => {
+    const sig = signSetCustomDomain(base, irk);
+    expect(verifySetCustomDomain({ ...base, fqdn: "evil.example.com" }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects a tampered appId", () => {
+    const sig = signSetCustomDomain(base, irk);
+    expect(verifySetCustomDomain({ ...base, appId: "harry-other" }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("fqdn is case-normalized in canonical bytes (signer/verifier agree on case)", () => {
+    const sig = signSetCustomDomain({ ...base, fqdn: "Shop.Example.COM" }, irk);
+    expect(verifySetCustomDomain({ ...base, fqdn: "shop.example.com" }, sig, irk.publicKey)).toBe(true);
   });
 });

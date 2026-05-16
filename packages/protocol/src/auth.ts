@@ -1369,6 +1369,7 @@ const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
 const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 const TAG_MARKETPLACE_SCAN_RESULT = "flagship/marketplace-scan-result/v1";
 const TAG_APP_RENAME = "flagship/app-rename/v1";
+const TAG_SET_CUSTOM_DOMAIN = "flagship/custom-domain/v1";
 const TAG_VOICI_SHORTEN = "flagship/voici-shorten/v1";
 
 /**
@@ -1563,6 +1564,37 @@ export function signAppRename(r: AppRename, irk: Keypair): Bytes {
 export function verifyAppRename(r: AppRename, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalAppRename(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Custom (external) domain attach request (#79A). IRK-signed; the
+ * server only RECORDS it (status=pending) and rate-limits — the CNAME
+ * is verified out-of-band later (#79B/#82) and the outcome pushed.
+ * `fqdn` is the subdomain the user is attaching (apex is rejected
+ * server-side; canonical-bytes lower-case it so signer/verifier agree).
+ */
+export interface SetCustomDomain {
+  username: string;
+  appId: string;
+  fqdn: string;
+  issuedAt: number;
+}
+
+function canonicalSetCustomDomain(r: SetCustomDomain): Bytes {
+  return new TextEncoder().encode(
+    [TAG_SET_CUSTOM_DOMAIN, r.username, r.appId, r.fqdn.toLowerCase(), r.issuedAt].join("|"),
+  );
+}
+
+export function signSetCustomDomain(r: SetCustomDomain, irk: Keypair): Bytes {
+  return ed.sign(canonicalSetCustomDomain(r), irk.privateKey);
+}
+export function verifySetCustomDomain(r: SetCustomDomain, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalSetCustomDomain(r), irkPub);
   } catch {
     return false;
   }
