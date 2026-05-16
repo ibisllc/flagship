@@ -203,6 +203,38 @@ command, run it, report the result; don't silently skip).
 
 ### Phase 4 — Async verify + cert + lifecycle (#79 part B, #82)
 
+> **Worker side DONE + DEPLOYED 2026-05-16** (`2b4ff92` listByStatus,
+> `333aa9d` verifier, `c74dea4` cron wiring; Worker `28c67286`, cron
+> `0 */6 * * *`). C4.1a `resolveCnameChain` (Cloudflare DoH, 5s,
+> never-throws) + `cnameTargetsStub` (ownership proof: fqdn CNAME →
+> `<user>.flagship.services`). C4.1b state machine
+> `runCustomDomainVerificationPass`: pending→(CNAME ok + live pod)
+> active + store podCanonical + `pushRedirection("add")` + reset
+> failCount; ok-but-no-pod stays pending; wrong → failCount++ or, past
+> 24h, failed + `pushRedirection("delete")`. C4.2 #82 sweep on active:
+> re-verify only if ≥12h since updatedAt; success self-heals
+> failCount→0; 3rd consecutive due-fail (≥24h span enforced by the 12h
+> cadence) → failed + `pushRedirection("delete")`. Wired into the 6h
+> cron (D1Storage + real DoH + real push over the live channel;
+> no-ops unless DB+base+secret). 2428 vitest green; tsc clean.
+>
+> **OPEN — C4.1c (the one remaining piece, deliberately a separate
+> focused sub-pass):** daemon-side ACME TLS-ALPN-01 for the custom
+> FQDN on the lead pod, cert/key replicated over the **`sibling/`**
+> channel (NEVER `peerBackup` — catastrophic if wrong). server-daemon
+> code; its real validation is the **north-star live exercise** (a
+> real external subdomain CNAME'd → real green padlock; needs a real
+> pod + real DNS + real Let's Encrypt). Most security-critical code
+> in this workstream — gets its own attentive pass, not a session-tail
+> rush. Until it lands, a confirmed order routes (redirection pushed)
+> but the pod has no cert for the custom FQDN, so HTTPS to it won't
+> complete — i.e. #79B is "verified+routed" but not "serving" until
+> C4.1c.
+>
+> **Known follow-on:** replace-time `DELETE(old fqdn)` when an ACTIVE
+> domain is destructively replaced (the verifier only sees the new
+> fqdn). Stale-routing cleanup, not a security hole; tracked.
+
 - **C4.1** async CNAME verifier (Worker cron / queue): pick `pending` orders, resolve
   the fqdn's CNAME (server-authoritative; DoH or Worker DNS), require it points at the
   user stub. Success → `status=active`, `pushRedirection("add")`, ACME TLS-ALPN-01 for
