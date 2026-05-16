@@ -221,3 +221,47 @@ honoring waits on this.
 
 Steps 2 and 4 have a human in the loop (upstream review; YubiKey ceremony) —
 they cannot complete from a CLI session; build to the seam and document it.
+
+---
+
+## 9. Consumer trust chain (the 4 links) + checkpoint
+
+A consumer accepts a user-key artifact (`UserPubKeyBinding`,
+`DemoDirective`) iff **all four** hold, evaluated at the consumer's
+clock `now`:
+
+1. **Pinned genesis** — the app ships the `.maintainers` genesis
+   pubkey(s); transport is untrusted and verified forward from it.
+2. **Maintainer authority at now** — `verifyTrack(ca)` →
+   `currentAuthority(ca, now)`: genesis → holder-signed renewals →
+   successor takeovers. A *gap-takeover* (`signedBy != prior.holder &&
+   issuedAt >= prior.expiresAt`) raises a **minor `TakeoverAlarm`** —
+   surfaced, not fail-closed; "critical" is a human/social call on a
+   public dispute, never an automatic protocol state. (A gapless
+   renewal raises nothing; a gapless takeover is impossible.)
+3. **Live CaEndorsement** — `verifyCaEndorsements(now)` against link 2;
+   `authorizedCaKeys(now)` = the operational keys authorized now.
+4. **The artifact** — its own signature verifies under a key in
+   link 3's set, and it is within its own TTL.
+
+Empty link-3 set ⇒ reject **all** CA artifacts (fail closed); never
+fall back to a previously-seen CA.
+
+**Checkpoint (perf, not trust):** a client persists the last authority
+state it verified from the pinned genesis (`{track, mandateId, holder,
+successors, issuedAt, expiresAt, ackedAlarms}`) and sends it so the
+server returns only the suffix (`verifyTrackFromCheckpoint`). Spec
+§5.2's three invariants bind it: optimization-not-floor (genesis stays
+the anchor; corrupt checkpoint → re-walk), suffix cryptographically
+chained to the checkpoint, alarms unskippable (a server may drop benign
+same-holder renewals but cannot hide a gap-takeover).
+
+**Status:** links 1–3 + the checkpoint are built & tested in
+`@maintainers/protocol` (`feat/ca-endorsement`: `verifyTrack`,
+`currentAuthority`, `verifyCaEndorsements`, `authorizedCaKeys`,
+`verifyTrackFromCheckpoint`, `checkpointFromVerifiedTrack`; 254 suite
+green). The **remaining wire** is link-4 enforcement at each consumer
+— daemon (extend `releaseVerifier.ts` with the ca path), then
+iOS/Android/webapp — which is exactly **#84 C1.2c**, now a one-liner
+per call site via `authorizedCaKeys`. Per-platform wiring is the
+large surface; it is sequenced, not yet coded.
