@@ -88,3 +88,62 @@ describe("TunnelRegistry — allocator-backed (N12b)", () => {
     expect(reg.size()).toBe(1);
   });
 });
+
+describe("TunnelRegistry — custom-domain redirections (#86)", () => {
+  it("resolves a custom fqdn to the pod's tunnel; removeRedirection clears it", () => {
+    const reg = new TunnelRegistry();
+    const pod = fakeTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: pod, canonicals: ["home.harry.flagship.services"] });
+    expect(reg.findBySni("shop.example.com")).toBeUndefined();
+
+    reg.addRedirection("Shop.Example.COM", "home.harry.flagship.services");
+    expect(reg.redirectionCount()).toBe(1);
+    expect(reg.findBySni("shop.example.com")).toBe(pod); // case-normalized
+
+    reg.removeRedirection("shop.example.com");
+    expect(reg.findBySni("shop.example.com")).toBeUndefined();
+    expect(reg.redirectionCount()).toBe(0);
+  });
+
+  it("never shadows first-party flagship.services routing (consulted last)", () => {
+    const reg = new TunnelRegistry();
+    const pod = fakeTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: pod, canonicals: ["notes.home.harry.flagship.services"] });
+    // A (mis)configured redirection for a real canonical must not win.
+    reg.addRedirection("notes.harry.flagship.services", "home.harry.flagship.services");
+    expect(reg.findBySni("notes.harry.flagship.services")).toBe(pod); // native path
+  });
+
+  it("survives a pod reconnect (keyed on podCanonical, not the WS object)", () => {
+    const reg = new TunnelRegistry();
+    const t1 = fakeTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: t1, canonicals: ["home.harry.flagship.services"] });
+    reg.addRedirection("shop.example.com", "home.harry.flagship.services");
+    expect(reg.findBySni("shop.example.com")).toBe(t1);
+
+    // Reconnect: same canonical, brand-new tunnel object.
+    const t2 = fakeTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: t2, canonicals: ["home.harry.flagship.services"] });
+    expect(reg.findBySni("shop.example.com")).toBe(t2);
+  });
+
+  it("loadRedirections replaces the whole set (cold-start pull)", () => {
+    const reg = new TunnelRegistry();
+    const pod = fakeTunnel("home.harry.flagship.services");
+    reg.register({ tunnel: pod, canonicals: ["home.harry.flagship.services"] });
+    reg.addRedirection("old.example.com", "home.harry.flagship.services");
+    reg.loadRedirections([
+      ["a.example.com", "home.harry.flagship.services"],
+      ["b.example.com", "home.harry.flagship.services"],
+    ]);
+    expect(reg.redirectionCount()).toBe(2);
+    expect(reg.findBySni("old.example.com")).toBeUndefined();
+    expect(reg.findBySni("a.example.com")).toBe(pod);
+  });
+
+  it("a redirection to an unknown pod resolves to undefined (no throw)", () => {
+    const reg = new TunnelRegistry();
+    reg.addRedirection("shop.example.com", "ghost.nobody.flagship.services");
+    expect(reg.findBySni("shop.example.com")).toBeUndefined();
+  });
+});

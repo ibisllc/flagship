@@ -37,6 +37,17 @@ export interface RegisteredTunnel {
  */
 export class TunnelRegistry {
   private readonly tunnels = new Map<string, RegisteredTunnel>();
+  /**
+   * #86 — custom-domain redirection table. `Map<customFqdn,
+   * podCanonical>`, RAM-only (no DB on `.services`, by design). It is
+   * an alias layer over the tunnel set, keyed on the pod canonical
+   * (a string) — NOT the WS/tunnel object — so a pod reconnect
+   * (which re-register()s under the same canonical) is transparent.
+   * `.com` pushes ADD/DELETE here (#87); cold-start pulls the active
+   * set. `findBySni` consults it only AFTER the native canonical/
+   * wildcard lookups, so it can never shadow first-party routing.
+   */
+  private readonly redirections = new Map<string, string>();
   private readonly allocator: AppUserAllocator;
 
   constructor(opts: { allocator?: AppUserAllocator } = {}) {
@@ -99,8 +110,45 @@ export class TunnelRegistry {
     const parent = lower.slice(dot + 1);
     const wildcardHolder = this.allocator.findHolderByFqdn(parent);
     if (wildcardHolder) return this.tunnels.get(wildcardHolder);
-    // Final fallback: the exact-match against the pod's own canonical.
-    return this.tunnels.get(parent) ?? undefined;
+    // Exact-match against the pod's own canonical.
+    const byParent = this.tunnels.get(parent);
+    if (byParent) return byParent;
+    // #86 — custom-domain redirection (consulted LAST so it can never
+    // shadow first-party `*.flagship.services` routing). Resolve the
+    // full SNI (custom domains are not flagship.services subdomains so
+    // the parent-strip above won't have matched).
+    const pod = this.redirections.get(lower);
+    return pod ? this.tunnels.get(pod) : undefined;
+  }
+
+  /**
+   * #86/#87 — install/replace a custom-domain redirection
+   * (`customFqdn → podCanonical`). `.com` calls this via the authed
+   * control channel on a confirmed CNAME; replace = delete(old) +
+   * add(new) as two ops. Idempotent.
+   */
+  addRedirection(fqdn: string, podCanonical: string): void {
+    this.redirections.set(fqdn.toLowerCase(), podCanonical.toLowerCase());
+  }
+
+  /** Remove a custom-domain redirection (invalidation / uninstall /
+   *  the delete half of a replace). Idempotent. */
+  removeRedirection(fqdn: string): void {
+    this.redirections.delete(fqdn.toLowerCase());
+  }
+
+  /** Replace the entire redirection set in one shot — used by the
+   *  `.services` cold-start pull from `.com`. */
+  loadRedirections(entries: Iterable<readonly [string, string]>): void {
+    this.redirections.clear();
+    for (const [fqdn, pod] of entries) {
+      this.redirections.set(fqdn.toLowerCase(), pod.toLowerCase());
+    }
+  }
+
+  /** Metrics / health: how many custom-domain redirections are loaded. */
+  redirectionCount(): number {
+    return this.redirections.size;
   }
 
   /** Snapshot helper for the hub's broadcast logic. */
