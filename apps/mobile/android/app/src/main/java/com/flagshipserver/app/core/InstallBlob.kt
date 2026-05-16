@@ -117,6 +117,26 @@ object AppRenameClaim {
     ).joinToString("|").toByteArray()
 }
 
+/** #79A — attach an external (custom) domain to an app. Signed by the
+ *  user's current IRK. Mirrors @flagship/protocol
+ *  canonicalSetCustomDomain (auth.ts TAG_SET_CUSTOM_DOMAIN) and the
+ *  iOS / webapp clients byte-for-byte so Live == Mock on the wire. */
+object SetCustomDomainClaim {
+    const val CANONICAL_TAG = "flagship/custom-domain/v1"
+    fun canonicalBytes(
+        username: String,
+        appId: String,
+        fqdn: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        username,
+        appId,
+        fqdn.lowercase(),
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
 /** V3 — voi.ci one-off short link envelope. Signed by IRK. Optional
  *  appId binds the link to a specific app so a rename can cascade-
  *  delete it. Mirrors TAG_VOICI_SHORTEN. */

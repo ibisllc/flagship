@@ -86,10 +86,24 @@ interface FlagshipServerClient {
     ): AppRenameResponse
 
     /** V3 — read the per-user URL identity of an app:
-     *  { displayLabel, canonicalUrl, instances, shortUrl }. */
+     *  { displayLabel, canonicalUrl, instances, shortUrl,
+     *    customDomain, customDomainConfirmed }. */
     suspend fun getAppLinks(
         username: String,
         appId: String,
+    ): AppLinksResponse
+
+    /** #79A — attach an external (custom) domain to an app. Signed by
+     *  the user's current IRK. Decoupled request/confirm: a 200 only
+     *  RECORDS the request (.com verifies the CNAME out-of-band and
+     *  pushes the outcome later); the ONLY synchronous denial is the
+     *  300s rate limit (429 "Too soon — try again in Ns.", byte-
+     *  identical to the Mock). On success returns the refreshed links
+     *  so callers surface the domain optimistically. */
+    suspend fun setCustomDomain(
+        username: String,
+        appId: String,
+        body: SetCustomDomainRequest,
     ): AppLinksResponse
 }
 
@@ -130,7 +144,27 @@ data class AppLinksResponse(
     val canonicalUrl: String,
     val instances: List<AppLinkInstance>,
     val shortUrl: String? = null,
+    /** #79A — the bound external domain (present as soon as the order
+     *  is recorded, even pending). A Replace never clears it. */
+    val customDomain: String? = null,
+    /** True once .com flips the order active. The apps-list short→
+     *  custom swap keys on this; null/false = still pending. */
+    val customDomainConfirmed: Boolean? = null,
 )
+
+@Serializable
+data class SetCustomDomainRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val appId: String,
+        val fqdn: String,
+        val issuedAt: Long,
+    )
+}
 
 @Serializable
 data class WipeRestartRequest(
@@ -545,6 +579,18 @@ class MockFlagshipServerClient(
     /** Mock-side alias cache; getAppLinks reads it, renameApp writes
      *  to it so test fixtures stay self-consistent across calls. */
     var appAliasByUser: MutableMap<String, MutableMap<String, Pair<String, String>>> = mutableMapOf()
+    /** #79A — bound external domains, keyed [user][appId]. A Replace
+     *  never clears this — deliberately separate from aliases. */
+    var customDomainByUser: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
+    /** Server-side rate-limit mirror: [user][appId] → last-change ms. */
+    var customDomainLastChangedByUser: MutableMap<String, MutableMap<String, Long>> = mutableMapOf()
+    /** Min ms between custom-domain changes (server-enforced; the
+     *  client mirrors a UX cooldown). 300s, same as .com + iOS. */
+    var customDomainMinIntervalMs: Long = 300_000
+    /** Demo only: how long after a request the Mock pretends .com
+     *  finished the out-of-band CNAME verify (a real server pushes
+     *  the outcome; the Mock just flips confirmed after this). */
+    var customDomainConfirmDelayMs: Long = 6_000
 
     override suspend fun renameApp(
         username: String,
@@ -595,6 +641,15 @@ class MockFlagshipServerClient(
         val label = alias?.first ?: defaultLabel
         val host = "${username.lowercase()}.flagship.services"
         val canonical = alias?.second ?: "https://$label.$host"
+        val u = username.lowercase()
+        val lastChanged = customDomainLastChangedByUser[u]?.get(appId)
+        // Demo: .com "confirms" the CNAME customDomainConfirmDelayMs
+        // after the request (a real server pushes the outcome). The
+        // server keeps its own lastChanged timer for the rate limit;
+        // it is NOT echoed (the client stores its own local stamp).
+        val confirmed = lastChanged?.let {
+            System.currentTimeMillis() - it >= customDomainConfirmDelayMs
+        }
         return AppLinksResponse(
             appId = appId,
             displayLabel = label,
@@ -603,7 +658,39 @@ class MockFlagshipServerClient(
                 AppLinkInstance(serverDomain = host, url = canonical),
             ),
             shortUrl = null,
+            customDomain = customDomainByUser[u]?.get(appId),
+            customDomainConfirmed = confirmed,
         )
+    }
+
+    override suspend fun setCustomDomain(
+        username: String,
+        appId: String,
+        body: SetCustomDomainRequest,
+    ): AppLinksResponse {
+        tick()
+        val u = username.lowercase()
+        // Server-side rate limit (the lastChanged column). The client
+        // mirrors this with a cooldown, but the server is the backstop.
+        val last = customDomainLastChangedByUser[u]?.get(appId)
+        if (last != null) {
+            val elapsed = System.currentTimeMillis() - last
+            if (elapsed < customDomainMinIntervalMs) {
+                // ceil to whole seconds; U+2014 em dash + trailing
+                // period — MUST byte-match .com + iOS Mock.
+                val wait = (customDomainMinIntervalMs - elapsed + 999) / 1000
+                throw HttpException(429, "Too soon — try again in ${wait}s.")
+            }
+        }
+        // Synchronous confirmation: a real server fetches the CNAME
+        // here and only commits if it points at the user's stub. The
+        // Mock has no DNS, so it accepts the claim (the demo can't
+        // exercise a real failure path).
+        customDomainByUser.getOrPut(u) { mutableMapOf() }[appId] =
+            body.request.fqdn.trim().lowercase()
+        customDomainLastChangedByUser.getOrPut(u) { mutableMapOf() }[appId] =
+            System.currentTimeMillis()
+        return getAppLinks(username, appId)
     }
 
     override suspend fun wipeRestart(
@@ -861,6 +948,27 @@ class LiveFlagshipServerClient(
             url = "$base/api/users/$u/apps/$a/links",
             responseSerializer = AppLinksResponse.serializer(),
         )
+    }
+
+    override suspend fun setCustomDomain(
+        username: String,
+        appId: String,
+        body: SetCustomDomainRequest,
+    ): AppLinksResponse {
+        val u = java.net.URLEncoder.encode(username, "UTF-8")
+        val a = java.net.URLEncoder.encode(appId, "UTF-8")
+        // The .com POST returns { recorded:true } (NOT links) and is
+        // the ONLY synchronous step — a non-2xx (429 rate-limit /
+        // 4xx) surfaces as HttpException(status, body) where body is
+        // { "error": "Too soon — try again in Ns." }. On 200 we mirror
+        // iOS Live: re-read links so the bound (still-pending) domain
+        // shows immediately; .com confirms out-of-band.
+        transport.postJson(
+            url = "$base/api/users/$u/apps/$a/custom-domain",
+            body = body,
+            serializer = SetCustomDomainRequest.serializer(),
+        )
+        return getAppLinks(username, appId)
     }
 }
 
