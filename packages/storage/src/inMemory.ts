@@ -50,6 +50,8 @@ import type {
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
+  InstallPolicyFanoutRecord,
+  InstallPolicyFanoutStorage,
 } from "./types.js";
 
 /**
@@ -732,6 +734,21 @@ export class InMemoryCustomDomainOrderStorage implements CustomDomainOrderStorag
   }
 }
 
+export class InMemoryInstallPolicyFanoutStorage
+  implements InstallPolicyFanoutStorage
+{
+  private byServer = new Map<string, InstallPolicyFanoutRecord>();
+  async recordOnce(rec: InstallPolicyFanoutRecord) {
+    if (this.byServer.has(rec.serverDomain)) return false;
+    this.byServer.set(rec.serverDomain, { ...rec });
+    return true;
+  }
+  async get(serverDomain: string) {
+    const r = this.byServer.get(serverDomain);
+    return r ? { ...r } : undefined;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -757,4 +774,5 @@ export class InMemoryStorage implements Storage {
   voiciLinks = new InMemoryVoiciLinkStorage();
   customDomainOrders = new InMemoryCustomDomainOrderStorage();
   demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
+  installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
 }

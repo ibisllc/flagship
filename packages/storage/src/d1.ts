@@ -50,6 +50,8 @@ import type {
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
+  InstallPolicyFanoutRecord,
+  InstallPolicyFanoutStorage,
 } from "./types.js";
 
 /**
@@ -1734,6 +1736,56 @@ export class D1DemoLlmLedgerStorage implements DemoLlmLedgerStorage {
   }
 }
 
+interface InstallPolicyFanoutRow {
+  server_domain: string;
+  username: string;
+  registered_at: number;
+  fanout_count: number;
+  notified_at: number;
+}
+
+export class D1InstallPolicyFanoutStorage
+  implements InstallPolicyFanoutStorage
+{
+  constructor(private db: D1Database) {}
+  async recordOnce(rec: InstallPolicyFanoutRecord) {
+    // INSERT OR IGNORE on the server_domain PK: a retry of a one-shot
+    // registration is a no-op insert ⇒ meta.changes === 0 ⇒ the
+    // caller must NOT re-notify the device family.
+    const r = await this.db
+      .prepare(
+        "INSERT OR IGNORE INTO install_policy_fanout " +
+          "(server_domain, username, registered_at, fanout_count, notified_at) " +
+          "VALUES (?, ?, ?, ?, ?)",
+      )
+      .bind(
+        rec.serverDomain,
+        rec.username,
+        rec.registeredAt,
+        rec.fanoutCount,
+        rec.notifiedAt,
+      )
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async get(serverDomain: string) {
+    const r = await this.db
+      .prepare("SELECT * FROM install_policy_fanout WHERE server_domain = ?")
+      .bind(serverDomain)
+      .first<InstallPolicyFanoutRow>();
+    return r
+      ? {
+          serverDomain: r.server_domain,
+          username: r.username,
+          registeredAt: r.registered_at,
+          fanoutCount: r.fanout_count,
+          notifiedAt: r.notified_at,
+        }
+      : undefined;
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -1759,6 +1811,7 @@ export class D1Storage implements Storage {
   voiciLinks: VoiciLinkStorage;
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
+  installPolicyFanout: InstallPolicyFanoutStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -1784,5 +1837,6 @@ export class D1Storage implements Storage {
     this.voiciLinks = new D1VoiciLinkStorage(db);
     this.customDomainOrders = new D1CustomDomainOrderStorage(db);
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
+    this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
   }
 }

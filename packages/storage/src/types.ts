@@ -480,6 +480,7 @@ export interface Storage {
   voiciLinks: VoiciLinkStorage;
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
+  installPolicyFanout: InstallPolicyFanoutStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -660,6 +661,35 @@ export interface DemoLlmLedgerStorage {
   append(username: string, grantedAt: number, tokens: number, pruneBefore: number): Promise<void>;
   /** Sum of tokens granted to `username` at or after `sinceMs`. */
   sumSince(username: string, sinceMs: number): Promise<number>;
+}
+
+/**
+ * One row per newly-registered server (N0d-2). The phone owns the
+ * install *policy*; .com only records that, on a new registration, it
+ * fanned a category-only push out to the user's device family so they
+ * reconcile their server list. Keyed by server_domain because server
+ * registration is one-shot (the auth-code is single-use) — the record
+ * doubles as a fan-out idempotency guard and as operational
+ * visibility (how many devices, when).
+ */
+export interface InstallPolicyFanoutRecord {
+  serverDomain: string;
+  username: string;
+  registeredAt: number;
+  /** number of the user's push tokens the notification fanned out to. */
+  fanoutCount: number;
+  notifiedAt: number;
+}
+
+export interface InstallPolicyFanoutStorage {
+  /**
+   * Insert the fan-out record iff none exists for `serverDomain`.
+   * Returns true if it was inserted (first time — the caller should
+   * notify), false if a record already existed (a retry — do NOT
+   * re-notify the device family).
+   */
+  recordOnce(rec: InstallPolicyFanoutRecord): Promise<boolean>;
+  get(serverDomain: string): Promise<InstallPolicyFanoutRecord | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

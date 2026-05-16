@@ -397,3 +397,39 @@ describe("InMemoryDemoLlmLedgerStorage (#85)", () => {
     expect(await s.demoLlmLedger.sumSince("c", 0)).toBe(0);
   });
 });
+
+describe("InMemoryInstallPolicyFanoutStorage (N0d-2)", () => {
+  const rec = (serverDomain: string) => ({
+    serverDomain,
+    username: "alice",
+    registeredAt: 1_000,
+    fanoutCount: 3,
+    notifiedAt: 1_001,
+  });
+
+  it("records the first fan-out and reads it back", async () => {
+    const s = new InMemoryStorage();
+    expect(await s.installPolicyFanout.recordOnce(rec("home.alice.flagship.services"))).toBe(true);
+    expect(await s.installPolicyFanout.get("home.alice.flagship.services")).toEqual(
+      rec("home.alice.flagship.services"),
+    );
+  });
+
+  it("recordOnce is idempotent — a retried registration does not re-notify", async () => {
+    const s = new InMemoryStorage();
+    expect(await s.installPolicyFanout.recordOnce(rec("h.alice.flagship.services"))).toBe(true);
+    expect(
+      await s.installPolicyFanout.recordOnce({
+        ...rec("h.alice.flagship.services"),
+        fanoutCount: 99,
+      }),
+    ).toBe(false);
+    // The original row is preserved; the retry did not overwrite it.
+    expect((await s.installPolicyFanout.get("h.alice.flagship.services"))?.fanoutCount).toBe(3);
+  });
+
+  it("returns undefined for an unknown server", async () => {
+    const s = new InMemoryStorage();
+    expect(await s.installPolicyFanout.get("nope.flagship.services")).toBeUndefined();
+  });
+});
