@@ -175,3 +175,51 @@ Until it lands, Operation 1 Path B (CLI) is the exact functional
 equivalent and is the supported path. The CLI is also the only
 successor-proof path if the web-ui host is ever unavailable, so it must
 keep working regardless.
+
+---
+
+## SECURITY-MODEL CORRECTION (2026-05-16, user-decided) — read this first
+
+The "Path A web-ui (everyday)" framing above is **superseded** for the
+maintainer ROOT key. Full rationale: `docs/maintainer-ca-endorsement.md`
+§10. Summary:
+
+- **Signing is CLI + a YubiKey hardware signer ONLY** (PIV-resident
+  Ed25519 over the raw canonical bytes). The maintainer private key
+  never enters browser memory. Browser WebAuthn-PRF derives an
+  *exfiltratable* in-memory key — unacceptable for the root (total,
+  silent, permanent break if stolen). This is the supported path, not
+  a fallback. The local-hex-file key source stays ONLY as an
+  air-gapped/successor lower-assurance fallback, labelled as such.
+- **The web-ui never signs.** It does status, ceremony preview (shows
+  the exact canonical bytes + the .maintainers diff), and the
+  commit-trigger over an ALREADY-signed artifact.
+- **Commit-writer service** (a .com Worker route, future session):
+  holds NO maintainer/CA key — only a least-privilege
+  `ibisllc/maintainers` contents:write GitHub credential. It
+  re-verifies the signed artifact chains to the pinned genesis + is
+  append-only, then commits (branch + auto-PR by default). Worst-case
+  compromise = commit-a-valid-signed-thing / DoS / garbage caught by
+  the offline verifier — it cannot forge authority. CLI may instead
+  `gh`/git-commit directly; same verify-then-commit path, the Worker
+  is the website convenience + successor-proof fallback.
+
+## Operation 0 — genesis (once, pre-release, CLI + primary YubiKey)
+
+Generate the cold maintainer Ed25519 ON the primary YubiKey; write the
+genesis `Mandate` for `ca`/`release`/`ops` naming the **second
+YubiKey** in `successors`; commit via the commit-writer; bake the
+emitted genesis pubkey into the build as `MAINTAINER_GENESIS_PUBKEYS`.
+Until this is done that constant is null and every consumer
+fail-closes (rejects all CA artifacts) — safe, since nothing is
+released and demo uses mock recovery. Tests/analysis assume the
+deterministic `.maintainers/` placeholder genesis is present.
+
+## Upstream push — now pre-authorized
+
+`feat/ca-endorsement` → `ibisllc/maintainers` push + PR is authorized.
+Future-session order: push+PR → (merge=governed) → bump
+`scripts/maintainers.pinned-sha` + `pull-maintainers.sh` → link-4
+wiring (#84 C1.2c) unblocks. The "Next upstream increment (web-ui
+CA-lease views)" below is REPLACED by §10.1: those views become
+status/preview-only; no signing view is built.

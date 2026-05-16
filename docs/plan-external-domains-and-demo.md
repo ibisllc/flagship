@@ -475,10 +475,48 @@ step from done" state and document that step.
 Decided 2026-05-16. The Flagship CA must be endorsed by the cold maintainer
 key via a new `CaEndorsement` envelope **upstream in `ibisllc/maintainers`**
 (now-anchored short lease — not the issuedAt-anchored release model). Full
-design + spec delta + runbooks + phasing in **`docs/maintainer-ca-endorsement.md`**;
+design + spec delta + runbooks + phasing in **`docs/maintainer-ca-endorsement.md`**
+(esp. **§10** — the 2026-05-16 ceremony/commit-writer/genesis decisions);
 durable cross-session context in agent-memory `project_maintainer_ca.md`.
 This **blocks #84 C1.2c** and ultimately hardens all CA-signed artifacts.
-Steps 2 (upstream PR) and 4 (real-YubiKey genesis) have a human in the loop.
+
+**EXPANDED + RE-SCOPED (2026-05-16, user) — execute in a future session,
+in this order:**
+
+1. **Push (PRE-AUTHORIZED).** `cd maintainers && git push <ibisllc/
+   maintainers> feat/ca-endorsement` + open the governed PR. The push
+   is now explicitly authorized; only the PR *merge* is governed/human.
+2. **Land + re-pull.** On merge: bump `scripts/maintainers.pinned-sha`
+   to the merged SHA + `pull-maintainers.sh`.
+3. **Genesis ceremony (CLI + primary YubiKey, pre-release human).**
+   Generate the cold maintainer Ed25519 *on the token*, write the
+   genesis `Mandate` (ca/release/ops) naming the **second YubiKey** in
+   `successors`, emit the pubkey to bake in. New genesis CLI required.
+4. **Hardware-token signer sources.** Wire real PIV/FIDO2-resident
+   Ed25519 signing into `scripts/rotate-ca.mjs` + the upstream
+   `maintainers ca-endorsement` CLI (replace the "staged" local-hex
+   source; keep hex only as a labelled air-gapped/successor fallback).
+   **No browser signing — ever** (§10.1: PRF derives an exfiltratable
+   in-memory root key; total/silent/permanent break). Web-ui = status
+   + ceremony-preview + commit-trigger ONLY.
+5. **Commit-writer service** (a .com Worker route): holds NO
+   maintainer/CA key — only a least-privilege `ibisllc/maintainers`
+   contents:write GitHub credential; re-verifies the signed artifact
+   chains to the pinned genesis + is append-only, then commits
+   (branch + auto-PR). Driven by CLI or website. §10.2.
+6. **Baked genesis constant + fail-closed link-1.** Add
+   `MAINTAINER_GENESIS_PUBKEYS` (null now). Every consumer verifier
+   treats empty-genesis as reject-all-CA-artifacts (safe pre-release;
+   demo = mock recovery, no users). Independently fail-closed-tested.
+7. **link-4 wiring = #84 C1.2c** (tasks #8/#9/#10): daemon
+   `releaseVerifier.ts` ca-path, then webapp, then iOS/Android — a
+   one-liner per call site via `authorizedCaKeys`, gated by (6). Now
+   unblocked once steps 1–2 land.
+
+Steps 1–2,4,5,6 are CLI/code-doable (push authorized). Only the PR
+*merge* (governed) + the real-YubiKey genesis (step 3, human) need a
+person; build everything else to that seam + the deterministic
+placeholder genesis for tests.
 
 ### Critical path to v1 alpha
 

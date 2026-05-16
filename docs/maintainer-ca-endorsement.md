@@ -265,3 +265,121 @@ green). The **remaining wire** is link-4 enforcement at each consumer
 iOS/Android/webapp — which is exactly **#84 C1.2c**, now a one-liner
 per call site via `authorizedCaKeys`. Per-platform wiring is the
 large surface; it is sequenced, not yet coded.
+
+---
+
+## 10. Ceremony surface: CLI-signs / web-prepares + the commit-writer service (decided 2026-05-16, user)
+
+Three coupled decisions, to **execute in a future session** (this
+section is the workplan; no code landed yet):
+
+### 10.1 Signing is CLI + a YubiKey HARDWARE signer — never browser memory
+
+The maintainer key is the root of the whole CA chain; a forged
+`Mandate`/`CaEndorsement` ultimately forges `UserPubKeyBinding`/
+`DemoDirective`. If that key is ever *exfiltrated* the break is total,
+silent, and permanent.
+
+- **Browser WebAuthn-PRF** (the `setupCloudRecovery`-style path) derives
+  the maintainer Ed25519 seed *into page JS memory*. A compromised page
+  — XSS, a malicious/served-JS supply-chain dep, a content-script
+  browser extension — reads and exfiltrates it. The served-JS + origin
+  + extension surface is not something flagshipserver.com can fully
+  control. Acceptable for *user* recovery (blast radius = one account,
+  sub-origin-isolated); **unacceptable for the maintainer root.**
+- **CLI + YubiKey-resident Ed25519** (PIV slot, or a FIDO2-resident key
+  used as a signer — NOT a PRF-derived in-memory key): the private key
+  never leaves the token. The host feeds the exact canonical
+  maintainers-protocol bytes in, gets a signature out, gated by touch/
+  PIN. Worst case under compromise = a bounded number of forged
+  signatures *while the attacker is physically present during a touch*
+  — never silent key theft. The CLI TCB (a pinned, auditable local
+  binary) is far smaller than browser + served-JS + extensions.
+
+**Decision:** ALL maintainer-key ceremonies — genesis, `Mandate`,
+`CaEndorsement` (the weekly lease), takeover — are **CLI + YubiKey
+hardware signer**. The maintainer private key NEVER materializes in
+browser memory. The protocol is unchanged: Ed25519 over the existing
+canonical tagged bytes; the only new work is wiring real PIV/FIDO2
+signer *sources* into the CLIs (today their YubiKey source is "staged"
+and the key is a local hex file — that hex-file mode stays only as an
+air-gapped/successor fallback, documented as lower-assurance).
+
+The website keeps ONLY the safe parts: chain/lease **status**, ceremony
+**preparation/preview** (show the exact canonical bytes + the .maintainers
+diff that will be committed), and the **commit trigger** (§10.2) over an
+already-signed artifact. The web-ui never holds or derives a signing
+key. (User accepted CLI for ceremonies since web is materially weaker
+for the root; the web stays for the parts where it is not.)
+
+Open sub-question for the future session (capture, do not resolve now):
+whether a YubiKey FIDO2 *assertion* can itself BE the protocol
+signature (challenge = canonical bytes). It cannot directly — a
+WebAuthn assertion signs `authenticatorData || hash(clientDataJSON)`,
+not the bare canonical bytes, so it would need an upstream
+canonical-bytes-scheme change in `ibisllc/maintainers`. Default plan:
+PIV-slot Ed25519 over raw canonical bytes via the CLI (no upstream
+protocol change). Revisit the assertion-as-signature variant only if a
+web-native signing path is later deemed worth an upstream spec delta.
+
+### 10.2 The commit-writer service (a Worker on .com) — holds NO key
+
+From the website OR the CLI the maintainer can "set in motion" a
+service that actually writes the `.maintainers/` commit (upstream
+`ibisllc/maintainers`, then Flagship bumps `scripts/maintainers.
+pinned-sha` + re-pulls). Design:
+
+- Hosted as a route on the **.com Worker** (it is the natural POST
+  target for a website button and a CLI alike; it already has
+  Cloudflare secret storage).
+- It holds **NO maintainer key and NO hot CA key** — only a
+  least-privilege GitHub credential (a fine-grained PAT or GitHub App
+  installation token scoped to `ibisllc/maintainers` *contents:write*
+  only). Stored as a Worker secret; rotatable.
+- Input: a fully-signed, self-verifying `Mandate`/`CaEndorsement`
+  JSON (produced by the CLI in §10.1). The Worker **re-verifies**
+  before committing: well-formed envelope, signature verifies, signer
+  chains to the pinned genesis, and it is an *append-only* addition
+  under `.maintainers/` (never rewrites/deletes history). Then it
+  creates the commit via the GitHub API — to a branch + an auto-PR by
+  default (governance-reviewable), or direct per repo policy.
+- **Compromise blast radius:** at worst it commits a *valid signed*
+  artifact, or DoS-refuses, or commits garbage that the offline
+  verifier + open-source auditability reject. It **cannot forge
+  authority** (no signing key). This asymmetry is exactly why the
+  *committer* is safe on .com while the *signer* is not.
+- The CLI may instead commit directly with the maintainer's own
+  `gh`/git (no service needed) — the Worker path is the website
+  convenience and the successor-proof fallback. Both funnel the same
+  signed artifact; one verify-then-commit code path.
+
+### 10.3 Genesis + the baked-in pubkey (null until the first ceremony)
+
+- The apps ship a pinned constant `MAINTAINER_GENESIS_PUBKEYS` (link-1
+  of §9). It is **null/empty until the user runs the first real
+  YubiKey genesis ceremony.** Verifiers MUST treat empty-genesis as
+  **fail-closed**: no maintainer authority ⇒ reject ALL CA artifacts.
+  This is safe pre-release — demo uses mock recovery, there are no
+  real users, nothing is shipped.
+- The **genesis ceremony** (CLI + the primary YubiKey): generate the
+  cold maintainer Ed25519 on the token, write the genesis `Mandate`
+  for the `ca`/`release`/`ops` tracks naming the **second YubiKey** in
+  `successors`, commit it via §10.2, and emit the genesis pubkey to
+  bake into the next build. A pre-release human step, done once.
+- For build/test/analysis: assume the genesis is present — use the
+  existing deterministic `.maintainers/` placeholder as the test
+  genesis. The real pubkey swap is the documented pre-release step;
+  every verifier's empty-genesis path is independently fail-closed
+  tested.
+
+### 10.4 Upstream push is pre-authorized
+
+The user authorized pushing `feat/ca-endorsement` to
+`ibisllc/maintainers`. The future session does, in order:
+(1) push the branch + open the governed PR; (2) on merge, bump
+`scripts/maintainers.pinned-sha` + `pull-maintainers.sh`; (3) that
+unblocks the link-4 wiring (#84 C1.2c: daemon `releaseVerifier.ts`
+ca-path, then webapp/iOS/Android) which becomes a one-liner-per-
+call-site via `authorizedCaKeys`, gated by the §10.3 fail-closed
+genesis constant. Steps 1–2 are now CLI-doable (authorized); only the
+governed PR *merge* + the real-YubiKey genesis remain human.
