@@ -223,3 +223,21 @@ Future-session order: push+PR → (merge=governed) → bump
 wiring (#84 C1.2c) unblocks. The "Next upstream increment (web-ui
 CA-lease views)" below is REPLACED by §10.1: those views become
 status/preview-only; no signing view is built.
+
+## CEREMONY SURFACE UPDATE (2026-05-16, user) — the NFC-tap maintainer app
+
+Refines the above. Full design: `docs/maintainer-ca-endorsement.md`
+§11. The **primary** ceremony surface is now a dedicated, minimal,
+reproducibly-built **"Flagship Maintainer" mobile app** (Android-first,
+iOS fast-follow — both feasible): open app → plain-language ceremony +
+raw-bytes/diff preview → **tap the YubiKey to the phone (NFC)** →
+PIV-Ed25519 signs the canonical bytes (key never leaves the token;
+protocol UNCHANGED — PIV-Ed25519 == standard Ed25519 over the same
+bytes) → POST to the §10.2 .com commit-writer. One device, one tap.
+Genesis + takeover are guided in-app (two taps). Hardware mandate:
+YubiKey 5, fw ≥ 5.7 (PIV-Ed25519), NFC, two keys/maintainer, touch=
+always. The web-ui shrinks to status only. **The CLI here is now the
+air-gapped / store-down / successor ESCAPE HATCH, not the everyday
+path** — it must keep working but is no longer what a maintainer
+normally touches. `rotate-ca` (hot CA key) stays CLI-only, unchanged
+(the hot key must never touch a phone).

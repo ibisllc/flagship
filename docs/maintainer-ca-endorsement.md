@@ -383,3 +383,103 @@ ca-path, then webapp/iOS/Android) which becomes a one-liner-per-
 call-site via `authorizedCaKeys`, gated by the §10.3 fail-closed
 genesis constant. Steps 1–2 are now CLI-doable (authorized); only the
 governed PR *merge* + the real-YubiKey genesis remain human.
+
+---
+
+## 11. Hardware mandate + the NFC-tap maintainer app (usability ⊕ security; 2026-05-16, user)
+
+Refines §10. Still a future-session workplan — no code yet. Goal the
+user set: *maximize security while doing the extra work to make it
+fool-proof for a non-expert successor* ("someone who won't be bothered
+to learn the ins and outs").
+
+### 11.1 Hardware mandate
+
+All maintainers (and their named successors) MUST use a **YubiKey 5
+series, firmware ≥ 5.7, NFC variant**, with the **PIV applet holding an
+Ed25519 key**. Rationale + the linchpin fact:
+
+- fw 5.7 added **Ed25519/X25519 to PIV**. A PIV-slot Ed25519 key signs
+  the presented message with standard RFC-8032 pure Ed25519. The
+  maintainers protocol verify is plain `ed.verify(sig, canonicalBytes,
+  pub)`. **⇒ a PIV-Ed25519 signature over the canonical bytes is
+  byte-identical to the current scheme and verifies unchanged — NO
+  upstream `ibisllc/maintainers` spec delta needed.** This kills the
+  §10.1 open sub-question (WebAuthn-assertion-as-signature): we don't
+  need it; PIV-Ed25519 signs raw canonical bytes directly.
+- fw is NOT field-upgradable on YubiKeys ⇒ "≥5.7" means maintainers
+  buy 5.7+ units (the user's 5C NFC @ 5.7.4 qualifies). Mandate is
+  reasonable + security-positive; the user accepted mandating it.
+- **Two keys per maintainer**: a primary + the key named in the genesis
+  Mandate `successors` (the natural recovery — lose/brick the primary ⇒
+  successor takeover via the existing protocol path, no key-escrow).
+- PIV policy: **touch = always** (every signature needs a physical
+  tap — defeats malware-triggered silent signing) + **PIN once per
+  session**. Build-time confirm: fw 5.7.4 PIV-Ed25519 signs the
+  presented message (no caller pre-hash) and short canonical bytes fit
+  the NFC/extended-APDU limit (they do — tagged pipe-joined string).
+
+### 11.2 The ceremony surface: a dedicated NFC-tap maintainer app
+
+The §10.1 "CLI signs / web prepares" hand-off is clunky. Replace the
+*primary* surface with a **dedicated "Flagship Maintainer" mobile app**:
+single device, one tap.
+
+- Flow: app shows the pending ceremony in **plain language** ("Renew
+  Flagship's weekly CA lease?", "Set up the Flagship maintainer root —
+  this is genesis", "Take over as maintainer") + the human summary +
+  the raw canonical bytes + the exact `.maintainers` diff that will be
+  committed (auditable). Big "**Hold your YubiKey to the top of your
+  phone**". User taps → app does the PIV-Ed25519 sign APDU over NFC
+  (PIN screen; touch policy auto-satisfied by the tap) → POSTs the
+  signed artifact to the §10.2 .com commit-writer. **One device, one
+  tap. No CLI, no copy-paste, no git/JSON/PEM.**
+- **Genesis** in-app: PIV `GENERATE` the Ed25519 on the primary key
+  (never leaves token) → prompt "tap your backup/successor key" → read
+  its PIV pubkey (public read, no PIN) → write the genesis Mandate
+  (ca/release/ops) naming it `successors` → commit via §10.2 → show
+  the genesis pubkey to bake into the build (`MAINTAINER_GENESIS_
+  PUBKEYS`, §10.3). Two taps, fully guided.
+- **Recurring chore made trivial**: a push notification → open app →
+  "Renew? [tap]" → done in ~10s, so lease cadence is never a burden
+  (keeps the 7d default; cadence-vs-window stays a knob, not a chore).
+- **Successor fool-proofing**: install one app; it walks the takeover
+  with a checklist + plain-language refusals; **fail-closed with
+  human-readable reasons** (never a silent/ambiguous state). No CLI,
+  no terminal. PIN-lockout foot-gun mitigated by: in-app guided PIN
+  setup, explicit retry/PUK warnings, and the two-key design being the
+  real recovery (don't rely on PUK).
+
+### 11.3 Platform + packaging decisions
+
+- **Android-first, iOS fast-follow.** Both are technically feasible
+  (Android `yubikit-android` PIV/NFC is most mature; iOS Core NFC
+  ISO7816 + YubiKit PIV/NFC works with the NFC ISO7816 entitlement +
+  PIV AID `A0 00 00 03 08` — this CORRECTS the user's "not sure Apple
+  exposes the primitive": it does, for PIV; only third-party
+  FIDO2-over-NFC is the restricted thing, which we don't use).
+- **Separate, minimal app — NOT a mode in the consumer Flagship app.**
+  Smaller TCB; a compromised consumer build can't become a
+  maintainer-signing surface; clean successor mental model ("install
+  Flagship Maintainer"). **Reproducibly built** (reuse the build-iso.yml
+  double-build discipline) so the binary is auditable like the ISO.
+- Security posture: the app (like the CLI) never holds the key — the
+  token signs. "Show X / sign Y" risk is mitigated identically (OSS +
+  reproducible build + on-screen raw-bytes/diff + the independent .com
+  committer + offline verifier + public `.maintainers`). **Equivalent
+  security to the CLI, far better usability.** The CLI remains ONLY
+  the air-gapped / app-store-down / successor escape hatch (documented,
+  lower-frequency, never the primary path).
+
+### 11.4 Open knobs (record, decide at build)
+
+- Lease cadence vs compromise window (7d default; the app makes any
+  cadence painless — could shorten, but 7d stays unless revisited).
+- iOS App Store vs notarized sideload for a niche maintainer tool
+  (sideload/TestFlight may be lower-friction than review).
+- PIV slot choice (9c "digital signature" vs 9a) + PIN/PUK policy
+  defaults baked into the genesis flow.
+- Whether the app also drives `rotate-ca` (hot-CA-key rotation) — it
+  CANNOT (hot key must never touch a phone; that stays CLI-only,
+  unchanged from §10/ca-operations). The app only ever drives
+  cold-key (Mandate/CaEndorsement/genesis/takeover) ceremonies.

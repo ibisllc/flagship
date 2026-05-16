@@ -518,6 +518,25 @@ Steps 1–2,4,5,6 are CLI/code-doable (push authorized). Only the PR
 person; build everything else to that seam + the deterministic
 placeholder genesis for tests.
 
+**REFINEMENT (2026-05-16, user — see `docs/maintainer-ca-endorsement.md`
+§11):** the primary ceremony surface is now a **dedicated, minimal,
+reproducibly-built "Flagship Maintainer" mobile app** — open app →
+plain-language ceremony + raw-bytes/diff preview → **tap the YubiKey
+(NFC)** → PIV-Ed25519 signs the canonical bytes (key never leaves the
+token; PIV-Ed25519 == standard Ed25519 over the same bytes ⇒ upstream
+protocol UNCHANGED, and the §10.1 WebAuthn-assertion question is moot)
+→ POST to the §10.2 commit-writer. One device, one tap; genesis +
+takeover guided in-app. Hardware mandate: YubiKey 5, fw ≥ 5.7
+(PIV-Ed25519), NFC, two keys/maintainer, touch=always. Android-first,
+**iOS fast-follow (feasible — Core NFC ISO7816 + YubiKit PIV; corrects
+the earlier "Apple maybe can't" worry)**. So step 4 ("hardware-token
+signer sources") now means BOTH the app's NFC-PIV path (primary) AND
+the CLI's USB-PIV path (the air-gapped/store-down/successor escape
+hatch — kept, lower-frequency, never the everyday path). New task for
+the app itself; `rotate-ca` (hot CA key) stays CLI-only, never on a
+phone. Reproducibly build the maintainer app (reuse build-iso.yml's
+double-build discipline) so the binary is auditable like the ISO.
+
 ### Critical path to v1 alpha
 
 ```
