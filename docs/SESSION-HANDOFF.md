@@ -56,8 +56,9 @@ Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
 
 ## 2. Live production state (verify before relying)
 
-- **Gate:** `npx tsc -b` clean · `npx vitest run` → **2492 passed / 221
-  files** on `main`. Everything pushed to `origin/main` (direct-to-main
+- **Gate:** `npx tsc -b` clean · `npx vitest run` → **2501 passed / 222
+  files** on `main` (was 2492/221; +9 from #30's fail-closed link-1
+  tests). Everything pushed to `origin/main` (direct-to-main
   is this repo's convention; pushes work without prompt).
 - **`.com` Worker `flagship-com`:** last deploy version `400186b0`
   (the #14 marketplace-scan-queue). D1 migrations applied through
@@ -115,7 +116,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 27 | Track P 3 genesis ceremony (app-primary + CLI fallback) | ▶ | generate-on-YubiKey + genesis Mandate naming successor + emit baked pubkey; tests use placeholder genesis |
 | 28 | Track P 4 PIV-Ed25519 signer | ▶ | app NFC-PIV (primary) + CLI USB-PIV (escape hatch); fw≥5.7 PIV-Ed25519 == std Ed25519 ⇒ no upstream spec change |
 | 29 | Track P 5 OPTIONAL hosted committer | ▶(downscoped) | opt-in credential-off-phone mode only; default is app-direct-commit (#32) |
-| 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ▶ | null now; verifiers reject-all-CA on empty genesis; gates #8/#9/#10 |
+| 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2501** |
 | 31 | Track P maintainers web-ui status/preview only | ▶ | NO signing view; status + ceremony-preview + commit-trigger |
 | 32 | **Track P generic OSS maintainers NFC-tap app** | ▶ | GENERIC, project-agnostic; home upstream `ibisllc/maintainers`; per-repo profile + hardware-stored git cred; tap YubiKey→PIV-Ed25519→app commits directly. §11+§12 |
 
@@ -130,7 +131,7 @@ Ed25519 over the canonical bytes).
 ## 4. Working discipline (non-negotiable — this is how the tree stayed clean)
 
 - One logical change per commit, each individually tested. `npx tsc -b
-  && npx vitest run` must stay green (**2492 baseline**) before every
+  && npx vitest run` must stay green (**2501 baseline**) before every
   commit. Commit with `git commit -F -` (heredoc — NEVER `-m` with
   backticks/`$()`). No `Co-Authored-By` trailer. Push each tested
   commit to `origin/main`.
