@@ -911,6 +911,16 @@ export { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 export type { RemoteDnsChallengeWriterOptions } from "./acme/remoteDnsChallengeWriter.js";
 export { CertManager } from "./certManager.js";
 export type { CertMaterial } from "./certManager.js";
+export {
+  CustomDomainCertStore,
+  ensureLeadCustomDomainCert,
+  receiveCustomDomainCert,
+} from "./acme/customDomainCert.js";
+export type {
+  SiblingCertSender,
+  EnsureLeadCustomCertDeps,
+  ReceiveCustomCertDeps,
+} from "./acme/customDomainCert.js";
 export { startDaemonRuntime, renewIfNeeded, resolveAccountKey } from "./runtime.js";
 export type {
   DaemonRuntime,

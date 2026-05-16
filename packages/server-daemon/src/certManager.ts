@@ -29,11 +29,40 @@ export class CertManager implements AlpnChallengeServer {
   private real: CertMaterial | null = null;
   private alpn = new Map<string, CertMaterial>();
   private notAfterMs = 0;
+  /**
+   * Per-SNI certs for custom (external) domains (#79B / C4.1c). Kept
+   * separate from `real` (the user's flagship.services wildcard): a
+   * custom FQDN is not covered by that wildcard, so it needs its own
+   * cert keyed by exact SNI. Populated either by the lead pod's ACME
+   * run or by a sibling-sync replicated bundle — never peerBackup.
+   */
+  private customReal = new Map<string, { cert: CertMaterial; notAfterMs: number }>();
 
   /** Install (or replace) the live cert. */
   install(cert: CertMaterial, notAfterMs: number): void {
     this.real = cert;
     this.notAfterMs = notAfterMs;
+  }
+
+  /** Install (or replace) the live cert for a specific custom FQDN. */
+  installCustom(fqdn: string, cert: CertMaterial, notAfterMs: number): void {
+    this.customReal.set(fqdn.toLowerCase(), { cert, notAfterMs });
+  }
+
+  /** True if there is no custom cert for `fqdn` or it has < windowMs left. */
+  customNeedsRenewal(
+    fqdn: string,
+    windowMs = 60 * 24 * 60 * 60 * 1000,
+    now = Date.now(),
+  ): boolean {
+    const e = this.customReal.get(fqdn.toLowerCase());
+    if (!e) return true;
+    return e.notAfterMs - now < windowMs;
+  }
+
+  /** notAfter (ms epoch) of the installed custom cert, or 0 if none. */
+  customNotAfter(fqdn: string): number {
+    return this.customReal.get(fqdn.toLowerCase())?.notAfterMs ?? 0;
   }
 
   /** Implements AlpnChallengeServer. Returns a disposer to remove the slot. */
@@ -48,9 +77,20 @@ export class CertManager implements AlpnChallengeServer {
   /** Returns null if no cert is loaded for this SNI. */
   contextFor(sni: string): SecureContext | null {
     const key = sni.toLowerCase();
+    // ALPN challenge cert wins during the (~5s) TLS-ALPN-01 window —
+    // even for a custom FQDN, the LE validator must see the challenge
+    // cert, not the real one.
     const slot = this.alpn.get(key);
     if (slot) {
       return createSecureContext({ cert: slot.certPem, key: slot.privateKeyPem });
+    }
+    // A custom FQDN is served by its own cert (not the wildcard).
+    const custom = this.customReal.get(key);
+    if (custom) {
+      return createSecureContext({
+        cert: custom.cert.certPem,
+        key: custom.cert.privateKeyPem,
+      });
     }
     if (!this.real) return null;
     return createSecureContext({ cert: this.real.certPem, key: this.real.privateKeyPem });

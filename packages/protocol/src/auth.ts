@@ -2630,11 +2630,16 @@ export function appGrantActiveAt(g: AppGrant, now: number): boolean {
 // chain) and replicates this bundle to the user's OTHER pods over the
 // authenticated sibling-sync channel ONLY — NEVER peerBackup/peerLink
 // (that is a stranger mesh; the private key leaving it would be
-// catastrophic to the privacy model). The bundle is IRK-signed so a
-// receiving sibling cryptographically verifies it came from the user's
-// own key and refuses anything a compromised peer fabricates. The
-// canonical bytes hash the PEMs (they contain newlines, unsafe for the
-// '|' separator scheme) — async, mirroring appGrantId.
+// catastrophic to the privacy model). The cert is born on the pod
+// (no IRK there), so the bundle is signed by the ISSUING POD's
+// identity (STK) key; the receiver verifies it under a pod identity
+// the sibling-sync layer has already authenticated as a member of
+// this user's fleet (the sync hello binds pod identities to the
+// user's IRK via PodIdentityBinding). Sign/verify are key-agnostic
+// Ed25519 — the policy of which key signs lives in the daemon's
+// customDomainCert module. The canonical bytes hash the PEMs (they
+// contain newlines, unsafe for the '|' separator scheme) — async,
+// mirroring appGrantId.
 // ──────────────────────────────────────────────────────────────────────
 
 export interface CustomDomainCert {
