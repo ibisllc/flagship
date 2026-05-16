@@ -182,8 +182,19 @@ command, run it, report the result; don't silently skip).
 > NOT apex `:443` (raw SNI passthrough). The full channel is
 > operational; it carries no data until Phase 4's verifier pushes.
 >
-> **Open (bounded follow-on):** lazy SNI-miss→ask-`.com` (pure latency
-> optimization; push + cold-start are the correctness core).
+> **Lazy SNI-miss→ask-`.com` (#12): tested seam + endpoint DONE +
+> DEPLOYED 2026-05-16** (`51931a3`, Worker `b55ffcaa`). `.com`
+> `handleRedirectionLookup` + `GET /api/internal/redirection-lookup
+> ?fqdn=` (fail-closed bearer, single-fqdn point lookup, 404 →
+> negative-cacheable, NO enumeration; live-smoke 401 w/o bearer). 
+> `.services` `LazyRedirectionResolver` (first-party-skip, fail-closed,
+> hit installs the redirection, negative-cache + in-flight dedupe +
+> rolling rate-limit DoS guard, bounded, never-throws). 10 tests.
+> **Open follow-on:** the `routeToTunnel` socket-path activation
+> (call `resolver.resolve()` on a `findBySni` miss for a non-
+> `flagship.services` SNI) — the raw-TCP :443 passthrough hot path
+> has no unit harness, so it gets a focused pass (correctness core
+> already shipped; this is pure latency optimization).
 
 - **C3.1** `.services` RAM table (#86): in `apps/web/src/tunnel/` add
   `RedirectionTable` = `Map<fqdn, podCanonical>`; integrate into `registry.findBySni`
