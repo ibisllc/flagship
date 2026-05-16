@@ -67,6 +67,40 @@ export async function handleActiveRedirections(
   return ok({ redirections });
 }
 
+/**
+ * GET /api/internal/redirection-lookup?fqdn=<fqdn> — the lazy
+ * SNI-miss path's point lookup (#12, Phase 3 C3.3 lazy half). Same
+ * fail-closed auth as the bulk endpoint, but resolves EXACTLY ONE
+ * caller-supplied fqdn → its serving pod. Deliberately NOT a
+ * list/enumeration endpoint: you must already know the precise fqdn
+ * (it came in on the wire as the TLS SNI), so this leaks nothing a
+ * `dig`/connection didn't already reveal. 404 on a fqdn with no
+ * active+served order so `.services` can negative-cache the miss.
+ */
+export async function handleRedirectionLookup(
+  deps: ActiveRedirectionsDeps,
+  presentedSecret: string | null,
+  expectedSecret: string | undefined,
+  fqdn: string | null | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  if (!expectedSecret) {
+    return { status: 503, body: { error: "control channel not configured" } };
+  }
+  if (!presentedSecret || !constantTimeEqual(presentedSecret, expectedSecret)) {
+    return { status: 401, body: { error: "unauthorized" } };
+  }
+  const f = (fqdn ?? "").trim().toLowerCase();
+  if (f.length === 0 || f.length > 253 || f.includes("/") || f.includes(":")) {
+    return { status: 400, body: { error: "fqdn required" } };
+  }
+  const active = await deps.customDomainOrders.listActive();
+  const hit = active.find((r) => r.fqdn.toLowerCase() === f && !!r.podCanonical);
+  if (!hit || !hit.podCanonical) {
+    return { status: 404, body: { found: false } };
+  }
+  return ok({ found: true, fqdn: hit.fqdn, podCanonical: hit.podCanonical });
+}
+
 export interface PushRedirectionOpts {
   servicesBaseUrl: string;
   secret: string;

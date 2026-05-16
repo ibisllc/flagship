@@ -4,6 +4,7 @@ import {
   constantTimeEqual,
   bearer,
   handleActiveRedirections,
+  handleRedirectionLookup,
   pushRedirection,
 } from "../src/customDomainRedirections.js";
 
@@ -56,6 +57,51 @@ describe("handleActiveRedirections (#87)", () => {
     const r = await handleActiveRedirections({ customDomainOrders: s.customDomainOrders }, "S", "S");
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ redirections: [{ fqdn: "shop.example.com", podCanonical: "home.u.flagship.services" }] });
+  });
+});
+
+describe("handleRedirectionLookup (#12 lazy point lookup)", () => {
+  async function rows(s: InMemoryStorage) {
+    await s.customDomainOrders.upsert({
+      appId: "a1", userId: "u", fqdn: "shop.example.com", status: "active",
+      podCanonical: "home.u.flagship.services",
+      lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
+    });
+    await s.customDomainOrders.upsert({
+      appId: "a2", userId: "u", fqdn: "nopod.example.com", status: "active",
+      lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
+    });
+    await s.customDomainOrders.upsert({
+      appId: "a3", userId: "u", fqdn: "pending.example.com", status: "pending",
+      lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
+    });
+  }
+  const dep = (s: InMemoryStorage) => ({ customDomainOrders: s.customDomainOrders });
+
+  it("fails closed: 503 no secret, 401 bad bearer", async () => {
+    const s = new InMemoryStorage();
+    expect((await handleRedirectionLookup(dep(s), "x", undefined, "shop.example.com")).status).toBe(503);
+    expect((await handleRedirectionLookup(dep(s), null, "S", "shop.example.com")).status).toBe(401);
+    expect((await handleRedirectionLookup(dep(s), "wrong", "S", "shop.example.com")).status).toBe(401);
+  });
+
+  it("400 when fqdn missing / not a bare hostname", async () => {
+    const s = new InMemoryStorage();
+    expect((await handleRedirectionLookup(dep(s), "S", "S", null)).status).toBe(400);
+    expect((await handleRedirectionLookup(dep(s), "S", "S", "")).status).toBe(400);
+    expect((await handleRedirectionLookup(dep(s), "S", "S", "https://x.example.com/p")).status).toBe(400);
+  });
+
+  it("200 for an active+served fqdn (case-insensitive); 404 otherwise — no enumeration", async () => {
+    const s = new InMemoryStorage();
+    await rows(s);
+    const hit = await handleRedirectionLookup(dep(s), "S", "S", "SHOP.EXAMPLE.COM");
+    expect(hit.status).toBe(200);
+    expect(hit.body).toEqual({ found: true, fqdn: "shop.example.com", podCanonical: "home.u.flagship.services" });
+    // active-but-no-pod, pending, and unknown all 404 (negative-cacheable)
+    expect((await handleRedirectionLookup(dep(s), "S", "S", "nopod.example.com")).status).toBe(404);
+    expect((await handleRedirectionLookup(dep(s), "S", "S", "pending.example.com")).status).toBe(404);
+    expect((await handleRedirectionLookup(dep(s), "S", "S", "unknown.example.com")).status).toBe(404);
   });
 });
 

@@ -40,6 +40,7 @@ import {
   handleSetCustomDomain,
   handleGetCustomDomain,
   handleActiveRedirections,
+  handleRedirectionLookup,
   pushRedirection,
   bearer,
   handleVoiciShorten,
@@ -227,6 +228,7 @@ const ROUTE_RE = {
   USER_IDENTITY_PUT: /^\/api\/user-identity$/,
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
+  INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
 };
 
 export async function tryControlPlane(
@@ -841,6 +843,16 @@ export async function tryControlPlane(
         { customDomainOrders: storage.customDomainOrders },
         bearer(request.headers.get("authorization")),
         env.SERVICES_CONTROL_SECRET,
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.INTERNAL_REDIRECTION_LOOKUP.test(path)) {
+    return finish(
+      await handleRedirectionLookup(
+        { customDomainOrders: storage.customDomainOrders },
+        bearer(request.headers.get("authorization")),
+        env.SERVICES_CONTROL_SECRET,
+        url.searchParams.get("fqdn"),
       ),
     );
   }
