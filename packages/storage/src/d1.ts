@@ -47,6 +47,8 @@ import type {
   UserAppAliasStorage,
   VoiciLinkRecord,
   VoiciLinkStorage,
+  CustomDomainOrderRecord,
+  CustomDomainOrderStorage,
 } from "./types.js";
 
 /**
@@ -1609,6 +1611,88 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
   }
 }
 
+interface CustomDomainOrderRow {
+  app_id: string;
+  user_id: string;
+  fqdn: string;
+  status: string;
+  last_changed: number;
+  fail_count: number;
+  created_at: number;
+  updated_at: number;
+}
+function rowToCustomDomainOrder(r: CustomDomainOrderRow): CustomDomainOrderRecord {
+  return {
+    appId: r.app_id,
+    userId: r.user_id,
+    fqdn: r.fqdn,
+    status: r.status as CustomDomainOrderRecord["status"],
+    lastChanged: r.last_changed,
+    failCount: r.fail_count,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
+  constructor(private db: D1Database) {}
+  async get(userId: string, appId: string) {
+    const r = await this.db
+      .prepare("SELECT * FROM custom_domain_orders WHERE user_id = ? AND app_id = ?")
+      .bind(userId.toLowerCase(), appId)
+      .first<CustomDomainOrderRow>();
+    return r ? rowToCustomDomainOrder(r) : undefined;
+  }
+  async upsert(rec: CustomDomainOrderRecord) {
+    const uid = rec.userId.toLowerCase();
+    // Destructive replace: ON CONFLICT overwrites every field — a new
+    // request irreversibly supersedes any prior order for the pair.
+    await this.db
+      .prepare(
+        "INSERT INTO custom_domain_orders " +
+          "(app_id, user_id, fqdn, status, last_changed, fail_count, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+          "ON CONFLICT(app_id, user_id) DO UPDATE SET " +
+          "fqdn=excluded.fqdn, status=excluded.status, " +
+          "last_changed=excluded.last_changed, fail_count=excluded.fail_count, " +
+          "updated_at=excluded.updated_at",
+      )
+      .bind(
+        rec.appId, uid, rec.fqdn, rec.status, rec.lastChanged,
+        rec.failCount, rec.createdAt, rec.updatedAt,
+      )
+      .run();
+    return { ...rec, userId: uid };
+  }
+  async setStatus(
+    userId: string,
+    appId: string,
+    fqdn: string,
+    status: CustomDomainOrderRecord["status"],
+    at: number,
+  ) {
+    // CAS on fqdn so a status write from a stale verifier can't clobber
+    // a row a newer request already replaced.
+    const failBump = status === "failed" ? 1 : 0;
+    const r = await this.db
+      .prepare(
+        "UPDATE custom_domain_orders SET status = ?, updated_at = ?, " +
+          "fail_count = fail_count + ? " +
+          "WHERE user_id = ? AND app_id = ? AND fqdn = ?",
+      )
+      .bind(status, at, failBump, userId.toLowerCase(), appId, fqdn)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async listActive() {
+    const r = await this.db
+      .prepare("SELECT * FROM custom_domain_orders WHERE status = 'active'")
+      .all<CustomDomainOrderRow>();
+    return r.results.map(rowToCustomDomainOrder);
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -1632,6 +1716,7 @@ export class D1Storage implements Storage {
   userIdentity: UserIdentityRecordStorage;
   userAppAliases: UserAppAliasStorage;
   voiciLinks: VoiciLinkStorage;
+  customDomainOrders: CustomDomainOrderStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -1655,5 +1740,6 @@ export class D1Storage implements Storage {
     this.userIdentity = new D1UserIdentityRecordStorage(db);
     this.userAppAliases = new D1UserAppAliasStorage(db);
     this.voiciLinks = new D1VoiciLinkStorage(db);
+    this.customDomainOrders = new D1CustomDomainOrderStorage(db);
   }
 }

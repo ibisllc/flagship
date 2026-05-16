@@ -478,6 +478,7 @@ export interface Storage {
   userIdentity: UserIdentityRecordStorage;
   userAppAliases: UserAppAliasStorage;
   voiciLinks: VoiciLinkStorage;
+  customDomainOrders: CustomDomainOrderStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -693,3 +694,45 @@ export interface UserIdentityRecordStorage {
   get(usernameHash: string): Promise<UserIdentityRecord | undefined>;
 }
 
+
+// ──────────────────────────────────────────────────────────────────────
+// Custom (external) domain orders (#79A).
+//
+// One row per (appId, userId): a new attach request DESTRUCTIVELY
+// replaces any prior (decided design — irreversible; doubles as the
+// only "forget a custom domain" affordance). `lastChanged` drives the
+// 300s server-side rate limit (the client mirrors a UX cooldown but
+// the server is the backstop). `status` is `pending` until the
+// out-of-band CNAME verifier (Phase 4) flips it to `active`/`failed`.
+
+export interface CustomDomainOrderRecord {
+  appId: string;
+  /** username, lowercased. */
+  userId: string;
+  fqdn: string;
+  status: "pending" | "active" | "failed";
+  /** ms — when the order was last (re)requested; the rate-limit clock. */
+  lastChanged: number;
+  failCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CustomDomainOrderStorage {
+  get(userId: string, appId: string): Promise<CustomDomainOrderRecord | undefined>;
+  /** Destructive upsert: replaces any prior row for (appId,userId)
+   *  wholesale and returns the stored row. */
+  upsert(rec: CustomDomainOrderRecord): Promise<CustomDomainOrderRecord>;
+  /** Phase-4 verifier transition (pending→active|failed). Bumps
+   *  failCount when status='failed'. Returns false if no row /
+   *  the fqdn no longer matches (a newer request superseded it). */
+  setStatus(
+    userId: string,
+    appId: string,
+    fqdn: string,
+    status: CustomDomainOrderRecord["status"],
+    at: number,
+  ): Promise<boolean>;
+  /** Phase-4 #82 re-verify sweep — every active order. */
+  listActive(): Promise<CustomDomainOrderRecord[]>;
+}

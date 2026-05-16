@@ -290,3 +290,48 @@ describe("InMemoryStorage", () => {
     });
   });
 });
+
+describe("InMemoryCustomDomainOrderStorage (#79A)", () => {
+  it("upsert/get round-trips; a new request destructively replaces the prior", async () => {
+    const s = new InMemoryStorage();
+    await s.customDomainOrders.upsert({
+      appId: "harry-game1", userId: "Harry", fqdn: "old.example.com",
+      status: "pending", lastChanged: 100, failCount: 0, createdAt: 100, updatedAt: 100,
+    });
+    expect(await s.customDomainOrders.get("harry", "harry-game1")).toMatchObject({
+      fqdn: "old.example.com", status: "pending", userId: "harry",
+    });
+    // Destructive replace — wholesale overwrite, even status/failCount.
+    await s.customDomainOrders.upsert({
+      appId: "harry-game1", userId: "harry", fqdn: "new.example.com",
+      status: "pending", lastChanged: 500, failCount: 0, createdAt: 100, updatedAt: 500,
+    });
+    const r = await s.customDomainOrders.get("harry", "harry-game1");
+    expect(r?.fqdn).toBe("new.example.com");
+    expect(r?.lastChanged).toBe(500);
+  });
+
+  it("setStatus is CAS'd on fqdn (a stale verifier can't clobber a replaced row)", async () => {
+    const s = new InMemoryStorage();
+    await s.customDomainOrders.upsert({
+      appId: "a", userId: "u", fqdn: "shop.example.com",
+      status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
+    });
+    // Stale verifier writing for an old fqdn → no-op.
+    expect(await s.customDomainOrders.setStatus("u", "a", "OLD.example.com", "active", 2)).toBe(false);
+    // Correct fqdn → applied.
+    expect(await s.customDomainOrders.setStatus("u", "a", "shop.example.com", "active", 2)).toBe(true);
+    expect((await s.customDomainOrders.get("u", "a"))?.status).toBe("active");
+    // failed bumps failCount.
+    await s.customDomainOrders.setStatus("u", "a", "shop.example.com", "failed", 3);
+    expect((await s.customDomainOrders.get("u", "a"))?.failCount).toBe(1);
+  });
+
+  it("listActive returns only active orders", async () => {
+    const s = new InMemoryStorage();
+    await s.customDomainOrders.upsert({ appId: "a1", userId: "u", fqdn: "x.example.com", status: "active", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    await s.customDomainOrders.upsert({ appId: "a2", userId: "u", fqdn: "y.example.com", status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    const active = await s.customDomainOrders.listActive();
+    expect(active.map((r) => r.appId)).toEqual(["a1"]);
+  });
+});

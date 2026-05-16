@@ -47,6 +47,8 @@ import type {
   UserAppAliasStorage,
   VoiciLinkRecord,
   VoiciLinkStorage,
+  CustomDomainOrderRecord,
+  CustomDomainOrderStorage,
 } from "./types.js";
 
 /**
@@ -671,6 +673,39 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
   }
 }
 
+export class InMemoryCustomDomainOrderStorage implements CustomDomainOrderStorage {
+  private byKey = new Map<string, CustomDomainOrderRecord>();
+  private k(userId: string, appId: string) {
+    return `${userId.toLowerCase()} ${appId}`;
+  }
+  async get(userId: string, appId: string) {
+    const r = this.byKey.get(this.k(userId, appId));
+    return r ? { ...r } : undefined;
+  }
+  async upsert(rec: CustomDomainOrderRecord) {
+    const stored: CustomDomainOrderRecord = { ...rec, userId: rec.userId.toLowerCase() };
+    this.byKey.set(this.k(stored.userId, stored.appId), stored);
+    return { ...stored };
+  }
+  async setStatus(
+    userId: string,
+    appId: string,
+    fqdn: string,
+    status: CustomDomainOrderRecord["status"],
+    at: number,
+  ) {
+    const r = this.byKey.get(this.k(userId, appId));
+    if (!r || r.fqdn !== fqdn) return false;
+    r.status = status;
+    r.updatedAt = at;
+    if (status === "failed") r.failCount += 1;
+    return true;
+  }
+  async listActive() {
+    return [...this.byKey.values()].filter((r) => r.status === "active").map((r) => ({ ...r }));
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -694,4 +729,5 @@ export class InMemoryStorage implements Storage {
   userIdentity = new InMemoryUserIdentityRecordStorage();
   userAppAliases = new InMemoryUserAppAliasStorage();
   voiciLinks = new InMemoryVoiciLinkStorage();
+  customDomainOrders = new InMemoryCustomDomainOrderStorage();
 }
