@@ -27,6 +27,7 @@ import {
   type AppRename,
 } from "@flagship/protocol";
 import type {
+  CustomDomainOrderStorage,
   ServerStorage,
   UserAppAliasStorage,
   UsernameStorage,
@@ -51,6 +52,9 @@ export interface AppRenameDeps {
   voiciLinks: VoiciLinkStorage;
   servers: ServerStorage;
   auditEvents: AuditEventStorage;
+  /** #79A — when wired, handleGetAppLinks surfaces the attached
+   *  custom domain + whether the Phase-4 verifier confirmed it. */
+  customDomainOrders?: CustomDomainOrderStorage;
   /** Optional — Worker wires the services-zone DNS publisher here.
    *  In tests + dev, leave undefined; the rename still completes,
    *  but the user-zone DNS won't be re-published until a real
@@ -294,12 +298,22 @@ export async function handleGetAppLinks(
     ? `https://${deps.shortHost ?? "voi.ci"}/${shortLink.code}`
     : null;
 
+  // #79A — attached custom domain. Shown optimistically on request
+  // (status='pending'); customDomainConfirmed flips true only once
+  // the Phase-4 verifier confirms the CNAME. Absent → null (the iOS
+  // apps-list "it's live" swap keys on confirmed===true).
+  const cdo = deps.customDomainOrders
+    ? await deps.customDomainOrders.get(u, appId)
+    : undefined;
+
   return ok({
     appId,
     displayLabel,
     canonicalUrl,
     instances,
     shortUrl,
+    customDomain: cdo ? cdo.fqdn : null,
+    customDomainConfirmed: cdo ? cdo.status === "active" : null,
     ...(shortLinkError ? { shortLinkError } : {}),
   });
 }

@@ -37,6 +37,8 @@ import {
   handleAppRename,
   handleGetAppLinks,
   handleListAppAliases,
+  handleSetCustomDomain,
+  handleGetCustomDomain,
   handleVoiciShorten,
   handleRevokeAutoUnlockLease,
   handleDns01Delete,
@@ -191,6 +193,7 @@ const ROUTE_RE = {
   WIPE_RESTART: /^\/api\/users\/([^/]+)\/wipe-restart$/,
   APP_RENAME: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/rename$/,
   APP_LINKS: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/links$/,
+  CUSTOM_DOMAIN: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/custom-domain$/,
   APP_ALIASES: /^\/api\/users\/([^/]+)\/apps\/aliases$/,
   VOICI_SHORTEN: /^\/api\/voici\/shorten$/,
   ADMIN_REPUBLISH: /^\/api\/admin\/republish-server-dns$/,
@@ -774,7 +777,27 @@ export async function tryControlPlane(
           voiciLinks: storage.voiciLinks,
           servers: storage.servers,
           auditEvents: storage.auditEvents,
+          customDomainOrders: storage.customDomainOrders,
         },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.CUSTOM_DOMAIN))) {
+    return finish(
+      await handleSetCustomDomain(
+        { usernames: storage.usernames, customDomainOrders: storage.customDomainOrders },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.CUSTOM_DOMAIN))) {
+    return finish(
+      await handleGetCustomDomain(
+        { usernames: storage.usernames, customDomainOrders: storage.customDomainOrders },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
       ),

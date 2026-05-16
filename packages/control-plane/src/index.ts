@@ -18,6 +18,7 @@ export * from "./wipeRestart.js";
 export * from "./webauthnRecovery.js";
 export * from "./voici.js";
 export * from "./appRename.js";
+export * from "./customDomain.js";
 export * from "./admin.js";
 export * from "./serverRevoke.js";
 export * from "./marketplace.js";
