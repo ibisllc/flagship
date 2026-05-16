@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { ed, signLlmPromoIssue, type Keypair } from "@flagship/protocol";
 import {
+  InMemoryDemoLlmLedgerStorage,
   InMemoryLlmPromoStorage,
   InMemoryTierStorage,
   InMemoryUsernameStorage,
@@ -159,6 +160,87 @@ describe("/api/llm-promo/issue", () => {
       { request: claim, signature: bytesToHex(sig) },
     );
     expect(r.status).toBe(403);
+  });
+});
+
+describe("/api/llm-promo/issue — demo cap (#85)", () => {
+  const NOW = 1_700_000_000_000;
+  async function seedDemo(usernames: InMemoryUsernameStorage, irk: Keypair) {
+    await seed(usernames, "alice", irk);
+    await usernames.setDemo("alice", true);
+  }
+
+  it("denies a demo claim when no ledger dep is wired (fail closed)", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seedDemo(usernames, irk);
+    const claim = makeRequest({ issuedAt: NOW });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames, mintProviderKey: stubMint, now: () => NOW },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(403);
+    expect((r.body as { error: string }).error).toBe("demo LLM disabled");
+  });
+
+  it("accrues the per-issue grant and hard-stops at the rolling cap", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
+    const irk = makeIrk(); await seedDemo(usernames, irk);
+    // free-tier grant per issue = 1000 in + 500 out = 1500. cap 2000 ⇒
+    // first issue (used 0 + 1500) ok; second (1500 + 1500 > 2000) blocked.
+    const deps = {
+      llmPromo: new InMemoryLlmPromoStorage(),
+      tiers: new InMemoryTierStorage(),
+      usernames,
+      demoLlmLedger,
+      demoLlmTokenCap: 2000,
+      mintProviderKey: stubMint,
+      now: () => NOW,
+    };
+    const claim = makeRequest({ issuedAt: NOW });
+    const sig = signLlmPromoIssue(claim, irk);
+    const first = await handleLlmPromoIssue(deps, { request: claim, signature: bytesToHex(sig) });
+    expect(first.status).toBe(200);
+    expect(await demoLlmLedger.sumSince("alice", 0)).toBe(1500);
+    const second = await handleLlmPromoIssue(deps, { request: claim, signature: bytesToHex(sig) });
+    expect(second.status).toBe(429);
+    const body = second.body as { error: string; demo: boolean; usedTokens: number; capTokens: number; windowMs: number };
+    expect(body.error).toBe("demo quota reached");
+    expect(body.demo).toBe(true);
+    expect(body.usedTokens).toBe(1500);
+    expect(body.capTokens).toBe(2000);
+    expect(body.windowMs).toBe(24 * 60 * 60_000);
+  });
+
+  it("only counts grants inside the rolling window", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
+    const irk = makeIrk(); await seedDemo(usernames, irk);
+    // An old grant of 9999 tokens, 5s before NOW, with a 1s window ⇒
+    // excluded from sumSince ⇒ a fresh 1500 issue stays under cap 2000.
+    await demoLlmLedger.append("alice", NOW - 5000, 9999, 0);
+    const claim = makeRequest({ issuedAt: NOW });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames, demoLlmLedger, demoLlmTokenCap: 2000, demoLlmWindowMs: 1000, mintProviderKey: stubMint, now: () => NOW },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200);
+  });
+
+  it("never touches the ledger for a non-demo user", async () => {
+    const usernames = new InMemoryUsernameStorage();
+    const demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk); // not demo
+    const claim = makeRequest({ issuedAt: NOW });
+    const sig = signLlmPromoIssue(claim, irk);
+    const r = await handleLlmPromoIssue(
+      { llmPromo: new InMemoryLlmPromoStorage(), tiers: new InMemoryTierStorage(), usernames, demoLlmLedger, demoLlmTokenCap: 1, mintProviderKey: stubMint, now: () => NOW },
+      { request: claim, signature: bytesToHex(sig) },
+    );
+    expect(r.status).toBe(200); // cap of 1 would block a demo user; ignored here
+    expect(await demoLlmLedger.sumSince("alice", 0)).toBe(0);
   });
 });
 

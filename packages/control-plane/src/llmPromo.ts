@@ -28,6 +28,7 @@ import {
   type LlmProvider,
 } from "@flagship/protocol";
 import type {
+  DemoLlmLedgerStorage,
   LlmPromoStorage,
   TierName,
   TierStorage,
@@ -57,6 +58,17 @@ export interface LlmPromoDeps {
   now?: () => number;
   /** Override caps per tier. */
   caps?: Partial<Record<TierName, TierCaps>>;
+  /**
+   * #85 — rolling-window token ledger for `is_demo` accounts. A demo
+   * account must never reach a real provider key uncapped, so when the
+   * claim is `is_demo` this dep is REQUIRED: absent ⇒ the issue is
+   * denied (fail closed). Non-demo accounts never touch it.
+   */
+  demoLlmLedger?: DemoLlmLedgerStorage;
+  /** Demo ceiling override (default {@link DEMO_LLM_TOKEN_CAP_DEFAULT}). */
+  demoLlmTokenCap?: number;
+  /** Demo window override (default {@link DEMO_LLM_WINDOW_MS_DEFAULT}). */
+  demoLlmWindowMs?: number;
 }
 
 export interface TierCaps {
@@ -71,6 +83,18 @@ const DEFAULT_CAPS: Record<TierName, TierCaps> = {
   hobby: { dailyCalls: 100, lifetimeCalls: 1000, perCallInputTokens: 1000, perCallOutputTokens: 500 },
   maker: { dailyCalls: 500, lifetimeCalls: -1,   perCallInputTokens: 2000, perCallOutputTokens: 1000 },
 };
+
+/**
+ * Strict rolling-window LLM token ceiling for `is_demo` accounts (#85).
+ * Independent of (and on top of) the per-tier caps: a demo account
+ * exists to let a reviewer exercise vibe-coding, not to fund sustained
+ * real-provider spend. Hard stop ("demo quota reached"), never billing.
+ * The Worker never proxies LLM traffic, so it pessimistically counts
+ * the full per-issue grant at issue time (same philosophy as
+ * llm_promo_usage). Both knobs are deps-overridable.
+ */
+export const DEMO_LLM_TOKEN_CAP_DEFAULT = 250_000;
+export const DEMO_LLM_WINDOW_MS_DEFAULT = 24 * 60 * 60_000;
 
 interface IssueBody {
   request?: Partial<LlmPromoIssueRequest>;
@@ -165,6 +189,31 @@ export async function handleLlmPromoIssue(
   const dailyOutput = Math.min(r.desiredDailyOutputTokenCap, caps.perCallOutputTokens);
   const expiresAt = now + 60 * 60_000; // 1h
 
+  // #85 — strict rolling-window token ceiling for demo accounts, on top
+  // of the tier caps above. Fail closed: a demo claim with no ledger
+  // dep is a misconfiguration we must never resolve into a live
+  // provider key. Count the full per-issue grant pessimistically (the
+  // Worker never observes actual usage).
+  const demoWindowMs = deps.demoLlmWindowMs ?? DEMO_LLM_WINDOW_MS_DEFAULT;
+  const demoGrant = dailyInput + dailyOutput;
+  if (userRec.isDemo) {
+    if (!deps.demoLlmLedger) return forbidden("demo LLM disabled");
+    const cap = deps.demoLlmTokenCap ?? DEMO_LLM_TOKEN_CAP_DEFAULT;
+    const used = await deps.demoLlmLedger.sumSince(r.username, now - demoWindowMs);
+    if (used + demoGrant > cap) {
+      return {
+        status: 429,
+        body: {
+          error: "demo quota reached",
+          demo: true,
+          usedTokens: used,
+          capTokens: cap,
+          windowMs: demoWindowMs,
+        },
+      };
+    }
+  }
+
   // Mint the upstream provider key.
   const minted = await deps.mintProviderKey({
     provider: r.provider,
@@ -178,6 +227,9 @@ export async function handleLlmPromoIssue(
   // Bump counters AFTER successful mint.
   await deps.llmPromo.bumpDaily(r.username, today, dailyInput, dailyOutput);
   await deps.llmPromo.bumpLifetime(r.username, dailyInput, dailyOutput, now);
+  if (userRec.isDemo && deps.demoLlmLedger) {
+    await deps.demoLlmLedger.append(r.username, now, demoGrant, now - demoWindowMs);
+  }
 
   return ok({
     ok: true,

@@ -1029,6 +1029,8 @@ export async function tryControlPlane(
           llmPromo: storage.llmPromo,
           tiers: storage.tiers,
           usernames: storage.usernames,
+          // #85 — enforce the demo rolling-token ceiling in production.
+          demoLlmLedger: storage.demoLlmLedger,
           // Stub minter: returns a deterministic fake key. Real Worker
           // wiring calls the upstream provider's scoped-key API.
           mintProviderKey: async (args) => ({
