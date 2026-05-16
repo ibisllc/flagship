@@ -630,7 +630,7 @@ Working assumption: 1–2 engineers full time + Claude doing code generation.
 - [ ] STK rotation exercised live
 - [ ] Recovery (lost phone → new phone) exercised live
 - [ ] Public security disclosure page + bounty payouts
-- [ ] Reproducible-build CI for ISO
+- [x] Reproducible-build CI for ISO — `.github/workflows/build-iso.yml`: builds the ISO twice and `cmp`-asserts byte-identical, `SOURCE_DATE_EPOCH` from the commit ts for deterministic mtimes, pinned Alpine ISO+sha256 in `scripts/build-flagship-iso.sh`. (Verified 2026-05-16. v1 caveat, documented in the workflow: the ubuntu-22.04 runner image + apt tool versions aren't SHA-pinned — acceptable for v1-alpha; stricter = pinned docker image / self-hosted runner.)
 
 When all checked: v1 alpha. Then iterate.
 

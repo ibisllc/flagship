@@ -100,7 +100,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 3. **Android app real impl** (Play internal track). 17 Kotlin files under `apps/mobile/android/`; same shape — Gradle build, FCM setup, signing, internal-track upload + 5 testers.
 4. **Marketplace security scan service**. `marketplace_listings.scan_grade` column ships NULL today; scanner service that pulls a docker image, runs Trivy + custom checks, posts back grade + R2 report. MVP requirement before public marketplace launch.
 5. **Recovery J.3 + J.4** — re-pair envelope (new IRK refs old; .com confirms in 24h grace; daemon swaps PSK + paired-session) + membership re-attach (walk apps, re-issue stable-ids, alert per app). Without these, a recovered UMK can't actually take over the user's existing servers.
-6. **Reproducible-build CI for the Alpine ISO**. Today the base ISO is built ad-hoc; for a "trust the bytes you boot" claim we need bit-for-bit reproducible builds in GitHub Actions with deterministic timestamps.
+6. ~~**Reproducible-build CI for the Alpine ISO**~~ **DONE** (verified 2026-05-16) — `.github/workflows/build-iso.yml` builds the ISO twice and `cmp`-asserts byte-identical output, with `SOURCE_DATE_EPOCH` from the commit timestamp + a pinned Alpine ISO/sha256. (v1 caveat noted in the workflow: runner image + apt tool versions not SHA-pinned.)
 7. **Peer-backup distribution at scale** — primitives all built (peerLink, transport, shardStore, registry, repairDaemon, matchmaker, BackupLoop); needs operational tuning + a 7-day exercise across multiple pods to validate.
 8. Update-pack + lineage-break + STK rotation + recovery-from-lost-phone — each needs a live exercise per the v1-alpha done-when checklist.
 
