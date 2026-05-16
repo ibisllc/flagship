@@ -4,7 +4,10 @@
 code because it is (a) a change to an externally-adoptable protocol
 (`ibisllc/maintainers`) and (b) load-bearing for the project's "verifiable in
 the open-source releases" claim. Rationale/threat-model context also lives in
-agent memory `project_maintainer_ca.md`.
+agent memory `project_maintainer_ca.md`. **Operator/successor runbook:
+`docs/ca-operations.md`** (issue lease / rotate CA / take over) — backed
+by shipped tooling: `scripts/rotate-ca.mjs` + the upstream
+`maintainers ca-endorsement` CLI command.
 
 ## 1. Problem
 
