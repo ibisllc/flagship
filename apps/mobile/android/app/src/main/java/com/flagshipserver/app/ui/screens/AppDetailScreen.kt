@@ -23,7 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,8 +48,11 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import com.flagshipserver.app.viewmodels.CustomDomainCooldownStore
+import com.flagshipserver.app.viewmodels.CustomDomainPrompt
 import com.flagshipserver.app.viewmodels.RenameAppPhase
 import com.flagshipserver.app.viewmodels.RenameAppViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -86,6 +88,7 @@ fun AppDetailScreen(nav: NavController, appId: String) {
     // section.
     val appState = LocalAppState.current
     val server = LocalFlagshipServerClient.current
+    val ctx = LocalContext.current
     val renameVm: RenameAppViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -93,6 +96,7 @@ fun AppDetailScreen(nav: NavController, appId: String) {
                     server = server,
                     appId = appId,
                     username = { appState.currentUser.value },
+                    cooldownStore = CustomDomainCooldownStore.fromContext(ctx),
                 )
             }
         },
@@ -231,7 +235,25 @@ fun AppDetailScreen(nav: NavController, appId: String) {
         )
 
         Spacer(Modifier.height(FS.space.s3))
-        CustomDomainsSection(userStub = "${appState.currentUser.value ?: "you"}.flagship.services")
+        SetCustomDomainSection(
+            rootDomain = "${appState.currentUser.value ?: "you"}.flagship.services",
+            cooldownUntilMs = renameVm.customDomainCooldownUntilMs.collectAsState().value,
+            onSubmit = { draft -> scope.launch { renameVm.submitCustomDomain(draft) } },
+        )
+
+        val cdPrompt by renameVm.customDomainPrompt.collectAsState()
+        cdPrompt?.let { p ->
+            CustomDomainPromptDialog(
+                prompt = p,
+                onConfirm = {
+                    scope.launch {
+                        renameVm.dismissCustomDomainPrompt()
+                        p.onConfirm?.invoke()
+                    }
+                },
+                onDismiss = { renameVm.dismissCustomDomainPrompt() },
+            )
+        }
 
         if (showReplaceDialog) {
             ReplaceStemDialog(
@@ -354,6 +376,17 @@ private fun WebDomainsSection(
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            // CUSTOM DOMAIN sits at the very top, only when one is
+            // bound — it's the user's own name. Shown as soon as the
+            // order is recorded (even pending); the apps-list short→
+            // custom swap is what waits for .com to confirm. Mirrors
+            // iOS AppDetailScreen.customDomainGroup.
+            val cd = links?.customDomain
+            if (!cd.isNullOrEmpty()) {
+                UrlGroupLabel("CUSTOM DOMAIN")
+                UrlRowProminent(url = "https://$cd")
+                HorizontalRule()
+            }
             UrlGroupLabel("SHORT REDIRECT")
             val short = links?.shortUrl
             if (!short.isNullOrEmpty()) {
@@ -381,40 +414,44 @@ private fun WebDomainsSection(
     }
 }
 
-/** V7 — "Add a custom domain" affordance, kept visible under WEB
- *  DOMAINS so users don't forget custom domains are possible. Mirrors
- *  the iOS box: a field + Add, each added domain on its own card with
- *  a remove control + the DNS hint. The verify-DNS round trip is a
- *  TODO on this surface (consistent with Save/Claim being stubbed). */
+/** #80 — SET CUSTOM DOMAIN. Mock-faithful with the iOS client:
+ *  section label + right-floated M:SS countdown while cooling, input
+ *  + Add (disabled during the 300s on-device cooldown), and the CNAME
+ *  guidance line — all byte-identical to AppDetailScreen.swift. The
+ *  decoupled request / apex→www / destructive-replace logic lives in
+ *  the VM (submitCustomDomain); this is presentation only. */
 @Composable
-private fun CustomDomainsSection(userStub: String) {
-    val domains = remember { mutableStateListOf<String>() }
+private fun SetCustomDomainSection(
+    rootDomain: String,
+    cooldownUntilMs: Long?,
+    onSubmit: (String) -> Unit,
+) {
     var draft by remember { mutableStateOf("") }
-    if (domains.isNotEmpty()) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            domains.forEach { d ->
-                FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = d,
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp),
-                            modifier = Modifier.weight(1f),
-                        )
-                        FSGhostButton(label = "Remove", onClick = { domains.remove(d) })
-                    }
-                }
-            }
+    // Tick every second so the countdown + disabled state stay live
+    // (mirrors the iOS TimelineView(.periodic, by: 1)).
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(cooldownUntilMs) {
+        while (cooldownUntilMs != null && cooldownUntilMs > System.currentTimeMillis()) {
+            nowMs = System.currentTimeMillis()
+            delay(1000)
         }
-        Spacer(Modifier.height(FS.space.s2))
+        nowMs = System.currentTimeMillis()
     }
+    val remainingMs = (cooldownUntilMs ?: 0L) - nowMs
+    val cooling = remainingMs > 0
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                text = "Add a custom domain",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                UrlGroupLabel("SET CUSTOM DOMAIN")
+                Spacer(Modifier.weight(1f))
+                if (cooling) {
+                    Text(
+                        text = cooldownLabel(remainingMs),
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = draft,
@@ -424,26 +461,68 @@ private fun CustomDomainsSection(userStub: String) {
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.padding(start = FS.space.s2))
-                FSGhostButton(label = "Add", onClick = {
-                    val v = draft.trim().lowercase()
-                    if (v.isNotEmpty() && !domains.contains(v)) {
-                        domains.add(v)
+                FSGhostButton(
+                    label = "Add",
+                    enabled = !cooling,
+                    onClick = {
+                        val v = draft
                         draft = ""
-                    }
-                })
+                        onSubmit(v)
+                    },
+                )
             }
             Text(
-                text = "Point a subdomain you own at Flagship with one DNS CNAME: " +
-                    "www.mydomain.com → $userStub. No registrar transfer, no IP. " +
-                    "Your apex (mydomain.com) can't take a CNAME — keep it on www " +
-                    "and redirect the apex to it (free Cloudflare/registrar redirect). " +
-                    "The short link and app URLs are unaffected; a Replace never " +
-                    "touches an attached domain.",
+                text = "Prior to claiming a FQDN, you must set a CNAME record targeting $rootDomain.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 11.sp),
             )
         }
     }
+}
+
+/** M:SS — ceil seconds, matching the iOS cooldownLabel + the webapp. */
+private fun cooldownLabel(remainingMs: Long): String {
+    val s = ((remainingMs + 999) / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(s / 60, s % 60)
+}
+
+/** One-at-a-time alert mirroring the iOS .alert(presenting:). A
+ *  confirm+Cancel when [CustomDomainPrompt.confirmLabel] is set, else
+ *  an informational single-dismiss alert. */
+@Composable
+private fun CustomDomainPromptDialog(
+    prompt: CustomDomainPrompt,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(prompt.title) },
+        text = {
+            Text(
+                text = prompt.message,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+        },
+        confirmButton = {
+            if (prompt.confirmLabel != null) {
+                TextButton(onClick = onConfirm) {
+                    Text(
+                        prompt.confirmLabel,
+                        color = if (prompt.destructive) FS.colors.danger else FS.colors.text,
+                    )
+                }
+            } else {
+                TextButton(onClick = onDismiss) { Text("OK") }
+            }
+        },
+        dismissButton = {
+            if (prompt.confirmLabel != null) {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable

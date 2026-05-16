@@ -137,15 +137,24 @@ private fun AppRow(app: AppSummary, onClick: () -> Unit) {
             // what these are, so no leading glyphs.
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (!app.shortUrl.isNullOrEmpty()) {
+                    // A bound custom domain takes the short link's slot
+                    // ONLY once .com has confirmed it — that swap is
+                    // the subtle "it's live" cue. Mirrors iOS
+                    // AppsTab.urlRow + the webapp apps-list.
+                    val short = if (app.customDomainConfirmed == true && !app.customDomain.isNullOrEmpty()) {
+                        "https://${app.customDomain}"
+                    } else {
+                        app.shortUrl
+                    }
+                    if (!short.isNullOrEmpty()) {
                         Text(
-                            text = stripScheme(app.shortUrl),
+                            text = stripScheme(short),
                             color = FS.colors.text,
                             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
                             maxLines = 1,
                             modifier = Modifier.padding(end = FS.space.s2),
                         )
-                        FSGhostButton(label = "Copy", onClick = { copyToClipboard(ctx, app.shortUrl) })
+                        FSGhostButton(label = "Copy", onClick = { copyToClipboard(ctx, short) })
                     } else {
                         Text(
                             text = "voi.ci/…",
@@ -192,4 +201,8 @@ data class AppSummary(
     val shortUrl: String? = null,
     /** V3 — canonical FQDN; muted right-aligned text in the URL row. */
     val canonicalUrl: String? = null,
+    /** #81 — the bound external domain + whether .com confirmed it.
+     *  Populated by the same /links fan-out as shortUrl. */
+    val customDomain: String? = null,
+    val customDomainConfirmed: Boolean? = null,
 )
