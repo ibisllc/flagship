@@ -366,6 +366,7 @@ export async function tryControlPlane(
             servicesIpv6: env.SERVICES_PASSTHROUGH_IPV6,
           }
         : undefined;
+    const srForwarder = buildOptionalPushForwarder(env);
     return finish(
       await handleServerRegister(
         {
@@ -373,6 +374,10 @@ export async function tryControlPlane(
           servers: storage.servers,
           routing: storage.routing,
           dns,
+          // N0d-2: nudge the device family on a new registration.
+          pushTokens: storage.pushTokens,
+          installPolicyFanout: storage.installPolicyFanout,
+          ...(srForwarder ? { forwardToProviders: srForwarder } : {}),
         },
         await readJson(request),
       ),

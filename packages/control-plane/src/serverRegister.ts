@@ -4,7 +4,13 @@ import {
   type AuthCode,
   type ServerRegisterRequest,
 } from "@flagship/protocol";
-import type { AuthCodeStorage, RoutingStorage, ServerStorage } from "@flagship/storage";
+import type {
+  AuthCodeStorage,
+  InstallPolicyFanoutStorage,
+  PushTokenStorage,
+  RoutingStorage,
+  ServerStorage,
+} from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
 /**
@@ -45,6 +51,19 @@ export interface ServerRegisterDeps {
     /** IPv6 address (optional). */
     servicesIpv6?: string;
   };
+  /** N0d-2: when all three are provided, a successful new-server
+   *  registration fans a category-only ("server-registered"),
+   *  empty-payload push out to the user's device family so they
+   *  reconcile their server list (the phone owns install policy; .com
+   *  only nudges). At-most-once per server via installPolicyFanout.
+   *  Entirely best-effort — a push failure never fails registration. */
+  pushTokens?: PushTokenStorage;
+  installPolicyFanout?: InstallPolicyFanoutStorage;
+  forwardToProviders?: (args: {
+    targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
+    category: string;
+    sealedPayloadHex: string;
+  }) => Promise<{ ok: boolean; sent: number; failed: number }>;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -161,6 +180,39 @@ export async function handleServerRegister(
     identityPubKeyHex: bytesToHex(identityPub),
     registeredAt: now,
   });
+
+  // N0d-2: nudge the user's device family to reconcile their server
+  // list. Empty-payload / category-only — .com never sees content
+  // (the privacy invariant; mirrors the webapp empty-push model).
+  // At-most-once via recordOnce (registration is one-shot, but a
+  // double-submit must not double-notify). Fully best-effort: any
+  // failure here must not fail an otherwise-good registration.
+  if (deps.pushTokens && deps.installPolicyFanout) {
+    try {
+      const tokens = await deps.pushTokens.listByUser(authCode.username);
+      const firstTime = await deps.installPolicyFanout.recordOnce({
+        serverDomain: authCode.serverDomain,
+        username: authCode.username,
+        registeredAt: now,
+        fanoutCount: tokens.length,
+        notifiedAt: now,
+      });
+      if (firstTime && tokens.length > 0 && deps.forwardToProviders) {
+        await deps.forwardToProviders({
+          targets: tokens.map((t) => ({
+            tokenId: t.tokenId,
+            platform: t.platform,
+            providerToken: t.providerToken,
+          })),
+          category: "server-registered",
+          sealedPayloadHex: "",
+        });
+      }
+    } catch {
+      // best-effort — swallow; the device family also reconciles via
+      // the servers list + ETag on next foreground.
+    }
+  }
 
   // If RCK is registered for this subdomain, point routing at this
   // server identity. Failover/migration via SetRoutingTarget can later
