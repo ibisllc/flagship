@@ -702,7 +702,10 @@ export class InMemoryCustomDomainOrderStorage implements CustomDomainOrderStorag
     return true;
   }
   async listActive() {
-    return [...this.byKey.values()].filter((r) => r.status === "active").map((r) => ({ ...r }));
+    return this.listByStatus("active");
+  }
+  async listByStatus(status: CustomDomainOrderRecord["status"]) {
+    return [...this.byKey.values()].filter((r) => r.status === status).map((r) => ({ ...r }));
   }
 }
 

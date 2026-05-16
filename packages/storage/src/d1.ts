@@ -1689,8 +1689,12 @@ export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
   async listActive() {
+    return this.listByStatus("active");
+  }
+  async listByStatus(status: CustomDomainOrderRecord["status"]) {
     const r = await this.db
-      .prepare("SELECT * FROM custom_domain_orders WHERE status = 'active'")
+      .prepare("SELECT * FROM custom_domain_orders WHERE status = ?")
+      .bind(status)
       .all<CustomDomainOrderRow>();
     return r.results.map(rowToCustomDomainOrder);
   }

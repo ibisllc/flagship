@@ -742,4 +742,9 @@ export interface CustomDomainOrderStorage {
   ): Promise<boolean>;
   /** Phase-4 #82 re-verify sweep — every active order. */
   listActive(): Promise<CustomDomainOrderRecord[]>;
+  /** Phase-4 verifier — every order in a given status (pending to
+   *  verify, active to re-verify). */
+  listByStatus(
+    status: CustomDomainOrderRecord["status"],
+  ): Promise<CustomDomainOrderRecord[]>;
 }

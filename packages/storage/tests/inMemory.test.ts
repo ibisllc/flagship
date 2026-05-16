@@ -355,3 +355,15 @@ describe("CustomDomainOrder podCanonical (#87 Phase 3)", () => {
     expect((await s.customDomainOrders.get("u", "b"))?.podCanonical).toBeUndefined();
   });
 });
+
+describe("CustomDomainOrder listByStatus (#79B)", () => {
+  it("filters by status (listActive delegates to it)", async () => {
+    const s = new InMemoryStorage();
+    await s.customDomainOrders.upsert({ appId: "a1", userId: "u", fqdn: "p.example.com", status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    await s.customDomainOrders.upsert({ appId: "a2", userId: "u", fqdn: "a.example.com", status: "active", podCanonical: "home.u.flagship.services", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    await s.customDomainOrders.upsert({ appId: "a3", userId: "u", fqdn: "f.example.com", status: "failed", lastChanged: 1, failCount: 3, createdAt: 1, updatedAt: 1 });
+    expect((await s.customDomainOrders.listByStatus("pending")).map((r) => r.appId)).toEqual(["a1"]);
+    expect((await s.customDomainOrders.listByStatus("failed")).map((r) => r.appId)).toEqual(["a3"]);
+    expect((await s.customDomainOrders.listActive()).map((r) => r.appId)).toEqual(["a2"]);
+  });
+});
