@@ -300,7 +300,16 @@ Apps own consistency. The harness owns distribution fabric.
 
 ## Open follow-ups
 
-- **N0d-2** Install-policy storage + push fan-out on new server.
-- **N0e-2** Sibling-WS endpoint at `/.flagship/sibling-handshake` and
-  the outbound client used during /api/url/claim takeovers.
+- ~~**N0d-2** Install-policy storage + push fan-out on new server.~~
+  DONE (2026-05-16): `install_policy_fanout` store + serverRegister
+  best-effort at-most-once empty-payload fan-out.
+- ~~**N0e-2** Sibling-WS endpoint + outbound client.~~ DONE
+  (2026-05-16): inbound accept was already runtime-wired; the
+  one-shot `openSiblingConnection` (takeovers) existed; this added
+  the persistent supervised auto-dialer
+  `SiblingHandshakeClientManager` at parity with the cert-sync
+  `SiblingClientManager`. Joint runtime `setPeers`-from-discovery
+  instantiation is the live exercise (tracked with the real-infra
+  backlog) — by precedent neither persistent supervisor is
+  constructed in `runtime.ts`.
 - LE high-volume issuer allowlist before public launch.

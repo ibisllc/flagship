@@ -1059,6 +1059,16 @@ export type {
   SiblingClientManagerOptions,
   WsLike as SiblingWsLike,
 } from "./sibling/siblingClient.js";
+export {
+  SiblingHandshakeClientManager,
+  startPersistentSiblingHandshakeClient,
+} from "./sibling/siblingHandshakeClient.js";
+export type {
+  PersistentSiblingHandshakeClient,
+  PersistentSiblingHandshakeClientOptions,
+  SiblingHandshakeClientManagerOptions,
+  SiblingOpenFn,
+} from "./sibling/siblingHandshakeClient.js";
 export { acceptSyncUpgrade } from "./sibling/siblingServer.js";
 export type { AcceptSyncUpgradeArgs } from "./sibling/siblingServer.js";
 

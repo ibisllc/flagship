@@ -66,7 +66,7 @@ Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
 
 ## 2. Live production state (verify before relying)
 
-- **Gate:** `npx tsc -b` clean · `npx vitest run` → **2509 passed / 223
+- **Gate:** `npx tsc -b` clean · `npx vitest run` → **2514 passed / 224
   files** on `main` (was 2492/221; +9 #30 fail-closed link-1, +8 #24
   fan-out). One pre-existing intermittent flake observed under full
   parallel run (deterministically green on isolated re-run) — see §0
@@ -125,12 +125,12 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 22 | lazy-SNI → routeToTunnel wiring | ⛔ | raw-TCP :443 hot path, no unit harness — focused pass; correctness core (push+cold-start) already shipped |
 | 23 | verify push secret injection (audit N3) | ✅ | verified live; `scripts/check-push-secrets.mjs` guard |
 | 24 | N0d-2 install-policy push fan-out | ✅ | `install_policy_fanout` store (types/inMemory/d1/0025) + serverRegister best-effort at-most-once empty-payload "server-registered" fan-out + apps/com wiring; 8 tests. build-tasks:664 ☑. Deployed (mig 0025 + Worker) |
-| 25 | N0e-2 daemon sibling-WS auto-dial | ▶ | build-tasks:666 ☐; wire peer discovery + auto outbound dial so `live_siblings` populates |
+| 25 | N0e-2 daemon sibling-WS auto-dial | ✅* | `siblingHandshakeClient.ts`: `startPersistentSiblingHandshakeClient` + `SiblingHandshakeClientManager` (reconnect/backoff/jitter/`setPeers`) at parity with cert-sync `SiblingClientManager`; router setSibling/removeSibling symmetric with the inbound accept; 5 tests; exported. build-tasks:666 ☑. *Joint runtime `setPeers`-from-discovery instantiation = live exercise (→ #16; neither persistent supervisor is runtime-instantiated by precedent) |
 | 26 | verify Forgejo + real-LLM streaming (audit N1/N2) | ⛔(mostly) | largely real-infra: real provider key + live daemon; add Forgejo+vibe-code e2e smoke |
 | 27 | Track P 3 genesis ceremony (app-primary + CLI fallback) | ▶ | generate-on-YubiKey + genesis Mandate naming successor + emit baked pubkey; tests use placeholder genesis |
 | 28 | Track P 4 PIV-Ed25519 signer | ▶ | app NFC-PIV (primary) + CLI USB-PIV (escape hatch); fw≥5.7 PIV-Ed25519 == std Ed25519 ⇒ no upstream spec change |
 | 29 | Track P 5 OPTIONAL hosted committer | ▶(downscoped) | opt-in credential-off-phone mode only; default is app-direct-commit (#32) |
-| 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2509** |
+| 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ▶ | NO signing view; status + ceremony-preview + commit-trigger |
 | 32 | **Track P generic OSS maintainers NFC-tap app** | ▶ | GENERIC, project-agnostic; home upstream `ibisllc/maintainers`; per-repo profile + hardware-stored git cred; tap YubiKey→PIV-Ed25519→app commits directly. §11+§12 |
 
@@ -145,7 +145,7 @@ Ed25519 over the canonical bytes).
 ## 4. Working discipline (non-negotiable — this is how the tree stayed clean)
 
 - One logical change per commit, each individually tested. `npx tsc -b
-  && npx vitest run` must stay green (**2509 baseline**) before every
+  && npx vitest run` must stay green (**2514 baseline**) before every
   commit. Commit with `git commit -F -` (heredoc — NEVER `-m` with
   backticks/`$()`). No `Co-Authored-By` trailer. Push each tested
   commit to `origin/main`.

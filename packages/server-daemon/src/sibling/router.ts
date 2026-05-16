@@ -19,13 +19,23 @@
  * and uses it as the "fromAppId" on send + the subscribe key — apps
  * cannot impersonate each other on send either.
  *
- * What this MODULE does not do (those land in N0e-2):
- *   - Establish the sibling-WS connections themselves
- *   - Drive the handshake state machine
- *   - Persistence — sibling state is in-memory; rebuilt on restart
+ * What this MODULE does not do:
+ *   - Establish the sibling-WS connections themselves — the inbound
+ *     accept (`wsServer.acceptSiblingUpgrade`, runtime-wired) and the
+ *     N0e-2 persistent outbound auto-dialer
+ *     (`siblingHandshakeClient.{startPersistentSiblingHandshakeClient,
+ *     SiblingHandshakeClientManager}`) own that; both call the seams
+ *     below.
+ *   - Drive the handshake state machine (handshake.ts).
+ *   - Persistence — sibling state is in-memory; rebuilt on restart.
  *
  * The router exposes `setSibling` / `removeSibling` / `ingestFromSibling`
- * as the seams the connection layer plugs into.
+ * as the seams the connection layer plugs into. N0e-2 note: by the
+ * cert-sync precedent the persistent supervisors are library-level;
+ * `runtime.ts` instantiation (feeding `setPeers` from live peer
+ * discovery) is the joint follow-on wiring exercise for BOTH the
+ * cert-sync `SiblingClientManager` and the handshake
+ * `SiblingHandshakeClientManager`.
  */
 
 export interface SiblingInfo {

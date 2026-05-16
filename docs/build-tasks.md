@@ -22,8 +22,7 @@ fallback page) shipped. Backend daemon, Worker control-plane, ISO
 build, web design system, marketplace backend, push token storage,
 LLM-promo + tier subscription storage, VibeCodeSession parser, and
 mobile Apps/Marketplace screens are shipped. Live URL deploy /
-real-LLM streaming / APNs+FCM bridge / Stripe / sibling-WS endpoint
-wiring (N0e-2) remain.
+real-LLM streaming / APNs+FCM bridge / Stripe remain.
 
 See `memory/session_close_2026_05_07_multiplex_v2.md` for the full
 push log of the multiplexing-v2 cycle.
@@ -663,7 +662,7 @@ task IDs:
 | N0d | claim-url / release-url PhoneOrders + UrlController | ☑ |
 | N0d-2 | Install-policy storage + push fan-out on new server | ☑ |
 | N0e | Sibling-WS frame protocol + handshake state machine | ☑ |
-| N0e-2 | Sibling WS endpoint at /.flagship/sibling-handshake + outbound client | ☐ |
+| N0e-2 | Sibling WS endpoint at /.flagship/sibling-handshake + outbound client | ☑ |
 | N0f | .services fallback page when SNI unclaimed under user zone | ☑ |
 | N0g | Rewrite docs/multiplexing.md to FINAL DESIGN | ☑ |
 | N0h | ClaimUrlCapability primitives + CapabilityStore + checkCapability | ☑ |
