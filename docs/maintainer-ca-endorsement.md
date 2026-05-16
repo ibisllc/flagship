@@ -198,9 +198,15 @@ and ultimately for hardening **all** CA-signed artifacts. The #84 *backend*
 (storage/protocol/control-plane) is already done & committed; only the client
 honoring waits on this.
 
-1. **(this doc)** + upstream spec delta drafted.
+1. **(this doc)** + upstream spec delta drafted. ✅
 2. Upstream `ibisllc/maintainers`: `CaEndorsement` type + canonical +
-   verifier + tests. PR-governed; lands → new SHA.
+   verifier + tests. **✅ BUILT on branch `feat/ca-endorsement`
+   (`496abae7`) in `./maintainers` — 12 new tests, 243 suite green,
+   protocol `tsc` clean; spec §2.6/§3.7/§5.1 added.** Remaining: push
+   the branch → PR/review in `ibisllc/maintainers` → land → bump
+   `scripts/maintainers.pinned-sha` (governed; user/CI-side). The
+   branch is durable locally (`./maintainers` HEAD parked at the
+   pinned SHA so `pull-maintainers.sh` won't hard-reset the ref).
 3. Flagship: bump `scripts/maintainers.pinned-sha`; daemon `ca`-endorsement
    path + tests.
 4. **Real-YubiKey genesis ceremony** (human; current `ca`-track holder is a
