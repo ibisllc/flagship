@@ -1616,6 +1616,7 @@ interface CustomDomainOrderRow {
   user_id: string;
   fqdn: string;
   status: string;
+  pod_canonical?: string | null;
   last_changed: number;
   fail_count: number;
   created_at: number;
@@ -1627,6 +1628,7 @@ function rowToCustomDomainOrder(r: CustomDomainOrderRow): CustomDomainOrderRecor
     userId: r.user_id,
     fqdn: r.fqdn,
     status: r.status as CustomDomainOrderRecord["status"],
+    podCanonical: r.pod_canonical ?? undefined,
     lastChanged: r.last_changed,
     failCount: r.fail_count,
     createdAt: r.created_at,
@@ -1650,16 +1652,17 @@ export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
     await this.db
       .prepare(
         "INSERT INTO custom_domain_orders " +
-          "(app_id, user_id, fqdn, status, last_changed, fail_count, created_at, updated_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+          "(app_id, user_id, fqdn, status, pod_canonical, last_changed, fail_count, created_at, updated_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
           "ON CONFLICT(app_id, user_id) DO UPDATE SET " +
           "fqdn=excluded.fqdn, status=excluded.status, " +
+          "pod_canonical=excluded.pod_canonical, " +
           "last_changed=excluded.last_changed, fail_count=excluded.fail_count, " +
           "updated_at=excluded.updated_at",
       )
       .bind(
-        rec.appId, uid, rec.fqdn, rec.status, rec.lastChanged,
-        rec.failCount, rec.createdAt, rec.updatedAt,
+        rec.appId, uid, rec.fqdn, rec.status, rec.podCanonical ?? null,
+        rec.lastChanged, rec.failCount, rec.createdAt, rec.updatedAt,
       )
       .run();
     return { ...rec, userId: uid };

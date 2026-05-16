@@ -711,6 +711,13 @@ export interface CustomDomainOrderRecord {
   userId: string;
   fqdn: string;
   status: "pending" | "active" | "failed";
+  /**
+   * The pod canonical that serves this fqdn, set by the Phase-4
+   * verifier when it confirms the CNAME (status→active). Undefined
+   * until then. `.services` cold-start (#87) reads fqdn→podCanonical
+   * from the active rows that have it.
+   */
+  podCanonical?: string;
   /** ms — when the order was last (re)requested; the rate-limit clock. */
   lastChanged: number;
   failCount: number;

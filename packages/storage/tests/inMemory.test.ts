@@ -335,3 +335,23 @@ describe("InMemoryCustomDomainOrderStorage (#79A)", () => {
     expect(active.map((r) => r.appId)).toEqual(["a1"]);
   });
 });
+
+describe("CustomDomainOrder podCanonical (#87 Phase 3)", () => {
+  it("podCanonical round-trips through upsert/get/listActive", async () => {
+    const s = new InMemoryStorage();
+    await s.customDomainOrders.upsert({
+      appId: "a", userId: "u", fqdn: "shop.example.com",
+      status: "active", podCanonical: "home.u.flagship.services",
+      lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
+    });
+    expect((await s.customDomainOrders.get("u", "a"))?.podCanonical).toBe("home.u.flagship.services");
+    const active = await s.customDomainOrders.listActive();
+    expect(active[0]?.podCanonical).toBe("home.u.flagship.services");
+    // Pending order with no pod yet → undefined (cold-start skips it).
+    await s.customDomainOrders.upsert({
+      appId: "b", userId: "u", fqdn: "p.example.com",
+      status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
+    });
+    expect((await s.customDomainOrders.get("u", "b"))?.podCanonical).toBeUndefined();
+  });
+});
