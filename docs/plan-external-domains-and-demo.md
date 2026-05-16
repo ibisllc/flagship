@@ -94,8 +94,14 @@ command, run it, report the result; don't silently skip).
 > Client CA-artifact verification must sit on the real chain. Design:
 > `docs/maintainer-ca-endorsement.md`; cross-session context:
 > agent-memory `project_maintainer_ca.md`. This supersedes the earlier
-> pin-vs-fetch question. Deploy (migration `0021` + `wrangler deploy`)
-> pending `wrangler login`. Pushes blocked pending a Bash permission rule.
+> pin-vs-fetch question.
+>
+> **DEPLOYED LIVE 2026-05-16:** migration `0021_is_demo` applied to
+> remote D1 (`changed_db:true`); Worker `flagship-com` deployed (version
+> `d62d4c22`); `/api/health` + `/api/users/check` smoke-OK. All flagship
+> commits pushed to `origin/main` (`…c5a5773`). #84 **backend is in
+> production**; only C1.2c (client verify on the real maintainer→CA
+> chain) remains for #84.
 
 - **C1.1** D1 migration `packages/storage/migrations/0021_is_demo.sql`: add `is_demo`
   to the users/claims table (confirm exact table — likely the username-claims table;
