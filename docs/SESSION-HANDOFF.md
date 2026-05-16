@@ -49,6 +49,21 @@ Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
   the discovery sweep — pin the flaky spec or add a deterministic
   wait; do not mask with a blanket retry.
 
+- **2026-05-16 (resume, Android build-blocker — FOUND+FIXED):** while
+  wiring #20, found `AppDetailScreen.kt` + `TrustedDevicesScreen.kt`
+  construct 3 plain (non-`androidx.lifecycle.ViewModel`) classes via
+  Compose `viewModel(factory=…)` (`fun <VM:ViewModel> viewModel`) —
+  the Android module would NOT compile (latent in the #80/#81
+  review-faithful work; Android is review-only here so it was never
+  caught). Fixed: `RenameAppViewModel`/`ReplaceDeviceViewModel`/
+  `WipeRestartViewModel` now `: ViewModel()` (commit `c06ca9f`),
+  matching the already-correct `TrustedDevicesViewModel`. Other
+  screens that construct plain VMs via `remember{VM()}`
+  (ActivityScreen/ServerDetailScreen) are fine — that is the correct
+  convention for a plain VM and is what #20's AppsListScreen uses.
+  Next JDK-equipped session should still run a real Gradle build to
+  shake out any further never-compiled Android drift.
+
 ## 1. Cold-start read order
 
 1. **This file** (state + backlog).
@@ -120,7 +135,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 17 | B-A3 webapp full Wipe ceremony | ⛔ | v1.1-deferred by CLAUDE.md/in-product copy; needs live cross-device WebAuthn-PRF exercise. Seam exists (keystore IDB + lib/recovery.js + WipeRestart envelope) |
 | 18 | C-A1 live WebAuthn wrappers | ⛔ | needs a real authenticator/device; iOS ASAuth PRF stub, iOS18+ only — document the iOS17 fallback |
 | 19 | Audit | ✅ | 17 findings → tasks #23–#26 + #14 rescope |
-| 20 | Android apps-list /links fan-out | ▶ | review-only; AppsListScreen is `sampleApps()=emptyList()` — wire screens-client + per-app `.com /links` fan-out, mirror iOS/webapp |
+| 20 | Android apps-list /links fan-out | ✅ | `AppsListViewModel.kt` (Kotlin mirror of the iOS VM) + `AppsListScreen` rewired off `sampleApps()` via the `remember{VM}` convention (ActivityScreen pattern, NOT the broken `viewModel()` one); merge faithful to iOS AppsTab.AppRow; fixed 2 pre-existing dead nav routes now exercised (`apps/`→`app-detail/`, `vibe-code/describe`→`vibe/describe`). Review-only (no JDK). Spun off the ViewModel-base build-blocker fix |
 | 21 | C4.1c runtime wiring + live exercise | ⛔ | real-infra (real CNAME→LE cert→green padlock→sibling failover). Steps in plan-doc Phase 4 note |
 | 22 | lazy-SNI → routeToTunnel wiring | ⛔ | raw-TCP :443 hot path, no unit harness — focused pass; correctness core (push+cold-start) already shipped |
 | 23 | verify push secret injection (audit N3) | ✅ | verified live; `scripts/check-push-secrets.mjs` guard |
