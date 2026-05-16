@@ -49,6 +49,7 @@ import type {
   VoiciLinkStorage,
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
+  DemoLlmLedgerStorage,
 } from "./types.js";
 
 /**
@@ -1700,6 +1701,27 @@ export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
   }
 }
 
+export class D1DemoLlmLedgerStorage implements DemoLlmLedgerStorage {
+  constructor(private db: D1Database) {}
+  async append(username: string, grantedAt: number, tokens: number, pruneBefore: number) {
+    await this.db
+      .prepare("INSERT INTO demo_llm_ledger (username, granted_at, tokens) VALUES (?, ?, ?)")
+      .bind(username, grantedAt, tokens)
+      .run();
+    await this.db
+      .prepare("DELETE FROM demo_llm_ledger WHERE username = ? AND granted_at < ?")
+      .bind(username, pruneBefore)
+      .run();
+  }
+  async sumSince(username: string, sinceMs: number) {
+    const r = await this.db
+      .prepare("SELECT COALESCE(SUM(tokens), 0) AS total FROM demo_llm_ledger WHERE username = ? AND granted_at >= ?")
+      .bind(username, sinceMs)
+      .first<{ total: number }>();
+    return r?.total ?? 0;
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -1724,6 +1746,7 @@ export class D1Storage implements Storage {
   userAppAliases: UserAppAliasStorage;
   voiciLinks: VoiciLinkStorage;
   customDomainOrders: CustomDomainOrderStorage;
+  demoLlmLedger: DemoLlmLedgerStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -1748,5 +1771,6 @@ export class D1Storage implements Storage {
     this.userAppAliases = new D1UserAppAliasStorage(db);
     this.voiciLinks = new D1VoiciLinkStorage(db);
     this.customDomainOrders = new D1CustomDomainOrderStorage(db);
+    this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
   }
 }

@@ -367,3 +367,33 @@ describe("CustomDomainOrder listByStatus (#79B)", () => {
     expect((await s.customDomainOrders.listActive()).map((r) => r.appId)).toEqual(["a2"]);
   });
 });
+
+describe("InMemoryDemoLlmLedgerStorage (#85)", () => {
+  it("sums only grants at or after the window start", async () => {
+    const s = new InMemoryStorage();
+    const t = 1_000_000_000;
+    const win = 24 * 60 * 60_000;
+    await s.demoLlmLedger.append("demo", t - win - 1, 100, 0); // out of window, pruned
+    await s.demoLlmLedger.append("demo", t - 10_000, 200, t - win);
+    await s.demoLlmLedger.append("demo", t, 300, t - win);
+    expect(await s.demoLlmLedger.sumSince("demo", t - win)).toBe(500);
+    // Boundary is inclusive (>= sinceMs).
+    expect(await s.demoLlmLedger.sumSince("demo", t)).toBe(300);
+  });
+  it("prunes entries older than pruneBefore on append", async () => {
+    const s = new InMemoryStorage();
+    await s.demoLlmLedger.append("demo", 100, 50, 0);
+    await s.demoLlmLedger.append("demo", 200, 50, 0);
+    // A later append with pruneBefore=150 drops the grantedAt=100 row.
+    await s.demoLlmLedger.append("demo", 300, 50, 150);
+    expect(await s.demoLlmLedger.sumSince("demo", 0)).toBe(100); // 200 + 300 only
+  });
+  it("isolates users", async () => {
+    const s = new InMemoryStorage();
+    await s.demoLlmLedger.append("a", 10, 999, 0);
+    await s.demoLlmLedger.append("b", 10, 1, 0);
+    expect(await s.demoLlmLedger.sumSince("a", 0)).toBe(999);
+    expect(await s.demoLlmLedger.sumSince("b", 0)).toBe(1);
+    expect(await s.demoLlmLedger.sumSince("c", 0)).toBe(0);
+  });
+});

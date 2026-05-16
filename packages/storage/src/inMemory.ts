@@ -49,6 +49,7 @@ import type {
   VoiciLinkStorage,
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
+  DemoLlmLedgerStorage,
 } from "./types.js";
 
 /**
@@ -421,6 +422,19 @@ export class InMemoryLlmPromoStorage implements LlmPromoStorage {
   }
 }
 
+export class InMemoryDemoLlmLedgerStorage implements DemoLlmLedgerStorage {
+  private byUser = new Map<string, { grantedAt: number; tokens: number }[]>();
+  async append(username: string, grantedAt: number, tokens: number, pruneBefore: number) {
+    const rows = this.byUser.get(username) ?? [];
+    rows.push({ grantedAt, tokens });
+    this.byUser.set(username, rows.filter((r) => r.grantedAt >= pruneBefore));
+  }
+  async sumSince(username: string, sinceMs: number) {
+    const rows = this.byUser.get(username) ?? [];
+    return rows.reduce((s, r) => (r.grantedAt >= sinceMs ? s + r.tokens : s), 0);
+  }
+}
+
 export class InMemoryTierStorage implements TierStorage {
   private byUser = new Map<string, TierSubscriptionRecord>();
   async get(u: string) { const r = this.byUser.get(u); return r ? { ...r } : undefined; }
@@ -733,4 +747,5 @@ export class InMemoryStorage implements Storage {
   userAppAliases = new InMemoryUserAppAliasStorage();
   voiciLinks = new InMemoryVoiciLinkStorage();
   customDomainOrders = new InMemoryCustomDomainOrderStorage();
+  demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
 }

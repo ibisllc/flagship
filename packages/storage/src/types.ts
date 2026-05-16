@@ -479,6 +479,7 @@ export interface Storage {
   userAppAliases: UserAppAliasStorage;
   voiciLinks: VoiciLinkStorage;
   customDomainOrders: CustomDomainOrderStorage;
+  demoLlmLedger: DemoLlmLedgerStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -623,6 +624,35 @@ export interface LlmPromoStorage {
   bumpDaily(username: string, day: number, inputTokens: number, outputTokens: number): Promise<LlmPromoUsageRecord>;
   getLifetime(username: string): Promise<LlmPromoLifetimeRecord | undefined>;
   bumpLifetime(username: string, inputTokens: number, outputTokens: number, now: number): Promise<LlmPromoLifetimeRecord>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Demo-account rolling LLM token ledger (#85)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Append-only grant log used to enforce a strict rolling-window token
+ * ceiling for `is_demo` users (#85). One row per LLM-promo issue; the
+ * Worker pessimistically logs the full per-issue grant (it never proxies
+ * traffic, mirroring the llm_promo_usage philosophy). A genuine rolling
+ * window (not a calendar day) so a demo account can't burst-reset at
+ * midnight. Old rows are pruned on append so the table stays tiny.
+ */
+export interface DemoLlmLedgerRecord {
+  username: string;
+  grantedAt: number; // ms epoch
+  tokens: number;
+}
+
+export interface DemoLlmLedgerStorage {
+  /**
+   * Record a grant of `tokens` at `grantedAt`, then drop this user's
+   * entries strictly older than `pruneBefore` in the same write so the
+   * ledger self-trims to the active window.
+   */
+  append(username: string, grantedAt: number, tokens: number, pruneBefore: number): Promise<void>;
+  /** Sum of tokens granted to `username` at or after `sinceMs`. */
+  sumSince(username: string, sinceMs: number): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
