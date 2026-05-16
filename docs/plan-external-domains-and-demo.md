@@ -125,10 +125,16 @@ command, run it, report the result; don't silently skip).
 > `customDomain.ts` + getAppLinks surfacing + routes). Migration `0022`
 > applied to remote D1 (14 tables); Worker deployed (`79cde2ea`);
 > smoke-OK (`GET …/custom-domain`→`{fqdn:null}`, malformed POST→400).
-> 2398 vitest green. **Open: C2.4** — iOS Live `setCustomDomain` 501
-> flip needs the renameApp-style signed-request refactor (tracked
-> separately; bounded; not backend-critical-path, can't exercise
-> pre-TestFlight). The decoupled CNAME-verify is Phase 4.
+> 2398 vitest green. **C2.4 DONE 2026-05-16** (`da6d1d0`): the
+> renameApp-style signed-request refactor — `SetCustomDomainClaim`
+> canonical bytes + `SetCustomDomainRequest` envelope; protocol method
+> is now `setCustomDomain(username:appId:body:)`; Mock keeps the 429
+> "Too soon — try again in Ns." (U+2014) + records from the body; Live
+> POSTs to `/custom-domain`, decodes `{error}` on non-2xx so the 429
+> string is byte-equal to the Mock, re-reads `getAppLinks` on 200
+> (decoupled); `AppDetailViewModel.bindCustomDomain` IRK-signs (Face
+> ID = 2nd factor). iOS app builds clean; 232 XCTests green. Live ==
+> Mock on the wire. (Real exercise still needs TestFlight.)
 
 - **C2.1** D1 migration `0022_custom_domain_orders.sql`: table
   `custom_domain_orders(app_id, user_id, fqdn, status TEXT /* pending|active|failed */,
