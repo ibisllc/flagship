@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   signBootApproval,
+  signDemoDirective,
+  verifyDemoDirective,
   signInvite,
   signInviteAcceptance,
   signMembershipMutation,
@@ -17,6 +19,7 @@ import {
   verifyRegisterServer,
   verifyRevocation,
   type BootChallenge,
+  type DemoDirective,
   type ImageRebuildRequest,
   type MembershipMutation,
   type MigrationRequest,
@@ -700,5 +703,46 @@ describe("UploadRecoveryRecord — IRK-signed cloud-shard recovery upload", () =
     };
     const sig = signUploadRecoveryRecord(r, irk);
     expect(verifyUploadRecoveryRecord(r, sig, otherIrk.publicKey)).toBe(false);
+  });
+});
+
+describe("DemoDirective (#84)", () => {
+  const ca = deriveIRK({ seed: new Uint8Array(32).fill(0xca) });
+  const d: DemoDirective = {
+    version: 1,
+    username: "demo",
+    useMockRecovery: true,
+    issuedAt: 1_700_000_000_000,
+    expiresAt: 1_700_000_900_000,
+    issuer: "flagship-ca-v1",
+  };
+
+  it("a CA-signed directive verifies under the CA pubkey", () => {
+    const sig = signDemoDirective(d, ca);
+    expect(verifyDemoDirective(d, sig, ca.publicKey)).toBe(true);
+  });
+
+  it("a client cannot self-elect demo mode (non-CA signer is rejected)", () => {
+    const notCa = deriveIRK({ seed: new Uint8Array(32).fill(0x11) });
+    const sig = signDemoDirective(d, notCa);
+    expect(verifyDemoDirective(d, sig, ca.publicKey)).toBe(false);
+  });
+
+  it("rejects a flipped useMockRecovery (can't downgrade a live account to mock or vice versa)", () => {
+    const sig = signDemoDirective(d, ca);
+    const tampered: DemoDirective = { ...d, useMockRecovery: false };
+    expect(verifyDemoDirective(tampered, sig, ca.publicKey)).toBe(false);
+  });
+
+  it("rejects a re-targeted username (a directive minted for one user can't be replayed onto another)", () => {
+    const sig = signDemoDirective(d, ca);
+    const tampered: DemoDirective = { ...d, username: "victim" };
+    expect(verifyDemoDirective(tampered, sig, ca.publicKey)).toBe(false);
+  });
+
+  it("rejects a stretched expiry (can't extend a captured directive's lifetime)", () => {
+    const sig = signDemoDirective(d, ca);
+    const tampered: DemoDirective = { ...d, expiresAt: d.expiresAt + 1 };
+    expect(verifyDemoDirective(tampered, sig, ca.publicKey)).toBe(false);
   });
 });
