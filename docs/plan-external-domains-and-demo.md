@@ -294,6 +294,44 @@ command, run it, report the result; don't silently skip).
 
 ### Phase 6 — Client parity: Android + webapp (#80, #81)
 
+> **Progress 2026-05-16:** **webapp (C6.2) DONE + DEPLOYED LIVE.**
+> Two tested commits: `fa078a6` apps-list short→custom swap gated
+> strictly on `customDomainConfirmed === true`; `ffb9cdf` app-detail
+> replaced the legacy P1.22 TXT-verify model with the Mock-faithful
+> decoupled flow — normalize → on-device 300s localStorage cooldown +
+> 1s M:SS ticker → structural apex→www `inlineConfirm` → destructive-
+> replace confirm → IRK-signed POST to `.com /custom-domain` (canonical
+> `flagship/custom-domain/v1|user|appId|fqdn|issuedAt`, mirrors
+> `@flagship/protocol` + the iOS Live wire); 200 records only (CUSTOM
+> DOMAIN group atop WEB DOMAINS, no pending UI), non-200 shown verbatim
+> so 429 == iOS Mock byte-for-byte; removed the url-controller/verify
+> cross-view drift. 2440 vitest green; tsc clean; `node --check` OK; 5
+> served-asset tests (`webappCustomDomainView.test.ts`). Deployed via
+> Worker `[assets]` (`a84204c5`); live-verified on
+> `web.flagshipserver.com` (old `expectedTxtRecord` gone, new prompts/
+> cooldown/CNAME-guidance/swap all present; an initial `cf-cache-status:
+> HIT` was transient CDN lag — origin workers.dev was correct
+> throughout).
+>
+> **C6.1 Android DONE (review-faithful).** Two commits: `8373002`
+> data layer (SetCustomDomainClaim canonical bytes; SetCustomDomain
+> Request; customDomain/customDomainConfirmed on AppLinksResponse;
+> setCustomDomain on FlagshipServerClient; Mock mirrors iOS Mock —
+> 300s 429 "Too soon — try again in Ns." U+2014, 6s confirm-delay;
+> Live POST→re-read links); `03a1b56` UI layer (RenameAppViewModel
+> gains submitCustomDomain/bindCustomDomain + a SharedPreferences
+> CustomDomainCooldownStore + CustomDomainPrompt; AppDetailScreen
+> SET CUSTOM DOMAIN section + CUSTOM DOMAIN group + prompt dialog +
+> 1s countdown; AppsListScreen swap gated on customDomainConfirmed;
+> SetCustomDomainCanonicalBytesTest pins the wire). **Drift fixed:**
+> `apps/mobile/android` DOES exist + is a real Gradle project (earlier
+> notes implied scaffolds); but `/usr/bin/java` is the macOS stub
+> (`java -version` fails) so it stays **review-only** — the established
+> bar holds. Android apps-list is still a `sampleApps()=emptyList()`
+> scaffold (no live /links fan-out yet) — the swap is structurally
+> correct for when that lands; wiring the fan-out is a separate
+> non-#80/#81 task. **Phase 6 COMPLETE.**
+
 - **C6.1** Android `AppDetailScreen.kt` + VM: mirror the iOS custom-domain UX — SET
   CUSTOM DOMAIN section (uppercase label style), real aligned Add button, failure
   alerts (apex→www, permanent-replace, rate-limit), on-device cooldown
