@@ -119,6 +119,17 @@ command, run it, report the result; don't silently skip).
 
 ### Phase 2 — Custom-domain `.com` core: the POST path (#79 part A)
 
+> **DEPLOYED LIVE 2026-05-16.** Backend done across 3 tested commits
+> (`dedad84` protocol `flagship/custom-domain/v1`; `cd085ff` storage
+> `custom_domain_orders` + migration `0022`; `8cd55cc` control-plane
+> `customDomain.ts` + getAppLinks surfacing + routes). Migration `0022`
+> applied to remote D1 (14 tables); Worker deployed (`79cde2ea`);
+> smoke-OK (`GET …/custom-domain`→`{fqdn:null}`, malformed POST→400).
+> 2398 vitest green. **Open: C2.4** — iOS Live `setCustomDomain` 501
+> flip needs the renameApp-style signed-request refactor (tracked
+> separately; bounded; not backend-critical-path, can't exercise
+> pre-TestFlight). The decoupled CNAME-verify is Phase 4.
+
 - **C2.1** D1 migration `0022_custom_domain_orders.sql`: table
   `custom_domain_orders(app_id, user_id, fqdn, status TEXT /* pending|active|failed */,
   last_changed INTEGER, fail_count INTEGER DEFAULT 0, created_at, updated_at,
