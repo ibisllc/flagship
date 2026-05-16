@@ -326,8 +326,15 @@ command, run it, report the result; don't silently skip).
 > applied to remote D1 (`changed_db:true`, 15 tables); Worker
 > `flagship-com` version `275b95f7`; smoke-OK (`/api/health` ok,
 > `POST /api/llm-promo/issue {}`→400 "malformed body" — route wired,
-> validation intact). **Open: C5.2/C5.3 (#83)** — provision/
-> decommission CLI (next).
+> validation intact). **C5.2/C5.3 (#83) DONE 2026-05-16**
+> (`af0c92e`): `scripts/demo-account.mjs` — registered-key-gated,
+> dry-run-default operator CLI (rotate-ca discipline); provision/
+> decommission plans pure+tested; mutating runs need `--execute` + a
+> fresh Ed25519 operator assertion; decommission also types the
+> username + is the ONLY teardown; HARD-deletes all 30 user-linked D1
+> tables (routing+VM first) + R2; the real wrangler/flyctl/R2 ops are
+> the printed operator runbook (real-infra, not auto-fired). 15
+> tests. **Phase 5 COMPLETE.**
 
 - **C5.1** #85: gate LLM spend for `is_demo` users in the control-plane usage path
   (`packages/control-plane` + `packages/llm-providers`): rolling-24 h token ledger,
