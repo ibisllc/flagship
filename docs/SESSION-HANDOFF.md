@@ -6,12 +6,80 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-16 (resume session — closed #11/#30/#24/#25/
-#20/#15/#29 + Android build-blocker fix + discovery sweep; flagship
-2514/2514, maintainers 257/257, all pushed, PR #1 open. See §0.)
+Last updated: 2026-05-16 (resume #2, Linux box — closed #33 [real
+Gradle build: assembleDebug + 190 unit tests green, 2 drift fixes
+pushed], #34 [triaged → v2-deferred], #3 [flake triaged]. Prior
+resume: #11/#30/#24/#25/#20/#15/#29. flagship 2514/2514 + Android
+190/190, maintainers 257/257, all pushed, PR #1 still open/governed.
+See §0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-16 (resume #2, #33 — FULLY CLOSED):** after the
+  `assembleDebug` `@Composable` fix, `./gradlew :app:testDebugUnitTest`
+  surfaced a second never-run layer — 4 latent test failures (was the
+  whole point of #33). Root causes + faithful fixes: (a) 3 Robolectric
+  classes missing the `@Config(sdk = [33])` pin every passing class
+  here already carries (Robolectric 4.13 max SDK 34 < targetSdk 35);
+  (b) `KeystoreIrkVersionTest`/`KeystoreWipeTest` called production
+  `Keystore.attach()` (needs hardware AndroidKeyStore) instead of the
+  `attachForTest(prefs)` seam their own docstrings describe; (c)
+  `MockScreensClientTest.appsList_returnsKnownApps` asserted the
+  pre-#20 bare-name shape vs the iOS source-of-truth namespaced IDs.
+  Fixed in `d960691`; **`assembleDebug` green + `testDebugUnitTest`
+  190/190, 0 failures.** #33 done. Note: `build-tasks §S:624`
+  ("Android on internal-track Play, 5+ testers") is a *launch gate*
+  (signing + Play upload + testers), NOT this build/test prerequisite —
+  deliberately left unticked; ticking it would be false.
+- **2026-05-16 (resume #2, #3 vitest flake — TRIAGED, no code change):**
+  the one-off "1 failed / 2503 passed" parallel-run flake. Both §0
+  named candidates ruled out **by inspection**:
+  `renewIfNeeded.test.ts` is fully deterministic (injected `now`, fake
+  issuer, no I/O/shared state); `dns-broker/test/index.test.ts` mutates
+  only `globalThis.fetch`/`_internal.ipBuckets` and restores them in
+  `afterEach` — and vitest 2.x here runs the **default `forks` pool
+  with per-file isolation** (no custom `pool`/`isolate` in
+  `vitest.config.ts`), so cross-file contamination is structurally
+  impossible. They were "candidates" only because they emit expected
+  negative-path stderr (visually noticeable in a failed run's tail) —
+  correlation, not the failing assertion. Verdict: **rare
+  timeout-under-CPU-contention at maximal fork parallelism, not a
+  logic/product bug** (additive-only changes since; `tsc -b` clean;
+  2514/2514 green on this session's cold full run). No safe
+  evidence-based deterministic fix exists; a speculative spec-pin or
+  retry is forbidden by the §0 note itself and would mask. **Watch
+  procedure:** on recurrence, capture `npx vitest run
+  --reporter=verbose` (names the failing spec + its duration vs the
+  30 000 ms `testTimeout`); only then pin/raise that specific spec's
+  timeout. #3 closed as triaged.
+- **2026-05-16 (resume #2, this Linux box — ENVIRONMENT DELTA):** the
+  prior handoff repeatedly asserted "Android review-only (no JDK —
+  `/usr/bin/java` is the macOS stub)". **False on this machine:** this
+  is a Linux box with **OpenJDK 17 + Gradle 8.10.2 + a populated
+  `ANDROID_HOME=/home/kamdemharry/android-sdk`** (platforms 34/35,
+  build-tools 34.0.0). #33 is therefore **UNBLOCKED here** and was
+  executed. Conversely iOS xcodebuild is **not** available on Linux —
+  #7/#79A/iOS-port verification flips from "verifiable here" to
+  "review-only here". Pin paths absolutely: the harness shell keeps
+  cwd across calls, so a bare `cd apps/mobile/android` compounds.
+- **2026-05-16 (resume #2, #33 — REAL never-compiled drift FOUND+
+  FIXED):** first real `./gradlew :app:assembleDebug` failed at
+  `:app:compileDebugKotlin` — a misplaced `@Composable` annotation in
+  `AppDetailScreen.kt` landed on the top-level `STEM_RE` regex const
+  (591) instead of `ReplaceStemDialog` (596); the `STEM_RE` decl + its
+  comment had been inserted between the annotation and its fn. 3 Kotlin
+  errors. Exactly the latent review-faithful drift #33 predicted.
+  Fixed by moving the annotation back onto the fn. (Note: a
+  `… | tail` pipe masks Gradle's exit code as the pipe's — always read
+  `BUILD SUCCESSFUL/FAILED` or `${PIPESTATUS[0]}`, never trust the
+  background "exit 0".)
+- **2026-05-16 (resume #2, #34 — TRIAGED → v2-deferred):**
+  `inheritance.ts` (#77) verdict: **deliberate v2 seam, not a v1 gap.**
+  Built+exported+unit-tested (`inheritance.test.ts`), NOT route-wired,
+  NOT cron-wired; absent from `build-tasks §S` and `CLAUDE.md`
+  outstanding work. Recorded in the new `docs/policy/inheritance.md`
+  (the decision record the module's own docstring already pointed at —
+  it had been dangling). No v1 action; #34 closed.
 - **2026-05-16 (resume, CRITICAL):** `feat/ca-endorsement`
   (`496abae7`) — claimed in `docs/maintainer-ca-endorsement.md` §8/§9
   as "BUILT, durable locally in `./maintainers`" — **did NOT exist on
@@ -124,7 +192,13 @@ Last updated: 2026-05-16 (resume session — closed #11/#30/#24/#25/
 - **iOS app:** builds clean from HEAD (`cd apps/mobile/ios/App &&
   xcodegen generate && xcodebuild -project FlagshipApp.xcodeproj
   -scheme FlagshipApp -destination 'platform=iOS Simulator,id=<udid>'
-  build`); 232 XCTests green.
+  build`); 232 XCTests green. *(Verified on the original Mac;
+  **not** re-verifiable on the current Linux box — no xcodebuild.
+  See §0 ENVIRONMENT DELTA.)*
+- **Android app:** `cd apps/mobile/android && ./gradlew
+  :app:assembleDebug :app:testDebugUnitTest` — green on this Linux
+  box (JDK17 + `ANDROID_HOME`); **190 unit tests, 0 fail** as of
+  `d960691`. Android is the CLI-verifiable mobile target here.
 - **Known benign:** `apps/mobile/ios/App/FlagshipApp.xcodeproj/
   project.pbxproj` shows perpetually-modified — it is a deterministic
   xcodegen artifact regenerated by `xcodegen generate` from
@@ -139,7 +213,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | # | Item | Status | What's needed / where |
 |---|---|---|---|
 | 1 | Phase 6 webapp #80/#81 | ✅ | deployed+verified |
-| 2 | Phase 6 Android #80/#81 | ✅ | review-faithful |
+| 2 | Phase 6 Android #80/#81 | ✅ | review-faithful → now **compile+test-verified** on Linux (#33: assembleDebug + 190 unit tests green) |
 | 3 | #85 demo LLM cap | ✅ | deployed |
 | 4 | #83 demo provision/decommission CLI | ✅ | `scripts/demo-account.mjs` |
 | 5 | C4.1c daemon ACME+sibling seam | ✅ | runtime wiring = #21 |
@@ -170,8 +244,8 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ⛔ | Upstream maintainers web-ui, **post PR #1 merge** (§5). NO signing view ever. Seam = ca-operations.md "Next upstream increment" (REPLACED by status/preview/commit-trigger-only per §10.1) — design complete; it's upstream-after-merge, not flagship code. |
 | 32 | **Track P generic OSS maintainers NFC-tap app** | ⛔ | Largest: a NEW Android-first app, home **upstream `ibisllc/maintainers`**, review-only here (no JDK; cf. #33). Multi-week; **post PR #1 merge**. Seam = the complete §11+§12 design (per-repo profile, hardware-stored git cred, tap→PIV-Ed25519→app-direct-commit; PIV-Ed25519 == std Ed25519 ⇒ no protocol change). Not closeable at a CLI session tail. |
-| 33 | Android real Gradle build (never-compiled drift) | ⛔ | DISCOVERY (#20). Android has only ever been review-faithful (no JDK). Found+fixed 1 hard blocker (3 VMs ⊄ ViewModel, `c06ca9f`) + 2 dead nav routes. Needs `./gradlew assembleDebug` on a JDK box to surface any remaining latent Kotlin errors across #80/#81/#20 before the Play upload. Belongs with C-Android. |
-| 34 | Triage `inheritance.ts` (v1-unwired vs v2-deferred) | ⛔ | DISCOVERY (sweep). Built control-plane module, no `apps/com` route + deferred `recordSigningActivity`; not in §S/backlog. One-line verdict needed: if v1 → wire routes; if v2 → mark it. §0. |
+| 33 | Android real Gradle build (never-compiled drift) | ✅ | **DONE on this Linux box** (JDK17+SDK present — env delta §0). `7c37d5e` main-source `@Composable` fix → `assembleDebug` green; `d960691` 4 never-run test fixes → `testDebugUnitTest` **190/190, 0 fail**. Remaining for C-Android = the operator Play-upload gate (`§S:624`: signing + internal track + 5 testers), NOT a code/CLI item. |
+| 34 | Triage `inheritance.ts` (v1-unwired vs v2-deferred) | ✅ | **Verdict: v2-deferred, deliberate seam.** Built+exported+unit-tested, not route/cron-wired, absent from §S + CLAUDE.md. Recorded in new `docs/policy/inheritance.md` (the decision record the module docstring already pointed at — was dangling). No v1 action. §0. |
 
 Maintainer→CA future-session order (mostly CLI/code-doable; only the PR
 *merge* + the one real-YubiKey genesis need a human): **#11 push+PR →
@@ -204,16 +278,21 @@ Ed25519 over the canonical bytes).
 
 ## 5. Recommended next-session order (highest value, unblocked first)
 
-**Resume-session 2026-05-16 closed #11(reconstructed+PR), #30, #24
-(deployed), #25, #20, #15, #29 — plus found+fixed an Android
-build-blocker and ran the discovery sweep. Every remaining item is
-now governed-merge / human-hardware / real-infra gated, seam built +
+**Resume #2 2026-05-16 (Linux box) closed #33 (real Gradle build +
+190 unit tests green; 2 latent-drift fixes pushed), #34 (triaged →
+v2-deferred, `docs/policy/inheritance.md`), and #3 (flake triaged →
+documented verdict, no speculative pin). Prior resume closed
+#11/#30/#24/#25/#20/#15/#29. Every remaining open item is now
+governed-merge / human-hardware / real-infra gated, seam built +
 documented.** Next session, in order:
 
-1. **GOVERNED: merge `ibisllc/maintainers#1`** (the reconstructed
-   CaEndorsement protocol). Then bump `scripts/maintainers.pinned-sha`
-   to the merge SHA + run `pull-maintainers.sh`. This is the single
-   gate that unblocks the most.
+1. **GOVERNED — the single remaining gate that unblocks the most:
+   merge `ibisllc/maintainers#1`** (the reconstructed CaEndorsement
+   protocol; OPEN, MERGEABLE, tip `5cace76`, 257 green, no CI on that
+   repo). Then bump `scripts/maintainers.pinned-sha` to the **merge
+   SHA** (not the branch tip) + run `pull-maintainers.sh`. Requires a
+   human — this is the one outward action this resume could not take
+   autonomously (asked; see the session note).
 2. **#8 → #9 → #10** link-4 wiring — now mechanical: back the #30
    `CaTrustChain` with `@maintainers/protocol` `authorizedCaKeys`
    (daemon `releaseVerifier.ts`, then webapp TS, then iOS/Android
@@ -224,13 +303,13 @@ documented.** Next session, in order:
    (rotate-ca) + needs a real YubiKey; #27 genesis run is human;
    #32 is a multi-week new app. Design 100% in maintainer-ca §10–§12
    + ca-operations.md.
-4. **#33** Android `./gradlew assembleDebug` on a JDK box (shake out
-   never-compiled drift before the Play upload); **#34** triage
-   `inheritance.ts` (v1 vs v2).
-5. ⛔ real-infra/live-device backlog (#16-row items: C4.1c live cert
+4. ⛔ real-infra/live-device backlog (#16-row items: C4.1c live cert
    exercise, lazy-SNI socket wiring, B-A2/B-A3, C-A1, Forgejo/LLM,
    the joint sibling-supervisor runtime instantiation) — only when
-   the device/infra is available; each documented to the seam.
-6. **Pre-existing test flake** (§0): triage the one parallel-run
-   flake (pin the spec / add a deterministic wait; never blanket
-   retry).
+   the device/infra is available; each documented to the seam. Note:
+   on a Linux box iOS xcodebuild is unavailable (#7/#79A/iOS-port
+   verification is review-only here); Android is now the
+   CLI-verifiable mobile target.
+5. If the flake (§0 #3) recurs: follow the §0 watch procedure
+   (`--reporter=verbose`, then pin/raise that *specific* spec) —
+   do NOT blanket-retry or guess-pin.
