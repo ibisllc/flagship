@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   runBackup,
   scheduled,
+  runCustomDomainVerify,
   _internal,
   type R2BucketLike,
   type R2ListResultLike,
@@ -312,8 +313,11 @@ describe("scheduled — D1 → R2 backup", () => {
       cron: "0 */6 * * *",
     };
     await scheduled(controller, env, ctx);
-    expect(waits).toHaveLength(1);
-    await waits[0];
+    // scheduled() now schedules two jobs: the D1→R2 backup AND the
+    // custom-domain verify pass (#79B). The verify pass no-ops here
+    // (no SERVICES_* on env) but is still waitUntil'd.
+    expect(waits).toHaveLength(2);
+    await Promise.all(waits);
     expect(r2.puts).toHaveLength(1);
     expect(r2.puts[0]!.key).toBe("d1/hourly/2026-05-11-06.jsonl.gz");
   });
@@ -334,5 +338,20 @@ describe("scheduled — key helpers", () => {
     const d = new Date(Date.UTC(2026, 0, 3, 5, 0, 0)); // 2026-01-03 05:00 UTC
     expect(_internal.formatHourlyKey(d)).toBe("2026-01-03-05");
     expect(_internal.formatMonthlyKey(d)).toBe("2026-01");
+  });
+});
+
+describe("runCustomDomainVerify — env guard (#79B Phase 4 C)", () => {
+  it("no-ops (no throw) when DB / SERVICES_BASE_URL / secret are absent", async () => {
+    await expect(runCustomDomainVerify({}, new Date(0))).resolves.toBeUndefined();
+    await expect(
+      runCustomDomainVerify({ SERVICES_BASE_URL: "https://x" } as ScheduledEnv, new Date(0)),
+    ).resolves.toBeUndefined();
+    await expect(
+      runCustomDomainVerify(
+        { SERVICES_BASE_URL: "https://x", SERVICES_CONTROL_SECRET: "s" } as ScheduledEnv,
+        new Date(0),
+      ),
+    ).resolves.toBeUndefined(); // still skipped: no DB binding
   });
 });

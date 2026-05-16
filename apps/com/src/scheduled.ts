@@ -36,6 +36,12 @@
  */
 
 import type { D1Database } from "@flagship/storage";
+import { D1Storage } from "@flagship/storage";
+import {
+  runCustomDomainVerificationPass,
+  resolveCnameChain,
+  pushRedirection,
+} from "@flagship/control-plane";
 
 /** Scope of one row that the dump emits. */
 export type DumpRow =
@@ -47,6 +53,11 @@ export interface ScheduledEnv {
   DB?: D1Database;
   /** R2 bucket for D1 backup artifacts. Separate from ISO_BUCKET. */
   BACKUPS_BUCKET?: R2BucketLike;
+  /** .services :8443 base (wrangler.toml) — custom-domain verifier
+   *  pushes confirmed/invalidated redirections here (#79B/#87). */
+  SERVICES_BASE_URL?: string;
+  /** Shared bearer for the .com↔.services control channel (#87). */
+  SERVICES_CONTROL_SECRET?: string;
 }
 
 /**
@@ -286,6 +297,35 @@ export async function scheduled(
 ): Promise<void> {
   const now = new Date(controller.scheduledTime);
   ctx.waitUntil(runBackup(env, now, controller.cron));
+  ctx.waitUntil(runCustomDomainVerify(env, now));
+}
+
+/**
+ * #79B/#82 — one custom-domain verification pass per cron tick
+ * (`0 *​/6 * * *`, so first-confirm is ≤6h after the record; DNS
+ * propagation after the user sets the CNAME is minutes anyway, and
+ * the UX already told them it's verified out-of-band). No-ops unless
+ * the DB binding + the .services control channel are configured.
+ * Never throws — the verifier swallows DoH/push failures and a row
+ * just stays pending for the next tick.
+ */
+export async function runCustomDomainVerify(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<void> {
+  if (!env.DB || !env.SERVICES_BASE_URL || !env.SERVICES_CONTROL_SECRET) return;
+  const servicesBaseUrl = env.SERVICES_BASE_URL;
+  const secret = env.SERVICES_CONTROL_SECRET;
+  const storage = new D1Storage(env.DB);
+  await runCustomDomainVerificationPass({
+    customDomainOrders: storage.customDomainOrders,
+    servers: storage.servers,
+    resolveCname: (fqdn) => resolveCnameChain(fqdn),
+    pushRedirection: async (op, fqdn, podCanonical) => {
+      await pushRedirection({ servicesBaseUrl, secret }, { op, fqdn, podCanonical });
+    },
+    now: () => now.getTime(),
+  });
 }
 
 export const _internal = {
