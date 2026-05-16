@@ -203,13 +203,18 @@ honoring waits on this.
 
 1. **(this doc)** + upstream spec delta drafted. ✅
 2. Upstream `ibisllc/maintainers`: `CaEndorsement` type + canonical +
-   verifier + tests. **✅ BUILT on branch `feat/ca-endorsement`
-   (`496abae7`) in `./maintainers` — 12 new tests, 243 suite green,
-   protocol `tsc` clean; spec §2.6/§3.7/§5.1 added.** Remaining: push
-   the branch → PR/review in `ibisllc/maintainers` → land → bump
-   `scripts/maintainers.pinned-sha` (governed; user/CI-side). The
-   branch is durable locally (`./maintainers` HEAD parked at the
-   pinned SHA so `pull-maintainers.sh` won't hard-reset the ref).
+   verifier + tests. **⚠️ The original `496abae7` work was local-only
+   to a prior machine and was LOST (never pushed; `./maintainers` is
+   git-ignored + freshly pulled at the pinned SHA — see
+   SESSION-HANDOFF.md §0).** **✅ FAITHFULLY RECONSTRUCTED 2026-05-16**
+   from §4 + §9 (ReleaseEndorsement as template): 4 commits on
+   `feat/ca-endorsement` (tip `5cace76`), **257 suite green** (was
+   231; +26 tests), `tsc -b` clean across the whole maintainers
+   workspace; pushed to `ibisllc/maintainers`; **PR #1 open**
+   (https://github.com/ibisllc/maintainers/pull/1). Remaining: the
+   governed PR *merge* → then bump `scripts/maintainers.pinned-sha`
+   to the merge SHA + `pull-maintainers.sh` (do NOT pin to the
+   unmerged branch tip).
 3. Flagship: bump `scripts/maintainers.pinned-sha`; daemon `ca`-endorsement
    path + tests.
 4. **Real-YubiKey genesis ceremony** (human; current `ca`-track holder is a
@@ -257,10 +262,12 @@ chained to the checkpoint, alarms unskippable (a server may drop benign
 same-holder renewals but cannot hide a gap-takeover).
 
 **Status:** links 1–3 + the checkpoint are built & tested in
-`@maintainers/protocol` (`feat/ca-endorsement`: `verifyTrack`,
-`currentAuthority`, `verifyCaEndorsements`, `authorizedCaKeys`,
-`verifyTrackFromCheckpoint`, `checkpointFromVerifiedTrack`; 254 suite
-green). The **remaining wire** is link-4 enforcement at each consumer
+`@maintainers/protocol` (`feat/ca-endorsement`, reconstructed
+2026-05-16, tip `5cace76`, **PR `ibisllc/maintainers#1`** open:
+`verifyTrack`, `currentAuthority`, `verifyCaEndorsements`,
+`authorizedCaKeys`, `verifyTrackFromCheckpoint`,
+`checkpointFromVerifiedTrack`; 257 suite green). The **remaining
+wire** is link-4 enforcement at each consumer
 — daemon (extend `releaseVerifier.ts` with the ca path), then
 iOS/Android/webapp — which is exactly **#84 C1.2c**, now a one-liner
 per call site via `authorizedCaKeys`. Per-platform wiring is the

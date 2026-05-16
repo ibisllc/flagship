@@ -483,11 +483,15 @@ This **blocks #84 C1.2c** and ultimately hardens all CA-signed artifacts.
 **EXPANDED + RE-SCOPED (2026-05-16, user) — execute in a future session,
 in this order:**
 
-1. **Push (PRE-AUTHORIZED).** `cd maintainers && git push <ibisllc/
-   maintainers> feat/ca-endorsement` + open the governed PR. The push
-   is now explicitly authorized; only the PR *merge* is governed/human.
-2. **Land + re-pull.** On merge: bump `scripts/maintainers.pinned-sha`
-   to the merged SHA + `pull-maintainers.sh`.
+1. **Push (PRE-AUTHORIZED). ✅ DONE 2026-05-16 (resume).** The prior
+   `496abae7` branch was lost (local-only, never pushed — see
+   SESSION-HANDOFF.md §0); the workstream was **faithfully
+   reconstructed** from §4+§9 (4 commits, tip `5cace76`, 257
+   maintainers tests green, tsc clean), pushed, **PR #1 open**
+   (https://github.com/ibisllc/maintainers/pull/1).
+2. **Land + re-pull. (GOVERNED — awaits PR #1 merge.)** On merge:
+   bump `scripts/maintainers.pinned-sha` to the merged SHA +
+   `pull-maintainers.sh`. Do NOT pin to the unmerged branch tip.
 3. **Genesis ceremony (CLI + primary YubiKey, pre-release human).**
    Generate the cold maintainer Ed25519 *on the token*, write the
    genesis `Mandate` (ca/release/ops) naming the **second YubiKey** in

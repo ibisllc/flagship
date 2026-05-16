@@ -6,8 +6,38 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-16 (end of the big external-domains + maintainer-CA
-session).
+Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
++ push/PR; see §0 drift log).
+
+## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-16 (resume, CRITICAL):** `feat/ca-endorsement`
+  (`496abae7`) — claimed in `docs/maintainer-ca-endorsement.md` §8/§9
+  as "BUILT, durable locally in `./maintainers`" — **did NOT exist on
+  this machine and was never pushed anywhere reachable.** `maintainers/`
+  is git-ignored and pulled fresh by `pull-maintainers.sh` at the
+  pinned SHA (`c009900`); the prior session's local-only branch was
+  lost with the original Mac. **Resolution:** the `CaEndorsement`
+  workstream was **faithfully reconstructed** from the authoritative
+  spec (`docs/maintainer-ca-endorsement.md` §4 + §9, with
+  `ReleaseEndorsement` as the explicit template), 4 commits on a fresh
+  `feat/ca-endorsement` (tip `5cace76`), **257 maintainers tests green**
+  (was 231; +26), `tsc -b` clean across the maintainers workspace;
+  pushed to `ibisllc/maintainers`; **PR #1 open**
+  (https://github.com/ibisllc/maintainers/pull/1) — merge is governed.
+  Exports delivered exactly per §9: `verifyCaEndorsements`,
+  `authorizedCaKeys`, `verifyTrackFromCheckpoint`,
+  `checkpointFromVerifiedTrack` (+ `signCaEndorsement`,
+  `canonicalCaEndorsement`, `CaEndorsement` type).
+- **2026-05-16 (resume, minor):** maintainers repo at base `c009900`
+  `tsc -b` is clean; adding `CaEndorsement` to the `Envelope` union
+  necessarily touched every dispatch site in `cloudflare-worker
+  policy.ts` + `web-ui adapter.ts` (parse/canonical/signatures/
+  authority/commit-message) — all handled in commit 1, no behavior
+  change to existing envelopes.
+- **2026-05-16 (resume):** flagship ground truth verified —
+  `git log` matches, `tsc -b` clean, `vitest run` **2492 / 221**
+  (baseline holds); spot-checked #4/#12/#14/#23 exist in code.
 
 ## 1. Cold-start read order
 
@@ -66,7 +96,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 8 | maintainer→CA link-4 daemon | ⛔ | after #11 land + #30; then 1-liner via `authorizedCaKeys` |
 | 9 | maintainer→CA link-4 webapp | ⛔ | after #11 land + #30 |
 | 10 | maintainer→CA link-4 iOS/Android | ⛔ | after #11 land + #30 |
-| 11 | **Track P 1-2: push `feat/ca-endorsement` + PR** | ▶ | **PRE-AUTHORIZED — do FIRST.** `cd maintainers && git push <ibisllc/maintainers> feat/ca-endorsement` + open PR; on merge bump `scripts/maintainers.pinned-sha` + `pull-maintainers.sh` |
+| 11 | **Track P 1-2: push `feat/ca-endorsement` + PR** | ✅* | **RECONSTRUCTED (drift §0) + pushed; PR #1 open** (`ibisllc/maintainers#1`, tip `5cace76`, 257 green). *Remaining = governed: on merge bump `scripts/maintainers.pinned-sha` to the merge SHA + run `pull-maintainers.sh` (do NOT pin to the unmerged branch tip). |
 | 12 | lazy-SNI seam+endpoint | ✅ | deployed; socket wiring = #22 |
 | 13 | C-iso verify+tick §S | ✅ | |
 | 14 | B-scan auto-trigger | ✅ | deployed (`400186b0`) |
