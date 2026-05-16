@@ -151,6 +151,18 @@ command, run it, report the result; don't silently skip).
 
 ### Phase 3 — `.services` RAM routing + control channel (#86, #87)
 
+> **Progress 2026-05-16:** **C3.1 DONE** (`f982b54`) — `TunnelRegistry`
+> in-RAM `Map<customFqdn,podCanonical>` redirection table; `findBySni`
+> fallback (consulted last, never shadows first-party routing; keyed on
+> pod canonical so reconnect-transparent); `add/remove/loadRedirections`
+> + `redirectionCount`; 6 tests; 2403 vitest green. **Open: C3.2–C3.4**
+> — `SERVICES_CONTROL_SECRET` HMAC channel; `.services` Fastify
+> `POST /control/redirections` (add/delete) wired in `apps/web/src/server.ts`;
+> `.com` authed `GET /internal/active-redirections` + `pushRedirection`
+> helper; `.services` cold-start pull + lazy SNI-miss→ask-`.com`
+> (negative-cached, rate-limited). Needs secrets + deploys on BOTH Fly
+> (`flyctl secrets set`) and the Worker (`wrangler secret put`).
+
 - **C3.1** `.services` RAM table (#86): in `apps/web/src/tunnel/` add
   `RedirectionTable` = `Map<fqdn, podCanonical>`; integrate into `registry.findBySni`
   as a fallback (custom fqdn → podCanonical → existing tunnel). Add/remove APIs +
