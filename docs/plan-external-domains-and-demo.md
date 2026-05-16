@@ -155,13 +155,28 @@ command, run it, report the result; don't silently skip).
 > in-RAM `Map<customFqdn,podCanonical>` redirection table; `findBySni`
 > fallback (consulted last, never shadows first-party routing; keyed on
 > pod canonical so reconnect-transparent); `add/remove/loadRedirections`
-> + `redirectionCount`; 6 tests; 2403 vitest green. **Open: C3.2–C3.4**
-> — `SERVICES_CONTROL_SECRET` HMAC channel; `.services` Fastify
-> `POST /control/redirections` (add/delete) wired in `apps/web/src/server.ts`;
-> `.com` authed `GET /internal/active-redirections` + `pushRedirection`
-> helper; `.services` cold-start pull + lazy SNI-miss→ask-`.com`
-> (negative-cached, rate-limited). Needs secrets + deploys on BOTH Fly
-> (`flyctl secrets set`) and the Worker (`wrangler secret put`).
+> + `redirectionCount`; 6 tests. **C3.2–C3.4 DONE** (`fc8649a`,
+> `633c496`): `SERVICES_CONTROL_SECRET` constant-time bearer; `.com`
+> `GET /api/internal/active-redirections` + `pushRedirection` (for
+> Phase 4); `.services` `POST /control/redirections` + cold-start pull,
+> both 5s-bounded/fail-closed; storage `pod_canonical` (migration
+> `0023`). 2417 vitest green; tsc clean.
+>
+> **DEPLOYED 2026-05-16 (.com only):** migration `0023` applied; Worker
+> `830f8609` with `SERVICES_CONTROL_SECRET` set; live smoke-OK
+> (`/api/internal/active-redirections`: no-auth→401, wrong→401,
+> bearer→200 `{redirections:[]}`). **`.services` (Fly) deploy is
+> user-side: `flyctl` is NOT installed on this machine** (CLAUDE.md's
+> `$HOME/.fly/bin` is stale). Outstanding op: install/auth flyctl →
+> `flyctl deploy --remote-only --strategy=immediate --yes -a
+> flagship-services` → set the SAME secret via
+> `printf 'SERVICES_CONTROL_SECRET=%s\n' "$(cat /tmp/scs.secret)" |
+> flyctl secrets import -a flagship-services` (the Worker-side value is
+> in `/tmp/scs.secret`, 600-perms; delete or rotate after). Non-blocking
+> — nothing crosses the channel until Phase 4's verifier pushes.
+>
+> **Open (bounded follow-on):** lazy SNI-miss→ask-`.com` (pure latency
+> optimization; push + cold-start are the correctness core).
 
 - **C3.1** `.services` RAM table (#86): in `apps/web/src/tunnel/` add
   `RedirectionTable` = `Map<fqdn, podCanonical>`; integrate into `registry.findBySni`
