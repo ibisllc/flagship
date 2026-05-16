@@ -74,6 +74,10 @@ import {
 import { startSniRouter, type RunningSniRouter } from "./tunnel/sniRouter.js";
 import { startTunnelHub } from "./tunnel/tunnelHub.js";
 import { TunnelRegistry } from "./tunnel/registry.js";
+import {
+  registerControlRedirections,
+  coldStartRedirections,
+} from "./routes/controlRedirections.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -371,10 +375,16 @@ export async function start(opts: {
   const app = buildServer({ surface });
   const serverRegistry = app.serverRegistry;
   const registry = new TunnelRegistry();
+  // #87 — custom-domain control channel. Must register before listen.
+  const servicesControlSecret = process.env.SERVICES_CONTROL_SECRET;
+  registerControlRedirections(app, { registry, secret: servicesControlSecret });
   await app.listen({ port: httpPort, host });
   // Authenticate tunnel HELLOs against .com's server registry over HTTPS.
   // 5-minute cache so reconnects don't hammer the API.
   const comBaseUrl = process.env.FLAGSHIP_COM_BASE_URL ?? "https://flagshipserver.com";
+  // Warm the RAM redirection table from .com before routing starts
+  // (best-effort + 5s-bounded; push backfills anything missed).
+  await coldStartRedirections({ registry, comBaseUrl, secret: servicesControlSecret });
   const remoteAuthCache = new Map<string, { pub: Uint8Array; expiresAt: number }>();
   const remoteAuthLookup = async (serverId: string): Promise<Uint8Array | null> => {
     const local = authLookupFromRegistry(serverRegistry)(serverId);

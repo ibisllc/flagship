@@ -39,6 +39,8 @@ import {
   handleListAppAliases,
   handleSetCustomDomain,
   handleGetCustomDomain,
+  handleActiveRedirections,
+  bearer,
   handleVoiciShorten,
   handleRevokeAutoUnlockLease,
   handleDns01Delete,
@@ -96,6 +98,9 @@ export interface ControlPlaneEnv {
   DB?: D1Database;
   FLAGSHIP_CA_PRIV_HEX?: string;
   FLAGSHIP_CA_ISSUER?: string;
+  /** Shared bearer secret for the .com↔.services custom-domain
+   *  control channel (#87). Also set as a Fly secret on .services. */
+  SERVICES_CONTROL_SECRET?: string;
   /**
    * Public URL of the standalone dns-broker Worker (see
    * `apps/dns-broker`). When set, the main Worker delegates ALL DNS
@@ -217,6 +222,7 @@ const ROUTE_RE = {
   RECOVERY_BY_USERNAME: /^\/api\/recovery\/by-username\/([^/]+)$/,
   USER_IDENTITY_PUT: /^\/api\/user-identity$/,
   USER_IDENTITY_GET: /^\/api\/user-identity\/([^/]+)$/,
+  INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
 };
 
 export async function tryControlPlane(
@@ -800,6 +806,15 @@ export async function tryControlPlane(
         { usernames: storage.usernames, customDomainOrders: storage.customDomainOrders },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
+      ),
+    );
+  }
+  if (method === "GET" && ROUTE_RE.INTERNAL_ACTIVE_REDIRECTIONS.test(path)) {
+    return finish(
+      await handleActiveRedirections(
+        { customDomainOrders: storage.customDomainOrders },
+        bearer(request.headers.get("authorization")),
+        env.SERVICES_CONTROL_SECRET,
       ),
     );
   }
