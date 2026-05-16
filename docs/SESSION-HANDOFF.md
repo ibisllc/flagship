@@ -64,6 +64,27 @@ Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
   Next JDK-equipped session should still run a real Gradle build to
   shake out any further never-compiled Android drift.
 
+- **2026-05-16 (resume, discovery sweep — step 4):** systematic
+  TODO/FIXME/501/stub grep + spot-checked ✅-done claims
+  (#4/#5/#6/#12/#14/#23) — all substantively real in code.
+  Net-new findings:
+  - **`packages/control-plane/src/inheritance.ts`**: a built module
+    (`InheritanceStorage` + declaration handlers) with **no
+    `apps/com` route wiring** and a deliberately-deferred
+    `recordSigningActivity` cross-call (rePair/username-claim don't
+    invoke it). Not in §S or this backlog → likely v2/future, but
+    needs a one-line triage verdict (v1-unwired vs v2-deferred) →
+    discovery task added.
+  - **`scripts/check-push-secrets.mjs`**: covered by a vitest test
+    but NOT wired into any CI workflow (manual/operator guard only).
+    Minor — `marketplace-scan.yml` is the pattern to copy if the
+    next session wants it auto-run; recorded, not built (no repo
+    secrets in a CLI session to validate a live check).
+  - 501s in `luksKeys.ts`/`screensHttp.ts` + `backupLoop.ts` TODO-v2
+    + `serverMetrics` stubbed history + `stableIdReissuer.ts`
+    "stubbed" are all intentional/documented or already-tracked
+    (stableIdReissuer = the known Recovery J.4 v1 item) — NOT new.
+
 ## 1. Cold-start read order
 
 1. **This file** (state + backlog).
@@ -147,7 +168,9 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 29 | Track P 5 OPTIONAL hosted committer | ✅* | IS the upstream `maintainers/.../server-adapters/cloudflare-worker` Model A worker (`worker.ts` POST /commit — holds only a GitHub PAT, no maintainer/CA key; `policy.ts` = verify→commit gate). M1 (`6beb3dd`, PR #1) made `policy.ts` CaEndorsement-aware incl. `checkCaEndorsementAuthority` (NOW-clock + lease window). §12.1 downscopes to opt-in (default = app-direct-commit #32); NOT a launch blocker. *Remaining = governed/operator: deploy Worker + provision `GITHUB_MAINTAINERS_PAT` (post PR #1 merge). A flagship `.com` route would duplicate the upstream worker + contradict §12.1 — intentionally not built. |
 | 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ⛔ | Upstream maintainers web-ui, **post PR #1 merge** (§5). NO signing view ever. Seam = ca-operations.md "Next upstream increment" (REPLACED by status/preview/commit-trigger-only per §10.1) — design complete; it's upstream-after-merge, not flagship code. |
-| 32 | **Track P generic OSS maintainers NFC-tap app** | ⛔ | Largest: a NEW Android-first app, home **upstream `ibisllc/maintainers`**, review-only here (no JDK; cf. #17). Multi-week; **post PR #1 merge**. Seam = the complete §11+§12 design (per-repo profile, hardware-stored git cred, tap→PIV-Ed25519→app-direct-commit; PIV-Ed25519 == std Ed25519 ⇒ no protocol change). Not closeable at a CLI session tail. |
+| 32 | **Track P generic OSS maintainers NFC-tap app** | ⛔ | Largest: a NEW Android-first app, home **upstream `ibisllc/maintainers`**, review-only here (no JDK; cf. #33). Multi-week; **post PR #1 merge**. Seam = the complete §11+§12 design (per-repo profile, hardware-stored git cred, tap→PIV-Ed25519→app-direct-commit; PIV-Ed25519 == std Ed25519 ⇒ no protocol change). Not closeable at a CLI session tail. |
+| 33 | Android real Gradle build (never-compiled drift) | ⛔ | DISCOVERY (#20). Android has only ever been review-faithful (no JDK). Found+fixed 1 hard blocker (3 VMs ⊄ ViewModel, `c06ca9f`) + 2 dead nav routes. Needs `./gradlew assembleDebug` on a JDK box to surface any remaining latent Kotlin errors across #80/#81/#20 before the Play upload. Belongs with C-Android. |
+| 34 | Triage `inheritance.ts` (v1-unwired vs v2-deferred) | ⛔ | DISCOVERY (sweep). Built control-plane module, no `apps/com` route + deferred `recordSigningActivity`; not in §S/backlog. One-line verdict needed: if v1 → wire routes; if v2 → mark it. §0. |
 
 Maintainer→CA future-session order (mostly CLI/code-doable; only the PR
 *merge* + the one real-YubiKey genesis need a human): **#11 push+PR →
