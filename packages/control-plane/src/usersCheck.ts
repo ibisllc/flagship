@@ -19,9 +19,12 @@
 //      can't discover an active sandbox by reading the repo.
 
 import type { UsernameStorage } from "@flagship/storage";
+import { signDemoDirective, type DemoDirective } from "@flagship/protocol";
 import { validateUserLabel } from "./labels.js";
 import { ok, malformed } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
+import type { CaIssuer } from "./pubkeyCert.js";
+import { bytesToHex } from "./hex.js";
 
 export interface TestAccountMeta {
   /** Human-readable name shown in the mobile UI's "Enter <X>" CTA. */
@@ -36,6 +39,16 @@ export interface UsersCheckDeps {
   /** JSON-decoded contents of env.TEST_ACCOUNTS, or null when no test
    *  accounts are configured. Keys are usernames (lowercased). */
   testAccounts?: Record<string, TestAccountMeta> | null;
+  /** Platform CA keypair. When present, an `is_demo` claim's check
+   *  response carries a CA-signed demo directive (#84). Absent in the
+   *  legacy Fastify path → demo accounts simply behave as normal
+   *  claims there (no directive minted). */
+  ca?: CaIssuer;
+  /** Override for tests. */
+  now?: () => number;
+  /** Directive validity window. Default 7 days (matches the pubkey
+   *  binding); the client re-fetches on every check anyway. */
+  demoDirectiveTtlMs?: number;
 }
 
 export interface UsersCheckBody {
@@ -47,6 +60,11 @@ export interface UsersCheckResponse {
   available: boolean;
   reason?: string;
   testAccount?: TestAccountMeta;
+  /** Present only for an `is_demo` claim when a CA keypair is wired.
+   *  The client verifies `signature` over the canonical
+   *  flagship/demo-directive/v1 bytes with the published CA pubkey
+   *  before honoring `directive.useMockRecovery`. */
+  demoDirective?: { directive: DemoDirective; signature: string };
 }
 
 export async function handleUsersCheck(
@@ -85,14 +103,33 @@ export async function handleUsersCheck(
     });
   }
 
-  // 3. Real claim lookup.
+  // 3. Real claim lookup. A demo account is a real claim — it still
+  //    reports "already claimed" — but when the CA key is wired it
+  //    additionally carries a signed directive telling the client to
+  //    run recovery through the Mock (#84). Signed server-side so a
+  //    client can't self-elect; time-boxed against replay.
   const existing = await deps.storage.get(norm);
   if (existing) {
-    return ok<UsersCheckResponse>({
+    const resp: UsersCheckResponse = {
       username: norm,
       available: false,
       reason: "already claimed",
-    });
+    };
+    if (existing.isDemo && deps.ca) {
+      const now = (deps.now ?? (() => Date.now()))();
+      const ttlMs = deps.demoDirectiveTtlMs ?? 7 * 24 * 60 * 60_000;
+      const directive: DemoDirective = {
+        version: 1,
+        username: norm,
+        useMockRecovery: true,
+        issuedAt: now,
+        expiresAt: now + ttlMs,
+        issuer: deps.ca.issuer,
+      };
+      const sig = signDemoDirective(directive, deps.ca.keypair);
+      resp.demoDirective = { directive, signature: bytesToHex(sig) };
+    }
+    return ok<UsersCheckResponse>(resp);
   }
 
   return ok<UsersCheckResponse>({

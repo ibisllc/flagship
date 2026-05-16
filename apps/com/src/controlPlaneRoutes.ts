@@ -240,6 +240,7 @@ export async function tryControlPlane(
         {
           storage: storage.usernames,
           testAccounts: parseTestAccountsEnv(env.TEST_ACCOUNTS),
+          ca,
         },
         await readJson(request),
       ),

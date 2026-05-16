@@ -11,6 +11,8 @@ import {
   parseTestAccountsEnv,
   type UsersCheckResponse,
 } from "../src/usersCheck.js";
+import { caKeypairFromEnv } from "../src/pubkeyCert.js";
+import { verifyDemoDirective } from "@flagship/protocol";
 import type { UsernameStorage } from "@flagship/storage";
 
 function fakeStorage(claimed: Record<string, string> = {}): UsernameStorage {
@@ -21,6 +23,25 @@ function fakeStorage(claimed: Record<string, string> = {}): UsernameStorage {
     },
     async put() { return { ok: true } as const; },
     async list() { return []; },
+  } as unknown as UsernameStorage;
+}
+
+/** Storage whose `get` returns a proper UsernameRecord (with the
+ *  isDemo flag) so the demo-directive branch can be exercised. */
+function recordStorage(
+  rows: Record<string, { isDemo?: boolean }>,
+): UsernameStorage {
+  return {
+    async get(name: string) {
+      const r = rows[name.toLowerCase()];
+      return r
+        ? { username: name.toLowerCase(), irkPubHex: "aa".repeat(32), claimedAt: 1, isDemo: !!r.isDemo }
+        : undefined;
+    },
+    async put() { return { ok: true } as const; },
+    async list() { return []; },
+    async swapIrkPub() { return false; },
+    async setDemo() { return true; },
   } as unknown as UsernameStorage;
 }
 
@@ -69,6 +90,49 @@ describe("handleUsersCheck", () => {
     const body = r.body as UsersCheckResponse;
     expect(body.available).toBe(false);
     expect(body.reason).toBe("already claimed");
+  });
+
+  it("an is_demo claim carries a CA-signed demo directive (#84)", async () => {
+    const ca = caKeypairFromEnv({});
+    const r = await handleUsersCheck(
+      { storage: recordStorage({ demo: { isDemo: true } }), ca, now: () => 1_000 },
+      { username: "Demo" },
+    );
+    const body = r.body as UsersCheckResponse;
+    // It is still a real claim.
+    expect(body.available).toBe(false);
+    expect(body.reason).toBe("already claimed");
+    // …plus a verifiable directive.
+    expect(body.demoDirective).toBeDefined();
+    const { directive, signature } = body.demoDirective!;
+    expect(directive.username).toBe("demo");
+    expect(directive.useMockRecovery).toBe(true);
+    expect(directive.issuedAt).toBe(1_000);
+    expect(directive.expiresAt).toBeGreaterThan(directive.issuedAt);
+    expect(directive.issuer).toBe(ca.issuer);
+    const sigBytes = Uint8Array.from(
+      signature.match(/../g)!.map((h) => parseInt(h, 16)),
+    );
+    expect(verifyDemoDirective(directive, sigBytes, ca.keypair.publicKey)).toBe(true);
+  });
+
+  it("a non-demo existing claim gets NO directive even with a CA wired", async () => {
+    const ca = caKeypairFromEnv({});
+    const r = await handleUsersCheck(
+      { storage: recordStorage({ alice: { isDemo: false } }), ca },
+      { username: "alice" },
+    );
+    expect((r.body as UsersCheckResponse).demoDirective).toBeUndefined();
+  });
+
+  it("an is_demo claim gets NO directive when no CA is wired (legacy path safe)", async () => {
+    const r = await handleUsersCheck(
+      { storage: recordStorage({ demo: { isDemo: true } }) },
+      { username: "demo" },
+    );
+    const body = r.body as UsersCheckResponse;
+    expect(body.reason).toBe("already claimed");
+    expect(body.demoDirective).toBeUndefined();
   });
 
   it("returns testAccount metadata when the username is in the secret", async () => {
