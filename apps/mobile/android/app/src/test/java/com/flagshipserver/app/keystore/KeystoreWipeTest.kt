@@ -15,16 +15,20 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33])
 class KeystoreWipeTest {
 
     @Before
     fun setUp() {
-        // Robolectric's ApplicationProvider returns a usable Context
-        // for SharedPreferences; the Keystore module's requirePrefs
-        // wires up against it once Keystore.attach(ctx) is called.
-        Keystore.attach(ApplicationProvider.getApplicationContext<Context>())
+        // Robolectric does not provide the hardware-backed
+        // AndroidKeyStore that production Keystore.attach() needs, so
+        // bind a plain in-memory SharedPreferences via the test seam —
+        // requirePrefs() then wires against it just the same.
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        Keystore.attachForTest(ctx.getSharedPreferences("keystore-test", Context.MODE_PRIVATE))
         // Start each test from a clean slate — prior tests in the
         // same JVM may have written keys we need to ignore.
         Keystore.wipe()

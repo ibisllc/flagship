@@ -16,13 +16,20 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33])
 class KeystoreIrkVersionTest {
 
     @Before
     fun setUp() {
-        Keystore.attach(ApplicationProvider.getApplicationContext<Context>())
+        // Robolectric does not provide the hardware-backed
+        // AndroidKeyStore that production Keystore.attach() needs, so
+        // use the test seam to bind a plain in-memory SharedPreferences
+        // — exactly the persistence path this suite means to pin.
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        Keystore.attachForTest(ctx.getSharedPreferences("keystore-test", Context.MODE_PRIVATE))
         Keystore.wipe()
     }
 

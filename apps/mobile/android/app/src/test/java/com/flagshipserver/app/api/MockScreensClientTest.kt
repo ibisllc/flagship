@@ -30,7 +30,11 @@ class MockScreensClientTest {
 
     @Test fun appsList_returnsKnownApps() = runTest {
         val r = makeClient().appsList()
-        assertEquals(listOf("plants", "wiki", "pad").sorted(), r.apps.map { it.appId }.sorted())
+        // appId is the immutable composite `<creator>-<slug>`.
+        assertEquals(
+            listOf("harry-plants", "harry-wiki", "trent-scratchpad").sorted(),
+            r.apps.map { it.appId }.sorted(),
+        )
     }
 
     @Test fun appDetail_throwsOnUnknownApp() = runTest {
