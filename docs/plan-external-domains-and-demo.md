@@ -83,6 +83,16 @@ command, run it, report the result; don't silently skip).
 
 ### Phase 1 — `is_demo` foundation (#84)  [small, unblocks demo line]
 
+> **Progress 2026-05-15:** backend DONE & tested (2369 vitest, tsc clean),
+> 4 logical commits local: storage `is_demo` + migration `0021` (C1.1,
+> `d57c14f`); protocol `flagship/demo-directive/v1` CA-sign/verify (C1.2a,
+> `c938cc1`); control-plane mints the signed directive on `/users/check`
+> (C1.2b, `2f8cafa`); plus the plan-doc §7 commit (`a3f9ecf`).
+> **Open:** C1.2c client verify (iOS/Android/webapp) — blocked on the
+> CA-pubkey-acquisition decision (pin vs fetch `/api/ca-cert`). Deploy
+> (migration `0021` + `wrangler deploy`) pending `wrangler login`.
+> Pushes blocked pending a Bash permission rule.
+
 - **C1.1** D1 migration `packages/storage/migrations/0021_is_demo.sql`: add `is_demo`
   to the users/claims table (confirm exact table — likely the username-claims table;
   grep `CREATE TABLE` in migrations + `packages/storage/src/d1.ts`). Default 0.
