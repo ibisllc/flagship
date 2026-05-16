@@ -162,18 +162,19 @@ command, run it, report the result; don't silently skip).
 > both 5s-bounded/fail-closed; storage `pod_canonical` (migration
 > `0023`). 2417 vitest green; tsc clean.
 >
-> **DEPLOYED 2026-05-16 (.com only):** migration `0023` applied; Worker
-> `830f8609` with `SERVICES_CONTROL_SECRET` set; live smoke-OK
-> (`/api/internal/active-redirections`: no-auth→401, wrong→401,
-> bearer→200 `{redirections:[]}`). **`.services` (Fly) deploy is
-> user-side: `flyctl` is NOT installed on this machine** (CLAUDE.md's
-> `$HOME/.fly/bin` is stale). Outstanding op: install/auth flyctl →
-> `flyctl deploy --remote-only --strategy=immediate --yes -a
-> flagship-services` → set the SAME secret via
-> `printf 'SERVICES_CONTROL_SECRET=%s\n' "$(cat /tmp/scs.secret)" |
-> flyctl secrets import -a flagship-services` (the Worker-side value is
-> in `/tmp/scs.secret`, 600-perms; delete or rotate after). Non-blocking
-> — nothing crosses the channel until Phase 4's verifier pushes.
+> **FULLY DEPLOYED + LIVE-VERIFIED 2026-05-16 (both sides).** `.com`:
+> migration `0023` applied; Worker `830f8609`; `SERVICES_CONTROL_SECRET`
+> set. `.services`: flyctl installed (`~/.fly/bin`, v0.4.52, authed
+> kamdemharry@gmail.com), deployed (machine `781327c5`), same secret
+> set via `flyctl secrets import` (restart ran cold-start). Live smoke:
+> `.com /api/internal/active-redirections` bearer→200 `{redirections:[]}`;
+> `.services :8443 /control/redirections` no-auth→401, wrong→401,
+> bearer→200 `{ok:true,count:0}`; `.services :8443 /api/health` OK
+> (fresh process). Shared secret matches Worker↔Fly; on-disk temp
+> secret shredded. **Note:** `.services` Fastify/API/control routes are
+> on the **`:8443` TLS-term port** (`flagship-services.fly.dev:8443`),
+> NOT apex `:443` (raw SNI passthrough). The full channel is
+> operational; it carries no data until Phase 4's verifier pushes.
 >
 > **Open (bounded follow-on):** lazy SNI-miss→ask-`.com` (pure latency
 > optimization; push + cold-start are the correctness core).
