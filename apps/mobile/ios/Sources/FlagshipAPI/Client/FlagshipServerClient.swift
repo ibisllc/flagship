@@ -106,15 +106,15 @@ public protocol FlagshipServerClient: Sendable {
         appId: String
     ) async throws -> AppLinksResponse
 
-    /// Bind an external domain to the app (the fqdn-service-binding
-    /// order). Replaces any existing one. Returns the refreshed links
-    /// so callers can reflect it immediately. The real routing-claim +
-    /// cert path is the staged backend; today the Mock stores it and
-    /// the Live client reports it's not yet available.
+    /// Bind an external domain to the app (#79A). Decoupled
+    /// request/confirm: a 200 only RECORDS it (.com verifies the CNAME
+    /// out-of-band and pushes the outcome); the ONLY synchronous denial
+    /// is the 300s rate limit (429 "Too soon — try again in Ns.").
+    /// Returns the refreshed links so callers reflect it immediately.
     func setCustomDomain(
         username: String,
         appId: String,
-        fqdn: String
+        body: SetCustomDomainRequest
     ) async throws -> AppLinksResponse
 }
 
@@ -128,6 +128,30 @@ public struct AppRenameRequest: Encodable, Sendable {
             self.username = username
             self.appId = appId
             self.newDisplayLabel = newDisplayLabel
+            self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String   // hex; Ed25519 by the user's IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
+/// #79A — IRK-signed external-domain attach request. Same envelope
+/// shape as AppRenameRequest; canonical bytes = SetCustomDomainClaim
+/// (flagship/custom-domain/v1 | username | appId | fqdn | issuedAt),
+/// matching the .com verifier + the Android/webapp clients.
+public struct SetCustomDomainRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let appId: String
+        public let fqdn: String
+        public let issuedAt: Int64
+        public init(username: String, appId: String, fqdn: String, issuedAt: Int64) {
+            self.username = username
+            self.appId = appId
+            self.fqdn = fqdn
             self.issuedAt = issuedAt
         }
     }
@@ -883,7 +907,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func setCustomDomain(
         username: String,
         appId: String,
-        fqdn: String
+        body: SetCustomDomainRequest
     ) async throws -> AppLinksResponse {
         try await tick()
         let u = username.lowercased()
@@ -902,9 +926,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // Synchronous confirmation: a real server fetches the CNAME
         // here and only commits if it points at the user's stub. The
         // Mock has no DNS, so it accepts the claim (the demo can't
-        // exercise a real failure path).
+        // exercise a real failure path). Record from the signed body.
         customDomainByUser[u, default: [:]][appId] =
-            fqdn.trimmingCharacters(in: .whitespaces).lowercased()
+            body.request.fqdn.trimmingCharacters(in: .whitespaces).lowercased()
         customDomainLastChangedByUser[u, default: [:]][appId] = Date()
         return try await getAppLinks(username: username, appId: appId)
     }
@@ -1245,16 +1269,33 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func setCustomDomain(
         username: String,
         appId: String,
-        fqdn: String
+        body: SetCustomDomainRequest
     ) async throws -> AppLinksResponse {
-        // The routing-claim + fleet-cert binding is the staged backend
-        // (see project_external_domains memory / task #79). No live
-        // endpoint yet — fail clearly rather than pretend success.
-        _ = (username, appId, fqdn)
-        throw ScreensClientError.http(
-            status: 501,
-            message: "Custom-domain binding isn't available yet."
-        )
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let a = appId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? appId
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/custom-domain"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            // .com returns { "error": "…" } on the synchronous denials
+            // (429 rate-limit / 400 apex / 403 sig). Surface .error
+            // verbatim so the 429 message is byte-identical to the
+            // Mock ("Too soon — try again in Ns.", U+2014); fall back
+            // to the raw body if it isn't the {error} shape.
+            struct ErrBody: Decodable { let error: String? }
+            let decoded = try? JSONDecoder().decode(ErrBody.self, from: data)
+            let message = decoded?.error
+                ?? String(data: data, encoding: .utf8)
+                ?? "Couldn't request custom domain."
+            throw ScreensClientError.http(status: status, message: message)
+        }
+        // 200 = recorded only (the POST returns { recorded:true }, NOT
+        // the links). Re-read links so the pending domain surfaces
+        // optimistically; .com confirms the CNAME out-of-band.
+        return try await getAppLinks(username: username, appId: appId)
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

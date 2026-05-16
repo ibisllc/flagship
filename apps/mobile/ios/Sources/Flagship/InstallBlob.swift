@@ -197,6 +197,29 @@ public enum AppRenameClaim {
     }
 }
 
+/// #79A — attach an external (custom) domain to an app. Signed by the
+/// user's current IRK. Mirrors @flagship/protocol
+/// canonicalSetCustomDomain + the Android/webapp clients byte-for-byte
+/// so Live == Mock on the wire (a drift here = "signed-by-IRK but .com
+/// rejects the attach").
+public enum SetCustomDomainClaim {
+    public static let canonicalTag = "flagship/custom-domain/v1"
+    public static func canonicalBytes(
+        username: String,
+        appId: String,
+        fqdn: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            username,
+            appId,
+            fqdn.lowercased(),
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
 /// V2 — voi.ci one-off short link envelope. Signed by IRK. Optional
 /// `appId` binds the link to a specific app so a future rename can
 /// cascade-delete it.

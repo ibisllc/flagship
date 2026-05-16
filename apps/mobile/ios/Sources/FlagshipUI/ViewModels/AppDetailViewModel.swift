@@ -195,13 +195,53 @@ public final class AppDetailViewModel {
 
     private func bindCustomDomain(_ fqdn: String) async {
         guard let server, let user = username(), !user.isEmpty else { return }
+        // IRK-sign the canonical attach bytes (mirrors renameApp). The
+        // Keystore.deriveIRK call triggers the Face ID prompt that is
+        // the second-factor confirmation; the .com verifier checks this
+        // signature against the account IRK before recording the order.
+        let irk: Curve25519.Signing.PrivateKey
+        do {
+            irk = try await Keystore.deriveIRK(reason: "Attach a custom domain")
+        } catch {
+            customDomainPrompt = CustomDomainPrompt(
+                title: "Couldn't request custom domain",
+                message: "Couldn't access your account keys: \(error.localizedDescription)",
+                confirmTitle: nil, destructive: false, onConfirm: nil
+            )
+            return
+        }
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let canonical = SetCustomDomainClaim.canonicalBytes(
+            username: user, appId: appId, fqdn: fqdn, issuedAt: issuedAt,
+        )
+        let signature: Data
+        do {
+            signature = try irk.signature(for: canonical)
+        } catch {
+            customDomainPrompt = CustomDomainPrompt(
+                title: "Couldn't request custom domain",
+                message: "Couldn't sign the request: \(error.localizedDescription)",
+                confirmTitle: nil, destructive: false, onConfirm: nil
+            )
+            return
+        }
         do {
             // 200 = recorded (NOT yet confirmed). We optimistically
             // surface the domain; the set/fail outcome arrives later
             // as a pushed alert (server backend, task #79). No
             // pending/unconfirmed state in the UI by design.
             let r = try await server.setCustomDomain(
-                username: user, appId: appId, fqdn: fqdn
+                username: user,
+                appId: appId,
+                body: SetCustomDomainRequest(
+                    request: .init(
+                        username: user,
+                        appId: appId,
+                        fqdn: fqdn,
+                        issuedAt: issuedAt,
+                    ),
+                    signature: HexUtil.encode(signature),
+                ),
             )
             appLinks = .loaded(r)
             customDomainDraft = ""
