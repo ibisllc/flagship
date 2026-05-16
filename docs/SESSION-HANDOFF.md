@@ -6,8 +6,9 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
-+ push/PR; see §0 drift log).
+Last updated: 2026-05-16 (resume session — closed #11/#30/#24/#25/
+#20/#15/#29 + Android build-blocker fix + discovery sweep; flagship
+2514/2514, maintainers 257/257, all pushed, PR #1 open. See §0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
@@ -203,15 +204,33 @@ Ed25519 over the canonical bytes).
 
 ## 5. Recommended next-session order (highest value, unblocked first)
 
-1. **#11** — push `feat/ca-endorsement` + open the PR (pre-authorized;
-   1 action; unblocks the whole maintainer→CA chain on merge).
-2. **#30** baked-genesis const + fail-closed link-1 (gates #8/#9/#10;
-   pure code; testable with the placeholder genesis).
-3. **#24** install-policy push fan-out (audit BLOCKER; backend; testable).
-4. **#25** daemon sibling auto-dial (audit; daemon-runtime; careful).
-5. **#20** Android /links fan-out (review-only; completes #81 e2e).
-6. **#15** B-e2e rig (largest; high confidence-to-ship value).
-7. **#27/#28/#32/#29/#31** the maintainer→CA build (post #11 merge),
-   then **#8/#9/#10** link-4 (mechanical once #30 + re-pin land).
-8. ⛔ items only when their gate clears (governed merge / live device /
-   real-infra exercise) — each is documented to the seam.
+**Resume-session 2026-05-16 closed #11(reconstructed+PR), #30, #24
+(deployed), #25, #20, #15, #29 — plus found+fixed an Android
+build-blocker and ran the discovery sweep. Every remaining item is
+now governed-merge / human-hardware / real-infra gated, seam built +
+documented.** Next session, in order:
+
+1. **GOVERNED: merge `ibisllc/maintainers#1`** (the reconstructed
+   CaEndorsement protocol). Then bump `scripts/maintainers.pinned-sha`
+   to the merge SHA + run `pull-maintainers.sh`. This is the single
+   gate that unblocks the most.
+2. **#8 → #9 → #10** link-4 wiring — now mechanical: back the #30
+   `CaTrustChain` with `@maintainers/protocol` `authorizedCaKeys`
+   (daemon `releaseVerifier.ts`, then webapp TS, then iOS/Android
+   port) over the pinned `.maintainers` snapshot. The chokepoint +
+   fail-closed default already ship (#30).
+3. **#27/#28/#31/#32** the maintainer→CA ceremony build — upstream
+   `ibisllc/maintainers` (post-merge). #28 is security-critical
+   (rotate-ca) + needs a real YubiKey; #27 genesis run is human;
+   #32 is a multi-week new app. Design 100% in maintainer-ca §10–§12
+   + ca-operations.md.
+4. **#33** Android `./gradlew assembleDebug` on a JDK box (shake out
+   never-compiled drift before the Play upload); **#34** triage
+   `inheritance.ts` (v1 vs v2).
+5. ⛔ real-infra/live-device backlog (#16-row items: C4.1c live cert
+   exercise, lazy-SNI socket wiring, B-A2/B-A3, C-A1, Forgejo/LLM,
+   the joint sibling-supervisor runtime instantiation) — only when
+   the device/infra is available; each documented to the seam.
+6. **Pre-existing test flake** (§0): triage the one parallel-run
+   flake (pin the spec / add a deterministic wait; never blanket
+   retry).
