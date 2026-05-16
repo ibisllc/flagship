@@ -38,6 +38,16 @@ Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
 - **2026-05-16 (resume):** flagship ground truth verified —
   `git log` matches, `tsc -b` clean, `vitest run` **2492 / 221**
   (baseline holds); spot-checked #4/#12/#14/#23 exist in code.
+- **2026-05-16 (resume, flake — DISCOVERY):** one intermittent test
+  failure observed once under the full `vitest run` (`1 failed | 2503
+  passed`), deterministically green on every isolated + full re-run
+  (`2504`/`2509` passed). Not introduced by the resume changes (tsc
+  clean; additive-only). Likely a parallelism/timing-sensitive spec
+  (candidates seen emitting expected negative-path stderr under load:
+  `apps/dns-broker/test/index.test.ts`,
+  `packages/server-daemon/tests/renewIfNeeded.test.ts`). Triage in
+  the discovery sweep — pin the flaky spec or add a deterministic
+  wait; do not mask with a blanket retry.
 
 ## 1. Cold-start read order
 
@@ -62,9 +72,11 @@ Last updated: 2026-05-16 (resume session: maintainer-CA reconstruction
   parallel run (deterministically green on isolated re-run) — see §0
   / discovery task. Everything pushed to `origin/main` (direct-to-main
   is this repo's convention; pushes work without prompt).
-- **`.com` Worker `flagship-com`:** last deploy version `400186b0`
-  (the #14 marketplace-scan-queue). D1 migrations applied through
-  **`0024`** (`0024_demo_llm_ledger`). Secrets verified live: all 4
+- **`.com` Worker `flagship-com`:** last deploy version `70a43eea`
+  (the #24 install-policy fan-out). D1 migrations applied through
+  **`0025`** (`0025_install_policy_fanout`, applied remote 2026-05-16
+  resume: `changed_db:true`, 16 tables; `install_policy_fanout`
+  confirmed live; `/api/health` ok). Secrets verified live: all 4
   `APNS_*` + `WEBPUSH_*` + `SERVICES_CONTROL_SECRET` set (run
   `node scripts/check-push-secrets.mjs`). `SERVICES_BASE_URL=
   https://flagship-services.fly.dev:8443` (the `.services` API is on
