@@ -13,6 +13,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppRenameRequest
 import com.flagshipserver.app.api.FlagshipServerClient
@@ -85,7 +86,7 @@ class RenameAppViewModel(
     private val appId: String,
     private val username: () -> String?,
     private val cooldownStore: CustomDomainCooldownStore = CustomDomainCooldownStore.Noop,
-) {
+) : ViewModel() {
     private val _phase = MutableStateFlow<RenameAppPhase>(RenameAppPhase.Idle)
     val phase: StateFlow<RenameAppPhase> = _phase.asStateFlow()
 

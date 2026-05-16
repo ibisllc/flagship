@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.WipeRestartRequest
 import com.flagshipserver.app.core.HexUtil
@@ -37,7 +38,7 @@ class WipeRestartViewModel(
     private val webAuthn: WebAuthnProvider = MockWebAuthnProvider(),
     private val username: () -> String?,
     private val rng: SecureRandom = SecureRandom(),
-) {
+) : ViewModel() {
     private val _phase = MutableStateFlow<WipeRestartPhase>(WipeRestartPhase.Idle)
     val phase: StateFlow<WipeRestartPhase> = _phase.asStateFlow()
 

@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.viewmodels
 
+import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.HexUtil
@@ -32,7 +33,7 @@ sealed interface ReplaceDevicePhase {
 class ReplaceDeviceViewModel(
     private val server: FlagshipServerClient,
     private val username: () -> String?,
-) {
+) : ViewModel() {
     private val _phase = MutableStateFlow<ReplaceDevicePhase>(ReplaceDevicePhase.Idle)
     val phase: StateFlow<ReplaceDevicePhase> = _phase.asStateFlow()
 
