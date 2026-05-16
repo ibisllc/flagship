@@ -172,3 +172,85 @@ describe("handleGetCustomDomain (#79A)", () => {
     });
   });
 });
+
+describe("handleSetCustomDomain — replace-time DELETE(old fqdn)", () => {
+  function depsWithPush(s: InMemoryStorage, now: () => number) {
+    const calls: Array<{ op: string; fqdn: string; pod?: string }> = [];
+    return {
+      calls,
+      deps: {
+        usernames: s.usernames,
+        customDomainOrders: s.customDomainOrders,
+        now,
+        pushRedirection: async (op: "add" | "delete", fqdn: string, pod?: string) => {
+          calls.push({ op, fqdn, pod });
+        },
+      },
+    };
+  }
+
+  it("DELETEs the old redirection when an ACTIVE order is replaced", async () => {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seed(s, irk);
+    const T0 = 1_000_000;
+    await s.customDomainOrders.upsert({
+      appId: APP, userId: USER, fqdn: "old.example.com", status: "active",
+      podCanonical: "home.alice.flagship.services",
+      lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
+    });
+    const T1 = T0 + 400_000; // past the 300s window
+    const { calls, deps } = depsWithPush(s, () => T1);
+    const r = await handleSetCustomDomain(deps, USER, APP, signedBody(irk, "new.example.com", T1));
+    expect(r.status).toBe(200);
+    expect(calls).toEqual([{ op: "delete", fqdn: "old.example.com", pod: undefined }]);
+    // The new order is recorded pending (the verifier will ADD it).
+    expect((await s.customDomainOrders.get(USER, APP))!.fqdn).toBe("new.example.com");
+  });
+
+  it("does NOT DELETE when the fqdn is unchanged", async () => {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seed(s, irk);
+    const T0 = 1_000_000;
+    await s.customDomainOrders.upsert({
+      appId: APP, userId: USER, fqdn: "same.example.com", status: "active",
+      podCanonical: "home.alice.flagship.services",
+      lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
+    });
+    const { calls, deps } = depsWithPush(s, () => T0 + 400_000);
+    await handleSetCustomDomain(deps, USER, APP, signedBody(irk, "same.example.com", T0 + 400_000));
+    expect(calls).toEqual([]);
+  });
+
+  it("does NOT DELETE when the prior order was only pending (no live redirection)", async () => {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seed(s, irk);
+    const T0 = 1_000_000;
+    await s.customDomainOrders.upsert({
+      appId: APP, userId: USER, fqdn: "pending.example.com", status: "pending",
+      lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
+    });
+    const { calls, deps } = depsWithPush(s, () => T0 + 400_000);
+    await handleSetCustomDomain(deps, USER, APP, signedBody(irk, "new2.example.com", T0 + 400_000));
+    expect(calls).toEqual([]);
+  });
+
+  it("still records the request when no pushRedirection dep is wired", async () => {
+    const s = new InMemoryStorage();
+    const irk = makeKey();
+    await seed(s, irk);
+    const T0 = 1_000_000;
+    await s.customDomainOrders.upsert({
+      appId: APP, userId: USER, fqdn: "old.example.com", status: "active",
+      podCanonical: "home.alice.flagship.services",
+      lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
+    });
+    const r = await handleSetCustomDomain(
+      deps(s, () => T0 + 400_000), USER, APP, signedBody(irk, "new3.example.com", T0 + 400_000),
+    );
+    expect(r.status).toBe(200);
+    expect((await s.customDomainOrders.get(USER, APP))!.fqdn).toBe("new3.example.com");
+  });
+});

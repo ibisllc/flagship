@@ -40,6 +40,7 @@ import {
   handleSetCustomDomain,
   handleGetCustomDomain,
   handleActiveRedirections,
+  pushRedirection,
   bearer,
   handleVoiciShorten,
   handleRevokeAutoUnlockLease,
@@ -101,6 +102,9 @@ export interface ControlPlaneEnv {
   /** Shared bearer secret for the .com↔.services custom-domain
    *  control channel (#87). Also set as a Fly secret on .services. */
   SERVICES_CONTROL_SECRET?: string;
+  /** Base URL of the `.services` control channel (the :8443 TLS-term
+   *  host). Needed to push the replace-time DELETE(old fqdn). */
+  SERVICES_BASE_URL?: string;
   /**
    * Public URL of the standalone dns-broker Worker (see
    * `apps/dns-broker`). When set, the main Worker delegates ALL DNS
@@ -793,7 +797,29 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.CUSTOM_DOMAIN))) {
     return finish(
       await handleSetCustomDomain(
-        { usernames: storage.usernames, customDomainOrders: storage.customDomainOrders },
+        {
+          usernames: storage.usernames,
+          customDomainOrders: storage.customDomainOrders,
+          // Replace-time DELETE(old fqdn): only wired when the control
+          // channel is configured (same gate as the verifier cron).
+          ...(env.SERVICES_BASE_URL && env.SERVICES_CONTROL_SECRET
+            ? {
+                pushRedirection: async (
+                  op: "add" | "delete",
+                  fqdn: string,
+                  podCanonical?: string,
+                ) => {
+                  await pushRedirection(
+                    {
+                      servicesBaseUrl: env.SERVICES_BASE_URL!,
+                      secret: env.SERVICES_CONTROL_SECRET!,
+                    },
+                    { op, fqdn, podCanonical },
+                  );
+                },
+              }
+            : {}),
+        },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
         await readJson(request),

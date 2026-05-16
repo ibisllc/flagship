@@ -36,6 +36,20 @@ export interface CustomDomainDeps {
   usernames: UsernameStorage;
   customDomainOrders: CustomDomainOrderStorage;
   now?: () => number;
+  /**
+   * Same-shaped helper the Phase-4 verifier uses. Optional: when an
+   * ACTIVE custom domain is destructively replaced, the verifier only
+   * ever sees the NEW (pending) fqdn, so it never deletes the OLD
+   * redirection — it would linger in `.services` RAM until a sweep /
+   * cold-start reconcile. Emitting DELETE(oldFqdn) here closes that
+   * window immediately. Stale-routing cleanup, not a security hole;
+   * absent ⇒ skip (the sweep still eventually reconciles).
+   */
+  pushRedirection?: (
+    op: "add" | "delete",
+    fqdn: string,
+    podCanonical?: string,
+  ) => Promise<void>;
 }
 
 const USERNAME_RE = /^[a-z0-9]{1,63}$/;
@@ -126,6 +140,29 @@ export async function handleSetCustomDomain(
     const elapsed = now - existing.lastChanged;
     if (elapsed < CUSTOM_DOMAIN_RATE_LIMIT_MS) {
       return tooSoon(Math.ceil((CUSTOM_DOMAIN_RATE_LIMIT_MS - elapsed) / 1000));
+    }
+  }
+
+  // Replace-time stale-routing cleanup: if the prior order was ACTIVE
+  // (a redirection is live in `.services` RAM for its fqdn) and the
+  // fqdn is actually changing, proactively DELETE the old redirection.
+  // The async verifier only ever sees the NEW pending fqdn, so without
+  // this the old one lingers until the #82 sweep / a cold-start. Best
+  // effort — a transient `.services` hiccup must not fail the attach
+  // request (the row is recorded regardless; the sweep backstops).
+  if (
+    deps.pushRedirection &&
+    existing &&
+    existing.status === "active" &&
+    existing.podCanonical &&
+    existing.fqdn.toLowerCase() !== fqdn
+  ) {
+    try {
+      await deps.pushRedirection("delete", existing.fqdn);
+    } catch (e) {
+      console.warn(
+        `[customDomain] replace-time DELETE(${existing.fqdn}) failed; sweep will reconcile: ${(e as Error).message}`,
+      );
     }
   }
 
