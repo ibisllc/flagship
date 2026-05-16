@@ -588,11 +588,11 @@ private fun UrlRowMuted(url: String) {
 // (no ZWSP) so a paste is still clean — mirrors iOS wrapAtDots.
 private fun wrapAtDots(s: String): String = s.replace(".", ".\u200B")
 
-@Composable
 // Mirrors the Worker's DNS_LABEL_RE in appRename.ts. Keep in sync —
 // drift means the button enables for stems the server then rejects.
 private val STEM_RE = Regex("^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 
+@Composable
 private fun ReplaceStemDialog(
     draft: String,
     currentStem: String,
