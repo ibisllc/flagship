@@ -259,6 +259,23 @@ command, run it, report the result; don't silently skip).
 
 ### Phase 5 — Demo lifecycle tooling (#85, #83)
 
+> **Progress 2026-05-16:** **C5.1 (#85) DONE + DEPLOYED LIVE.** Two
+> tested commits: `1252deb` storage `demo_llm_ledger` (append-only
+> rolling-window grant log; migration `0024`; InMemory+D1 adapters;
+> Storage aggregate both classes; 3 tests) — chose a genuine sliding
+> window over a calendar bucket so a demo account can't burst-reset at
+> UTC midnight. `eee5fe2` control-plane: `handleLlmPromoIssue` gates an
+> `is_demo` claim on a rolling token sum (default 250k/24h, both
+> deps-overridable), pessimistically logs the full per-issue grant on
+> success, **fails closed** (no ledger dep ⇒ "demo LLM disabled", never
+> an uncapped provider key); wired into the production Worker route; 4
+> tests. 2435 vitest green; tsc clean. Deployed: migration `0024`
+> applied to remote D1 (`changed_db:true`, 15 tables); Worker
+> `flagship-com` version `275b95f7`; smoke-OK (`/api/health` ok,
+> `POST /api/llm-promo/issue {}`→400 "malformed body" — route wired,
+> validation intact). **Open: C5.2/C5.3 (#83)** — provision/
+> decommission CLI (next).
+
 - **C5.1** #85: gate LLM spend for `is_demo` users in the control-plane usage path
   (`packages/control-plane` + `packages/llm-providers`): rolling-24 h token ledger,
   hard stop with "demo quota reached" (no billing, graceful). Default cap §2.
