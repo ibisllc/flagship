@@ -13,17 +13,20 @@ import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 const COM_BASE = "https://flagshipserver.com";
 
-/** V3 — cached app-links per appId for the current render. */
+/** V3 — cached app-links per appId for the current render. Carries
+ *  `customDomain` + `customDomainConfirmed` from .com's /links. */
 let currentAppLinks = null;
-
-/** Custom domains the user has added in this view. Local-only — the
- *  daemon's P1.22 verify endpoint checks DNS; there is no separate
- *  "register" call. `{ fqdn, status, expectedTxtRecord, reason }`. */
-let customDomains = [];
 
 registerView("view-app-detail");
 
 let currentAppId = null;
+
+/** Custom-domain change rate limit, mirrored on-device (the .com
+ *  last_changed column is the real backstop — this is just the UX
+ *  cooldown). 300s, identical to the iOS client + the server. */
+const CUSTOM_DOMAIN_COOLDOWN_MS = 300_000;
+/** 1s countdown ticker handle for the SET CUSTOM DOMAIN section. */
+let cdCooldownTicker = null;
 
 /**
  * #32 — browser-viewer is only reachable from here, only when the
@@ -40,7 +43,6 @@ function hasBrowserBundle(body) {
 
 export async function renderAppDetail(appId) {
   currentAppId = appId;
-  customDomains = [];
   const root = $("app-detail-content");
   root.innerHTML = skeletonCards(3);
   try {
@@ -252,6 +254,22 @@ function renderWebDomainsSection(app, links) {
       <button class="ghost" data-copy="${escapeHtml(canonical)}" aria-label="Copy canonical">📋</button>
     </div>`;
 
+  // CUSTOM DOMAIN sits at the very top of the card, only when one is
+  // bound. It's the user's own name — show it first. Surfaced as soon
+  // as the order is recorded (even pending); the apps-list short→
+  // custom swap is what waits for .com to confirm. Mirrors iOS
+  // AppDetailScreen.customDomainGroup.
+  const cd = links?.customDomain ?? null;
+  const customDomainBlock = !cd ? "" : `
+      <div class="label-tiny">CUSTOM DOMAIN</div>
+      <div class="row" data-section="custom">
+        <a class="weight-600 mono" href="https://${escapeHtml(cd)}" target="_blank" rel="noopener">
+          ${displayUrl("https://" + cd)}
+        </a>
+        <button class="ghost" data-copy="https://${escapeHtml(cd)}" aria-label="Copy custom domain">📋</button>
+      </div>
+      <div class="mt-3"></div>`;
+
   const instancesBlock = instances.length === 0 ? "" : `
     <div class="mt-3">
       <div class="label-tiny">INDIVIDUAL INSTANCES</div>
@@ -268,6 +286,7 @@ function renderWebDomainsSection(app, links) {
       <button class="danger small" id="ad-replace-stem">Replace</button>
     </div>
     <div class="card">
+      ${customDomainBlock}
       <div class="label-tiny">SHORT REDIRECT</div>
       ${shortRow}
       <div class="mt-3">
@@ -296,52 +315,73 @@ function bindWebDomainsHandlers(app) {
 }
 
 // ---------------------------------------------------------------
-// Custom domains — add locally, verify DNS via P1.22.
+// SET CUSTOM DOMAIN — Mock-faithful with the iOS client (#80/#81).
+//
+// Decoupled request/confirm: a 200 only RECORDS the request; .com
+// verifies the CNAME out-of-band and pushes the outcome. Non-200 is
+// the ONLY synchronous denial (the 300s rate limit / busy). No
+// phone-side CNAME check, no pending UI; the bound domain shows in
+// the CUSTOM DOMAIN group on 200, the apps-list swap waits for the
+// confirm. Mirrors AppDetailViewModel.submitCustomDomain exactly.
 // ---------------------------------------------------------------
 
-function statusPill(status) {
-  switch (status) {
-    case "verified": return '<span class="pill ok">Verified</span>';
-    case "pending":  return '<span class="pill">Pending DNS</span>';
-    case "failed":   return '<span class="pill err">Failed</span>';
-    default:         return '<span class="pill">Not yet checked</span>';
+const COOLDOWN_KEY_PREFIX = "flagship.customDomain.lastChanged.";
+
+function cdCooldownKey(appId) {
+  return `${COOLDOWN_KEY_PREFIX}${appId}`;
+}
+
+/** Remaining cooldown ms for the current app (0 = none). Rebuilt from
+ *  the on-device timestamp so it survives a reload — the server 429
+ *  is the real backstop if local state is lost. */
+function cdCooldownRemainingMs() {
+  try {
+    const ts = Number(localStorage.getItem(cdCooldownKey(currentAppId)));
+    if (!ts) return 0;
+    return Math.max(0, ts + CUSTOM_DOMAIN_COOLDOWN_MS - Date.now());
+  } catch {
+    return 0;
   }
 }
 
-/** Card with the list of added custom domains (each with a Verify /
- *  Remove control + TXT hint) and an add field. Kept visible so the
- *  custom-domain affordance isn't forgotten. */
+function recordCustomDomainChangeLocally() {
+  try {
+    localStorage.setItem(cdCooldownKey(currentAppId), String(Date.now()));
+  } catch {
+    /* private mode / disabled storage — the server 429 still backstops */
+  }
+}
+
+/** M:SS, matching the iOS cooldownLabel (ceil seconds). */
+function cooldownLabel(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function customDomainRoot() {
+  return `${getSession().username || "you"}.flagship.services`;
+}
+
+/** SET CUSTOM DOMAIN card: section label + right-floated M:SS
+ *  countdown while cooling, input + Add (disabled during cooldown),
+ *  and the CNAME guidance line — all byte-faithful to the iOS UI. */
 function renderCustomDomainsSection() {
-  const list = customDomains.map((d, i) => `
-    <div class="card" data-cd-row="${i}">
-      <div class="row" style="align-items:baseline;">
-        <span class="mono text-xs" style="flex:1; min-width:0; word-break:break-all;">${escapeHtml(d.fqdn)}</span>
-        ${statusPill(d.status)}
-        <button class="ghost mini" data-cd-remove="${i}" aria-label="Remove">✕</button>
-      </div>
-      ${d.expectedTxtRecord ? `
-        <div class="muted-sm text-xs mt-1">Add this TXT record on <span class="mono">_flagship.${escapeHtml(d.fqdn)}</span>:</div>
-        <div class="mono text-xs">${escapeHtml(d.expectedTxtRecord)}</div>` : ""}
-      ${d.reason ? `<div class="muted-sm text-xs mt-1">${escapeHtml(d.reason)}</div>` : ""}
-      <button class="secondary small mt-2" data-cd-verify="${i}">${d.status === "pending" ? "Re-check DNS" : "Verify DNS"}</button>
-    </div>
-  `).join("");
+  const remaining = cdCooldownRemainingMs();
+  const cooling = remaining > 0;
   return `
-    <h2 class="mt-4">Custom domain</h2>
-    ${list}
+    <h2 class="mt-4">Set custom domain</h2>
     <div class="card">
-      <div class="row">
-        <input id="ad-cd-input" placeholder="www.mydomain.com" autocomplete="off" style="flex:1;" />
-        <button class="secondary" id="ad-cd-add">Add</button>
+      <div class="row" style="align-items:baseline;">
+        <div class="label-tiny" style="flex:1;">SET CUSTOM DOMAIN</div>
+        <div class="label-tiny mono" id="ad-cd-cooldown" ${cooling ? "" : "hidden"}>${cooling ? cooldownLabel(remaining) : ""}</div>
+      </div>
+      <div class="row mt-2">
+        <input id="ad-cd-input" placeholder="www.mydomain.com" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" style="flex:1;" />
+        <button class="secondary" id="ad-cd-add" ${cooling ? "disabled" : ""}>Add</button>
       </div>
       <div class="muted-sm text-xs mt-2">
-        Point a subdomain you own at Flagship with one DNS CNAME:
-        <span class="mono">www.mydomain.com → ${escapeHtml(getSession().username || "you")}.flagship.services</span>.
-        No registrar transfer, no IP to point at. Your apex
-        (<span class="mono">mydomain.com</span>) can't take a CNAME — keep it on
-        <span class="mono">www</span> and redirect the apex to it (a free
-        Cloudflare/registrar redirect). The short link and app URLs are
-        unaffected, and a Replace never touches an attached domain.
+        Prior to claiming a FQDN, you must set a CNAME record targeting
+        <span class="mono">${escapeHtml(customDomainRoot())}</span>.
       </div>
     </div>
   `;
@@ -354,47 +394,170 @@ function rerenderCustomDomains() {
   bindCustomDomainsHandlers();
 }
 
-function bindCustomDomainsHandlers() {
-  $("ad-cd-add")?.addEventListener("click", () => {
-    const input = $("ad-cd-input");
-    const v = (input?.value || "").trim().toLowerCase();
-    if (!v || customDomains.some((d) => d.fqdn === v)) return;
-    customDomains.push({ fqdn: v, status: null, expectedTxtRecord: "", reason: "" });
-    rerenderCustomDomains();
-  });
-  document.querySelectorAll("[data-cd-remove]").forEach((b) => {
-    b.addEventListener("click", () => {
-      customDomains.splice(Number(b.getAttribute("data-cd-remove")), 1);
-      rerenderCustomDomains();
-    });
-  });
-  document.querySelectorAll("[data-cd-verify]").forEach((b) => {
-    b.addEventListener("click", () => verifyCustomDomain(Number(b.getAttribute("data-cd-verify"))));
-  });
+/** 1s ticker that keeps the M:SS countdown + disabled state live,
+ *  then re-enables Add when it elapses. Single-instance. */
+function startCooldownTicker() {
+  if (cdCooldownTicker) clearInterval(cdCooldownTicker);
+  cdCooldownTicker = setInterval(() => {
+    const label = $("ad-cd-cooldown");
+    const addBtn = $("ad-cd-add");
+    if (!label || !addBtn) {
+      clearInterval(cdCooldownTicker);
+      cdCooldownTicker = null;
+      return;
+    }
+    const remaining = cdCooldownRemainingMs();
+    if (remaining > 0) {
+      label.hidden = false;
+      label.textContent = cooldownLabel(remaining);
+      addBtn.disabled = true;
+    } else {
+      label.hidden = true;
+      addBtn.disabled = false;
+      clearInterval(cdCooldownTicker);
+      cdCooldownTicker = null;
+    }
+  }, 1000);
 }
 
-async function verifyCustomDomain(idx) {
-  const d = customDomains[idx];
-  if (!d) return;
-  try {
-    const r = await screensFetch("/api/screens/url-controller/verify", {
-      method: "POST",
-      body: JSON.stringify({ fqdn: d.fqdn }),
+function bindCustomDomainsHandlers() {
+  $("ad-cd-add")?.addEventListener("click", () => {
+    submitCustomDomain().catch((e) => toast(String(e?.message ?? e), "err"));
+  });
+  if (cdCooldownRemainingMs() > 0) startCooldownTicker();
+}
+
+/** Validate the draft and either raise an explanatory prompt or issue
+ *  the binding request. Mirrors AppDetailViewModel.submitCustomDomain:
+ *  normalize → cooldown gate → apex→www → destructive-replace confirm
+ *  → decoupled request. */
+async function submitCustomDomain() {
+  const input = $("ad-cd-input");
+  const fqdn = (input?.value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^\/+|\/+$/g, "");
+  if (!fqdn) return;
+
+  // Client mirror of the server's last_changed rate limit.
+  if (cdCooldownRemainingMs() > 0) return;
+
+  const { inlineConfirm } = await import("../lib/modal.js");
+
+  // (a) Apex / no subdomain — fewer than 3 labels means there's no
+  // subdomain to CNAME (example.com). Offer the www form. Structural
+  // (not a DNS check) so it stays instant + local.
+  if (fqdn.split(".").length < 3) {
+    const suggested = `www.${fqdn}`;
+    const ok = await inlineConfirm({
+      title: "Subdomains only",
+      message: `This only supports subdomains — an apex like ${fqdn} can't take a CNAME. Use ${suggested}?`,
+      okLabel: `Use ${suggested}`,
     });
-    customDomains[idx] = {
-      fqdn: r.fqdn,
-      status: r.status,
-      expectedTxtRecord: r.expectedTxtRecord || "",
-      reason: r.reason || "",
-    };
-  } catch (e) {
-    customDomains[idx] = {
-      ...d,
-      status: "failed",
-      reason: e instanceof ScreensError ? e.message : String(e),
-    };
+    if (!ok) return;
+    if (input) input.value = suggested;
+    return submitCustomDomain();
   }
-  rerenderCustomDomains();
+
+  // No phone-side CNAME check: .com re-validates authoritatively
+  // anyway, so we take the claim at face value and let the binding
+  // POST test it. A failed CNAME comes back asynchronously, not here.
+
+  // (b) Replacing an existing binding — confirm first. The swap is
+  // destructive + irreversible: this device drops its memory of the
+  // old domain immediately, even if the new one never confirms
+  // (there's no "forget a domain" affordance otherwise).
+  const existing = currentAppLinks?.customDomain ?? null;
+  if (existing && existing !== fqdn) {
+    const ok = await inlineConfirm({
+      title: "Replace custom domain?",
+      message: `This will permanently replace the current custom domain (${existing}). It can't be undone, even if the new one fails to verify.`,
+      okLabel: "Replace",
+      danger: true,
+    });
+    if (!ok) return;
+  }
+
+  // (c) Clean path — decoupled request. A 200 only means "recorded;
+  // .com will verify the CNAME out-of-band and push the outcome".
+  await bindCustomDomain(fqdn);
+}
+
+async function bindCustomDomain(fqdn) {
+  const session = getSession();
+  if (!session.username || !session.umk) {
+    toast("Sign in first.", "err");
+    return;
+  }
+  const issuedAt = Date.now();
+  const canonical = canonicalSetCustomDomain(
+    session.username, currentAppId, fqdn, issuedAt,
+  );
+  let sig;
+  try {
+    sig = await signWithIrk(session.umk, canonical);
+  } catch (e) {
+    toast(`Couldn't sign: ${e.message ?? e}`, "err");
+    return;
+  }
+  try {
+    const r = await fetch(
+      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(currentAppId)}/custom-domain`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request: {
+            username: session.username,
+            appId: currentAppId,
+            fqdn,
+            issuedAt,
+          },
+          signature: bytesToHex(sig),
+        }),
+      },
+    );
+    if (!r.ok) {
+      // Non-200 is the ONLY synchronous denial — rate-limit / busy,
+      // never a CNAME verdict (that's async). Show .com's reason
+      // verbatim; for 429 it is the byte-identical "Too soon — try
+      // again in Ns." string the iOS Mock uses.
+      let msg = `Couldn't request custom domain (${r.status}).`;
+      try {
+        const body = await r.json();
+        if (body && typeof body.error === "string") msg = body.error;
+      } catch {
+        /* keep the status fallback */
+      }
+      toast(msg, "err");
+      return;
+    }
+    // 200 = recorded (NOT yet confirmed). Start the cooldown + re-
+    // render: /links now returns the pending domain so the CUSTOM
+    // DOMAIN group surfaces it optimistically. No pending UI by
+    // design; the apps-list swap waits for the async confirm.
+    recordCustomDomainChangeLocally();
+    if (currentAppId) await renderAppDetail(currentAppId);
+  } catch (e) {
+    toast(`Couldn't request custom domain: ${e.message ?? e}`, "err");
+  }
+}
+
+/** Mirrors @flagship/protocol canonicalSetCustomDomain
+ *  (flagship/custom-domain/v1 | username | appId | fqdn | issuedAt).
+ *  Same shape the iOS Live client + the .com verifier expect. */
+function canonicalSetCustomDomain(username, appId, fqdn, issuedAt) {
+  const enc = new TextEncoder();
+  return enc.encode(
+    [
+      "flagship/custom-domain/v1",
+      username,
+      appId,
+      fqdn.toLowerCase(),
+      String(issuedAt),
+    ].join("|"),
+  );
 }
 
 /** Modal-style scare sheet for the Replace ceremony. Inline (no

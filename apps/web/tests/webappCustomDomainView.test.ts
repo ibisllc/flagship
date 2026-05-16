@@ -24,3 +24,46 @@ describe("webapp apps-list — short→custom swap (#81)", () => {
     expect(body).toContain("const short = confirmedCustom ?? links?.shortUrl ?? null;");
   });
 });
+
+describe("webapp app-detail — SET CUSTOM DOMAIN (#80)", () => {
+  it("signs the exact .com canonical bytes and hits the custom-domain POST", async () => {
+    const body = await asset("/webapp/views/app-detail.js");
+    expect(body).toContain('"flagship/custom-domain/v1"');
+    expect(body).toContain("/custom-domain`");
+    expect(body).toContain("signWithIrk(session.umk, canonical)");
+    // Decoupled: a 200 records + re-renders; no pending UI.
+    expect(body).toContain("recordCustomDomainChangeLocally()");
+  });
+
+  it("mirrors the iOS apex→www and destructive-replace prompts verbatim", async () => {
+    const body = await asset("/webapp/views/app-detail.js");
+    // U+2014 em dash, byte-identical to AppDetailViewModel.
+    expect(body).toContain(
+      "This only supports subdomains — an apex like ${fqdn} can't take a CNAME. Use ${suggested}?",
+    );
+    expect(body).toContain("Subdomains only");
+    expect(body).toContain(
+      "This will permanently replace the current custom domain (${existing}). It can't be undone, even if the new one fails to verify.",
+    );
+    // Apex test is structural (<3 labels), not a DNS check.
+    expect(body).toContain('fqdn.split(".").length < 3');
+  });
+
+  it("has a 300s on-device cooldown, M:SS countdown and CNAME guidance", async () => {
+    const body = await asset("/webapp/views/app-detail.js");
+    expect(body).toContain("CUSTOM_DOMAIN_COOLDOWN_MS = 300_000");
+    expect(body).toContain('"flagship.customDomain.lastChanged."');
+    expect(body).toContain("startCooldownTicker");
+    expect(body).toContain(
+      "Prior to claiming a FQDN, you must set a CNAME record targeting",
+    );
+    // The CUSTOM DOMAIN group sits atop WEB DOMAINS once bound.
+    expect(body).toContain('<div class="label-tiny">CUSTOM DOMAIN</div>');
+  });
+
+  it("dropped the legacy P1.22 TXT-verify custom-domain model", async () => {
+    const body = await asset("/webapp/views/app-detail.js");
+    expect(body).not.toContain("/api/screens/url-controller/verify");
+    expect(body).not.toContain("expectedTxtRecord");
+  });
+});
