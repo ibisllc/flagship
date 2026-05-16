@@ -78,7 +78,9 @@ test("S11 — enable browser notifications + register webpush token", async ({
   // pushManager.subscribe(); both attempts hit our route stubs.
   const result = await page.evaluate(async () => {
     try {
-      const pushMod = await import("/lib/push.js");
+      const pushMod = (await import("/lib/push.js" as string)) as {
+        subscribeToWebPush(): Promise<void>;
+      };
       await pushMod.subscribeToWebPush();
       return { ok: true };
     } catch (e) {
@@ -93,7 +95,11 @@ test("S11 — enable browser notifications + register webpush token", async ({
   await expect.poll(() => fetchedVapid, { timeout: 5_000 }).toBe(true);
 
   // If register also fired, the body should declare platform=webpush.
-  if (registerBody) {
-    expect(registerBody).toContain("webpush");
+  // `registerBody` is only assigned inside the route closure, so CFA
+  // narrows the outer symbol to its `null` initializer (→ `never` in
+  // the truthy branch). The `as` re-asserts the real declared type.
+  const captured = registerBody as string | null;
+  if (captured) {
+    expect(captured).toContain("webpush");
   }
 });

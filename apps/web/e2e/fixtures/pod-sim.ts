@@ -20,7 +20,12 @@ export interface E2EFixtures {
  */
 export async function syncWebappPubkey(page: Page, podSim: PodSim): Promise<string> {
   const hex = await page.evaluate(async () => {
-    const state = await import("/lib/state.js");
+    // Runtime-served browser module — widen the specifier so TS treats
+    // it as a dynamic import (NodeNext won't honor a path ambient
+    // shim); cast to the surface this fixture uses.
+    const state = (await import("/lib/state.js" as string)) as {
+      getSession(): { irk?: { publicKey?: Uint8Array } | null };
+    };
     const session = state.getSession();
     if (!session.irk || !session.irk.publicKey) {
       throw new Error("syncWebappPubkey: session.irk not populated — call after view-home");

@@ -54,7 +54,19 @@ const MARKETING_PAGES = [
 ];
 
 /** Token contract every page must expose at the document root. */
-async function readDocTokens(page: Page): Promise<Record<string, string>> {
+interface DocTokens {
+  accent: string;
+  ink: string;
+  canvas: string;
+  fontSans: string;
+  fontDisplay: string;
+  fontMono: string;
+  primary: string;
+  bg: string;
+  fg: string;
+}
+
+async function readDocTokens(page: Page): Promise<DocTokens> {
   return page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
     return {
@@ -229,7 +241,7 @@ test.describe("S14 — unified design system on the marketing surface", () => {
   test("each marketing page shares the same accent + font tokens", async ({
     page,
   }) => {
-    const baselines: Array<{ label: string; tokens: Record<string, string> }> = [];
+    const baselines: Array<{ label: string; tokens: DocTokens }> = [];
     for (const p of MARKETING_PAGES) {
       const resp = await page.goto(p.path);
       // 200 OR 304 (cached). Anything else means the page is gone.

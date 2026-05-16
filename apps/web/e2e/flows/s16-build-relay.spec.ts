@@ -48,7 +48,9 @@ test.describe("S16 — Compose draft (#24)", () => {
     // router only listens to button clicks (no popstate handler), so
     // page.goto("/#create-server") wouldn't fire the transition.
     await page.evaluate(async () => {
-      const m = await import("/views/create-server.js");
+      const m = (await import("/views/create-server.js" as string)) as {
+        enterCreateServer(): Promise<void>;
+      };
       await m.enterCreateServer();
     });
     await expect(page.locator("#view-create-server")).toBeVisible();
