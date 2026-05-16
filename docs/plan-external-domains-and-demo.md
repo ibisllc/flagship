@@ -88,10 +88,14 @@ command, run it, report the result; don't silently skip).
 > `d57c14f`); protocol `flagship/demo-directive/v1` CA-sign/verify (C1.2a,
 > `c938cc1`); control-plane mints the signed directive on `/users/check`
 > (C1.2b, `2f8cafa`); plus the plan-doc §7 commit (`a3f9ecf`).
-> **Open:** C1.2c client verify (iOS/Android/webapp) — blocked on the
-> CA-pubkey-acquisition decision (pin vs fetch `/api/ca-cert`). Deploy
-> (migration `0021` + `wrangler deploy`) pending `wrangler login`.
-> Pushes blocked pending a Bash permission rule.
+> **Open:** C1.2c client verify (iOS/Android/webapp) — **blocked by the
+> maintainer→CA hierarchy** (decided 2026-05-16: add a `CaEndorsement`
+> envelope upstream in `ibisllc/maintainers`; CA-pubkey-pin idea dropped).
+> Client CA-artifact verification must sit on the real chain. Design:
+> `docs/maintainer-ca-endorsement.md`; cross-session context:
+> agent-memory `project_maintainer_ca.md`. This supersedes the earlier
+> pin-vs-fetch question. Deploy (migration `0021` + `wrangler deploy`)
+> pending `wrangler login`. Pushes blocked pending a Bash permission rule.
 
 - **C1.1** D1 migration `packages/storage/migrations/0021_is_demo.sql`: add `is_demo`
   to the users/claims table (confirm exact table — likely the username-claims table;
@@ -273,6 +277,16 @@ step from done" state and document that step.
 - **C-Android** Play internal track — no JDK on this Mac; Kotlin is review-only here. Build/sign/FCM/upload happens off-Mac.
 - **C-exercise** Live multi-day exercises: recovery J.3/J.4 cross-device walk; peer-backup 7-day cross-pod; update-pack pull (2 pods, 7 days); lineage-break re-anchor; STK rotation; lost-phone→new-phone. Each = "run on real infra, document failure modes."
 - **C-iso** Reproducible-ISO CI — likely **already exists** (`.github/workflows/build-iso.yml` with a double-build byte-identity check, per `project_v1_alpha_progress`). Action is *verify + tick `build-tasks.md §S`*, not build. `CLAUDE.md`'s outstanding list is stale here.
+
+### Track P — maintainer→CA hierarchy (prerequisite; gates #84 C1.2c)
+
+Decided 2026-05-16. The Flagship CA must be endorsed by the cold maintainer
+key via a new `CaEndorsement` envelope **upstream in `ibisllc/maintainers`**
+(now-anchored short lease — not the issuedAt-anchored release model). Full
+design + spec delta + runbooks + phasing in **`docs/maintainer-ca-endorsement.md`**;
+durable cross-session context in agent-memory `project_maintainer_ca.md`.
+This **blocks #84 C1.2c** and ultimately hardens all CA-signed artifacts.
+Steps 2 (upstream PR) and 4 (real-YubiKey genesis) have a human in the loop.
 
 ### Critical path to v1 alpha
 
