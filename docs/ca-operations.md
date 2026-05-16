@@ -241,3 +241,20 @@ air-gapped / store-down / successor ESCAPE HATCH, not the everyday
 path** — it must keep working but is no longer what a maintainer
 normally touches. `rotate-ca` (hot CA key) stays CLI-only, unchanged
 (the hot key must never touch a phone).
+
+## OSS-GENERIC REFRAME (2026-05-16, user) — the app is project-agnostic
+
+`docs/maintainer-ca-endorsement.md` §12. The maintainer NFC-tap app is
+a GENERIC OSS tool (home: upstream `ibisllc/maintainers`), not
+Flagship-only. Any project adopting the maintainers protocol: download
+the app, add a profile `{forge, repo, maintainersPath, credentialRef}`,
+save a narrowly-scoped per-repo git credential (hardware-stored,
+biometric-gated), tap the YubiKey → the **app commits directly** to
+that repo's `.maintainers/`. The §10.2 hosted `.com` commit-writer is
+now OPTIONAL/opt-in (credential-off-phone mode) — NOT required; the
+default is app-direct-commit, zero infra for adopters. Authority is
+still ONLY the YubiKey Ed25519 (never on the phone); the git
+credential is write-transport, can't forge authority (offline verifier
++ append-only walk contain a stolen token to one-repo DoS). Flagship =
+one configured consumer; its baked-genesis + fail-closed verifier
+wiring is the reference template other adopters copy.

@@ -483,3 +483,86 @@ single device, one tap.
   CANNOT (hot key must never touch a phone; that stays CLI-only,
   unchanged from §10/ca-operations). The app only ever drives
   cold-key (Mandate/CaEndorsement/genesis/takeover) ceremonies.
+
+---
+
+## 12. Generic, project-agnostic OSS maintainers app (decided 2026-05-16, user — final refinement)
+
+The maintainer app (§11) is **NOT Flagship-specific**. It is a generic
+companion to `@maintainers/protocol`: *our OSS contribution*. Anyone
+running any project that adopts the `ibisllc/maintainers` protocol in
+its source downloads ONE app, points it at their repo, saves their own
+git credential into it, and starts running ceremonies. Flagship is
+merely the first configured consumer.
+
+### 12.1 Decentralized: the app commits directly (no required hosted service)
+
+- The maintainer configures, per repo: the **forge + repo** (GitHub /
+  GitLab / Gitea-Forgejo / generic git-over-SSH), the **`.maintainers/`
+  path** (convention, overridable), and a **git write credential**
+  (a fine-grained PAT scoped to that one repo's contents, or a
+  per-repo deploy/SSH key) stored on-device.
+- Ceremony: tap YubiKey → PIV-Ed25519 signs the canonical bytes →
+  **the app itself commits** the signed artifact to `.maintainers/`
+  via the configured forge API / git-over-SSH (branch + auto-PR by
+  default, or direct per the project's policy read from its config).
+- ⇒ **Zero infra for adopters.** The §10.2 hosted `.com` commit-writer
+  is **DOWNSCOPED to an optional, opt-in mode** for maintainers who
+  refuse any git token on a phone (it then takes the YubiKey-signed
+  artifact and commits with a server-side credential). It is NOT the
+  generic path and NOT required; the default is app-direct-commit.
+  Flagship MAY run/use it; an arbitrary adopter never needs to.
+
+### 12.2 Why a git credential on the device is acceptable (security)
+
+The git token/key is **write-transport, not authority**:
+
+- Authority is solely the YubiKey-held Ed25519 (PIV-resident; never on
+  the phone, §11). Every `Mandate`/`CaEndorsement` is verified offline
+  by `@maintainers/protocol` against the chained authority from the
+  pinned genesis. A stolen git credential **cannot forge authority** —
+  the verifier rejects anything not Ed25519-signed by the chained key.
+- Worst case of a compromised device/credential: push garbage or
+  tamper `.maintainers/` history in **one repo** (DoS) — contained by
+  the protocol's append-only first-parent walk + `TakeoverAlarm` +
+  open-source auditability + offline verification (history rewrite is
+  detectable; the verdict is always re-derived from pinned genesis).
+- Mitigations the app MUST implement: store the credential in
+  hardware-backed secure storage (iOS Keychain w/ Secure Enclave
+  protection class; Android Keystore, StrongBox where available),
+  gate its use behind device biometric, and guide the user to the
+  **narrowest scopeable** credential the forge supports (single-repo
+  fine-grained PAT contents:write, or a single-repo deploy key).
+- Net: device-direct-commit + YubiKey-signing is *more* decentralized
+  than a mandatory hosted committer and **no weaker** (authority never
+  leaves the token in either model). This asymmetry is the whole
+  reason it's safe to ship as a generic tool.
+
+### 12.3 Genericization (nothing Flagship-hardcoded)
+
+- The signing + canonical bytes + verifier are already
+  project-agnostic (they live in `@maintainers/protocol`). The app
+  hardcodes NONE of: repo, forge, `.maintainers/` path, track names,
+  or scope strings. Track set + policies + `CaEndorsement` scope
+  strings (Flagship's are e.g. `flagship/directory-attestation`) are
+  **read from the target repo's `.maintainers/` config**, not baked in.
+- Per-project app config is a small profile: `{ forge, repo,
+  maintainersPath, credentialRef }`. The maintainer can hold profiles
+  for several projects in one app install.
+- The per-consumer baked genesis pubkey + fail-closed verifier wiring
+  (§10.3, tasks #30/#8/#9/#10) is a **CONSUMER-PROJECT** concern, not
+  the app's — each adopting project bakes its own genesis into its own
+  clients. Flagship's wiring becomes the reference template other
+  adopters copy. The app only *produces & commits* genesis/lease/
+  takeover artifacts for whatever project it's pointed at.
+
+### 12.4 Home + packaging
+
+- The app's canonical home is **upstream in `ibisllc/maintainers`**
+  (with the protocol + CLI), released as the OSS maintainers app — not
+  vendored Flagship-only. Flagship pins/consumes it like it pins the
+  protocol. Reproducible build (build-iso.yml-style) so the published
+  binary is auditable. Android-first, iOS fast-follow (§11.3).
+- `rotate-ca` and any hot-operational-key tooling stay
+  Flagship-specific + CLI-only (a hot service key is a consumer
+  concern, never the generic cold-key app's job; never on a phone).

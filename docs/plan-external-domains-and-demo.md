@@ -537,6 +537,26 @@ the app itself; `rotate-ca` (hot CA key) stays CLI-only, never on a
 phone. Reproducibly build the maintainer app (reuse build-iso.yml's
 double-build discipline) so the binary is auditable like the ISO.
 
+**OSS-GENERIC REFRAME (2026-05-16, user — final — see §12):** the app
+is **NOT Flagship-specific** — it's a generic OSS companion to
+`@maintainers/protocol`, home **upstream in `ibisllc/maintainers`**.
+Anyone running any project that adopts the maintainers protocol:
+download the app, add a profile `{forge, repo, maintainersPath,
+credentialRef}`, save a narrowly-scoped per-repo git credential
+(hardware-stored, biometric-gated), tap the YubiKey → the **app
+commits directly** to that repo's `.maintainers/`. ⇒ **zero infra for
+adopters**; the §10.2 hosted `.com` commit-writer (task #29) is
+**downscoped to OPTIONAL/opt-in** (credential-off-phone mode), no
+longer the core path. Authority stays ONLY on the YubiKey (never on
+the phone); the git credential is write-transport — a stolen token =
+one-repo DoS, contained by the offline verifier + append-only walk +
+`TakeoverAlarm`, and *cannot forge authority*. Nothing
+Flagship-hardcoded: tracks/scope strings read from the target repo's
+`.maintainers/` config. Flagship = one configured consumer; its
+baked-genesis (#30) + fail-closed link-4 (#8/#9/#10) wiring is the
+reference template adopters copy. Task #32 reframed (generic OSS app,
+upstream home); #29 downscoped.
+
 ### Critical path to v1 alpha
 
 ```
