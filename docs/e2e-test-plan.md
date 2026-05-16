@@ -311,13 +311,21 @@ npm run e2e -- --debug --grep "S5"
 
 ## CI integration
 
-GitHub Actions matrix: `{chromium, firefox, webkit}`. wrangler dev
-runs against a `--local` D1 file that the action seeds before each
-job. Total runtime budget: ~5 minutes per browser. Flaky scenarios
-are retried once; persistent flakes fail the job.
-
-Screenshots + traces upload as artifacts on failure (Playwright's
-`trace: 'retain-on-failure'`).
+**DONE 2026-05-16: `.github/workflows/e2e.yml`.** Chromium-only (the
+`{chromium,firefox,webkit}` matrix was descoped to chromium per the
+2026-05-11 product decision — the playwright config has a single
+`chromium` project; firefox/webkit explicitly deferred). The workflow
+follows the README's documented procedure: `npm install` → `tsc -b`
+→ `playwright install chromium` → `wrangler dev` (local miniflare on
+:8787, no remote secrets) → `cd apps/web/e2e && npm test`. Triggered
+on `pull_request` + `workflow_dispatch` — deliberately NOT
+`push:main` until it has a proven green run on a real GitHub runner
+(it cannot be executed from a CLI dev session, same as
+build-iso.yml/marketplace-scan.yml). Flaky scenarios are retried once
+(playwright config `retries:1` in CI); a persistent flake should be
+quarantined per "Build order", not blanket-retried. Playwright
+report + traces + the wrangler-dev log upload as artifacts always
+(14-day retention).
 
 
 ## What this DOESN'T cover

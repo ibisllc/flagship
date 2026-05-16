@@ -457,7 +457,7 @@ folds them into the same timeline so nothing is lost when external-domains ships
 | **B-A2** | Replace-device `complete()` "Take over now" UI (iOS + Android). VM exists (`ReplaceDeviceViewModel`), no button; optional post-24h-grace foreground poll. | After Phase 6 (touches the same client surfaces). |
 | **B-A3** | Webapp full Wipe ceremony: IndexedDB UMK rotation + `navigator.credentials.create()` PRF + `Recovery.wrap` over new UMK + OLD-IRK-signed `flagship/wipe-restart/v1` POST. | After Phase 6 (webapp client work). |
 | **B-scan** | Marketplace security-scan service (§L): separate Fly app, pull docker image, Trivy + custom checks, post grade + R2 report via authed Worker webhook. Protocol type `TAG_MARKETPLACE_SCAN_RESULT` + `marketplace_listings.scan_grade` already wired. | Independent — schedule after Phase 4 (frees the deploy pipeline). |
-| **B-e2e** | The E2E rig itself (`docs/e2e-test-plan.md`): Playwright + pod-sim, 13 scenarios, chromium-first. **Largest single v1 piece.** | Big parallel investment — start once the Track A backend (Phases 2–4) is stable enough to assert against. B-tsc is a prerequisite. |
+| **B-e2e** | ~~The E2E rig itself~~ **DONE 2026-05-16.** Rig + 17 specs (46 tests) were already built + green (B-tsc done); the missing piece was CI — added `.github/workflows/e2e.yml` (chromium-only, README's wrangler-dev procedure, pull_request + dispatch). First green run is on a real GitHub runner. | — |
 
 ### Track C — needs a human, a device, or a live multi-day exercise
 

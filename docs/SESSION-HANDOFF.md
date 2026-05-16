@@ -130,7 +130,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 12 | lazy-SNI seam+endpoint | ✅ | deployed; socket wiring = #22 |
 | 13 | C-iso verify+tick §S | ✅ | |
 | 14 | B-scan auto-trigger | ✅ | deployed (`400186b0`) |
-| 15 | B-e2e rig | ▶ | `apps/web/e2e/` 16/17 specs active (s09 cross-browser `test.skip` = intentional manual QA); largest single piece; `docs/e2e-test-plan.md` |
+| 15 | B-e2e rig | ✅ | Rig was already built + green (B-tsc done, e2e `tsc` clean, **46 tests / 17 files** collect; last-run passed). The real gap = no CI ran it. Added `.github/workflows/e2e.yml` (chromium-only; README's wrangler-dev procedure; pull_request + dispatch). First green run is on a real GitHub runner (CLI can't run Actions — same seam as build-iso.yml). |
 | 16 | B-A2 Replace-device "Take over now" UI | ⛔ | v1.1-deferred by the project's own code/copy; needs the live cross-device recovery exercise. VM complete; initiate leg wired |
 | 17 | B-A3 webapp full Wipe ceremony | ⛔ | v1.1-deferred by CLAUDE.md/in-product copy; needs live cross-device WebAuthn-PRF exercise. Seam exists (keystore IDB + lib/recovery.js + WipeRestart envelope) |
 | 18 | C-A1 live WebAuthn wrappers | ⛔ | needs a real authenticator/device; iOS ASAuth PRF stub, iOS18+ only — document the iOS17 fallback |

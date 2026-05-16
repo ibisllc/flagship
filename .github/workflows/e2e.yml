@@ -1,0 +1,108 @@
+name: e2e (Playwright + pod-sim)
+
+# Wires the existing webapp → .com → pod-sim end-to-end rig
+# (apps/web/e2e, 17 specs s00–s16) into CI — the "CI integration"
+# step called for in docs/e2e-test-plan.md §"CI integration". The rig
+# itself + the B-tsc fixes are already done + green locally; what was
+# missing was anything that RUNS it automatically.
+#
+# Faithful to the README's documented run procedure:
+#   cd apps/com && npx wrangler dev &        # local miniflare on :8787
+#   (wait for Ready)
+#   cd apps/web/e2e && npm test              # Playwright, chromium-only
+#
+# Honest caveats (stated like build-iso.yml's runner-pinning note):
+#   - Chromium-only by design (2026-05-11 product decision; the
+#     playwright config has a single `chromium` project). Firefox/
+#     WebKit are explicitly deferred.
+#   - `wrangler dev` runs in LOCAL miniflare mode (local D1, no remote
+#     secrets) — most specs stub apex /api/* via page.route with the
+#     service worker blocked; only S14 hits the apex surface directly,
+#     which local wrangler-dev serves.
+#   - First execution is on the GitHub runner (a CLI dev session can't
+#     run GitHub Actions, exactly like build-iso.yml/marketplace-scan).
+#     Triggered on pull_request + manual dispatch — deliberately NOT
+#     push:main until it has a proven green run on a real runner, so
+#     it can't add main-branch noise before it's trusted (the plan's
+#     "flaky scenarios quarantine" posture).
+#   - retries:1 in CI is set by the playwright config; a genuinely
+#     flaky spec should be quarantined per the plan, not blanket
+#     retried away.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      WEBAPP_BASE_URL: http://localhost:8787
+      APEX_BASE_URL: http://localhost:8787
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install workspace deps
+        run: npm install --no-audit --no-fund
+
+      - name: Build the workspace (so @flagship/* resolve)
+        run: npx tsc -b
+
+      - name: Install Chromium for Playwright
+        working-directory: apps/web/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Start the apex Worker (wrangler dev, local miniflare)
+        working-directory: apps/com
+        run: |
+          set -euo pipefail
+          npx wrangler dev --port 8787 > "$GITHUB_WORKSPACE/wrangler-dev.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/wrangler-dev.pid"
+
+      - name: Wait for :8787 to answer
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null "http://localhost:8787/api/health"; then
+              echo "apex up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::wrangler dev never became ready on :8787"
+          tail -50 "$GITHUB_WORKSPACE/wrangler-dev.log" || true
+          exit 1
+
+      - name: Run the e2e suite (chromium)
+        working-directory: apps/web/e2e
+        env:
+          CI: "1"
+        run: npm test
+
+      - name: Stop wrangler dev
+        if: always()
+        run: |
+          pid=$(cat "$GITHUB_WORKSPACE/wrangler-dev.pid" 2>/dev/null || echo "")
+          [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+
+      - name: Upload Playwright report + traces (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.sha }}
+          path: |
+            apps/web/e2e/playwright-report
+            apps/web/e2e/test-results
+            wrangler-dev.log
+          if-no-files-found: ignore
+          retention-days: 14
