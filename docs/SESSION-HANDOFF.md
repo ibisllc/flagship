@@ -6,26 +6,65 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-17 (**v1-launch program session 3**, Mac/darwin
-box. **Phase-1 AGENT work is COMPLETE.** Session 3 landed the three
-remaining #28 pieces — `4647582` assemble/sign split + `--dry-run`,
-`d55a86d` ceremony banner + typed confirm + never-log-secrets +
-successor guidance, `a195968` native PC/SC `piv-apdu` codec +
-`piv-pcsc` channel seam (fail-closed; hw round-trip is Human Gate B) —
-each green+pushed on `feat/piv-ed25519-signer`, maintainers
-**277→307**, tsc clean. ZERO protocol/wire/spec delta (CLI-package
-only; `@maintainers/protocol` untouched). **PR #2 flipped out of draft
-→ ready for review**, tip `a195968`. Final flagship gate re-verified
-**2526/2526 · 225 files · tsc clean**. Remaining is human-only:
-**Human Gate A** (governed PR #2 merge → re-pin
-`scripts/maintainers.pinned-sha` + `pull-maintainers.sh`) then
-**Human Gate B** (Operation 0 genesis with the real YubiKey → bake
-`MAINTAINER_GENESIS_PUBKEYS`, #30 flips live, re-run #8). Sessions 1–2
-(same day): keystone + signer threading + `ca-endorsement` command.
-See §0.)
+Last updated: 2026-05-17 (**v1-launch program session 4**, Mac/darwin
+box. **Phase-1 AGENT work + Human Gate A are BOTH COMPLETE.** The human
+did the governed merge of PR `ibisllc/maintainers#2` between sessions
+(merge commit `833fa45`, tip of `main`). Session 4 executed Gate A's
+agent half: bumped `scripts/maintainers.pinned-sha` `10c65aa`→`833fa45`,
+`pull-maintainers.sh pull` reset the clone, **both gates re-run green —
+flagship `tsc -b` clean + `vitest run` 2526/225; maintainers (now AT
+THE PIN, baseline 257→307) `tsc -b` clean + `vitest run` 307/31.**
+web-ui byte-identical between pins ⇒ NO Worker redeploy. Committed
+`34b6cb5`, pushed `origin/main`. **The ONLY remaining Phase-1 item is
+Human Gate B** (Operation 0 genesis with the real YubiKey → agent bakes
+`MAINTAINER_GENESIS_PUBKEYS`, #30 flips live, re-run #8 — deploy
+nothing). **Phase 2 (#35 → #9 → #10) is now UNBLOCKED — it does NOT
+need Gate B** — so #35 agent build work can proceed in parallel with
+the human-clocked Gate B. Sessions 1–3 (same day): keystone + signer
+threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
+§0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-17 (v1-launch program session 4, Mac/darwin):**
+  - **Human Gate A SATISFIED (verify-before-trust on the GitHub side):**
+    `gh pr view 2 --repo ibisllc/maintainers` showed PR #2 **MERGED**
+    (merge commit `833fa45`, base `main`, mergedAt 19:48Z) — the human
+    did the governed merge between sessions 3 and 4. Verified before
+    re-pinning: `git merge-base --is-ancestor a195968 833fa45` = YES,
+    all 8 #28 commits (`f646f99`..`a195968`) reachable from the merge,
+    `833fa45` = tip of `origin/main`.
+  - **Gate A agent half executed + both gates re-run green:** bumped
+    `scripts/maintainers.pinned-sha` `10c65aa`→`833fa45` (the
+    first-parent-reachable MERGE commit, NOT branch tip — same rule as
+    the PR #1 re-pin `0697bab`); `pull-maintainers.sh pull` reset the
+    clone cleanly; **flagship `npx tsc -b` clean + `npx vitest run`
+    2526/225 exit 0; maintainers (now AT THE PIN `833fa45`) `npx tsc
+    -b` clean + `npx vitest run` 307/31 exit 0.** Committed `34b6cb5`
+    (pin file only — `project.pbxproj` left unstaged as always), pushed
+    `origin/main`.
+  - **Maintainers baseline moved 257 → 307 AT THE PIN.** The +50 #28
+    tests are now first-parent-reachable from `main`; the old
+    `10c65aa`/257 baseline is superseded. Every doc that said
+    "maintainers 257 at the pin / 307 only on the branch" is now stale
+    — the branch was merged; pin == merge == 307.
+  - **No redeploy needed (verified, not assumed):** `git diff --stat
+    10c65aa..833fa45` = `packages/cli` + `packages/protocol` only;
+    `packages/web-ui` byte-identical, so the `flagshipserver.com/
+    maintainers/` esbuild bundle is unchanged and the Worker needs no
+    redeploy. The only flagship runtime consumer is
+    `@maintainers/protocol` via `server-daemon/src/caTrustChain.ts`;
+    the green flagship gate proves the additive `Ed25519Signer`/
+    `signing.ts` is back-compatible with every `{privKey}` caller.
+  - **Shell-cwd-compound hazard bit again (caught, not shipped):** an
+    early verify `cd /Users/.../maintainers && git …` poisoned the
+    persistent cwd; subsequent "flagship" commands used explicit
+    absolute `cd /Users/harrywinner/flagship &&`. The §0 "ALWAYS
+    absolute paths" rule stands — this is the 3rd session it has tried
+    to bite.
+  - **Phase 2 unblocked:** Gate A satisfied ⇒ Phase 2 (#35 → #9 → #10)
+    no longer blocked on Phase 1 (it does NOT need Gate B). Only Human
+    Gate B (YubiKey genesis) remains in Phase 1.
 - **2026-05-17 (v1-launch program session 3, Mac/darwin):**
   - **No env-sync drift** (verify-before-trust): the gitignored
     `maintainers/` clone was already on `feat/piv-ed25519-signer` @
@@ -455,7 +494,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 25 | N0e-2 daemon sibling-WS auto-dial | ✅* | `siblingHandshakeClient.ts`: `startPersistentSiblingHandshakeClient` + `SiblingHandshakeClientManager` (reconnect/backoff/jitter/`setPeers`) at parity with cert-sync `SiblingClientManager`; router setSibling/removeSibling symmetric with the inbound accept; 5 tests; exported. build-tasks:666 ☑. *Joint runtime `setPeers`-from-discovery instantiation = live exercise (→ #16; neither persistent supervisor is runtime-instantiated by precedent) |
 | 26 | verify Forgejo + real-LLM streaming (audit N1/N2) | ⛔(mostly) | largely real-infra: real provider key + live daemon; add Forgejo+vibe-code e2e smoke |
 | 27 | Track P 3 genesis ceremony (app-primary + CLI fallback) | ⛔ | Upstream `ibisllc/maintainers` CLI, sequenced **post PR #1 merge** (§5); the real genesis run is human+YubiKey. Seam = the complete design in maintainer-ca §10.3/§11.2 + ca-operations "Operation 0" + the now-reconstructed PR #1 protocol; tests use the deterministic placeholder genesis (#30 already fail-closed-tested). Don't pile more unmerged upstream behind the governed PR. |
-| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ✅ AGENT (human gates remain) | **AGENT-COMPLETE+green+pushed** (2026-05-17 s1–s3): `protocol` `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` (`9e7c495`) + threaded through genesis/mandate/takeover (`d2027df`) + release endorsement (`5148bbf`) + `ca-endorsement` command & `.maintainers/ca-endorsements/` store (`3a4bbe9`) + **assemble/sign split & `--dry-run`** (`4647582`) + **ceremony banner / typed confirm / never-log-secrets / successor guidance** (`d55a86d`) + **native PC/SC `piv-apdu` codec + `piv-pcsc` channel seam, fail-closed** (`a195968`). ZERO protocol/wire/spec delta (CLI-package only — `@maintainers/protocol` untouched); maintainers 257→**307**; `feat/piv-ed25519-signer` tip `a195968`, **PR `ibisllc/maintainers#2` READY (out of draft)**. flagship gate re-verified 2526/225. **Remaining = human-only:** Gate A (governed PR #2 merge → re-pin `scripts/maintainers.pinned-sha` + `pull-maintainers.sh`) → Gate B (Operation 0 genesis w/ real YubiKey → bake `MAINTAINER_GENESIS_PUBKEYS`, #30 flips live, re-run #8). The libpcsclite hardware round-trip is verified ONLY at Gate B. Design: maintainer-ca §10.1/§11.1 + program doc Phase 1 progress log. |
+| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ✅ AGENT (human gates remain) | **AGENT-COMPLETE+green+pushed** (2026-05-17 s1–s3): `protocol` `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` (`9e7c495`) + threaded through genesis/mandate/takeover (`d2027df`) + release endorsement (`5148bbf`) + `ca-endorsement` command & `.maintainers/ca-endorsements/` store (`3a4bbe9`) + **assemble/sign split & `--dry-run`** (`4647582`) + **ceremony banner / typed confirm / never-log-secrets / successor guidance** (`d55a86d`) + **native PC/SC `piv-apdu` codec + `piv-pcsc` channel seam, fail-closed** (`a195968`). ZERO protocol/wire/spec delta (CLI-package only — `@maintainers/protocol` untouched); maintainers 257→**307**. **PR `ibisllc/maintainers#2` MERGED `833fa45` (Human Gate A ✅ — session 4).** Agent half done: re-pinned `scripts/maintainers.pinned-sha` `10c65aa`→`833fa45` + `pull-maintainers.sh` + both gates re-run green (flagship 2526/225; maintainers 307/31 **AT THE PIN**); commit `34b6cb5` pushed; web-ui byte-identical between pins ⇒ no Worker redeploy. **Remaining = Human Gate B ONLY:** Operation 0 genesis w/ real YubiKey → agent bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live), re-run #8. The libpcsclite hardware round-trip is verified ONLY at Gate B. Design: maintainer-ca §10.1/§11.1 + program doc Phase 1 progress log. |
 | 29 | Track P 5 OPTIONAL hosted committer | ✅* | IS the upstream `maintainers/.../server-adapters/cloudflare-worker` Model A worker (`worker.ts` POST /commit — holds only a GitHub PAT, no maintainer/CA key; `policy.ts` = verify→commit gate). M1 (`6beb3dd`, PR #1) made `policy.ts` CaEndorsement-aware incl. `checkCaEndorsementAuthority` (NOW-clock + lease window). §12.1 downscopes to opt-in (default = app-direct-commit #32); NOT a launch blocker. *Remaining = governed/operator: deploy Worker + provision `GITHUB_MAINTAINERS_PAT` (post PR #1 merge). A flagship `.com` route would duplicate the upstream worker + contradict §12.1 — intentionally not built. |
 | 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ⛔ | Upstream maintainers web-ui, **post PR #1 merge** (§5). NO signing view ever. Seam = ca-operations.md "Next upstream increment" (REPLACED by status/preview/commit-trigger-only per §10.1) — design complete; it's upstream-after-merge, not flagship code. |
@@ -464,22 +503,31 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 34 | Triage `inheritance.ts` (v1-unwired vs v2-deferred) | ✅ | **Verdict: v2-deferred, deliberate seam.** Built+exported+unit-tested, not route/cron-wired, absent from §S + CLAUDE.md. Recorded in new `docs/policy/inheritance.md` (the decision record the module docstring already pointed at — was dangling). No v1 action. §0. |
 | 35 | **Transition maintainers consumption: clone-SHA pull → adopter-friendly (MUST)** | ⛔ trigger-gated | The `scripts/maintainers.pinned-sha` + `pull-maintainers.sh` clone-at-build model is a **pre-1.0 dogfooding bootstrap ONLY**, not a distribution mechanism — a bespoke clone script is the opposite of the maintainers objective ("usable by others' projects easily"). **MUST transition when the spec is deemed mature = flagship↔maintainers co-development ends (expected SOON: primitives all coded, only e2e testing remains):** (a) `npm publish @maintainers/protocol` (semver, `--provenance`, lockfile/`npm ci` pinnable); (b) versioned spec + **published conformance test vectors** as the primary portable artifact (de-risks #9/#10 + every non-TS adopter) — these vectors **MUST include the mandatory fail-closed negative cases** (absent genesis ⇒ reject; forked/unknown genesis ⇒ reject; endorsement gap / substituted intermediate ⇒ reject) so no port can pass conformance while silently weakening fail-closed; (c) flagship drops the pull-script and consumes the published package like any adopter (makes the dogfooding honest). Full rationale: `docs/maintainers-deployment.md` → "Adoption: the pull-script is a bootstrap, NOT the distribution" + "Threat model & applicability boundary" (maintainers propagates trust from a pinned root, never creates it; guarantee scales with the independent population that can detect divergence — for agreed-canonical-source projects). Do NOT let the pull-script ossify into the integration story. |
 
-Maintainer→CA progress: **#11 push+PR ✅ → merge (governed) ✅ →
-re-pin `10c65aa` ✅ → #8 link-4 daemon ✅ → #28 keystone + signer
-threading + `ca-endorsement` command & `.maintainers/ca-endorsements/`
-**write-side** store convention ✅** (2026-05-17 session 2;
-`feat/piv-ed25519-signer`, draft PR #2). **Next:** #28 finish
-(`--dry-run`/banner/native-transport, NEXT session START). The
-remaining **read-side** gap is the **upstream CaEndorsement on-disk
-store convention** consumed by verifiers — the CLI now writes
-`.maintainers/ca-endorsements/<ts>-<id>.json` (and `rotate-ca.mjs`
-reads it), but the maintainers *store reader* / spec §3.7 directory
-convention + a bundled browser verifier are still Phase 2 work that
-unblocks #9 (webapp) + #10 (iOS/Android Swift/Kotlin reimpl). Then the
-human/hardware ceremony cluster: #28 finish + #27 genesis-flow + #32
-app + #29 optional committer + #31 web-ui + #30 baked-genesis. Design fully specified in maintainer-ca-endorsement.md
-§9–§12; protocol needs ZERO upstream change (PIV-Ed25519 == std
-Ed25519 over the canonical bytes).
+Maintainer→CA progress: **#11 push+PR ✅ → PR #1 merge (governed) ✅ →
+re-pin `10c65aa` ✅ → #8 link-4 daemon ✅ → #28 AGENT-complete (keystone
++ signer threading + `ca-endorsement` command/store + `--dry-run` +
+banner/confirm + native PC/SC) ✅ → PR #2 merge (Human Gate A,
+governed) ✅ → re-pin `833fa45` + both gates green ✅** (2026-05-17
+sessions 1–4). **The ONLY remaining Phase-1 item is Human Gate B**
+(Operation 0 genesis with the real YubiKey → agent bakes
+`MAINTAINER_GENESIS_PUBKEYS`, #30 flips live, re-run #8; deploy
+nothing). **Phase 2 (#35 → #9 → #10) is now UNBLOCKED (does NOT need
+Gate B)** — the next agent build work is **#35**: per the LOCKED
+Phase-2 design (`docs/v1-launch-program.md` "Phase-2 DESIGN
+DECISION" / §0 2026-05-17), an additive genesis-signed `SignedPolicy`
++ a `verifyTrack` genesis precondition + the published static-layout
+spec (`origin.json`/`tracks/<t>/log.json`/`ca-leases.json`) + a tiny
+`fetch()` reference client + conformance vectors that MUST include the
+fail-closed negatives (tampered-policy / lapsed-lease-at-NOW /
+withheld-rolled-back-log / absent-forked-genesis / endorsement-gap),
+then `npm publish @maintainers/protocol` (Human Gate: npm org/2FA) and
+flagship DROPS `pull-maintainers.sh`/`maintainers.pinned-sha`. Then #9
+(webapp) → #10 (iOS Swift + Android Kotlin reimpl, heaviest — sequence
+it). Then the human/hardware ceremony cluster: Gate B + #27
+genesis-flow + #32 app + #29 optional committer + #31 web-ui + #30
+baked-genesis. Design fully specified in maintainer-ca-endorsement.md
+§9–§12; `Mandate`/`CaEndorsement` need ZERO wire change (PIV-Ed25519 ==
+std Ed25519; `SignedPolicy` is the only additive Phase-2 spec delta).
 
 ## 4. Working discipline (non-negotiable — this is how the tree stayed clean)
 
@@ -505,30 +553,34 @@ Ed25519 over the canonical bytes).
 ## 5. Recommended next-session order (highest value, unblocked first)
 
 > **2026-05-17: `docs/v1-launch-program.md` governs phase order** (the
-> `/alpha` Phases 1-8). We are in **Phase 1** (genesis ceremony / #28),
-> and **Phase-1 AGENT work is now COMPLETE.** Session 3 landed the
-> three remaining #28 pieces on `feat/piv-ed25519-signer` (each
-> green+pushed): `4647582` assemble/sign split + `--dry-run`,
-> `d55a86d` ceremony banner + typed confirm + never-log-secrets +
-> successor guidance, `a195968` native PC/SC `piv-apdu` codec +
-> `piv-pcsc` channel seam (fail-closed; libpcsclite round-trip is
-> Human Gate B only). maintainers **277→307**, tsc clean, ZERO
-> protocol/wire/spec delta (CLI-package only). **PR #2 is READY (out
-> of draft), tip `a195968`.** Final flagship gate re-verified
-> **2526/225 · tsc clean**.
+> `/alpha` Phases 1-8). We are in **Phase 1**; **Phase-1 AGENT work +
+> Human Gate A are BOTH COMPLETE.** Session 4: PR
+> `ibisllc/maintainers#2` was merged by the maintainer (Gate A
+> governed step) as `833fa45`; the agent re-pinned
+> `scripts/maintainers.pinned-sha` `10c65aa`→`833fa45`, ran
+> `pull-maintainers.sh`, and re-ran both gates green — **flagship
+> `tsc -b` clean + `vitest run` 2526/225; maintainers (now AT THE PIN,
+> baseline 257→307) `tsc -b` clean + `vitest run` 307/31** — commit
+> `34b6cb5` pushed. web-ui byte-identical between pins ⇒ no Worker
+> redeploy.
 >
-> **Immediate next action = the two HUMAN GATES (no agent build work
-> left in Phase 1):**
-> **Gate A (governed):** human merges PR `ibisllc/maintainers#2`, then
-> bump `scripts/maintainers.pinned-sha` to the MERGE commit + run
-> `bash scripts/pull-maintainers.sh pull` (the classifier may block an
-> agent `gh pr merge` even post-approval — if so the human runs that
-> one command; the agent does the re-pin + pull + gate).
-> **Gate B (YubiKey):** human runs `ca-operations.md` "Operation 0 —
-> genesis" with the real YubiKey; the agent walks/verifies every
-> artifact, bakes `MAINTAINER_GENESIS_PUBKEYS` into `@flagship/protocol`
-> (#30 flips live; re-bake per surface — record the exact pubkey),
-> re-runs the #8 suite to prove links 1–4 resolve. Deploy nothing.
+> **Immediate next actions (two independent tracks):**
+> **(1) Human Gate B (YubiKey) — the only remaining Phase-1 item:**
+> human runs `ca-operations.md` "Operation 0 — genesis" with the real
+> YubiKey; the agent walks/verifies every artifact, bakes
+> `MAINTAINER_GENESIS_PUBKEYS` into `@flagship/protocol` (#30 flips
+> live; re-bake per surface — record the exact pubkey), re-runs the #8
+> suite to prove links 1–4 resolve. Deploy nothing. **This is a HUMAN
+> GATE — stop with one crisp ask; do not fabricate genesis material.**
+> **(2) Phase 2 #35 — now UNBLOCKED by Gate A (does NOT need Gate B),
+> agent build work available in parallel:** per the LOCKED Phase-2
+> design (program doc "Phase-2 DESIGN DECISION"), add the additive
+> genesis-signed `SignedPolicy` + the `verifyTrack` genesis
+> precondition + the static-layout spec + a `fetch()` reference client
+> + conformance vectors incl. the mandatory fail-closed negatives,
+> upstream in `maintainers/` on a new branch → governed PR (PR #1/#2
+> precedent); the `npm publish` step is itself a Human Gate. #35 design
+> is LOCKED — implement to it, do NOT re-litigate without the user.
 > The list below is later-phase detail (Phase 2 = #35 → #9 → #10).
 
 **Resume #2 2026-05-16 (Linux box) closed #33 (real Gradle build +

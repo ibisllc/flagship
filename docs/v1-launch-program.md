@@ -19,25 +19,26 @@ open phase here.
   on `main`. One known parallel-load flake (deterministically green on re-run;
   SESSION-HANDOFF §0 #3 watch procedure — never blanket-retry / guess-pin).
 - maintainers (`maintainers/`, gitignored, pinned `scripts/maintainers.pinned-sha`
-  = `10c65aa`, PR #1 merged): `npx vitest run` → **307 passed / 31 files**
-  on `feat/piv-ed25519-signer` (257 = the pinned `10c65aa` baseline; +20 from
-  the prior #28 keystone/threading/`ca-endorsement`; +4 `--dry-run`; +9
-  banner/confirm/never-log-secrets; +17 the pure PC/SC APDU codec + seam).
-  tip `a195968`, pushed, **PR #2 ready for review (out of draft)** — the
-  governed merge is Human Gate A.
+  = `833fa45`, **PR #2 MERGED** = Human Gate A satisfied): `npx vitest run` →
+  **307 passed / 31 files** **AT THE PIN** on `main` (no longer "on a branch":
+  the full #28 scope — keystone +20, `--dry-run` +4, banner/confirm/
+  never-log-secrets +9, PC/SC APDU codec + seam +17 — is now first-parent-
+  reachable from `833fa45`; the old `10c65aa`/257 baseline is superseded).
+  `npx tsc -b` clean. The pin diff `10c65aa..833fa45` touches only
+  `packages/cli` + `packages/protocol`; `packages/web-ui` is byte-identical,
+  so the `flagshipserver.com/maintainers/` bundle needs no re-bundle and the
+  Worker needs no redeploy.
   On a fresh machine the clone is stale → run `bash scripts/pull-maintainers.sh
-  pull` first (idempotent; resets to the pin). This was required on the
-  2026-05-17 Mac (clone was at the pre-CaEndorsement base `c009900`; tsc -b
-  was red on the two `caTrustChain.ts` `@maintainers/protocol` imports until
-  the pull synced it to `10c65aa`).
-  - **To continue Phase-1 #28 work:** `pull-maintainers.sh` resets the
-    clone to the pin, discarding the local branch checkout (the branch
-    is safe on origin). Re-checkout it: `cd maintainers && git fetch
-    origin && git checkout feat/piv-ed25519-signer`, then continue
-    committing there. The +13 #28 tests live only on that branch; the
-    pinned `10c65aa` alone is 257. Always use absolute paths — the
-    shell keeps cwd across tool calls, so a bare `cd maintainers`
-    compounds (bit this session).
+  pull` first (idempotent; resets to the pin `833fa45`). This was required on
+  the 2026-05-17 Mac at session 1 (clone was at the pre-CaEndorsement base
+  `c009900`; `tsc -b` was red on the two `caTrustChain.ts`
+  `@maintainers/protocol` imports until the pull synced it).
+  - **Phase-1 #28 is MERGED — no branch checkout dance anymore.** The old
+    "re-checkout `feat/piv-ed25519-signer` after pull" note is obsolete:
+    the branch was merged to `main` as `833fa45` and the pin now points
+    at it, so `pull-maintainers.sh` lands you exactly on the #28 work.
+    Always use absolute paths — the shell keeps cwd across tool calls,
+    so a bare `cd maintainers` compounds (bit sessions 3 + 4).
 - Android: review-only on this Mac (`/usr/bin/java` is the macOS stub, no real
   JDK). iOS IS verifiable here (Xcode 16.4 / xcodebuild present). This is the
   inverse of the resume-#2 Linux box (JDK present, no xcodebuild).
@@ -48,8 +49,8 @@ open phase here.
 
 | Phase | Title | State |
 |---|---|---|
-| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ AGENT-COMPLETE → at the human gates.** Keystone + signer threaded through genesis/mandate/takeover/endorsement + `ca-endorsement` command/store + **assemble/sign split & `--dry-run`** + **ceremony banner / typed confirm / never-log-secrets / successor guidance** + **native PC/SC APDU codec + channel seam (fail-closed; hw round-trip is the gate)** all built+green+pushed. **PR #2 flipped out of draft (ready), tip `a195968`, maintainers 307.** Remaining = **Human Gate A** (governed PR #2 merge → re-pin) then **Human Gate B** (Operation 0 genesis with the real YubiKey → bake `MAINTAINER_GENESIS_PUBKEYS`). |
-| 2 | Maintainers as its own product (#35 → #9 → #10) | ☐ blocked on Phase 1 |
+| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ AGENT-COMPLETE · Human Gate A SATISFIED → only Human Gate B remains.** Keystone + signer threaded through genesis/mandate/takeover/endorsement + `ca-endorsement` command/store + assemble/sign split & `--dry-run` + ceremony banner / typed confirm / never-log-secrets / successor guidance + native PC/SC APDU codec + channel seam (fail-closed; hw round-trip is the gate) all built+green+pushed. **PR #2 MERGED `833fa45`; flagship re-pinned + pulled + both gates re-run green (flagship 2526/225, maintainers 307/31 AT THE PIN); commit `34b6cb5` pushed.** Remaining = **Human Gate B only**: Operation 0 genesis with the real YubiKey → agent bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live), re-runs the #8 suite. Deploy nothing. |
+| 2 | Maintainers as its own product (#35 → #9 → #10) | **▶ UNBLOCKED by Gate A** (does NOT need Gate B). Agent build work available now: #35 `SignedPolicy` + static-layout spec + `fetch()` reference client + conformance vectors incl. fail-closed negatives. Design LOCKED below. |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
 | 5 | On-demand VPS + promo AI + real vibe-code | ☐ seam built (#83/#85); human/credential |
@@ -136,9 +137,20 @@ retained below for provenance.
   the `yubikey-piv:` source exists, rotate-ca's Step-2 fallback command
   string should reference it instead of "staged".
 
-### 1B. HUMAN GATE (YubiKey)
+### 1A→Gate-A. ✅ SATISFIED (2026-05-17 session 4)
 
-In order, after 1A lands and is merged+re-pinned:
+PR `ibisllc/maintainers#2` was merged by the maintainer (governed step)
+as merge commit `833fa45` (tip of `main`, all 8 #28 commits
+first-parent-reachable). Agent half done: `scripts/maintainers.pinned-sha`
+bumped `10c65aa`→`833fa45`, `pull-maintainers.sh pull` reset the clone,
+**both gates re-run green — flagship `tsc -b` clean + `vitest run`
+2526/225; maintainers (now at the pin) `tsc -b` clean + `vitest run`
+307/31.** web-ui byte-identical between pins ⇒ no Worker redeploy.
+Committed `34b6cb5`, pushed to `origin/main`. Phase 2 is now unblocked.
+
+### 1B. HUMAN GATE (YubiKey) — the ONLY remaining Phase-1 item
+
+In order, now that 1A is merged + re-pinned (Gate A ✅):
 1. Human runs `ca-operations.md` "Operation 0 — genesis" with the real
    YubiKey (primary key generates the cold maintainer Ed25519 on-token;
    second YubiKey named in `successors`). Agent walks through, verifies
@@ -296,6 +308,50 @@ every §S box is ☑ → v1-alpha.
 ---
 
 ## Progress log (newest first)
+
+### 2026-05-17 — session 4 (this Mac): Human Gate A SATISFIED → Phase 2 unblocked
+
+Cold-start: the `maintainers/` clone was on `feat/piv-ed25519-signer` @
+`a195968` (clean) from session 3. **Verify-before-trust on the GitHub
+side first:** `gh pr view 2` showed PR `ibisllc/maintainers#2` is
+**MERGED** (merge commit `833fa45`, base `main`, mergedAt
+2026-05-17T19:48Z) — the human did the governed merge between sessions.
+`git merge-base --is-ancestor a195968 833fa45` = YES and all 8 #28
+commits (`f646f99`..`a195968`) are reachable from the merge; `833fa45`
+is the tip of `origin/main`.
+
+**Gate A agent half executed:**
+- Bumped `scripts/maintainers.pinned-sha` `10c65aa` → `833fa45` (the
+  first-parent-reachable MERGE commit, NOT the branch tip — same rule
+  as the PR #1 re-pin `0697bab`).
+- `bash scripts/pull-maintainers.sh pull` → clone `git reset --hard`'d
+  to `833fa45` cleanly, maintainers deps reinstalled (exit 0).
+- **Both gates re-run, sequential, absolute-cwd (the shell-cwd-compound
+  hazard bit a verify step again — caught, re-run with explicit `cd`):**
+  flagship `npx tsc -b` clean + `npx vitest run` **2526/225 exit 0**;
+  maintainers (now AT THE PIN `833fa45`) `npx tsc -b` clean + `npx
+  vitest run` **307/31 exit 0**. The maintainers baseline is now
+  **307 at the pin** — the +50 #28 tests are first-parent-reachable
+  from `main`, the old `10c65aa`/257 is superseded.
+- Pin diff `10c65aa..833fa45` = `packages/cli` + `packages/protocol`
+  only; `packages/web-ui` byte-identical ⇒ `flagshipserver.com/
+  maintainers/` bundle unchanged, **no Worker re-bundle / redeploy**.
+  The only flagship runtime consumer is `@maintainers/protocol` via
+  `server-daemon/src/caTrustChain.ts`; the green flagship gate proves
+  the additive `Ed25519Signer`/`signing.ts` is back-compatible with
+  every `{privKey}` caller (the §11.1 linchpin holds end to end).
+- Committed `34b6cb5` (`scripts: re-pin maintainers to the PR #2 merge
+  commit`, pin file only — `project.pbxproj` left unstaged as always),
+  pushed to `origin/main`.
+
+**Phase-1 AGENT work + Human Gate A are both COMPLETE.** The only
+remaining Phase-1 item is **Human Gate B** (Operation 0 genesis with
+the real YubiKey → agent bakes `MAINTAINER_GENESIS_PUBKEYS`, #30 flips
+live, re-run #8). **Phase 2 (#35 → #9 → #10) is now unblocked — it does
+NOT require Gate B** — so agent build work (#35 `SignedPolicy` + the
+static-layout spec + a `fetch()` reference client + conformance vectors
+incl. the fail-closed negatives, per the LOCKED Phase-2 design) may
+proceed in parallel with the human-clocked Gate B.
 
 ### 2026-05-17 — session 3 (this Mac): Phase-1 AGENT #28 finished + PR #2 ready
 
