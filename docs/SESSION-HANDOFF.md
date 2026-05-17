@@ -66,6 +66,18 @@ See §0.)
     tip `a195968`, body rewritten to the full 8-commit #28 scope.
     Phase-1 AGENT work is **complete**; only Human Gate A (governed PR
     #2 merge → re-pin) and Human Gate B (YubiKey genesis) remain.
+  - **Phase-2 design LOCKED (user-picked, 2026-05-17):** "pin one key,
+    fetch a folder, verify at your own clock" — D1 genesis-signed
+    immutable `SignedPolicy` (closes the unsigned-`policy.json` hole;
+    no per-ceremony threshold), D2 a dumb static `origin.json`/
+    `tracks/<t>/log.json`/`ca-leases.json` layout (no `current.json`/
+    checkpoint files in v1), D3 freshness = the shipped `CaEndorsement`
+    NOW-clock lease (nothing new). ZERO Mandate/CaEndorsement wire
+    delta; only additive `SignedPolicy`. Full rationale + #35 scope
+    delta + the accepted limitation (no equivocation/split-view
+    detection) in `docs/v1-launch-program.md` → "Phase-2 DESIGN
+    DECISION". This is the Phase-2 acceptance bar; do not re-litigate
+    without the user.
 - **2026-05-17 (v1-launch program session 2, Mac/darwin):**
   - **No env-sync drift this session** (verify-before-trust): the
     gitignored `maintainers/` clone was already on

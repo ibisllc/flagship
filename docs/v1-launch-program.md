@@ -159,6 +159,59 @@ In order, after 1A lands and is merged+re-pinned:
 
 ## PHASE 2 — MAINTAINERS AS ITS OWN PRODUCT (#35, then #9, then #10)
 
+### Phase-2 DESIGN DECISION (2026-05-17, user-picked) — "pin one key, fetch a folder, verify at your own clock"
+
+Locked after a verify-before-trust read of `verifier.ts`/`types.ts`.
+Guideline: minimal value for Flagship, easiest + most secure for any
+adopter with our needs. **Three decisions, ZERO `Mandate`/
+`CaEndorsement` canonical-bytes change** (the #28 invariant holds; the
+only additive spec delta is `SignedPolicy`, appropriate for the
+Phase-2 versioned bump):
+
+- **D1 — Policy is genesis-anchored + immutable in v1.** `policy.json`
+  (`RootPolicy` + every `TrackPolicy`) today is UNSIGNED and trusted as
+  a `verifyTrack` argument — a real hole under HTTP fetch (host can
+  weaken the threshold). Fix: a `SignedPolicy` = canonical bytes of the
+  policy + ONE Ed25519 signature by the genesis key (reuses existing
+  crypto; no new envelope semantics). `verifyTrack` gains a precondition
+  — the consumed `TrackPolicy` MUST verify against the baked genesis
+  authority, else hard fail-closed. NO per-ceremony threshold (lets one
+  compromised holder weaken its own quorum; not minimal). Changing
+  quorum/track-set in v1 = a NEW genesis ceremony. ~1 canonical fn +
+  ~10 verifier lines, zero policy-mutation governance.
+- **D2 — A fixed dumb static layout any host serves** (GitHub raw / S3 /
+  CDN / repo-over-HTTPS; no server logic):
+  `<base>/origin.json` (RootPolicy + SignedPolicy + per-track genesis
+  Mandate; immutable, consumer-pinned) · `<base>/tracks/<t>/log.json`
+  (append-only `Mandate[]`) · `<base>/ca-leases.json` (append-only
+  `CaEndorsement[]`). Consumer algo: fetch origin → verify SignedPolicy
+  vs the hardcoded genesis pubkey → fetch log → `verifyTrack` from
+  genesis → fetch leases → `authorizedCaKeys(…, NOW)`. Append-only ⇒
+  trivial caching; a stale cache only loses freshness (fail-closed),
+  never gains forged authority. **NO `current.json`/`checkpoint_<id>`
+  in v1** — the log is tiny; "fetch + re-walk from genesis" is simpler;
+  the `verifyTrackFromCheckpoint` primitive stays a pure optimization
+  to add only if size demands.
+- **D3 — Freshness IS the shipped `CaEndorsement` lease, nothing new.**
+  Rule (not mechanism): a consumer MUST require a `CaEndorsement` whose
+  `[notBefore,notAfter)` contains its OWN now, judged at its OWN clock.
+  Host withholds ⇒ newest lease lapses ⇒ all consumers fail closed
+  within one window (default 7d). Cold maintainer track stays
+  long-lived; the hot key's short lease is the beacon. No timestamp
+  server / snapshot role / CRL.
+- **Known, accepted limitation (state it to adopters):** rollback-
+  resistance is bounded by the lease window; this is NOT equivocation/
+  split-view detection (a host serving different valid histories to
+  different consumers). CT-style gossip is deliberately out of scope
+  for Flagship's threat model.
+- **#35 scope therefore gains:** `SignedPolicy` (canonical fn + the
+  genesis-sig `verifyTrack` precondition) + the published static-layout
+  spec + a tiny `fetch()` reference client + conformance vectors that
+  MUST additionally include *tampered-policy ⇒ reject*,
+  *lapsed-lease-at-NOW ⇒ reject*, *withheld/rolled-back log ⇒ reject*
+  (on top of the absent/forked-genesis + endorsement-gap negatives).
+  #9/#10 get EASIER (fetch 3 JSON files, rerun the same pure verifier).
+
 - **#35**: `npm publish @maintainers/protocol` (semver, `--provenance`,
   `npm ci`-pinnable) + a versioned spec + a published **conformance
   test-vector set that MUST include the mandatory fail-closed negatives**
