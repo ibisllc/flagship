@@ -187,11 +187,63 @@ In order, now that 1A is merged + re-pinned (Gate A ✅):
    Step-(A) tests MUST cover "no reader" + "token removed mid-prompt"
    → friendly wait/retry → recovers on insert. See
    [[feedback-no-hardware-assumptions]].
+0c. **(A, no hardware needed) Build the `register` increment (#9) —
+   registration precedes the ceremony (user-chosen 2026-05-17 s4).**
+   The protocol already implements `KeyFile`/`EmailRotation`/
+   `KeyRedirect` (types/canonical/signing/Envelope) but the CLI has NO
+   `register` command. Add it, additive, #28-pattern, governed PR.
+   **Commit plan (each green: maintainers tsc -b + suite, then flagship
+   gate as the guard since `@maintainers/protocol` is touched):**
+   - **c1 ✅ `dc48559`** (pushed `feat/keyfile-register`) — protocol
+     additive external self-signer variants `signKeyFileWith` /
+     `signKeyRedirectWith` / `signEmailRotationWith` (one signer,
+     `signer.pubKey == envelope.pubkey`, fail-closed). ZERO
+     canonical/verifier/wire/spec change (§11.1). maintainers 307→**311**;
+     flagship guard 2526/225.
+   - c2 — `store.ts` `writeKeyFile`/`writeEmailRotation`/`writeKeyRedirect`
+     + filename helpers; `ceremony.ts` `CeremonyKind` += `"register" |
+     "rotate-email"` + banner cases + `confirmPhrase` (default
+     `.toUpperCase()` already covers; banners are bespoke).
+   - c3 — `register` command (`assembleKeyFile` + `runRegister`):
+     self-signed KeyFile → `.maintainers/keys/<email>.json`; dispatch +
+     usage; dry-run/banner/confirm; tests (byte-exact dry-run, no-write,
+     self-signed fail-closed, fidelity).
+   - c4 — `rotate-email` (EmailRotation + the §3.3 dual-write of the
+     `KeyRedirect` replacing `keys/<old-email>.json`) + tests.
+   - c5 — genesis additive `--mandate-id <uuid>` (defaults to
+     `opts.uuid()`; explicit threads through) so the bootstrap pointer
+     is truthful (see the design note below) + test.
+   Then docs (this file + ca-operations Operation 0 gain the register
+   step) + governed PR → re-pin. **HUMAN GATE: PR merge (PR #1/#2
+   precedent).**
+
+   **`introductionMandate` bootstrap — design decision (s4, verified
+   against `policy.ts:570-577`).** `KeyFile.introductionMandate` is a
+   required Uuid, BUT the verifier trusts the self-signed attestation
+   and does NOT cross-check the id (the real security gate is the
+   pubkey being named by an authoritative mandate; the field is an
+   audit pointer, consistent with spec §2.4 "not authoritative for
+   permission decisions"). Chosen for register-before-genesis: **pre-
+   mint ONE genesis mandate UUID; `register --introduction-mandate
+   <id>` for both KeyFiles; `genesis --mandate-id <id>`** so the
+   pointer is *truthful* (a verifier/human can confirm the KeyFile
+   points at the real genesis mandate) — NOT a placeholder/sentinel
+   (a lie in a signed root-of-trust artifact) and NOT register-after
+   (contradicts the user's sequencing). This is why c5 adds the
+   additive genesis `--mandate-id`.
+0d. **(after 0a+0b+0c) Register the two keys.** Each on-token key
+   self-signs its `KeyFile` via `register --signing-key
+   yubikey-piv:slot=9c --display-name … --email harry@harrywinner.com
+   --introduction-mandate <pre-minted-id>` (and `harry_backup@…` for
+   the backup). Needs 0b (PC/SC binding — the on-token keys sign) +
+   0c (the command). `--dry-run` first; agent verifies bytes.
 1. Human runs `ca-operations.md` "Operation 0 — genesis" with the real
-   YubiKey, `--dry-run` first per track (agent verifies the canonical
-   bytes), then the signed run per track ca/release/ops (typed
-   `GENESIS` + PIN + physical tap). Agent walks through, verifies
-   every emitted artifact (canonical bytes, signature, chain).
+   YubiKey, `--mandate-id <pre-minted-id>`, `--dry-run` first per track
+   (agent verifies the canonical bytes), then the signed run per track
+   ca/release/ops (typed `GENESIS` + PIN + physical tap). Agent walks
+   through, verifies every emitted artifact (canonical bytes,
+   signature, chain), incl. that each KeyFile's `introductionMandate`
+   == the genesis `mandateId`.
 2. Agent bakes the emitted genesis pubkey(s) into `@flagship/protocol`
    `MAINTAINER_GENESIS_PUBKEYS` (currently `Object.freeze([])`,
    fail-closed) — #30 flips live. **Scope of this bake: the one TS
@@ -403,6 +455,26 @@ surface + record-the-value, "deploy nothing". The two human-owned
 non-code-derivable inputs (on-token keygen + PIN/PUK per §11.4; the
 cold-genesis `<DURATION>` per LOCKED D1) are flagged. **Gate B is now
 *armed* — safe to execute, not just pending.**
+
+Also this session: **separation-of-concerns design Q + the
+registration-first increment (#9) started.** The user asked to confirm
+"registration ≠ ceremony": each key self-registers under an email id
+(harry@ / harry_backup@harrywinner.com), ceremonies are designed
+freely, the tool prompts "tap X's key" at sign time. Verify-before-
+trust against spec §2.4/§3.2/§3.3 + types: this **is** the protocol —
+`KeyFile` (self-signed, email-named, displayName/metadata/emailHistory)
++ `EmailRotation`/`KeyRedirect`; identity-for-trust is the **pubkey**
+(spec non-goal: emails "conventional but not load-bearing"), so the
+email is a human label, never a credential (free self-registration is
+safe ONLY because a non-chained KeyFile has zero authority). The CLI
+has NO `register` command though (protocol-implemented, CLI-missing —
+same shape as the s1 `ca-endorsement` gap). User chose **build
+register first, then genesis**. Increment #9 commit plan in §1B 0c;
+**c1 `dc48559` landed + pushed** (`feat/keyfile-register`) — additive
+protocol self-signer variants, maintainers 307→**311**, flagship guard
+**2526/225**, ZERO wire/spec change. `introductionMandate` bootstrap
+resolved (truthful pre-minted shared id + additive genesis
+`--mandate-id`; see §1B design note). c2–c5 + governed PR remain.
 
 ### 2026-05-17 — session 3 (this Mac): Phase-1 AGENT #28 finished + PR #2 ready
 

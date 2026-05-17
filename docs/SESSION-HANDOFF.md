@@ -27,6 +27,32 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
 ## 0. Drift log (verify-before-trust findings, newest first)
 
 - **2026-05-17 (v1-launch program session 4, Mac/darwin):**
+  - **Registration-first increment (#9) started (user-chosen).** User
+    asked to confirm "registration ≠ ceremony" (each key self-registers
+    under an email id; ceremonies designed freely; tool prompts "tap
+    X's key"). Verify-before-trust vs spec §2.4/§3.2/§3.3 + `types.ts`:
+    this IS the protocol — `KeyFile` (self-signed, email-named) +
+    `EmailRotation`/`KeyRedirect`; identity-for-trust = the **pubkey**
+    (spec non-goal: emails "conventional but **not load-bearing**"), so
+    the email is a human label, never a credential. **Real gap (same
+    shape as the s1 `ca-endorsement` gap):** protocol implements
+    KeyFile/EmailRotation, the **CLI has NO `register` command**. User
+    chose build register FIRST, then genesis. **`introductionMandate`
+    bootstrap decision** (verified `policy.ts:570-577` — verifier
+    trusts the self-signed attestation, doesn't cross-check the id;
+    it's an audit pointer): pre-mint ONE genesis mandate UUID, both
+    KeyFiles `register --introduction-mandate <id>`, `genesis
+    --mandate-id <id>` ⇒ pointer is *truthful* (no placeholder lie in
+    a root artifact; no register-after). #9 commit plan = program doc
+    §1B "0c"; **c1 `dc48559` LANDED + pushed** on
+    `feat/keyfile-register` (additive protocol self-signer variants
+    `signKeyFileWith`/`signKeyRedirectWith`/`signEmailRotationWith` —
+    one signer, `signer.pubKey==envelope.pubkey`, fail-closed; ZERO
+    canonical/verifier/wire/spec change §11.1). **maintainers 307→311
+    on the branch; flagship guard 2526/225, tsc clean both.** c2–c5 +
+    docs + governed PR remain (governed merge = a Human-Gate-A-style
+    step → re-pin). This is upstream → branch is pushed, NOT pinned
+    (pin stays `833fa45` until merge).
   - **Human Gate A SATISFIED (verify-before-trust on the GitHub side):**
     `gh pr view 2 --repo ibisllc/maintainers` showed PR #2 **MERGED**
     (merge commit `833fa45`, base `main`, mergedAt 19:48Z) — the human
