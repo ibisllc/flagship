@@ -6,24 +6,66 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-17 (**v1-launch program session 2**, Mac/darwin
-box. Phase 1 AGENT: signer threaded through genesis/mandate/takeover
-**and** release endorsement (one async signing path), **and** the
-missing `ca-endorsement` command + the on-disk CA-lease store
-convention — three security-critical commits on
-`feat/piv-ed25519-signer`, each green+pushed, draft PR #2 tip
-`3a4bbe9`, maintainers **270→277**. Flagship-side: `rotate-ca.mjs`
-Step-2 + `ca-operations.md` Path B now reference the real
-`yubikey-piv:` source; flagship gate held **2526/2526 · tsc clean**.
-**Phase-1 AGENT remaining (next session START, attentively — NOT
-tail):** `--dry-run` (needs the unsigned/sign split for byte-fidelity)
-+ ceremony banner/typed-confirm + never-log-secrets test + native
-PC/SC transport stub, then the 1B human gate. Session 1 (same day):
-keystone `Ed25519Signer`+`loadSigner`/`PivTransport`, created
-`docs/v1-launch-program.md`. See §0.)
+Last updated: 2026-05-17 (**v1-launch program session 3**, Mac/darwin
+box. **Phase-1 AGENT work is COMPLETE.** Session 3 landed the three
+remaining #28 pieces — `4647582` assemble/sign split + `--dry-run`,
+`d55a86d` ceremony banner + typed confirm + never-log-secrets +
+successor guidance, `a195968` native PC/SC `piv-apdu` codec +
+`piv-pcsc` channel seam (fail-closed; hw round-trip is Human Gate B) —
+each green+pushed on `feat/piv-ed25519-signer`, maintainers
+**277→307**, tsc clean. ZERO protocol/wire/spec delta (CLI-package
+only; `@maintainers/protocol` untouched). **PR #2 flipped out of draft
+→ ready for review**, tip `a195968`. Final flagship gate re-verified
+**2526/2526 · 225 files · tsc clean**. Remaining is human-only:
+**Human Gate A** (governed PR #2 merge → re-pin
+`scripts/maintainers.pinned-sha` + `pull-maintainers.sh`) then
+**Human Gate B** (Operation 0 genesis with the real YubiKey → bake
+`MAINTAINER_GENESIS_PUBKEYS`, #30 flips live, re-run #8). Sessions 1–2
+(same day): keystone + signer threading + `ca-endorsement` command.
+See §0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-17 (v1-launch program session 3, Mac/darwin):**
+  - **No env-sync drift** (verify-before-trust): the gitignored
+    `maintainers/` clone was already on `feat/piv-ed25519-signer` @
+    `3a4bbe9` and clean → `pull-maintainers.sh` correctly NOT run (it
+    would discard the branch for the pin). Start gate confirmed:
+    flagship **2526/225 · tsc clean**, maintainers (on the branch)
+    **277/26 · tsc clean** — exactly the documented baseline.
+  - **Re-confirmed shell-cwd-compound hazard (caught, not shipped):**
+    a background `cd maintainers` left the persistent cwd in
+    `maintainers/`, so the first two "flagship" gate runs actually ran
+    the maintainers suite. Caught immediately (277 ≠ 2526), re-run with
+    absolute `cd /Users/harrywinner/flagship &&` — flagship gate then
+    verified 2526/225. The §0/program-prompt "ALWAYS absolute paths"
+    rule stands; this is exactly the trap it warns about.
+  - **Phase-1 #28 — three security-critical commits landed (green,
+    pushed); PR #2 flipped out of draft:**
+    - `4647582` assemble/sign split + `--dry-run` (exact canonical
+      bytes + `.maintainers` diff; no PIN/tap/sign/write;
+      `loadSignerBoundPubKey`; `signAssembled` swap-guard). 277→281.
+    - `d55a86d` ceremony banner + typed confirm (`ttyConfirm`,
+      ceremony-phrase, `--yes` bypass, fail-closed when piped) +
+      whole-surface never-log-secrets sweep + genesis successor
+      guidance. Existing write-path dispatch tests now pass `--yes`.
+      281→290.
+    - `a195968` native PC/SC stub: pure tested `piv-apdu` codec +
+      `piv-pcsc` channel seam; optional `pcsclite` dynamic-import
+      fail-closes precisely (no package.json/lockfile change; NEVER a
+      hex fallback; libpcsclite round-trip = Human Gate B only).
+      290→**307**.
+    - ZERO protocol/canonical/wire/spec delta — all changes are in
+      `maintainers/packages/cli` only; `@maintainers/protocol` is
+      untouched, so flagship's protocol-only import graph is **provably
+      outside** the change (same basis §0 uses for pin-SHA/Android).
+      The final flagship gate was still re-run as the guard: **2526/225
+      · tsc clean** (baseline held). `tsc -b` clean throughout
+      maintainers.
+  - **PR #2 (`ibisllc/maintainers#2`) is now READY (out of draft)**,
+    tip `a195968`, body rewritten to the full 8-commit #28 scope.
+    Phase-1 AGENT work is **complete**; only Human Gate A (governed PR
+    #2 merge → re-pin) and Human Gate B (YubiKey genesis) remain.
 - **2026-05-17 (v1-launch program session 2, Mac/darwin):**
   - **No env-sync drift this session** (verify-before-trust): the
     gitignored `maintainers/` clone was already on
@@ -401,7 +443,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 25 | N0e-2 daemon sibling-WS auto-dial | ✅* | `siblingHandshakeClient.ts`: `startPersistentSiblingHandshakeClient` + `SiblingHandshakeClientManager` (reconnect/backoff/jitter/`setPeers`) at parity with cert-sync `SiblingClientManager`; router setSibling/removeSibling symmetric with the inbound accept; 5 tests; exported. build-tasks:666 ☑. *Joint runtime `setPeers`-from-discovery instantiation = live exercise (→ #16; neither persistent supervisor is runtime-instantiated by precedent) |
 | 26 | verify Forgejo + real-LLM streaming (audit N1/N2) | ⛔(mostly) | largely real-infra: real provider key + live daemon; add Forgejo+vibe-code e2e smoke |
 | 27 | Track P 3 genesis ceremony (app-primary + CLI fallback) | ⛔ | Upstream `ibisllc/maintainers` CLI, sequenced **post PR #1 merge** (§5); the real genesis run is human+YubiKey. Seam = the complete design in maintainer-ca §10.3/§11.2 + ca-operations "Operation 0" + the now-reconstructed PR #1 protocol; tests use the deterministic placeholder genesis (#30 already fail-closed-tested). Don't pile more unmerged upstream behind the governed PR. |
-| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ◐ | **Keystone + signer-threading + `ca-endorsement` DONE+green+pushed** (2026-05-17): `protocol` `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` (`9e7c495`) + threaded through genesis/mandate/takeover (`d2027df`) + release endorsement (`5148bbf`) + the missing `ca-endorsement` command & `.maintainers/ca-endorsements/` store convention (`3a4bbe9`). ZERO wire/spec delta; maintainers 257→**277**; `feat/piv-ed25519-signer` tip `3a4bbe9`, **draft PR `ibisllc/maintainers#2`** (merge governed → re-pin). **Remaining (next session START, attentively — NOT tail):** `--dry-run` (needs the unsigned/sign split for byte-fidelity) + ceremony banner/typed-confirm + never-log-secrets test + native PC/SC transport stub. Then 1B human gate. Design: maintainer-ca §10.1/§11.1 + program doc Phase 1 progress log. |
+| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ✅ AGENT (human gates remain) | **AGENT-COMPLETE+green+pushed** (2026-05-17 s1–s3): `protocol` `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` (`9e7c495`) + threaded through genesis/mandate/takeover (`d2027df`) + release endorsement (`5148bbf`) + `ca-endorsement` command & `.maintainers/ca-endorsements/` store (`3a4bbe9`) + **assemble/sign split & `--dry-run`** (`4647582`) + **ceremony banner / typed confirm / never-log-secrets / successor guidance** (`d55a86d`) + **native PC/SC `piv-apdu` codec + `piv-pcsc` channel seam, fail-closed** (`a195968`). ZERO protocol/wire/spec delta (CLI-package only — `@maintainers/protocol` untouched); maintainers 257→**307**; `feat/piv-ed25519-signer` tip `a195968`, **PR `ibisllc/maintainers#2` READY (out of draft)**. flagship gate re-verified 2526/225. **Remaining = human-only:** Gate A (governed PR #2 merge → re-pin `scripts/maintainers.pinned-sha` + `pull-maintainers.sh`) → Gate B (Operation 0 genesis w/ real YubiKey → bake `MAINTAINER_GENESIS_PUBKEYS`, #30 flips live, re-run #8). The libpcsclite hardware round-trip is verified ONLY at Gate B. Design: maintainer-ca §10.1/§11.1 + program doc Phase 1 progress log. |
 | 29 | Track P 5 OPTIONAL hosted committer | ✅* | IS the upstream `maintainers/.../server-adapters/cloudflare-worker` Model A worker (`worker.ts` POST /commit — holds only a GitHub PAT, no maintainer/CA key; `policy.ts` = verify→commit gate). M1 (`6beb3dd`, PR #1) made `policy.ts` CaEndorsement-aware incl. `checkCaEndorsementAuthority` (NOW-clock + lease window). §12.1 downscopes to opt-in (default = app-direct-commit #32); NOT a launch blocker. *Remaining = governed/operator: deploy Worker + provision `GITHUB_MAINTAINERS_PAT` (post PR #1 merge). A flagship `.com` route would duplicate the upstream worker + contradict §12.1 — intentionally not built. |
 | 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ⛔ | Upstream maintainers web-ui, **post PR #1 merge** (§5). NO signing view ever. Seam = ca-operations.md "Next upstream increment" (REPLACED by status/preview/commit-trigger-only per §10.1) — design complete; it's upstream-after-merge, not flagship code. |
@@ -451,27 +493,31 @@ Ed25519 over the canonical bytes).
 ## 5. Recommended next-session order (highest value, unblocked first)
 
 > **2026-05-17: `docs/v1-launch-program.md` governs phase order** (the
-> `/alpha` Phases 1-8). We are in **Phase 1** (genesis ceremony / #28).
-> **Session 2 landed (green+pushed, draft PR #2 tip `3a4bbe9`, 277):**
-> signer threaded through genesis/mandate/takeover/endorsement (one
-> async path) + the missing `ca-endorsement` command + the
-> `.maintainers/ca-endorsements/` store convention; flagship-side
-> `rotate-ca.mjs`/`ca-operations.md` now point at `yubikey-piv:`.
-> **Immediate next action (next session START — attentively,
-> security-critical, do NOT tail-bolt):** on `feat/piv-ed25519-signer`,
-> (1) refactor each `build*` to compute the *unsigned* envelope + target
-> path then sign, and add `--dry-run` (print exact canonical bytes +
-> the would-write `.maintainers` diff; sign/write nothing; no-PIN
-> public read only); (2) plain-language ceremony banner + typed
-> explicit confirm + never-log-secrets regression test + successor
-> guidance; (3) native PC/SC `PivTransport` stub (pure tested APDU
-> encoders behind a channel seam; libpcsclite round-trip fail-closes —
-> verified only at the gate). Each commit green, push, keep draft PR #2
-> current; flip it out of draft only when #28 is fully complete. THEN
-> the 1B human gate: merge PR #2 (governed) → re-pin → Operation 0
-> genesis with the real YubiKey → bake `MAINTAINER_GENESIS_PUBKEYS`
-> (#30 flips live) → re-run #8. The list below is later-phase detail
-> (Phase 2 = #35 → #9 → #10).
+> `/alpha` Phases 1-8). We are in **Phase 1** (genesis ceremony / #28),
+> and **Phase-1 AGENT work is now COMPLETE.** Session 3 landed the
+> three remaining #28 pieces on `feat/piv-ed25519-signer` (each
+> green+pushed): `4647582` assemble/sign split + `--dry-run`,
+> `d55a86d` ceremony banner + typed confirm + never-log-secrets +
+> successor guidance, `a195968` native PC/SC `piv-apdu` codec +
+> `piv-pcsc` channel seam (fail-closed; libpcsclite round-trip is
+> Human Gate B only). maintainers **277→307**, tsc clean, ZERO
+> protocol/wire/spec delta (CLI-package only). **PR #2 is READY (out
+> of draft), tip `a195968`.** Final flagship gate re-verified
+> **2526/225 · tsc clean**.
+>
+> **Immediate next action = the two HUMAN GATES (no agent build work
+> left in Phase 1):**
+> **Gate A (governed):** human merges PR `ibisllc/maintainers#2`, then
+> bump `scripts/maintainers.pinned-sha` to the MERGE commit + run
+> `bash scripts/pull-maintainers.sh pull` (the classifier may block an
+> agent `gh pr merge` even post-approval — if so the human runs that
+> one command; the agent does the re-pin + pull + gate).
+> **Gate B (YubiKey):** human runs `ca-operations.md` "Operation 0 —
+> genesis" with the real YubiKey; the agent walks/verifies every
+> artifact, bakes `MAINTAINER_GENESIS_PUBKEYS` into `@flagship/protocol`
+> (#30 flips live; re-bake per surface — record the exact pubkey),
+> re-runs the #8 suite to prove links 1–4 resolve. Deploy nothing.
+> The list below is later-phase detail (Phase 2 = #35 → #9 → #10).
 
 **Resume #2 2026-05-16 (Linux box) closed #33 (real Gradle build +
 190 unit tests green; 2 latent-drift fixes), #34 (triaged →

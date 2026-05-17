@@ -76,6 +76,18 @@ node packages/cli/dist/index.js ca-endorsement \
   --path ../.maintainers
 # writes .maintainers/ca-endorsements/<ts>-<id>.json — commit it (PR to main)
 ```
+Before the real run, preview it: add `--dry-run` to print the EXACT
+canonical bytes (hex + utf-8) and the would-write `.maintainers` diff
+while signing/writing **nothing** and touching no PIN/token (it
+resolves pubkeys via the no-PIN public read only). The real run prints
+a plain-language banner + the same byte/diff REVIEW and then requires
+a **typed confirmation** (a ceremony-specific phrase, e.g. `CA-LEASE`)
+before any token touch or write; `--yes` is the deliberate
+non-interactive bypass (banner + preview still shown). The PIN and any
+`file:` private key are never logged anywhere (regression-tested). The
+same `--dry-run`/banner/typed-confirm applies to `genesis`, `mandate`,
+and `takeover`.
+
 The `ca-endorsement` command and the `yubikey-piv:` signer source both
 exist (maintainers `feat/piv-ed25519-signer`, #28): the PIV-resident
 Ed25519 private half never leaves the token, and a PIV-Ed25519
