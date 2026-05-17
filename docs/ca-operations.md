@@ -63,7 +63,8 @@ run any cadence; "renew weekly forever" is the expected lifestyle.)
 > view + route. See "Next upstream increment" at the bottom — until it
 > lands, use Path B, which is fully equivalent.
 
-**Path B — CLI (headless / air-gapped / successor / today):**
+**Path B — CLI + YubiKey (the supported maintainer-root path; also the
+air-gapped / store-down / successor escape hatch):**
 ```sh
 cd maintainers          # the pulled ibisllc/maintainers clone
 node packages/cli/dist/index.js ca-endorsement \
@@ -71,12 +72,21 @@ node packages/cli/dist/index.js ca-endorsement \
   --scope flagship/directory-attestation \
   --duration 7d \
   --track ca \
-  --signing-key file:<your-maintainer-ed25519-priv-hex-file> \
+  --signing-key yubikey-piv:slot=9c \
   --path ../.maintainers
-# commit the new file under .maintainers/ca-endorsements/ (PR to main)
+# writes .maintainers/ca-endorsements/<ts>-<id>.json — commit it (PR to main)
 ```
-(YubiKey-via-PIV signing key sources are staged in the CLI; until then
-the maintainer key is a local 32-byte hex file you guard.)
+The `ca-endorsement` command and the `yubikey-piv:` signer source both
+exist (maintainers `feat/piv-ed25519-signer`, #28): the PIV-resident
+Ed25519 private half never leaves the token, and a PIV-Ed25519
+signature over the canonical bytes is byte-identical RFC-8032 Ed25519,
+so there is **zero protocol/wire/spec change** (§11.1). The native
+PC/SC transport is verified only at the YubiKey gate; until it is
+wired the source fail-closes with a precise message — it never
+silently falls back. **Lower-assurance fallback** (air-gapped /
+successor, documented as such): `--signing-key
+file:<maintainer-ed25519-priv-hex-file>` — a local 32-byte hex file
+you guard.
 
 Check what is being served at any time:
 ```sh

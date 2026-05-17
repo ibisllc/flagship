@@ -6,21 +6,89 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-17 (**v1-launch program session 1**, Mac/darwin
-box — first run from the `/alpha` Phases-1-8 prompt. Created
-`docs/v1-launch-program.md` (the authoritative phase tracker). Phase 1
-(genesis ceremony / #28 PIV-Ed25519 signer) AGENT work: the two
-keystone pieces built + tested + pushed — `protocol` external
-`Ed25519Signer` abstraction and `cli` `loadSigner`/`PivTransport`
-seam, ZERO wire/spec delta, maintainers 257→270 green — on upstream
-branch `feat/piv-ed25519-signer`, **draft PR `ibisllc/maintainers#2`**.
-Cold-start env-sync drift found+fixed (stale `maintainers/` clone
-`c009900`→`10c65aa` via pull-maintainers.sh; flagship gate
-**2526/2526**, tsc clean). Prior: resume #2 Linux box closed
-#33/#34/#3/#4/#8; #9/#10 scope-corrected; #35 added. See §0.)
+Last updated: 2026-05-17 (**v1-launch program session 2**, Mac/darwin
+box. Phase 1 AGENT: signer threaded through genesis/mandate/takeover
+**and** release endorsement (one async signing path), **and** the
+missing `ca-endorsement` command + the on-disk CA-lease store
+convention — three security-critical commits on
+`feat/piv-ed25519-signer`, each green+pushed, draft PR #2 tip
+`3a4bbe9`, maintainers **270→277**. Flagship-side: `rotate-ca.mjs`
+Step-2 + `ca-operations.md` Path B now reference the real
+`yubikey-piv:` source; flagship gate held **2526/2526 · tsc clean**.
+**Phase-1 AGENT remaining (next session START, attentively — NOT
+tail):** `--dry-run` (needs the unsigned/sign split for byte-fidelity)
++ ceremony banner/typed-confirm + never-log-secrets test + native
+PC/SC transport stub, then the 1B human gate. Session 1 (same day):
+keystone `Ed25519Signer`+`loadSigner`/`PivTransport`, created
+`docs/v1-launch-program.md`. See §0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-17 (v1-launch program session 2, Mac/darwin):**
+  - **No env-sync drift this session** (verify-before-trust): the
+    gitignored `maintainers/` clone was already on
+    `feat/piv-ed25519-signer` @ `9e7c495` (clean) from session 1 —
+    `pull-maintainers.sh` was therefore NOT run (it would discard the
+    branch checkout for the pin). Gate at start confirmed: flagship
+    **2526/2526 · tsc clean**, maintainers (on branch) **270/270 · tsc
+    clean**. Continue rule holds for the next cold start: if the clone
+    is stale, `pull-maintainers.sh` then `git fetch && git checkout
+    feat/piv-ed25519-signer`; if already on the branch & clean, do NOT
+    pull.
+  - **Phase-1 #28 — three security-critical commits landed (green,
+    pushed, draft PR #2):**
+    - `d2027df` thread the external signer through genesis/mandate/
+      takeover: async `build*`, keys via `loadSigner`/`loadSignerPubKey`
+      (+ new `loadSignerPubKeyList` for a `yubikey-piv:` second key in a
+      successors/holder CSV — §11.2), `signMandateWith`. `dispatch`/
+      `run` async; each command `await`ed inside the try so a `CliError`
+      still maps to exit 1; bin shim awaits. `CliEnv` gains optional
+      `pivTransport`/`pivPin` (real transport fail-closes — NEVER a
+      silent hex fallback). New test proves the YubiKey-PIV genesis is
+      byte-identical to the hex path and verifies (the §11.1 linchpin
+      end to end). 270→271.
+    - `5148bbf` thread the signer through release `endorsement` too
+      (§10.1: ALL maintainer-key ceremonies on the one path; the legacy
+      `loadPrivKey` had also *rejected* `yubikey:`). 271.
+    - `3a4bbe9` add the missing **`ca-endorsement` command** +
+      `store.ts` `writeCaEndorsement` defining
+      `.maintainers/ca-endorsements/<ts>-<id>.json` — exactly what
+      `rotate-ca.mjs` `readCaEndorsements` already reads. Closes the
+      real gap from session-1 §0 (Op 1 Path B referenced a nonexistent
+      command). Non-fatal advisory when the signer is not the on-disk
+      ca authority; never hard-fails (authority is the verifier's call
+      at its own clock; overlapping leases/takeovers are legitimate).
+      Cross-checked end to end vs `verifyCaEndorsements`/
+      `authorizedCaKeys`. 271→**277**.
+    - ZERO protocol/canonical/wire/spec delta across all three (a
+      PIV-Ed25519 signature over the canonical bytes is byte-identical
+      RFC-8032 Ed25519). `tsc -b` clean throughout.
+  - **Flagship-side (→ origin/main):** `scripts/rotate-ca.mjs` Step-2
+    fallback now references `--signing-key yubikey-piv:slot=9c` (file:
+    documented as the lower-assurance air-gapped/successor fallback);
+    `docs/ca-operations.md` Path B corrected — the command + signer
+    source now exist, "staged" note removed. `rotate-ca.test.ts` is
+    pure-logic (doesn't exercise the print path) so the string change
+    is test-safe; flagship gate held **2526/2526 · tsc clean**.
+  - **Phase-1 AGENT remaining (next session START, attentively — do NOT
+    tail-bolt; security-critical ceremony surface):** (1) `--dry-run`
+    for genesis/mandate/takeover/ca-endorsement — print the EXACT
+    canonical bytes + the would-write `.maintainers` diff and sign/
+    write nothing; resolve pubkeys via the no-PIN public read only.
+    **This requires refactoring each `build*` to first compute the
+    *unsigned* envelope + target path, then sign**, so the dry-run
+    preview is the same bytes the real run signs (fidelity is the
+    point; uuid/timestamps differ across separate invocations — note
+    that in the banner). (2) Plain-language per-ceremony banner + typed
+    explicit confirm before any token-touch/write (injectable;
+    `--yes`/non-interactive bypass for tests) + a regression test
+    asserting PIN/seed never appears in any emitted line + second-key/
+    successor guidance. (3) Native PC/SC `PivTransport` stub: APDU
+    encode/parse (SELECT PIV AID `A0 00 00 03 08`, VERIFY PIN, GENERAL
+    AUTHENTICATE Ed25519, GENERATE) as pure tested functions behind a
+    channel seam; the libpcsclite round-trip fail-closes precisely (no
+    new mandatory dep; NEVER a hex fallback), verified only at the
+    YubiKey gate. Then 1B human gate.
 - **2026-05-17 (v1-launch program session 1, Mac/darwin):**
   - **NEW authoritative tracker:** `docs/v1-launch-program.md` created
     (first run from the `/alpha` Phases-1-8 prompt). It is now the
@@ -333,7 +401,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 25 | N0e-2 daemon sibling-WS auto-dial | ✅* | `siblingHandshakeClient.ts`: `startPersistentSiblingHandshakeClient` + `SiblingHandshakeClientManager` (reconnect/backoff/jitter/`setPeers`) at parity with cert-sync `SiblingClientManager`; router setSibling/removeSibling symmetric with the inbound accept; 5 tests; exported. build-tasks:666 ☑. *Joint runtime `setPeers`-from-discovery instantiation = live exercise (→ #16; neither persistent supervisor is runtime-instantiated by precedent) |
 | 26 | verify Forgejo + real-LLM streaming (audit N1/N2) | ⛔(mostly) | largely real-infra: real provider key + live daemon; add Forgejo+vibe-code e2e smoke |
 | 27 | Track P 3 genesis ceremony (app-primary + CLI fallback) | ⛔ | Upstream `ibisllc/maintainers` CLI, sequenced **post PR #1 merge** (§5); the real genesis run is human+YubiKey. Seam = the complete design in maintainer-ca §10.3/§11.2 + ca-operations "Operation 0" + the now-reconstructed PR #1 protocol; tests use the deterministic placeholder genesis (#30 already fail-closed-tested). Don't pile more unmerged upstream behind the governed PR. |
-| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ◐ | **Two keystone pieces DONE+green+pushed** (2026-05-17): `protocol` external `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` seam (`9e7c495`), ZERO wire/spec delta, maintainers 257→270, on `feat/piv-ed25519-signer` → **draft PR `ibisllc/maintainers#2`** (merge governed → re-pin). **Remaining (next session, attentively — NOT tail):** thread `loadSigner` through genesis/mandate/takeover; genesis/ceremony UX hardening; the missing `ca-endorsement` command (§0); native PC/SC transport (YubiKey human gate). Design: maintainer-ca §10.1/§11.1 + program doc Phase 1. |
+| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ◐ | **Keystone + signer-threading + `ca-endorsement` DONE+green+pushed** (2026-05-17): `protocol` `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` (`9e7c495`) + threaded through genesis/mandate/takeover (`d2027df`) + release endorsement (`5148bbf`) + the missing `ca-endorsement` command & `.maintainers/ca-endorsements/` store convention (`3a4bbe9`). ZERO wire/spec delta; maintainers 257→**277**; `feat/piv-ed25519-signer` tip `3a4bbe9`, **draft PR `ibisllc/maintainers#2`** (merge governed → re-pin). **Remaining (next session START, attentively — NOT tail):** `--dry-run` (needs the unsigned/sign split for byte-fidelity) + ceremony banner/typed-confirm + never-log-secrets test + native PC/SC transport stub. Then 1B human gate. Design: maintainer-ca §10.1/§11.1 + program doc Phase 1 progress log. |
 | 29 | Track P 5 OPTIONAL hosted committer | ✅* | IS the upstream `maintainers/.../server-adapters/cloudflare-worker` Model A worker (`worker.ts` POST /commit — holds only a GitHub PAT, no maintainer/CA key; `policy.ts` = verify→commit gate). M1 (`6beb3dd`, PR #1) made `policy.ts` CaEndorsement-aware incl. `checkCaEndorsementAuthority` (NOW-clock + lease window). §12.1 downscopes to opt-in (default = app-direct-commit #32); NOT a launch blocker. *Remaining = governed/operator: deploy Worker + provision `GITHUB_MAINTAINERS_PAT` (post PR #1 merge). A flagship `.com` route would duplicate the upstream worker + contradict §12.1 — intentionally not built. |
 | 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ⛔ | Upstream maintainers web-ui, **post PR #1 merge** (§5). NO signing view ever. Seam = ca-operations.md "Next upstream increment" (REPLACED by status/preview/commit-trigger-only per §10.1) — design complete; it's upstream-after-merge, not flagship code. |
@@ -343,13 +411,19 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 35 | **Transition maintainers consumption: clone-SHA pull → adopter-friendly (MUST)** | ⛔ trigger-gated | The `scripts/maintainers.pinned-sha` + `pull-maintainers.sh` clone-at-build model is a **pre-1.0 dogfooding bootstrap ONLY**, not a distribution mechanism — a bespoke clone script is the opposite of the maintainers objective ("usable by others' projects easily"). **MUST transition when the spec is deemed mature = flagship↔maintainers co-development ends (expected SOON: primitives all coded, only e2e testing remains):** (a) `npm publish @maintainers/protocol` (semver, `--provenance`, lockfile/`npm ci` pinnable); (b) versioned spec + **published conformance test vectors** as the primary portable artifact (de-risks #9/#10 + every non-TS adopter) — these vectors **MUST include the mandatory fail-closed negative cases** (absent genesis ⇒ reject; forked/unknown genesis ⇒ reject; endorsement gap / substituted intermediate ⇒ reject) so no port can pass conformance while silently weakening fail-closed; (c) flagship drops the pull-script and consumes the published package like any adopter (makes the dogfooding honest). Full rationale: `docs/maintainers-deployment.md` → "Adoption: the pull-script is a bootstrap, NOT the distribution" + "Threat model & applicability boundary" (maintainers propagates trust from a pinned root, never creates it; guarantee scales with the independent population that can detect divergence — for agreed-canonical-source projects). Do NOT let the pull-script ossify into the integration story. |
 
 Maintainer→CA progress: **#11 push+PR ✅ → merge (governed) ✅ →
-re-pin `10c65aa` ✅ → #8 link-4 daemon ✅** (this resume). **Next:**
-the genuine remaining gap is the **upstream CaEndorsement on-disk
-store convention** (no spec/store directory for CaEndorsements yet —
-§0) — that unblocks #9 (webapp) + #10 (iOS/Android Swift/Kotlin
-reimpl). Then the human/hardware ceremony cluster: #28 signer + #27
-genesis-flow + #32 app + #29 optional committer + #31 web-ui + #30
-baked-genesis. Design fully specified in maintainer-ca-endorsement.md
+re-pin `10c65aa` ✅ → #8 link-4 daemon ✅ → #28 keystone + signer
+threading + `ca-endorsement` command & `.maintainers/ca-endorsements/`
+**write-side** store convention ✅** (2026-05-17 session 2;
+`feat/piv-ed25519-signer`, draft PR #2). **Next:** #28 finish
+(`--dry-run`/banner/native-transport, NEXT session START). The
+remaining **read-side** gap is the **upstream CaEndorsement on-disk
+store convention** consumed by verifiers — the CLI now writes
+`.maintainers/ca-endorsements/<ts>-<id>.json` (and `rotate-ca.mjs`
+reads it), but the maintainers *store reader* / spec §3.7 directory
+convention + a bundled browser verifier are still Phase 2 work that
+unblocks #9 (webapp) + #10 (iOS/Android Swift/Kotlin reimpl). Then the
+human/hardware ceremony cluster: #28 finish + #27 genesis-flow + #32
+app + #29 optional committer + #31 web-ui + #30 baked-genesis. Design fully specified in maintainer-ca-endorsement.md
 §9–§12; protocol needs ZERO upstream change (PIV-Ed25519 == std
 Ed25519 over the canonical bytes).
 
@@ -376,20 +450,28 @@ Ed25519 over the canonical bytes).
 
 ## 5. Recommended next-session order (highest value, unblocked first)
 
-> **2026-05-17: `docs/v1-launch-program.md` now governs phase order**
-> (the `/alpha` Phases 1-8). We are in **Phase 1** (genesis ceremony /
-> #28). **Immediate next action:** continue Phase 1 AGENT work on the
-> already-pushed `feat/piv-ed25519-signer` branch — thread `loadSigner`
-> through genesis/mandate/takeover, harden the genesis/ceremony UX
-> (banner / `--dry-run` / typed confirm / never-log-secrets /
-> fail-closed reasons), add the missing `ca-endorsement` command, stub
-> the native PC/SC transport to the seam. Do this attentively at a
-> session START (security-critical), each commit green, push to the
-> branch + update draft PR #2. THEN the human gate: merge PR #2
-> (governed) → re-pin → Operation 0 genesis with the real YubiKey →
-> bake `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live) → re-run #8.
-> The list below is retained as later-phase detail (Phase 2 = #35 →
-> #9 → #10; the upstream CaEndorsement-store convention etc.).
+> **2026-05-17: `docs/v1-launch-program.md` governs phase order** (the
+> `/alpha` Phases 1-8). We are in **Phase 1** (genesis ceremony / #28).
+> **Session 2 landed (green+pushed, draft PR #2 tip `3a4bbe9`, 277):**
+> signer threaded through genesis/mandate/takeover/endorsement (one
+> async path) + the missing `ca-endorsement` command + the
+> `.maintainers/ca-endorsements/` store convention; flagship-side
+> `rotate-ca.mjs`/`ca-operations.md` now point at `yubikey-piv:`.
+> **Immediate next action (next session START — attentively,
+> security-critical, do NOT tail-bolt):** on `feat/piv-ed25519-signer`,
+> (1) refactor each `build*` to compute the *unsigned* envelope + target
+> path then sign, and add `--dry-run` (print exact canonical bytes +
+> the would-write `.maintainers` diff; sign/write nothing; no-PIN
+> public read only); (2) plain-language ceremony banner + typed
+> explicit confirm + never-log-secrets regression test + successor
+> guidance; (3) native PC/SC `PivTransport` stub (pure tested APDU
+> encoders behind a channel seam; libpcsclite round-trip fail-closes —
+> verified only at the gate). Each commit green, push, keep draft PR #2
+> current; flip it out of draft only when #28 is fully complete. THEN
+> the 1B human gate: merge PR #2 (governed) → re-pin → Operation 0
+> genesis with the real YubiKey → bake `MAINTAINER_GENESIS_PUBKEYS`
+> (#30 flips live) → re-run #8. The list below is later-phase detail
+> (Phase 2 = #35 → #9 → #10).
 
 **Resume #2 2026-05-16 (Linux box) closed #33 (real Gradle build +
 190 unit tests green; 2 latent-drift fixes), #34 (triaged →

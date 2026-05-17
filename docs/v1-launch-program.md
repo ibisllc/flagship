@@ -19,9 +19,10 @@ open phase here.
   on `main`. One known parallel-load flake (deterministically green on re-run;
   SESSION-HANDOFF §0 #3 watch procedure — never blanket-retry / guess-pin).
 - maintainers (`maintainers/`, gitignored, pinned `scripts/maintainers.pinned-sha`
-  = `10c65aa`, PR #1 merged): `npx vitest run` → **270 passed / 25 files**
-  (257 baseline + 13 from the Phase-1 #28 signer seam on the not-yet-merged
-  `feat/piv-ed25519-signer` branch; the pinned `10c65aa` itself is 257).
+  = `10c65aa`, PR #1 merged): `npx vitest run` → **277 passed / 26 files**
+  on `feat/piv-ed25519-signer` (257 = the pinned `10c65aa` baseline; +13 from
+  the #28 keystone seam; +1 byte-identity genesis-via-PIV; +6 the new
+  `ca-endorsement` command suite). tip `3a4bbe9`, pushed, draft PR #2.
   On a fresh machine the clone is stale → run `bash scripts/pull-maintainers.sh
   pull` first (idempotent; resets to the pin). This was required on the
   2026-05-17 Mac (clone was at the pre-CaEndorsement base `c009900`; tsc -b
@@ -45,7 +46,7 @@ open phase here.
 
 | Phase | Title | State |
 |---|---|---|
-| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ IN PROGRESS** — #28 keystone (protocol `Ed25519Signer` + CLI `loadSigner`/`PivTransport`) built+green+pushed (draft PR #2); command-threading + genesis UX + native transport + `ca-endorsement` cmd remain |
+| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ IN PROGRESS** — keystone + **signer threaded through genesis/mandate/takeover/endorsement (one signing path, async)** + **`ca-endorsement` command + on-disk CA-lease store convention** all built+green+pushed (draft PR #2, tip `3a4bbe9`, 277). **Remaining (next session, attentively — NOT tail):** genesis/ceremony UX hardening (`--dry-run` + banner/typed-confirm — needs the unsigned/sign split) + native PC/SC transport stub. Then 1B human gate. |
 | 2 | Maintainers as its own product (#35 → #9 → #10) | ☐ blocked on Phase 1 |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
@@ -218,6 +219,62 @@ every §S box is ☑ → v1-alpha.
 ---
 
 ## Progress log (newest first)
+
+### 2026-05-17 — session 2 (this Mac): Phase-1 AGENT signer threading + `ca-endorsement`
+
+Cold-start verified ground truth (no env-sync drift this time — the
+`maintainers/` clone was already on `feat/piv-ed25519-signer` @ `9e7c495`,
+clean). Gate at start: flagship **2526/2526 · tsc clean**; maintainers (on
+the branch) **270/270 · tsc clean**. Three security-critical commits on
+`feat/piv-ed25519-signer`, each green + pushed (draft PR #2):
+
+- **`d2027df` — thread the external signer through genesis/mandate/
+  takeover.** `build*` are async, resolve every key via `loadSigner`/
+  `loadSignerPubKey` (+ new `loadSignerPubKeyList` so a successors/holder
+  CSV can name a `yubikey-piv:` second key — the §11.2 second-YubiKey
+  read). `dispatch`/`run` async, each command `await`ed inside the try so
+  a `CliError` still maps to exit 1; bin shim awaits. `CliEnv` gains
+  optional `pivTransport`/`pivPin` (default real transport fail-closes —
+  NEVER a silent hex fallback). New test drives `buildGenesis` through an
+  injected fake PIV token and proves the mandate is byte-identical to the
+  hex path and verifies under the protocol verifier (the §11.1 linchpin,
+  end to end). 270 → 271.
+- **`5148bbf` — thread the signer through release `endorsement` too.**
+  §10.1 requires ALL maintainer-key ceremonies to sign via the one path;
+  the legacy `loadPrivKey` also *rejected* `yubikey:`, so YubiKey-signed
+  releases were impossible. Now `loadSigner` + `signReleaseEndorsementWith`.
+- **`3a4bbe9` — add the missing `ca-endorsement` command + the on-disk
+  CA-lease store convention.** `ca-operations.md` Op 1 Path B and
+  `rotate-ca.mjs` Step 2 both invoked a `ca-endorsement` command that did
+  not exist — a real gap (SESSION-HANDOFF §0). `buildCaEndorsement` signs
+  via `signCaEndorsementWith`; `store.ts` `writeCaEndorsement` defines
+  `.maintainers/ca-endorsements/<ts>-<id>.json` — exactly what
+  `rotate-ca.mjs` `readCaEndorsements` already reads. A non-fatal
+  human-readable advisory fires when the signer is not the on-disk ca
+  authority (but never hard-fails — authority is judged at the verifier's
+  clock; overlapping leases / fresh takeovers are legitimate, §5.1/§11.2).
+  Tests cross-check end to end against `verifyCaEndorsements`/
+  `authorizedCaKeys` (live lease authorizes exactly the hot key; lapsed
+  lease fail-closes at the verifier's clock; PIV path byte-identical to
+  file:). 271 → **277**.
+
+Flagship-side (this session, → `origin/main`): `scripts/rotate-ca.mjs`
+Step-2 fallback now references the real `--signing-key yubikey-piv:slot=9c`
+(file: noted as the lower-assurance air-gapped/successor fallback);
+`docs/ca-operations.md` Path B corrected (the command + signer source now
+exist; "staged" note removed). Flagship gate held **2526/2526 · tsc clean**.
+
+**Phase-1 AGENT remaining (next session, START attentively — security-
+critical, do NOT tail-bolt):** `--dry-run` for the four ceremony commands
+(print exact canonical bytes + the would-write `.maintainers` diff; sign/
+write NOTHING; resolve pubkeys via the no-PIN public read only). This
+needs each `build*` refactored to first compute the *unsigned* envelope +
+target path, then sign — so the dry-run preview is the SAME bytes the real
+run signs (fidelity is the whole point). Then the plain-language ceremony
+banner + typed explicit confirm + a never-log-secrets regression test, and
+the native PC/SC `PivTransport` stub (APDU encoders pure+tested; the
+libpcsclite round-trip fail-closes, verified only at the YubiKey gate).
+Then the 1B human gate.
 
 ### 2026-05-17 — session 1 from the v1-launch program prompt (this Mac)
 

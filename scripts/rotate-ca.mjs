@@ -307,10 +307,12 @@ async function cmdRotate(opts, p) {
   p(`  Go to ${C.b(opts.comUrl + "/maintainers")} → "Replace CA":`);
   p(`    • paste the public key above`);
   p(`    • scope: ${C.b(scope)}   • duration: ${C.b(dur + "d")}   • tap your YubiKey, commit\n`);
-  p(C.dim("  Headless / air-gapped / successor fallback (no browser):"));
+  p(C.dim("  CLI + YubiKey (the supported maintainer-root path — the web never signs the root):"));
   p(C.dim(`    cd maintainers && node packages/cli/dist/index.js ca-endorsement \\`));
   p(C.dim(`      --ca-pubkey ${pubHex} --scope ${scope} --duration ${dur}d \\`));
-  p(C.dim(`      --track ca --signing-key <your-maintainer-key-source> --path ../.maintainers`));
+  p(C.dim(`      --track ca --signing-key yubikey-piv:slot=9c --path ../.maintainers`));
+  p(C.dim(`    (air-gapped/successor fallback ONLY, lower assurance:`));
+  p(C.dim(`       --signing-key file:<maintainer-ed25519-priv-hex-file>)`));
   p(C.dim(`  then commit .maintainers/ca-endorsements/ and \`git pull\` here.\n`));
 
   if (opts.flags["non-interactive"]) {
