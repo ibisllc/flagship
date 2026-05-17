@@ -14,6 +14,59 @@ want to set up the same model for their own repository.
 
 ---
 
+## Adoption: the pull-script is a bootstrap, NOT the distribution
+
+**This is a load-bearing transition commitment, not a nicety.**
+
+`scripts/maintainers.pinned-sha` + `scripts/pull-maintainers.sh`
+(clone `ibisllc/maintainers` at a pinned commit SHA at build time) is
+**flagship's private pre-1.0 dogfooding bootstrap only**. It is *not*
+a distribution mechanism and must never be presented to external
+adopters as one. A bespoke clone-at-build shell script is one of the
+highest-friction ways to depend on a library — the opposite of the
+maintainers project's whole objective ("usable by others in their
+own projects easily").
+
+Why the SHA-pull is acceptable *for now*: while flagship and
+maintainers are **co-developed**, the SHA-pull lets us bump to an
+unreleased `main` commit instantly without a publish cycle (exactly
+what happened merging `ibisllc/maintainers#1` → re-pin `10c65aa`).
+That convenience is real and only justified during co-development.
+
+**MUST transition — trigger:** as soon as the spec is deemed mature,
+i.e. when flagship↔maintainers **co-development ends**. This is
+expected *soon* — the protocol primitives are all coded; the main
+gap is end-to-end testing, not new protocol surface. Do not let the
+pull-script ossify into the de-facto integration story; that would
+keep external adoption hard indefinitely.
+
+**What the transition is (the adopter-friendly model):**
+
+1. **Publish `@maintainers/protocol` to npm** — semver, `npm publish
+   --provenance` (Sigstore-backed supply-chain attestation), pinned
+   by consumers via exact version + lockfile integrity / `npm ci`.
+   Same reproducibility as a SHA pin, a fraction of the friction, and
+   a *stronger* standard tamper-evidence story than "fetch this SHA
+   over https." (Trust is anchored in the genesis pubkey — data —
+   not the code channel, so the code channel should optimize purely
+   for adoption friction.)
+2. **Treat the versioned spec as the primary portable artifact** —
+   `docs/spec/v1.md` + the `maintainers/<purpose>/v1` canonical-bytes
+   tags + a **published conformance test-vector set**, so non-TS
+   adopters (Swift, Kotlin, Go, Rust, …) can implement links 1–4 and
+   self-verify. The TS package is the *reference* implementation, not
+   the only one. This directly de-risks the iOS/Android port (#10)
+   and every adopter who isn't a TS project.
+3. **Flagship then drops the pull-script** and consumes the published
+   `@maintainers/protocol` exactly like any external adopter — which
+   is the only way the "we dogfood the same model adopters use"
+   claim becomes *true* (today flagship dogfoods a path no adopter
+   would ever use, which undercuts the rationale).
+
+Tracked as **SESSION-HANDOFF.md §3 #35** (trigger-gated MUST).
+
+---
+
 ## Where the UI lives
 
 For Flagship: **`https://flagshipserver.com/maintainers/`** — a subdirectory

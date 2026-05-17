@@ -10,6 +10,8 @@ Last updated: 2026-05-16 (resume #2, Linux box — closed #33 [Gradle
 build + 190 unit tests], #34 [v2-deferred], #3 [flake triaged+
 corroborated], #4 [GOVERNED PR #1 merged + re-pin `10c65aa`], #8
 [link-4 daemon port built+tested]; #9/#10 scope-corrected — see §0.
+Added #35 (MUST transition maintainers consumption clone-SHA →
+npm/spec when co-development ends — user decision 2026-05-17).
 Prior resume: #11/#30/#24/#25/#20/#15/#29. flagship 2521/2521 +
 Android 190/190, maintainers PR #1 MERGED, all pushed. See §0.)
 
@@ -281,6 +283,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 32 | **Track P generic OSS maintainers NFC-tap app** | ⛔ | Largest: a NEW Android-first app, home **upstream `ibisllc/maintainers`**, review-only here (no JDK; cf. #33). Multi-week; **post PR #1 merge**. Seam = the complete §11+§12 design (per-repo profile, hardware-stored git cred, tap→PIV-Ed25519→app-direct-commit; PIV-Ed25519 == std Ed25519 ⇒ no protocol change). Not closeable at a CLI session tail. |
 | 33 | Android real Gradle build (never-compiled drift) | ✅ | **DONE on this Linux box** (JDK17+SDK present — env delta §0). `7c37d5e` main-source `@Composable` fix → `assembleDebug` green; `d960691` 4 never-run test fixes → `testDebugUnitTest` **190/190, 0 fail**. Remaining for C-Android = the operator Play-upload gate (`§S:624`: signing + internal track + 5 testers), NOT a code/CLI item. |
 | 34 | Triage `inheritance.ts` (v1-unwired vs v2-deferred) | ✅ | **Verdict: v2-deferred, deliberate seam.** Built+exported+unit-tested, not route/cron-wired, absent from §S + CLAUDE.md. Recorded in new `docs/policy/inheritance.md` (the decision record the module docstring already pointed at — was dangling). No v1 action. §0. |
+| 35 | **Transition maintainers consumption: clone-SHA pull → adopter-friendly (MUST)** | ⛔ trigger-gated | The `scripts/maintainers.pinned-sha` + `pull-maintainers.sh` clone-at-build model is a **pre-1.0 dogfooding bootstrap ONLY**, not a distribution mechanism — a bespoke clone script is the opposite of the maintainers objective ("usable by others' projects easily"). **MUST transition when the spec is deemed mature = flagship↔maintainers co-development ends (expected SOON: primitives all coded, only e2e testing remains):** (a) `npm publish @maintainers/protocol` (semver, `--provenance`, lockfile/`npm ci` pinnable); (b) versioned spec + **published conformance test vectors** as the primary portable artifact (de-risks #9/#10 + every non-TS adopter); (c) flagship drops the pull-script and consumes the published package like any adopter (makes the dogfooding honest). Full rationale: `docs/maintainers-deployment.md` → "Adoption: the pull-script is a bootstrap, NOT the distribution". Do NOT let the pull-script ossify into the integration story. |
 
 Maintainer→CA progress: **#11 push+PR ✅ → merge (governed) ✅ →
 re-pin `10c65aa` ✅ → #8 link-4 daemon ✅** (this resume). **Next:**
