@@ -119,7 +119,14 @@ In order, after 1A lands and is merged+re-pinned:
    second YubiKey named in `successors`). Agent walks through, verifies
    every emitted artifact (canonical bytes, signature, chain).
 2. Agent bakes the emitted genesis pubkey(s) into `@flagship/protocol`
-   `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live).
+   `MAINTAINER_GENESIS_PUBKEYS` (currently `Object.freeze([])`,
+   fail-closed) — #30 flips live. **Scope of this bake: the one TS
+   constant only**, which covers the daemon (#8, wired) and later the
+   webapp (#9). It does NOT reach iOS/Android — those are separate
+   Swift/Kotlin reimplementations that re-bake the SAME pubkey at
+   Phase 2 #10 (see Phase 2's "GENESIS PUBKEY MUST BE RE-BAKED PER
+   SURFACE"). Record the exact pubkey value in this tracker + the
+   ceremony artifact so the Phase-2 mobile bake is provably the same.
 3. Re-run the #8 suite to prove links 1–4 now resolve with a real genesis.
 4. **Deploy nothing yet.**
 
@@ -143,6 +150,18 @@ In order, after 1A lands and is merged+re-pinned:
   reimpl of `verifyTrack`/`verifyCaEndorsements`/`authorizedCaKeys`, each
   PROVEN against the published conformance vectors incl. the fail-closed
   negatives). #10 is the heaviest single item — sequence it, don't tail-bolt.
+- **GENESIS PUBKEY MUST BE RE-BAKED PER SURFACE.** The Phase-1 bake
+  populates ONLY the one TS constant `@flagship/protocol`
+  `MAINTAINER_GENESIS_PUBKEYS` — that covers the daemon (#8, wired) and
+  the webapp (#9, once wired). iOS (Swift) and Android (Kotlin) are
+  independent reimplementations: each #10 port MUST hardcode the **same**
+  genesis pubkey(s) into its own source (today `apps/mobile` contains
+  ZERO genesis material — verified). #10's acceptance bar — proven
+  against the published conformance vectors incl. the fail-closed
+  negatives (absent/forked genesis ⇒ reject) — is the guard that no
+  mobile port ships with a wrong/empty/placeholder genesis. Same pubkey
+  value, four baked locations (protocol-const, webapp via it, iOS, and
+  Android), sequenced Phase 1 → Phase 2.
 
 ## PHASE 3 — THE MAINTAINERS APP (retire the CLI) — #31 + #32
 
