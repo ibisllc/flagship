@@ -12,8 +12,9 @@ corroborated], #4 [GOVERNED PR #1 merged + re-pin `10c65aa`], #8
 [link-4 daemon port built+tested]; #9/#10 scope-corrected — see §0.
 Added #35 (MUST transition maintainers consumption clone-SHA →
 npm/spec when co-development ends — user decision 2026-05-17).
-Prior resume: #11/#30/#24/#25/#20/#15/#29. flagship 2521/2521 +
-Android 190/190, maintainers PR #1 MERGED, all pushed. See §0.)
+Prior resume: #11/#30/#24/#25/#20/#15/#29. flagship 2526/2526
+(2521 + the user's own `5b7d140` /alpha route tests) + Android
+190/190, maintainers PR #1 MERGED, all pushed. See §0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
@@ -208,12 +209,13 @@ Android 190/190, maintainers PR #1 MERGED, all pushed. See §0.)
 
 ## 2. Live production state (verify before relying)
 
-- **Gate:** `npx tsc -b` clean · `npx vitest run` → **2514 passed / 224
-  files** on `main` (was 2492/221; +9 #30 fail-closed link-1, +8 #24
-  fan-out). One pre-existing intermittent flake observed under full
-  parallel run (deterministically green on isolated re-run) — see §0
-  / discovery task. Everything pushed to `origin/main` (direct-to-main
-  is this repo's convention; pushes work without prompt).
+- **Gate:** `npx tsc -b` clean · `npx vitest run` → **2526 passed / 225
+  files** on `main` (resume #2: +7 #8 caTrustChain → 2521; then +5 from
+  the user's own `5b7d140` `/alpha` route tests → 2526). One
+  pre-existing intermittent flake under heavy parallel load
+  (deterministically green on re-run) — see §0 #3 + watch procedure.
+  Everything pushed to `origin/main` (direct-to-main is this repo's
+  convention; pushes work without prompt).
 - **`.com` Worker `flagship-com`:** last deploy version `70a43eea`
   (the #24 install-policy fan-out). D1 migrations applied through
   **`0025`** (`0025_install_policy_fanout`, applied remote 2026-05-16
@@ -299,7 +301,7 @@ Ed25519 over the canonical bytes).
 ## 4. Working discipline (non-negotiable — this is how the tree stayed clean)
 
 - One logical change per commit, each individually tested. `npx tsc -b
-  && npx vitest run` must stay green (**2514 baseline**) before every
+  && npx vitest run` must stay green (**2526 baseline**) before every
   commit. Commit with `git commit -F -` (heredoc — NEVER `-m` with
   backticks/`$()`). No `Co-Authored-By` trailer. Push each tested
   commit to `origin/main`.
@@ -324,7 +326,8 @@ Ed25519 over the canonical bytes).
 v2-deferred), #3 (flake triaged + corroborated), #4 (GOVERNED PR #1
 merged by the maintainer + re-pinned `10c65aa`), and #8 (link-4
 daemon port built+tested). Prior resume: #11/#30/#24/#25/#20/#15/#29.
-Net: flagship 2521/2521, Android 190/190, all pushed.** Next
+Net: flagship 2526/2526 (incl. the user's own `/alpha` commit),
+Android 190/190, all pushed.** Next
 session, in order:
 
 1. **Define the upstream on-disk CaEndorsement store convention.**
