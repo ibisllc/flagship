@@ -62,9 +62,42 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
     absolute `cd /Users/harrywinner/flagship &&`. The §0 "ALWAYS
     absolute paths" rule stands — this is the 3rd session it has tried
     to bite.
+  - **Gate B runbook concretized + source-verified (`d9b4848`):**
+    `ca-operations.md` "Operation 0 — genesis" was a 10-line conceptual
+    sketch with NO command — the same verify-before-trust hole that bit
+    session 1. Rewrote it as a precise step-by-step runbook, every CLI
+    detail checked against the merged CLI at the pin (genesis is
+    PER-TRACK ⇒ 3 runs ca/release/ops; exact `node
+    packages/cli/dist/index.js genesis …` line; `--dry-run` first;
+    typed-confirm phrase is exactly `GENESIS`; self-signed invariant;
+    successor=2nd YubiKey via a one-time `file:` pubkey export; `npm
+    run build` precondition since `dist/` is gitignored; `verify`/
+    `status` both take `--path`; bake the single shared `holder`
+    pubkey; deploy nothing). Two human-owned non-derivable inputs
+    flagged: on-token keygen + PIN/PUK (`ykman`; §11.4 open knob) and
+    the cold-genesis `<DURATION>` (LOCKED Phase-2 D1 long-lived track).
+    Gate B is now *armed* (safe to execute), not just pending.
   - **Phase 2 unblocked:** Gate A satisfied ⇒ Phase 2 (#35 → #9 → #10)
     no longer blocked on Phase 1 (it does NOT need Gate B). Only Human
-    Gate B (YubiKey genesis) remains in Phase 1.
+    Gate B (YubiKey genesis) remains in Phase 1. **Phase-2 #35 START
+    plan** (next agent build, attentively at a START — NOT a tail-bolt;
+    upstream `maintainers` new branch → governed PR, PR #1/#2
+    precedent): per the LOCKED design, (1) additive `SignedPolicy` =
+    canonical bytes of `RootPolicy`+`TrackPolicy` + ONE genesis-key
+    Ed25519 sig (reuses `signing.ts`; ~1 canonical fn) + a `verifyTrack`
+    precondition that the consumed `TrackPolicy` MUST verify vs the
+    baked genesis authority else hard fail-closed (~10 verifier lines);
+    (2) the published static-layout spec
+    (`origin.json`/`tracks/<t>/log.json`/`ca-leases.json`) + a tiny
+    `fetch()` reference client; (3) conformance vectors that MUST
+    include the fail-closed negatives (tampered-policy / lapsed-lease-
+    at-NOW / withheld-rolled-back-log / absent-forked-genesis /
+    endorsement-gap); (4) `npm publish @maintainers/protocol`
+    (semver/`--provenance` — Human Gate: npm org/2FA); (5) flagship
+    DROPS `pull-maintainers.sh` + `maintainers.pinned-sha`. Read
+    `maintainers/packages/protocol/src/verifier.ts` + `types.ts` +
+    `signing.ts` FIRST; ZERO `Mandate`/`CaEndorsement` wire delta —
+    `SignedPolicy` is the only additive spec change.
 - **2026-05-17 (v1-launch program session 3, Mac/darwin):**
   - **No env-sync drift** (verify-before-trust): the gitignored
     `maintainers/` clone was already on `feat/piv-ed25519-signer` @

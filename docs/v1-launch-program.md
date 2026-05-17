@@ -353,6 +353,20 @@ static-layout spec + a `fetch()` reference client + conformance vectors
 incl. the fail-closed negatives, per the LOCKED Phase-2 design) may
 proceed in parallel with the human-clocked Gate B.
 
+Also this session (`d9b4848`): **Gate B runbook concretized +
+source-verified.** `ca-operations.md` "Operation 0 — genesis" was a
+conceptual sketch with no command (the verify-before-trust hole that
+bit session 1). Rewrote it as a precise per-track (ca/release/ops)
+runbook, every CLI detail checked against the merged CLI at the pin —
+exact `genesis` invocation, `--dry-run`-first, the `GENESIS`
+typed-confirm phrase, the self-signed invariant, successor=2nd-YubiKey
+via a one-time `file:` pubkey export, the `npm run build` precondition,
+verify/status `--path`, the single-`holder`-pubkey bake + re-bake-per-
+surface + record-the-value, "deploy nothing". The two human-owned
+non-code-derivable inputs (on-token keygen + PIN/PUK per §11.4; the
+cold-genesis `<DURATION>` per LOCKED D1) are flagged. **Gate B is now
+*armed* — safe to execute, not just pending.**
+
 ### 2026-05-17 — session 3 (this Mac): Phase-1 AGENT #28 finished + PR #2 ready
 
 Cold-start: no env-sync drift — the `maintainers/` clone was already on
