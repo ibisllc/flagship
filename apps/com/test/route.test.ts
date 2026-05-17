@@ -1317,7 +1317,7 @@ describe("/.well-known/assetlinks.json — Android App Links binding", () => {
   });
 });
 
-describe("Pre-launch stealth gate (/wip_ + coming-soon)", () => {
+describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
   it("apex / returns coming-soon HTML when the preview cookie is missing", async () => {
     const env = makeEnv();
     const r = await route(new Request("https://flagshipserver.com/"), env);
@@ -1445,6 +1445,52 @@ describe("Pre-launch stealth gate (/wip_ + coming-soon)", () => {
 
   it("/wipx (no underscore) is NOT a preview path — gated as usual", async () => {
     const r = await route(new Request("https://flagshipserver.com/wipx"), makeEnv());
+    expect(await r.text()).toBe("asset:/coming-soon.html");
+  });
+
+  it("/alpha is an alias for /wip_ — serves the real index and sets the cookie", async () => {
+    const r = await route(new Request("https://flagshipserver.com/alpha"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/");
+    const setCookie = r.headers.get("set-cookie") ?? "";
+    expect(setCookie).toMatch(/flagship_preview=1/);
+    expect(setCookie).toMatch(/Path=\//);
+    expect(setCookie).toMatch(/SameSite=Lax/);
+  });
+
+  it("/alpha/ (trailing slash) is canonicalised to /", async () => {
+    const r = await route(new Request("https://flagshipserver.com/alpha/"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/");
+    expect(r.headers.get("set-cookie") ?? "").toMatch(/flagship_preview=1/);
+  });
+
+  it("/alpha/<path> strips the prefix and serves the underlying asset", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/alpha/faq.html"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/faq.html");
+    expect(r.headers.get("set-cookie") ?? "").toMatch(/flagship_preview=1/);
+  });
+
+  it("/alpha/<path>?x=1 preserves the query string", async () => {
+    let captured = "";
+    const env = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          captured = req.url;
+          return new Response(`asset:${new URL(req.url).pathname}`, { status: 200 });
+        },
+      },
+    });
+    await route(new Request("https://flagshipserver.com/alpha/faq.html?x=1"), env);
+    expect(new URL(captured).search).toBe("?x=1");
+  });
+
+  it("/alphabet (no segment boundary) is NOT a preview path — gated as usual", async () => {
+    const r = await route(new Request("https://flagshipserver.com/alphabet"), makeEnv());
     expect(await r.text()).toBe("asset:/coming-soon.html");
   });
 

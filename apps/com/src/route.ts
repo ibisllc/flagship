@@ -459,14 +459,16 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // a "coming soon" page so operational detail (build flow, dev tools,
   // status, docs, etc.) isn't exposed before the mobile apps ship.
   //
-  // `/wip_` and `/wip_/*` strip the prefix, serve the real asset, and
-  // drop a `flagship_preview` cookie so internal links (which point at
-  // un-prefixed paths like /faq.html) continue to resolve to the real
-  // pages on subsequent navigations. /api/*, /og, /me/*, /webapp/*,
-  // /recovery/*, /build/iso/*, and /.well-known/* are handled above
-  // and never hit this gate — the apps keep working unchanged.
-  if (url.pathname === "/wip_" || url.pathname.startsWith("/wip_/")) {
-    return serveWipPreview(request, url, env);
+  // `/wip_` (and the friendlier alias `/alpha`) plus their `/*` subpaths
+  // strip the prefix, serve the real asset, and drop a `flagship_preview`
+  // cookie so internal links (which point at un-prefixed paths like
+  // /faq.html) continue to resolve to the real pages on subsequent
+  // navigations. /api/*, /og, /me/*, /webapp/*, /recovery/*,
+  // /build/iso/*, and /.well-known/* are handled above and never hit
+  // this gate — the apps keep working unchanged.
+  const previewPrefix = matchedPreviewPrefix(url.pathname);
+  if (previewPrefix) {
+    return serveWipPreview(request, url, env, previewPrefix);
   }
 
   // Rate-limit the four mutating control-plane endpoints. Runs BEFORE
@@ -1176,8 +1178,26 @@ function withRecoveryHeaders(res: Response): Response {
  */
 const WIP_PREVIEW_COOKIE_NAME = "flagship_preview";
 const WIP_PREVIEW_COOKIE = `${WIP_PREVIEW_COOKIE_NAME}=1; Path=/; SameSite=Lax; Max-Age=604800`;
+// Original stealth path. `/alpha` is a friendlier public-facing alias —
+// `/wip_` looked unserious in shared links. Both behave identically and
+// `/wip_` stays so links already in the wild don't break.
 const WIP_PREFIX = "/wip_";
+const WIP_PREFIXES = [WIP_PREFIX, "/alpha"] as const;
 const COMING_SOON_PATH = "/coming-soon.html";
+
+/**
+ * Return the preview prefix the pathname is under, or null.
+ *
+ * A prefix matches only on an exact hit (`/alpha`) or a true segment
+ * boundary (`/alpha/...`) — `/alphabet` and `/wipx` are NOT previews
+ * and stay behind the coming-soon gate.
+ */
+function matchedPreviewPrefix(pathname: string): string | null {
+  for (const p of WIP_PREFIXES) {
+    if (pathname === p || pathname.startsWith(`${p}/`)) return p;
+  }
+  return null;
+}
 
 const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   COMING_SOON_PATH,
@@ -1231,10 +1251,10 @@ async function serveComingSoon(env: RouteEnv): Promise<Response> {
 }
 
 /**
- * `/wip_` and `/wip_/<path>` serve the real marketing assets. The
- * prefix is stripped before handing off to the asset binding so the
- * underlying file tree is unchanged — `/wip_/faq.html` reads from
- * apps/web/public/faq.html.
+ * `/wip_` / `/alpha` and their `/<path>` subpaths serve the real
+ * marketing assets. The matched `prefix` is stripped before handing
+ * off to the asset binding so the underlying file tree is unchanged —
+ * `/alpha/faq.html` reads from apps/web/public/faq.html.
  *
  * Sets the preview cookie on the response so the next navigation
  * (to un-prefixed paths the original index.html links at) bypasses
@@ -1245,8 +1265,9 @@ async function serveWipPreview(
   request: Request,
   url: URL,
   env: RouteEnv,
+  prefix: string,
 ): Promise<Response> {
-  const tail = url.pathname.slice(WIP_PREFIX.length); // "" or "/X"
+  const tail = url.pathname.slice(prefix.length); // "" or "/X"
   const realPath = !tail || tail === "/" ? "/" : tail;
   const rewritten = new URL(realPath + url.search, "https://flagshipserver.com");
   const assetReq = new Request(rewritten.toString(), {
@@ -1285,6 +1306,7 @@ export const _internal = {
   RECOVERY_ORIGIN,
   RECOVERY_CSP,
   WIP_PREFIX,
+  WIP_PREFIXES,
   WIP_PREVIEW_COOKIE_NAME,
   COMING_SOON_PATH,
 };
