@@ -27,6 +27,14 @@ open phase here.
   2026-05-17 Mac (clone was at the pre-CaEndorsement base `c009900`; tsc -b
   was red on the two `caTrustChain.ts` `@maintainers/protocol` imports until
   the pull synced it to `10c65aa`).
+  - **To continue Phase-1 #28 work:** `pull-maintainers.sh` resets the
+    clone to the pin, discarding the local branch checkout (the branch
+    is safe on origin). Re-checkout it: `cd maintainers && git fetch
+    origin && git checkout feat/piv-ed25519-signer`, then continue
+    committing there. The +13 #28 tests live only on that branch; the
+    pinned `10c65aa` alone is 257. Always use absolute paths — the
+    shell keeps cwd across tool calls, so a bare `cd maintainers`
+    compounds (bit this session).
 - Android: review-only on this Mac (`/usr/bin/java` is the macOS stub, no real
   JDK). iOS IS verifiable here (Xcode 16.4 / xcodebuild present). This is the
   inverse of the resume-#2 Linux box (JDK present, no xcodebuild).
