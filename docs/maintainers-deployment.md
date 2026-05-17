@@ -67,6 +67,83 @@ Tracked as **SESSION-HANDOFF.md §3 #35** (trigger-gated MUST).
 
 ---
 
+## Threat model & applicability boundary
+
+**maintainers propagates trust forward from a pinned root; it never
+creates trust.** Reading this before adopting it (or before reasoning
+about what a compromise buys an attacker) is mandatory — the
+guarantee is precise and its edges are sharp.
+
+### A purge is a detectable *denial*, not a *forgery*
+
+Three mechanisms compose:
+
+1. **Link-1 is a baked genesis pubkey in the *consumer*, not in the
+   protected repo.** The artifact the end-user runs ships the genesis
+   pubkey compiled in (`@flagship/protocol`'s
+   `MAINTAINER_GENESIS_PUBKEYS`, or any adopter's equivalent).
+   Verification walks *forward* from that pin.
+2. **Fail-closed is mandatory.** Empty / absent / forked
+   `.maintainers/` ⇒ no chain rooted in the pinned genesis ⇒
+   `authorizedCaKeys` empty ⇒ reject **everything**. The spec forbids
+   fallback: absence of a genesis is a hard reject, never a downgrade.
+3. **`verifyEndorsementChainAgainstGit` pins the first-parent commit
+   walk** between consecutive endorsements (intermediate-commit list +
+   Merkle root, checked against the *local* git history).
+
+Together: an attacker who takes the history and purges/rewrites
+`.maintainers/` cannot forge a trusted build — they get a build that
+*fails to validate* on every fail-closed consumer. They can't
+substitute their own `.maintainers/` (any chain not signed by the
+genesis private key is rejected) and can't keep two real endorsements
+while swapping the code between them (the git-walk catches it). The
+purge degrades to a **visible, safe failure** — the property working,
+not breaking.
+
+### The applicability boundary (where adoption makes sense)
+
+Everything bottoms out at one out-of-band fact: the genesis pin the
+consumer was built with, and the consumer's own provenance. So the
+guarantee tiers by who the attacker controls:
+
+| Attacker controls | maintainers gives you |
+|---|---|
+| A mirror/host of the protected project (≠ maintainer, ≠ consumer build) | **Full protection.** The realistic open-source threat; covered. |
+| An insider / compromised host distinct from the root | **Tamper-evidence + an auditable ceremony log.** A divergence is provable after the fact. |
+| The consumer's own root (source **+** build **+** distribution of the verifying artifact) | **Nothing** — they strip the pin and the verify call. No in-band scheme (SLSA, Sigstore, signed apt, …) survives this; trust must be anchored out of band. |
+
+**The guarantee scales with the size of the independent population
+that can detect a divergence from the pinned root.** Maximal in open
+source — the genesis pubkey is published in many independent places,
+reproducible builds let many parties confirm "this binary == this
+audited source", and a missing/forked `.maintainers/` is socially
+conspicuous because thousands hold the real history. It degrades
+toward "trust the vendor" as that population shrinks. A closed
+single-vendor adopter still gets a real, auditable tamper-evident
+ceremony log (valuable against a compromised mirror/insider distinct
+from the root) — but cannot be protected against the root party
+itself, because no independent population exists to notice
+divergence. **This is the design's stated assumption, not a
+limitation to paper over: maintainers is for projects with an agreed,
+widely-replicated canonical source.**
+
+### Consequences (load-bearing)
+
+- **Every consumer MUST be fail-closed with a real pin.** A port that
+  fails open, or ships an empty genesis as a "TODO", silently
+  destroys the entire property for its users. This is why the #35
+  conformance vectors are not optional and **must include mandatory
+  negative cases**: absent genesis ⇒ reject; forked/unknown genesis ⇒
+  reject; endorsement gap / substituted intermediate ⇒ reject. No
+  Swift/Kotlin/Go/Rust port (cf. SESSION-HANDOFF §3 #9/#10) may pass
+  conformance while quietly weakening fail-closed.
+- **The genesis pin must be maximally visible and independently
+  re-derivable** — published in multiple channels and, ideally, tied
+  to reproducible builds — since it is the single load-bearing
+  out-of-band fact.
+
+---
+
 ## Where the UI lives
 
 For Flagship: **`https://flagshipserver.com/maintainers/`** — a subdirectory
