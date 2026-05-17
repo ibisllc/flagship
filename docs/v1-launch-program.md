@@ -49,7 +49,7 @@ open phase here.
 
 | Phase | Title | State |
 |---|---|---|
-| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ AGENT-COMPLETE · Human Gate A SATISFIED → only Human Gate B remains.** Keystone + signer threaded through genesis/mandate/takeover/endorsement + `ca-endorsement` command/store + assemble/sign split & `--dry-run` + ceremony banner / typed confirm / never-log-secrets / successor guidance + native PC/SC APDU codec + channel seam (fail-closed; hw round-trip is the gate) all built+green+pushed. **PR #2 MERGED `833fa45`; flagship re-pinned + pulled + both gates re-run green (flagship 2526/225, maintainers 307/31 AT THE PIN); commit `34b6cb5` pushed.** Remaining = **Human Gate B only**: Operation 0 genesis with the real YubiKey → agent bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live), re-runs the #8 suite. Deploy nothing. |
+| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ AGENT-COMPLETE · Human Gate A SATISFIED → only Human Gate B remains.** Keystone + signer threaded through genesis/mandate/takeover/endorsement + `ca-endorsement` command/store + assemble/sign split & `--dry-run` + ceremony banner / typed confirm / never-log-secrets / successor guidance + native PC/SC APDU codec + channel seam (fail-closed; hw round-trip is the gate) all built+green+pushed. **PR #2 MERGED `833fa45`; flagship re-pinned + pulled + both gates re-run green (flagship 2526/225, maintainers 307/31 AT THE PIN); commit `34b6cb5` pushed.** Remaining = **Human Gate B only**, now known **TWO-PART** (s4 verify-before-trust): `connectPcscChannel` is a fail-closed stub by #28 design → (P) human provisions (`pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, decide DURATION) → (A) agent implements+live-verifies the libpcsclite wiring behind the tested seam (governed PR; never blind) → `--dry-run` → human signs genesis per track → agent verifies+bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live)+re-run #8. `file:` NOT acceptable for the genesis root. Deploy nothing. |
 | 2 | Maintainers as its own product (#35 → #9 → #10) | **▶ UNBLOCKED by Gate A** (does NOT need Gate B). Agent build work available now: #35 `SignedPolicy` + static-layout spec + `fetch()` reference client + conformance vectors incl. fail-closed negatives. Design LOCKED below. |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
@@ -148,12 +148,41 @@ bumped `10c65aa`→`833fa45`, `pull-maintainers.sh pull` reset the clone,
 307/31.** web-ui byte-identical between pins ⇒ no Worker redeploy.
 Committed `34b6cb5`, pushed to `origin/main`. Phase 2 is now unblocked.
 
-### 1B. HUMAN GATE (YubiKey) — the ONLY remaining Phase-1 item
+### 1B. HUMAN GATE (YubiKey) — the ONLY remaining Phase-1 item · **TWO-PART** (s4 finding)
+
+**Verify-before-trust finding (2026-05-17 s4, while walking the gate):**
+the native PC/SC transport is not executable yet. `piv-pcsc.ts`
+`connectPcscChannel()` is — by #28's deliberate design — a fail-closed
+stub that throws **unconditionally even with `pcsclite` installed**;
+#28 shipped the pure tested `piv-apdu` codec + the `PcscChannel` seam +
+this stub, and the real libpcsclite wiring (reader enum → connect →
+APDU transmit) is the explicitly-deferred **human-gate increment**,
+implementable only with the reader+token present. (Also: `pcsclite`
+not installed, `ykman` not installed, no YubiKey plugged in.)
+`file:` is NOT acceptable for the genesis root (it would put the root
+private half on disk; it is the successor/air-gapped path only). Full
+detail = `ca-operations.md` Operation 0 "GATE-B EXECUTION REALITY".
 
 In order, now that 1A is merged + re-pinned (Gate A ✅):
+0a. **(P) Human provisions the environment:** install `pcsclite` (so
+   `connectPcscChannel` can load the binding) + `ykman`; generate the
+   on-token Ed25519 in PIV slot 9c on BOTH YubiKeys (touch=always,
+   PIN-once; the exact `ykman` invocation + PIN/PUK policy is the
+   §11.4 human knob); export the backup key's slot-9c pubkey to
+   `backup-9c.pub`; decide the cold-genesis `<DURATION>` (LOCKED D1 ⇒
+   long-lived, e.g. `3650d`); plug in both YubiKeys.
+0b. **(A) Agent implements + LIVE-verifies** the `connectPcscChannel`
+   libpcsclite wiring (reader enumeration → connect → APDU transmit
+   Buffer↔Uint8Array) behind the existing tested `PcscChannel` seam +
+   `piv-apdu` codec, proving the round-trip with a NON-destructive
+   `getPublicKey` read FIRST. Security-critical native transport — it
+   is upstream `maintainers` (governed PR → re-pin, PR #1/#2
+   precedent) and is NEVER written blind/bolted: the hardware-in-loop
+   verification is the entire reason it is done AT the gate.
 1. Human runs `ca-operations.md` "Operation 0 — genesis" with the real
-   YubiKey (primary key generates the cold maintainer Ed25519 on-token;
-   second YubiKey named in `successors`). Agent walks through, verifies
+   YubiKey, `--dry-run` first per track (agent verifies the canonical
+   bytes), then the signed run per track ca/release/ops (typed
+   `GENESIS` + PIN + physical tap). Agent walks through, verifies
    every emitted artifact (canonical bytes, signature, chain).
 2. Agent bakes the emitted genesis pubkey(s) into `@flagship/protocol`
    `MAINTAINER_GENESIS_PUBKEYS` (currently `Object.freeze([])`,

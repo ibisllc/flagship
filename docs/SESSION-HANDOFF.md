@@ -76,7 +76,32 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
     pubkey; deploy nothing). Two human-owned non-derivable inputs
     flagged: on-token keygen + PIN/PUK (`ykman`; §11.4 open knob) and
     the cold-genesis `<DURATION>` (LOCKED Phase-2 D1 long-lived track).
-    Gate B is now *armed* (safe to execute), not just pending.
+  - **Gate-B EXECUTION BLOCKER found (verify-before-trust, attempting
+    to walk it after the user chose "walk Gate B now"):** the native
+    PC/SC transport is NOT executable yet. `piv-pcsc.ts`
+    `connectPcscChannel()` is — by #28's deliberate design — a
+    fail-closed stub that throws **unconditionally even when `pcsclite`
+    is installed** (`void mod; throw CliError("…no PC/SC reader/token
+    round-trip…verified only at the YubiKey ceremony gate")`). #28
+    shipped the pure tested `piv-apdu` codec + the `PcscChannel` seam +
+    this stub; the real binding wiring (reader enum → connect → APDU
+    transmit Buffer↔Uint8Array) is the explicitly-deferred **human-gate
+    increment**, implementable only with the real reader+token present.
+    Recon also: `pcsclite` binding NOT installed, `ykman` NOT
+    installed, no YubiKey in the USB tree. So Gate B is a TWO-PART
+    ordered step — **(P)** human provisions env (install `pcsclite` +
+    `ykman`; on-token keygen; plug in both YubiKeys) → **(A)** agent
+    implements + LIVE-verifies the `connectPcscChannel` libpcsclite
+    wiring behind the tested seam (non-destructive public-key read
+    first; security-critical native transport; lands upstream via a
+    governed `maintainers` PR + re-pin like PR #1/#2; NEVER written
+    blind) → then `--dry-run` → the signed ceremony. **`file:` is NOT
+    acceptable for the genesis root** (would put the root private half
+    on disk; it is the successor/air-gapped lower-assurance path only).
+    Recorded as the GATE-B EXECUTION REALITY callout in
+    `ca-operations.md` Operation 0. **No genesis material fabricated;
+    nothing signed; stopped with the crisp provisioning ask.** Gate B
+    is *armed but environment-blocked*, not executable this turn.
   - **Phase 2 unblocked:** Gate A satisfied ⇒ Phase 2 (#35 → #9 → #10)
     no longer blocked on Phase 1 (it does NOT need Gate B). Only Human
     Gate B (YubiKey genesis) remains in Phase 1. **Phase-2 #35 START
@@ -527,7 +552,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 25 | N0e-2 daemon sibling-WS auto-dial | ✅* | `siblingHandshakeClient.ts`: `startPersistentSiblingHandshakeClient` + `SiblingHandshakeClientManager` (reconnect/backoff/jitter/`setPeers`) at parity with cert-sync `SiblingClientManager`; router setSibling/removeSibling symmetric with the inbound accept; 5 tests; exported. build-tasks:666 ☑. *Joint runtime `setPeers`-from-discovery instantiation = live exercise (→ #16; neither persistent supervisor is runtime-instantiated by precedent) |
 | 26 | verify Forgejo + real-LLM streaming (audit N1/N2) | ⛔(mostly) | largely real-infra: real provider key + live daemon; add Forgejo+vibe-code e2e smoke |
 | 27 | Track P 3 genesis ceremony (app-primary + CLI fallback) | ⛔ | Upstream `ibisllc/maintainers` CLI, sequenced **post PR #1 merge** (§5); the real genesis run is human+YubiKey. Seam = the complete design in maintainer-ca §10.3/§11.2 + ca-operations "Operation 0" + the now-reconstructed PR #1 protocol; tests use the deterministic placeholder genesis (#30 already fail-closed-tested). Don't pile more unmerged upstream behind the governed PR. |
-| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ✅ AGENT (human gates remain) | **AGENT-COMPLETE+green+pushed** (2026-05-17 s1–s3): `protocol` `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` (`9e7c495`) + threaded through genesis/mandate/takeover (`d2027df`) + release endorsement (`5148bbf`) + `ca-endorsement` command & `.maintainers/ca-endorsements/` store (`3a4bbe9`) + **assemble/sign split & `--dry-run`** (`4647582`) + **ceremony banner / typed confirm / never-log-secrets / successor guidance** (`d55a86d`) + **native PC/SC `piv-apdu` codec + `piv-pcsc` channel seam, fail-closed** (`a195968`). ZERO protocol/wire/spec delta (CLI-package only — `@maintainers/protocol` untouched); maintainers 257→**307**. **PR `ibisllc/maintainers#2` MERGED `833fa45` (Human Gate A ✅ — session 4).** Agent half done: re-pinned `scripts/maintainers.pinned-sha` `10c65aa`→`833fa45` + `pull-maintainers.sh` + both gates re-run green (flagship 2526/225; maintainers 307/31 **AT THE PIN**); commit `34b6cb5` pushed; web-ui byte-identical between pins ⇒ no Worker redeploy. **Remaining = Human Gate B ONLY:** Operation 0 genesis w/ real YubiKey → agent bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live), re-run #8. The libpcsclite hardware round-trip is verified ONLY at Gate B. Design: maintainer-ca §10.1/§11.1 + program doc Phase 1 progress log. |
+| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ✅ AGENT (human gates remain) | **AGENT-COMPLETE+green+pushed** (2026-05-17 s1–s3): `protocol` `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` (`9e7c495`) + threaded through genesis/mandate/takeover (`d2027df`) + release endorsement (`5148bbf`) + `ca-endorsement` command & `.maintainers/ca-endorsements/` store (`3a4bbe9`) + **assemble/sign split & `--dry-run`** (`4647582`) + **ceremony banner / typed confirm / never-log-secrets / successor guidance** (`d55a86d`) + **native PC/SC `piv-apdu` codec + `piv-pcsc` channel seam, fail-closed** (`a195968`). ZERO protocol/wire/spec delta (CLI-package only — `@maintainers/protocol` untouched); maintainers 257→**307**. **PR `ibisllc/maintainers#2` MERGED `833fa45` (Human Gate A ✅ — session 4).** Agent half done: re-pinned `scripts/maintainers.pinned-sha` `10c65aa`→`833fa45` + `pull-maintainers.sh` + both gates re-run green (flagship 2526/225; maintainers 307/31 **AT THE PIN**); commit `34b6cb5` pushed; web-ui byte-identical between pins ⇒ no Worker redeploy. **Remaining = Human Gate B (TWO-PART, s4 finding):** `connectPcscChannel` is a fail-closed stub by #28 design (throws even with `pcsclite` present) — the real libpcsclite wiring is the deferred human-gate increment. (P) human provisions (`pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, decide DURATION) → (A) agent implements+live-verifies the binding behind the tested seam (governed `maintainers` PR + re-pin; never blind) → `--dry-run` → human signs genesis per track → agent verifies+bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live)+re-run #8. `file:` NOT acceptable for the genesis root. Design: maintainer-ca §10.1/§11.1 + ca-operations Operation 0 "GATE-B EXECUTION REALITY" + program doc Phase 1. |
 | 29 | Track P 5 OPTIONAL hosted committer | ✅* | IS the upstream `maintainers/.../server-adapters/cloudflare-worker` Model A worker (`worker.ts` POST /commit — holds only a GitHub PAT, no maintainer/CA key; `policy.ts` = verify→commit gate). M1 (`6beb3dd`, PR #1) made `policy.ts` CaEndorsement-aware incl. `checkCaEndorsementAuthority` (NOW-clock + lease window). §12.1 downscopes to opt-in (default = app-direct-commit #32); NOT a launch blocker. *Remaining = governed/operator: deploy Worker + provision `GITHUB_MAINTAINERS_PAT` (post PR #1 merge). A flagship `.com` route would duplicate the upstream worker + contradict §12.1 — intentionally not built. |
 | 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ⛔ | Upstream maintainers web-ui, **post PR #1 merge** (§5). NO signing view ever. Seam = ca-operations.md "Next upstream increment" (REPLACED by status/preview/commit-trigger-only per §10.1) — design complete; it's upstream-after-merge, not flagship code. |
@@ -598,13 +623,27 @@ std Ed25519; `SignedPolicy` is the only additive Phase-2 spec delta).
 > redeploy.
 >
 > **Immediate next actions (two independent tracks):**
-> **(1) Human Gate B (YubiKey) — the only remaining Phase-1 item:**
-> human runs `ca-operations.md` "Operation 0 — genesis" with the real
-> YubiKey; the agent walks/verifies every artifact, bakes
-> `MAINTAINER_GENESIS_PUBKEYS` into `@flagship/protocol` (#30 flips
-> live; re-bake per surface — record the exact pubkey), re-runs the #8
-> suite to prove links 1–4 resolve. Deploy nothing. **This is a HUMAN
-> GATE — stop with one crisp ask; do not fabricate genesis material.**
+> **(1) Human Gate B (YubiKey) — the only remaining Phase-1 item, now
+> known to be TWO-PART (s4 verify-before-trust finding):** the native
+> PC/SC transport `connectPcscChannel` is a fail-closed stub by #28
+> design — the real libpcsclite wiring is the deferred human-gate
+> increment, implementable only with the hardware present. So:
+> **(P) human provisions** — install `pcsclite` (so the binding loads)
+> + `ykman`; generate the on-token Ed25519 in PIV slot 9c on BOTH
+> YubiKeys (touch=always, PIN-once; PIN/PUK = §11.4 human knob); export
+> the backup's slot-9c pubkey to `backup-9c.pub`; decide `<DURATION>`
+> (LOCKED D1 → long, e.g. `3650d`); plug in both keys.
+> **(A) agent implements + LIVE-verifies** `connectPcscChannel`'s
+> libpcsclite wiring behind the tested seam (non-destructive public-key
+> read FIRST; upstream `maintainers` branch → governed PR → re-pin,
+> PR #1/#2 precedent; NEVER written blind).
+> **then** `--dry-run` each track → human runs the signed `genesis`
+> (typed `GENESIS` + PIN + tap, per track ca/release/ops) → agent
+> verifies chain, bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live;
+> re-bake per surface — record the exact pubkey), re-runs #8. Deploy
+> nothing. **`file:` is NOT acceptable for the genesis root.** **HUMAN
+> GATE — stop with the crisp provisioning ask; never fabricate genesis
+> material / never write the binding blind.**
 > **(2) Phase 2 #35 — now UNBLOCKED by Gate A (does NOT need Gate B),
 > agent build work available in parallel:** per the LOCKED Phase-2
 > design (program doc "Phase-2 DESIGN DECISION"), add the additive

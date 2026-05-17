@@ -245,6 +245,33 @@ The command surface below is verified against the merged
 = `833fa45`, PR #2 / #28). The genesis command does NOT generate the
 on-token key — that is a hardware prerequisite (step 1).
 
+> **GATE-B EXECUTION REALITY (verified against source 2026-05-17 s4 —
+> read before attempting).** `maintainers/packages/cli/src/lib/
+> piv-pcsc.ts` `connectPcscChannel()` is, by #28's deliberate design,
+> a **fail-closed stub that throws UNCONDITIONALLY** — even when the
+> optional `pcsclite` binding IS installed (it does `void mod; throw
+> CliError("…no PC/SC reader/token round-trip…verified only at the
+> YubiKey ceremony gate")`). #28 shipped the pure tested `piv-apdu`
+> codec + the `PcscChannel` seam + this stub; the real binding wiring
+> (reader enumeration → connect → APDU transmit Buffer↔Uint8Array) is
+> the explicitly-deferred **human-gate increment**, implementable only
+> with the real reader+token present to verify the round-trip. So
+> executing Gate B is a TWO-PART step, in this order:
+> **(P) human provisions the environment** (install `pcsclite` so the
+> binding can load + `ykman` for keygen; generate the on-token Ed25519
+> keys; plug in both YubiKeys) → **(A) agent implements + live-verifies
+> the `connectPcscChannel` libpcsclite wiring** behind the existing
+> tested seam, proving the round-trip with a NON-destructive public-key
+> read FIRST (security-critical native transport; lands upstream via a
+> governed `maintainers` PR + re-pin, like PR #1/#2; NEVER written
+> blind / bolted unverified — the hardware-in-loop verification is the
+> whole point of doing it AT the gate) → then the `--dry-run` and the
+> signed ceremony below. **The `file:` hex key is NOT acceptable for
+> the genesis root** — it would put the root-of-trust private half on
+> disk, defeating the entire on-token/no-escrow model; `file:` is the
+> documented *successor / air-gapped* lower-assurance path ONLY, never
+> for minting genesis.
+
 ### Prerequisites (human, before any CLI)
 
 1. **On each of the two YubiKeys, generate an Ed25519 key in PIV slot
