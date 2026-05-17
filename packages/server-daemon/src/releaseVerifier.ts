@@ -108,6 +108,29 @@ export function verifyMaintainersFolder(opts: ReleaseVerifierOptions): ReleaseSt
 }
 
 /**
+ * Verify one named track from `${gitRepoPath}/.maintainers/` and hand
+ * back the `VerifiedTrack` + its policy. This is the disk→verified
+ * bridge link-4 needs: `caTrustChain.makeCaTrustChain` feeds the
+ * "ca"-track result (and `policy.approvalRule`) into
+ * `@maintainers/protocol`'s `authorizedCaKeys`. `null` when the track
+ * has no policy/mandates on disk (⇒ the chain yields no keys ⇒ the
+ * #30 chokepoint fail-closes). Clock-free on purpose: `verifyTrack`
+ * checks the mandate chain structurally; the `now` gate is applied by
+ * `currentAuthority`/`authorizedCaKeys` at the consumer.
+ */
+export function verifiedTrackFromFolder(
+  opts: ReleaseVerifierOptions,
+  trackName: TrackName,
+): { track: VerifiedTrack; policy: TrackPolicy } | null {
+  const rootDir = path.join(opts.gitRepoPath, ".maintainers");
+  const store = readStoreFromDisk(rootDir);
+  const policy = store.trackPolicies.get(trackName);
+  const mandates = store.mandatesByTrack.get(trackName);
+  if (!policy || !mandates) return null;
+  return { track: verifyTrack(trackName, policy, mandates), policy };
+}
+
+/**
  * Walk the local git repo's first-parent chain backward from
  * `endorsement.commitHash` and confirm that the visited commits are
  * exactly `endorsement.intermediateCommits` in the documented order,
