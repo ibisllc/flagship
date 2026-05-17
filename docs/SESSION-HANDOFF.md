@@ -87,9 +87,14 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
     this stub; the real binding wiring (reader enum → connect → APDU
     transmit Buffer↔Uint8Array) is the explicitly-deferred **human-gate
     increment**, implementable only with the real reader+token present.
-    Recon also: `pcsclite` binding NOT installed, `ykman` NOT
-    installed, no YubiKey in the USB tree. So Gate B is a TWO-PART
-    ordered step — **(P)** human provisions env (install `pcsclite` +
+    The two hardware-INDEPENDENT prep blockers: `pcsclite` binding NOT
+    installed, `ykman` NOT installed. **CORRECTION (user-flagged, same
+    turn): the "no YubiKey in the USB tree" recon line was
+    UNINFORMATIVE and is NOT a blocker** — the key was never requested
+    to be plugged in, so an empty USB scan proves nothing; do not
+    trust/repeat it. The real blocker is purely the unconditional-throw
+    stub + the two absent tools, none of which depend on plug-in state.
+    So Gate B is a TWO-PART ordered step — **(P)** human provisions env (install `pcsclite` +
     `ykman`; on-token keygen; plug in both YubiKeys) → **(A)** agent
     implements + LIVE-verifies the `connectPcscChannel` libpcsclite
     wiring behind the tested seam (non-destructive public-key read
@@ -98,10 +103,18 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
     blind) → then `--dry-run` → the signed ceremony. **`file:` is NOT
     acceptable for the genesis root** (would put the root private half
     on disk; it is the successor/air-gapped lower-assurance path only).
+    **STEP-(A) UX REQUIREMENT (user, hard): the transport must NEVER
+    assume the key/reader is present.** Absent reader / absent token /
+    not-tapped-yet are NORMAL recoverable states → prompt + wait +
+    friendly retry ("Insert your YubiKey…", poll for the reader), NOT a
+    fatal `CliError`. Fail-closed is a SECURITY property only (never
+    silently sign with a weaker/wrong key); it must not leak into the UX
+    of ordinary absent-hardware. See [[feedback-no-hardware-assumptions]].
     Recorded as the GATE-B EXECUTION REALITY callout in
     `ca-operations.md` Operation 0. **No genesis material fabricated;
-    nothing signed; stopped with the crisp provisioning ask.** Gate B
-    is *armed but environment-blocked*, not executable this turn.
+    nothing signed; binding NOT written blind; stopped with the crisp
+    provisioning ask.** Gate B is *armed*; step (A) is the next agent
+    increment (hardware-in-loop).
   - **Phase 2 unblocked:** Gate A satisfied ⇒ Phase 2 (#35 → #9 → #10)
     no longer blocked on Phase 1 (it does NOT need Gate B). Only Human
     Gate B (YubiKey genesis) remains in Phase 1. **Phase-2 #35 START

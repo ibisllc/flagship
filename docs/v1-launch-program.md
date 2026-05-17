@@ -178,7 +178,15 @@ In order, now that 1A is merged + re-pinned (Gate A ✅):
    `getPublicKey` read FIRST. Security-critical native transport — it
    is upstream `maintainers` (governed PR → re-pin, PR #1/#2
    precedent) and is NEVER written blind/bolted: the hardware-in-loop
-   verification is the entire reason it is done AT the gate.
+   verification is the entire reason it is done AT the gate. **UX
+   acceptance criterion (hard, user-set):** the tool must NOT assume
+   the key/reader is present — no-reader / no-token / not-tapped-yet
+   are normal recoverable states → prompt + wait + friendly retry,
+   never a fatal `CliError`. Fail-closed = security only (never sign
+   with a weaker/wrong key); it must not leak into absent-hardware UX.
+   Step-(A) tests MUST cover "no reader" + "token removed mid-prompt"
+   → friendly wait/retry → recovers on insert. See
+   [[feedback-no-hardware-assumptions]].
 1. Human runs `ca-operations.md` "Operation 0 — genesis" with the real
    YubiKey, `--dry-run` first per track (agent verifies the canonical
    bytes), then the signed run per track ca/release/ops (typed

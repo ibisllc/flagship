@@ -271,6 +271,24 @@ on-token key — that is a hardware prerequisite (step 1).
 > disk, defeating the entire on-token/no-escrow model; `file:` is the
 > documented *successor / air-gapped* lower-assurance path ONLY, never
 > for minting genesis.
+>
+> **STEP-(A) UX REQUIREMENT (hard — the tool must not make
+> hardware-presence assumptions).** When the libpcsclite wiring is
+> implemented it MUST treat *no reader connected*, *no token in the
+> reader*, and *not tapped yet* as **normal, recoverable** states: a
+> clear human prompt + wait/poll + retry ("Insert your YubiKey and
+> press Enter…", "Tap your YubiKey now…"), with actionable guidance —
+> **never** a cryptic fatal `CliError` for the everyday "hardware not
+> inserted yet" case. Fail-closed is strictly a SECURITY property
+> (never silently sign with a weaker/wrong key, never a hex fallback);
+> it must NOT leak into the UX of ordinary absent-hardware. Conformance
+> for step (A): "no reader" and "token removed mid-prompt" paths each
+> show a friendly wait/retry and recover when the key is inserted —
+> add this to the step-(A) tests. (This whole reality callout exists
+> because an empty USB scan was once mistaken for a blocker without
+> first asking the operator to plug the key in — do not repeat that;
+> the only real prep blockers are the unconditional-throw stub +
+> `pcsclite`/`ykman` not installed, all plug-in-independent.)
 
 ### Prerequisites (human, before any CLI)
 
