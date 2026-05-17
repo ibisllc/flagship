@@ -49,8 +49,8 @@ open phase here.
 
 | Phase | Title | State |
 |---|---|---|
-| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ AGENT-COMPLETE · Human Gate A SATISFIED → only Human Gate B remains.** Keystone + signer threaded through genesis/mandate/takeover/endorsement + `ca-endorsement` command/store + assemble/sign split & `--dry-run` + ceremony banner / typed confirm / never-log-secrets / successor guidance + native PC/SC APDU codec + channel seam (fail-closed; hw round-trip is the gate) all built+green+pushed. **PR #2 MERGED `833fa45`; flagship re-pinned + pulled + both gates re-run green (flagship 2526/225, maintainers 307/31 AT THE PIN); commit `34b6cb5` pushed.** Remaining = **Human Gate B only**, now known **TWO-PART** (s4 verify-before-trust): `connectPcscChannel` is a fail-closed stub by #28 design → (P) human provisions (`pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, decide DURATION) → (A) agent implements+live-verifies the libpcsclite wiring behind the tested seam (governed PR; never blind) → `--dry-run` → human signs genesis per track → agent verifies+bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live)+re-run #8. `file:` NOT acceptable for the genesis root. Deploy nothing. |
-| 2 | Maintainers as its own product (#35 → #9 → #10) | **▶ UNBLOCKED by Gate A** (does NOT need Gate B). Agent build work available now: #35 `SignedPolicy` + static-layout spec + `fetch()` reference client + conformance vectors incl. fail-closed negatives. Design LOCKED below. |
+| **1** | Genesis ceremony (keystone) — **now: the first `upsertMandate`, its hash pinned** | **▶ Gate A SATISFIED; #28 done. Gate B RE-SEQUENCED behind the Phase-2 v2 lock (s4).** The genesis is no longer "per-track self-signed Mandate v1 + bake pubkeys" — it is **the first `upsertMandate` (Mandate v2, inline policy), whose canonical hash is the per-surface pin** (#30 generalised). Because Gate B freezes the pinned-mandate shape **forever**, the **Phase-2 v2 protocol redesign MUST land + be re-pinned BEFORE Gate B.** Gate B itself stays TWO-PART (P: human provisions `pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, set policy/`maxDuration`; A: agent implements+live-verifies the `connectPcscChannel` libpcsclite wiring behind the tested seam, never blind) → `--dry-run` → human signs the from-scratch `upsertMandate` → agent verifies + bakes the **pinned-mandate hash** + re-runs #8. `file:` NOT acceptable. Deploy nothing. |
+| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ UNBLOCKED + PROMOTED.** Per the LOCKED v2 design below: pinned-mandate anchor + in-mandate succession policy + the L3 one-rule (no self-renewal); `createKey`+`upsertMandate`; Mandate **v2** canonical bytes; #30 = bake the pinned-mandate hash. **This redesign now PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). `c1 dc48559` (KeyFile self-signer parity) stays. |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
 | 5 | On-demand VPS + promo AI + real vibe-code | ☐ seam built (#83/#85); human/credential |
@@ -58,11 +58,15 @@ open phase here.
 | 7 | Monitoring dashboard (costs) | ☐ depends on Phase 5 telemetry |
 | 8 | Remaining v1-alpha live exercises → tick §S | ☐ human-clocked exercises |
 
-Earlier-numbered phases gate later ones for the *trust-chain* spine
-(1→2→3). Phases 4–8 are seam-complete and human/hardware/credential-gated;
-they can advance opportunistically when the human gate is satisfiable, but
-the program's primary thrust is 1→2→3 first (it is the launch-blocking
-critical path and everything downstream verifies against it).
+**Trust-chain spine ordering REVISED (s4 v2 lock):** the Phase-2 v2
+protocol redesign now **precedes** Phase-1's Gate B (Gate B freezes the
+pinned-mandate shape forever, so the v2 Mandate must be final + pinned
+first). Effective critical path: **Phase-2 v2 protocol redesign +
+re-pin → Gate B (the first `upsertMandate`, hash pinned) → #9 webapp →
+#10 mobile → Phase 3**. Phases 4–8 are seam-complete and
+human/hardware/credential-gated; they may advance opportunistically
+when their human gate is satisfiable, but the launch-blocking thrust is
+the spine above (everything downstream verifies against the pin).
 
 ---
 
@@ -148,7 +152,27 @@ bumped `10c65aa`→`833fa45`, `pull-maintainers.sh pull` reset the clone,
 307/31.** web-ui byte-identical between pins ⇒ no Worker redeploy.
 Committed `34b6cb5`, pushed to `origin/main`. Phase 2 is now unblocked.
 
-### 1B. HUMAN GATE (YubiKey) — the ONLY remaining Phase-1 item · **TWO-PART** (s4 finding)
+### 1B. HUMAN GATE (YubiKey)
+
+> ⚠ **PARTIALLY SUPERSEDED by the Phase-2 v2 LOCK (s4).** The
+> `connectPcscChannel`/PC-SC TWO-PART finding (P provisions / A
+> implements+live-verifies the libpcsclite wiring, never blind) and
+> the no-hardware-assumptions UX bar **still hold verbatim**. But the
+> v1-era specifics below — *per-track* genesis, baking
+> `MAINTAINER_GENESIS_PUBKEYS` (pubkeys), the `register` c1–c5 plan
+> with c5 `--mandate-id`, the `introductionMandate` pre-mint, the
+> 0c/0d/1/2 steps — are **OBSOLETE.** Under the v2 lock: genesis = the
+> **first `upsertMandate`** (Mandate v2, inline policy, set the
+> `threshold N of […]` + `minSuccessors` + `maxDuration` at create);
+> the per-surface pin = **its canonical hash** (#30 generalised), not a
+> pubkey list; `createKey` is independent + non-load-bearing (no
+> `introductionMandate` bootstrap). And Gate B is **gated on the
+> Phase-2 v2 protocol redesign landing + re-pinning first** (it freezes
+> the pinned-mandate shape forever). Authoritative = "Phase-2 DESIGN
+> DECISION — LOCKED v2" above. Read steps below ONLY for the still-valid
+> PC/SC + provisioning + UX content.
+
+#### 1B (historical detail — PC/SC + provisioning still valid; mandate specifics superseded) · TWO-PART (s4 finding)
 
 **Verify-before-trust finding (2026-05-17 s4, while walking the gate):**
 the native PC/SC transport is not executable yet. `piv-pcsc.ts`
@@ -260,39 +284,53 @@ In order, now that 1A is merged + re-pinned (Gate A ✅):
 
 ## PHASE 2 — MAINTAINERS AS ITS OWN PRODUCT (#35, then #9, then #10)
 
-### Phase-2 DESIGN DECISION (2026-05-17, user-picked) — "pin one key, fetch a folder, verify at your own clock"
+### Phase-2 DESIGN DECISION — **LOCKED v2 (2026-05-17 s4, user-authorized override of the prior D1/D2 lock)**
 
-Locked after a verify-before-trust read of `verifier.ts`/`types.ts`.
-Guideline: minimal value for Flagship, easiest + most secure for any
-adopter with our needs. **Three decisions, ZERO `Mandate`/
-`CaEndorsement` canonical-bytes change** (the #28 invariant holds; the
-only additive spec delta is `SignedPolicy`, appropriate for the
-Phase-2 versioned bump):
+> SUPERSEDES the prior "pin one key, fetch a folder" D1/D2 lock.
+> D3 (freshness = `CaEndorsement` NOW-clock lease) is **unchanged** and
+> carried forward. Deliberated with the user across s4 and explicitly
+> re-locked; it overrides a previously-LOCKED decision and changes a
+> security invariant, so it is recorded with full rationale. **Do NOT
+> re-litigate without the user.**
 
-- **D1 — Policy is genesis-anchored + immutable in v1.** `policy.json`
-  (`RootPolicy` + every `TrackPolicy`) today is UNSIGNED and trusted as
-  a `verifyTrack` argument — a real hole under HTTP fetch (host can
-  weaken the threshold). Fix: a `SignedPolicy` = canonical bytes of the
-  policy + ONE Ed25519 signature by the genesis key (reuses existing
-  crypto; no new envelope semantics). `verifyTrack` gains a precondition
-  — the consumed `TrackPolicy` MUST verify against the baked genesis
-  authority, else hard fail-closed. NO per-ceremony threshold (lets one
-  compromised holder weaken its own quorum; not minimal). Changing
-  quorum/track-set in v1 = a NEW genesis ceremony. ~1 canonical fn +
-  ~10 verifier lines, zero policy-mutation governance.
-- **D2 — A fixed dumb static layout any host serves** (GitHub raw / S3 /
-  CDN / repo-over-HTTPS; no server logic):
-  `<base>/origin.json` (RootPolicy + SignedPolicy + per-track genesis
-  Mandate; immutable, consumer-pinned) · `<base>/tracks/<t>/log.json`
-  (append-only `Mandate[]`) · `<base>/ca-leases.json` (append-only
-  `CaEndorsement[]`). Consumer algo: fetch origin → verify SignedPolicy
-  vs the hardcoded genesis pubkey → fetch log → `verifyTrack` from
-  genesis → fetch leases → `authorizedCaKeys(…, NOW)`. Append-only ⇒
-  trivial caching; a stale cache only loses freshness (fail-closed),
-  never gains forged authority. **NO `current.json`/`checkpoint_<id>`
-  in v1** — the log is tiny; "fetch + re-walk from genesis" is simpler;
-  the `verifyTrackFromCheckpoint` primitive stays a pure optimization
-  to add only if size demands.
+**The model: "pin a mandate, verify forward; the mandate carries its
+own succession rule; there is no privileged self-renewal."**
+
+- **L1 — A pinned `Mandate` is an INDEPENDENT trust anchor (generalises
+  "genesis").** A consumer bakes the canonical hash of *some* Mandate
+  into its signed build and verifies the chain **forward** from it.
+  Genesis is merely "the first pin." Multiple pinned roots coexist
+  **forever**: an old build pinned at M₀ and a newer build pinned at a
+  later, more-cosigned Mᵢ both remain independently valid — nothing
+  requires walking back to genesis. REPLACES prior D2 ("genesis is the
+  only anchor; checkpoints are optimization-not-floor") and **rewrites
+  spec §5.2: the pin IS the floor.** Fail-closed preserved: no baked
+  pin ⇒ reject all (the #30 invariant, generalised).
+- **L2 — Succession policy lives INSIDE the `Mandate` (no separate
+  policy file).** Each Mandate carries `approvalRule`
+  (`threshold N of [pubkeys]`), `successors`, `minSuccessors`,
+  `maxDuration`, `defaultDuration` (+ the project-level `contact` /
+  track-list on the from-scratch mandate). DISSOLVES prior D1: the
+  unsigned-`policy.json` hole and the `SignedPolicy` envelope are
+  **gone** — the rule governing mandate K+1 is signed *into* mandate K,
+  as trustworthy as the chain itself. No separate policy artifact
+  exists.
+- **L3 — No self-renewal; ONE uniform succession rule.** No privileged
+  "holder extends in-window" path. Mandate K+1 is valid **iff** its
+  signatures satisfy **K's embedded `approvalRule`** over **K's
+  authorised signer set**, AND K+1 obeys K's constraints
+  (`successors.length ≥ K.minSuccessors`, `duration ≤ K.maxDuration`).
+  Renewal = rotation = takeover = removal = repolicy = that ONE
+  mechanism. Solo founder: `successors=[self,backups], threshold=1`
+  (renewal effort identical to self-renew today); growth = issue a
+  mandate with real `threshold N of [M people]` and the strong property
+  switches on **automatically — no knob, no exploitable exemption**.
+  Bounded `maxDuration` ⇒ perpetuation structurally requires the quorum
+  to periodically re-convene (the anti-rubber-hose property, emergent
+  not configured). The `selfRenewable` knob was explicitly REJECTED (a
+  control the adversary can decline to engage is not a control).
+  Removes the verifier's holder-in-window-vs-after-expiry split — a
+  real simplification of the load-bearing path.
 - **D3 — Freshness IS the shipped `CaEndorsement` lease, nothing new.**
   Rule (not mechanism): a consumer MUST require a `CaEndorsement` whose
   `[notBefore,notAfter)` contains its OWN now, judged at its OWN clock.
@@ -300,47 +338,86 @@ Phase-2 versioned bump):
   within one window (default 7d). Cold maintainer track stays
   long-lived; the hot key's short lease is the beacon. No timestamp
   server / snapshot role / CRL.
-- **Known, accepted limitation (state it to adopters):** rollback-
-  resistance is bounded by the lease window; this is NOT equivocation/
-  split-view detection (a host serving different valid histories to
-  different consumers). CT-style gossip is deliberately out of scope
-  for Flagship's threat model.
-- **#35 scope therefore gains:** `SignedPolicy` (canonical fn + the
-  genesis-sig `verifyTrack` precondition) + the published static-layout
-  spec + a tiny `fetch()` reference client + conformance vectors that
-  MUST additionally include *tampered-policy ⇒ reject*,
-  *lapsed-lease-at-NOW ⇒ reject*, *withheld/rolled-back log ⇒ reject*
-  (on top of the absent/forked-genesis + endorsement-gap negatives).
-  #9/#10 get EASIER (fetch 3 JSON files, rerun the same pure verifier).
+- **Accepted limitation (state to adopters), UNCHANGED + clarified:**
+  still NO equivocation/split-view detection (a host serving divergent
+  *valid* forward-histories to different consumers is undetectable).
+  Multi-pin does NOT add equivocation detection; it *narrows* the
+  rollback window (a later pin discards everything before it). CT-style
+  gossip remains out of scope for Flagship's threat model.
+- **Security boundary, explicit.** "From-scratch" `upsertMandate` is
+  unauthenticated by the protocol — anyone with push can mint an
+  "origin." 100% of the trust is *which mandate's hash is compiled into
+  the signed app/release*; the protocol guarantees only "verify forward
+  from the baked pin, unforgeably," and distributing the correct pin
+  rides the existing signed-release trust (the bake IS the ceremony). A
+  captured *valid quorum* can re-set policy arbitrarily — the only
+  guard is the pin (consumers on an earlier, stronger pin are
+  unaffected until they ship a build with a newer pin). Inherent;
+  pinning is the answer.
 
-- **#35**: `npm publish @maintainers/protocol` (semver, `--provenance`,
-  `npm ci`-pinnable) + a versioned spec + a published **conformance
-  test-vector set that MUST include the mandatory fail-closed negatives**
-  (absent genesis ⇒ reject; forked/unknown genesis ⇒ reject; endorsement
-  gap / substituted intermediate ⇒ reject — `docs/maintainers-deployment.md`
-  "Threat model & applicability boundary"). Flagship DROPS
-  `scripts/pull-maintainers.sh` + `maintainers.pinned-sha` and consumes the
-  published package like any adopter (honest dogfooding).
-  HUMAN GATE: npm org/2FA + `npm publish` (or authorize the agent's publish
-  step — may be classifier-blocked even post-approval; if so the human runs
-  the one command).
-- Then **#9** (webapp link-4: the #8 `caTrustChain.ts` shape in `apps/web`
-  + a bundled browser verifier) → **#10** (iOS Swift + Android Kotlin
-  reimpl of `verifyTrack`/`verifyCaEndorsements`/`authorizedCaKeys`, each
-  PROVEN against the published conformance vectors incl. the fail-closed
-  negatives). #10 is the heaviest single item — sequence it, don't tail-bolt.
-- **GENESIS PUBKEY MUST BE RE-BAKED PER SURFACE.** The Phase-1 bake
-  populates ONLY the one TS constant `@flagship/protocol`
-  `MAINTAINER_GENESIS_PUBKEYS` — that covers the daemon (#8, wired) and
+**Consequences — schema + sequencing (CRITICAL):**
+
+- This is a **`Mandate` canonical-bytes / verifier change** (Mandate
+  **v2**: inline policy; the one-rule authorisation; pinned-anchor
+  verify-forward). It is NOT additive. It is acceptable *precisely
+  because there is no real genesis yet* (`MAINTAINER_GENESIS_PUBKEYS`
+  empty; no chain; nothing pinned). Once Gate B runs, the pinned
+  mandate's shape is **frozen forever.**
+- ⇒ **The locked-model protocol redesign MUST land (governed PR →
+  re-pin) BEFORE Gate B.** Phase-2's protocol spine is now a
+  **prerequisite of Phase-1's Gate B**, not "after" it. Revised
+  ordering: *Phase-2 protocol redesign → Gate B (genesis = the first
+  `upsertMandate`, its hash pinned) → the rest.*
+- **#30 generalised:** bake the **pinned Mandate's canonical hash** per
+  surface (protocol-const, webapp via it, iOS, Android — same value),
+  NOT a `MAINTAINER_GENESIS_PUBKEYS` pubkey list. Fail-closed when
+  unset. Re-bake-per-surface discipline unchanged.
+- **CLI verbs:** `createKey` (KeyFile self-registration — KEPT;
+  `c1 dc48559` stays; human-identity layer hangs off pubkeys, NOT
+  load-bearing) **+** `upsertMandate` (the ONE mandate verb:
+  fetch-if-exists → design next → sign per the *predecessor's* embedded
+  rule; from-scratch sets initial policy freely). `genesis` / `mandate`
+  / `takeover` collapse into `upsertMandate`. The prior
+  `--mandate-id` / `introductionMandate`-bootstrap sub-plan is
+  **OBSOLETE** (no separate policy/`SignedPolicy`; `createKey` is
+  independent + non-load-bearing).
+
+- **#35 (reshaped to v2)**: implement the locked v2 protocol in
+  `maintainers` (Mandate **v2** canonical bytes incl. inline policy;
+  the L3 one-rule verify-forward; pinned-mandate anchor; `createKey` +
+  `upsertMandate` CLI) → governed PR → re-pin (this is the Gate-B
+  prerequisite). Then `npm publish @maintainers/protocol` (semver,
+  `--provenance`, `npm ci`-pinnable) + the versioned **v2 spec** +
+  `fetch()` reference client + a published **conformance test-vector
+  set** that MUST include the v2 fail-closed negatives: *absent/forked
+  pin ⇒ reject*, *pin-not-in-log ⇒ reject*, *self-renewal-attempt ⇒
+  reject*, *sub-threshold signers ⇒ reject*, *under-`minSuccessors` ⇒
+  reject*, *over-`maxDuration` ⇒ reject*, *endorsement-gap ⇒ reject*,
+  *lapsed-lease-at-NOW ⇒ reject*, *tampered/rolled-back history ⇒
+  reject*. Flagship DROPS `scripts/pull-maintainers.sh` +
+  `maintainers.pinned-sha` and consumes the published package like any
+  adopter (honest dogfooding). HUMAN GATES: the governed PR merge
+  (PR #1/#2 precedent), and npm org/2FA + `npm publish` (classifier may
+  block even post-approval — if so the human runs the one command).
+- Then **#9** (webapp link-4: the #8 `caTrustChain.ts` shape in
+  `apps/web` + a bundled browser verifier) → **#10** (iOS Swift +
+  Android Kotlin reimpl of the v2 verify-forward + freshness, each
+  PROVEN against the published v2 conformance vectors incl. every
+  fail-closed negative). #10 is the heaviest single item — sequence it,
+  don't tail-bolt.
+- **THE PINNED-MANDATE HASH MUST BE RE-BAKED PER SURFACE.** The
+  Phase-1/Gate-B bake populates the one TS constant in
+  `@flagship/protocol` (#30 generalised: the *pinned Mandate canonical
+  hash*, not a pubkey list) — that covers the daemon (#8, wired) and
   the webapp (#9, once wired). iOS (Swift) and Android (Kotlin) are
-  independent reimplementations: each #10 port MUST hardcode the **same**
-  genesis pubkey(s) into its own source (today `apps/mobile` contains
-  ZERO genesis material — verified). #10's acceptance bar — proven
-  against the published conformance vectors incl. the fail-closed
-  negatives (absent/forked genesis ⇒ reject) — is the guard that no
-  mobile port ships with a wrong/empty/placeholder genesis. Same pubkey
-  value, four baked locations (protocol-const, webapp via it, iOS, and
-  Android), sequenced Phase 1 → Phase 2.
+  independent reimplementations: each #10 port MUST hardcode the
+  **same** pinned-mandate hash into its own source (today `apps/mobile`
+  contains ZERO genesis material — verified). #10's acceptance bar —
+  proven against the published v2 vectors incl. *absent/forked pin ⇒
+  reject* — is the guard that no port ships with a wrong/empty/
+  placeholder pin. Same hash value, four baked locations
+  (protocol-const, webapp via it, iOS, Android), sequenced:
+  Phase-2-protocol-redesign → Gate B → per-surface re-bake.
 
 ## PHASE 3 — THE MAINTAINERS APP (retire the CLI) — #31 + #32
 
@@ -475,6 +552,34 @@ protocol self-signer variants, maintainers 307→**311**, flagship guard
 **2526/225**, ZERO wire/spec change. `introductionMandate` bootstrap
 resolved (truthful pre-minted shared id + additive genesis
 `--mandate-id`; see §1B design note). c2–c5 + governed PR remain.
+
+**Then (same session) the design dialogue escalated to a full Phase-2
+re-lock — "Phase-2 DESIGN DECISION — LOCKED v2", user-authorized
+override of the prior D1/D2 lock.** Through a multi-turn verify-before-
+trust dialogue the user converged on a strictly better model and
+explicitly re-locked it: **(L1)** a pinned `Mandate` is an independent
+trust anchor (genesis = "first pin"), verify FORWARD, multiple pins
+coexist forever — rewrites spec §5.2 "the pin IS the floor", replaces
+D2; **(L2)** succession policy folded INTO the Mandate (no separate
+policy file) — dissolves D1 and the `SignedPolicy` envelope entirely;
+**(L3)** NO self-renewal — ONE rule: K+1 valid iff it satisfies K's
+embedded `approvalRule` over K's signer set + obeys `minSuccessors`/
+`maxDuration`; `selfRenewable` knob rejected; bounded duration ⇒
+perpetuation needs periodic re-quorum (emergent anti-rubber-hose);
+solo founder = `successors=[self,backups],threshold=1`. D3 (CaEndorse
+NOW-freshness) unchanged. Consequences: **Mandate v2 canonical-bytes /
+verifier change** (acceptable ONLY because no real genesis exists yet)
+⇒ **the Phase-2 v2 redesign now PRECEDES Gate B** (Gate B freezes the
+pinned-mandate shape forever); **#30 generalised** to bake the pinned
+*mandate hash* not a pubkey list; CLI = `createKey` + `upsertMandate`
+(genesis/mandate/takeover collapse in); the prior `--mandate-id`/
+`introductionMandate` sub-plan is OBSOLETE; **`c1 dc48559` stays**
+(KeyFile self-signer parity, still needed for `createKey`). Phase
+table + spine ordering + §1B banner updated; full rationale in the
+"Phase-2 DESIGN DECISION — LOCKED v2" section. Next: build the v2
+redesign upstream (the new #35 spine) under this lock — attentively,
+at a START, NOT a tail-bolt (security-critical; the verifier + Mandate
+canonical bytes are the load-bearing path).
 
 ### 2026-05-17 — session 3 (this Mac): Phase-1 AGENT #28 finished + PR #2 ready
 

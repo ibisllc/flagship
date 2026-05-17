@@ -27,6 +27,37 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
 ## 0. Drift log (verify-before-trust findings, newest first)
 
 - **2026-05-17 (v1-launch program session 4, Mac/darwin):**
+  - **★ PHASE-2 RE-LOCKED v2 (user-authorized override of the prior
+    D1/D2 lock) — the trust model changed; this is the new
+    authority.** A multi-turn verify-before-trust design dialogue
+    converged on a strictly better model, explicitly re-locked by the
+    user: **(L1)** a pinned `Mandate` is an INDEPENDENT trust anchor
+    (genesis = merely "the first pin"); verify FORWARD from it; multiple
+    pins coexist forever — **rewrites spec §5.2 "the pin IS the floor"**,
+    replaces D2. **(L2)** succession policy folds INTO the Mandate (no
+    separate policy file) — **dissolves D1 + the `SignedPolicy`
+    envelope entirely** (the unsigned-policy hole vanishes; the rule
+    governing K+1 is signed into K). **(L3)** NO self-renewal — ONE
+    rule: K+1 valid iff its sigs satisfy K's embedded `approvalRule`
+    over K's signer set AND obey `minSuccessors`/`maxDuration`;
+    `selfRenewable` knob rejected; bounded duration ⇒ perpetuation
+    needs periodic re-quorum (emergent anti-rubber-hose); solo founder =
+    `successors=[self,backups],threshold=1`. D3 (CaEndorse NOW-clock
+    freshness) UNCHANGED. **Consequences:** Mandate **v2**
+    canonical-bytes/verifier change (OK only because no real genesis
+    exists yet) ⇒ **the Phase-2 v2 redesign now PRECEDES Phase-1 Gate
+    B** (Gate B freezes the pinned-mandate shape FOREVER); **#30
+    generalised** → bake the pinned *Mandate canonical hash* per
+    surface, NOT `MAINTAINER_GENESIS_PUBKEYS`; CLI = `createKey` +
+    `upsertMandate` (genesis/mandate/takeover collapse in); the prior
+    register `--mandate-id`/`introductionMandate` sub-plan is OBSOLETE;
+    `c1 dc48559` STAYS (KeyFile self-signer parity, still needed for
+    `createKey`). Authoritative detail = `docs/v1-launch-program.md`
+    "Phase-2 DESIGN DECISION — LOCKED v2" + phase table + spine note +
+    §1B SUPERSEDED banner. **Next agent build = the v2 protocol
+    redesign upstream (the new #35 spine), at a START, attentively —
+    NOT a tail-bolt (the verifier + Mandate canonical bytes are the
+    load-bearing path).**
   - **Registration-first increment (#9) started (user-chosen).** User
     asked to confirm "registration ≠ ceremony" (each key self-registers
     under an email id; ceremonies designed freely; tool prompts "tap
@@ -559,6 +590,16 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
 
 ## 3. THE BACKLOG (rebuild your TaskList from this table)
 
+> ⚠ **Rows #8/#9/#10/#27/#28/#30/#35 below predate the s4 Phase-2 v2
+> re-lock and describe the v1-era model (SignedPolicy, per-track
+> genesis, `MAINTAINER_GENESIS_PUBKEYS` pubkeys, register `--mandate-id`
+> bootstrap).** Those mechanics are SUPERSEDED — authoritative now is
+> `docs/v1-launch-program.md` "Phase-2 DESIGN DECISION — LOCKED v2"
+> (pinned-mandate anchor + in-mandate policy + L3 one-rule; Mandate v2;
+> #30 bakes the pinned-mandate *hash*; `createKey`+`upsertMandate`;
+> the v2 redesign PRECEDES Gate B). Rebuild the TaskList from the v2
+> lock + the revised spine, not from the literal pre-v2 row text.
+
 Status key: ✅ done · ⛔ blocked-by-design/governed/real-infra (seam
 built + documented; not effort-blocked) · ▶ buildable now.
 
@@ -661,38 +702,45 @@ std Ed25519; `SignedPolicy` is the only additive Phase-2 spec delta).
 > `34b6cb5` pushed. web-ui byte-identical between pins ⇒ no Worker
 > redeploy.
 >
-> **Immediate next actions (two independent tracks):**
-> **(1) Human Gate B (YubiKey) — the only remaining Phase-1 item, now
-> known to be TWO-PART (s4 verify-before-trust finding):** the native
-> PC/SC transport `connectPcscChannel` is a fail-closed stub by #28
-> design — the real libpcsclite wiring is the deferred human-gate
-> increment, implementable only with the hardware present. So:
-> **(P) human provisions** — install `pcsclite` (so the binding loads)
-> + `ykman`; generate the on-token Ed25519 in PIV slot 9c on BOTH
-> YubiKeys (touch=always, PIN-once; PIN/PUK = §11.4 human knob); export
-> the backup's slot-9c pubkey to `backup-9c.pub`; decide `<DURATION>`
-> (LOCKED D1 → long, e.g. `3650d`); plug in both keys.
-> **(A) agent implements + LIVE-verifies** `connectPcscChannel`'s
-> libpcsclite wiring behind the tested seam (non-destructive public-key
-> read FIRST; upstream `maintainers` branch → governed PR → re-pin,
-> PR #1/#2 precedent; NEVER written blind).
-> **then** `--dry-run` each track → human runs the signed `genesis`
-> (typed `GENESIS` + PIN + tap, per track ca/release/ops) → agent
-> verifies chain, bakes `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live;
-> re-bake per surface — record the exact pubkey), re-runs #8. Deploy
-> nothing. **`file:` is NOT acceptable for the genesis root.** **HUMAN
-> GATE — stop with the crisp provisioning ask; never fabricate genesis
-> material / never write the binding blind.**
-> **(2) Phase 2 #35 — now UNBLOCKED by Gate A (does NOT need Gate B),
-> agent build work available in parallel:** per the LOCKED Phase-2
-> design (program doc "Phase-2 DESIGN DECISION"), add the additive
-> genesis-signed `SignedPolicy` + the `verifyTrack` genesis
-> precondition + the static-layout spec + a `fetch()` reference client
-> + conformance vectors incl. the mandatory fail-closed negatives,
-> upstream in `maintainers/` on a new branch → governed PR (PR #1/#2
-> precedent); the `npm publish` step is itself a Human Gate. #35 design
-> is LOCKED — implement to it, do NOT re-litigate without the user.
-> The list below is later-phase detail (Phase 2 = #35 → #9 → #10).
+> **★ Immediate next thrust = the Phase-2 v2 protocol redesign
+> (re-locked s4; it now PRECEDES Gate B).** Authoritative detail =
+> `docs/v1-launch-program.md` "Phase-2 DESIGN DECISION — LOCKED v2".
+> Build it upstream in `maintainers/` on a new branch → governed PR →
+> re-pin, **at a START, attentively — NOT a tail-bolt** (the verifier +
+> Mandate canonical bytes are the load-bearing trust path). Scope:
+> Mandate **v2** canonical bytes with inline succession policy
+> (`approvalRule` `threshold N of […]`, `successors`, `minSuccessors`,
+> `maxDuration`, `defaultDuration`); the **L3 one-rule** verify-forward
+> (no self-renewal; K+1 valid iff it satisfies K's embedded rule + K's
+> constraints); the **L1 pinned-mandate anchor** (verify forward from
+> any pinned mandate; multiple pins coexist; rewrites spec §5.2);
+> `createKey` (KeyFile self-reg — `c1 dc48559` stays) + `upsertMandate`
+> (the one verb; `genesis`/`mandate`/`takeover` collapse in); **#30
+> generalised** to bake the pinned-mandate canonical hash; published
+> v2 conformance vectors incl. ALL fail-closed negatives
+> (absent/forked pin, pin-not-in-log, self-renewal-attempt,
+> sub-threshold, under-minSuccessors, over-maxDuration, endorsement-gap,
+> lapsed-lease-at-NOW, tampered history). One logical change per
+> commit; maintainers tsc -b + suite green, then flagship gate as the
+> guard (`@maintainers/protocol` is in flagship's graph), each commit.
+> HUMAN GATES: governed PR merge (PR #1/#2 precedent) + `npm publish`
+> (org/2FA; classifier may block — human runs the one command).
+> **THEN Gate B** (the keystone, now downstream of the redesign): it
+> stays TWO-PART — **(P)** human provisions `pcsclite`+`ykman`, on-token
+> Ed25519 PIV slot 9c on BOTH YubiKeys (touch=always, PIN-once; PIN/PUK
+> = §11.4 human knob), plug in, set the create-time policy (`threshold`,
+> `minSuccessors`, `maxDuration`); **(A)** agent implements +
+> LIVE-verifies `connectPcscChannel`'s libpcsclite wiring behind the
+> tested seam (non-destructive pubkey read FIRST; NEVER written blind;
+> the no-hardware-assumptions UX bar — see
+> [[feedback-no-hardware-assumptions]]) → `--dry-run` → human signs the
+> **from-scratch `upsertMandate`** (typed confirm + PIN + tap) → agent
+> verifies the chain + bakes the **pinned-mandate hash** (#30, per
+> surface; record the exact value) + re-runs #8. Deploy nothing.
+> `file:` NOT acceptable for the root. **HUMAN GATE — stop with the
+> crisp provisioning ask; never fabricate the pinned mandate / never
+> write the binding blind.** Then #9 webapp → #10 mobile (re-verify
+> against the published v2 vectors).
 
 **Resume #2 2026-05-16 (Linux box) closed #33 (real Gradle build +
 190 unit tests green; 2 latent-drift fixes), #34 (triaged →
