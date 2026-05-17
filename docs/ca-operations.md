@@ -228,14 +228,112 @@ maintainer ROOT key. Full rationale: `docs/maintainer-ca-endorsement.md`
 
 ## Operation 0 — genesis (once, pre-release, CLI + primary YubiKey)
 
-Generate the cold maintainer Ed25519 ON the primary YubiKey; write the
-genesis `Mandate` for `ca`/`release`/`ops` naming the **second
-YubiKey** in `successors`; commit via the commit-writer; bake the
-emitted genesis pubkey into the build as `MAINTAINER_GENESIS_PUBKEYS`.
-Until this is done that constant is null and every consumer
-fail-closes (rejects all CA artifacts) — safe, since nothing is
-released and demo uses mock recovery. Tests/analysis assume the
-deterministic `.maintainers/` placeholder genesis is present.
+**This is the Human Gate B ceremony. It is IRREVERSIBLE — it creates the
+root of trust. Run it exactly; `--dry-run` every track first.** Generate
+the cold maintainer Ed25519 ON the primary YubiKey; write the genesis
+`Mandate` for the `ca`, `release`, and `ops` tracks (three runs) naming
+the **second YubiKey** in `successors`; commit the resulting
+`.maintainers/` artifacts; bake the emitted holder pubkey into the build
+as `MAINTAINER_GENESIS_PUBKEYS`. Until this is done that constant is
+`Object.freeze([])` and every consumer fail-closes (rejects all CA
+artifacts) — safe, since nothing is released and demo uses mock
+recovery. Tests/analysis assume the deterministic `.maintainers/`
+placeholder genesis is present.
+
+The command surface below is verified against the merged
+`maintainers` CLI at the pinned SHA (`scripts/maintainers.pinned-sha`
+= `833fa45`, PR #2 / #28). The genesis command does NOT generate the
+on-token key — that is a hardware prerequisite (step 1).
+
+### Prerequisites (human, before any CLI)
+
+1. **On each of the two YubiKeys, generate an Ed25519 key in PIV slot
+   `9c`** ("digital signature": PIN-gated every signature), **touch
+   policy = always**, **PIN once per session** — per §11.1 of
+   `docs/maintainer-ca-endorsement.md` (YubiKey 5, fw ≥ 5.7, NFC). The
+   private half is generated on-token and **never exported**. The exact
+   `ykman piv keys generate …` invocation + the PIN/PUK policy is the
+   maintainer's to run with YubiKey Manager; slot `9c` is the CLI
+   default (`DEFAULT_PIV_SLOT`), and the precise slot/PIN/PUK defaults
+   are the §11.4 "open knob" the maintainer fixes here, once.
+2. **Export the SECOND (backup/successor) YubiKey's slot-9c public key
+   to a file** — a no-PIN public read, done once: this lets the genesis
+   runs name the successor as `--successors file:backup-9c.pub` without
+   juggling two tokens on one reader mid-ceremony. (Alternative: pass
+   `--successors yubikey-piv:slot=9c` and physically swap to the backup
+   token when the public read is requested — `loadSignerPubKeyList`
+   resolves sequentially.) **The named successor is the ONLY recovery
+   if the primary is lost/bricked — there is no key escrow.**
+3. **Decide `<DURATION>` for the cold genesis mandate.** This is a human
+   policy choice (not code-derivable). Per the LOCKED Phase-2 D1 the
+   cold maintainer track is *long-lived* (changing quorum/track-set is a
+   NEW genesis ceremony); a multi-year duration (e.g. `3650d`) is
+   appropriate. Expiry is not terminal: the `mandate` command (the
+   append-only track log) renews/extends a track signed by the genesis
+   holder — but pick a comfortably long genesis duration regardless.
+4. **Build the CLI** (dist/ is gitignored — absent on a fresh clone):
+   ```sh
+   cd maintainers && npm run build      # = tsc -b, idempotent
+   ```
+
+### The ceremony (per track: ca, release, ops — repeat all of steps A/B)
+
+For each `<TRACK>` in `ca`, then `release`, then `ops`:
+
+**A. Dry-run first (signs/writes NOTHING, no PIN, no tap):**
+```sh
+cd maintainers
+node packages/cli/dist/index.js genesis \
+  --track <TRACK> \
+  --duration <DURATION> \
+  --holder-key  yubikey-piv:slot=9c \
+  --signing-key yubikey-piv:slot=9c \
+  --successors  file:backup-9c.pub \
+  --output ../.maintainers \
+  --dry-run
+```
+The agent verifies the printed canonical bytes (hex + utf-8) and the
+unsigned `.maintainers` diff: `kind:"Mandate"`, `track:"<TRACK>"`,
+`holder` == `signedBy` (genesis is self-signed; the CLI hard-fails if
+`--signing-key` ≠ `--holder-key`), `successors` == the backup pubkey,
+and the would-write path
+`.maintainers/tracks/<TRACK>/mandates/<ts>-<id>.json` (+
+`tracks/<TRACK>/policy.json` if missing). Re-running mints a fresh
+id/timestamps, so the dry-run preview is exact for that invocation
+only — confirm the *structure*, not byte-equality across runs.
+
+**B. Real run (drop `--dry-run`):** same command without `--dry-run`.
+The CLI prints the ⚠ GENESIS banner + the same byte/diff REVIEW, then
+prompts: `Type GENESIS (exactly) then Enter to proceed, anything else
+aborts:`. The human types `GENESIS`, then **taps the primary YubiKey**
+(PIN once, touch per signature). Do **not** use `--yes` for the real
+ceremony — type the phrase by hand. It writes the signed mandate (+
+`policy.json` if missing) and prints `holder:` / `successors:` /
+`mandateId:`.
+
+### After all three tracks (agent)
+
+1. **Verify the chain.** Run `node packages/cli/dist/index.js verify
+   --path ../.maintainers` (exits non-zero on any failure) and
+   `node packages/cli/dist/index.js status --path ../.maintainers` —
+   every track must resolve from its genesis; the agent independently
+   re-checks the canonical bytes + signatures before the irreversible
+   bake.
+2. **Bake the genesis pubkey.** The `holder:` pubkey is identical
+   across ca/release/ops (the same primary YubiKey self-signed all
+   three) — that ONE 64-hex value goes into `@flagship/protocol`
+   `maintainerCa.ts` `MAINTAINER_GENESIS_PUBKEYS` (today
+   `Object.freeze([])`). #30 flips live; the daemon (#8) and later the
+   webapp (#9) consume this const. **Re-bake the SAME value per surface
+   in Phase 2 #10** (iOS Swift + Android Kotlin). **Record the exact
+   pubkey value in `docs/v1-launch-program.md` + the ceremony artifact**
+   so the mobile re-bake is provably identical.
+3. **Commit** the `.maintainers/` artifacts (the three mandates + the
+   per-track `policy.json`) AND the `MAINTAINER_GENESIS_PUBKEYS` bake to
+   flagship. **Deploy nothing.**
+4. **Re-run the #8 suite** (`caTrustChain` / `releaseVerifier` tests) +
+   the flagship gate to prove links 1–4 now resolve against a real
+   genesis (they were correctly inert while the const was empty).
 
 ## Upstream push — now pre-authorized
 
