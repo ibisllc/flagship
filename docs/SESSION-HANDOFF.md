@@ -6,15 +6,50 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-16 (resume #2, Linux box — closed #33 [real
-Gradle build: assembleDebug + 190 unit tests green, 2 drift fixes
-pushed], #34 [triaged → v2-deferred], #3 [flake triaged]. Prior
-resume: #11/#30/#24/#25/#20/#15/#29. flagship 2514/2514 + Android
-190/190, maintainers 257/257, all pushed, PR #1 still open/governed.
-See §0.)
+Last updated: 2026-05-16 (resume #2, Linux box — closed #33 [Gradle
+build + 190 unit tests], #34 [v2-deferred], #3 [flake triaged+
+corroborated], #4 [GOVERNED PR #1 merged + re-pin `10c65aa`], #8
+[link-4 daemon port built+tested]; #9/#10 scope-corrected — see §0.
+Prior resume: #11/#30/#24/#25/#20/#15/#29. flagship 2521/2521 +
+Android 190/190, maintainers PR #1 MERGED, all pushed. See §0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-16 (resume #2, #8 done + #9/#10 SCOPE CORRECTED):** the
+  governed PR #1 was merged by the maintainer (authorized via the
+  session prompt); re-pinned `scripts/maintainers.pinned-sha` →
+  `10c65aa` (merge commit, NOT branch tip `5cace76`); `0697bab`.
+  `pull-maintainers.sh` reset the snapshot cleanly;
+  `@maintainers/protocol` now exports the CA API. **#8 daemon port
+  built + tested** (`beb6279`: `caTrustChain.ts` + `releaseVerifier.ts`
+  `verifiedTrackFromFolder`; 7 tests; gate 2521). **But the handoff's
+  "#8/#9/#10 = mechanical 1-liner per call site via `authorizedCaKeys`"
+  was inaccurate** (verify-before-trust): (a) there is **NO production
+  call site** of the #30 chokepoint anywhere in flagship — only tests
+  reference the raw `verifyDemoDirective`/`verifyUserPubKeyBinding`;
+  (b) the maintainers store reader (even post-merge) only knows
+  `endorsements/` = `ReleaseEndorsement` — there is **no on-disk
+  CaEndorsement directory convention** in the spec or store, and
+  flagship's `.maintainers/` has zero endorsements; (c) genesis stays
+  empty so the #30 chokepoint fail-closes and the port is never
+  consulted regardless. So #8 took CaEndorsements as an **injected
+  arg** (invents no disk path); #9 (webapp) needs the upstream store
+  convention + a bundled browser verifier; #10 (iOS/Android) ALSO
+  needs a Swift+Kotlin reimpl of the TS-only maintainers verify — it
+  is the heaviest item, NOT a session-tail 1-liner. #9/#10 re-scoped
+  in §3; the real unblock is the upstream CaEndorsement store
+  convention (#31/#27 territory), not flagship wiring.
+- **2026-05-16 (resume #2, #3 flake — CORROBORATED):** the §0
+  parallel-run flake **reproduced once** under heavy concurrent load
+  (`1 failed / 2513 passed`) during the post-re-pin gate, then was
+  **deterministically green on the immediate verbose re-run**
+  (`2514/2514`) and again at `2521/2521` after #8. `tsc -b` clean
+  throughout; the changed files (pin SHA, Android, `maintainers/`) are
+  provably outside the flagship TS/vitest graph. `personalize.test.ts
+  > personalizeStream` was observed at **~19 s** under load (30 000 ms
+  `testTimeout`) — consistent with the #3 verdict (rare
+  timeout-under-CPU-contention, not a logic bug). No new action;
+  watch procedure unchanged.
 - **2026-05-16 (resume #2, #33 — FULLY CLOSED):** after the
   `assembleDebug` `@Composable` fix, `./gradlew :app:testDebugUnitTest`
   surfaced a second never-run layer — 4 latent test failures (was the
@@ -219,9 +254,9 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 5 | C4.1c daemon ACME+sibling seam | ✅ | runtime wiring = #21 |
 | 6 | replace-time DELETE(old fqdn) | ✅ | deployed |
 | 7 | #79A C2.4 iOS Live setCustomDomain | ✅ | 232 XCTests green |
-| 8 | maintainer→CA link-4 daemon | ⛔ | after #11 land + #30; then 1-liner via `authorizedCaKeys` |
-| 9 | maintainer→CA link-4 webapp | ⛔ | after #11 land + #30 |
-| 10 | maintainer→CA link-4 iOS/Android | ⛔ | after #11 land + #30 |
+| 8 | maintainer→CA link-4 daemon | ✅ | **Built+tested** (`beb6279`): `caTrustChain.ts` `makeCaTrustChain` (adapts `@maintainers/protocol` `authorizedCaKeys`→#30 `CaTrustChain`; now-ms→Date) + `releaseVerifier.ts` `verifiedTrackFromFolder` disk bridge; 7 tests; gate 2521. Correctly inert (#30 fail-closed until genesis). |
+| 9 | maintainer→CA link-4 webapp | ⛔ | **Scope corrected (§0): NOT a 1-liner.** Same shape as #8 in `apps/web`, but blocked on the genuine upstream gap (no on-disk CaEndorsement store convention — see §0) + needs a bundled maintainers verifier / browser `.maintainers` source. No #30 call site exists yet. Post upstream-store-convention. |
+| 10 | maintainer→CA link-4 iOS/Android | ⛔ | **Scope corrected (§0): the heaviest, NOT a 1-liner.** Needs a Swift+Kotlin reimplementation of maintainers `verifyTrack`/`verifyCaEndorsements`/`authorizedCaKeys` (TS-only today) + the upstream CaEndorsement store convention + a call site. Explicitly do-not-bolt-at-session-tail (security-critical crypto). |
 | 11 | **Track P 1-2: push `feat/ca-endorsement` + PR** | ✅* | **RECONSTRUCTED (drift §0) + pushed; PR #1 open** (`ibisllc/maintainers#1`, tip `5cace76`, 257 green). *Remaining = governed: on merge bump `scripts/maintainers.pinned-sha` to the merge SHA + run `pull-maintainers.sh` (do NOT pin to the unmerged branch tip). |
 | 12 | lazy-SNI seam+endpoint | ✅ | deployed; socket wiring = #22 |
 | 13 | C-iso verify+tick §S | ✅ | |
@@ -247,12 +282,15 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 33 | Android real Gradle build (never-compiled drift) | ✅ | **DONE on this Linux box** (JDK17+SDK present — env delta §0). `7c37d5e` main-source `@Composable` fix → `assembleDebug` green; `d960691` 4 never-run test fixes → `testDebugUnitTest` **190/190, 0 fail**. Remaining for C-Android = the operator Play-upload gate (`§S:624`: signing + internal track + 5 testers), NOT a code/CLI item. |
 | 34 | Triage `inheritance.ts` (v1-unwired vs v2-deferred) | ✅ | **Verdict: v2-deferred, deliberate seam.** Built+exported+unit-tested, not route/cron-wired, absent from §S + CLAUDE.md. Recorded in new `docs/policy/inheritance.md` (the decision record the module docstring already pointed at — was dangling). No v1 action. §0. |
 
-Maintainer→CA future-session order (mostly CLI/code-doable; only the PR
-*merge* + the one real-YubiKey genesis need a human): **#11 push+PR →
-(merge, governed) → re-pin → #28 signer + #27 genesis-flow + #32 app +
-#29 optional committer + #31 web-ui + #30 baked-genesis → #8/#9/#10
-link-4.** Design is fully specified in maintainer-ca-endorsement.md
-§10–§12; protocol needs ZERO upstream change (PIV-Ed25519 == std
+Maintainer→CA progress: **#11 push+PR ✅ → merge (governed) ✅ →
+re-pin `10c65aa` ✅ → #8 link-4 daemon ✅** (this resume). **Next:**
+the genuine remaining gap is the **upstream CaEndorsement on-disk
+store convention** (no spec/store directory for CaEndorsements yet —
+§0) — that unblocks #9 (webapp) + #10 (iOS/Android Swift/Kotlin
+reimpl). Then the human/hardware ceremony cluster: #28 signer + #27
+genesis-flow + #32 app + #29 optional committer + #31 web-ui + #30
+baked-genesis. Design fully specified in maintainer-ca-endorsement.md
+§9–§12; protocol needs ZERO upstream change (PIV-Ed25519 == std
 Ed25519 over the canonical bytes).
 
 ## 4. Working discipline (non-negotiable — this is how the tree stayed clean)
@@ -279,30 +317,33 @@ Ed25519 over the canonical bytes).
 ## 5. Recommended next-session order (highest value, unblocked first)
 
 **Resume #2 2026-05-16 (Linux box) closed #33 (real Gradle build +
-190 unit tests green; 2 latent-drift fixes pushed), #34 (triaged →
-v2-deferred, `docs/policy/inheritance.md`), and #3 (flake triaged →
-documented verdict, no speculative pin). Prior resume closed
-#11/#30/#24/#25/#20/#15/#29. Every remaining open item is now
-governed-merge / human-hardware / real-infra gated, seam built +
-documented.** Next session, in order:
+190 unit tests green; 2 latent-drift fixes), #34 (triaged →
+v2-deferred), #3 (flake triaged + corroborated), #4 (GOVERNED PR #1
+merged by the maintainer + re-pinned `10c65aa`), and #8 (link-4
+daemon port built+tested). Prior resume: #11/#30/#24/#25/#20/#15/#29.
+Net: flagship 2521/2521, Android 190/190, all pushed.** Next
+session, in order:
 
-1. **GOVERNED — the single remaining gate that unblocks the most:
-   merge `ibisllc/maintainers#1`** (the reconstructed CaEndorsement
-   protocol; OPEN, MERGEABLE, tip `5cace76`, 257 green, no CI on that
-   repo). Then bump `scripts/maintainers.pinned-sha` to the **merge
-   SHA** (not the branch tip) + run `pull-maintainers.sh`. Requires a
-   human — this is the one outward action this resume could not take
-   autonomously (asked; see the session note).
-2. **#8 → #9 → #10** link-4 wiring — now mechanical: back the #30
-   `CaTrustChain` with `@maintainers/protocol` `authorizedCaKeys`
-   (daemon `releaseVerifier.ts`, then webapp TS, then iOS/Android
-   port) over the pinned `.maintainers` snapshot. The chokepoint +
-   fail-closed default already ship (#30).
+1. **Define the upstream on-disk CaEndorsement store convention.**
+   This is the real gap surfaced this resume (§0): the maintainers
+   store reader knows only `endorsements/` = `ReleaseEndorsement`;
+   there is no directory/spec for CaEndorsements. It is upstream
+   `ibisllc/maintainers` work (spec §3.7 + `cli/src/lib/store.ts` +
+   the protocol's `verifyCaEndorsements`). It unblocks #9 + #10 and
+   makes #8's injected-arg seam loadable from disk. Sequence it with
+   #31 (upstream web-ui) post-merge.
+2. **#9 (webapp) → #10 (iOS/Android)** link-4 — only AFTER step 1.
+   #9 = the #8 adapter shape in `apps/web` + a bundled browser
+   verifier. #10 = a Swift+Kotlin reimplementation of the TS-only
+   maintainers verify (`verifyTrack`/`verifyCaEndorsements`/
+   `authorizedCaKeys`) — the heaviest, security-critical; NOT a
+   1-liner, do not bolt at a session tail. (#8 is the done reference
+   implementation: `caTrustChain.ts`.)
 3. **#27/#28/#31/#32** the maintainer→CA ceremony build — upstream
-   `ibisllc/maintainers` (post-merge). #28 is security-critical
-   (rotate-ca) + needs a real YubiKey; #27 genesis run is human;
-   #32 is a multi-week new app. Design 100% in maintainer-ca §10–§12
-   + ca-operations.md.
+   `ibisllc/maintainers`. #28 is security-critical (rotate-ca) +
+   needs a real YubiKey; #27 genesis run is human; #32 is a
+   multi-week new app. Design 100% in maintainer-ca §9–§12 +
+   ca-operations.md. #30 baked-genesis flips #8's port live.
 4. ⛔ real-infra/live-device backlog (#16-row items: C4.1c live cert
    exercise, lazy-SNI socket wiring, B-A2/B-A3, C-A1, Forgejo/LLM,
    the joint sibling-supervisor runtime instantiation) — only when

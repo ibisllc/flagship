@@ -262,16 +262,32 @@ chained to the checkpoint, alarms unskippable (a server may drop benign
 same-holder renewals but cannot hide a gap-takeover).
 
 **Status:** links 1–3 + the checkpoint are built & tested in
-`@maintainers/protocol` (`feat/ca-endorsement`, reconstructed
-2026-05-16, tip `5cace76`, **PR `ibisllc/maintainers#1`** open:
-`verifyTrack`, `currentAuthority`, `verifyCaEndorsements`,
-`authorizedCaKeys`, `verifyTrackFromCheckpoint`,
-`checkpointFromVerifiedTrack`; 257 suite green). The **remaining
-wire** is link-4 enforcement at each consumer
-— daemon (extend `releaseVerifier.ts` with the ca path), then
-iOS/Android/webapp — which is exactly **#84 C1.2c**, now a one-liner
-per call site via `authorizedCaKeys`. Per-platform wiring is the
-large surface; it is sequenced, not yet coded.
+`@maintainers/protocol` (`feat/ca-endorsement`; **PR
+`ibisllc/maintainers#1` MERGED 2026-05-16**, merge commit `10c65aa`,
+flagship re-pinned: `verifyTrack`, `currentAuthority`,
+`verifyCaEndorsements`, `authorizedCaKeys`, `verifyTrackFromCheckpoint`,
+`checkpointFromVerifiedTrack`; 257 suite green).
+
+**Link-4, daemon (#8): DONE** — `packages/server-daemon/src/
+caTrustChain.ts` `makeCaTrustChain` adapts `authorizedCaKeys` to the
+#30 `CaTrustChain`, fed by `releaseVerifier.ts`
+`verifiedTrackFromFolder`; 7 tests. While `MAINTAINER_GENESIS_PUBKEYS`
+is empty the #30 chokepoint fail-closes and never calls the port —
+correctly inert until the genesis ceremony.
+
+**Correction (verify-before-trust, 2026-05-16):** the prior "now a
+one-liner per call site via `authorizedCaKeys`" was inaccurate.
+There is **no production call site** of the #30 chokepoint in
+flagship (only tests reference the raw verifiers), and there is **no
+on-disk CaEndorsement store convention** — the maintainers store
+reader knows only `endorsements/` = `ReleaseEndorsement`; a
+ca-endorsement directory convention is genuine upstream-undefined
+work, not consumer wiring. So #8 takes the CaEndorsement set as an
+injected argument. **#9 (webapp)** additionally needs a bundled
+browser verifier + that upstream convention; **#10 (iOS/Android)**
+additionally needs a Swift+Kotlin reimplementation of the TS-only
+maintainers verify — it is the heaviest item, sequenced behind the
+upstream CaEndorsement-store convention, NOT a session-tail change.
 
 ---
 
