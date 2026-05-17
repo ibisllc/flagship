@@ -6,18 +6,73 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-16 (resume #2, Linux box — closed #33 [Gradle
-build + 190 unit tests], #34 [v2-deferred], #3 [flake triaged+
-corroborated], #4 [GOVERNED PR #1 merged + re-pin `10c65aa`], #8
-[link-4 daemon port built+tested]; #9/#10 scope-corrected — see §0.
-Added #35 (MUST transition maintainers consumption clone-SHA →
-npm/spec when co-development ends — user decision 2026-05-17).
-Prior resume: #11/#30/#24/#25/#20/#15/#29. flagship 2526/2526
-(2521 + the user's own `5b7d140` /alpha route tests) + Android
-190/190, maintainers PR #1 MERGED, all pushed. See §0.)
+Last updated: 2026-05-17 (**v1-launch program session 1**, Mac/darwin
+box — first run from the `/alpha` Phases-1-8 prompt. Created
+`docs/v1-launch-program.md` (the authoritative phase tracker). Phase 1
+(genesis ceremony / #28 PIV-Ed25519 signer) AGENT work: the two
+keystone pieces built + tested + pushed — `protocol` external
+`Ed25519Signer` abstraction and `cli` `loadSigner`/`PivTransport`
+seam, ZERO wire/spec delta, maintainers 257→270 green — on upstream
+branch `feat/piv-ed25519-signer`, **draft PR `ibisllc/maintainers#2`**.
+Cold-start env-sync drift found+fixed (stale `maintainers/` clone
+`c009900`→`10c65aa` via pull-maintainers.sh; flagship gate
+**2526/2526**, tsc clean). Prior: resume #2 Linux box closed
+#33/#34/#3/#4/#8; #9/#10 scope-corrected; #35 added. See §0.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-17 (v1-launch program session 1, Mac/darwin):**
+  - **NEW authoritative tracker:** `docs/v1-launch-program.md` created
+    (first run from the `/alpha` Phases-1-8 prompt). It is now the
+    source of truth for *which phase + what's done*; this file stays
+    the fine-grained backlog/drift/gate source. Cold-start read order
+    adds it after §0/§3/§5.
+  - **Cold-start env-sync drift (found+fixed, NOT a regression):** on
+    this Mac the gitignored `maintainers/` clone was stale at
+    `c009900` (pre-CaEndorsement) → `npx tsc -b` RED on two
+    `packages/server-daemon/src/caTrustChain.ts` imports of
+    `authorizedCaKeys`/`CaEndorsement`. Fix is the documented one:
+    `bash scripts/pull-maintainers.sh pull` (idempotent; resets to the
+    pin `10c65aa`). Then flagship gate **2526/2526 · tsc -b clean**,
+    maintainers suite **257/257**. **Every cold start on a fresh
+    machine must run pull-maintainers first** (the clone is not
+    vendored). `timeout(1)` is absent on macOS — don't wrap commands
+    in it.
+  - **Environment delta (this box):** darwin/Mac, Xcode 16.4
+    (xcodebuild present → iOS verifiable here), **no real JDK**
+    (`/usr/bin/java` stub → Android review-only here). Inverse of the
+    resume-#2 Linux box. iOS sim UDIDs in memory may be stale.
+  - **Phase 1 / #28 — two keystone pieces built+green+pushed:**
+    `protocol` external `Ed25519Signer` (`f646f99`: interface +
+    `privKeySigner` wrapper [ONE signing path] + `sign*With` async
+    variants; **ZERO canonical/verifier/wire/spec change** — the
+    §11.1 linchpin; back-compat with all `{privKey}` callers) and
+    `cli` `loadSigner`/`PivTransport` seam (`9e7c495`: injectable PIV
+    transport, fail-closed `realPivTransport` [no silent hex
+    fallback], `loadSignerPubKey` no-PIN read, PIN-never-logged
+    test). maintainers **257→270** green, `tsc -b` clean. On upstream
+    branch `feat/piv-ed25519-signer`, **draft PR
+    `ibisllc/maintainers#2`** (push+PR pre-authorized §10.4; merge
+    governed; on merge bump `scripts/maintainers.pinned-sha` +
+    re-pull). Branch is PUSHED (durable — not lost like the original
+    `feat/ca-endorsement`).
+  - **Real gap surfaced (verify-before-trust):** `docs/ca-operations.md`
+    Operation 1 Path B invokes `node packages/cli/dist/index.js
+    ca-endorsement …` but **no `ca-endorsement` CLI command exists**
+    (commands = genesis/mandate/endorsement[=Release]/takeover/verify/
+    status; the CaEndorsement *protocol* sign/verify landed in PR #1,
+    the *issue-a-lease command* did not). Blocks Operation 1 (weekly
+    lease) at the human gate. Tracked in the #28 row + program doc
+    Phase 1; build it with the command-threading increment.
+  - **Phase 1 remainder (deliberately NOT tail-bolted — security-
+    critical ceremony surface):** thread `loadSigner` through
+    genesis/mandate/takeover (async `build*` refactor); genesis/
+    ceremony UX hardening (banner, `--dry-run` = print canonical
+    bytes + `.maintainers` diff & write nothing, typed confirm,
+    never-log-secrets, fail-closed reasons); the `ca-endorsement`
+    command; native PC/SC `PivTransport` (verified only at the
+    YubiKey human gate). Start the NEXT session attentively, not at a
+    tail.
 - **2026-05-16 (resume #2, #8 done + #9/#10 SCOPE CORRECTED):** the
   governed PR #1 was merged by the maintainer (authorized via the
   session prompt); re-pinned `scripts/maintainers.pinned-sha` →
@@ -278,7 +333,7 @@ built + documented; not effort-blocked) · ▶ buildable now.
 | 25 | N0e-2 daemon sibling-WS auto-dial | ✅* | `siblingHandshakeClient.ts`: `startPersistentSiblingHandshakeClient` + `SiblingHandshakeClientManager` (reconnect/backoff/jitter/`setPeers`) at parity with cert-sync `SiblingClientManager`; router setSibling/removeSibling symmetric with the inbound accept; 5 tests; exported. build-tasks:666 ☑. *Joint runtime `setPeers`-from-discovery instantiation = live exercise (→ #16; neither persistent supervisor is runtime-instantiated by precedent) |
 | 26 | verify Forgejo + real-LLM streaming (audit N1/N2) | ⛔(mostly) | largely real-infra: real provider key + live daemon; add Forgejo+vibe-code e2e smoke |
 | 27 | Track P 3 genesis ceremony (app-primary + CLI fallback) | ⛔ | Upstream `ibisllc/maintainers` CLI, sequenced **post PR #1 merge** (§5); the real genesis run is human+YubiKey. Seam = the complete design in maintainer-ca §10.3/§11.2 + ca-operations "Operation 0" + the now-reconstructed PR #1 protocol; tests use the deterministic placeholder genesis (#30 already fail-closed-tested). Don't pile more unmerged upstream behind the governed PR. |
-| 28 | Track P 4 PIV-Ed25519 signer | ⛔ | **Security-critical key ceremony** (touches `scripts/rotate-ca.mjs` + the upstream maintainers CLI signer source) — explicitly do-not-bolt-at-session-tail; needs a real YubiKey to verify. Seam = the staged/hex-file source already in `rotate-ca.mjs`+CLI (ca-operations.md) + the full §10.1/§11.1/§28 design (PIV-Ed25519 == std Ed25519 over the canonical bytes ⇒ ZERO upstream spec change). Post PR #1 merge + hardware. |
+| 28 | Track P 4 PIV-Ed25519 signer (**Phase 1**) | ◐ | **Two keystone pieces DONE+green+pushed** (2026-05-17): `protocol` external `Ed25519Signer` (`f646f99`) + `cli` `loadSigner`/`PivTransport` seam (`9e7c495`), ZERO wire/spec delta, maintainers 257→270, on `feat/piv-ed25519-signer` → **draft PR `ibisllc/maintainers#2`** (merge governed → re-pin). **Remaining (next session, attentively — NOT tail):** thread `loadSigner` through genesis/mandate/takeover; genesis/ceremony UX hardening; the missing `ca-endorsement` command (§0); native PC/SC transport (YubiKey human gate). Design: maintainer-ca §10.1/§11.1 + program doc Phase 1. |
 | 29 | Track P 5 OPTIONAL hosted committer | ✅* | IS the upstream `maintainers/.../server-adapters/cloudflare-worker` Model A worker (`worker.ts` POST /commit — holds only a GitHub PAT, no maintainer/CA key; `policy.ts` = verify→commit gate). M1 (`6beb3dd`, PR #1) made `policy.ts` CaEndorsement-aware incl. `checkCaEndorsementAuthority` (NOW-clock + lease window). §12.1 downscopes to opt-in (default = app-direct-commit #32); NOT a launch blocker. *Remaining = governed/operator: deploy Worker + provision `GITHUB_MAINTAINERS_PAT` (post PR #1 merge). A flagship `.com` route would duplicate the upstream worker + contradict §12.1 — intentionally not built. |
 | 30 | Track P 6 baked `MAINTAINER_GENESIS_PUBKEYS` + fail-closed link-1 | ✅ | `@flagship/protocol` `maintainerCa.ts`: empty baked const + `verifyCaSigned{DemoDirective,UserPubKeyBinding}` chokepoint, fail-closed `genesis-unconfigured` (chain port never consulted); injectable-genesis seam for #8/#9/#10; 9 tests. Flagship baseline now **2514** |
 | 31 | Track P maintainers web-ui status/preview only | ⛔ | Upstream maintainers web-ui, **post PR #1 merge** (§5). NO signing view ever. Seam = ca-operations.md "Next upstream increment" (REPLACED by status/preview/commit-trigger-only per §10.1) — design complete; it's upstream-after-merge, not flagship code. |
@@ -320,6 +375,21 @@ Ed25519 over the canonical bytes).
   vitest served-asset tests.
 
 ## 5. Recommended next-session order (highest value, unblocked first)
+
+> **2026-05-17: `docs/v1-launch-program.md` now governs phase order**
+> (the `/alpha` Phases 1-8). We are in **Phase 1** (genesis ceremony /
+> #28). **Immediate next action:** continue Phase 1 AGENT work on the
+> already-pushed `feat/piv-ed25519-signer` branch — thread `loadSigner`
+> through genesis/mandate/takeover, harden the genesis/ceremony UX
+> (banner / `--dry-run` / typed confirm / never-log-secrets /
+> fail-closed reasons), add the missing `ca-endorsement` command, stub
+> the native PC/SC transport to the seam. Do this attentively at a
+> session START (security-critical), each commit green, push to the
+> branch + update draft PR #2. THEN the human gate: merge PR #2
+> (governed) → re-pin → Operation 0 genesis with the real YubiKey →
+> bake `MAINTAINER_GENESIS_PUBKEYS` (#30 flips live) → re-run #8.
+> The list below is retained as later-phase detail (Phase 2 = #35 →
+> #9 → #10; the upstream CaEndorsement-store convention etc.).
 
 **Resume #2 2026-05-16 (Linux box) closed #33 (real Gradle build +
 190 unit tests green; 2 latent-drift fixes), #34 (triaged →

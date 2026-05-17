@@ -19,7 +19,9 @@ open phase here.
   on `main`. One known parallel-load flake (deterministically green on re-run;
   SESSION-HANDOFF §0 #3 watch procedure — never blanket-retry / guess-pin).
 - maintainers (`maintainers/`, gitignored, pinned `scripts/maintainers.pinned-sha`
-  = `10c65aa`, PR #1 merged): `npx vitest run` → **257 passed / 25 files**.
+  = `10c65aa`, PR #1 merged): `npx vitest run` → **270 passed / 25 files**
+  (257 baseline + 13 from the Phase-1 #28 signer seam on the not-yet-merged
+  `feat/piv-ed25519-signer` branch; the pinned `10c65aa` itself is 257).
   On a fresh machine the clone is stale → run `bash scripts/pull-maintainers.sh
   pull` first (idempotent; resets to the pin). This was required on the
   2026-05-17 Mac (clone was at the pre-CaEndorsement base `c009900`; tsc -b
@@ -35,7 +37,7 @@ open phase here.
 
 | Phase | Title | State |
 |---|---|---|
-| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ IN PROGRESS** — AGENT build underway |
+| **1** | Genesis ceremony (keystone; YubiKey in hand) | **▶ IN PROGRESS** — #28 keystone (protocol `Ed25519Signer` + CLI `loadSigner`/`PivTransport`) built+green+pushed (draft PR #2); command-threading + genesis UX + native transport + `ca-endorsement` cmd remain |
 | 2 | Maintainers as its own product (#35 → #9 → #10) | ☐ blocked on Phase 1 |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
@@ -210,5 +212,28 @@ every §S box is ☑ → v1-alpha.
   `yubikey-piv:` source with injectable transport → genesis/ceremony UX
   hardening. Build in progress on an upstream branch in `maintainers/`;
   lands via governed PR → re-pin.
-- Phase 1 AGENT build status: _(updated as commits land — see SESSION-
-  HANDOFF §0 newest entry for the live detail)._
+- **Phase 1 AGENT — two keystone pieces landed (green, pushed):**
+  - `protocol` external `Ed25519Signer` abstraction + `privKeySigner`
+    (ONE signing path) + `sign*With` async variants — `f646f99`. ZERO
+    canonical/verifier/wire/spec change (the §11.1 linchpin);
+    back-compatible with every `{privKey}` caller. Tests prove
+    byte-identity + token-shaped async signer + M-of-N order.
+  - `cli` `loadSigner` + injectable `PivTransport` seam + fail-closed
+    `realPivTransport` (no silent hex fallback) + `loadSignerPubKey`
+    (no-PIN) + PIN-never-logged test — `9e7c495`.
+  - maintainers suite **257 → 270**, `tsc -b` clean. Branch
+    `feat/piv-ed25519-signer` PUSHED to `ibisllc/maintainers`; **draft
+    PR #2** opened (push+PR pre-authorized §10.4; merge governed).
+- **Phase 1 remaining (next session, at a START — security-critical,
+  do NOT tail-bolt):** thread `loadSigner`/`loadSignerPubKey` through
+  `genesis`/`mandate`/`takeover` (async `build*` + dispatch refactor);
+  genesis/ceremony UX hardening (plain-language banner, `--dry-run` =
+  print canonical bytes + `.maintainers` diff and write/sign nothing,
+  typed explicit confirm, never-log-secrets, fail-closed
+  human-readable refusals, second-key/successor guidance); add the
+  **missing `ca-endorsement` CLI command** (ca-operations.md
+  Operation 1 Path B references it but it does not exist — real gap,
+  SESSION-HANDOFF §0); native PC/SC `PivTransport` (verified only at
+  the YubiKey human gate). Then 1B human gate. `scripts/rotate-ca.mjs`
+  Step-2 fallback string should reference `yubikey-piv:` once the
+  command threading lands.
