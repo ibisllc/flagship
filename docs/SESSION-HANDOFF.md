@@ -26,6 +26,49 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-17 (v1-launch program session 5, Linux box):**
+  - **No env-sync drift (verify-before-trust).** Cold start: `maintainers/`
+    clone was on `feat/ca-endorsement`@`10c65aa` (stale). Per the
+    continue-rule, NOT `pull-maintainers` (it would reset to the pin and
+    discard the v2 branch); instead `git -C maintainers fetch origin &&
+    checkout feat/keyfile-register` → `dc48559` (c1) on top of the merged
+    pin `833fa45`. Start gate verified at baseline: maintainers (on the
+    branch) **311/31 · tsc clean** (307 pin + 4 c1), flagship **2526/225 ·
+    tsc clean**. `pwd` checked — no background-cd cwd poisoning this
+    session (absolute `cd /home/kamdemharry/flagship &&` used for every
+    flagship gate; `git -C` for all maintainers git).
+  - **★ Phase-2 v2 spine — c2 LANDED (the load-bearing trust path,
+    attentively, NOT tail-bolted).** `5f3b146` on `feat/keyfile-register`,
+    pushed: the v2 protocol *core* in `@maintainers/protocol`, **strictly
+    additive** (v1 fully intact ⇒ flagship guard provably back-compatible).
+    `MandateV2` (inline policy), `canonicalMandateV2` (`maintainers/
+    mandate/v2`, fixed 15-slot, non-negative-integer encoder for
+    cross-language byte-stability) + `mandatePinHash` (sha256 of canonical
+    bytes — content-bound, signature-independent; the #30-generalised
+    baked value), `signMandateV2`/`signMandateV2With`,
+    **`verifyMandateChainFromPin`** (L1 pin-is-the-floor verify-forward +
+    multi-pin + fail-closed on no-pin/pin-not-in-log; L3 ONE rule, no
+    self-renewal; TOTAL — never throws on adversarial input) +
+    `currentAuthorityV2`. **Verify-before-trust catch:** adding `MandateV2`
+    to the v1 `Envelope` union broke the kind-discriminated switch in the
+    cloudflare-worker + web-ui adapters (`policy.ts` TS2345) — so
+    `MandateV2` is deliberately KEPT OUT of `Envelope` (that store/adapter
+    rework is c4); this kept c2 truly additive. **21 new tests** assert
+    the happy path + L1 multi-pin + 2-of-3 threshold **and every
+    fail-closed negative** (no-pin, pin-not-in-log, forked/tampered pin,
+    root-sig-invalid, root-not-self-signed, self-renewal-attempt,
+    sub-threshold, under-minSuccessors, over-maxDuration,
+    issued-before-predecessor, signed-by-not-in-sigs,
+    rolled-back/dropped-intermediate, duplicate-id, cross-track-ignore,
+    adversarial-input totality) + pin content-binding + signMandateV2With
+    byte-identity. maintainers **332/32 · tsc clean**; flagship guard
+    **2526/225 · tsc clean**. Branch pushed; **pin UNCHANGED `833fa45`**
+    (upstream branch is pushed, NEVER pinned until the governed merge).
+  - **Discipline call (honest):** c3 (the `createKey`+`upsertMandate` CLI
+    = the security-critical ceremony surface) was deliberately NOT started
+    at this session's tail — the same do-not-tail-bolt rule sessions 1–3
+    honored for the #28 ceremony work. c2 (the verifier + canonical bytes)
+    is the correct attentive START; c3 gets its own focused START next.
 - **2026-05-17 (v1-launch program session 4, Mac/darwin):**
   - **★ PHASE-2 RE-LOCKED v2 (user-authorized override of the prior
     D1/D2 lock) — the trust model changed; this is the new
@@ -650,22 +693,36 @@ sessions 1–4). **The ONLY remaining Phase-1 item is Human Gate B**
 (Operation 0 genesis with the real YubiKey → agent bakes
 `MAINTAINER_GENESIS_PUBKEYS`, #30 flips live, re-run #8; deploy
 nothing). **Phase 2 (#35 → #9 → #10) is now UNBLOCKED (does NOT need
-Gate B)** — the next agent build work is **#35**: per the LOCKED
-Phase-2 design (`docs/v1-launch-program.md` "Phase-2 DESIGN
-DECISION" / §0 2026-05-17), an additive genesis-signed `SignedPolicy`
-+ a `verifyTrack` genesis precondition + the published static-layout
-spec (`origin.json`/`tracks/<t>/log.json`/`ca-leases.json`) + a tiny
-`fetch()` reference client + conformance vectors that MUST include the
-fail-closed negatives (tampered-policy / lapsed-lease-at-NOW /
-withheld-rolled-back-log / absent-forked-genesis / endorsement-gap),
-then `npm publish @maintainers/protocol` (Human Gate: npm org/2FA) and
-flagship DROPS `pull-maintainers.sh`/`maintainers.pinned-sha`. Then #9
-(webapp) → #10 (iOS Swift + Android Kotlin reimpl, heaviest — sequence
-it). Then the human/hardware ceremony cluster: Gate B + #27
-genesis-flow + #32 app + #29 optional committer + #31 web-ui + #30
-baked-genesis. Design fully specified in maintainer-ca-endorsement.md
-§9–§12; `Mandate`/`CaEndorsement` need ZERO wire change (PIV-Ed25519 ==
-std Ed25519; `SignedPolicy` is the only additive Phase-2 spec delta).
+Gate B)** — the agent build work is **#35 reshaped to the LOCKED
+Phase-2 **v2** model** (`docs/v1-launch-program.md` "Phase-2 DESIGN
+DECISION — LOCKED v2"; `SignedPolicy` is SUPERSEDED — there is no
+separate policy artifact). The v2 redesign is the new #35 spine and
+**PRECEDES Gate B** (Gate B freezes the pinned-mandate shape forever).
+**Progress (2026-05-17 session 5): c2 LANDED + pushed** on
+`feat/keyfile-register` (`5f3b146`) — the v2 protocol *core*, the
+load-bearing trust path, landed additively (v1 fully intact): `MandateV2`
+(inline succession policy: `approvalRule` threshold / `successors` /
+`minSuccessors` / `maxDurationSeconds` / `defaultDurationSeconds` /
+optional `project`), `canonicalMandateV2` (tag `maintainers/mandate/v2`,
+fixed 15-slot, integer encoder) + `mandatePinHash` (sha256 of canonical
+bytes — the #30-generalised baked value, content-bound), `signMandateV2`
+(+`With`), and **`verifyMandateChainFromPin`** = L1 (pin IS the floor,
+verify FORWARD, multi-pin, fail-closed on no-pin/pin-not-in-log) + L3
+(ONE rule, no self-renewal) + `currentAuthorityV2`; TOTAL (never throws).
+**21 new tests covering every fail-closed negative**; maintainers
+**332/32** tsc-clean, flagship guard **2526/225** tsc-clean. Branch
+pushed, **NOT pinned** (pin stays `833fa45` until the governed merge).
+**Remaining v2 spine:** c3 `createKey`+`upsertMandate` CLI verbs
+(`genesis`/`mandate`/`takeover` collapse in; #28 ceremony discipline) →
+c4 retire v1 path + spec→v2 + migrate flagship consumer + #30 generalised
+bake → c5 published v2 spec + `fetch()` reference client + conformance
+vectors (ALL fail-closed negatives) → governed PR (Human Gate, PR #1/#2
+precedent) → re-pin → `npm publish` (Human Gate: npm org/2FA) → flagship
+DROPS `pull-maintainers.sh`/`maintainers.pinned-sha`. **THEN** Gate B
+(the first `upsertMandate`, its hash pinned) → #9 (webapp) → #10 (iOS
+Swift + Android Kotlin reimpl, heaviest — sequence it) → Phase 3 cluster.
+`c3` is the security-critical ceremony surface — START it attentively,
+**do NOT tail-bolt**.
 
 ## 4. Working discipline (non-negotiable — this is how the tree stayed clean)
 
@@ -705,9 +762,19 @@ std Ed25519; `SignedPolicy` is the only additive Phase-2 spec delta).
 > **★ Immediate next thrust = the Phase-2 v2 protocol redesign
 > (re-locked s4; it now PRECEDES Gate B).** Authoritative detail =
 > `docs/v1-launch-program.md` "Phase-2 DESIGN DECISION — LOCKED v2".
-> Build it upstream in `maintainers/` on a new branch → governed PR →
-> re-pin, **at a START, attentively — NOT a tail-bolt** (the verifier +
-> Mandate canonical bytes are the load-bearing trust path). Scope:
+> **Status (s5): c2 — the v2 protocol *core* — is LANDED + pushed**
+> (`feat/keyfile-register` `5f3b146`; maintainers 332/32, flagship guard
+> 2526/225; branch NOT pinned). **Next = c3: the `createKey` +
+> `upsertMandate` CLI verbs** (`genesis`/`mandate`/`takeover` collapse
+> in; full #28 ceremony discipline) — the security-critical ceremony
+> surface; START it attentively, do NOT tail-bolt. Then c4 (retire v1 +
+> spec→v2 + flagship-consumer migrate + #30 generalised bake) → c5
+> (published v2 spec + `fetch()` client + conformance vectors) →
+> governed PR → re-pin → `npm publish` → flagship drops the pull-script.
+> Build it upstream in `maintainers/` on `feat/keyfile-register` →
+> governed PR → re-pin, **at a START, attentively — NOT a tail-bolt**
+> (the verifier + Mandate canonical bytes are the load-bearing trust
+> path). Full scope:
 > Mandate **v2** canonical bytes with inline succession policy
 > (`approvalRule` `threshold N of […]`, `successors`, `minSuccessors`,
 > `maxDuration`, `defaultDuration`); the **L3 one-rule** verify-forward
