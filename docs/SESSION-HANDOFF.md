@@ -8,6 +8,16 @@ lives **here, in git**. Rebuild your task list from §3 below.
 
 Last updated: 2026-05-18 (**v1-launch program session 8**, Mac/darwin
 box. **★ READ §0 TOP ENTRY FIRST — it is the full resume anchor.**
+**GATE-B IN PROGRESS (s8 cont.):** the user provisioned both YubiKeys
+(on-token Ed25519 slot-9c, PIN/PUK/PIN-protected-mgmt-key hardened);
+the orchestrator implemented + **independently LIVE-verified** the
+native libpcsclite `connectPcscChannel` binding **and fixed the
+pre-existing GET-METADATA pubkey-parse bug it surfaced** (real metadata
+is `04→86`, not GENERATE's `7F49{86}`) — the production
+`loadSignerPubKey("yubikey-piv:slot=9c")` path now returns the real
+slot-9c oracle `2137e739…71d7` 3/3, PIN+PUK counters provably untouched.
+**Governed PR #6 (`feat/gate-b-pcsc-binding` `59363fa`) is OPEN** —
+awaiting the human merge → re-pin → the signed genesis ceremony.
 Net of session 8: the **entire agent-side Phase A** (the maintainers
 protocol product: c4.6 de-version + c4.7 spec + c5 conformance +
 ceremony hardening + governed PRs #3/#4/#5 merged & re-pinned `df992f2`
@@ -152,6 +162,70 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-18 (v1-launch program session 8 cont. — GATE-B step (A)
+  DONE + a pre-existing root-of-trust bug caught & fixed; PR #6 open,
+  awaiting governed merge):** The user provisioned BOTH YubiKeys
+  (on-token Ed25519 slot-9c; PIN set, PUK set, PIN-protected randomly-
+  generated mgmt key — confirmed via `ykman piv info`). Orchestrator
+  preconditions: fixed the predicted `-g` pcsclite blocker (the user's
+  `npm i -g pcsclite` is NOT Node-resolvable from the CLI; installed
+  `pcsclite` into `maintainers/node_modules` via `--no-save` — §28
+  optional dynamic import, NOT in package.json/lockfile, transient
+  ceremony-build dep); captured the **independent oracle** = key-#1
+  slot-9c pubkey `2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010
+  ba91ab5e71d7` via PIN-less `ykman piv keys export`.
+  - **Step (A) — native binding** (subagent → orchestrator verify):
+    `connectPcscChannel`'s fail-closed stub body replaced with the real
+    libpcsclite wiring behind the unchanged `PcscChannel` seam +
+    `piv-apdu` codec (reader/card bounded wait → `connect(SCARD_SHARE_
+    SHARED)` → `Uint8Array↔Buffer` transmit; PC/SC → typed taxonomy).
+  - **★ The hardware gate caught a pre-existing, hardware-only,
+    root-of-trust bug (verify-before-trust's whole purpose):**
+    `getPublicKey` issues GET METADATA (INS 0xF7, no-PIN) but parsed it
+    with `extractEd25519PublicKey`, which only knows the **GENERATE**
+    template `7F49{86}`. A REAL YubiKey 5.7.4 GET METADATA response is
+    a flat TLV seq — pubkey under top-level `0x04 → 0x86` (32 B), **no
+    `7F49`** — so the production no-PIN signer-pubkey path threw on
+    every real token (synthetic unit fixtures never caught it). Fixed
+    via a dedicated strict fail-closed `extractMetadataPublicKey`
+    (Ed25519-alg sanity; `0x04→0x86`; exactly 32 B); `generateEd25519`
+    keeps `extractEd25519PublicKey` for the genuine GENERATE shape;
+    hermetic regression test built from the REAL captured metadata
+    bytes + 5 fail-closed negatives; no coverage deleted.
+  - **Orchestrator independent verify-before-trust (never trusted the
+    subagents):** audited the diff (5 cli files; `piv-apdu` change
+    confined to the pubkey-parse area; binding body + 2 test-
+    hermeticity fixes preserved; pin/protocol/lockfile untouched);
+    re-ran the hermetic gate itself (tsc -b clean + vitest **370 →
+    372/36, 0 failed, ~1.3 s** — hardware-independent, build-not-wired
+    assertions injected not env-dependent); and **independently
+    re-drove BOTH the raw transport AND the full production path
+    `loadSignerPubKey("yubikey-piv:slot=9c")` against the real token,
+    3/3 === the oracle, with `ykman` PIN tries AND PUK tries `3/3`
+    unchanged BEFORE and AFTER (provably no PIN / touch / sign / write
+    — non-destructive public read only).** Throwaway `/tmp` harnesses
+    scrubbed. cwd-poisoning recurred once (a maintainers-cwd then a
+    relative `docs/` path → "No such file"; caught, re-run with
+    absolute `cd /Users/harrywinner/flagship`).
+  - **Committed `feat/gate-b-pcsc-binding` `59363fa` (off `df992f2`),
+    pushed; governed PR `ibisllc/maintainers#6` OPEN.** `pcsclite` NOT
+    added to any manifest. Pin `df992f2` UNCHANGED (re-pin on the
+    governed merge — PR #1..#5 precedent).
+  - **NEXT (after the human merges PR #6):** (1) re-pin
+    `scripts/maintainers.pinned-sha` → PR#6 first-parent merge commit;
+    `pull-maintainers.sh pull`; re-run both gates. (2) **Re-install the
+    ceremony-build dep** — `pull-maintainers.sh` `npm install` will NOT
+    restore `pcsclite` (optional, not in manifest): re-run `cd
+    /Users/harrywinner/flagship/maintainers && npm i pcsclite --no-save`
+    before the ceremony. (3) With key #1 plugged in: `--dry-run` all 3
+    tracks (ca, release, ops) — no PIN/tap, the no-PIN pubkey read now
+    works on real hw (proven). (4) The human runs each real
+    `upsert-mandate` (types `UPSERT-MANDATE` + PIN + tap). (5) Agent
+    `verify`/`status`, recompute + record each track's `mandatePinHash`
+    (Phase C bakes that into 4 surfaces). `file:` NOT acceptable for
+    the genesis root. Deploy nothing. Full runbook =
+    `docs/ca-operations.md` Operation 0.
 
 - **2026-05-18 (v1-launch program session 8 — ★ AGENT-DOABLE WORK
   EXHAUSTED ON THIS ENV; clean documented stop at the human/credential/

@@ -488,6 +488,33 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-18 — session 8 cont. (Mac/darwin): GATE-B step (A) done + a root-of-trust codec bug caught & fixed (PR #6 open)
+
+User provisioned both YubiKeys (on-token Ed25519 slot-9c; PIN/PUK set;
+PIN-protected random mgmt key — ykman-confirmed). Orchestrator fixed
+the predicted `-g` pcsclite resolution blocker (installed local
+`--no-save`, §28 optional dep) and captured the independent oracle
+(key-#1 slot-9c pubkey `2137e739…71d7`). Subagent #1 implemented the
+real native libpcsclite `connectPcscChannel` binding (behind the
+unchanged seam + piv-apdu codec; PC/SC→typed taxonomy). ★ The hardware
+gate surfaced a pre-existing root-of-trust bug: `getPublicKey` parsed
+the no-PIN GET-METADATA response with the GENERATE-only `7F49{86}`
+parser, but real metadata is `0x04→0x86` — it threw on every real
+token. Subagent #2 fixed it (dedicated strict `extractMetadataPublicKey`;
+GENERATE path preserved; real-bytes hermetic regression + 5 negatives).
+Orchestrator verify-before-trust (never trusted either subagent):
+audited the confined diff; re-ran the hermetic gate itself (372/36, 0
+failed, ~1.3 s, hardware-independent); and **independently re-drove
+both the raw transport and the full production path
+`loadSignerPubKey("yubikey-piv:slot=9c")` against the real token, 3/3
+=== the oracle, ykman PIN+PUK 3/3 unchanged before+after (non-
+destructive — no PIN/touch/sign)**. Committed `feat/gate-b-pcsc-binding`
+`59363fa`, governed **PR #6 open**, pin `df992f2` unchanged. Next:
+human merges PR #6 → re-pin → re-install pcsclite ceremony-dep →
+dry-run all 3 tracks → human performs the signed `upsert-mandate` per
+track → record each `mandatePinHash` (→ Phase C bake). Runbook =
+`docs/ca-operations.md` Operation 0.
+
 ### 2026-05-18 — session 8 (Mac/darwin): agent-doable Phase E COMPLETE — recon showed J.3/J.4 + E2E already built
 
 Verify-before-trust over the prompt's Phase-E framing (docs/landed-code
