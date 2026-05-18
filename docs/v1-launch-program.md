@@ -50,7 +50,7 @@ open phase here.
 | Phase | Title | State |
 |---|---|---|
 | **1** | Genesis ceremony (keystone) — **now: the first `upsertMandate`, its hash pinned** | **▶ Gate A SATISFIED; #28 done. Gate B RE-SEQUENCED behind the Phase-2 v2 lock (s4).** The genesis is no longer "per-track self-signed Mandate v1 + bake pubkeys" — it is **the first `upsertMandate` (Mandate v2, inline policy), whose canonical hash is the per-surface pin** (#30 generalised). Because Gate B freezes the pinned-mandate shape **forever**, the **Phase-2 v2 protocol redesign MUST land + be re-pinned BEFORE Gate B.** Gate B itself stays TWO-PART (P: human provisions `pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, set policy/`maxDuration`; A: agent implements+live-verifies the `connectPcscChannel` libpcsclite wiring behind the tested seam, never blind) → `--dry-run` → human signs the from-scratch `upsertMandate` → agent verifies + bakes the **pinned-mandate hash** + re-runs #8. `file:` NOT acceptable. Deploy nothing. |
-| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s6: the entire flagship-side migration landed).** Per the LOCKED v2 design below. **c1 `dc48559`** + **c2 `5f3b146`** (v2 core) + **c3a `23a4d35`** + **c3b `2fa2b0c`** (CLI verbs) — s5. **s6: c4.1 `6cfee83`** (v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers **371/36**) + **c4.3 `5fb2fdf`** (flagship #30 generalised → `MAINTAINER_PINNED_MANDATE_HASH`) + **c4.4 `ff8ce91`** (the LIVE flagship trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to verify-forward-from-pin; **flagship gate now a REAL v2 consumer check**, new baseline **2529/225**) — all LANDED + pushed on `feat/keyfile-register` / `main`; NOT pinned (`833fa45`). flagship no longer imports ANY v1 Mandate-path symbol. genesis/mandate/takeover + the v1 Mandate path remain (retired in **c4.5e**). **Remaining:** **c4.5 — the maintainers v1→v2 cutover, CONSUMER-FIRST decomposed (s7 verify-before-trust correction; the "one atomic commit" call is SUPERSEDED — the true blast radius is ~30 files / 5 packages incl. the forgotten `extension`; consumer-first→removal-last is safe because the v2 symbols already exist additively):** c4.5a worker → c4.5b web-ui (delete the v1 signing views per #31) → c4.5c extension → c4.5d cli (delete genesis/mandate/takeover) → **c4.5e protocol v1-removal (LAST; re-home the shared VerifiedEndorsements/EndorsementFailReason/VerifiedCaEndorsements types)** — a–d order-free + independent, each its OWN green commit (v2 coexists with v1 until e), flagship guard 2529/225 throughout. → **c4.6 de-version rename** (user decision s6: "v2" is a transitional dev artifact — the protocol is UNRELEASED/never-used; drop the `V2` code-symbol suffix + reset the Mandate envelope `version 2→1` + canonical tag `maintainers/mandate/v2→/v1`; keep a numeric wire version; NOT a trust-model change; changes `mandatePinHash` ⇒ MUST precede c4.7/c5/Gate B, OK only because nothing is pinned yet) → **c4.7** spec (authored directly under the final name) → **c5** published spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. (The old separate-additive-`Envelope` "c4.2" was deleted as over-decomposition — folds into c4.5.) **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
+| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s6: the entire flagship-side migration landed).** Per the LOCKED v2 design below. **c1 `dc48559`** + **c2 `5f3b146`** (v2 core) + **c3a `23a4d35`** + **c3b `2fa2b0c`** (CLI verbs) — s5. **s6: c4.1 `6cfee83`** (v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers **371/36**) + **c4.3 `5fb2fdf`** (flagship #30 generalised → `MAINTAINER_PINNED_MANDATE_HASH`) + **c4.4 `ff8ce91`** (the LIVE flagship trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to verify-forward-from-pin; **flagship gate now a REAL v2 consumer check**, new baseline **2529/225**) — all LANDED + pushed on `feat/keyfile-register` / `main`; NOT pinned (`833fa45`). flagship no longer imports ANY v1 Mandate-path symbol. genesis/mandate/takeover + the v1 Mandate path remain (retired in **c4.5e**). **Remaining:** **c4.5 — the maintainers v1→v2 cutover, CONSUMER-FIRST decomposed (s7 verify-before-trust correction; the "one atomic commit" call is SUPERSEDED — the true blast radius is ~30 files / 5 packages incl. the forgotten `extension`; consumer-first→removal-last is safe because the v2 symbols already exist additively):** **c4.5a worker `650fee2` ✅** → **c4.5b web-ui `429a57c` ✅** (signing views onboard/renew/takeover DELETED per #31; maintainers **378/37**, flagship guard **2529/225**) → c4.5c extension → c4.5d cli (delete genesis/mandate/takeover) → **c4.5e protocol v1-removal (LAST; re-home the shared VerifiedEndorsements/EndorsementFailReason/VerifiedCaEndorsements types)** — a–d order-free + independent, each its OWN green commit (v2 coexists with v1 until e), flagship guard 2529/225 throughout. → **c4.6 de-version rename** (user decision s6: "v2" is a transitional dev artifact — the protocol is UNRELEASED/never-used; drop the `V2` code-symbol suffix + reset the Mandate envelope `version 2→1` + canonical tag `maintainers/mandate/v2→/v1`; keep a numeric wire version; NOT a trust-model change; changes `mandatePinHash` ⇒ MUST precede c4.7/c5/Gate B, OK only because nothing is pinned yet) → **c4.7** spec (authored directly under the final name) → **c5** published spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. (The old separate-additive-`Envelope` "c4.2" was deleted as over-decomposition — folds into c4.5.) **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
 | 5 | On-demand VPS + promo AI + real vibe-code | ☐ seam built (#83/#85); human/credential |
@@ -487,6 +487,43 @@ every §S box is ☑ → v1-alpha.
 ---
 
 ## Progress log (newest first)
+
+### 2026-05-18 — session 7 cont. (Linux box): recovered a 9h-looped session → c4.5b LANDED (orchestrator, one subagent at a time)
+
+A prior session persisted the execution-model decision (`9dd3154`) then
+looped ~9h. Recovery verified it caused **zero damage** (repo clean, no
+spurious commits, pin `833fa45` unchanged, no crons/tasks/wakeups
+armed). Start gate re-verified green at baseline — flagship **2529/225**,
+maintainers **373/36** @ `650fee2`, both tsc clean. User chose to resume
+c4.5 as **orchestrator + ONE subagent at a time** (the documented model
+but strictly serial — no parallel design fan-out, no parallel worktrees).
+
+**c4.5b LANDED `429a57c` (maintainers `feat/keyfile-register`),
+pushed.** `packages/web-ui` re-based off the v1 Mandate/policy path onto
+v2 verify-forward-from-pin while v1 still coexists in protocol (additive;
+protocol removal is c4.5e, last). Per **#31** (web-ui is STATUS/PREVIEW
+only, NEVER a signing surface — the program's own directive) the three
+signing views `onboard`/`renew`/`takeover` and their v1 mandate/policy
+builders were DELETED, not ported. `project.ts`/`state.ts` →
+`verifyMandateChainFromPin` + `currentAuthorityV2` over the v2 on-disk
+convention (no policy.json/rootPolicy/TrackPolicy); `adapter.ts` →
+local v2-only envelope union (the c4.5a `WorkerEnvelope` pattern);
+preview anchor = first on-repo mandate's `mandatePinHash` (the c4.5a
+`summarizeState` no-baked-pin pattern; security boundary unchanged +
+documented). Tests rewritten to v2 fixtures incl. the mandated
+fail-closed negatives. 16 files, +586/−1938.
+
+**Verify-before-trust applied:** the subagent's self-reported "green"
+was NOT trusted — the orchestrator re-ran the FULL gate itself
+(maintainers tsc -b clean + vitest **373/36 → 378/37**, +5 new v2
+coverage; flagship guard tsc -b clean + **2529/225** unchanged) and
+audited the diff (confined to `packages/web-ui`, protocol untouched, pin
+unchanged, zero forbidden v1 symbols) before commit+push. The
+cwd-poisoning hazard recurred (a backgrounded flagship-guard ran in the
+poisoned `…/maintainers` cwd → 37/378 not 225/2529; caught by the count,
+re-run with explicit `cd /abs && pwd && …`). **Next = c4.5c (extension)
+then c4.5d (cli), order-free; c4.5e strictly last; then c4.6 → c4.7 →
+c5 → governed PR → re-pin → npm publish → Gate B (all unchanged).**
 
 ### 2026-05-18 — session 7 (Linux box): c4.5 verify-before-trust correction — consumer-first, not one atomic commit
 

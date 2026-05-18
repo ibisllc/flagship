@@ -18,11 +18,13 @@ verify-forward-from-pin — **the flagship gate is now a REAL v2 consumer
 check**, new honest baseline **2529/225**, tsc clean both). flagship no
 longer imports ANY v1 Mandate-path symbol. Branch pin UNCHANGED
 `833fa45` (never pin an unmerged tip). **c4.5a (worker) LANDED s7
-`650fee2`; Next = c4.5b/c4.5c/c4.5d (order-free) → c4.5e LAST.** The
+`650fee2`; c4.5b (web-ui) LANDED s7 `429a57c` (maintainers now
+**378/37**, flagship guard **2529/225** unchanged); Next =
+c4.5c/c4.5d (order-free) → c4.5e LAST.** The
 maintainers v1→v2 cutover is CONSUMER-FIRST decomposed per the s7
 verify-before-trust correction — the "one atomic commit" call is
 SUPERSEDED; ~30 files / 5 pkgs incl. the forgotten `extension`;
-sub-sequence c4.5a worker ✅ → b web-ui → c extension → d cli → e
+sub-sequence c4.5a worker ✅ → b web-ui ✅ → c extension → d cli → e
 protocol-removal-LAST, each its own green commit, v2 coexists with v1
 until e; each the next attentive START, NOT a tail-bolt → **c4.6
 de-version rename** (user decision s6: "v2" is a
@@ -37,6 +39,51 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 7 cont. — c4.5b LANDED,
+  orchestrator-driven, recovered after a prior session looped 9h):**
+  the prior session persisted the execution-model decision (`9dd3154`)
+  then looped for ~9h WITHOUT corrupting anything — repo clean, no bad
+  commits, pin unchanged, no crons/tasks/wakeups armed. Recovery
+  re-verified the start gate green at baseline (flagship **2529/225**,
+  maintainers **373/36** @ `650fee2`, both tsc clean) then resumed
+  c4.5 as **orchestrator + ONE subagent at a time** (user-chosen mode:
+  documented model but strictly serial, no parallel fan-out).
+  - **c4.5b LANDED `429a57c` (maintainers `feat/keyfile-register`),
+    pushed.** `packages/web-ui` re-based off the v1 Mandate/policy path
+    onto v2 verify-forward-from-pin while v1 still coexists in protocol
+    (additive — protocol untouched, removed last in c4.5e). Per #31
+    (web-ui is STATUS/PREVIEW only, NEVER a signing surface) the three
+    signing views `onboard`/`renew`/`takeover` + their v1 mandate/policy
+    builders were DELETED, not ported (the program's own directive).
+    `project.ts`/`state.ts` → `verifyMandateChainFromPin` +
+    `currentAuthorityV2` over the v2 on-disk convention
+    (`tracks/<t>/mandates/*.json` v2-filtered, no policy.json/
+    rootPolicy/TrackPolicy); `adapter.ts` uses a local v2-only envelope
+    union mirroring c4.5a's `WorkerEnvelope`; preview anchor = first
+    on-repo mandate's `mandatePinHash` (the c4.5a `summarizeState`
+    no-baked-pin pattern; security boundary unchanged + documented).
+    Tests rewritten to v2 fixtures incl. the mandated fail-closed
+    negatives (empty-pin⇒`no-pin`⇒reject, pin-not-in-log⇒reject,
+    unauthorised-successor⇒`signer-not-in-successor-set`). 16 files,
+    +586/−1938.
+  - **Verify-before-trust applied as designed:** the chunk's
+    self-reported "green" was NOT trusted — the orchestrator
+    re-ran the FULL gate itself (maintainers `tsc -b` clean + vitest
+    **373/36 → 378/37**, +5 from the new v2 coverage; flagship guard
+    `tsc -b` clean + **2529/225** unchanged, web-ui not in flagship's
+    import graph + protocol untouched ⇒ provably unaffected) and audited
+    the diff (confined to `packages/web-ui`, protocol untouched, pin
+    `833fa45` unchanged, zero forbidden v1 symbols, fail-closed negatives
+    asserted) BEFORE commit+push.
+  - **★ cwd-poisoning recurred and was caught (the documented §0
+    hazard).** A backgrounded flagship-guard command launched with the
+    persistent cwd poisoned to `…/maintainers` (a prior `cd` persisted)
+    re-ran the *maintainers* gate instead (37/378, not 225/2529); caught
+    by inspecting the count, re-run with explicit `cd /home/kamdemharry/
+    flagship && pwd && …`. Discipline reaffirmed: EVERY command (incl.
+    backgrounded) must start with an explicit absolute `cd /abs &&` or
+    use `git -C`; never rely on the persistent cwd. Next = c4.5c
+    (extension) then c4.5d (cli), order-free; c4.5e strictly last.
 - **2026-05-18 (v1-launch program session 7 — EXECUTION-MODEL DECISION,
   user-directed):** the program now runs as **ORCHESTRATOR +
   fresh-subagent-per-chunk**, parallel where genuinely independent. This
