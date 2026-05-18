@@ -7,8 +7,24 @@ TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
 Last updated: 2026-05-18 (**v1-launch program session 8**, Mac/darwin
-box. **c4.6 DE-VERSION RENAME LANDED — the protocol's first-ever
-shipped name is final.** Thin-orchestrator + ONE fresh subagent for the
+box. **★ READ §0 TOP ENTRY FIRST — it is the full resume anchor.**
+Net of session 8: the **entire agent-side Phase A** (the maintainers
+protocol product: c4.6 de-version + c4.7 spec + c5 conformance +
+ceremony hardening + governed PRs #3/#4/#5 merged & re-pinned `df992f2`
++ the `@maintainers/protocol`→`@ibisllc/maintainers@0.1.0` rename)
+**AND the agent-doable Phase E** (marketplace security-scan service
+built `9aac1ec`; iOS / Recovery-J.3-J.4 / E2E-rig-13-scenarios-CI
+verify-before-trust-confirmed already built) are **COMPLETE, gate-green
+(flagship `95f88a7` 2567/227, maintainers `df992f2` 370/36), pushed.**
+**Everything still open is HUMAN / CREDENTIAL / HARDWARE / CI /
+LIVE-EXERCISE gated** (Gate B genesis; Phase C bake-the-pin blocked on
+it; Phase F ISO/VPS = env-gated here [no qemu/docker/Linux; x86_64] +
+paid-VPS; §S live exercises; iOS TestFlight; Android on a JDK box; the
+deferred `npm publish` — the user's pasted npm token is BURNED, revoke
+it). The orchestrator faked nothing and stopped cleanly at the
+boundary; §0 top entry has the precise copy-pasteable unblock runbook
+per gate. (Prior session-8 narrative follows for history.) Thin-
+orchestrator + ONE fresh subagent for the
 chunk, verify-before-trust: env-sync drift caught at cold start (local
 `maintainers/` clone stale at `dc48559`/c1 — non-destructively
 ff-only-merged to `208978a`/c4.5e; both baseline gates re-verified green
@@ -136,6 +152,93 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-18 (v1-launch program session 8 — ★ AGENT-DOABLE WORK
+  EXHAUSTED ON THIS ENV; clean documented stop at the human/credential/
+  hardware boundary):** Phase F recon (verify-before-trust +
+  [[feedback-no-hardware-assumptions]]): this box is **darwin/arm64
+  with NO qemu, NO docker/colima/lima, NO Linux**; the ISO is **Alpine
+  x86_64** built by a **Linux-only** `scripts/build-flagship-iso.sh`
+  (`xorriso`, `runs-on: ubuntu-22.04`). ⇒ the Phase-F agent-doable part
+  (ISO build + local QEMU smoke) **cannot be responsibly performed or
+  verified here** (same env-gate class as Android-no-JDK). The
+  *reproducible ISO build itself is already CI-proven* (§S
+  reproducible-build ✅, build-iso.yml builds twice + cmp). Also
+  verified the last two candidate §S items are **code-complete** (gap
+  is live/operational, not agent code): **#4 LLM-promo cap** =
+  `packages/control-plane/src/llmPromo.ts` + 5 green test files
+  (`control-plane/tests/llmPromo.test.ts`, `apps/web/tests/
+  {llmPromo,webappPromoUi,surfaceSplit}.test.ts`, `storage/tests/
+  inMemory.test.ts`); deployed per backlog #3 — gap = the live cap
+  demonstration. **#9 security disclosure** = `apps/web/public/
+  security/disclosure.html` (9.2 KB) + `report.html` (5.2 KB) exist —
+  gap = operational bounty payouts (not code).
+  - **★ STATE OF THE WHOLE PROGRAM (this is the resume anchor):**
+    flagship `main` tip `95f88a7` (gate **2567/227** tsc-clean);
+    maintainers pinned `df992f2` (gate **370/36** tsc-clean); package
+    is `@ibisllc/maintainers@0.1.0`. Working tree clean except the
+    perpetual `project.pbxproj` xcodegen artifact (never commit). ALL
+    agent work committed + pushed.
+    - **Phase A (agent-side): COMPLETE** — c4.6/c4.7/c5 + ceremony
+      hardening + PRs #3/#4/#5 merged + re-pinned + the rename.
+    - **Phase E (agent-doable): COMPLETE** — marketplace scanner BUILT
+      (`9aac1ec`); iOS code-complete+232-XCTests-green; Recovery
+      J.3/J.4 + the E2E rig+13-scenarios+CI verified already built.
+    - **Phase B — HUMAN+HARDWARE:** the genesis ceremony. (P)
+      provisioning checklist is armed in `docs/ca-operations.md`
+      Operation 0: install `pcsclite`+`ykman`; `ykman piv keys
+      generate --algorithm ED25519 --pin-policy ONCE --touch-policy
+      ALWAYS 9c …` on BOTH YubiKeys; decide DURATION (LOCKED D1
+      long-lived, e.g. `3650d`) + policy (`--threshold`/
+      `--min-successors`/`--max-duration`). Then the agent implements
+      + LIVE-verifies the `connectPcscChannel` libpcsclite binding
+      WITH the reader/token (governed `maintainers` PR + re-pin; the
+      in-code GATE-(A) plan is in `packages/cli/src/lib/piv-pcsc.ts`),
+      `--dry-run`, then the human types `UPSERT-MANDATE` + PIN + taps;
+      agent verifies the chain + records `mandatePinHash`.
+    - **Phase C — BLOCKED on Gate B** (needs the genesis mandate hash):
+      bake `MAINTAINER_PINNED_MANDATE_HASH` per surface (protocol-const
+      + webapp via it + iOS + Android — 4 locations, one value) + wire
+      #9 (webapp link-4) / #10 (iOS+Android verify-forward reimpl),
+      each PROVEN against the published `maintainers/conformance/`
+      vectors incl. the absent/forked-pin reject.
+    - **Phase D:** #31 (web-ui status/preview-only) already enforced
+      (signing views deleted in c4.5b); #32 (generic OSS NFC-tap app,
+      Android-first) is a multi-week upstream app, post-merge — NOT a
+      v1-launch blocker.
+    - **Phase F — ENV + CREDENTIAL gate:** needs a Linux/x86_64 box
+      (or Docker) with qemu/KVM to build+smoke the ISO, then a PAID
+      VPS that boots a custom ISO (Vultr `vultr-cli iso create --url`,
+      or Hetzner `hcloud` / Scaleway `scw`) — user supplies the API
+      token (`! export VULTR_API_KEY=…`). Chain: phone-sim mints a
+      build code at `flagshipserver.com/dev/create-server` → `/build/`
+      personalizes the ISO → boot on the VPS → first-boot installer
+      (LUKS + register) → tunnel up → `curl https://<server>.<user>.
+      flagship.services/` real green padlock → exercise unlock-on-boot
+      / auto-unlock-lease+renewal / WebAuthn-PRF recovery / Web Push.
+    - **Phase G — LIVE/HUMAN exercises** to tick §S: iOS TestFlight
+      (`[[project-testflight-blockers]]`: 4 wrangler APNs `secret put`
+      in `apps/com/`, Apple "Associated Domains" tick, Archive→ASC,
+      ASC metadata, real-device push smoke, 5 testers); Android on a
+      JDK box → Play internal; marketplace ≥10 listings + ≥3
+      cross-pod installs (scanner code now exists); update-pack 7-day
+      two-pod; lineage-break live; STK rotation live; recovery
+      lost-phone live; LLM-cap live demo; bounty payouts.
+    - **DEFERRED non-blocking:** `npm publish @ibisllc/maintainers
+      @0.1.0` — create the `ibisllc` npm org + a FRESH `@ibisllc`-
+      scoped bypass-2FA token (**the token the user pasted earlier is
+      BURNED — revoke it at npmjs.com → Access Tokens**); then `cd
+      maintainers/packages/protocol && npm publish --access public`
+      (the orchestrator then verifies it + does the flagship-drops-
+      `pull-maintainers.sh`+`maintainers.pinned-sha`+symlink chunk —
+      the symlink-is-live-consumer gotcha ends there). Off the
+      critical path (the pull-script bootstrap works).
+  - **The orchestrator did NOT fake any gate.** Clean stop per the
+    program's §5: everything agent-doable on this env is landed +
+    gate-green + pushed + documented; each remaining step has a
+    precise copy-pasteable runbook above / in `ca-operations.md`. A
+    resume on a Linux+qemu box can take Phase F directly; the human
+    gates are independent and can proceed in any order.
 
 - **2026-05-18 (v1-launch program session 8 — Phase E agent-doable
   work COMPLETE; recon-vs-prompt discrepancies recorded):**
