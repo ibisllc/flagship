@@ -17,14 +17,14 @@ LIVE trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to
 verify-forward-from-pin — **the flagship gate is now a REAL v2 consumer
 check**, new honest baseline **2529/225**, tsc clean both). flagship no
 longer imports ANY v1 Mandate-path symbol. Branch pin UNCHANGED
-`833fa45` (never pin an unmerged tip). **c4.5a (worker) LANDED s7
-`650fee2`; c4.5b (web-ui) LANDED s7 `429a57c` (maintainers now
-**378/37**, flagship guard **2529/225** unchanged); Next =
-c4.5c/c4.5d (order-free) → c4.5e LAST.** The
+`833fa45` (never pin an unmerged tip). **c4.5a (worker) `650fee2`,
+c4.5b (web-ui) `429a57c`, c4.5c (extension) `fba0657` ALL LANDED s7
+(maintainers now **385/37**, flagship guard **2529/225** unchanged);
+Next = c4.5d (cli) → c4.5e LAST.** The
 maintainers v1→v2 cutover is CONSUMER-FIRST decomposed per the s7
 verify-before-trust correction — the "one atomic commit" call is
 SUPERSEDED; ~30 files / 5 pkgs incl. the forgotten `extension`;
-sub-sequence c4.5a worker ✅ → b web-ui ✅ → c extension → d cli → e
+sub-sequence c4.5a worker ✅ → b web-ui ✅ → c extension ✅ → d cli → e
 protocol-removal-LAST, each its own green commit, v2 coexists with v1
 until e; each the next attentive START, NOT a tail-bolt → **c4.6
 de-version rename** (user decision s6: "v2" is a
@@ -39,6 +39,29 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 7 cont. — c4.5c LANDED):**
+  **c4.5c `fba0657` (maintainers `feat/keyfile-register`), pushed.**
+  `packages/extension` (the browser-extension verifier — a pure
+  consumer, no signing surface) re-based off v1 onto v2 while v1 still
+  coexists in protocol (additive; protocol removal is c4.5e, last).
+  `verifier-logic.ts`: `verifyTrack`/`currentAuthority`/
+  `lastExpiredMandate`/`verifyChainOfEndorsements` →
+  `verifyMandateChainFromPin`+`currentAuthorityV2`+
+  `verifyChainOfEndorsementsV2`; expiry derived from
+  `currentAuthorityV2===null`+last-valid (no v1 holder-in-window split).
+  `fetcher.ts` → v2 on-disk convention (no policy.json/RootPolicy/
+  TrackPolicy; v1 shapes dropped pre-verifier). Preview anchor = first
+  on-repo mandate's `mandatePinHash` via a `safePinHash` wrapper
+  (non-canonicalizable ⇒ ""⇒`no-pin`⇒fail-closed); the c4.5a/c4.5b
+  no-baked-pin pattern, boundary documented. CA track was never
+  separately endorsement-verified ⇒ no `*V2` CA call wired (behaviour
+  preserved). 9 files, +520/−313. **Verify-before-trust applied:** the
+  subagent's "green" was NOT trusted — orchestrator re-ran the FULL
+  gate itself with pwd-confirmed cwd (maintainers tsc -b clean + vitest
+  **378/37 → 385/37**, +7; flagship guard tsc -b clean + **2529/225**
+  unchanged) and audited the diff (confined to `packages/extension`,
+  protocol untouched, pin `833fa45` unchanged, zero forbidden v1
+  symbols) before commit+push. **Next = c4.5d (cli); c4.5e last.**
 - **2026-05-18 (v1-launch program session 7 cont. — c4.5b LANDED,
   orchestrator-driven, recovered after a prior session looped 9h):**
   the prior session persisted the execution-model decision (`9dd3154`)
