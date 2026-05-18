@@ -17,14 +17,16 @@ LIVE trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to
 verify-forward-from-pin — **the flagship gate is now a REAL v2 consumer
 check**, new honest baseline **2529/225**, tsc clean both). flagship no
 longer imports ANY v1 Mandate-path symbol. Branch pin UNCHANGED
-`833fa45` (never pin an unmerged tip). **c4.5a (worker) `650fee2`,
-c4.5b (web-ui) `429a57c`, c4.5c (extension) `fba0657` ALL LANDED s7
-(maintainers now **385/37**, flagship guard **2529/225** unchanged);
-Next = c4.5d (cli) → c4.5e LAST.** The
+`833fa45` (never pin an unmerged tip). **ALL FOUR consumer re-bases
+LANDED s7: c4.5a (worker) `650fee2`, c4.5b (web-ui) `429a57c`, c4.5c
+(extension) `fba0657`, c4.5d (cli — collapsed verbs deleted) `616b8f9`
+(maintainers now **382/37**, flagship guard **2529/225** unchanged). No
+consumer imports v1 anymore. Next = c4.5e (protocol v1-removal,
+STRICTLY LAST — the only remaining v1 holder).** The
 maintainers v1→v2 cutover is CONSUMER-FIRST decomposed per the s7
 verify-before-trust correction — the "one atomic commit" call is
 SUPERSEDED; ~30 files / 5 pkgs incl. the forgotten `extension`;
-sub-sequence c4.5a worker ✅ → b web-ui ✅ → c extension ✅ → d cli → e
+sub-sequence c4.5a worker ✅ → b web-ui ✅ → c extension ✅ → d cli ✅ → e
 protocol-removal-LAST, each its own green commit, v2 coexists with v1
 until e; each the next attentive START, NOT a tail-bolt → **c4.6
 de-version rename** (user decision s6: "v2" is a
@@ -39,6 +41,34 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 7 cont. — c4.5d LANDED;
+  ALL consumers now v2):** **c4.5d `616b8f9` (maintainers
+  `feat/keyfile-register`), pushed.** `packages/cli` re-based off v1
+  onto v2; per the LOCKED "CLI verbs" decision the three collapsed v1
+  verbs `genesis`/`mandate`/`takeover` (= the from-scratch/renewal/
+  takeover cases of the ONE landed `upsert-mandate`) were DELETED and
+  unwired from `index.ts`/`args.ts`. `verify.ts` → `verifyMandate
+  ChainFromPin`+`currentAuthorityV2`+`verifyChainOfEndorsementsV2`,
+  no-baked-pin `safePinHash` anchor (no `--pin` flag exists; none
+  invented). `lib/store.ts` → v2 on-disk convention via the existing
+  `readMandatesV2`. `endorsement.ts`/`caEndorsement.ts` authority →
+  `currentAuthorityV2`/`authorizedCaKeysV2` (still EMIT v1
+  ReleaseEndorsement/CaEndorsement — unchanged by the v2 model).
+  Subagent self-corrected an assertion-design error: an on-disk tamper
+  surfaces as `root-signature-invalid` (the preview anchor recomputes
+  the hash over the tampered bytes, so the pin still matches the file —
+  the signature is what breaks), still a hard fail-closed; the pure
+  `pin-not-in-log`/forked/unauthorised-successor negatives moved to the
+  protocol-layer test where each is genuinely reachable. 18 files,
+  +553/−1454. **Verify-before-trust applied:** orchestrator re-ran the
+  FULL gate itself pwd-confirmed (maintainers tsc -b clean + vitest
+  **385/37 → 382/37**, net −3 deleted-verb tests, expected; flagship
+  guard tsc -b clean + **2529/225** unchanged), audited the diff
+  (confined to `packages/cli`, protocol/pin untouched, zero forbidden
+  v1 symbols, fail-closed negatives confirmed asserted) before
+  commit+push. **All four consumers (worker/web-ui/extension/cli) are
+  now on v2; nothing imports v1. c4.5e (protocol v1-removal) is now
+  unblocked and is the STRICTLY-LAST chunk.**
 - **2026-05-18 (v1-launch program session 7 cont. — c4.5c LANDED):**
   **c4.5c `fba0657` (maintainers `feat/keyfile-register`), pushed.**
   `packages/extension` (the browser-extension verifier — a pure
