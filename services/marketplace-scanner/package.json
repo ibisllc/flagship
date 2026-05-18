@@ -13,9 +13,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
-    "@flagship/protocol": "*",
-    "@noble/curves": "^2.2.0",
-    "@noble/hashes": "^1.5.0"
+    "@flagship/protocol": "*"
   },
   "license": "BUSL-1.1"
 }

@@ -1,91 +1,79 @@
-# Flagship marketplace scanner (#56)
+# Flagship marketplace scanner
 
-Standalone service that runs Trivy + custom checks on marketplace
-listings and posts a signed scan result back to `flagshipserver.com`.
+The marketplace security-scan service (build-tasks §L). Given a
+listing, it clones the canonical pod's repo at the pinned
+`manifest_hash`, runs a sandboxed tool chain, computes a deterministic
+A–F grade, uploads a report to R2, and posts a **scanner-signed**
+`MarketplaceScanResult` back to `flagshipserver.com`. `.com` already
+verifies that envelope (`handleMarketplaceScanResult` →
+`verifyMarketplaceScanResult`) and writes
+`marketplace_listings.scan_grade + scan_report_key`. This package is
+the previously-missing *producer* of that envelope.
 
-## What it does
+## Architecture (pure core + injected ports)
 
-For each marketplace listing whose `scan_grade` is NULL:
+Mirrors the `packages/control-plane` convention: a pure,
+runtime-agnostic, fully-unit-tested core + thin runtime adapters.
 
-1. Pulls the docker image at the listing's `imageRef`.
-2. Runs Trivy (`trivy image --format json --quiet --severity HIGH,CRITICAL`)
-   against the image.
-3. Runs custom checks against the listing's `flagship.app.json` manifest:
-   - No `*` in `data.network.allowedHosts`.
-   - No `runtime.requiresPrivileged: true`.
-   - No suspicious `runtime.envInject.*` patterns.
-4. Computes a grade (A/B/C/D/F) from the Trivy CVE counts + custom-check results.
-5. Uploads the full JSON report to R2 at `r2://flagship-scan-reports/<creator>/<slug>/<imageDigest>.json`.
-6. Posts a signed `MarketplaceScanResult` envelope to `POST /api/marketplace/<creator>/<slug>/scan`.
-
-## Grade rubric
-
-| Grade | Criteria |
+| File | Role |
 |---|---|
-| A | 0 CRITICAL + 0 HIGH CVEs in Trivy output; all custom checks pass. |
-| B | 0 CRITICAL + 1-2 HIGH CVEs; all custom checks pass. |
-| C | 0 CRITICAL + 3-5 HIGH CVEs; OR 1 minor custom check warning. |
-| D | 0 CRITICAL + 6+ HIGH CVEs; OR multiple custom check warnings. |
-| F | Any CRITICAL CVE; OR any "no shipping" custom check failure (network=`*`, requiresPrivileged=true, etc.). |
+| `src/grade.ts` | Pure A–F policy. Single source of truth for thresholds (see `POLICY.md`). Includes the fail-closed `gradeScanError`. |
+| `src/scanResult.ts` | Builds + signs the envelope using **`@flagship/protocol`'s `signMarketplaceScanResult`** — same bytes `.com` verifies. No hand-rolled canonical bytes. |
+| `src/scanner.ts` | Pure orchestration: assess → grade → assemble report → (upload) → signed post. Fail-closed. |
+| `src/ports.ts` | Injected interfaces: `ScanRunner`, `ReportStore`, `ResultPoster`, `QueueSource`, `Clock`. |
+| `src/adapters.ts` | **Thin real adapters** (git/npm/trivy/semgrep, R2 PUT, HTTP post, scan-queue). NOT unit-tested against real infra. |
+| `src/index.ts` | Thin cron entry: wires real adapters + drains the landed scan-queue. |
 
-The rubric is intentionally cautious — most well-maintained images
-land at B+ — so a marketplace listing that ships A is "this maintainer
-clearly cares about CVEs." An F listing is hidden from search by
-default (a config knob).
+The vitest gate substitutes fake ports — it never execs
+git/npm/trivy/semgrep/docker or touches the network. The real tools
+run only at the live/operator edge.
+
+## Grade policy
+
+See `POLICY.md` (public, deterministic, mirrors `src/grade.ts`).
+Worst-finding-dominates; fail-closed F when a scan does not complete.
 
 ## Deployment
 
-The scanner is meant to run on a Flagship-operated host (a low-end
-VPS or a Flagship-pod with Docker installed). It is NOT a Cloudflare
-Worker — running Trivy needs filesystem access + a Docker daemon.
+Runs on a Flagship-operated Docker-equipped host (low-end VPS or
+Flagship pod), NOT a Cloudflare Worker — the tool chain needs a
+filesystem + child processes.
 
 ```sh
-# One-time:
-sudo apt install -y trivy docker.io
+sudo apt install -y git nodejs npm trivy
+pipx install semgrep
 npm install -g tsx
 git clone https://github.com/ibisllc/flagship
 cd flagship/services/marketplace-scanner
 
-# Configure env:
-export FLAGSHIP_API_URL="https://flagshipserver.com"
-export FLAGSHIP_SCANNER_PRIV_HEX=$(cat .scanner-key)
-export R2_ACCESS_KEY_ID=...
-export R2_SECRET_ACCESS_KEY=...
-export R2_BUCKET=flagship-scan-reports
+export FLAGSHIP_API_BASE="https://flagshipserver.com"
+export FLAGSHIP_SCANNER_PRIV_HEX=$(cat .scanner-key)   # 32-byte hex
+export FLAGSHIP_SCAN_QUEUE_BEARER=...                   # matches .com's scan-queue secret
+export FLAGSHIP_R2_BUCKET_URL=https://<r2-write-proxy>  # report uploads
+# optional: FLAGSHIP_SCAN_STALE_DAYS=30
 
-# Run on a cron (every 6 hours):
+# cron, every 6h:
 0 */6 * * * cd /opt/flagship-scanner && npm start >>scanner.log 2>&1
 ```
 
+`npm start -- --dry` walks the queue and computes + signs grades
+**without** uploading or posting.
+
 ## Signing key
 
-`FLAGSHIP_SCANNER_PRIV_HEX` is the Ed25519 private key whose pubkey
-is set as the Worker's `MARKETPLACE_SCANNER_PUBKEY_HEX` env var. The
-control-plane handler validates incoming scan results against this
-pubkey; only the scanner can post.
+`FLAGSHIP_SCANNER_PRIV_HEX` is the Ed25519 private key whose pubkey is
+set on the Worker as `MARKETPLACE_SCANNER_PUBKEY_HEX`. The
+control-plane handler verifies every incoming result against that
+pubkey; only the holder of the private key can post a grade.
 
-To rotate:
-
-1. Generate a new keypair: `node -e 'const {ed25519}=require("@noble/curves/ed25519"); const p=ed25519.utils.randomPrivateKey(); console.log("priv:", Buffer.from(p).toString("hex")); console.log("pub:", Buffer.from(ed25519.getPublicKey(p)).toString("hex"))'`
-2. Update Worker secret: `wrangler secret put MARKETPLACE_SCANNER_PUBKEY_HEX` (paste pub).
-3. Update scanner env: `FLAGSHIP_SCANNER_PRIV_HEX=<new priv>`.
-4. Restart the scanner cron.
+To rotate: generate a new keypair, `wrangler secret put
+MARKETPLACE_SCANNER_PUBKEY_HEX` (new pub), update
+`FLAGSHIP_SCANNER_PRIV_HEX` (new priv), restart the cron.
 
 ## Local testing
 
 ```sh
-npm test            # runs the grading-rubric unit tests (no Docker needed)
-npm start -- --dry  # walks the listing list + computes grades without posting
+npm test    # pure policy + signed-postback round-trip + fail-closed; no Docker/network
 ```
 
-## What's stubbed in this v1
-
-- Trivy invocation uses `child_process.execFileSync`. For high-volume
-  use a proper pool + async would be better; out of scope.
-- Custom-check set is intentionally narrow (3 checks). Extend as new
-  app-platform attack vectors are discovered.
-- No retry on R2 upload failure — a missed scan just retries on the
-  next cron tick.
-
-This service is BUSL-1.1 → Apache 2.0 in 2030, same as the rest of
-the project.
+BUSL-1.1 → Apache 2.0 in 2030, same as the rest of the project.

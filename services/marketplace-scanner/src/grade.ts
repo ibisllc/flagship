@@ -1,8 +1,21 @@
 /**
- * Grade computation from a Trivy JSON output + custom-check results.
+ * Grade computation — the A–F security-scan policy.
  *
- * Pure function — no I/O — so it's directly unit-testable. The
- * scanner CLI calls this after running Trivy and the manifest checks.
+ * Pure functions, no I/O, fully deterministic: the same inputs always
+ * produce the same grade. The thresholds here are the single source of
+ * truth; `POLICY.md` documents them publicly. If you change a constant
+ * here, change POLICY.md in the same commit.
+ *
+ * WORST-FINDING-DOMINATES: the grade is the *floor* across every
+ * dimension. A clean Trivy result cannot lift a manifest that ships a
+ * no-ship custom-check failure out of F, and a single CRITICAL CVE
+ * caps at F regardless of everything else.
+ *
+ * FAIL-CLOSED: a scan that could not actually run (clone/tool error,
+ * timeout, clone-hash mismatch, sandbox failure) yields the explicit
+ * failure grade `SCAN_ERROR_GRADE` (= "F") — NEVER a passing grade.
+ * `gradeScanError()` is the only path scanners take when scanning was
+ * not completed; it can never return better than F.
  */
 
 export interface TrivyVulnerability {
@@ -19,21 +32,70 @@ export interface TrivyResult {
   LOW: number;
 }
 
+/**
+ * `npm audit --json` rolled up to the same severity buckets as Trivy.
+ * Folded into the Trivy tallies (worst-finding-dominates) so a
+ * CRITICAL advisory in the dependency tree caps the grade at F just
+ * like a CRITICAL OS-package CVE.
+ */
+export interface NpmAuditResult {
+  CRITICAL: number;
+  HIGH: number;
+  MODERATE: number;
+  LOW: number;
+}
+
+/**
+ * `semgrep --config=p/owasp-top-ten --json` rolled up by severity.
+ * Semgrep ERROR ⇒ no-ship-class (caps at F); WARNING ⇒ degrades one
+ * notch like a custom-check warn.
+ */
+export interface SemgrepResult {
+  ERROR: number;
+  WARNING: number;
+  INFO: number;
+}
+
 export interface CustomCheckResult {
   /** Stable identifier — e.g., "network-allowlist-wildcard" */
   id: string;
-  /** "no-ship" = fail-stop; "warn" = degrades grade by one notch. */
+  /** "no-ship" = fail-stop (F); "warn" = degrades grade by one notch. */
   level: "no-ship" | "warn";
   message: string;
 }
 
 export type Grade = "A" | "B" | "C" | "D" | "F";
 
+/**
+ * The grade a scanner MUST report when the scan did not actually
+ * complete (clone failed, a tool errored or timed out, the cloned
+ * tree's hash did not match the pinned manifest_hash, the sandbox
+ * failed). Fail-closed: this is "F", never anything passing.
+ */
+export const SCAN_ERROR_GRADE: Grade = "F";
+
+/** Grades at/above this are considered "passing" for the search filter. */
+export const PASSING_GRADE_FLOOR: Grade = "C";
+
+const GRADE_ORDER: Record<Grade, number> = { A: 4, B: 3, C: 2, D: 1, F: 0 };
+
+/** True iff `g` is a passing grade (>= PASSING_GRADE_FLOOR). */
+export function isPassingGrade(g: Grade): boolean {
+  return GRADE_ORDER[g] >= GRADE_ORDER[PASSING_GRADE_FLOOR];
+}
+
+/** The worse (lower) of two grades. Used to enforce worst-dominates. */
+export function worseGrade(a: Grade, b: Grade): Grade {
+  return GRADE_ORDER[a] <= GRADE_ORDER[b] ? a : b;
+}
+
 export interface GradeBreakdown {
   grade: Grade;
   reasons: string[];
   trivy: TrivyResult;
   customChecks: CustomCheckResult[];
+  /** Present when the grade came from a fail-closed scan error. */
+  scanError?: string;
 }
 
 export function summarizeTrivy(vulns: TrivyVulnerability[]): TrivyResult {
@@ -42,6 +104,45 @@ export function summarizeTrivy(vulns: TrivyVulnerability[]): TrivyResult {
     result[v.Severity] = (result[v.Severity] ?? 0) + 1;
   }
   return result;
+}
+
+/**
+ * Fold an `npm audit` + `semgrep` roll-up into the Trivy severity
+ * tallies and a derived custom-check list, so the single
+ * `computeGrade` policy applies uniformly across all three tools
+ * (worst-finding-dominates). npm CRITICAL/HIGH map onto Trivy
+ * CRITICAL/HIGH; npm MODERATE → Trivy MEDIUM; npm LOW → Trivy LOW.
+ * semgrep ERROR becomes a no-ship custom check; semgrep WARNING
+ * becomes a warn custom check.
+ */
+export function foldSourceFindings(
+  trivy: TrivyResult,
+  npmAudit: NpmAuditResult | undefined,
+  semgrep: SemgrepResult | undefined,
+  customChecks: CustomCheckResult[],
+): { trivy: TrivyResult; customChecks: CustomCheckResult[] } {
+  const merged: TrivyResult = {
+    CRITICAL: trivy.CRITICAL + (npmAudit?.CRITICAL ?? 0),
+    HIGH: trivy.HIGH + (npmAudit?.HIGH ?? 0),
+    MEDIUM: trivy.MEDIUM + (npmAudit?.MODERATE ?? 0),
+    LOW: trivy.LOW + (npmAudit?.LOW ?? 0),
+  };
+  const checks = [...customChecks];
+  if (semgrep && semgrep.ERROR > 0) {
+    checks.push({
+      id: "semgrep-owasp-error",
+      level: "no-ship",
+      message: `semgrep p/owasp-top-ten reported ${semgrep.ERROR} ERROR finding(s)`,
+    });
+  }
+  if (semgrep && semgrep.WARNING > 0) {
+    checks.push({
+      id: "semgrep-owasp-warning",
+      level: "warn",
+      message: `semgrep p/owasp-top-ten reported ${semgrep.WARNING} WARNING finding(s)`,
+    });
+  }
+  return { trivy: merged, customChecks: checks };
 }
 
 export function computeGrade(
@@ -81,6 +182,25 @@ export function computeGrade(
   }
   reasons.unshift(`${trivy.HIGH} HIGH CVE(s) plus ${warnCount} warning(s)`);
   return { grade: "D", reasons, trivy, customChecks };
+}
+
+/**
+ * FAIL-CLOSED grade for a scan that did not actually complete. There
+ * is intentionally no input that lets this return a passing grade —
+ * it is always `SCAN_ERROR_GRADE`. The reason is recorded so the
+ * report explains why the listing is ungraded-as-F.
+ */
+export function gradeScanError(reason: string): GradeBreakdown {
+  const empty: TrivyResult = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+  return {
+    grade: SCAN_ERROR_GRADE,
+    reasons: [`scan did not complete: ${reason}`],
+    trivy: empty,
+    customChecks: [
+      { id: "scan-incomplete", level: "no-ship", message: reason },
+    ],
+    scanError: reason,
+  };
 }
 
 /**
