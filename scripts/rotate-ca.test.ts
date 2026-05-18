@@ -92,7 +92,7 @@ describe("genEd25519", () => {
 });
 
 describe("caEndorsementCanonicalBytes", () => {
-  it("byte-matches the upstream @maintainers/protocol order (spec §3.7)", () => {
+  it("byte-matches the upstream @ibisllc/maintainers order (spec §3.7)", () => {
     const bytes = caEndorsementCanonicalBytes({
       endorsementId: "eid",
       track: "ca",

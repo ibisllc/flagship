@@ -103,7 +103,7 @@ function assertNoControl(name, v) {
 
 /**
  * Canonical bytes for a CaEndorsement — MUST byte-match
- * @maintainers/protocol canonicalCaEndorsement (spec §3.7):
+ * @ibisllc/maintainers canonicalCaEndorsement (spec §3.7):
  *   maintainers/ca-endorsement/v1
  *     |endorsementId|track|caPubkey|scope|notBefore|notAfter|issuedAt|signedBy
  */
@@ -142,7 +142,7 @@ export function verifyEd25519(pubHex, msg, sigHex) {
 
 /**
  * Operator pre-flight authority check. The AUTHORITATIVE verification is
- * @maintainers/protocol verifyCaEndorsements, run consumer-side (daemon
+ * @ibisllc/maintainers verifyCaEndorsements, run consumer-side (daemon
  * + clients) against the full ca-track mandate chain. This is only a
  * "did my lease actually land and is it self-consistent" gate before the
  * irreversible Worker-secret swap. It checks signature + window + that

@@ -529,7 +529,7 @@ type the phrase by hand. It writes the signed mandate and prints
 The ceremony-tooling hardening lands upstream via a **governed
 `maintainers` PR** (PR #1/#2 precedent: a human merges it), then the
 orchestrator bumps `scripts/maintainers.pinned-sha` +
-`pull-maintainers.sh`, then `npm publish @maintainers/protocol`, then
+`pull-maintainers.sh`, then `npm publish @ibisllc/maintainers`, then
 flagship DROPS the pull-script and consumes the published package like
 any adopter — THEN Gate B (the first `upsert-mandate`, its
 `mandatePinHash` pinned per surface). The "Next upstream increment

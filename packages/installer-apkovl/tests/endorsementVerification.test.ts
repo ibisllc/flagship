@@ -35,7 +35,7 @@ import {
   signReleaseEndorsement,
   type Mandate,
   type ReleaseEndorsement,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const HELPER = path.join(REPO_ROOT, "scripts", "verify-endorsement.mjs");

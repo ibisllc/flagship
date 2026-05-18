@@ -42,7 +42,7 @@ keep external adoption hard indefinitely.
 
 **What the transition is (the adopter-friendly model):**
 
-1. **Publish `@maintainers/protocol` to npm** — semver, `npm publish
+1. **Publish `@ibisllc/maintainers` to npm** — semver, `npm publish
    --provenance` (Sigstore-backed supply-chain attestation), pinned
    by consumers via exact version + lockfile integrity / `npm ci`.
    Same reproducibility as a SHA pin, a fraction of the friction, and
@@ -58,7 +58,7 @@ keep external adoption hard indefinitely.
    the only one. This directly de-risks the iOS/Android port (#10)
    and every adopter who isn't a TS project.
 3. **Flagship then drops the pull-script** and consumes the published
-   `@maintainers/protocol` exactly like any external adopter — which
+   `@ibisllc/maintainers` exactly like any external adopter — which
    is the only way the "we dogfood the same model adopters use"
    claim becomes *true* (today flagship dogfoods a path no adopter
    would ever use, which undercuts the rationale).
@@ -293,7 +293,7 @@ small maintainer set, Model B is honestly enough.
 
 It's TypeScript, all the way down. No PHP, no Python, no Ruby.
 
-- **`@maintainers/protocol`** — pure TS library. Runs in the browser
+- **`@ibisllc/maintainers`** — pure TS library. Runs in the browser
   and in Node 20+. Zero runtime dependencies beyond the standard JS
   runtime + Web Crypto. Used by the daemon, the install script, and
   every other consumer that validates an envelope.

@@ -67,7 +67,7 @@ verifier's own clock, never by an attacker-controlled `issuedAt`.
 > `scripts/maintainers.pinned-sha` and re-pulls. Do **not** vendor it into
 > Flagship.
 
-### 4.1 Type (`@maintainers/protocol` `types.ts`)
+### 4.1 Type (`@ibisllc/maintainers` `types.ts`)
 
 ```ts
 export interface CaEndorsement {
@@ -133,7 +133,7 @@ closes (windows may freely overlap — endorsements aren't mandates).
 
 ```
 pinned scripts/maintainers.pinned-sha  (the trusted .maintainers snapshot)
-  → verifyTrack("ca", ca/policy.json, ca mandates)        [@maintainers/protocol]
+  → verifyTrack("ca", ca/policy.json, ca mandates)        [@ibisllc/maintainers]
   → currentAuthority(caTrack, now) = the cold maintainer  (else: no trust)
   → a CaEndorsement, now ∈ [notBefore,notAfter), signedBy = that authority
   → that endorsement's caPubkey
@@ -143,9 +143,9 @@ pinned scripts/maintainers.pinned-sha  (the trusted .maintainers snapshot)
 Consumers that must adopt this:
 
 - **Daemon** — already has `releaseVerifier.ts`; add the `ca`-endorsement
-  path (reuse `@maintainers/protocol`). Pure-fs/offline, no `.com` trust.
+  path (reuse `@ibisllc/maintainers`). Pure-fs/offline, no `.com` trust.
 - **Clients (iOS / Android / webapp)** — need a **`ca`-track + CaEndorsement
-  verifier**. Webapp can use `@maintainers/protocol` directly (TS). iOS/
+  verifier**. Webapp can use `@ibisllc/maintainers` directly (TS). iOS/
   Android need a faithful port (Ed25519 + the tagged-canonical-bytes + the
   `currentAuthority(now)` rule) operating over the `.maintainers/` snapshot
   shipped/pinned with the app. This is the largest new client surface and is
@@ -220,7 +220,7 @@ honoring waits on this.
 4. **Real-YubiKey genesis ceremony** (human; current `ca`-track holder is a
    deterministic placeholder per its KeyFile metadata) + first real
    `CaEndorsement` for the production CA pubkey.
-5. Client `ca`-verifier: webapp (`@maintainers/protocol`), then iOS/Android
+5. Client `ca`-verifier: webapp (`@ibisllc/maintainers`), then iOS/Android
    ports. = **#84 C1.2c**, now on the real chain.
 6. Extend the same gate to `UserPubKeyBinding` consumers.
 
@@ -262,7 +262,7 @@ chained to the checkpoint, alarms unskippable (a server may drop benign
 same-holder renewals but cannot hide a gap-takeover).
 
 **Status:** links 1–3 + the checkpoint are built & tested in
-`@maintainers/protocol` (`feat/ca-endorsement`; **PR
+`@ibisllc/maintainers` (`feat/ca-endorsement`; **PR
 `ibisllc/maintainers#1` MERGED 2026-05-16**, merge commit `10c65aa`,
 flagship re-pinned: `verifyTrack`, `currentAuthority`,
 `verifyCaEndorsements`, `authorizedCaKeys`, `verifyTrackFromCheckpoint`,
@@ -512,7 +512,7 @@ single device, one tap.
 ## 12. Generic, project-agnostic OSS maintainers app (decided 2026-05-16, user — final refinement)
 
 The maintainer app (§11) is **NOT Flagship-specific**. It is a generic
-companion to `@maintainers/protocol`: *our OSS contribution*. Anyone
+companion to `@ibisllc/maintainers`: *our OSS contribution*. Anyone
 running any project that adopts the `ibisllc/maintainers` protocol in
 its source downloads ONE app, points it at their repo, saves their own
 git credential into it, and starts running ceremonies. Flagship is
@@ -542,7 +542,7 @@ The git token/key is **write-transport, not authority**:
 
 - Authority is solely the YubiKey-held Ed25519 (PIV-resident; never on
   the phone, §11). Every `Mandate`/`CaEndorsement` is verified offline
-  by `@maintainers/protocol` against the chained authority from the
+  by `@ibisllc/maintainers` against the chained authority from the
   pinned genesis. A stolen git credential **cannot forge authority** —
   the verifier rejects anything not Ed25519-signed by the chained key.
 - Worst case of a compromised device/credential: push garbage or
@@ -564,7 +564,7 @@ The git token/key is **write-transport, not authority**:
 ### 12.3 Genericization (nothing Flagship-hardcoded)
 
 - The signing + canonical bytes + verifier are already
-  project-agnostic (they live in `@maintainers/protocol`). The app
+  project-agnostic (they live in `@ibisllc/maintainers`). The app
   hardcodes NONE of: repo, forge, `.maintainers/` path, track names,
   or scope strings. Track set + policies + `CaEndorsement` scope
   strings (Flagship's are e.g. `flagship/directory-attestation`) are

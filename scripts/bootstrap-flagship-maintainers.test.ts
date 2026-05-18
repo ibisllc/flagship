@@ -10,7 +10,7 @@
  *   2. The produced folder is **byte-identical** across runs — same
  *      fixed seeds, same fixed timestamps, same uuids.
  *   3. The produced mandate chain verifies cleanly under
- *      `@maintainers/protocol`'s v2 verifier — the script doesn't just
+ *      `@ibisllc/maintainers`'s v2 verifier — the script doesn't just
  *      emit JSON, it emits the actual cryptographic chain we'd ship.
  *      Each track is anchored FORWARD from its first (only) on-repo
  *      mandate's `mandatePinHash` (the no-baked-pin preview anchor; the
@@ -33,7 +33,7 @@ import {
   mandatePinHash,
   verifyMandateChainFromPin,
   type Mandate,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, "bootstrap-flagship-maintainers.mjs");
@@ -43,12 +43,12 @@ const COMMITTED = path.join(REPO_ROOT, ".maintainers");
 function runScriptInto(targetRoot: string): void {
   // The script writes to `<repoRoot>/.maintainers`. We make a temp clone
   // of the repo root just deep enough that the script can locate
-  // `@maintainers/protocol` via the npm workspace symlink — so we
+  // `@ibisllc/maintainers` via the npm workspace symlink — so we
   // construct a directory tree that contains `node_modules` plus the
   // script itself, and invoke node from there.
   fs.mkdirSync(path.join(targetRoot, "scripts"), { recursive: true });
   fs.copyFileSync(SCRIPT, path.join(targetRoot, "scripts", path.basename(SCRIPT)));
-  // Symlink node_modules so `import "@maintainers/protocol"` resolves.
+  // Symlink node_modules so `import "@ibisllc/maintainers"` resolves.
   fs.symlinkSync(
     path.join(REPO_ROOT, "node_modules"),
     path.join(targetRoot, "node_modules"),
@@ -156,7 +156,7 @@ describe("bootstrap-flagship-maintainers.mjs", () => {
     }
   });
 
-  it("the emitted v2 mandate chain verifies under @maintainers/protocol", () => {
+  it("the emitted v2 mandate chain verifies under @ibisllc/maintainers", () => {
     for (const track of ["release", "ca", "ops"]) {
       const mandate = JSON.parse(
         fs.readFileSync(

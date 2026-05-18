@@ -25,7 +25,7 @@ import {
   signReleaseEndorsement,
   type Mandate,
   type ReleaseEndorsement,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 import {
   verifyEndorsementChainAgainstGit,
   verifyMaintainersFolder,

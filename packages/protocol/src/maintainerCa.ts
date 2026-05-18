@@ -34,10 +34,10 @@
  * is a hard reject, never a downgrade.
  *
  * Links 2-3 are supplied by the consumer as a `CaTrustChain` (the daemon
- * and each client port `@maintainers/protocol`'s
+ * and each client port `@ibisllc/maintainers`'s
  * `verifyMandateChainFromPin`/`currentAuthority` +
  * `authorizedCaKeys` over the pinned `.maintainers` snapshot — tasks
- * #8/#9/#10). This module stays free of `@maintainers/protocol` so it
+ * #8/#9/#10). This module stays free of `@ibisllc/maintainers` so it
  * can ship to every consumer (incl. the mobile mirrors) before that
  * wiring lands; the chain port is dependency-injected and closes over
  * the baked pin itself. When the pin is unconfigured the port is never
@@ -55,7 +55,7 @@ import {
 /**
  * Baked-in pinned-Mandate canonical hash (lower-case hex sha256 of the
  * pinned `Mandate`'s `canonicalMandate` bytes — see
- * `@maintainers/protocol` `mandatePinHash`). EMPTY until the real Gate-B
+ * `@ibisllc/maintainers` `mandatePinHash`). EMPTY until the real Gate-B
  * ceremony — see the module doc. The real swap is the documented
  * pre-release step; do not populate this with a placeholder in a shipped
  * build. Re-baked per surface to the SAME value (#30 generalised).

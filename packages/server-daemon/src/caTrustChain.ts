@@ -7,14 +7,14 @@
  * (`verifyCaSigned{DemoDirective,UserPubKeyBinding}`) with the chain
  * port — links 2-3 — *dependency-injected* as a `CaTrustChain`, so that
  * module can ship to every consumer (incl. the mobile mirrors) without
- * taking a `@maintainers/protocol` dependency. This module is the
- * daemon's concrete port: it adapts `@maintainers/protocol`'s
+ * taking a `@ibisllc/maintainers` dependency. This module is the
+ * daemon's concrete port: it adapts `@ibisllc/maintainers`'s
  * `authorizedCaKeys` (links 2-3: verify the ca-track mandate log
  * FORWARD from the baked pin, then resolve the live `CaEndorsement`
  * lease at `now`) to the `CaTrustChain` interface.
  *
  * The one impedance mismatch it bridges: `CaTrustChain.authorizedCaKeys`
- * takes epoch-ms (`number`); `@maintainers/protocol` takes a `Date`.
+ * takes epoch-ms (`number`); `@ibisllc/maintainers` takes a `Date`.
  * The verified ca-track chain comes from the daemon's on-disk verifier
  * (`verifiedTrackFromFolder` in releaseVerifier.ts), which already
  * anchored it at the baked pin. The CaEndorsement set is an explicit
@@ -32,7 +32,7 @@ import {
   authorizedCaKeys,
   type CaEndorsement,
   type VerifiedChain,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 import type { CaTrustChain } from "@flagship/protocol";
 
 /**

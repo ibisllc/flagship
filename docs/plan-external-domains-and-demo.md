@@ -543,7 +543,7 @@ double-build discipline) so the binary is auditable like the ISO.
 
 **OSS-GENERIC REFRAME (2026-05-16, user — final — see §12):** the app
 is **NOT Flagship-specific** — it's a generic OSS companion to
-`@maintainers/protocol`, home **upstream in `ibisllc/maintainers`**.
+`@ibisllc/maintainers`, home **upstream in `ibisllc/maintainers`**.
 Anyone running any project that adopts the maintainers protocol:
 download the app, add a profile `{forge, repo, maintainersPath,
 credentialRef}`, save a narrowly-scoped per-repo git credential

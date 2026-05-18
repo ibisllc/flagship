@@ -50,7 +50,7 @@ import {
   type TakeoverAlarm,
   type VerifiedChain,
   type VerifiedEndorsements,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 import { MAINTAINER_PINNED_MANDATE_HASH } from "@flagship/protocol";
 
 export type TrackName = "release" | "ca" | "ops" | string;

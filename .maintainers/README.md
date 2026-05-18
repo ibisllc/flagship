@@ -39,4 +39,4 @@ All maintainer correspondence: `harry@flagship.services`.
 
 See [`maintainers/docs/spec/v1.md`](../maintainers/docs/spec/v1.md)
 for the protocol definition. The reference verifier is
-[`@maintainers/protocol`](../maintainers/packages/protocol/).
+[`@ibisllc/maintainers`](../maintainers/packages/protocol/).

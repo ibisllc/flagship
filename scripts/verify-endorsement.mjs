@@ -20,7 +20,7 @@
  * canonical-bytes format. Re-implementing all that in busybox sh
  * would be a footgun. The bootstrap clones the Flagship repo + runs
  * `npm ci` BEFORE invoking this helper, so node + the
- * @maintainers/protocol library are guaranteed available.
+ * @ibisllc/maintainers library are guaranteed available.
  *
  * (A path-to-pure-shell is possible — pre-bundle a single
  * statically-linked verify binary into the apkovl, then call it
@@ -30,7 +30,7 @@
  * This helper intentionally does its own .maintainers/ disk read
  * instead of importing the daemon's releaseVerifier. The bootstrap
  * runs BEFORE `tsc -b` produces the daemon's compiled output, so we
- * keep the dep surface to "@maintainers/protocol" + node fs only.
+ * keep the dep surface to "@ibisllc/maintainers" + node fs only.
  *
  * **LOCKED Phase-2 v2 model.** Each track is verified FORWARD from a
  * pinned mandate (`verifyMandateChainFromPin`); the succession policy
@@ -61,7 +61,7 @@ import {
   verifyChainOfEndorsements,
   verifyMandateChainFromPin,
   intermediateMerkleRoot,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 
 function fail(reason, detail) {
   process.stderr.write(`verify-endorsement: ${reason}`);

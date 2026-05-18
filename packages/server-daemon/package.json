@@ -14,7 +14,7 @@
     "@flagship/llm-providers": "*",
     "@flagship/protocol": "*",
     "@flagship/tunnel-protocol": "*",
-    "@maintainers/protocol": "*",
+    "@ibisllc/maintainers": "*",
     "@peculiar/asn1-schema": "^2.7.0",
     "@peculiar/asn1-x509": "^2.7.0",
     "@peculiar/x509": "^2.0.0",

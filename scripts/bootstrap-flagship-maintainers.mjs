@@ -35,7 +35,7 @@ import {
   signMandate,
   mandatePinHash,
   signKeyFile,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..");
@@ -206,7 +206,7 @@ function emit() {
       "",
       "See [`maintainers/docs/spec/v1.md`](../maintainers/docs/spec/v1.md)",
       "for the protocol definition. The reference verifier is",
-      "[`@maintainers/protocol`](../maintainers/packages/protocol/).",
+      "[`@ibisllc/maintainers`](../maintainers/packages/protocol/).",
       "",
     ].join("\n"),
     "utf8",

@@ -4,7 +4,7 @@
  *
  * Proves the wire from a real on-disk `.maintainers/` v2 ca-track —
  * verified FORWARD from a baked pinned-Mandate hash — through
- * `@maintainers/protocol`'s authorizedCaKeys into the #30
+ * `@ibisllc/maintainers`'s authorizedCaKeys into the #30
  * `CaTrustChain`, and that the #30 chokepoint stays fail-closed
  * (`pin-unconfigured`) until a pinned-mandate hash is configured —
  * i.e. the wire is built but correctly inert pre-ceremony.
@@ -21,7 +21,7 @@ import {
   signMandate,
   type CaEndorsement,
   type Mandate,
-} from "@maintainers/protocol";
+} from "@ibisllc/maintainers";
 import { authorizedCaKeysOrFailClosed } from "@flagship/protocol";
 import { verifiedTrackFromFolder } from "../src/releaseVerifier.js";
 import { makeCaTrustChain } from "../src/caTrustChain.js";

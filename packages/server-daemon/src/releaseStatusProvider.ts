@@ -2,7 +2,7 @@
  * Bridges the offline `releaseVerifier` to the BFF wire format.
  *
  * Why split this out: `releaseVerifier.ts` returns the internal
- * `ReleaseStatus` shape (rich types from @maintainers/protocol).
+ * `ReleaseStatus` shape (rich types from @ibisllc/maintainers).
  * `screens/types.ts` is the wire contract used by webapp + phone +
  * mobile clients. Keeping the reshape in one place means the wire
  * shape can evolve independently of the verifier's internals.
