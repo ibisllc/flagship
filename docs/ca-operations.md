@@ -68,7 +68,7 @@ run any cadence; "renew weekly forever" is the expected lifestyle.)
 air-gapped / store-down / successor escape hatch):**
 ```sh
 cd maintainers          # the pulled ibisllc/maintainers clone
-node packages/cli/dist/index.js ca-endorsement \
+node packages/cli/bin/maintainers ca-endorsement \
   --ca-pubkey <64-hex operational CA pubkey> \
   --scope flagship/directory-attestation \
   --duration 7d \
@@ -159,7 +159,7 @@ collapsed into `upsert-mandate`); there is **no self-renewal**.
   acceptance — verified FORWARD from the baked pin):
   ```sh
   cd maintainers
-  node packages/cli/dist/index.js upsert-mandate \
+  node packages/cli/bin/maintainers upsert-mandate \
     --track ca \
     --signing-key yubikey-piv:slot=9c \
     --holder yubikey-piv:slot=9c \
@@ -285,10 +285,15 @@ flagship `packages/protocol/src/maintainerCa.ts`:
 from that pinned hash; the pin IS the floor (spec §5.2 rewritten).
 
 The command surface below is verified against the LANDED `maintainers`
-CLI (`packages/cli/src/commands/upsertMandate.ts` + `lib/args.ts`/
-`ceremony.ts`/`duration.ts`), post-c4.5/c4.6/c4.7/c5. The
-`upsert-mandate` command does NOT generate the on-token key — that is a
-hardware prerequisite (the `(P)` checklist below).
+CLI (`packages/cli/src/commands/createKey.ts` +
+`packages/cli/src/commands/upsertMandate.ts` + `lib/args.ts`/
+`ceremony.ts`/`duration.ts`), post-c4.5/c4.6/c4.7/c5. Neither
+`create-key` nor `upsert-mandate` generates the on-token key — that is
+a hardware prerequisite (the `(P)` checklist below). The full
+ceremony sequence is: provision (`(P)`) → `create-key` ×2 personas
+(Step 1, dry-run→real) → from-scratch `upsert-mandate` ORIGIN ×3 tracks
+`ca`,`release`,`ops` (Step 2, dry-run→real) → `verify`/`status` →
+record each track's `mandatePinHash` (the per-surface bake is Phase C).
 
 > **GATE-B EXECUTION REALITY (verified against landed source — read
 > before attempting).** `maintainers/packages/cli/src/lib/piv-pcsc.ts`
@@ -366,6 +371,8 @@ So the operator knows precisely where the human gate is:
 
 | Step | Needs the YubiKey? | Why |
 |---|---|---|
+| `create-key … --dry-run` (exact canonical bytes + the `.maintainers/keys/` diff, no PIN/tap) | **NO** | Same no-PIN public read of the self-signing pubkey; the KeyFile is non-load-bearing (zero authority), so this step is honestly low-stakes. |
+| `create-key …` real (typed confirm + PIN + tap, self-signed per token) | **YES** | The token self-signs its own KeyFile; the private half never leaves the token. |
 | `upsert-mandate … --dry-run` (exact canonical bytes + the `.maintainers` diff, no PIN/tap) | **NO** | Resolves the signer pubkey via the no-PIN public read (`loadSignerBoundPubKey`); proven byte-fidelity-equal to a real signed run (`tests/dryrun.test.ts`). With a `file:` pubkey for the dry-run you don't even need the token to preview structure. |
 | Byte-fidelity self-check (the dry-run preview bytes == `canonicalMandate` of the envelope a real signed run produces; uuid/timestamps pinned) | **NO** | Asserted in `tests/dryrun.test.ts` ("byte-fidelity: from-scratch genesis dry-run preview bytes EQUAL …"). |
 | The no-hardware UX state machine (not-ready→prompt+wait+retry; security→hard-abort; build→fail-closed; non-interactive→fail-closed; bounded) | **NO** | Fully unit-tested with injected fakes (`tests/piv-connect.test.ts`). |
@@ -478,14 +485,59 @@ Also build the CLI (dist/ is gitignored — absent on a fresh clone):
 cd maintainers && npm run build      # = tsc -b, idempotent
 ```
 
-### The ceremony (per track: ca, release, ops — repeat all of A/B)
+### Step 1 — self-register both KeyFiles (`create-key` ×2 personas)
+
+A `KeyFile` is a human-readable identity label (display name + email)
+that self-registers a pubkey. It carries ZERO authority (the protocol
+identifies holders by Ed25519 pubkey; emails are conventional, not
+load-bearing) — it exists so consumers can render a name next to a
+pubkey. Register one per persona, **self-signed from each token** (the
+signer pubkey MUST equal the KeyFile's `pubkey` — a token self-signs
+its own KeyFile). This is byte-identical to what any fresh external
+adopter does first.
+
+For each persona — first the **primary** YubiKey, then the **backup**
+YubiKey (physically swap tokens between the two runs):
+
+**A. Dry-run first (signs/writes NOTHING, no PIN, no tap):**
+```sh
+cd maintainers
+node packages/cli/bin/maintainers create-key \
+  --signing-key yubikey-piv:slot=9c \
+  --display-name "Harry Winner Kamdem" \
+  --email harry@flagship.services \
+  --role "Flagship maintainer (primary)" \
+  --path ../.maintainers \
+  --dry-run
+# then, with the BACKUP token inserted:
+node packages/cli/bin/maintainers create-key \
+  --signing-key yubikey-piv:slot=9c \
+  --display-name "Harry Winner Kamdem (backup)" \
+  --email harrybackup@flagship.services \
+  --role "Flagship maintainer (backup/successor)" \
+  --path ../.maintainers \
+  --dry-run
+```
+The agent verifies the printed canonical bytes + the would-write
+`.maintainers/keys/<email>.json` diff: `kind:"KeyFile"`, `version:1`,
+`pubkey` == the self-signing token's slot-9c pubkey, the display
+name/email, `introductionMandate` == the nil UUID (`00000000-…`
+= self-registered, no introduction — the v2 norm).
+
+**B. Real run (drop `--dry-run`):** same two commands without
+`--dry-run`. The CLI prints the (honestly low-stakes) banner + the same
+byte/diff REVIEW, then prompts the typed confirm; the human types the
+phrase and **taps that token** (self-sign). It writes
+`.maintainers/keys/<email>.json`.
+
+### Step 2 — the ceremony (per track: ca, release, ops — repeat all of A/B)
 
 For each `<TRACK>` in `ca`, then `release`, then `ops`:
 
 **A. Dry-run first (signs/writes NOTHING, no PIN, no tap):**
 ```sh
 cd maintainers
-node packages/cli/dist/index.js upsert-mandate \
+node packages/cli/bin/maintainers upsert-mandate \
   --track <TRACK> \
   --duration <DURATION> \
   --signing-key yubikey-piv:slot=9c \
@@ -527,9 +579,9 @@ type the phrase by hand. It writes the signed mandate and prints
 ### After all three tracks (agent)
 
 1. **Verify the chain.** Run
-   `node packages/cli/dist/index.js verify --path ../.maintainers`
+   `node packages/cli/bin/maintainers verify --path ../.maintainers`
    (exits non-zero on any failure) and
-   `node packages/cli/dist/index.js status --path ../.maintainers` —
+   `node packages/cli/bin/maintainers status --path ../.maintainers` —
    every track must resolve FORWARD from its from-scratch origin
    mandate; the agent independently re-checks the canonical bytes +
    signatures + the `mandatePinHash` before the irreversible bake.
@@ -544,8 +596,9 @@ type the phrase by hand. It writes the signed mandate and prints
    artifact + `docs/v1-launch-program.md` so the mobile re-bake is
    provably identical. (Do NOT edit `maintainerCa.ts` here — Phase C
    owns the bake; Operation 0 only produces + records the hash.)
-3. **Commit** the `.maintainers/` artifacts (the three from-scratch
-   mandates — one per track; NO `policy.json`). **Deploy nothing.**
+3. **Commit** the `.maintainers/` artifacts (the two self-signed
+   KeyFiles from Step 1 + the three from-scratch ORIGIN mandates, one
+   per track; NO `policy.json`). **Deploy nothing.**
 4. **Validate a consumer/port via the c5 portable conformance
    artifact.** `maintainers/conformance/` (spec §12) is the
    dependency-free 17-vector set (4 happy + all 10 mandatory
