@@ -488,6 +488,34 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-18 — session 8 cont. (Mac/darwin): Gate-B genesis prerequisite landed (placeholder scaffold retired; adopter-faithful); pre-ceremony dry-run caught 2 defects
+
+Re-pinned to PR#6 merge `ce6691c` (flagship `a1a53ed`; gates 372/36 ·
+2567/227; pcsclite ceremony dep re-installed). The pre-ceremony dry-run
+(verify-before-trust) caught, before any irreversible signing: (1) the
+runbook's `node packages/cli/dist/index.js …` is exports-only — real
+entry is `node packages/cli/bin/maintainers …` (fixed 5×); (2) a
+from-scratch ORIGIN conflicts with the committed deterministic
+placeholder genesis mandates. User's deciding criterion — "what does a
+real adopter do?" — chose **Option 2**: retire the placeholder scaffold
+so Flagship's setup is byte-identical to a fresh adopter's (honest
+reference template, the Phase-A objective). Confirmed the trust model
+to the user (recovery-vs-redefine; independent holder/successors/
+threshold + self-exclusion; branch defense = pin-floor + public log +
+timestamps/lease + ReleaseEndorsement, with equivocation-prevention an
+explicitly accepted out-of-scope limitation). **Landed flagship
+`2016985`** (orchestrator-audited + gate re-run): `git rm` the 5
+committed placeholders + the 2 `bootstrap-flagship-maintainers.{mjs,
+test.ts}` scaffold files; `.maintainers/` clean (README only); chain
+already fail-closed via the empty `MAINTAINER_PINNED_MANDATE_HASH`
+(unchanged `""` — no ceremony/bake performed); `ca-operations.md`
+Operation 0 reconciled to the adopter-identical flow ((P) → create-key
+×2 → from-scratch ORIGIN ×3 → verify/status → record mandatePinHash;
+bake = Phase C). Flagship-only; zero maintainers/protocol/pin change;
+gate 2567/227 → **2563/226** (−4 = the obsolete bootstrap test; 0
+failed). Pin `ce6691c`. Next: 2 persona identities → drive all
+dry-runs → human signs each real run → record the 4-surface pin.
+
 ### 2026-05-18 — session 8 cont. (Mac/darwin): GATE-B step (A) done + a root-of-trust codec bug caught & fixed (PR #6 open)
 
 User provisioned both YubiKeys (on-token Ed25519 slot-9c; PIN/PUK set;

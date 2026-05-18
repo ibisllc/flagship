@@ -163,6 +163,67 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8 cont. — Gate-B genesis
+  PREREQUISITE landed; pre-ceremony dry-run caught TWO real defects;
+  Option-2 adopter-faithful path chosen):** Re-pinned to PR#6 merge
+  `ce6691c` (flagship `a1a53ed`, gates 372/36 · 2567/227), re-installed
+  the `pcsclite` ceremony dep (`--no-save`). The **pre-ceremony dry-run
+  did its job** — caught two defects BEFORE any irreversible signing
+  (nothing signed; PIN/PUK still 3/3):
+  - **(1) Runbook command drift:** Operation 0 said
+    `node packages/cli/dist/index.js …` but `dist/index.js` is
+    exports-only (no self-exec; tests call `dispatch()`); the real
+    entry is `node packages/cli/bin/maintainers …`. Fixed in
+    ca-operations (5×).
+  - **(2) Procedure vs committed-artifact conflict:** a from-scratch
+    ORIGIN refuses if a track mandate already exists — and
+    `../.maintainers` shipped committed deterministic PLACEHOLDER
+    genesis mandates (`bootstrap-flagship-maintainers.mjs` scaffold).
+    **User's deciding criterion = "what does a real adopter do?": a
+    fresh adopter has no placeholder; clean from-scratch ORIGIN by the
+    YubiKey, bake THAT hash ⇒ Option 2 — retire the placeholder
+    scaffold so Flagship == an honest adopter reference template.**
+  - **Conceptual model confirmed (do not re-litigate):** "backup is
+    the only recovery" = the catastrophic case only (can't satisfy the
+    current mandate's approvalRule ⇒ chain dead, no escrow); while you
+    still can, you may redefine holder/successors/threshold freely next
+    mandate. holder/successors/threshold independent per mandate; a
+    maintainer may self-exclude from `successors` (irrevocable; bounded
+    by `minSuccessors`). Branch/equivocation defense = pin-is-floor +
+    public append-only canonical log (community DETECTION) + signed
+    timestamps/bounded maxDuration + D3 NOW-clock lease +
+    ReleaseEndorsement; full equivocation PREVENTION (CT gossip) is an
+    EXPLICITLY ACCEPTED out-of-scope limitation. `create-key` gets the
+    same test→dry→real treatment (the email↔pubkey KeyFile layer the
+    GUI successor-selection needs).
+  - **Landed `2016985` (flagship `main`; orchestrator audited +
+    re-ran the gate):** `git rm` the 5 placeholders + the 2 scaffold
+    files; `.maintainers/` now clean (README only); chain already
+    fail-closed via the empty `MAINTAINER_PINNED_MANDATE_HASH`
+    (UNCHANGED `""` — NO ceremony/bake performed). No reader needed
+    conversion (server-daemon/installer tests build own fixtures +
+    already assert pin-unconfigured fail-closed; no hook/CI ran the
+    scaffold). `ca-operations.md` Operation 0 reconciled to the
+    adopter-identical flow (bin/maintainers; (P) → `create-key` ×2
+    (dry→real) → from-scratch `upsert-mandate` ORIGIN ×3
+    `ca`/`release`/`ops` (dry→real) → `verify`/`status` → record each
+    `mandatePinHash`; bake = Phase C). Flagship-only; ZERO maintainers/
+    protocol/pin change. Gate **2567/227 → 2563/226** (−4 = exactly the
+    obsolete bootstrap test; 0 failed; no real coverage lost). Pin
+    `ce6691c` unchanged.
+  - **NEXT (params decided; awaiting only the 2 persona identities):**
+    ORIGIN per track — `--duration 100d --max-duration 3650d`
+    (user-chosen frozen ceiling), `--signing-key yubikey-piv:slot=9c`,
+    `--holder` omitted (self-signed ORIGIN), `--successors` = BOTH keys
+    (key#1 `2137e739…71d7` + key#2 `dba78ab5…0392`, as `file:` pubkeys)
+    `--threshold 1 --min-successors 1`, `--project-name flagship
+    --project-contact hello@harrywinner.com --path ../.maintainers`.
+    `create-key` ×2 needs the user's persona display-name/email/role
+    (primary=key#1, backup=key#2). Then orchestrator drives all
+    dry-runs (non-destructive; verify exact canonical bytes) → human
+    performs each real signed run (typed confirm + PIN + tap) →
+    orchestrator `verify`/`status` + records the 4-surface
+    `mandatePinHash`. `file:` NOT acceptable for the root signer.
 - **2026-05-18 (v1-launch program session 8 cont. — GATE-B step (A)
   DONE + a pre-existing root-of-trust bug caught & fixed; PR #6 open,
   awaiting governed merge):** The user provisioned BOTH YubiKeys
@@ -1585,7 +1646,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
     re-pull). Branch is PUSHED (durable — not lost like the original
     `feat/ca-endorsement`).
   - **Real gap surfaced (verify-before-trust):** `docs/ca-operations.md`
-    Operation 1 Path B invokes `node packages/cli/dist/index.js
+    Operation 1 Path B invokes `node packages/cli/bin/maintainers
     ca-endorsement …` but **no `ca-endorsement` CLI command exists**
     (commands = genesis/mandate/endorsement[=Release]/takeover/verify/
     status; the CaEndorsement *protocol* sign/verify landed in PR #1,
