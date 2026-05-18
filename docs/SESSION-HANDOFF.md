@@ -24,9 +24,13 @@ real canonical-tag site was the local `joinTagged2` builder (hardcoded
 `joinTagged2→joinTaggedMandate` with `/v1`; that is what makes
 `mandatePinHash` genuinely change (the `.maintainers/` mandate
 signatures changed, KeyFiles byte-unchanged, regeneration
-byte-deterministic). Next = **c4.7 spec** (author the protocol spec
-DIRECTLY under the final de-versioned name) → c5 → governed PR → re-pin
-→ npm publish → Gate B. See §0 (top entry) for full detail.
+byte-deterministic). **c4.7 spec ALSO LANDED** (maintainers `f509849`:
+`docs/spec/v1.md` rewritten 607→971 under the final name to the LOCKED
+model, authored against the landed code as ground truth; section
+numbers preserved). Next = **c5** (publishable spec + `fetch()`
+reference client + conformance test-vector set incl. EVERY fail-closed
+negative) → governed PR → re-pin → npm publish → Gate B. See §0 (top
+entries) for full detail.
 PRIOR HEADER (s7 — the c4.5 v1→v2 cutover) follows for history:
 **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
 is the SOLE trust path.** verify-before-trust per chunk: **c4.5a**
@@ -73,6 +77,43 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8, Mac/darwin — c4.7 spec
+  LANDED):** maintainers **`f509849`** (`feat/keyfile-register`),
+  pushed. One fresh subagent rewrote `docs/spec/v1.md` (607→971 lines)
+  end to end, in place, directly under the final de-versioned name to
+  the LOCKED model — **authored against the LANDED code as ground
+  truth** (canonical.ts/verifier.ts/endorsement.ts/caEndorsement.ts/
+  types.ts), §3.1 transcribes the exact 15-slot `canonicalMandate`
+  field order + `maintainers/mandate/v1` tag + `mandatePinHash`; §4
+  L1-pin-is-the-floor verify-forward + L2/L3 one-rule; §5.0/§5.1
+  holder-signs + D3 (unchanged); §5.2 rewritten "the pin IS the floor";
+  §8 from-scratch boundary + accepted no-equivocation limitation; §9
+  single shipped wire version 1 (fail-closed on unknown). Removed every
+  trace of genesis-walk / `policy.json` / `RootPolicy`/`TrackPolicy`/
+  `SignedPolicy` / checkpoint-not-floor / `selfRenewable` / `…V2` —
+  verify-before-trust confirmed the only `v2`/`policy.json`/
+  `selfRenewable` strings left are **explicit ABSENCE statements**
+  ("there is no v2", "no `policy.json` at any level", "`selfRenewable`
+  deliberately **not** part of the protocol"), not residue. Section
+  numbers PRESERVED ⇒ inbound `§N.N` refs stay valid; added an
+  informative §11.1 so the long-standing signing.ts/cli `§11.1` refs
+  resolve. Two forced single-token JSDoc fixes (`docs/spec/v2.md` —
+  a path that never existed — → `docs/spec/v1.md`) in `types.ts`/
+  `verifier.ts`; no symbol/behavior change; the "LOCKED v2 model"
+  design-lineage prose left per the c4.6 boundary. **Code-wins
+  discipline:** reject reasons present in the type unions that the
+  landed holder-signs code never emits are deliberately NOT presented
+  as protocol-emittable. Orchestrator audited the diff (3 files; pin
+  untouched; no flagship change — the `project.pbxproj` entry is the
+  pre-existing xcodegen artifact, not the subagent's) + re-ran BOTH
+  full gates itself: maintainers tsc -b clean + 330/33 exit 0; flagship
+  tsc -b clean + 2529/225 exit 0. 3 files, +651/−287. **Next = c5 —
+  publishable spec + a `fetch()` reference client + a conformance
+  test-vector set that MUST include every fail-closed negative
+  (absent/forked pin, pin-not-in-log, self-renewal-attempt,
+  sub-threshold, under-minSuccessors, over-maxDuration, endorsement-gap,
+  lapsed-lease-at-NOW, tampered/rolled-back history). A fresh attentive
+  START.**
 - **2026-05-18 (v1-launch program session 8, Mac/darwin — c4.6
   DE-VERSION RENAME LANDED; cold-start env-sync drift caught & fixed):**
   Thin-orchestrator model: oriented from the in-repo authority docs,
