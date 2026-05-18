@@ -17,10 +17,14 @@ LIVE trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to
 verify-forward-from-pin — **the flagship gate is now a REAL v2 consumer
 check**, new honest baseline **2529/225**, tsc clean both). flagship no
 longer imports ANY v1 Mandate-path symbol. Branch pin UNCHANGED
-`833fa45` (never pin an unmerged tip). **Next = c4.5** (the maintainers
-v1→v2 cutover: retire the v1 Mandate path + re-base worker/web-ui onto
-v2 in ONE atomic green commit — the next attentive START, NOT a
-tail-bolt) → **c4.6 de-version rename** (user decision s6: "v2" is a
+`833fa45` (never pin an unmerged tip). **Next = c4.5a** (the
+maintainers v1→v2 cutover, CONSUMER-FIRST decomposed per the s7
+verify-before-trust correction — the "one atomic commit" call is
+SUPERSEDED; ~30 files / 5 pkgs incl. the forgotten `extension`;
+sub-sequence c4.5a worker → b web-ui → c extension → d cli → e
+protocol-removal-LAST, each its own green commit, v2 coexists with v1
+until e; the next attentive START, NOT a tail-bolt) → **c4.6
+de-version rename** (user decision s6: "v2" is a
 transitional dev artifact — the protocol is UNRELEASED; drop the `V2`
 suffix + Mandate envelope `version 2→1` + tag `maintainers/mandate/v2→
 /v1`; MUST precede c5/Gate B as it changes `mandatePinHash`) → c4.7
@@ -32,6 +36,49 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 7, Linux box):**
+  - **★ c4.5 VERIFY-BEFORE-TRUST CORRECTION — "one atomic commit"
+    was wrong; consumer-first is the safe path.** Before touching code,
+    an exhaustive Explore fan-out inventoried EVERY v1-symbol reference
+    across the whole maintainers tree. The true blast radius of the v1
+    removal is **~30 files across FIVE packages** — protocol, cli,
+    web-ui, cloudflare-worker, **AND `packages/extension/` (which the
+    session-6 c4.5 plan FORGOT entirely: `verifier-logic.ts` +
+    `fetcher.ts` + `tests/fixtures/build-fixture.ts` +
+    `verifier-logic.test.ts` all consume v1)** — including substantial
+    rewrites of security-critical verification code (worker `policy.ts`
+    authority/`summarizeState`, extension `verifier-logic.ts`, web-ui
+    `views/project.ts`+`renew.ts`+`takeover.ts`+`state.ts`,
+    cli `verify.ts`+`caEndorsement.ts`). The session-6 "c4.5 = ONE
+    atomic commit, cannot be partialed" call was made WITHOUT this
+    inventory. **With it: a blind 30-file atomic rewrite of
+    trust-verification code is unsafe and violates the "attentive,
+    never rushed on the load-bearing path" discipline.** It CAN be
+    safely partialed: "cannot be partialed" is true ONLY if v1 is
+    removed from protocol FIRST. The v2 symbols already exist
+    (c1/c2/c4.1), so each consumer can be re-based to v2 **while v1
+    still coexists in protocol** (additive — maintainers gate green
+    each step), and v1 is removed from protocol **last**, once nothing
+    imports it. This is the EXACT consumer-first→removal-last pattern
+    that safely landed the flagship side (c4.3 #30 → c4.4 consumer →
+    then removal). **New sub-sequence:** `c4.5a worker → c4.5b web-ui
+    → c4.5c extension → c4.5d cli → c4.5e protocol v1-removal` — a–d
+    are order-free + independent (each its own green commit, v2
+    coexisting with v1); **c4.5e (the protocol removal + re-home the
+    shared VerifiedEndorsements/EndorsementFailReason/
+    VerifiedCaEndorsements types) MUST be last**, when no consumer
+    imports v1. This is a COMMIT-SEQUENCING correction (engineering
+    autonomy; same class as the c4.2 deletion), **NOT a v2-model
+    change** (the LOCKED model is untouched). The web-ui signing views
+    (onboard/renew/takeover) are *correctly deleted* per #31 ("NEVER a
+    signing view") — the program's own directive, not a shortcut;
+    web-ui keeps status/preview only. After c4.5e the de-version
+    rename is **c4.6** (unchanged), then **c4.7** spec, c5, … (also
+    unchanged). Start gate re-verified green at s7 open: maintainers
+    **371/36 · tsc clean**; flagship **2529/225 · tsc clean** (gate
+    re-run; cwd-poisoning hazard recurred — a compound
+    `cd …/maintainers && …` ran the "flagship" half in maintainers
+    too; caught via `pwd`, flagship re-run with absolute path).
 - **2026-05-17 (v1-launch program session 6, Linux box):**
   - **No env drift (verify-before-trust).** Cold start: `maintainers/`
     clone already on `feat/keyfile-register`@`2fa2b0c` (c3b); start gate
@@ -887,23 +934,45 @@ baseline). flagship no longer imports ANY v1 Mandate-path symbol.
 was deleted — that re-base folds into c4.5, atomic, no dual-version
 collision.)
 
-**Remaining v2 spine:** **c4.5** (the next attentive START — the single
-most delicate maintainers change; do NOT tail-bolt): the maintainers
-v1→v2 cutover in ONE green commit (cannot be safely partialed while the
-maintainers gate stays green) — retire the v1 Mandate path in
-`@maintainers/protocol` (canonicalMandate v1 / verifyTrack / checkpoint
-/ RootPolicy / TrackPolicy / the now-v1-superseded endorsement.ts +
-caEndorsement.ts / currentAuthority / lastExpiredMandate / policy.json
-plumbing / genesis|mandate|takeover CLI + v1 store fns + their tests)
-AND re-base the worker (`cloudflare-worker` policy.ts/worker.ts) +
-web-ui (parse-folder/envelopes/adapter/views) onto v2 (`Envelope`
-becomes `MandateV2|…`; worker write-gate uses
-`verifyMandateChainFromPin`/holder-signs; web-ui = status/preview only
-per #31 — drop the v1 signing builders) + rewrite all maintainers
-tests. flagship guard 2529/225 (passes precisely because flagship no
-longer imports v1; re-home the shared `VerifiedEndorsements`/
-`EndorsementFailReason`/`VerifiedCaEndorsements` types into the v2 files
-since endorsementV2/caEndorsementV2 import them from the v1 files).
+**Remaining v2 spine:** **c4.5 — the maintainers v1→v2 cutover, now
+decomposed CONSUMER-FIRST (s7 verify-before-trust correction; the
+"one atomic commit" call is SUPERSEDED — see §0 s7).** The full
+inventory showed ~30 files across FIVE packages (incl. the forgotten
+`extension`); a blind atomic rewrite of trust-verification code is
+unsafe. v2 symbols already exist (additive), so each consumer is
+re-based to v2 while v1 still coexists in protocol, each its OWN green
+commit, and v1 is removed from protocol LAST:
+- **c4.5a** worker (`cloudflare-worker` policy.ts/worker.ts +
+  policy.test.ts/worker.test.ts) → v2 (verifyMandateChainFromPin /
+  currentAuthorityV2 / holder-signs; Envelope handling tolerant of
+  MandateV2 while v1 still present).
+- **c4.5b** web-ui: re-base parse-folder/adapter/state to v2; **DELETE
+  the v1 signing views** onboard/renew/takeover + the v1 signing
+  builders in envelopes.ts (correct per #31 — NEVER a signing view;
+  web-ui = status/preview only) + project.ts → v2; rewrite web-ui tests.
+- **c4.5c** extension: verifier-logic.ts/fetcher.ts +
+  tests/fixtures/build-fixture.ts + verifier-logic.test.ts → v2.
+- **c4.5d** cli: DELETE commands/genesis|mandate|takeover (already
+  superseded by upsert-mandate c3b) + their v1-only tests
+  (envelopes.test.ts, dryrun v1 parts) + the index.ts wiring/re-exports;
+  re-base verify.ts/caEndorsement.ts/lib/store.ts (readStore→v2-only;
+  delete writeMandate v1/isMandate v1) to v2; fix caEndorsement.test.ts.
+- **c4.5e (LAST — only when NO consumer imports v1):** remove the v1
+  Mandate path from `@maintainers/protocol` — delete verifier.ts /
+  endorsement.ts / caEndorsement.ts (v1); delete `canonicalMandate` +
+  `signMandate`/`signMandateWith`; delete `Mandate`(v1)/`RootPolicy`/
+  `TrackPolicy`/`ApprovalRule`(v1) from types.ts + narrow `Envelope` to
+  `MandateV2|…`; **re-home the shared `VerifiedEndorsements`/
+  `EndorsementFailReason`/`VerifiedCaEndorsements`/`DEFAULT_CLOCK_SKEW_MS`
+  types into endorsementV2.ts/caEndorsementV2.ts** (they currently
+  import them from the v1 files); KEEP `joinTagged` (used by 6 non-v1
+  canonical fns); delete the v1-only protocol tests
+  (verifier/checkpoint/endorsement/caEndorsement) + the v1 parts of
+  canonical.test.ts/signing.test.ts/encryptedBlobAdapter.test.ts.
+a–d are order-free + independent; **e MUST be last.** Each commit:
+maintainers tsc -b + vitest green, flagship guard 2529/225 (it stays
+green throughout — flagship already imports zero v1; from c4.4 it is a
+REAL v2 consumer check). Push each to feat/keyfile-register.
 → **c4.6 de-version rename** (user decision s6 — "v2" is a transitional
 dev artifact; the protocol is unreleased): drop the `V2` code-symbol
 suffix everywhere + reset the Mandate envelope `version: 2→1` +
@@ -921,8 +990,9 @@ client + conformance vectors (ALL fail-closed negatives) → governed PR
 npm org/2FA) → flagship DROPS `pull-maintainers.sh`/
 `maintainers.pinned-sha`. **THEN** Gate B (the first `upsert-mandate`,
 its hash pinned) → #9 (webapp) → #10 (iOS Swift + Android Kotlin
-reimpl, heaviest — sequence it) → Phase 3 cluster. c4.5 is the
-security-critical cutover — START it attentively, **do NOT tail-bolt**.
+reimpl, heaviest — sequence it) → Phase 3 cluster. c4.5a–e is the
+security-critical cutover (consumer-first; e last) — START each
+attentively, one tested green commit, **do NOT tail-bolt**.
 
 ## 4. Working discipline (non-negotiable — this is how the tree stayed clean)
 
@@ -971,17 +1041,19 @@ security-critical cutover — START it attentively, **do NOT tail-bolt**.
 > REAL v2 consumer check**, **2529/225** the new honest baseline).
 > Branch NOT pinned (pin stays `833fa45` until the governed merge).
 > genesis/mandate/takeover + the v1 Mandate path remain (retired in
-> **c4.5**). **Next = c4.5 (the next attentive START; do NOT
-> tail-bolt — the single most delicate maintainers change):** the
-> maintainers v1→v2 cutover in ONE green commit (cannot be safely
-> partialed) — retire the v1 Mandate path in `@maintainers/protocol`
-> AND re-base the worker + web-ui onto v2 (`Envelope`→`MandateV2|…`;
-> web-ui = status/preview only per #31, drop the v1 signing builders) +
-> rewrite all maintainers tests; re-home the shared
-> `VerifiedEndorsements`/`EndorsementFailReason`/`VerifiedCaEndorsements`
-> types into the v2 files (endorsementV2/caEndorsementV2 currently
-> import them from the v1 files being removed). flagship guard 2529/225
-> (passes precisely because flagship no longer imports v1). → **c4.6
+> **c4.5e**). **Next = c4.5a (the next attentive START; do NOT
+> tail-bolt).** c4.5 is CONSUMER-FIRST decomposed (s7
+> verify-before-trust correction — the "one atomic commit" call is
+> SUPERSEDED; the true blast radius is ~30 files / 5 packages incl.
+> the forgotten `extension`; see §0 s7 + the §3-tail spine): each
+> consumer re-based to v2 while v1 still coexists in protocol (each
+> its own green commit), v1 removed from protocol LAST. Order:
+> **c4.5a worker → c4.5b web-ui (delete the v1 signing views per #31)
+> → c4.5c extension → c4.5d cli (delete genesis/mandate/takeover) →
+> c4.5e protocol v1-removal (LAST; re-home the shared
+> VerifiedEndorsements/EndorsementFailReason/VerifiedCaEndorsements
+> types)**. a–d order-free; e strictly last. flagship guard 2529/225
+> throughout (flagship already imports zero v1). → **c4.6
 > de-version rename** (user decision s6 — "v2" is a transitional dev
 > artifact; the protocol is UNRELEASED: drop the `V2` code-symbol
 > suffix everywhere + Mandate envelope `version 2→1` + canonical tag
