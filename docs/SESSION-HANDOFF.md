@@ -40,17 +40,26 @@ typed PC/SC error taxonomy + the no-hardware prompt+wait+retry UX
 binding deliberately NOT written blind; flagship `6cd2c55`:
 ca-operations Operation 0 reconciled to the de-versioned
 `upsert-mandate` reality; maintainers 358/35 → **370/36**, flagship
-2529/225). **The ENTIRE agent-side Phase-A spine is DONE. What remains
-in Phase A is HUMAN-GATED:** the governed PR merge
-(`ibisllc/maintainers` `feat/keyfile-register`→`main`, PR #1/#2
-precedent) → agent re-pins `scripts/maintainers.pinned-sha` to the
-merge SHA + reruns gates → **HUMAN** `npm publish @maintainers/protocol`
-(npm org/2FA) → flagship drops `pull-maintainers.sh` + the symlink →
-**HUMAN Gate B** (the (P) provisioning + the YubiKey genesis ceremony,
-runbook armed in `docs/ca-operations.md` Operation 0). The orchestrator
-PAUSES here and hands the user the copy-pasteable runbook; it does NOT
-fake the merge/publish/ceremony. See §0 (top entries) for full
-detail + the exact human steps.
+2529/225). **PR #3 (the whole 14-commit Phase-2 spine) was MERGED by
+the maintainer; agent re-pinned `scripts/maintainers.pinned-sha` →
+the first-parent merge commit `8e8915e` (flagship `ea9f707`), both
+gates re-verified GREEN at the pin (maintainers 370/36, flagship
+2529/225).** Then the **npm packaging-prep LANDED on a new branch**
+(`feat/publish-protocol` `1e9705f`, **governed PR #4 OPEN**): the
+package is now publishable (`private` removed, conditional `exports` so
+the flagship symlink resolves unchanged, `files` allowlist ships dist+
+README+LICENSE+SPEC.md+the 17-vector conformance set, `prepack` builds+
+bundles; version stays 0.1.0) — orchestrator re-verified `--force` both
+gates (maintainers 370/36, flagship 2529/225) + `npm pack/publish
+--dry-run` clean. **What remains is HUMAN-GATED, in order:** (1) merge
+PR #4 → agent re-pins to its merge SHA + reruns gates; (2) **HUMAN**
+`cd maintainers/packages/protocol && npm publish --access public` (npm
+org/2FA); (3) flagship drops `pull-maintainers.sh` + the symlink +
+consumes the published pkg; (4) **HUMAN Gate B** (the (P) provisioning +
+the YubiKey genesis, runbook armed in `docs/ca-operations.md`
+Operation 0). The orchestrator PAUSES at each and hands the user the
+copy-pasteable runbook; it does NOT fake the merge/publish/ceremony.
+See §0 (top entries) for full detail + the exact human steps.
 PRIOR HEADER (s7 — the c4.5 v1→v2 cutover) follows for history:
 **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
 is the SOLE trust path.** verify-before-trust per chunk: **c4.5a**
@@ -96,6 +105,71 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-18 (v1-launch program session 8, Mac/darwin — PR #3
+  MERGED + re-pinned + npm packaging-prep landed (PR #4 open)):** The
+  human merged the governed **PR #3** (`feat/keyfile-register`→`main`,
+  the entire 14-commit Phase-2 v2 spine). Verify-before-trust:
+  confirmed `gh pr view 3` MERGED, merge commit **`8e8915e`** (parents
+  = `833fa45` old-pin first-parent + `10979ab` branch tip; `git diff
+  8e8915e 10979ab` EMPTY ⇒ the merged tree == the gate-verified tree).
+  Re-pinned `scripts/maintainers.pinned-sha` `833fa45`→`8e8915e` (the
+  **first-parent merge commit**, NOT the branch tip — PR #1/#2 rule),
+  ran `pull-maintainers.sh pull` (reset clone to the pin), re-ran BOTH
+  gates AT THE PIN: maintainers tsc -b clean + **370/36**; flagship
+  tsc -b clean + **2529/225**. Committed flagship `ea9f707` (pin file
+  only). **★ User-asked release audit (answered honestly):** the
+  shipped code is 100% de-versioned — ZERO `…V2` code symbols, ZERO
+  `version: 2`, ZERO `maintainers/mandate/v2`; the ONLY "v2" tokens in
+  the whole tree are TWO `docs/spec/v1.md` sentences that explicitly
+  say "there is no v2" (deliberate forward-compat clarification, not
+  residue). Release-completeness audit: key-signing (`signing.ts`+
+  `create-key`), mandates (`canonicalMandate`/`verifier`/
+  `upsert-mandate`), endorsements (`endorsement`/`caEndorsement`),
+  ceremonies (`ceremony.ts` dry-run + PC/SC seam), helper tools
+  (verify/status) — all present + gate-green; the ONLY deliberately-
+  incomplete piece is the native libpcsclite transmit (the Gate-B (A)
+  hardware increment, fail-closed stub by design, `file:` fallback +
+  armed runbook).
+  - **★ npm-publish-readiness finding (verify-before-trust caught it):
+    the package was NOT one-command-publishable** — `"private": true`
+    (npm refuses), `main`/`types`/`exports`→raw `./src/*.ts`, no
+    `files` allowlist, conformance vectors+spec outside the package
+    dir. A fresh subagent did the packaging-prep (a real chunk, not a
+    one-liner) on a NEW branch off `8e8915e` (`feat/publish-protocol`,
+    NOT the merged `feat/keyfile-register`): remove `private`, add
+    `publishConfig.access:public`, a **conditional `exports`** that
+    keeps the in-repo/flagship-symlink resolution byte-unchanged
+    (top-level `main`/`types`→`./src/index.ts`) while published/`types`
+    →compiled `./dist/`, a `files` allowlist, a `prepack` (tsc -b +
+    deterministically stage the repo-root `conformance/`+`docs/spec/
+    v1.md` into the tarball — gitignored pack artifacts), a package
+    README + byte-identical package LICENSE. Version stays **0.1.0**
+    (the spec is "Draft, targeting v1.0 on independent interop" — the
+    future #9/#10; 1.0.0 over-claims). Verify-before-trust:
+    orchestrator re-ran BOTH gates with **`tsc -b --force`** (cache-
+    defeating, the symlink-resolution guardrail) — maintainers clean +
+    370/36; flagship clean + **2529/225** (held); `npm pack --dry-run`
+    = 67 files / 69.5 kB (dist js+d.ts + README + LICENSE + SPEC.md +
+    17 vectors + manifest; NO src/tests/tsconfig); `npm publish
+    --dry-run --access public` validates. Committed
+    `feat/publish-protocol` `1e9705f`, pushed, **governed PR #4 open**.
+    Zero protocol/spec/conformance semantic change; pin + program
+    trackers untouched.
+  - **Next, HUMAN-gated in order:** (1) merge **PR #4**
+    (`ibisllc/maintainers#4`) → agent re-pins
+    `scripts/maintainers.pinned-sha` to ITS first-parent merge SHA +
+    reruns both gates + commits; (2) **HUMAN** `cd /Users/harrywinner/
+    flagship/maintainers/packages/protocol && npm publish --access
+    public` (npm login/org/2FA; `prepack` auto-builds+bundles); (3)
+    flagship DROPS `scripts/pull-maintainers.sh` +
+    `maintainers.pinned-sha` + the `node_modules/@maintainers/protocol`
+    symlink and consumes `@maintainers/protocol@0.1.0` like any adopter
+    (the symlink-is-live-consumer gotcha ENDS here — update memory);
+    (4) **HUMAN Gate B** genesis ceremony (the (P) provisioning + the
+    signed `upsert-mandate`; runbook = `docs/ca-operations.md`
+    Operation 0). The orchestrator PAUSES at each gate — never fakes
+    the merge/publish/ceremony.
 
 - **2026-05-18 (v1-launch program session 8, Mac/darwin — ceremony
   tooling hardened UP TO the hardware gate; the agent-side Phase-A
