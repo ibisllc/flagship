@@ -6,9 +6,28 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-17 (**v1-launch program session 6**, Linux box.
-**Phase 2 v2 spine — the entire flagship-side migration LANDED.** This
-session: **c4.1** `6cfee83` (maintainers `feat/keyfile-register`: the
+Last updated: 2026-05-18 (**v1-launch program session 7 cont.**, Linux
+box. **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
+is the SOLE trust path.** Recovered a prior session that looped 9h
+(zero damage). Orchestrator + ONE-subagent-at-a-time (user-chosen
+serial mode), verify-before-trust on every chunk: **c4.5a** `650fee2`
+(worker) · **c4.5b** `429a57c` (web-ui, signing views deleted #31) ·
+**c4.5c** `fba0657` (extension) · **c4.5d** `616b8f9` (cli, collapsed
+verbs deleted) · **c4.5e-pre** flagship `def22ca` (the 4 missed
+flagship v1 consumers re-based — see the §0 finding) · **c4.5e**
+`208978a` (protocol v1 removal, removal-last). maintainers
+**382/37 → 330/33**, flagship guard **2529/225 ALL PASS**, pin
+UNCHANGED `833fa45`. **★ Critical correction (verify-before-trust):
+flagship resolves `@maintainers/protocol` via a LIVE node_modules
+symlink to the maintainers working tree, NOT the pin — so a protocol
+change DOES hit the flagship guard; and c4.4's "flagship is v1-free"
+inventory had MISSED 4 files (2 `.mjs` scripts invisible to a tsc-graph
+grep). Both now fixed; flagship is genuinely v1-free as of `def22ca`.**
+Next = **c4.6 de-version rename** (a fresh attentive START — NOT
+tail-bolted). See §0 (top entries) for the full per-commit detail.
+PRIOR HEADER (s6) follows for history:
+**Phase 2 v2 spine — the entire flagship-side migration LANDED.** s6:
+**c4.1** `6cfee83` (maintainers `feat/keyfile-register`: the
 v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/
 `verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers
 **371/36**), **c4.3** `5fb2fdf` (flagship: #30 generalised —
@@ -41,6 +60,65 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 7 cont. — c4.5e LANDED;
+  THE WHOLE c4.5 CUTOVER COMPLETE; ★ two canonical invariants
+  corrected):** **c4.5e `208978a` (maintainers `feat/keyfile-register`)
+  + c4.5e-pre `def22ca` (flagship `main`), both pushed.** v1 is fully
+  removed from `packages/protocol`; v2 is the SOLE trust path.
+  - **c4.5e** deleted the v1 genesis-walk verifier + v1 endorsement/
+    ca-endorsement verifiers + their tests (verifier/endorsement/
+    caEndorsement.ts + .test.ts; checkpoint.test.ts — L1 replaced the
+    genesis-walk/checkpoint concept). Shared result types re-homed
+    BEFORE deletion (EndorsementFailReason/VerifiedEndorsements →
+    endorsementV2.ts; CaEndorsementFailReason/VerifiedCaEndorsements/
+    DEFAULT_CLOCK_SKEW_MS → caEndorsementV2.ts; still re-exported via
+    index ⇒ consumer public surface unchanged). Pruned v1 Mandate/
+    TrackPolicy/RootPolicy/ApprovalRule (types.ts), v1 canonicalMandate
+    (canonical.ts — `joinTagged` KEPT, 6+ non-v1 fns use it), v1
+    signMandate/signMandateWith (signing.ts), the 3 v1 index export
+    lines. `Envelope` union `Mandate`→`MandateV2` (zero consumers
+    outside protocol, verified). Pure deletion+re-home, no v2 semantics
+    changed. 17 files, +77/−2176. maintainers tsc -b --force clean +
+    vitest **382/37 → 330/33** (−52/−4 = the deleted v1 test files;
+    v2 trust-path tests verifierV2 21 / endorsementV2 16 /
+    caEndorsementV2 11 are now the SOLE trust coverage, all pass).
+  - **★ THE FINDING (verify-before-trust did its job):** the first
+    c4.5e gate run broke the **flagship guard** (4 fails / 2 files) —
+    contradicting the handoff's "flagship provably unaffected via the
+    pin". Two canonical invariants were WRONG: **(1)** `node_modules/
+    @maintainers/protocol` is a **LIVE symlink** to `maintainers/
+    packages/protocol` (the working tree), NOT a pinned vendored copy
+    — so ANY protocol change hits the flagship guard locally (CI/Docker
+    differ: `pull-maintainers.sh` clones at the pinned SHA there; the
+    pin is a CI-time isolation, not a local one). c4.5a–d stayed green
+    only because they never touched protocol. **(2)** c4.4's "flagship
+    imports zero v1 since c4.4" was incomplete — it migrated only the
+    server-daemon runtime consumer; **4 flagship files still imported
+    v1**: `scripts/bootstrap-flagship-maintainers.mjs` (PROD),
+    `scripts/verify-endorsement.mjs`, `scripts/bootstrap-flagship-
+    maintainers.test.ts`, `packages/installer-apkovl/tests/
+    endorsementVerification.test.ts` — the two `.mjs` were invisible to
+    a tsc-graph symbol grep (so `tsc -b` passed; only vitest runtime
+    failed). c4.5e was HELD (git stash), the user chose **consumer-
+    first**, and **c4.5e-pre** re-based all 4 to v2 (mirroring c4.4)
+    WHILE v1 still coexisted — incl. regenerating the committed
+    `./.maintainers/` artifact to the v2 shape (root + 3 per-track
+    `policy.json` deleted, 3 mandates rewritten v2, byte-deterministic;
+    KeyFiles byte-unchanged). flagship `def22ca`: tsc clean + **2529/
+    225 ALL PASS**. THEN the stash was popped and c4.5e committed with
+    the FULL gate green both sides. **Lesson for any cold start: locally
+    the flagship guard IS a live consumer check of the maintainers
+    working tree — run it after EVERY maintainers protocol change; the
+    pin only isolates CI/Docker.** flagship is genuinely v1-free as of
+    `def22ca`.
+  - Process: orchestrator + ONE subagent at a time, verify-before-trust
+    on every chunk (re-ran the FULL gate itself with file-redirect for
+    real exit codes — a `| tail` pipeline hides vitest's exit AND
+    truncates the verdict; that mistake was caught and corrected
+    mid-session). The harness TaskList reset mid-run (ephemeral by
+    design) — rebuilt from these in-repo docs (the whole point of this
+    file). **Next = c4.6 de-version rename (a fresh attentive START,
+    NOT a tail-bolt — it changes `mandatePinHash`, security-sensitive).**
 - **2026-05-18 (v1-launch program session 7 cont. — c4.5d LANDED;
   ALL consumers now v2):** **c4.5d `616b8f9` (maintainers
   `feat/keyfile-register`), pushed.** `packages/cli` re-based off v1
