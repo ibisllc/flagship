@@ -1,15 +1,16 @@
 /**
- * Link-1 fail-closed gate (#30). The shipped genesis is EMPTY, so
- * every CA-signed artifact MUST be rejected `genesis-unconfigured`
- * regardless of any chain — that is the pre-release invariant. The
- * configured path is exercised via the injectable genesis param
- * (the placeholder for #8/#9/#10) to prove the seam lights up once
- * the real genesis ceremony bakes the constant in.
+ * Link-1 fail-closed gate (#30 generalised to the LOCKED Phase-2 v2
+ * model). The shipped pinned-Mandate hash is the EMPTY string, so every
+ * CA-signed artifact MUST be rejected `pin-unconfigured` regardless of
+ * any chain — that is the pre-release invariant. The configured path is
+ * exercised via the injectable pin param (the placeholder for #8/#9/#10)
+ * to prove the seam lights up once the real Gate-B ceremony bakes the
+ * pinned-mandate canonical hash in.
  */
 import { describe, expect, it, vi } from "vitest";
 import {
-  MAINTAINER_GENESIS_PUBKEYS,
-  maintainerGenesisConfigured,
+  MAINTAINER_PINNED_MANDATE_HASH,
+  maintainerPinConfigured,
   authorizedCaKeysOrFailClosed,
   verifyCaSignedDemoDirective,
   verifyCaSignedUserPubKeyBinding,
@@ -50,20 +51,20 @@ function chainReturning(keys: string[]): CaTrustChain {
   return { authorizedCaKeys: vi.fn(() => keys) };
 }
 
-describe("MAINTAINER_GENESIS_PUBKEYS (#30 link-1)", () => {
+describe("MAINTAINER_PINNED_MANDATE_HASH (#30 link-1, generalised)", () => {
   it("ships EMPTY — the pre-release fail-closed invariant", () => {
-    expect(MAINTAINER_GENESIS_PUBKEYS).toEqual([]);
-    expect(maintainerGenesisConfigured()).toBe(false);
+    expect(MAINTAINER_PINNED_MANDATE_HASH).toBe("");
+    expect(maintainerPinConfigured()).toBe(false);
   });
 
-  it("does not consult the chain port when genesis is unconfigured", () => {
+  it("does not consult the chain port when the pin is unconfigured", () => {
     const chain = chainReturning([caHex]);
     const r = authorizedCaKeysOrFailClosed(chain, NOW);
-    expect(r).toEqual({ ok: false, reason: "genesis-unconfigured" });
+    expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
     expect(chain.authorizedCaKeys).not.toHaveBeenCalled();
   });
 
-  it("rejects a perfectly-signed DemoDirective with the shipped genesis", () => {
+  it("rejects a perfectly-signed DemoDirective with the shipped empty pin", () => {
     const sig = signDemoDirective(directive, ca);
     const r = verifyCaSignedDemoDirective(
       directive,
@@ -71,10 +72,10 @@ describe("MAINTAINER_GENESIS_PUBKEYS (#30 link-1)", () => {
       chainReturning([caHex]),
       NOW,
     );
-    expect(r).toEqual({ ok: false, reason: "genesis-unconfigured" });
+    expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
   });
 
-  it("rejects a perfectly-signed UserPubKeyBinding with the shipped genesis", () => {
+  it("rejects a perfectly-signed UserPubKeyBinding with the shipped empty pin", () => {
     const sig = signUserPubKeyBinding(binding, ca);
     const r = verifyCaSignedUserPubKeyBinding(
       binding,
@@ -82,12 +83,12 @@ describe("MAINTAINER_GENESIS_PUBKEYS (#30 link-1)", () => {
       chainReturning([caHex]),
       NOW,
     );
-    expect(r).toEqual({ ok: false, reason: "genesis-unconfigured" });
+    expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
   });
 });
 
-describe("configured-genesis seam (placeholder genesis for #8/#9/#10)", () => {
-  const GENESIS = ["deadbeef".repeat(8)]; // any non-empty set ⇒ link-1 ok
+describe("configured-pin seam (placeholder pin for #8/#9/#10)", () => {
+  const PIN = "deadbeef".repeat(8); // any non-empty pin ⇒ link-1 ok
 
   it("accepts a CA-signed, in-TTL DemoDirective when the chain authorizes the key", () => {
     const sig = signDemoDirective(directive, ca);
@@ -96,7 +97,7 @@ describe("configured-genesis seam (placeholder genesis for #8/#9/#10)", () => {
       sig,
       chainReturning([caHex]),
       NOW,
-      GENESIS,
+      PIN,
     );
     expect(r).toEqual({ ok: true });
   });
@@ -108,7 +109,7 @@ describe("configured-genesis seam (placeholder genesis for #8/#9/#10)", () => {
       sig,
       chainReturning([caHex]),
       NOW,
-      GENESIS,
+      PIN,
     );
     expect(r).toEqual({ ok: true });
   });
@@ -116,10 +117,10 @@ describe("configured-genesis seam (placeholder genesis for #8/#9/#10)", () => {
   it("fails closed when the chain authorizes no key (lapsed lease)", () => {
     const sig = signDemoDirective(directive, ca);
     expect(
-      verifyCaSignedDemoDirective(directive, sig, chainReturning([]), NOW, GENESIS),
+      verifyCaSignedDemoDirective(directive, sig, chainReturning([]), NOW, PIN),
     ).toEqual({ ok: false, reason: "no-authorized-ca-keys" });
     expect(
-      authorizedCaKeysOrFailClosed(null, NOW, GENESIS),
+      authorizedCaKeysOrFailClosed(null, NOW, PIN),
     ).toEqual({ ok: false, reason: "no-authorized-ca-keys" });
   });
 
@@ -131,7 +132,7 @@ describe("configured-genesis seam (placeholder genesis for #8/#9/#10)", () => {
         sig,
         chainReturning([caHex]),
         directive.expiresAt + 1,
-        GENESIS,
+        PIN,
       ),
     ).toEqual({ ok: false, reason: "artifact-expired" });
   });
@@ -144,7 +145,7 @@ describe("configured-genesis seam (placeholder genesis for #8/#9/#10)", () => {
         sig,
         chainReturning([caHex]),
         NOW,
-        GENESIS,
+        PIN,
       ),
     ).toEqual({ ok: false, reason: "signature-unverified" });
   });

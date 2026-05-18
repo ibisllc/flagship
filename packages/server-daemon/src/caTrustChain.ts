@@ -24,11 +24,12 @@
  *     ReleaseEndorsement; a ca-endorsement directory convention is
  *     genuine upstream-undefined work, NOT invented here).
  *
- * While `MAINTAINER_GENESIS_PUBKEYS` is empty the #30 chokepoint
- * fail-closes (`genesis-unconfigured`) and never calls this port at
- * all — so this wire is correctly inert until the real genesis
- * ceremony bakes the pinned key in. It is built + unit-tested now so
- * that step is the only remaining flip.
+ * While `MAINTAINER_PINNED_MANDATE_HASH` is empty the #30 chokepoint
+ * fail-closes (`pin-unconfigured`) and never calls this port at
+ * all — so this wire is correctly inert until the real Gate-B
+ * ceremony bakes the pinned-mandate hash in. It is built + unit-tested
+ * now so that step is the only remaining flip. (The verify-forward-
+ * from-pin migration of this port itself is c4.4.)
  */
 
 import {

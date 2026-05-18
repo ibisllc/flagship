@@ -4,28 +4,44 @@
  * (`UserPubKeyBinding`, `DemoDirective`) is accepted iff ALL four
  * links hold at the consumer's clock `now`:
  *
- *   1. pinned maintainer GENESIS pubkey(s)            — this module
- *   2. ca-track authority at now (verifyTrack(ca))    — chain port
- *   3. live CaEndorsement → authorizedCaKeys(now)     — chain port
- *   4. the artifact's own signature + TTL             — this module
+ *   1. the baked pinned-Mandate canonical hash                — this module
+ *   2. ca-track authority at now (verify FORWARD from the pin) — chain port
+ *   3. live CaEndorsement → operational CA keys at now         — chain port
+ *   4. the artifact's own signature + TTL                      — this module
  *
- * `MAINTAINER_GENESIS_PUBKEYS` is the link-1 anchor and is **empty
- * until the first real YubiKey genesis ceremony** bakes the real
- * pubkey in (ca-operations.md "Operation 0 — genesis"). While empty,
- * EVERY CA-signed artifact is rejected (fail closed). That is safe
- * pre-release: the demo account uses mock recovery, there are no real
- * users, nothing is shipped. A consumer MUST NOT fall back to a
- * previously-seen or env-provided CA key — the absence of a genesis
+ * #30 GENERALISED to the LOCKED Phase-2 v2 trust model (see flagship
+ * `docs/v1-launch-program.md` "Phase-2 DESIGN DECISION — LOCKED v2"):
+ *
+ *   L1 — a pinned `Mandate` is an INDEPENDENT trust anchor; "genesis" is
+ *   merely "the first pin". The baked link-1 value is therefore the
+ *   **canonical hash of the pinned mandate** (`mandatePinHash`, sha256
+ *   of `canonicalMandateV2`), NOT a maintainer-pubkey list. The chain
+ *   port (link-2/3, supplied by the consumer) verifies the mandate log
+ *   FORWARD from that pin. Multiple pinned roots coexist forever — an
+ *   old build pinned at M₀ and a newer build pinned at a later, more
+ *   co-signed Mᵢ are each independently valid; nothing walks back to a
+ *   privileged "genesis". This same hash is re-baked per surface
+ *   (this TS const for daemon+webapp; the iOS/Android ports hardcode the
+ *   identical value into their own source — #10).
+ *
+ * `MAINTAINER_PINNED_MANDATE_HASH` is the link-1 anchor and is the
+ * **empty string until the first real YubiKey ceremony** (Gate B) bakes
+ * the pinned mandate's canonical hash in (ca-operations.md "Operation
+ * 0"). While empty, EVERY CA-signed artifact is rejected (fail closed).
+ * That is safe pre-release: the demo account uses mock recovery, there
+ * are no real users, nothing is shipped. A consumer MUST NOT fall back
+ * to a previously-seen or env-provided pin — the absence of a baked pin
  * is a hard reject, never a downgrade.
  *
- * Links 2-3 are supplied by the consumer as a `CaTrustChain` (the
- * daemon and each client port `@maintainers/protocol`'s
- * `verifyTrack`/`verifyCaEndorsements`/`authorizedCaKeys` over the
- * pinned `.maintainers` snapshot — tasks #8/#9/#10). This module
- * stays free of `@maintainers/protocol` so it can ship to every
- * consumer (incl. the mobile mirrors) before that wiring lands; the
- * chain port is dependency-injected. When genesis is unconfigured the
- * port is never even consulted.
+ * Links 2-3 are supplied by the consumer as a `CaTrustChain` (the daemon
+ * and each client port `@maintainers/protocol`'s
+ * `verifyMandateChainFromPin`/`currentAuthorityV2` +
+ * `authorizedCaKeysV2` over the pinned `.maintainers` snapshot — tasks
+ * #8/#9/#10). This module stays free of `@maintainers/protocol` so it
+ * can ship to every consumer (incl. the mobile mirrors) before that
+ * wiring lands; the chain port is dependency-injected and closes over
+ * the baked pin itself. When the pin is unconfigured the port is never
+ * even consulted.
  */
 
 import type { Bytes } from "./types.js";
@@ -37,31 +53,34 @@ import {
 } from "./auth.js";
 
 /**
- * Baked-in maintainer genesis pubkeys (lower-case hex Ed25519). EMPTY
- * until the real genesis ceremony — see the module doc. The real swap
- * is the documented pre-release step; do not populate this with a
- * placeholder in a shipped build.
+ * Baked-in pinned-Mandate canonical hash (lower-case hex sha256 of the
+ * pinned `MandateV2`'s `canonicalMandateV2` bytes — see
+ * `@maintainers/protocol` `mandatePinHash`). EMPTY until the real Gate-B
+ * ceremony — see the module doc. The real swap is the documented
+ * pre-release step; do not populate this with a placeholder in a shipped
+ * build. Re-baked per surface to the SAME value (#30 generalised).
  */
-export const MAINTAINER_GENESIS_PUBKEYS: readonly string[] = Object.freeze([]);
+export const MAINTAINER_PINNED_MANDATE_HASH = "";
 
-export function maintainerGenesisConfigured(
-  genesisPubkeys: readonly string[] = MAINTAINER_GENESIS_PUBKEYS,
+export function maintainerPinConfigured(
+  pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
 ): boolean {
-  return genesisPubkeys.length > 0;
+  return typeof pinnedMandateHash === "string" && pinnedMandateHash.length > 0;
 }
 
 /**
- * Links 2-3, injected by the consumer. `authorizedCaKeys(now)` walks
- * pinned-genesis → ca-track → live CaEndorsement and returns the
- * operational CA pubkeys (lower-case hex) authorized at `now`. It is
- * NEVER called when link-1 (genesis) is unconfigured.
+ * Links 2-3, injected by the consumer. `authorizedCaKeys(now)` verifies
+ * the ca-track mandate log FORWARD from the baked pin the port closes
+ * over, then resolves the live `CaEndorsement` lease, and returns the
+ * operational CA pubkeys (lower-case hex) authorized at `now` — or `[]`.
+ * It is NEVER called when link-1 (the baked pin) is unconfigured.
  */
 export interface CaTrustChain {
   authorizedCaKeys(now: number): string[];
 }
 
 export type CaArtifactReject =
-  | "genesis-unconfigured"
+  | "pin-unconfigured"
   | "no-authorized-ca-keys"
   | "artifact-expired"
   | "signature-unverified";
@@ -72,18 +91,18 @@ export type CaGateResult =
 
 /**
  * Resolve the operational CA keys a consumer may currently trust, or
- * fail closed. Empty/absent genesis ⇒ `genesis-unconfigured` and the
- * chain port is not consulted. An empty authorized set (lapsed/no
- * lease) ⇒ `no-authorized-ca-keys`. Either way: reject ALL CA
- * artifacts; never fall back to another key.
+ * fail closed. Empty/absent pin ⇒ `pin-unconfigured` and the chain port
+ * is not consulted. An empty authorized set (lapsed/no lease, or a
+ * pin-not-in-log forward-verify failure) ⇒ `no-authorized-ca-keys`.
+ * Either way: reject ALL CA artifacts; never fall back to another key.
  */
 export function authorizedCaKeysOrFailClosed(
   chain: CaTrustChain | null,
   now: number,
-  genesisPubkeys: readonly string[] = MAINTAINER_GENESIS_PUBKEYS,
+  pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
 ): CaGateResult {
-  if (!maintainerGenesisConfigured(genesisPubkeys)) {
-    return { ok: false, reason: "genesis-unconfigured" };
+  if (!maintainerPinConfigured(pinnedMandateHash)) {
+    return { ok: false, reason: "pin-unconfigured" };
   }
   if (!chain) return { ok: false, reason: "no-authorized-ca-keys" };
   const keys = chain.authorizedCaKeys(now);
@@ -111,17 +130,17 @@ function withinTtl(issuedAt: number, expiresAt: number, now: number): boolean {
 /**
  * The single chokepoint a consumer calls instead of
  * `verifyDemoDirective` + a raw `caPub`. Enforces links 1-4. With the
- * shipped (empty) genesis this always rejects `genesis-unconfigured`
- * — the only correct pre-release behavior.
+ * shipped (empty) pin this always rejects `pin-unconfigured` — the only
+ * correct pre-release behavior.
  */
 export function verifyCaSignedDemoDirective(
   d: DemoDirective,
   sig: Bytes,
   chain: CaTrustChain | null,
   now: number,
-  genesisPubkeys: readonly string[] = MAINTAINER_GENESIS_PUBKEYS,
+  pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
 ): { ok: true } | { ok: false; reason: CaArtifactReject } {
-  const gate = authorizedCaKeysOrFailClosed(chain, now, genesisPubkeys);
+  const gate = authorizedCaKeysOrFailClosed(chain, now, pinnedMandateHash);
   if (!gate.ok) return gate;
   if (!withinTtl(d.issuedAt, d.expiresAt, now)) {
     return { ok: false, reason: "artifact-expired" };
@@ -144,9 +163,9 @@ export function verifyCaSignedUserPubKeyBinding(
   sig: Bytes,
   chain: CaTrustChain | null,
   now: number,
-  genesisPubkeys: readonly string[] = MAINTAINER_GENESIS_PUBKEYS,
+  pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
 ): { ok: true } | { ok: false; reason: CaArtifactReject } {
-  const gate = authorizedCaKeysOrFailClosed(chain, now, genesisPubkeys);
+  const gate = authorizedCaKeysOrFailClosed(chain, now, pinnedMandateHash);
   if (!gate.ok) return gate;
   if (!withinTtl(b.issuedAt, b.expiresAt, now)) {
     return { ok: false, reason: "artifact-expired" };

@@ -4,7 +4,7 @@
  * Proves the wire from a real on-disk `.maintainers/` ca-track through
  * `@maintainers/protocol`'s authorizedCaKeys into the #30
  * `CaTrustChain`, and that the #30 chokepoint stays fail-closed
- * (`genesis-unconfigured`) until a pinned genesis is configured —
+ * (`pin-unconfigured`) until a pinned-mandate hash is configured —
  * i.e. the wire is built but correctly inert pre-ceremony.
  */
 
@@ -179,7 +179,7 @@ describe("makeCaTrustChain", () => {
 });
 
 describe("#30 chokepoint integration (links 1-4)", () => {
-  it("stays fail-closed (genesis-unconfigured) with the shipped empty genesis — chain not consulted", () => {
+  it("stays fail-closed (pin-unconfigured) with the shipped empty pin — chain not consulted", () => {
     const repo = makeCaRepo();
     try {
       const op = kp(99);
@@ -189,16 +189,16 @@ describe("#30 chokepoint integration (links 1-4)", () => {
         vt.policy.approvalRule,
         [signedEndorsement(repo.authority, op.pubKey)],
       );
-      // Default MAINTAINER_GENESIS_PUBKEYS is empty ⇒ link-1 unmet ⇒
+      // Default MAINTAINER_PINNED_MANDATE_HASH is empty ⇒ link-1 unmet ⇒
       // reject before the port is ever called.
       const r = authorizedCaKeysOrFailClosed(chain, NOW);
-      expect(r).toEqual({ ok: false, reason: "genesis-unconfigured" });
+      expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
     } finally {
       repo.cleanup();
     }
   });
 
-  it("once a genesis is configured, the port resolves the operational key", () => {
+  it("once a pin is configured, the port resolves the operational key", () => {
     const repo = makeCaRepo();
     try {
       const op = kp(99);
@@ -208,9 +208,9 @@ describe("#30 chokepoint integration (links 1-4)", () => {
         vt.policy.approvalRule,
         [signedEndorsement(repo.authority, op.pubKey)],
       );
-      // Inject a non-empty pinned genesis (the post-ceremony state):
-      // link-1 met ⇒ the chokepoint consults the link-4 port.
-      const r = authorizedCaKeysOrFailClosed(chain, NOW, [repo.authority.pubKey]);
+      // Inject a non-empty baked pinned-mandate hash (the post-Gate-B
+      // state): link-1 met ⇒ the chokepoint consults the link-4 port.
+      const r = authorizedCaKeysOrFailClosed(chain, NOW, "deadbeef".repeat(8));
       expect(r).toEqual({ ok: true, keys: [op.pubKey] });
     } finally {
       repo.cleanup();
