@@ -127,6 +127,45 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8 — Phase E: marketplace
+  security-scan service BUILT; latent wire-contract bug fixed):**
+  flagship `9aac1ec`, pushed. A non-functional scaffold existed at
+  `services/marketplace-scanner/` (already in root tsconfig +
+  vitest.config). A fresh subagent built it into a real fail-closed
+  pure-core + injected-ports service. **★ verify-before-trust caught a
+  latent wire-contract bug:** the scaffold's `scanResult.ts` hand-rolled
+  the canonical tag `flagship/marketplace-scan/v1`, but the landed
+  `@flagship/protocol` + the (already-built) `control-plane`
+  `handleMarketplaceScanResult` use `flagship/marketplace-scan-result/
+  v1` — the scaffold could NEVER have produced a result `.com` accepts.
+  Fixed by reusing `@flagship/protocol`'s `signMarketplaceScanResult`/
+  `verifyMarketplaceScanResult` (zero hand-rolled bytes — the
+  iOS-Mock-matches-Worker-wire discipline). Orchestrator-audited:
+  change set confined to `services/marketplace-scanner/` (ZERO
+  protocol/control-plane/storage/migration change — the receive side +
+  `scan_grade`/`scan_report_key`/`scan_completed_at` schema were
+  already built); the signed postback round-trips through the REAL
+  landed `verifyMarketplaceScanResult` (construct→sign→verify ✓;
+  tamper-any-field/forge/wrong-key→reject ✓); fail-closed asserted
+  (`SCAN_ERROR_GRADE`="F" for ANY error string, `isPassingGrade`∈
+  {A,B,C} — a clone/tool/timeout/hash-mismatch can never yield a
+  passing grade, and the F is still scanner-signed; no unsigned/bypass
+  path); real git/trivy/npm/semgrep/R2/postback isolated behind ports
+  (vitest never execs them — they're a thin `adapters.ts` live edge).
+  Deterministic A–F worst-dominates policy in `POLICY.md` + `grade.ts`.
+  Orchestrator re-ran the gate itself: flagship tsc -b clean + vitest
+  **2529/225 → 2567/227** (+38, 0 failed). §L "docker image" vs the
+  landed "clone-repo-at-manifest_hash" envelope reconciled:
+  `imageDigestHex` = sha256 of the scanned source tree at the pinned
+  hash (semantically "which artifact got the grade"; zero wire change).
+  Pin `df992f2` unchanged. **Next Phase-E chunk: verify/complete
+  Recovery J.3/J.4** (recon: substantially BUILT already —
+  `server-daemon/src/postRecovery/{rePairWatcher,stableIdReissuer}.ts`
+  + `control-plane/tests/rePair.test.ts` + `server-daemon/tests/
+  rePairWatcher.test.ts`; the §S gap is the lost-phone LIVE exercise,
+  Phase G, not greenfield code — verify completeness, don't rebuild)
+  → then E2E rig 13 scenarios + CI.
+
 - **2026-05-18 (v1-launch program session 8, Mac/darwin — PR #5
   merged + re-pinned `df992f2`; agent-Phase-A COMPLETE; entered Phase
   E; iOS verified GREEN/human-gated, Android env-gated here):** The

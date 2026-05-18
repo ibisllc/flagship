@@ -488,6 +488,27 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-18 — session 8 (Mac/darwin): Phase E — marketplace security-scan service built (wire-contract bug fixed)
+
+flagship `9aac1ec`. Built the missing scanner/producer at
+`services/marketplace-scanner/` (a non-functional scaffold existed; the
+.com receive side + `scan_grade` schema + the protocol envelope were
+already built). ★ Fixed a latent wire-contract bug — the scaffold
+hand-rolled tag `flagship/marketplace-scan/v1` vs the landed
+`flagship/marketplace-scan-result/v1`; rewrote to reuse
+`@flagship/protocol`'s `signMarketplaceScanResult`/
+`verifyMarketplaceScanResult` (guaranteed byte-match; proven:
+construct→sign→LANDED-verify ✓, tamper/forge/wrong-key→reject).
+Fail-closed (any clone/tool/timeout/hash-mismatch ⇒ "F", still
+scanner-signed; `isPassingGrade`∈{A,B,C}); real git/trivy/npm/semgrep/
+R2/postback behind injected ports (gate never execs them). Pure-core +
+ports + thin live adapter. ZERO protocol/control-plane/storage/
+migration change. Orchestrator re-ran the gate: flagship tsc -b clean +
+vitest 2529/225 → **2567/227** (+38, 0 failed). Next Phase-E:
+verify/complete Recovery J.3/J.4 (recon: substantially built; gap = the
+live exercise, Phase G) → E2E 13 scenarios + CI. iOS verified
+green/human-gated; Android env-gated (no JDK here).
+
 ### 2026-05-18 — session 8 (Mac/darwin box): PR #5 merged → re-pinned `df992f2` → AGENT-SIDE PHASE A COMPLETE; entered Phase E (iOS verified green/human-gated)
 
 Maintainer merged governed **PR #5** (the `@maintainers/protocol`→
