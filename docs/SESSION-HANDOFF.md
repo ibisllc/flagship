@@ -6,25 +6,38 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-18 (**v1-launch program session 7 cont.**, Linux
-box. **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
-is the SOLE trust path.** Recovered a prior session that looped 9h
-(zero damage). Orchestrator + ONE-subagent-at-a-time (user-chosen
-serial mode), verify-before-trust on every chunk: **c4.5a** `650fee2`
-(worker) · **c4.5b** `429a57c` (web-ui, signing views deleted #31) ·
-**c4.5c** `fba0657` (extension) · **c4.5d** `616b8f9` (cli, collapsed
-verbs deleted) · **c4.5e-pre** flagship `def22ca` (the 4 missed
-flagship v1 consumers re-based — see the §0 finding) · **c4.5e**
-`208978a` (protocol v1 removal, removal-last). maintainers
-**382/37 → 330/33**, flagship guard **2529/225 ALL PASS**, pin
-UNCHANGED `833fa45`. **★ Critical correction (verify-before-trust):
-flagship resolves `@maintainers/protocol` via a LIVE node_modules
-symlink to the maintainers working tree, NOT the pin — so a protocol
-change DOES hit the flagship guard; and c4.4's "flagship is v1-free"
-inventory had MISSED 4 files (2 `.mjs` scripts invisible to a tsc-graph
-grep). Both now fixed; flagship is genuinely v1-free as of `def22ca`.**
-Next = **c4.6 de-version rename** (a fresh attentive START — NOT
-tail-bolted). See §0 (top entries) for the full per-commit detail.
+Last updated: 2026-05-18 (**v1-launch program session 8**, Mac/darwin
+box. **c4.6 DE-VERSION RENAME LANDED — the protocol's first-ever
+shipped name is final.** Thin-orchestrator + ONE fresh subagent for the
+chunk, verify-before-trust: env-sync drift caught at cold start (local
+`maintainers/` clone stale at `dc48559`/c1 — non-destructively
+ff-only-merged to `208978a`/c4.5e; both baseline gates re-verified green
+BEFORE work). c4.6 = pure rename + Mandate wire `version 2→1` + canonical
+tag `maintainers/mandate/v2→/v1`; **NOT a trust-model change** (L1/L2/L3/
+D3 untouched). maintainers **`a8ac151`** (`feat/keyfile-register`, 38
+files, 7 `git mv` renames, 330/33) + flagship **`c5995c9`** (`main`, 13
+files, regenerated `.maintainers/` artifact to v1, 2529/225) — both
+pushed; pin UNCHANGED `833fa45` (re-pin is the later governed step). ★
+Subagent's load-bearing find (verify-before-trust confirmed it): the
+real canonical-tag site was the local `joinTagged2` builder (hardcoded
+`/v2`), DISTINCT from the descriptive comment — renamed
+`joinTagged2→joinTaggedMandate` with `/v1`; that is what makes
+`mandatePinHash` genuinely change (the `.maintainers/` mandate
+signatures changed, KeyFiles byte-unchanged, regeneration
+byte-deterministic). Next = **c4.7 spec** (author the protocol spec
+DIRECTLY under the final de-versioned name) → c5 → governed PR → re-pin
+→ npm publish → Gate B. See §0 (top entry) for full detail.
+PRIOR HEADER (s7 — the c4.5 v1→v2 cutover) follows for history:
+**THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
+is the SOLE trust path.** verify-before-trust per chunk: **c4.5a**
+`650fee2` (worker) · **c4.5b** `429a57c` (web-ui, signing views deleted
+#31) · **c4.5c** `fba0657` (extension) · **c4.5d** `616b8f9` (cli,
+collapsed verbs deleted) · **c4.5e-pre** flagship `def22ca` (4 missed
+flagship v1 consumers re-based) · **c4.5e** `208978a` (protocol v1
+removal). **★ Critical invariant: flagship resolves `@maintainers/
+protocol` via a LIVE node_modules symlink to the maintainers working
+tree, NOT the pin — so a protocol change DOES hit the flagship guard;
+the `.mjs` scripts are invisible to a tsc-graph grep (vitest-only).**
 PRIOR HEADER (s6) follows for history:
 **Phase 2 v2 spine — the entire flagship-side migration LANDED.** s6:
 **c4.1** `6cfee83` (maintainers `feat/keyfile-register`: the
@@ -60,6 +73,73 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8, Mac/darwin — c4.6
+  DE-VERSION RENAME LANDED; cold-start env-sync drift caught & fixed):**
+  Thin-orchestrator model: oriented from the in-repo authority docs,
+  rebuilt the TaskList (ephemeral by design), spawned ONE fresh
+  general-purpose subagent with a self-contained brief for c4.6, then
+  verified-before-trust (audited the diff + re-ran BOTH full gates
+  myself + committed/pushed). **c4.6 = the de-version rename** (user
+  decision s6): the maintainers protocol is unreleased; "v2" was a
+  transitional cutover artifact; c4.5e made it the sole path so the
+  first-ever shipped name must not be "v2". Dropped the `V2` code-symbol
+  suffix everywhere (`MandateV2→Mandate`, `verifier/endorsement/
+  caEndorsementV2.ts`+symbols→plain, `currentAuthorityV2`/
+  `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/
+  `authorizedCaKeysV2`/`signMandateV2(With)`/`canonicalMandateV2`/
+  `isMandateV2`/`readMandatesV2`/`writeMandateV2`/`ApprovalRuleV2`→
+  plain, `VerifiedChainV2→VerifiedChain`), reset the **Mandate**
+  envelope wire `version: 2→1` + canonical tag `maintainers/mandate/
+  v2→/v1`. **NOT a trust-model change** — L1/L2/L3/D3 untouched, no
+  verifier logic / threshold / holder-signs / fail-closed assertion
+  changed (fail-closed negatives recomputed to new expected values,
+  never weakened). Only Mandate ever carried the bogus v2; KeyFile/
+  ReleaseEndorsement/CaEndorsement stay v1.
+  - **★ env-sync drift caught at cold start (verify-before-trust paid
+    off immediately):** the gitignored `maintainers/` clone was stale on
+    `feat/keyfile-register`@`dc48559` (c1 ONLY — missing c2..c4.5e).
+    `git reset --hard` was (correctly) classifier-blocked as
+    destructive; re-verified the tree was provably clean + strictly 0
+    ahead / 9 behind, then `git merge --ff-only origin/feat/keyfile-
+    register` → `208978a` (non-destructive, refuses if not a clean FF).
+    Both baseline gates re-verified GREEN before any work (maintainers
+    330/33 tsc-clean; flagship 2529/225 tsc-clean). **Cold-start rule
+    reaffirmed: the `maintainers/` clone is a gitignored sub-clone that
+    can lag the pushed branch by many commits — fetch + `--ff-only`
+    merge to `origin/feat/keyfile-register` (NOT `pull-maintainers.sh`,
+    which resets to the pin and discards the v2 branch); never `reset
+    --hard` (destructive — use ff-only).**
+  - **★ subagent's load-bearing find (orchestrator confirmed it in the
+    audited diff):** the real canonical-tag site was the *local*
+    `joinTagged2` builder in `canonical.ts` (hardcoded
+    `${TAG_PREFIX}/${kind}/v2`), DISTINCT from the descriptive comment
+    at line 262. A naive `maintainers/mandate/v2` regex would have left
+    it untouched ⇒ the signature would have been byte-identical (the pin
+    would NOT have changed — c4.6 silently a no-op on the load-bearing
+    output). Renamed `joinTagged2→joinTaggedMandate` with the `/v1`
+    literal; `mandatePinHash` genuinely changes (ca-track example:
+    `3724ad7e…664c`→`5eac384e…faab`; the `.maintainers/` mandate
+    signatures changed, KeyFiles byte-unchanged, regeneration
+    byte-deterministic across two runs). Also handled mid-token V2
+    (`signMandateV2With`, `isV2Shape→isMandateShape`) the `\w+V2\b`
+    regex misses, and a missed nested consumer
+    `packages/server-adapters/cloudflare-worker` (not under
+    `packages/*/src`).
+  - **Landed:** maintainers `a8ac151` (`feat/keyfile-register`, 38
+    files, 7 `git mv` renames history-preserved, +476/−477) + flagship
+    `c5995c9` (`main`, 13 files, +77/−77, regenerated `.maintainers/`
+    artifact to v1) — both pushed. Pin UNCHANGED `833fa45` (re-pin is
+    the later governed Phase-A.merge step; never pin an unmerged tip).
+    `apps/mobile/.../project.pbxproj` (pre-existing xcodegen artifact)
+    explicitly NOT staged; `dist/` (gitignored) + `docs/` not in either
+    commit. Orchestrator re-ran both FULL gates itself (file-redirect
+    for real exit codes, never `| tail`): maintainers tsc -b clean +
+    330/33 exit 0; flagship tsc -b clean + 2529/225 exit 0. **Next =
+    c4.7 spec — author the protocol spec DIRECTLY under the final
+    de-versioned name (rewrites §5.2 "the pin IS the floor"; dissolves
+    policy.json/SignedPolicy; documents L1/L2/L3 + mandatePinHash +
+    holder-signs + the from-scratch boundary; D3 unchanged). A fresh
+    attentive START — do NOT tail-bolt.**
 - **2026-05-18 (v1-launch program session 7 cont. — c4.5e LANDED;
   THE WHOLE c4.5 CUTOVER COMPLETE; ★ two canonical invariants
   corrected):** **c4.5e `208978a` (maintainers `feat/keyfile-register`)
