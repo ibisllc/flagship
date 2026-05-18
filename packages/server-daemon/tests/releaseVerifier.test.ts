@@ -21,9 +21,9 @@ import {
   generateKeypair,
   intermediateMerkleRoot,
   mandatePinHash,
-  signMandateV2,
+  signMandate,
   signReleaseEndorsement,
-  type MandateV2,
+  type Mandate,
   type ReleaseEndorsement,
 } from "@maintainers/protocol";
 import {
@@ -76,11 +76,11 @@ function makeRepoWith(seedByte: number): {
 
 function mkMandate(
   primary: ReturnType<typeof kp>,
-  over: Partial<Omit<MandateV2, "signatures">> = {},
-): MandateV2 {
-  const unsigned: Omit<MandateV2, "signatures"> = {
+  over: Partial<Omit<Mandate, "signatures">> = {},
+): Mandate {
+  const unsigned: Omit<Mandate, "signatures"> = {
     kind: "Mandate",
-    version: 2,
+    version: 1,
     mandateId: "11111111-1111-4111-8111-111111111111",
     track: "release",
     holder: primary.pubKey,
@@ -94,10 +94,10 @@ function mkMandate(
     signedBy: primary.pubKey,
     ...over,
   };
-  return signMandateV2(unsigned, [{ privKey: primary.privKey }]);
+  return signMandate(unsigned, [{ privKey: primary.privKey }]);
 }
 
-function writeMandate(rootDir: string, m: MandateV2): void {
+function writeMandate(rootDir: string, m: Mandate): void {
   fs.writeFileSync(
     path.join(
       rootDir,
@@ -152,7 +152,7 @@ describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
       const genesis = mkMandate(repo.primary);
       const pin = mandatePinHash(genesis); // pin of the UNtampered bytes
       // Tamper issuedAt: the on-disk mandate no longer hashes to the pin.
-      const tampered: MandateV2 = { ...genesis, issuedAt: "2026-04-01T00:00:00.000Z" };
+      const tampered: Mandate = { ...genesis, issuedAt: "2026-04-01T00:00:00.000Z" };
       writeMandate(repo.rootDir, tampered);
 
       const status = verifyMaintainersFolder({

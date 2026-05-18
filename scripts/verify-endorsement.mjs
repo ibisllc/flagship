@@ -34,10 +34,10 @@
  *
  * **LOCKED Phase-2 v2 model.** Each track is verified FORWARD from a
  * pinned mandate (`verifyMandateChainFromPin`); the succession policy
- * is INLINE in each `MandateV2` (there is no `policy.json` — the v2
+ * is INLINE in each `Mandate` (there is no `policy.json` — the v2
  * model dissolved the unsigned-policy hole, L2); endorsements verify
  * holder-signs against the v2 release chain (`verifyChainOf
- * EndorsementsV2`); "expired" is simply `currentAuthorityV2 === null`
+ * Endorsements`); "expired" is simply `currentAuthority === null`
  * (no holder-in-window vs after-expiry split).
  *
  * **No baked pin (the c4.5a/b/c/d preview pattern).** This helper
@@ -56,9 +56,9 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  currentAuthorityV2,
+  currentAuthority,
   mandatePinHash,
-  verifyChainOfEndorsementsV2,
+  verifyChainOfEndorsements,
   verifyMandateChainFromPin,
   intermediateMerkleRoot,
 } from "@maintainers/protocol";
@@ -93,11 +93,11 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
-function isMandateV2(x) {
+function isMandate(x) {
   if (typeof x !== "object" || x === null) return false;
   return (
     x.kind === "Mandate" &&
-    x.version === 2 &&
+    x.version === 1 &&
     typeof x.mandateId === "string" &&
     typeof x.track === "string" &&
     typeof x.holder === "string" &&
@@ -116,7 +116,7 @@ function isMandateV2(x) {
 /**
  * v2 on-disk convention: `tracks/<track>/mandates/*.json`,
  * filename-sorted (the canonical-log substitute), filtered to
- * `version === 2`. No policy.json (root or per-track) — the
+ * `version === 1`. No policy.json (root or per-track) — the
  * succession rule lives inline in each mandate.
  */
 function readMaintainersFolder(rootDir) {
@@ -137,7 +137,7 @@ function readMaintainersFolder(rootDir) {
         for (const f of fs.readdirSync(mandatesDir).sort()) {
           if (!f.endsWith(".json")) continue;
           const parsed = readJson(path.join(mandatesDir, f));
-          if (isMandateV2(parsed)) arr.push(parsed);
+          if (isMandate(parsed)) arr.push(parsed);
         }
       }
       out.mandatesByTrack.set(name, arr);
@@ -204,7 +204,7 @@ function verifyMaintainers(store) {
   if (store.endorsements.length === 0) {
     fail("no-endorsements", "`.maintainers/endorsements/` is empty");
   }
-  const result = verifyChainOfEndorsementsV2(store.endorsements, releaseChain);
+  const result = verifyChainOfEndorsements(store.endorsements, releaseChain);
   if (result.rejections.length > 0) {
     const first = result.rejections[0];
     fail(
@@ -281,11 +281,11 @@ function main() {
   // hostile mirror could rewrite history but not produce a fresh
   // mandate satisfying the predecessor's inline approvalRule — the v2
   // forward-walk would reject it). v2: "active" is simply
-  // `currentAuthorityV2 !== null` (no holder-in-window split).
+  // `currentAuthority !== null` (no holder-in-window split).
   const releaseChain = verifyTrackChain(
     store.mandatesByTrack.get("release") ?? [],
   );
-  const authority = currentAuthorityV2(releaseChain, new Date());
+  const authority = currentAuthority(releaseChain, new Date());
   if (!authority) {
     fail(
       "no-current-authority",

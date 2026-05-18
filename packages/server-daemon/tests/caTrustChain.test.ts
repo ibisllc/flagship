@@ -4,7 +4,7 @@
  *
  * Proves the wire from a real on-disk `.maintainers/` v2 ca-track —
  * verified FORWARD from a baked pinned-Mandate hash — through
- * `@maintainers/protocol`'s authorizedCaKeysV2 into the #30
+ * `@maintainers/protocol`'s authorizedCaKeys into the #30
  * `CaTrustChain`, and that the #30 chokepoint stays fail-closed
  * (`pin-unconfigured`) until a pinned-mandate hash is configured —
  * i.e. the wire is built but correctly inert pre-ceremony.
@@ -18,9 +18,9 @@ import {
   generateKeypair,
   mandatePinHash,
   signCaEndorsement,
-  signMandateV2,
+  signMandate,
   type CaEndorsement,
-  type MandateV2,
+  type Mandate,
 } from "@maintainers/protocol";
 import { authorizedCaKeysOrFailClosed } from "@flagship/protocol";
 import { verifiedTrackFromFolder } from "../src/releaseVerifier.js";
@@ -52,9 +52,9 @@ function makeCaRepo(): {
   const dotM = path.join(tmp, ".maintainers");
   fs.mkdirSync(path.join(dotM, "tracks", "ca", "mandates"), { recursive: true });
   const authority = kp(7);
-  const unsigned: Omit<MandateV2, "signatures"> = {
+  const unsigned: Omit<Mandate, "signatures"> = {
     kind: "Mandate",
-    version: 2,
+    version: 1,
     mandateId: "7a7a7a7a-7a7a-4a7a-8a7a-7a7a7a7a7a7a",
     track: "ca",
     holder: authority.pubKey,
@@ -67,7 +67,7 @@ function makeCaRepo(): {
     defaultDurationSeconds: 180 * DAY,
     signedBy: authority.pubKey,
   };
-  const genesis: MandateV2 = signMandateV2(unsigned, [{ privKey: authority.privKey }]);
+  const genesis: Mandate = signMandate(unsigned, [{ privKey: authority.privKey }]);
   // No policy.json in v2 — the succession rule is folded into the mandate.
   fs.writeFileSync(
     path.join(dotM, "tracks", "ca", "mandates", "2026-05-01-genesis.json"),

@@ -9,7 +9,7 @@
  * module can ship to every consumer (incl. the mobile mirrors) without
  * taking a `@maintainers/protocol` dependency. This module is the
  * daemon's concrete port: it adapts `@maintainers/protocol`'s
- * `authorizedCaKeysV2` (links 2-3: verify the ca-track mandate log
+ * `authorizedCaKeys` (links 2-3: verify the ca-track mandate log
  * FORWARD from the baked pin, then resolve the live `CaEndorsement`
  * lease at `now`) to the `CaTrustChain` interface.
  *
@@ -29,9 +29,9 @@
  */
 
 import {
-  authorizedCaKeysV2,
+  authorizedCaKeys,
   type CaEndorsement,
-  type VerifiedChainV2,
+  type VerifiedChain,
 } from "@maintainers/protocol";
 import type { CaTrustChain } from "@flagship/protocol";
 
@@ -47,13 +47,13 @@ import type { CaTrustChain } from "@flagship/protocol";
  * `now` ⇒ `[]`.
  */
 export function makeCaTrustChain(
-  caChain: VerifiedChainV2,
+  caChain: VerifiedChain,
   caEndorsements: CaEndorsement[],
   opts: { clockSkewMs?: number } = {},
 ): CaTrustChain {
   return {
     authorizedCaKeys(now: number): string[] {
-      return authorizedCaKeysV2(caEndorsements, caChain, new Date(now), opts);
+      return authorizedCaKeys(caEndorsements, caChain, new Date(now), opts);
     },
   };
 }

@@ -15,7 +15,7 @@
  *   L1 — a pinned `Mandate` is an INDEPENDENT trust anchor; "genesis" is
  *   merely "the first pin". The baked link-1 value is therefore the
  *   **canonical hash of the pinned mandate** (`mandatePinHash`, sha256
- *   of `canonicalMandateV2`), NOT a maintainer-pubkey list. The chain
+ *   of `canonicalMandate`), NOT a maintainer-pubkey list. The chain
  *   port (link-2/3, supplied by the consumer) verifies the mandate log
  *   FORWARD from that pin. Multiple pinned roots coexist forever — an
  *   old build pinned at M₀ and a newer build pinned at a later, more
@@ -35,8 +35,8 @@
  *
  * Links 2-3 are supplied by the consumer as a `CaTrustChain` (the daemon
  * and each client port `@maintainers/protocol`'s
- * `verifyMandateChainFromPin`/`currentAuthorityV2` +
- * `authorizedCaKeysV2` over the pinned `.maintainers` snapshot — tasks
+ * `verifyMandateChainFromPin`/`currentAuthority` +
+ * `authorizedCaKeys` over the pinned `.maintainers` snapshot — tasks
  * #8/#9/#10). This module stays free of `@maintainers/protocol` so it
  * can ship to every consumer (incl. the mobile mirrors) before that
  * wiring lands; the chain port is dependency-injected and closes over
@@ -54,7 +54,7 @@ import {
 
 /**
  * Baked-in pinned-Mandate canonical hash (lower-case hex sha256 of the
- * pinned `MandateV2`'s `canonicalMandateV2` bytes — see
+ * pinned `Mandate`'s `canonicalMandate` bytes — see
  * `@maintainers/protocol` `mandatePinHash`). EMPTY until the real Gate-B
  * ceremony — see the module doc. The real swap is the documented
  * pre-release step; do not populate this with a placeholder in a shipped

@@ -1,6 +1,6 @@
 {
   "kind": "Mandate",
-  "version": 2,
+  "version": 1,
   "mandateId": "32954bac-3a12-4985-ac7e-677aaa50cb8f",
   "track": "ops",
   "holder": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
@@ -31,7 +31,7 @@
   "signatures": [
     {
       "pubkey": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
-      "sig": "e9254b7cf03b1363a70c0f95fb660a54c85bf83da371bc9fbcf19a3f74f98ac061cb0bcc80ea562712147a416ffc8379cb32e2b7fe762131b287df4c10ba8506"
+      "sig": "66b4bac9908fe6dd200d39a496040775100ab0dabe646facf7b4b291c2dbafe8022eb48df7fc968632dcef8bd7d094453192f9a1ec56cede8c720f0bf61e2508"
     }
   ]
 }

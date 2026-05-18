@@ -17,7 +17,7 @@
  * **LOCKED Phase-2 v2 model.** Mirrors the cli's `upsert-mandate`
  * from-scratch (root) shape so the on-disk envelopes are
  * indistinguishable from those a real `maintainers upsert-mandate`
- * invocation would produce: one self-signed root `MandateV2` per
+ * invocation would produce: one self-signed root `Mandate` per
  * track, with the succession policy folded INLINE into the mandate
  * (`approvalRule` / `successors` / `minSuccessors` /
  * `maxDurationSeconds` / `defaultDurationSeconds` / project metadata).
@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import {
   generateKeypair,
-  signMandateV2,
+  signMandate,
   mandatePinHash,
   signKeyFile,
 } from "@maintainers/protocol";
@@ -130,10 +130,10 @@ function buildRootMandate(track, holder, successors, durationDays) {
   const issuedAt = GENESIS_ISO;
   const expiresAt = isoFromDays(GENESIS_ISO, durationDays);
   const windowSeconds = durationDays * 24 * 60 * 60;
-  return signMandateV2(
+  return signMandate(
     {
       kind: "Mandate",
-      version: 2,
+      version: 1,
       mandateId: deterministicUuid(`flagship/${track}/genesis-2026-05-11`),
       track,
       holder: holder.pubKey,
@@ -189,7 +189,7 @@ function emit() {
       "  sign the next mandate unilaterally if the primary's mandate lapses.",
       "",
       "Each track is a single self-signed **root (from-scratch)**",
-      "`MandateV2` whose succession policy is folded INLINE (no",
+      "`Mandate` whose succession policy is folded INLINE (no",
       "`policy.json` — the LOCKED v2 model dissolved the unsigned-policy",
       "hole). The pubkeys checked in here are **placeholders derived from",
       "fixed seeds** so anyone can re-derive them locally with",

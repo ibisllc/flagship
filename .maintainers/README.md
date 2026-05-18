@@ -22,7 +22,7 @@ Three tracks:
   sign the next mandate unilaterally if the primary's mandate lapses.
 
 Each track is a single self-signed **root (from-scratch)**
-`MandateV2` whose succession policy is folded INLINE (no
+`Mandate` whose succession policy is folded INLINE (no
 `policy.json` — the LOCKED v2 model dissolved the unsigned-policy
 hole). The pubkeys checked in here are **placeholders derived from
 fixed seeds** so anyone can re-derive them locally with

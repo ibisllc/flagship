@@ -31,9 +31,9 @@ import * as path from "node:path";
 import {
   generateKeypair,
   intermediateMerkleRoot,
-  signMandateV2,
+  signMandate,
   signReleaseEndorsement,
-  type MandateV2,
+  type Mandate,
   type ReleaseEndorsement,
 } from "@maintainers/protocol";
 
@@ -91,7 +91,7 @@ function setupFixture(opts: { seedByte: number }): Fixture {
   // Write .maintainers/ with a valid root v2 mandate + one
   // endorsement covering all three commits. **LOCKED Phase-2 v2
   // model**: NO policy.json (root or per-track) — the succession rule
-  // is folded INLINE into the self-signed root MandateV2; the helper
+  // is folded INLINE into the self-signed root Mandate; the helper
   // anchors the track FORWARD from this mandate's `mandatePinHash`.
   const dotM = path.join(cwd, ".maintainers");
   fs.mkdirSync(path.join(dotM, "tracks", "release", "mandates"), {
@@ -101,10 +101,10 @@ function setupFixture(opts: { seedByte: number }): Fixture {
 
   const issuedAt = new Date(Date.now() - 60_000).toISOString();
   const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-  const mandate: MandateV2 = signMandateV2(
+  const mandate: Mandate = signMandate(
     {
       kind: "Mandate",
-      version: 2,
+      version: 1,
       mandateId: "11111111-1111-4111-8111-111111111111",
       track: "release",
       holder: primary.pubKey,
@@ -235,7 +235,7 @@ describe("verify-endorsement.mjs helper", () => {
         "mandates",
         "genesis.json",
       );
-      const m = JSON.parse(fs.readFileSync(mandatePath, "utf8")) as MandateV2;
+      const m = JSON.parse(fs.readFileSync(mandatePath, "utf8")) as Mandate;
       m.issuedAt = "2020-01-01T00:00:00.000Z";
       fs.writeFileSync(mandatePath, JSON.stringify(m), "utf8");
 

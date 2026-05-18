@@ -6,7 +6,7 @@
  *      layout (README, three tracks with their root v2 mandates, two
  *      key files). **LOCKED Phase-2 v2 model**: there is NO `policy.json`
  *      (root or per-track) — the succession rule is folded inline into
- *      each root `MandateV2`.
+ *      each root `Mandate`.
  *   2. The produced folder is **byte-identical** across runs — same
  *      fixed seeds, same fixed timestamps, same uuids.
  *   3. The produced mandate chain verifies cleanly under
@@ -29,10 +29,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  currentAuthorityV2,
+  currentAuthority,
   mandatePinHash,
   verifyMandateChainFromPin,
-  type MandateV2,
+  type Mandate,
 } from "@maintainers/protocol";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -163,10 +163,10 @@ describe("bootstrap-flagship-maintainers.mjs", () => {
           path.join(COMMITTED, "tracks", track, "mandates", "2026-05-11-genesis.json"),
           "utf8",
         ),
-      ) as MandateV2;
+      ) as Mandate;
       // It is a v2 root mandate with inline succession policy (no
       // policy.json — that file does not exist in v2).
-      expect(mandate.version).toBe(2);
+      expect(mandate.version).toBe(1);
       expect(mandate.approvalRule).toEqual({ kind: "threshold", threshold: 1 });
       expect(mandate.minSuccessors).toBe(1);
       expect(mandate.project?.name).toBe("Flagship");
@@ -179,7 +179,7 @@ describe("bootstrap-flagship-maintainers.mjs", () => {
       expect(chain.root).not.toBeNull();
       expect(chain.rejections).toEqual([]);
       expect(chain.validMandates).toHaveLength(1);
-      const authority = currentAuthorityV2(
+      const authority = currentAuthority(
         chain,
         new Date("2026-05-11T12:00:00.000Z"),
       );

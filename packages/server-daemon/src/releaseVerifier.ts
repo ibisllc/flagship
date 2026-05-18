@@ -20,7 +20,7 @@
  *     authority anywhere ⇒ fully fail-closed. Tests inject a non-empty
  *     pin to exercise the post-ceremony state (the maintainerCa.ts
  *     injectable-pin seam, mirrored here).
- *   - endorsements are holder-signed (`verifyChainOfEndorsementsV2`):
+ *   - endorsements are holder-signed (`verifyChainOfEndorsements`):
  *     the mandate `holder` is the operational authority.
  *
  * What this module does:
@@ -41,14 +41,14 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  currentAuthorityV2,
-  verifyChainOfEndorsementsV2,
+  currentAuthority,
+  verifyChainOfEndorsements,
   verifyMandateChainFromPin,
-  type MandateV2,
+  type Mandate,
   type Pubkey,
   type ReleaseEndorsement,
   type TakeoverAlarm,
-  type VerifiedChainV2,
+  type VerifiedChain,
   type VerifiedEndorsements,
 } from "@maintainers/protocol";
 import { MAINTAINER_PINNED_MANDATE_HASH } from "@flagship/protocol";
@@ -60,7 +60,7 @@ export interface MaintainersStoreSnapshot {
   /** Whether `${gitRepoPath}/.maintainers/` exists with a tracks dir. */
   rootDirPresent: boolean;
   /** v2 mandates per track, filename-sorted (canonical-log substitute). */
-  mandatesByTrack: Map<TrackName, MandateV2[]>;
+  mandatesByTrack: Map<TrackName, Mandate[]>;
   endorsements: ReleaseEndorsement[];
 }
 
@@ -137,7 +137,7 @@ export function verifyMaintainersFolder(opts: ReleaseVerifierOptions): ReleaseSt
  * Verify one named track from `${gitRepoPath}/.maintainers/` and hand
  * back its v2 forward-verified chain. This is the disk→verified bridge
  * link-4 needs: `caTrustChain.makeCaTrustChain` feeds the "ca"-track
- * chain into `authorizedCaKeysV2`. `null` when the track has no v2
+ * chain into `authorizedCaKeys`. `null` when the track has no v2
  * mandates on disk (⇒ the chain yields no keys ⇒ the #30 chokepoint
  * fail-closes). The pin is applied here: an empty/forked pin yields a
  * chain with `validMandates: []` (fail-closed), not null.
@@ -145,7 +145,7 @@ export function verifyMaintainersFolder(opts: ReleaseVerifierOptions): ReleaseSt
 export function verifiedTrackFromFolder(
   opts: ReleaseVerifierOptions,
   trackName: TrackName,
-): { chain: VerifiedChainV2 } | null {
+): { chain: VerifiedChain } | null {
   const rootDir = path.join(opts.gitRepoPath, ".maintainers");
   const pin = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
   const store = readStoreFromDisk(rootDir);
@@ -241,12 +241,12 @@ function verifyStore(
   pin: string,
 ): ReleaseStatus {
   const tracks: TrackVerdict[] = [];
-  const chainsByTrack = new Map<TrackName, VerifiedChainV2>();
+  const chainsByTrack = new Map<TrackName, VerifiedChain>();
 
   for (const [name, mandates] of store.mandatesByTrack.entries()) {
     const chain = verifyMandateChainFromPin(pin, mandates);
     chainsByTrack.set(name, chain);
-    const auth = currentAuthorityV2(chain, now);
+    const auth = currentAuthority(chain, now);
     const lastValid = chain.validMandates[chain.validMandates.length - 1];
 
     const rejections: TrackVerdict["rejections"] = [];
@@ -288,7 +288,7 @@ function verifyStore(
         detail: "endorsements present but no verifiable release-track v2 chain",
       }));
     } else {
-      const result: VerifiedEndorsements = verifyChainOfEndorsementsV2(
+      const result: VerifiedEndorsements = verifyChainOfEndorsements(
         store.endorsements,
         releaseChain,
       );
@@ -323,11 +323,11 @@ function verifyStore(
 }
 
 /**
- * Mirror of the cli's lib/store.ts `readMandatesV2` but inlined here so
+ * Mirror of the cli's lib/store.ts `readMandates` but inlined here so
  * the daemon doesn't take a dep on the cli (which isn't published and
  * would drag yargs etc. for ~100 lines of JSON I/O). v2 on-disk
  * convention: `tracks/<track>/mandates/*.json`, filename-sorted as the
- * canonical-log substitute, filtered to `version === 2`. No policy.json.
+ * canonical-log substitute, filtered to `version === 1`. No policy.json.
  */
 function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
   const out: MaintainersStoreSnapshot = {
@@ -346,12 +346,12 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
       const trackDir = path.join(tracksDir, name);
       if (!fs.statSync(trackDir).isDirectory()) continue;
       const mandatesDir = path.join(trackDir, "mandates");
-      const arr: MandateV2[] = [];
+      const arr: Mandate[] = [];
       if (fs.existsSync(mandatesDir) && fs.statSync(mandatesDir).isDirectory()) {
         for (const f of fs.readdirSync(mandatesDir).sort()) {
           if (!f.endsWith(".json")) continue;
           const parsed = readJson(path.join(mandatesDir, f));
-          if (isMandateV2(parsed)) arr.push(parsed);
+          if (isMandate(parsed)) arr.push(parsed);
         }
       }
       out.mandatesByTrack.set(name, arr);
@@ -370,7 +370,7 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
 }
 
 function deriveTakeoverAlarm(
-  releaseChain: VerifiedChainV2 | undefined,
+  releaseChain: VerifiedChain | undefined,
   store: MaintainersStoreSnapshot,
 ): TakeoverAlarm | null {
   if (!releaseChain) return null;
@@ -432,12 +432,12 @@ function readJson(p: string): unknown {
   return JSON.parse(raw);
 }
 
-function isMandateV2(x: unknown): x is MandateV2 {
+function isMandate(x: unknown): x is Mandate {
   if (typeof x !== "object" || x === null) return false;
   const o = x as Record<string, unknown>;
   return (
     o.kind === "Mandate" &&
-    o.version === 2 &&
+    o.version === 1 &&
     typeof o.mandateId === "string" &&
     typeof o.track === "string" &&
     typeof o.holder === "string" &&
