@@ -56,23 +56,31 @@ maintainers` workspace symlink [old `@maintainers/protocol` scope dir
 gone] + a prose/comment sweep of the active flagship docs so the final
 name never churns again). Orchestrator re-verified both gates
 (maintainers 370/36; flagship 2529/225 via the new symlink) + `npm pack
---dry-run` → `@ibisllc/maintainers@0.1.0`. **What remains, in order:**
-(1) **merge PR #5** → agent re-pins to its first-parent merge SHA +
-reruns both gates + commits the pin bump (this completes the rename
-landing); (2) *(later, user's pace — "publish later")* HUMAN creates
-the `ibisllc` npm org + a `@ibisllc`-scoped granular token → `cd
-maintainers/packages/protocol && npm publish --access public`; (3)
-flagship drops `pull-maintainers.sh` + `maintainers.pinned-sha` + the
-workspace symlink + consumes the published `@ibisllc/maintainers@0.1.0`
-(the symlink-is-live-consumer gotcha ENDS there); (4) **HUMAN Gate B**
-genesis ceremony (runbook armed in `docs/ca-operations.md` Operation 0).
-**Per the user's directive: after PR #5 merges + re-pin, PROCEED THE
-CRITICAL PATH** (Gate B prep / Phase E independent v1-launch blockers
-toward the ISO-on-VPS + §S Definition of Done); npm publish +
-flagship-drops-pull-script are tracked DEFERRED follow-ups (not on the
-critical path — the pull-script bootstrap works). The orchestrator
-PAUSES at each human gate; it does NOT fake the merge/publish/ceremony.
-See §0 (top entries) for full detail + exact human steps.
+--dry-run` → `@ibisllc/maintainers@0.1.0`. **PR #5 MERGED;
+re-pinned `maintainers.pinned-sha` → `df992f2` (flagship `0eddcb8`),
+both gates GREEN at the pin (maintainers 370/36; flagship 2529/225 via
+the `@ibisllc/maintainers` symlink). ⇒ THE ENTIRE AGENT-SIDE PHASE A IS
+COMPLETE.** Now in **Phase E** (per the user's "proceed critical-path").
+**iOS verified code-complete + GREEN at current HEAD** (build SUCCEEDED
++ **232 XCTests 0 failures**, grown 110→232; zero `@maintainers`
+coupling so unaffected by this session) — the ONLY remaining iOS work
+is the **user-side TestFlight gate** (punch list in
+[[project-testflight-blockers]] / §S: wrangler APNs secrets, Apple
+"Associated Domains" tick, Xcode Archive+upload, ASC metadata,
+real-device push smoke, 5 testers — none agent-advanceable). **Android
+real-impl is environment-gated on THIS Mac (no JDK → review-only;
+needs a JDK/Android-SDK box).** Next agent chunk = the **marketplace
+security-scan service** (genuine net-new, fully agent-doable, hard
+marketplace-MVP blocker — `marketplace_listings.scan_grade` ships NULL
+today). DEFERRED human/credential follow-ups (off the critical path,
+user's pace): create the `ibisllc` npm org + a fresh `@ibisllc`-scoped
+bypass-2FA token (the earlier pasted token is BURNED — revoke it) →
+`npm publish @ibisllc/maintainers@0.1.0` → flagship drops
+`pull-maintainers.sh`+`maintainers.pinned-sha`+the workspace symlink;
+**HUMAN Gate B** genesis ceremony (runbook armed in
+`docs/ca-operations.md` Operation 0); iOS TestFlight; Android on a JDK
+box. The orchestrator PAUSES at each human gate; it does NOT fake the
+publish/ceremony/upload. See §0 (top entries) for full detail.
 PRIOR HEADER (s7 — the c4.5 v1→v2 cutover) follows for history:
 **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
 is the SOLE trust path.** verify-before-trust per chunk: **c4.5a**
@@ -118,6 +126,66 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-18 (v1-launch program session 8, Mac/darwin — PR #5
+  merged + re-pinned `df992f2`; agent-Phase-A COMPLETE; entered Phase
+  E; iOS verified GREEN/human-gated, Android env-gated here):** The
+  human merged governed **PR #5** (the `@maintainers/protocol`→
+  `@ibisllc/maintainers` rename). Verify-before-trust: `gh pr view 5`
+  MERGED, merge `df992f2` (first parent `4a272b9` = old pin, second
+  `5f93129` = rename branch tip; `git diff df992f2 5f93129` empty ⇒
+  merged tree == gate-verified tree). Re-pinned
+  `scripts/maintainers.pinned-sha` `4a272b9`→**`df992f2`** (first-parent
+  merge commit, PR#1..#5 rule), `pull-maintainers.sh` reset the clone,
+  both gates re-run GREEN AT THE PIN (maintainers tsc -b clean +
+  370/36; flagship tsc -b clean + 2529/225, resolving
+  `@ibisllc/maintainers` via the regenerated workspace symlink).
+  Committed flagship `0eddcb8` (pin only). **⇒ THE ENTIRE AGENT-SIDE
+  PHASE A IS COMPLETE** (protocol-product spine c4.6/c4.7/c5 + ceremony
+  hardening + governed PRs #3/#4/#5 merged+re-pinned + the
+  npm-publishable `@ibisllc/maintainers` rename).
+  - **★ Phase-E verify-before-trust over the prompt's framing (docs
+    win):** the prompt lists "iOS real impl" as build work, but the
+    in-repo+memory reality is iOS is **production-grade + fully green**.
+    Orchestrator regression-verified at current HEAD on this Mac
+    (Xcode 16.4): `xcodegen generate` + `xcodebuild …FlagshipApp build`
+    = **BUILD SUCCEEDED**; `xcodebuild -scheme FlagshipMobile-Package …
+    test` = **232 tests, 0 failures, TEST SUCCEEDED** (the suite grew
+    110→232; iOS has ZERO `@maintainers`/`maintainers/protocol` import
+    coupling — provably unaffected by this session's heavy
+    maintainers-rename work; that is WHY it stayed green). The pbxproj
+    is the regenerated xcodegen artifact — left unstaged as always.
+    **There is NO iOS implementation gap; every remaining iOS step is
+    the user-side TestFlight gate** ([[project-testflight-blockers]]:
+    4 wrangler APNs `secret put` in `apps/com/`, Apple-portal
+    "Associated Domains" capability tick on `com.flagshipserver.app`,
+    Xcode Archive→Distribute→ASC, ASC metadata [privacy URL / 1024²
+    icon / screenshots / nutrition labels / "what to test"],
+    real-device push smoke [sim never yields a real APNs token],
+    invite 5 external testers [Apple beta review 1–2 d]). None
+    agent-advanceable — do NOT spawn an iOS "impl" subagent; it's done.
+  - **★ Android env-gate (this Mac):** Android is real-impl work (the
+    Kotlin is canonical-bytes-mirror scaffolds, not a built app) but
+    this Mac has **no real JDK** (`/usr/bin/java` stub) → Android is
+    **review-only here**; a Gradle build/verify needs a JDK+Android-SDK
+    box (the resume-#2 Linux box had it; this darwin box does not). Do
+    not bolt unverifiable Android changes here — env-gated.
+  - **Next agent chunk = the marketplace security-scan service**
+    (`marketplace_listings.scan_grade` ships NULL today; CLAUDE.md
+    outstanding #4 — pull a docker image → Trivy + custom checks →
+    post back grade + an R2 report; MVP-blocking for the public
+    marketplace; fully agent-doable, flagship-vitest-verifiable, no
+    human/hardware/credential gate). Recon also found **Recovery
+    J.3/J.4 is substantially BUILT already** (`server-daemon/src/
+    postRecovery/{rePairWatcher,stableIdReissuer}.ts` + `control-plane/
+    tests/rePair.test.ts` + `server-daemon/tests/rePairWatcher.test.ts`)
+    — contradicts the prompt's "needs building" framing; the gap is
+    the live exercise (Phase G), not greenfield code (verify when its
+    turn comes). The **E2E rig exists** (backlog #15: 46 tests/17
+    files, `apps/web/e2e/flows/`) — gap = the full 13 scenarios per
+    `docs/e2e-test-plan.md` + CI. Phase-E agent order (env-aware):
+    marketplace scanner → recovery J.3/J.4 verify/complete → E2E
+    scenarios; iOS = human-gated handoff (done), Android = env-gated.
 
 - **2026-05-18 (v1-launch program session 8, Mac/darwin — PR #3+#4
   merged + re-pinned; `@maintainers/protocol`→`@ibisllc/maintainers`
