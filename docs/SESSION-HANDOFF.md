@@ -17,13 +17,14 @@ LIVE trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to
 verify-forward-from-pin — **the flagship gate is now a REAL v2 consumer
 check**, new honest baseline **2529/225**, tsc clean both). flagship no
 longer imports ANY v1 Mandate-path symbol. Branch pin UNCHANGED
-`833fa45` (never pin an unmerged tip). **Next = c4.5a** (the
-maintainers v1→v2 cutover, CONSUMER-FIRST decomposed per the s7
+`833fa45` (never pin an unmerged tip). **c4.5a (worker) LANDED s7
+`650fee2`; Next = c4.5b/c4.5c/c4.5d (order-free) → c4.5e LAST.** The
+maintainers v1→v2 cutover is CONSUMER-FIRST decomposed per the s7
 verify-before-trust correction — the "one atomic commit" call is
 SUPERSEDED; ~30 files / 5 pkgs incl. the forgotten `extension`;
-sub-sequence c4.5a worker → b web-ui → c extension → d cli → e
+sub-sequence c4.5a worker ✅ → b web-ui → c extension → d cli → e
 protocol-removal-LAST, each its own green commit, v2 coexists with v1
-until e; the next attentive START, NOT a tail-bolt) → **c4.6
+until e; each the next attentive START, NOT a tail-bolt → **c4.6
 de-version rename** (user decision s6: "v2" is a
 transitional dev artifact — the protocol is UNRELEASED; drop the `V2`
 suffix + Mandate envelope `version 2→1` + tag `maintainers/mandate/v2→
@@ -76,9 +77,32 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
     rename is **c4.6** (unchanged), then **c4.7** spec, c5, … (also
     unchanged). Start gate re-verified green at s7 open: maintainers
     **371/36 · tsc clean**; flagship **2529/225 · tsc clean** (gate
-    re-run; cwd-poisoning hazard recurred — a compound
-    `cd …/maintainers && …` ran the "flagship" half in maintainers
-    too; caught via `pwd`, flagship re-run with absolute path).
+    re-run; cwd-poisoning hazard recurred TWICE — a compound
+    `cd …/maintainers && …` ran a later half in maintainers; caught
+    via `pwd` both times, re-run with absolute path. Use `git -C` /
+    explicit `cd /abs &&` per step).
+  - **c4.5a LANDED `650fee2` (maintainers `feat/keyfile-register`),
+    pushed.** The cloudflare-worker write-gate re-based off the v1
+    Mandate path onto v2 WHILE v1 still coexists in protocol (additive
+    — protocol untouched): `policy.ts` RepoState =
+    `Map<string,MandateV2[]>` + no policy.json; a local `WorkerEnvelope`
+    union (v2-only, doesn't touch the protocol `Envelope`);
+    parseEnvelope Mandate⇒v2 (v1⇒`mandate-version-unsupported`);
+    checkMandateAuthority = empty-track⇒valid self-signed v2 ROOT,
+    non-empty⇒verify-forward-from-the-first-on-repo-mandate (the L3
+    one rule); endorsement/ca authority = `currentAuthorityV2` +
+    holder-signs (Ca still judged at NOW — §5.1 unchanged);
+    `summarizeState`/RepoSummary v2 (drop rootPolicy/approvalRule).
+    `worker.ts` `fetchMaintainersState` drops the policy.json reads,
+    reads version-2 mandates. `worker.test.ts` untouched (helper-only).
+    `policy.test.ts` fully rewritten to v2 fixtures. maintainers tsc
+    -b clean + vitest **371→373/36**; flagship guard **2529/225** tsc
+    clean (worker is NOT in flagship's import graph + protocol
+    unchanged ⇒ provably unaffected). pin UNCHANGED `833fa45`.
+    **Next = c4.5b / c4.5c / c4.5d (order-free) → c4.5e LAST.**
+    Deliberately NOT started a 2nd large security-sensitive sub-commit
+    this turn (would be a rushed tail-bolt on the load-bearing path —
+    same discipline call as end-of-s6).
 - **2026-05-17 (v1-launch program session 6, Linux box):**
   - **No env drift (verify-before-trust).** Cold start: `maintainers/`
     clone already on `feat/keyfile-register`@`2fa2b0c` (c3b); start gate
@@ -1041,8 +1065,10 @@ attentively, one tested green commit, **do NOT tail-bolt**.
 > REAL v2 consumer check**, **2529/225** the new honest baseline).
 > Branch NOT pinned (pin stays `833fa45` until the governed merge).
 > genesis/mandate/takeover + the v1 Mandate path remain (retired in
-> **c4.5e**). **Next = c4.5a (the next attentive START; do NOT
-> tail-bolt).** c4.5 is CONSUMER-FIRST decomposed (s7
+> **c4.5e**). **c4.5a (worker) LANDED s7 `650fee2`; Next =
+> c4.5b/c4.5c/c4.5d (order-free) → c4.5e LAST — each the next
+> attentive START; do NOT tail-bolt.** c4.5 is CONSUMER-FIRST
+> decomposed (s7
 > verify-before-trust correction — the "one atomic commit" call is
 > SUPERSEDED; the true blast radius is ~30 files / 5 packages incl.
 > the forgotten `extension`; see §0 s7 + the §3-tail spine): each

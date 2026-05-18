@@ -534,6 +534,29 @@ rename → c4.7 spec → c5 → governed PR → re-pin → npm publish → Gate 
 §3-tail + §5 and here + the phase-2 row + memory; the unsafe atomic
 must NOT be attempted.
 
+**c4.5a LANDED `650fee2` (maintainers `feat/keyfile-register`),
+pushed.** The cloudflare-worker write-gate re-based off the v1 Mandate
+path onto v2 WHILE v1 still coexists in protocol (additive — protocol
+untouched, removed last in c4.5e). `policy.ts`: RepoState =
+`Map<string,MandateV2[]>`, no policy.json; a local `WorkerEnvelope`
+union (v2-only, doesn't touch the protocol `Envelope` which still has
+v1 Mandate); parseEnvelope Mandate⇒v2 (v1⇒`mandate-version-
+unsupported`); checkMandateAuthority = empty-track⇒valid self-signed
+v2 ROOT (from-scratch is protocol-unauthenticated by design),
+non-empty⇒verify-forward-from-the-first-on-repo-mandate (the L3 one
+rule); endorsement/ca authority = `currentAuthorityV2` + holder-signs
+(Ca judged at NOW — §5.1 unchanged); `summarizeState`/RepoSummary v2.
+`worker.ts` `fetchMaintainersState` drops the policy.json reads, reads
+version-2 mandates. `worker.test.ts` untouched (helper-only).
+`policy.test.ts` fully rewritten to v2 fixtures. maintainers tsc -b
+clean + vitest **371→373/36**; flagship guard **2529/225** tsc clean
+(worker NOT in flagship's import graph + protocol unchanged ⇒ provably
+unaffected). pin UNCHANGED `833fa45`. **Next = c4.5b / c4.5c / c4.5d
+(order-free) → c4.5e LAST.** A 2nd large security-sensitive sub-commit
+was deliberately NOT started this turn (rushing it would be a
+tail-bolt on the load-bearing path — the same end-of-session
+discipline call as s6).
+
 ### 2026-05-17 — session 6 (Linux box): Phase-2 v2 spine — c4.1 + c4.3 + c4.4 (the entire flagship-side v2 migration) landed
 
 Cold start: `maintainers/` clone already on `feat/keyfile-register`@
