@@ -50,7 +50,7 @@ open phase here.
 | Phase | Title | State |
 |---|---|---|
 | **1** | Genesis ceremony (keystone) — **now: the first `upsertMandate`, its hash pinned** | **▶ Gate A SATISFIED; #28 done. Gate B RE-SEQUENCED behind the Phase-2 v2 lock (s4).** The genesis is no longer "per-track self-signed Mandate v1 + bake pubkeys" — it is **the first `upsertMandate` (Mandate v2, inline policy), whose canonical hash is the per-surface pin** (#30 generalised). Because Gate B freezes the pinned-mandate shape **forever**, the **Phase-2 v2 protocol redesign MUST land + be re-pinned BEFORE Gate B.** Gate B itself stays TWO-PART (P: human provisions `pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, set policy/`maxDuration`; A: agent implements+live-verifies the `connectPcscChannel` libpcsclite wiring behind the tested seam, never blind) → `--dry-run` → human signs the from-scratch `upsertMandate` → agent verifies + bakes the **pinned-mandate hash** + re-runs #8. `file:` NOT acceptable. Deploy nothing. |
-| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s6: the entire flagship-side migration landed).** Per the LOCKED v2 design below. **c1 `dc48559`** + **c2 `5f3b146`** (v2 core) + **c3a `23a4d35`** + **c3b `2fa2b0c`** (CLI verbs) — s5. **s6: c4.1 `6cfee83`** (v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers **371/36**) + **c4.3 `5fb2fdf`** (flagship #30 generalised → `MAINTAINER_PINNED_MANDATE_HASH`) + **c4.4 `ff8ce91`** (the LIVE flagship trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to verify-forward-from-pin; **flagship gate now a REAL v2 consumer check**, new baseline **2529/225**) — all LANDED + pushed on `feat/keyfile-register` / `main`; NOT pinned (`833fa45`). flagship no longer imports ANY v1 Mandate-path symbol. genesis/mandate/takeover + the v1 Mandate path remain (retired in **c4.5**). **Remaining:** **c4.5** (the maintainers v1→v2 cutover — retire the v1 path in `@maintainers/protocol` + re-base worker/web-ui onto v2 in ONE atomic green commit) → **c4.6** spec→v2 → **c5** published v2 spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. (The old separate-additive-`Envelope` "c4.2" was deleted as over-decomposition — folds into c4.5.) **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
+| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s6: the entire flagship-side migration landed).** Per the LOCKED v2 design below. **c1 `dc48559`** + **c2 `5f3b146`** (v2 core) + **c3a `23a4d35`** + **c3b `2fa2b0c`** (CLI verbs) — s5. **s6: c4.1 `6cfee83`** (v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers **371/36**) + **c4.3 `5fb2fdf`** (flagship #30 generalised → `MAINTAINER_PINNED_MANDATE_HASH`) + **c4.4 `ff8ce91`** (the LIVE flagship trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to verify-forward-from-pin; **flagship gate now a REAL v2 consumer check**, new baseline **2529/225**) — all LANDED + pushed on `feat/keyfile-register` / `main`; NOT pinned (`833fa45`). flagship no longer imports ANY v1 Mandate-path symbol. genesis/mandate/takeover + the v1 Mandate path remain (retired in **c4.5**). **Remaining:** **c4.5** (the maintainers v1→v2 cutover — retire the v1 path in `@maintainers/protocol` + re-base worker/web-ui onto v2 in ONE atomic green commit) → **c4.6 de-version rename** (user decision s6: "v2" is a transitional dev artifact — the protocol is UNRELEASED/never-used; drop the `V2` code-symbol suffix + reset the Mandate envelope `version 2→1` + canonical tag `maintainers/mandate/v2→/v1`; keep a numeric wire version; NOT a trust-model change; changes `mandatePinHash` ⇒ MUST precede c4.7/c5/Gate B, OK only because nothing is pinned yet) → **c4.7** spec (authored directly under the final name) → **c5** published spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. (The old separate-additive-`Envelope` "c4.2" was deleted as over-decomposition — folds into c4.5.) **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
 | 5 | On-demand VPS + promo AI + real vibe-code | ☐ seam built (#83/#85); human/credential |
@@ -355,14 +355,27 @@ own succession rule; there is no privileged self-renewal."**
   unaffected until they ship a build with a newer pin). Inherent;
   pinning is the answer.
 
-**Consequences — schema + sequencing (CRITICAL):**
+> **Naming addendum (user decision 2026-05-17 s6):** the "**v2**" label
+> throughout this section is a *transitional development artifact* used
+> only to let the new model coexist with v1 during the cutover. The
+> maintainers protocol is **unreleased and never used**, so its
+> first-ever shipped version must NOT be called "v2". Once v1 is fully
+> removed (**c4.5**), a dedicated **c4.6 de-version rename** drops the
+> `V2` code-symbol suffix everywhere and resets the Mandate envelope to
+> `version: 1` / canonical tag `maintainers/mandate/v1` (a numeric wire
+> version is kept — good engineering; only "v1 named v2" is the
+> nonsense). This is **naming + the wire-version integer only — NOT a
+> trust-model change**; everything in L1/L2/L3/D3 below is unchanged.
+> It changes `mandatePinHash`, so it MUST land before c5 and Gate B
+> (acceptable in the same pre-pin window noted just below).
 
-- This is a **`Mandate` canonical-bytes / verifier change** (Mandate
-  **v2**: inline policy; the one-rule authorisation; pinned-anchor
-  verify-forward). It is NOT additive. It is acceptable *precisely
-  because there is no real genesis yet* (`MAINTAINER_GENESIS_PUBKEYS`
-  empty; no chain; nothing pinned). Once Gate B runs, the pinned
-  mandate's shape is **frozen forever.**
+- This is a **`Mandate` canonical-bytes / verifier change** (inline
+  policy; the one-rule authorisation; pinned-anchor verify-forward; the
+  envelope's eventual released version is **1**, see the naming addendum
+  above — "v2" here is transitional). It is NOT additive. It is
+  acceptable *precisely because there is no real genesis yet*
+  (`MAINTAINER_PINNED_MANDATE_HASH` empty; no chain; nothing pinned).
+  Once Gate B runs, the pinned mandate's shape is **frozen forever.**
 - ⇒ **The locked-model protocol redesign MUST land (governed PR →
   re-pin) BEFORE Gate B.** Phase-2's protocol spine is now a
   **prerequisite of Phase-1's Gate B**, not "after" it. Revised
@@ -571,8 +584,31 @@ envelopes/adapter/views) onto v2 (`Envelope`→`MandateV2|…`; worker
 write-gate uses verifyMandateChainFromPin/holder-signs; web-ui =
 status/preview only per #31, drop the v1 signing builders) + rewrite
 all maintainers tests. flagship guard 2529/225 (passes precisely
-because flagship no longer imports v1). → **c4.6** spec→v2 → **c5**
-published v2 spec + static layout + `fetch()` client + conformance
+because flagship no longer imports v1). → **c4.6 de-version rename**
+(user decision 2026-05-17 s6 — "v2" is a transitional development
+artifact, NOT a real version: the maintainers protocol is UNRELEASED
+and never used, so its first-ever version must not be called "v2", and
+the canonical tag `maintainers/mandate/v2` must not be frozen forever
+by Gate B's pin. Drop the `V2` code-symbol suffix everywhere
+(`MandateV2`→`Mandate`, `verifierV2.ts`→`verifier.ts`,
+`currentAuthorityV2`→`currentAuthority`,
+`verifyChainOfEndorsementsV2`→`verifyChainOfEndorsements`,
+`endorsementV2.ts`/`caEndorsementV2.ts`→plain,
+`verifyCaEndorsementsV2`/`authorizedCaKeysV2`→plain,
+`isMandateV2`/`readMandatesV2`→plain) + reset the Mandate envelope
+`version: 2→1` + canonical tag `maintainers/mandate/v2→/v1` (KEEP a
+numeric wire version — versioning a wire format is good engineering;
+the nonsense is only "v1 named v2"; note ReleaseEndorsement/
+CaEndorsement/KeyFile are already `version: 1` — only Mandate carried
+the bogus v2). NOT a trust-model change (the LOCKED design is
+untouched). It is a coordinated flagship-consumer rename (flagship
+imports `MandateV2`/`currentAuthorityV2`/`MAINTAINER_PINNED_MANDATE_
+HASH`/… — flagship gate as a REAL consumer check, same as c4.4). It
+changes `mandatePinHash` output, so it MUST land before c4.7/c5 and
+Gate B — acceptable ONLY because nothing is pinned yet, the SAME "no
+real genesis exists yet" window the v2 lock itself relied on.) →
+**c4.7** spec (authored DIRECTLY under the final name) → **c5**
+published spec + static layout + `fetch()` client + conformance
 vectors (ALL fail-closed negatives) → governed PR (Human Gate) →
 re-pin → `npm publish` (Human Gate) → flagship drops the pull-script.
 **THEN** Gate B. c4.5 is the security-critical cutover and the single

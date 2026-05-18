@@ -20,7 +20,11 @@ longer imports ANY v1 Mandate-path symbol. Branch pin UNCHANGED
 `833fa45` (never pin an unmerged tip). **Next = c4.5** (the maintainers
 v1→v2 cutover: retire the v1 Mandate path + re-base worker/web-ui onto
 v2 in ONE atomic green commit — the next attentive START, NOT a
-tail-bolt) → c4.6 spec→v2 → c5 → governed PR → re-pin → npm publish →
+tail-bolt) → **c4.6 de-version rename** (user decision s6: "v2" is a
+transitional dev artifact — the protocol is UNRELEASED; drop the `V2`
+suffix + Mandate envelope `version 2→1` + tag `maintainers/mandate/v2→
+/v1`; MUST precede c5/Gate B as it changes `mandatePinHash`) → c4.7
+spec → c5 → governed PR → re-pin → npm publish →
 **THEN** Human Gate B. The prior "c4.2" (separate additive Envelope
 rework) was deleted as over-decomposition (folds into c4.5). Phase-1
 Gate B remains the only open Phase-1 item, downstream of the v2 redesign
@@ -99,6 +103,34 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
     `Envelope` re-base folds into the v1-removal cutover (c4.5)** —
     atomic, no dual-version collision (v1 `Mandate` leaves `Envelope`
     exactly as `MandateV2` enters). c4.2 deleted from the plan.
+  - **★ User decision (2026-05-17 s6) — DE-VERSION the protocol
+    ("v2" is a transitional dev artifact, not a real version).** The
+    maintainers protocol is UNRELEASED and never used (no real genesis,
+    nothing pinned, zero adopters); shipping its first-ever version
+    named "v2" — and baking the canonical tag `maintainers/mandate/v2`
+    into `mandatePinHash`, which Gate B freezes FOREVER — is permanent
+    nonsense. Mandated step **c4.6 — de-version rename:** drop the `V2`
+    code-symbol suffix (`MandateV2`→`Mandate`, `verifierV2.ts`→
+    `verifier.ts`, `currentAuthorityV2`→`currentAuthority`,
+    `verifyChainOfEndorsementsV2`→`verifyChainOfEndorsements`,
+    `endorsementV2.ts`/`caEndorsementV2.ts` back to their plain names,
+    `verifyCaEndorsementsV2`/`authorizedCaKeysV2`→plain; `isMandateV2`/
+    `readMandatesV2`→plain) AND reset the Mandate envelope `version: 2
+    → 1` + the canonical tag `maintainers/mandate/v2 →
+    maintainers/mandate/v1` (KEEP a numeric wire version — that is good
+    engineering; the nonsense is only "v1 named v2"). Note: only the
+    *Mandate* envelope ever carried the bogus v2 — ReleaseEndorsement /
+    CaEndorsement / KeyFile / … are already `version: 1`. **Sequencing
+    (load-bearing): c4.5 (frees the names) → c4.6 de-version rename →
+    c4.7 spec (authored DIRECTLY under the final name) → c5 (published
+    spec + conformance vectors).** It changes `mandatePinHash` output —
+    acceptable ONLY because nothing is pinned yet (the SAME "no real
+    genesis exists yet" window the v2 lock relied on); it therefore
+    MUST precede c5 and Gate B. It is a coordinated flagship-consumer
+    rename too (flagship imports `MandateV2`/`currentAuthorityV2`/
+    `MAINTAINER_PINNED_MANDATE_HASH`/…) — flagship gate as a REAL
+    consumer check, same as c4.4. NOT a trust-model change (the LOCKED
+    v2 design is unchanged — only naming + the wire version integer).
   - **Discipline call (honest):** **c4.5 is the next attentive START —
     NOT tail-bolted at the end of this long 3-commit session.** It is
     the single most delicate remaining maintainers change (retire the
@@ -872,10 +904,18 @@ tests. flagship guard 2529/225 (passes precisely because flagship no
 longer imports v1; re-home the shared `VerifiedEndorsements`/
 `EndorsementFailReason`/`VerifiedCaEndorsements` types into the v2 files
 since endorsementV2/caEndorsementV2 import them from the v1 files).
-→ **c4.6** spec→v2 (rewrites §5.2 "the pin IS the floor"; dissolves
-policy.json/SignedPolicy; documents L1/L2/L3 + mandatePinHash + the
-holder-signs endorsement model + the from-scratch boundary + D3
-unchanged) → **c5** published v2 spec + static layout + `fetch()`
+→ **c4.6 de-version rename** (user decision s6 — "v2" is a transitional
+dev artifact; the protocol is unreleased): drop the `V2` code-symbol
+suffix everywhere + reset the Mandate envelope `version: 2→1` +
+canonical tag `maintainers/mandate/v2→/v1` (keep a numeric wire version
+— only Mandate ever carried the bogus v2). Coordinated flagship-consumer
+rename (flagship gate a REAL consumer check). NOT a trust-model change.
+Changes `mandatePinHash` — acceptable ONLY pre-pin (same window the v2
+lock relied on) ⇒ MUST precede c4.7/c5/Gate B.
+→ **c4.7** spec (authored DIRECTLY under the final name): rewrites §5.2
+"the pin IS the floor"; dissolves policy.json/SignedPolicy; documents
+L1/L2/L3 + mandatePinHash + the holder-signs endorsement model + the
+from-scratch boundary + D3 unchanged) → **c5** published spec + static layout + `fetch()`
 client + conformance vectors (ALL fail-closed negatives) → governed PR
 (Human Gate, PR #1/#2 precedent) → re-pin → `npm publish` (Human Gate:
 npm org/2FA) → flagship DROPS `pull-maintainers.sh`/
@@ -941,8 +981,15 @@ security-critical cutover — START it attentively, **do NOT tail-bolt**.
 > `VerifiedEndorsements`/`EndorsementFailReason`/`VerifiedCaEndorsements`
 > types into the v2 files (endorsementV2/caEndorsementV2 currently
 > import them from the v1 files being removed). flagship guard 2529/225
-> (passes precisely because flagship no longer imports v1). → **c4.6**
-> spec→v2 → **c5** (published v2 spec + static layout + `fetch()`
+> (passes precisely because flagship no longer imports v1). → **c4.6
+> de-version rename** (user decision s6 — "v2" is a transitional dev
+> artifact; the protocol is UNRELEASED: drop the `V2` code-symbol
+> suffix everywhere + Mandate envelope `version 2→1` + canonical tag
+> `maintainers/mandate/v2→/v1`; keep a numeric wire version; NOT a
+> trust-model change; coordinated flagship-consumer rename; MUST
+> precede c4.7/c5/Gate B since it changes `mandatePinHash` — OK only
+> pre-pin) → **c4.7** spec (authored directly under the final name) →
+> **c5** (published spec + static layout + `fetch()`
 > client + conformance vectors, ALL fail-closed negatives) → governed
 > PR → re-pin → `npm publish` → flagship drops the pull-script.
 > Build it upstream in `maintainers/` on `feat/keyfile-register` →
