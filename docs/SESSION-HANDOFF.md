@@ -40,26 +40,39 @@ typed PC/SC error taxonomy + the no-hardware prompt+wait+retry UX
 binding deliberately NOT written blind; flagship `6cd2c55`:
 ca-operations Operation 0 reconciled to the de-versioned
 `upsert-mandate` reality; maintainers 358/35 → **370/36**, flagship
-2529/225). **PR #3 (the whole 14-commit Phase-2 spine) was MERGED by
-the maintainer; agent re-pinned `scripts/maintainers.pinned-sha` →
-the first-parent merge commit `8e8915e` (flagship `ea9f707`), both
-gates re-verified GREEN at the pin (maintainers 370/36, flagship
-2529/225).** Then the **npm packaging-prep LANDED on a new branch**
-(`feat/publish-protocol` `1e9705f`, **governed PR #4 OPEN**): the
-package is now publishable (`private` removed, conditional `exports` so
-the flagship symlink resolves unchanged, `files` allowlist ships dist+
-README+LICENSE+SPEC.md+the 17-vector conformance set, `prepack` builds+
-bundles; version stays 0.1.0) — orchestrator re-verified `--force` both
-gates (maintainers 370/36, flagship 2529/225) + `npm pack/publish
---dry-run` clean. **What remains is HUMAN-GATED, in order:** (1) merge
-PR #4 → agent re-pins to its merge SHA + reruns gates; (2) **HUMAN**
-`cd maintainers/packages/protocol && npm publish --access public` (npm
-org/2FA); (3) flagship drops `pull-maintainers.sh` + the symlink +
-consumes the published pkg; (4) **HUMAN Gate B** (the (P) provisioning +
-the YubiKey genesis, runbook armed in `docs/ca-operations.md`
-Operation 0). The orchestrator PAUSES at each and hands the user the
-copy-pasteable runbook; it does NOT fake the merge/publish/ceremony.
-See §0 (top entries) for full detail + the exact human steps.
+2529/225). **PR #3 (14-commit Phase-2 spine) + PR #4 (npm
+packaging-prep) were both MERGED by the maintainer; agent re-pinned
+`scripts/maintainers.pinned-sha` → `8e8915e` (PR#3) then → **`4a272b9`**
+(PR#4, the current pin; flagship `aceb204`), both gates GREEN at each
+pin.** **★ npm-name finding (verify-before-trust):** `@maintainers/
+protocol` is PERMANENTLY unpublishable — an unrelated unscoped
+`maintainers` pkg (another npm user) blocks creating the `@maintainers`
+npm org. **Renamed `@maintainers/protocol` → `@ibisllc/maintainers`**
+(free; clean `github.com/ibisllc/maintainers` provenance) — maintainers
+`5f93129` (**governed PR #5 OPEN**, 43 files, pure specifier swap, no
+semantic change) + flagship `11f3a06` (consumer rename: server-daemon +
+the 2 `.mjs` + lockfile + the regenerated `node_modules/@ibisllc/
+maintainers` workspace symlink [old `@maintainers/protocol` scope dir
+gone] + a prose/comment sweep of the active flagship docs so the final
+name never churns again). Orchestrator re-verified both gates
+(maintainers 370/36; flagship 2529/225 via the new symlink) + `npm pack
+--dry-run` → `@ibisllc/maintainers@0.1.0`. **What remains, in order:**
+(1) **merge PR #5** → agent re-pins to its first-parent merge SHA +
+reruns both gates + commits the pin bump (this completes the rename
+landing); (2) *(later, user's pace — "publish later")* HUMAN creates
+the `ibisllc` npm org + a `@ibisllc`-scoped granular token → `cd
+maintainers/packages/protocol && npm publish --access public`; (3)
+flagship drops `pull-maintainers.sh` + `maintainers.pinned-sha` + the
+workspace symlink + consumes the published `@ibisllc/maintainers@0.1.0`
+(the symlink-is-live-consumer gotcha ENDS there); (4) **HUMAN Gate B**
+genesis ceremony (runbook armed in `docs/ca-operations.md` Operation 0).
+**Per the user's directive: after PR #5 merges + re-pin, PROCEED THE
+CRITICAL PATH** (Gate B prep / Phase E independent v1-launch blockers
+toward the ISO-on-VPS + §S Definition of Done); npm publish +
+flagship-drops-pull-script are tracked DEFERRED follow-ups (not on the
+critical path — the pull-script bootstrap works). The orchestrator
+PAUSES at each human gate; it does NOT fake the merge/publish/ceremony.
+See §0 (top entries) for full detail + exact human steps.
 PRIOR HEADER (s7 — the c4.5 v1→v2 cutover) follows for history:
 **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
 is the SOLE trust path.** verify-before-trust per chunk: **c4.5a**
@@ -105,6 +118,76 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-18 (v1-launch program session 8, Mac/darwin — PR #3+#4
+  merged + re-pinned; `@maintainers/protocol`→`@ibisllc/maintainers`
+  rename landed, PR #5 open):** The human merged governed **PR #3**
+  (Phase-2 spine) then **PR #4** (npm packaging-prep). Verify-before-
+  trust: re-pinned `scripts/maintainers.pinned-sha` `833fa45`→`8e8915e`
+  (PR#3 first-parent merge; flagship `ea9f707`) then `8e8915e`→
+  **`4a272b9`** (PR#4 first-parent merge; flagship `aceb204`), both
+  gates re-verified GREEN at each pin (maintainers 370/36; flagship
+  2529/225). **★ npm-publish blocked by a namespace fact (not our
+  code):** `npm publish` advanced ENEEDAUTH→403(2FA)→**404 "Scope not
+  found"**. Root cause via `npm view`: an unrelated unscoped
+  `maintainers@1.0.0` (owner `alestoraldous`) EXISTS ⇒ npm forbids
+  creating an org named `maintainers` ⇒ the `@maintainers` scope is
+  **permanently unobtainable** ⇒ `@maintainers/protocol` is
+  unpublishable. `@ibisllc/maintainers` is free (`npm view` E404) and
+  is the clean `github.com/ibisllc/maintainers` provenance mapping.
+  User decided (AskUserQuestion): rename now, publish later, then
+  proceed critical-path. **Scoped npm names do NOT collide with
+  unscoped ones; the blocker is org-name==existing-package
+  reservation. Lesson: pick the npm scope BEFORE the first publish
+  attempt; a scoped package needs its org creatable.**
+  - A fresh subagent did the **pure specifier rename**
+    `@maintainers/protocol`→`@ibisllc/maintainers` (43 maintainers
+    files on branch `chore/rename-protocol-to-ibisllc-maintainers`
+    `5f93129`, **governed PR #5 OPEN**; +60/−60, zero semantic change;
+    `package.json` name only [exports/files/publishConfig/prepack/
+    version 0.1.0 preserved; dir unmoved]; sibling `@maintainers/*`
+    names + the `@maintainers/source` export-condition deliberately
+    LEFT — distinct tokens). Flagship side `11f3a06` on `main`:
+    server-daemon dep+imports, the 2 `.mjs` (vitest-only blind spot),
+    installer-apkovl test, regenerated root `package-lock.json`, and
+    the **npm-workspace symlink regenerated** (`node_modules/@ibisllc/
+    maintainers`→`maintainers/packages/protocol`; old `@maintainers`
+    scope dir removed — flagship's `package.json` `workspaces` lists
+    the PATH so it auto-relinks from the new `name`). Byte-identity
+    pair (`bootstrap-flagship-maintainers.mjs:209` generated-README ↔
+    committed `.maintainers/README.md`) changed in lockstep (the
+    bootstrap test SHA-compares; flagship vitest green proves it).
+    Orchestrator added a **prose/comment sweep** of the ACTIVE flagship
+    docs (`ca-operations.md` operator runbook, `maintainer-ca-
+    endorsement.md`, `maintainers-deployment.md`, `plan-…-demo.md`,
+    `rotate-ca.mjs/.test.ts`, `maintainerCa.ts` module-doc — that
+    module stays `@ibisllc/maintainers`-import-FREE, comment only;
+    flagship `dist/` is gitignored, regenerates) so the final name
+    never churns; the orchestrator-owned historical trackers
+    (SESSION-HANDOFF/v1-launch-program) intentionally KEEP their
+    period-accurate `@maintainers/protocol` mentions (a log, not
+    rewritten). Verify-before-trust: orchestrator audited the diff
+    (name-only pkg change; siblings intact; zero residual specifier;
+    pin/orchestrator-docs untouched; pbxproj NOT staged) + re-ran BOTH
+    gates itself — maintainers tsc -b clean + **370/36**; flagship
+    tsc -b clean + **2529/225** (via the regenerated `@ibisllc/
+    maintainers` symlink — the live consumer proof) + after the prose
+    sweep re-ran flagship again still 2529/225; `npm pack --dry-run` →
+    `@ibisllc/maintainers@0.1.0`, `ibisllc-maintainers-0.1.0.tgz`, 67
+    files.
+  - **★ token hygiene:** the user pasted a live bypass-2FA npm token in
+    cleartext. Used transiently (private `mktemp` npmrc, `trap`-removed,
+    NEVER `~/.npmrc`/repo/memory) — scrubbed. **The user MUST revoke
+    that token (`npm_FUNp…`) at npmjs.com → Access Tokens; treat as
+    burned.** Future publishes need a fresh `@ibisllc`-scoped
+    granular+bypass-2FA token created AFTER the `ibisllc` org exists.
+  - **Next:** merge **PR #5** → agent re-pins `maintainers.pinned-sha`
+    to its first-parent merge SHA + reruns both gates + commits → THEN
+    **proceed the critical path** (Gate B prep / Phase E) per the user.
+    npm publish + flagship-drops-pull-script(+symlink) are DEFERRED
+    tracked follow-ups (off the critical path; the pull-script
+    bootstrap still works). `docs/ca-operations.md` Operation 0 holds
+    the armed Gate-B (P) provisioning checklist.
 
 - **2026-05-18 (v1-launch program session 8, Mac/darwin — PR #3
   MERGED + re-pinned + npm packaging-prep landed (PR #4 open)):** The
