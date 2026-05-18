@@ -50,7 +50,7 @@ open phase here.
 | Phase | Title | State |
 |---|---|---|
 | **1** | Genesis ceremony (keystone) — **now: the first `upsertMandate`, its hash pinned** | **▶ Gate A SATISFIED; #28 done. Gate B RE-SEQUENCED behind the Phase-2 v2 lock (s4).** The genesis is no longer "per-track self-signed Mandate v1 + bake pubkeys" — it is **the first `upsertMandate` (Mandate v2, inline policy), whose canonical hash is the per-surface pin** (#30 generalised). Because Gate B freezes the pinned-mandate shape **forever**, the **Phase-2 v2 protocol redesign MUST land + be re-pinned BEFORE Gate B.** Gate B itself stays TWO-PART (P: human provisions `pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, set policy/`maxDuration`; A: agent implements+live-verifies the `connectPcscChannel` libpcsclite wiring behind the tested seam, never blind) → `--dry-run` → human signs the from-scratch `upsertMandate` → agent verifies + bakes the **pinned-mandate hash** + re-runs #8. `file:` NOT acceptable. Deploy nothing. |
-| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s8: c4.6 de-version rename + c4.7 spec BOTH LANDED — c4.6 maintainers `a8ac151` + flagship `c5995c9`; c4.7 spec `f509849` (`docs/spec/v1.md` rewritten to the LOCKED model under the final name, authored against the landed code); all pushed; next = c5 publishable spec + conformance vectors).** Per the LOCKED v2 design below. **c1 `dc48559`** + **c2 `5f3b146`** (v2 core) + **c3a `23a4d35`** + **c3b `2fa2b0c`** (CLI verbs) — s5. **s6: c4.1 `6cfee83`** (v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers **371/36**) + **c4.3 `5fb2fdf`** (flagship #30 generalised → `MAINTAINER_PINNED_MANDATE_HASH`) + **c4.4 `ff8ce91`** (the LIVE flagship trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to verify-forward-from-pin; **flagship gate now a REAL v2 consumer check**, new baseline **2529/225**) — all LANDED + pushed on `feat/keyfile-register` / `main`; NOT pinned (`833fa45`). flagship no longer imports ANY v1 Mandate-path symbol. genesis/mandate/takeover + the v1 Mandate path remain (retired in **c4.5e**). **Remaining:** **c4.5 — the maintainers v1→v2 cutover, CONSUMER-FIRST decomposed (s7 verify-before-trust correction; the "one atomic commit" call is SUPERSEDED — the true blast radius is ~30 files / 5 packages incl. the forgotten `extension`; consumer-first→removal-last is safe because the v2 symbols already exist additively):** **c4.5a worker `650fee2` ✅** → **c4.5b web-ui `429a57c` ✅** (signing views onboard/renew/takeover DELETED per #31) → **c4.5c extension `fba0657` ✅** (pure verifier) → **c4.5d cli `616b8f9` ✅** (genesis/mandate/takeover verbs DELETED — collapsed into the landed upsert-mandate) → **c4.5e-pre flagship `def22ca` ✅** (verify-before-trust found 4 MISSED flagship v1 consumers — flagship resolves @maintainers/protocol via a LIVE symlink not the pin; re-based incl. the regenerated v2 .maintainers/ artifact) → **c4.5e protocol v1-removal `208978a` ✅ — DONE, v1 fully gone, v2 is the SOLE trust path** (maintainers **382/37 → 330/33**, flagship guard **2529/225 ALL PASS**). ~~**c4.5e protocol v1-removal (LAST;~~ re-home the shared VerifiedEndorsements/EndorsementFailReason/VerifiedCaEndorsements types)** — a–d order-free + independent, each its OWN green commit (v2 coexists with v1 until e), flagship guard 2529/225 throughout. → **c4.6 de-version rename `a8ac151` (maintainers) + `c5995c9` (flagship) ✅ — LANDED s8** (dropped the `V2` code-symbol suffix everywhere + reset the Mandate envelope `version 2→1` + canonical tag `maintainers/mandate/v2→/v1`; the real load-bearing tag site was the local `joinTagged2` builder, not the comment — renamed `joinTaggedMandate`/`/v1` so `mandatePinHash` genuinely changes; `.maintainers/` artifact regenerated to v1, KeyFiles byte-unchanged, byte-deterministic; NOT a trust-model change; maintainers 330/33, flagship 2529/225, pin UNCHANGED `833fa45`) → **c4.7** spec (authored directly under the final name) → **c5** published spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. (The old separate-additive-`Envelope` "c4.2" was deleted as over-decomposition — folds into c4.5.) **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
+| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s8: c4.6 + c4.7 + c5 — the whole protocol-product spine — ALL LANDED. c4.6 maintainers `a8ac151` + flagship `c5995c9`; c4.7 `f509849` (spec rewritten to LOCKED model under the final name); c5 `6acca14` (spec §7.1/§12 + `fetch()` reference client + the portable `maintainers/conformance/` 17-vector set + conformance.test.ts; maintainers 358/35, flagship 2529/225); all pushed; pin UNCHANGED `833fa45`. Next = ceremony-tooling hardening (native PC/SC PIV binding) → governed PR → re-pin → npm publish → flagship drops pull-script → Gate B).** Per the LOCKED v2 design below. **c1 `dc48559`** + **c2 `5f3b146`** (v2 core) + **c3a `23a4d35`** + **c3b `2fa2b0c`** (CLI verbs) — s5. **s6: c4.1 `6cfee83`** (v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers **371/36**) + **c4.3 `5fb2fdf`** (flagship #30 generalised → `MAINTAINER_PINNED_MANDATE_HASH`) + **c4.4 `ff8ce91`** (the LIVE flagship trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to verify-forward-from-pin; **flagship gate now a REAL v2 consumer check**, new baseline **2529/225**) — all LANDED + pushed on `feat/keyfile-register` / `main`; NOT pinned (`833fa45`). flagship no longer imports ANY v1 Mandate-path symbol. genesis/mandate/takeover + the v1 Mandate path remain (retired in **c4.5e**). **Remaining:** **c4.5 — the maintainers v1→v2 cutover, CONSUMER-FIRST decomposed (s7 verify-before-trust correction; the "one atomic commit" call is SUPERSEDED — the true blast radius is ~30 files / 5 packages incl. the forgotten `extension`; consumer-first→removal-last is safe because the v2 symbols already exist additively):** **c4.5a worker `650fee2` ✅** → **c4.5b web-ui `429a57c` ✅** (signing views onboard/renew/takeover DELETED per #31) → **c4.5c extension `fba0657` ✅** (pure verifier) → **c4.5d cli `616b8f9` ✅** (genesis/mandate/takeover verbs DELETED — collapsed into the landed upsert-mandate) → **c4.5e-pre flagship `def22ca` ✅** (verify-before-trust found 4 MISSED flagship v1 consumers — flagship resolves @maintainers/protocol via a LIVE symlink not the pin; re-based incl. the regenerated v2 .maintainers/ artifact) → **c4.5e protocol v1-removal `208978a` ✅ — DONE, v1 fully gone, v2 is the SOLE trust path** (maintainers **382/37 → 330/33**, flagship guard **2529/225 ALL PASS**). ~~**c4.5e protocol v1-removal (LAST;~~ re-home the shared VerifiedEndorsements/EndorsementFailReason/VerifiedCaEndorsements types)** — a–d order-free + independent, each its OWN green commit (v2 coexists with v1 until e), flagship guard 2529/225 throughout. → **c4.6 de-version rename `a8ac151` (maintainers) + `c5995c9` (flagship) ✅ — LANDED s8** (dropped the `V2` code-symbol suffix everywhere + reset the Mandate envelope `version 2→1` + canonical tag `maintainers/mandate/v2→/v1`; the real load-bearing tag site was the local `joinTagged2` builder, not the comment — renamed `joinTaggedMandate`/`/v1` so `mandatePinHash` genuinely changes; `.maintainers/` artifact regenerated to v1, KeyFiles byte-unchanged, byte-deterministic; NOT a trust-model change; maintainers 330/33, flagship 2529/225, pin UNCHANGED `833fa45`) → **c4.7** spec (authored directly under the final name) → **c5** published spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. (The old separate-additive-`Envelope` "c4.2" was deleted as over-decomposition — folds into c4.5.) **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
 | 5 | On-demand VPS + promo AI + real vibe-code | ☐ seam built (#83/#85); human/credential |
@@ -487,6 +487,47 @@ every §S box is ☑ → v1-alpha.
 ---
 
 ## Progress log (newest first)
+
+### 2026-05-18 — session 8 (Mac/darwin box): c5 LANDED — publishable layout + fetch() reference client + the portable conformance vector set
+
+**maintainers `6acca14` (`feat/keyfile-register`), pushed.** The #35
+portable-artifact requirement, additive (zero model/canonical/verifier
+change): (1) `docs/spec/v1.md` §7.1 documents the published-fetch
+layout as the HTTP/raw-content form of the §7 Git-adapter layout — the
+EXISTING `.maintainers/index.json` convention (`{version:1,tracks,keys,
+endorsements}`, every path under `.maintainers/`, anti-redirect), NOT
+the stale pre-v2 `origin.json`/`log.json`/`ca-leases.json` vocabulary —
++ §12 Conformance (vector format, the "conformant iff every vector incl.
+every fail-closed negative" criterion, named the primary portable
+artifact); section numbers preserved. (2) `packages/protocol/src/
+fetchClient.ts` (`verifyFromFetch`) — dependency-free, total,
+fail-closed; GETs `<base>/.maintainers/index.json` then the listed
+files and runs the landed verifier at the caller's own `now`;
+byte-consistent with `extension/src/fetcher.ts` (one published layout,
+not a fork). (3) `packages/protocol/scripts/gen-conformance.ts` — a
+deterministic generator (real Ed25519 signing, fixed seeds/timestamps/
+UUIDs) emitting the portable `maintainers/conformance/` (manifest + 17
+vectors) + `conformance.test.ts` replaying EVERY vector through the
+LANDED `verifier.ts`/`endorsement.ts`/`caEndorsement.ts` asserting both
+`accepted` and the exact `rejectReason` (the suite FAILS if any
+expected reject silently flips to accept — the guard for #9/#10), plus
+totality, presence of all 10 mandatory negatives, byte-deterministic
+regeneration. Vectors: 4 happy + neg-1..10 (absent/forked/
+pin-not-in-log, self-renewal, sub-threshold, under-minSuccessors,
+over-maxDuration, endorsement-gap, lapsed-lease-at-NOW, 10a rolled-back
++ 10b tampered-root) + totality + CA-no-pin; each negative maps to the
+exact landed reason. Verify-before-trust: orchestrator audited the diff
+(pin untouched; conformance test uses the real verifier not mocks;
+neg-4 spot-checked genuinely fail-closed; generator real-signs ⇒
+genuine canonical bytes) + re-ran both gates — maintainers 330/33 →
+**358/35** (+28, 0 failed); flagship **2529/225** unchanged. **The
+c4.6/c4.7/c5 protocol-product spine is DONE. Next = ceremony-tooling
+hardening (native PC/SC YubiKey PIV binding behind the tested
+`connectPcscChannel` seam; make create-key/upsert-mandate/ca-endorsement
++ ca-operations Operation 0 concrete & dry-run-clean; the transport
+must never assume key/reader present). A fresh attentive START —
+security-critical native transport; lands upstream via a governed
+maintainers PR; hardware-in-loop verify is a human gate.**
 
 ### 2026-05-18 — session 8 (Mac/darwin box): c4.7 SPEC LANDED — protocol spec rewritten under the final name to the LOCKED model
 

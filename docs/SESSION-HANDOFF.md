@@ -27,10 +27,19 @@ signatures changed, KeyFiles byte-unchanged, regeneration
 byte-deterministic). **c4.7 spec ALSO LANDED** (maintainers `f509849`:
 `docs/spec/v1.md` rewritten 607→971 under the final name to the LOCKED
 model, authored against the landed code as ground truth; section
-numbers preserved). Next = **c5** (publishable spec + `fetch()`
-reference client + conformance test-vector set incl. EVERY fail-closed
-negative) → governed PR → re-pin → npm publish → Gate B. See §0 (top
-entries) for full detail.
+numbers preserved). **c5 ALSO LANDED** (maintainers `6acca14`: spec
+§7.1 published-fetch layout + §12 Conformance; a dependency-free
+`fetch()` reference client `fetchClient.ts`; a deterministic generator
++ the portable artifact `maintainers/conformance/` (17 vectors:
+4 happy + all 10 mandatory fail-closed negatives + totality + CA-no-pin)
++ `conformance.test.ts` replaying every vector through the LANDED
+verifier; maintainers 330/33 → **358/35**, flagship 2529/225). **All of
+c4.6/c4.7/c5 (the protocol-product spine) are DONE.** Next = **the
+ceremony-tooling hardening** (native PC/SC YubiKey PIV binding behind
+the tested `connectPcscChannel` seam + make create-key/upsert-mandate/
+ca-endorsement + the `ca-operations.md` Operation-0 runbook concrete
+and dry-run-clean) → governed PR → re-pin → npm publish → flagship
+drops pull-script → Gate B. See §0 (top entries) for full detail.
 PRIOR HEADER (s7 — the c4.5 v1→v2 cutover) follows for history:
 **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
 is the SOLE trust path.** verify-before-trust per chunk: **c4.5a**
@@ -77,6 +86,56 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8, Mac/darwin — c5
+  LANDED; ★ stale-layout discrepancy reconciled):** maintainers
+  **`6acca14`** (`feat/keyfile-register`, 25 files, +3525), pushed.
+  One fresh subagent built the three #35 portable-artifact pieces
+  (additive — zero model/canonical/verifier change): (1) spec §7.1
+  published-fetch layout + §12 Conformance (section numbers preserved);
+  (2) a dependency-free `fetch()` reference client
+  `packages/protocol/src/fetchClient.ts` (`verifyFromFetch`, total,
+  fail-closed); (3) a deterministic real-Ed25519-signed generator
+  `packages/protocol/scripts/gen-conformance.ts` → the portable
+  artifact `maintainers/conformance/` (manifest + 17 vectors) +
+  `conformance.test.ts`. **★ Discrepancy the orchestrator flagged &
+  the subagent honored:** the program prompt + old `#35`/D2 prose name
+  a static layout `origin.json`/`tracks/<t>/log.json`/`ca-leases.json`
+  — that vocabulary is STALE (pre-v2-lock). The LANDED published-fetch
+  convention (per `extension/src/fetcher.ts`) is a committed
+  `.maintainers/index.json` (`{version:1,tracks,keys,endorsements}`,
+  every path under `.maintainers/`, anti-redirect). c5 documents/uses
+  ONLY that — one published layout shared by extension + reference
+  client + #9/#10; zero divergence found. **Cold-start rule: trust the
+  in-repo docs + landed code over the prompt when they disagree (the
+  prompt's §F also says origin.json/log.json/ca-leases.json — read it
+  as the `.maintainers/index.json` convention).** Verify-before-trust:
+  orchestrator audited the change set (pin untouched; zero `…V2`;
+  conformance.test.ts imports the REAL `verifier.ts`/`endorsement.ts`/
+  `caEndorsement.ts` — not mocks — and asserts BOTH `accepted` and the
+  exact `rejectReason` per vector so a silent accept-flip FAILS the
+  suite; spot-checked neg-4 self-renewal genuinely fails closed —
+  `now` past the expired root window so it can't fall back, rejects
+  `signer-not-in-successor-set`; generator uses real `signMandate` +
+  fixed seeds ⇒ genuine signatures over genuine canonical bytes, a
+  mis-implementing port FAILS the vectors) + re-ran BOTH gates itself:
+  maintainers tsc -b clean + vitest **330/33 → 358/35** (+28, 0
+  failed — the conformance suite passing IS the proof all 17 vectors
+  replay correctly through the landed verifier); flagship tsc -b clean
+  + **2529/225** unchanged (new exported file compiles via the live
+  symlink, doesn't touch flagship's graph). The 17 vectors (4 happy +
+  neg-1..10 incl. 10a rolled-back & 10b tampered-root + totality + CA
+  no-pin) are the security guard for #9/#10. **The c4.6/c4.7/c5
+  protocol-product spine is DONE. Next = the ceremony-tooling
+  hardening** (native PC/SC YubiKey PIV binding behind the tested
+  `connectPcscChannel` seam — currently a fail-closed stub that throws
+  even with `pcsclite` present; make `create-key`/`upsert-mandate`/
+  `ca-endorsement` + `ca-operations.md` Operation 0 concrete &
+  dry-run-clean; the transport must NEVER assume key/reader present —
+  prompt+wait+retry, fail-closed is security-only — see
+  [[feedback-no-hardware-assumptions]]). HARDWARE-in-loop live verify
+  is a human gate; lands upstream via a governed `maintainers` PR.
+  **A fresh attentive START — security-critical native transport, do
+  NOT tail-bolt or write the binding blind.**
 - **2026-05-18 (v1-launch program session 8, Mac/darwin — c4.7 spec
   LANDED):** maintainers **`f509849`** (`feat/keyfile-register`),
   pushed. One fresh subagent rewrote `docs/spec/v1.md` (607→971 lines)
