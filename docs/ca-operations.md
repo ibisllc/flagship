@@ -396,18 +396,50 @@ brew install ykman
 #   sudo apt-get install -y yubikey-manager
 
 # 3. On EACH of the two YubiKeys, generate an Ed25519 key ON the token
-#    in PIV slot 9c ("digital signature": PIN-gated every signature),
-#    touch policy = always, PIN once per session. The private half is
-#    generated on-token and NEVER exported. Run this once PER key
-#    (plug in key #1, run it; swap to key #2, run it):
+#    in PIV slot 9c (the PIV "Digital Signature" slot). Policy baked at
+#    generation, IMMUTABLE afterward: `--pin-policy ONCE` = PIN entered
+#    once per PIV session (≈ once per `upsert-mandate` invocation, NOT
+#    once per signature, NOT once forever); `--touch-policy ALWAYS` = a
+#    physical proof-of-presence for EVERY signature (over USB: tap the
+#    contact; over NFC: holding the key to the phone during the op
+#    satisfies it — touch=ALWAYS does NOT preclude the NFC tap app).
+#    The private half is generated on-token and is NON-EXPORTABLE.
+#    `generate` is an ADMIN op gated by the PIV *management key* (not
+#    the PIN): on a factory key press Enter at "Enter a management key
+#    [blank to use default key]" to use the well-known default
+#    (010203…0708). Run once PER key (plug in #1, run; swap to #2, run):
 ykman piv keys generate \
   --algorithm ED25519 \
   --pin-policy ONCE \
   --touch-policy ALWAYS \
   9c \
   slot-9c-public.pem
-#    (If the key/PUK is still factory-default, ykman will prompt; set a
-#    real PIN/PUK now — this is the §11.4 human knob, fixed once.)
+
+# 3b. Harden access on EACH key — MANDATORY, do it immediately after
+#     3 on that same key, BEFORE moving to the next key. Factory PIN
+#     (123456) / PUK (12345678) / management key (010203…0708) are
+#     PUBLIC values; left at default, anyone with brief physical
+#     possession could overwrite your slot-9c key (they still cannot
+#     extract the non-exportable private half, nor sign without your
+#     PIN+touch, and a swapped key fails the forward chain — but
+#     defense-in-depth locks the admin path too). The cleanest posture
+#     (no separate 24-byte secret to store) is a PIN-protected,
+#     randomly-generated management key:
+ykman piv access change-pin                       # 123456 → your real PIN
+ykman piv access change-puk                       # 12345678 → your real PUK
+ykman piv access change-management-key --protect --generate
+#     `--protect --generate` mints a random management key and stores
+#     it on-card encrypted under the PIN, so future admin ops (incl.
+#     ever re-keying the slot) just need the PIN; the public default is
+#     gone. Record the PIN + PUK safely (offline, not in this repo);
+#     the PUK unblocks a locked PIN — lose BOTH and the PIV applet is
+#     bricked (catastrophic AFTER genesis; harmless to `ykman piv
+#     reset` BEFORE). Generating in step 3 does NOT need re-doing after
+#     this — the slot-9c key + its baked PIN/touch policy are
+#     unaffected; 3b only changes the access credentials around it.
+#
+#     [Flagship genesis keys: applied during the s8 ceremony
+#     provisioning — this is the established standard, not optional.]
 
 # 4. Export the SECOND (backup/successor) YubiKey's slot-9c PUBLIC key
 #    to a 64-hex file so the genesis run can name it in --successors
