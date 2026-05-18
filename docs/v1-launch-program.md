@@ -50,7 +50,7 @@ open phase here.
 | Phase | Title | State |
 |---|---|---|
 | **1** | Genesis ceremony (keystone) — **now: the first `upsertMandate`, its hash pinned** | **▶ Gate A SATISFIED; #28 done. Gate B RE-SEQUENCED behind the Phase-2 v2 lock (s4).** The genesis is no longer "per-track self-signed Mandate v1 + bake pubkeys" — it is **the first `upsertMandate` (Mandate v2, inline policy), whose canonical hash is the per-surface pin** (#30 generalised). Because Gate B freezes the pinned-mandate shape **forever**, the **Phase-2 v2 protocol redesign MUST land + be re-pinned BEFORE Gate B.** Gate B itself stays TWO-PART (P: human provisions `pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, set policy/`maxDuration`; A: agent implements+live-verifies the `connectPcscChannel` libpcsclite wiring behind the tested seam, never blind) → `--dry-run` → human signs the from-scratch `upsertMandate` → agent verifies + bakes the **pinned-mandate hash** + re-runs #8. `file:` NOT acceptable. Deploy nothing. |
-| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s5: c2 landed).** Per the LOCKED v2 design below: pinned-mandate anchor + in-mandate succession policy + the L3 one-rule (no self-renewal); `createKey`+`upsertMandate`; Mandate **v2** canonical bytes; #30 = bake the pinned-mandate hash. **c1 `dc48559`** (KeyFile self-signer parity) + **c2 `5f3b146`** (v2 protocol *core*: `MandateV2`, `canonicalMandateV2`, `mandatePinHash`, `signMandateV2`/`With`, `verifyMandateChainFromPin` L1+L3, `currentAuthorityV2`; additive; 21 fail-closed-negative tests; maintainers 332/32, flagship guard 2526/225) **LANDED + pushed** on `feat/keyfile-register` (NOT pinned). **Remaining:** c3 `createKey`+`upsertMandate` CLI → c4 retire v1 + spec→v2 + flagship-consumer migrate + #30-generalised bake → c5 published v2 spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
+| **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **▶ IN PROGRESS (s5: c2+c3 landed).** Per the LOCKED v2 design below: pinned-mandate anchor + in-mandate succession policy + the L3 one-rule (no self-renewal); `createKey`+`upsertMandate`; Mandate **v2** canonical bytes; #30 = bake the pinned-mandate hash. **c1 `dc48559`** (KeyFile self-signer parity) + **c2 `5f3b146`** (v2 protocol *core*) + **c3a `23a4d35`** (`create-key` self-registered KeyFile via the c1 seam) + **c3b `2fa2b0c`** (`upsert-mandate` — the ONE mandate verb: from-scratch ORIGIN \| succession; fail-closed pre-flight refuses BEFORE any tap; prints `mandatePinHash`) **LANDED + pushed** on `feat/keyfile-register` (maintainers 344/34, flagship guard 2526/225; NOT pinned). genesis/mandate/takeover still present (retired in c4). **Remaining:** c4 retire v1 path + spec→v2 + flagship-consumer migrate + #30-generalised bake → c5 published v2 spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
 | 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
 | 5 | On-demand VPS + promo AI + real vibe-code | ☐ seam built (#83/#85); human/credential |
@@ -475,7 +475,7 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
-### 2026-05-17 — session 5 (Linux box): Phase-2 v2 spine — c2 (protocol core) landed
+### 2026-05-17 — session 5 (Linux box): Phase-2 v2 spine — c2 (protocol core) + c3 (CLI verbs) landed
 
 Cold-start: `maintainers/` clone was stale on `feat/ca-endorsement`
 @`10c65aa`. Per the continue-rule, did NOT `pull-maintainers` (would
@@ -529,17 +529,57 @@ provably back-compatible (flagship imports only v1 symbols). Branch
 pushed; **pin UNCHANGED `833fa45`** (an upstream branch is pushed,
 NEVER pinned until the governed merge).
 
-**Remaining v2 spine:** c3 `createKey` + `upsertMandate` CLI verbs
-(`genesis`/`mandate`/`takeover` collapse in; full #28 ceremony
-discipline — the security-critical ceremony surface, START it
-attentively) → c4 retire v1 path + rewrite spec to v2 (rewrites §5.2
-"the pin IS the floor"; dissolves `policy.json`/`SignedPolicy`) +
-migrate the flagship consumer (`caTrustChain.ts`/`releaseVerifier.ts`)
-+ #30 generalised bake → c5 published v2 spec + `fetch()` reference
-client + conformance vectors (ALL fail-closed negatives) → governed PR
-(Human Gate, PR #1/#2 precedent) → re-pin → `npm publish` (Human Gate:
-npm org/2FA) → flagship DROPS `pull-maintainers.sh`/
-`maintainers.pinned-sha`. THEN Gate B (the first `upsertMandate`, its
+**Update — c3 (the CLI verbs) LANDED later the same session, two
+attentive commits, NOT tail-bolted:**
+
+- **c3a `23a4d35` — `create-key`.** Self-registered KeyFile via the c1
+  `signKeyFileWith` self-signer seam. INDEPENDENT + non-load-bearing
+  (trust operates on the pubkey; emails "conventional but not
+  load-bearing"); the v1-era `--mandate-id`/`introductionMandate`
+  bootstrap is OBSOLETE — `--introduction-mandate` defaults to the nil
+  UUID ("self-registered, no introduction"). Runs on the ONE #28
+  ceremony path; `CeremonyKind` gains `create-key` (honest LOW-STAKES
+  banner) + a generic `Assembled.bannerExtra` hook; `store.ts`
+  `writeKeyFile`/`keyFileFilename` (append-only). 3 tests. 332→335.
+- **c3b `2fa2b0c` — `upsert-mandate` (the ONE mandate verb).**
+  genesis/mandate/takeover collapse in: no prior ⇒ FROM-SCRATCH ORIGIN
+  (sets policy freely, self-signed, trusted via its baked
+  `mandatePinHash`; requires `--project-name`); prior ⇒ SUCCESSION
+  (renew = rotate = takeover = repolicy, the ONE mechanism, no
+  self-renewal). **Fail-closed PRE-FLIGHT**: every predecessor-rule
+  check makeable from PUBLIC reads (signer ∈ pred.successors;
+  pred.threshold; window ≤ pred.maxDuration; clock-skew; threshold ≤
+  successors; successors ≥ minSuccessors) runs in `assemble` and
+  refuses BEFORE any token touch — tests prove it with a token whose
+  sign/PIN throw. Honest scoped boundary: single-signer only ⇒
+  pred.threshold > 1 is fail-closed-refused (multi-sig quorum
+  collection is a scoped follow-up; the c2 verifier enforces threshold
+  regardless). `store.ts` `readMandatesV2`/`writeMandateV2` (reuse the
+  file-per-mandate convention, version-2-filtered; no policy.json; the
+  published `log.json` is the later c5 artifact). 9 tests (incl.
+  round-trip readMandatesV2 → verifyMandateChainFromPin →
+  currentAuthorityV2). 335→**344**.
+
+Both: maintainers `tsc -b` clean; flagship guard 2526/225 tsc-clean
+(CLI-only, `@maintainers/protocol` untouched). genesis/mandate/takeover
+remain (retired in c4). Branch pushed; **pin UNCHANGED `833fa45`**.
+
+**Remaining v2 spine:** **c4** (the next attentive START — NOT a
+tail-bolt; it migrates the live flagship trust consumer): retire the v1
+Mandate path (canonicalMandate v1 / verifyTrack / checkpoint /
+RootPolicy / TrackPolicy / policy.json; carry MandateV2 into the
+worker/web-ui `Envelope` kind+version discrimination; remove
+genesis/mandate/takeover) + rewrite `docs/spec` to **v2** (rewrites
+§5.2 "the pin IS the floor"; dissolves `policy.json`/`SignedPolicy`) +
+migrate the flagship consumer (`server-daemon` `caTrustChain.ts` /
+`releaseVerifier.ts`) to verify-forward-from-pin + **#30 generalised**
+(bake the pinned-mandate canonical hash per surface; fail-closed
+unset) → **c5** published v2 spec + static layout
+(`origin.json`/`tracks/<t>/log.json`/`ca-leases.json`) + `fetch()`
+reference client + conformance vectors (ALL fail-closed negatives) →
+governed PR (Human Gate, PR #1/#2 precedent) → re-pin → `npm publish`
+(Human Gate: npm org/2FA) → flagship DROPS `pull-maintainers.sh`/
+`maintainers.pinned-sha`. THEN Gate B (the first `upsert-mandate`, its
 hash pinned) → #9 → #10 → Phase 3.
 
 ### 2026-05-17 — session 4 (this Mac): Human Gate A SATISFIED → Phase 2 unblocked

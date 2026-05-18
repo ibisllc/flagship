@@ -64,11 +64,43 @@ threading + `ca-endorsement` command + `--dry-run`/banner/PC-SC. See
     byte-identity. maintainers **332/32 · tsc clean**; flagship guard
     **2526/225 · tsc clean**. Branch pushed; **pin UNCHANGED `833fa45`**
     (upstream branch is pushed, NEVER pinned until the governed merge).
-  - **Discipline call (honest):** c3 (the `createKey`+`upsertMandate` CLI
-    = the security-critical ceremony surface) was deliberately NOT started
-    at this session's tail — the same do-not-tail-bolt rule sessions 1–3
-    honored for the #28 ceremony work. c2 (the verifier + canonical bytes)
-    is the correct attentive START; c3 gets its own focused START next.
+  - **c3 (the CLI verbs) LANDED — same session, on user "continue with
+    c3", two attentive commits, NOT tail-bolted.** Each its own logical
+    change, each gate-green + pushed:
+    - **c3a `23a4d35` — `create-key`.** Self-registered KeyFile via the
+      c1 `signKeyFileWith` seam; INDEPENDENT + non-load-bearing
+      (`--introduction-mandate` defaults to the nil UUID — the v1-era
+      `--mandate-id`/`introductionMandate` bootstrap is OBSOLETE). ONE
+      #28 ceremony path; `CeremonyKind` gains `create-key` (honest
+      LOW-STAKES banner) + a generic `Assembled.bannerExtra` hook;
+      `store.ts` `writeKeyFile`/`keyFileFilename` (append-only). 3 tests.
+    - **c3b `2fa2b0c` — `upsert-mandate` (the ONE mandate verb).**
+      genesis/mandate/takeover collapse in (from-scratch ORIGIN \|
+      succession; renew=rotate=takeover=repolicy, no self-renewal).
+      **Headline = fail-closed PRE-FLIGHT:** every predecessor-rule
+      check makeable from PUBLIC reads refuses in `assemble` BEFORE any
+      token touch — tests prove it with a token whose sign/PIN throw.
+      Honest scoped boundary: single-signer only ⇒ pred.threshold > 1 is
+      fail-closed-refused (multi-sig quorum collection = scoped
+      follow-up; c2 verifier enforces threshold regardless). `store.ts`
+      `readMandatesV2`/`writeMandateV2` (file-per-mandate, v2-filtered;
+      no policy.json — the published `log.json` is the later c5
+      artifact). 9 tests incl. round-trip readMandatesV2 →
+      verifyMandateChainFromPin → currentAuthorityV2.
+    Both: maintainers `tsc -b` clean + `vitest run` 335 then **344/34**;
+    flagship guard **2526/225 · tsc clean** (CLI-only —
+    `@maintainers/protocol` untouched). genesis/mandate/takeover remain
+    (retired in c4). Branch pushed; **pin UNCHANGED `833fa45`**.
+  - **Verify-before-trust note:** `mandateFilename`'s `Pick<Mandate,
+    "issuedAt"|"mandateId">` param accepts a `MandateV2` structurally
+    (extra props are fine for a non-literal arg) — so v2 reuses it with
+    NO widening; confirmed by tsc + the green round-trip tests.
+  - **Discipline call (honest):** c4 (retire v1 path + spec→v2 +
+    **migrate the LIVE flagship trust consumer** `caTrustChain.ts`/
+    `releaseVerifier.ts` + #30-generalised bake) is the next attentive
+    START — it changes flagship runtime trust code (the flagship gate is
+    no longer just a back-compat guard there) and is security-critical;
+    deliberately NOT tail-bolted after two large CLI commits this turn.
 - **2026-05-17 (v1-launch program session 4, Mac/darwin):**
   - **★ PHASE-2 RE-LOCKED v2 (user-authorized override of the prior
     D1/D2 lock) — the trust model changed; this is the new
@@ -710,16 +742,27 @@ bytes — the #30-generalised baked value, content-bound), `signMandateV2`
 verify FORWARD, multi-pin, fail-closed on no-pin/pin-not-in-log) + L3
 (ONE rule, no self-renewal) + `currentAuthorityV2`; TOTAL (never throws).
 **21 new tests covering every fail-closed negative**; maintainers
-**332/32** tsc-clean, flagship guard **2526/225** tsc-clean. Branch
+**332/32** tsc-clean, flagship guard **2526/225** tsc-clean. **c3 (the
+CLI verbs) then LANDED the same session — c3a `23a4d35` `create-key`
+(KeyFile self-reg via the c1 seam; `--introduction-mandate`→nil-UUID;
+`writeKeyFile`) + c3b `2fa2b0c` `upsert-mandate` (the ONE verb:
+from-scratch ORIGIN \| succession; fail-closed pre-flight refuses
+BEFORE any tap; single-signer scoped boundary; `readMandatesV2`/
+`writeMandateV2`); maintainers 332→335→344/34; flagship guard
+2526/225.** genesis/mandate/takeover remain (retired in c4). Branch
 pushed, **NOT pinned** (pin stays `833fa45` until the governed merge).
-**Remaining v2 spine:** c3 `createKey`+`upsertMandate` CLI verbs
-(`genesis`/`mandate`/`takeover` collapse in; #28 ceremony discipline) →
-c4 retire v1 path + spec→v2 + migrate flagship consumer + #30 generalised
-bake → c5 published v2 spec + `fetch()` reference client + conformance
-vectors (ALL fail-closed negatives) → governed PR (Human Gate, PR #1/#2
-precedent) → re-pin → `npm publish` (Human Gate: npm org/2FA) → flagship
-DROPS `pull-maintainers.sh`/`maintainers.pinned-sha`. **THEN** Gate B
-(the first `upsertMandate`, its hash pinned) → #9 (webapp) → #10 (iOS
+**Remaining v2 spine:** **c4** (the next attentive START — it migrates
+the LIVE flagship trust consumer): retire the v1 Mandate path
+(canonicalMandate v1 / verifyTrack / checkpoint / RootPolicy /
+TrackPolicy / policy.json; carry MandateV2 into the worker/web-ui
+`Envelope` discrimination; drop genesis/mandate/takeover) + spec→v2 +
+migrate `server-daemon` `caTrustChain.ts`/`releaseVerifier.ts` to
+verify-forward-from-pin + #30 generalised bake → c5 published v2 spec +
+static layout + `fetch()` reference client + conformance vectors (ALL
+fail-closed negatives) → governed PR (Human Gate, PR #1/#2 precedent) →
+re-pin → `npm publish` (Human Gate: npm org/2FA) → flagship DROPS
+`pull-maintainers.sh`/`maintainers.pinned-sha`. **THEN** Gate B
+(the first `upsert-mandate`, its hash pinned) → #9 (webapp) → #10 (iOS
 Swift + Android Kotlin reimpl, heaviest — sequence it) → Phase 3 cluster.
 `c3` is the security-critical ceremony surface — START it attentively,
 **do NOT tail-bolt**.
@@ -762,15 +805,20 @@ Swift + Android Kotlin reimpl, heaviest — sequence it) → Phase 3 cluster.
 > **★ Immediate next thrust = the Phase-2 v2 protocol redesign
 > (re-locked s4; it now PRECEDES Gate B).** Authoritative detail =
 > `docs/v1-launch-program.md` "Phase-2 DESIGN DECISION — LOCKED v2".
-> **Status (s5): c2 — the v2 protocol *core* — is LANDED + pushed**
-> (`feat/keyfile-register` `5f3b146`; maintainers 332/32, flagship guard
-> 2526/225; branch NOT pinned). **Next = c3: the `createKey` +
-> `upsertMandate` CLI verbs** (`genesis`/`mandate`/`takeover` collapse
-> in; full #28 ceremony discipline) — the security-critical ceremony
-> surface; START it attentively, do NOT tail-bolt. Then c4 (retire v1 +
-> spec→v2 + flagship-consumer migrate + #30 generalised bake) → c5
-> (published v2 spec + `fetch()` client + conformance vectors) →
-> governed PR → re-pin → `npm publish` → flagship drops the pull-script.
+> **Status (s5): c2 (protocol core) + c3 (CLI verbs) are LANDED +
+> pushed** on `feat/keyfile-register` — c2 `5f3b146`, c3a `23a4d35`
+> (`create-key`), c3b `2fa2b0c` (`upsert-mandate`); maintainers
+> **344/34**, flagship guard 2526/225; branch NOT pinned (pin stays
+> `833fa45` until the governed merge). genesis/mandate/takeover remain
+> (retired in c4). **Next = c4: retire the v1 Mandate path + rewrite
+> spec→v2 + MIGRATE THE LIVE FLAGSHIP TRUST CONSUMER** (`server-daemon`
+> `caTrustChain.ts`/`releaseVerifier.ts` → verify-forward-from-pin) +
+> **#30 generalised** (bake the pinned-mandate canonical hash per
+> surface; fail-closed unset) — the next attentive START; security-
+> critical (the flagship gate stops being just a back-compat guard
+> there); do NOT tail-bolt. Then c5 (published v2 spec + static layout
+> + `fetch()` client + conformance vectors, ALL fail-closed negatives)
+> → governed PR → re-pin → `npm publish` → flagship drops the pull-script.
 > Build it upstream in `maintainers/` on `feat/keyfile-register` →
 > governed PR → re-pin, **at a START, attentively — NOT a tail-bolt**
 > (the verifier + Mandate canonical bytes are the load-bearing trust
