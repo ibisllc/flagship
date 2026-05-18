@@ -69,10 +69,20 @@ is the **user-side TestFlight gate** (punch list in
 "Associated Domains" tick, Xcode Archive+upload, ASC metadata,
 real-device push smoke, 5 testers — none agent-advanceable). **Android
 real-impl is environment-gated on THIS Mac (no JDK → review-only;
-needs a JDK/Android-SDK box).** Next agent chunk = the **marketplace
-security-scan service** (genuine net-new, fully agent-doable, hard
-marketplace-MVP blocker — `marketplace_listings.scan_grade` ships NULL
-today). DEFERRED human/credential follow-ups (off the critical path,
+needs a JDK/Android-SDK box).** **★ THE AGENT-DOABLE PHASE E IS
+COMPLETE:** marketplace security-scan service BUILT (`9aac1ec`, gate
+2567/227); Recovery J.3/J.4 verified code-complete+wired+tested green
+(gap = lost-phone LIVE exercise = Phase G, NOT code); the E2E rig + ALL
+13 plan scenarios (S1–S13, S7 folded in `s06-long-lived-lease.spec.ts`)
++ `.github/workflows/e2e.yml` are ALL already built (backlog #15; gap =
+a green run on a real GitHub Actions runner = CI-execution gate, the
+CLI cannot trigger Actions — same seam as build-iso.yml; NOT code).
+iOS code-complete+green (human TestFlight gate). The only net-new
+Phase-E code needed was the scanner. **Next agent chunk = Phase F's
+agent-doable part: build the personalized ISO via the reproducible
+path + smoke it locally with QEMU/KVM** (the real-VPS boot is a paid
+credential gate — user supplies the API token). DEFERRED
+human/credential follow-ups (off the critical path,
 user's pace): create the `ibisllc` npm org + a fresh `@ibisllc`-scoped
 bypass-2FA token (the earlier pasted token is BURNED — revoke it) →
 `npm publish @ibisllc/maintainers@0.1.0` → flagship drops
@@ -126,6 +136,53 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-18 (v1-launch program session 8 — Phase E agent-doable
+  work COMPLETE; recon-vs-prompt discrepancies recorded):**
+  Verify-before-trust over the prompt's Phase-E framing (the prompt
+  lists iOS/recovery/E2E as build work; the in-repo reality is they're
+  built):
+  - **Recovery J.3/J.4 = code-complete, runtime-wired, tested green**
+    (NOT greenfield as the prompt implies). J.3 = `server-daemon/src/
+    postRecovery/rePairWatcher.ts` (327 ln: new-IRK re-pair envelope →
+    `.com` 24h grace → `/api/users/:u/re-pair/complete` atomic IRK swap
+    → daemon polls, drops paired-session tokens, restart-safe marker);
+    `.com` routes wired `apps/com/src/controlPlaneRoutes.ts:200-203,668`
+    (RE_PAIR_INITIATE/OBJECT/COMPLETE/GET); daemon wires `RePairWatcher`
+    in `index.ts:31-33`. J.4 = `postRecovery/stableIdReissuer.ts`
+    (356 ln: `reissueStableIds` walks `appPlatform.list()` → re-issues
+    stable-ids → per-app alert-inbox summaries). Tests green in the
+    2567/227 gate: `control-plane/tests/rePair.test.ts` (~12+ cases:
+    initiate/grace/object/complete/If-Match-ETag-race/412/404/cancel),
+    `server-daemon/tests/rePairWatcher.test.ts`. **The §S "Recovery
+    (lost phone → new phone) exercised live" gap is the LIVE EXERCISE
+    (Phase G; 2 phones + live pod + .com), NOT code. Do not rebuild.**
+  - **E2E rig + ALL 13 plan scenarios + CI = already built** (backlog
+    #15). `apps/web/e2e/` rig (fixtures/flows/pod-sim/playwright.config)
+    + 17 specs s00–s16 covering plan S1–S13 (★ **S7 "Silent
+    auto-renewal — CRITICAL" is folded into
+    `flows/s06-long-lived-lease.spec.ts:72`**, not a missing `s07-`
+    file — verified it mirrors the plan's S7 12h-within-window steps) +
+    extra surfaces S14–S16, + `.github/workflows/e2e.yml` (3.8 KB,
+    chromium-only, wrangler-dev + Playwright). **Gap = a green run on a
+    real GitHub Actions runner — a CI-execution gate (the CLI cannot
+    trigger/run Actions; identical seam to build-iso.yml), NOT a code
+    gap.**
+  - **⇒ THE AGENT-DOABLE PHASE E IS COMPLETE.** The only net-new
+    Phase-E code required was the marketplace scanner (`9aac1ec`,
+    landed+verified this session). iOS = code-complete+232-XCTests-green
+    (human TestFlight gate). Android = real-impl but env-gated on this
+    Mac (no JDK; needs a JDK/Android-SDK box). Phase-E's residual items
+    are ALL human/credential/CI/live-exercise gates.
+  - **Next agent chunk = Phase F's agent-doable part: build the
+    personalized ISO via the reproducible-build path
+    (`scripts/build-flagship-iso.sh` + the `build-iso.yml`
+    determinism path) and SMOKE IT LOCALLY with QEMU/KVM** (free,
+    deterministic, CLI). The TRUE end-to-end on a real cloud VPS is a
+    PAID CREDENTIAL gate (user supplies the API token; candidates
+    Vultr `vultr-cli` / Hetzner `hcloud` / Scaleway `scw`). Per the
+    program: drive the agent-doable build+local-smoke; PAUSE at the
+    paid-VPS credential gate with the copy-pasteable runbook.
 
 - **2026-05-18 (v1-launch program session 8 — Phase E: marketplace
   security-scan service BUILT; latent wire-contract bug fixed):**
