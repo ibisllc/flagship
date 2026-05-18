@@ -37,6 +37,52 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 7 — EXECUTION-MODEL DECISION,
+  user-directed):** the program now runs as **ORCHESTRATOR +
+  fresh-subagent-per-chunk**, parallel where genuinely independent. This
+  is the canonical execution model; a cold start MUST adopt it (the
+  redesigned program prompt encodes it in full; this is the in-repo
+  anchor so it survives even if the prompt isn't reused verbatim).
+  - **Orchestrator stays thin:** orients from these docs, decomposes,
+    delegates each chunk to a BRAND-NEW subagent with a SELF-CONTAINED
+    brief (none of the orchestrator's context). The brief MUST cite the
+    in-repo authority docs (this §0 + §3-tail; v1-launch-program "LOCKED
+    v2" + the relevant s7 log) and the established v2 re-base PATTERN
+    (`c4.4` server-daemon + `c4.5a` cloudflare-worker, both landed —
+    verifyMandateChainFromPin / currentAuthorityV2 /
+    verifyChainOfEndorsementsV2 / holder-signs / the v2 on-disk
+    convention, no policy.json), list the exact files + the exact v2
+    contract + the FORBIDDEN v1 symbols, and the invariants (model
+    LOCKED, NO Co-Authored-By, do NOT touch
+    `scripts/maintainers.pinned-sha`, do NOT push, absolute paths).
+  - **Parallel is REAL but BOUNDED by the gate.** Read-only mapping/
+    design fan-out (Explore/Plan subagents) is ALWAYS parallel-safe (no
+    writes ⇒ no collision) — use it for unmapped surfaces (the
+    `extension` package is unmapped). Disjoint-package IMPLEMENTATION
+    chunks may run concurrently ONLY as `isolation:"worktree"`
+    subagents that run the maintainers-internal tsc+vitest in their own
+    worktree and **return a verified diff — NO commit, NO push**.
+  - **THE SERIALIZATION SPINE (security-critical, non-negotiable):** the
+    shared branch `feat/keyfile-register` + the whole-monorepo
+    maintainers gate + the cross-repo flagship guard CANNOT be driven by
+    concurrent writers. The orchestrator integrates returned chunks
+    STRICTLY ONE AT A TIME: apply diff → **re-run the FULL gate ITSELF**
+    (maintainers tsc+vitest AND the flagship guard; NEVER trust a
+    subagent's "green" — verify-before-trust) → only if green
+    `git -C maintainers commit -F -` (heredoc, NO Co-Authored-By) +
+    push → update docs/memory → next chunk. One chunk = one commit; pin
+    NEVER moved on an unmerged tip.
+  - **Concrete parallel map (current work):** c4.5b (web-ui) / c4.5c
+    (extension) / c4.5d (cli) are DISJOINT packages ⇒ design fan-out in
+    parallel, implement in parallel worktrees, **integrate serially**
+    (v1 still coexists in protocol ⇒ flagship guard 2529/225 each
+    integration). **c4.5e is STRICTLY LAST** (serial; only when b+c+d
+    pushed and no consumer imports v1). c4.6 de-version rename / c4.7
+    spec / c5 are inherently serial. Later: #10 iOS ‖ Android are
+    independent ⇒ parallel worktree subagents, serial-integrate.
+  - Naively running concurrent writer-subagents on the shared branch
+    would corrupt the load-bearing trust path — that is WHY the spine is
+    serialized; this is not optional.
 - **2026-05-18 (v1-launch program session 7, Linux box):**
   - **★ c4.5 VERIFY-BEFORE-TRUST CORRECTION — "one atomic commit"
     was wrong; consumer-first is the safe path.** Before touching code,

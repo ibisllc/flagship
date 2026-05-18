@@ -557,6 +557,18 @@ was deliberately NOT started this turn (rushing it would be a
 tail-bolt on the load-bearing path — the same end-of-session
 discipline call as s6).
 
+**EXECUTION-MODEL DECISION (s7, user-directed):** the program now runs
+as ORCHESTRATOR + fresh-subagent-per-chunk, parallel where genuinely
+independent. Canonical detail = SESSION-HANDOFF §0 top entry
+"EXECUTION-MODEL DECISION" + the redesigned program prompt. Read-only
+design fan-out is always parallel-safe; disjoint-package implementation
+runs in parallel `isolation:"worktree"` subagents returning verified
+diffs (NO commit/push); the orchestrator integrates STRICTLY ONE AT A
+TIME, re-running the FULL gate itself (never trusting a subagent's
+"green"), then commits+pushes. c4.5b/c/d parallel; c4.5e/c4.6/c4.7/c5
+serial. The gate→commit→push spine is serialized — concurrent writers
+on the shared branch would corrupt the trust path; non-negotiable.
+
 ### 2026-05-17 — session 6 (Linux box): Phase-2 v2 spine — c4.1 + c4.3 + c4.4 (the entire flagship-side v2 migration) landed
 
 Cold start: `maintainers/` clone already on `feat/keyfile-register`@
