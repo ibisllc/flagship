@@ -3,13 +3,19 @@
  * `.maintainers/` folder from a fixed seed. The contract:
  *
  *   1. Running the script in a clean directory writes the expected file
- *      layout (README, root policy, three tracks with their genesis
- *      mandates + policies, two key files).
+ *      layout (README, three tracks with their root v2 mandates, two
+ *      key files). **LOCKED Phase-2 v2 model**: there is NO `policy.json`
+ *      (root or per-track) — the succession rule is folded inline into
+ *      each root `MandateV2`.
  *   2. The produced folder is **byte-identical** across runs — same
  *      fixed seeds, same fixed timestamps, same uuids.
  *   3. The produced mandate chain verifies cleanly under
- *      `@maintainers/protocol`'s verifier — the script doesn't just
+ *      `@maintainers/protocol`'s v2 verifier — the script doesn't just
  *      emit JSON, it emits the actual cryptographic chain we'd ship.
+ *      Each track is anchored FORWARD from its first (only) on-repo
+ *      mandate's `mandatePinHash` (the no-baked-pin preview anchor; the
+ *      real trust is the pin a downstream consumer bakes — see
+ *      verify-endorsement.mjs / releaseVerifier.ts).
  *
  * If any of these break, contributors will silently re-derive a
  * different chain on their machines and the in-repo bytes will drift.
@@ -23,10 +29,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  verifyTrack,
-  currentAuthority,
-  type Mandate,
-  type TrackPolicy,
+  currentAuthorityV2,
+  mandatePinHash,
+  verifyMandateChainFromPin,
+  type MandateV2,
 } from "@maintainers/protocol";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -92,11 +98,14 @@ describe("bootstrap-flagship-maintainers.mjs", () => {
       runScriptInto(tmp);
       const dotMaintainers = path.join(tmp, ".maintainers");
       expect(fs.existsSync(path.join(dotMaintainers, "README.md"))).toBe(true);
-      expect(fs.existsSync(path.join(dotMaintainers, "policy.json"))).toBe(true);
+      // v2: NO root policy.json (succession policy is inline in each
+      // root mandate — the unsigned-policy hole is dissolved).
+      expect(fs.existsSync(path.join(dotMaintainers, "policy.json"))).toBe(false);
       for (const track of ["release", "ca", "ops"]) {
+        // v2: NO per-track policy.json either.
         expect(
           fs.existsSync(path.join(dotMaintainers, "tracks", track, "policy.json")),
-        ).toBe(true);
+        ).toBe(false);
         expect(
           fs.existsSync(
             path.join(dotMaintainers, "tracks", track, "mandates", "2026-05-11-genesis.json"),
@@ -147,27 +156,37 @@ describe("bootstrap-flagship-maintainers.mjs", () => {
     }
   });
 
-  it("the emitted mandate chain verifies under @maintainers/protocol", () => {
+  it("the emitted v2 mandate chain verifies under @maintainers/protocol", () => {
     for (const track of ["release", "ca", "ops"]) {
-      const policy = JSON.parse(
-        fs.readFileSync(
-          path.join(COMMITTED, "tracks", track, "policy.json"),
-          "utf8",
-        ),
-      ) as TrackPolicy;
       const mandate = JSON.parse(
         fs.readFileSync(
           path.join(COMMITTED, "tracks", track, "mandates", "2026-05-11-genesis.json"),
           "utf8",
         ),
-      ) as Mandate;
-      const result = verifyTrack(track, policy, [mandate]);
-      expect(result.rejections).toEqual([]);
-      expect(result.validMandates).toHaveLength(1);
-      const authority = currentAuthority(result, new Date("2026-05-11T12:00:00.000Z"));
+      ) as MandateV2;
+      // It is a v2 root mandate with inline succession policy (no
+      // policy.json — that file does not exist in v2).
+      expect(mandate.version).toBe(2);
+      expect(mandate.approvalRule).toEqual({ kind: "threshold", threshold: 1 });
+      expect(mandate.minSuccessors).toBe(1);
+      expect(mandate.project?.name).toBe("Flagship");
+      // Anchor FORWARD from the first (only) on-repo mandate's pin —
+      // the no-baked-pin preview anchor the verify-endorsement helper
+      // and the daemon's releaseVerifier use.
+      const pin = mandatePinHash(mandate);
+      const chain = verifyMandateChainFromPin(pin, [mandate]);
+      expect(chain.rootError).toBeUndefined();
+      expect(chain.root).not.toBeNull();
+      expect(chain.rejections).toEqual([]);
+      expect(chain.validMandates).toHaveLength(1);
+      const authority = currentAuthorityV2(
+        chain,
+        new Date("2026-05-11T12:00:00.000Z"),
+      );
       expect(authority?.holder).toBe(mandate.holder);
       // The backup pubkey is listed as a successor on every track —
-      // it's the only key that can take over on lapse.
+      // under the inline 1-of-N approvalRule it can sign the next
+      // mandate on lapse.
       expect(authority?.successors).toHaveLength(2);
     }
   });

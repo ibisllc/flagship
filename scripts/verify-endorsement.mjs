@@ -31,15 +31,35 @@
  * instead of importing the daemon's releaseVerifier. The bootstrap
  * runs BEFORE `tsc -b` produces the daemon's compiled output, so we
  * keep the dep surface to "@maintainers/protocol" + node fs only.
+ *
+ * **LOCKED Phase-2 v2 model.** Each track is verified FORWARD from a
+ * pinned mandate (`verifyMandateChainFromPin`); the succession policy
+ * is INLINE in each `MandateV2` (there is no `policy.json` — the v2
+ * model dissolved the unsigned-policy hole, L2); endorsements verify
+ * holder-signs against the v2 release chain (`verifyChainOf
+ * EndorsementsV2`); "expired" is simply `currentAuthorityV2 === null`
+ * (no holder-in-window vs after-expiry split).
+ *
+ * **No baked pin (the c4.5a/b/c/d preview pattern).** This helper
+ * inspects an arbitrary cloned `.maintainers/` with NO compiled-in
+ * `MAINTAINER_PINNED_MANDATE_HASH`, so it anchors each track at the
+ * FIRST on-repo mandate's `mandatePinHash` (`safePinHash`). The v2
+ * security boundary is UNCHANGED: real trust is the pin a downstream
+ * consumer (the daemon's `releaseVerifier`, the webapp, iOS/Android)
+ * BAKES into its signed build and walks forward from — distributing
+ * the correct pin rides the existing signed-release trust. An empty
+ * mandate list ⇒ `verifyMandateChainFromPin("", …)` ⇒
+ * `rootError:"no-pin"` ⇒ fail-closed (the #30 invariant, generalised).
  */
 
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  currentAuthority,
-  verifyChainOfEndorsements,
-  verifyTrack,
+  currentAuthorityV2,
+  mandatePinHash,
+  verifyChainOfEndorsementsV2,
+  verifyMandateChainFromPin,
   intermediateMerkleRoot,
 } from "@maintainers/protocol";
 
@@ -73,33 +93,51 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
+function isMandateV2(x) {
+  if (typeof x !== "object" || x === null) return false;
+  return (
+    x.kind === "Mandate" &&
+    x.version === 2 &&
+    typeof x.mandateId === "string" &&
+    typeof x.track === "string" &&
+    typeof x.holder === "string" &&
+    typeof x.issuedAt === "string" &&
+    typeof x.expiresAt === "string" &&
+    Array.isArray(x.successors) &&
+    typeof x.approvalRule === "object" &&
+    x.approvalRule !== null &&
+    typeof x.minSuccessors === "number" &&
+    typeof x.maxDurationSeconds === "number" &&
+    typeof x.signedBy === "string" &&
+    Array.isArray(x.signatures)
+  );
+}
+
+/**
+ * v2 on-disk convention: `tracks/<track>/mandates/*.json`,
+ * filename-sorted (the canonical-log substitute), filtered to
+ * `version === 2`. No policy.json (root or per-track) — the
+ * succession rule lives inline in each mandate.
+ */
 function readMaintainersFolder(rootDir) {
   const out = {
     rootDir,
-    rootPolicy: null,
-    trackPolicies: new Map(),
     mandatesByTrack: new Map(),
     endorsements: [],
   };
   if (!fs.existsSync(rootDir)) return out;
-  const rootPolicyPath = path.join(rootDir, "policy.json");
-  if (fs.existsSync(rootPolicyPath)) {
-    out.rootPolicy = readJson(rootPolicyPath);
-  }
   const tracksDir = path.join(rootDir, "tracks");
   if (fs.existsSync(tracksDir)) {
     for (const name of fs.readdirSync(tracksDir).sort()) {
       const trackDir = path.join(tracksDir, name);
       if (!fs.statSync(trackDir).isDirectory()) continue;
-      const polPath = path.join(trackDir, "policy.json");
-      if (fs.existsSync(polPath)) out.trackPolicies.set(name, readJson(polPath));
       const mandatesDir = path.join(trackDir, "mandates");
       const arr = [];
       if (fs.existsSync(mandatesDir)) {
         for (const f of fs.readdirSync(mandatesDir).sort()) {
           if (!f.endsWith(".json")) continue;
           const parsed = readJson(path.join(mandatesDir, f));
-          if (parsed && parsed.kind === "Mandate") arr.push(parsed);
+          if (isMandateV2(parsed)) arr.push(parsed);
         }
       }
       out.mandatesByTrack.set(name, arr);
@@ -117,31 +155,56 @@ function readMaintainersFolder(rootDir) {
   return out;
 }
 
+function safePinHash(m) {
+  try {
+    return mandatePinHash(m);
+  } catch {
+    // An adversarial first mandate that won't canonicalize ⇒ no anchor
+    // ⇒ pin-not-in-log ⇒ fail-closed.
+    return "";
+  }
+}
+
+/**
+ * Forward-verify a track anchored at its FIRST on-repo mandate's
+ * `mandatePinHash` (the no-baked-pin preview anchor — this helper has
+ * no compiled-in pin; see the header). An empty log ⇒ empty pin ⇒
+ * `rootError:"no-pin"` ⇒ fail-closed.
+ */
+function verifyTrackChain(mandates) {
+  const pin = mandates.length > 0 ? safePinHash(mandates[0]) : "";
+  return verifyMandateChainFromPin(pin, mandates);
+}
+
 function verifyMaintainers(store) {
   const verifiedTracks = new Map();
   for (const [name, mandates] of store.mandatesByTrack.entries()) {
-    const policy = store.trackPolicies.get(name);
-    if (!policy) continue;
-    const verified = verifyTrack(name, policy, mandates);
-    if (verified.rejections.length > 0) {
-      const first = verified.rejections[0];
+    const chain = verifyTrackChain(mandates);
+    // L1 fail-closed: no anchor (empty/forked/tampered pin, malformed
+    // root) ⇒ no verifiable v2 chain for this track.
+    if (chain.root === null) {
+      fail(
+        "mandate-chain-invalid",
+        `track ${name}: ${chain.rootError ?? "no-forward-chain"}`,
+      );
+    }
+    if (chain.rejections.length > 0) {
+      const first = chain.rejections[0];
       fail(
         "mandate-chain-invalid",
         `track ${name}: ${first.reason}${first.detail ? ` (${first.detail})` : ""}`,
       );
     }
-    verifiedTracks.set(name, { track: verified, policy });
+    verifiedTracks.set(name, chain);
   }
-  const release = verifiedTracks.get("release");
-  if (!release) fail("no-release-track", "policy + mandates for `release` track missing");
+  const releaseChain = verifiedTracks.get("release");
+  if (!releaseChain) {
+    fail("no-release-track", "mandates for `release` track missing");
+  }
   if (store.endorsements.length === 0) {
     fail("no-endorsements", "`.maintainers/endorsements/` is empty");
   }
-  const result = verifyChainOfEndorsements(
-    store.endorsements,
-    release.track,
-    release.policy.approvalRule,
-  );
+  const result = verifyChainOfEndorsementsV2(store.endorsements, releaseChain);
   if (result.rejections.length > 0) {
     const first = result.rejections[0];
     fail(
@@ -216,19 +279,18 @@ function main() {
 
   // Confirm we still have an active authority at this moment (a
   // hostile mirror could rewrite history but not produce a fresh
-  // mandate signed by an unknown key — the chain would reject it).
-  const releaseTrack = (() => {
-    const policy = store.trackPolicies.get("release");
-    return policy ? verifyTrack("release", policy, store.mandatesByTrack.get("release") ?? []) : null;
-  })();
-  if (releaseTrack) {
-    const authority = currentAuthority(releaseTrack, new Date());
-    if (!authority) {
-      fail(
-        "no-current-authority",
-        "the release track has no active mandate at the current time — succession required",
-      );
-    }
+  // mandate satisfying the predecessor's inline approvalRule — the v2
+  // forward-walk would reject it). v2: "active" is simply
+  // `currentAuthorityV2 !== null` (no holder-in-window split).
+  const releaseChain = verifyTrackChain(
+    store.mandatesByTrack.get("release") ?? [],
+  );
+  const authority = currentAuthorityV2(releaseChain, new Date());
+  if (!authority) {
+    fail(
+      "no-current-authority",
+      "the release track has no active mandate at the current time — succession required",
+    );
   }
 
   const match = validEndorsements.find(

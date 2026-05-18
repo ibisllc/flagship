@@ -1,6 +1,6 @@
 {
   "kind": "Mandate",
-  "version": 1,
+  "version": 2,
   "mandateId": "d4bb165a-fc7d-41a3-b143-1e1550405b5b",
   "track": "ca",
   "holder": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
@@ -10,11 +10,28 @@
     "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
     "b70a7996945a98a884f70172655128624316c2dce9d4124126197058cae27fca"
   ],
+  "approvalRule": {
+    "kind": "threshold",
+    "threshold": 1
+  },
+  "minSuccessors": 1,
+  "maxDurationSeconds": 15552000,
+  "defaultDurationSeconds": 15552000,
+  "project": {
+    "name": "Flagship",
+    "contact": "harry@flagship.services",
+    "homepage": "https://flagshipserver.com/",
+    "tracks": [
+      "release",
+      "ca",
+      "ops"
+    ]
+  },
   "signedBy": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
   "signatures": [
     {
       "pubkey": "2083708375c866e2eb97e6a344e86b6ad1c4651d840242b8e87e2add5dcf94f8",
-      "sig": "4922a32d65db4d4545df8a50bcf20b7588f913e4acb657e20968ff20571cda4158fb70b0668e1f266b8b68787babf6b66b5abda6dfe0faec135362475354db0c"
+      "sig": "2fd8a1c950fcf7c58e1fcdd52fb32bc2efea4e003795fd047064df7691771fdde2d484b26be40e13f555e2a15385f7b4c7da444c6b4410b0bf57dfc76d06500c"
     }
   ]
 }

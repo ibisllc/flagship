@@ -31,11 +31,10 @@ import * as path from "node:path";
 import {
   generateKeypair,
   intermediateMerkleRoot,
-  signMandate,
+  signMandateV2,
   signReleaseEndorsement,
-  type Mandate,
+  type MandateV2,
   type ReleaseEndorsement,
-  type TrackPolicy,
 } from "@maintainers/protocol";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -89,44 +88,34 @@ function setupFixture(opts: { seedByte: number }): Fixture {
 
   const primary = kp(opts.seedByte);
 
-  // Write .maintainers/ with a valid genesis mandate + one
-  // endorsement covering all three commits.
+  // Write .maintainers/ with a valid root v2 mandate + one
+  // endorsement covering all three commits. **LOCKED Phase-2 v2
+  // model**: NO policy.json (root or per-track) — the succession rule
+  // is folded INLINE into the self-signed root MandateV2; the helper
+  // anchors the track FORWARD from this mandate's `mandatePinHash`.
   const dotM = path.join(cwd, ".maintainers");
   fs.mkdirSync(path.join(dotM, "tracks", "release", "mandates"), {
     recursive: true,
   });
   fs.mkdirSync(path.join(dotM, "endorsements"), { recursive: true });
-  fs.writeFileSync(
-    path.join(dotM, "policy.json"),
-    JSON.stringify({
-      schemaVersion: 1,
-      project: { name: "Flagship-test" },
-      tracks: ["release"],
-    }),
-    "utf8",
-  );
-  fs.writeFileSync(
-    path.join(dotM, "tracks", "release", "policy.json"),
-    JSON.stringify({
-      track: "release",
-      defaultMandateDuration: "60d",
-      approvalRule: { kind: "threshold", threshold: 1, of: "anyAuthorizedSigner" },
-    } satisfies TrackPolicy),
-    "utf8",
-  );
 
   const issuedAt = new Date(Date.now() - 60_000).toISOString();
   const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-  const mandate: Mandate = signMandate(
+  const mandate: MandateV2 = signMandateV2(
     {
       kind: "Mandate",
-      version: 1,
+      version: 2,
       mandateId: "11111111-1111-4111-8111-111111111111",
       track: "release",
       holder: primary.pubKey,
       issuedAt,
       expiresAt,
       successors: [primary.pubKey],
+      approvalRule: { kind: "threshold", threshold: 1 },
+      minSuccessors: 1,
+      maxDurationSeconds: 365 * 24 * 60 * 60,
+      defaultDurationSeconds: 60 * 24 * 60 * 60,
+      project: { name: "Flagship-test", tracks: ["release"] },
       signedBy: primary.pubKey,
     },
     [{ privKey: primary.privKey }],
@@ -246,10 +235,17 @@ describe("verify-endorsement.mjs helper", () => {
         "mandates",
         "genesis.json",
       );
-      const m = JSON.parse(fs.readFileSync(mandatePath, "utf8")) as Mandate;
+      const m = JSON.parse(fs.readFileSync(mandatePath, "utf8")) as MandateV2;
       m.issuedAt = "2020-01-01T00:00:00.000Z";
       fs.writeFileSync(mandatePath, JSON.stringify(m), "utf8");
 
+      // v2: the helper anchors the track at the FIRST mandate's
+      // `mandatePinHash`, recomputed over the (tampered) bytes — so the
+      // pin still matches the file, but the root's Ed25519 signature
+      // (made over the ORIGINAL canonical bytes) no longer verifies ⇒
+      // `root-signature-invalid` ⇒ chain.root === null ⇒ a hard
+      // fail-closed (`mandate-chain-invalid`). Same surfacing as the
+      // c4.5d cli self-correction.
       const r = runHelper({ cwd: tampered.cwd, commitHash: tampered.commits[2]! });
       expect(r.code).not.toBe(0);
       expect(r.stderr).toMatch(/mandate-chain-invalid/);

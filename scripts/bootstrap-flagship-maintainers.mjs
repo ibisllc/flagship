@@ -10,12 +10,20 @@
  * `harrybackup@flagship.services`) are PLACEHOLDERS derived from fixed
  * seeds so any contributor can re-derive them locally and verify the
  * chain offline. Before public release, swap these for the real
- * Yubikey-held pubkeys via a fresh genesis mandate signed by the
- * placeholder, listing the real key as a successor.
+ * Yubikey-held pubkeys via a fresh succession mandate signed by the
+ * placeholder (it is a named successor of itself), listing the real
+ * key as the new holder.
  *
- * Mirrors the cli's genesis-command shape so the on-disk envelopes are
- * indistinguishable from those a real `maintainers genesis` invocation
- * would produce.
+ * **LOCKED Phase-2 v2 model.** Mirrors the cli's `upsert-mandate`
+ * from-scratch (root) shape so the on-disk envelopes are
+ * indistinguishable from those a real `maintainers upsert-mandate`
+ * invocation would produce: one self-signed root `MandateV2` per
+ * track, with the succession policy folded INLINE into the mandate
+ * (`approvalRule` / `successors` / `minSuccessors` /
+ * `maxDurationSeconds` / `defaultDurationSeconds` / project metadata).
+ * There is NO `policy.json` (root or per-track) — the v2 model
+ * dissolved the unsigned-policy hole (L2). Each root is trusted purely
+ * via its baked canonical-hash PIN (#30 generalised L1).
  */
 
 import * as fs from "node:fs";
@@ -24,7 +32,8 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import {
   generateKeypair,
-  signMandate,
+  signMandateV2,
+  mandatePinHash,
   signKeyFile,
 } from "@maintainers/protocol";
 
@@ -104,19 +113,43 @@ function buildKeyFile(holder, displayName, email, introductionMandateId) {
   return signKeyFile(unsigned, holder.privKey);
 }
 
-function buildGenesisMandate(track, holder, successors, durationDays) {
+/**
+ * Build a from-scratch (root) v2 mandate for a track — the
+ * genesis-equivalent in the LOCKED v2 model. Self-signed by its
+ * holder; the succession policy is folded INLINE (L2): a 1-of-N
+ * threshold over `successors` (one signature from any named successor
+ * authorises the next mandate — same operational laxity as the prior
+ * v1 `1-of-anyAuthorizedSigner` track policy), `minSuccessors: 1`, and
+ * a conservative `maxDurationSeconds` equal to THIS window so the next
+ * mandate cannot silently outlast it (mirrors the cli
+ * `upsert-mandate` from-scratch default). `project` carries the
+ * project-level metadata that the deleted root `policy.json` used to
+ * hold.
+ */
+function buildRootMandate(track, holder, successors, durationDays) {
   const issuedAt = GENESIS_ISO;
   const expiresAt = isoFromDays(GENESIS_ISO, durationDays);
-  return signMandate(
+  const windowSeconds = durationDays * 24 * 60 * 60;
+  return signMandateV2(
     {
       kind: "Mandate",
-      version: 1,
+      version: 2,
       mandateId: deterministicUuid(`flagship/${track}/genesis-2026-05-11`),
       track,
       holder: holder.pubKey,
       issuedAt,
       expiresAt,
       successors,
+      approvalRule: { kind: "threshold", threshold: 1 },
+      minSuccessors: 1,
+      maxDurationSeconds: windowSeconds,
+      defaultDurationSeconds: windowSeconds,
+      project: {
+        name: "Flagship",
+        contact: "harry@flagship.services",
+        homepage: "https://flagshipserver.com/",
+        tracks: TRACKS.map((t) => t.name),
+      },
       signedBy: holder.pubKey,
     },
     [{ privKey: holder.privKey }],
@@ -151,14 +184,19 @@ function emit() {
       "## Current authority",
       "",
       "- `harry@flagship.services` — primary holder on every track.",
-      "- `harrybackup@flagship.services` — listed as successor on every track;",
-      "  takes over unilaterally if the primary's mandate lapses.",
+      "- `harrybackup@flagship.services` — a named successor on every",
+      "  track; under each track's inline `approvalRule` (1-of-N) it can",
+      "  sign the next mandate unilaterally if the primary's mandate lapses.",
       "",
-      "The pubkeys checked in here are **placeholders derived from fixed",
-      "seeds** so anyone can re-derive them locally with",
+      "Each track is a single self-signed **root (from-scratch)**",
+      "`MandateV2` whose succession policy is folded INLINE (no",
+      "`policy.json` — the LOCKED v2 model dissolved the unsigned-policy",
+      "hole). The pubkeys checked in here are **placeholders derived from",
+      "fixed seeds** so anyone can re-derive them locally with",
       "`scripts/bootstrap-flagship-maintainers.mjs` and verify the chain",
-      "offline. Before the public alpha, the genesis mandates will be",
-      "rotated to Yubikey-held pubkeys via a normal renewal flow.",
+      "offline. Before the public alpha, the root mandates will be",
+      "rotated to Yubikey-held pubkeys via a normal succession flow",
+      "(the placeholder is a named successor of itself).",
       "",
       "## Contact",
       "",
@@ -174,48 +212,36 @@ function emit() {
     "utf8",
   );
 
-  // Root policy
-  writeJson(path.join(TARGET, "policy.json"), {
-    schemaVersion: 1,
-    project: {
-      name: "Flagship",
-      homepage: "https://flagshipserver.com/",
-      contact: "harry@flagship.services",
-    },
-    tracks: TRACKS.map((t) => t.name),
-  });
+  // v2: NO root policy.json — the project-level metadata that used to
+  // live there is folded into each root mandate's `project` field.
 
-  // Genesis mandates first — KeyFiles reference their mandateId.
-  const releaseMandate = buildGenesisMandate(
+  // Root (from-scratch) mandates first — KeyFiles reference their
+  // mandateId. v2: NO per-track policy.json; the succession rule is
+  // inline in each mandate.
+  const releaseMandate = buildRootMandate(
     "release",
     HARRY,
     [HARRY.pubKey, BACKUP.pubKey],
     TRACKS[0].durationDays,
   );
-  const caMandate = buildGenesisMandate(
+  const caMandate = buildRootMandate(
     "ca",
     HARRY,
     [HARRY.pubKey, BACKUP.pubKey],
     TRACKS[1].durationDays,
   );
-  const opsMandate = buildGenesisMandate(
+  const opsMandate = buildRootMandate(
     "ops",
     HARRY,
     [HARRY.pubKey, BACKUP.pubKey],
     TRACKS[2].durationDays,
   );
 
-  for (const [track, mandate, durationDays] of [
-    ["release", releaseMandate, TRACKS[0].durationDays],
-    ["ca", caMandate, TRACKS[1].durationDays],
-    ["ops", opsMandate, TRACKS[2].durationDays],
+  for (const [track, mandate] of [
+    ["release", releaseMandate],
+    ["ca", caMandate],
+    ["ops", opsMandate],
   ]) {
-    writeJson(path.join(TARGET, "tracks", track, "policy.json"), {
-      track,
-      description: `Flagship ${track} track — ${durationDays}-day cadence; 1-of-N approval (one signature from any authorized signer).`,
-      defaultMandateDuration: `${durationDays}d`,
-      approvalRule: { kind: "threshold", threshold: 1, of: "anyAuthorizedSigner" },
-    });
     writeJson(
       path.join(
         TARGET,
@@ -257,6 +283,11 @@ function emit() {
   console.log(`  release mandateId:     ${releaseMandate.mandateId}`);
   console.log(`  ca mandateId:          ${caMandate.mandateId}`);
   console.log(`  ops mandateId:         ${opsMandate.mandateId}`);
+  // The #30-generalised baked anchor for the load-bearing release
+  // track (stdout only; not written to disk). When the placeholder
+  // roots are rotated to real Yubikey-held keys, the post-rotation
+  // root's PIN — printed the same way — is what gets baked per surface.
+  console.log(`  release root PIN:      ${mandatePinHash(releaseMandate)}`);
 }
 
 emit();
