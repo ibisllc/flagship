@@ -1,19 +1,32 @@
 /**
  * Release verifier — Flagship's daemon's view of who can authorize a
- * production update of itself.
+ * production update of itself. **LOCKED Phase-2 v2 model** (verify
+ * FORWARD from a baked pinned-Mandate hash; no policy.json).
  *
- * Why: the maintainers protocol (see maintainers/docs/spec/v1.md)
- * specifies how a project declares its current signing authority + the
- * exact commits the authority has endorsed. Flagship dogfoods that
- * protocol from .maintainers/ at the repo root. This module is the
- * keystone that closes the loop between "Harry's Yubikey signs a
- * release manifest in the maintainers UI" and "Flagship's daemon
+ * Why: the maintainers protocol (maintainers/docs/spec) specifies how a
+ * project declares its current signing authority + the exact commits
+ * that authority has endorsed. Flagship dogfoods that protocol from
+ * `.maintainers/` at the repo root. This module closes the loop between
+ * "Harry's YubiKey signs a release endorsement" and "Flagship's daemon
  * refuses to apply updates that aren't endorsed."
  *
+ * v2 changes vs the prior implementation:
+ *   - the trust anchor is the baked **pinned-Mandate canonical hash**
+ *     (`MAINTAINER_PINNED_MANDATE_HASH`, #30 generalised); each track's
+ *     mandate log is verified FORWARD from it
+ *     (`verifyMandateChainFromPin`). There is no `policy.json` (root or
+ *     track) — the succession rule is folded INTO each mandate (L2).
+ *   - the empty baked pin (pre-Gate-B) ⇒ every chain fails L1 ⇒ no
+ *     authority anywhere ⇒ fully fail-closed. Tests inject a non-empty
+ *     pin to exercise the post-ceremony state (the maintainerCa.ts
+ *     injectable-pin seam, mirrored here).
+ *   - endorsements are holder-signed (`verifyChainOfEndorsementsV2`):
+ *     the mandate `holder` is the operational authority.
+ *
  * What this module does:
- *   - reads .maintainers/ from disk (a local clone path)
- *   - verifies each track's mandate chain offline (no .com round-trip)
- *   - verifies the release-endorsement chain against the release track
+ *   - reads `.maintainers/` from disk (a local clone path)
+ *   - verifies each track's v2 mandate chain offline (no .com round-trip)
+ *   - verifies the release-endorsement chain against the release chain
  *   - exposes the current authority + the set of valid endorsements
  *   - given an endorsement + a local git working tree, walks
  *     `git rev-list --first-parent` and confirms the intermediate
@@ -21,41 +34,43 @@
  *     commit substitution
  *
  * The verifier is intentionally pure-fs + pure-git: a hostile control
- * plane cannot poison a verdict because we never ask it anything. The
- * webapp + phone-app surface the cached result via a BFF endpoint, but
- * that's a render path — the verdict itself is local.
+ * plane cannot poison a verdict because we never ask it anything.
  */
 
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  currentAuthority,
-  lastExpiredMandate,
-  verifyChainOfEndorsements,
-  verifyTrack,
-  type Mandate,
+  currentAuthorityV2,
+  verifyChainOfEndorsementsV2,
+  verifyMandateChainFromPin,
+  type MandateV2,
   type Pubkey,
   type ReleaseEndorsement,
-  type RootPolicy,
   type TakeoverAlarm,
-  type TrackPolicy,
+  type VerifiedChainV2,
   type VerifiedEndorsements,
-  type VerifiedTrack,
 } from "@maintainers/protocol";
+import { MAINTAINER_PINNED_MANDATE_HASH } from "@flagship/protocol";
 
 export type TrackName = "release" | "ca" | "ops" | string;
 
 export interface MaintainersStoreSnapshot {
   rootDir: string;
-  rootPolicy: RootPolicy | null;
-  trackPolicies: Map<TrackName, TrackPolicy>;
-  mandatesByTrack: Map<TrackName, Mandate[]>;
+  /** Whether `${gitRepoPath}/.maintainers/` exists with a tracks dir. */
+  rootDirPresent: boolean;
+  /** v2 mandates per track, filename-sorted (canonical-log substitute). */
+  mandatesByTrack: Map<TrackName, MandateV2[]>;
   endorsements: ReleaseEndorsement[];
 }
 
 export interface TrackVerdict {
   track: TrackName;
+  /**
+   * v2: the track's mandate log anchored a root at the baked pin
+   * (`chain.root !== null`). Field name kept for the BFF/mobile wire
+   * mirror; the meaning is "the track has a verifiable v2 chain".
+   */
   hasPolicy: boolean;
   totalMandates: number;
   validMandates: number;
@@ -63,10 +78,8 @@ export interface TrackVerdict {
   currentMandateExpiresAt: string | null;
   successors: Pubkey[];
   /**
-   * The most-recently-expired mandate, only populated when the track
-   * is in "expired pending succession" state (i.e. currentHolder is
-   * null). Listed successors of this mandate are the ones with
-   * standing to take over.
+   * The holder of the last valid mandate when no mandate's window
+   * contains `now` (its successors hold standing to issue the next).
    */
   lastExpiredHolder: Pubkey | null;
   rejections: { mandateId: string; reason: string; detail?: string }[];
@@ -74,6 +87,11 @@ export interface TrackVerdict {
 
 export interface ReleaseStatus {
   rootDir: string;
+  /**
+   * v2: whether a usable `.maintainers/` root is present on disk. Field
+   * name kept for the BFF/mobile wire mirror (there is no policy.json
+   * in v2 — the prior "policy.json readable" meaning is obsolete).
+   */
   rootPolicyPresent: boolean;
   tracks: TrackVerdict[];
   /** Most recent VALID endorsement, in canonical-log order. */
@@ -93,6 +111,13 @@ export interface ReleaseVerifierOptions {
   gitRepoPath: string;
   /** Treat now as `at` instead of the wall clock — useful in tests. */
   now?: Date;
+  /**
+   * The baked pinned-Mandate canonical hash (#30 generalised L1
+   * anchor). Defaults to `@flagship/protocol`'s
+   * `MAINTAINER_PINNED_MANDATE_HASH` (EMPTY until Gate B ⇒ fail-closed).
+   * Overridable so tests can exercise the post-ceremony configured path.
+   */
+  pinnedMandateHash?: string;
 }
 
 /**
@@ -103,31 +128,30 @@ export interface ReleaseVerifierOptions {
 export function verifyMaintainersFolder(opts: ReleaseVerifierOptions): ReleaseStatus {
   const rootDir = path.join(opts.gitRepoPath, ".maintainers");
   const now = opts.now ?? new Date();
+  const pin = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
   const store = readStoreFromDisk(rootDir);
-  return verifyStore(store, now);
+  return verifyStore(store, now, pin);
 }
 
 /**
  * Verify one named track from `${gitRepoPath}/.maintainers/` and hand
- * back the `VerifiedTrack` + its policy. This is the disk→verified
- * bridge link-4 needs: `caTrustChain.makeCaTrustChain` feeds the
- * "ca"-track result (and `policy.approvalRule`) into
- * `@maintainers/protocol`'s `authorizedCaKeys`. `null` when the track
- * has no policy/mandates on disk (⇒ the chain yields no keys ⇒ the
- * #30 chokepoint fail-closes). Clock-free on purpose: `verifyTrack`
- * checks the mandate chain structurally; the `now` gate is applied by
- * `currentAuthority`/`authorizedCaKeys` at the consumer.
+ * back its v2 forward-verified chain. This is the disk→verified bridge
+ * link-4 needs: `caTrustChain.makeCaTrustChain` feeds the "ca"-track
+ * chain into `authorizedCaKeysV2`. `null` when the track has no v2
+ * mandates on disk (⇒ the chain yields no keys ⇒ the #30 chokepoint
+ * fail-closes). The pin is applied here: an empty/forked pin yields a
+ * chain with `validMandates: []` (fail-closed), not null.
  */
 export function verifiedTrackFromFolder(
   opts: ReleaseVerifierOptions,
   trackName: TrackName,
-): { track: VerifiedTrack; policy: TrackPolicy } | null {
+): { chain: VerifiedChainV2 } | null {
   const rootDir = path.join(opts.gitRepoPath, ".maintainers");
+  const pin = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
   const store = readStoreFromDisk(rootDir);
-  const policy = store.trackPolicies.get(trackName);
   const mandates = store.mandatesByTrack.get(trackName);
-  if (!policy || !mandates) return null;
-  return { track: verifyTrack(trackName, policy, mandates), policy };
+  if (!mandates || mandates.length === 0) return null;
+  return { chain: verifyMandateChainFromPin(pin, mandates) };
 }
 
 /**
@@ -137,11 +161,9 @@ export function verifiedTrackFromFolder(
  * landing at `endorsement.previousCommitHash` (or with no predecessor
  * for a genesis endorsement).
  *
- * Returns `{ ok: true }` on success or `{ ok: false, reason }` with a
- * brief failure description suitable for logs.
- *
- * Spec §5 step 4. This is what stops a hostile mirror from
- * substituting commits between two known-good endorsements.
+ * Spec §5 step 4. This is what stops a hostile mirror from substituting
+ * commits between two known-good endorsements. Unchanged by v2 (the
+ * ReleaseEndorsement envelope + git-walk are identical).
  */
 export function verifyEndorsementChainAgainstGit(
   endorsement: ReleaseEndorsement,
@@ -153,7 +175,6 @@ export function verifyEndorsementChainAgainstGit(
     return execFileSync(git, ["-C", gitRepoPath, ...args], { encoding: "utf8" });
   };
 
-  // Confirm every intermediate exists locally.
   for (const c of endorsement.intermediateCommits) {
     try {
       runGit(["cat-file", "-e", c]);
@@ -175,13 +196,6 @@ export function verifyEndorsementChainAgainstGit(
     };
   }
 
-  // Walk first-parent from commitHash backward; collect either to the
-  // previous endorsement's commit (exclusive) for non-genesis, or to
-  // the root for genesis.
-  //
-  // Per spec §3.5: intermediateCommits is ordered oldest-first; the
-  // first-parent walk from commitHash backward visits newest-first; so
-  // we walk and reverse.
   const range = endorsement.previousCommitHash
     ? `${endorsement.previousCommitHash}..${endorsement.commitHash}`
     : endorsement.commitHash;
@@ -221,62 +235,62 @@ export function verifyEndorsementChainAgainstGit(
 
 // ---- internal -----------------------------------------------------------
 
-function verifyStore(store: MaintainersStoreSnapshot, now: Date): ReleaseStatus {
+function verifyStore(
+  store: MaintainersStoreSnapshot,
+  now: Date,
+  pin: string,
+): ReleaseStatus {
   const tracks: TrackVerdict[] = [];
-  const verifiedTracks = new Map<TrackName, { track: VerifiedTrack; policy: TrackPolicy }>();
+  const chainsByTrack = new Map<TrackName, VerifiedChainV2>();
 
   for (const [name, mandates] of store.mandatesByTrack.entries()) {
-    const policy = store.trackPolicies.get(name);
-    if (!policy) {
-      tracks.push({
-        track: name,
-        hasPolicy: false,
-        totalMandates: mandates.length,
-        validMandates: 0,
-        currentHolder: null,
-        currentMandateExpiresAt: null,
-        successors: [],
-        lastExpiredHolder: null,
-        rejections: [],
-      });
-      continue;
+    const chain = verifyMandateChainFromPin(pin, mandates);
+    chainsByTrack.set(name, chain);
+    const auth = currentAuthorityV2(chain, now);
+    const lastValid = chain.validMandates[chain.validMandates.length - 1];
+
+    const rejections: TrackVerdict["rejections"] = [];
+    // Surface the L1 fail-closed cause (no-pin / pin-not-in-log / a
+    // malformed root) so diagnosis is possible — it is WHY there is no
+    // authority, not a per-mandate rejection.
+    if (chain.rootError) {
+      rejections.push({ mandateId: "(root)", reason: chain.rootError });
     }
-    const verified = verifyTrack(name, policy, mandates);
-    verifiedTracks.set(name, { track: verified, policy });
-    const auth = currentAuthority(verified, now);
-    const expired = lastExpiredMandate(verified, now);
-    tracks.push({
-      track: name,
-      hasPolicy: true,
-      totalMandates: mandates.length,
-      validMandates: verified.validMandates.length,
-      currentHolder: auth?.holder ?? null,
-      currentMandateExpiresAt: auth?.mandate.expiresAt ?? null,
-      successors: auth ? auth.successors : (expired?.successors ?? []),
-      lastExpiredHolder: !auth && expired ? expired.holder : null,
-      rejections: verified.rejections.map((r) => ({
+    for (const r of chain.rejections) {
+      rejections.push({
         mandateId: r.mandate.mandateId,
         reason: r.reason,
         detail: r.detail,
-      })),
+      });
+    }
+
+    tracks.push({
+      track: name,
+      hasPolicy: chain.root !== null,
+      totalMandates: mandates.length,
+      validMandates: chain.validMandates.length,
+      currentHolder: auth?.holder ?? null,
+      currentMandateExpiresAt: auth?.mandate.expiresAt ?? null,
+      successors: auth ? auth.successors : (lastValid?.successors ?? []),
+      lastExpiredHolder: !auth ? (lastValid?.holder ?? null) : null,
+      rejections,
     });
   }
 
   let validEndorsements: ReleaseEndorsement[] = [];
   let endorsementErrors: ReleaseStatus["endorsementErrors"] = [];
   if (store.endorsements.length > 0) {
-    const releaseTrack = verifiedTracks.get("release");
-    if (!releaseTrack) {
+    const releaseChain = chainsByTrack.get("release");
+    if (!releaseChain || releaseChain.validMandates.length === 0) {
       endorsementErrors = store.endorsements.map((e) => ({
         releaseId: e.releaseId,
-        reason: "no-release-track-policy",
-        detail: "endorsements present but no tracks/release/policy.json",
+        reason: "no-release-track-authority",
+        detail: "endorsements present but no verifiable release-track v2 chain",
       }));
     } else {
-      const result: VerifiedEndorsements = verifyChainOfEndorsements(
+      const result: VerifiedEndorsements = verifyChainOfEndorsementsV2(
         store.endorsements,
-        releaseTrack.track,
-        releaseTrack.policy.approvalRule,
+        releaseChain,
       );
       validEndorsements = result.validEndorsements;
       endorsementErrors = result.rejections.map((r) => ({
@@ -292,11 +306,14 @@ function verifyStore(store: MaintainersStoreSnapshot, now: Date): ReleaseStatus 
       ? validEndorsements[validEndorsements.length - 1] ?? null
       : null;
 
-  const pendingTakeoverAlarm = deriveTakeoverAlarm(verifiedTracks.get("release")?.track, store);
+  const pendingTakeoverAlarm = deriveTakeoverAlarm(
+    chainsByTrack.get("release"),
+    store,
+  );
 
   return {
     rootDir: store.rootDir,
-    rootPolicyPresent: store.rootPolicy !== null,
+    rootPolicyPresent: store.rootDirPresent,
     tracks,
     currentRelease,
     validEndorsements,
@@ -306,42 +323,35 @@ function verifyStore(store: MaintainersStoreSnapshot, now: Date): ReleaseStatus 
 }
 
 /**
- * Mirror of the cli's lib/store.ts but inlined here so the daemon
- * doesn't take a dep on the cli. The cli isn't published; reusing the
- * file would force flagship to ingest the whole cli subtree's
- * dependencies (yargs etc.) for ~100 lines of JSON I/O.
+ * Mirror of the cli's lib/store.ts `readMandatesV2` but inlined here so
+ * the daemon doesn't take a dep on the cli (which isn't published and
+ * would drag yargs etc. for ~100 lines of JSON I/O). v2 on-disk
+ * convention: `tracks/<track>/mandates/*.json`, filename-sorted as the
+ * canonical-log substitute, filtered to `version === 2`. No policy.json.
  */
 function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
   const out: MaintainersStoreSnapshot = {
     rootDir,
-    rootPolicy: null,
-    trackPolicies: new Map(),
+    rootDirPresent: false,
     mandatesByTrack: new Map(),
     endorsements: [],
   };
   if (!fs.existsSync(rootDir) || !fs.statSync(rootDir).isDirectory()) {
     return out;
   }
-  const rootPolicyPath = path.join(rootDir, "policy.json");
-  if (fs.existsSync(rootPolicyPath)) {
-    out.rootPolicy = readJson(rootPolicyPath) as RootPolicy;
-  }
   const tracksDir = path.join(rootDir, "tracks");
   if (fs.existsSync(tracksDir) && fs.statSync(tracksDir).isDirectory()) {
+    out.rootDirPresent = true;
     for (const name of fs.readdirSync(tracksDir).sort()) {
       const trackDir = path.join(tracksDir, name);
       if (!fs.statSync(trackDir).isDirectory()) continue;
-      const policyPath = path.join(trackDir, "policy.json");
-      if (fs.existsSync(policyPath)) {
-        out.trackPolicies.set(name, readJson(policyPath) as TrackPolicy);
-      }
       const mandatesDir = path.join(trackDir, "mandates");
-      const arr: Mandate[] = [];
+      const arr: MandateV2[] = [];
       if (fs.existsSync(mandatesDir) && fs.statSync(mandatesDir).isDirectory()) {
         for (const f of fs.readdirSync(mandatesDir).sort()) {
           if (!f.endsWith(".json")) continue;
           const parsed = readJson(path.join(mandatesDir, f));
-          if (isMandate(parsed)) arr.push(parsed);
+          if (isMandateV2(parsed)) arr.push(parsed);
         }
       }
       out.mandatesByTrack.set(name, arr);
@@ -360,16 +370,17 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
 }
 
 function deriveTakeoverAlarm(
-  releaseTrack: VerifiedTrack | undefined,
+  releaseChain: VerifiedChainV2 | undefined,
   store: MaintainersStoreSnapshot,
 ): TakeoverAlarm | null {
-  if (!releaseTrack) return null;
-  const vm = releaseTrack.validMandates;
+  if (!releaseChain) return null;
+  const vm = releaseChain.validMandates;
   if (vm.length < 2) return null;
   const newest = vm[vm.length - 1]!;
   const prior = vm[vm.length - 2]!;
   // Takeover = newest mandate signedBy is NOT the prior holder, and
-  // newest.issuedAt >= prior.expiresAt (succession path).
+  // newest.issuedAt >= prior.expiresAt (a successor took over rather
+  // than the holder renewing in-window).
   const newestIssuedAt = Date.parse(newest.issuedAt);
   const priorExpiry = Date.parse(prior.expiresAt);
   if (newest.signedBy === prior.holder) return null;
@@ -421,18 +432,22 @@ function readJson(p: string): unknown {
   return JSON.parse(raw);
 }
 
-function isMandate(x: unknown): x is Mandate {
+function isMandateV2(x: unknown): x is MandateV2 {
   if (typeof x !== "object" || x === null) return false;
   const o = x as Record<string, unknown>;
   return (
     o.kind === "Mandate" &&
-    o.version === 1 &&
+    o.version === 2 &&
     typeof o.mandateId === "string" &&
     typeof o.track === "string" &&
     typeof o.holder === "string" &&
     typeof o.issuedAt === "string" &&
     typeof o.expiresAt === "string" &&
     Array.isArray(o.successors) &&
+    typeof o.approvalRule === "object" &&
+    o.approvalRule !== null &&
+    typeof o.minSuccessors === "number" &&
+    typeof o.maxDurationSeconds === "number" &&
     typeof o.signedBy === "string" &&
     Array.isArray(o.signatures)
   );

@@ -1,69 +1,59 @@
 /**
  * Link-4 of the consumer CA-trust chain, daemon side
  * (docs/maintainer-ca-endorsement.md §9; tasks #8/#9/#10).
+ * **LOCKED Phase-2 v2 model.**
  *
  * `@flagship/protocol`'s `maintainerCa.ts` ships the #30 chokepoint
  * (`verifyCaSigned{DemoDirective,UserPubKeyBinding}`) with the chain
- * port — links 2-3 — *dependency-injected* as a `CaTrustChain`, so
- * that module can ship to every consumer (incl. the mobile mirrors)
- * without taking a `@maintainers/protocol` dependency. This module is
- * the daemon's concrete port: it adapts `@maintainers/protocol`'s
- * `authorizedCaKeys` (links 2-3 over the pinned `.maintainers`
- * snapshot) to the `CaTrustChain` interface.
+ * port — links 2-3 — *dependency-injected* as a `CaTrustChain`, so that
+ * module can ship to every consumer (incl. the mobile mirrors) without
+ * taking a `@maintainers/protocol` dependency. This module is the
+ * daemon's concrete port: it adapts `@maintainers/protocol`'s
+ * `authorizedCaKeysV2` (links 2-3: verify the ca-track mandate log
+ * FORWARD from the baked pin, then resolve the live `CaEndorsement`
+ * lease at `now`) to the `CaTrustChain` interface.
  *
- * Two impedance mismatches it bridges, nothing more:
- *   - clock: `CaTrustChain.authorizedCaKeys(now)` takes epoch-ms
- *     (`number`); `@maintainers/protocol` takes a `Date`.
- *   - inputs: the maintainers fn needs the verified ca-track, its
- *     approval rule, and the live CaEndorsement set. The first two
- *     come from the daemon's existing on-disk verifier
- *     (`verifiedTrackFromFolder` in releaseVerifier.ts). The
- *     CaEndorsement set is taken as an explicit argument — there is
- *     deliberately NO on-disk CaEndorsement convention yet (the
- *     maintainers store reader only knows `endorsements/` =
- *     ReleaseEndorsement; a ca-endorsement directory convention is
- *     genuine upstream-undefined work, NOT invented here).
+ * The one impedance mismatch it bridges: `CaTrustChain.authorizedCaKeys`
+ * takes epoch-ms (`number`); `@maintainers/protocol` takes a `Date`.
+ * The verified ca-track chain comes from the daemon's on-disk verifier
+ * (`verifiedTrackFromFolder` in releaseVerifier.ts), which already
+ * anchored it at the baked pin. The CaEndorsement set is an explicit
+ * argument (the on-disk `ca-endorsements/` convention is consumed by
+ * the caller, not invented here).
  *
  * While `MAINTAINER_PINNED_MANDATE_HASH` is empty the #30 chokepoint
- * fail-closes (`pin-unconfigured`) and never calls this port at
- * all — so this wire is correctly inert until the real Gate-B
- * ceremony bakes the pinned-mandate hash in. It is built + unit-tested
- * now so that step is the only remaining flip. (The verify-forward-
- * from-pin migration of this port itself is c4.4.)
+ * fail-closes (`pin-unconfigured`) and never calls this port; the port
+ * itself also yields `[]` (the pin-anchored chain has no valid
+ * mandates) — fail-closed at two independent layers. Real keys flow
+ * only once Gate B bakes the pinned-mandate hash in.
  */
 
 import {
-  authorizedCaKeys,
-  type ApprovalRule,
+  authorizedCaKeysV2,
   type CaEndorsement,
-  type VerifiedTrack,
+  type VerifiedChainV2,
 } from "@maintainers/protocol";
 import type { CaTrustChain } from "@flagship/protocol";
 
 /**
- * Build a `CaTrustChain` (#30 links 2-3) from a verified ca-class
- * track + its approval rule + the live CaEndorsement set.
+ * Build a `CaTrustChain` (#30 links 2-3) from a verify-forward-from-pin
+ * ca-track chain + the live CaEndorsement set.
  *
- * `authorizedCaKeys(now)` returns the operational CA pubkeys (lower
- * hex) a consumer may currently accept CA-signed artifacts under, or
- * `[]` — which the #30 chokepoint treats as `no-authorized-ca-keys`
- * (fail closed; never a fall-back to a previously-seen key).
+ * `authorizedCaKeys(now)` returns the operational CA pubkeys (lower hex)
+ * a consumer may currently accept CA-signed artifacts under, or `[]` —
+ * which the #30 chokepoint treats as `no-authorized-ca-keys` (fail
+ * closed; never a fall-back to a previously-seen key). An empty/forked
+ * baked pin makes `caChain.validMandates` empty ⇒ no ca authority at
+ * `now` ⇒ `[]`.
  */
 export function makeCaTrustChain(
-  caTrack: VerifiedTrack,
-  approvalRule: ApprovalRule,
+  caChain: VerifiedChainV2,
   caEndorsements: CaEndorsement[],
   opts: { clockSkewMs?: number } = {},
 ): CaTrustChain {
   return {
     authorizedCaKeys(now: number): string[] {
-      return authorizedCaKeys(
-        caEndorsements,
-        caTrack,
-        approvalRule,
-        new Date(now),
-        opts,
-      );
+      return authorizedCaKeysV2(caEndorsements, caChain, new Date(now), opts);
     },
   };
 }

@@ -1,13 +1,15 @@
 /**
- * Tests for the daemon's offline release-verifier.
+ * Tests for the daemon's offline release-verifier (LOCKED Phase-2 v2).
  *
  * Coverage:
- *   - reads `.maintainers/` from disk and reports current authority
- *   - rejects a tampered mandate
- *   - reports current release endorsement when one is present
+ *   - reads `.maintainers/` v2 mandates from disk and reports the
+ *     verify-forward-from-pin current authority
+ *   - a tampered mandate breaks the pin anchor (fail-closed)
+ *   - reports the current release endorsement when one is present
+ *     (holder-signed, v2)
  *   - `verifyEndorsementChainAgainstGit` walks a real local git repo
- *     and accepts the intermediate-commit list when it matches
- *   - the same helper rejects mismatches in count or order
+ *     and accepts the intermediate-commit list when it matches; rejects
+ *     mismatches in count or presence (unchanged by v2)
  */
 
 import { describe, expect, it } from "vitest";
@@ -18,11 +20,11 @@ import { execFileSync } from "node:child_process";
 import {
   generateKeypair,
   intermediateMerkleRoot,
-  signMandate,
+  mandatePinHash,
+  signMandateV2,
   signReleaseEndorsement,
-  type Mandate,
+  type MandateV2,
   type ReleaseEndorsement,
-  type TrackPolicy,
 } from "@maintainers/protocol";
 import {
   verifyEndorsementChainAgainstGit,
@@ -32,6 +34,7 @@ import {
 const ISO_GENESIS = "2026-05-01T00:00:00.000Z";
 const ISO_NEXT = "2026-06-01T00:00:00.000Z";
 const ISO_AFTER_EXPIRY = "2026-07-15T00:00:00.000Z";
+const DAY = 86400;
 
 function kp(seedByte: number) {
   const b = new Uint8Array(32);
@@ -49,26 +52,10 @@ function makeRepoWith(seedByte: number): {
   const dotM = path.join(tmp, ".maintainers");
   fs.mkdirSync(path.join(dotM, "tracks", "release", "mandates"), { recursive: true });
   fs.mkdirSync(path.join(dotM, "keys"), { recursive: true });
-  fs.writeFileSync(
-    path.join(dotM, "policy.json"),
-    JSON.stringify({
-      schemaVersion: 1,
-      project: { name: "Flagship-test" },
-      tracks: ["release"],
-    }),
-    "utf8",
-  );
-  fs.writeFileSync(
-    path.join(dotM, "tracks", "release", "policy.json"),
-    JSON.stringify({
-      track: "release",
-      defaultMandateDuration: "60d",
-      approvalRule: { kind: "threshold", threshold: 1, of: "anyAuthorizedSigner" },
-    } satisfies TrackPolicy),
-    "utf8",
-  );
   const primary = kp(seedByte);
   const backup = kp(seedByte + 1);
+  // No policy.json (root or track) in v2 — the succession rule is folded
+  // into each mandate. A KeyFile is kept only for holder-name lookup.
   fs.writeFileSync(
     path.join(dotM, "keys", "primary@example.com.json"),
     JSON.stringify({
@@ -79,7 +66,7 @@ function makeRepoWith(seedByte: number): {
       currentEmail: "primary@example.com",
       emailHistory: [],
       metadata: {},
-      introductionMandate: "fixture",
+      introductionMandate: "00000000-0000-0000-0000-000000000000",
       signature: "x",
     }),
     "utf8",
@@ -87,9 +74,39 @@ function makeRepoWith(seedByte: number): {
   return { rootDir: tmp, cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }), primary, backup };
 }
 
-function writeMandate(rootDir: string, m: Mandate): void {
+function mkMandate(
+  primary: ReturnType<typeof kp>,
+  over: Partial<Omit<MandateV2, "signatures">> = {},
+): MandateV2 {
+  const unsigned: Omit<MandateV2, "signatures"> = {
+    kind: "Mandate",
+    version: 2,
+    mandateId: "11111111-1111-4111-8111-111111111111",
+    track: "release",
+    holder: primary.pubKey,
+    issuedAt: ISO_GENESIS,
+    expiresAt: ISO_AFTER_EXPIRY,
+    successors: [primary.pubKey],
+    approvalRule: { kind: "threshold", threshold: 1 },
+    minSuccessors: 1,
+    maxDurationSeconds: 365 * DAY,
+    defaultDurationSeconds: 60 * DAY,
+    signedBy: primary.pubKey,
+    ...over,
+  };
+  return signMandateV2(unsigned, [{ privKey: primary.privKey }]);
+}
+
+function writeMandate(rootDir: string, m: MandateV2): void {
   fs.writeFileSync(
-    path.join(rootDir, ".maintainers", "tracks", m.track, "mandates", `${m.issuedAt.replace(/[:.]/g, "")}-${m.mandateId.slice(0, 8)}.json`),
+    path.join(
+      rootDir,
+      ".maintainers",
+      "tracks",
+      m.track,
+      "mandates",
+      `${m.issuedAt.replace(/[:.]/g, "")}-${m.mandateId.slice(0, 8)}.json`,
+    ),
     JSON.stringify(m),
     "utf8",
   );
@@ -101,69 +118,54 @@ function writeEndorsement(rootDir: string, e: ReleaseEndorsement): void {
   fs.writeFileSync(path.join(dir, `${e.semverTag}.json`), JSON.stringify(e), "utf8");
 }
 
-describe("verifyMaintainersFolder", () => {
+describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
   it("reports current authority when the chain is valid", () => {
     const repo = makeRepoWith(11);
     try {
-      const genesis = signMandate(
-        {
-          kind: "Mandate",
-          version: 1,
-          mandateId: "11111111-1111-4111-8111-111111111111",
-          track: "release",
-          holder: repo.primary.pubKey,
-          issuedAt: ISO_GENESIS,
-          expiresAt: ISO_AFTER_EXPIRY,
-          successors: [repo.primary.pubKey, repo.backup.pubKey],
-          signedBy: repo.primary.pubKey,
-        },
-        [{ privKey: repo.primary.privKey }],
-      );
+      const genesis = mkMandate(repo.primary, {
+        successors: [repo.primary.pubKey, repo.backup.pubKey],
+      });
       writeMandate(repo.rootDir, genesis);
 
       const status = verifyMaintainersFolder({
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
+        pinnedMandateHash: mandatePinHash(genesis),
       });
       expect(status.rootPolicyPresent).toBe(true);
       const releaseTrack = status.tracks.find((t) => t.track === "release");
+      expect(releaseTrack?.hasPolicy).toBe(true);
       expect(releaseTrack?.validMandates).toBe(1);
       expect(releaseTrack?.currentHolder).toBe(repo.primary.pubKey);
-      expect(releaseTrack?.successors).toEqual([repo.primary.pubKey, repo.backup.pubKey]);
+      expect(releaseTrack?.successors).toEqual([
+        repo.primary.pubKey,
+        repo.backup.pubKey,
+      ]);
     } finally {
       repo.cleanup();
     }
   });
 
-  it("rejects a tampered mandate (signature does not verify)", () => {
+  it("a tampered mandate breaks the pin anchor (fail-closed)", () => {
     const repo = makeRepoWith(13);
     try {
-      const genesis = signMandate(
-        {
-          kind: "Mandate",
-          version: 1,
-          mandateId: "11111111-1111-4111-8111-111111111111",
-          track: "release",
-          holder: repo.primary.pubKey,
-          issuedAt: ISO_GENESIS,
-          expiresAt: ISO_AFTER_EXPIRY,
-          successors: [repo.primary.pubKey],
-          signedBy: repo.primary.pubKey,
-        },
-        [{ privKey: repo.primary.privKey }],
-      );
-      // Tamper: flip the issuedAt so the signature no longer verifies.
-      const tampered: Mandate = { ...genesis, issuedAt: "2026-04-01T00:00:00.000Z" };
+      const genesis = mkMandate(repo.primary);
+      const pin = mandatePinHash(genesis); // pin of the UNtampered bytes
+      // Tamper issuedAt: the on-disk mandate no longer hashes to the pin.
+      const tampered: MandateV2 = { ...genesis, issuedAt: "2026-04-01T00:00:00.000Z" };
       writeMandate(repo.rootDir, tampered);
 
       const status = verifyMaintainersFolder({
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
+        pinnedMandateHash: pin,
       });
       const releaseTrack = status.tracks.find((t) => t.track === "release");
       expect(releaseTrack?.validMandates).toBe(0);
-      expect(releaseTrack?.rejections.length).toBeGreaterThan(0);
-      expect(releaseTrack?.rejections[0]?.reason).toMatch(/signature-invalid|approval/);
+      expect(releaseTrack?.currentHolder).toBe(null);
+      expect(releaseTrack?.rejections.some((r) => r.reason === "pin-not-in-log")).toBe(
+        true,
+      );
     } finally {
       repo.cleanup();
     }
@@ -172,20 +174,7 @@ describe("verifyMaintainersFolder", () => {
   it("surfaces a valid release endorsement as currentRelease", () => {
     const repo = makeRepoWith(15);
     try {
-      const genesis = signMandate(
-        {
-          kind: "Mandate",
-          version: 1,
-          mandateId: "11111111-1111-4111-8111-111111111111",
-          track: "release",
-          holder: repo.primary.pubKey,
-          issuedAt: ISO_GENESIS,
-          expiresAt: ISO_AFTER_EXPIRY,
-          successors: [repo.primary.pubKey],
-          signedBy: repo.primary.pubKey,
-        },
-        [{ privKey: repo.primary.privKey }],
-      );
+      const genesis = mkMandate(repo.primary);
       writeMandate(repo.rootDir, genesis);
 
       const commit = "a".repeat(40);
@@ -212,6 +201,7 @@ describe("verifyMaintainersFolder", () => {
       const status = verifyMaintainersFolder({
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
+        pinnedMandateHash: mandatePinHash(genesis),
       });
       expect(status.validEndorsements).toHaveLength(1);
       expect(status.currentRelease?.commitHash).toBe(commit);
@@ -232,9 +222,27 @@ describe("verifyMaintainersFolder", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it("the empty baked pin (pre-Gate-B) fails closed even with a valid on-disk chain", () => {
+    const repo = makeRepoWith(17);
+    try {
+      writeMandate(repo.rootDir, mkMandate(repo.primary));
+      // No pinnedMandateHash override ⇒ the EMPTY baked default.
+      const status = verifyMaintainersFolder({
+        gitRepoPath: repo.rootDir,
+        now: new Date(ISO_NEXT),
+      });
+      const releaseTrack = status.tracks.find((t) => t.track === "release");
+      expect(releaseTrack?.validMandates).toBe(0);
+      expect(releaseTrack?.currentHolder).toBe(null);
+      expect(releaseTrack?.rejections.some((r) => r.reason === "no-pin")).toBe(true);
+    } finally {
+      repo.cleanup();
+    }
+  });
 });
 
-// ----- verifyEndorsementChainAgainstGit ----------------------------------
+// ----- verifyEndorsementChainAgainstGit (unchanged by v2) ----------------
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
