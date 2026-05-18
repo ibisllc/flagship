@@ -33,13 +33,24 @@ numbers preserved). **c5 ALSO LANDED** (maintainers `6acca14`: spec
 + the portable artifact `maintainers/conformance/` (17 vectors:
 4 happy + all 10 mandatory fail-closed negatives + totality + CA-no-pin)
 + `conformance.test.ts` replaying every vector through the LANDED
-verifier; maintainers 330/33 → **358/35**, flagship 2529/225). **All of
-c4.6/c4.7/c5 (the protocol-product spine) are DONE.** Next = **the
-ceremony-tooling hardening** (native PC/SC YubiKey PIV binding behind
-the tested `connectPcscChannel` seam + make create-key/upsert-mandate/
-ca-endorsement + the `ca-operations.md` Operation-0 runbook concrete
-and dry-run-clean) → governed PR → re-pin → npm publish → flagship
-drops pull-script → Gate B. See §0 (top entries) for full detail.
+verifier; maintainers 330/33 → **358/35**, flagship 2529/225).
+**Ceremony-tooling hardening ALSO LANDED** (maintainers `10979ab`:
+typed PC/SC error taxonomy + the no-hardware prompt+wait+retry UX
++ dry-run byte-fidelity, up to the gate — the native libpcsclite
+binding deliberately NOT written blind; flagship `6cd2c55`:
+ca-operations Operation 0 reconciled to the de-versioned
+`upsert-mandate` reality; maintainers 358/35 → **370/36**, flagship
+2529/225). **The ENTIRE agent-side Phase-A spine is DONE. What remains
+in Phase A is HUMAN-GATED:** the governed PR merge
+(`ibisllc/maintainers` `feat/keyfile-register`→`main`, PR #1/#2
+precedent) → agent re-pins `scripts/maintainers.pinned-sha` to the
+merge SHA + reruns gates → **HUMAN** `npm publish @maintainers/protocol`
+(npm org/2FA) → flagship drops `pull-maintainers.sh` + the symlink →
+**HUMAN Gate B** (the (P) provisioning + the YubiKey genesis ceremony,
+runbook armed in `docs/ca-operations.md` Operation 0). The orchestrator
+PAUSES here and hands the user the copy-pasteable runbook; it does NOT
+fake the merge/publish/ceremony. See §0 (top entries) for full
+detail + the exact human steps.
 PRIOR HEADER (s7 — the c4.5 v1→v2 cutover) follows for history:
 **THE ENTIRE c4.5 v1→v2 CUTOVER LANDED — v1 is fully removed; v2
 is the SOLE trust path.** verify-before-trust per chunk: **c4.5a**
@@ -86,6 +97,74 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8, Mac/darwin — ceremony
+  tooling hardened UP TO the hardware gate; the agent-side Phase-A
+  spine is DONE; PAUSED at the human/credential gate):** maintainers
+  **`10979ab`** + flagship **`6cd2c55`**, both pushed. One fresh
+  subagent hardened the genesis-ceremony tooling to the documented
+  (P)/(A) gate WITHOUT writing the security-critical native libpcsclite
+  transport blind (verify-before-trust confirmed: `connectPcscChannel`
+  still fail-closes via the new typed `PcscBuildError`; ZERO real
+  `reader.transmit`/`pcsclite()`/`.connect({` calls anywhere). Three
+  pieces: (A) `docs/ca-operations.md` Operation 0 reconciled to the
+  de-versioned reality (`upsert-mandate` not `genesis`;
+  `MAINTAINER_PINNED_MANDATE_HASH` not `MAINTAINER_GENESIS_PUBKEYS`; no
+  `policy.json`; tag `maintainers/mandate/v1`; confirm phrase
+  `UPSERT-MANDATE`; c5 conformance ref; + a copy-pasteable (P)
+  provisioning checklist + a dry-run-vs-needs-YubiKey table — every
+  command source-verified vs the landed CLI). (B) a typed transport
+  taxonomy — `PcscNotReadyError` (recoverable: prompt+wait+poll+retry)
+  / `PcscSecurityError` (FATAL, never a software fallback) /
+  `PcscBuildError` (FATAL, non-recoverable build cond — not retried),
+  all `extends CliError`; `piv-connect.ts`
+  `connectPcscChannelWithPrompt` loop branches ONLY on
+  `isRecoverableNotReady`, non-interactive fails closed immediately,
+  bounded deadline, returns ONLY a real channel or throws (no
+  degraded/fallback path) — [[feedback-no-hardware-assumptions]]
+  satisfied; fully fake-injected tests. (C) dry-run byte-fidelity: a
+  new test proves a from-scratch genesis `upsert-mandate --dry-run`
+  preview == `canonicalMandate` of the real signed envelope (uuid/ts
+  pinned) and the real sig verifies over precisely the previewed bytes,
+  nothing written; the libpcsclite API contract for the gate-(A) step
+  is recorded in-code so it is mechanical, not invented under pressure.
+  Verify-before-trust: orchestrator audited (pin + SESSION-HANDOFF +
+  v1-launch-program untouched; native binding NOT written; the loop has
+  no fallback return; ca-operations stale terms appear ONLY as explicit
+  migration negations) + re-ran both gates itself — maintainers tsc -b
+  clean + **358/35 → 370/36** (+12, 0 failed); flagship tsc -b clean +
+  **2529/225** (doc-only on the flagship side). cwd-poisoning hazard
+  recurred during the audit (a `cd /flagship` then a maintainers-path
+  grep "No such file" — caught, re-run with the correct repo path; the
+  documented §0 trap, 4th time).
+  - **★ The agent-side Phase-A protocol-product spine + ceremony
+    hardening are COMPLETE. Everything remaining in Phase A and all of
+    Phase B is HUMAN/CREDENTIAL/HARDWARE-gated** — the orchestrator
+    PAUSES here per the human-gate protocol (PREPARE→PAUSE→WATCH→VERIFY,
+    never fake). The exact remaining human steps, in order:
+    **(1) governed PR merge** — push is done (`feat/keyfile-register`
+    tip `10979ab`); the maintainer merges `ibisllc/maintainers`
+    `feat/keyfile-register` → `main` on GitHub (PR #1/#2 precedent);
+    then the agent bumps `scripts/maintainers.pinned-sha` to the
+    **first-parent merge commit** (NOT the branch tip — the PR #1/#2
+    rule), runs `pull-maintainers.sh`, re-runs BOTH gates, commits the
+    pin bump. **(2) `npm publish @maintainers/protocol`** — HUMAN (npm
+    org + 2FA; classifier may block even post-approval — the human runs
+    the one `npm publish` command; semver/`--provenance`). **(3)
+    flagship drops** `scripts/pull-maintainers.sh` + `maintainers.
+    pinned-sha` + the `node_modules/@maintainers/protocol` symlink and
+    consumes the published package like any adopter (honest dogfooding;
+    update [[feedback-no-hardware-assumptions]]-adjacent gotcha memory:
+    the symlink invariant ENDS here). **(4) Gate B** — the (P)
+    provisioning checklist (now in `ca-operations.md` Operation 0:
+    install `pcsclite`+`ykman`, `ykman piv keys generate --algorithm
+    ED25519 --pin-policy ONCE --touch-policy ALWAYS 9c …` on BOTH
+    YubiKeys, decide `<DURATION>`+policy) → the agent implements +
+    LIVE-verifies `connectPcscChannel`'s libpcsclite wiring WITH the
+    real reader/token (governed `maintainers` PR + re-pin; non-
+    destructive pubkey read first; NEVER blind) → `--dry-run` → the
+    human types `UPSERT-MANDATE` + PIN + taps → the agent verifies the
+    chain + records `mandatePinHash` (the per-surface bake is Phase C).
+    `file:` is NOT acceptable for the genesis root.
 - **2026-05-18 (v1-launch program session 8, Mac/darwin — c5
   LANDED; ★ stale-layout discrepancy reconciled):** maintainers
   **`6acca14`** (`feat/keyfile-register`, 25 files, +3525), pushed.
