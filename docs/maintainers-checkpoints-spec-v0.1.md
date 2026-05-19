@@ -252,6 +252,28 @@ The bot must verify:
 7. The new checkpoint row only appends data and does not alter prior rows.
 8. The timestamp in the final row is assigned by the checkpoint bot.
 9. The file path matches the declared canonical project repo.
+10. **No-op rejection.** If the requested `current_mandate_hash` equals
+    the project's most recently witnessed hash for the same track, the
+    PR is rejected as a no-op. The registry records only *changes* in
+    security state; re-submitting the existing head is never accepted.
+    (Rule 7 forbids row tampering; this rule additionally forbids
+    duplicate-content appends.)
+11. **Rate cap.** Per project — and per track once the item-5
+    multi-track format is adopted — at most `N` checkpoints may be
+    accepted within a rolling 30-day window (default `N = 6`, generous
+    against the expected handful-per-year cadence and roomy enough for a
+    real incident cluster, e.g. emergency-recovery → rotation →
+    successor change in the same week). Submissions over the cap are
+    rejected with a pointer to a manual-override process for the rare
+    legitimate exception.
+
+Rules 10 and 11 are **mandatory from v0.1**, not deferred. Their
+purpose is anti-bloat, not security: they keep the public checkpoints
+repo small and cheap to clone (the owner's stated concern) by ensuring
+every merged row reflects a genuine, distinct security-state change.
+The continuity-and-authority rules (3–9) already make spam *expensive*
+(you can only checkpoint a project whose current mandate key you hold);
+rules 10–11 make repetitive spam *impossible to merge* regardless.
 
 ## 11. Continuity rule
 
@@ -511,22 +533,67 @@ specifics to settle so the build is consistent with the LOCKED model:
    enforced **per (project, track)**. One-file-per-project is kept; the
    bot keys continuity by track. Purely additive to this still-draft
    spec — adopt it before any Phase-H build.
-6. **Funding / anti-spam (owner question) — DEFERRED to v0.2+, NOT
-   v0.1.** The spam concern (a dev mass-submitting checkpoints) is real
-   for a public registry but is already structurally bounded: every
-   row is authority-signed (you can only checkpoint a project whose
-   maintainer key you control — mass-spam needs mass-key-control) and
-   event-driven (only on real security-state changes). A pay-per-line
-   fee is explicitly NOT recommended as the first lever: it adds
-   payment rails + a gatekeeper role + an economic relationship that
-   conflicts with the free-public-mirror ethos (§15) and could deter
-   the independent mirrors the security model depends on. If volume
-   ever materializes, prefer (in order): reject no-op/duplicate rows;
-   per-project/per-authority rate caps; a small *refundable* deposit;
-   sponsorship/academic hosting — only then a fee. At v0.1 the sole
-   project is Flagship — there is no spam problem to monetize a
-   solution for; designing payment now is premature complexity that
-   contradicts the simplicity value-prop.
+6. **Funding / anti-spam (owner question) — RESOLVED 2026-05-19
+   (owner).** Split into two parts:
+
+   **(a) Repetitive-spam / repo-bloat → SOLVED IN v0.1, NOT deferred.**
+   The owner's concern is the public checkpoints repo growing into a
+   nuisance to clone. This is now closed structurally, with no payment:
+   the no-op/duplicate rejection and the per-project/per-track rolling
+   rate cap are **mandatory v0.1 bot rules** (§10 rules 10–11). Combined
+   with the pre-existing bound — every row is authority-signed
+   (mass-spam needs mass-key-control) and event-driven (only on real
+   security-state changes) — a flood of checkpoints simply cannot be
+   merged, so it never enters anyone's clone. (Note also: checkpoints
+   live in their own repo, separate from `flagship` and the protocol
+   repo, so cloning Flagship is never burdened regardless.)
+
+   **(b) A fee → still DEFERRED, and remains the wrong first lever.** A
+   pay-per-line fee adds payment rails + a gatekeeper role + an economic
+   relationship that conflicts with the free-public-mirror ethos (§15)
+   and could deter the independent mirrors the security model depends
+   on; it also cuts against Flagship's free-tier-first principle. With
+   (a) in place there is no repetitive-spam problem left for a fee to
+   solve. At v0.1 the sole project is Flagship — designing payment now
+   is premature complexity that contradicts the simplicity value-prop.
+
+   **Residual threat (acknowledged, deliberately unsolved):** a
+   determined attacker who *creates many incoherent but individually
+   valid projects* — each its own real maintainer key + public
+   `.maintainers/` chain + reachable canonical repo — could grow the
+   registry along the *project* axis, which the per-project rate cap
+   does not bound. The onus is, by construction, shifted onto the host
+   platform: to mass-produce this the attacker must first stand up N
+   real, publicly-reachable, chain-valid repos with N keys they
+   control. On major hosts (GitHub / GitLab / Codeberg) that means
+   first defeating *that platform's* own Sybil defenses — account age,
+   phone verification, repo-creation limits, abuse takedowns — which
+   the registry inherits for free. This makes the attack expensive and
+   is a further reason the fee stays deferred. It is **not** a reason to
+   require a platform: §13 forbids relying on host identity alone — the
+   trust root remains maintainer key + continuity + the bot's
+   independent chain verification; "major host" is only a triage /
+   friction heuristic, and self-hosted Forgejo / Gitea projects stay
+   first-class.
+
+   Minor / self-hosted hosts bring no such inherited Sybil resistance,
+   so the bot MUST record a **per-canonical-host-domain project-count
+   statistic**. A single minor or unknown domain rooting an unusually
+   large number of distinct projects is the clearest spam signal we
+   have; at v0.1 this is **observational only** — surfaced for manual
+   review, never an auto-reject (a legitimately prolific self-hoster can
+   exist) — feeding the escalation ladder rather than gating.
+
+   If the project-axis Sybil ever materializes, escalate in order:
+   tighten the bot's canonical-repo liveness/age checks and act on the
+   per-host-domain volume signal above; require a minimum repo
+   provenance signal; per-submitter (host-identity) project-creation
+   cap; sponsorship / academic free tier; and only as the last lever a
+   small **one-time, refundable, per-project anti-spam deposit**
+   (~$20–50, refunded to honest projects, never charged to mirror
+   operators or recognized OSS/academic) — explicitly a Sybil-friction
+   deposit, never per-line revenue. Do not build any payment rail until
+   this threat is observed in practice.
 7. **Scope honesty re TUF/Sigstore (owner question) — recorded.** For
    the *identity/CA-authority* plane (`ca` track) TUF does not fit
    (it models artifacts, not "which online key may currently mint
