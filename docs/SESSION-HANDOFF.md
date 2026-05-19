@@ -199,19 +199,39 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
   dist+conformance+SPEC, no src/secret leak) BUT top-level
   `main`/`types` = `./src/index.ts` (NOT in `files[]` tarball) — modern
   `exports`-aware consumers OK (exports→dist), legacy-resolution
-  consumers + an immutable first 0.1.0 = real defect. Fix = a
-  `publishConfig` override (publish-time main/types→dist; preserve the
-  `@maintainers/source` live-src condition for the workspace) via a
-  GOVERNED maintainers PR → re-pin → THEN owner runs the verified
-  one-command `npm publish` (NO token via the agent — the burned token
-  `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` still must be revoked).
-  After publish: agent chunk = flagship drops pull-script/pin/symlink,
-  consumes `@ibisllc/maintainers@0.1.0` like any adopter. Remaining
+  consumers + an immutable first 0.1.0 = real defect. Fix (empirically determined; the
+  first `publishConfig` guess was DISCARDED as publish-time-only/
+  weaker): a 2-line top-level change — `main`→`./dist/index.js`,
+  `types`→`./dist/index.d.ts` (exports + publishConfig unchanged).
+  Safe in-workspace because both repos use `moduleResolution:NodeNext`
+  with NO `customConditions`/`paths` for this pkg → NodeNext honors
+  `exports` & IGNORES top-level main/types (the `@maintainers/source`
+  condition is dormant; live resolution is purely `exports["."]`→
+  `dist`). Orchestrator independently re-verified WITH the change:
+  maintainers tsc clean + 467/41 unchanged; **flagship tsc clean
+  (decisive no-regression proof)**; packed tarball main/types=dist
+  (PACK-verifiable); src absent; external ESM + `tsc --noEmit` types
+  resolve under both `bundler` & legacy `node`. = **governed PR #14
+  OPEN** (`chore/protocol-publish-manifest-dist`, github.com/ibisllc/
+  maintainers/pull/14). POST-MERGE PUBLISH RUNBOOK: (1) owner merges
+  #14 → (2) agent re-pins flagship → PR#14 first-parent merge SHA +
+  `pull-maintainers.sh pull` + re-gate (the pinned clone becomes the
+  CORRECTED tree — DO NOT publish from `016f263`, it still has the
+  src-pointer bug) → (3) owner, from the re-pinned `maintainers/
+  packages/protocol` with their `ibisllc` npm login (NO token via the
+  agent; revoke the burned `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`):
+  `npm whoami` → `npm view @ibisllc/maintainers version` (expect E404)
+  → `npm publish --dry-run` → `npm publish` (access:public + prepack
+  build automatic) → (4) confirm `npm view @ibisllc/maintainers` shows
+  0.1.0 → (5) agent chunk = flagship drops pull-script/pin/symlink,
+  consumes `@ibisllc/maintainers@0.1.0` from npm like any adopter +
+  re-verifies. Remaining
   toward "finished": chunk 3 = CA-endorsement consumer gate (pillar 2,
   + human YubiKey ceremony runbook); the BYOK protocol/webapp carrier;
   then the irreducible human gates (CaEndorsement signing, deploy,
   paid-VPS live `create-vps` run, mobile, Phase G). Pin `016f263`
-  until the publishConfig PR merges.
+  until PR #14 merges (DO NOT publish from `016f263` — src-pointer bug;
+  publish only from the post-#14 re-pinned tree).
 
 - **2026-05-19 (v1-launch program session 9 cont. — PR #13 MERGED +
   FINAL re-pin `016f263`; Phase H agent-side COMPLETE; building the
