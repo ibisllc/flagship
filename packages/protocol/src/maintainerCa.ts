@@ -24,14 +24,17 @@
  *   (this TS const for daemon+webapp; the iOS/Android ports hardcode the
  *   identical value into their own source — #10).
  *
- * `MAINTAINER_PINNED_MANDATE_HASH` is the link-1 anchor and is the
- * **empty string until the first real YubiKey ceremony** (Gate B) bakes
- * the pinned mandate's canonical hash in (ca-operations.md "Operation
- * 0"). While empty, EVERY CA-signed artifact is rejected (fail closed).
- * That is safe pre-release: the demo account uses mock recovery, there
- * are no real users, nothing is shipped. A consumer MUST NOT fall back
- * to a previously-seen or env-provided pin — the absence of a baked pin
- * is a hard reject, never a downgrade.
+ * `MAINTAINER_PINNED_MANDATE_HASH` is the link-1 anchor. The invariant
+ * is: while it is the **empty string** EVERY CA-signed artifact is
+ * rejected (fail closed) — a consumer MUST NOT fall back to a
+ * previously-seen or env-provided pin; the absence of a baked pin is a
+ * hard reject, never a downgrade. Gate B (the first real YubiKey
+ * ceremony, ca-operations.md "Operation 0") is now COMPLETE: the const
+ * is POPULATED with the canonical hash of the committed `ca` ORIGIN
+ * mandate in `.maintainers/`, so the chain port is now consulted and the
+ * trust chain verifies FORWARD from that live pin. The empty-⇒-fail-
+ * closed invariant above still holds and is still exercised by tests
+ * that pass an explicit empty pin.
  *
  * Links 2-3 are supplied by the consumer as a `CaTrustChain` (the daemon
  * and each client port `@ibisllc/maintainers`'s
@@ -55,12 +58,16 @@ import {
 /**
  * Baked-in pinned-Mandate canonical hash (lower-case hex sha256 of the
  * pinned `Mandate`'s `canonicalMandate` bytes — see
- * `@ibisllc/maintainers` `mandatePinHash`). EMPTY until the real Gate-B
- * ceremony — see the module doc. The real swap is the documented
- * pre-release step; do not populate this with a placeholder in a shipped
- * build. Re-baked per surface to the SAME value (#30 generalised).
+ * `@ibisllc/maintainers` `mandatePinHash`). POPULATED by the real Gate-B
+ * ceremony (2026-05-19) with the canonical hash of the committed `ca`
+ * ORIGIN mandate in `.maintainers/` — see the module doc. While this is
+ * the empty string the surface fail-closes (rejects every CA artifact);
+ * it is now the live anchor. Re-baked per surface to the SAME value
+ * (#30 generalised; the iOS/Android ports hardcode the identical value
+ * — #10).
  */
-export const MAINTAINER_PINNED_MANDATE_HASH = "";
+export const MAINTAINER_PINNED_MANDATE_HASH =
+  "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae";
 
 export function maintainerPinConfigured(
   pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,

@@ -220,17 +220,20 @@ describe("makeCaTrustChain", () => {
 });
 
 describe("#30 chokepoint integration (links 1-4)", () => {
-  it("stays fail-closed (pin-unconfigured) with the shipped empty pin — chain not consulted", () => {
+  it("stays fail-closed (pin-unconfigured) with an empty pin — chain not consulted", () => {
     const repo = makeCaRepo();
     try {
       const op = kp(99);
-      // No pinnedMandateHash override ⇒ the (empty) baked default; the
-      // chain is fail-closed AND the chokepoint never consults the port.
-      const vt = verifiedTrackFromFolder({ gitRepoPath: repo.rootDir }, "ca")!;
+      // An explicit empty pin ⇒ the chain is fail-closed AND the
+      // chokepoint never consults the port (the empty-pin invariant).
+      const vt = verifiedTrackFromFolder(
+        { gitRepoPath: repo.rootDir, pinnedMandateHash: "" },
+        "ca",
+      )!;
       const chain = makeCaTrustChain(vt.chain, [
         signedEndorsement(repo.authority, op.pubKey),
       ]);
-      const r = authorizedCaKeysOrFailClosed(chain, NOW);
+      const r = authorizedCaKeysOrFailClosed(chain, NOW, "");
       expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
     } finally {
       repo.cleanup();

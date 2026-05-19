@@ -52,36 +52,42 @@ function chainReturning(keys: string[]): CaTrustChain {
 }
 
 describe("MAINTAINER_PINNED_MANDATE_HASH (#30 link-1, generalised)", () => {
-  it("ships EMPTY — the pre-release fail-closed invariant", () => {
-    expect(MAINTAINER_PINNED_MANDATE_HASH).toBe("");
-    expect(maintainerPinConfigured()).toBe(false);
+  it("is POPULATED post-Gate-B; empty pin is still fail-closed", () => {
+    expect(MAINTAINER_PINNED_MANDATE_HASH).toBe(
+      "5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae",
+    );
+    expect(maintainerPinConfigured()).toBe(true);
+    // The empty-⇒-fail-closed invariant still holds with an explicit "".
+    expect(maintainerPinConfigured("")).toBe(false);
   });
 
   it("does not consult the chain port when the pin is unconfigured", () => {
     const chain = chainReturning([caHex]);
-    const r = authorizedCaKeysOrFailClosed(chain, NOW);
+    const r = authorizedCaKeysOrFailClosed(chain, NOW, "");
     expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
     expect(chain.authorizedCaKeys).not.toHaveBeenCalled();
   });
 
-  it("rejects a perfectly-signed DemoDirective with the shipped empty pin", () => {
+  it("rejects a perfectly-signed DemoDirective with an empty pin", () => {
     const sig = signDemoDirective(directive, ca);
     const r = verifyCaSignedDemoDirective(
       directive,
       sig,
       chainReturning([caHex]),
       NOW,
+      "",
     );
     expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
   });
 
-  it("rejects a perfectly-signed UserPubKeyBinding with the shipped empty pin", () => {
+  it("rejects a perfectly-signed UserPubKeyBinding with an empty pin", () => {
     const sig = signUserPubKeyBinding(binding, ca);
     const r = verifyCaSignedUserPubKeyBinding(
       binding,
       sig,
       chainReturning([caHex]),
       NOW,
+      "",
     );
     expect(r).toEqual({ ok: false, reason: "pin-unconfigured" });
   });

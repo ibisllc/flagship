@@ -223,14 +223,15 @@ describe("verifyMaintainersFolder (v2 verify-forward-from-pin)", () => {
     }
   });
 
-  it("the empty baked pin (pre-Gate-B) fails closed even with a valid on-disk chain", () => {
+  it("an empty pin fails closed even with a valid on-disk chain", () => {
     const repo = makeRepoWith(17);
     try {
       writeMandate(repo.rootDir, mkMandate(repo.primary));
-      // No pinnedMandateHash override ⇒ the EMPTY baked default.
+      // An explicit empty pin ⇒ the empty-pin fail-closed invariant.
       const status = verifyMaintainersFolder({
         gitRepoPath: repo.rootDir,
         now: new Date(ISO_NEXT),
+        pinnedMandateHash: "",
       });
       const releaseTrack = status.tracks.find((t) => t.track === "release");
       expect(releaseTrack?.validMandates).toBe(0);
