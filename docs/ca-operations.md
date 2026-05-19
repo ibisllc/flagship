@@ -246,7 +246,42 @@ maintainer ROOT key. Full rationale: `docs/maintainer-ca-endorsement.md`
 ## Operation 0 — genesis (once, pre-release, CLI + primary YubiKey)
 
 **This is the Human Gate B ceremony. It is IRREVERSIBLE — it creates the
-root of trust. Run it exactly; `--dry-run` every track first.**
+root of trust. Run it exactly; `--dry-run` first.**
+
+> **★ LOCKED SCOPE (2026-05-18/19, owner; SESSION-HANDOFF §0 is
+> authoritative) — supersedes every "ca, release, ops / all three
+> tracks" instruction below:** genesis signs the **`ca` track ONLY**.
+> `ops` is dropped (no v1 consumer); `release` is deferred to its own
+> later isolated genesis if a release-role ever exists (v1 update
+> integrity rides on app-store signing + reproducible-build CI; TUF/
+> Sigstore are the mature standards for that slice). Wherever this
+> document says "for each track in ca, release, ops" or "after all
+> three tracks", read **"the `ca` track"** / **"after the `ca`
+> track"**. One ORIGIN mandate, one `mandatePinHash`.
+>
+> **★ LOCKED PARAMETERS (verified by a real `--dry-run` at pin
+> `393b7a7`, nothing signed):** two personas — primary **"Harry
+> Winner" / `hello@harrywinner.com` / role `maintainer`** (key#1,
+> pubkey `2137e739…71d7`, file `~/key1-9c.pub`); backup **"Harry
+> Winner (backup)" / `hello+backup@harrywinner.com` / role
+> `backup-maintainer`** (key#2, pubkey `dba78ab5…0392`, file
+> `~/backup-9c.pub`). ca ORIGIN: `--successors` = **BOTH** key#1 **and**
+> key#2 (`file:` pubkeys, comma-separated, absolute paths); `--threshold
+> 1`; `--min-successors 1`; `--duration 100d`; `--max-duration 3650d`;
+> `--project-name flagship`; `--project-contact hello@harrywinner.com`.
+> The dry-run produced exactly this: self-signed `version:1 track:ca`,
+> holder=key#1, `successors:[key#1,key#2]`, `threshold:1`, max=3650d,
+> default=100d. The bare example identities/emails further down are
+> STALE — these locked values win.
+>
+> **★ LOCKED SEQUENCE (one swap — supersedes Step 1's "both create-keys
+> first" ordering; the KeyFiles carry zero authority so order is
+> correctness-neutral, one swap is the operational choice):** with
+> **key#1** inserted — (1) `create-key #1` (primary persona;
+> dry-run→real), (2) `upsert-mandate --track ca` ORIGIN (dry-run→real,
+> signed by key#1); **then physically SWAP to key#2** — (3)
+> `create-key #2` (backup persona; agent-driven corrected dry-run →
+> owner real). Three real signatures total, one token swap.
 
 Under the **LOCKED Phase-2 v2 model** (de-versioned: the protocol's
 first-ever shipped name is final — Mandate wire `version: 1`, canonical
@@ -502,19 +537,20 @@ YubiKey (physically swap tokens between the two runs):
 **A. Dry-run first (signs/writes NOTHING, no PIN, no tap):**
 ```sh
 cd maintainers
+# PRIMARY token (key#1) inserted:
 node packages/cli/bin/maintainers create-key \
   --signing-key yubikey-piv:slot=9c \
-  --display-name "Harry Winner Kamdem" \
-  --email harry@flagship.services \
-  --role "Flagship maintainer (primary)" \
+  --display-name "Harry Winner" \
+  --email hello@harrywinner.com \
+  --role maintainer \
   --path ../.maintainers \
   --dry-run
-# then, with the BACKUP token inserted:
+# then physically SWAP to the BACKUP token (key#2) and run:
 node packages/cli/bin/maintainers create-key \
   --signing-key yubikey-piv:slot=9c \
-  --display-name "Harry Winner Kamdem (backup)" \
-  --email harrybackup@flagship.services \
-  --role "Flagship maintainer (backup/successor)" \
+  --display-name "Harry Winner (backup)" \
+  --email hello+backup@harrywinner.com \
+  --role backup-maintainer \
   --path ../.maintainers \
   --dry-run
 ```
@@ -530,23 +566,25 @@ byte/diff REVIEW, then prompts the typed confirm; the human types the
 phrase and **taps that token** (self-sign). It writes
 `.maintainers/keys/<email>.json`.
 
-### Step 2 — the ceremony (per track: ca, release, ops — repeat all of A/B)
+### Step 2 — the ceremony (the `ca` track ONLY — see the LOCKED SCOPE banner)
 
-For each `<TRACK>` in `ca`, then `release`, then `ops`:
+Only the `ca` track is signed (ops dropped, release deferred). Run A
+then B once, with the **PRIMARY** token (key#1) inserted.
 
-**A. Dry-run first (signs/writes NOTHING, no PIN, no tap):**
+**A. Dry-run first (signs/writes NOTHING, no PIN, no tap) — this exact
+command was run at pin `393b7a7` and verified structurally correct:**
 ```sh
 cd maintainers
 node packages/cli/bin/maintainers upsert-mandate \
-  --track <TRACK> \
-  --duration <DURATION> \
+  --track ca \
+  --duration 100d \
   --signing-key yubikey-piv:slot=9c \
-  --successors  file:backup-9c.pub \
+  --successors  file:/Users/harrywinner/key1-9c.pub,file:/Users/harrywinner/backup-9c.pub \
   --threshold   1 \
   --min-successors 1 \
-  --max-duration <DURATION> \
+  --max-duration 3650d \
   --project-name flagship \
-  --project-contact harry@flagship.services \
+  --project-contact hello@harrywinner.com \
   --path ../.maintainers \
   --dry-run
 ```
@@ -576,7 +614,7 @@ type the phrase by hand. It writes the signed mandate and prints
 `holder:` / `issuedAt:` / `expiresAt:` / `mandateId:` / `successors:` /
 `rule:` / `PIN (canonical hash):`.
 
-### After all three tracks (agent)
+### After the `ca` track (agent)
 
 1. **Verify the chain.** Run
    `node packages/cli/bin/maintainers verify --path ../.maintainers`
@@ -586,8 +624,9 @@ type the phrase by hand. It writes the signed mandate and prints
    mandate; the agent independently re-checks the canonical bytes +
    signatures + the `mandatePinHash` before the irreversible bake.
 2. **Record the pinned-mandate canonical hash.** The CLI printed
-   `PIN (canonical hash):` for each track; it is `mandatePinHash` of
-   that track's from-scratch origin mandate. **This per-surface re-bake
+   `PIN (canonical hash):` for the `ca` track; it is `mandatePinHash`
+   of the single `ca` from-scratch origin mandate (one value, not
+   three). **This per-surface re-bake
    is Phase C** (#30 generalised): the SAME value goes into FOUR
    locations — `@flagship/protocol` `maintainerCa.ts`
    `MAINTAINER_PINNED_MANDATE_HASH` (covers the daemon #8 + the webapp
@@ -597,8 +636,8 @@ type the phrase by hand. It writes the signed mandate and prints
    provably identical. (Do NOT edit `maintainerCa.ts` here — Phase C
    owns the bake; Operation 0 only produces + records the hash.)
 3. **Commit** the `.maintainers/` artifacts (the two self-signed
-   KeyFiles from Step 1 + the three from-scratch ORIGIN mandates, one
-   per track; NO `policy.json`). **Deploy nothing.**
+   KeyFiles from Step 1 + the **single** `ca` from-scratch ORIGIN
+   mandate; NO `release`/`ops`; NO `policy.json`). **Deploy nothing.**
 4. **Validate a consumer/port via the c5 portable conformance
    artifact.** `maintainers/conformance/` (spec §12) is the
    dependency-free 17-vector set (4 happy + all 10 mandatory
