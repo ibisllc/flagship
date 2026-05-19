@@ -74,6 +74,7 @@ maintainers-checkpoints does not claim to:
 - replace local mandate-chain verification
 - replace signed releases or reproducible builds
 - guarantee that every intermediate mandate transition was witnessed
+- serve as a complete or immutable ledger — the registry may prune extra or intermediate checkpoint rows over time (§11); only the project's own `.maintainers/` chain is authoritative and gap-free
 - guarantee that the checkpoint repo itself cannot be rewritten unless independent mirrors exist
 
 Instead, it provides a public witness record that can be checked, mirrored, and audited.
@@ -145,10 +146,14 @@ checkpoints/github.com/ibisllc/flagship.csv
 Each project checkpoint file is a minimal CSV.
 
 ```
-observed_at,current_mandate_hash
-2026-05-18T20:30:00Z,sha256:abc123...
-2026-06-02T14:12:00Z,sha256:def456...
+observed_at,track,current_mandate_hash,flagged
+2026-05-18T20:30:00Z,ca,sha256:abc123...,
+2026-06-02T14:12:00Z,ca,sha256:def456...,
+2026-06-09T09:01:00Z,ca,sha256:ghi789...,rate-cap
 ```
+
+`flagged` is empty for the overwhelming majority of rows. A header row
+with exactly these four columns, in this order, is required.
 
 ### 7.1 Columns
 
@@ -162,6 +167,16 @@ Format:
 
 `YYYY-MM-DDTHH:MM:SSZ`
 
+**track**
+
+The mandate-track this row witnesses (per the item-5 multi-track model:
+the bot keys continuity **per (project, track)**). A single-track
+project records its sole track name (for Flagship v1: `ca`); a project
+with more than one mandate-track emits one row per track change under
+its track name. Always present (never blank).
+
+Format: a short lowercase track identifier, e.g. `ca`, `release`.
+
 **current_mandate_hash**
 
 The SHA-256 hash of the mandate that the registry verified as current for the project at observed_at.
@@ -169,6 +184,20 @@ The SHA-256 hash of the mandate that the registry verified as current for the pr
 Format:
 
 `sha256:<hex>`
+
+**flagged**
+
+Empty for a normal row. Set by the bot (never by the submitter) when
+the row was appended but warrants human attention — at v0.1 the only
+defined value is `rate-cap`, meaning this row exceeded the §10 rule-11
+rolling rate cap and was **recorded anyway** (the registry never
+refuses to witness — see §10) with a manual-verification ticket opened
+to the maintainer. A flagged row is a **fully valid, authority-signed,
+continuity-checked checkpoint** in every other respect; the flag is a
+review/volume annotation, not a trust downgrade, and does not weaken
+§11 continuity (see §11).
+
+Format: empty, or a short lowercase reason token (v0.1: `rate-cap`).
 
 ## 8. PR submission model
 
@@ -258,33 +287,101 @@ The bot must verify:
     security state; re-submitting the existing head is never accepted.
     (Rule 7 forbids row tampering; this rule additionally forbids
     duplicate-content appends.)
-11. **Rate cap.** Per project — and per track once the item-5
-    multi-track format is adopted — at most `N` checkpoints may be
-    accepted within a rolling 30-day window (default `N = 6`, generous
-    against the expected handful-per-year cadence and roomy enough for a
-    real incident cluster, e.g. emergency-recovery → rotation →
-    successor change in the same week). Submissions over the cap are
-    rejected with a pointer to a manual-override process for the rare
-    legitimate exception.
+11. **Rate cap — fail OPEN with a flag, never reject.** Per
+    (project, track) — the publicly documented cap is at most `N`
+    checkpoints within a rolling 30-day window (default `N = 6`,
+    generous against the expected handful-per-year cadence and roomy
+    enough for a real incident cluster, e.g. emergency-recovery →
+    rotation → successor change in the same week). The cap value is
+    public and known. **A submission over the cap is still recorded** —
+    it is appended like any other row, having passed rules 1–10 and §11
+    continuity, with its `flagged` column set to `rate-cap`. The bot
+    does NOT reject it: a witness log that refuses to witness during a
+    security-incident cluster fails exactly when it is needed most. The
+    flag opens a lightweight manual-verification flow: the bot
+    auto-sends the project maintainer an "is everything OK with the
+    recent checkpoint volume on your project? if unexpected, click here
+    to open a ticket" email; an opened ticket escalates to a human
+    reviewer. Normal operation is unaffected; over-cap rows are merely
+    visible and reviewed, not blocked.
 
 Rules 10 and 11 are **mandatory from v0.1**, not deferred. Their
-purpose is anti-bloat, not security: they keep the public checkpoints
-repo small and cheap to clone (the owner's stated concern) by ensuring
-every merged row reflects a genuine, distinct security-state change.
-The continuity-and-authority rules (3–9) already make spam *expensive*
-(you can only checkpoint a project whose current mandate key you hold);
-rules 10–11 make repetitive spam *impossible to merge* regardless.
+purpose is anti-bloat, not security — and they achieve it without ever
+making the registry refuse a valid witness. Rule 10 makes
+duplicate/no-op spam *impossible to merge* (zero-information rows are
+rejected outright). Rule 11 makes *volume* impossible to merge
+*silently*: every over-cap row is recorded but flagged and actively
+reviewed (maintainer ping → optional human ticket), so a flood is
+immediately visible and triaged rather than either bloating the repo
+unnoticed or — the worse failure — being dropped mid-incident. The
+continuity-and-authority rules (3–9) already make spam *expensive* (you
+can only checkpoint a project whose current mandate key you hold);
+rule 10 closes repetitive duplicates; rule 11 keeps volume observable
+and accountable while preserving the absolute witness guarantee.
 
 ## 11. Continuity rule
 
 The continuity rule is the key security property of the checkpoint repo.
 
-Let:
+Let, **scoped per (project, track)**:
 
 ```
-H_old = latest previously witnessed current_mandate_hash
+H_old = latest previously witnessed current_mandate_hash for this track
 H_new = newly requested current_mandate_hash
 ```
+
+`H_old` is the most recent **currently-present** prior row for that
+`(project, track)` — flagged rows count for as long as they are
+present.
+
+**The registry is a prunable witness, not the authoritative ledger.**
+The registry MAY delete rows at any time — not only `rate-cap`-flagged
+rows it is not satisfied reflect legitimate use, but also ordinary
+intermediate/middle-chain rows dropped for routine housekeeping or
+anti-bloat. This is deliberate and does NOT weaken the security model,
+because the model **never depended on the checkpoint file being
+complete**:
+
+- The authoritative, gap-free mandate-transition history is the
+  project's own `.maintainers/` chain, re-verified forward from the
+  pin on every submission (rules 3–5). The maintainers protocol admits
+  a single authority line — no valid fork or silent rollback can exist
+  *in that chain* regardless of what the registry holds.
+- §11 only anchors `H_new` to *some* real previously-witnessed hash.
+  Pruning can only move that anchor **earlier** to an older still-present
+  witnessed row. That is a strictly *weaker* anchor, never a *bypassed*
+  one: any accepted `H_new` must still chain through that older real
+  mandate **and** present a protocol-valid gap-free chain, so a
+  rollback/fork is still rejected — the check degrades gracefully, it
+  does not break.
+- The registry therefore claims only to hold **checkpoints**, not every
+  transition. A missing/pruned row means "this intermediate transition
+  was not (or is no longer) witnessed here," never "continuity was
+  violated." Completeness is explicitly a non-goal (§3); resilience to
+  a sparse or pruned checkpoint history is a designed property (§19).
+
+Deletions are themselves public and auditable: the checkpoints repo is
+git-versioned and independently mirrored (§15), so a removal is visible
+in history and to every mirror. A registry operator colluding with a
+malicious project authority to *launder* a rollback by deleting an
+inconvenient witnessed row is out of scope by construction — §13: the
+registry is never the trust root; it is a transparency aid whose own
+mutations are observable. Honest framing over false assurance: the
+checkpoint repo makes silent rollback *harder to hide and easier to
+catch*, it does not make it cryptographically impossible — that
+guarantee lives only in the project's signed chain.
+
+The one honest caveat: pruning never costs *security*, but each
+retained row is a public transparency anchor, so pruning trades away
+witness *granularity/value*, not safety. Recommended prune discipline
+(SHOULD, not MUST — none of it is load-bearing for the continuity
+guarantee): always retain the project's **first** checkpoint (the
+genesis anchor, §12) and a reasonable **recent tail**; drop middle
+rows preferentially over recent ones; keep flagged rows at least until
+their manual-verification ticket is resolved. Over-aggressive pruning
+(e.g. keeping only the head) yields a still-*safe* but
+nearly-*valueless* witness — the failure mode is "this provided little
+public transparency," never "this accepted a rollback."
 
 The bot must fetch the project’s public .maintainers/ chain and verify that the chain leading to H_new contains H_old.
 
@@ -412,7 +509,7 @@ The github.com/ibisllc/maintainers-checkpoints README should say:
 >
 > Each project has a small CSV file containing rows of:
 >
-> observed_at,current_mandate_hash
+> observed_at,track,current_mandate_hash,flagged
 >
 > A row means that the checkpoint bot verified, at that time, that the mandate hash was publicly available in the project repo, that the project’s mandate chain was valid, that the request was signed by the current maintainer authority, and that the chain preserved continuity with the previously witnessed checkpoint.
 >
@@ -425,7 +522,8 @@ With pinned mandate hashes plus checkpoints, the system gains:
 - local root-of-trust verification through app-pinned mandate hashes
 - maintainer rotation without app reshipping
 - public witnessing of current maintainer authority
-- rollback/rewrite resistance after first checkpoint
+- rollback/rewrite **detection** after first checkpoint (transparency-based: makes silent rollback harder to hide and easier to catch, anchored to the project's signed chain — not a cryptographic prevention; see §11)
+- graceful degradation: the security model is resilient to a sparse, pruned, or partially-rewritten checkpoint history — continuity always anchors to the project's own gap-free `.maintainers/` chain, so dropping extra/intermediate rows weakens granularity, never the guarantee (§11)
 - public PR-level audit trail for checkpoint authorization
 - easy mirroring by universities and independent operators
 - low operational burden for project maintainers
@@ -539,12 +637,16 @@ specifics to settle so the build is consistent with the LOCKED model:
    **(a) Repetitive-spam / repo-bloat → SOLVED IN v0.1, NOT deferred.**
    The owner's concern is the public checkpoints repo growing into a
    nuisance to clone. This is now closed structurally, with no payment:
-   the no-op/duplicate rejection and the per-project/per-track rolling
+   the no-op/duplicate rejection and the per-(project,track) rolling
    rate cap are **mandatory v0.1 bot rules** (§10 rules 10–11). Combined
    with the pre-existing bound — every row is authority-signed
    (mass-spam needs mass-key-control) and event-driven (only on real
-   security-state changes) — a flood of checkpoints simply cannot be
-   merged, so it never enters anyone's clone. (Note also: checkpoints
+   security-state changes): rule 10 makes duplicate/no-op rows
+   *unmergeable*; rule 11 records over-cap rows but *flags* them, and
+   the registry *prunes* flagged/extra/intermediate rows at will (§11,
+   §3 — the security model never depended on completeness). So a flood
+   can never *persist* in anyone's clone, while the witness never
+   refuses a valid checkpoint mid-incident. (Note also: checkpoints
    live in their own repo, separate from `flagship` and the protocol
    repo, so cloning Flagship is never burdened regardless.)
 
