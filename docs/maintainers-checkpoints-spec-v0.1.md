@@ -373,15 +373,55 @@ guarantee lives only in the project's signed chain.
 
 The one honest caveat: pruning never costs *security*, but each
 retained row is a public transparency anchor, so pruning trades away
-witness *granularity/value*, not safety. Recommended prune discipline
-(SHOULD, not MUST — none of it is load-bearing for the continuity
-guarantee): always retain the project's **first** checkpoint (the
-genesis anchor, §12) and a reasonable **recent tail**; drop middle
-rows preferentially over recent ones; keep flagged rows at least until
-their manual-verification ticket is resolved. Over-aggressive pruning
-(e.g. keeping only the head) yields a still-*safe* but
+witness *granularity/value*, not safety.
+
+**Prune discipline — MUST (value-preserving; bind for product worth,
+not for the continuity guarantee).** Continuity holds even if these are
+violated (the prunable-witness argument above is unconditional); they
+are MUST because a witness no one can rely on has no reason to exist:
+
+- The registry MUST NOT prune the **latest currently-witnessed row**
+  for a `(project, track)`. It is security-safe to do so (H_old merely
+  moves earlier), but it is the single row consumers and auditors most
+  depend on — deleting it is maximally value-destroying for zero
+  benefit.
+- The registry MUST NOT prune a project's **first / genesis
+  checkpoint** (§12) — the oldest public anchor.
+- The registry MUST NOT prune a **flagged** row before its
+  manual-verification ticket is resolved (prune only *after* review
+  confirms it illegitimate).
+
+**Prune discipline — SHOULD (housekeeping).** Thin *middle* rows by
+time/count bucketing (e.g. keep ≥ 1 row per quarter beyond N months),
+always in preference to recent rows. Over-aggressive pruning (e.g.
+keeping only head + genesis) yields a still-*safe* but
 nearly-*valueless* witness — the failure mode is "this provided little
 public transparency," never "this accepted a rollback."
+
+**Why not a tamper-PROOF (CT-style) log instead.** The immutable
+alternative is a Certificate-Transparency-style append-only Merkle log
+(signed tree heads + witness cosigning + monitors/gossip) where the
+operator *structurally cannot* prune. Deliberately **not** chosen: (a)
+the root of trust is the app-pinned signed mandate chain, never this
+log (§13) — the log is a transparency aid, so CT-grade immutability
+secures the wrong layer; (b) the Merkle/STH/cosigning/monitor
+machinery is heavy re-distribution infrastructure disproportionate to
+a witness whose worst-case failure is "less public transparency," not
+"trust broken"; (c) strict immutability would also make spam and
+garbage rows *permanent*, directly defeating the anti-bloat goal that
+motivated pruning. Checkpoints is therefore deliberately
+**tamper-evident** (git history + independent mirrors make removals
+visible), **not tamper-proof**. Revisit CT-style only if the witness
+ever becomes load-bearing — which §13 forbids by construction.
+
+**v0.1 trusted-operator assumption (explicit, time-bounded).**
+Discretionary operator pruning is a *trusted-operator* lever. Its
+safety argument — "removals are visible via independent mirrors" — is
+only as strong as the mirror ecosystem, which at v0.1 (a single
+project, no independent mirrors yet) is theoretical. So for v0.1 the
+registry operator is **trusted not to maliciously prune**; this
+de-risks as independent mirrors materialize. Recorded as a named
+limitation, not glossed — see §20.
 
 The bot must fetch the project’s public .maintainers/ chain and verify that the chain leading to H_new contains H_old.
 
@@ -538,6 +578,7 @@ The design still does not fully prevent:
 - split views between checkpoint submissions if nobody asks the registry to witness them
 - total compromise of current maintainer authority keys
 - fake mirror lists served by a compromised canonical checkpoint repo
+- a malicious or coerced registry operator selectively pruning an inconvenient witnessed row before any independent mirror has snapshotted it — at v0.1 the operator is *trusted* not to do this (the §11 prune lever); it is security-safe by construction (continuity anchors to the project's own signed chain, §11) but costs transparency, and the "removals are mirror-visible" mitigation is only theoretical until independent mirrors exist (de-risks as the §15 mirror ecosystem materializes)
 
 These can be reduced later with:
 
@@ -643,7 +684,8 @@ specifics to settle so the build is consistent with the LOCKED model:
    (mass-spam needs mass-key-control) and event-driven (only on real
    security-state changes): rule 10 makes duplicate/no-op rows
    *unmergeable*; rule 11 records over-cap rows but *flags* them, and
-   the registry *prunes* flagged/extra/intermediate rows at will (§11,
+   the registry *prunes* flagged/extra/intermediate rows (subject to
+   the §11 MUST retention rules — keep latest/genesis/unreviewed-flagged;
    §3 — the security model never depended on completeness). So a flood
    can never *persist* in anyone's clone, while the witness never
    refuses a valid checkpoint mid-incident. (Note also: checkpoints
