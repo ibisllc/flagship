@@ -508,6 +508,28 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): ★★ PHASE C COMPLETE — genesis pin baked + conformance-verified on ALL surfaces (#10 Android f946592)
+
+#10 Android: fresh subagent built the Kotlin mirror of #10 iOS
+(`core/MaintainersTrust.kt`, Tink Ed25519Verify + JDK SHA-256, no new
+dep) + baked the exact anchor + a JVM unit test replaying the shared
+17-vector conformance artifact from disk. Orchestrator audited (2 new
+.kt files, loads-from-disk not transcribed, build-scripts/catalog
+untouched, `.kotlin/`+gitignored google-services.json excluded) +
+independently re-ran `:app:testDebugUnitTest --rerun-tasks` ⇒ BUILD
+SUCCESSFUL, JUnit XML 192/192 0-fail 0-skip, conformance suite executed
+(2 testcases, not skipped). Committed `f946592` (no Co-Authored-By).
+Pre-existing env note: Android unit tests need the gitignored
+app/google-services.json (plugin aborts without it; clean checkout/CI
+must provision it). **⇒ PHASE C (#30/#9/#10) COMPLETE:** genesis
+`mandatePinHash 5016749377de…01ae` baked + c5-conformance-verified on
+@flagship/protocol (`d110675`, daemon #8 + webapp #9), iOS (`a67c1e5`),
+Android (`f946592`) — same 17 vectors, matching verdicts everywhere.
+Trust chain genesis→all-consumers wired. NEXT (program order): Phase D
+(app + first-class GUI-like CLI per steering), Phase F (ISO/VPS,
+env-gated here), Phase H (checkpoints, additive), Phase G (§S live).
+Detail: SESSION-HANDOFF §0 top.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): #10 iOS landed (a67c1e5); CLI-not-retired steering; Android tooling installed
 
 #10 iOS: fresh subagent built the greenfield Swift maintainers

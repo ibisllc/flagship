@@ -171,6 +171,44 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — ★★ PHASE C
+  COMPLETE: the genesis pin is baked + conformance-verified on EVERY
+  surface):** **#10 Android** — fresh subagent built the Kotlin mirror
+  of #10 iOS (`apps/mobile/android/app/src/main/java/com/flagshipserver/
+  app/core/MaintainersTrust.kt`, Google Tink `subtle.Ed25519Verify` +
+  JDK SHA-256, NO new Gradle dep) byte-identical to the TS reference,
+  baked `pinnedMandateHash` = the exact anchor `5016749377de…01ae`,
+  + a JVM unit test loading the SHARED `maintainers/conformance/`
+  artifact from disk at runtime and replaying all 17 vectors.
+  Orchestrator verify-before-trust: audited scope (2 new `.kt` files
+  only; TS/iOS/maintainers/.maintainers/pin/docs/build-scripts/version-
+  catalog untouched; `.kotlin/` build-artifact + gitignored
+  `google-services.json` placeholder excluded from the commit),
+  confirmed loads-from-disk (not transcribed), independently re-ran
+  `:app:testDebugUnitTest --rerun-tasks` (JAVA_HOME-prefixed) ⇒ BUILD
+  SUCCESSFUL, parsed the JUnit XML: **192/192, 0 failures, 0 skipped**;
+  `MaintainersConformanceTest` suite present with **2 testcases,
+  skipped=0** (the 17-vector replay genuinely executed, not skipped).
+  Committed flagship `main` **`f946592`** (2 `.kt` files, no
+  `Co-Authored-By`). **Pre-existing env note (NOT introduced here):**
+  `:app:testDebugUnitTest` needs the gitignored `app/google-services.
+  json` (the `com.google.gms.google-services` plugin aborts without
+  it); a subagent-created minimal gitignored placeholder is on disk
+  (never committed) — a clean checkout / Android CI must provision that
+  file before Android unit tests run. **⇒ PHASE C (#30/#9/#10) IS
+  COMPLETE:** the signed genesis root (`mandatePinHash
+  5016749377de…01ae`) is now baked AND conformance-verified on all
+  surfaces — `@flagship/protocol` const `d110675` (daemon #8 + webapp
+  #9), iOS `a67c1e5`, Android `f946592` — each replaying the identical
+  c5 17-vector set with matching verdicts. The full trust chain from
+  genesis to every consumer is wired. Pin `393b7a7`; nothing else
+  changed. NEXT (program order, each with a gating nuance): Phase D
+  (maintainers app **+ first-class GUI-like CLI** per the 2026-05-19
+  steering — design-heavy, agent-doable), Phase F (ISO/VPS —
+  env-gated here: darwin/arm64, no qemu/docker/Linux; real VPS = paid),
+  Phase H (Maintainers Checkpoints — additive, agent-doable), Phase G
+  (§S live exercises — largely human/live).
+
 - **2026-05-19 (v1-launch program session 9 cont. — #10 iOS LANDED;
   owner steering: CLI is FIRST-CLASS not retired; Android tooling
   installed ⇒ #10 Android now agent-doable here):** **#10 iOS** —
