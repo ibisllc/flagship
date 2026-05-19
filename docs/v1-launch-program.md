@@ -488,6 +488,49 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-18 — session 9 (Mac/darwin): PR #7's PIN reader echoed the real PIN + crashed EBADF → OS-level fix is PR #8 OPEN (human-merge gate)
+
+PR #7 merged; agent re-pinned `scripts/maintainers.pinned-sha` →
+**`835bbc6`**. The owner then ran the **real** `create-key #1` (ca-only)
+in their own terminal and the PR-#7 reader **echoed every keystroke of
+the real PIN**, then **crashed with an unhandled `EBADF` 'error'**.
+Owner reported it; agent owned the verify-before-trust gap honestly: a
+hermetic suite with a fake TTY (correctly) cannot prove real-terminal
+no-echo — that exact green combination passed for #7. **Root causes:**
+(1) `/dev/tty` was read via generic `fs` streams (no `setRawMode`;
+echo is OS-level termios, not a readline-output property); (2) the
+single fd was double-closed with no `'error'` listener ⇒ unhandled
+`EBADF`. **Fix** `feat/gate-b-piv-pin-noecho-fix` `7ad159f` (governed
+**PR #8 OPEN**): real `tty.ReadStream`/`tty.WriteStream` over one
+`/dev/tty` fd + **raw mode** (kernel-level no-echo) + explicit
+Backspace/Ctrl-C/Ctrl-D/EOF + cooked-mode restore in `finally`;
+**fail-closed if no `setRawMode`** (same taxonomy as the
+non-interactive aborts; `--yes` still never skips the PIN); lifetime
+`'error'`-swallow on both streams + single `closed`-guarded
+`fs.closeSync` ⇒ teardown/`EBADF` can never crash or mask the outcome;
+PIN still never argv/env/file/log/error/stack. **Plus a hidden
+non-secret `selftest-pin` command** (drives the SAME reader; human
+types a DUMMY in a real terminal; prints only verdict + byte length +
+SHA, never the value) — the non-skippable real-terminal acceptance
+gate that closes the spy-can't-prove-it gap. Independently audited
+(scope confined to `index.ts`+`piv-pin.ts`+its test; protocol/
+canonical/`piv-apdu`/`connectPcscChannel`/`upsert-mandate`-confirm
+UNtouched; `defaultEnv.pivPin` unchanged; `selftest-pin` hidden, never
+in any signing path), tests assert the real properties (incl. an
+`EBADF`-swallow regression on the *real* `openControllingTty`), both
+gates re-run: maintainers `tsc -b` clean + vitest **386/386 · 37 files
+· 0 failed** (1.30s); flagship `tsc -b` clean. Committed (no
+`Co-Authored-By`), pushed, PR #8 opened. **Next — HUMAN-MERGE GATE
+(agent never merges a governed maintainers PR / never pins an unmerged
+tip):** owner merges #8 → agent re-pins to PR#8 first-parent merge SHA
++ `bash scripts/pull-maintainers.sh pull` + re-gate + `npm i pcsclite
+--no-save` → owner runs `selftest-pin` (DUMMY) in their own terminal
+to re-trust the IO → owner **rotates the exposed PIV PIN** → owner
+re-runs the `ca`-only ceremony → agent verifies + records the single
+ca `mandatePinHash` + commits `.maintainers/`. Nothing signed; tree
+clean; pin `835bbc6` until #8 merges. Full runbook: SESSION-HANDOFF §0
+top entry.
+
 ### 2026-05-18 — session 8 cont. (Mac/darwin): real ca-ceremony surfaced + fixed the PIN-provider gap (PR #7 open)
 
 The real `create-key #1` run hit `error: yubikey-piv: a PIN provider

@@ -6,8 +6,13 @@ project_resume_2026_05_16.md`) is local to one machine and the harness
 TaskList does NOT persist across sessions — so the authoritative backlog
 lives **here, in git**. Rebuild your task list from §3 below.
 
-Last updated: 2026-05-18 (**v1-launch program session 8**, Mac/darwin
-box. **★ READ §0 TOP ENTRY FIRST — it is the full resume anchor.**
+Last updated: 2026-05-18 (**v1-launch program session 8/9**, Mac/darwin
+box. **★ READ §0 TOP ENTRY FIRST — it is the full resume anchor.** The
+top entry supersedes the older PR#6/`df992f2` narrative in this header:
+PRs #5/#6/#7 are MERGED, pin advanced to `835bbc6` (PR#7), the real
+ceremony surfaced a PIN-echo+EBADF bug in #7's reader, the OS-level fix
+is **governed PR #8 OPEN — awaiting the human merge** (nothing signed;
+tree clean).
 **GATE-B IN PROGRESS (s8 cont.):** the user provisioned both YubiKeys
 (on-token Ed25519 slot-9c, PIN/PUK/PIN-protected-mgmt-key hardened);
 the orchestrator implemented + **independently LIVE-verified** the
@@ -162,6 +167,75 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-18 (v1-launch program session 9 — PR #7's PIN reader
+  ECHOED the real PIN + crashed `EBADF`; OS-level fix is governed PR #8
+  OPEN; ★ HUMAN-MERGE GATE — nothing signed, tree clean, pin `835bbc6`):**
+  PR #7 was merged and the agent re-pinned `scripts/maintainers.pinned-sha`
+  → **`835bbc6`** (PR#7 first-parent merge). The owner then ran the
+  **real** `create-key #1` (ca-only) in their own terminal — and the
+  PR-#7 PIN reader **(1) echoed every keystroke of the real PIN to the
+  screen, then (2) crashed with an unhandled `EBADF` 'error' right after
+  the prompt.** Owner reported it; agent OWNED the verify-before-trust
+  gap honestly: code review + a hermetic suite that (correctly) injects
+  a fake TTY *structurally cannot* prove real-terminal no-echo — that
+  exact green combination passed for #7 and still shipped an echoing
+  PIN. **Root causes:** (1) it read `/dev/tty` via generic `fs` streams,
+  which have no `setRawMode`; terminal echo is OS-level termios, not a
+  readline output-write property, so echo was never suppressed; (2) the
+  single `/dev/tty` fd was double-closed on teardown with no `'error'`
+  listener ⇒ the late `EBADF` became an unhandled `'error'` and crashed
+  the process. **Fix (mechanism, not symptom)** on
+  `feat/gate-b-piv-pin-noecho-fix` **`7ad159f`** (governed **PR #8
+  OPEN**): open `/dev/tty` once as real `tty.ReadStream`/`tty.WriteStream`,
+  put the terminal in **raw mode** so the *kernel* stops echoing, read
+  bytes ourselves (Backspace/Ctrl-C/Ctrl-D/EOF handled, nothing written
+  for typed chars), restore cooked mode in `finally`; **fail closed if
+  `setRawMode` is unavailable** (same taxonomy as the non-interactive /
+  no-`/dev/tty` aborts; `--yes` still never skips the PIN); lifetime
+  swallowing `'error'` handlers on both streams + single `closed`-guarded
+  `fs.closeSync` ⇒ a teardown/`EBADF` can never be unhandled, crash, or
+  mask the signing outcome; PIN still never argv/env/file/log/error/stack.
+  **Plus a hidden non-secret `selftest-pin` command** driving the SAME
+  reader: the human types a throwaway dummy in a real terminal and sees
+  only verdict + byte length + SHA-256, never the value — the
+  **non-skippable real-terminal acceptance gate** that closes the gap a
+  `setRawMode` spy cannot. Orchestrator independently audited (scope
+  confined to `index.ts`+`piv-pin.ts`+its test; protocol/canonical/
+  `piv-apdu`/`connectPcscChannel`/the `upsert-mandate` confirm UNtouched;
+  `defaultEnv.pivPin` wiring unchanged; `selftest-pin` hidden from
+  `printUsage`, never wired into signing), verified the tests assert the
+  REAL properties (incl. an `EBADF`-swallow regression on the *real*
+  `openControllingTty`), and re-ran BOTH gates: maintainers `tsc -b`
+  clean + vitest **386/386, 37 files, 0 failed** (1.30s,
+  hardware-independent); flagship `tsc -b` clean (real consumer via the
+  workspace symlink). Committed (no `Co-Authored-By`), pushed, PR #8
+  opened. **★ NEXT — HUMAN-MERGE GATE (the agent does NOT merge a
+  governed maintainers PR / never pins an unmerged tip):**
+  1. Owner merges PR #8 (`gh pr merge 8 --repo ibisllc/maintainers
+     --squash` or via the UI).
+  2. Agent re-pins `scripts/maintainers.pinned-sha` → PR#8 **first-parent
+     merge SHA**; runs `bash scripts/pull-maintainers.sh pull`; re-runs
+     BOTH gates at the new pin; **re-installs the non-manifest ceremony
+     dep** `cd maintainers/packages/cli && npm i pcsclite --no-save`
+     (the pull's `npm install` does NOT restore it).
+  3. Owner runs **`node packages/cli/bin/maintainers selftest-pin`** in
+     their OWN real terminal, types a **DUMMY** (e.g. `test123`, NOT a
+     PIN) → must see the prompt, NOTHING echoed, `SELFTEST PASS` + a
+     byte length + SHA, and no crash. Only that re-trusts the IO path.
+  4. Owner **rotates the YubiKey PIV PIN** (the original was shown on
+     screen by the #7 bug — treat it as exposed; `ykman piv access
+     change-pin`).
+  5. Owner re-runs the `ca`-only ceremony in their own terminal:
+     `create-key #1` (key#1; `--yes` acceptable, PIN+tap) →
+     `upsert-mandate --track ca` ORIGIN (key#1; **NO `--yes`**, hand-type
+     `UPSERT-MANDATE` + PIN + tap) → swap to key#2 → agent-driven
+     corrected `create-key #2` dry-run (`--signing-key
+     yubikey-piv:slot=9c`, NOT `file:`) → owner real `create-key #2` →
+     agent verifies all 3 artifacts + records the single ca-track
+     `mandatePinHash` + commits `.maintainers/`. Then Phase C.
+  Nothing signed yet; `.maintainers/` clean; pin `835bbc6` until PR #8
+  merges.
 
 - **2026-05-18 (v1-launch program session 8 cont. — the REAL `ca`
   ceremony surfaced + fixed a 2nd deferred-seam gap; PR #7 open):**
