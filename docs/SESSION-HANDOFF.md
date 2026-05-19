@@ -171,6 +171,44 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PHASE H
+  FOUNDATION: `checkpoint-request/v1` signed envelope = governed PR
+  #10 OPEN, awaiting human merge):** Continuing the program post-push,
+  a fresh subagent built the foundational Phase-H piece: the
+  `maintainers/checkpoint-request/v1` first-class signed envelope
+  (`CheckpointRequest` type + `canonicalCheckpointRequest` +
+  `signCheckpointRequest`/`…With` + `verifyCheckpointRequest`),
+  mirroring `CaEndorsement` exactly; **holder-signs** per the RESOLVED
+  open-detail item 1 (authorised iff a sig over the canonical bytes
+  verifies under the holder of the mandate current at `now` via
+  `currentAuthority`/`verifyMandateChainFromPin`; quorum governs
+  succession only); total/fail-closed like the siblings. **★
+  Orchestrator caught + briefed the cross-repo hazard:** the iOS/
+  Android conformance ports hard-pin `count==17` + replay-all against
+  the SHARED `conformance/manifest.json` under xcodebuild/gradle (NOT
+  `npx vitest`) — a shared-manifest mutation is a SILENT cross-repo
+  break invisible to the flagship TS gate. So the new conformance is
+  ADDITIVE & isolated at `conformance/checkpoint-request/` (7 det-gen
+  vectors: 1 happy + 6 fail-closed negatives), shared 17-set proven
+  **byte-identical** (`git status` on it empty — independently
+  verified). Verify-before-trust: read the verifier (holder-signs not
+  quorum; canonicalization-throw⇒signature-invalid; absent pin⇒
+  no-authority-at-now; no fallback; never throws), confirmed confined
+  scope (only `packages/protocol/**` + the additive set; no flagship/
+  shared-manifest/CLI/bot), re-ran gates independently — maintainers
+  `tsc -b` clean + vitest **408/408·38** (was 398/38; +10 all in
+  `conformance.test.ts` → now 30 = 20 shared + 10 new; 0 failed).
+  Committed `feat/checkpoint-request-envelope` off pin `5a3079e` (repo-
+  local identity `Harry Winner <kamdemharry@gmail.com>`; no
+  `Co-Authored-By`), pushed, **governed PR #10 OPEN**
+  (https://github.com/ibisllc/maintainers/pull/10). **★ NEXT —
+  HUMAN-MERGE GATE:** owner merges PR #10 → agent re-pins
+  `scripts/maintainers.pinned-sha` → PR#10 first-parent merge SHA +
+  `pull-maintainers.sh pull` + re-gate + `npm i pcsclite --no-save`.
+  Pin `5a3079e` until #10 merges. (Later Phase-H chunks: bot validation
+  rules + CSV registry + `maintainers checkpoint submit` CLI; the
+  `ibisllc/maintainers-checkpoints` repo creation is a human gate.)
+
 - **2026-05-19 (v1-launch program session 9 cont. — PR #9 MERGED +
   re-pinned `5a3079e`; checkpoint spec refined; `main` pushed to
   origin):** Owner authorized: push `main` + merge PR #9. PR #9

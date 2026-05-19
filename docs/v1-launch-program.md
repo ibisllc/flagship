@@ -508,6 +508,25 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): Phase H foundation — checkpoint-request/v1 envelope = governed PR #10 OPEN
+
+Continuing the program: fresh subagent built the first-class
+`maintainers/checkpoint-request/v1` signed envelope (type + canonical +
+sign + `verifyCheckpointRequest`), mirroring CaEndorsement; holder-signs
+per RESOLVED open-detail item 1 (not quorum); total/fail-closed.
+Orchestrator caught the cross-repo hazard (iOS/Android hard-pin
+shared-conformance count==17 under xcodebuild/gradle, invisible to
+`npx vitest`) and briefed it: new conformance is ADDITIVE at
+`conformance/checkpoint-request/` (7 det-gen vectors), shared 17-set
+proven byte-identical. Audited (holder-signs verifier, confined scope)
++ re-ran gates independently: maintainers tsc clean + **408/38**
+(was 398/38; +10 in conformance.test.ts → 30; 0 failed). Branch
+`feat/checkpoint-request-envelope` off pin `5a3079e`, pushed, **governed
+PR #10 OPEN** — awaiting human merge → re-pin. Later Phase-H chunks:
+bot rules + CSV registry + `checkpoint submit` CLI (+ the
+maintainers-checkpoints repo = human gate). Detail: SESSION-HANDOFF §0
+top.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): PR #9 MERGED + re-pinned 5a3079e; checkpoint spec refined; main pushed
 
 Owner authorized push + merge. PR #9 (guided menu wizard) squash-merged
