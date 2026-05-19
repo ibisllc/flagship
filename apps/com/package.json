@@ -12,7 +12,8 @@
   "dependencies": {
     "@flagship/control-plane": "*",
     "@flagship/storage": "*",
-    "@flagship/protocol": "*"
+    "@flagship/protocol": "*",
+    "@ibisllc/maintainers": "0.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251001.0"

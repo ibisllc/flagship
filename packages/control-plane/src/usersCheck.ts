@@ -19,11 +19,15 @@
 //      can't discover an active sandbox by reading the repo.
 
 import type { UsernameStorage } from "@flagship/storage";
-import { signDemoDirective, type DemoDirective } from "@flagship/protocol";
+import {
+  signDemoDirective,
+  verifyCaSignedDemoDirective,
+  type DemoDirective,
+} from "@flagship/protocol";
 import { validateUserLabel } from "./labels.js";
 import { ok, malformed } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
-import type { CaIssuer } from "./pubkeyCert.js";
+import { type CaIssuer, type CaGate, evaluateCaGate } from "./pubkeyCert.js";
 import { bytesToHex } from "./hex.js";
 
 export interface TestAccountMeta {
@@ -44,6 +48,11 @@ export interface UsersCheckDeps {
    *  legacy Fastify path → demo accounts simply behave as normal
    *  claims there (no directive minted). */
   ca?: CaIssuer;
+  /** #30 maintainer→CA gate over the minted demo directive. Same
+   *  deploy-safe semantics as PubkeyCertDeps.caGate: absent ⇒ legacy
+   *  (no gate); present + enforce=false ⇒ OBSERVE (log, sign as
+   *  today); enforce=true ⇒ refuse when unauthorized. */
+  caGate?: CaGate;
   /** Override for tests. */
   now?: () => number;
   /** Directive validity window. Default 7 days (matches the pubkey
@@ -127,7 +136,26 @@ export async function handleUsersCheck(
         issuer: deps.ca.issuer,
       };
       const sig = signDemoDirective(directive, deps.ca.keypair);
-      resp.demoDirective = { directive, signature: bytesToHex(sig) };
+      // #30 chokepoint over the signed directive. OBSERVE (default)
+      // logs + attaches the directive exactly as today; ENFORCE +
+      // unauthorized refuses to attach a CA-signed directive (the
+      // claim-lookup response itself is unchanged — no directive).
+      const gateResp = evaluateCaGate(
+        deps.caGate,
+        "DemoDirective",
+        norm,
+        now,
+        () =>
+          verifyCaSignedDemoDirective(
+            directive,
+            sig,
+            deps.caGate!.caTrustChain,
+            now,
+          ),
+      );
+      if (!gateResp) {
+        resp.demoDirective = { directive, signature: bytesToHex(sig) };
+      }
     }
     return ok<UsersCheckResponse>(resp);
   }

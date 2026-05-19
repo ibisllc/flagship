@@ -1,0 +1,92 @@
+/**
+ * Worker-side construction of the #30 maintainer→CA `CaTrustChain`.
+ *
+ * The Cloudflare Worker has NO filesystem, so the daemon's
+ * `releaseVerifier` (fs-based) cannot run here. Instead this module
+ * `import`s the committed ca-track mandate chain + the committed
+ * `CaEndorsement` bundle as bundled JSON (esbuild inlines both into the
+ * Worker script — a few KB) and runs the REAL `@ibisllc/maintainers`
+ * verifier over them, exactly the same algorithm the daemon runs:
+ *
+ *   verifyMandateChainFromPin(BAKED_PIN, caTrackMandates)   // links 1-2
+ *     → verifyCaEndorsements(endorsements, chain, now)       // link 3
+ *       (wrapped as a CaTrustChain via authorizedCaKeys)
+ *
+ * This is NOT a weakened shortcut: the Worker does not "trust a
+ * pre-verified endorsement" or "only check the lease TTL + signature".
+ * It re-derives the forward-from-pin ca-track authority and resolves
+ * the live lease itself, every request, from the SAME baked
+ * `MAINTAINER_PINNED_MANDATE_HASH` every other surface bakes. A
+ * forked/tampered chain or a forged endorsement yields `[]` authorized
+ * keys ⇒ the protocol chokepoint fail-closes.
+ *
+ * The pin lives in `@flagship/protocol`; the verifier in
+ * `@ibisllc/maintainers`; this module only glues them to the JSON the
+ * repo commits under `.maintainers/`.
+ */
+
+import {
+  authorizedCaKeys,
+  verifyMandateChainFromPin,
+  type CaEndorsement,
+  type Mandate,
+} from "@ibisllc/maintainers";
+import {
+  MAINTAINER_PINNED_MANDATE_HASH,
+  type CaTrustChain,
+} from "@flagship/protocol";
+
+// Bundled at build time by esbuild/wrangler (resolveJsonModule).
+// Path: apps/com/src → repo root `.maintainers/`.
+// The ca-track ORIGIN mandate (the pin anchors exactly this file's
+// canonical bytes — see Gate B / docs/ca-operations.md).
+import caOriginMandate from "../../../.maintainers/tracks/ca/mandates/20260519T120808-706880c9.json";
+// The committed CaEndorsement leases. Starts `[]`; the human ceremony
+// appends (see docs/ca-operations.md "CaEndorsement ceremony runbook").
+import caEndorsementsBundle from "../../../.maintainers/ca-endorsements/bundle.json";
+
+/**
+ * The committed ca-track mandate log, oldest-first (canonical-log
+ * order). Today this is the single ORIGIN mandate; successor mandates
+ * (added by future ceremonies) extend this array — keep it
+ * filename-sorted, exactly the daemon's `readStoreFromDisk` convention.
+ */
+const CA_TRACK_MANDATES: Mandate[] = [caOriginMandate as Mandate];
+
+const CA_ENDORSEMENTS: CaEndorsement[] = caEndorsementsBundle as CaEndorsement[];
+
+/**
+ * Build the #30 `CaTrustChain` the control-plane handlers consult. The
+ * forward chain is verified ONCE at module load (the mandate JSON is
+ * static for the lifetime of a deployed bundle); the live-lease
+ * resolution (`authorizedCaKeys`) is re-run per request at the caller's
+ * `now`, so a lease that expires between two requests is correctly
+ * dropped without a redeploy. Pure functions over injected JSON — no
+ * I/O, Worker-safe.
+ */
+export function workerCaTrustChain(
+  pinnedMandateHash: string = MAINTAINER_PINNED_MANDATE_HASH,
+): CaTrustChain {
+  const verifiedChain = verifyMandateChainFromPin(
+    pinnedMandateHash,
+    CA_TRACK_MANDATES,
+  );
+  return {
+    authorizedCaKeys(now: number): string[] {
+      return authorizedCaKeys(CA_ENDORSEMENTS, verifiedChain, new Date(now));
+    },
+  };
+}
+
+/**
+ * Read the deploy-safe ENFORCE switch. Default (unset / not exactly
+ * "true") ⇒ OBSERVE — the gate logs its verdict but signing proceeds
+ * byte-for-byte as today. A human flips this to the literal string
+ * `"true"` ONLY after a valid CaEndorsement is committed and verified
+ * (docs/ca-operations.md). This is the single, documented control.
+ */
+export function caEnforceFromEnv(
+  env: Record<string, string | undefined>,
+): boolean {
+  return env.CA_ENDORSEMENT_ENFORCE === "true";
+}

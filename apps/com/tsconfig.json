@@ -11,7 +11,11 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true,
+    // The #30 ca-trust-chain loader bundles the committed ca-track
+    // mandate chain + the CaEndorsement bundle as JSON imports
+    // (esbuild/wrangler inline them; the Worker has no filesystem).
+    "resolveJsonModule": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src/**/*", "test/**/*"]
+  "include": ["src/**/*", "test/**/*", "../../.maintainers/tracks/ca/mandates/*.json", "../../.maintainers/ca-endorsements/*.json"]
 }

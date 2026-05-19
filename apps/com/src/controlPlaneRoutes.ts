@@ -92,15 +92,29 @@ import {
   handleGetUserIdentity,
   handlePutUserIdentity,
   type CaIssuer,
+  type CaGate,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
 } from "@flagship/control-plane";
 import { D1Storage, type D1Database } from "@flagship/storage";
+import { workerCaTrustChain, caEnforceFromEnv } from "./caTrustChainLoader.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
   FLAGSHIP_CA_PRIV_HEX?: string;
   FLAGSHIP_CA_ISSUER?: string;
+  /**
+   * #30 maintainer→CA gate mode — the SINGLE documented switch.
+   * Unset / anything other than the literal `"true"` ⇒ OBSERVE: the
+   * gate runs the full pin→chain→endorsement verification and emits a
+   * structured log line, but signing proceeds byte-for-byte as today
+   * (DEPLOY-SAFE — there is no committed CaEndorsement until the human
+   * YubiKey ceremony, so hard-enforcing would fail-close every live
+   * directory attestation). `"true"` ⇒ ENFORCE: refuse to mint a
+   * CA-signed artifact when the chain is unauthorized. A human flips
+   * this to `"true"` ONLY after a valid CaEndorsement is committed and
+   * verified — see docs/ca-operations.md. */
+  CA_ENDORSEMENT_ENFORCE?: string;
   /** Shared bearer secret for the .com↔.services custom-domain
    *  control channel (#87). Also set as a Fly secret on .services. */
   SERVICES_CONTROL_SECRET?: string;
@@ -246,6 +260,18 @@ export async function tryControlPlane(
     FLAGSHIP_CA_PRIV_HEX: env.FLAGSHIP_CA_PRIV_HEX,
     FLAGSHIP_CA_ISSUER: env.FLAGSHIP_CA_ISSUER,
   });
+  // #30 maintainer→CA gate. The trust chain is the REAL forward
+  // verifier over the committed ca-track mandate chain + endorsement
+  // bundle (see caTrustChainLoader). `enforce` is the single
+  // documented switch — unset ⇒ OBSERVE ⇒ identical-to-today signing
+  // plus a structured log line. Built once per request; the chain's
+  // lease resolution re-runs at the handler's `now`.
+  const caGate: CaGate = {
+    caTrustChain: workerCaTrustChain(),
+    enforce: caEnforceFromEnv({
+      CA_ENDORSEMENT_ENFORCE: env.CA_ENDORSEMENT_ENFORCE,
+    }),
+  };
 
   let m: RegExpMatchArray | null;
   if (method === "POST" && ROUTE_RE.USERNAME_CLAIM.test(path)) {
@@ -258,6 +284,7 @@ export async function tryControlPlane(
           storage: storage.usernames,
           testAccounts: parseTestAccountsEnv(env.TEST_ACCOUNTS),
           ca,
+          caGate,
         },
         await readJson(request),
       ),
@@ -404,7 +431,7 @@ export async function tryControlPlane(
   if (method === "GET" && (m = path.match(ROUTE_RE.PUBKEY_CERT))) {
     return finish(
       await handleUserPubKeyCert(
-        { ca, usernames: storage.usernames },
+        { ca, usernames: storage.usernames, caGate },
         decodeURIComponent(m[1]!),
       ),
     );

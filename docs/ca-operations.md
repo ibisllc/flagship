@@ -110,6 +110,105 @@ node scripts/rotate-ca.mjs status     # lists leases; marks the SERVED one
 
 ---
 
+## Operation 1b — CaEndorsement ceremony runbook (the `.com` #30 gate)
+
+Operation 1 mints + commits the lease. This sub-runbook is the
+**deploy-safe procedure to actually arm the `.com` Worker's #30
+maintainer→CA gate** with it. The gate ships in **OBSERVE** mode and is
+already deployed: with no committed `CaEndorsement` it logs
+`no-authorized-ca-keys` and signs `UserPubKeyBinding` / `DemoDirective`
+**exactly as before** — landing the gate code changed nothing
+observable. ENFORCE is engaged by a human, ONLY here, ONLY after a valid
+lease exists.
+
+The gate's verifier runs in two places, identically (full chain, no
+shortcut): the daemon (`releaseVerifier.caTrustChainFromFolder` → fs
+read of `.maintainers/ca-endorsements/*.json`) and the `.com` Worker
+(`apps/com/src/caTrustChainLoader.ts` → the bundled
+`.maintainers/ca-endorsements/bundle.json`). Both call the real
+`@ibisllc/maintainers` `verifyMandateChainFromPin(BAKED_PIN, ca-track
+mandates)` → `verifyCaEndorsements(...)`.
+
+**Step 1 — dry-run the lease (no token, no write).** Preview the EXACT
+canonical bytes + the `.maintainers` diff:
+```sh
+cd maintainers
+node packages/cli/bin/maintainers ca-endorsement \
+  --ca-pubkey <64-hex live hot CA pubkey> \
+  --scope flagship/directory-attestation \
+  --duration 7d --track ca \
+  --signing-key yubikey-piv:slot=9c \
+  --path ../.maintainers --dry-run
+```
+The `--ca-pubkey` MUST be the pubkey of the live `FLAGSHIP_CA_PRIV_HEX`
+Worker secret (derive it: `node scripts/rotate-ca.mjs status` shows the
+served key). `--scope` is the free-form consumer scope per spec §7;
+`flagship/directory-attestation` is the convention. The window is
+NOW→+~7d (`--duration 7d`).
+
+**Step 2 — sign it (YubiKey ceremony).** Re-run without `--dry-run`;
+the ca-track holder (key #1, the genesis authority `2137e739…71d7`)
+signs on the YubiKey after the typed `CA-LEASE` confirmation + PIN +
+physical tap. It writes
+`.maintainers/ca-endorsements/<ts>-<id>.json`.
+
+**Step 3 — local verify BEFORE committing (mirror `rotate-ca.mjs`).**
+This is the operator pre-flight — the authoritative check still runs
+consumer-side, but never commit a lease that fails this:
+```sh
+node scripts/rotate-ca.mjs status     # the new lease must list as LIVE/SERVED
+```
+Confirm, against the just-written file: (1) `now` is within
+`[notBefore, notAfter)`; (2) `signedBy` == the current ca-track
+authority (key #1) and is present in `signatures`; (3) every signature
+verifies over the canonical `CaEndorsement` bytes. (`rotate-ca.mjs
+status` folds all three via `isLeaseLive`.)
+
+**Step 4 — regenerate the Worker bundle.** The daemon reads the
+individual `*.json` files; the Worker has no filesystem and imports the
+flattened array. Regenerate it so the two consumers stay in lockstep:
+```sh
+# from repo root — array of every committed CaEndorsement, filename-sorted
+node -e 'const fs=require("fs"),p=".maintainers/ca-endorsements";\
+const a=fs.readdirSync(p).filter(f=>f.endsWith(".json")&&f!=="bundle.json").sort()\
+.map(f=>JSON.parse(fs.readFileSync(p+"/"+f,"utf8"))).filter(e=>e&&e.kind==="CaEndorsement");\
+fs.writeFileSync(p+"/bundle.json",JSON.stringify(a,null,2)+"\n")'
+```
+Commit BOTH the new `<ts>-<id>.json` AND the regenerated `bundle.json`
+in the same change (PR to `main`).
+
+**Step 5 — deploy in OBSERVE first (still zero behavior change).**
+Deploy the Worker with the committed lease but `CA_ENDORSEMENT_ENFORCE`
+still unset. Verify in the Worker logs that the `ca-gate` structured
+line now reports `"authorized": true` for live
+`pubkey-cert`/`demo-directive` requests. Signing is still unchanged —
+this is the safe confirmation that the chain verifies end-to-end in
+production before anything can fail-close.
+
+**Step 6 — the explicit ENFORCE flip (the irreversible-until-renewed
+arming step).** Only after Step 5 shows `authorized: true`:
+```sh
+cd apps/com
+npx wrangler deploy --var CA_ENDORSEMENT_ENFORCE:true
+# (or set CA_ENDORSEMENT_ENFORCE = "true" under [vars] in wrangler.toml
+#  and `npx wrangler deploy` — the literal string "true" is the ONLY
+#  value that arms ENFORCE; anything else is OBSERVE.)
+```
+From this point, if no valid lease is live the Worker REFUSES to sign
+(`403 ca-gate: no-authorized-ca-keys`) instead of attesting under an
+unauthorized key. **Keep renewing the lease (Operation 1) before
+`notAfter`** — a lapsed lease now means a hard directory-attestation
+outage by design. To stand down, redeploy with
+`CA_ENDORSEMENT_ENFORCE` unset (back to OBSERVE) — instant, no data
+change.
+
+> Forgot Step 5 and went straight to ENFORCE with no live lease? The
+> gate fail-closes every `pubkey-cert`/`demo-directive`. Recovery is a
+> single redeploy with `CA_ENDORSEMENT_ENFORCE` unset; no state is
+> touched. This is why Step 5 (OBSERVE-with-lease) is mandatory.
+
+---
+
 ## Operation 2 — rotate the operational CA key
 
 Use when the hot key may be exposed, or on a hygiene schedule. One

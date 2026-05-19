@@ -44,6 +44,7 @@ import {
   currentAuthority,
   verifyChainOfEndorsements,
   verifyMandateChainFromPin,
+  type CaEndorsement,
   type Mandate,
   type Pubkey,
   type ReleaseEndorsement,
@@ -51,7 +52,11 @@ import {
   type VerifiedChain,
   type VerifiedEndorsements,
 } from "@ibisllc/maintainers";
-import { MAINTAINER_PINNED_MANDATE_HASH } from "@flagship/protocol";
+import {
+  MAINTAINER_PINNED_MANDATE_HASH,
+  type CaTrustChain,
+} from "@flagship/protocol";
+import { makeCaTrustChain } from "./caTrustChain.js";
 
 export type TrackName = "release" | "ca" | "ops" | string;
 
@@ -62,6 +67,15 @@ export interface MaintainersStoreSnapshot {
   /** v2 mandates per track, filename-sorted (canonical-log substitute). */
   mandatesByTrack: Map<TrackName, Mandate[]>;
   endorsements: ReleaseEndorsement[];
+  /**
+   * #30 link-3 input: every committed `CaEndorsement` under
+   * `.maintainers/ca-endorsements/`, filename-sorted. Read with the
+   * same fail-soft discipline as `endorsements` (skip malformed). The
+   * convention is consumed by `caTrustChainFromFolder` →
+   * `makeCaTrustChain`; an empty set ⇒ the #30 chokepoint
+   * fail-closes `no-authorized-ca-keys`.
+   */
+  caEndorsements: CaEndorsement[];
 }
 
 export interface TrackVerdict {
@@ -152,6 +166,32 @@ export function verifiedTrackFromFolder(
   const mandates = store.mandatesByTrack.get(trackName);
   if (!mandates || mandates.length === 0) return null;
   return { chain: verifyMandateChainFromPin(pin, mandates) };
+}
+
+/**
+ * #30 link-2/3, daemon side: build the `CaTrustChain` the protocol
+ * chokepoint (`verifyCaSigned{UserPubKeyBinding,DemoDirective}`)
+ * consults — the forward-from-pin "ca"-track chain + the committed
+ * `.maintainers/ca-endorsements/` leases, wired through
+ * `makeCaTrustChain` (the SAME `@ibisllc/maintainers` `authorizedCaKeys`
+ * the Worker runs). The daemon does not itself currently mint/consume
+ * CA-signed `UserPubKeyBinding`/`DemoDirective` artifacts (that is the
+ * `.com` Worker's role — see apps/com/src/caTrustChainLoader.ts), so
+ * this is provided as the daemon-side convention + parity port: any
+ * future daemon path that verifies a CA artifact MUST route through
+ * this so it enforces the identical gate. Returns a chain even with no
+ * ca-track mandates (it then yields `[]` ⇒ fail-closed) so callers get
+ * a uniform, never-null port.
+ */
+export function caTrustChainFromFolder(
+  opts: ReleaseVerifierOptions,
+): CaTrustChain {
+  const rootDir = path.join(opts.gitRepoPath, ".maintainers");
+  const pin = opts.pinnedMandateHash ?? MAINTAINER_PINNED_MANDATE_HASH;
+  const store = readStoreFromDisk(rootDir);
+  const mandates = store.mandatesByTrack.get("ca") ?? [];
+  const caChain = verifyMandateChainFromPin(pin, mandates);
+  return makeCaTrustChain(caChain, store.caEndorsements);
 }
 
 /**
@@ -335,6 +375,7 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
     rootDirPresent: false,
     mandatesByTrack: new Map(),
     endorsements: [],
+    caEndorsements: [],
   };
   if (!fs.existsSync(rootDir) || !fs.statSync(rootDir).isDirectory()) {
     return out;
@@ -365,6 +406,26 @@ function readStoreFromDisk(rootDir: string): MaintainersStoreSnapshot {
       if (isReleaseEndorsement(parsed)) out.endorsements.push(parsed);
     }
     out.endorsements.sort((a, b) => Date.parse(a.issuedAt) - Date.parse(b.issuedAt));
+  }
+  // #30: the committed CaEndorsement leases. Same fs-only, fail-soft
+  // discipline as the ReleaseEndorsement read above (skip non-JSON /
+  // malformed / wrong-kind). `bundle.json` is the Worker's flattened
+  // mirror, NOT a CaEndorsement — the kind guard naturally skips it.
+  const caEndorsementsDir = path.join(rootDir, "ca-endorsements");
+  if (
+    fs.existsSync(caEndorsementsDir) &&
+    fs.statSync(caEndorsementsDir).isDirectory()
+  ) {
+    for (const f of fs.readdirSync(caEndorsementsDir).sort()) {
+      if (!f.endsWith(".json")) continue;
+      let parsed: unknown;
+      try {
+        parsed = readJson(path.join(caEndorsementsDir, f));
+      } catch {
+        continue;
+      }
+      if (isCaEndorsement(parsed)) out.caEndorsements.push(parsed);
+    }
   }
   return out;
 }
@@ -465,5 +526,30 @@ function isReleaseEndorsement(x: unknown): x is ReleaseEndorsement {
     typeof o.issuedAt === "string" &&
     Array.isArray(o.signatures) &&
     Array.isArray(o.intermediateCommits)
+  );
+}
+
+/**
+ * Shape guard for an on-disk `CaEndorsement` (the #30 lease). Mirrors
+ * `isReleaseEndorsement`'s discipline: a structural pre-filter only —
+ * the AUTHORITATIVE check is `@ibisllc/maintainers`
+ * `verifyCaEndorsements` (signature + window + signedBy == ca-track
+ * authority at NOW), run via `makeCaTrustChain` below.
+ */
+function isCaEndorsement(x: unknown): x is CaEndorsement {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return (
+    o.kind === "CaEndorsement" &&
+    o.version === 1 &&
+    typeof o.endorsementId === "string" &&
+    typeof o.track === "string" &&
+    typeof o.caPubkey === "string" &&
+    typeof o.scope === "string" &&
+    typeof o.notBefore === "string" &&
+    typeof o.notAfter === "string" &&
+    typeof o.issuedAt === "string" &&
+    typeof o.signedBy === "string" &&
+    Array.isArray(o.signatures)
   );
 }
