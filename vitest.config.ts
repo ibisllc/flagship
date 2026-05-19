@@ -8,6 +8,7 @@ export default defineConfig({
       "apps/com/test/**/*.test.ts",
       "apps/dns-broker/test/**/*.test.ts",
       "services/*/tests/**/*.test.ts",
+      "tools/*/tests/**/*.test.ts",
       "scripts/**/*.test.ts",
     ],
     testTimeout: 30_000,

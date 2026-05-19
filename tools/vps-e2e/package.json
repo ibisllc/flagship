@@ -1,0 +1,19 @@
+{
+  "name": "@flagship/vps-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/cli.ts",
+  "bin": {
+    "flagship-create-vps": "./src/cli.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests",
+    "start": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@flagship/protocol": "*"
+  },
+  "license": "BUSL-1.1"
+}
