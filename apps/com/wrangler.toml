@@ -165,6 +165,18 @@ TUNNEL_HUB_URL = "wss://flagship-services.fly.dev:8443/tunnel"
 # direct-CF-token mode below; production routes DNS through the
 # dns-broker Worker via DNS_BROKER_URL.
 CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
+# Arms the #30 maintainer→CA chokepoint: when this is exactly "true"
+# the ca-gate refuses to sign UserPubKeyBinding / DemoDirective unless
+# `authorizedCaKeys(...)` (verified forward from
+# MAINTAINER_PINNED_MANDATE_HASH over the committed ca-track mandates +
+# CaEndorsement bundle) currently lists the live FLAGSHIP_CA_PRIV_HEX
+# pubkey. Any other value = OBSERVE (logs verdict, signs anyway).
+# A LAPSED CaEndorsement under ENFORCE = a hard directory-attestation
+# outage by design. Renew before notAfter; to stand down, remove this
+# line and redeploy (instant, no state change). First armed
+# 2026-05-19 against pubkey 230ad9ed…1cd235cc, lease through
+# 2026-06-02T22:40:29.858Z.
+CA_ENDORSEMENT_ENFORCE = "true"
 # DnsBroker Worker (Task #13) — when set, the main Worker forwards ALL
 # DNS mutations to the broker. Production posture: drop
 # CLOUDFLARE_DNS_API_TOKEN from this Worker entirely and set this var
