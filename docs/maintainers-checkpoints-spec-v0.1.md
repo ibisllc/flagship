@@ -474,17 +474,17 @@ That is enough for a practical v0.1 and strong enough to make the system feel mo
 These do NOT change anything already shipped; they are checkpoint-layer
 specifics to settle so the build is consistent with the LOCKED model:
 
-1. **Authority-proof signing key (§13).** The shipped model is
-   *holder-signs* (the current mandate's `holder` signs
-   ReleaseEndorsement/CaEndorsement) while the `approvalRule`/
-   `successors` quorum governs the *next mandate*. §13 says "satisfy
-   the current mandate approval rule" (= the succession quorum). Decide
-   whether a checkpoint request is **holder-signed** (consistent +
-   operationally light; recommended for routine reaffirms) or
-   **succession-quorum-signed** (heavier, higher assurance). For
-   Flagship's solo-founder threshold-1 these coincide; the choice
-   matters for the general protocol + the bot rule + multi-maintainer
-   adopters.
+1. **Authority-proof signing key (§13). — RESOLVED 2026-05-18 (owner):
+   HOLDER-SIGNS.** A checkpoint request is signed by the *current
+   mandate's `holder`*, identical to how CaEndorsement/ReleaseEndorsement
+   are authorized (the shipped holder-signs model, c4.1) — operationally
+   light; the security-state *change* itself is already quorum-signed by
+   construction (it is a new mandate), so the checkpoint merely witnesses
+   it. The bot's check #5 ("signed by the current maintainer authority")
+   MUST be implemented as *holder-of-the-current-mandate-signed*, NOT
+   the succession quorum; §13's literal "satisfy the current mandate
+   approval rule" wording is superseded by this decision for
+   consistency across the protocol + multi-maintainer adopters.
 2. **Make the checkpoint request a first-class signed envelope.**
    `maintainers.checkpoint.request.v1` should have defined canonical
    bytes (a tagged form analogous to `maintainers/mandate/v1` —
@@ -493,13 +493,12 @@ specifics to settle so the build is consistent with the LOCKED model:
    signed via the existing `signing.ts`, and SHOULD get conformance
    vectors like the other envelopes — so the witness proof is exactly
    as verifiable/portable as the rest of the protocol (not ad-hoc).
-3. **Sequencing vs. Gate B.** Checkpoints are inherently post-genesis
-   (cannot witness a non-existent mandate) and additive ⇒ they do NOT
-   block the genesis ceremony. Either: genesis now → build Phase H →
-   submit Flagship's genesis as the inaugural checkpoint; or build the
-   `checkpoint submit` tooling first → genesis becomes the first
-   checkpoint via that CLI. (Orchestrator recommendation: genesis now;
-   it is the human-gated bottleneck and is already prepped.)
+3. **Sequencing vs. Gate B. — RESOLVED 2026-05-18 (owner): GENESIS
+   NOW, Phase H AFTER.** Run the genesis ceremony immediately; build
+   Phase H as a follow-on and submit Flagship's genesis mandates as the
+   inaugural checkpoint(s) once `maintainers checkpoint submit` exists
+   (the first checkpoint witnesses the genesis retroactively — nothing
+   lost).
 4. **New-repo creation** `github.com/ibisllc/maintainers-checkpoints`
    is a human/credential action (like the governed PR merges) — a
    human gate within the Phase-H build chunk.
