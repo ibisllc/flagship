@@ -1,0 +1,31 @@
+{
+  "kind": "Mandate",
+  "version": 1,
+  "mandateId": "706880c9-477e-4a8c-823c-9f8451b6930f",
+  "track": "ca",
+  "holder": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+  "issuedAt": "2026-05-19T12:08:08.205Z",
+  "expiresAt": "2026-08-27T12:08:08.205Z",
+  "successors": [
+    "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+    "dba78ab5293ed47a462bdef72b8719a167c787f70fdd1391559a1ee53a980392"
+  ],
+  "approvalRule": {
+    "kind": "threshold",
+    "threshold": 1
+  },
+  "minSuccessors": 1,
+  "maxDurationSeconds": 315360000,
+  "defaultDurationSeconds": 8640000,
+  "project": {
+    "name": "flagship",
+    "contact": "hello@harrywinner.com"
+  },
+  "signedBy": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+  "signatures": [
+    {
+      "pubkey": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+      "sig": "3f7a5964827ec0e9cef69084b4223e687f1472c890258fac20fdf582d536fbfb18860687c3bcfb2562fef7bc637765db1556e8f04949b6f472e56b821d43fd05"
+    }
+  ]
+}

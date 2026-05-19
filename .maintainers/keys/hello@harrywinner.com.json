@@ -1,0 +1,21 @@
+{
+  "kind": "KeyFile",
+  "version": 1,
+  "pubkey": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+  "displayName": "Harry Winner",
+  "currentEmail": "hello@harrywinner.com",
+  "emailHistory": [
+    {
+      "email": "hello@harrywinner.com",
+      "from": "2026-05-19T12:07:24.457Z",
+      "to": null
+    }
+  ],
+  "metadata": {
+    "photo": null,
+    "github": null,
+    "role": "maintainer"
+  },
+  "introductionMandate": "00000000-0000-0000-0000-000000000000",
+  "signature": "23fa9382d5fef2b29cabbf68051823af19ce2e480785bd6e07f0a6c177fed34110c713dd832672bb9ba113054fc7b78df9b8b6ffed359bf86cf36e3519242a0f"
+}
