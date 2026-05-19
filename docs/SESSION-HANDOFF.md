@@ -171,6 +171,27 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PR #11 MERGED +
+  re-pinned `c8d3fc0`; next Phase-H chunk 3 = `checkpoint submit` CLI
+  verb):** Owner merged PR #11 (bot validation-rules library). Governed
+  re-pin: `scripts/maintainers.pinned-sha` `b497c5e` →
+  **`c8d3fc0758f18ac4c9f9952a0658c636d0dff22e`** (PR#11 first-parent
+  merge; carries `checkpointBot.ts`), `pull-maintainers.sh pull` (clone
+  detached-clean), re-ran BOTH gates — maintainers `tsc -b` clean +
+  vitest **430/430·39**; flagship `tsc -b` clean (run from repo root
+  with a cwd assertion; a cwd-poisoned first attempt that re-checked
+  the maintainers pkg was caught + corrected — recurring hazard, always
+  assert `pwd` before the flagship gate) — re-installed the pull-wiped
+  `pcsclite`. Pin `c8d3fc0`. **NEXT (program, governed maintainers
+  PR):** Phase-H chunk 3 = the **`maintainers checkpoint submit` CLI
+  verb** — build + holder-sign a `CheckpointRequest` (reusing
+  `signCheckpointRequest`/`canonicalCheckpointRequest`), emit the §9
+  PR payload + a CSV-row preview, byte-preview + typed-confirm + PIN
+  like the other verbs, dry-run + hermetic tests; confined to
+  `packages/cli`. (The thin GitHub-Action shell over `checkpointBot` is
+  chunk 4; the `ibisllc/maintainers-checkpoints` repo creation stays a
+  human gate.)
+
 - **2026-05-19 (v1-launch program session 9 cont. — PHASE H chunk 2:
   bot validation-rules library = governed PR #11 OPEN, awaiting human
   merge):** Fresh subagent built `checkpointBot.ts` —
