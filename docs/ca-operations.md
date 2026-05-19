@@ -211,10 +211,35 @@ change.
 
 ## Operation 2 — rotate the operational CA key
 
-Use when the hot key may be exposed, or on a hygiene schedule. One
-command drives it, in the **safe order** (new lease live *before* the
-key swap, so there is no gap — the old lease keeps serving until its
-own `notAfter`):
+Use when the hot key may be exposed, or on a hygiene schedule. Two
+drivers exist; pick by terminal count.
+
+### Operation 2a — single-terminal driver (recommended)
+
+`scripts/rotate-and-endorse-ca.mjs` is the one-process flow: keygen →
+spawn the maintainers CLI in-process (stdio inherited, so the typed
+`CA-LEASE` + PIN + tap prompts appear right here) → locally verify →
+regen `bundle.json` → `wrangler secret put`. No second terminal, no
+manual `git pull` round-trip. Ordering is fail-safe — if the YubiKey or
+local-verify step fails, Cloudflare is untouched.
+
+```sh
+node scripts/rotate-and-endorse-ca.mjs --dry-run     # CLI dry-run; no signature, no Cloudflare touch
+node scripts/rotate-and-endorse-ca.mjs               # for real (asks before the wrangler step)
+node scripts/rotate-and-endorse-ca.mjs --verify-user <name>   # + post-swap probe
+```
+
+Defaults assume `./maintainers/packages/cli/bin/maintainers` and
+`./apps/com`; override with `--maintainers-cli` / `--com-dir` if your
+maintainers clone lives elsewhere. After it succeeds, commit the
+written `.maintainers/ca-endorsements/<file>.json` + the regenerated
+`bundle.json` together — same PR — then redeploy the Worker in OBSERVE
+first (Operation 1b Step 5), then flip ENFORCE (Step 6).
+
+### Operation 2b — two-trip driver (rotate-ca.mjs, original)
+
+If you'd rather sign the lease in a separate terminal or via the
+web-ui, the original driver still works the same as before:
 
 ```sh
 node scripts/rotate-ca.mjs rotate            # add --dry-run first if unsure
