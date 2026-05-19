@@ -50,12 +50,8 @@ test-results/
 # `@ibisllc/maintainers` (see packages/server-daemon/package.json — exact
 # pin). It is NOT vendored. A standalone clone may still exist at the repo
 # root from older workflows or for local protocol-repo work; keep it
-# untracked. The leading slash anchors this to the repo root so other
-# directories named `maintainers/` (notably apps/web/public/maintainers/
-# for the hosted UI) are NOT affected.
+# untracked (the leading slash anchors this to the repo root). The former
+# hosted `flagshipserver.com/maintainers/` web-ui surface was removed —
+# adopters expose `.maintainers/` via their own git host's GET, public
+# transparency is the checkpoints repo, and operators use the CLI.
 /maintainers/
-
-# The maintainers web-ui bundle under apps/web/public/maintainers/lib/ is
-# a build artifact emitted alongside the host HTML (which IS checked in).
-# Tracking it would just churn the diff.
-apps/web/public/maintainers/lib/

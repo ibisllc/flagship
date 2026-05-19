@@ -1,9 +1,24 @@
 # Maintainers protocol — deployment & operations
 
 Flagship dogfoods the [maintainers protocol](https://github.com/ibisllc/maintainers).
-This doc explains how the protocol's code is consumed, where the UI is
-hosted, what keys it needs, and what's load-bearing for adopters who want
-to set up the same model for their own repository.
+This doc explains how the protocol's code is consumed, what keys it
+needs, and what's load-bearing for adopters who want to set up the same
+model for their own repository.
+
+> **★ 2026-05-19 — the hosted `flagshipserver.com/maintainers/` web-ui
+> surface has been REMOVED (and is NOT coming back).** It was a
+> non-load-bearing convenience viewer: nothing in the trust path ever
+> fetched it (consumers verify-forward from the *baked* pin against the
+> project's own `.maintainers/`, never from a network-served page —
+> §13). The correct, sufficient surfaces are: (1) an adopter exposes
+> their `.maintainers/` folder over their **git host's plain GET**
+> (GitHub/GitLab/Gitea already serve it) — that is the adopter's
+> responsibility, not ours to host; (2) public transparency is the
+> **Maintainers Checkpoints repo** (a mirrorable git repo, by design
+> NOT a service anyone operates); (3) operators use the **`maintainers`
+> CLI**. Hosting webserver/UI code for this is explicitly out of
+> scope. Any reference below to a hosted `/maintainers/` page or its
+> `apps/web/public/maintainers/` bundle is superseded by this note.
 
 > tl;dr — Flagship consumes the **published `@ibisllc/maintainers` npm
 > package** (exact-pinned in `packages/server-daemon/package.json`,
@@ -13,9 +28,9 @@ to set up the same model for their own repository.
 > and the iOS/Android cross-language replays read it from there. The
 > old build-time clone bootstrap (`scripts/pull-maintainers.sh` +
 > `scripts/maintainers.pinned-sha`) has been **removed** — see
-> "Adoption" below. Flagship's hosted UI lives at
-> `flagshipserver.com/maintainers/`, served by the Cloudflare Worker's
-> `[assets]` binding. No keys are required to consume the package; one
+> "Adoption" below. There is **no hosted maintainers web UI** (the
+> former `flagshipserver.com/maintainers/` surface was removed — see
+> the banner above). No keys are required to consume the package; one
 > fine-grained GitHub PAT is required only if you also deploy the
 > Model-A push adapter.
 
@@ -160,29 +175,15 @@ widely-replicated canonical source.**
 
 ---
 
-## Where the UI lives
+## Where the UI lives — N/A (removed 2026-05-19)
 
-For Flagship: **`https://flagshipserver.com/maintainers/`** — a subdirectory
-of the marketing site, served by the same Cloudflare Worker that hosts
-the apex `/`, `/docs`, `/faq`, etc.
-
-Considered and rejected for v1:
-
-- **`maintainers.flagshipserver.com`** — cleaner separation but needs a new
-  DNS record, a route in `wrangler.toml`, and a CORS surface for the
-  adapter Worker. Will revisit if path conflicts arise or if we want a
-  separate Worker for the maintainers UI (e.g., to deploy independently).
-- **`maintainers.ibis.dev`** or another Ibis-LLC-owned domain — most
-  independent narrative ("Ibis LLC publishes maintainers as a separate
-  product, Flagship is an adopter") but adds another Worker + domain +
-  cert to operate. Defer until the protocol has external adopters.
-
-A subdirectory is the cheapest deployment that still gives every adopter
-a copy-paste-able pattern. The Flagship-specific HTML host page lives at
-`apps/web/public/maintainers/index.html`; its compiled web-ui bundle is
-a build artifact under `apps/web/public/maintainers/lib/` (gitignored,
-served by the Worker's `[assets]` binding) — independent of the protocol
-npm dependency described above.
+There is **no hosted maintainers UI**. The former
+`flagshipserver.com/maintainers/` surface (`apps/web/public/maintainers/`)
+was deleted — see the banner at the top of this doc. It was never in the
+trust path. Adopters expose their `.maintainers/` over their git host's
+plain GET; public transparency is the Maintainers Checkpoints repo;
+operators use the `maintainers` CLI. Hosting webserver/UI code for this
+is out of scope.
 
 ---
 
@@ -237,15 +238,14 @@ Adopters who maintain a private fork can publish it to their own
 registry/scope and point the dependency at that — the same exact-pin +
 lockfile-integrity story applies.
 
-### 2. Flagship maintainers UI hosted at `/maintainers/` — **zero keys**
+### 2. Hosted maintainers UI — **removed (N/A)**
 
-The hosted UI is static. It only *reads* the `.maintainers/` folder
-from `ibisllc/flagship` via the public GitHub raw-content URL. No
-authentication needed.
-
-Writes from the hosted UI happen through Model A (below) or Model B
-(user copies the patch and applies it manually via a normal PR). Model
-B requires no keys on the deployer side at all.
+There is no hosted UI (removed 2026-05-19 — see the top banner). A
+`.maintainers/` folder is already readable over its git host's public
+GET; nothing here needs keys. Authority *writes* are the genesis /
+`upsert-mandate` / `ca-endorsement` ceremonies via the `maintainers`
+CLI (Model B: a normal signed PR), and public witnessing is the
+Checkpoints repo — neither requires a deployer-side key.
 
 ### 3. Model-A push adapter (optional) — **one fine-grained PAT**
 
