@@ -488,6 +488,28 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): PR #8 merged + re-pinned 393b7a7 + HUMAN real-terminal selftest PASSED → remaining = rotate PIN + ceremony
+
+Owner merged governed PR #8 (squash `393b7a7` on `origin/main`). Agent
+re-pinned `scripts/maintainers.pinned-sha` `835bbc6`→**`393b7a7`** (fix
+present: `setRawMode(true)`), `pull-maintainers.sh pull` (clone AT the
+pin, clean), re-ran BOTH gates at the pin (maintainers tsc clean +
+**386/386·37·0-failed**; flagship tsc clean — a cwd-poisoning first
+attempt that re-ran the maintainers gate was caught + corrected),
+re-installed `pcsclite`, confirmed `bin/maintainers` + `selftest-pin`
+fail-closed-on-pipe. **★ Owner ran `selftest-pin` in their OWN real
+terminal against the fixed code: PASS — nothing echoed, clean exit,
+non-empty read.** Real-terminal acceptance met by the human directly
+(not agent checkmarks); the spy-can't-prove-it gap is closed. Nothing
+signed; `.maintainers/` clean; pin `393b7a7`. **Remaining (owner, own
+terminal):** rotate the exposed PIV PIN (`ykman piv access change-pin`)
+→ re-run the `ca`-only ceremony (`create-key #1` key#1 `--yes` OK →
+`upsert-mandate --track ca` ORIGIN key#1 NO `--yes` → swap key#2 →
+agent corrected `create-key #2` dry-run `yubikey-piv:slot=9c` → owner
+real `create-key #2`) → agent verifies + records the single ca
+`mandatePinHash` + commits `.maintainers/` → Phase C. Full runbook:
+SESSION-HANDOFF §0 top entry.
+
 ### 2026-05-18 — session 9 (Mac/darwin): PR #7's PIN reader echoed the real PIN + crashed EBADF → OS-level fix is PR #8 OPEN (human-merge gate)
 
 PR #7 merged; agent re-pinned `scripts/maintainers.pinned-sha` →

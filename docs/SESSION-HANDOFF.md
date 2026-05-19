@@ -9,10 +9,13 @@ lives **here, in git**. Rebuild your task list from §3 below.
 Last updated: 2026-05-18 (**v1-launch program session 8/9**, Mac/darwin
 box. **★ READ §0 TOP ENTRY FIRST — it is the full resume anchor.** The
 top entry supersedes the older PR#6/`df992f2` narrative in this header:
-PRs #5/#6/#7 are MERGED, pin advanced to `835bbc6` (PR#7), the real
-ceremony surfaced a PIN-echo+EBADF bug in #7's reader, the OS-level fix
-is **governed PR #8 OPEN — awaiting the human merge** (nothing signed;
-tree clean).
+PRs #5/#6/#7/#8 are MERGED, pin advanced to **`393b7a7`** (PR#8), the
+PIN-echo+EBADF bug from #7's reader is fixed at the OS level, and the
+owner ran `selftest-pin` in their OWN real terminal — **PASS: no echo,
+no crash**. Both gates re-verified at the pin (maintainers tsc clean +
+386/386·37; flagship tsc clean), `pcsclite` re-installed. **NEXT = the
+owner rotates the exposed PIV PIN, then re-runs the `ca`-only ceremony
+in their own terminal** (nothing signed yet; `.maintainers/` clean).
 **GATE-B IN PROGRESS (s8 cont.):** the user provisioned both YubiKeys
 (on-token Ed25519 slot-9c, PIN/PUK/PIN-protected-mgmt-key hardened);
 the orchestrator implemented + **independently LIVE-verified** the
@@ -167,6 +170,45 @@ Gate B remains the only open Phase-1 item, downstream of the v2 redesign
 merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
+
+- **2026-05-19 (v1-launch program session 9 cont. — PR #8 MERGED +
+  re-pinned + HUMAN real-terminal selftest PASSED; ★ REMAINING = rotate
+  PIN + re-run the `ca`-only ceremony; nothing signed, `.maintainers/`
+  clean):** The owner merged governed **PR #8** (squash
+  `393b7a77935ae9b9bb680bd46f0924befb377d0c` on `origin/main`). Agent
+  re-pinned `scripts/maintainers.pinned-sha` `835bbc6` →
+  **`393b7a7`** (PR#8 first-parent merge SHA — fix verified present:
+  `setRawMode(true)`, piv-pin.ts +452), ran `pull-maintainers.sh pull`
+  (clone now detached AT the pin, clean, OFF the feature branch),
+  re-ran BOTH gates at the pin (maintainers `tsc -b` clean + vitest
+  **386/386·37·0-failed** 1.40s; flagship `tsc -b` clean, run from the
+  repo root — a first attempt had a cwd-poisoning bug that re-ran the
+  maintainers gate; caught + corrected), re-installed the non-manifest
+  `pcsclite` (`packages/cli`, resolvable), confirmed `bin/maintainers`
+  runs and `selftest-pin` fail-closes deterministically on piped/
+  non-interactive input. **★ The owner ran `selftest-pin` in their OWN
+  real terminal against the fixed code: PASS — prompt shown, NOTHING
+  echoed, clean exit, non-empty read (a 6-byte dummy; the printed SHA
+  is of the dummy, never a PIN).** That is the real-terminal acceptance
+  gate met directly by the human, not by agent green checkmarks — the
+  exact gap a `setRawMode` spy could not close is now closed.
+  **REMAINING (owner, in their own terminal):** (1) **rotate the
+  exposed PIV PIN** — the original was shown on screen by the #7 bug;
+  `ykman piv access change-pin`. (2) Re-run the `ca`-only ceremony:
+  `node packages/cli/bin/maintainers create-key #1` (key#1 "Harry
+  Winner"/hello@harrywinner.com/maintainer; `--yes` acceptable; PIN +
+  tap) → `upsert-mandate --track ca` ORIGIN (key#1 self-signed;
+  successors=[key#1 `2137e739…71d7`, key#2 `dba78ab5…0392`] both
+  `file:` pubkeys; threshold 1; minSuccessors 1; duration 100d;
+  maxDuration 3650d; project flagship/hello@harrywinner.com; `--path
+  ../.maintainers`; **NO `--yes`** — hand-type `UPSERT-MANDATE` + PIN +
+  tap) → **swap to key#2** → agent-driven corrected `create-key #2`
+  dry-run (`--signing-key yubikey-piv:slot=9c`, NOT `file:`) → owner
+  real `create-key #2` ("Harry Winner (backup)"/
+  hello+backup@harrywinner.com/backup-maintainer). (3) Agent verifies
+  all 3 artifacts + records the single `ca`-track `mandatePinHash` +
+  commits `.maintainers/` → Phase C. Pin `393b7a7`; nothing signed yet;
+  tree clean.
 
 - **2026-05-18 (v1-launch program session 9 — PR #7's PIN reader
   ECHOED the real PIN + crashed `EBADF`; OS-level fix is governed PR #8
