@@ -1,0 +1,18 @@
+{
+  "kind": "CaEndorsement",
+  "version": 1,
+  "endorsementId": "5f02554c-7dec-48f8-8d3e-da0dee00fc20",
+  "track": "ca",
+  "caPubkey": "230ad9ed20e56d79e836690e351cb5538fb4aca9e509d9adc9755da81cd235cc",
+  "scope": "flagship/directory-attestation",
+  "notBefore": "2026-05-19T22:40:29.858Z",
+  "notAfter": "2026-06-02T22:40:29.858Z",
+  "issuedAt": "2026-05-19T22:40:29.858Z",
+  "signedBy": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+  "signatures": [
+    {
+      "pubkey": "2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7",
+      "sig": "7a40f8dd97fed0ff2140283e6c178491ba267069532fa8e2a263629f6a6b9cd0de48e287fd64600343c4e6eb56c923784651ebc6d62c4f54e78905df0b695d02"
+    }
+  ]
+}
