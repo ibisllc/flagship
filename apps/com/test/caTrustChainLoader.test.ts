@@ -31,13 +31,25 @@ import { workerCaTrustChain, caEnforceFromEnv } from "../src/caTrustChainLoader.
 const NOW = Date.parse("2026-06-01T00:00:00.000Z");
 
 describe("workerCaTrustChain — real verifier over the committed assets", () => {
-  // The committed bundle.json is []; the real forward verify anchors a
-  // root at the baked pin but there is no live CaEndorsement ⇒ the
-  // REAL authorizedCaKeys returns []. (A stub returning a hardcoded
-  // key, or one that skipped the lease check, would NOT be empty.)
-  it("real committed chain + empty endorsements ⇒ [] (fail-closed through the real verifier)", () => {
+  // The committed bundle.json now contains the first live CaEndorsement
+  // (Operation 1b ceremony 2026-05-19 in apps/com). At a NOW within the
+  // lease window the REAL forward-verify resolves to the endorsed
+  // hot-CA pubkey — a 64-hex key, not [] or a stub literal.
+  it("real committed chain at NOW WITHIN the live lease ⇒ a 64-hex endorsed pubkey", () => {
+    const liveNow = Date.parse("2026-05-25T00:00:00.000Z");
     const chain = workerCaTrustChain();
-    expect(chain.authorizedCaKeys(NOW)).toEqual([]);
+    const keys = chain.authorizedCaKeys(liveNow);
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  // At a NOW past every committed lease's notAfter the real verifier
+  // MUST return []. A stub returning a hardcoded key, or one that
+  // skipped the per-request lease check, would not.
+  it("real committed chain at NOW past every lease ⇒ [] (fail-closed via real verifier)", () => {
+    const farFuture = Date.parse("2099-01-01T00:00:00.000Z");
+    const chain = workerCaTrustChain();
+    expect(chain.authorizedCaKeys(farFuture)).toEqual([]);
   });
 
   // Prove the loader is anchored at the SAME baked pin every other
