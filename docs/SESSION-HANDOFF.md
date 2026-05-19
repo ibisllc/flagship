@@ -171,6 +171,31 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — ★★ GATE B / PHASE
+  B COMPLETE: the genesis is SIGNED, VERIFIED, and COMMITTED; entering
+  Phase C):** `create-key #2` (backup persona, key#2 `dba78ab5…0392`,
+  after PIN-rotate + token swap; agent-driven corrected dry-run
+  confirmed key#2 not key#1, then owner real run) wrote
+  `keys/hello+backup@harrywinner.com.json`. Final independent
+  verification of the COMPLETE store: 2 self-signed KeyFiles (key#1
+  maintainer, key#2 backup-maintainer) + the unchanged ca ORIGIN
+  mandate; `verify` exit 0 (`verify: OK`); `status` ca anchored 1/1
+  valid; **`mandatePinHash()` recomputed from the STORED FILE via the
+  protocol's own canonicalizer = the recorded anchor
+  `5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae`
+  exactly**; mandate carries `signedBy`+`signatures`. Committed
+  atomically to flagship `main` **`1b86908`** (3 artifacts only; no
+  `Co-Authored-By`; `.maintainers/` now fully tracked). The
+  #7-exposed key#1 PIN was rotated by the owner (does not affect the
+  signed mandate). **Gate B is satisfied; nothing deployed.** **NEXT =
+  PHASE C** (#30/#9/#10): bake the SAME anchor
+  `5016749377de…01ae` into FOUR surfaces — `@flagship/protocol`
+  `maintainerCa.ts` `MAINTAINER_PINNED_MANDATE_HASH` (covers daemon #8
+  + webapp #9 via the const), iOS (Swift), Android (Kotlin) — then
+  re-gate + the c5 portable conformance replay so no surface ships
+  with an empty/wrong pin. Pin `393b7a7`; agent-doable (code, not
+  hardware).
+
 - **2026-05-19 (v1-launch program session 9 cont. — ★ GENESIS `ca`
   ORIGIN SIGNED + independently verified; the root of trust now
   EXISTS; REMAINING = rotate the exposed key#1 PIN + create-key#2

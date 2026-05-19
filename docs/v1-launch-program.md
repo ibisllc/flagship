@@ -488,6 +488,23 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): ★★ GATE B / PHASE B COMPLETE — genesis signed, verified, committed (1b86908); entering Phase C
+
+After PIN-rotate + token swap, the agent-driven corrected
+`create-key #2` dry-run confirmed key#2 (`dba78ab5…0392`, not key#1);
+owner ran the real `create-key #2` → `keys/hello+backup@harrywinner.com.json`.
+Final independent verification of the complete store: 2 self-signed
+KeyFiles + the unchanged ca ORIGIN mandate; `verify: OK` (exit 0);
+`status` ca anchored 1/1 valid; **`mandatePinHash()` recomputed from
+the stored file via the protocol canonicalizer = the recorded anchor
+`5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae`**.
+Committed atomically to flagship `main` `1b86908` (3 artifacts, no
+Co-Authored-By). Gate B satisfied; nothing deployed. Phase B (#6) →
+**complete**; Phase C (#7) → **in progress**: bake the same anchor
+into the four surfaces (protocol-const → daemon + webapp; iOS;
+Android), re-gate + c5 conformance replay. Detail + anchor:
+SESSION-HANDOFF §0 top entry.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): ★ GENESIS `ca` ORIGIN SIGNED + independently verified — the root of trust EXISTS
 
 Owner ran the real ceremony at pin `393b7a7`: `create-key #1` (2nd
