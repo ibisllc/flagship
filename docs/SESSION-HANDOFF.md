@@ -163,6 +163,47 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8 cont. — the REAL `ca`
+  ceremony surfaced + fixed a 2nd deferred-seam gap; PR #7 open):**
+  The owner ran the real `create-key #1` (ca-only scope). First via
+  Claude's `!` prefix → the typed-confirm correctly **fail-closed**
+  (non-interactive; nothing signed — the ceremony hardening working).
+  Re-run in the owner's real terminal → typed `CREATE-KEY` accepted,
+  then `error: yubikey-piv: a PIN provider is required (the command
+  must prompt; the PIN is never read from argv and never logged)`.
+  **Verify-before-trust root cause:** `defaultEnv` (index.ts) wired
+  `pivTransport` but **never `pivPin`** — the interactive PIN reader
+  existed only as an injectable seam; dry-runs never exercised it (they
+  do the no-PIN public read), so the REAL ceremony is the first thing
+  that needs a PIN and it correctly fail-closed (nothing signed).
+  **Owner UX point conceded + recorded:** the hand-typed confirm is
+  over-gatekeeping for the non-load-bearing/redoable `create-key`
+  (`--yes` is acceptable there — already works, verified); keep it
+  mandatory only for the irreversible `upsert-mandate`/`ca-endorsement`.
+  Fix landed on `feat/gate-b-piv-pin-provider` **`c67c788`** (governed
+  **PR #7 open**): new `packages/cli/src/lib/piv-pin.ts` `pivPinFromTty`
+  + `defaultEnv.pivPin` wiring. Orchestrator READ the actual code +
+  verified the security contract (no-echo `/dev/tty` not the stdin
+  pipe; never argv/env/file/log/error/stack; non-interactive ⇒
+  deterministic CliError BEFORE opening any device — never hangs/
+  fabricates; one prompt, no auto-retry ⇒ never burns the 3-try
+  counter; fd always closed; no fallback) + re-ran both gates
+  (maintainers tsc clean + vitest **372/36 → 379/37**, +7 hermetic, 0
+  failed, 1.37s hardware-independent; flagship tsc clean). Confined to
+  index.ts(+14) + 2 new piv-pin files; protocol/canonical/piv-apdu/
+  connectPcscChannel/the upsert-mandate-confirm untouched; pin
+  `ce6691c` unchanged. **The PIN must NEVER transit the agent** — it
+  is read no-echo locally; the owner's real ceremony run post-merge IS
+  the live end-to-end verification. **Next:** merge PR #7 → agent
+  re-pins to its first-parent merge SHA + reruns both gates +
+  re-installs the `pcsclite` ceremony dep → owner re-runs the
+  `ca`-only ceremony **in their own terminal** (create-key#1 →
+  upsert-mandate --track ca ORIGIN, both key#1; then swap to key#2 →
+  agent-driven corrected create-key#2 dry-run → owner real
+  create-key#2) → agent verifies + records the single ca
+  `mandatePinHash` + commits `.maintainers/`. Nothing signed yet; tree
+  clean.
+
 - **2026-05-18 (v1-launch program session 8 cont. — genesis SCOPE
   decided: `ca` ONLY; ops dropped; release deferred):** After a
   multi-turn simplicity/threat-model dialogue (the owner pushed hard

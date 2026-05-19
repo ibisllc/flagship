@@ -488,6 +488,28 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-18 — session 8 cont. (Mac/darwin): real ca-ceremony surfaced + fixed the PIN-provider gap (PR #7 open)
+
+The real `create-key #1` run hit `error: yubikey-piv: a PIN provider
+is required …` — `defaultEnv` wired `pivTransport` but not `pivPin`
+(the interactive PIN reader was an unwired injectable seam; dry-runs
+never exercised it; the ceremony correctly fail-closed, nothing
+signed). Also confirmed Claude's `!` prefix can't run the real
+ceremony (non-interactive ⇒ typed-confirm fail-closes — correct);
+real runs must be in the owner's own terminal. Conceded: `--yes` is
+fine for the non-load-bearing `create-key` confirm (already works);
+keep it mandatory for `upsert-mandate`/`ca-endorsement`. Fix:
+`feat/gate-b-piv-pin-provider` `c67c788` (governed **PR #7 open**) —
+`piv-pin.ts` `pivPinFromTty()` + `defaultEnv.pivPin`; security
+contract verified by reading the code (no-echo /dev/tty, never
+argv/env/file/log/error, non-interactive deterministic fail-closed
+before any device, no auto-retry, fd closed, no fallback); both gates
+re-run (maintainers 372/36 → 379/37 +7 hermetic 0-failed; flagship
+tsc clean); confined; pin ce6691c unchanged; the PIN never transits
+the agent. Next: merge PR #7 → re-pin + re-install pcsclite → owner
+re-runs the ca-only ceremony in their own terminal → record the
+single ca mandatePinHash + commit `.maintainers/`.
+
 ### 2026-05-18 — session 8 cont. (Mac/darwin): genesis scope decided — `ca` ONLY (ops dropped, release deferred); ceremony about to run
 
 Multi-turn simplicity/threat-model + TUF-comparison dialogue with the
