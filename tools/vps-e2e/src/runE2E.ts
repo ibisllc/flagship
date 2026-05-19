@@ -46,9 +46,13 @@ import type {
 } from "./ports.js";
 
 const GATED_BYOK =
-  "BYOK vibe-app cannot call the user's LLM provider: " +
-  "packages/server-daemon/src/llm/vibeCodeSession.ts never loads the " +
-  "stored provider key. Expected-fail until that wiring lands.";
+  "BYOK vibe-app cannot YET answer end-to-end on a live VPS: the " +
+  "daemon runtime IS now wired (packages/server-daemon/src/appByokStore.ts " +
+  "+ appByokRuntime.ts seal a per-app provider key at rest and the " +
+  "appProxy answers /.flagship/llm/chat with it), but no order/protocol " +
+  "carrier yet ships the user's key from the phone/webapp through the " +
+  "signed envelope to deploySession.resolveByok. Expected-fail until " +
+  "that @flagship/protocol + webapp carrier lands.";
 
 const GATED_CA =
   "Served pubkey-cert is signed with the raw FLAGSHIP_CA_PRIV_HEX and " +

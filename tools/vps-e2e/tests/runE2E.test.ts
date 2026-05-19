@@ -185,7 +185,9 @@ describe("runE2E orchestration core", () => {
       expect(byName[n]!.status).toBe("pass");
     }
     expect(byName["byokVibeApp"]!.status).toBe("known-gated");
-    expect(byName["byokVibeApp"]!.gatedReason).toMatch(/vibeCodeSession\.ts/);
+    expect(byName["byokVibeApp"]!.gatedReason).toMatch(
+      /appByokRuntime\.ts|order\/protocol carrier/,
+    );
     expect(byName["assertCaAuthorized"]!.status).toBe("known-gated");
     expect(byName["assertCaAuthorized"]!.gatedReason).toMatch(
       /CaEndorsement|caTrustChain\.ts/,

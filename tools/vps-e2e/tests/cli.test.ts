@@ -50,7 +50,7 @@ describe("renderPlan", () => {
     expect(txt).toMatch(/byokVibeApp \[KNOWN-GATED\]/);
     expect(txt).toMatch(/assertCaAuthorized \[KNOWN-GATED\]/);
     expect(txt).toMatch(/teardown \[ALWAYS — try\/finally\]/);
-    expect(txt).toMatch(/vibeCodeSession\.ts/);
+    expect(txt).toMatch(/appByokRuntime\.ts|order\/protocol carrier/);
     expect(txt).toMatch(/CaEndorsement/);
   });
 });

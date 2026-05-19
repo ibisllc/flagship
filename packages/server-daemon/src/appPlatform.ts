@@ -106,6 +106,14 @@ export interface AppPlatformDeps {
     appId: string;
     canonicalUrl: string;
   }) => Promise<{ currentTip: string }>) | null;
+  /**
+   * Per-app BYOK provider-key store. When set, install persists the
+   * app's own `{providerId, apiKey, baseUrl?}` (when the caller supplies
+   * one) so the runtime LLM-call seam can resolve it later; uninstall
+   * forgets it. The key is sealed at rest by the store itself. Optional
+   * — when null, BYOK apps simply can't make their own provider calls.
+   */
+  byokStore?: import("./appByokStore.js").AppByokStore | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -187,6 +195,14 @@ export class AppPlatform {
     verify: (req: InstallAppRequest, sig: Bytes, irkPub: Bytes) => boolean;
     /** For tests + future port allocators. Default picks a random 49152–65535. */
     pickPort?: () => number;
+    /**
+     * The user's own LLM provider config for this app, if any. Persisted
+     * to `deps.byokStore` (sealed at rest by the store). This is a
+     * daemon-internal arg — it is deliberately NOT part of the signed
+     * `InstallAppRequest` protocol envelope, so it never crosses the
+     * `@flagship/protocol` boundary.
+     */
+    byok?: import("./appByokStore.js").AppByokConfig;
   }): Promise<InstallResult> {
     const { request: r, signature, verify } = args;
 
@@ -352,6 +368,18 @@ export class AppPlatform {
       }
     }
 
+    // Persist the app's own BYOK provider config (sealed at rest by the
+    // store) so the runtime LLM-call seam can resolve it later. Scoped
+    // strictly to this appId. A persist hiccup shouldn't kill the
+    // install — the app just can't make BYOK calls until reconfigured.
+    if (args.byok && this.deps.byokStore) {
+      try {
+        await this.deps.byokStore.put(appId, args.byok);
+      } catch {
+        // soft failure; never surface the key in a thrown error
+      }
+    }
+
     return { ok: true, app: installed };
   }
 
@@ -429,6 +457,10 @@ export class AppPlatform {
     // call back; idempotent + best-effort.
     if (this.deps.appAuthTokens) {
       await this.deps.appAuthTokens.forget(appId).catch(() => {});
+    }
+    // Drop the app's BYOK provider key so it doesn't outlive the app.
+    if (this.deps.byokStore) {
+      await this.deps.byokStore.forget(appId).catch(() => {});
     }
     // Browser feature: close any tabs the app opened, then revoke its
     // domain grant. Order matters — close tabs first so the gate is
