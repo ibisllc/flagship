@@ -508,6 +508,23 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): Phase H chunk 3 — `checkpoint submit` CLI verb = governed PR #12 OPEN
+
+PR #11 merged → re-pinned `c8d3fc0`. Chunk 3: fresh subagent added the
+`maintainers checkpoint submit` verb (mirrors caEndorsement; byte-
+preview+typed-confirm+PIN; emits the §9 payload, no network dep). Key:
+the emitted payload carries a real signed CheckpointRequest and §9
+replay-binding holds by construction; a hermetic round-trip test feeds
+it into the chunk-2 `validateCheckpointSubmission` ⇒ accept:true (+
+tamper⇒request-repo-mismatch) — chunks 2&3 provably compose. Audited
+(confined to packages/cli; protocol/conformance/docs/wizard git-clean;
+no --yes weakening) + re-ran gates: maintainers tsc clean + **442/40**
+(+12; conformance 30 / wizard 12 / checkpointBot 22 unchanged);
+flagship tsc clean. Branch `feat/checkpoint-submit-cli` off `c8d3fc0`,
+pushed, **governed PR #12 OPEN** — awaiting human merge → re-pin. After
+#12: chunk 4 = the thin GH-Action shell (last agent-doable Phase-H
+unit; repo creation = human gate). Detail: SESSION-HANDOFF §0 top.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): Phase H chunk 2 — bot validation-rules library = governed PR #11 OPEN
 
 PR #10 merged → re-pinned `b497c5e` (gates 408/38). Next chunk: fresh

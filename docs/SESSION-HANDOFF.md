@@ -171,6 +171,41 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PHASE H chunk 3:
+  `maintainers checkpoint submit` CLI verb = governed PR #12 OPEN,
+  awaiting human merge):** Fresh subagent added `commands/
+  checkpointSubmit.ts` mirroring `caEndorsement.ts` (pure assemble →
+  `previewConfirmSign` banner+byte-preview+typed `CHECKPOINT-SUBMIT`
+  confirm+PIN → `signCheckpointRequestWith`); dispatch `checkpoint
+  submit`; ceremony kind+banner; H_new from a local `.maintainers`
+  store (verify.ts way) or `--current-mandate-hash` (`sha256:<64hex>`);
+  `--source-commit` advisory; PR-open NOT bundled (no net dep — emits
+  payload + `gh` instructions). **★ Integration verified:** the emitted
+  §9 payload carries a REAL signed `CheckpointRequest`
+  (`proof.request === botPayload.request`); §9 replay-binding holds BY
+  CONSTRUCTION (every payload field sourced from the signed request);
+  orchestrator confirmed the hermetic ROUND-TRIP test genuinely feeds
+  the verb's `botPayload` + a matching verified chain into
+  `validateCheckpointSubmission` ⇒ `accept:true`+expected row, and the
+  TAMPER negative ⇒ `request-repo-mismatch` — chunk-3↔chunk-2 provably
+  compose. Verify-before-trust: confined scope (4 `packages/cli`
+  files; protocol/conformance/docs/wizard **git-clean**), no `--yes`
+  weakening (reuses `previewConfirmSign`/`signAssembled` verbatim),
+  non-interactive deterministic fail-closed, re-ran gates independently
+  — maintainers `tsc -b` clean + vitest **442/442·40** (was 430/39;
+  +12 hermetic `checkpointSubmit.test.ts`; conformance 30 / wizard 12 /
+  checkpointBot 22 unchanged; 0 failed); flagship `tsc -b` clean (repo
+  root, cwd asserted). Branch `feat/checkpoint-submit-cli` off pin
+  `c8d3fc0` (no `Co-Authored-By`), pushed, **governed PR #12 OPEN**
+  (https://github.com/ibisllc/maintainers/pull/12). **★ NEXT —
+  HUMAN-MERGE GATE:** owner merges #12 → agent re-pins → pull →
+  re-gate → `npm i pcsclite --no-save`. Pin `c8d3fc0` until #12
+  merges. After #12: Phase-H **chunk 4 = the thin GitHub-Action shell**
+  over `validateCheckpointSubmission` (octokit/fs glue; lightly
+  unit-testable with injected fakes) — the LAST agent-doable Phase-H
+  unit; the `ibisllc/maintainers-checkpoints` repo creation + the
+  first real checkpoint submission are human/credential gates.
+
 - **2026-05-19 (v1-launch program session 9 cont. — PR #11 MERGED +
   re-pinned `c8d3fc0`; next Phase-H chunk 3 = `checkpoint submit` CLI
   verb):** Owner merged PR #11 (bot validation-rules library). Governed
