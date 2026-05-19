@@ -508,6 +508,22 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): PR #9 MERGED + re-pinned 5a3079e; checkpoint spec refined; main pushed
+
+Owner authorized push + merge. PR #9 (guided menu wizard) squash-merged
+→ `5a3079e`; governed re-pin `393b7a7`→`5a3079e` + pull + re-gate
+(maintainers tsc clean + 398/38 incl wizard 12 / conformance 20;
+flagship tsc clean) + pcsclite re-installed. Checkpoint spec (Phase H)
+refined per 3 owner messages (`6d8c6a2`, draft): rule 11 fails OPEN
+with `flagged=rate-cap` + auto manual-verify ticket (never rejects);
+4-col CSV `observed_at,track,current_mandate_hash,flagged`; prunable
+witness (flagged + middle-chain rows droppable; security rests on the
+project's own gap-free chain; completeness §3 non-goal; graceful
+degradation §19; honest caveat: pruning costs value not safety). Repo
+git identity set local `Harry Winner <kamdemharry@gmail.com>`
+(auto-detect broke). `main` pushed to origin (whole session + owner's
+260e426 + spec edit + re-pin). Detail: SESSION-HANDOFF §0 top.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): Phase D started — guided menu wizard = governed PR #9 OPEN
 
 Per owner steering (CLI first-class), fresh subagent added a guided

@@ -171,6 +171,35 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PR #9 MERGED +
+  re-pinned `5a3079e`; checkpoint spec refined; `main` pushed to
+  origin):** Owner authorized: push `main` + merge PR #9. PR #9
+  (guided menu wizard) squash-merged → **`5a3079e4f9d7ee212abdf64838249de6f61d8bd0`**
+  (on origin/main, carries `lib/wizard.ts`+index wiring). Agent ran the
+  governed re-pin: `scripts/maintainers.pinned-sha` `393b7a7` →
+  **`5a3079e`**, `pull-maintainers.sh pull` (clone detached-clean at
+  the pin, off the deleted feature branch), re-ran BOTH gates at the
+  pin — maintainers `tsc -b` clean + vitest **398/398·38** (wizard 12,
+  conformance 20, 0 failed); flagship `tsc -b` clean — re-installed the
+  pull-wiped `pcsclite` (resolves). **Checkpoint spec (Phase H)
+  refined** per 3 owner messages, committed `6d8c6a2` (reviewable
+  draft): §10 rule 11 now **fails OPEN with a `flagged=rate-cap` row +
+  auto manual-verify ticket** (never rejects — a witness must not
+  refuse mid-incident); CSV is 4-col `observed_at,track,
+  current_mandate_hash,flagged`; the registry is a **prunable witness**
+  (may drop flagged AND ordinary middle-chain rows — security rests on
+  the project's own gap-free `.maintainers/` chain, §11 anchors to any
+  present prior hash; completeness is a §3 non-goal, graceful
+  degradation a §19 property; honest caveat: pruning costs witness
+  value not safety). Git identity auto-detect broke (hostname
+  `Mac.(none)`) → set **repo-local** `Harry Winner
+  <kamdemharry@gmail.com>` (matches owner's own commits; future commits
+  only). `main` (this whole session's verified work + the owner's
+  `260e426` + the spec edit + this re-pin) **pushed to
+  `origin/main`**. Pin `5a3079e`; genesis/Phase-B/C all intact &
+  verified (earlier entries). NEXT: Phase D remainder / Phase H build /
+  Phase F (env-gated) / Phase G — owner's call.
+
 - **2026-05-19 (v1-launch program session 9 cont. — PHASE D started:
   guided menu wizard = governed PR #9 OPEN, awaiting human merge):**
   Per the owner steering (CLI is first-class), a fresh subagent added a
