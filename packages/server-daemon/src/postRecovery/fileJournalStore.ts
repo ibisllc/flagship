@@ -44,7 +44,7 @@ export class FileJournalStore implements JournalStore {
       try {
         const parsed = JSON.parse(trimmed) as EncryptedJournalRow;
         if (
-          typeof parsed.appId === "string" &&
+          typeof parsed.serviceId === "string" &&
           typeof parsed.ivHex === "string" &&
           typeof parsed.ciphertextHex === "string" &&
           typeof parsed.tagHex === "string" &&

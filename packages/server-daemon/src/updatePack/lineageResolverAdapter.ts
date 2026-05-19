@@ -5,7 +5,7 @@
  * Bridges three pre-existing primitives:
  *   - `AppPullStateStore.list()` to find paused apps
  *   - `UpdateClient.acceptLineageBreak` to roll the anchor forward
- *   - `AppPlatform.uninstall` to revoke
+ *   - `ServicePlatform.uninstall` to revoke
  *
  * The webapp / phone use the BFF endpoint; this adapter is what the
  * daemon-side wiring in `index.ts` hands to `buildScreensHttp` so the
@@ -35,11 +35,11 @@ export interface LineageResolverAdapterDeps {
   client: UpdateClient;
   /**
    * Best-effort uninstall hook. Production: a thunk that walks the
-   * AppPlatform.uninstall path (which already drops pull state +
+   * ServicePlatform.uninstall path (which already drops pull state +
    * container + data stores + tabs). Returning `{ ok: false }` is fine
    * — the BFF surfaces that to the phone as a 502.
    */
-  uninstall: (appId: string) => Promise<{ ok: boolean; reason?: string }>;
+  uninstall: (serviceId: string) => Promise<{ ok: boolean; reason?: string }>;
 }
 
 export function buildLineageResolverAdapter(deps: LineageResolverAdapterDeps) {
@@ -53,12 +53,12 @@ export function buildLineageResolverAdapter(deps: LineageResolverAdapterDeps) {
       if (!deps.store.list) return [];
       const appIds = await deps.store.list();
       const out: LineagePauseSummary[] = [];
-      for (const appId of appIds) {
-        const state = await deps.store.get(appId);
+      for (const serviceId of appIds) {
+        const state = await deps.store.get(serviceId);
         if (!state?.lineagePaused || !state.lineagePauseInfo) continue;
         const info = state.lineagePauseInfo;
         out.push({
-          appId,
+          serviceId,
           creator: info.creator,
           slug: info.slug,
           canonicalUrl: info.canonicalUrl,
@@ -74,16 +74,16 @@ export function buildLineageResolverAdapter(deps: LineageResolverAdapterDeps) {
     },
 
     async accept(
-      appId: string,
+      serviceId: string,
     ): Promise<{ ok: boolean; outcome: "accepted" | "already-clear"; reason?: string }> {
-      const r = await deps.client.acceptLineageBreak({ appId });
+      const r = await deps.client.acceptLineageBreak({ serviceId });
       if (!r.ok) return { ok: false, outcome: "already-clear", reason: r.reason };
       return { ok: true, outcome: r.outcome };
     },
 
-    async revoke(appId: string): Promise<{ ok: boolean; reason?: string }> {
+    async revoke(serviceId: string): Promise<{ ok: boolean; reason?: string }> {
       try {
-        return await deps.uninstall(appId);
+        return await deps.uninstall(serviceId);
       } catch (e) {
         return { ok: false, reason: (e as Error).message };
       }

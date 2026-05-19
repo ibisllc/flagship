@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { InMemoryAlertInbox } from "../../src/alertInbox.js";
-import { InMemoryAppAuthTokens } from "../../src/appAuthToken.js";
+import { InMemoryAppAuthTokens } from "../../src/serviceAuthToken.js";
 import { BrowserManager } from "../../src/browser/browserManager.js";
 import { bootstrapBrowserBundle } from "../../src/browser/bootstrap.js";
 import { FakeCdpServer } from "./fakeCdpServer.js";

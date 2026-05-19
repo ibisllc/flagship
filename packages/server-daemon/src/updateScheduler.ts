@@ -2,7 +2,7 @@
  * 6-hour-jittered pull scheduler for the update-pack distribution
  * subsystem.
  *
- * The daemon's `AppPlatform.install` records an `AppPullState` for every
+ * The daemon's `ServicePlatform.install` records an `AppPullState` for every
  * cross-creator app it installs. This scheduler scans the state store on
  * each tick and calls `UpdateClient.pullOne` for each app. Per-app jitter
  * ensures a fleet of subscribers doesn't synchronize their pulls (which
@@ -42,9 +42,9 @@ export interface UpdateSchedulerDeps {
   clearTimeoutImpl?: typeof clearTimeout;
   random?: () => number;
   /** Receive a callback after every per-app pull. Useful for tests + metrics. */
-  onResult?: (appId: string, result: PullResult) => void;
+  onResult?: (serviceId: string, result: PullResult) => void;
   /** Called when a pull throws (the scheduler doesn't propagate). */
-  onError?: (appId: string, err: Error) => void;
+  onError?: (serviceId: string, err: Error) => void;
 }
 
 export class UpdateScheduler {
@@ -101,20 +101,20 @@ export class UpdateScheduler {
     }
     const appIds = await this.deps.store.list();
     const results = new Map<string, PullResult>();
-    for (const appId of appIds) {
-      if (this.running.has(appId)) {
+    for (const serviceId of appIds) {
+      if (this.running.has(serviceId)) {
         // Skip if a previous tick's pull is still in flight.
         continue;
       }
-      this.running.add(appId);
+      this.running.add(serviceId);
       try {
-        const r = await this.deps.client.pullOne({ appId });
-        results.set(appId, r);
-        this.deps.onResult?.(appId, r);
+        const r = await this.deps.client.pullOne({ serviceId });
+        results.set(serviceId, r);
+        this.deps.onResult?.(serviceId, r);
       } catch (e) {
-        this.deps.onError?.(appId, e as Error);
+        this.deps.onError?.(serviceId, e as Error);
       } finally {
-        this.running.delete(appId);
+        this.running.delete(serviceId);
       }
       if (this.perAppGapMs > 0) {
         await new Promise<void>((resolve) =>

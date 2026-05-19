@@ -28,28 +28,28 @@ export class DomainGate {
   private grants = new Map<string, string[]>();
 
   /** Install-time grant: replace this app's allowed domains with the manifest's. */
-  setGrant(appId: string, domains: string[]): void {
+  setGrant(serviceId: string, domains: string[]): void {
     // Defensive copy so callers can't mutate after the fact.
-    this.grants.set(appId, [...domains]);
+    this.grants.set(serviceId, [...domains]);
   }
 
   /** Drop the grant entirely (uninstall). After this, every check returns deny. */
-  revoke(appId: string): void {
-    this.grants.delete(appId);
+  revoke(serviceId: string): void {
+    this.grants.delete(serviceId);
   }
 
   /** True if a grant exists for the app (whether or not a specific URL is allowed). */
-  hasGrant(appId: string): boolean {
-    return this.grants.has(appId);
+  hasGrant(serviceId: string): boolean {
+    return this.grants.has(serviceId);
   }
 
   /** Snapshot for diagnostics / phone display. */
-  grantsFor(appId: string): string[] {
-    return [...(this.grants.get(appId) ?? [])];
+  grantsFor(serviceId: string): string[] {
+    return [...(this.grants.get(serviceId) ?? [])];
   }
 
   /**
-   * Decide whether `appId` may navigate to `url`. Defense rules:
+   * Decide whether `serviceId` may navigate to `url`. Defense rules:
    *   - URL must parse and use http/https scheme.
    *   - App must have a grant.
    *   - URL's host must match at least one entry under that grant.
@@ -58,8 +58,8 @@ export class DomainGate {
    * + a structured error (so the app knows the manifest needs the
    * domain added, vs a generic 4xx that looks like a bug).
    */
-  check(appId: string, url: string): GateDecision {
-    const entries = this.grants.get(appId);
+  check(serviceId: string, url: string): GateDecision {
+    const entries = this.grants.get(serviceId);
     if (!entries || entries.length === 0) return "deny";
     let host: string;
     try {

@@ -62,33 +62,35 @@ export function deriveSTK(swk: Bytes): Keypair {
 }
 
 /**
- * Per-app secret used by the runtime on a Flagship server. Different apps on
- * the same server have independent secrets, so a stable-id derived for app A
- * cannot be linked to a stable-id derived for app B (privacy by construction —
- * apps cannot cross-link the same person without explicit handshake).
+ * Per-service secret used by the runtime on a Flagship server. Different
+ * services on the same server have independent secrets, so a stable-id
+ * derived for service A cannot be linked to a stable-id derived for service
+ * B (privacy by construction — services cannot cross-link the same person
+ * without explicit handshake).
  */
-export function deriveAppSecret(swk: Bytes, appId: string): Bytes {
+export function deriveServiceSecret(swk: Bytes, serviceId: string): Bytes {
   return hkdf(
     sha256,
     swk,
-    new TextEncoder().encode(appId),
+    new TextEncoder().encode(serviceId),
     new TextEncoder().encode(INFO_APP_SECRET),
     32,
   );
 }
 
 /**
- * Per-app stable member identifier derived from the app's secret and the
- * member's IRK pubkey. Used by Caddy as the value of `X-Flagship-Member`
- * injected on inbound requests. Returns 32 hex chars (16 bytes) for compactness.
+ * Per-service stable member identifier derived from the service's secret
+ * and the member's IRK pubkey. Used by Caddy as the value of
+ * `X-Flagship-Member` injected on inbound requests. Returns 32 hex chars
+ * (16 bytes) for compactness.
  */
-export function deriveAppMemberStableId(
-  appSecret: Bytes,
+export function deriveServiceMemberStableId(
+  serviceSecret: Bytes,
   accepterIrkPub: Bytes,
 ): string {
   const out = hkdf(
     sha256,
-    appSecret,
+    serviceSecret,
     accepterIrkPub,
     new TextEncoder().encode(INFO_APP_MEMBER),
     16,

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ed, signInstallApp, type Keypair } from "@flagship/protocol";
+import { ed, signInstallService, type Keypair } from "@flagship/protocol";
 import {
   decideAccess,
   handleAppRequest,
   stripIdentityHeaders,
   type SessionInfo,
-} from "../src/appProxy.js";
-import { AppPlatform, type InstalledApp } from "../src/appPlatform.js";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+} from "../src/serviceProxy.js";
+import { ServicePlatform, type InstalledService } from "../src/servicePlatform.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import { DataProvisioner, InMemoryPostgresAdmin } from "../src/dataLayer/index.js";
 
 const HOST = "alice";
@@ -31,9 +31,9 @@ const NOOP_CMD: CommandRunner = {
 
 async function makeApp(opts: {
   publicRoutes?: string[];
-}): Promise<{ app: InstalledApp; platform: AppPlatform; hostIrk: Keypair }> {
+}): Promise<{ app: InstalledService; platform: ServicePlatform; hostIrk: Keypair }> {
   const hostIrk = makeKey();
-  const platform = new AppPlatform({
+  const platform = new ServicePlatform({
     host: { username: HOST, irkPub: hostIrk.publicKey },
     swk: fakeSwk(),
     appRunner: new AppRunner(NOOP_CMD),
@@ -63,7 +63,7 @@ async function makeApp(opts: {
   };
   const r = await platform.install({
     request: installReq,
-    signature: signInstallApp(installReq, hostIrk),
+    signature: signInstallService(installReq, hostIrk),
     verify: () => true,
   });
   if (!r.ok) throw new Error(r.reason);
@@ -173,7 +173,7 @@ describe("handleAppRequest — full flow", () => {
     // Client-supplied X-Flagship-* are stripped
     expect(captured!.headers["x-flagship-user"]).toBe("anonymous");
     expect(captured!.headers["x-flagship-role"]).toBe("anonymous");
-    expect(captured!.headers["x-flagship-app-id"]).toBe(app.appId);
+    expect(captured!.headers["x-flagship-app-id"]).toBe(app.serviceId);
     expect(captured!.headers["x-flagship-timestamp"]).toBe("12345");
     expect(captured!.headers["x-flagship-signature"]).toMatch(/^[0-9a-f]{128}$/);
     // Cookies + other headers pass through
@@ -210,7 +210,7 @@ describe("handleAppRequest — full flow", () => {
       },
       now: () => 999,
     });
-    const canonical = `flagship/inject/v1|${app.appId}|anonymous|anonymous|999`;
+    const canonical = `flagship/inject/v1|${app.serviceId}|anonymous|anonymous|999`;
     const sigHex = captured["x-flagship-signature"];
     expect(sigHex).toBeDefined();
     const sig = new Uint8Array(sigHex.length / 2);

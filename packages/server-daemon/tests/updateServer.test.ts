@@ -19,7 +19,7 @@ import {
   type UpdatePullRequest,
 } from "@flagship/protocol";
 import { UpdateServer, type AppDistributionInfo } from "../src/updateServer.js";
-import type { InstalledApp } from "../src/appPlatform.js";
+import type { InstalledService } from "../src/servicePlatform.js";
 import type { HttpRequest } from "../src/runtime.js";
 
 const execFileP = promisify(execFile);
@@ -45,12 +45,12 @@ async function makeRepo(): Promise<{ repo: string; firstCommit: string; secondCo
   return { repo, firstCommit, secondCommit };
 }
 
-function makeApp(creator: string, slug: string): InstalledApp {
-  const appId = `${creator}--${slug}`;
+function makeApp(creator: string, slug: string): InstalledService {
+  const serviceId = `${creator}--${slug}`;
   return {
     creator,
     slug,
-    appId,
+    serviceId,
     manifest: {
       schemaVersion: 1,
       name: slug,
@@ -60,9 +60,9 @@ function makeApp(creator: string, slug: string): InstalledApp {
       network: { subdomain: slug },
       access: { enabled: true, defaultRole: "viewer", publicRoutes: ["/"] },
       migration: { portable: true, verification: "standard" },
-    } as InstalledApp["manifest"],
+    } as InstalledService["manifest"],
     urlLabel: slug,
-    membership: undefined as unknown as InstalledApp["membership"],
+    membership: undefined as unknown as InstalledService["membership"],
     containerPort: 0,
     data: null,
     installedAt: 0,
@@ -329,7 +329,7 @@ describe("UpdateServer", () => {
     await rm(subscriber, { recursive: true, force: true });
   });
 
-  it("caches packs by (appId, since, tip) — second hit reuses the cached bundle", async () => {
+  it("caches packs by (serviceId, since, tip) — second hit reuses the cached bundle", async () => {
     const s = makeServer();
     const app = makeApp("alice", "game1");
     const pull: UpdatePullRequest = {

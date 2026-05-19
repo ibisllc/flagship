@@ -14,7 +14,7 @@
  *
  *   await startDaemonRuntime({
  *     ...,
- *     appPlatform: {
+ *     servicePlatform: {
  *       ...,
  *       appAuthTokens: bundle.appAuthTokens,
  *       domainGate: bundle.domainGate,
@@ -34,7 +34,7 @@
 import { join } from "node:path";
 import type { AlertInbox } from "../alertInbox.js";
 import type { PairedSessionGate } from "../alertInboxHttp.js";
-import { FileAppAuthTokens, type AppAuthTokens } from "../appAuthToken.js";
+import { FileAppAuthTokens, type AppAuthTokens } from "../serviceAuthToken.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { buildBrowserApiHandlers } from "./apiHandlers.js";
 import { BrowserManager } from "./browserManager.js";

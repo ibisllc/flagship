@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  deriveAppMemberStableId,
-  deriveAppSecret,
+  deriveServiceMemberStableId,
+  deriveServiceSecret,
   deriveBAK,
   deriveIRK,
   deriveSWK,
@@ -71,37 +71,37 @@ describe("per-app stable identity", () => {
   const accepter1 = deriveIRK({ seed: new Uint8Array(32).fill(55) }).publicKey;
   const accepter2 = deriveIRK({ seed: new Uint8Array(32).fill(66) }).publicKey;
 
-  it("deriveAppSecret is deterministic for (swk, appId)", () => {
-    expect(deriveAppSecret(swk, "habit-tracker")).toEqual(deriveAppSecret(swk, "habit-tracker"));
+  it("deriveServiceSecret is deterministic for (swk, appId)", () => {
+    expect(deriveServiceSecret(swk, "habit-tracker")).toEqual(deriveServiceSecret(swk, "habit-tracker"));
   });
 
-  it("deriveAppSecret differs by appId", () => {
-    expect(deriveAppSecret(swk, "habit-tracker")).not.toEqual(deriveAppSecret(swk, "photos"));
+  it("deriveServiceSecret differs by appId", () => {
+    expect(deriveServiceSecret(swk, "habit-tracker")).not.toEqual(deriveServiceSecret(swk, "photos"));
   });
 
   it("stable id is deterministic for (appSecret, irkPub)", () => {
-    const sec = deriveAppSecret(swk, "habit-tracker");
-    expect(deriveAppMemberStableId(sec, accepter1)).toEqual(deriveAppMemberStableId(sec, accepter1));
+    const sec = deriveServiceSecret(swk, "habit-tracker");
+    expect(deriveServiceMemberStableId(sec, accepter1)).toEqual(deriveServiceMemberStableId(sec, accepter1));
   });
 
   it("same person across two apps gets DIFFERENT stable IDs (privacy)", () => {
-    const secA = deriveAppSecret(swk, "habit-tracker");
-    const secB = deriveAppSecret(swk, "photos");
-    const idA = deriveAppMemberStableId(secA, accepter1);
-    const idB = deriveAppMemberStableId(secB, accepter1);
+    const secA = deriveServiceSecret(swk, "habit-tracker");
+    const secB = deriveServiceSecret(swk, "photos");
+    const idA = deriveServiceMemberStableId(secA, accepter1);
+    const idB = deriveServiceMemberStableId(secB, accepter1);
     expect(idA).not.toEqual(idB);
   });
 
   it("two different people in the same app get different stable IDs", () => {
-    const sec = deriveAppSecret(swk, "habit-tracker");
-    expect(deriveAppMemberStableId(sec, accepter1)).not.toEqual(
-      deriveAppMemberStableId(sec, accepter2),
+    const sec = deriveServiceSecret(swk, "habit-tracker");
+    expect(deriveServiceMemberStableId(sec, accepter1)).not.toEqual(
+      deriveServiceMemberStableId(sec, accepter2),
     );
   });
 
   it("stable id is 32 hex chars (16 bytes), short enough for headers and URLs", () => {
-    const sec = deriveAppSecret(swk, "habit-tracker");
-    const id = deriveAppMemberStableId(sec, accepter1);
+    const sec = deriveServiceSecret(swk, "habit-tracker");
+    const id = deriveServiceMemberStableId(sec, accepter1);
     expect(id).toMatch(/^[0-9a-f]{32}$/);
   });
 });

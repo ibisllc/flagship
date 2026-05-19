@@ -1,7 +1,7 @@
 /**
  * Full app-install end-to-end smoke. Assumes:
  *
- *   - A daemon is running with AppPlatform configured (host IRK +
+ *   - A daemon is running with ServicePlatform configured (host IRK +
  *     SWK supplied via FLAGSHIP_HOST_IRK_PUB_HEX + FLAGSHIP_SWK_HEX).
  *   - The data-services compose stack is up.
  *   - The daemon's local HTTP API is reachable at the URL passed in
@@ -15,18 +15,18 @@
  *     npx tsx scripts/smoke-app-install.ts
  *
  * Steps:
- *   1. POST /api/apps with a tiny demo manifest (nginx, no data
+ *   1. POST /api/services with a tiny demo manifest (nginx, no data
  *      stores).
- *   2. GET /api/apps to confirm it landed.
+ *   2. GET /api/services to confirm it landed.
  *   3. curl the resulting URL (collapsed because creator===host) and
  *      check we got a 200 from nginx.
- *   4. DELETE /api/apps/<appId> to clean up.
+ *   4. DELETE /api/services/<serviceId> to clean up.
  *
  * If any step fails, the script exits non-zero and the partial state
  * is left on the box for inspection.
  */
 
-import { ed, signInstallApp, signUninstallApp, type Keypair } from "@flagship/protocol";
+import { ed, signInstallService, signUninstallService, type Keypair } from "@flagship/protocol";
 
 const API = process.env.FLAGSHIP_DAEMON_API ?? "https://home.alice.flagship.services";
 const SUBDOMAIN = process.env.FLAGSHIP_SUBDOMAIN ?? "home.alice.flagship.services";
@@ -107,8 +107,8 @@ async function main(): Promise<void> {
     addOwnerToMembership: true,
     issuedAt: Date.now(),
   };
-  const installSig = signInstallApp(installReq, irk);
-  const installRes = await postJson("/api/apps", {
+  const installSig = signInstallService(installReq, irk);
+  const installRes = await postJson("/api/services", {
     request: installReq,
     signature: bytesToHex(installSig),
   });
@@ -116,12 +116,12 @@ async function main(): Promise<void> {
   if (installRes.status !== 200) process.exit(2);
 
   // List
-  const list = await getJson("/api/apps");
-  if (!Array.isArray(list.body?.apps) || !list.body.apps.find((a: { appId: string }) => a.appId === `${CREATOR}--${SLUG}`)) {
-    console.error(`[smoke] app not in /api/apps list`);
+  const list = await getJson("/api/services");
+  if (!Array.isArray(list.body?.apps) || !list.body.apps.find((a: { serviceId: string }) => a.serviceId === `${CREATOR}--${SLUG}`)) {
+    console.error(`[smoke] app not in /api/services list`);
     process.exit(2);
   }
-  console.log(`[smoke] /api/apps → 200, contains ${CREATOR}--${SLUG}`);
+  console.log(`[smoke] /api/services → 200, contains ${CREATOR}--${SLUG}`);
 
   // Hit the public route
   const appUrl = `https://${SLUG}.${SUBDOMAIN}/`;
@@ -143,8 +143,8 @@ async function main(): Promise<void> {
     slug: SLUG,
     issuedAt: Date.now(),
   };
-  const uninstallSig = signUninstallApp(uninstallReq, irk);
-  const cleanup = await deleteJson(`/api/apps/${CREATOR}--${SLUG}`, {
+  const uninstallSig = signUninstallService(uninstallReq, irk);
+  const cleanup = await deleteJson(`/api/services/${CREATOR}--${SLUG}`, {
     request: uninstallReq,
     signature: bytesToHex(uninstallSig),
   });

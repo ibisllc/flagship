@@ -40,7 +40,7 @@ import {
   type Bytes,
   type UpdatePullRequest,
 } from "@flagship/protocol";
-import type { InstalledApp } from "./appPlatform.js";
+import type { InstalledService } from "./servicePlatform.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
 const execFileP = promisify(execFile);
@@ -63,7 +63,7 @@ export interface UpdateServerDeps {
    * lookups can hit a real (file/D1-backed) registry.
    */
   appDistribution: (
-    app: InstalledApp,
+    app: InstalledService,
   ) => Promise<AppDistributionInfo | null> | AppDistributionInfo | null;
 
   /**
@@ -106,7 +106,7 @@ export class UpdateServer {
    * Returns null if the request isn't an update pull (so the proxy can
    * keep going). Otherwise returns the response (success or denial).
    */
-  async handle(app: InstalledApp, req: HttpRequest): Promise<HttpResponse | null> {
+  async handle(app: InstalledService, req: HttpRequest): Promise<HttpResponse | null> {
     if (req.path !== PATH) return null;
     if (req.method !== "GET") {
       return { status: 405, headers: { "content-type": "text/plain" }, body: "method not allowed" };
@@ -188,7 +188,7 @@ export class UpdateServer {
     // Build / fetch from cache.
     let pack: Buffer;
     try {
-      pack = await this.buildPack({ appId: app.appId, repoPath: dist.repoPath, since: pull.since });
+      pack = await this.buildPack({ serviceId: app.serviceId, repoPath: dist.repoPath, since: pull.since });
     } catch (e) {
       return {
         status: 500,
@@ -212,13 +212,13 @@ export class UpdateServer {
    * Build (or read cached) git bundle of commits between `since` and current
    * `main`. `since` empty string means "send full history" (no exclusion).
    *
-   * Cache key: sha256("<appId>|<since>|<currentTip>"). When the canonical
+   * Cache key: sha256("<serviceId>|<since>|<currentTip>"). When the canonical
    * tip advances, the key naturally changes, so old subscribers see a new
    * pack on next request without us having to maintain explicit
    * invalidation. Stale cache entries can be cleaned up by a background
    * job; not on the hot path here.
    */
-  async buildPack(args: { appId: string; repoPath: string; since: string }): Promise<Buffer> {
+  async buildPack(args: { serviceId: string; repoPath: string; since: string }): Promise<Buffer> {
     const tip = await this.repoTip(args.repoPath);
     if (!tip) throw new Error(`repo ${args.repoPath} has no main branch`);
 
@@ -240,8 +240,8 @@ export class UpdateServer {
       range = reachable ? `${args.since}..main` : "main";
     }
 
-    const cacheKey = sha256Hex(`${args.appId}|${args.since}|${tip}|${range}`);
-    const cacheFile = join(this.deps.cacheDir, `${args.appId}-${cacheKey}.bundle`);
+    const cacheKey = sha256Hex(`${args.serviceId}|${args.since}|${tip}|${range}`);
+    const cacheFile = join(this.deps.cacheDir, `${args.serviceId}-${cacheKey}.bundle`);
 
     if (existsSync(cacheFile)) {
       return await readFile(cacheFile);

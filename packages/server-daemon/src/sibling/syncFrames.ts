@@ -6,7 +6,7 @@
  * sibling-app-message routing. This protocol lives on
  * `/.flagship/sibling-sync` and carries routine cert + key sharing
  * between a user's pods. Authoritative state on each pod is the local
- * AppGrant store; sibling-sync just keeps the population eventually
+ * ServiceGrant store; sibling-sync just keeps the population eventually
  * consistent without an authoritative phone round-trip per change.
  *
  * Wire shape: each WS message is one binary blob beginning with a
@@ -22,14 +22,14 @@
  *        STK so a captured binding alone can't impersonate.
  *
  *   0x10 cert-sync-offer — inventory frame. The sender advertises every
- *        AppGrant it currently holds: { grantId, expiresAt, appCanonical,
- *        appInstanceId? }. The peer compares against its own set and
+ *        ServiceGrant it currently holds: { grantId, expiresAt, serviceCanonical,
+ *        serviceInstanceId? }. The peer compares against its own set and
  *        replies with pull-request for grants it lacks (or whose copy
  *        is older — staler-cert-loses).
  *
  *   0x11 pull-request — list of grantIds the sender wants pushed.
  *
- *   0x12 push-cert — full AppGrant + IRK signature. Receiver verifies
+ *   0x12 push-cert — full ServiceGrant + IRK signature. Receiver verifies
  *        the signature against the user's known IRK pubkey, applies if
  *        valid and fresher than what it already holds.
  *
@@ -77,8 +77,8 @@ export interface SyncHelloPayload {
 
 export interface CertInventoryEntry {
   grantId: string;
-  appCanonical: string;
-  appInstanceId?: string;
+  serviceCanonical: string;
+  serviceInstanceId?: string;
   /** ms epoch — recipient uses this for the fresher-cert-wins comparison. */
   issuedAt: number;
   expiresAt: number;
@@ -93,12 +93,12 @@ export interface PullRequestPayload {
 }
 
 export interface PushCertPayload {
-  /** Wire form of AppGrant. */
+  /** Wire form of ServiceGrant. */
   grant: {
     grantId: string;
     username: string;
-    appCanonical: string;
-    appInstanceId?: string;
+    serviceCanonical: string;
+    serviceInstanceId?: string;
     serverDomains: string[];
     serverIdentitiesHex: string[];
     routes: Array<{ url: string; scope: "canonical" | "non-canonical" | "subpath" }>;
@@ -219,7 +219,7 @@ function validatePayload(
         const r = e as Record<string, unknown>;
         if (
           typeof r.grantId !== "string" ||
-          typeof r.appCanonical !== "string" ||
+          typeof r.serviceCanonical !== "string" ||
           typeof r.issuedAt !== "number" ||
           typeof r.expiresAt !== "number"
         ) {
@@ -227,12 +227,12 @@ function validatePayload(
         }
         const entry: CertInventoryEntry = {
           grantId: r.grantId,
-          appCanonical: r.appCanonical,
+          serviceCanonical: r.serviceCanonical,
           issuedAt: r.issuedAt,
           expiresAt: r.expiresAt,
         };
-        if (typeof r.appInstanceId === "string") {
-          entry.appInstanceId = r.appInstanceId;
+        if (typeof r.serviceInstanceId === "string") {
+          entry.serviceInstanceId = r.serviceInstanceId;
         }
         inv.push(entry);
       }
@@ -257,7 +257,7 @@ function validatePayload(
       if (
         typeof g.grantId !== "string" ||
         typeof g.username !== "string" ||
-        typeof g.appCanonical !== "string" ||
+        typeof g.serviceCanonical !== "string" ||
         !Array.isArray(g.serverDomains) ||
         !Array.isArray(g.serverIdentitiesHex) ||
         !Array.isArray(g.routes) ||
@@ -295,15 +295,15 @@ function validatePayload(
       const grant: PushCertPayload["grant"] = {
         grantId: g.grantId,
         username: g.username,
-        appCanonical: g.appCanonical,
+        serviceCanonical: g.serviceCanonical,
         serverDomains: g.serverDomains as string[],
         serverIdentitiesHex: g.serverIdentitiesHex as string[],
         routes,
         issuedAt: g.issuedAt,
         expiresAt: g.expiresAt,
       };
-      if (typeof g.appInstanceId === "string") {
-        grant.appInstanceId = g.appInstanceId;
+      if (typeof g.serviceInstanceId === "string") {
+        grant.serviceInstanceId = g.serviceInstanceId;
       }
       return { ok: true, payload: { grant, signatureHex: o.signatureHex } };
     }

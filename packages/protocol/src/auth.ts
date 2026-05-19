@@ -244,7 +244,7 @@ export interface TunnelHello {
 }
 
 export interface MembershipMutation {
-  appId: string;
+  serviceId: string;
   /** Recipient's IRK pubkey (32 bytes). The platform identifies members by this, never by username/contact. */
   targetIrkPub: Bytes;
   /** Role to assign, or null to remove the member. */
@@ -255,7 +255,7 @@ export interface MembershipMutation {
 export type MigrationMode = "cut" | "copy";
 
 export interface MigrationRequest {
-  appId: string;
+  serviceId: string;
   fromUser: UserId;
   toUser: UserId;
   mode: MigrationMode;
@@ -273,7 +273,7 @@ export interface MigrationRequest {
  * ability to sign an acceptance with an IRK is what grants membership.
  */
 export interface InviteToken {
-  appId: string;
+  serviceId: string;
   /** Role the recipient is invited to (e.g. "member", "parent", "admin"). */
   role: string;
   /** 32 random bytes; doubles as the invite identifier and anti-replay handle. */
@@ -456,28 +456,28 @@ export function legacyFieldGuard(name: string, value: string): void {
 }
 
 function canonicalMembership(m: MembershipMutation): Bytes {
-  legacyFieldGuard("appId", m.appId);
+  legacyFieldGuard("serviceId", m.serviceId);
   legacyFieldGuard("role", m.role ?? "REMOVE");
   return new TextEncoder().encode(
-    `${TAG_MEMBERSHIP}|${m.appId}|${hex(m.targetIrkPub)}|${m.role ?? "REMOVE"}|${m.issuedAt}`,
+    `${TAG_MEMBERSHIP}|${m.serviceId}|${hex(m.targetIrkPub)}|${m.role ?? "REMOVE"}|${m.issuedAt}`,
   );
 }
 
 function canonicalMigration(m: MigrationRequest): Bytes {
-  legacyFieldGuard("appId", m.appId);
+  legacyFieldGuard("serviceId", m.serviceId);
   legacyFieldGuard("fromUser", m.fromUser);
   legacyFieldGuard("toUser", m.toUser);
   legacyFieldGuard("mode", m.mode);
   return new TextEncoder().encode(
-    `${TAG_MIGRATION}|${m.appId}|${m.fromUser}|${m.toUser}|${m.mode}|${m.withData ? "1" : "0"}|${m.issuedAt}`,
+    `${TAG_MIGRATION}|${m.serviceId}|${m.fromUser}|${m.toUser}|${m.mode}|${m.withData ? "1" : "0"}|${m.issuedAt}`,
   );
 }
 
 function canonicalInvite(t: InviteToken): Bytes {
-  legacyFieldGuard("appId", t.appId);
+  legacyFieldGuard("serviceId", t.serviceId);
   legacyFieldGuard("role", t.role);
   return new TextEncoder().encode(
-    `${TAG_INVITE}|${t.appId}|${t.role}|${hex(t.nonce)}|${t.issuedAt}|${t.expiresAt}`,
+    `${TAG_INVITE}|${t.serviceId}|${t.role}|${hex(t.nonce)}|${t.issuedAt}|${t.expiresAt}`,
   );
 }
 
@@ -1127,14 +1127,14 @@ export type PhoneOrder =
        */
       type: "add-subscriber";
       serverId: ServerId;
-      appId: string;
+      serviceId: string;
       fqdn: string;
       issuedAt: number;
     }
   | {
       type: "remove-subscriber";
       serverId: ServerId;
-      appId: string;
+      serviceId: string;
       fqdn: string;
       issuedAt: number;
     }
@@ -1235,11 +1235,11 @@ function canonicalPhoneOrder(o: PhoneOrder): Bytes {
       );
     case "add-subscriber":
       return enc.encode(
-        [TAG_ORDER_ADD_SUBSCRIBER, o.serverId, o.appId, o.fqdn, o.issuedAt].join("|"),
+        [TAG_ORDER_ADD_SUBSCRIBER, o.serverId, o.serviceId, o.fqdn, o.issuedAt].join("|"),
       );
     case "remove-subscriber":
       return enc.encode(
-        [TAG_ORDER_REMOVE_SUBSCRIBER, o.serverId, o.appId, o.fqdn, o.issuedAt].join("|"),
+        [TAG_ORDER_REMOVE_SUBSCRIBER, o.serverId, o.serviceId, o.fqdn, o.issuedAt].join("|"),
       );
     case "add-paired-session":
       return enc.encode(
@@ -1368,7 +1368,7 @@ const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
 const TAG_RE_PAIR_OBJECT = "flagship/re-pair-object/v1";
 const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
 const TAG_MARKETPLACE_SCAN_RESULT = "flagship/marketplace-scan-result/v1";
-const TAG_APP_RENAME = "flagship/app-rename/v1";
+const TAG_SERVICE_RENAME = "flagship/service-rename/v1";
 const TAG_SET_CUSTOM_DOMAIN = "flagship/custom-domain/v1";
 const TAG_VOICI_SHORTEN = "flagship/voici-shorten/v1";
 
@@ -1535,7 +1535,7 @@ export function verifyWipeRestart(r: WipeRestart, sig: Bytes, oldIrkPub: Bytes):
 
 /**
  * App rename (voi.ci-aware). Replaces the user-visible URL stem
- * the app surfaces at. The internal appId is preserved; only the
+ * the app surfaces at. The internal serviceId is preserved; only the
  * displayLabel changes. Signed by the user's current IRK.
  *
  * The handler is responsible for:
@@ -1545,25 +1545,25 @@ export function verifyWipeRestart(r: WipeRestart, sig: Bytes, oldIrkPub: Bytes):
  *   - re-publishing user-zone DNS labels (delegated to a hook)
  *   - minting a fresh voi.ci code for the new canonical URL
  */
-export interface AppRename {
+export interface ServiceRename {
   username: string;
-  appId: string;
+  serviceId: string;
   newDisplayLabel: string;
   issuedAt: number;
 }
 
-function canonicalAppRename(r: AppRename): Bytes {
+function canonicalServiceRename(r: ServiceRename): Bytes {
   return new TextEncoder().encode(
-    [TAG_APP_RENAME, r.username, r.appId, r.newDisplayLabel.toLowerCase(), r.issuedAt].join("|"),
+    [TAG_SERVICE_RENAME, r.username, r.serviceId, r.newDisplayLabel.toLowerCase(), r.issuedAt].join("|"),
   );
 }
 
-export function signAppRename(r: AppRename, irk: Keypair): Bytes {
-  return ed.sign(canonicalAppRename(r), irk.privateKey);
+export function signServiceRename(r: ServiceRename, irk: Keypair): Bytes {
+  return ed.sign(canonicalServiceRename(r), irk.privateKey);
 }
-export function verifyAppRename(r: AppRename, sig: Bytes, irkPub: Bytes): boolean {
+export function verifyServiceRename(r: ServiceRename, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalAppRename(r), irkPub);
+    return ed.verify(sig, canonicalServiceRename(r), irkPub);
   } catch {
     return false;
   }
@@ -1578,14 +1578,14 @@ export function verifyAppRename(r: AppRename, sig: Bytes, irkPub: Bytes): boolea
  */
 export interface SetCustomDomain {
   username: string;
-  appId: string;
+  serviceId: string;
   fqdn: string;
   issuedAt: number;
 }
 
 function canonicalSetCustomDomain(r: SetCustomDomain): Bytes {
   return new TextEncoder().encode(
-    [TAG_SET_CUSTOM_DOMAIN, r.username, r.appId, r.fqdn.toLowerCase(), r.issuedAt].join("|"),
+    [TAG_SET_CUSTOM_DOMAIN, r.username, r.serviceId, r.fqdn.toLowerCase(), r.issuedAt].join("|"),
   );
 }
 
@@ -1609,16 +1609,16 @@ export function verifySetCustomDomain(r: SetCustomDomain, sig: Bytes, irkPub: By
  */
 export interface VoiciShorten {
   username: string;
-  /** Optional binding to an appId — when omitted, the link is a
+  /** Optional binding to an serviceId — when omitted, the link is a
    *  one-off (no cascade on rename). */
-  appId?: string;
+  serviceId?: string;
   targetUrl: string;
   issuedAt: number;
 }
 
 function canonicalVoiciShorten(r: VoiciShorten): Bytes {
   return new TextEncoder().encode(
-    [TAG_VOICI_SHORTEN, r.username, r.appId ?? "", r.targetUrl, r.issuedAt].join("|"),
+    [TAG_VOICI_SHORTEN, r.username, r.serviceId ?? "", r.targetUrl, r.issuedAt].join("|"),
   );
 }
 
@@ -1847,7 +1847,7 @@ export function verifyServerRevokeBySelf(r: ServerRevokeBySelf, sig: Bytes, iden
  * exposes the toggle so a host installing on behalf of others (e.g.,
  * for the family) can leave themselves out of the membership list.
  */
-export interface InstallAppRequest {
+export interface InstallServiceRequest {
   serverId: ServerId;
   creator: string;
   slug: string;
@@ -1858,24 +1858,24 @@ export interface InstallAppRequest {
 }
 
 /**
- * Phone request to uninstall an app. IRK-signed by the host. Removes
+ * Phone request to uninstall a service. IRK-signed by the host. Removes
  * the container, drops the data namespace, and forgets the membership
- * store. Idempotent against an already-uninstalled app.
+ * store. Idempotent against an already-uninstalled service.
  */
-export interface UninstallAppRequest {
+export interface UninstallServiceRequest {
   serverId: ServerId;
   creator: string;
   slug: string;
   issuedAt: number;
 }
 
-const TAG_INSTALL_APP = "flagship/install-app/v1";
-const TAG_UNINSTALL_APP = "flagship/uninstall-app/v1";
+const TAG_INSTALL_SERVICE = "flagship/install-service/v1";
+const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
 
-function canonicalInstallApp(r: InstallAppRequest): Bytes {
+function canonicalInstallService(r: InstallServiceRequest): Bytes {
   return new TextEncoder().encode(
     [
-      TAG_INSTALL_APP,
+      TAG_INSTALL_SERVICE,
       r.serverId,
       r.creator,
       r.slug,
@@ -1888,29 +1888,29 @@ function canonicalInstallApp(r: InstallAppRequest): Bytes {
   );
 }
 
-function canonicalUninstallApp(r: UninstallAppRequest): Bytes {
+function canonicalUninstallService(r: UninstallServiceRequest): Bytes {
   return new TextEncoder().encode(
-    [TAG_UNINSTALL_APP, r.serverId, r.creator, r.slug, r.issuedAt].join("|"),
+    [TAG_UNINSTALL_SERVICE, r.serverId, r.creator, r.slug, r.issuedAt].join("|"),
   );
 }
 
-export function signInstallApp(r: InstallAppRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalInstallApp(r), irk.privateKey);
+export function signInstallService(r: InstallServiceRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalInstallService(r), irk.privateKey);
 }
-export function verifyInstallApp(r: InstallAppRequest, sig: Bytes, irkPub: Bytes): boolean {
+export function verifyInstallService(r: InstallServiceRequest, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalInstallApp(r), irkPub);
+    return ed.verify(sig, canonicalInstallService(r), irkPub);
   } catch {
     return false;
   }
 }
 
-export function signUninstallApp(r: UninstallAppRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalUninstallApp(r), irk.privateKey);
+export function signUninstallService(r: UninstallServiceRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalUninstallService(r), irk.privateKey);
 }
-export function verifyUninstallApp(r: UninstallAppRequest, sig: Bytes, irkPub: Bytes): boolean {
+export function verifyUninstallService(r: UninstallServiceRequest, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalUninstallApp(r), irkPub);
+    return ed.verify(sig, canonicalUninstallService(r), irkPub);
   } catch {
     return false;
   }
@@ -1935,16 +1935,16 @@ export function verifyUninstallApp(r: UninstallAppRequest, sig: Bytes, irkPub: B
  * captured signature; the values are SECRET — the daemon never logs
  * them, never returns them on any surface, and seals them at rest.
  */
-export interface SetAppEnvRequest {
+export interface SetServiceEnvRequest {
   serverId: ServerId;
   creator: string;
   slug: string;
-  /** Full desired env set for the app. Values are SECRET. */
+  /** Full desired env set for the service. Values are SECRET. */
   env: Record<string, string>;
   issuedAt: number;
 }
 
-const TAG_SET_APP_ENV = "flagship/set-app-env/v1";
+const TAG_SET_SERVICE_ENV = "flagship/set-service-env/v1";
 
 /**
  * Canonical bytes for a set-app-env order. The env map is serialized
@@ -1953,13 +1953,13 @@ const TAG_SET_APP_ENV = "flagship/set-app-env/v1";
  * separator like every other envelope. Both name and value go into
  * the signed bytes (a value swap must invalidate the signature).
  */
-function canonicalSetAppEnv(r: SetAppEnvRequest): Bytes {
+function canonicalSetServiceEnv(r: SetServiceEnvRequest): Bytes {
   const pairs = Object.keys(r.env)
     .sort()
     .map((k) => `${k}=${r.env[k]}`);
   return new TextEncoder().encode(
     [
-      TAG_SET_APP_ENV,
+      TAG_SET_SERVICE_ENV,
       r.serverId,
       r.creator,
       r.slug,
@@ -1970,12 +1970,12 @@ function canonicalSetAppEnv(r: SetAppEnvRequest): Bytes {
   );
 }
 
-export function signSetAppEnv(r: SetAppEnvRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalSetAppEnv(r), irk.privateKey);
+export function signSetServiceEnv(r: SetServiceEnvRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalSetServiceEnv(r), irk.privateKey);
 }
-export function verifySetAppEnv(r: SetAppEnvRequest, sig: Bytes, irkPub: Bytes): boolean {
+export function verifySetServiceEnv(r: SetServiceEnvRequest, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalSetAppEnv(r), irkPub);
+    return ed.verify(sig, canonicalSetServiceEnv(r), irkPub);
   } catch {
     return false;
   }
@@ -2330,7 +2330,7 @@ export function verifyRootEntitlement(
  * them to derive the shortened slots the pod can compete for; the
  * pod doesn't list shortened slots explicitly.
  *
- * FUTURE: extend with `customDomains: Array<{ host: string; appId:
+ * FUTURE: extend with `customDomains: Array<{ host: string; serviceId:
  * { slug: string; author: string } }>`. A user-purchased domain
  * (e.g., `notes.alice.com` pointed at .services) MUST be bound to a
  * specific (slug, author, user) tuple — never free-floating. The
@@ -2344,7 +2344,7 @@ export function verifyRootEntitlement(
  * canonicals; AppGrant inverts the axis (per-app listing of pods) for
  * cleaner multi-pod failover.
  */
-export interface AppEntitlement {
+export interface ServiceEntitlement {
   username: string;
   podPubKey: Bytes;
   /** Lower-cased FQDNs the pod is entitled to serve. */
@@ -2353,14 +2353,14 @@ export interface AppEntitlement {
   expiresAt: number;
 }
 
-const TAG_APP_ENTITLEMENT = "flagship/app-entitlement/v1";
+const TAG_SERVICE_ENTITLEMENT = "flagship/service-entitlement/v1";
 
-function canonicalAppEntitlement(c: AppEntitlement): Bytes {
+function canonicalServiceEntitlement(c: ServiceEntitlement): Bytes {
   // Sort canonicals so signing is order-independent.
   const list = [...c.canonicals].map((s) => s.toLowerCase()).sort().join(",");
   return new TextEncoder().encode(
     [
-      TAG_APP_ENTITLEMENT,
+      TAG_SERVICE_ENTITLEMENT,
       c.username,
       hex(c.podPubKey),
       list,
@@ -2370,17 +2370,17 @@ function canonicalAppEntitlement(c: AppEntitlement): Bytes {
   );
 }
 
-export function signAppEntitlement(c: AppEntitlement, irk: Keypair): Bytes {
-  return ed.sign(canonicalAppEntitlement(c), irk.privateKey);
+export function signServiceEntitlement(c: ServiceEntitlement, irk: Keypair): Bytes {
+  return ed.sign(canonicalServiceEntitlement(c), irk.privateKey);
 }
 
-export function verifyAppEntitlement(
-  c: AppEntitlement,
+export function verifyServiceEntitlement(
+  c: ServiceEntitlement,
   sig: Bytes,
   irkPub: Bytes,
 ): boolean {
   try {
-    return ed.verify(sig, canonicalAppEntitlement(c), irkPub);
+    return ed.verify(sig, canonicalServiceEntitlement(c), irkPub);
   } catch {
     return false;
   }
@@ -2400,8 +2400,8 @@ export async function rootEntitlementCertId(c: RootEntitlement): Promise<string>
   return hex(new Uint8Array(digest));
 }
 
-export async function appEntitlementCertId(c: AppEntitlement): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", canonicalAppEntitlement(c));
+export async function serviceEntitlementCertId(c: ServiceEntitlement): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", canonicalServiceEntitlement(c));
   return hex(new Uint8Array(digest));
 }
 
@@ -2472,10 +2472,10 @@ export interface TunnelHelloV2 {
   /** SHA-256 hex of the RootEntitlement's canonical bytes. */
   rootEntitlementCertId: string;
   /**
-   * SHA-256 hex of the AppEntitlement's canonical bytes, or empty
-   * string when no app entitlement is presented (initial provisioning).
+   * SHA-256 hex of the ServiceEntitlement's canonical bytes, or empty
+   * string when no service entitlement is presented (initial provisioning).
    */
-  appEntitlementCertId: string;
+  serviceEntitlementCertId: string;
   /** 32-byte random nonce for replay defense. */
   nonce: Bytes;
   issuedAt: number;
@@ -2489,7 +2489,7 @@ function canonicalTunnelHelloV2(h: TunnelHelloV2): Bytes {
       TAG_TUNNEL_HELLO_V2,
       h.serverId,
       h.rootEntitlementCertId,
-      h.appEntitlementCertId,
+      h.serviceEntitlementCertId,
       hex(h.nonce),
       h.issuedAt,
     ].join("|"),
@@ -2536,79 +2536,79 @@ export function verifyTunnelHelloV2(
 //     at the AppGrant verification layer
 // ──────────────────────────────────────────────────────────────────────
 
-export type AppGrantRouteScope = "canonical" | "non-canonical" | "subpath";
+export type ServiceGrantRouteScope = "canonical" | "non-canonical" | "subpath";
 
-export interface AppGrantRoute {
+export interface ServiceGrantRoute {
   /** Lower-case FQDN (and optional path prefix for "subpath" scope). */
   url: string;
-  scope: AppGrantRouteScope;
+  scope: ServiceGrantRouteScope;
 }
 
-export interface AppGrant {
+export interface ServiceGrant {
   /** Fresh v4 UUID; consumers reject duplicates within the active window. */
   grantId: string;
   /** Username at issuance time. Renames produce new grants under the new name. */
   username: string;
   /**
-   * App canonical name in the form `appName@authorStableId` where
+   * Service canonical name in the form `serviceName@authorStableId` where
    * authorStableId is a 12-char SHA-256 prefix of the author's IRK pubkey.
    * Stable across author renames.
    */
-  appCanonical: string;
-  /** Optional discriminator for multi-instance installs of the same app. */
-  appInstanceId?: string;
+  serviceCanonical: string;
+  /** Optional discriminator for multi-instance installs of the same service. */
+  serviceInstanceId?: string;
   /** Pod canonical FQDNs covered by this grant (sorted at canonicalization). */
   serverDomains: string[];
   /** Pod identity pubkeys authorized to serve (sorted at canonicalization). */
   serverIdentities: Bytes[];
   /** Explicit list of URLs (canonical + non-canonical + subpath) covered. */
-  routes: AppGrantRoute[];
+  routes: ServiceGrantRoute[];
   /** ms since epoch. */
   issuedAt: number;
   /** ms since epoch; SHOULD be issuedAt + 7*24*3600*1000 by convention. */
   expiresAt: number;
 }
 
-const TAG_APP_GRANT = "flagship/app-grant/v1";
+const TAG_SERVICE_GRANT = "flagship/service-grant/v1";
 
 /**
- * Validate that no string field in an AppGrant contains the
+ * Validate that no string field in a ServiceGrant contains the
  * canonical-bytes separator '|' or any control byte (H1 hardening).
  * Throws on violation.
  */
-function validateAppGrantFields(g: AppGrant): void {
+function validateServiceGrantFields(g: ServiceGrant): void {
   const fields: Array<[string, string]> = [
     ["grantId", g.grantId],
     ["username", g.username],
-    ["appCanonical", g.appCanonical],
+    ["serviceCanonical", g.serviceCanonical],
   ];
-  if (g.appInstanceId) fields.push(["appInstanceId", g.appInstanceId]);
+  if (g.serviceInstanceId) fields.push(["serviceInstanceId", g.serviceInstanceId]);
   for (const d of g.serverDomains) fields.push(["serverDomain", d]);
   for (const r of g.routes) fields.push([`route(${r.scope})`, r.url]);
   for (const [name, value] of fields) {
     for (let i = 0; i < value.length; i++) {
       const c = value.charCodeAt(i);
-      if (c === 0x7c) throw new Error(`AppGrant field "${name}" contains separator '|'`);
+      if (c === 0x7c) throw new Error(`ServiceGrant field "${name}" contains separator '|'`);
       if (c <= 0x1f || c === 0x7f) {
         throw new Error(
-          `AppGrant field "${name}" contains control char 0x${c.toString(16)} at index ${i}`,
+          `ServiceGrant field "${name}" contains control char 0x${c.toString(16)} at index ${i}`,
         );
       }
     }
   }
   if (g.expiresAt <= g.issuedAt) {
-    throw new Error("AppGrant: expiresAt must be strictly after issuedAt");
+    throw new Error("ServiceGrant: expiresAt must be strictly after issuedAt");
   }
   if (g.serverIdentities.length === 0) {
-    throw new Error("AppGrant: serverIdentities must have at least one entry");
+    throw new Error("ServiceGrant: serverIdentities must have at least one entry");
   }
   if (g.routes.length === 0) {
-    throw new Error("AppGrant: routes must have at least one entry");
+    throw new Error("ServiceGrant: routes must have at least one entry");
   }
 }
 
-function canonicalAppGrant(g: AppGrant): Bytes {
-  validateAppGrantFields(g);
+function canonicalServiceGrant(g: ServiceGrant): Bytes {
+  validateServiceGrantFields(g);
   const domains = [...g.serverDomains].map((d) => d.toLowerCase()).sort().join(",");
   const identities = [...g.serverIdentities].map((b) => hex(b)).sort().join(",");
   const routes = [...g.routes]
@@ -2617,11 +2617,11 @@ function canonicalAppGrant(g: AppGrant): Bytes {
     .join(",");
   return new TextEncoder().encode(
     [
-      TAG_APP_GRANT,
+      TAG_SERVICE_GRANT,
       g.grantId,
       g.username,
-      g.appCanonical,
-      g.appInstanceId ?? "",
+      g.serviceCanonical,
+      g.serviceInstanceId ?? "",
       domains,
       identities,
       routes,
@@ -2631,25 +2631,25 @@ function canonicalAppGrant(g: AppGrant): Bytes {
   );
 }
 
-export function signAppGrant(g: AppGrant, irk: Keypair): Bytes {
-  return ed.sign(canonicalAppGrant(g), irk.privateKey);
+export function signServiceGrant(g: ServiceGrant, irk: Keypair): Bytes {
+  return ed.sign(canonicalServiceGrant(g), irk.privateKey);
 }
 
-export function verifyAppGrant(g: AppGrant, sig: Bytes, irkPub: Bytes): boolean {
+export function verifyServiceGrant(g: ServiceGrant, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalAppGrant(g), irkPub);
+    return ed.verify(sig, canonicalServiceGrant(g), irkPub);
   } catch {
     return false;
   }
 }
 
 /**
- * Stable identifier for an AppGrant — SHA-256 hex of its canonical
+ * Stable identifier for a ServiceGrant — SHA-256 hex of its canonical
  * bytes. Used as the lookup key in revocation lists and the cert-sync
  * inventory.
  */
-export async function appGrantId(g: AppGrant): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", canonicalAppGrant(g));
+export async function serviceGrantId(g: ServiceGrant): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", canonicalServiceGrant(g));
   return hex(new Uint8Array(digest));
 }
 
@@ -2658,7 +2658,7 @@ export async function appGrantId(g: AppGrant): Promise<string> {
  * The verifier MUST also confirm the grant's signature, that it is not
  * revoked, and that the current time is within [issuedAt, expiresAt).
  */
-export function appGrantAuthorizesPod(g: AppGrant, podPubKey: Bytes): boolean {
+export function serviceGrantAuthorizesPod(g: ServiceGrant, podPubKey: Bytes): boolean {
   const target = hex(podPubKey);
   for (const id of g.serverIdentities) {
     if (hex(id) === target) return true;
@@ -2670,7 +2670,7 @@ export function appGrantAuthorizesPod(g: AppGrant, podPubKey: Bytes): boolean {
  * Check whether a URL is in the grant's routes list.
  * Comparison is case-insensitive on the host portion.
  */
-export function appGrantAuthorizesUrl(g: AppGrant, url: string): boolean {
+export function serviceGrantAuthorizesUrl(g: ServiceGrant, url: string): boolean {
   const target = url.toLowerCase();
   for (const r of g.routes) {
     if (r.url.toLowerCase() === target) return true;
@@ -2683,7 +2683,7 @@ export function appGrantAuthorizesUrl(g: AppGrant, url: string): boolean {
  * Check whether `now` falls inside the grant's active window. The
  * window is half-open: [issuedAt, expiresAt).
  */
-export function appGrantActiveAt(g: AppGrant, now: number): boolean {
+export function serviceGrantActiveAt(g: ServiceGrant, now: number): boolean {
   return now >= g.issuedAt && now < g.expiresAt;
 }
 
@@ -2837,11 +2837,11 @@ export function verifyPodIdentityBinding(b: PodIdentityBinding, sig: Bytes, irkP
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// AppAccessInvite (#79) — single-use access secret for inviting
-// specific people to a pod-resident app. Distinct from the legacy
-// InviteToken (used for membership / cross-pod app collaboration). The
-// access invite uses an opaqueTag to keep the recipient's identity off
-// the server; the owner's phone keeps the tag→displayName map locally.
+// ServiceAccessInvite (#79) — single-use access secret for inviting
+// specific people to a pod-resident service. Distinct from the legacy
+// InviteToken (used for membership / cross-pod service collaboration).
+// The access invite uses an opaqueTag to keep the recipient's identity
+// off the server; the owner's phone keeps the tag→displayName map locally.
 //
 // expectedIrkPubKey is optional: when set, only that exact IRK can
 // consume the invite. When null, first-IRK-to-redeem wins (bearer
@@ -2849,11 +2849,11 @@ export function verifyPodIdentityBinding(b: PodIdentityBinding, sig: Bytes, irkP
 // pattern users invoke when they don't yet know the recipient's IRK).
 // ──────────────────────────────────────────────────────────────────────
 
-export interface AppAccessInvite {
+export interface ServiceAccessInvite {
   /** Fresh UUID; consumers reject duplicates. */
   inviteId: string;
-  /** App canonical (appName@authorStableId). */
-  appCanonical: string;
+  /** Service canonical (serviceName@authorStableId). */
+  serviceCanonical: string;
   /** SHA-256 hex of the random secret embedded in the share-link fragment. */
   secretHash: string;
   /** Role granted on consumption (e.g. "admin", "reader"). */
@@ -2868,19 +2868,19 @@ export interface AppAccessInvite {
   expiresAt: number;
 }
 
-const TAG_APP_INVITE = "flagship/app-invite/v1";
+const TAG_SERVICE_INVITE = "flagship/service-invite/v1";
 
-function canonicalAppAccessInvite(i: AppAccessInvite): Bytes {
+function canonicalServiceAccessInvite(i: ServiceAccessInvite): Bytes {
   validateNoSepCtrl("inviteId", i.inviteId);
-  validateNoSepCtrl("appCanonical", i.appCanonical);
+  validateNoSepCtrl("serviceCanonical", i.serviceCanonical);
   validateNoSepCtrl("role", i.role);
   validateNoSepCtrl("secretHash", i.secretHash);
   if (i.contextNote !== null) validateNoSepCtrl("contextNote", i.contextNote);
   return new TextEncoder().encode(
     [
-      TAG_APP_INVITE,
+      TAG_SERVICE_INVITE,
       i.inviteId,
-      i.appCanonical,
+      i.serviceCanonical,
       i.secretHash,
       i.role,
       hex(i.opaqueTag),
@@ -2892,19 +2892,19 @@ function canonicalAppAccessInvite(i: AppAccessInvite): Bytes {
   );
 }
 
-export function signAppAccessInvite(i: AppAccessInvite, irk: Keypair): Bytes {
-  return ed.sign(canonicalAppAccessInvite(i), irk.privateKey);
+export function signServiceAccessInvite(i: ServiceAccessInvite, irk: Keypair): Bytes {
+  return ed.sign(canonicalServiceAccessInvite(i), irk.privateKey);
 }
 
-export function verifyAppAccessInvite(i: AppAccessInvite, sig: Bytes, irkPub: Bytes): boolean {
+export function verifyServiceAccessInvite(i: ServiceAccessInvite, sig: Bytes, irkPub: Bytes): boolean {
   try {
-    return ed.verify(sig, canonicalAppAccessInvite(i), irkPub);
+    return ed.verify(sig, canonicalServiceAccessInvite(i), irkPub);
   } catch {
     return false;
   }
 }
 
-export interface AppAccessAcceptance {
+export interface ServiceAccessAcceptance {
   inviteId: string;
   /** SHA-256 hex of the actual secret bytes (must match invite.secretHash). */
   secretHash: string;
@@ -2914,14 +2914,14 @@ export interface AppAccessAcceptance {
   nonce: Bytes;
 }
 
-const TAG_APP_INVITE_ACCEPT = "flagship/app-invite-accept/v1";
+const TAG_SERVICE_INVITE_ACCEPT = "flagship/service-invite-accept/v1";
 
-function canonicalAppAccessAcceptance(a: AppAccessAcceptance): Bytes {
+function canonicalServiceAccessAcceptance(a: ServiceAccessAcceptance): Bytes {
   validateNoSepCtrl("inviteId", a.inviteId);
   validateNoSepCtrl("secretHash", a.secretHash);
   return new TextEncoder().encode(
     [
-      TAG_APP_INVITE_ACCEPT,
+      TAG_SERVICE_INVITE_ACCEPT,
       a.inviteId,
       a.secretHash,
       hex(a.consumerIrkPubKey),
@@ -2931,17 +2931,17 @@ function canonicalAppAccessAcceptance(a: AppAccessAcceptance): Bytes {
   );
 }
 
-export function signAppAccessAcceptance(a: AppAccessAcceptance, consumerIrk: Keypair): Bytes {
-  return ed.sign(canonicalAppAccessAcceptance(a), consumerIrk.privateKey);
+export function signServiceAccessAcceptance(a: ServiceAccessAcceptance, consumerIrk: Keypair): Bytes {
+  return ed.sign(canonicalServiceAccessAcceptance(a), consumerIrk.privateKey);
 }
 
-export function verifyAppAccessAcceptance(
-  a: AppAccessAcceptance,
+export function verifyServiceAccessAcceptance(
+  a: ServiceAccessAcceptance,
   sig: Bytes,
   consumerIrkPub: Bytes,
 ): boolean {
   try {
-    return ed.verify(sig, canonicalAppAccessAcceptance(a), consumerIrkPub);
+    return ed.verify(sig, canonicalServiceAccessAcceptance(a), consumerIrkPub);
   } catch {
     return false;
   }

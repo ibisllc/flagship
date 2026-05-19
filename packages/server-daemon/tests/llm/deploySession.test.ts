@@ -3,15 +3,15 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ed, type Keypair } from "@flagship/protocol";
-import { AppPlatform } from "../../src/appPlatform.js";
-import { AppRunner, type CommandRunner } from "../../src/appRunner.js";
+import { ServicePlatform } from "../../src/servicePlatform.js";
+import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
 import {
   DataProvisioner,
   InMemoryMinioAdmin,
   InMemoryPostgresAdmin,
   InMemoryRedisAdmin,
 } from "../../src/dataLayer/index.js";
-import { ForgejoAppAdmin } from "../../src/forgejoAppAdmin.js";
+import { ForgejoAppAdmin } from "../../src/forgejoServiceAdmin.js";
 import { buildDeploySession } from "../../src/llm/deploySession.js";
 import { VibeCodeSession } from "../../src/llm/vibeCodeSession.js";
 
@@ -82,12 +82,12 @@ function makeSession(files: Record<string, string>): VibeCodeSession {
 }
 
 describe("buildDeploySession", () => {
-  it("happy path: writes files, builds image, signs install, calls AppPlatform", async () => {
+  it("happy path: writes files, builds image, signs install, calls ServicePlatform", async () => {
     const wd = await tmpWorkdir();
     try {
       const { cmd, calls } = recordingCmd();
       const irk = makeKey();
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(cmd),
@@ -100,15 +100,15 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,
         cmd,
-        // Use real time so AppPlatform's freshness check against
+        // Use real time so ServicePlatform's freshness check against
         // Date.now() doesn't reject as stale.
       });
       const session = makeSession({
@@ -121,7 +121,7 @@ describe("buildDeploySession", () => {
         // surface the actual reason in the failure message for debugging
         throw new Error(`deploy failed: ${r.reason}`);
       }
-      expect(r.appId).toBe("alice-habits");
+      expect(r.serviceId).toBe("alice-habits");
       expect(r.url).toBe(`https://habits.${SERVER}`);
       expect(r.image).toMatch(/^flagship-vibe-alice-habits:\d+$/);
       // docker build was invoked at the working dir
@@ -145,7 +145,7 @@ describe("buildDeploySession", () => {
     try {
       const { cmd } = recordingCmd();
       const irk = makeKey();
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(cmd),
@@ -154,10 +154,10 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,
@@ -178,7 +178,7 @@ describe("buildDeploySession", () => {
     try {
       const { cmd } = recordingCmd();
       const irk = makeKey();
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(cmd),
@@ -187,10 +187,10 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,
@@ -263,7 +263,7 @@ describe("buildDeploySession", () => {
         capture: cmd.capture,
       };
 
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(teeingCmd),
@@ -276,10 +276,10 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,
@@ -327,7 +327,7 @@ describe("buildDeploySession", () => {
         serviceToken: "tk",
         fetchImpl: failingFetch as never,
       });
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(cmd),
@@ -336,10 +336,10 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,
@@ -366,7 +366,7 @@ describe("buildDeploySession", () => {
     try {
       const { cmd, calls } = recordingCmd();
       const irk = makeKey();
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(cmd),
@@ -379,10 +379,10 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,
@@ -402,7 +402,7 @@ describe("buildDeploySession", () => {
     }
   });
 
-  it("end-to-end: streamed LLM output → Forgejo commit → AppPlatform.install", async () => {
+  it("end-to-end: streamed LLM output → Forgejo commit → ServicePlatform.install", async () => {
     // This is the test mandated by the P1.X1 carryover: feed the parser
     // with a realistic streaming response and assert the deploy step
     // follows through to a successful container-launch invocation.
@@ -431,7 +431,7 @@ describe("buildDeploySession", () => {
         fetchImpl: fakeFetch as never,
       });
 
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(cmd),
@@ -444,10 +444,10 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,
@@ -482,7 +482,7 @@ describe("buildDeploySession", () => {
 
       const r = await deploy(session);
       if (!r.ok) throw new Error(`deploy failed: ${r.reason}`);
-      expect(r.appId).toBe("alice-habits");
+      expect(r.serviceId).toBe("alice-habits");
       expect(r.url).toBe(`https://habits.${SERVER}`);
 
       // The container was actually launched (docker run with the patched image).
@@ -502,7 +502,7 @@ describe("buildDeploySession", () => {
         },
         capture: async () => ({ stdout: "", stderr: "" }),
       };
-      const platform = new AppPlatform({
+      const platform = new ServicePlatform({
         host: { username: HOST, irkPub: irk.publicKey },
         swk: fakeSwk(),
         appRunner: new AppRunner(cmd),
@@ -511,10 +511,10 @@ describe("buildDeploySession", () => {
         domainGate: null,
         tabRegistry: null,
         pullStateStore: null,
-        cloneApp: null,
+        cloneService: null,
       });
       const deploy = buildDeploySession({
-        appPlatform: platform,
+        servicePlatform: platform,
         hostIrk: irk,
         hostUsername: HOST,
         workingDir: wd.dir,

@@ -17,10 +17,10 @@ import {
   type Frame,
 } from "@flagship/tunnel-protocol";
 import {
-  appEntitlementCertId,
+  serviceEntitlementCertId,
   rootEntitlementCertId,
   signTunnelHelloV2,
-  type AppEntitlement,
+  type ServiceEntitlement,
   type Bytes,
   type Keypair,
   type RootEntitlement,
@@ -44,8 +44,8 @@ export interface EntitlementBundle {
   rootEntitlement: RootEntitlement;
   rootEntitlementSig: Bytes;
   /** Optional. Pods can boot with no apps yet (root-only HELLO). */
-  appEntitlement?: AppEntitlement | null;
-  appEntitlementSig?: Bytes | null;
+  serviceEntitlement?: ServiceEntitlement | null;
+  serviceEntitlementSig?: Bytes | null;
 }
 
 /**
@@ -195,13 +195,13 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
     if (issuedAt <= lastIssuedAt) issuedAt = lastIssuedAt + 1;
     lastIssuedAt = issuedAt;
     const rootCertId = await rootEntitlementCertId(bundle.rootEntitlement);
-    const appCertId = bundle.appEntitlement
-      ? await appEntitlementCertId(bundle.appEntitlement)
+    const appCertId = bundle.serviceEntitlement
+      ? await serviceEntitlementCertId(bundle.serviceEntitlement)
       : "";
     const envelope: TunnelHelloV2 = {
       serverId: bundle.rootEntitlement.podCanonical,
       rootEntitlementCertId: rootCertId,
-      appEntitlementCertId: appCertId,
+      serviceEntitlementCertId: appCertId,
       nonce,
       issuedAt,
     };
@@ -217,17 +217,17 @@ export function startTunnelClient(opts: TunnelClientOptions): TunnelClient {
       },
       rootEntitlementSig: bytesToHex(bundle.rootEntitlementSig),
       rootEntitlementCertId: rootCertId,
-      appEntitlement: bundle.appEntitlement
+      serviceEntitlement: bundle.serviceEntitlement
         ? {
-            username: bundle.appEntitlement.username,
-            podPubKey: bytesToHex(bundle.appEntitlement.podPubKey),
-            canonicals: bundle.appEntitlement.canonicals,
-            issuedAt: bundle.appEntitlement.issuedAt,
-            expiresAt: bundle.appEntitlement.expiresAt,
+            username: bundle.serviceEntitlement.username,
+            podPubKey: bytesToHex(bundle.serviceEntitlement.podPubKey),
+            canonicals: bundle.serviceEntitlement.canonicals,
+            issuedAt: bundle.serviceEntitlement.issuedAt,
+            expiresAt: bundle.serviceEntitlement.expiresAt,
           }
         : null,
-      appEntitlementSig: bundle.appEntitlementSig ? bytesToHex(bundle.appEntitlementSig) : null,
-      appEntitlementCertId: appCertId,
+      serviceEntitlementSig: bundle.serviceEntitlementSig ? bytesToHex(bundle.serviceEntitlementSig) : null,
+      serviceEntitlementCertId: appCertId,
       nonce: bytesToHex(nonce),
       issuedAt,
       signature: bytesToHex(signature),

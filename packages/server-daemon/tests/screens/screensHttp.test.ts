@@ -12,7 +12,7 @@ import {
 import { VibeCodeSessionRegistry } from "../../src/llm/vibeCodeSession.js";
 import type { OwnedUrl } from "../../src/screens/types.js";
 import type { HttpRequest } from "../../src/runtime.js";
-import type { InstalledApp } from "../../src/appPlatform.js";
+import type { InstalledService } from "../../src/servicePlatform.js";
 import type { FetchLike } from "@flagship/llm-providers";
 
 const SERVER_FQDN = "home.alice.flagship.services";
@@ -82,12 +82,12 @@ function makeMembership(): AppMembership {
   return new AppMembership("habits", USERNAME, irk.publicKey, swk);
 }
 
-function makeInstalledApp(over: Partial<InstalledApp> = {}): InstalledApp {
+function makeInstalledService(over: Partial<InstalledService> = {}): InstalledService {
   const membership = over.membership ?? makeMembership();
   return {
     creator: USERNAME,
     slug: "habits",
-    appId: "alice-habits",
+    serviceId: "alice-habits",
     manifest: {
       schema_version: 1,
       name: "habits",
@@ -98,7 +98,7 @@ function makeInstalledApp(over: Partial<InstalledApp> = {}): InstalledApp {
       network: { subdomain: "habits" },
       access: { enabled: true, default_role: "owner" },
       migration: { verification: "standard" },
-    } as unknown as InstalledApp["manifest"],
+    } as unknown as InstalledService["manifest"],
     urlLabel: "habits",
     membership,
     containerPort: 8080,
@@ -108,12 +108,12 @@ function makeInstalledApp(over: Partial<InstalledApp> = {}): InstalledApp {
   };
 }
 
-function fakeAppPlatform(apps: InstalledApp[]) {
+function fakeServicePlatform(apps: InstalledService[]) {
   return {
     list: () => apps,
-    byAppId: (id: string) => apps.find((a) => a.appId === id),
+    byServiceId: (id: string) => apps.find((a) => a.serviceId === id),
     byLabel: (l: string) => apps.find((a) => a.urlLabel === l),
-  } as unknown as ScreensHttpDeps["appPlatform"];
+  } as unknown as ScreensHttpDeps["servicePlatform"];
 }
 
 const COMMON: Omit<ScreensHttpDeps, "gate"> = {
@@ -151,13 +151,13 @@ describe("screens HTTP — P1.1 server-detail", () => {
   it("returns server identity, uptime, app count, paired-session count, and cert info", async () => {
     const installEventLog: InstallEventLog = {
       recent: () => [
-        { at: 100, kind: "installed", appId: "alice-habits", detail: "" },
+        { at: 100, kind: "installed", serviceId: "alice-habits", detail: "" },
       ],
     };
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      appPlatform: fakeAppPlatform([makeInstalledApp()]),
+      servicePlatform: fakeServicePlatform([makeInstalledService()]),
       pairedSessions: fakePairedSessions([
         { token: "tok-good", label: "phone", addedAt: 200 },
         { token: "tok-laptop", label: "laptop", addedAt: 300 },
@@ -178,7 +178,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
     expect(body.serverFqdn).toBe(SERVER_FQDN);
     expect(body.username).toBe(USERNAME);
     expect(body.uptimeMs).toBe(4_000); // now=5000 - startedAt=1000
-    expect(body.appCount).toBe(1);
+    expect(body.serviceCount).toBe(1);
     expect(body.pairedSessionCount).toBe(2);
     expect(body.certNotAfter).toBe(9_000);
     expect(body.certSans).toEqual([SERVER_FQDN, `*.${SERVER_FQDN}`]);
@@ -196,7 +196,7 @@ describe("screens HTTP — P1.1 server-detail", () => {
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
-    expect(body.appCount).toBe(0);
+    expect(body.serviceCount).toBe(0);
     expect(body.pairedSessionCount).toBe(0);
     expect(body.recentInstallEvents).toEqual([]);
     expect(body.certNotAfter).toBeUndefined();
@@ -208,12 +208,12 @@ describe("screens HTTP — P1.2 apps-list", () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      appPlatform: fakeAppPlatform([
-        makeInstalledApp({ slug: "habits", appId: "alice-habits", urlLabel: "habits" }),
-        makeInstalledApp({
+      servicePlatform: fakeServicePlatform([
+        makeInstalledService({ slug: "habits", serviceId: "alice-habits", urlLabel: "habits" }),
+        makeInstalledService({
           slug: "game1",
           creator: "bob",
-          appId: "bob-game1",
+          serviceId: "bob-game1",
           urlLabel: "game1-bob",
         }),
       ]),
@@ -241,7 +241,7 @@ describe("screens HTTP — P1.2 apps-list", () => {
   });
 });
 
-describe("screens HTTP — P1.3 app-detail/:appId", () => {
+describe("screens HTTP — P1.3 app-detail/:serviceId", () => {
   it("returns 503 when no app-platform is wired", async () => {
     const handle = buildScreensHttp({ ...COMMON, gate: fakeGate() });
     const r = await handle(req({
@@ -255,7 +255,7 @@ describe("screens HTTP — P1.3 app-detail/:appId", () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      appPlatform: fakeAppPlatform([]),
+      servicePlatform: fakeServicePlatform([]),
     });
     const r = await handle(req({
       path: "/api/screens/app-detail/alice-nope",
@@ -265,7 +265,7 @@ describe("screens HTTP — P1.3 app-detail/:appId", () => {
   });
 
   it("returns the app's manifest, members (truncated), and tab list", async () => {
-    const app = makeInstalledApp();
+    const app = makeInstalledService();
     // Seed a member by directly using internalAdd
     const otherPriv = new Uint8Array(32);
     crypto.getRandomValues(otherPriv);
@@ -274,7 +274,7 @@ describe("screens HTTP — P1.3 app-detail/:appId", () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      appPlatform: fakeAppPlatform([app]),
+      servicePlatform: fakeServicePlatform([app]),
       tabRegistry: {
         tabsForApp: () => ["tab-1", "tab-2"],
       } as unknown as ScreensHttpDeps["tabRegistry"],
@@ -285,7 +285,7 @@ describe("screens HTTP — P1.3 app-detail/:appId", () => {
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
-    expect(body.app.appId).toBe("alice-habits");
+    expect(body.app.serviceId).toBe("alice-habits");
     expect(body.manifest.name).toBe("habits");
     expect(body.browserTabs).toHaveLength(2);
     expect(body.members.length).toBeGreaterThan(0);
@@ -536,7 +536,7 @@ describe("screens HTTP — P1.4 marketplace-browse (proxy)", () => {
       controlPlaneBaseUrl: "https://flagshipserver.com",
       fetchImpl: fakeFetch,
       // alice/habits is installed locally
-      appPlatform: fakeAppPlatform([makeInstalledApp({ creator: "alice", slug: "habits" })]),
+      servicePlatform: fakeServicePlatform([makeInstalledService({ creator: "alice", slug: "habits" })]),
     });
     const r = await handle(req({
       path: "/api/screens/marketplace-browse",
@@ -762,7 +762,7 @@ describe("screens HTTP — P1.14 orders/send", () => {
 });
 
 describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
-  it("start: parses appId, calls AppBackupService.createBackup, returns metadata", async () => {
+  it("start: parses serviceId, calls AppBackupService.createBackup, returns metadata", async () => {
     const fakeBackup = {
       createBackup: async (spec: { creator: string; slug: string }) => ({
         backupId: "abc123",
@@ -784,7 +784,7 @@ describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
       method: "POST",
       path: "/api/screens/app-backup/start",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice-habits", includeUserData: false })),
+      body: Buffer.from(JSON.stringify({ serviceId: "alice-habits", includeUserData: false })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
@@ -793,7 +793,7 @@ describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
     expect(body.encrypted).toBe(false);
   });
 
-  it("start: 400 on malformed appId", async () => {
+  it("start: 400 on malformed serviceId", async () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
@@ -803,7 +803,7 @@ describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
       method: "POST",
       path: "/api/screens/app-backup/start",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "nocreatorseparator" })),
+      body: Buffer.from(JSON.stringify({ serviceId: "nocreatorseparator" })),
     }));
     expect(r?.status).toBe(400);
   });
@@ -828,12 +828,12 @@ describe("screens HTTP — P1.19 / P1.20 app-backup", () => {
   });
 });
 
-describe("screens HTTP — P1.10 browser-tabs/list/:appId", () => {
+describe("screens HTTP — P1.10 browser-tabs/list/:serviceId", () => {
   it("returns the tab ids tabRegistry.tabsForApp() reports", async () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      appPlatform: fakeAppPlatform([makeInstalledApp()]),
+      servicePlatform: fakeServicePlatform([makeInstalledService()]),
       tabRegistry: {
         tabsForApp: () => ["t1", "t2"],
       } as unknown as ScreensHttpDeps["tabRegistry"],
@@ -845,14 +845,14 @@ describe("screens HTTP — P1.10 browser-tabs/list/:appId", () => {
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.tabs.map((t: { tabId: string }) => t.tabId)).toEqual(["t1", "t2"]);
-    expect(body.tabs[0].appId).toBe("alice-habits");
+    expect(body.tabs[0].serviceId).toBe("alice-habits");
   });
 
   it("returns an empty list when no tabRegistry is wired", async () => {
     const handle = buildScreensHttp({
       ...COMMON,
       gate: fakeGate(),
-      appPlatform: fakeAppPlatform([makeInstalledApp()]),
+      servicePlatform: fakeServicePlatform([makeInstalledService()]),
     });
     const r = await handle(req({
       path: "/api/screens/browser-tabs/list/alice-habits",
@@ -1027,7 +1027,7 @@ describe("screens HTTP — P1.8 / P1.9 unlock approvals (proxy)", () => {
 
 describe("screens HTTP — /api/screens/lineage-resolve", () => {
   function fakeResolver(initial: Array<{
-    appId: string;
+    serviceId: string;
     creator: string;
     slug: string;
     canonicalUrl: string;
@@ -1044,12 +1044,12 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       accepted,
       revoked,
       list: async () => initial.slice(),
-      accept: async (appId: string) => {
-        accepted.push(appId);
+      accept: async (serviceId: string) => {
+        accepted.push(serviceId);
         return { ok: true as const, outcome: "accepted" as const };
       },
-      revoke: async (appId: string) => {
-        revoked.push(appId);
+      revoke: async (serviceId: string) => {
+        revoked.push(serviceId);
         return { ok: true };
       },
     };
@@ -1058,7 +1058,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
   it("GET returns the paused list", async () => {
     const resolver = fakeResolver([
       {
-        appId: "alice-game1",
+        serviceId: "alice-game1",
         creator: "alice",
         slug: "game1",
         canonicalUrl: "game1.alice.flagship.services",
@@ -1082,7 +1082,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
     expect(body.paused).toHaveLength(1);
-    expect(body.paused[0].appId).toBe("alice-game1");
+    expect(body.paused[0].serviceId).toBe("alice-game1");
     expect(body.paused[0].reason).toBe("anchor-unreachable");
   });
 
@@ -1107,7 +1107,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "accept" })),
+      body: Buffer.from(JSON.stringify({ serviceId: "alice-game1", decision: "accept" })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
@@ -1126,7 +1126,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "revoke" })),
+      body: Buffer.from(JSON.stringify({ serviceId: "alice-game1", decision: "revoke" })),
     }));
     expect(r?.status).toBe(200);
     const body = JSON.parse(r!.body as string);
@@ -1134,7 +1134,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
     expect(resolver.revoked).toEqual(["alice-game1"]);
   });
 
-  it("POST returns 400 on missing appId / bad decision", async () => {
+  it("POST returns 400 on missing serviceId / bad decision", async () => {
     const resolver = fakeResolver([]);
     const handle = buildScreensHttp({
       ...COMMON,
@@ -1152,7 +1152,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "burn-it-down" })),
+      body: Buffer.from(JSON.stringify({ serviceId: "alice-game1", decision: "burn-it-down" })),
     }));
     expect(badDecision?.status).toBe(400);
   });
@@ -1163,7 +1163,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "accept" })),
+      body: Buffer.from(JSON.stringify({ serviceId: "alice-game1", decision: "accept" })),
     }));
     expect(r?.status).toBe(503);
   });
@@ -1182,7 +1182,7 @@ describe("screens HTTP — /api/screens/lineage-resolve", () => {
       method: "POST",
       path: "/api/screens/lineage-resolve",
       headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ appId: "alice-game1", decision: "accept" })),
+      body: Buffer.from(JSON.stringify({ serviceId: "alice-game1", decision: "accept" })),
     }));
     expect(r?.status).toBe(502);
   });

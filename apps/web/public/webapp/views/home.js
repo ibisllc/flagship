@@ -102,7 +102,7 @@ function renderServerCard(server, pod) {
     : c.kind === "cert-expiring-soon" ? "pill warn"
     : "pill";
   const apps = pod?.appsServed ?? [];
-  const appCount = Array.isArray(apps) ? apps.length : 0;
+  const serviceCount = Array.isArray(apps) ? apps.length : 0;
   const certCountdown = pod?.currentCert?.validUntil
     ? formatCertCountdown(pod.currentCert.validUntil) : "";
   const autoUnlock = pod?.routingTarget
@@ -117,7 +117,7 @@ function renderServerCard(server, pod) {
       <span class="${pillClass}">${escapeHtml(c.label)}</span>
     </div>
     <div class="server-card-meta mt-2">
-      <span class="server-meta-chip">${appCount} app${appCount === 1 ? "" : "s"}</span>
+      <span class="server-meta-chip">${serviceCount} app${serviceCount === 1 ? "" : "s"}</span>
       ${certCountdown ? `<span class="server-meta-chip">${escapeHtml(certCountdown)}</span>` : ""}
       <span class="server-meta-chip">${escapeHtml(autoUnlock)}</span>
     </div>

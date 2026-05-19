@@ -7,7 +7,7 @@
  * data-services compose stack (specifically the chromium container
  * exposing CDP on 127.0.0.1:9222). Exercises the daemon-side
  * BrowserManager against the live Chromium and the full
- * apiHandlers stack against an in-memory AppPlatform with two
+ * apiHandlers stack against an in-memory ServicePlatform with two
  * tenants so isolation is exercised end-to-end on real CDP.
  *
  * Prints OK / FAIL per check. Non-zero exit on any failure.
@@ -20,7 +20,7 @@ import { DomainGate } from "../packages/server-daemon/src/browser/domainGate.js"
 import { PhonePipe } from "../packages/server-daemon/src/browser/phonePipe.js";
 import { buildBrowserApiHandlers } from "../packages/server-daemon/src/browser/apiHandlers.js";
 import { InMemoryAlertInbox } from "../packages/server-daemon/src/alertInbox.js";
-import { InMemoryAppAuthTokens } from "../packages/server-daemon/src/appAuthToken.js";
+import { InMemoryAppAuthTokens } from "../packages/server-daemon/src/serviceAuthToken.js";
 import type { HttpRequest } from "../packages/server-daemon/src/runtime.js";
 
 const ENDPOINT = process.env.FLAGSHIP_CHROMIUM_CDP ?? "http://127.0.0.1:9222";

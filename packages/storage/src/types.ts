@@ -385,7 +385,7 @@ export interface DaemonStatusRecord {
   certValidUntil: number | null;
   certIssuer: string | null;
   /** JSON-encoded list of canonical FQDNs the daemon currently serves. */
-  appsServedJson: string;
+  servicesServedJson: string;
   lastReported: number;
 }
 
@@ -396,30 +396,30 @@ export interface DaemonStatusStorage {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// App URL aliases (voi.ci-aware rename — migration 0019)
+// Service URL aliases (voi.ci-aware rename — migration 0019)
 // ──────────────────────────────────────────────────────────────────────
 
-/** Per (username, appId) override of the URL stem the app surfaces
- *  at. Absent row → fall back to the slug-creator derived default.
- *  The internal `appId` stays stable across renames; only the
- *  user-visible `displayLabel` changes. */
-export interface UserAppAliasRecord {
+/** Per (username, serviceId) override of the URL stem the service
+ *  surfaces at. Absent row → fall back to the slug-creator derived
+ *  default. The internal `serviceId` stays stable across renames;
+ *  only the user-visible `displayLabel` changes. */
+export interface UserServiceAliasRecord {
   username: string;
-  appId: string;
+  serviceId: string;
   /** DNS-safe label. Validated by the handler before write. */
   displayLabel: string;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface UserAppAliasStorage {
+export interface UserServiceAliasStorage {
   /** Insert or update — atomic. */
-  upsert(rec: UserAppAliasRecord): Promise<void>;
-  get(username: string, appId: string): Promise<UserAppAliasRecord | undefined>;
-  /** Every alias for the user — drives the apps-list BFF join. */
-  listForUser(username: string): Promise<UserAppAliasRecord[]>;
+  upsert(rec: UserServiceAliasRecord): Promise<void>;
+  get(username: string, serviceId: string): Promise<UserServiceAliasRecord | undefined>;
+  /** Every alias for the user — drives the services-list BFF join. */
+  listForUser(username: string): Promise<UserServiceAliasRecord[]>;
   /** Delete by composite key. Returns whether a row existed. */
-  delete(username: string, appId: string): Promise<boolean>;
+  delete(username: string, serviceId: string): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -429,11 +429,11 @@ export interface UserAppAliasStorage {
 export interface VoiciLinkRecord {
   code: string;
   username: string;
-  /** Optional — when present, deleting the app's links cascades here. */
-  appId?: string;
+  /** Optional — when present, deleting the service's links cascades here. */
+  serviceId?: string;
   targetUrl: string;
   createdAt: number;
-  /** Optional soft TTL. NULL on app-bound links; set on one-offs. */
+  /** Optional soft TTL. NULL on service-bound links; set on one-offs. */
   expiresAt?: number;
 }
 
@@ -443,14 +443,15 @@ export interface VoiciLinkStorage {
   insert(rec: VoiciLinkRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
   /** Redirect-path lookup. */
   get(code: string): Promise<VoiciLinkRecord | undefined>;
-  /** Look up the active app-bound short link for a (user, app) pair.
-   *  At most ONE row should match — handleAppRename cascade-deletes
-   *  prior rows before minting the new one. Returns the most-recently
-   *  created row when more than one is present (defensive); undefined
-   *  if no app-bound short link has been minted. */
-  getByApp(username: string, appId: string): Promise<VoiciLinkRecord | undefined>;
-  /** Cascade-delete on app rename / uninstall. Returns count deleted. */
-  deleteByApp(username: string, appId: string): Promise<number>;
+  /** Look up the active service-bound short link for a (user, service)
+   *  pair. At most ONE row should match — handleServiceRename
+   *  cascade-deletes prior rows before minting the new one. Returns the
+   *  most-recently created row when more than one is present
+   *  (defensive); undefined if no service-bound short link has been
+   *  minted. */
+  getByService(username: string, serviceId: string): Promise<VoiciLinkRecord | undefined>;
+  /** Cascade-delete on service rename / uninstall. Returns count deleted. */
+  deleteByService(username: string, serviceId: string): Promise<number>;
   /** Periodic GC for expired one-offs. */
   deleteExpired(before: number): Promise<number>;
 }
@@ -476,7 +477,7 @@ export interface Storage {
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
   userIdentity: UserIdentityRecordStorage;
-  userAppAliases: UserAppAliasStorage;
+  userServiceAliases: UserServiceAliasStorage;
   voiciLinks: VoiciLinkStorage;
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
@@ -765,7 +766,7 @@ export interface UserIdentityRecordStorage {
 // ──────────────────────────────────────────────────────────────────────
 // Custom (external) domain orders (#79A).
 //
-// One row per (appId, userId): a new attach request DESTRUCTIVELY
+// One row per (serviceId, userId): a new attach request DESTRUCTIVELY
 // replaces any prior (decided design — irreversible; doubles as the
 // only "forget a custom domain" affordance). `lastChanged` drives the
 // 300s server-side rate limit (the client mirrors a UX cooldown but
@@ -773,7 +774,7 @@ export interface UserIdentityRecordStorage {
 // out-of-band CNAME verifier (Phase 4) flips it to `active`/`failed`.
 
 export interface CustomDomainOrderRecord {
-  appId: string;
+  serviceId: string;
   /** username, lowercased. */
   userId: string;
   fqdn: string;
@@ -793,8 +794,8 @@ export interface CustomDomainOrderRecord {
 }
 
 export interface CustomDomainOrderStorage {
-  get(userId: string, appId: string): Promise<CustomDomainOrderRecord | undefined>;
-  /** Destructive upsert: replaces any prior row for (appId,userId)
+  get(userId: string, serviceId: string): Promise<CustomDomainOrderRecord | undefined>;
+  /** Destructive upsert: replaces any prior row for (serviceId,userId)
    *  wholesale and returns the stored row. */
   upsert(rec: CustomDomainOrderRecord): Promise<CustomDomainOrderRecord>;
   /** Phase-4 verifier transition (pending→active|failed). Bumps
@@ -802,7 +803,7 @@ export interface CustomDomainOrderStorage {
    *  the fqdn no longer matches (a newer request superseded it). */
   setStatus(
     userId: string,
-    appId: string,
+    serviceId: string,
     fqdn: string,
     status: CustomDomainOrderRecord["status"],
     at: number,

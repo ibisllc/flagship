@@ -21,7 +21,7 @@
 export interface AppSummary {
   /** Composite id `<creator>-<slug>`. Immutable for the life of the
    *  package — survives re-deploys and URL-stem renames. */
-  appId: string;
+  serviceId: string;
   creator: string;
   slug: string;
   /** Human label used in URLs: `<slug>` or `<slug>-<creator>`. */
@@ -42,7 +42,7 @@ export interface RecentInstallEvent {
   /** Unix-ms. */
   at: number;
   kind: "installed" | "uninstalled" | "deploy" | "update-pulled";
-  appId: string;
+  serviceId: string;
   /** Human-friendly one-liner. */
   detail?: string;
 }
@@ -62,7 +62,7 @@ export interface ServerDetailResponse {
   certNotBefore?: number;
   /** SAN list from the live cert, if known. */
   certSans?: string[];
-  appCount: number;
+  serviceCount: number;
   pairedSessionCount: number;
   recentInstallEvents: RecentInstallEvent[];
 }
@@ -73,7 +73,7 @@ export interface AppsListResponse {
   apps: AppSummary[];
 }
 
-// ---------- P1.3 — /api/screens/app-detail/:appId ----------------------
+// ---------- P1.3 — /api/screens/app-detail/:serviceId ----------------------
 
 export interface AppDetailResponse {
   app: AppSummary;
@@ -128,7 +128,7 @@ export type VibeCodeFrame =
   | { kind: "repo-create"; repoFullName: string }
   | { kind: "build-start" }
   | { kind: "build-log"; line: string }
-  | { kind: "deploy"; appId: string; url: string }
+  | { kind: "deploy"; serviceId: string; url: string }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
@@ -174,7 +174,7 @@ export interface UnlockApprovalApproveRequest {
 
 export interface BrowserTab {
   tabId: string;
-  appId: string;
+  serviceId: string;
   currentUrl?: string;
   title?: string;
   /** Object key in the browser-screenshot store, when available. */
@@ -323,7 +323,7 @@ export interface ServerMetricsResponse {
 // ---------- P1.19 / P1.20 — /api/screens/app-backup --------------------
 
 export interface AppBackupStartRequest {
-  appId: string;
+  serviceId: string;
   /** Optional symmetric password to encrypt the archive end-to-end. */
   password?: string;
   includeUserData?: boolean;
@@ -360,7 +360,7 @@ export interface AppBackupStartResponse {
 // the same gate guards every /api/screens/* endpoint.
 
 export interface LineagePauseSummary {
-  appId: string;
+  serviceId: string;
   creator: string;
   slug: string;
   canonicalUrl: string;
@@ -383,7 +383,7 @@ export interface LineagePausedListResponse {
 }
 
 export interface LineageResolveRequest {
-  appId: string;
+  serviceId: string;
   /** "accept" rolls the anchor forward; "revoke" uninstalls. */
   decision: "accept" | "revoke";
 }

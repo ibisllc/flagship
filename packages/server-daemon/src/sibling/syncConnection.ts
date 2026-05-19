@@ -31,12 +31,12 @@
  */
 
 import {
-  appGrantId,
+  serviceGrantId,
   ed,
   signPodIdentityBinding,
-  verifyAppGrant,
+  verifyServiceGrant,
   verifyPodIdentityBinding,
-  type AppGrant,
+  type ServiceGrant,
   type Bytes,
   type Keypair,
   type PodIdentityBinding,
@@ -68,17 +68,17 @@ export interface SyncTransport {
 /** What the connection reads + writes against the local pod's grant store. */
 export interface AppGrantStore {
   /** Return every active (or expired-but-known) grant + signature. */
-  list(): Array<{ grant: AppGrant; signature: Bytes }>;
+  list(): Array<{ grant: ServiceGrant; signature: Bytes }>;
   /** Lookup a grant by its grantId; null if unknown. */
-  byGrantId(grantId: string): { grant: AppGrant; signature: Bytes } | null;
+  byGrantId(grantId: string): { grant: ServiceGrant; signature: Bytes } | null;
   /**
    * Apply a fresher grant. Implementations MUST drop the incoming
    * grant when an existing one with the same grantId has a higher
-   * issuedAt, OR when the grant has an appCanonical (+ optional
-   * appInstanceId) where the existing entry is fresher. This is the
+   * issuedAt, OR when the grant has an serviceCanonical (+ optional
+   * serviceInstanceId) where the existing entry is fresher. This is the
    * fresher-cert-wins primitive.
    */
-  applyIfFresher(args: { grant: AppGrant; signature: Bytes }): boolean;
+  applyIfFresher(args: { grant: ServiceGrant; signature: Bytes }): boolean;
 }
 
 /** Per-user IRK lookup (injected; tests supply a static map). */
@@ -132,7 +132,7 @@ export interface SyncConnectionOptions {
    * Hook for tests/observability — fires every time a fresh peer push
    * is accepted into the local store.
    */
-  onPushApplied?: (args: { grantId: string; appCanonical: string }) => void;
+  onPushApplied?: (args: { grantId: string; serviceCanonical: string }) => void;
   /**
    * Hook fires every time a peer's hello is REJECTED for any reason.
    * The wire response is always a close — this hook lets tests assert
@@ -383,14 +383,14 @@ export function startSyncConnection(opts: SyncConnectionOptions): SyncConnection
         grant: {
           grantId: e.grant.grantId,
           username: e.grant.username,
-          appCanonical: e.grant.appCanonical,
+          serviceCanonical: e.grant.serviceCanonical,
           serverDomains: e.grant.serverDomains,
           serverIdentitiesHex: e.grant.serverIdentities.map(bytesToHex),
           routes: e.grant.routes.map((r) => ({ url: r.url, scope: r.scope })),
           issuedAt: e.grant.issuedAt,
           expiresAt: e.grant.expiresAt,
-          ...(e.grant.appInstanceId !== undefined
-            ? { appInstanceId: e.grant.appInstanceId }
+          ...(e.grant.serviceInstanceId !== undefined
+            ? { serviceInstanceId: e.grant.serviceInstanceId }
             : {}),
         },
         signatureHex: bytesToHex(e.signature),
@@ -416,20 +416,20 @@ export function startSyncConnection(opts: SyncConnectionOptions): SyncConnection
     if (!irkPub) return;
     const revoked = await opts.revocations(p.grant.username);
     if (revoked && revoked.has(p.grant.grantId)) return;
-    // Inflate wire → AppGrant.
-    let grant: AppGrant;
+    // Inflate wire → ServiceGrant.
+    let grant: ServiceGrant;
     try {
       grant = {
         grantId: p.grant.grantId,
         username: p.grant.username,
-        appCanonical: p.grant.appCanonical,
+        serviceCanonical: p.grant.serviceCanonical,
         serverDomains: p.grant.serverDomains,
         serverIdentities: p.grant.serverIdentitiesHex.map(hexToBytes),
         routes: p.grant.routes,
         issuedAt: p.grant.issuedAt,
         expiresAt: p.grant.expiresAt,
-        ...(p.grant.appInstanceId !== undefined
-          ? { appInstanceId: p.grant.appInstanceId }
+        ...(p.grant.serviceInstanceId !== undefined
+          ? { serviceInstanceId: p.grant.serviceInstanceId }
           : {}),
       };
     } catch {
@@ -441,12 +441,12 @@ export function startSyncConnection(opts: SyncConnectionOptions): SyncConnection
     } catch {
       return;
     }
-    if (!verifyAppGrant(grant, sig, irkPub)) return;
+    if (!verifyServiceGrant(grant, sig, irkPub)) return;
     const applied = opts.store.applyIfFresher({ grant, signature: sig });
     if (applied) {
       opts.onPushApplied?.({
         grantId: grant.grantId,
-        appCanonical: grant.appCanonical,
+        serviceCanonical: grant.serviceCanonical,
       });
     }
   }
@@ -514,11 +514,11 @@ export function makeInventory(store: AppGrantStore): CertInventoryEntry[] {
     .map((e) => {
       const entry: CertInventoryEntry = {
         grantId: e.grant.grantId,
-        appCanonical: e.grant.appCanonical,
+        serviceCanonical: e.grant.serviceCanonical,
         issuedAt: e.grant.issuedAt,
         expiresAt: e.grant.expiresAt,
       };
-      if (e.grant.appInstanceId !== undefined) entry.appInstanceId = e.grant.appInstanceId;
+      if (e.grant.serviceInstanceId !== undefined) entry.serviceInstanceId = e.grant.serviceInstanceId;
       return entry;
     });
 }
@@ -528,21 +528,21 @@ export function makeInventory(store: AppGrantStore): CertInventoryEntry[] {
  * wires a file-backed implementation that survives daemon restart.
  */
 export class InMemoryAppGrantStore implements AppGrantStore {
-  private byId = new Map<string, { grant: AppGrant; signature: Bytes }>();
-  private byApp = new Map<string, string>(); // appCanonical[#instance] → grantId
+  private byId = new Map<string, { grant: ServiceGrant; signature: Bytes }>();
+  private byApp = new Map<string, string>(); // serviceCanonical[#instance] → grantId
 
-  put(entry: { grant: AppGrant; signature: Bytes }): void {
+  put(entry: { grant: ServiceGrant; signature: Bytes }): void {
     this.byId.set(entry.grant.grantId, entry);
     this.byApp.set(appKey(entry.grant), entry.grant.grantId);
   }
 
-  list(): Array<{ grant: AppGrant; signature: Bytes }> {
+  list(): Array<{ grant: ServiceGrant; signature: Bytes }> {
     return [...this.byId.values()];
   }
-  byGrantId(grantId: string): { grant: AppGrant; signature: Bytes } | null {
+  byGrantId(grantId: string): { grant: ServiceGrant; signature: Bytes } | null {
     return this.byId.get(grantId) ?? null;
   }
-  applyIfFresher(args: { grant: AppGrant; signature: Bytes }): boolean {
+  applyIfFresher(args: { grant: ServiceGrant; signature: Bytes }): boolean {
     const existing = this.byId.get(args.grant.grantId);
     if (existing && existing.grant.issuedAt >= args.grant.issuedAt) return false;
     // Different grantId for same appKey — only adopt when fresher.
@@ -566,8 +566,8 @@ export class InMemoryAppGrantStore implements AppGrantStore {
   }
 }
 
-function appKey(g: AppGrant): string {
-  return g.appInstanceId ? `${g.appCanonical}#${g.appInstanceId}` : g.appCanonical;
+function appKey(g: ServiceGrant): string {
+  return g.serviceInstanceId ? `${g.serviceCanonical}#${g.serviceInstanceId}` : g.serviceCanonical;
 }
 
 /**
@@ -736,4 +736,4 @@ export function memorySyncTransportPair(): [SyncTransport, SyncTransport] {
   return [a, b];
 }
 
-void appGrantId; // referenced for future grantId verification at apply time
+void serviceGrantId; // referenced for future grantId verification at apply time

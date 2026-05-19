@@ -5,39 +5,39 @@
  * Apps don't talk to the .com control plane. They don't talk to the
  * tunnel hub. They don't manage AppGrants. They call this harness:
  *
- *   - `ownUrls(appId)`              "which URLs route to THIS copy?"
- *   - `siblings(appId)`             "which other pods of mine run this app?"
+ *   - `ownUrls(serviceId)`              "which URLs route to THIS copy?"
+ *   - `siblings(serviceId)`             "which other pods of mine run this app?"
  *   - `requestUrl(url)`             "point that URL at me" (capability-gated)
- *   - `openSiblingWs(pod, appId)`   open an opaque app-message channel
- *   - `sendToSibling(pod, appId, msg)`  one-shot send (no channel mgmt)
- *   - `inbound(appId)`              async-iter of inbound app messages
+ *   - `openSiblingWs(pod, serviceId)`   open an opaque app-message channel
+ *   - `sendToSibling(pod, serviceId, msg)`  one-shot send (no channel mgmt)
+ *   - `inbound(serviceId)`              async-iter of inbound app messages
  *
  * The harness sits on TWO sources of truth:
  *
  *   1. `AppGrantState` — the current set of grants the user has signed
- *      for THIS pod (one per `appCanonical@instance`). Each grant lists
+ *      for THIS pod (one per `serviceCanonical@instance`). Each grant lists
  *      the sibling pods + routes the app is authorized to serve from.
  *      Refreshed by the .com pull loop; the harness just reads.
  *
  *   2. `SiblingFabric` — the persistent sibling-WS layer (#86). The
  *      fabric exposes `siblingsForApp` (which peer pods are CURRENTLY
- *      reachable for an appId), `openChannel` (open a control channel
- *      to a specific peer for an appId), `send` (one-shot), and an
- *      `inboundFor(appId)` async iterator that fans out inbound
+ *      reachable for an serviceId), `openChannel` (open a control channel
+ *      to a specific peer for an serviceId), `send` (one-shot), and an
+ *      `inboundFor(serviceId)` async iterator that fans out inbound
  *      sibling-app-message frames.
  *
  * The harness is RUNTIME-AGNOSTIC: production wires it with the real
- * sibling client + an AppGrant store fed by the .com poller; tests pass
+ * sibling client + an ServiceGrant store fed by the .com poller; tests pass
  * in-memory doubles. The harness itself never touches the network.
  *
  * Important guarantees:
  *   - Capability scoping is enforced HERE, not in the app. `requestUrl`
- *     consults the AppGrant for the calling app; only if a route matches
+ *     consults the ServiceGrant for the calling app; only if a route matches
  *     do we ask the URL controller to claim. Otherwise the harness emits
  *     a phone alert ("approval-needed-for-url") and returns
  *     `{ ok: false, reason: "needs-user-approval" }`.
  *   - `sendToSibling` / `openSiblingWs` refuse to talk to a pod that
- *     ISN'T listed in the active AppGrant — even if the fabric happens
+ *     ISN'T listed in the active ServiceGrant — even if the fabric happens
  *     to have a live WS to it (e.g. for a sibling app). This closes
  *     cross-app data leaks at the harness boundary.
  *
@@ -47,42 +47,42 @@
  */
 
 import type {
-  AppGrant,
+  ServiceGrant,
   Bytes,
 } from "@flagship/protocol";
 import {
-  appGrantActiveAt,
-  appGrantAuthorizesPod,
-  appGrantAuthorizesUrl,
+  serviceGrantActiveAt,
+  serviceGrantAuthorizesPod,
+  serviceGrantAuthorizesUrl,
 } from "@flagship/protocol";
 
 /**
  * Active grants for one (app + optional instance). Keyed by `appKey =
- * appCanonical[#instance]`. The harness queries by appId (the daemon's
+ * serviceCanonical[#instance]`. The harness queries by serviceId (the daemon's
  * internal "<creator>--<slug>" form) → the caller maps to appKey via
- * `AppGrantState.grantForApp(appId)`.
+ * `AppGrantState.grantForApp(serviceId)`.
  */
 export interface AppGrantEntry {
-  grant: AppGrant;
+  grant: ServiceGrant;
   /** Signature over the grant, verified by the .com poll before storing. */
   signature: Bytes;
 }
 
 export interface AppGrantState {
   /**
-   * Return the active grant (if any) for the daemon-internal appId.
-   * Mapping appId → grant is the implementer's responsibility — the
-   * daemon's AppPlatform knows the mapping; tests inject a static map.
+   * Return the active grant (if any) for the daemon-internal serviceId.
+   * Mapping serviceId → grant is the implementer's responsibility — the
+   * daemon's ServicePlatform knows the mapping; tests inject a static map.
    * Returns null when no grant exists OR the grant is expired/inactive.
    */
-  grantForApp(appId: string, now?: number): AppGrantEntry | null;
+  grantForApp(serviceId: string, now?: number): AppGrantEntry | null;
 }
 
 /**
  * Lookup from a sibling pod's canonical FQDN → its identity pubkey.
- * Sourced from the AppGrant itself (`serverIdentities` + `serverDomains`
+ * Sourced from the ServiceGrant itself (`serverIdentities` + `serverDomains`
  * paired by index when the grant is constructed, or from a side-table
- * the AppGrant store builds at ingest). The harness needs this to keep
+ * the ServiceGrant store builds at ingest). The harness needs this to keep
  * its API by-FQDN while the underlying fabric is keyed by pubkey.
  *
  * Implementations should accept lower-case FQDNs.
@@ -96,20 +96,20 @@ export type PodPubKeyLookup = (podCanonical: string) => Bytes | null;
  */
 export interface SiblingFabric {
   /**
-   * Currently-reachable peer pods for `appId`. The fabric filters its
+   * Currently-reachable peer pods for `serviceId`. The fabric filters its
    * own connection set by which grants entitle which peers — but the
    * harness ALSO filters by the grant on every call (defense in depth).
    */
-  reachablePeers(appId: string): Array<{ podCanonical: string }>;
+  reachablePeers(serviceId: string): Array<{ podCanonical: string }>;
   /**
    * Open a duplex channel-like object to the named peer for the given
-   * appId. Returns a `MultipodChannel`. Multiple calls for the same
-   * (peer, appId) MAY return the same underlying channel — the harness
+   * serviceId. Returns a `MultipodChannel`. Multiple calls for the same
+   * (peer, serviceId) MAY return the same underlying channel — the harness
    * doesn't guarantee identity.
    */
   openChannel(args: {
     podCanonical: string;
-    appId: string;
+    serviceId: string;
   }): Promise<MultipodChannel>;
   /**
    * One-shot send. Doesn't keep a channel open. Useful for fire-and-
@@ -117,15 +117,15 @@ export interface SiblingFabric {
    */
   sendOnce(args: {
     podCanonical: string;
-    appId: string;
+    serviceId: string;
     message: Uint8Array;
   }): Promise<void>;
   /**
-   * Subscribe to inbound app-messages for an appId. The fabric calls
+   * Subscribe to inbound app-messages for an serviceId. The fabric calls
    * `cb` once per inbound message until the returned closure runs.
    */
   subscribe(
-    appId: string,
+    serviceId: string,
     cb: (msg: { fromPod: string; message: Uint8Array }) => void,
   ): () => void;
 }
@@ -150,7 +150,7 @@ export interface MultipodChannel {
  */
 export type ApprovalAlerter = (alert: {
   kind: "needs-url-approval";
-  appId: string;
+  serviceId: string;
   requestedUrl: string;
 }) => void;
 
@@ -189,22 +189,22 @@ export interface MultipodInboundMessage {
 }
 
 export interface MultipodHarness {
-  ownUrls(appId: string): Promise<string[]>;
-  siblings(appId: string): Promise<Array<{ podId: string; canonicalUrl: string }>>;
-  openSiblingWs(podCanonical: string, appId: string): Promise<MultipodChannel>;
+  ownUrls(serviceId: string): Promise<string[]>;
+  siblings(serviceId: string): Promise<Array<{ podId: string; canonicalUrl: string }>>;
+  openSiblingWs(podCanonical: string, serviceId: string): Promise<MultipodChannel>;
   requestUrl(
     url: string,
-    appId: string,
+    serviceId: string,
   ): Promise<{ ok: true } | { ok: false; reason: "needs-user-approval" }>;
-  sendToSibling(podCanonical: string, appId: string, message: Uint8Array): Promise<void>;
-  inbound(appId: string): AsyncIterableIterator<MultipodInboundMessage>;
+  sendToSibling(podCanonical: string, serviceId: string, message: Uint8Array): Promise<void>;
+  inbound(serviceId: string): AsyncIterableIterator<MultipodInboundMessage>;
 }
 
 /**
  * Implementation. Apps' calls all flow through here so capability
  * scoping has exactly one enforcement point. The harness:
  *
- *   1. Looks up the active grant for `appId`. No grant → every method
+ *   1. Looks up the active grant for `serviceId`. No grant → every method
  *      returns empty / errors / needs-user-approval.
  *   2. Filters siblings to grant.serverDomains MINUS this pod (so we
  *      don't list ourselves as a peer).
@@ -219,11 +219,11 @@ export class MultipodHarnessImpl implements MultipodHarness {
     this.now = opts.now ?? (() => Date.now());
   }
 
-  async ownUrls(appId: string): Promise<string[]> {
-    const entry = this.opts.grants.grantForApp(appId, this.now());
+  async ownUrls(serviceId: string): Promise<string[]> {
+    const entry = this.opts.grants.grantForApp(serviceId, this.now());
     if (!entry) return [];
     const grant = entry.grant;
-    if (!appGrantAuthorizesPod(grant, this.opts.myPodPubKey)) return [];
+    if (!serviceGrantAuthorizesPod(grant, this.opts.myPodPubKey)) return [];
     // "Own URLs" = routes whose serverDomain list includes us. The
     // grant doesn't currently store route→pod mapping at fine grain —
     // any pod in serverIdentities can serve any route. For the
@@ -235,12 +235,12 @@ export class MultipodHarnessImpl implements MultipodHarness {
   }
 
   async siblings(
-    appId: string,
+    serviceId: string,
   ): Promise<Array<{ podId: string; canonicalUrl: string }>> {
-    const entry = this.opts.grants.grantForApp(appId, this.now());
+    const entry = this.opts.grants.grantForApp(serviceId, this.now());
     if (!entry) return [];
     const grant = entry.grant;
-    if (!appGrantAuthorizesPod(grant, this.opts.myPodPubKey)) return [];
+    if (!serviceGrantAuthorizesPod(grant, this.opts.myPodPubKey)) return [];
     const me = this.opts.myPodCanonical.toLowerCase();
     const out: Array<{ podId: string; canonicalUrl: string }> = [];
     const seen = new Set<string>();
@@ -256,21 +256,21 @@ export class MultipodHarnessImpl implements MultipodHarness {
 
   async openSiblingWs(
     podCanonical: string,
-    appId: string,
+    serviceId: string,
   ): Promise<MultipodChannel> {
-    this.assertPeerEntitled(podCanonical, appId);
+    this.assertPeerEntitled(podCanonical, serviceId);
     return this.opts.fabric.openChannel({
       podCanonical: podCanonical.toLowerCase(),
-      appId,
+      serviceId,
     });
   }
 
   async requestUrl(
     url: string,
-    appId: string,
+    serviceId: string,
   ): Promise<{ ok: true } | { ok: false; reason: "needs-user-approval" }> {
-    const entry = this.opts.grants.grantForApp(appId, this.now());
-    if (entry && appGrantAuthorizesUrl(entry.grant, url)) {
+    const entry = this.opts.grants.grantForApp(serviceId, this.now());
+    if (entry && serviceGrantAuthorizesUrl(entry.grant, url)) {
       const fqdn = parseFqdn(url);
       if (!fqdn) return { ok: false, reason: "needs-user-approval" };
       await this.opts.urlClaimer.claim(fqdn);
@@ -278,7 +278,7 @@ export class MultipodHarnessImpl implements MultipodHarness {
     }
     this.opts.alerter({
       kind: "needs-url-approval",
-      appId,
+      serviceId,
       requestedUrl: url,
     });
     return { ok: false, reason: "needs-user-approval" };
@@ -286,18 +286,18 @@ export class MultipodHarnessImpl implements MultipodHarness {
 
   async sendToSibling(
     podCanonical: string,
-    appId: string,
+    serviceId: string,
     message: Uint8Array,
   ): Promise<void> {
-    this.assertPeerEntitled(podCanonical, appId);
+    this.assertPeerEntitled(podCanonical, serviceId);
     await this.opts.fabric.sendOnce({
       podCanonical: podCanonical.toLowerCase(),
-      appId,
+      serviceId,
       message,
     });
   }
 
-  inbound(appId: string): AsyncIterableIterator<MultipodInboundMessage> {
+  inbound(serviceId: string): AsyncIterableIterator<MultipodInboundMessage> {
     // Bridge the fabric's callback subscription into an async iterator.
     // Buffer inbound messages between pulls so apps with bursty inputs
     // don't lose data; cap at 1024 to avoid runaway memory.
@@ -306,12 +306,12 @@ export class MultipodHarnessImpl implements MultipodHarness {
       (r: IteratorResult<MultipodInboundMessage>) => void
     > = [];
     let closed = false;
-    const unsub = this.opts.fabric.subscribe(appId, (msg) => {
+    const unsub = this.opts.fabric.subscribe(serviceId, (msg) => {
       // Defense in depth: only deliver messages from peers entitled by
       // the CURRENT grant. (The fabric should already filter, but a
       // grant rotation between fabric-deliver and harness-receive can
       // leave a stale message in flight.)
-      const entry = this.opts.grants.grantForApp(appId, this.now());
+      const entry = this.opts.grants.grantForApp(serviceId, this.now());
       if (!entry) return;
       const peerPub = null; // we don't know peer pubkey from the fabric callback;
       // but we DO know the peer FQDN, and the grant lists FQDNs.
@@ -369,28 +369,28 @@ export class MultipodHarnessImpl implements MultipodHarness {
   }
 
   /**
-   * Throws when the peer isn't authorized under the appId's current
+   * Throws when the peer isn't authorized under the serviceId's current
    * grant. The thrown error is intentionally bland so apps don't get
    * a side-channel into other apps' grants ("does grant X cover pod
    * Y?" → if yes, no error; if no, "peer not entitled" — the message
    * itself is the same shape regardless).
    */
-  private assertPeerEntitled(podCanonical: string, appId: string): void {
+  private assertPeerEntitled(podCanonical: string, serviceId: string): void {
     const lower = podCanonical.toLowerCase();
     if (lower === this.opts.myPodCanonical.toLowerCase()) {
       throw new Error("peer not entitled");
     }
-    const entry = this.opts.grants.grantForApp(appId, this.now());
+    const entry = this.opts.grants.grantForApp(serviceId, this.now());
     if (!entry) throw new Error("peer not entitled");
     const grant = entry.grant;
-    if (!appGrantAuthorizesPod(grant, this.opts.myPodPubKey)) {
+    if (!serviceGrantAuthorizesPod(grant, this.opts.myPodPubKey)) {
       throw new Error("peer not entitled");
     }
     const inDomains = grant.serverDomains.some(
       (d) => d.toLowerCase() === lower,
     );
     if (!inDomains) throw new Error("peer not entitled");
-    if (!appGrantActiveAt(grant, this.now())) {
+    if (!serviceGrantActiveAt(grant, this.now())) {
       throw new Error("peer not entitled");
     }
   }
@@ -404,19 +404,19 @@ export class MultipodHarnessImpl implements MultipodHarness {
 export class InMemoryAppGrantState implements AppGrantState {
   private byApp = new Map<string, AppGrantEntry>();
 
-  set(appId: string, entry: AppGrantEntry): void {
-    this.byApp.set(appId, entry);
+  set(serviceId: string, entry: AppGrantEntry): void {
+    this.byApp.set(serviceId, entry);
   }
 
-  remove(appId: string): void {
-    this.byApp.delete(appId);
+  remove(serviceId: string): void {
+    this.byApp.delete(serviceId);
   }
 
-  grantForApp(appId: string, now?: number): AppGrantEntry | null {
-    const e = this.byApp.get(appId);
+  grantForApp(serviceId: string, now?: number): AppGrantEntry | null {
+    const e = this.byApp.get(serviceId);
     if (!e) return null;
     const t = now ?? Date.now();
-    if (!appGrantActiveAt(e.grant, t)) return null;
+    if (!serviceGrantActiveAt(e.grant, t)) return null;
     return e;
   }
 }

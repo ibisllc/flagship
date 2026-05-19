@@ -1,5 +1,5 @@
 /**
- * #91 — Phone-side AppGrant background renewer.
+ * #91 — Phone-side ServiceGrant background renewer.
  *
  * AppGrants ship with a 7-day TTL by convention. Without auto-renewal,
  * every user-installed app would silently lose authority after a week
@@ -9,7 +9,7 @@
  *      user-mandate store on .com via #71, or from a local cache).
  *   2. For each grant within RENEW_WINDOW_MS of expiry, re-signs with
  *      a fresh issuedAt + expiresAt and the same content (serverIdentities,
- *      routes, appCanonical).
+ *      routes, serviceCanonical).
  *   3. Distributes the new grant to all listed serverIdentities via
  *      the existing sibling-WS transport from #86. Each pod stores
  *      the fresh grant; the legacy one expires naturally.
@@ -26,10 +26,10 @@
  */
 
 import {
-  appGrantActiveAt,
-  signAppGrant,
-  verifyAppGrant,
-  type AppGrant,
+  serviceGrantActiveAt,
+  signServiceGrant,
+  verifyServiceGrant,
+  type ServiceGrant,
   type Bytes,
   type Keypair,
 } from "@flagship/protocol";
@@ -40,7 +40,7 @@ export const DEFAULT_RENEW_WINDOW_MS = 24 * 60 * 60_000;
 export const DEFAULT_GRANT_TTL_MS = 7 * 24 * 60 * 60_000;
 
 export interface GrantWithMeta {
-  grant: AppGrant;
+  grant: ServiceGrant;
   signature: Bytes;
   /** When true, renewal requires explicit phone tap rather than auto. */
   requiresExplicitRenewal: boolean;
@@ -138,7 +138,7 @@ export async function runRenewal(deps: RenewerDeps): Promise<RenewalRun> {
 
 /**
  * Produce a fresh GrantWithMeta from an existing one. Content
- * (appCanonical, serverIdentities, routes, etc.) is copied verbatim;
+ * (serviceCanonical, serverIdentities, routes, etc.) is copied verbatim;
  * only grantId + issuedAt + expiresAt change. Caller passes the IRK
  * keypair; we sign with it before returning.
  */
@@ -149,16 +149,16 @@ export function renewOne(
   ttlMs: number,
   newId?: () => string,
 ): GrantWithMeta {
-  const next: AppGrant = {
+  const next: ServiceGrant = {
     ...cur.grant,
     grantId: (newId ?? defaultUuid)(),
     issuedAt: now,
     expiresAt: now + ttlMs,
   };
-  const signature = signAppGrant(next, irk);
+  const signature = signServiceGrant(next, irk);
   // Sanity: verify what we just produced (defends against silent
   // canonicalization bugs).
-  if (!verifyAppGrant(next, signature, irk.publicKey)) {
+  if (!verifyServiceGrant(next, signature, irk.publicKey)) {
     throw new Error("renewer: self-verify failed on freshly signed grant");
   }
   return {
@@ -191,9 +191,9 @@ function defaultUuid(): string {
  * the full renewer.
  */
 export function isInRenewalWindow(
-  grant: AppGrant,
+  grant: ServiceGrant,
   now: number,
   windowMs = DEFAULT_RENEW_WINDOW_MS,
 ): boolean {
-  return grant.expiresAt - now <= windowMs && appGrantActiveAt(grant, now);
+  return grant.expiresAt - now <= windowMs && serviceGrantActiveAt(grant, now);
 }

@@ -92,7 +92,7 @@ export function parseViewQuery() {
     return {
       view: resolveViewAlias(raw),
       serverId: params.get("serverId") ?? null,
-      appId: params.get("appId") ?? null,
+      serviceId: params.get("serviceId") ?? null,
       debug: params.get("debug") === "1",
     };
   } catch {
@@ -135,7 +135,7 @@ export function isDebug() {
 }
 
 /**
- * Strip ?view= / ?serverId= / ?appId= / ?debug= from the URL bar once
+ * Strip ?view= / ?serverId= / ?serviceId= / ?debug= from the URL bar once
  * we've consumed them, so a deep-link doesn't keep firing on every
  * subsequent reload. Kept side-effecting (no return) — callers don't
  * need the URL object.
@@ -144,7 +144,7 @@ export function clearViewQuery() {
   try {
     const u = new URL(window.location.href);
     let touched = false;
-    for (const k of ["view", "serverId", "appId"]) {
+    for (const k of ["view", "serverId", "serviceId"]) {
       if (u.searchParams.has(k)) {
         u.searchParams.delete(k);
         touched = true;

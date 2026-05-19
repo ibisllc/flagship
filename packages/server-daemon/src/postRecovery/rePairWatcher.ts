@@ -287,7 +287,7 @@ export class RePairWatcher {
           if (app.rewrittenCount === 0) continue;
           const alert: ReissuanceAlert = {
             kind: "membership-reissued",
-            appId: app.appId,
+            serviceId: app.serviceId,
             slug: app.slug,
             rewrittenCount: app.rewrittenCount,
             oldIrkPrefix: reissue.oldIrkPrefix,

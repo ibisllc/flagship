@@ -2,7 +2,7 @@
  * End-to-end isolation test for the browser feature.
  *
  * Wires the full daemon-side stack (BrowserManager + TabRegistry +
- * DomainGate + PhonePipe + AlertInbox + apiHandlers + AppPlatform +
+ * DomainGate + PhonePipe + AlertInbox + apiHandlers + ServicePlatform +
  * AppAuthTokens) against a FakeCdpServer. Asserts the contract every
  * tenant boundary stays in place under realistic flows:
  *
@@ -10,7 +10,7 @@
  *   - Each app opens tabs and drives them; cross-tenant access
  *     attempts return 404 (NOT 403, no existence leak).
  *   - DomainGate.check is enforced on both openTab and navigate.
- *   - Descendant popups (window.open) inherit the parent's appId.
+ *   - Descendant popups (window.open) inherit the parent's serviceId.
  *   - PhonePipe roundtrip: alert → screenshot ref → PSK-signed
  *     response → CDP Input.insertText.
  *   - Uninstall closes the app's tabs + revokes its grant; old
@@ -20,8 +20,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ed,
-  signInstallApp,
-  signUninstallApp,
+  signInstallService,
+  signUninstallService,
   type Keypair,
 } from "@flagship/protocol";
 import { BrowserManager } from "../../src/browser/browserManager.js";
@@ -30,9 +30,9 @@ import { DomainGate } from "../../src/browser/domainGate.js";
 import { PhonePipe } from "../../src/browser/phonePipe.js";
 import { buildBrowserApiHandlers } from "../../src/browser/apiHandlers.js";
 import { InMemoryAlertInbox } from "../../src/alertInbox.js";
-import { InMemoryAppAuthTokens } from "../../src/appAuthToken.js";
-import { AppPlatform } from "../../src/appPlatform.js";
-import { AppRunner, type CommandRunner } from "../../src/appRunner.js";
+import { InMemoryAppAuthTokens } from "../../src/serviceAuthToken.js";
+import { ServicePlatform } from "../../src/servicePlatform.js";
+import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
 import {
   DataProvisioner,
   InMemoryPostgresAdmin,
@@ -102,7 +102,7 @@ describe("Browser feature — full-stack isolation", () => {
   let pipe: PhonePipe;
   let inbox: InMemoryAlertInbox;
   let tokens: InMemoryAppAuthTokens;
-  let platform: AppPlatform;
+  let platform: ServicePlatform;
   let irk: Keypair;
   let handle: (req: HttpRequest) => Promise<{ status: number; headers?: Record<string, string>; body: string | Buffer } | null>;
 
@@ -132,7 +132,7 @@ describe("Browser feature — full-stack isolation", () => {
     pipe.start();
     tokens = new InMemoryAppAuthTokens();
     irk = makeKey();
-    platform = new AppPlatform({
+    platform = new ServicePlatform({
       host: { username: HOST, irkPub: irk.publicKey },
       swk: fakeSwk(),
       appRunner: new AppRunner(NOOP_CMD),
@@ -159,7 +159,7 @@ describe("Browser feature — full-stack isolation", () => {
         addOwnerToMembership: false,
         issuedAt: Date.now(),
       },
-      signature: signInstallApp(
+      signature: signInstallService(
         {
           serverId: HOST_FQDN,
           creator: HOST,
@@ -352,7 +352,7 @@ describe("Browser feature — full-stack isolation", () => {
     const alert = inbox.list()[0]?.alert;
     expect(alert).toMatchObject({
       kind: "browser-input-needed",
-      appId: "alice-shopper",
+      serviceId: "alice-shopper",
       tabId: "tab-shopper-1",
       domain: "amazon.com",
       inputKind: "password",
@@ -390,7 +390,7 @@ describe("Browser feature — full-stack isolation", () => {
         slug: "shopper",
         issuedAt: Date.now(),
       },
-      signature: signUninstallApp(
+      signature: signUninstallService(
         { serverId: HOST_FQDN, creator: HOST, slug: "shopper", issuedAt: Date.now() },
         irk,
       ),

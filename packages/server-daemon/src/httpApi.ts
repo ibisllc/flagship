@@ -13,11 +13,11 @@ import { BootCoordinator } from "./bootCoordinator.js";
 import { AppMembership } from "./membership.js";
 import { IdentityInjector } from "./identityInjector.js";
 import { LlmHarness } from "./llmHarness.js";
-import { AppRunner } from "./appRunner.js";
+import { AppRunner } from "./serviceRunner.js";
 import { PhoneStateStore, PHONE_STATE_MAX_BYTES } from "./phoneStateStore.js";
 import { DataProvisioner, credentialsToEnv, type AppDataCredentials } from "./dataLayer/index.js";
-import { buildLlmAppContext } from "./llmAppContext.js";
-import { ForgejoAppAdmin } from "./forgejoAppAdmin.js";
+import { buildLlmAppContext } from "./llmServiceContext.js";
+import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import { BackupLoop } from "./backupLoop.js";
 
 /**
@@ -148,10 +148,10 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   // ---- Per-app invite redemption ----------------------------------------
 
   app.post<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Body: {
       token?: {
-        appId?: string;
+        serviceId?: string;
         role?: string;
         nonce?: string;
         issuedAt?: number;
@@ -165,8 +165,8 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       };
       acceptanceSignature?: string;
     };
-  }>("/apps/:appId/invites/redeem", async (req, reply) => {
-    const app = ctx.apps.get(req.params.appId);
+  }>("/apps/:serviceId/invites/redeem", async (req, reply) => {
+    const app = ctx.apps.get(req.params.serviceId);
     if (!app) return reply.status(404).send({ error: "app not found" });
 
     const body = req.body ?? {};
@@ -192,7 +192,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     let accSig: Uint8Array;
     try {
       token = {
-        appId: req.params.appId,
+        serviceId: req.params.serviceId,
         role: body.token.role,
         nonce: hexToBytes(body.token.nonce),
         issuedAt: body.token.issuedAt,
@@ -221,18 +221,18 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   // ---- Per-app membership mutations (remove, role change) ---------------
 
   app.post<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Body: {
       mutation?: {
-        appId?: string;
+        serviceId?: string;
         targetIrkPub?: string;
         role?: string | null;
         issuedAt?: number;
       };
       signature?: string;
     };
-  }>("/apps/:appId/membership/mutation", async (req, reply) => {
-    const app = ctx.apps.get(req.params.appId);
+  }>("/apps/:serviceId/membership/mutation", async (req, reply) => {
+    const app = ctx.apps.get(req.params.serviceId);
     if (!app) return reply.status(404).send({ error: "app not found" });
 
     const body = req.body ?? {};
@@ -250,7 +250,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     let sig: Uint8Array;
     try {
       mutation = {
-        appId: req.params.appId,
+        serviceId: req.params.serviceId,
         targetIrkPub: hexToBytes(m.targetIrkPub),
         role: m.role ?? null,
         issuedAt: m.issuedAt,
@@ -283,9 +283,9 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     const parsed = parseManifest(body.manifest);
     if (!parsed.ok) return reply.status(400).send({ error: "invalid manifest", details: parsed.errors });
     const m = parsed.manifest;
-    const appId = m.name;
-    if (ctx.deployedApps.has(appId)) {
-      return reply.status(409).send({ error: "app already deployed", appId });
+    const serviceId = m.name;
+    if (ctx.deployedApps.has(serviceId)) {
+      return reply.status(409).send({ error: "app already deployed", serviceId });
     }
 
     // Provision data-layer resources before starting the container so the
@@ -301,7 +301,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       try {
         creds = await ctx.dataProvisioner.provisionApp({
           creator: ctx.userId,
-          slug: appId,
+          slug: serviceId,
           stores,
         });
       } catch (e) {
@@ -315,11 +315,11 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       ...(m.runtime.env ?? {}),
       ...dataEnv,
       FLAGSHIP_PEERS_TOKEN: peersToken,
-      FLAGSHIP_APP_ID: appId,
+      FLAGSHIP_APP_ID: serviceId,
     };
     try {
       await ctx.appRunner.deploy({
-        appId,
+        serviceId,
         image: m.runtime.image,
         env,
         port: m.runtime.port,
@@ -329,35 +329,35 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       // a half-provisioned tenant.
       if (creds && ctx.dataProvisioner) {
         await ctx.dataProvisioner
-          .deprovisionApp({ creator: ctx.userId, slug: appId, stores })
+          .deprovisionApp({ creator: ctx.userId, slug: serviceId, stores })
           .catch(() => {});
       }
       return reply.status(500).send({ error: "deploy failed", message: errMsg(e) });
     }
-    ctx.deployedApps.set(appId, {
+    ctx.deployedApps.set(serviceId, {
       manifest: m,
       deployedAt: Date.now(),
       source: typeof body.source === "string" ? body.source : undefined,
       data: creds,
       peersToken,
     });
-    return { ok: true, appId };
+    return { ok: true, serviceId };
   });
 
   app.delete<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Body: { sessionToken?: string };
-  }>("/apps/:appId", async (req, reply) => {
+  }>("/apps/:serviceId", async (req, reply) => {
     if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
     if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
     if (!ctx.resolveSession(req.body?.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    const appId = req.params.appId;
-    const entry = ctx.deployedApps.get(appId);
+    const serviceId = req.params.serviceId;
+    const entry = ctx.deployedApps.get(serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     try {
-      await ctx.appRunner.stop(appId);
+      await ctx.appRunner.stop(serviceId);
     } catch (e) {
       return reply.status(500).send({ error: "stop failed", message: errMsg(e) });
     }
@@ -365,38 +365,38 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       await ctx.dataProvisioner
         .deprovisionApp({
           creator: ctx.userId,
-          slug: appId,
+          slug: serviceId,
           stores: entry.manifest.data.stores ?? {},
         })
         .catch(() => {
           // best-effort: data containers may already be gone (system stopping)
         });
     }
-    ctx.deployedApps.delete(appId);
-    return { ok: true, appId };
+    ctx.deployedApps.delete(serviceId);
+    return { ok: true, serviceId };
   });
 
   app.post<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Body: { sessionToken?: string };
-  }>("/apps/:appId/restart", async (req, reply) => {
+  }>("/apps/:serviceId/restart", async (req, reply) => {
     if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
     if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
     if (!ctx.resolveSession(req.body?.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    const entry = ctx.deployedApps.get(req.params.appId);
+    const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     const dataEnv = entry.data ? credentialsToEnv(entry.data) : {};
     const restartEnv: Record<string, string> = {
       ...(entry.manifest.runtime.env ?? {}),
       ...dataEnv,
-      FLAGSHIP_APP_ID: req.params.appId,
+      FLAGSHIP_APP_ID: req.params.serviceId,
     };
     if (entry.peersToken) restartEnv.FLAGSHIP_PEERS_TOKEN = entry.peersToken;
     try {
       await ctx.appRunner.restart({
-        appId: req.params.appId,
+        serviceId: req.params.serviceId,
         image: entry.manifest.runtime.image,
         env: restartEnv,
         port: entry.manifest.runtime.port,
@@ -408,21 +408,21 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   });
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; tail?: string };
-  }>("/apps/:appId/logs", async (req, reply) => {
+  }>("/apps/:serviceId/logs", async (req, reply) => {
     if (!ctx.appRunner) return reply.status(503).send({ error: "appRunner not configured" });
     if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
     if (!ctx.resolveSession(req.query.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    if (!ctx.deployedApps.has(req.params.appId)) {
+    if (!ctx.deployedApps.has(req.params.serviceId)) {
       return reply.status(404).send({ error: "app not found" });
     }
     const tail = Number(req.query.tail ?? 200);
     const safeTail = Number.isFinite(tail) && tail > 0 && tail <= 5000 ? Math.floor(tail) : 200;
     try {
-      const out = await ctx.appRunner.logs(req.params.appId, safeTail);
+      const out = await ctx.appRunner.logs(req.params.serviceId, safeTail);
       return { stdout: out.stdout, stderr: out.stderr, tail: safeTail };
     } catch (e) {
       return reply.status(500).send({ error: "logs failed", message: errMsg(e) });
@@ -437,8 +437,8 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
         return reply.status(401).send({ error: "session not authenticated" });
       }
       return {
-        apps: [...ctx.deployedApps.entries()].map(([appId, e]) => ({
-          appId,
+        apps: [...ctx.deployedApps.entries()].map(([serviceId, e]) => ({
+          serviceId,
           name: e.manifest.name,
           version: e.manifest.version,
           subdomain: e.manifest.network.subdomain,
@@ -458,16 +458,16 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   }
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; instance?: string };
-  }>("/data/postgres/:appId/tables", async (req, reply) => {
+  }>("/data/postgres/:serviceId/tables", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
     }
     if (!ctx.resolveSession(req.query.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    const entry = ctx.deployedApps.get(req.params.appId);
+    const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     const inst = resolveInstance(entry.data?.postgres, req.query.instance);
     if (!inst) return reply.status(404).send({ error: "app does not use this postgres instance" });
@@ -476,16 +476,16 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   });
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; sql?: string; max?: string; instance?: string };
-  }>("/data/postgres/:appId/query", async (req, reply) => {
+  }>("/data/postgres/:serviceId/query", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
     }
     if (!ctx.resolveSession(req.query.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    const entry = ctx.deployedApps.get(req.params.appId);
+    const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     const inst = resolveInstance(entry.data?.postgres, req.query.instance);
     if (!inst) return reply.status(404).send({ error: "app does not use this postgres instance" });
@@ -506,16 +506,16 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   });
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; prefix?: string; max?: string; instance?: string };
-  }>("/data/objects/:appId/list", async (req, reply) => {
+  }>("/data/objects/:serviceId/list", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
     }
     if (!ctx.resolveSession(req.query.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    const entry = ctx.deployedApps.get(req.params.appId);
+    const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     const inst = resolveInstance(entry.data?.objects, req.query.instance);
     if (!inst) return reply.status(404).send({ error: "app does not use this objects instance" });
@@ -529,16 +529,16 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   });
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; max?: string; instance?: string };
-  }>("/data/kv/:appId/keys", async (req, reply) => {
+  }>("/data/kv/:serviceId/keys", async (req, reply) => {
     if (!ctx.deployedApps || !ctx.dataProvisioner) {
       return reply.status(503).send({ error: "data subsystem missing" });
     }
     if (!ctx.resolveSession(req.query.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    const entry = ctx.deployedApps.get(req.params.appId);
+    const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     const inst = resolveInstance(entry.data?.kv, req.query.instance);
     if (!inst) return reply.status(404).send({ error: "app does not use this kv instance" });
@@ -610,7 +610,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
 
   // ---- Per-app Forgejo (commits / PRs / merge / revert) -----------------
 
-  function requireForgejoApp(req: { params: { appId: string }; query: { sessionToken?: string } }, reply: import("fastify").FastifyReply) {
+  function requireForgejoApp(req: { params: { serviceId: string }; query: { sessionToken?: string } }, reply: import("fastify").FastifyReply) {
     if (!ctx.forgejo) {
       reply.status(503).send({ error: "forgejo admin not configured" });
       return null;
@@ -623,7 +623,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
       reply.status(401).send({ error: "session not authenticated" });
       return null;
     }
-    const entry = ctx.deployedApps.get(req.params.appId);
+    const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) {
       reply.status(404).send({ error: "app not found" });
       return null;
@@ -632,38 +632,38 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   }
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; max?: string };
-  }>("/apps/:appId/git/commits", async (req, reply) => {
+  }>("/apps/:serviceId/git/commits", async (req, reply) => {
     const r = requireForgejoApp(req, reply);
     if (!r) return reply;
     const max = Number(req.query.max ?? 50);
-    const commits = await r.forgejo.listCommits(req.params.appId, max);
+    const commits = await r.forgejo.listCommits(req.params.serviceId, max);
     return { commits };
   });
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; state?: "open" | "closed" | "all" };
-  }>("/apps/:appId/git/prs", async (req, reply) => {
+  }>("/apps/:serviceId/git/prs", async (req, reply) => {
     const r = requireForgejoApp(req, reply);
     if (!r) return reply;
     const state = req.query.state === "closed" || req.query.state === "all" ? req.query.state : "open";
-    const prs = await r.forgejo.listPullRequests(req.params.appId, state);
+    const prs = await r.forgejo.listPullRequests(req.params.serviceId, state);
     return { prs };
   });
 
   app.post<{
-    Params: { appId: string; prNumber: string };
+    Params: { serviceId: string; prNumber: string };
     Querystring: { sessionToken?: string };
     Body: { message?: string };
-  }>("/apps/:appId/git/prs/:prNumber/approve", async (req, reply) => {
+  }>("/apps/:serviceId/git/prs/:prNumber/approve", async (req, reply) => {
     const r = requireForgejoApp(req, reply);
     if (!r) return reply;
     const num = Number(req.params.prNumber);
     if (!Number.isInteger(num) || num <= 0) return reply.status(400).send({ error: "invalid PR number" });
     try {
-      const merged = await r.forgejo.mergePr(req.params.appId, num, req.body?.message);
+      const merged = await r.forgejo.mergePr(req.params.serviceId, num, req.body?.message);
       return merged;
     } catch (e) {
       return reply.status(500).send({ error: "merge failed", message: errMsg(e) });
@@ -671,15 +671,15 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   });
 
   app.post<{
-    Params: { appId: string; prNumber: string };
+    Params: { serviceId: string; prNumber: string };
     Querystring: { sessionToken?: string };
-  }>("/apps/:appId/git/prs/:prNumber/retract", async (req, reply) => {
+  }>("/apps/:serviceId/git/prs/:prNumber/retract", async (req, reply) => {
     const r = requireForgejoApp(req, reply);
     if (!r) return reply;
     const num = Number(req.params.prNumber);
     if (!Number.isInteger(num) || num <= 0) return reply.status(400).send({ error: "invalid PR number" });
     try {
-      await r.forgejo.closePr(req.params.appId, num);
+      await r.forgejo.closePr(req.params.serviceId, num);
       return { closed: true };
     } catch (e) {
       return reply.status(500).send({ error: "close failed", message: errMsg(e) });
@@ -687,14 +687,14 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   });
 
   app.post<{
-    Params: { appId: string; sha: string };
+    Params: { serviceId: string; sha: string };
     Querystring: { sessionToken?: string };
-  }>("/apps/:appId/git/commits/:sha/revert", async (req, reply) => {
+  }>("/apps/:serviceId/git/commits/:sha/revert", async (req, reply) => {
     const r = requireForgejoApp(req, reply);
     if (!r) return reply;
     if (!/^[0-9a-f]{7,40}$/.test(req.params.sha)) return reply.status(400).send({ error: "invalid sha" });
     try {
-      const pr = await r.forgejo.createRevertPr(req.params.appId, req.params.sha);
+      const pr = await r.forgejo.createRevertPr(req.params.serviceId, req.params.sha);
       return { pr };
     } catch (e) {
       return reply.status(500).send({ error: "revert failed", message: errMsg(e) });
@@ -770,9 +770,9 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     }
     const token = auth.slice("Bearer ".length).trim();
     let queryingAppId: string | undefined;
-    for (const [appId, entry] of ctx.deployedApps) {
+    for (const [serviceId, entry] of ctx.deployedApps) {
       if (entry.peersToken && entry.peersToken === token) {
-        queryingAppId = appId;
+        queryingAppId = serviceId;
         break;
       }
     }
@@ -796,14 +796,14 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   // ---- LLM app context (markdown blob the harness prepends to chat) -----
 
   app.get<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Querystring: { sessionToken?: string; reveal?: string };
-  }>("/apps/:appId/llm-context", async (req, reply) => {
+  }>("/apps/:serviceId/llm-context", async (req, reply) => {
     if (!ctx.deployedApps) return reply.status(503).send({ error: "deployedApps store missing" });
     if (!ctx.resolveSession(req.query.sessionToken)) {
       return reply.status(401).send({ error: "session not authenticated" });
     }
-    const entry = ctx.deployedApps.get(req.params.appId);
+    const entry = ctx.deployedApps.get(req.params.serviceId);
     if (!entry) return reply.status(404).send({ error: "app not found" });
     const reveal = req.query.reveal === "1" || req.query.reveal === "true";
     const out = await buildLlmAppContext({
@@ -862,10 +862,10 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
   // ---- Identity-injector decision (used by the in-server Caddy) ---------
 
   app.post<{
-    Params: { appId: string };
+    Params: { serviceId: string };
     Body: { path?: string; sessionToken?: string };
-  }>("/apps/:appId/identity/decide", async (req, reply) => {
-    const injector = ctx.injectors.get(req.params.appId);
+  }>("/apps/:serviceId/identity/decide", async (req, reply) => {
+    const injector = ctx.injectors.get(req.params.serviceId);
     if (!injector) return reply.status(404).send({ error: "no injector for app" });
     const body = req.body ?? {};
     if (typeof body.path !== "string") {

@@ -61,11 +61,11 @@ async function makeBundle(repo: string, range: string): Promise<Buffer> {
 
 class MemStore implements AppPullStateStore {
   private state = new Map<string, AppPullState>();
-  async get(appId: string): Promise<AppPullState | null> {
-    return this.state.get(appId) ?? null;
+  async get(serviceId: string): Promise<AppPullState | null> {
+    return this.state.get(serviceId) ?? null;
   }
-  async put(appId: string, state: AppPullState): Promise<void> {
-    this.state.set(appId, { ...state });
+  async put(serviceId: string, state: AppPullState): Promise<void> {
+    this.state.set(serviceId, { ...state });
   }
 }
 
@@ -114,7 +114,7 @@ describe("UpdateClient", () => {
   function makeClient(args: {
     store: AppPullStateStore;
     fetcher: (url: string, init: RequestInit) => Promise<Response>;
-    runMigration?: (a: { appId: string; absPath: string; filename: string }) => Promise<void>;
+    runMigration?: (a: { serviceId: string; absPath: string; filename: string }) => Promise<void>;
   }): UpdateClient {
     return new UpdateClient({
       identity,
@@ -151,7 +151,7 @@ describe("UpdateClient", () => {
         return new Response(null, { status: 500 });
       },
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "no-op", reason: "frozen-policy" });
     expect(fetched).toBe(false);
   });
@@ -174,7 +174,7 @@ describe("UpdateClient", () => {
           headers: { "content-type": "application/x-git-bundle" },
         }),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "applied", from: firstCommit, to: secondCommit });
     expect(restartCount).toBe(1);
     expect(migrationsRun).toEqual([]);
@@ -207,7 +207,7 @@ describe("UpdateClient", () => {
       store,
       fetcher: async () => new Response(bundle, { status: 200 }),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "applied", to: tipAfterM2, migrationsApplied: [m1, m2] });
     expect(migrationsRun).toEqual([m1, m2]);
     expect(restartCount).toBe(1);
@@ -230,7 +230,7 @@ describe("UpdateClient", () => {
       store,
       fetcher: async () => new Response(bundle, { status: 200 }),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "halted-manual-pending", from: firstCommit, to: secondCommit });
     expect(restartCount).toBe(0);
     // Working tree was NOT advanced — main still on firstCommit.
@@ -239,7 +239,7 @@ describe("UpdateClient", () => {
     expect(alerts).toEqual([
       expect.objectContaining({
         kind: "manual-pending",
-        appId: APP_ID,
+        serviceId: APP_ID,
         fromCommit: firstCommit,
         toCommit: secondCommit,
       }),
@@ -267,9 +267,9 @@ describe("UpdateClient", () => {
       fetcher: async () => new Response(bundle, { status: 200 }),
     });
     // First call halts pending.
-    await client.pullOne({ appId: APP_ID });
+    await client.pullOne({ serviceId: APP_ID });
     // Phone approves.
-    const res = await client.applyPending({ appId: APP_ID });
+    const res = await client.applyPending({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "applied", to: tipWithMigration, migrationsApplied: [m1] });
     expect(restartCount).toBe(1);
     const after = await store.get(APP_ID);
@@ -295,7 +295,7 @@ describe("UpdateClient", () => {
       store,
       fetcher: async () => new Response(bundle, { status: 200 }),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({
       kind: "halted-lineage-break",
       lineageAnchor: firstCommit,
@@ -308,7 +308,7 @@ describe("UpdateClient", () => {
     expect(alerts).toEqual([
       expect.objectContaining({
         kind: "lineage-break",
-        appId: APP_ID,
+        serviceId: APP_ID,
         upstreamTip: divergentSecond,
       }),
     ]);
@@ -337,7 +337,7 @@ describe("UpdateClient", () => {
         migrationsRun.push(filename);
       },
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({
       kind: "halted-migration-failed",
       failingFile: m1,
@@ -347,7 +347,7 @@ describe("UpdateClient", () => {
     expect(alerts).toEqual([
       expect.objectContaining({
         kind: "migration-failed",
-        appId: APP_ID,
+        serviceId: APP_ID,
         migrationFile: m1,
       }),
     ]);
@@ -366,7 +366,7 @@ describe("UpdateClient", () => {
       store,
       fetcher: async () => new Response(new Uint8Array(0), { status: 200 }),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "no-op", reason: "already-current" });
     expect(restartCount).toBe(0);
   });
@@ -384,7 +384,7 @@ describe("UpdateClient", () => {
       store,
       fetcher: async () => new Response("nope", { status: 500 }),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({ kind: "error" });
     expect(restartCount).toBe(0);
   });
@@ -420,7 +420,7 @@ describe("UpdateClient", () => {
         },
       },
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res.kind).toBe("halted-unendorsed");
     if (res.kind === "halted-unendorsed") {
       expect(res.upstreamTip).toBe(secondCommit);

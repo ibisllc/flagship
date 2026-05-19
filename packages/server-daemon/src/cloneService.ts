@@ -36,7 +36,7 @@ export interface CloneAppDeps {
   /** This box's FQDN. */
   pullerServerId: string;
   /** Where to put the working tree per app. */
-  appWorkingDir: (appId: string) => string;
+  appWorkingDir: (serviceId: string) => string;
   /** Override fetch for tests. */
   fetch?: (url: string | URL, init?: RequestInit) => Promise<Response>;
   gitBinary?: string;
@@ -46,7 +46,7 @@ export interface CloneAppDeps {
 export function buildCloneApp(
   deps: CloneAppDeps,
 ): (args: {
-  appId: string;
+  serviceId: string;
   canonicalUrl: string;
 }) => Promise<{ currentTip: string }> {
   const fetcher = deps.fetch ?? ((u: string | URL, i?: RequestInit) => fetch(u, i));
@@ -58,12 +58,12 @@ export function buildCloneApp(
       maxBuffer: 64 * 1024 * 1024,
     });
 
-  return async function cloneApp(args: {
-    appId: string;
+  return async function cloneService(args: {
+    serviceId: string;
     canonicalUrl: string;
   }): Promise<{ currentTip: string }> {
-    const [creator, slug] = parseAppId(args.appId);
-    const workDir = deps.appWorkingDir(args.appId);
+    const [creator, slug] = parseServiceId(args.serviceId);
+    const workDir = deps.appWorkingDir(args.serviceId);
 
     // Fresh init: erase prior partial clone, init bare, then fetch.
     // We use a non-bare repo so the bind-mounted source tree is checkout-able.
@@ -115,16 +115,16 @@ export function buildCloneApp(
   };
 }
 
-function parseAppId(appId: string): [string, string] {
+function parseServiceId(serviceId: string): [string, string] {
   // `<creator>-<slug>`, single dash. Split at the FIRST hyphen —
   // the creator is a username and usernames are hyphen-free, so the
   // first hyphen is always the creator/slug boundary even when the
   // slug itself contains hyphens.
-  const i = appId.indexOf("-");
-  if (i <= 0 || i >= appId.length - 1) {
-    throw new Error(`appId ${appId} not in <creator>-<slug> form`);
+  const i = serviceId.indexOf("-");
+  if (i <= 0 || i >= serviceId.length - 1) {
+    throw new Error(`serviceId ${serviceId} not in <creator>-<slug> form`);
   }
-  return [appId.slice(0, i), appId.slice(i + 1)];
+  return [serviceId.slice(0, i), serviceId.slice(i + 1)];
 }
 
 function bytesToHex(b: Uint8Array): string {

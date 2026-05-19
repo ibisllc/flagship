@@ -16,12 +16,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ed,
-  signInstallApp,
-  signSetAppEnv,
-  signUninstallApp,
-  verifySetAppEnv,
+  signInstallService,
+  signSetServiceEnv,
+  signUninstallService,
+  verifySetServiceEnv,
   type Keypair,
-  type SetAppEnvRequest,
+  type SetServiceEnvRequest,
 } from "@flagship/protocol";
 import {
   FileAppEnvStore,
@@ -29,13 +29,13 @@ import {
   exportEnvSchema,
   type AppEnv,
   type AppEnvStore,
-} from "../src/appEnvStore.js";
-import { AppPlatform } from "../src/appPlatform.js";
-import { AppRunner, type AppSpec, type CommandRunner } from "../src/appRunner.js";
+} from "../src/serviceEnvStore.js";
+import { ServicePlatform } from "../src/servicePlatform.js";
+import { AppRunner, type AppSpec, type CommandRunner } from "../src/serviceRunner.js";
 import { buildUserContext } from "../src/llm/systemPrompt.js";
 import { buildDeploySession } from "../src/llm/deploySession.js";
 import { VibeCodeSession } from "../src/llm/vibeCodeSession.js";
-import type { InstalledApp } from "../src/appPlatform.js";
+import type { InstalledService } from "../src/servicePlatform.js";
 
 /** The decisive sentinel: this string is a VALUE and must NEVER leave the box. */
 const SECRET = "sk-user-private-DO-NOT-LEAK-1234567890";
@@ -105,7 +105,7 @@ function runStoreContract(label: string, factory: () => Promise<AppEnvStore>): v
       expect(JSON.stringify(names)).not.toContain(SECRET);
     });
 
-    // Justification: env is strictly scoped to one appId.
+    // Justification: env is strictly scoped to one serviceId.
     it("get is scoped per app — another app sees nothing", async () => {
       await store.put("alice-envapp", { K: SECRET });
       expect(await store.get("alice-otherapp")).toBeNull();
@@ -172,12 +172,12 @@ describe("FileAppEnvStore — sealed at rest + persistence", () => {
 
 // ── Signed set-app-env order (invariant b) ────────────────────────────
 
-describe("AppPlatform.setEnv — owner-signed order accepted; unsigned/wrong-signer rejected", () => {
+describe("ServicePlatform.setEnv — owner-signed order accepted; unsigned/wrong-signer rejected", () => {
   function build() {
     const hostIrk = makeKey();
     const { runner } = fakeRunner();
     const store = new InMemoryAppEnvStore();
-    const platform = new AppPlatform({
+    const platform = new ServicePlatform({
       host: { username: HOST, irkPub: hostIrk.publicKey },
       swk: fakeSwk(),
       appRunner: runner,
@@ -187,7 +187,7 @@ describe("AppPlatform.setEnv — owner-signed order accepted; unsigned/wrong-sig
     return { platform, hostIrk, store };
   }
 
-  function order(env: Record<string, string>): SetAppEnvRequest {
+  function order(env: Record<string, string>): SetServiceEnvRequest {
     return {
       serverId: HOST_FQDN,
       creator: HOST,
@@ -204,8 +204,8 @@ describe("AppPlatform.setEnv — owner-signed order accepted; unsigned/wrong-sig
     const r = order({ OPENAI_API_KEY: SECRET });
     const res = await platform.setEnv({
       request: r,
-      signature: signSetAppEnv(r, hostIrk),
-      verify: verifySetAppEnv,
+      signature: signSetServiceEnv(r, hostIrk),
+      verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(true);
     expect(await store.get("alice-envapp")).toEqual({ OPENAI_API_KEY: SECRET });
@@ -219,8 +219,8 @@ describe("AppPlatform.setEnv — owner-signed order accepted; unsigned/wrong-sig
     const r = order({ OPENAI_API_KEY: SECRET });
     const res = await platform.setEnv({
       request: r,
-      signature: signSetAppEnv(r, attacker),
-      verify: verifySetAppEnv,
+      signature: signSetServiceEnv(r, attacker),
+      verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(false);
     expect(await store.get("alice-envapp")).toBeNull();
@@ -231,11 +231,11 @@ describe("AppPlatform.setEnv — owner-signed order accepted; unsigned/wrong-sig
   it("rejects a value tampered after signing; nothing stored", async () => {
     const { platform, hostIrk, store } = build();
     const r = order({ OPENAI_API_KEY: SECRET });
-    const sig = signSetAppEnv(r, hostIrk);
+    const sig = signSetServiceEnv(r, hostIrk);
     const res = await platform.setEnv({
       request: { ...r, env: { OPENAI_API_KEY: "sk-swapped" } },
       signature: sig,
-      verify: verifySetAppEnv,
+      verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(false);
     expect(await store.get("alice-envapp")).toBeNull();
@@ -247,8 +247,8 @@ describe("AppPlatform.setEnv — owner-signed order accepted; unsigned/wrong-sig
     const r = order({ FLAGSHIP_APP_ID: "spoof" });
     const res = await platform.setEnv({
       request: r,
-      signature: signSetAppEnv(r, hostIrk),
-      verify: verifySetAppEnv,
+      signature: signSetServiceEnv(r, hostIrk),
+      verify: verifySetServiceEnv,
     });
     expect(res.ok).toBe(false);
     expect(await store.get("alice-envapp")).toBeNull();
@@ -257,11 +257,11 @@ describe("AppPlatform.setEnv — owner-signed order accepted; unsigned/wrong-sig
 
 // ── Runtime env injection (invariant d) + lifecycle (invariant g) ─────
 
-describe("AppPlatform — values injected into the deployed app's env; lifecycle", () => {
+describe("ServicePlatform — values injected into the deployed app's env; lifecycle", () => {
   function build(store: AppEnvStore) {
     const hostIrk = makeKey();
     const { runner, specs } = fakeRunner();
-    const platform = new AppPlatform({
+    const platform = new ServicePlatform({
       host: { username: HOST, irkPub: hostIrk.publicKey },
       swk: fakeSwk(),
       appRunner: runner,
@@ -291,7 +291,7 @@ describe("AppPlatform — values injected into the deployed app's env; lifecycle
     const req = installReq();
     const r = await platform.install({
       request: req,
-      signature: signInstallApp(req, hostIrk),
+      signature: signInstallService(req, hostIrk),
       verify: () => true,
     });
     expect(r.ok).toBe(true);
@@ -311,20 +311,20 @@ describe("AppPlatform — values injected into the deployed app's env; lifecycle
     const req = installReq();
     await platform.install({
       request: req,
-      signature: signInstallApp(req, hostIrk),
+      signature: signInstallService(req, hostIrk),
       verify: () => true,
     });
     const ureq = { serverId: HOST_FQDN, creator: HOST, slug: "envapp", issuedAt: Date.now() };
     const ur = await platform.uninstall({
       request: ureq,
-      signature: signUninstallApp(ureq, hostIrk),
+      signature: signUninstallService(ureq, hostIrk),
       verify: () => true,
     });
     expect(ur.ok).toBe(true);
     expect(await store.get("alice-envapp")).toBeNull();
   });
 
-  // Justification (invariant f): the public /api/apps listing never
+  // Justification (invariant f): the public /api/services listing never
   // contains a value (the former appByok public-surface negative).
   it("the public app listing never contains a value", async () => {
     const store = new InMemoryAppEnvStore();
@@ -333,7 +333,7 @@ describe("AppPlatform — values injected into the deployed app's env; lifecycle
     const req = installReq();
     await platform.install({
       request: req,
-      signature: signInstallApp(req, hostIrk),
+      signature: signInstallService(req, hostIrk),
       verify: () => true,
     });
     expect(JSON.stringify(platform.list())).not.toContain(SECRET);
@@ -417,7 +417,7 @@ describe("export/share artifact — declared names only, never a value", () => {
     const hostIrk = makeKey();
     const { runner } = fakeRunner();
     const store = new InMemoryAppEnvStore();
-    const platform = new AppPlatform({
+    const platform = new ServicePlatform({
       host: { username: HOST, irkPub: hostIrk.publicKey },
       swk: fakeSwk(),
       appRunner: runner,
@@ -425,7 +425,7 @@ describe("export/share artifact — declared names only, never a value", () => {
       envStore: store,
     });
     // Owner sets a secret env on the app.
-    const setReq: SetAppEnvRequest = {
+    const setReq: SetServiceEnvRequest = {
       serverId: HOST_FQDN,
       creator: HOST,
       slug: "envapp",
@@ -434,8 +434,8 @@ describe("export/share artifact — declared names only, never a value", () => {
     };
     await platform.setEnv({
       request: setReq,
-      signature: signSetAppEnv(setReq, hostIrk),
-      verify: verifySetAppEnv,
+      signature: signSetServiceEnv(setReq, hostIrk),
+      verify: verifySetServiceEnv,
     });
 
     const session = new VibeCodeSession({ username: HOST, serverFqdn: HOST_FQDN });
@@ -452,7 +452,7 @@ describe("export/share artifact — declared names only, never a value", () => {
     session.endAssistant();
 
     const deploy = buildDeploySession({
-      appPlatform: platform,
+      servicePlatform: platform,
       hostIrk,
       hostUsername: HOST,
       workingDir: workDir,
@@ -487,29 +487,29 @@ describe("set-app-env HTTP — response never echoes a value", () => {
   // Justification (invariant f): a successful set-env returns a bare
   // ok; an error never interpolates a value.
   it("a wrong-signer set-env over HTTP returns a generic error, no value", async () => {
-    const { buildAppHttpHandlers } = await import("../src/appPlatform.js");
+    const { buildServiceHttpHandlers } = await import("../src/servicePlatform.js");
     const hostIrk = makeKey();
     const { runner } = fakeRunner();
     const store = new InMemoryAppEnvStore();
-    const platform = new AppPlatform({
+    const platform = new ServicePlatform({
       host: { username: HOST, irkPub: hostIrk.publicKey },
       swk: fakeSwk(),
       appRunner: runner,
       dataProvisioner: null,
       envStore: store,
     });
-    const handle = buildAppHttpHandlers({ platform, hostIrk: null });
-    const r: SetAppEnvRequest = {
+    const handle = buildServiceHttpHandlers({ platform, hostIrk: null });
+    const r: SetServiceEnvRequest = {
       serverId: HOST_FQDN,
       creator: HOST,
       slug: "envapp",
       env: { OPENAI_API_KEY: SECRET },
       issuedAt: Date.now(),
     };
-    const sig = signSetAppEnv(r, makeKey()); // attacker key
+    const sig = signSetServiceEnv(r, makeKey()); // attacker key
     const res = await handle({
       method: "POST",
-      path: "/api/apps/alice-envapp/env",
+      path: "/api/services/alice-envapp/env",
       headers: {},
       body: Buffer.from(
         JSON.stringify({ request: r, signature: Buffer.from(sig).toString("hex") }),
@@ -524,19 +524,19 @@ describe("set-app-env HTTP — response never echoes a value", () => {
   // Justification (invariant f): a valid set-env success body carries
   // no value either.
   it("a valid set-env over HTTP returns {ok:true} with no value echoed", async () => {
-    const { buildAppHttpHandlers } = await import("../src/appPlatform.js");
+    const { buildServiceHttpHandlers } = await import("../src/servicePlatform.js");
     const hostIrk = makeKey();
     const { runner } = fakeRunner();
     const store = new InMemoryAppEnvStore();
-    const platform = new AppPlatform({
+    const platform = new ServicePlatform({
       host: { username: HOST, irkPub: hostIrk.publicKey },
       swk: fakeSwk(),
       appRunner: runner,
       dataProvisioner: null,
       envStore: store,
     });
-    const handle = buildAppHttpHandlers({ platform, hostIrk: null });
-    const r: SetAppEnvRequest = {
+    const handle = buildServiceHttpHandlers({ platform, hostIrk: null });
+    const r: SetServiceEnvRequest = {
       serverId: HOST_FQDN,
       creator: HOST,
       slug: "envapp",
@@ -545,10 +545,10 @@ describe("set-app-env HTTP — response never echoes a value", () => {
     };
     const res = await handle({
       method: "POST",
-      path: "/api/apps/alice-envapp/env",
+      path: "/api/services/alice-envapp/env",
       headers: {},
       body: Buffer.from(
-        JSON.stringify({ request: r, signature: Buffer.from(signSetAppEnv(r, hostIrk)).toString("hex") }),
+        JSON.stringify({ request: r, signature: Buffer.from(signSetServiceEnv(r, hostIrk)).toString("hex") }),
       ),
     });
     expect(res!.status).toBe(200);

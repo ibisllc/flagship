@@ -29,7 +29,7 @@ const APP = "habit-tracker";
 const OWNER = "harry";
 
 function mut(targetIrkPub: Uint8Array, role: string | null, issuedAt: number): MembershipMutation {
-  return { appId: APP, targetIrkPub, role, issuedAt };
+  return { serviceId: APP, targetIrkPub, role, issuedAt };
 }
 
 describe("MembershipStore — IRK-keyed", () => {
@@ -80,7 +80,7 @@ describe("MembershipStore — IRK-keyed", () => {
   it("rejects app-id mismatch", () => {
     const store = new MembershipStore(APP, OWNER, ownerIrk.publicKey);
     const m: MembershipMutation = {
-      appId: "other-app",
+      serviceId: "other-app",
       targetIrkPub: sarahIrk.publicKey,
       role: "parent",
       issuedAt: Date.now(),
@@ -99,7 +99,7 @@ function makeInvite(role: string, expiresIn = 60 * 60_000): {
   const nonce = newInviteNonce();
   const issuedAt = Date.now();
   const token: InviteToken = {
-    appId: APP,
+    serviceId: APP,
     role,
     nonce,
     issuedAt,
@@ -210,7 +210,7 @@ describe("AppMembership — combined invite redemption + membership", () => {
     app.redeemInvite(token, inviteSig, acceptance, acceptanceSig);
 
     const remove: MembershipMutation = {
-      appId: APP,
+      serviceId: APP,
       targetIrkPub: sarahIrk.publicKey,
       role: null,
       issuedAt: Date.now(),

@@ -148,7 +148,7 @@ export async function handleGetEntitlementRevocations(
  *   - certId    (optional) — filter to a single SHA-256 cert id
  *
  * The kind field in each entry is currently "EntitlementCert"; future
- * envelope kinds (AppGrant per-grantId revocation, etc.) extend the
+ * envelope kinds (ServiceGrant per-grantId revocation, etc.) extend the
  * union as the underlying envelope inventory grows. Schema is
  * forward-compatible: consumers that don't recognize a kind ignore
  * that entry.

@@ -1,5 +1,5 @@
 export * from "./types.js";
-export * from "./appId.js";
+export * from "./serviceId.js";
 export * from "./keys.js";
 export * from "./auth.js";
 export * from "./maintainerCa.js";

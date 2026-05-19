@@ -39,7 +39,7 @@
  *   punches. `protocolVersion` MUST be 1.
  *
  * 0x06 sibling-app-message — bidirectional, opaque.
- *   Generic app-payload routing. `appId` is the routing key
+ *   Generic app-payload routing. `serviceId` is the routing key
  *   (FLAGSHIP_APP_TOKEN-bound on the receive side); `payload` is
  *   opaque to the harness. All app-level coordination — takeovers,
  *   sync handshakes, leader-election, RPC, anything — rides on this
@@ -85,7 +85,7 @@ export interface SiblingHelloPayload {
 }
 
 export interface SiblingAppMessagePayload {
-  appId: string;
+  serviceId: string;
   fromSiblingId: string;
   toSiblingId: string;
   /** Opaque hex payload. */
@@ -178,7 +178,7 @@ function validatePayload(type: SiblingFrameType, raw: unknown): ValidateResult<S
     }
     case FRAME_SIBLING_APP_MESSAGE: {
       if (
-        typeof o.appId !== "string" ||
+        typeof o.serviceId !== "string" ||
         typeof o.fromSiblingId !== "string" ||
         typeof o.toSiblingId !== "string" ||
         typeof o.payloadHex !== "string"
@@ -188,7 +188,7 @@ function validatePayload(type: SiblingFrameType, raw: unknown): ValidateResult<S
       return {
         ok: true,
         payload: {
-          appId: o.appId,
+          serviceId: o.serviceId,
           fromSiblingId: o.fromSiblingId,
           toSiblingId: o.toSiblingId,
           payloadHex: o.payloadHex,

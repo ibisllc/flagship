@@ -1,19 +1,19 @@
-// V5 — AliasReconciler + AppPlatform.setAlias unit tests.
+// V5 — AliasReconciler + ServicePlatform.setAlias unit tests.
 //
 // The Reconciler is wired against a fake fetch that returns a
-// scripted alias-list payload; the AppPlatform is a real instance
+// scripted alias-list payload; the ServicePlatform is a real instance
 // holding a single installed app so we can verify the reverse-proxy
 // index actually flips on setAlias.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AppPlatform, type InstalledApp } from "../src/appPlatform.js";
+import { ServicePlatform, type InstalledService } from "../src/servicePlatform.js";
 import { AliasReconciler } from "../src/aliasReconciler.js";
 
-function fakeApp(appId: string, slug: string, urlLabel: string): InstalledApp {
+function fakeApp(serviceId: string, slug: string, urlLabel: string): InstalledService {
   return {
     creator: "alice",
     slug,
-    appId,
+    serviceId,
     manifest: { name: slug } as never,
     urlLabel,
     membership: { append: async () => undefined, list: async () => [] } as never,
@@ -23,32 +23,32 @@ function fakeApp(appId: string, slug: string, urlLabel: string): InstalledApp {
   };
 }
 
-/** Construct an AppPlatform with one pre-installed app whose internal
+/** Construct an ServicePlatform with one pre-installed app whose internal
  *  state we can mutate via setAlias. We bypass the install pipeline by
  *  reaching into the private maps; the test's interest is the
  *  setAlias rebinding logic, not the install flow. */
-function makePlatformWithApp(appId: string, slug: string, urlLabel: string): AppPlatform {
-  const platform = new AppPlatform({
+function makePlatformWithApp(serviceId: string, slug: string, urlLabel: string): ServicePlatform {
+  const platform = new ServicePlatform({
     host: { username: "alice", irkPub: new Uint8Array() } as never,
   } as never);
-  const app = fakeApp(appId, slug, urlLabel);
+  const app = fakeApp(serviceId, slug, urlLabel);
   // The class doesn't expose a public seed-an-app helper; use the
   // private maps directly. Casting through `as` keeps the test
   // self-contained.
   (platform as unknown as {
-    apps: Map<string, InstalledApp>;
-    byUrlLabel: Map<string, InstalledApp>;
-  }).apps.set(appId, app);
+    apps: Map<string, InstalledService>;
+    byUrlLabel: Map<string, InstalledService>;
+  }).apps.set(serviceId, app);
   (platform as unknown as {
-    byUrlLabel: Map<string, InstalledApp>;
+    byUrlLabel: Map<string, InstalledService>;
   }).byUrlLabel.set(urlLabel.toLowerCase(), app);
   return platform;
 }
 
-describe("AppPlatform.setAlias", () => {
+describe("ServicePlatform.setAlias", () => {
   it("rebinds byLabel index on a real rename", () => {
     const p = makePlatformWithApp("meta-scratchpad", "scratchpad", "scratchpad-meta");
-    expect(p.byLabel("scratchpad-meta")?.appId).toBe("meta-scratchpad");
+    expect(p.byLabel("scratchpad-meta")?.serviceId).toBe("meta-scratchpad");
     const r = p.setAlias("meta-scratchpad", "mynotes");
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -56,9 +56,9 @@ describe("AppPlatform.setAlias", () => {
       expect(r.oldLabel).toBe("scratchpad-meta");
       expect(r.newLabel).toBe("mynotes");
     }
-    expect(p.byLabel("mynotes")?.appId).toBe("meta-scratchpad");
+    expect(p.byLabel("mynotes")?.serviceId).toBe("meta-scratchpad");
     expect(p.byLabel("scratchpad-meta")).toBeUndefined();
-    expect(p.byAppId("meta-scratchpad")?.urlLabel).toBe("mynotes");
+    expect(p.byServiceId("meta-scratchpad")?.urlLabel).toBe("mynotes");
   });
 
   it("is idempotent — applying the same label twice is a no-op", () => {
@@ -78,19 +78,19 @@ describe("AppPlatform.setAlias", () => {
     if (!r.ok) expect(r.reason).toMatch(/invalid label/);
   });
 
-  it("rejects unknown appId", () => {
+  it("rejects unknown serviceId", () => {
     const p = makePlatformWithApp("a-app", "app", "current");
     const r = p.setAlias("does-not-exist", "fine");
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe("unknown appId");
+    if (!r.ok) expect(r.reason).toBe("unknown serviceId");
   });
 
   it("409s on collision with another installed app", () => {
     const p = makePlatformWithApp("a-app", "app", "appA");
     // Seed a second app at label "appB".
-    (p as unknown as { apps: Map<string, InstalledApp>; byUrlLabel: Map<string, InstalledApp> })
+    (p as unknown as { apps: Map<string, InstalledService>; byUrlLabel: Map<string, InstalledService> })
       .apps.set("b-other", fakeApp("b-other", "other", "appB"));
-    (p as unknown as { byUrlLabel: Map<string, InstalledApp> })
+    (p as unknown as { byUrlLabel: Map<string, InstalledService> })
       .byUrlLabel.set("appb", fakeApp("b-other", "other", "appB"));
     const r = p.setAlias("a-app", "appB");
     expect(r.ok).toBe(false);
@@ -102,7 +102,7 @@ describe("AliasReconciler", () => {
   let fetchCalls: string[] = [];
   afterEach(() => { fetchCalls = []; });
 
-  function makeFetch(rows: Array<{ appId: string; displayLabel: string; updatedAt: number }>): typeof fetch {
+  function makeFetch(rows: Array<{ serviceId: string; displayLabel: string; updatedAt: number }>): typeof fetch {
     return (async (url: string) => {
       fetchCalls.push(url);
       return new Response(JSON.stringify({ aliases: rows }), { status: 200 });
@@ -111,18 +111,18 @@ describe("AliasReconciler", () => {
 
   it("applies a fresh alias on the first reconcile pass", async () => {
     const platform = makePlatformWithApp("meta-scratchpad", "scratchpad", "scratchpad-meta");
-    const applied: Array<{ appId: string; oldLabel?: string; newLabel: string }> = [];
+    const applied: Array<{ serviceId: string; oldLabel?: string; newLabel: string }> = [];
     const reconciler = new AliasReconciler({
       comBaseUrl: "https://flagshipserver.com",
       username: "alice",
       platform,
-      fetchImpl: makeFetch([{ appId: "meta-scratchpad", displayLabel: "mynotes", updatedAt: 100 }]),
+      fetchImpl: makeFetch([{ serviceId: "meta-scratchpad", displayLabel: "mynotes", updatedAt: 100 }]),
       onApplied: (c) => applied.push(...c),
     });
     await reconciler.reconcileNow();
-    expect(platform.byLabel("mynotes")?.appId).toBe("meta-scratchpad");
+    expect(platform.byLabel("mynotes")?.serviceId).toBe("meta-scratchpad");
     expect(applied).toEqual([
-      { appId: "meta-scratchpad", oldLabel: "scratchpad-meta", newLabel: "mynotes" },
+      { serviceId: "meta-scratchpad", oldLabel: "scratchpad-meta", newLabel: "mynotes" },
     ]);
   });
 
@@ -143,7 +143,7 @@ describe("AliasReconciler", () => {
   it("short-circuits when the high watermark hasn't moved", async () => {
     const platform = makePlatformWithApp("meta-scratchpad", "scratchpad", "scratchpad-meta");
     let callCount = 0;
-    const applied: Array<{ appId: string; oldLabel?: string; newLabel: string }> = [];
+    const applied: Array<{ serviceId: string; oldLabel?: string; newLabel: string }> = [];
     const reconciler = new AliasReconciler({
       comBaseUrl: "https://flagshipserver.com",
       username: "alice",
@@ -151,7 +151,7 @@ describe("AliasReconciler", () => {
       fetchImpl: (async () => {
         callCount += 1;
         return new Response(JSON.stringify({
-          aliases: [{ appId: "meta-scratchpad", displayLabel: "mynotes", updatedAt: 100 }],
+          aliases: [{ serviceId: "meta-scratchpad", displayLabel: "mynotes", updatedAt: 100 }],
         }), { status: 200 });
       }) as typeof fetch,
       onApplied: (c) => applied.push(...c),
@@ -175,15 +175,15 @@ describe("AliasReconciler", () => {
       fetchImpl: makeFetch([
         // .com knows about an app the daemon hasn't installed yet —
         // not an error. The next reconcile after install picks it up.
-        { appId: "c-newly-installed", displayLabel: "shiny", updatedAt: 100 },
+        { serviceId: "c-newly-installed", displayLabel: "shiny", updatedAt: 100 },
         // ...and an app the daemon HAS installed; this one should apply.
-        { appId: "a-app", displayLabel: "renamed", updatedAt: 100 },
+        { serviceId: "a-app", displayLabel: "renamed", updatedAt: 100 },
       ]),
       onError: (e) => errors.push(e),
     });
     await reconciler.reconcileNow();
     expect(errors).toEqual([]);
-    expect(platform.byLabel("renamed")?.appId).toBe("a-app");
+    expect(platform.byLabel("renamed")?.serviceId).toBe("a-app");
   });
 
   it("forwards fetch failures to onError", async () => {

@@ -41,19 +41,19 @@ import {
 export type AppEnv = Record<string, string>;
 
 export interface AppEnvStore {
-  /** Persist (full replace) the env map for `appId`. */
-  put(appId: string, env: AppEnv): Promise<void>;
+  /** Persist (full replace) the env map for `serviceId`. */
+  put(serviceId: string, env: AppEnv): Promise<void>;
   /** Load the full env map (incl. values) for runtime injection, or null. */
-  get(appId: string): Promise<AppEnv | null>;
+  get(serviceId: string): Promise<AppEnv | null>;
   /**
-   * The KEY NAMES only (sorted) for `appId` — the ONLY thing a
+   * The KEY NAMES only (sorted) for `serviceId` — the ONLY thing a
    * non-runtime caller (the vibecode session, any public/screens
    * surface) may obtain. Never includes values. Empty array when the
    * app has no env set.
    */
-  names(appId: string): Promise<string[]>;
+  names(serviceId: string): Promise<string[]>;
   /** Drop the env for an app (called on uninstall). Idempotent. */
-  forget(appId: string): Promise<void>;
+  forget(serviceId: string): Promise<void>;
 }
 
 function sortedNames(env: AppEnv): string[] {
@@ -65,7 +65,7 @@ function sortedNames(env: AppEnv): string[] {
  * published app: a schema of declared env-var NAMES (sorted), so a
  * recipient knows what to set on their own box. It carries NO values —
  * the values are sealed at rest on the originating box and never leave
- * it. `store.names(appId)` is the source; this is the shape that may
+ * it. `store.names(serviceId)` is the source; this is the shape that may
  * be embedded in a share/marketplace package.
  */
 export interface ExportedEnvSchema {
@@ -75,9 +75,9 @@ export interface ExportedEnvSchema {
 
 export async function exportEnvSchema(
   store: AppEnvStore,
-  appId: string,
+  serviceId: string,
 ): Promise<ExportedEnvSchema> {
-  return { names: await store.names(appId) };
+  return { names: await store.names(serviceId) };
 }
 
 /**
@@ -87,28 +87,28 @@ export async function exportEnvSchema(
 export class InMemoryAppEnvStore implements AppEnvStore {
   private byApp = new Map<string, AppEnv>();
 
-  async put(appId: string, env: AppEnv): Promise<void> {
-    this.byApp.set(appId, { ...env });
+  async put(serviceId: string, env: AppEnv): Promise<void> {
+    this.byApp.set(serviceId, { ...env });
   }
 
-  async get(appId: string): Promise<AppEnv | null> {
-    const e = this.byApp.get(appId);
+  async get(serviceId: string): Promise<AppEnv | null> {
+    const e = this.byApp.get(serviceId);
     return e ? { ...e } : null;
   }
 
-  async names(appId: string): Promise<string[]> {
-    const e = this.byApp.get(appId);
+  async names(serviceId: string): Promise<string[]> {
+    const e = this.byApp.get(serviceId);
     return e ? sortedNames(e) : [];
   }
 
-  async forget(appId: string): Promise<void> {
-    this.byApp.delete(appId);
+  async forget(serviceId: string): Promise<void> {
+    this.byApp.delete(serviceId);
   }
 }
 
 /**
  * File-backed, SWK-sealed write-through cache. Production default.
- * One file per app under `<dir>/<appId>.env` containing the
+ * One file per app under `<dir>/<serviceId>.env` containing the
  * `sealLlmPayload` blob (nonce || ciphertext, hex). On construction
  * call `load()` to populate the in-memory cache.
  */
@@ -126,11 +126,11 @@ export class FileAppEnvStore implements AppEnvStore {
     if (!existsSync(this.dir)) return;
     for (const f of readdirSync(this.dir)) {
       if (!f.endsWith(".env")) continue;
-      const appId = f.slice(0, -".env".length);
+      const serviceId = f.slice(0, -".env".length);
       try {
         const hex = (await readFile(join(this.dir, f), "utf8")).trim();
         const env = this.unseal(hex);
-        if (env) this.cache.set(appId, env);
+        if (env) this.cache.set(serviceId, env);
       } catch {
         // Ignore unreadable / undecryptable entries — a missing env
         // just means the app runs without those vars until reset,
@@ -139,32 +139,32 @@ export class FileAppEnvStore implements AppEnvStore {
     }
   }
 
-  async put(appId: string, env: AppEnv): Promise<void> {
+  async put(serviceId: string, env: AppEnv): Promise<void> {
     if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
     const blob = sealLlmPayload(
       new TextEncoder().encode(JSON.stringify(env)),
       this.swk,
     );
-    const file = join(this.dir, `${appId}.env`);
+    const file = join(this.dir, `${serviceId}.env`);
     const tmp = `${file}.tmp`;
     await writeFile(tmp, sealedToHex(blob), { mode: 0o600 });
     await rename(tmp, file);
-    this.cache.set(appId, { ...env });
+    this.cache.set(serviceId, { ...env });
   }
 
-  async get(appId: string): Promise<AppEnv | null> {
-    const e = this.cache.get(appId);
+  async get(serviceId: string): Promise<AppEnv | null> {
+    const e = this.cache.get(serviceId);
     return e ? { ...e } : null;
   }
 
-  async names(appId: string): Promise<string[]> {
-    const e = this.cache.get(appId);
+  async names(serviceId: string): Promise<string[]> {
+    const e = this.cache.get(serviceId);
     return e ? sortedNames(e) : [];
   }
 
-  async forget(appId: string): Promise<void> {
-    this.cache.delete(appId);
-    await rm(join(this.dir, `${appId}.env`), { force: true });
+  async forget(serviceId: string): Promise<void> {
+    this.cache.delete(serviceId);
+    await rm(join(this.dir, `${serviceId}.env`), { force: true });
   }
 
   private unseal(hex: string): AppEnv | null {

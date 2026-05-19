@@ -173,10 +173,10 @@ export class SiblingConnection {
     }
     if (r.frame.type === FRAME_SIBLING_APP_MESSAGE) {
       const p = r.frame.payload;
-      // Route into the in-pod router by appId.
+      // Route into the in-pod router by serviceId.
       this.opts.router.ingestFromSibling({
         fromSiblingId: p.fromSiblingId,
-        appId: p.appId,
+        serviceId: p.serviceId,
         payloadHex: p.payloadHex,
       });
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryAppAuthTokens } from "../../src/appAuthToken.js";
+import { InMemoryAppAuthTokens } from "../../src/serviceAuthToken.js";
 import { buildSiblingHttpHandlers } from "../../src/sibling/httpHandlers.js";
 import { InMemorySiblingRouter, type SiblingTransport } from "../../src/sibling/router.js";
 import type { HttpRequest } from "../../src/runtime.js";
@@ -10,7 +10,7 @@ const GARAGE = "garage.alice.flagship.services";
 
 interface RecordingTransport extends SiblingTransport {
   sent: Array<{
-    appId: string;
+    serviceId: string;
     fromSiblingId: string;
     toSiblingId: string;
     payloadHex: string;
@@ -102,7 +102,7 @@ describe("/api/live_siblings/send", () => {
     expect(r?.status).toBe(200);
     expect(s.transport.sent).toEqual([
       {
-        appId: "app-a",
+        serviceId: "app-a",
         fromSiblingId: HOME,
         toSiblingId: OFFICE,
         payloadHex: "deadbeef",
@@ -121,7 +121,7 @@ describe("/api/live_siblings/send", () => {
       }),
     );
     expect(r?.status).toBe(200);
-    expect(s.transport.sent[0]!.appId).toBe("app-b");
+    expect(s.transport.sent[0]!.serviceId).toBe("app-b");
   });
 
   it("returns 404 for unknown sibling", async () => {
@@ -175,7 +175,7 @@ describe("/api/live_siblings/poll", () => {
     await new Promise((r) => setTimeout(r, 10));
     s.router.ingestFromSibling({
       fromSiblingId: OFFICE,
-      appId: "app-a",
+      serviceId: "app-a",
       payloadHex: "01",
     });
     const r = await pending;
@@ -186,7 +186,7 @@ describe("/api/live_siblings/poll", () => {
     ]);
   });
 
-  it("does NOT deliver app A's traffic to app B (route by appId)", async () => {
+  it("does NOT deliver app A's traffic to app B (route by serviceId)", async () => {
     const s = await setup();
     const pendingB = s.handle(
       req({ method: "GET", path: "/api/live_siblings/poll", token: s.tokenB }),
@@ -194,7 +194,7 @@ describe("/api/live_siblings/poll", () => {
     await new Promise((r) => setTimeout(r, 10));
     s.router.ingestFromSibling({
       fromSiblingId: OFFICE,
-      appId: "app-a", // routed to app-a's subscriber, not app-b's
+      serviceId: "app-a", // routed to app-a's subscriber, not app-b's
       payloadHex: "01",
     });
     const r = await pendingB;
@@ -210,7 +210,7 @@ describe("/api/live_siblings/poll", () => {
     expect(body.events).toEqual([]);
   });
 
-  it("fans out a domain-granted event to ALL apps regardless of appId", async () => {
+  it("fans out a domain-granted event to ALL apps regardless of serviceId", async () => {
     const s = await setup();
     // Both apps poll concurrently.
     const pendingA = s.handle(

@@ -143,7 +143,7 @@ describe("IRK server revocation", () => {
 describe("IRK membership mutation", () => {
   const sarahIrkPub = deriveIRK({ seed: new Uint8Array(32).fill(33) }).publicKey;
   const m: MembershipMutation = {
-    appId: "habit-tracker",
+    serviceId: "habit-tracker",
     targetIrkPub: sarahIrkPub,
     role: "parent",
     issuedAt: 1_700_000_000_000,
@@ -186,7 +186,7 @@ describe("IRK membership mutation", () => {
 });
 
 describe("invite tokens (capability-based, no directory)", () => {
-  const appId = "habit-tracker";
+  const serviceId = "habit-tracker";
 
   it("owner-signed invite verifies; acceptance binds it to recipient's IRK", () => {
     const ownerIrk = deriveIRK(umk);
@@ -195,7 +195,7 @@ describe("invite tokens (capability-based, no directory)", () => {
     const issuedAt = 1_700_000_000_000;
     const expiresAt = issuedAt + 14 * 24 * 60 * 60_000;
 
-    const token = { appId, role: "parent", nonce, issuedAt, expiresAt };
+    const token = { serviceId, role: "parent", nonce, issuedAt, expiresAt };
     const inviteSig = signInvite(token, ownerIrk);
     expect(verifyInvite(token, inviteSig, ownerIrk.publicKey)).toBe(true);
 
@@ -212,7 +212,7 @@ describe("invite tokens (capability-based, no directory)", () => {
     const ownerIrk = deriveIRK(umk);
     const attackerIrk = deriveIRK({ seed: new Uint8Array(32).fill(99) });
     const token = {
-      appId,
+      serviceId,
       role: "admin",
       nonce: new Uint8Array(32).fill(7),
       issuedAt: 1000,
@@ -237,7 +237,7 @@ describe("invite tokens (capability-based, no directory)", () => {
   it("rejects role tamper after signing (parent → admin)", () => {
     const ownerIrk = deriveIRK(umk);
     const token = {
-      appId,
+      serviceId,
       role: "parent",
       nonce: new Uint8Array(32).fill(7),
       issuedAt: 1000,
@@ -251,7 +251,7 @@ describe("invite tokens (capability-based, no directory)", () => {
   it("rejects expiry tamper (extending the deadline)", () => {
     const ownerIrk = deriveIRK(umk);
     const token = {
-      appId,
+      serviceId,
       role: "parent",
       nonce: new Uint8Array(32).fill(7),
       issuedAt: 1000,
@@ -282,7 +282,7 @@ describe("invite tokens (capability-based, no directory)", () => {
     const ownerIrk = deriveIRK(umk);
     const ownerBak = deriveBAK(umk, "srv-1");
     const token = {
-      appId,
+      serviceId,
       role: "member",
       nonce: new Uint8Array(32).fill(1),
       issuedAt: 1000,
@@ -295,7 +295,7 @@ describe("invite tokens (capability-based, no directory)", () => {
 
 describe("IRK migration request", () => {
   const m: MigrationRequest = {
-    appId: "habit-tracker",
+    serviceId: "habit-tracker",
     fromUser: "harry",
     toUser: "sarah",
     mode: "cut",
@@ -489,11 +489,11 @@ describe("UpdatePullRequest — server-identity-signed app update pull", () => {
   });
 });
 
-describe("SetAppEnvRequest — IRK-signed per-app env (names+values both signed)", () => {
+describe("SetServiceEnvRequest — IRK-signed per-app env (names+values both signed)", () => {
   const irk = deriveIRK(umk);
 
   it("round-trips sign/verify under the host IRK", async () => {
-    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const { signSetServiceEnv, verifySetServiceEnv } = await import("../src/auth.js");
     const r = {
       serverId: "home.alice.flagship.services",
       creator: "alice",
@@ -501,12 +501,12 @@ describe("SetAppEnvRequest — IRK-signed per-app env (names+values both signed)
       env: { OPENAI_API_KEY: "sk-secret-xyz", APP_REGION: "us" },
       issuedAt: 1735689600000,
     };
-    const sig = signSetAppEnv(r, irk);
-    expect(verifySetAppEnv(r, sig, irk.publicKey)).toBe(true);
+    const sig = signSetServiceEnv(r, irk);
+    expect(verifySetServiceEnv(r, sig, irk.publicKey)).toBe(true);
   });
 
   it("is order-independent over env keys (canonical sorts keys)", async () => {
-    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const { signSetServiceEnv, verifySetServiceEnv } = await import("../src/auth.js");
     const r1 = {
       serverId: "home.alice.flagship.services",
       creator: "alice",
@@ -514,13 +514,13 @@ describe("SetAppEnvRequest — IRK-signed per-app env (names+values both signed)
       env: { B: "2", A: "1" },
       issuedAt: 1,
     };
-    const sig = signSetAppEnv(r1, irk);
+    const sig = signSetServiceEnv(r1, irk);
     const r2 = { ...r1, env: { A: "1", B: "2" } };
-    expect(verifySetAppEnv(r2, sig, irk.publicKey)).toBe(true);
+    expect(verifySetServiceEnv(r2, sig, irk.publicKey)).toBe(true);
   });
 
   it("rejects a swapped value — a MITM cannot change a value against a captured sig", async () => {
-    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const { signSetServiceEnv, verifySetServiceEnv } = await import("../src/auth.js");
     const r = {
       serverId: "home.alice.flagship.services",
       creator: "alice",
@@ -528,18 +528,18 @@ describe("SetAppEnvRequest — IRK-signed per-app env (names+values both signed)
       env: { OPENAI_API_KEY: "sk-real" },
       issuedAt: 1,
     };
-    const sig = signSetAppEnv(r, irk);
+    const sig = signSetServiceEnv(r, irk);
     expect(
-      verifySetAppEnv({ ...r, env: { OPENAI_API_KEY: "sk-attacker" } }, sig, irk.publicKey),
+      verifySetServiceEnv({ ...r, env: { OPENAI_API_KEY: "sk-attacker" } }, sig, irk.publicKey),
     ).toBe(false);
     expect(
-      verifySetAppEnv({ ...r, env: { OPENAI_API_KEY: "sk-real", EXTRA: "x" } }, sig, irk.publicKey),
+      verifySetServiceEnv({ ...r, env: { OPENAI_API_KEY: "sk-real", EXTRA: "x" } }, sig, irk.publicKey),
     ).toBe(false);
-    expect(verifySetAppEnv({ ...r, slug: "other" }, sig, irk.publicKey)).toBe(false);
+    expect(verifySetServiceEnv({ ...r, slug: "other" }, sig, irk.publicKey)).toBe(false);
   });
 
   it("rejects under a different signer pubkey (wrong-signer)", async () => {
-    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const { signSetServiceEnv, verifySetServiceEnv } = await import("../src/auth.js");
     const other = deriveIRK({ seed: new Uint8Array(32).fill(0x77) });
     const r = {
       serverId: "home.alice.flagship.services",
@@ -548,8 +548,8 @@ describe("SetAppEnvRequest — IRK-signed per-app env (names+values both signed)
       env: { K: "v" },
       issuedAt: 1,
     };
-    const sig = signSetAppEnv(r, irk);
-    expect(verifySetAppEnv(r, sig, other.publicKey)).toBe(false);
+    const sig = signSetServiceEnv(r, irk);
+    expect(verifySetServiceEnv(r, sig, other.publicKey)).toBe(false);
   });
 });
 
@@ -818,7 +818,7 @@ describe("SetCustomDomain (#79A)", () => {
   const irk = deriveIRK(umk);
   const base: SetCustomDomain = {
     username: "harry",
-    appId: "harry-game1",
+    serviceId: "harry-game1",
     fqdn: "shop.example.com",
     issuedAt: 1_700_000_000_000,
   };
@@ -839,9 +839,9 @@ describe("SetCustomDomain (#79A)", () => {
     expect(verifySetCustomDomain({ ...base, fqdn: "evil.example.com" }, sig, irk.publicKey)).toBe(false);
   });
 
-  it("rejects a tampered appId", () => {
+  it("rejects a tampered serviceId", () => {
     const sig = signSetCustomDomain(base, irk);
-    expect(verifySetCustomDomain({ ...base, appId: "harry-other" }, sig, irk.publicKey)).toBe(false);
+    expect(verifySetCustomDomain({ ...base, serviceId: "harry-other" }, sig, irk.publicKey)).toBe(false);
   });
 
   it("fqdn is case-normalized in canonical bytes (signer/verifier agree on case)", () => {

@@ -7,7 +7,7 @@
  *                                  real WS endpoint is wired in N0e-2)
  *
  * carrying `Authorization: Bearer <FLAGSHIP_APP_TOKEN>`. The handler
- * resolves the bearer back to an appId; that appId becomes the scope
+ * resolves the bearer back to an serviceId; that serviceId becomes the scope
  * key for both send (fromAppId) and subscribe (the only id apps may
  * receive on). Two apps on the same pod cannot read each other's
  * inbound traffic and cannot send under each other's identity.
@@ -19,7 +19,7 @@
  * the punches as the user adds and removes pods.
  */
 
-import type { AppAuthTokens } from "../appAuthToken.js";
+import type { AppAuthTokens } from "../serviceAuthToken.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type {
   EventListener,
@@ -53,8 +53,8 @@ export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
   const pollWaitMs = deps.pollWaitMs ?? 25_000;
   const bufferMax = deps.pollBufferMax ?? 256;
 
-  function ensureSlot(appId: string): PollSlot {
-    let s = slots.get(appId);
+  function ensureSlot(serviceId: string): PollSlot {
+    let s = slots.get(serviceId);
     if (s) return s;
     const slot: PollSlot = {
       buffer: [],
@@ -70,16 +70,16 @@ export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
         // backpressure.
       },
     };
-    deps.router.subscribe(appId, slot.listener);
-    slots.set(appId, slot);
+    deps.router.subscribe(serviceId, slot.listener);
+    slots.set(serviceId, slot);
     return slot;
   }
 
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     if (!req.path.startsWith("/api/live_siblings/")) return null;
 
-    const appId = await resolveAppId(req, deps.appAuthTokens);
-    if (!appId) return jerr(401, "missing or invalid app token");
+    const serviceId = await resolveAppId(req, deps.appAuthTokens);
+    if (!serviceId) return jerr(401, "missing or invalid app token");
 
     if (req.path === "/api/live_siblings/list" && req.method === "GET") {
       return {
@@ -105,7 +105,7 @@ export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
         return jerr(400, "malformed body");
       }
       const r = await deps.router.send({
-        fromAppId: appId,
+        fromAppId: serviceId,
         fromSiblingId: deps.thisSiblingId,
         toSiblingId: body.toSiblingId,
         payloadHex: body.payloadHex,
@@ -122,7 +122,7 @@ export function buildSiblingHttpHandlers(deps: SiblingHttpDeps) {
     }
 
     if (req.path === "/api/live_siblings/poll" && req.method === "GET") {
-      const slot = ensureSlot(appId);
+      const slot = ensureSlot(serviceId);
       // If we have buffered events, return immediately.
       if (slot.buffer.length > 0) {
         const events = slot.buffer.splice(0);

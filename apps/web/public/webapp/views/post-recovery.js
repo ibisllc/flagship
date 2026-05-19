@@ -70,7 +70,7 @@ function renderReport(report) {
       ? '<div class="card placeholder">no apps walked</div>'
       : (report.apps ?? []).map((a) => `
         <div class="card">
-          <div class="row"><span class="label">${escapeHtml(a.slug ?? a.appId)}</span><span class="value text-xs">${escapeHtml(a.appId)}</span></div>
+          <div class="row"><span class="label">${escapeHtml(a.slug ?? a.serviceId)}</span><span class="value text-xs">${escapeHtml(a.serviceId)}</span></div>
           <div class="row"><span class="value">${a.rewrittenCount} reattached</span><span class="value">${a.unchangedCount} unchanged</span></div>
           ${a.error ? `<div class="row"><span class="value err-text">${escapeHtml(a.error)}</span></div>` : ""}
         </div>

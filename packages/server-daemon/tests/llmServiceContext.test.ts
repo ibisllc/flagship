@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import { AppMembership } from "../src/membership.js";
 import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
@@ -11,7 +11,7 @@ import {
   InMemoryPostgresAdmin,
   InMemoryRedisAdmin,
 } from "../src/dataLayer/index.js";
-import { buildLlmAppContext } from "../src/llmAppContext.js";
+import { buildLlmAppContext } from "../src/llmServiceContext.js";
 
 const umk = { seed: new Uint8Array(32).fill(11) };
 const ownerIrk = deriveIRK(umk);
@@ -51,7 +51,7 @@ describe("buildLlmAppContext", () => {
   });
 
   it("prependFlagshipSystemPrompt inserts the context markdown as the first system message", async () => {
-    const { prependFlagshipSystemPrompt } = await import("../src/llmAppContext.js");
+    const { prependFlagshipSystemPrompt } = await import("../src/llmServiceContext.js");
     const deployed = new Map<string, { manifest: AppManifest }>();
     deployed.set("habit-tracker", { manifest: manifest() });
     const ctx = await buildLlmAppContext({
@@ -180,13 +180,13 @@ describe("buildLlmAppContext", () => {
       deployedApps: deployed,
       revealCredentials: false,
     });
-    const sisterIds = ctx.sisterApps.map((s) => s.appId);
+    const sisterIds = ctx.sisterApps.map((s) => s.serviceId);
     expect(sisterIds).toContain("pomodoro-timer");
     expect(sisterIds).not.toContain("diary");
   });
 });
 
-describe("daemon HTTP — GET /apps/:appId/llm-context", () => {
+describe("daemon HTTP — GET /apps/:serviceId/llm-context", () => {
   function makeCtx() {
     const apps = new Map<string, AppMembership>();
     apps.set("habit-tracker", new AppMembership("habit-tracker", "harry", ownerIrk.publicKey, swk));
@@ -214,7 +214,7 @@ describe("daemon HTTP — GET /apps/:appId/llm-context", () => {
     });
     expect(r.statusCode).toBe(200);
     const body = JSON.parse(r.body);
-    expect(body.appId).toBe("habit-tracker");
+    expect(body.serviceId).toBe("habit-tracker");
     expect(body.markdown).toContain("Flagship app context");
     expect(Array.isArray(body.envVars)).toBe(true);
   });

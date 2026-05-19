@@ -36,7 +36,7 @@ describe("TabRegistry", () => {
     expect(reg.appIdForTab("tab-2")).toBeNull();
   });
 
-  it("popup with known openerId inherits the parent's appId", async () => {
+  it("popup with known openerId inherits the parent's serviceId", async () => {
     reg.assignTab("tab-parent", "alice-game1");
     server.emitEvent("Target.targetCreated", {
       targetInfo: {

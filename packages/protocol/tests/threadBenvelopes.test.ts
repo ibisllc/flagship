@@ -1,7 +1,7 @@
 /**
  * Tests for the Thread-B + invitation envelopes added in this cycle:
  *   - PodIdentityBinding (#89)
- *   - AppAccessInvite + AppAccessAcceptance (#79)
+ *   - ServiceAccessInvite + ServiceAccessAcceptance (#79)
  *   - RotateRck + RecoverRck + RevokeRecoverRck (#75)
  *   - MergeBack (#76)
  *
@@ -10,22 +10,22 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  type AppAccessAcceptance,
-  type AppAccessInvite,
+  type ServiceAccessAcceptance,
+  type ServiceAccessInvite,
   type MergeBack,
   type PodIdentityBinding,
   type RecoverRck,
   type RevokeRecoverRck,
   type RotateRck,
-  signAppAccessAcceptance,
-  signAppAccessInvite,
+  signServiceAccessAcceptance,
+  signServiceAccessInvite,
   signMergeBack,
   signPodIdentityBinding,
   signRecoverRck,
   signRevokeRecoverRck,
   signRotateRck,
-  verifyAppAccessAcceptance,
-  verifyAppAccessInvite,
+  verifyServiceAccessAcceptance,
+  verifyServiceAccessInvite,
   verifyMergeBack,
   verifyPodIdentityBinding,
   verifyRecoverRck,
@@ -76,10 +76,10 @@ describe("PodIdentityBinding", () => {
   });
 });
 
-describe("AppAccessInvite + Acceptance", () => {
-  const invite: AppAccessInvite = {
+describe("ServiceAccessInvite + Acceptance", () => {
+  const invite: ServiceAccessInvite = {
     inviteId: "550e8400-e29b-41d4-a716-446655440000",
-    appCanonical: "notes@abc123def456",
+    serviceCanonical: "notes@abc123def456",
     secretHash: "f".repeat(64),
     role: "admin",
     opaqueTag: new Uint8Array(16).fill(0xa),
@@ -90,35 +90,35 @@ describe("AppAccessInvite + Acceptance", () => {
   };
 
   it("sign + verify invite under owner IRK", () => {
-    const sig = signAppAccessInvite(invite, harryIrk);
-    expect(verifyAppAccessInvite(invite, sig, harryIrk.publicKey)).toBe(true);
+    const sig = signServiceAccessInvite(invite, harryIrk);
+    expect(verifyServiceAccessInvite(invite, sig, harryIrk.publicKey)).toBe(true);
   });
 
   it("expectedIrkPubKey changes the bytes (pre-bound vs bearer)", () => {
-    const sigBearer = signAppAccessInvite(invite, harryIrk);
-    const preBound: AppAccessInvite = { ...invite, expectedIrkPubKey: harryIrk.publicKey };
-    const sigPreBound = signAppAccessInvite(preBound, harryIrk);
-    expect(verifyAppAccessInvite(invite, sigPreBound, harryIrk.publicKey)).toBe(false);
-    expect(verifyAppAccessInvite(preBound, sigBearer, harryIrk.publicKey)).toBe(false);
+    const sigBearer = signServiceAccessInvite(invite, harryIrk);
+    const preBound: ServiceAccessInvite = { ...invite, expectedIrkPubKey: harryIrk.publicKey };
+    const sigPreBound = signServiceAccessInvite(preBound, harryIrk);
+    expect(verifyServiceAccessInvite(invite, sigPreBound, harryIrk.publicKey)).toBe(false);
+    expect(verifyServiceAccessInvite(preBound, sigBearer, harryIrk.publicKey)).toBe(false);
   });
 
   it("rejects '|' in contextNote", () => {
     expect(() =>
-      signAppAccessInvite({ ...invite, contextNote: "evil|context" }, harryIrk),
+      signServiceAccessInvite({ ...invite, contextNote: "evil|context" }, harryIrk),
     ).toThrow(/separator/);
   });
 
   it("sign + verify acceptance under consumer IRK", () => {
     const consumer = freshKeypair(7);
-    const acceptance: AppAccessAcceptance = {
+    const acceptance: ServiceAccessAcceptance = {
       inviteId: invite.inviteId,
       secretHash: invite.secretHash,
       consumerIrkPubKey: consumer.publicKey,
       acceptedAt: 1_780_000_000_500,
       nonce: new Uint8Array(16).fill(0xc),
     };
-    const sig = signAppAccessAcceptance(acceptance, consumer);
-    expect(verifyAppAccessAcceptance(acceptance, sig, consumer.publicKey)).toBe(true);
+    const sig = signServiceAccessAcceptance(acceptance, consumer);
+    expect(verifyServiceAccessAcceptance(acceptance, sig, consumer.publicKey)).toBe(true);
   });
 });
 

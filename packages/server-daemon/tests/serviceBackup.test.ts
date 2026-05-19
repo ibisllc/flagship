@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createGunzip } from "node:zlib";
 import { Readable } from "node:stream";
 import * as tar from "tar-stream";
-import { AppBackupService, decryptArchive } from "../src/appBackup.js";
+import { AppBackupService, decryptArchive } from "../src/serviceBackup.js";
 
 async function tmpDir(): Promise<{ dir: string; cleanup: () => Promise<void> }> {
   const dir = await mkdtemp(join(tmpdir(), "appbackup-test-"));

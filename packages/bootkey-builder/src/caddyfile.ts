@@ -3,7 +3,7 @@ import type { AppManifest } from "@flagship/protocol";
 export interface CaddyAppEntry {
   manifest: AppManifest;
   /** Logical app id (used in URLs to the daemon's /apps/:id/identity/decide). */
-  appId: string;
+  serviceId: string;
   /** Container hostname inside the user-network — e.g. `app-habit-tracker.flagship.local`. */
   containerHost: string;
 }
@@ -75,7 +75,7 @@ export function renderCaddyfile(ctx: CaddyContext, apps: CaddyAppEntry[]): strin
     const target = entry.containerHost.includes(":")
       ? entry.containerHost
       : `${entry.containerHost}:${entry.manifest.runtime.port}`;
-    lines.push(`# ${entry.appId} — ${entry.manifest.description ?? entry.manifest.name}`);
+    lines.push(`# ${entry.serviceId} — ${entry.manifest.description ?? entry.manifest.name}`);
     lines.push(`${fqdn} {${tlsBlock}`);
     lines.push("");
     lines.push("  # 2. Strip any client-supplied identity headers — the only valid source");
@@ -89,7 +89,7 @@ export function renderCaddyfile(ctx: CaddyContext, apps: CaddyAppEntry[]): strin
     lines.push("  # 3. Hand the request to the daemon's /identity/decide which returns the");
     lines.push("  # signed identity headers (or a 403 page rendered by the daemon).");
     lines.push(`  forward_auth ${q(daemon)} {`);
-    lines.push(`    uri /apps/${entry.appId}/identity/decide`);
+    lines.push(`    uri /apps/${entry.serviceId}/identity/decide`);
     lines.push("    copy_headers X-Flagship-User X-Flagship-Role X-Flagship-Signature X-Flagship-Member");
     lines.push("  }");
     lines.push("");

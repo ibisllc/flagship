@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import { AppMembership } from "../src/membership.js";
 import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
@@ -70,7 +70,7 @@ async function deploy(http: ReturnType<typeof buildDaemonHttp>) {
 }
 
 describe("/data dashboard endpoints", () => {
-  it("/data/postgres/:appId/tables lists tables", async () => {
+  it("/data/postgres/:serviceId/tables lists tables", async () => {
     const { ctx, pg } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
@@ -85,7 +85,7 @@ describe("/data dashboard endpoints", () => {
     expect(body.tables).toEqual(["habits"]);
   });
 
-  it("/data/postgres/:appId/query clamps `max` to [1, 1000]", async () => {
+  it("/data/postgres/:serviceId/query clamps `max` to [1, 1000]", async () => {
     const { ctx, pg } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
@@ -101,7 +101,7 @@ describe("/data dashboard endpoints", () => {
     expect(JSON.parse(tooHigh.body).max).toBe(1000);
   });
 
-  it("/data/objects/:appId/list returns objects with size", async () => {
+  it("/data/objects/:serviceId/list returns objects with size", async () => {
     const { ctx, objects } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);
@@ -116,7 +116,7 @@ describe("/data dashboard endpoints", () => {
     expect(body.objects).toEqual([{ key: "a/b.txt", size: 42 }]);
   });
 
-  it("/data/kv/:appId/keys filters by the per-app prefix", async () => {
+  it("/data/kv/:serviceId/keys filters by the per-app prefix", async () => {
     const { ctx, kv } = makeCtx();
     const http = buildDaemonHttp(ctx);
     await deploy(http);

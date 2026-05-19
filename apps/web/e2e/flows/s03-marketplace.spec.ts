@@ -3,7 +3,7 @@
  *
  * Seed the pod-sim's marketplace endpoint with a listing, open the
  * Marketplace view, click Install on the listing → assert the
- * pod-sim received a POST /api/apps with an IRK-signed install-app
+ * pod-sim received a POST /api/services with an IRK-signed install-app
  * envelope.
  */
 

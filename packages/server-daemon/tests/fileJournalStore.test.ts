@@ -8,9 +8,9 @@ import {
 } from "../src/postRecovery/fileJournalStore.js";
 import type { EncryptedJournalRow } from "../src/postRecovery/stableIdReissuer.js";
 
-function row(appId: string, rewrittenAt: number): EncryptedJournalRow {
+function row(serviceId: string, rewrittenAt: number): EncryptedJournalRow {
   return {
-    appId,
+    serviceId,
     ivHex: "00".repeat(12),
     ciphertextHex: "ab".repeat(32),
     tagHex: "00".repeat(16),
@@ -29,7 +29,7 @@ describe("FileJournalStore", () => {
     await store.append(row("b", 2));
     await store.append(row("c", 3));
     const all = await store.listAll();
-    expect(all.map((r) => r.appId)).toEqual(["a", "b", "c"]);
+    expect(all.map((r) => r.serviceId)).toEqual(["a", "b", "c"]);
     expect(all.map((r) => r.rewrittenAt)).toEqual([1, 2, 3]);
   });
 
@@ -47,7 +47,7 @@ describe("FileJournalStore", () => {
     const removed = await store.deleteOlderThan(20);
     expect(removed).toBe(1);
     const remaining = await store.listAll();
-    expect(remaining.map((r) => r.appId).sort()).toEqual(["b", "c"]);
+    expect(remaining.map((r) => r.serviceId).sort()).toEqual(["b", "c"]);
   });
 
   it("deleteOlderThan returns 0 + no rewrite when nothing matches", async () => {
@@ -66,7 +66,7 @@ describe("FileJournalStore", () => {
     writeFileSync(path, readFileSync(path, "utf8") + "{not json\n", { flag: "w" });
     await store.append(row("b", 2));
     const all = await store.listAll();
-    expect(all.map((r) => r.appId).sort()).toEqual(["a", "b"]);
+    expect(all.map((r) => r.serviceId).sort()).toEqual(["a", "b"]);
   });
 
   it("survives a half-written tmp file (rename atomicity sanity)", async () => {

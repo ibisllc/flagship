@@ -1,6 +1,6 @@
 import {
-  deriveAppMemberStableId,
-  deriveAppSecret,
+  deriveServiceMemberStableId,
+  deriveServiceSecret,
   verifyInvite,
   verifyInviteAcceptance,
   verifyMembershipMutation,
@@ -52,7 +52,7 @@ export class InviteStore {
   private readonly now: () => number;
 
   constructor(
-    public readonly appId: string,
+    public readonly serviceId: string,
     private readonly ownerIrkPub: Bytes,
     opts: MembershipStoreOptions = {},
   ) {
@@ -66,7 +66,7 @@ export class InviteStore {
     acceptance: InviteAcceptance,
     acceptanceSig: Bytes,
   ): RedeemResult {
-    if (token.appId !== this.appId) {
+    if (token.serviceId !== this.serviceId) {
       return { ok: false, reason: "app-mismatch" };
     }
     if (!verifyInvite(token, inviteSig, this.ownerIrkPub)) {
@@ -126,7 +126,7 @@ export class MembershipStore {
   private readonly now: () => number;
 
   constructor(
-    public readonly appId: string,
+    public readonly serviceId: string,
     private readonly ownerUserId: string,
     private readonly ownerIrkPub: Bytes,
     opts: MembershipStoreOptions = {},
@@ -136,7 +136,7 @@ export class MembershipStore {
   }
 
   applySignedMutation(m: MembershipMutation, signature: Bytes): ApplyResult {
-    if (m.appId !== this.appId) return { ok: false, reason: "app-mismatch" };
+    if (m.serviceId !== this.serviceId) return { ok: false, reason: "app-mismatch" };
     if (!verifyMembershipMutation(m, signature, this.ownerIrkPub)) {
       return { ok: false, reason: "invalid-signature" };
     }
@@ -223,15 +223,15 @@ export class AppMembership {
   private readonly appSecret: Bytes;
 
   constructor(
-    public readonly appId: string,
+    public readonly serviceId: string,
     ownerUserId: string,
     ownerIrkPub: Bytes,
     swk: Bytes,
     opts: MembershipStoreOptions = {},
   ) {
-    this.invites = new InviteStore(appId, ownerIrkPub, opts);
-    this.members = new MembershipStore(appId, ownerUserId, ownerIrkPub, opts);
-    this.appSecret = deriveAppSecret(swk, appId);
+    this.invites = new InviteStore(serviceId, ownerIrkPub, opts);
+    this.members = new MembershipStore(serviceId, ownerUserId, ownerIrkPub, opts);
+    this.appSecret = deriveServiceSecret(swk, serviceId);
   }
 
   /** Redeem an invite, atomically marking the nonce used and adding the member. */
@@ -244,7 +244,7 @@ export class AppMembership {
     const r = this.invites.redeem(token, inviteSig, acceptance, acceptanceSig);
     if (!r.ok) return r;
     this.members.internalAdd(r.accepterIrkPub, r.role);
-    return { ...r, stableId: deriveAppMemberStableId(this.appSecret, r.accepterIrkPub) };
+    return { ...r, stableId: deriveServiceMemberStableId(this.appSecret, r.accepterIrkPub) };
   }
 
   /** Apply an owner-signed remove or role-change mutation. */
@@ -253,7 +253,7 @@ export class AppMembership {
   }
 
   stableIdFor(irkPub: Bytes): string {
-    return deriveAppMemberStableId(this.appSecret, irkPub);
+    return deriveServiceMemberStableId(this.appSecret, irkPub);
   }
 }
 

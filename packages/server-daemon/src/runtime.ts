@@ -3,11 +3,11 @@ import { createServer as createTlsServer, type Server as TlsServer, type TLSSock
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
-import { AppPlatform, buildAppHttpHandlers } from "./appPlatform.js";
+import { ServicePlatform, buildServiceHttpHandlers } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
-import { handleAppRequest } from "./appProxy.js";
-import { FileAppEnvStore, type AppEnvStore } from "./appEnvStore.js";
-import { AppRunner } from "./appRunner.js";
+import { handleAppRequest } from "./serviceProxy.js";
+import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
+import { AppRunner } from "./serviceRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
   DataProvisioner,
@@ -126,7 +126,7 @@ export interface DaemonRuntimeOptions {
    * Replace with a real reverse-proxy / app router.
    *
    * Replacing this entirely also disables the built-in routes for
-   * `/api/orders-from-user` and `/api/apps` — usually you want
+   * `/api/orders-from-user` and `/api/services` — usually you want
    * `additionalHandlers` instead.
    */
   handleHttp?: (req: HttpRequest) => Promise<HttpResponse>;
@@ -135,7 +135,7 @@ export interface DaemonRuntimeOptions {
    * returns null to fall through. The first non-null response wins.
    * Use this to overlay extra surfaces (the browser feature's
    * `/api/browser/*`, the admin-UI proxy's `/.flagship/admin/*`)
-   * without losing the built-in `/api/orders-from-user` + `/api/apps`
+   * without losing the built-in `/api/orders-from-user` + `/api/services`
    * routes.
    */
   additionalHandlers?: Array<(req: HttpRequest) => Promise<HttpResponse | null>>;
@@ -165,7 +165,7 @@ export interface DaemonRuntimeOptions {
    *   (apps with no stores still deploy).
    * - `hostUsername`: the host's username (the middle label of
    *   `<server>.<host>.flagship.services`). Required to build
-   *   `AppPlatform` (otherwise app install/uninstall is not exposed).
+   *   `ServicePlatform` (otherwise app install/uninstall is not exposed).
    * - `hostIrkPub`: the host's IRK pubkey, the authority for
    *   membership mutations on every app installed here.
    * - `hostIrk`: optional. When supplied, the install endpoint can
@@ -178,7 +178,7 @@ export interface DaemonRuntimeOptions {
    *
    * `AppRunner` is built unconditionally (it just shells to docker).
    */
-  appPlatform?: {
+  servicePlatform?: {
     dataServicesEnvFile?: string;
     hostUsername?: string;
     hostIrkPub?: Bytes;
@@ -188,24 +188,24 @@ export interface DaemonRuntimeOptions {
      * Optional browser-feature wiring. The caller builds + starts
      * BrowserManager / TabRegistry / DomainGate / PhonePipe externally
      * and hands them in here; the runtime just plumbs them through to
-     * AppPlatform so install/uninstall hooks domain grants on the gate.
+     * ServicePlatform so install/uninstall hooks domain grants on the gate.
      * Apps' /api/browser/* calls are routed by the caller's
      * `opts.handleHttp` overlay, not by the default handler — keeps
      * runtime.ts decoupled from the browser surface.
      */
-    appAuthTokens?: import("./appAuthToken.js").AppAuthTokens;
+    appAuthTokens?: import("./serviceAuthToken.js").AppAuthTokens;
     domainGate?: import("./browser/domainGate.js").DomainGate;
     tabRegistry?: import("./browser/tabRegistry.js").TabRegistry;
     /**
-     * Update-pack canonical-home registration. When set, AppPlatform
+     * Update-pack canonical-home registration. When set, ServicePlatform
      * records an initial AppPullState for cross-creator installs so
-     * the pull scheduler can fetch updates. `cloneApp` is invoked at
+     * the pull scheduler can fetch updates. `cloneService` is invoked at
      * install time to materialize the initial working tree (production
      * wires this to a /.flagship/update?since= bundle fetch).
      */
     pullStateStore?: import("./updateClient.js").AppPullStateStore;
-    cloneApp?: (args: {
-      appId: string;
+    cloneService?: (args: {
+      serviceId: string;
       canonicalUrl: string;
     }) => Promise<{ currentTip: string }>;
     /**
@@ -226,7 +226,7 @@ export interface DaemonRuntimeOptions {
      * order persists sealed and is injected into the deployed app's
      * runtime environment. Tests inject an `InMemoryAppEnvStore`.
      */
-    envStore?: import("./appEnvStore.js").AppEnvStore;
+    envStore?: import("./serviceEnvStore.js").AppEnvStore;
   };
 }
 
@@ -251,14 +251,14 @@ export interface DaemonRuntime {
   /**
    * App-platform handles. `appRunner` is unconditional (it just shells
    * to docker). `dataProvisioner` is null when the data-services
-   * compose stack isn't configured. `appPlatform` is null when
-   * `appPlatform.hostIrkPub` + `appPlatform.swk` weren't supplied —
+   * compose stack isn't configured. `servicePlatform` is null when
+   * `servicePlatform.hostIrkPub` + `servicePlatform.swk` weren't supplied —
    * the daemon then runs without an app-install surface, useful for
    * tunnel-only / cert-only test profiles.
    */
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
-  appPlatform: AppPlatform | null;
+  servicePlatform: ServicePlatform | null;
   /**
    * App-claim primitives: add/remove FQDNs from this pod's
    * controlledDomains list and push a HELLO update to the tunnel hub.
@@ -278,14 +278,14 @@ export interface DaemonRuntime {
   /**
    * App backup service. PhoneOrder backup-app calls into this; the
    * resulting one-shot fetch URL is served at /api/backups/<id>.
-   * Null when no AppPlatform / dataDir is wired.
+   * Null when no ServicePlatform / dataDir is wired.
    */
-  appBackup: import("./appBackup.js").AppBackupService | null;
+  appBackup: import("./serviceBackup.js").AppBackupService | null;
   /**
    * Append a handler to the live HTTP-handler chain. Handlers are
    * tried in registration order; the first non-null response wins.
    * Use this to wire surfaces that depend on the runtime's own
-   * post-startup state (appPlatform, urlController, appBackup).
+   * post-startup state (servicePlatform, urlController, appBackup).
    */
   addHandler(h: (req: HttpRequest) => Promise<HttpResponse | null>): void;
   /**
@@ -321,7 +321,7 @@ export interface UrlController {
 
 function buildDefaultHandler(
   opts: DaemonRuntimeOptions,
-  appPlatformRef: { current: AppPlatform | null },
+  servicePlatformRef: { current: ServicePlatform | null },
 ): (req: HttpRequest) => Promise<HttpResponse> {
   const orderHandler = opts.orders
     ? buildOrdersHandler({
@@ -343,17 +343,17 @@ function buildDefaultHandler(
       return orderHandler(req);
     }
 
-    if (req.path === "/api/apps" || req.path.startsWith("/api/apps/")) {
-      if (!appPlatformRef.current) {
+    if (req.path === "/api/services" || req.path.startsWith("/api/services/")) {
+      if (!servicePlatformRef.current) {
         return {
           status: 503,
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ error: "AppPlatform not configured" }),
+          body: JSON.stringify({ error: "ServicePlatform not configured" }),
         };
       }
-      const appsHandler = buildAppHttpHandlers({
-        platform: appPlatformRef.current,
-        hostIrk: opts.appPlatform?.hostIrk ?? null,
+      const appsHandler = buildServiceHttpHandlers({
+        platform: servicePlatformRef.current,
+        hostIrk: opts.servicePlatform?.hostIrk ?? null,
       });
       const r = await appsHandler(req);
       if (r) return r;
@@ -421,11 +421,11 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       : [opts.serverFqdn, `*.${opts.serverFqdn}`]
     : [opts.serverFqdn];
   const certManager = new CertManager();
-  // The default handler needs to refer to AppPlatform, but AppPlatform
+  // The default handler needs to refer to ServicePlatform, but ServicePlatform
   // is constructed below (after the cert + tunnel). The ref-cell lets
   // us bind the handler now and populate it later.
-  const appPlatformRef: { current: AppPlatform | null } = { current: null };
-  const baseHandleHttp = opts.handleHttp ?? buildDefaultHandler(opts, appPlatformRef);
+  const servicePlatformRef: { current: ServicePlatform | null } = { current: null };
+  const baseHandleHttp = opts.handleHttp ?? buildDefaultHandler(opts, servicePlatformRef);
   // Mutable handler chain. We push internally-built handlers (live_siblings,
   // url) into this AFTER startup wires their dependencies. The closure
   // below captures the array by reference so post-startup additions are
@@ -468,8 +468,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // otherwise fall back to the daemon's own HTTP surface.
     const sni = ((typeof socket.servername === "string" ? socket.servername : null) ?? opts.serverFqdn).toLowerCase();
     const leftmost = leftmostLabel(sni, opts.serverFqdn);
-    const app = leftmost && appPlatformRef.current
-      ? appPlatformRef.current.byLabel(leftmost)
+    const app = leftmost && servicePlatformRef.current
+      ? servicePlatformRef.current.byLabel(leftmost)
       : undefined;
     if (app) {
       handleHttpConnection(socket, async (req) => {
@@ -504,7 +504,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
           if (h(args)) return true;
         }
         if (args.path !== "/.flagship/sibling-handshake") return false;
-        if (!opts.appPlatform?.swk) return false; // no STK → can't auth siblings
+        if (!opts.servicePlatform?.swk) return false; // no STK → can't auth siblings
         const accepted = acceptSiblingUpgrade({
           socket: args.socket as unknown as import("node:net").Socket,
           headBuffer: args.headBuffer,
@@ -678,13 +678,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // App-platform construction. AppRunner is unconditional (apps that
   // don't use the data layer can still deploy); DataProvisioner is
   // wired only if the data-services env file is supplied + readable;
-  // AppPlatform is wired only when host IRK + SWK are supplied.
+  // ServicePlatform is wired only when host IRK + SWK are supplied.
   const appRunner = new AppRunner();
   const dataProvisioner = await maybeBuildDataProvisioner(
-    opts.appPlatform?.dataServicesEnvFile,
+    opts.servicePlatform?.dataServicesEnvFile,
   );
 
-  const apOpts = opts.appPlatform;
+  const apOpts = opts.servicePlatform;
   let aliasReconciler: AliasReconciler | null = null;
   let envStore: AppEnvStore | null = null;
   if (apOpts?.hostUsername && apOpts.hostIrkPub && apOpts.swk) {
@@ -701,7 +701,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       await fileStore.load();
       envStore = fileStore;
     }
-    appPlatformRef.current = new AppPlatform({
+    servicePlatformRef.current = new ServicePlatform({
       host: { username: apOpts.hostUsername, irkPub: apOpts.hostIrkPub },
       swk: apOpts.swk,
       appRunner,
@@ -710,30 +710,30 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       domainGate: apOpts.domainGate ?? null,
       tabRegistry: apOpts.tabRegistry ?? null,
       pullStateStore: apOpts.pullStateStore ?? null,
-      cloneApp: apOpts.cloneApp ?? null,
+      cloneService: apOpts.cloneService ?? null,
       envStore,
     });
     const extras: string[] = [];
     if (apOpts.appAuthTokens) extras.push("app-tokens");
     if (apOpts.domainGate) extras.push("browser-gate");
     console.log(
-      `[runtime] AppPlatform ready for host ${apOpts.hostUsername}` +
+      `[runtime] ServicePlatform ready for host ${apOpts.hostUsername}` +
         (extras.length ? ` (with ${extras.join(", ")})` : ""),
     );
     // V5 — periodic poll of /api/users/:u/apps/aliases on .com so a
     // phone-driven Replace stem flow rebinds the reverse-proxy index
-    // automatically. Opt-out via opts.appPlatform.aliasReconcilerComBase = false.
+    // automatically. Opt-out via opts.servicePlatform.aliasReconcilerComBase = false.
     const reconcileBase = apOpts.aliasReconcilerComBase;
     if (reconcileBase !== false) {
       aliasReconciler = new AliasReconciler({
         comBaseUrl: reconcileBase ?? "https://flagshipserver.com",
         username: apOpts.hostUsername,
-        platform: appPlatformRef.current,
+        platform: servicePlatformRef.current,
         intervalMs: apOpts.aliasReconcilerIntervalMs ?? 60_000,
         onApplied: (changes) => {
           for (const c of changes) {
             console.log(
-              `[runtime] alias applied: ${c.appId} ${c.oldLabel ?? "(new)"} → ${c.newLabel}`,
+              `[runtime] alias applied: ${c.serviceId} ${c.oldLabel ?? "(new)"} → ${c.newLabel}`,
             );
           }
         },
@@ -745,7 +745,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       console.log(`[runtime] AliasReconciler polling ${apOpts.hostUsername} → ${reconcileBase ?? "flagshipserver.com"}`);
     }
   } else {
-    console.log(`[runtime] AppPlatform skipped (host IRK / SWK not provided)`);
+    console.log(`[runtime] ServicePlatform skipped (host IRK / SWK not provided)`);
   }
 
   // URL controller — under the entitlement model, claims happen at
@@ -785,20 +785,20 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // authenticate so the routes would always 401; we just don't mount
   // them. URL claims are now hub-driven via FRAME_REQUEST_TRANSFER —
   // no daemon-side capability store needed (N12d).
-  const appAuthTokens = opts.appPlatform?.appAuthTokens;
+  const appAuthTokens = opts.servicePlatform?.appAuthTokens;
   // App backup service. Wired only when we have a place to put backup
-  // archives + a way to find an app's source tree (AppPlatform).
-  const { AppBackupService } = await import("./appBackup.js");
+  // archives + a way to find an app's source tree (ServicePlatform).
+  const { AppBackupService } = await import("./serviceBackup.js");
   const appBackup =
-    opts.dataDir && appPlatformRef.current
+    opts.dataDir && servicePlatformRef.current
       ? new AppBackupService({
           backupDir: `${opts.dataDir}/backups`,
           resolveSource: async ({ creator, slug }) => {
-            const ap = appPlatformRef.current;
+            const ap = servicePlatformRef.current;
             if (!ap) return null;
-            const app = ap.byAppId(`${creator}--${slug}`);
+            const app = ap.byServiceId(`${creator}--${slug}`);
             if (!app) return null;
-            // Vibe-coded apps live under <dataDir>/data/app-clones/<appId>;
+            // Vibe-coded apps live under <dataDir>/data/app-clones/<serviceId>;
             // cross-creator apps under their Forgejo checkout. The runtime
             // doesn't currently track per-app source paths centrally — the
             // common path is the daemon's app-clones dir. Caller may
@@ -823,17 +823,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         appAuthTokens,
         urlController,
         thisSiblingId: opts.serverFqdn,
-        canonicalFqdnsForApp: (appId) => {
-          const ap = appPlatformRef.current;
+        canonicalFqdnsForApp: (serviceId) => {
+          const ap = servicePlatformRef.current;
           if (!ap) return [];
-          const app = ap.byAppId(appId);
+          const app = ap.byServiceId(serviceId);
           if (!app) return [];
           // The pod's wildcard already covers <app>.<server>.<user>; the
           // canonical FQDN we surface is the leftmost-label form so apps
           // can show + reason about their identity URL.
           const host = apOpts?.hostUsername ?? "";
           const label = host
-            ? AppPlatform.urlLabel(host, app.creator, app.slug)
+            ? ServicePlatform.urlLabel(host, app.creator, app.slug)
             : app.slug;
           return [`${label}.${opts.serverFqdn}`];
         },
@@ -853,7 +853,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     certManager,
     appRunner,
     dataProvisioner,
-    appPlatform: appPlatformRef.current,
+    servicePlatform: servicePlatformRef.current,
     urlController,
     siblingRouter,
     appBackup,

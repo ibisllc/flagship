@@ -6,7 +6,7 @@ interface FeedItem { kind: string; at: number; title: string; }
 
 function buildFeed(
   approvals: Array<{ requestedAt: number; serverFqdn: string }>,
-  recents: Array<{ at: number; kind: string; appId: string }>,
+  recents: Array<{ at: number; kind: string; serviceId: string }>,
   recovery: { status: string; completedAt: number } | null,
 ): FeedItem[] {
   const items: FeedItem[] = [];
@@ -14,7 +14,7 @@ function buildFeed(
     items.push({ kind: "approval", at: a.requestedAt, title: `unlock ${a.serverFqdn}` });
   }
   for (const r of recents) {
-    items.push({ kind: "install", at: r.at, title: `${r.kind}: ${r.appId}` });
+    items.push({ kind: "install", at: r.at, title: `${r.kind}: ${r.serviceId}` });
   }
   if (recovery) {
     items.push({ kind: "recovery", at: recovery.completedAt, title: `recovery ${recovery.status}` });
@@ -27,8 +27,8 @@ describe("activity feed merge", () => {
     const feed = buildFeed(
       [{ requestedAt: 100, serverFqdn: "home.h.flagship.services" }],
       [
-        { at: 300, kind: "deploy", appId: "wiki" },
-        { at: 200, kind: "installed", appId: "plants" },
+        { at: 300, kind: "deploy", serviceId: "wiki" },
+        { at: 200, kind: "installed", serviceId: "plants" },
       ],
       { status: "complete", completedAt: 50 },
     );
@@ -42,7 +42,7 @@ describe("activity feed merge", () => {
   it("tags each item with its kind so the renderer can branch", () => {
     const feed = buildFeed(
       [{ requestedAt: 1, serverFqdn: "x" }],
-      [{ at: 2, kind: "installed", appId: "y" }],
+      [{ at: 2, kind: "installed", serviceId: "y" }],
       null,
     );
     expect(feed.map((i) => i.kind).sort()).toEqual(["approval", "install"]);

@@ -273,9 +273,9 @@ describe("orders-from-user handler", () => {
     expect(body.error).toBe("invalid signature");
   });
 
-  it("dispatches add-subscriber with appId + fqdn", async () => {
+  it("dispatches add-subscriber with serviceId + fqdn", async () => {
     const psk = makeKey();
-    const calls: Array<{ appId: string; fqdn: string }> = [];
+    const calls: Array<{ serviceId: string; fqdn: string }> = [];
     const ex: OrderExecutor = {
       addSubscriber: (a) => {
         calls.push(a);
@@ -285,18 +285,18 @@ describe("orders-from-user handler", () => {
     const order: PhoneOrder = {
       type: "add-subscriber",
       serverId: SERVER_FQDN,
-      appId: "alice-game1",
+      serviceId: "alice-game1",
       fqdn: "home.bob.flagship.services",
       issuedAt: Date.now(),
     };
     const r = await h(makeReq(envelope(order, psk)));
     expect(r.status).toBe(200);
-    expect(calls).toEqual([{ appId: "alice-game1", fqdn: "home.bob.flagship.services" }]);
+    expect(calls).toEqual([{ serviceId: "alice-game1", fqdn: "home.bob.flagship.services" }]);
   });
 
   it("dispatches remove-subscriber", async () => {
     const psk = makeKey();
-    const calls: Array<{ appId: string; fqdn: string }> = [];
+    const calls: Array<{ serviceId: string; fqdn: string }> = [];
     const ex: OrderExecutor = {
       removeSubscriber: (a) => {
         calls.push(a);
@@ -306,7 +306,7 @@ describe("orders-from-user handler", () => {
     const order: PhoneOrder = {
       type: "remove-subscriber",
       serverId: SERVER_FQDN,
-      appId: "alice-game1",
+      serviceId: "alice-game1",
       fqdn: "home.bob.flagship.services",
       issuedAt: Date.now(),
     };

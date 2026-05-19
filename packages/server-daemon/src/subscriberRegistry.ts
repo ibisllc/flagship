@@ -11,7 +11,7 @@
  * is keyed by FQDN, not by IRK). So in v1 we keep the subscriber list
  * as a sidecar maintained by the host's phone:
  *
- *   - `add(appId, fqdn)` / `remove(appId, fqdn)`: phone-issued
+ *   - `add(serviceId, fqdn)` / `remove(serviceId, fqdn)`: phone-issued
  *     mutations (over the orders endpoint or a future explicit
  *     `manage-subscribers` route) update the registry.
  *   - The membership store is still the source of truth for who can
@@ -29,15 +29,15 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AppPlatform, InstalledApp } from "./appPlatform.js";
+import type { ServicePlatform, InstalledService } from "./servicePlatform.js";
 import type { AppDistributionInfo } from "./updateServer.js";
 
 export interface SubscriberRegistry {
   /** All FQDNs allowed to pull this app's updates. */
-  subscribersFor(appId: string): Promise<Set<string>>;
-  add(appId: string, fqdn: string): Promise<void>;
-  remove(appId: string, fqdn: string): Promise<void>;
-  list(appId: string): Promise<string[]>;
+  subscribersFor(serviceId: string): Promise<Set<string>>;
+  add(serviceId: string, fqdn: string): Promise<void>;
+  remove(serviceId: string, fqdn: string): Promise<void>;
+  list(serviceId: string): Promise<string[]>;
 }
 
 const FQDN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -51,37 +51,37 @@ function validateFqdn(fqdn: string): void {
 export class InMemorySubscriberRegistry implements SubscriberRegistry {
   private byApp = new Map<string, Set<string>>();
 
-  async subscribersFor(appId: string): Promise<Set<string>> {
-    const s = this.byApp.get(appId);
+  async subscribersFor(serviceId: string): Promise<Set<string>> {
+    const s = this.byApp.get(serviceId);
     return new Set(s ?? []);
   }
-  async add(appId: string, fqdn: string): Promise<void> {
+  async add(serviceId: string, fqdn: string): Promise<void> {
     validateFqdn(fqdn);
-    let s = this.byApp.get(appId);
+    let s = this.byApp.get(serviceId);
     if (!s) {
       s = new Set();
-      this.byApp.set(appId, s);
+      this.byApp.set(serviceId, s);
     }
     s.add(fqdn.toLowerCase());
   }
-  async remove(appId: string, fqdn: string): Promise<void> {
-    this.byApp.get(appId)?.delete(fqdn.toLowerCase());
+  async remove(serviceId: string, fqdn: string): Promise<void> {
+    this.byApp.get(serviceId)?.delete(fqdn.toLowerCase());
   }
-  async list(appId: string): Promise<string[]> {
-    return [...(this.byApp.get(appId) ?? [])].sort();
+  async list(serviceId: string): Promise<string[]> {
+    return [...(this.byApp.get(serviceId) ?? [])].sort();
   }
 }
 
 export class FileSubscriberRegistry implements SubscriberRegistry {
   constructor(private readonly dir: string) {}
 
-  private path(appId: string): string {
-    return join(this.dir, `${appId}.json`);
+  private path(serviceId: string): string {
+    return join(this.dir, `${serviceId}.json`);
   }
 
-  private async readAll(appId: string): Promise<Set<string>> {
+  private async readAll(serviceId: string): Promise<Set<string>> {
     try {
-      const buf = await readFile(this.path(appId), "utf8");
+      const buf = await readFile(this.path(serviceId), "utf8");
       const arr = JSON.parse(buf) as unknown;
       if (!Array.isArray(arr)) return new Set();
       return new Set(arr.filter((x): x is string => typeof x === "string"));
@@ -91,37 +91,37 @@ export class FileSubscriberRegistry implements SubscriberRegistry {
     }
   }
 
-  private async writeAll(appId: string, fqdns: Set<string>): Promise<void> {
+  private async writeAll(serviceId: string, fqdns: Set<string>): Promise<void> {
     if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const tmp = `${this.path(appId)}.tmp`;
+    const tmp = `${this.path(serviceId)}.tmp`;
     const sorted = [...fqdns].sort();
     if (sorted.length === 0) {
-      await rm(this.path(appId), { force: true });
+      await rm(this.path(serviceId), { force: true });
       return;
     }
     await writeFile(tmp, JSON.stringify(sorted, null, 2));
-    await rename(tmp, this.path(appId));
+    await rename(tmp, this.path(serviceId));
   }
 
-  async subscribersFor(appId: string): Promise<Set<string>> {
-    return this.readAll(appId);
+  async subscribersFor(serviceId: string): Promise<Set<string>> {
+    return this.readAll(serviceId);
   }
 
-  async add(appId: string, fqdn: string): Promise<void> {
+  async add(serviceId: string, fqdn: string): Promise<void> {
     validateFqdn(fqdn);
-    const s = await this.readAll(appId);
+    const s = await this.readAll(serviceId);
     s.add(fqdn.toLowerCase());
-    await this.writeAll(appId, s);
+    await this.writeAll(serviceId, s);
   }
 
-  async remove(appId: string, fqdn: string): Promise<void> {
-    const s = await this.readAll(appId);
+  async remove(serviceId: string, fqdn: string): Promise<void> {
+    const s = await this.readAll(serviceId);
     if (!s.delete(fqdn.toLowerCase())) return;
-    await this.writeAll(appId, s);
+    await this.writeAll(serviceId, s);
   }
 
-  async list(appId: string): Promise<string[]> {
-    return [...(await this.readAll(appId))].sort();
+  async list(serviceId: string): Promise<string[]> {
+    return [...(await this.readAll(serviceId))].sort();
   }
 
   /** All appIds with at least one subscriber — for diagnostics. */
@@ -134,14 +134,14 @@ export class FileSubscriberRegistry implements SubscriberRegistry {
 }
 
 export interface BuildAppDistributionDeps {
-  platform: AppPlatform;
+  platform: ServicePlatform;
   registry: SubscriberRegistry;
   /**
    * Resolve the on-disk path of the bare git repo for an installed app.
    * Production: the Forgejo per-user namespace path. Tests inject a
    * fixture path.
    */
-  repoPath: (app: InstalledApp) => string;
+  repoPath: (app: InstalledService) => string;
 }
 
 /**
@@ -150,10 +150,10 @@ export interface BuildAppDistributionDeps {
  * server doesn't have to care about either source separately.
  */
 export function buildAppDistribution(deps: BuildAppDistributionDeps) {
-  return async (app: InstalledApp): Promise<AppDistributionInfo | null> => {
+  return async (app: InstalledService): Promise<AppDistributionInfo | null> => {
     const repoPath = deps.repoPath(app);
     if (!repoPath) return null;
-    const subscribers = await deps.registry.subscribersFor(app.appId);
+    const subscribers = await deps.registry.subscribersFor(app.serviceId);
     return {
       publicDistribution: !!app.manifest.distribution?.public,
       subscribers,

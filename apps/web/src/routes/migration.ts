@@ -45,7 +45,7 @@ export interface MigrationOptions {
 
 interface StartBody {
   request: {
-    appId: string;
+    serviceId: string;
     fromUser: string;
     toUser: string;
     mode: "cut" | "copy";
@@ -83,7 +83,7 @@ export function registerMigration(app: FastifyInstance, opts: MigrationOptions):
       !body ||
       !body.request ||
       typeof body.signature !== "string" ||
-      typeof body.request.appId !== "string" ||
+      typeof body.request.serviceId !== "string" ||
       typeof body.request.fromUser !== "string" ||
       typeof body.request.toUser !== "string" ||
       (body.request.mode !== "cut" && body.request.mode !== "copy") ||
@@ -145,7 +145,7 @@ export function registerMigration(app: FastifyInstance, opts: MigrationOptions):
       status: s.status,
       request: s.request
         ? {
-            appId: s.request.appId,
+            serviceId: s.request.serviceId,
             fromUser: s.request.fromUser,
             toUser: s.request.toUser,
             mode: s.request.mode,

@@ -295,7 +295,7 @@ describe("InMemoryCustomDomainOrderStorage (#79A)", () => {
   it("upsert/get round-trips; a new request destructively replaces the prior", async () => {
     const s = new InMemoryStorage();
     await s.customDomainOrders.upsert({
-      appId: "harry-game1", userId: "Harry", fqdn: "old.example.com",
+      serviceId: "harry-game1", userId: "Harry", fqdn: "old.example.com",
       status: "pending", lastChanged: 100, failCount: 0, createdAt: 100, updatedAt: 100,
     });
     expect(await s.customDomainOrders.get("harry", "harry-game1")).toMatchObject({
@@ -303,7 +303,7 @@ describe("InMemoryCustomDomainOrderStorage (#79A)", () => {
     });
     // Destructive replace — wholesale overwrite, even status/failCount.
     await s.customDomainOrders.upsert({
-      appId: "harry-game1", userId: "harry", fqdn: "new.example.com",
+      serviceId: "harry-game1", userId: "harry", fqdn: "new.example.com",
       status: "pending", lastChanged: 500, failCount: 0, createdAt: 100, updatedAt: 500,
     });
     const r = await s.customDomainOrders.get("harry", "harry-game1");
@@ -314,7 +314,7 @@ describe("InMemoryCustomDomainOrderStorage (#79A)", () => {
   it("setStatus is CAS'd on fqdn (a stale verifier can't clobber a replaced row)", async () => {
     const s = new InMemoryStorage();
     await s.customDomainOrders.upsert({
-      appId: "a", userId: "u", fqdn: "shop.example.com",
+      serviceId: "a", userId: "u", fqdn: "shop.example.com",
       status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
     // Stale verifier writing for an old fqdn → no-op.
@@ -329,10 +329,10 @@ describe("InMemoryCustomDomainOrderStorage (#79A)", () => {
 
   it("listActive returns only active orders", async () => {
     const s = new InMemoryStorage();
-    await s.customDomainOrders.upsert({ appId: "a1", userId: "u", fqdn: "x.example.com", status: "active", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
-    await s.customDomainOrders.upsert({ appId: "a2", userId: "u", fqdn: "y.example.com", status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    await s.customDomainOrders.upsert({ serviceId: "a1", userId: "u", fqdn: "x.example.com", status: "active", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    await s.customDomainOrders.upsert({ serviceId: "a2", userId: "u", fqdn: "y.example.com", status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
     const active = await s.customDomainOrders.listActive();
-    expect(active.map((r) => r.appId)).toEqual(["a1"]);
+    expect(active.map((r) => r.serviceId)).toEqual(["a1"]);
   });
 });
 
@@ -340,7 +340,7 @@ describe("CustomDomainOrder podCanonical (#87 Phase 3)", () => {
   it("podCanonical round-trips through upsert/get/listActive", async () => {
     const s = new InMemoryStorage();
     await s.customDomainOrders.upsert({
-      appId: "a", userId: "u", fqdn: "shop.example.com",
+      serviceId: "a", userId: "u", fqdn: "shop.example.com",
       status: "active", podCanonical: "home.u.flagship.services",
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
@@ -349,7 +349,7 @@ describe("CustomDomainOrder podCanonical (#87 Phase 3)", () => {
     expect(active[0]?.podCanonical).toBe("home.u.flagship.services");
     // Pending order with no pod yet → undefined (cold-start skips it).
     await s.customDomainOrders.upsert({
-      appId: "b", userId: "u", fqdn: "p.example.com",
+      serviceId: "b", userId: "u", fqdn: "p.example.com",
       status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
     expect((await s.customDomainOrders.get("u", "b"))?.podCanonical).toBeUndefined();
@@ -359,12 +359,12 @@ describe("CustomDomainOrder podCanonical (#87 Phase 3)", () => {
 describe("CustomDomainOrder listByStatus (#79B)", () => {
   it("filters by status (listActive delegates to it)", async () => {
     const s = new InMemoryStorage();
-    await s.customDomainOrders.upsert({ appId: "a1", userId: "u", fqdn: "p.example.com", status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
-    await s.customDomainOrders.upsert({ appId: "a2", userId: "u", fqdn: "a.example.com", status: "active", podCanonical: "home.u.flagship.services", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
-    await s.customDomainOrders.upsert({ appId: "a3", userId: "u", fqdn: "f.example.com", status: "failed", lastChanged: 1, failCount: 3, createdAt: 1, updatedAt: 1 });
-    expect((await s.customDomainOrders.listByStatus("pending")).map((r) => r.appId)).toEqual(["a1"]);
-    expect((await s.customDomainOrders.listByStatus("failed")).map((r) => r.appId)).toEqual(["a3"]);
-    expect((await s.customDomainOrders.listActive()).map((r) => r.appId)).toEqual(["a2"]);
+    await s.customDomainOrders.upsert({ serviceId: "a1", userId: "u", fqdn: "p.example.com", status: "pending", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    await s.customDomainOrders.upsert({ serviceId: "a2", userId: "u", fqdn: "a.example.com", status: "active", podCanonical: "home.u.flagship.services", lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1 });
+    await s.customDomainOrders.upsert({ serviceId: "a3", userId: "u", fqdn: "f.example.com", status: "failed", lastChanged: 1, failCount: 3, createdAt: 1, updatedAt: 1 });
+    expect((await s.customDomainOrders.listByStatus("pending")).map((r) => r.serviceId)).toEqual(["a1"]);
+    expect((await s.customDomainOrders.listByStatus("failed")).map((r) => r.serviceId)).toEqual(["a3"]);
+    expect((await s.customDomainOrders.listActive()).map((r) => r.serviceId)).toEqual(["a2"]);
   });
 });
 

@@ -176,7 +176,7 @@ describe("Tunnel hub — failover priority (#87, end-to-end)", () => {
           podPubKey: homeStk.publicKey,
           username: "alice",
           podCanonical: HOME_FQDN,
-          appCanonicals: [APP_HOME],
+          serviceCanonicals: [APP_HOME],
         }),
       resolveBackend: () => null,
     });
@@ -196,7 +196,7 @@ describe("Tunnel hub — failover priority (#87, end-to-end)", () => {
           podPubKey: officeStk.publicKey,
           username: "alice",
           podCanonical: OFFICE_FQDN,
-          appCanonicals: [APP_OFFICE],
+          serviceCanonicals: [APP_OFFICE],
         }),
       resolveBackend: () => null,
     });
@@ -229,7 +229,7 @@ describe("Tunnel hub — failover priority (#87, end-to-end)", () => {
           podPubKey: homeStk.publicKey,
           username: "alice",
           podCanonical: HOME_FQDN,
-          appCanonicals: [APP_HOME],
+          serviceCanonicals: [APP_HOME],
         }),
       resolveBackend: () => null,
     });
@@ -243,7 +243,7 @@ describe("Tunnel hub — failover priority (#87, end-to-end)", () => {
           podPubKey: officeStk.publicKey,
           username: "alice",
           podCanonical: OFFICE_FQDN,
-          appCanonicals: [APP_OFFICE],
+          serviceCanonicals: [APP_OFFICE],
         }),
       resolveBackend: () => null,
     });
@@ -263,7 +263,7 @@ describe("Tunnel hub — failover priority (#87, end-to-end)", () => {
           podPubKey: homeStk.publicKey,
           username: "alice",
           podCanonical: HOME_FQDN,
-          appCanonicals: [APP_HOME],
+          serviceCanonicals: [APP_HOME],
         }),
       resolveBackend: () => null,
     });

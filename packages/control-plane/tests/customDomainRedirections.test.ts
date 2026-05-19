@@ -26,17 +26,17 @@ describe("constantTimeEqual / bearer", () => {
 describe("handleActiveRedirections (#87)", () => {
   async function withRows(s: InMemoryStorage) {
     await s.customDomainOrders.upsert({
-      appId: "a1", userId: "u", fqdn: "shop.example.com", status: "active",
+      serviceId: "a1", userId: "u", fqdn: "shop.example.com", status: "active",
       podCanonical: "home.u.flagship.services",
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
     // active but no pod yet → excluded; pending → excluded.
     await s.customDomainOrders.upsert({
-      appId: "a2", userId: "u", fqdn: "nopod.example.com", status: "active",
+      serviceId: "a2", userId: "u", fqdn: "nopod.example.com", status: "active",
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
     await s.customDomainOrders.upsert({
-      appId: "a3", userId: "u", fqdn: "pending.example.com", status: "pending",
+      serviceId: "a3", userId: "u", fqdn: "pending.example.com", status: "pending",
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
   }
@@ -63,16 +63,16 @@ describe("handleActiveRedirections (#87)", () => {
 describe("handleRedirectionLookup (#12 lazy point lookup)", () => {
   async function rows(s: InMemoryStorage) {
     await s.customDomainOrders.upsert({
-      appId: "a1", userId: "u", fqdn: "shop.example.com", status: "active",
+      serviceId: "a1", userId: "u", fqdn: "shop.example.com", status: "active",
       podCanonical: "home.u.flagship.services",
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
     await s.customDomainOrders.upsert({
-      appId: "a2", userId: "u", fqdn: "nopod.example.com", status: "active",
+      serviceId: "a2", userId: "u", fqdn: "nopod.example.com", status: "active",
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
     await s.customDomainOrders.upsert({
-      appId: "a3", userId: "u", fqdn: "pending.example.com", status: "pending",
+      serviceId: "a3", userId: "u", fqdn: "pending.example.com", status: "pending",
       lastChanged: 1, failCount: 0, createdAt: 1, updatedAt: 1,
     });
   }

@@ -18,7 +18,7 @@
 //   - 400 / 403              = malformed / bad-signature / apex.
 //
 // A new request DESTRUCTIVELY replaces any prior order for the
-// (appId,user) pair (irreversible; doubles as the only "forget"
+// (serviceId,user) pair (irreversible; doubles as the only "forget"
 // affordance) — enforced at the storage layer's upsert.
 
 import { verifySetCustomDomain, type SetCustomDomain } from "@flagship/protocol";
@@ -84,7 +84,7 @@ function tooSoon(waitSeconds: number): HandlerResponseWithHeaders {
   return { status: 429, body: { error: `Too soon — try again in ${waitSeconds}s.` } };
 }
 
-/** POST /api/users/:u/apps/:appId/custom-domain */
+/** POST /api/users/:u/apps/:serviceId/custom-domain */
 export async function handleSetCustomDomain(
   deps: CustomDomainDeps,
   username: string,
@@ -99,7 +99,7 @@ export async function handleSetCustomDomain(
   const r = b?.request ?? {};
   if (
     typeof r.username !== "string" ||
-    typeof r.appId !== "string" ||
+    typeof r.serviceId !== "string" ||
     typeof r.fqdn !== "string" ||
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
@@ -107,7 +107,7 @@ export async function handleSetCustomDomain(
     return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== u) return forbidden("username / url mismatch");
-  if (r.appId !== appIdFromUrl) return forbidden("appId / url mismatch");
+  if (r.serviceId !== appIdFromUrl) return forbidden("serviceId / url mismatch");
   if (Math.abs(now - r.issuedAt) > DEFAULT_MAX_AGE_MS) return forbidden("stale request");
 
   const fqdn = r.fqdn.trim().toLowerCase();
@@ -125,7 +125,7 @@ export async function handleSetCustomDomain(
   }
   const claim: SetCustomDomain = {
     username: u,
-    appId: r.appId,
+    serviceId: r.serviceId,
     fqdn,
     issuedAt: r.issuedAt,
   };
@@ -135,7 +135,7 @@ export async function handleSetCustomDomain(
 
   // 300s rate limit off the prior row's last_changed (the server is
   // the backstop; the client mirrors a UX cooldown).
-  const existing = await deps.customDomainOrders.get(u, r.appId);
+  const existing = await deps.customDomainOrders.get(u, r.serviceId);
   if (existing) {
     const elapsed = now - existing.lastChanged;
     if (elapsed < CUSTOM_DOMAIN_RATE_LIMIT_MS) {
@@ -169,7 +169,7 @@ export async function handleSetCustomDomain(
   // Destructive upsert: records the request as pending; any prior
   // order for the pair is wholesale replaced (storage-layer upsert).
   await deps.customDomainOrders.upsert({
-    appId: r.appId,
+    serviceId: r.serviceId,
     userId: u,
     fqdn,
     status: "pending",
@@ -182,15 +182,15 @@ export async function handleSetCustomDomain(
   return ok({ recorded: true });
 }
 
-/** GET /api/users/:u/apps/:appId/custom-domain — current order (if any). */
+/** GET /api/users/:u/apps/:serviceId/custom-domain — current order (if any). */
 export async function handleGetCustomDomain(
   deps: CustomDomainDeps,
   username: string,
-  appId: string,
+  serviceId: string,
 ): Promise<HandlerResponseWithHeaders> {
   const u = username.toLowerCase();
   if (!USERNAME_RE.test(u)) return malformed("malformed username");
-  const row = await deps.customDomainOrders.get(u, appId);
+  const row = await deps.customDomainOrders.get(u, serviceId);
   if (!row) return ok({ fqdn: null });
   return ok({
     fqdn: row.fqdn,

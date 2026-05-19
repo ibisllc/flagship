@@ -1,5 +1,5 @@
 /**
- * #91 — AppGrant background renewer tests.
+ * #91 — ServiceGrant background renewer tests.
  *
  * Walks the matrix: grants within window get renewed, grants far from
  * expiry are skipped, revoked grants are skipped, explicit-renewal
@@ -14,14 +14,14 @@ import {
   runRenewal,
   type GrantWithMeta,
   type RenewerDeps,
-} from "../../src/grants/appGrantRenewer.js";
+} from "../../src/grants/serviceGrantRenewer.js";
 import {
   deriveIRK,
   deriveSTK,
   deriveSWK,
-  signAppGrant,
-  verifyAppGrant,
-  type AppGrant,
+  signServiceGrant,
+  verifyServiceGrant,
+  type ServiceGrant,
 } from "@flagship/protocol";
 
 const umk = { seed: new Uint8Array(32).fill(7) };
@@ -30,10 +30,10 @@ const stk = deriveSTK(deriveSWK(umk, "home"));
 
 function fixture(opts: { expiresInMs: number; requiresExplicit?: boolean }): GrantWithMeta {
   const now = 1_780_000_000_000;
-  const g: AppGrant = {
+  const g: ServiceGrant = {
     grantId: `g-${Math.random().toString(36).slice(2, 10)}`,
     username: "harry",
-    appCanonical: "notes@abc123def456",
+    serviceCanonical: "notes@abc123def456",
     serverDomains: ["home.harry.flagship.services"],
     serverIdentities: [stk.publicKey],
     routes: [{ url: "home.harry.flagship.services", scope: "canonical" }],
@@ -42,7 +42,7 @@ function fixture(opts: { expiresInMs: number; requiresExplicit?: boolean }): Gra
   };
   return {
     grant: g,
-    signature: signAppGrant(g, irk),
+    signature: signServiceGrant(g, irk),
     requiresExplicitRenewal: opts.requiresExplicit ?? false,
   };
 }
@@ -74,7 +74,7 @@ function harness(input: GrantWithMeta[], now: number, revoked: Set<string> = new
   };
 }
 
-describe("AppGrant renewer (#91)", () => {
+describe("ServiceGrant renewer (#91)", () => {
   const NOW = 1_780_000_000_000;
 
   it("renews a grant within the renewal window", async () => {
@@ -119,7 +119,7 @@ describe("AppGrant renewer (#91)", () => {
     const h = harness([cur], NOW);
     await runRenewal(h.deps);
     const next = h.saved[0]!.grant;
-    expect(next.appCanonical).toBe(cur.grant.appCanonical);
+    expect(next.serviceCanonical).toBe(cur.grant.serviceCanonical);
     expect(next.username).toBe(cur.grant.username);
     expect(next.serverDomains).toEqual(cur.grant.serverDomains);
     expect(next.routes).toEqual(cur.grant.routes);
@@ -133,7 +133,7 @@ describe("AppGrant renewer (#91)", () => {
     const h = harness([cur], NOW);
     await runRenewal(h.deps);
     const saved = h.saved[0]!;
-    expect(verifyAppGrant(saved.grant, saved.signature, irk.publicKey)).toBe(true);
+    expect(verifyServiceGrant(saved.grant, saved.signature, irk.publicKey)).toBe(true);
   });
 
   it("a distribute failure does not roll back the save", async () => {

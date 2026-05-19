@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AppBackupService } from "../src/appBackup.js";
-import { buildAppBackupHttpHandlers } from "../src/appBackupHttp.js";
+import { AppBackupService } from "../src/serviceBackup.js";
+import { buildAppBackupHttpHandlers } from "../src/serviceBackupHttp.js";
 import type { PairedSessionGate } from "../src/alertInboxHttp.js";
 import type { HttpRequest } from "../src/runtime.js";
 

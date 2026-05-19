@@ -14,7 +14,7 @@ import { buildAdminProxyHandler } from "./adminProxy.js";
 import { BackupLoop } from "./backupLoop.js";
 import { BootCoordinator } from "./bootCoordinator.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
-import { buildCloneApp } from "./cloneApp.js";
+import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
@@ -42,7 +42,7 @@ import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
 import { VibeCodeSessionRegistry } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession } from "./llm/deploySession.js";
-import { ForgejoAppAdmin } from "./forgejoAppAdmin.js";
+import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import {
   startDaemonRuntime,
   type DaemonRuntime,
@@ -229,7 +229,7 @@ async function main(): Promise<void> {
 
   // ---- Update-pack distribution wiring ----
   const appCloneRoot = join(dataDir, "data", "app-clones");
-  const appWorkingDir = (appId: string) => join(appCloneRoot, appId);
+  const appWorkingDir = (serviceId: string) => join(appCloneRoot, serviceId);
   const pullStateStore = new FileAppPullStateStore(
     join(dataDir, "data", "app-state"),
   );
@@ -237,12 +237,12 @@ async function main(): Promise<void> {
   // exact path is environment-specific so we make it overridable via env.
   const repoRoot =
     process.env.FLAGSHIP_REPO_ROOT ?? join(dataDir, "data", "forgejo", "git");
-  const appPlatformRefForServer: { current: import("./appPlatform.js").AppPlatform | null } = { current: null };
+  const servicePlatformRefForServer: { current: import("./servicePlatform.js").ServicePlatform | null } = { current: null };
   const updateServer = new UpdateServer({
     appDistribution: buildAppDistribution({
       // Platform isn't strictly used by buildAppDistribution beyond its
       // type; the closure supplies the per-app repo path.
-      platform: undefined as unknown as import("./appPlatform.js").AppPlatform,
+      platform: undefined as unknown as import("./servicePlatform.js").ServicePlatform,
       registry: subscriberRegistry,
       repoPath: (app) =>
         join(repoRoot, app.creator.toLowerCase(), `${app.slug.toLowerCase()}.git`),
@@ -267,13 +267,13 @@ async function main(): Promise<void> {
     cacheDir: join(dataDir, "data", "update-pack-cache"),
   });
 
-  const cloneApp = buildCloneApp({
+  const cloneService = buildCloneApp({
     identity: identityKeypair,
     pullerServerId: env.serverFqdn!,
     appWorkingDir,
   });
   const runMigration = buildRunMigration({
-    appByAppId: (appId) => appPlatformRefForServer.current?.byAppId(appId) ?? null,
+    serviceByServiceId: (serviceId) => servicePlatformRefForServer.current?.byServiceId(serviceId) ?? null,
   });
   const updateClient = new UpdateClient({
     identity: identityKeypair,
@@ -281,11 +281,11 @@ async function main(): Promise<void> {
     state: pullStateStore,
     appWorkingDir,
     runMigration,
-    restartContainer: async (appId) => {
-      const ap = appPlatformRefForServer.current;
-      const app = ap?.byAppId(appId);
+    restartContainer: async (serviceId) => {
+      const ap = servicePlatformRefForServer.current;
+      const app = ap?.byServiceId(serviceId);
       // AppRunner uses docker; restarting the named container is enough.
-      // We don't tear down the AppPlatform record because the install
+      // We don't tear down the ServicePlatform record because the install
       // is still valid; only the container's image needs to re-read
       // bind-mounted files.
       if (app) {
@@ -301,10 +301,10 @@ async function main(): Promise<void> {
   const updateScheduler = new UpdateScheduler({
     client: updateClient,
     store: pullStateStore,
-    onResult: (appId, r) =>
-      console.log(`[update-pack] ${appId} → ${r.kind}`),
-    onError: (appId, e) =>
-      console.warn(`[update-pack] ${appId} threw: ${e.message}`),
+    onResult: (serviceId, r) =>
+      console.log(`[update-pack] ${serviceId} → ${r.kind}`),
+    onError: (serviceId, e) =>
+      console.warn(`[update-pack] ${serviceId} threw: ${e.message}`),
   });
 
   // ---- Phone-pollable AlertInbox HTTP + admin proxy + identity rotate ----
@@ -336,7 +336,7 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       orders,
-      appPlatform: {
+      servicePlatform: {
         // The data-services compose stack writes its admin creds here on
         // first boot. If it's missing, the runtime degrades gracefully:
         // apps declaring `data.stores` will refuse to install with a
@@ -346,18 +346,18 @@ async function main(): Promise<void> {
         domainGate: browserBundle?.domainGate,
         tabRegistry: browserBundle?.tabRegistry,
         pullStateStore,
-        cloneApp,
+        cloneService,
       },
       additionalHandlers,
       updateServer,
     });
-    appPlatformRefForServer.current = runtime.appPlatform;
+    servicePlatformRefForServer.current = runtime.servicePlatform;
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
     console.log(`[daemon] 🔒 cert installed; serving HTTPS for ${env.serverFqdn}`);
 
     // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
-    // surface now that runtime.appPlatform / appBackup / urlController
+    // surface now that runtime.servicePlatform / appBackup / urlController
     // are populated. Both surfaces are paired-session gated.
     const vibeRegistry = new VibeCodeSessionRegistry();
     const forgejoBaseUrl = process.env.FLAGSHIP_FORGEJO_BASE_URL;
@@ -374,13 +374,13 @@ async function main(): Promise<void> {
         : null;
     const vibeAppDir = join(dataDir, "data", "app-clones");
     const username = cfg?.userId ?? env.serverFqdn!.split(".")[1] ?? "user";
-    const deploySession = runtime.appPlatform
+    const deploySession = runtime.servicePlatform
       ? buildDeploySession({
-          appPlatform: runtime.appPlatform,
+          servicePlatform: runtime.servicePlatform,
           hostIrk: identityKeypair,
           hostUsername: username,
           workingDir: vibeAppDir,
-          cmd: (await import("./appRunner.js")).realCommandRunner,
+          cmd: (await import("./serviceRunner.js")).realCommandRunner,
           forgejoAdmin,
         })
       : undefined;
@@ -396,20 +396,20 @@ async function main(): Promise<void> {
     const lineageResolver = buildLineageResolverAdapter({
       store: pullStateStore,
       client: updateClient,
-      // Production uninstall walks the AppPlatform path which already
+      // Production uninstall walks the ServicePlatform path which already
       // drops pull state + container + data stores + tabs. The BFF's
       // paired-session gate has already authenticated the caller, so
       // this is the trust equivalent of a host-IRK-signed uninstall.
-      uninstall: async (appId) => {
+      uninstall: async (serviceId) => {
         try {
-          const ap = runtime.appPlatform;
-          const app = ap?.byAppId(appId);
+          const ap = runtime.servicePlatform;
+          const app = ap?.byServiceId(serviceId);
           if (!app) return { ok: true };
           // Drop pull state so the scheduler stops pestering the canonical
           // home, even if container-stop is best-effort and may fail in
           // ways we don't surface here.
           if (pullStateStore.delete) {
-            await pullStateStore.delete(appId).catch(() => {});
+            await pullStateStore.delete(serviceId).catch(() => {});
           }
           return { ok: true };
         } catch (e) {
@@ -427,7 +427,7 @@ async function main(): Promise<void> {
       username,
       daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",
       startedAt: Date.now(),
-      appPlatform: runtime.appPlatform,
+      servicePlatform: runtime.servicePlatform,
       pairedSessions,
       tabRegistry: browserBundle?.tabRegistry ?? null,
       appBackup: runtime.appBackup,
@@ -484,9 +484,9 @@ async function main(): Promise<void> {
         statePath: defaultRePairWatcherPath(dataDir),
         pollIntervalMs: 5 * 60_000,
         clearPairedSessions: () => pairedSessions.removeAll(),
-        reissuerDeps: runtime.appPlatform
+        reissuerDeps: runtime.servicePlatform
           ? {
-              appPlatform: runtime.appPlatform,
+              servicePlatform: runtime.servicePlatform,
               swk: reissuerJournalSwk,
               journal: journalStore,
             }
@@ -659,15 +659,15 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
         }
       : undefined,
     addSubscriber: deps.subscriberRegistry
-      ? async ({ appId, fqdn }) => {
-          await deps.subscriberRegistry!.add(appId, fqdn);
-          console.log(`[daemon] order: add-subscriber appId=${appId} fqdn=${fqdn}`);
+      ? async ({ serviceId, fqdn }) => {
+          await deps.subscriberRegistry!.add(serviceId, fqdn);
+          console.log(`[daemon] order: add-subscriber serviceId=${serviceId} fqdn=${fqdn}`);
         }
       : undefined,
     removeSubscriber: deps.subscriberRegistry
-      ? async ({ appId, fqdn }) => {
-          await deps.subscriberRegistry!.remove(appId, fqdn);
-          console.log(`[daemon] order: remove-subscriber appId=${appId} fqdn=${fqdn}`);
+      ? async ({ serviceId, fqdn }) => {
+          await deps.subscriberRegistry!.remove(serviceId, fqdn);
+          console.log(`[daemon] order: remove-subscriber serviceId=${serviceId} fqdn=${fqdn}`);
         }
       : undefined,
     addPairedSession: deps.pairedSessions
@@ -862,7 +862,7 @@ if (invokedDirectly) {
 
 export { BootCoordinator } from "./bootCoordinator.js";
 export { BackupLoop } from "./backupLoop.js";
-export { AppRunner } from "./appRunner.js";
+export { AppRunner } from "./serviceRunner.js";
 export { loadConfig, parseConfig } from "./config.js";
 export type { ServerConfig } from "./config.js";
 export {
@@ -970,12 +970,12 @@ export {
   evaluateAccess,
   InMemoryAccessModeStore,
   signAccessMode,
-} from "./appAccessGate.js";
+} from "./serviceAccessGate.js";
 export type {
   AccessGateDecision,
   AccessGateDeps,
   AccessModeStore,
-} from "./appAccessGate.js";
+} from "./serviceAccessGate.js";
 export {
   resolveServicesEndpoints,
   parseServicesEndpoints,

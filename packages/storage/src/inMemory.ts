@@ -43,8 +43,8 @@ import type {
   UsernameStorage,
   DaemonStatusRecord,
   DaemonStatusStorage,
-  UserAppAliasRecord,
-  UserAppAliasStorage,
+  UserServiceAliasRecord,
+  UserServiceAliasStorage,
   VoiciLinkRecord,
   VoiciLinkStorage,
   CustomDomainOrderRecord,
@@ -634,22 +634,22 @@ export class InMemoryAuditEventStorage implements AuditEventStorage {
   }
 }
 
-export class InMemoryUserAppAliasStorage implements UserAppAliasStorage {
-  private rows = new Map<string, UserAppAliasRecord>();
+export class InMemoryUserServiceAliasStorage implements UserServiceAliasStorage {
+  private rows = new Map<string, UserServiceAliasRecord>();
   private key(u: string, app: string) { return `${u.toLowerCase()}|${app}`; }
-  async upsert(rec: UserAppAliasRecord): Promise<void> {
-    this.rows.set(this.key(rec.username, rec.appId), { ...rec, username: rec.username.toLowerCase() });
+  async upsert(rec: UserServiceAliasRecord): Promise<void> {
+    this.rows.set(this.key(rec.username, rec.serviceId), { ...rec, username: rec.username.toLowerCase() });
   }
-  async get(username: string, appId: string) {
-    const r = this.rows.get(this.key(username, appId));
+  async get(username: string, serviceId: string) {
+    const r = this.rows.get(this.key(username, serviceId));
     return r ? { ...r } : undefined;
   }
   async listForUser(username: string) {
     const u = username.toLowerCase();
     return [...this.rows.values()].filter((r) => r.username === u).map((r) => ({ ...r }));
   }
-  async delete(username: string, appId: string) {
-    return this.rows.delete(this.key(username, appId));
+  async delete(username: string, serviceId: string) {
+    return this.rows.delete(this.key(username, serviceId));
   }
 }
 
@@ -664,22 +664,22 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
     const r = this.rows.get(code);
     return r ? { ...r } : undefined;
   }
-  async getByApp(username: string, appId: string) {
+  async getByService(username: string, serviceId: string) {
     const u = username.toLowerCase();
     // Most-recently created wins on (defensively) duplicate rows.
     let pick: VoiciLinkRecord | undefined;
     for (const r of this.rows.values()) {
-      if (r.username === u && r.appId === appId) {
+      if (r.username === u && r.serviceId === serviceId) {
         if (!pick || r.createdAt > pick.createdAt) pick = r;
       }
     }
     return pick ? { ...pick } : undefined;
   }
-  async deleteByApp(username: string, appId: string) {
+  async deleteByService(username: string, serviceId: string) {
     const u = username.toLowerCase();
     let n = 0;
     for (const [code, r] of this.rows) {
-      if (r.username === u && r.appId === appId) {
+      if (r.username === u && r.serviceId === serviceId) {
         this.rows.delete(code);
         n++;
       }
@@ -700,26 +700,26 @@ export class InMemoryVoiciLinkStorage implements VoiciLinkStorage {
 
 export class InMemoryCustomDomainOrderStorage implements CustomDomainOrderStorage {
   private byKey = new Map<string, CustomDomainOrderRecord>();
-  private k(userId: string, appId: string) {
-    return `${userId.toLowerCase()} ${appId}`;
+  private k(userId: string, serviceId: string) {
+    return `${userId.toLowerCase()} ${serviceId}`;
   }
-  async get(userId: string, appId: string) {
-    const r = this.byKey.get(this.k(userId, appId));
+  async get(userId: string, serviceId: string) {
+    const r = this.byKey.get(this.k(userId, serviceId));
     return r ? { ...r } : undefined;
   }
   async upsert(rec: CustomDomainOrderRecord) {
     const stored: CustomDomainOrderRecord = { ...rec, userId: rec.userId.toLowerCase() };
-    this.byKey.set(this.k(stored.userId, stored.appId), stored);
+    this.byKey.set(this.k(stored.userId, stored.serviceId), stored);
     return { ...stored };
   }
   async setStatus(
     userId: string,
-    appId: string,
+    serviceId: string,
     fqdn: string,
     status: CustomDomainOrderRecord["status"],
     at: number,
   ) {
-    const r = this.byKey.get(this.k(userId, appId));
+    const r = this.byKey.get(this.k(userId, serviceId));
     if (!r || r.fqdn !== fqdn) return false;
     r.status = status;
     r.updatedAt = at;
@@ -770,7 +770,7 @@ export class InMemoryStorage implements Storage {
   tiers = new InMemoryTierStorage();
   entitlementRevocations = new InMemoryEntitlementRevocationStorage();
   userIdentity = new InMemoryUserIdentityRecordStorage();
-  userAppAliases = new InMemoryUserAppAliasStorage();
+  userServiceAliases = new InMemoryUserServiceAliasStorage();
   voiciLinks = new InMemoryVoiciLinkStorage();
   customDomainOrders = new InMemoryCustomDomainOrderStorage();
   demoLlmLedger = new InMemoryDemoLlmLedgerStorage();

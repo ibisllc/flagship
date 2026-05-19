@@ -5,7 +5,7 @@ import {
   handleSetCustomDomain,
   handleGetCustomDomain,
 } from "../src/customDomain.js";
-import { handleGetAppLinks } from "../src/appRename.js";
+import { handleGetAppLinks } from "../src/serviceRename.js";
 
 const USER = "alice";
 const APP = "alice-game1";
@@ -35,10 +35,10 @@ function deps(s: InMemoryStorage, now: () => number) {
   return { usernames: s.usernames, customDomainOrders: s.customDomainOrders, now };
 }
 
-function signedBody(irk: Keypair, fqdn: string, issuedAt: number, over?: Partial<{ username: string; appId: string; fqdn: string }>) {
+function signedBody(irk: Keypair, fqdn: string, issuedAt: number, over?: Partial<{ username: string; serviceId: string; fqdn: string }>) {
   const claim = {
     username: over?.username ?? USER,
-    appId: over?.appId ?? APP,
+    serviceId: over?.serviceId ?? APP,
     fqdn: over?.fqdn ?? fqdn,
     issuedAt,
   };
@@ -62,7 +62,7 @@ describe("handleSetCustomDomain (#79A)", () => {
 
     const links = await handleGetAppLinks(
       {
-        usernames: s.usernames, userAppAliases: s.userAppAliases, voiciLinks: s.voiciLinks,
+        usernames: s.usernames, userServiceAliases: s.userServiceAliases, voiciLinks: s.voiciLinks,
         servers: s.servers, auditEvents: s.auditEvents, customDomainOrders: s.customDomainOrders,
       },
       USER, APP,
@@ -195,7 +195,7 @@ describe("handleSetCustomDomain — replace-time DELETE(old fqdn)", () => {
     await seed(s, irk);
     const T0 = 1_000_000;
     await s.customDomainOrders.upsert({
-      appId: APP, userId: USER, fqdn: "old.example.com", status: "active",
+      serviceId: APP, userId: USER, fqdn: "old.example.com", status: "active",
       podCanonical: "home.alice.flagship.services",
       lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
     });
@@ -214,7 +214,7 @@ describe("handleSetCustomDomain — replace-time DELETE(old fqdn)", () => {
     await seed(s, irk);
     const T0 = 1_000_000;
     await s.customDomainOrders.upsert({
-      appId: APP, userId: USER, fqdn: "same.example.com", status: "active",
+      serviceId: APP, userId: USER, fqdn: "same.example.com", status: "active",
       podCanonical: "home.alice.flagship.services",
       lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
     });
@@ -229,7 +229,7 @@ describe("handleSetCustomDomain — replace-time DELETE(old fqdn)", () => {
     await seed(s, irk);
     const T0 = 1_000_000;
     await s.customDomainOrders.upsert({
-      appId: APP, userId: USER, fqdn: "pending.example.com", status: "pending",
+      serviceId: APP, userId: USER, fqdn: "pending.example.com", status: "pending",
       lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
     });
     const { calls, deps } = depsWithPush(s, () => T0 + 400_000);
@@ -243,7 +243,7 @@ describe("handleSetCustomDomain — replace-time DELETE(old fqdn)", () => {
     await seed(s, irk);
     const T0 = 1_000_000;
     await s.customDomainOrders.upsert({
-      appId: APP, userId: USER, fqdn: "old.example.com", status: "active",
+      serviceId: APP, userId: USER, fqdn: "old.example.com", status: "active",
       podCanonical: "home.alice.flagship.services",
       lastChanged: T0, failCount: 0, createdAt: T0, updatedAt: T0,
     });

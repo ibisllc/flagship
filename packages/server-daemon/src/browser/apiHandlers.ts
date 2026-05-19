@@ -2,10 +2,10 @@
  * App-facing browser API. Apps call these endpoints from inside their
  * containers using `Authorization: Bearer <FLAGSHIP_APP_TOKEN>`.
  *
- * The handler resolves the bearer to an appId, then enforces:
+ * The handler resolves the bearer to an serviceId, then enforces:
  *
  *   - DomainGate.check on every navigate / openTab URL.
- *   - TabRegistry.appIdForTab matches the calling appId on every
+ *   - TabRegistry.appIdForTab matches the calling serviceId on every
  *     per-tab operation. Cross-tenant tab id returns 404 (NOT 403)
  *     to avoid leaking that the tab exists for a different app.
  *
@@ -14,7 +14,7 @@
  * level Puppeteer-style only" decision.
  */
 
-import type { AppAuthTokens } from "../appAuthToken.js";
+import type { AppAuthTokens } from "../serviceAuthToken.js";
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { BrowserManager } from "./browserManager.js";
@@ -67,13 +67,13 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
       }
     }
 
-    const appId = await resolveAppId(req, deps.appAuthTokens);
-    if (!appId) return jerr(401, "missing or invalid app token");
+    const serviceId = await resolveAppId(req, deps.appAuthTokens);
+    if (!serviceId) return jerr(401, "missing or invalid app token");
 
     // Check the app actually has a browser grant (manifest declared
     // browser.domains and the daemon installed the grant). If not, the
     // app is not entitled to use the browser surface at all.
-    if (!deps.domainGate.hasGrant(appId)) {
+    if (!deps.domainGate.hasGrant(serviceId)) {
       return jerr(403, "app does not declare browser.domains in its manifest");
     }
 
@@ -84,11 +84,11 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
 
     // POST /api/browser/tabs  { url }
     if (path === "/api/browser/tabs" && method === "POST") {
-      return openTab(req, appId, deps);
+      return openTab(req, serviceId, deps);
     }
     // GET /api/browser/tabs (list this app's tabs)
     if (path === "/api/browser/tabs" && method === "GET") {
-      return listTabs(appId, deps);
+      return listTabs(serviceId, deps);
     }
 
     // GET /api/browser/screenshot/:ref — phone or app retrieving an
@@ -96,7 +96,7 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
     {
       const m = /^\/api\/browser\/screenshot\/([a-zA-Z0-9._-]+)$/.exec(path);
       if (m && method === "GET") {
-        return getScreenshot(m[1]!, appId, deps);
+        return getScreenshot(m[1]!, serviceId, deps);
       }
     }
 
@@ -106,14 +106,14 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
       const tabId = tabPathMatch[1]!;
       const verb = tabPathMatch[2];
       const ownership = deps.tabRegistry.appIdForTab(tabId);
-      if (ownership !== appId) {
+      if (ownership !== serviceId) {
         // 404 — not 403 — so cross-tenant probing can't enumerate.
         return jerr(404, "tab not found");
       }
 
       if (!verb && method === "DELETE") return closeTab(tabId, deps);
       if (!verb && method === "GET") return tabInfo(tabId, deps);
-      if (verb === "navigate" && method === "POST") return navigate(req, tabId, appId, deps);
+      if (verb === "navigate" && method === "POST") return navigate(req, tabId, serviceId, deps);
       if (verb === "fill" && method === "POST") return fill(req, tabId, deps);
       if (verb === "click" && method === "POST") return click(req, tabId, deps);
       if (verb === "dom" && method === "GET") return readDom(req, tabId, deps);
@@ -131,13 +131,13 @@ export function buildBrowserApiHandlers(deps: BrowserApiDeps) {
 
 async function openTab(
   req: HttpRequest,
-  appId: string,
+  serviceId: string,
   deps: BrowserApiDeps,
 ): Promise<HttpResponse> {
   const body = parseJson(req.body);
   const url = (body as { url?: string } | null)?.url;
   if (typeof url !== "string") return jerr(400, "url is required");
-  if (deps.domainGate.check(appId, url) !== "allow") {
+  if (deps.domainGate.check(serviceId, url) !== "allow") {
     return jerr(403, "domain not in app's browser.domains allowlist");
   }
   let tabId: string;
@@ -147,7 +147,7 @@ async function openTab(
   } catch (e) {
     return jerr(502, `openTab failed: ${(e as Error).message}`);
   }
-  deps.tabRegistry.assignTab(tabId, appId);
+  deps.tabRegistry.assignTab(tabId, serviceId);
   // Equip the tab so the focus-watcher binding fires for password / OTP
   // fields. Failures here are non-fatal — the tab still works for nav,
   // we just won't surface input alerts.
@@ -155,8 +155,8 @@ async function openTab(
   return { status: 200, headers: J, body: JSON.stringify({ tabId }) };
 }
 
-function listTabs(appId: string, deps: BrowserApiDeps): HttpResponse {
-  const tabs = deps.tabRegistry.tabsForApp(appId);
+function listTabs(serviceId: string, deps: BrowserApiDeps): HttpResponse {
+  const tabs = deps.tabRegistry.tabsForApp(serviceId);
   return { status: 200, headers: J, body: JSON.stringify({ tabs }) };
 }
 
@@ -171,13 +171,13 @@ function tabInfo(tabId: string, deps: BrowserApiDeps): HttpResponse {
 async function navigate(
   req: HttpRequest,
   tabId: string,
-  appId: string,
+  serviceId: string,
   deps: BrowserApiDeps,
 ): Promise<HttpResponse> {
   const body = parseJson(req.body);
   const url = (body as { url?: string } | null)?.url;
   if (typeof url !== "string") return jerr(400, "url is required");
-  if (deps.domainGate.check(appId, url) !== "allow") {
+  if (deps.domainGate.check(serviceId, url) !== "allow") {
     return jerr(403, "domain not in app's browser.domains allowlist");
   }
   try {
@@ -276,14 +276,14 @@ async function requestInput(
 
 async function getScreenshot(
   ref: string,
-  appId: string,
+  serviceId: string,
   deps: BrowserApiDeps,
 ): Promise<HttpResponse> {
   // Phone-paired-session gating is future work; for now we gate on the
   // calling app being one with browser entitlement (any app with a grant
   // can attempt a fetch — but the ref space is opaque random hex, so an
   // app that didn't issue the request can't guess refs in practice).
-  void appId;
+  void serviceId;
   const png = deps.phonePipe.getScreenshot(ref);
   if (!png) return jerr(404, "screenshot ref not found or expired");
   return { status: 200, headers: PNG, body: png };

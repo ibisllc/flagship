@@ -216,7 +216,7 @@ function renderSession(body) {
     // the daemon (which has the IRK + manifest hash) signs the listing
     // request to .com. The webapp doesn't need the manifest contents
     // here — just the canonical app id; the daemon resolves the rest.
-    const appCanonical = body.appCanonical ?? body.canonicalAppName ?? null;
+    const serviceCanonical = body.serviceCanonical ?? body.canonicalAppName ?? null;
     const publishedSlug = body.marketplaceSlug ?? null;
     resultBox.innerHTML = `
       <div class="card">
@@ -226,13 +226,13 @@ function renderSession(body) {
         </div>
         ${publishedSlug
           ? `<div class="faint-sm mt-2">published as <code>${escapeHtml(publishedSlug)}</code> on the marketplace</div>`
-          : `<button id="vc-publish" class="secondary mt-2 full-width" data-canonical="${escapeHtml(appCanonical ?? "")}">
+          : `<button id="vc-publish" class="secondary mt-2 full-width" data-canonical="${escapeHtml(serviceCanonical ?? "")}">
               Publish this app
             </button>`}
       </div>
     `;
     resultBox.classList.remove("hidden");
-    $("vc-publish")?.addEventListener("click", () => publishToMarketplace(appCanonical));
+    $("vc-publish")?.addEventListener("click", () => publishToMarketplace(serviceCanonical));
   } else if (body.errorReason) {
     resultBox.innerHTML = `
       <div class="card"><p class="err-text">${escapeHtml(body.errorReason)}</p></div>
@@ -254,12 +254,12 @@ function renderSession(body) {
  * pod's data layer and the daemon has direct access. Listings stay
  * `scan_grade=null` until the scanner service catches up.
  */
-async function publishToMarketplace(appCanonical) {
-  if (!appCanonical) {
+async function publishToMarketplace(serviceCanonical) {
+  if (!serviceCanonical) {
     return toast("missing app canonical name", "err");
   }
   if (!confirm(
-    `Publish "${appCanonical}" to the Flagship marketplace? You can unlist later from the marketplace view.`,
+    `Publish "${serviceCanonical}" to the Flagship marketplace? You can unlist later from the marketplace view.`,
   )) {
     return;
   }
@@ -271,9 +271,9 @@ async function publishToMarketplace(appCanonical) {
   try {
     const r = await screensFetch("/api/screens/marketplace/publish", {
       method: "POST",
-      body: JSON.stringify({ appCanonical }),
+      body: JSON.stringify({ serviceCanonical }),
     });
-    toast(`published as ${r.slug ?? appCanonical}`);
+    toast(`published as ${r.slug ?? serviceCanonical}`);
     if (btn) {
       btn.disabled = true;
       btn.textContent = "published ✓";

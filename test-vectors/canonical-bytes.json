@@ -47,7 +47,7 @@
       "name": "membership",
       "signedBy": "irk",
       "input": {
-        "appId": "habit-tracker",
+        "serviceId": "habit-tracker",
         "targetIrkPub": "c2c973618041bb1ee4d6f423f9d71995f3bd9d010099889e13dc90b496c8c7e3",
         "role": "parent",
         "issuedAt": 1735689600000
@@ -58,7 +58,7 @@
       "name": "migration",
       "signedBy": "irk",
       "input": {
-        "appId": "habit-tracker",
+        "serviceId": "habit-tracker",
         "fromUser": "harry",
         "toUser": "sarah",
         "mode": "cut",
@@ -71,7 +71,7 @@
       "name": "invite",
       "signedBy": "irk",
       "input": {
-        "appId": "habit-tracker",
+        "serviceId": "habit-tracker",
         "role": "parent",
         "nonce": "0708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526",
         "issuedAt": 1735689600000,

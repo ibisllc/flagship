@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryAppAuthTokens } from "../../src/appAuthToken.js";
+import { InMemoryAppAuthTokens } from "../../src/serviceAuthToken.js";
 import { buildUrlHttpHandlers } from "../../src/sibling/urlHttpHandlers.js";
 import type { HttpRequest, UrlController } from "../../src/runtime.js";
 
@@ -32,9 +32,9 @@ async function setup() {
     appAuthTokens: tokens,
     urlController: ctrl,
     thisSiblingId: POD,
-    canonicalFqdnsForApp: (appId) => {
-      if (appId === APP_A) return [`notes.${POD}`];
-      if (appId === APP_B) return [`tasks.${POD}`];
+    canonicalFqdnsForApp: (serviceId) => {
+      if (serviceId === APP_A) return [`notes.${POD}`];
+      if (serviceId === APP_B) return [`tasks.${POD}`];
       return [];
     },
     now: () => 2_000,

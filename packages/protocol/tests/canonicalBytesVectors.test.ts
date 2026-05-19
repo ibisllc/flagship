@@ -97,7 +97,7 @@ describe("cross-language canonical-bytes vectors", () => {
       case "membership":
         return verifyMembershipMutation(
           {
-            appId: i.appId as string,
+            serviceId: i.serviceId as string,
             targetIrkPub: fromHex("targetIrkPub"),
             role: (i.role as string | null) ?? null,
             issuedAt: i.issuedAt as number,
@@ -108,7 +108,7 @@ describe("cross-language canonical-bytes vectors", () => {
       case "migration":
         return verifyMigrationRequest(
           {
-            appId: i.appId as string,
+            serviceId: i.serviceId as string,
             fromUser: i.fromUser as string,
             toUser: i.toUser as string,
             mode: i.mode as "cut" | "copy",
@@ -121,7 +121,7 @@ describe("cross-language canonical-bytes vectors", () => {
       case "invite":
         return verifyInvite(
           {
-            appId: i.appId as string,
+            serviceId: i.serviceId as string,
             role: i.role as string,
             nonce: fromHex("nonce"),
             issuedAt: i.issuedAt as number,

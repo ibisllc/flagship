@@ -63,7 +63,7 @@ function startClient(args: {
   podFqdn: string;
   stk: Keypair;
   irk: Keypair;
-  appCanonicals?: string[];
+  serviceCanonicals?: string[];
   onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
 }): TunnelClient {
   return startTunnelClient({
@@ -75,7 +75,7 @@ function startClient(args: {
         podPubKey: args.stk.publicKey,
         username: "alice",
         podCanonical: args.podFqdn,
-        appCanonicals: args.appCanonicals,
+        serviceCanonicals: args.serviceCanonicals,
       }),
     resolveBackend: () => null,
     onDomainGranted: args.onDomainGranted,
@@ -107,7 +107,7 @@ describe("tunnel hub: per-pod identity + entitlement validation", () => {
       podFqdn: HOME_FQDN,
       stk,
       irk: s.irk,
-      appCanonicals: ["notes.home.alice.flagship.services"],
+      serviceCanonicals: ["notes.home.alice.flagship.services"],
     });
     await t.ready();
     expect(s.registry.findBySni(HOME_FQDN)).toBeDefined();
@@ -130,7 +130,7 @@ describe("tunnel hub: FCFS allocation", () => {
       podFqdn: HOME_FQDN,
       stk: homeStk,
       irk: s.irk,
-      appCanonicals: ["notes.home.alice.flagship.services"],
+      serviceCanonicals: ["notes.home.alice.flagship.services"],
     });
     await home.ready();
     const office = startClient({
@@ -138,7 +138,7 @@ describe("tunnel hub: FCFS allocation", () => {
       podFqdn: OFFICE_FQDN,
       stk: officeStk,
       irk: s.irk,
-      appCanonicals: ["notes.office.alice.flagship.services"],
+      serviceCanonicals: ["notes.office.alice.flagship.services"],
     });
     await office.ready();
     const holder = s.registry.findBySni("notes.alice.flagship.services");
@@ -155,7 +155,7 @@ describe("tunnel hub: FCFS allocation", () => {
       podFqdn: HOME_FQDN,
       stk: homeStk,
       irk: s.irk,
-      appCanonicals: ["notes.home.alice.flagship.services"],
+      serviceCanonicals: ["notes.home.alice.flagship.services"],
     });
     await home.ready();
     const office = startClient({
@@ -163,7 +163,7 @@ describe("tunnel hub: FCFS allocation", () => {
       podFqdn: OFFICE_FQDN,
       stk: officeStk,
       irk: s.irk,
-      appCanonicals: ["notes.office.alice.flagship.services"],
+      serviceCanonicals: ["notes.office.alice.flagship.services"],
     });
     await office.ready();
     expect(s.registry.findBySni("notes.alice.flagship.services")?.podCanonical).toBe(HOME_FQDN);

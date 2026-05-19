@@ -6,7 +6,7 @@ import {
   FileAppAuthTokens,
   InMemoryAppAuthTokens,
   type AppAuthTokens,
-} from "../src/appAuthToken.js";
+} from "../src/serviceAuthToken.js";
 
 function runContractTests(name: string, factory: () => Promise<AppAuthTokens>): void {
   describe(`${name} — interface contract`, () => {
@@ -23,7 +23,7 @@ function runContractTests(name: string, factory: () => Promise<AppAuthTokens>): 
       expect(a).not.toBe(b);
     });
 
-    it("resolve maps a token back to its appId", async () => {
+    it("resolve maps a token back to its serviceId", async () => {
       const t = await store.mint("alice-game1");
       expect(await store.resolve(t)).toBe("alice-game1");
     });

@@ -405,7 +405,7 @@ async function vibeAppEnv(
   st: RunState,
 ): Promise<StageResult> {
   const name = "vibeAppEnv";
-  const { signSetAppEnv } = await import("@flagship/protocol");
+  const { signSetServiceEnv } = await import("@flagship/protocol");
   const creator = plan.username;
   const slug = "e2e-env";
   // The decisive value: it must reach the container env but never the
@@ -420,8 +420,8 @@ async function vibeAppEnv(
     env: { E2E_ENV_PROOF: proof },
     issuedAt: deps.clock(),
   };
-  const setSig = signSetAppEnv(setReq, deps.identity.irk);
-  const setUrl = `https://${st.serverFqdn}/api/apps/${creator}-${slug}/env`;
+  const setSig = signSetServiceEnv(setReq, deps.identity.irk);
+  const setUrl = `https://${st.serverFqdn}/api/services/${creator}-${slug}/env`;
   const setRes = await deps.http.post(setUrl, {
     request: setReq,
     signature: bytesToHex(setSig),
@@ -443,7 +443,7 @@ async function vibeAppEnv(
       fail(name, `vibe-app order rejected (HTTP ${order.status})`),
     );
   }
-  const created = await deps.http.post(`https://${st.serverFqdn}/api/apps`, {
+  const created = await deps.http.post(`https://${st.serverFqdn}/api/services`, {
     from: "vibe-app",
     order: JSON.parse(order.body || "{}"),
   });
@@ -456,7 +456,7 @@ async function vibeAppEnv(
   // 3. Decisive assertion: the deployed app answers using the injected
   // env value (proving the value reached the container env, sealed at
   // rest, never to the model).
-  const appResp = await deps.http.get(`https://${st.serverFqdn}/api/apps/${creator}-${slug}/health`);
+  const appResp = await deps.http.get(`https://${st.serverFqdn}/api/services/${creator}-${slug}/health`);
   if (appResp.status !== 200 || !appResp.body.includes(proof)) {
     throw new StageError(
       fail(

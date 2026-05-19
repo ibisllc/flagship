@@ -12,7 +12,7 @@
  *   publishTxtChallenge — ACME DNS-01 challenge TXT under either the
  *     requesting pod's namespace or the surrounding user-zone. Pod-namespace
  *     challenges accept a daemon-identity signature; user-zone challenges
- *     require either (a) an active AppGrant whose `routes` list covers the
+ *     require either (a) an active ServiceGrant whose `routes` list covers the
  *     user-zone wildcard, or (b) an explicit IRK signature on the challenge.
  *
  *   publishARecord — A/AAAA for `<server>.<user>.<apex>` and its
@@ -37,14 +37,14 @@
  */
 
 import {
-  appGrantActiveAt,
-  appGrantAuthorizesUrl,
+  serviceGrantActiveAt,
+  serviceGrantAuthorizesUrl,
   ed,
-  verifyAppGrant,
+  verifyServiceGrant,
   verifyDns01Delete,
   verifyDns01Publish,
-  type AppGrant,
-  type AppGrantRoute,
+  type ServiceGrant,
+  type ServiceGrantRoute,
   type Dns01DeleteRequest,
   type Dns01PublishRequest,
 } from "@flagship/protocol";
@@ -101,7 +101,7 @@ export interface PublishTxtChallengeBody {
    *   - pod-namespace authority: a daemon-identity signature over the
    *     standard Dns01PublishRequest envelope (serverId === recordName
    *     stripped of its `_acme-challenge.` prefix or its user-zone form).
-   *   - user-zone authority: either an AppGrant whose routes cover the
+   *   - user-zone authority: either an ServiceGrant whose routes cover the
    *     user-zone wildcard, or an explicit IRK signature.
    */
   authority:
@@ -198,17 +198,17 @@ export interface UserZoneIrkDeleteAuthority {
 export type RpcBody = PublishTxtChallengeBody | PublishARecordBody | DeleteRecordBody;
 
 /**
- * Wire form of AppGrant — same fields as the in-memory `AppGrant` but
+ * Wire form of ServiceGrant — same fields as the in-memory `ServiceGrant` but
  * with `serverIdentities` hex-encoded for JSON transport.
  */
 export interface AppGrantWire {
   grantId: string;
   username: string;
-  appCanonical: string;
-  appInstanceId?: string;
+  serviceCanonical: string;
+  serviceInstanceId?: string;
   serverDomains: string[];
   serverIdentitiesHex: string[];
-  routes: AppGrantRoute[];
+  routes: ServiceGrantRoute[];
   issuedAt: number;
   expiresAt: number;
 }
@@ -422,35 +422,35 @@ async function verifyUserzoneGrantPublish(
   const expectedHost = `${auth.username}.${env.apex}`;
   if (host !== expectedHost) return deny("host/username mismatch");
 
-  // Canonicalize the grant wire form into the in-memory AppGrant.
-  let grant: AppGrant;
+  // Canonicalize the grant wire form into the in-memory ServiceGrant.
+  let grant: ServiceGrant;
   try {
     grant = inflateGrant(auth.grant);
   } catch {
     return deny("bad grant");
   }
   if (grant.username !== auth.username) return deny("grant/username mismatch");
-  if (!appGrantActiveAt(grant, env.now)) return deny("grant inactive");
+  if (!serviceGrantActiveAt(grant, env.now)) return deny("grant inactive");
 
   // At least one route must cover the user-zone wildcard.
   const wildcardUrl = `https://*.${auth.username}.${env.apex}`;
   const apexUrl = `https://${auth.username}.${env.apex}`;
-  const covers = grant.routes.some((r: AppGrantRoute) => {
+  const covers = grant.routes.some((r: ServiceGrantRoute) => {
     const u = r.url.toLowerCase();
     return u === wildcardUrl.toLowerCase() || u === apexUrl.toLowerCase();
   });
   if (!covers) return deny("grant does not cover user zone");
-  // Belt-and-suspenders: appGrantAuthorizesUrl agrees on the apex URL.
+  // Belt-and-suspenders: serviceGrantAuthorizesUrl agrees on the apex URL.
   // The routes check above is the primary gate; this reference keeps the
   // import live for future strict-mode wiring.
-  void appGrantAuthorizesUrl;
+  void serviceGrantAuthorizesUrl;
 
   // Verify grant signature against the claimed IRK, and verify that IRK
   // is the registered IRK for `username`.
   const irkPub = decodeHex(auth.irkPubKeyHex);
   const grantSig = decodeHex(auth.grantSignatureHex);
   if (!irkPub || !grantSig) return deny("invalid hex");
-  if (!verifyAppGrant(grant, grantSig, irkPub)) return deny("bad grant signature");
+  if (!verifyServiceGrant(grant, grantSig, irkPub)) return deny("bad grant signature");
 
   const registeredIrk = await env.resolveUserIrk(auth.username);
   if (!registeredIrk) return deny("unknown user");
@@ -607,23 +607,23 @@ async function verifyDelete(b: DeleteRecordBody, env: PolicyEnv): Promise<Verify
 
 // ---- helpers ----
 
-function inflateGrant(wire: AppGrantWire): AppGrant {
+function inflateGrant(wire: AppGrantWire): ServiceGrant {
   const serverIdentities = wire.serverIdentitiesHex.map((h) => {
     const bytes = decodeHex(h);
     if (!bytes) throw new Error("bad hex");
     return bytes;
   });
-  const out: AppGrant = {
+  const out: ServiceGrant = {
     grantId: wire.grantId,
     username: wire.username,
-    appCanonical: wire.appCanonical,
+    serviceCanonical: wire.serviceCanonical,
     serverDomains: wire.serverDomains,
     serverIdentities,
     routes: wire.routes,
     issuedAt: wire.issuedAt,
     expiresAt: wire.expiresAt,
   };
-  if (wire.appInstanceId !== undefined) out.appInstanceId = wire.appInstanceId;
+  if (wire.serviceInstanceId !== undefined) out.serviceInstanceId = wire.serviceInstanceId;
   return out;
 }
 

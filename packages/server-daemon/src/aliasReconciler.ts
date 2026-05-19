@@ -1,7 +1,7 @@
 // V5 — periodic alias reconciliation against .com.
 //
 // The phone-driven Replace flow lands on flagshipserver.com:
-// /api/users/:u/apps/:appId/rename upserts `user_app_aliases` +
+// /api/users/:u/apps/:serviceId/rename upserts `user_app_aliases` +
 // rotates the voi.ci link. The DAEMON (on the user's box) needs to
 // hear about the rename so its reverse-proxy can route the new
 // subdomain to the right container.
@@ -10,15 +10,15 @@
 // already polling .com for adjacent state (daemon-status, push
 // relay, etc.), and Replace is a low-frequency event. So we just
 // pull: every N seconds, GET /api/users/:u/apps/aliases and apply
-// any diffs via AppPlatform.setAlias.
+// any diffs via ServicePlatform.setAlias.
 //
 // Failure mode: a transient network blip leaves the daemon a
 // reconcile cycle behind. The next tick catches up. The Worker
 // side is idempotent (re-applying the same alias is a no-op via
-// AppPlatform.setAlias's `unchanged` short-circuit), so the
+// ServicePlatform.setAlias's `unchanged` short-circuit), so the
 // reconciler is safe to retry without a separate dedup layer.
 
-import type { AppPlatform } from "./appPlatform.js";
+import type { ServicePlatform } from "./servicePlatform.js";
 
 /** Default poll cadence — 60 seconds. Replace is interactive but
  *  not latency-critical (the user just authorized it on their phone
@@ -32,24 +32,24 @@ export interface AliasReconcilerDeps {
   comBaseUrl: string;
   /** The user this daemon's installed apps belong to. */
   username: string;
-  /** The platform owns the urlLabel → InstalledApp index that the
+  /** The platform owns the urlLabel → InstalledService index that the
    *  reverse proxy consults; setAlias mutates it. */
-  platform: AppPlatform;
+  platform: ServicePlatform;
   /** Injection seam for tests + dev. Production: a thin wrapper
    *  around globalThis.fetch. */
   fetchImpl?: typeof fetch;
   /** Interval between reconciles. Defaults to 60s. */
   intervalMs?: number;
-  /** Optional hook — invoked with the set of (appId, oldLabel,
+  /** Optional hook — invoked with the set of (serviceId, oldLabel,
    *  newLabel) tuples that were applied on each tick. Tests use it
    *  to assert; production may wire a log line. */
-  onApplied?: (changes: Array<{ appId: string; oldLabel?: string; newLabel: string }>) => void;
+  onApplied?: (changes: Array<{ serviceId: string; oldLabel?: string; newLabel: string }>) => void;
   /** Optional error sink. Defaults to console.warn. */
   onError?: (e: unknown) => void;
 }
 
 interface AliasRow {
-  appId: string;
+  serviceId: string;
   displayLabel: string;
   updatedAt: number;
 }
@@ -63,8 +63,8 @@ export class AliasReconciler {
   /** Latest updatedAt we've seen across all aliases — short-circuits
    *  the apply step when nothing has moved since the last fetch. */
   private highWatermark = 0;
-  /** Last-applied label per appId. Lets us trace which alias we
-   *  pushed into AppPlatform last, useful for the audit trail when
+  /** Last-applied label per serviceId. Lets us trace which alias we
+   *  pushed into ServicePlatform last, useful for the audit trail when
    *  the .com row is itself rolled back. */
   private readonly lastApplied = new Map<string, string>();
 
@@ -98,19 +98,19 @@ export class AliasReconciler {
       }
       const max = rows.reduce((m, r) => (r.updatedAt > m ? r.updatedAt : m), 0);
       if (max <= this.highWatermark) return; // unchanged
-      const applied: Array<{ appId: string; oldLabel?: string; newLabel: string }> = [];
+      const applied: Array<{ serviceId: string; oldLabel?: string; newLabel: string }> = [];
       for (const row of rows) {
-        const r = this.deps.platform.setAlias(row.appId, row.displayLabel);
+        const r = this.deps.platform.setAlias(row.serviceId, row.displayLabel);
         if (r.ok && !r.unchanged) {
           applied.push({
-            appId: row.appId,
+            serviceId: row.serviceId,
             ...(r.oldLabel ? { oldLabel: r.oldLabel } : {}),
             newLabel: r.newLabel ?? row.displayLabel,
           });
-          this.lastApplied.set(row.appId, row.displayLabel);
+          this.lastApplied.set(row.serviceId, row.displayLabel);
         }
         // r.ok === false cases:
-        //   - 'unknown appId' — the daemon hasn't installed this app
+        //   - 'unknown serviceId' — the daemon hasn't installed this app
         //     yet. That's normal during a fresh install; the next
         //     reconcile (after install lands) will pick it up.
         //   - collision — two .com aliases land on the same label.
@@ -119,8 +119,8 @@ export class AliasReconciler {
         //   - invalid label — the Worker validated this on write, so
         //     a malformed row arriving here means a downgrade attack
         //     or corrupt state. Surface and skip.
-        if (!r.ok && r.reason !== "unknown appId") {
-          this.deps.onError?.(new Error(`alias apply failed for ${row.appId}: ${r.reason}`));
+        if (!r.ok && r.reason !== "unknown serviceId") {
+          this.deps.onError?.(new Error(`alias apply failed for ${row.serviceId}: ${r.reason}`));
         }
       }
       this.highWatermark = max;

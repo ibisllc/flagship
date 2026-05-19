@@ -16,36 +16,36 @@
 import {
   parseManifest,
   signMembershipMutation,
-  composeAppId,
-  parseAppId as parseAppIdShared,
+  composeServiceId,
+  parseServiceId as parseServiceIdShared,
   deriveUrlFragment,
   type AppManifest,
   type Bytes,
-  type InstallAppRequest,
+  type InstallServiceRequest,
   type Keypair,
   type MembershipMutation,
-  type SetAppEnvRequest,
-  type UninstallAppRequest,
+  type SetServiceEnvRequest,
+  type UninstallServiceRequest,
 } from "@flagship/protocol";
-import type { AppEnv } from "./appEnvStore.js";
-import { AppRunner, type AppSpec } from "./appRunner.js";
+import type { AppEnv } from "./serviceEnvStore.js";
+import { AppRunner, type AppSpec } from "./serviceRunner.js";
 import { AppMembership } from "./membership.js";
 import {
   DataProvisioner,
   credentialsToEnv,
   type AppDataCredentials,
 } from "./dataLayer/index.js";
-import type { AppAuthTokens } from "./appAuthToken.js";
+import type { AppAuthTokens } from "./serviceAuthToken.js";
 import type { DomainGate } from "./browser/domainGate.js";
 import type { TabRegistry } from "./browser/tabRegistry.js";
 import type { AppPullState, AppPullStateStore, UpdatePolicy } from "./updateClient.js";
 
-export interface InstalledApp {
+export interface InstalledService {
   creator: string;
   slug: string;
   /** Composite app id: `<creator>-<slug>` (single dash; creator is
    *  hyphen-free so it parses unambiguously). Container name + map key. */
-  appId: string;
+  serviceId: string;
   manifest: AppManifest;
   /** Host-relative URL label: `<slug>` if self-authored, else `<slug>-<creator>`. */
   urlLabel: string;
@@ -58,7 +58,7 @@ export interface InstalledApp {
   installedAt: number;
 }
 
-export interface AppPlatformDeps {
+export interface ServicePlatformDeps {
   /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner. */
   host: { username: string; irkPub: Bytes };
   /**
@@ -95,7 +95,7 @@ export interface AppPlatformDeps {
    * records an initial AppPullState so the pull scheduler can fetch
    * updates from the canonical home.
    *
-   * `cloneApp` is the daemon-injected hook that clones the canonical
+   * `cloneService` is the daemon-injected hook that clones the canonical
    * repo into the working tree and returns the HEAD commit (lineage
    * anchor + initial tip). Production wires it to a real git client;
    * tests inject a fake. When unset, install records canonicalUrl +
@@ -104,8 +104,8 @@ export interface AppPlatformDeps {
    * deferred-fetch flows.
    */
   pullStateStore?: AppPullStateStore | null;
-  cloneApp?: ((args: {
-    appId: string;
+  cloneService?: ((args: {
+    serviceId: string;
     canonicalUrl: string;
   }) => Promise<{ currentTip: string }>) | null;
   /**
@@ -115,19 +115,19 @@ export interface AppPlatformDeps {
    * forgets them. Optional — when null, an app simply runs without any
    * owner-set env vars (just the FLAGSHIP_* / data-layer ones).
    */
-  envStore?: import("./appEnvStore.js").AppEnvStore | null;
+  envStore?: import("./serviceEnvStore.js").AppEnvStore | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
 }
 
-export class AppPlatform {
-  private readonly apps = new Map<string, InstalledApp>();
-  private readonly byUrlLabel = new Map<string, InstalledApp>();
+export class ServicePlatform {
+  private readonly apps = new Map<string, InstalledService>();
+  private readonly byUrlLabel = new Map<string, InstalledService>();
   private readonly maxAgeMs: number;
   private readonly now: () => number;
 
-  constructor(private readonly deps: AppPlatformDeps) {
+  constructor(private readonly deps: ServicePlatformDeps) {
     this.maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
     this.now = deps.now ?? (() => Date.now());
   }
@@ -138,14 +138,14 @@ export class AppPlatform {
    *  the FIRST hyphen always separates creator from slug even when
    *  the slug itself contains hyphens. Stable for the life of the
    *  package — never rotates on a URL-stem Replace. */
-  static appId(creator: string, slug: string): string {
-    return composeAppId(creator, slug);
+  static serviceId(creator: string, slug: string): string {
+    return composeServiceId(creator, slug);
   }
 
-  /** Inverse of `appId`. Splits at the FIRST hyphen (creator is
+  /** Inverse of `serviceId`. Splits at the FIRST hyphen (creator is
    *  hyphen-free). Returns null when the id has no hyphen. */
-  static parseAppId(appId: string): { creator: string; slug: string } | null {
-    return parseAppIdShared(appId);
+  static parseServiceId(serviceId: string): { creator: string; slug: string } | null {
+    return parseServiceIdShared(serviceId);
   }
 
   /**
@@ -158,7 +158,7 @@ export class AppPlatform {
    * can never drift on what URL a user sees.
    */
   static urlLabel(host: string, creator: string, slug: string): string {
-    return deriveUrlFragment(composeAppId(creator, slug), host);
+    return deriveUrlFragment(composeServiceId(creator, slug), host);
   }
 
   /**
@@ -174,17 +174,17 @@ export class AppPlatform {
     return `${slug}.${creator}.flagship.services`;
   }
 
-  list(): InstalledApp[] {
+  list(): InstalledService[] {
     return [...this.apps.values()].map((a) => ({ ...a }));
   }
 
   /** Look up an app by the leftmost SNI label. Used by the reverse proxy. */
-  byLabel(urlLabel: string): InstalledApp | undefined {
+  byLabel(urlLabel: string): InstalledService | undefined {
     return this.byUrlLabel.get(urlLabel.toLowerCase());
   }
 
-  byAppId(appId: string): InstalledApp | undefined {
-    return this.apps.get(appId);
+  byServiceId(serviceId: string): InstalledService | undefined {
+    return this.apps.get(serviceId);
   }
 
   /**
@@ -192,9 +192,9 @@ export class AppPlatform {
    * against the **host's** IRK pubkey (the daemon's `deps.host.irkPub`).
    */
   async install(args: {
-    request: InstallAppRequest;
+    request: InstallServiceRequest;
     signature: Bytes;
-    verify: (req: InstallAppRequest, sig: Bytes, irkPub: Bytes) => boolean;
+    verify: (req: InstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
     /** For tests + future port allocators. Default picks a random 49152–65535. */
     pickPort?: () => number;
   }): Promise<InstallResult> {
@@ -216,11 +216,11 @@ export class AppPlatform {
       return { ok: false, reason: `manifest invalid: ${parsed.errors.join("; ")}` };
     }
 
-    const appId = AppPlatform.appId(r.creator, r.slug);
-    if (this.apps.has(appId)) {
-      return { ok: false, reason: `app ${appId} already installed` };
+    const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
+    if (this.apps.has(serviceId)) {
+      return { ok: false, reason: `app ${serviceId} already installed` };
     }
-    const urlLabel = AppPlatform.urlLabel(this.deps.host.username, r.creator, r.slug);
+    const urlLabel = ServicePlatform.urlLabel(this.deps.host.username, r.creator, r.slug);
     if (this.byUrlLabel.has(urlLabel)) {
       // E.g., a self-authored `game1` would collide with an existing
       // `game1.<host>...` from another (creator==host, slug==game1)
@@ -253,7 +253,7 @@ export class AppPlatform {
     let apiToken: string | null = null;
     if (this.deps.appAuthTokens) {
       try {
-        apiToken = await this.deps.appAuthTokens.mint(appId);
+        apiToken = await this.deps.appAuthTokens.mint(serviceId);
       } catch (e) {
         // A failed token mint shouldn't kill an install — the app just
         // won't be able to use the browser surface until re-installed.
@@ -271,20 +271,20 @@ export class AppPlatform {
     // transiently for this deploy and never logged.
     const port = args.pickPort?.() ?? randomPort();
     const ownerEnv = this.deps.envStore
-      ? sanitizeOwnerEnv(await this.deps.envStore.get(appId).catch(() => null))
+      ? sanitizeOwnerEnv(await this.deps.envStore.get(serviceId).catch(() => null))
       : {};
     const env: Record<string, string> = {
       ...ownerEnv,
       ...(parsed.manifest.runtime.env ?? {}),
       ...(data ? credentialsToEnv(data) : {}),
-      FLAGSHIP_APP_ID: appId,
+      FLAGSHIP_APP_ID: serviceId,
       FLAGSHIP_CREATOR: r.creator,
       FLAGSHIP_SLUG: r.slug,
       FLAGSHIP_HOST: this.deps.host.username,
       ...(apiToken ? { FLAGSHIP_APP_TOKEN: apiToken } : {}),
     };
     const spec: AppSpec = {
-      appId,
+      serviceId,
       image: parsed.manifest.runtime.image,
       env,
       port,
@@ -299,25 +299,25 @@ export class AppPlatform {
           .catch(() => {});
       }
       // Roll back the minted token too — a stale entry would let a
-      // re-attempted install collide on the same appId.
+      // re-attempted install collide on the same serviceId.
       if (apiToken && this.deps.appAuthTokens) {
-        await this.deps.appAuthTokens.forget(appId).catch(() => {});
+        await this.deps.appAuthTokens.forget(serviceId).catch(() => {});
       }
       return { ok: false, reason: `container deploy failed: ${(e as Error).message}` };
     }
 
     // 3. Build the per-app membership store (mutations gated by host's IRK).
     const membership = new AppMembership(
-      appId,
+      serviceId,
       this.deps.host.username,
       this.deps.host.irkPub,
       this.deps.swk,
     );
 
-    const installed: InstalledApp = {
+    const installed: InstalledService = {
       creator: r.creator,
       slug: r.slug,
-      appId,
+      serviceId,
       manifest: parsed.manifest,
       urlLabel,
       membership,
@@ -325,14 +325,14 @@ export class AppPlatform {
       data,
       installedAt: this.now(),
     };
-    this.apps.set(appId, installed);
+    this.apps.set(serviceId, installed);
     this.byUrlLabel.set(urlLabel.toLowerCase(), installed);
 
     // Browser feature: register the domain grant if the manifest
     // declares one AND the daemon has the gate wired in. Without a
     // grant, the app's calls to /api/browser/* return 403.
     if (this.deps.domainGate && parsed.manifest.browser?.domains) {
-      this.deps.domainGate.setGrant(appId, parsed.manifest.browser.domains);
+      this.deps.domainGate.setGrant(serviceId, parsed.manifest.browser.domains);
     }
 
     // Update-pack: record canonical-home pull state on first install
@@ -342,12 +342,12 @@ export class AppPlatform {
       this.deps.pullStateStore &&
       r.creator !== this.deps.host.username
     ) {
-      const canonicalUrl = AppPlatform.canonicalUrl(r.creator, r.slug);
+      const canonicalUrl = ServicePlatform.canonicalUrl(r.creator, r.slug);
       const updatePolicy: UpdatePolicy = "auto";
       let currentTip = "";
-      if (this.deps.cloneApp) {
+      if (this.deps.cloneService) {
         try {
-          const r2 = await this.deps.cloneApp({ appId, canonicalUrl });
+          const r2 = await this.deps.cloneService({ serviceId, canonicalUrl });
           currentTip = r2.currentTip;
         } catch (e) {
           // Cloning is best-effort; the pull scheduler will recover on its
@@ -364,7 +364,7 @@ export class AppPlatform {
         updatePolicy,
       };
       try {
-        await this.deps.pullStateStore.put(appId, pullState);
+        await this.deps.pullStateStore.put(serviceId, pullState);
       } catch {
         // Same rationale: don't fail the install over a state-write
         // hiccup; the scheduler is the recovery path.
@@ -375,7 +375,7 @@ export class AppPlatform {
   }
 
   /**
-   * Apply an owner-signed `SetAppEnvRequest`: verify the IRK signature
+   * Apply an owner-signed `SetServiceEnvRequest`: verify the IRK signature
    * (same trust root as install/uninstall), then store the env sealed
    * at rest. Full-replace semantics — the request carries the complete
    * desired env set. The new values take effect on the next deploy
@@ -387,9 +387,9 @@ export class AppPlatform {
    * them, and never surfaces them in an error.
    */
   async setEnv(args: {
-    request: SetAppEnvRequest;
+    request: SetServiceEnvRequest;
     signature: Bytes;
-    verify: (req: SetAppEnvRequest, sig: Bytes, irkPub: Bytes) => boolean;
+    verify: (req: SetServiceEnvRequest, sig: Bytes, irkPub: Bytes) => boolean;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     const { request: r, signature, verify } = args;
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
@@ -406,9 +406,9 @@ export class AppPlatform {
         return { ok: false, reason: "reserved FLAGSHIP_ env name" };
       }
     }
-    const appId = AppPlatform.appId(r.creator, r.slug);
+    const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
     try {
-      await this.deps.envStore.put(appId, { ...r.env });
+      await this.deps.envStore.put(serviceId, { ...r.env });
     } catch {
       // Never surface a value in a thrown error.
       return { ok: false, reason: "failed to persist env" };
@@ -431,15 +431,15 @@ export class AppPlatform {
    * exactly like any other "add member" event.
    */
   addHostAsOwner(args: {
-    appId: string;
+    serviceId: string;
     hostIrk: Keypair;
     role?: "owner" | "admin" | "member" | "viewer";
   }): { ok: true } | { ok: false; reason: string } {
-    const app = this.apps.get(args.appId);
+    const app = this.apps.get(args.serviceId);
     if (!app) return { ok: false, reason: "unknown app" };
     const role = args.role ?? "owner";
     const mutation: MembershipMutation = {
-      appId: args.appId,
+      serviceId: args.serviceId,
       targetIrkPub: this.deps.host.irkPub,
       role,
       issuedAt: this.now(),
@@ -451,9 +451,9 @@ export class AppPlatform {
   }
 
   async uninstall(args: {
-    request: UninstallAppRequest;
+    request: UninstallServiceRequest;
     signature: Bytes;
-    verify: (req: UninstallAppRequest, sig: Bytes, irkPub: Bytes) => boolean;
+    verify: (req: UninstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
   }): Promise<UninstallResult> {
     const { request: r, signature, verify } = args;
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
@@ -462,15 +462,15 @@ export class AppPlatform {
     if (!verify(r, signature, this.deps.host.irkPub)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
     }
-    const appId = AppPlatform.appId(r.creator, r.slug);
-    const app = this.apps.get(appId);
+    const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
+    const app = this.apps.get(serviceId);
     if (!app) {
       // Idempotent: uninstalling something already gone is success.
       return { ok: true, alreadyGone: true };
     }
     // Stop container; best-effort.
     try {
-      await this.deps.appRunner.stop(appId);
+      await this.deps.appRunner.stop(serviceId);
     } catch {
       // container may already be gone
     }
@@ -489,38 +489,38 @@ export class AppPlatform {
     // Drop the daemon-API token so any container that's still alive can't
     // call back; idempotent + best-effort.
     if (this.deps.appAuthTokens) {
-      await this.deps.appAuthTokens.forget(appId).catch(() => {});
+      await this.deps.appAuthTokens.forget(serviceId).catch(() => {});
     }
     // Drop the app's owner-set env so values don't outlive the app.
     if (this.deps.envStore) {
-      await this.deps.envStore.forget(appId).catch(() => {});
+      await this.deps.envStore.forget(serviceId).catch(() => {});
     }
     // Browser feature: close any tabs the app opened, then revoke its
     // domain grant. Order matters — close tabs first so the gate is
     // still in place during shutdown (paranoid; close shouldn't navigate).
     if (this.deps.tabRegistry) {
-      await this.deps.tabRegistry.closeAllForApp(appId).catch(() => {});
+      await this.deps.tabRegistry.closeAllForApp(serviceId).catch(() => {});
     }
     if (this.deps.domainGate) {
-      this.deps.domainGate.revoke(appId);
+      this.deps.domainGate.revoke(serviceId);
     }
     // Update-pack: drop pull state so the scheduler doesn't keep
     // contacting the canonical home for an app no longer installed.
     if (this.deps.pullStateStore?.delete) {
-      await this.deps.pullStateStore.delete(appId).catch(() => {});
+      await this.deps.pullStateStore.delete(serviceId).catch(() => {});
     }
-    this.apps.delete(appId);
+    this.apps.delete(serviceId);
     this.byUrlLabel.delete(app.urlLabel.toLowerCase());
     return { ok: true };
   }
 
   /**
    * V5 — apply a user-chosen URL stem alias to an already-installed
-   * app. The internal `appId` is preserved; only `urlLabel` flips +
+   * app. The internal `serviceId` is preserved; only `urlLabel` flips +
    * the reverse-proxy index is re-keyed under the new label.
    *
    * Returns `{ ok: false, reason }` when:
-   *   - the appId isn't installed (e.g., daemon hasn't pulled it yet)
+   *   - the serviceId isn't installed (e.g., daemon hasn't pulled it yet)
    *   - the new label is malformed
    *   - the new label is already used by another app on this box
    *
@@ -530,9 +530,9 @@ export class AppPlatform {
    * trusting setAlias to do the right thing whether the daemon was
    * already in sync or not.
    */
-  setAlias(appId: string, newLabel: string): SetAliasResult {
-    const app = this.apps.get(appId);
-    if (!app) return { ok: false, reason: "unknown appId" };
+  setAlias(serviceId: string, newLabel: string): SetAliasResult {
+    const app = this.apps.get(serviceId);
+    if (!app) return { ok: false, reason: "unknown serviceId" };
     const lower = newLabel.toLowerCase();
     if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(lower)) {
       return { ok: false, reason: "invalid label (DNS-safe; 1..40 chars)" };
@@ -543,18 +543,18 @@ export class AppPlatform {
     // Collision check — another installed app already owns this
     // label on this box.
     const existing = this.byUrlLabel.get(lower);
-    if (existing && existing.appId !== appId) {
+    if (existing && existing.serviceId !== serviceId) {
       return {
         ok: false,
-        reason: `URL stem '${lower}' is already used by ${existing.appId}`,
+        reason: `URL stem '${lower}' is already used by ${existing.serviceId}`,
       };
     }
     const oldLabel = app.urlLabel.toLowerCase();
     this.byUrlLabel.delete(oldLabel);
-    const updated: InstalledApp = { ...app, urlLabel: lower };
-    this.apps.set(appId, updated);
+    const updated: InstalledService = { ...app, urlLabel: lower };
+    this.apps.set(serviceId, updated);
     this.byUrlLabel.set(lower, updated);
-    // Domain gate, when present, is keyed by appId — no rebind
+    // Domain gate, when present, is keyed by serviceId — no rebind
     // needed there. Caddy / Fastify routing is driven off byLabel(),
     // so the next inbound request to the new label will land in the
     // updated entry.
@@ -567,7 +567,7 @@ export type SetAliasResult =
   | { ok: false; reason: string };
 
 export type InstallResult =
-  | { ok: true; app: InstalledApp }
+  | { ok: true; app: InstalledService }
   | { ok: false; reason: string };
 
 export type UninstallResult =
@@ -592,11 +592,11 @@ function randomPort(): number {
 // HTTP surface (consumed by runtime.ts's default handler)
 // ──────────────────────────────────────────────────────────────────────
 
-import { verifyInstallApp, verifyUninstallApp, verifySetAppEnv, ed } from "@flagship/protocol";
+import { verifyInstallService, verifyUninstallService, verifySetServiceEnv, ed } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
-export interface AppHttpDeps {
-  platform: AppPlatform;
+export interface ServiceHttpDeps {
+  platform: ServicePlatform;
   /**
    * The host's IRK keypair, needed so the install endpoint can sign
    * the synthetic "add host as owner" membership mutation when the
@@ -616,30 +616,30 @@ export interface AppHttpDeps {
 
 const J: Record<string, string> = { "content-type": "application/json" };
 
-export function buildAppHttpHandlers(deps: AppHttpDeps) {
+export function buildServiceHttpHandlers(deps: ServiceHttpDeps) {
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
-    if (req.path === "/api/apps") {
-      if (req.method === "GET") return listApps(deps);
-      if (req.method === "POST") return installApp(deps, req);
+    if (req.path === "/api/services") {
+      if (req.method === "GET") return listServices(deps);
+      if (req.method === "POST") return installService(deps, req);
       return { status: 405, headers: J, body: JSON.stringify({ error: "method not allowed" }) };
     }
-    // Owner-signed set-app-env. Mirrors the install/uninstall envelope
+    // Owner-signed set-service-env. Mirrors the install/uninstall envelope
     // trust root (host IRK). Values are SECRET — never echoed back.
-    const envM = /^\/api\/apps\/([^/]+)\/env$/.exec(req.path);
+    const envM = /^\/api\/services\/([^/]+)\/env$/.exec(req.path);
     if (envM && req.method === "POST") {
-      return setAppEnv(deps, envM[1]!, req);
+      return setServiceEnv(deps, envM[1]!, req);
     }
-    if (req.path.startsWith("/api/apps/") && req.method === "DELETE") {
-      const appId = req.path.slice("/api/apps/".length);
-      return uninstallApp(deps, appId, req);
+    if (req.path.startsWith("/api/services/") && req.method === "DELETE") {
+      const serviceId = req.path.slice("/api/services/".length);
+      return uninstallService(deps, serviceId, req);
     }
     return null;
   };
 }
 
-function listApps(deps: AppHttpDeps): HttpResponse {
+function listServices(deps: ServiceHttpDeps): HttpResponse {
   const apps = deps.platform.list().map((a) => ({
-    appId: a.appId,
+    serviceId: a.serviceId,
     creator: a.creator,
     slug: a.slug,
     urlLabel: a.urlLabel,
@@ -651,7 +651,7 @@ function listApps(deps: AppHttpDeps): HttpResponse {
   return { status: 200, headers: J, body: JSON.stringify({ apps }) };
 }
 
-async function installApp(deps: AppHttpDeps, req: HttpRequest): Promise<HttpResponse> {
+async function installService(deps: ServiceHttpDeps, req: HttpRequest): Promise<HttpResponse> {
   const body = safeJsonParse(req.body.toString("utf8")) as {
     request?: Record<string, unknown>;
     signature?: string;
@@ -686,7 +686,7 @@ async function installApp(deps: AppHttpDeps, req: HttpRequest): Promise<HttpResp
       issuedAt: r.issuedAt,
     },
     signature,
-    verify: verifyInstallApp,
+    verify: verifyInstallService,
   });
   if (!installResult.ok) {
     return { status: 400, headers: J, body: JSON.stringify({ error: installResult.reason }) };
@@ -696,7 +696,7 @@ async function installApp(deps: AppHttpDeps, req: HttpRequest): Promise<HttpResp
   // and ships it alongside the install request (TODO surface).
   if (r.addOwnerToMembership && deps.hostIrk) {
     deps.platform.addHostAsOwner({
-      appId: installResult.app.appId,
+      serviceId: installResult.app.serviceId,
       hostIrk: deps.hostIrk,
       role: "owner",
     });
@@ -706,14 +706,14 @@ async function installApp(deps: AppHttpDeps, req: HttpRequest): Promise<HttpResp
     headers: J,
     body: JSON.stringify({
       ok: true,
-      appId: installResult.app.appId,
+      serviceId: installResult.app.serviceId,
       urlLabel: installResult.app.urlLabel,
       port: installResult.app.containerPort,
     }),
   };
 }
 
-async function uninstallApp(deps: AppHttpDeps, appId: string, req: HttpRequest): Promise<HttpResponse> {
+async function uninstallService(deps: ServiceHttpDeps, serviceId: string, req: HttpRequest): Promise<HttpResponse> {
   const body = safeJsonParse(req.body.toString("utf8")) as {
     request?: Record<string, unknown>;
     signature?: string;
@@ -730,8 +730,8 @@ async function uninstallApp(deps: AppHttpDeps, appId: string, req: HttpRequest):
   ) {
     return { status: 400, headers: J, body: JSON.stringify({ error: "malformed request" }) };
   }
-  if (AppPlatform.appId(r.creator, r.slug) !== appId) {
-    return { status: 400, headers: J, body: JSON.stringify({ error: "appId / (creator,slug) mismatch" }) };
+  if (ServicePlatform.serviceId(r.creator, r.slug) !== serviceId) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "serviceId / (creator,slug) mismatch" }) };
   }
   let signature: Uint8Array;
   try {
@@ -747,7 +747,7 @@ async function uninstallApp(deps: AppHttpDeps, appId: string, req: HttpRequest):
       issuedAt: r.issuedAt,
     },
     signature,
-    verify: verifyUninstallApp,
+    verify: verifyUninstallService,
   });
   if (!result.ok) {
     return { status: 400, headers: J, body: JSON.stringify({ error: result.reason }) };
@@ -761,7 +761,7 @@ async function uninstallApp(deps: AppHttpDeps, appId: string, req: HttpRequest):
  * success is a bare `{ ok: true }`; an error is a generic reason that
  * never interpolates a value.
  */
-async function setAppEnv(deps: AppHttpDeps, appId: string, req: HttpRequest): Promise<HttpResponse> {
+async function setServiceEnv(deps: ServiceHttpDeps, serviceId: string, req: HttpRequest): Promise<HttpResponse> {
   const body = safeJsonParse(req.body.toString("utf8")) as {
     request?: Record<string, unknown>;
     signature?: string;
@@ -788,8 +788,8 @@ async function setAppEnv(deps: AppHttpDeps, appId: string, req: HttpRequest): Pr
     }
     env[k] = v;
   }
-  if (AppPlatform.appId(r.creator, r.slug) !== appId) {
-    return { status: 400, headers: J, body: JSON.stringify({ error: "appId / (creator,slug) mismatch" }) };
+  if (ServicePlatform.serviceId(r.creator, r.slug) !== serviceId) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "serviceId / (creator,slug) mismatch" }) };
   }
   let signature: Uint8Array;
   try {
@@ -806,7 +806,7 @@ async function setAppEnv(deps: AppHttpDeps, appId: string, req: HttpRequest): Pr
       issuedAt: r.issuedAt,
     },
     signature,
-    verify: verifySetAppEnv,
+    verify: verifySetServiceEnv,
   });
   if (!result.ok) {
     return { status: 400, headers: J, body: JSON.stringify({ error: result.reason }) };

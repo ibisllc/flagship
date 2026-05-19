@@ -29,7 +29,7 @@ function makePairedApp(opts: { withSarah: boolean; publicRoutes?: string[] }) {
   if (opts.withSarah) {
     const nonce = newInviteNonce();
     const issuedAt = Date.now();
-    const token: InviteToken = { appId: APP, role: "parent", nonce, issuedAt, expiresAt: issuedAt + 60_000 };
+    const token: InviteToken = { serviceId: APP, role: "parent", nonce, issuedAt, expiresAt: issuedAt + 60_000 };
     const inviteSig = signInvite(token, ownerIrk);
     const acceptance: InviteAcceptance = {
       inviteNonce: nonce,

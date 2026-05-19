@@ -5,7 +5,7 @@
  * This is the Stage 1 live wiring of `buildUserContext` into the
  * production vibecode call:
  *
- *   1. Compute the env-var NAMES list via `appEnvStore.names(appId)` —
+ *   1. Compute the env-var NAMES list via `appEnvStore.names(serviceId)` —
  *      `.get()` is NEVER called from this path.
  *   2. Assemble the system message via `buildUserContext()` with those
  *      names + the existing context fields.
@@ -24,7 +24,7 @@ import type {
   StreamingFetchLike,
   StreamingLLMProvider,
 } from "@flagship/llm-providers";
-import type { AppEnvStore } from "../appEnvStore.js";
+import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { VibeCodeSessionRegistry } from "./vibeCodeSession.js";
 import { streamIntoSession } from "./streamIntoSession.js";
 import {
@@ -40,7 +40,7 @@ export interface BuildVibeCodeStartStreamingArgs {
   config: ProviderConfig;
   /** Streaming-fetch implementation; tests inject. Production omits. */
   fetchImpl?: StreamingFetchLike;
-  /** Resolves the appId an in-flight session is editing. */
+  /** Resolves the serviceId an in-flight session is editing. */
   resolveAppId: (sessionId: string) => string | null;
   /** Read-only env-var-name accessor. NEVER values. */
   appEnvStore: AppEnvStore;
@@ -68,10 +68,10 @@ export function buildVibeCodeStartStreaming(
   return async function startStreaming(s: StartStreamingArgs): Promise<void> {
     const session = args.registry.get(s.sessionId);
     if (!session) return;
-    const appId = args.resolveAppId(s.sessionId);
+    const serviceId = args.resolveAppId(s.sessionId);
     // CRITICAL: only .names(). `.get()` is never called on this path —
     // values must never reach the prompt or the request body.
-    const appEnvNames = appId ? await args.appEnvStore.names(appId) : [];
+    const appEnvNames = serviceId ? await args.appEnvStore.names(serviceId) : [];
     const systemMessage =
       buildUserContext({
         ...args.context,

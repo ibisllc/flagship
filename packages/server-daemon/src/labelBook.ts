@@ -49,10 +49,10 @@ export interface LabelEntry {
 }
 
 /**
- * appId → opaqueTagHex → LabelEntry.
+ * serviceId → opaqueTagHex → LabelEntry.
  *
  * `opaqueTag` is a 16-byte secret on the wire; we key the inner map on
- * the lowercase hex form. The outer key is the same composite appId the
+ * the lowercase hex form. The outer key is the same composite serviceId the
  * server-daemon uses (`<creator>--<slug>`) so the user can keep parallel
  * label books for different apps without collision.
  *
@@ -68,7 +68,7 @@ export function emptyLabelBook(): LabelBook {
 }
 
 /**
- * Add (or overwrite) a label for `(appId, opaqueTag)`. Returns a fresh
+ * Add (or overwrite) a label for `(serviceId, opaqueTag)`. Returns a fresh
  * LabelBook — the input is not mutated.
  *
  * `opaqueTag` is hex (matches the daemon-side row schema's storage
@@ -76,18 +76,18 @@ export function emptyLabelBook(): LabelBook {
  */
 export function addLabel(
   book: LabelBook,
-  appId: string,
+  serviceId: string,
   opaqueTag: string,
   entry: LabelEntry,
 ): LabelBook {
-  validateAppId(appId);
+  validateAppId(serviceId);
   const tag = normalizeTag(opaqueTag);
   const validated = validateEntry(entry);
   const next = cloneBook(book);
-  let inner = next.get(appId);
+  let inner = next.get(serviceId);
   if (!inner) {
     inner = new Map();
-    next.set(appId, inner);
+    next.set(serviceId, inner);
   }
   inner.set(tag, validated);
   return next;
@@ -97,13 +97,13 @@ export function addLabel(
  * Remove a label. Idempotent — removing a missing entry returns the
  * input book unchanged structurally (but still a fresh copy).
  */
-export function removeLabel(book: LabelBook, appId: string, opaqueTag: string): LabelBook {
+export function removeLabel(book: LabelBook, serviceId: string, opaqueTag: string): LabelBook {
   const tag = normalizeTag(opaqueTag);
   const next = cloneBook(book);
-  const inner = next.get(appId);
+  const inner = next.get(serviceId);
   if (!inner) return next;
   inner.delete(tag);
-  if (inner.size === 0) next.delete(appId);
+  if (inner.size === 0) next.delete(serviceId);
   return next;
 }
 
@@ -112,10 +112,10 @@ export function removeLabel(book: LabelBook, appId: string, opaqueTag: string): 
  * is malformed — we don't throw on read, callers usually want to
  * gracefully render "unknown" in the UI).
  */
-export function lookup(book: LabelBook, appId: string, opaqueTag: string): LabelEntry | undefined {
+export function lookup(book: LabelBook, serviceId: string, opaqueTag: string): LabelEntry | undefined {
   if (typeof opaqueTag !== "string") return undefined;
   const tag = opaqueTag.toLowerCase();
-  const inner = book.get(appId);
+  const inner = book.get(serviceId);
   return inner ? inner.get(tag) : undefined;
 }
 
@@ -127,9 +127,9 @@ export function appIds(book: LabelBook): string[] {
 /** All entries for one app, sorted by tag hex. */
 export function entriesForApp(
   book: LabelBook,
-  appId: string,
+  serviceId: string,
 ): Array<{ opaqueTag: string; entry: LabelEntry }> {
-  const inner = book.get(appId);
+  const inner = book.get(serviceId);
   if (!inner) return [];
   return [...inner.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
@@ -150,7 +150,7 @@ const MAGIC = new TextEncoder().encode("flagship/label-book/v1\n");
 interface SerializedShape {
   v: 1;
   apps: Array<{
-    appId: string;
+    serviceId: string;
     entries: Array<{ tag: string; entry: LabelEntry }>;
   }>;
 }
@@ -173,9 +173,9 @@ interface SerializedShape {
 export function serialize(book: LabelBook): Uint8Array {
   const out: SerializedShape = {
     v: 1,
-    apps: appIds(book).map((appId) => ({
-      appId,
-      entries: entriesForApp(book, appId).map(({ opaqueTag, entry }) => ({
+    apps: appIds(book).map((serviceId) => ({
+      serviceId,
+      entries: entriesForApp(book, serviceId).map(({ opaqueTag, entry }) => ({
         tag: opaqueTag,
         entry: {
           displayName: entry.displayName,
@@ -223,8 +223,8 @@ export function deserialize(bytes: Uint8Array): LabelBook {
   if (!shape || shape.v !== 1 || !Array.isArray(shape.apps)) return emptyLabelBook();
   const book = emptyLabelBook();
   for (const a of shape.apps) {
-    if (!a || typeof a.appId !== "string" || !Array.isArray(a.entries)) continue;
-    if (!isValidAppId(a.appId)) continue;
+    if (!a || typeof a.serviceId !== "string" || !Array.isArray(a.entries)) continue;
+    if (!isValidAppId(a.serviceId)) continue;
     const inner = new Map<string, LabelEntry>();
     for (const e of a.entries) {
       if (!e || typeof e.tag !== "string") continue;
@@ -241,7 +241,7 @@ export function deserialize(bytes: Uint8Array): LabelBook {
       };
       inner.set(tag, normalized);
     }
-    if (inner.size > 0) book.set(a.appId, inner);
+    if (inner.size > 0) book.set(a.serviceId, inner);
   }
   return book;
 }
@@ -252,10 +252,10 @@ export function deserialize(bytes: Uint8Array): LabelBook {
 
 function cloneBook(book: LabelBook): LabelBook {
   const next: LabelBook = new Map();
-  for (const [appId, inner] of book) {
+  for (const [serviceId, inner] of book) {
     const innerCopy = new Map<string, LabelEntry>();
     for (const [tag, entry] of inner) innerCopy.set(tag, { ...entry });
-    next.set(appId, innerCopy);
+    next.set(serviceId, innerCopy);
   }
   return next;
 }
@@ -268,16 +268,16 @@ function normalizeTag(tag: string): string {
   return lower;
 }
 
-function validateAppId(appId: string): void {
-  if (!isValidAppId(appId)) throw new Error(`invalid appId: ${appId}`);
+function validateAppId(serviceId: string): void {
+  if (!isValidAppId(serviceId)) throw new Error(`invalid serviceId: ${serviceId}`);
 }
 
-function isValidAppId(appId: string): boolean {
-  if (typeof appId !== "string" || appId.length === 0 || appId.length > 256) return false;
-  // Daemon-side appId is `<creator>--<slug>`; keep the validator lax to
+function isValidAppId(serviceId: string): boolean {
+  if (typeof serviceId !== "string" || serviceId.length === 0 || serviceId.length > 256) return false;
+  // Daemon-side serviceId is `<creator>--<slug>`; keep the validator lax to
   // accommodate slugs with hyphens / digits but reject control chars.
-  for (let i = 0; i < appId.length; i++) {
-    const c = appId.charCodeAt(i);
+  for (let i = 0; i < serviceId.length; i++) {
+    const c = serviceId.charCodeAt(i);
     if (c < 0x20 || c === 0x7f) return false;
   }
   return true;

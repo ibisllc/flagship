@@ -51,7 +51,7 @@ export type VibeCodeEvent =
   | { kind: "chunk"; filename: string; text: string }
   | { kind: "file-complete"; filename: string; content: string }
   | { kind: "phase"; phase: "build" | "migrate" | "deploy" | "ready"; detail?: string }
-  | { kind: "deployed"; appId: string; url: string }
+  | { kind: "deployed"; serviceId: string; url: string }
   | { kind: "error"; message: string; recoverable: boolean }
   | { kind: "done"; manifestJson?: string; files: Record<string, string> }
   | {
@@ -105,7 +105,7 @@ export interface EnvVarAckPayload {
    *                  in a follow-up turn or proceed without it.
    */
   readonly status: "set" | "declined" | "deferred";
-  /** Whether `appEnvStore.names(appId)` now includes the name. */
+  /** Whether `appEnvStore.names(serviceId)` now includes the name. */
   readonly currentlySet: boolean;
 }
 
@@ -138,7 +138,7 @@ export interface VibeCodeSessionMeta {
     | "deployed"
     | "failed"
     | "cancelled";
-  appId?: string;
+  serviceId?: string;
   url?: string;
 }
 
@@ -417,14 +417,14 @@ export class VibeCodeSession extends EventEmitter {
   }
 
   /**
-   * Mark the session as deployed — caller invokes after AppPlatform.install
+   * Mark the session as deployed — caller invokes after ServicePlatform.install
    * succeeds. The state-machine constraint that matters here is: you may
    * NOT deploy while a tool_use is pending (`awaiting-tool-response`),
    * because the model hasn't been given the chance to incorporate the
    * tool result yet. All other prior states (streaming, ready-to-deploy,
    * deploying) flow through — markDeployed is idempotent.
    */
-  markDeployed(args: { appId: string; url: string }): void {
+  markDeployed(args: { serviceId: string; url: string }): void {
     if (this.meta.status === "awaiting-tool-response") {
       this.emit("event", {
         kind: "error",
@@ -434,9 +434,9 @@ export class VibeCodeSession extends EventEmitter {
       return;
     }
     this.meta.status = "deployed";
-    this.meta.appId = args.appId;
+    this.meta.serviceId = args.serviceId;
     this.meta.url = args.url;
-    this.emit("event", { kind: "deployed", appId: args.appId, url: args.url } as VibeCodeEvent);
+    this.emit("event", { kind: "deployed", serviceId: args.serviceId, url: args.url } as VibeCodeEvent);
   }
 
   fail(message: string, recoverable = false): void {

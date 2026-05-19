@@ -50,7 +50,7 @@ export async function renderServerDetail() {
       </div>
       <h2 class="mt-4">Counters</h2>
       <div class="card">
-        <div class="row"><span class="label">Apps installed</span><span class="value">${body.appCount}</span></div>
+        <div class="row"><span class="label">Apps installed</span><span class="value">${body.serviceCount}</span></div>
         <div class="row"><span class="label">Paired sessions</span><span class="value">${body.pairedSessionCount}</span></div>
       </div>
       <h2 class="mt-4">Auto-unlock</h2>
@@ -82,7 +82,7 @@ export async function renderServerDetail() {
         : (body.recentInstallEvents ?? []).map((e) => `
           <div class="card">
             <div class="row">
-              <span class="value">${escapeHtml(e.kind)}: ${escapeHtml(e.appId)}</span>
+              <span class="value">${escapeHtml(e.kind)}: ${escapeHtml(e.serviceId)}</span>
               <span class="pill">${escapeHtml(fmtDate(e.at))}</span>
             </div>
           </div>

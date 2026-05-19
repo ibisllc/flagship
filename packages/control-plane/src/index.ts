@@ -17,7 +17,7 @@ export * from "./rePair.js";
 export * from "./wipeRestart.js";
 export * from "./webauthnRecovery.js";
 export * from "./voici.js";
-export * from "./appRename.js";
+export * from "./serviceRename.js";
 export * from "./customDomain.js";
 export * from "./customDomainRedirections.js";
 export * from "./customDomainVerifier.js";

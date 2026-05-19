@@ -45,7 +45,7 @@ describe("sibling-frame encode/decode round-trip", () => {
     const frame: SiblingFrame = {
       type: FRAME_SIBLING_APP_MESSAGE,
       payload: {
-        appId: "notes",
+        serviceId: "notes",
         fromSiblingId: "home.alice.flagship.services",
         toSiblingId: "office.alice.flagship.services",
         payloadHex: "0011aabb",
@@ -107,7 +107,7 @@ describe("sibling-frame decode error handling", () => {
     const buf = new Uint8Array([
       FRAME_SIBLING_APP_MESSAGE,
       ...new TextEncoder().encode(JSON.stringify({
-        appId: "notes",
+        serviceId: "notes",
         fromSiblingId: "a",
         toSiblingId: "b",
       })),

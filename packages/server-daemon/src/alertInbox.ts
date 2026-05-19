@@ -15,7 +15,7 @@
  * lineage-break alert that was lost would re-appear within the next
  * pull cycle).
  *
- * For lineage-break alerts specifically we de-dupe on (appId, kind,
+ * For lineage-break alerts specifically we de-dupe on (serviceId, kind,
  * upstreamTip) so a daemon polling every 6h doesn't flood the phone
  * with the same alert until the user resolves it.
  */
@@ -83,7 +83,7 @@ export class InMemoryAlertInbox implements AlertInbox {
   /**
    * De-dupe rule: for `lineage-break` and `manual-pending` we'd hammer
    * the queue on every poll cycle until the user resolves. So if there's
-   * already an unacked event with the same identity (kind + appId +
+   * already an unacked event with the same identity (kind + serviceId +
    * salient field), drop the new one. `migration-failed` is also
    * deduped — re-emitting on every tick would mask other issues.
    */
@@ -93,7 +93,7 @@ export class InMemoryAlertInbox implements AlertInbox {
 }
 
 function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
-  if (a.kind !== b.kind || a.appId !== b.appId) return false;
+  if (a.kind !== b.kind || a.serviceId !== b.serviceId) return false;
   if (a.kind === "lineage-break" && b.kind === "lineage-break") {
     return a.upstreamTip === b.upstreamTip;
   }
@@ -104,14 +104,14 @@ function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
     return a.migrationFile === b.migrationFile;
   }
   if (a.kind === "browser-input-needed" && b.kind === "browser-input-needed") {
-    // Dedupe per (appId, tabId, inputKind) — re-detection of the same
+    // Dedupe per (serviceId, tabId, inputKind) — re-detection of the same
     // focused field on the same tab shouldn't flood the phone. New
     // input is needed only when the page transitions to a new field
     // (different inputKind) or a different tab focuses something.
     return a.tabId === b.tabId && a.inputKind === b.inputKind;
   }
   if (a.kind === "membership-reissued" && b.kind === "membership-reissued") {
-    // One alert per (appId, newIrkPrefix) — repeated re-issuance walks
+    // One alert per (serviceId, newIrkPrefix) — repeated re-issuance walks
     // for the same target shouldn't fan out, but a second swap to a
     // different IRK pubkey is genuinely a new event.
     return a.newIrkPrefix === b.newIrkPrefix;

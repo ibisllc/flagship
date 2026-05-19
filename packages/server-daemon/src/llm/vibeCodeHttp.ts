@@ -22,8 +22,8 @@
  *     → { ok: true }
  *
  *   POST /api/llm/sessions/<id>/deploy
- *     → triggers AppPlatform.install with the session's emitted files;
- *       returns { ok: true, appId, url } once deployed.
+ *     → triggers ServicePlatform.install with the session's emitted files;
+ *       returns { ok: true, serviceId, url } once deployed.
  *
  * Real WebSocket streaming lives in a sibling module (`vibeCodeWs.ts`,
  * future) — this HTTP surface is the orchestration + replay layer.
@@ -31,7 +31,7 @@
 
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import type { AppEnvStore } from "../appEnvStore.js";
+import type { AppEnvStore } from "../serviceEnvStore.js";
 import {
   looksLikePastedSecret,
   type EnvVarAckPayload,
@@ -47,10 +47,10 @@ export interface VibeCodeHttpDeps {
   serverFqdn: string;
   /**
    * Hook called when the phone POSTs /sessions/<id>/deploy. Production
-   * wires this to AppPlatform.install with the session's manifest +
+   * wires this to ServicePlatform.install with the session's manifest +
    * files; tests inject a stub.
    */
-  deploySession?: (session: VibeCodeSession) => Promise<{ ok: true; appId: string; url: string } | { ok: false; reason: string }>;
+  deploySession?: (session: VibeCodeSession) => Promise<{ ok: true; serviceId: string; url: string } | { ok: false; reason: string }>;
   /**
    * Per-app env store — used by the tool-ack endpoint to compute
    * `currentlySet` for `requestEnvVar` acks. Names ONLY; values never
@@ -59,8 +59,8 @@ export interface VibeCodeHttpDeps {
    */
   appEnvStore?: AppEnvStore | null;
   /**
-   * The appId an in-flight session is editing. For brand-new sessions
-   * the appId may not exist yet — env vars get keyed by the eventual
+   * The serviceId an in-flight session is editing. For brand-new sessions
+   * the serviceId may not exist yet — env vars get keyed by the eventual
    * `creator-slug`. Tests inject; production resolves from the
    * session's pending manifest once the model has emitted one.
    */
@@ -188,10 +188,10 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
       const name = typeof pending.input.name === "string" ? pending.input.name : "";
       let currentlySet = false;
       if (deps.appEnvStore && deps.resolveAppId) {
-        const appId = deps.resolveAppId(session);
-        if (appId) {
+        const serviceId = deps.resolveAppId(session);
+        if (serviceId) {
           try {
-            const names = await deps.appEnvStore.names(appId);
+            const names = await deps.appEnvStore.names(serviceId);
             currentlySet = name.length > 0 && names.includes(name);
           } catch {
             currentlySet = false;
@@ -220,8 +220,8 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
         session.fail(r.reason, true);
         return jerr(502, r.reason);
       }
-      session.markDeployed({ appId: r.appId, url: r.url });
-      return jok({ ok: true, appId: r.appId, url: r.url });
+      session.markDeployed({ serviceId: r.serviceId, url: r.url });
+      return jok({ ok: true, serviceId: r.serviceId, url: r.url });
     }
     return jerr(405, "method not allowed");
   };

@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { TokenSetSessionGate } from "../../src/alertInboxHttp.js";
-import { InMemoryAppEnvStore } from "../../src/appEnvStore.js";
+import { InMemoryAppEnvStore } from "../../src/serviceEnvStore.js";
 import { buildVibeCodeHttpHandlers } from "../../src/llm/vibeCodeHttp.js";
 import { VibeCodeSessionRegistry } from "../../src/llm/vibeCodeSession.js";
 import type { HttpRequest } from "../../src/runtime.js";
@@ -219,7 +219,7 @@ describe("vibe-code HTTP — tool endpoints", () => {
       username: "alice",
       serverFqdn: "home.alice.flagship.services",
       appEnvStore,
-      deploySession: async () => ({ ok: true, appId: "alice-x", url: "https://x.alice.flagship.services" }),
+      deploySession: async () => ({ ok: true, serviceId: "alice-x", url: "https://x.alice.flagship.services" }),
     });
     const c = await handle(req({ method: "POST", path: "/api/llm/sessions", token: SECRET_TOKEN, body: { prompt: "p" } }));
     const sid = JSON.parse(c!.body.toString()).sessionId as string;

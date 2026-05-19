@@ -4,8 +4,8 @@
 // install a marketplace listing:
 //   1. Pull the full listing (including the manifest JSON) from
 //      .com via /api/marketplace/<creator>/<slug>.
-//   2. Build an InstallAppRequest, IRK-sign it.
-//   3. POST to <pod>/api/apps.
+//   2. Build an InstallServiceRequest, IRK-sign it.
+//   3. POST to <pod>/api/services.
 //
 // The daemon verifies the signature against the host's IRK pubkey
 // (== this user's IRK) and provisions data + container.
@@ -14,10 +14,10 @@ import { bytesToHex, signWithIrk } from "../keystore.js";
 import { getPodBaseUrl } from "./api.js";
 import { getSession } from "./state.js";
 
-function canonicalInstallApp({ serverId, creator, slug, manifestJson, addOwnerToMembership, issuedAt }) {
+function canonicalInstallService({ serverId, creator, slug, manifestJson, addOwnerToMembership, issuedAt }) {
   return new TextEncoder().encode(
     [
-      "flagship/install-app/v1",
+      "flagship/install-service/v1",
       serverId,
       creator,
       slug,
@@ -28,10 +28,10 @@ function canonicalInstallApp({ serverId, creator, slug, manifestJson, addOwnerTo
   );
 }
 
-function canonicalUninstallApp({ serverId, creator, slug, issuedAt }) {
+function canonicalUninstallService({ serverId, creator, slug, issuedAt }) {
   return new TextEncoder().encode(
     [
-      "flagship/uninstall-app/v1",
+      "flagship/uninstall-service/v1",
       serverId,
       creator,
       slug,
@@ -75,8 +75,8 @@ export async function installFromMarketplace({ creator, slug }) {
     addOwnerToMembership: true,
     issuedAt,
   };
-  const sig = await signWithIrk(session.umk, canonicalInstallApp(request));
-  const r = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/apps`, {
+  const sig = await signWithIrk(session.umk, canonicalInstallService(request));
+  const r = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/services`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ request, signature: bytesToHex(sig) }),
@@ -91,7 +91,7 @@ export async function installFromMarketplace({ creator, slug }) {
 /**
  * Uninstall an app from the user's pod. Idempotent on the daemon side.
  */
-export async function uninstallApp({ creator, slug }) {
+export async function uninstallService({ creator, slug }) {
   const session = getSession();
   if (!session.umk) throw new Error("unlock first");
   const baseUrl = getPodBaseUrl();
@@ -100,10 +100,10 @@ export async function uninstallApp({ creator, slug }) {
   const serverId = new URL(baseUrl).host;
   const issuedAt = Date.now();
   const request = { serverId, creator, slug, issuedAt };
-  const sig = await signWithIrk(session.umk, canonicalUninstallApp(request));
-  const appId = `${creator}--${slug}`;
+  const sig = await signWithIrk(session.umk, canonicalUninstallService(request));
+  const serviceId = `${creator}--${slug}`;
   const r = await fetch(
-    `${baseUrl.replace(/\/+$/, "")}/api/apps/${encodeURIComponent(appId)}`,
+    `${baseUrl.replace(/\/+$/, "")}/api/services/${encodeURIComponent(serviceId)}`,
     {
       method: "DELETE",
       headers: { "content-type": "application/json" },

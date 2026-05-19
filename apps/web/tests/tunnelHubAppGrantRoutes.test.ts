@@ -1,5 +1,5 @@
 /**
- * #6 regression — when an AppGrant is presented (and validated) on the
+ * #6 regression — when an ServiceGrant is presented (and validated) on the
  * HELLO, the hub MUST union its route URLs' hostnames into the SNI
  * allowlist alongside the legacy entitlement canonicals.
  *
@@ -14,14 +14,14 @@
  * `appGrants` field yet, so today's daemons can't send any.
  */
 import { describe, expect, it } from "vitest";
-import type { AppGrant } from "@flagship/protocol";
+import type { ServiceGrant } from "@flagship/protocol";
 import { appGrantHosts } from "../src/tunnel/tunnelHub.js";
 
-function grant(routes: { url: string; scope: "canonical" | "non-canonical" | "subpath" }[]): AppGrant {
+function grant(routes: { url: string; scope: "canonical" | "non-canonical" | "subpath" }[]): ServiceGrant {
   return {
     grantId: "00000000-0000-4000-8000-000000000000",
     username: "alice",
-    appCanonical: "notes@abcdef012345",
+    serviceCanonical: "notes@abcdef012345",
     serverDomains: ["home.alice.flagship.services"],
     serverIdentities: [new Uint8Array(32)],
     routes,

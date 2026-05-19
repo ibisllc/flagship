@@ -87,7 +87,7 @@ describe("VibeCodeSession", () => {
     const s = new VibeCodeSession({ username: "alice", serverFqdn: "home.alice.flagship.services" });
     const events: VibeCodeEvent[] = [];
     s.on("event", (e: VibeCodeEvent) => events.push(e));
-    s.markDeployed({ appId: "alice-habits", url: "https://habits.alice.flagship.services" });
+    s.markDeployed({ serviceId: "alice-habits", url: "https://habits.alice.flagship.services" });
     expect(s.meta.status).toBe("deployed");
     expect(events.find((e) => e.kind === "deployed")).toBeTruthy();
   });

@@ -158,7 +158,7 @@ function bridgeVibeCodeSession(ws: WsSocket, session: VibeCodeSession): void {
         if (e.phase === "build") send({ kind: "build-start" });
         return;
       case "deployed":
-        send({ kind: "deploy", appId: e.appId, url: e.url });
+        send({ kind: "deploy", serviceId: e.serviceId, url: e.url });
         send({ kind: "done" });
         return;
       case "error":
@@ -179,7 +179,7 @@ function bridgeVibeCodeSession(ws: WsSocket, session: VibeCodeSession): void {
   if (session.meta.status === "deployed") {
     send({
       kind: "deploy",
-      appId: session.meta.appId ?? "",
+      serviceId: session.meta.serviceId ?? "",
       url: session.meta.url ?? "",
     });
     send({ kind: "done" });

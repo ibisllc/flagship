@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 
 export interface AppSpec {
-  appId: string;
+  serviceId: string;
   image: string;
   env?: Record<string, string>;
   port?: number;
@@ -44,7 +44,7 @@ export class AppRunner {
       "run",
       "-d",
       "--name",
-      this.containerName(spec.appId),
+      this.containerName(spec.serviceId),
       ...this.envArgs(spec.env),
       ...this.portArgs(spec.port),
       spec.image,
@@ -53,9 +53,9 @@ export class AppRunner {
     return args;
   }
 
-  async stop(appId: string): Promise<void> {
-    await this.cmd.run("docker", ["stop", this.containerName(appId)]);
-    await this.cmd.run("docker", ["rm", this.containerName(appId)]);
+  async stop(serviceId: string): Promise<void> {
+    await this.cmd.run("docker", ["stop", this.containerName(serviceId)]);
+    await this.cmd.run("docker", ["rm", this.containerName(serviceId)]);
   }
 
   /**
@@ -65,7 +65,7 @@ export class AppRunner {
    */
   async restart(spec: AppSpec): Promise<void> {
     try {
-      await this.stop(spec.appId);
+      await this.stop(spec.serviceId);
     } catch {
       // best-effort: container may not exist
     }
@@ -77,13 +77,13 @@ export class AppRunner {
    * For a real production setup the daemon would stream incrementally;
    * for v0 a one-shot tail keeps the wire shape simple.
    */
-  async logs(appId: string, tail: number): Promise<{ stdout: string; stderr: string }> {
+  async logs(serviceId: string, tail: number): Promise<{ stdout: string; stderr: string }> {
     if (!this.cmd.capture) throw new Error("CommandRunner.capture is not configured");
-    return this.cmd.capture("docker", ["logs", "--tail", String(tail), this.containerName(appId)]);
+    return this.cmd.capture("docker", ["logs", "--tail", String(tail), this.containerName(serviceId)]);
   }
 
-  containerName(appId: string): string {
-    return `flagship-${appId}`;
+  containerName(serviceId: string): string {
+    return `flagship-${serviceId}`;
   }
 
   private envArgs(env: Record<string, string> | undefined): string[] {

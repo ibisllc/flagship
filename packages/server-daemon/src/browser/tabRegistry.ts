@@ -6,7 +6,7 @@
  * Rules:
  *
  *   - When an app's API call creates a tab, the apiHandler calls
- *     `assignTab(tabId, appId)` immediately after openTab returns.
+ *     `assignTab(tabId, serviceId)` immediately after openTab returns.
  *   - When a tab opens a popup or window.open child, Chromium emits
  *     `Target.targetCreated` with `openerId`. We walk the chain to
  *     find the root app and inherit ownership. So `appA.tabs[0].open()
@@ -59,8 +59,8 @@ export class TabRegistry {
   }
 
   /** Assign a tab to an app explicitly. Overrides any prior owner. */
-  assignTab(tabId: string, appId: string): void {
-    this.byTab.set(tabId, appId);
+  assignTab(tabId: string, serviceId: string): void {
+    this.byTab.set(tabId, serviceId);
   }
 
   /** Forget a tab — the daemon called closeTab and we don't want to wait
@@ -69,15 +69,15 @@ export class TabRegistry {
     this.byTab.delete(tabId);
   }
 
-  /** Return the appId that owns this tab, or null. */
+  /** Return the serviceId that owns this tab, or null. */
   appIdForTab(tabId: string): string | null {
     return this.byTab.get(tabId) ?? null;
   }
 
   /** Return all tab ids belonging to an app (snapshot — not live). */
-  tabsForApp(appId: string): string[] {
+  tabsForApp(serviceId: string): string[] {
     const out: string[] = [];
-    for (const [t, a] of this.byTab) if (a === appId) out.push(t);
+    for (const [t, a] of this.byTab) if (a === serviceId) out.push(t);
     return out;
   }
 
@@ -89,10 +89,10 @@ export class TabRegistry {
   /**
    * Close every tab owned by the given app via the BrowserManager and
    * forget them locally. Best-effort; closeTab errors are swallowed.
-   * Called on AppPlatform.uninstall and on app-token revocation.
+   * Called on ServicePlatform.uninstall and on app-token revocation.
    */
-  async closeAllForApp(appId: string): Promise<{ closed: number }> {
-    const tabs = this.tabsForApp(appId);
+  async closeAllForApp(serviceId: string): Promise<{ closed: number }> {
+    const tabs = this.tabsForApp(serviceId);
     for (const t of tabs) {
       await this.browser.closeTab(t).catch(() => {});
       this.byTab.delete(t);

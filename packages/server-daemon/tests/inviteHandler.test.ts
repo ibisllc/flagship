@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
   ed,
-  signAppAccessAcceptance,
-  type AppAccessAcceptance,
+  signServiceAccessAcceptance,
+  type ServiceAccessAcceptance,
   type Keypair,
 } from "@flagship/protocol";
 import {
@@ -58,7 +58,7 @@ function fixedRandom(b: Uint8Array): (n: number) => Uint8Array {
 
 function issueEnvelope(args: {
   serverFqdn: string;
-  appId: string;
+  serviceId: string;
   role: string;
   opaqueTag: Uint8Array;
   expectedIrkPubKey?: Uint8Array | null;
@@ -69,7 +69,7 @@ function issueEnvelope(args: {
 }) {
   const f = {
     serverId: args.serverFqdn,
-    appId: args.appId,
+    serviceId: args.serviceId,
     role: args.role,
     opaqueTag: args.opaqueTag,
     expectedIrkPubKey: args.expectedIrkPubKey ?? null,
@@ -81,7 +81,7 @@ function issueEnvelope(args: {
   return {
     request: {
       serverId: f.serverId,
-      appId: f.appId,
+      serviceId: f.serviceId,
       role: f.role,
       opaqueTag: bytesToHex(f.opaqueTag),
       expectedIrkPubKey: f.expectedIrkPubKey ? bytesToHex(f.expectedIrkPubKey) : null,
@@ -99,14 +99,14 @@ function acceptEnvelope(args: {
   consumer: Keypair;
   acceptedAt: number;
 }) {
-  const acceptance: AppAccessAcceptance = {
+  const acceptance: ServiceAccessAcceptance = {
     inviteId: args.inviteId,
     secretHash: sha256Hex(args.secret),
     consumerIrkPubKey: args.consumer.publicKey,
     acceptedAt: args.acceptedAt,
     nonce: new Uint8Array([1, 2, 3, 4]),
   };
-  const sig = signAppAccessAcceptance(acceptance, args.consumer);
+  const sig = signServiceAccessAcceptance(acceptance, args.consumer);
   return {
     request: {
       inviteId: acceptance.inviteId,
@@ -141,7 +141,7 @@ describe("invite handler — issue → accept → revoke", () => {
         `/.flagship/app/${APP_ID}/invite`,
         issueEnvelope({
           serverFqdn: SERVER_FQDN,
-          appId: APP_ID,
+          serviceId: APP_ID,
           role: "reader",
           opaqueTag,
           contextNote: "John (work email)",
@@ -194,7 +194,7 @@ describe("invite handler — issue → accept → revoke", () => {
     // Authorized: access lookup via token returns the row.
     const accRow = await store.findAccessByToken(abody.sessionToken);
     expect(accRow).not.toBeNull();
-    expect(accRow!.appId).toBe(APP_ID);
+    expect(accRow!.serviceId).toBe(APP_ID);
     expect(accRow!.revokedAt).toBeNull();
   });
 
@@ -219,7 +219,7 @@ describe("invite handler — issue → accept → revoke", () => {
         `/.flagship/app/${APP_ID}/invite`,
         issueEnvelope({
           serverFqdn: SERVER_FQDN,
-          appId: APP_ID,
+          serviceId: APP_ID,
           role: "member",
           opaqueTag,
           expectedIrkPubKey: null,
@@ -266,7 +266,7 @@ describe("invite handler — issue → accept → revoke", () => {
         `/.flagship/app/${APP_ID}/invite`,
         issueEnvelope({
           serverFqdn: SERVER_FQDN,
-          appId: APP_ID,
+          serviceId: APP_ID,
           role: "reader",
           opaqueTag: new Uint8Array(16),
           expectedIrkPubKey: intended.publicKey,
@@ -329,7 +329,7 @@ describe("invite handler — issue → accept → revoke", () => {
         `/.flagship/app/${APP_ID}/invite`,
         issueEnvelope({
           serverFqdn: SERVER_FQDN,
-          appId: APP_ID,
+          serviceId: APP_ID,
           role: "reader",
           opaqueTag: new Uint8Array(16),
           issuedAt: Date.now(),
@@ -377,7 +377,7 @@ describe("invite handler — issue → accept → revoke", () => {
         `/.flagship/app/${APP_ID}/invite`,
         issueEnvelope({
           serverFqdn: SERVER_FQDN,
-          appId: APP_ID,
+          serviceId: APP_ID,
           role: "reader",
           opaqueTag: new Uint8Array(16),
           issuedAt: Date.now(),
@@ -400,7 +400,7 @@ describe("invite handler — issue → accept → revoke", () => {
     const consumerHex = bytesToHex(consumer.publicKey);
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       irkPubKey: consumer.publicKey,
       issuedAt: Date.now(),
     };
@@ -409,7 +409,7 @@ describe("invite handler — issue → accept → revoke", () => {
       makeReq("POST", `/.flagship/app/${APP_ID}/access/${consumerHex}/revoke`, {
         request: {
           serverId: fields.serverId,
-          appId: fields.appId,
+          serviceId: fields.serviceId,
           irkPubKey: bytesToHex(fields.irkPubKey),
           issuedAt: fields.issuedAt,
         },
@@ -432,7 +432,7 @@ describe("invite handler — issue → accept → revoke", () => {
     });
     const env = issueEnvelope({
       serverFqdn: "other.alice.flagship.services",
-      appId: APP_ID,
+      serviceId: APP_ID,
       role: "reader",
       opaqueTag: new Uint8Array(16),
       issuedAt: Date.now(),
@@ -454,7 +454,7 @@ describe("invite handler — issue → accept → revoke", () => {
     });
     const env = issueEnvelope({
       serverFqdn: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       role: "reader",
       opaqueTag: new Uint8Array(16),
       issuedAt: Date.now(),
@@ -534,7 +534,7 @@ describe("invite handler — issue → accept → revoke", () => {
     const psk = makeKey();
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       role: "admin",
       opaqueTag: new Uint8Array(16).fill(7),
       expectedIrkPubKey: null,
@@ -548,7 +548,7 @@ describe("invite handler — issue → accept → revoke", () => {
 
     const revF = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       irkPubKey: new Uint8Array(32).fill(3),
       issuedAt: 1234567890,
     };

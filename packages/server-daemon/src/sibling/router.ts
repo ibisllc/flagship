@@ -9,13 +9,13 @@
  *     plus refreshed periodically from .com /api/server/by-domain
  *     (production wires this; tests poke setSibling directly).
  *   - Per-app subscription channels — apps register a listener via
- *     `subscribe(appId, ...)` and receive every inbound app-message
- *     whose embedded `appId` matches their token-bound id.
+ *     `subscribe(serviceId, ...)` and receive every inbound app-message
+ *     whose embedded `serviceId` matches their token-bound id.
  *
- * Token isolation: the sibling-WS frame carries an `appId` field; on
+ * Token isolation: the sibling-WS frame carries an `serviceId` field; on
  * inbound, we route only to the matching subscription. Two apps on
  * the same pod cannot read each other's inbound traffic. The HTTP
- * layer (handlers.ts) similarly resolves the calling token's appId
+ * layer (handlers.ts) similarly resolves the calling token's serviceId
  * and uses it as the "fromAppId" on send + the subscribe key — apps
  * cannot impersonate each other on send either.
  *
@@ -48,7 +48,7 @@ export interface SiblingInfo {
 export interface SiblingTransport {
   /** Send a sibling-app-message frame to this peer. Throws on offline. */
   send(args: {
-    appId: string;
+    serviceId: string;
     fromSiblingId: string;
     toSiblingId: string;
     payloadHex: string;
@@ -84,7 +84,7 @@ export type SendResult =
  */
 export class InMemorySiblingRouter {
   private siblings = new Map<string, SiblingInfo & { transport: SiblingTransport | null }>();
-  /** appId → set of listeners. */
+  /** serviceId → set of listeners. */
   private subscribers = new Map<string, Set<AppMessageListener>>();
   private now: () => number;
 
@@ -125,7 +125,7 @@ export class InMemorySiblingRouter {
 
   /**
    * Send a sibling-app-message. The caller has already resolved the
-   * calling app's appId from FLAGSHIP_APP_TOKEN; the router does not
+   * calling app's serviceId from FLAGSHIP_APP_TOKEN; the router does not
    * cross-validate it — token resolution + scoping happens in the
    * HTTP handler, then this method is invoked with that scope.
    */
@@ -142,7 +142,7 @@ export class InMemorySiblingRouter {
     }
     try {
       await peer.transport.send({
-        appId: args.fromAppId,
+        serviceId: args.fromAppId,
         fromSiblingId: args.fromSiblingId,
         toSiblingId: args.toSiblingId,
         payloadHex: args.payloadHex,
@@ -154,38 +154,38 @@ export class InMemorySiblingRouter {
   }
 
   /**
-   * Register a listener for a specific appId. Returns an
-   * unsubscribe closure. Apps subscribe to their OWN appId (resolved
+   * Register a listener for a specific serviceId. Returns an
+   * unsubscribe closure. Apps subscribe to their OWN serviceId (resolved
    * from the token) — there is no cross-app subscribe.
    */
-  subscribe(appId: string, listener: AppMessageListener): () => void {
-    let set = this.subscribers.get(appId);
+  subscribe(serviceId: string, listener: AppMessageListener): () => void {
+    let set = this.subscribers.get(serviceId);
     if (!set) {
       set = new Set();
-      this.subscribers.set(appId, set);
+      this.subscribers.set(serviceId, set);
     }
     set.add(listener);
     return () => {
-      const cur = this.subscribers.get(appId);
+      const cur = this.subscribers.get(serviceId);
       if (!cur) return;
       cur.delete(listener);
-      if (cur.size === 0) this.subscribers.delete(appId);
+      if (cur.size === 0) this.subscribers.delete(serviceId);
     };
   }
 
   /**
    * Called by the connection layer when a sibling-app-message arrives.
-   * Routes to every subscriber for the embedded appId. If no subscribers,
+   * Routes to every subscriber for the embedded serviceId. If no subscribers,
    * the message is dropped silently — apps with no live subscription
    * have implicitly opted out (no buffering is harness territory; apps
    * that need at-least-once delivery handle that themselves).
    */
   ingestFromSibling(args: {
     fromSiblingId: string;
-    appId: string;
+    serviceId: string;
     payloadHex: string;
   }): void {
-    const cur = this.subscribers.get(args.appId);
+    const cur = this.subscribers.get(args.serviceId);
     if (!cur) return;
     const event: InboundEvent = {
       kind: "app-message",
@@ -198,7 +198,7 @@ export class InMemorySiblingRouter {
   /**
    * Pod-level event: the .services hub just told us a domain was
    * granted (FRAME 0x12). Broadcast to every subscriber on this pod
-   * regardless of appId — every app that cares can compare
+   * regardless of serviceId — every app that cares can compare
    * `ownerSiblingId` against its pod's canonical and react. Granted
    * events for the new owner are included; apps know if they're the
    * recipient.

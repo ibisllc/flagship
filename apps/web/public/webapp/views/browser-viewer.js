@@ -7,12 +7,12 @@
 // #32 — only reachable from views/app-detail.js's "Open browser viewer"
 // button (rendered when the manifest declares a browser bundle or the
 // app already has open tabs). The legacy home-grid entry point — which
-// fell back to a window.prompt() for the appId — is gone. Calling
-// enterBrowserViewer() without an appId now toasts an error and bails
+// fell back to a window.prompt() for the serviceId — is gone. Calling
+// enterBrowserViewer() without an serviceId now toasts an error and bails
 // instead of prompting.
 //
 // Lookup flow:
-//   1. app-detail invokes enterBrowserViewer(appId).
+//   1. app-detail invokes enterBrowserViewer(serviceId).
 //   2. We poll P1.10 for the app's tab list.
 //   3. User picks a tab → we open a WS to P1.11 and start streaming.
 
@@ -164,16 +164,16 @@ export function initBrowserViewerView() {
   });
 }
 
-export async function enterBrowserViewer(appId) {
+export async function enterBrowserViewer(serviceId) {
   closeSocket();
-  // #30 + #32 — appId must be provided by the caller (only reachable
+  // #30 + #32 — serviceId must be provided by the caller (only reachable
   // from app-detail.js for apps that declare a browser bundle). The
   // legacy window.prompt() fallback is gone.
-  if (!appId) {
+  if (!serviceId) {
     toast("open the browser viewer from an app's detail screen", "err");
     return;
   }
-  activeAppId = appId;
+  activeAppId = serviceId;
   activeTabId = null;
   $("bv-app-id").textContent = activeAppId;
   $("bv-frame").src = "";

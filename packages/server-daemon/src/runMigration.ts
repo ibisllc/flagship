@@ -1,7 +1,7 @@
 /**
  * Production runMigration dispatcher.
  *
- * The UpdateClient calls a daemon-injected `runMigration({appId, absPath,
+ * The UpdateClient calls a daemon-injected `runMigration({serviceId, absPath,
  * filename})` for every new file under `migrations/` between the puller's
  * current tip and the upstream tip. This module is the canonical
  * production implementation; the dispatch is by file extension:
@@ -27,18 +27,18 @@ import { promisify } from "node:util";
 import { extname } from "node:path";
 import type { AppDataCredentials } from "./dataLayer/index.js";
 import { credentialsToEnv } from "./dataLayer/index.js";
-import type { InstalledApp } from "./appPlatform.js";
+import type { InstalledService } from "./servicePlatform.js";
 
 const execFileP = promisify(execFile);
 
 export interface RunMigrationDeps {
   /**
-   * Look up the installed app by appId so we can pick up its data
+   * Look up the installed app by serviceId so we can pick up its data
    * credentials + reserved env. Returns null when the app isn't
    * installed (which shouldn't happen in practice — UpdateClient is
    * called by the scheduler for installed apps only).
    */
-  appByAppId: (appId: string) => InstalledApp | null;
+  serviceByServiceId: (serviceId: string) => InstalledService | null;
   /**
    * Override executors for tests. Each is called with the resolved
    * env so tests can assert what the migration would have seen
@@ -62,7 +62,7 @@ export interface RunMigrationDeps {
 }
 
 export function buildRunMigration(deps: RunMigrationDeps): (args: {
-  appId: string;
+  serviceId: string;
   absPath: string;
   filename: string;
 }) => Promise<void> {
@@ -71,14 +71,14 @@ export function buildRunMigration(deps: RunMigrationDeps): (args: {
   const tsx = deps.tsxBinary ?? "tsx";
 
   return async function runMigration(args: {
-    appId: string;
+    serviceId: string;
     absPath: string;
     filename: string;
   }): Promise<void> {
     const ext = extname(args.filename).toLowerCase();
-    const app = deps.appByAppId(args.appId);
+    const app = deps.serviceByServiceId(args.serviceId);
     if (!app) {
-      throw new Error(`unknown appId ${args.appId}`);
+      throw new Error(`unknown serviceId ${args.serviceId}`);
     }
 
     if (ext === ".sql") {
@@ -115,7 +115,7 @@ export function buildRunMigration(deps: RunMigrationDeps): (args: {
       const env: Record<string, string> = {
         ...filterParentEnv(),
         ...(app.data ? credentialsToEnv(app.data) : {}),
-        FLAGSHIP_APP_ID: app.appId,
+        FLAGSHIP_APP_ID: app.serviceId,
         FLAGSHIP_CREATOR: app.creator,
         FLAGSHIP_SLUG: app.slug,
         FLAGSHIP_MIGRATION_FILE: args.filename,

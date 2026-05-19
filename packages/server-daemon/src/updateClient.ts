@@ -41,7 +41,7 @@ export type UpdatePolicy = "auto" | "manual" | "frozen";
  * Per-app state persisted on disk by the daemon. Read on boot, written
  * after each successful pull / migration. The store is injected so we
  * don't dictate the on-disk layout (production: per-app JSON file under
- * `/var/flagship/data/app-state/<appId>.json`).
+ * `/var/flagship/data/app-state/<serviceId>.json`).
  */
 export interface AppPullState {
   canonicalUrl: string;
@@ -94,18 +94,18 @@ export interface LineagePauseInfo {
 }
 
 export interface AppPullStateStore {
-  get(appId: string): Promise<AppPullState | null>;
-  put(appId: string, state: AppPullState): Promise<void>;
+  get(serviceId: string): Promise<AppPullState | null>;
+  put(serviceId: string, state: AppPullState): Promise<void>;
   /** List all appIds with persisted pull state (for the scheduler). */
   list?(): Promise<string[]>;
   /** Drop the entry — called on uninstall. Idempotent. */
-  delete?(appId: string): Promise<void>;
+  delete?(serviceId: string): Promise<void>;
 }
 
 export type PhoneUpdateAlert =
   | {
       kind: "lineage-break";
-      appId: string;
+      serviceId: string;
       canonicalUrl: string;
       lineageAnchor: string;
       upstreamTip: string;
@@ -123,13 +123,13 @@ export type PhoneUpdateAlert =
     }
   | {
       kind: "manual-pending";
-      appId: string;
+      serviceId: string;
       fromCommit: string;
       toCommit: string;
     }
   | {
       kind: "migration-failed";
-      appId: string;
+      serviceId: string;
       migrationFile: string;
       reason: string;
     };
@@ -162,10 +162,10 @@ export interface UpdateClientDeps {
   state: AppPullStateStore;
   /**
    * Absolute path to the per-app working-tree clone, e.g.
-   * `/var/flagship/data/app-clones/<appId>/`. Container's bind-mount
+   * `/var/flagship/data/app-clones/<serviceId>/`. Container's bind-mount
    * source. Created on first install.
    */
-  appWorkingDir: (appId: string) => string;
+  appWorkingDir: (serviceId: string) => string;
   /**
    * HTTP client. Defaults to global fetch; override in tests.
    * The body returned must allow `arrayBuffer()`.
@@ -177,12 +177,12 @@ export interface UpdateClientDeps {
    * Throws on failure.
    */
   runMigration: (args: {
-    appId: string;
+    serviceId: string;
     absPath: string;
     filename: string;
   }) => Promise<void>;
   /** Restart the running container after migrations succeed. */
-  restartContainer: (appId: string) => Promise<void>;
+  restartContainer: (serviceId: string) => Promise<void>;
   /**
    * Surface an event to the phone (e.g. via the orders/state queue).
    * Synchronous — the phone alert mechanism is fire-and-forget.
@@ -239,8 +239,8 @@ export class UpdateClient {
    * branch but does not advance the working tree; emits a phone alert.
    * If `auto`, advances + runs migrations + restarts.
    */
-  async pullOne(args: { appId: string }): Promise<PullResult> {
-    const state = await this.deps.state.get(args.appId);
+  async pullOne(args: { serviceId: string }): Promise<PullResult> {
+    const state = await this.deps.state.get(args.serviceId);
     if (!state) {
       return { kind: "no-op", reason: "no-canonical-state" };
     }
@@ -256,12 +256,12 @@ export class UpdateClient {
       return { kind: "no-op", reason: "lineage-paused" };
     }
 
-    const workDir = this.deps.appWorkingDir(args.appId);
+    const workDir = this.deps.appWorkingDir(args.serviceId);
     if (!existsSync(workDir)) {
       return { kind: "error", reason: `working dir ${workDir} missing` };
     }
 
-    const [creator, slug] = parseAppId(args.appId);
+    const [creator, slug] = parseServiceId(args.serviceId);
 
     // Build, sign, send the pull envelope.
     const pull: UpdatePullRequest = {
@@ -346,7 +346,7 @@ export class UpdateClient {
         // Durably pause the app + persist the break context so a daemon
         // restart doesn't silently retry. The current installed version
         // keeps running until the phone resolves.
-        const [creator, slug] = parseAppId(args.appId);
+        const [creator, slug] = parseServiceId(args.serviceId);
         const info: LineagePauseInfo = {
           detectedAt: this.now(),
           creator,
@@ -363,10 +363,10 @@ export class UpdateClient {
           lineagePaused: true,
           lineagePauseInfo: info,
         };
-        await this.deps.state.put(args.appId, paused);
+        await this.deps.state.put(args.serviceId, paused);
         const alert: PhoneUpdateAlert = {
           kind: "lineage-break",
-          appId: args.appId,
+          serviceId: args.serviceId,
           canonicalUrl: state.canonicalUrl,
           lineageAnchor: state.lineageAnchor,
           upstreamTip,
@@ -390,10 +390,10 @@ export class UpdateClient {
         // Stage but don't merge. Record the pending tip; the phone-side
         // approval flow will call `applyPending` to commit.
         const next: AppPullState = { ...state, pendingPullCommit: upstreamTip };
-        await this.deps.state.put(args.appId, next);
+        await this.deps.state.put(args.serviceId, next);
         const alert: PhoneUpdateAlert = {
           kind: "manual-pending",
-          appId: args.appId,
+          serviceId: args.serviceId,
           fromCommit: state.currentTip,
           toCommit: upstreamTip,
         };
@@ -403,7 +403,7 @@ export class UpdateClient {
 
       // Auto: advance the working tree, then run any new migrations.
       return await this.advanceAndMigrate({
-        appId: args.appId,
+        serviceId: args.serviceId,
         workDir,
         state,
         toCommit: upstreamTip,
@@ -425,8 +425,8 @@ export class UpdateClient {
    *
    * Idempotent: calling on a non-paused app is `outcome: already-clear`.
    */
-  async acceptLineageBreak(args: { appId: string }): Promise<LineageResolveResult> {
-    const state = await this.deps.state.get(args.appId);
+  async acceptLineageBreak(args: { serviceId: string }): Promise<LineageResolveResult> {
+    const state = await this.deps.state.get(args.serviceId);
     if (!state) return { ok: false, reason: "no state" };
     if (!state.lineagePaused || !state.lineagePauseInfo) {
       return { ok: true, outcome: "already-clear" };
@@ -437,7 +437,7 @@ export class UpdateClient {
       lineagePaused: false,
       lineagePauseInfo: undefined,
     };
-    await this.deps.state.put(args.appId, next);
+    await this.deps.state.put(args.serviceId, next);
     return { ok: true, outcome: "accepted" };
   }
 
@@ -446,8 +446,8 @@ export class UpdateClient {
    * endpoint to surface "what's the current state?" before the phone
    * decides accept-or-revoke. Returns null if not paused.
    */
-  async lineagePauseInfo(args: { appId: string }): Promise<LineagePauseInfo | null> {
-    const state = await this.deps.state.get(args.appId);
+  async lineagePauseInfo(args: { serviceId: string }): Promise<LineagePauseInfo | null> {
+    const state = await this.deps.state.get(args.serviceId);
     if (!state?.lineagePaused || !state.lineagePauseInfo) return null;
     return { ...state.lineagePauseInfo };
   }
@@ -455,11 +455,11 @@ export class UpdateClient {
   /**
    * Phone-approved completion of a manual pull. Idempotent.
    */
-  async applyPending(args: { appId: string }): Promise<PullResult> {
-    const state = await this.deps.state.get(args.appId);
+  async applyPending(args: { serviceId: string }): Promise<PullResult> {
+    const state = await this.deps.state.get(args.serviceId);
     if (!state) return { kind: "error", reason: "no state" };
     if (!state.pendingPullCommit) return { kind: "no-op", reason: "already-current" };
-    const workDir = this.deps.appWorkingDir(args.appId);
+    const workDir = this.deps.appWorkingDir(args.serviceId);
     if (this.deps.releaseGate) {
       try {
         this.deps.releaseGate.assertCommitEndorsed(state.pendingPullCommit);
@@ -472,7 +472,7 @@ export class UpdateClient {
       }
     }
     return await this.advanceAndMigrate({
-      appId: args.appId,
+      serviceId: args.serviceId,
       workDir,
       state,
       toCommit: state.pendingPullCommit,
@@ -480,12 +480,12 @@ export class UpdateClient {
   }
 
   private async advanceAndMigrate(args: {
-    appId: string;
+    serviceId: string;
     workDir: string;
     state: AppPullState;
     toCommit: string;
   }): Promise<PullResult> {
-    const { workDir, state, toCommit, appId } = args;
+    const { workDir, state, toCommit, serviceId } = args;
     // Discover migrations to apply: any file under migrations/ in the
     // upstream tree whose name (lex-sorted) is greater than
     // state.lastAppliedMigration. We read the migration list from the
@@ -512,13 +512,13 @@ export class UpdateClient {
     for (const m of migrationsToRun) {
       const absPath = join(workDir, "migrations", m);
       try {
-        await this.deps.runMigration({ appId, absPath, filename: m });
+        await this.deps.runMigration({ serviceId, absPath, filename: m });
       } catch (e) {
         const reason = (e as Error).message;
         // Halt; don't restart container; surface to phone.
         this.deps.emitPhoneAlert({
           kind: "migration-failed",
-          appId,
+          serviceId,
           migrationFile: m,
           reason,
         });
@@ -534,8 +534,8 @@ export class UpdateClient {
       lastAppliedMigration: last,
       pendingPullCommit: undefined,
     };
-    await this.deps.state.put(appId, next);
-    await this.deps.restartContainer(appId);
+    await this.deps.state.put(serviceId, next);
+    await this.deps.restartContainer(serviceId);
     return {
       kind: "applied",
       from: state.currentTip,
@@ -599,13 +599,13 @@ export class UpdateClient {
 export class FileAppPullStateStore implements AppPullStateStore {
   constructor(private readonly dir: string) {}
 
-  private path(appId: string): string {
-    return join(this.dir, `${appId}.json`);
+  private path(serviceId: string): string {
+    return join(this.dir, `${serviceId}.json`);
   }
 
-  async get(appId: string): Promise<AppPullState | null> {
+  async get(serviceId: string): Promise<AppPullState | null> {
     try {
-      const buf = await readFile(this.path(appId), "utf8");
+      const buf = await readFile(this.path(serviceId), "utf8");
       return JSON.parse(buf) as AppPullState;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -613,13 +613,13 @@ export class FileAppPullStateStore implements AppPullStateStore {
     }
   }
 
-  async put(appId: string, state: AppPullState): Promise<void> {
+  async put(serviceId: string, state: AppPullState): Promise<void> {
     if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const tmp = `${this.path(appId)}.tmp`;
+    const tmp = `${this.path(serviceId)}.tmp`;
     await writeFile(tmp, JSON.stringify(state, null, 2));
     // atomic replace
     const { rename } = await import("node:fs/promises");
-    await rename(tmp, this.path(appId));
+    await rename(tmp, this.path(serviceId));
   }
 
   async list(): Promise<string[]> {
@@ -629,33 +629,33 @@ export class FileAppPullStateStore implements AppPullStateStore {
       .map((f) => f.slice(0, -".json".length));
   }
 
-  async delete(appId: string): Promise<void> {
-    await rm(this.path(appId), { force: true });
+  async delete(serviceId: string): Promise<void> {
+    await rm(this.path(serviceId), { force: true });
   }
 }
 
 /**
  * In-memory store for tests and ephemeral test daemons. Production uses
  * `FileAppPullStateStore`. Implements `list` + `delete` so the scheduler
- * + AppPlatform.uninstall can find/clean entries.
+ * + ServicePlatform.uninstall can find/clean entries.
  */
 export class InMemoryAppPullStateStore implements AppPullStateStore {
   private readonly byApp = new Map<string, AppPullState>();
 
-  async get(appId: string): Promise<AppPullState | null> {
-    return this.byApp.get(appId) ?? null;
+  async get(serviceId: string): Promise<AppPullState | null> {
+    return this.byApp.get(serviceId) ?? null;
   }
 
-  async put(appId: string, state: AppPullState): Promise<void> {
-    this.byApp.set(appId, state);
+  async put(serviceId: string, state: AppPullState): Promise<void> {
+    this.byApp.set(serviceId, state);
   }
 
   async list(): Promise<string[]> {
     return [...this.byApp.keys()];
   }
 
-  async delete(appId: string): Promise<void> {
-    this.byApp.delete(appId);
+  async delete(serviceId: string): Promise<void> {
+    this.byApp.delete(serviceId);
   }
 }
 
@@ -667,14 +667,14 @@ function bytesToHex(b: Bytes): string {
   return s;
 }
 
-function parseAppId(appId: string): [string, string] {
+function parseServiceId(serviceId: string): [string, string] {
   // `<creator>-<slug>`, single dash. Split at the FIRST hyphen
   // (creator is hyphen-free, so the first '-' is the boundary).
-  const i = appId.indexOf("-");
-  if (i <= 0 || i >= appId.length - 1) {
-    throw new Error(`appId ${appId} is not in <creator>-<slug> form`);
+  const i = serviceId.indexOf("-");
+  if (i <= 0 || i >= serviceId.length - 1) {
+    throw new Error(`serviceId ${serviceId} is not in <creator>-<slug> form`);
   }
-  return [appId.slice(0, i), appId.slice(i + 1)];
+  return [serviceId.slice(0, i), serviceId.slice(i + 1)];
 }
 
 // Used in tests; export so they can scan migrations directly.

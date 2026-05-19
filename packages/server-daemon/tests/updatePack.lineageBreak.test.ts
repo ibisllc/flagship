@@ -227,7 +227,7 @@ describe("UpdateClient — lineage-break auto-pause + resolve", () => {
       updatePolicy: "auto",
     });
     const client = makeClient(store, () => makeBundle(divergent, "main"));
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res.kind).toBe("halted-lineage-break");
     if (res.kind === "halted-lineage-break") {
       expect(res.reason).toBe("anchor-unreachable");
@@ -277,7 +277,7 @@ describe("UpdateClient — lineage-break auto-pause + resolve", () => {
       updatePolicy: "auto",
     });
     const client1 = makeClient(storeBefore, () => makeBundle(divergent, "main"));
-    await client1.pullOne({ appId: APP_ID });
+    await client1.pullOne({ serviceId: APP_ID });
 
     // Simulate daemon restart: a fresh store instance reading the same dir.
     const storeAfter = new FileAppPullStateStore(stateDir);
@@ -302,7 +302,7 @@ describe("UpdateClient — lineage-break auto-pause + resolve", () => {
       },
       emitPhoneAlert: (a) => alerts.push(a),
     });
-    const res = await client2.pullOne({ appId: APP_ID });
+    const res = await client2.pullOne({ serviceId: APP_ID });
     expect(res).toEqual({ kind: "no-op", reason: "lineage-paused" });
     // Critically — no HTTP fetch was attempted while paused.
     expect(postRestartFetchCount).toBe(0);
@@ -324,13 +324,13 @@ describe("UpdateClient — lineage-break auto-pause + resolve", () => {
       updatePolicy: "auto",
     });
     const client = makeClient(store, () => makeBundle(divergent, "main"));
-    await client.pullOne({ appId: APP_ID });
+    await client.pullOne({ serviceId: APP_ID });
 
     // Sanity: paused.
     expect((await store.get(APP_ID))?.lineagePaused).toBe(true);
 
     // Phone taps accept.
-    const r = await client.acceptLineageBreak({ appId: APP_ID });
+    const r = await client.acceptLineageBreak({ serviceId: APP_ID });
     expect(r).toEqual({ ok: true, outcome: "accepted" });
 
     const after = await store.get(APP_ID);
@@ -339,7 +339,7 @@ describe("UpdateClient — lineage-break auto-pause + resolve", () => {
     expect(after?.lineageAnchor).toBe(divergentSecond);
 
     // Accept on an already-clear app is idempotent.
-    const r2 = await client.acceptLineageBreak({ appId: APP_ID });
+    const r2 = await client.acceptLineageBreak({ serviceId: APP_ID });
     expect(r2).toEqual({ ok: true, outcome: "already-clear" });
     await rm(divergent, { recursive: true, force: true });
   });
@@ -362,14 +362,14 @@ describe("UpdateClient — lineage-break auto-pause + resolve", () => {
     const client = makeClient(store, () => makeBundle(divergent, "main"));
 
     // Initial pull halts.
-    const first = await client.pullOne({ appId: APP_ID });
+    const first = await client.pullOne({ serviceId: APP_ID });
     expect(first.kind).toBe("halted-lineage-break");
     const alertsAfterFirst = alerts.length;
 
     // Subsequent ticks: all no-ops, no new alerts, no working-tree
     // movement, no restart.
     for (let i = 0; i < 5; i++) {
-      const r = await client.pullOne({ appId: APP_ID });
+      const r = await client.pullOne({ serviceId: APP_ID });
       expect(r).toEqual({ kind: "no-op", reason: "lineage-paused" });
     }
     expect(alerts.length).toBe(alertsAfterFirst);
@@ -395,9 +395,9 @@ describe("UpdateClient — lineage-break auto-pause + resolve", () => {
       updatePolicy: "auto",
     });
     const client = makeClient(store, () => makeBundle(divergent, "main"));
-    expect(await client.lineagePauseInfo({ appId: APP_ID })).toBeNull();
-    await client.pullOne({ appId: APP_ID });
-    const info = await client.lineagePauseInfo({ appId: APP_ID });
+    expect(await client.lineagePauseInfo({ serviceId: APP_ID })).toBeNull();
+    await client.pullOne({ serviceId: APP_ID });
+    const info = await client.lineagePauseInfo({ serviceId: APP_ID });
     expect(info?.reason).toBe("anchor-unreachable");
     expect(info?.creator).toBe("alice");
     expect(info?.detectedAt).toBe(1_700_000_000_000);
@@ -460,7 +460,7 @@ describe("LineageResolverAdapter — list + accept + revoke wiring", () => {
       restartContainer: async () => {},
       emitPhoneAlert: () => {},
     });
-    await client.pullOne({ appId: APP_ID });
+    await client.pullOne({ serviceId: APP_ID });
     await rm(divergent, { recursive: true, force: true });
     return { store, client, upstreamTip };
   }
@@ -475,7 +475,7 @@ describe("LineageResolverAdapter — list + accept + revoke wiring", () => {
     const list = await adapter.list();
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({
-      appId: APP_ID,
+      serviceId: APP_ID,
       creator: "alice",
       slug: "game1",
       canonicalUrl: "game1.alice.flagship.services",
@@ -503,8 +503,8 @@ describe("LineageResolverAdapter — list + accept + revoke wiring", () => {
     const adapter = buildLineageResolverAdapter({
       store,
       client,
-      uninstall: async (appId) => {
-        calls.push(appId);
+      uninstall: async (serviceId) => {
+        calls.push(serviceId);
         return { ok: true };
       },
     });

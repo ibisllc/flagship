@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ed,
-  signAppGrant,
-  type AppGrant,
+  signServiceGrant,
+  type ServiceGrant,
   type Bytes,
   type Keypair,
 } from "@flagship/protocol";
@@ -28,7 +28,7 @@ const PEER_B = "travel.alice.flagship.services";
 
 function makeGrant(opts: {
   irk: Keypair;
-  appCanonical?: string;
+  serviceCanonical?: string;
   pods: Array<{ canonical: string; pubKey: Bytes }>;
   routes?: Array<{ url: string; scope: "canonical" | "non-canonical" | "subpath" }>;
   issuedAt?: number;
@@ -36,10 +36,10 @@ function makeGrant(opts: {
 }): AppGrantEntry {
   const issuedAt = opts.issuedAt ?? 1_000_000;
   const expiresAt = opts.expiresAt ?? issuedAt + 7 * 24 * 3600_000;
-  const grant: AppGrant = {
+  const grant: ServiceGrant = {
     grantId: "00000000-0000-4000-8000-000000000001",
     username: "alice",
-    appCanonical: opts.appCanonical ?? "notes@abc123def456",
+    serviceCanonical: opts.serviceCanonical ?? "notes@abc123def456",
     serverDomains: opts.pods.map((p) => p.canonical),
     serverIdentities: opts.pods.map((p) => p.pubKey),
     routes: opts.routes ?? [
@@ -48,13 +48,13 @@ function makeGrant(opts: {
     issuedAt,
     expiresAt,
   };
-  return { grant, signature: signAppGrant(grant, opts.irk) };
+  return { grant, signature: signServiceGrant(grant, opts.irk) };
 }
 
 class FakeFabric implements SiblingFabric {
   reachable: string[] = [];
-  sent: Array<{ podCanonical: string; appId: string; message: Uint8Array }> = [];
-  channels: Array<{ podCanonical: string; appId: string; ch: FakeChannel }> = [];
+  sent: Array<{ podCanonical: string; serviceId: string; message: Uint8Array }> = [];
+  channels: Array<{ podCanonical: string; serviceId: string; ch: FakeChannel }> = [];
   subs = new Map<
     string,
     (msg: { fromPod: string; message: Uint8Array }) => void
@@ -66,7 +66,7 @@ class FakeFabric implements SiblingFabric {
   }
   async openChannel(args: {
     podCanonical: string;
-    appId: string;
+    serviceId: string;
   }): Promise<MultipodChannel> {
     const ch = new FakeChannel();
     this.channels.push({ ...args, ch });
@@ -74,7 +74,7 @@ class FakeFabric implements SiblingFabric {
   }
   async sendOnce(args: {
     podCanonical: string;
-    appId: string;
+    serviceId: string;
     message: Uint8Array;
   }): Promise<void> {
     if (this.failNextSend) {
@@ -84,14 +84,14 @@ class FakeFabric implements SiblingFabric {
     this.sent.push(args);
   }
   subscribe(
-    appId: string,
+    serviceId: string,
     cb: (msg: { fromPod: string; message: Uint8Array }) => void,
   ): () => void {
-    this.subs.set(appId, cb);
-    return () => this.subs.delete(appId);
+    this.subs.set(serviceId, cb);
+    return () => this.subs.delete(serviceId);
   }
-  deliver(appId: string, fromPod: string, message: Uint8Array): void {
-    const cb = this.subs.get(appId);
+  deliver(serviceId: string, fromPod: string, message: Uint8Array): void {
+    const cb = this.subs.get(serviceId);
     if (cb) cb({ fromPod, message });
   }
 }
@@ -135,7 +135,7 @@ interface Setup {
   fabric: FakeFabric;
   alerts: Array<{
     kind: "needs-url-approval";
-    appId: string;
+    serviceId: string;
     requestedUrl: string;
   }>;
   claimed: string[];
@@ -267,7 +267,7 @@ describe("MultipodHarness", () => {
     await h.sendToSibling(PEER, "notes", new Uint8Array([1, 2, 3]));
     expect(s.fabric.sent).toHaveLength(1);
     expect(s.fabric.sent[0]!.podCanonical).toBe(PEER);
-    expect(s.fabric.sent[0]!.appId).toBe("notes");
+    expect(s.fabric.sent[0]!.serviceId).toBe("notes");
     expect([...s.fabric.sent[0]!.message]).toEqual([1, 2, 3]);
   });
 
@@ -370,7 +370,7 @@ describe("MultipodHarness", () => {
     expect(r).toEqual({ ok: false, reason: "needs-user-approval" });
     expect(s.claimed).toEqual([]);
     expect(s.alerts).toEqual([
-      { kind: "needs-url-approval", appId: "notes", requestedUrl: "totally-other.com" },
+      { kind: "needs-url-approval", serviceId: "notes", requestedUrl: "totally-other.com" },
     ]);
   });
 

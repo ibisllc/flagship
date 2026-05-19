@@ -14,18 +14,18 @@ import {
   type Frame,
 } from "@flagship/tunnel-protocol";
 import {
-  appEntitlementCertId,
-  appGrantActiveAt,
-  appGrantAuthorizesPod,
-  appGrantId,
+  serviceEntitlementCertId,
+  serviceGrantActiveAt,
+  serviceGrantAuthorizesPod,
+  serviceGrantId,
   rootEntitlementCertId,
-  verifyAppEntitlement,
-  verifyAppGrant,
+  verifyServiceEntitlement,
+  verifyServiceGrant,
   verifyRootEntitlement,
   verifyTunnelHelloV2,
-  type AppEntitlement,
-  type AppGrant,
-  type AppGrantRoute,
+  type ServiceEntitlement,
+  type ServiceGrant,
+  type ServiceGrantRoute,
   type Bytes,
   type RootEntitlement,
   type TunnelHelloV2,
@@ -217,8 +217,8 @@ function attachTunnel(
       // raw helloOk.appGrants so an unverified grant can never
       // contribute a host to the allowlist.
       const canonicals: string[] = [helloOk.rootEntitlement.podCanonical];
-      if (helloOk.appEntitlement) {
-        for (const c of helloOk.appEntitlement.canonicals) canonicals.push(c);
+      if (helloOk.serviceEntitlement) {
+        for (const c of helloOk.serviceEntitlement.canonicals) canonicals.push(c);
       }
       for (const host of appGrantHosts(auth.validatedGrants)) canonicals.push(host);
       const tunnel: RegisteredTunnel = {
@@ -266,8 +266,8 @@ function attachTunnel(
         return;
       }
       const canonicals: string[] = [helloOk.rootEntitlement.podCanonical];
-      if (helloOk.appEntitlement) {
-        for (const c of helloOk.appEntitlement.canonicals) canonicals.push(c);
+      if (helloOk.serviceEntitlement) {
+        for (const c of helloOk.serviceEntitlement.canonicals) canonicals.push(c);
       }
       for (const host of appGrantHosts(auth.validatedGrants)) canonicals.push(host);
       const reg = registry.register({ tunnel: registered, canonicals });
@@ -315,9 +315,9 @@ interface ParsedHelloV2 {
   rootEntitlement: RootEntitlement;
   rootEntitlementSig: Bytes;
   rootEntitlementCertId: string;
-  appEntitlement: AppEntitlement | null;
-  appEntitlementSig: Bytes | null;
-  appEntitlementCertId: string;
+  serviceEntitlement: ServiceEntitlement | null;
+  serviceEntitlementSig: Bytes | null;
+  serviceEntitlementCertId: string;
   nonce: Bytes;
   issuedAt: number;
   signature: Bytes;
@@ -332,7 +332,7 @@ interface ParsedHelloV2 {
 }
 
 interface ParsedAppGrant {
-  grant: AppGrant;
+  grant: ServiceGrant;
   signature: Bytes;
   /** SHA-256 hex of the grant's canonical bytes. */
   grantIdHash: string;
@@ -374,27 +374,27 @@ function parseHello(payload: Uint8Array): HelloParse {
   const re = parseRootEntitlement(o.rootEntitlement);
   if (!re.ok) return { ok: false, reason: re.reason };
 
-  let app: AppEntitlement | null = null;
+  let app: ServiceEntitlement | null = null;
   let appSig: Bytes | null = null;
   let appCertId = "";
-  if (o.appEntitlement !== undefined && o.appEntitlement !== null) {
-    if (typeof o.appEntitlement !== "object") {
-      return { ok: false, reason: "HELLO.appEntitlement not an object" };
+  if (o.serviceEntitlement !== undefined && o.serviceEntitlement !== null) {
+    if (typeof o.serviceEntitlement !== "object") {
+      return { ok: false, reason: "HELLO.serviceEntitlement not an object" };
     }
-    if (typeof o.appEntitlementSig !== "string" || !/^[0-9a-f]{128}$/.test(o.appEntitlementSig)) {
-      return { ok: false, reason: "HELLO.appEntitlementSig must be 64-byte hex" };
+    if (typeof o.serviceEntitlementSig !== "string" || !/^[0-9a-f]{128}$/.test(o.serviceEntitlementSig)) {
+      return { ok: false, reason: "HELLO.serviceEntitlementSig must be 64-byte hex" };
     }
-    if (typeof o.appEntitlementCertId !== "string" || !/^[0-9a-f]{64}$/.test(o.appEntitlementCertId)) {
-      return { ok: false, reason: "HELLO.appEntitlementCertId must be 32-byte hex" };
+    if (typeof o.serviceEntitlementCertId !== "string" || !/^[0-9a-f]{64}$/.test(o.serviceEntitlementCertId)) {
+      return { ok: false, reason: "HELLO.serviceEntitlementCertId must be 32-byte hex" };
     }
-    const ae = parseAppEntitlement(o.appEntitlement);
+    const ae = parseServiceEntitlement(o.serviceEntitlement);
     if (!ae.ok) return { ok: false, reason: ae.reason };
     app = ae.value;
-    appSig = hexToBytes(o.appEntitlementSig);
-    appCertId = o.appEntitlementCertId;
+    appSig = hexToBytes(o.serviceEntitlementSig);
+    appCertId = o.serviceEntitlementCertId;
   }
 
-  // #6 — optional AppGrant list. Each entry: { grant, signatureHex }.
+  // #6 — optional ServiceGrant list. Each entry: { grant, signatureHex }.
   const appGrants: ParsedAppGrant[] = [];
   if (o.appGrants !== undefined) {
     if (!Array.isArray(o.appGrants)) {
@@ -429,9 +429,9 @@ function parseHello(payload: Uint8Array): HelloParse {
     rootEntitlement: re.value,
     rootEntitlementSig: hexToBytes(o.rootEntitlementSig),
     rootEntitlementCertId: o.rootEntitlementCertId,
-    appEntitlement: app,
-    appEntitlementSig: appSig,
-    appEntitlementCertId: appCertId,
+    serviceEntitlement: app,
+    serviceEntitlementSig: appSig,
+    serviceEntitlementCertId: appCertId,
     nonce: hexToBytes(o.nonce),
     issuedAt: o.issuedAt,
     signature: hexToBytes(o.signature),
@@ -440,54 +440,54 @@ function parseHello(payload: Uint8Array): HelloParse {
 }
 
 /**
- * Inflate a wire AppGrant (with `serverIdentitiesHex`) into the
+ * Inflate a wire ServiceGrant (with `serverIdentitiesHex`) into the
  * in-memory shape (with `serverIdentities: Bytes[]`). Validates basic
  * field shapes; signature verification is the caller's job.
  */
 function inflateAppGrantWire(
   o: Record<string, unknown>,
-): { ok: true; value: AppGrant } | { ok: false; reason: string } {
-  if (typeof o.grantId !== "string") return { ok: false, reason: "AppGrant.grantId missing" };
-  if (typeof o.username !== "string") return { ok: false, reason: "AppGrant.username missing" };
-  if (typeof o.appCanonical !== "string") return { ok: false, reason: "AppGrant.appCanonical missing" };
-  if (!Array.isArray(o.serverDomains)) return { ok: false, reason: "AppGrant.serverDomains must be an array" };
-  if (!Array.isArray(o.serverIdentitiesHex)) return { ok: false, reason: "AppGrant.serverIdentitiesHex must be an array" };
-  if (!Array.isArray(o.routes)) return { ok: false, reason: "AppGrant.routes must be an array" };
-  if (typeof o.issuedAt !== "number") return { ok: false, reason: "AppGrant.issuedAt must be a number" };
-  if (typeof o.expiresAt !== "number") return { ok: false, reason: "AppGrant.expiresAt must be a number" };
+): { ok: true; value: ServiceGrant } | { ok: false; reason: string } {
+  if (typeof o.grantId !== "string") return { ok: false, reason: "ServiceGrant.grantId missing" };
+  if (typeof o.username !== "string") return { ok: false, reason: "ServiceGrant.username missing" };
+  if (typeof o.serviceCanonical !== "string") return { ok: false, reason: "ServiceGrant.serviceCanonical missing" };
+  if (!Array.isArray(o.serverDomains)) return { ok: false, reason: "ServiceGrant.serverDomains must be an array" };
+  if (!Array.isArray(o.serverIdentitiesHex)) return { ok: false, reason: "ServiceGrant.serverIdentitiesHex must be an array" };
+  if (!Array.isArray(o.routes)) return { ok: false, reason: "ServiceGrant.routes must be an array" };
+  if (typeof o.issuedAt !== "number") return { ok: false, reason: "ServiceGrant.issuedAt must be a number" };
+  if (typeof o.expiresAt !== "number") return { ok: false, reason: "ServiceGrant.expiresAt must be a number" };
   for (const d of o.serverDomains) {
-    if (typeof d !== "string") return { ok: false, reason: "AppGrant.serverDomains must be strings" };
+    if (typeof d !== "string") return { ok: false, reason: "ServiceGrant.serverDomains must be strings" };
   }
   const serverIdentities: Bytes[] = [];
   for (const h of o.serverIdentitiesHex) {
     if (typeof h !== "string" || !/^[0-9a-f]{64}$/.test(h)) {
-      return { ok: false, reason: "AppGrant.serverIdentitiesHex must be 32-byte hex" };
+      return { ok: false, reason: "ServiceGrant.serverIdentitiesHex must be 32-byte hex" };
     }
     serverIdentities.push(hexToBytes(h));
   }
-  const routes: AppGrantRoute[] = [];
+  const routes: ServiceGrantRoute[] = [];
   for (const r of o.routes) {
     if (typeof r !== "object" || r === null) {
-      return { ok: false, reason: "AppGrant.route not object" };
+      return { ok: false, reason: "ServiceGrant.route not object" };
     }
     const rr = r as Record<string, unknown>;
-    if (typeof rr.url !== "string") return { ok: false, reason: "AppGrant.route.url missing" };
+    if (typeof rr.url !== "string") return { ok: false, reason: "ServiceGrant.route.url missing" };
     if (rr.scope !== "canonical" && rr.scope !== "non-canonical" && rr.scope !== "subpath") {
-      return { ok: false, reason: "AppGrant.route.scope invalid" };
+      return { ok: false, reason: "ServiceGrant.route.scope invalid" };
     }
     routes.push({ url: rr.url, scope: rr.scope });
   }
-  const out: AppGrant = {
+  const out: ServiceGrant = {
     grantId: o.grantId,
     username: o.username,
-    appCanonical: o.appCanonical,
+    serviceCanonical: o.serviceCanonical,
     serverDomains: o.serverDomains as string[],
     serverIdentities,
     routes,
     issuedAt: o.issuedAt,
     expiresAt: o.expiresAt,
   };
-  if (typeof o.appInstanceId === "string") out.appInstanceId = o.appInstanceId;
+  if (typeof o.serviceInstanceId === "string") out.serviceInstanceId = o.serviceInstanceId;
   return { ok: true, value: out };
 }
 
@@ -511,19 +511,19 @@ function parseRootEntitlement(o: unknown): { ok: true; value: RootEntitlement } 
   };
 }
 
-function parseAppEntitlement(o: unknown): { ok: true; value: AppEntitlement } | { ok: false; reason: string } {
-  if (typeof o !== "object" || o === null) return { ok: false, reason: "appEntitlement not object" };
+function parseServiceEntitlement(o: unknown): { ok: true; value: ServiceEntitlement } | { ok: false; reason: string } {
+  if (typeof o !== "object" || o === null) return { ok: false, reason: "serviceEntitlement not object" };
   const r = o as Record<string, unknown>;
-  if (typeof r.username !== "string") return { ok: false, reason: "appEntitlement.username missing" };
+  if (typeof r.username !== "string") return { ok: false, reason: "serviceEntitlement.username missing" };
   if (typeof r.podPubKey !== "string" || !/^[0-9a-f]{64}$/.test(r.podPubKey)) {
-    return { ok: false, reason: "appEntitlement.podPubKey must be 32-byte hex" };
+    return { ok: false, reason: "serviceEntitlement.podPubKey must be 32-byte hex" };
   }
-  if (!Array.isArray(r.canonicals)) return { ok: false, reason: "appEntitlement.canonicals must be an array" };
+  if (!Array.isArray(r.canonicals)) return { ok: false, reason: "serviceEntitlement.canonicals must be an array" };
   for (const c of r.canonicals) {
-    if (typeof c !== "string" || !c) return { ok: false, reason: "appEntitlement.canonicals contains a non-string" };
+    if (typeof c !== "string" || !c) return { ok: false, reason: "serviceEntitlement.canonicals contains a non-string" };
   }
-  if (typeof r.issuedAt !== "number") return { ok: false, reason: "appEntitlement.issuedAt must be a number" };
-  if (typeof r.expiresAt !== "number") return { ok: false, reason: "appEntitlement.expiresAt must be a number" };
+  if (typeof r.issuedAt !== "number") return { ok: false, reason: "serviceEntitlement.issuedAt must be a number" };
+  if (typeof r.expiresAt !== "number") return { ok: false, reason: "serviceEntitlement.expiresAt must be a number" };
   return {
     ok: true,
     value: {
@@ -542,7 +542,7 @@ async function authenticateHello(
   now: () => number,
   maxHelloAgeMs: number,
 ): Promise<
-  | { ok: true; validatedGrants: AppGrant[] }
+  | { ok: true; validatedGrants: ServiceGrant[] }
   | { ok: false; reason: string; closeCode: number }
 > {
   const age = now() - hello.issuedAt;
@@ -569,21 +569,21 @@ async function authenticateHello(
   if (computedRootId !== hello.rootEntitlementCertId) {
     return { ok: false, reason: "rootEntitlementCertId does not match cert", closeCode: 1002 };
   }
-  if (hello.appEntitlement) {
-    const computedAppId = await appEntitlementCertId(hello.appEntitlement);
-    if (computedAppId !== hello.appEntitlementCertId) {
-      return { ok: false, reason: "appEntitlementCertId does not match cert", closeCode: 1002 };
+  if (hello.serviceEntitlement) {
+    const computedAppId = await serviceEntitlementCertId(hello.serviceEntitlement);
+    if (computedAppId !== hello.serviceEntitlementCertId) {
+      return { ok: false, reason: "serviceEntitlementCertId does not match cert", closeCode: 1002 };
     }
     // App entitlement expiry check.
-    if (hello.appEntitlement.expiresAt <= now()) {
-      return { ok: false, reason: "appEntitlement expired", closeCode: 1008 };
+    if (hello.serviceEntitlement.expiresAt <= now()) {
+      return { ok: false, reason: "serviceEntitlement expired", closeCode: 1008 };
     }
-    if (hello.appEntitlement.username !== hello.rootEntitlement.username) {
-      return { ok: false, reason: "appEntitlement.username mismatches root", closeCode: 1008 };
+    if (hello.serviceEntitlement.username !== hello.rootEntitlement.username) {
+      return { ok: false, reason: "serviceEntitlement.username mismatches root", closeCode: 1008 };
     }
     // Bind: app cert's podPubKey must equal root cert's podPubKey.
-    if (!equalBytes(hello.appEntitlement.podPubKey, hello.rootEntitlement.podPubKey)) {
-      return { ok: false, reason: "appEntitlement.podPubKey mismatches root", closeCode: 1008 };
+    if (!equalBytes(hello.serviceEntitlement.podPubKey, hello.rootEntitlement.podPubKey)) {
+      return { ok: false, reason: "serviceEntitlement.podPubKey mismatches root", closeCode: 1008 };
     }
   }
   // Verify entitlement IRK signatures against the user's IRK.
@@ -595,9 +595,9 @@ async function authenticateHello(
     if (!verifyRootEntitlement(hello.rootEntitlement, hello.rootEntitlementSig, irkPub)) {
       return { ok: false, reason: "rootEntitlement signature failed verification", closeCode: 1008 };
     }
-    if (hello.appEntitlement && hello.appEntitlementSig) {
-      if (!verifyAppEntitlement(hello.appEntitlement, hello.appEntitlementSig, irkPub)) {
-        return { ok: false, reason: "appEntitlement signature failed verification", closeCode: 1008 };
+    if (hello.serviceEntitlement && hello.serviceEntitlementSig) {
+      if (!verifyServiceEntitlement(hello.serviceEntitlement, hello.serviceEntitlementSig, irkPub)) {
+        return { ok: false, reason: "serviceEntitlement signature failed verification", closeCode: 1008 };
       }
     }
   }
@@ -608,8 +608,8 @@ async function authenticateHello(
       if (revoked.has(hello.rootEntitlementCertId)) {
         return { ok: false, reason: "rootEntitlement is revoked", closeCode: 1008 };
       }
-      if (hello.appEntitlement && revoked.has(hello.appEntitlementCertId)) {
-        return { ok: false, reason: "appEntitlement is revoked", closeCode: 1008 };
+      if (hello.serviceEntitlement && revoked.has(hello.serviceEntitlementCertId)) {
+        return { ok: false, reason: "serviceEntitlement is revoked", closeCode: 1008 };
       }
     }
   }
@@ -617,7 +617,7 @@ async function authenticateHello(
   const envelope: TunnelHelloV2 = {
     serverId: hello.serverId,
     rootEntitlementCertId: hello.rootEntitlementCertId,
-    appEntitlementCertId: hello.appEntitlementCertId,
+    serviceEntitlementCertId: hello.serviceEntitlementCertId,
     nonce: hello.nonce,
     issuedAt: hello.issuedAt,
   };
@@ -635,7 +635,7 @@ async function authenticateHello(
     }
   }
 
-  // #6 — AppGrant gate. Verify each presented AppGrant against the
+  // #6 — ServiceGrant gate. Verify each presented ServiceGrant against the
   // user's IRK, confirm this pod is in serverIdentities, confirm
   // the grant is active (issuedAt ≤ now < expiresAt) and not on
   // the revocation list. The union of validated grants' route URLs
@@ -645,7 +645,7 @@ async function authenticateHello(
   // FAIL CLOSED: if AppGrants are present and the IRK lookup or
   // revocation lookup fails, reject the HELLO. Better to refuse a
   // legitimate connection than to silently accept a hostile grant.
-  const validatedGrants: AppGrant[] = [];
+  const validatedGrants: ServiceGrant[] = [];
   if (hello.appGrants.length > 0) {
     if (!opts.irkLookup) {
       return {
@@ -666,32 +666,32 @@ async function authenticateHello(
       ? await opts.revocationLookup(hello.rootEntitlement.username)
       : null;
     for (const pg of hello.appGrants) {
-      if (!verifyAppGrant(pg.grant, pg.signature, irkPub)) {
+      if (!verifyServiceGrant(pg.grant, pg.signature, irkPub)) {
         return {
           ok: false,
-          reason: "AppGrant signature failed verification",
+          reason: "ServiceGrant signature failed verification",
           closeCode: 1008,
         };
       }
-      if (!appGrantActiveAt(pg.grant, now())) {
+      if (!serviceGrantActiveAt(pg.grant, now())) {
         return {
           ok: false,
-          reason: "AppGrant outside active window",
+          reason: "ServiceGrant outside active window",
           closeCode: 1008,
         };
       }
-      if (!appGrantAuthorizesPod(pg.grant, hello.rootEntitlement.podPubKey)) {
+      if (!serviceGrantAuthorizesPod(pg.grant, hello.rootEntitlement.podPubKey)) {
         return {
           ok: false,
-          reason: "AppGrant does not authorize this pod",
+          reason: "ServiceGrant does not authorize this pod",
           closeCode: 1008,
         };
       }
-      const computedId = await appGrantId(pg.grant);
+      const computedId = await serviceGrantId(pg.grant);
       if (revoked && revoked.has(computedId)) {
         return {
           ok: false,
-          reason: "AppGrant is revoked",
+          reason: "ServiceGrant is revoked",
           closeCode: 1008,
         };
       }
@@ -729,7 +729,7 @@ function broadcastSnapshot(registry: TunnelRegistry, key: import("./allocator.js
  *
  * Exported only for the `__internal__` test surface below.
  */
-export function appGrantHosts(grants: AppGrant[]): string[] {
+export function appGrantHosts(grants: ServiceGrant[]): string[] {
   const hosts = new Set<string>();
   for (const g of grants) {
     for (const route of g.routes) {

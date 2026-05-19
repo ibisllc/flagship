@@ -70,7 +70,7 @@ describe("labelBook helpers", () => {
     // removing the same tag again is a no-op
     book = removeLabel(book, APP_A, TAG_1);
     expect(entriesForApp(book, APP_A)).toHaveLength(1);
-    // removing the LAST tag of an app drops the appId key
+    // removing the LAST tag of an app drops the serviceId key
     book = removeLabel(book, APP_A, TAG_2);
     expect(book.has(APP_A)).toBe(false);
   });
@@ -154,7 +154,7 @@ describe("labelBook helpers", () => {
           v: 1,
           apps: [
             {
-              appId: APP_A,
+              serviceId: APP_A,
               entries: [
                 { tag: "not-hex", entry: entry({ displayName: "should drop" }) },
                 { tag: TAG_1, entry: entry({ displayName: "should keep" }) },
@@ -183,7 +183,7 @@ describe("labelBook helpers", () => {
     expect(e.notes.length).toBe(2000);
   });
 
-  it("invalid appId / tag are rejected on write", () => {
+  it("invalid serviceId / tag are rejected on write", () => {
     expect(() => addLabel(emptyLabelBook(), "\x00bad", TAG_1, entry())).toThrow();
     expect(() => addLabel(emptyLabelBook(), APP_A, "zzzz", entry())).toThrow();
     expect(() => addLabel(emptyLabelBook(), APP_A, "abcd", entry())).toThrow();

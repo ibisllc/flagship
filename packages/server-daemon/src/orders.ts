@@ -44,8 +44,8 @@ export interface OrderExecutor {
     value: string;
     screenshotRef: string;
   }): Promise<void> | void;
-  addSubscriber?(args: { appId: string; fqdn: string }): Promise<void> | void;
-  removeSubscriber?(args: { appId: string; fqdn: string }): Promise<void> | void;
+  addSubscriber?(args: { serviceId: string; fqdn: string }): Promise<void> | void;
+  removeSubscriber?(args: { serviceId: string; fqdn: string }): Promise<void> | void;
   addPairedSession?(args: { token: string; label: string }): Promise<void> | void;
   removePairedSession?(args: { token: string }): Promise<void> | void;
   // (claimUrl / releaseUrl removed in N12d — claims now flow app →
@@ -208,20 +208,20 @@ function parseOrder(r: Record<string, unknown>): PhoneOrder | null {
       };
     }
     case "add-subscriber":
-      if (typeof r.appId !== "string" || typeof r.fqdn !== "string") return null;
+      if (typeof r.serviceId !== "string" || typeof r.fqdn !== "string") return null;
       return {
         type: "add-subscriber",
         serverId: r.serverId,
-        appId: r.appId,
+        serviceId: r.serviceId,
         fqdn: r.fqdn,
         issuedAt: r.issuedAt,
       };
     case "remove-subscriber":
-      if (typeof r.appId !== "string" || typeof r.fqdn !== "string") return null;
+      if (typeof r.serviceId !== "string" || typeof r.fqdn !== "string") return null;
       return {
         type: "remove-subscriber",
         serverId: r.serverId,
-        appId: r.appId,
+        serviceId: r.serviceId,
         fqdn: r.fqdn,
         issuedAt: r.issuedAt,
       };
@@ -299,11 +299,11 @@ async function dispatch(order: PhoneOrder, ex: OrderExecutor): Promise<void> {
       return;
     case "add-subscriber":
       if (!ex.addSubscriber) throw new Error("addSubscriber not implemented");
-      await ex.addSubscriber({ appId: order.appId, fqdn: order.fqdn });
+      await ex.addSubscriber({ serviceId: order.serviceId, fqdn: order.fqdn });
       return;
     case "remove-subscriber":
       if (!ex.removeSubscriber) throw new Error("removeSubscriber not implemented");
-      await ex.removeSubscriber({ appId: order.appId, fqdn: order.fqdn });
+      await ex.removeSubscriber({ serviceId: order.serviceId, fqdn: order.fqdn });
       return;
     case "add-paired-session":
       if (!ex.addPairedSession) throw new Error("addPairedSession not implemented");

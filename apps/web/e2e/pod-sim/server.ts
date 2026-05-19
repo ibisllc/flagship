@@ -12,10 +12,10 @@
  *   POST /api/orders-from-user            verify PSK sig, record order
  *   GET  /api/screens/server-detail       seedable fixture
  *   GET  /api/screens/apps-list           apps-store snapshot
- *   GET  /api/screens/app-detail/:appId   apps-store lookup
+ *   GET  /api/screens/app-detail/:serviceId   apps-store lookup
  *   GET  /api/screens/marketplace-browse  empty array fixture
  *   GET  /api/screens/unlock-approvals/pending  pending-store snapshot
- *   POST /api/apps                        IRK-verified install (record only)
+ *   POST /api/services                        IRK-verified install (record only)
  *   GET  /api/screens/paired-sessions/list  recorded paired-session orders
  *   GET  /api/screens/tier-status         static fixture
  */
@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   ed,
-  verifyInstallApp,
+  verifyInstallService,
   verifyPhoneOrder,
   type Bytes,
 } from "@flagship/protocol";
@@ -220,14 +220,14 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
     uptimeMs: 60_000,
     certNotAfter: Date.now() + 89 * 86400_000,
     certSans: [opts.serverFqdn, `*.${opts.serverFqdn}`],
-    appCount: apps.list().length,
+    serviceCount: apps.list().length,
     pairedSessionCount: validSessionTokens.size,
     recentInstallEvents: [],
   }));
 
   app.get("/api/screens/apps-list", async () => ({
     apps: apps.list().map((a) => ({
-      appId: a.appId,
+      serviceId: a.serviceId,
       creator: a.creator,
       slug: a.slug,
       installedAt: a.installedAt,
@@ -235,10 +235,10 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
     })),
   }));
 
-  app.get<{ Params: { appId: string } }>(
-    "/api/screens/app-detail/:appId",
+  app.get<{ Params: { serviceId: string } }>(
+    "/api/screens/app-detail/:serviceId",
     async (req, reply) => {
-      const a = apps.get(req.params.appId);
+      const a = apps.get(req.params.serviceId);
       if (!a) return reply.status(404).send({ error: "not found" });
       return reply.send({
         ...a,
@@ -271,11 +271,11 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
   }));
 
   // ──────────────────────────────────────────────────────────────────
-  // POST /api/apps — webapp marketplace install path. Verifies the
+  // POST /api/services — webapp marketplace install path. Verifies the
   // host IRK signature on the install envelope.
   // ──────────────────────────────────────────────────────────────────
   app.post<{ Body: { request?: Record<string, unknown>; signature?: string } }>(
-    "/api/apps",
+    "/api/services",
     async (req, reply) => {
       const b = req.body;
       const r = (b?.request ?? {}) as Record<string, unknown>;
@@ -288,19 +288,19 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
       } catch {
         return reply.status(400).send({ error: "invalid signature hex" });
       }
-      if (!verifyInstallApp(r as never, sig, hostIrkPub)) {
+      if (!verifyInstallService(r as never, sig, hostIrkPub)) {
         return reply.status(403).send({ error: "invalid install signature" });
       }
       const creator = r.creator as string;
       const slug = r.slug as string;
-      const appId = `${creator}--${slug}`;
-      apps.add({ appId, creator, slug, installedAt: Date.now() });
+      const serviceId = `${creator}--${slug}`;
+      apps.add({ serviceId, creator, slug, installedAt: Date.now() });
       orders.push({
         type: "install-app",
         raw: r,
         receivedAt: Date.now(),
       });
-      return reply.send({ ok: true, appId });
+      return reply.send({ ok: true, serviceId });
     },
   );
 

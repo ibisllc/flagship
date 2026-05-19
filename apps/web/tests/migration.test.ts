@@ -31,7 +31,7 @@ function makeApp(now = () => Date.now()) {
 
 function makeRequest(overrides: Partial<MigrationRequest> = {}): MigrationRequest {
   return {
-    appId: "habit-tracker",
+    serviceId: "habit-tracker",
     fromUser: "harry",
     toUser: "sarah",
     mode: "cut",

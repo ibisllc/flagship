@@ -67,7 +67,7 @@ describe("SiblingConnection", () => {
       }
     });
     aliceConn.sendAppMessage({
-      appId: "notes",
+      serviceId: "notes",
       fromSiblingId: ALICE,
       toSiblingId: BOB,
       payloadHex: "deadbeef",
@@ -84,7 +84,7 @@ describe("SiblingConnection", () => {
     bobRouter.subscribe("alpha", () => aReceived.push(1));
     bobRouter.subscribe("beta", () => bReceived.push(1));
     aliceConn.sendAppMessage({
-      appId: "alpha",
+      serviceId: "alpha",
       fromSiblingId: ALICE,
       toSiblingId: BOB,
       payloadHex: "01",

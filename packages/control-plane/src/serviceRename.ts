@@ -4,7 +4,7 @@
 // and conceptual surface (an app's URL identity from the user's
 // perspective).
 //
-//   - handleAppRename: signed by IRK; rewrites display_label, cascade-
+//   - handleServiceRename: signed by IRK; rewrites display_label, cascade-
 //     deletes the app's old voi.ci codes, mints a fresh one against
 //     the new canonical URL. The actual user-zone DNS publish is
 //     delegated to a hook the Worker wires up (services-zone
@@ -22,14 +22,14 @@
 //   - Reserved labels rejected ("api", "www", "admin", "_", etc).
 
 import {
-  verifyAppRename,
+  verifyServiceRename,
   deriveUrlFragment,
-  type AppRename,
+  type ServiceRename,
 } from "@flagship/protocol";
 import type {
   CustomDomainOrderStorage,
   ServerStorage,
-  UserAppAliasStorage,
+  UserServiceAliasStorage,
   UsernameStorage,
   VoiciLinkStorage,
 } from "@flagship/storage";
@@ -46,9 +46,9 @@ import {
   type HandlerResponseWithHeaders,
 } from "./types.js";
 
-export interface AppRenameDeps {
+export interface ServiceRenameDeps {
   usernames: UsernameStorage;
-  userAppAliases: UserAppAliasStorage;
+  userServiceAliases: UserServiceAliasStorage;
   voiciLinks: VoiciLinkStorage;
   servers: ServerStorage;
   auditEvents: AuditEventStorage;
@@ -59,7 +59,7 @@ export interface AppRenameDeps {
    *  In tests + dev, leave undefined; the rename still completes,
    *  but the user-zone DNS won't be re-published until a real
    *  publisher attaches. */
-  publishDns?: (username: string, oldLabel: string, newLabel: string, appId: string) => Promise<void>;
+  publishDns?: (username: string, oldLabel: string, newLabel: string, serviceId: string) => Promise<void>;
   now?: () => number;
   /** voi.ci minter — uses the same VoiciLinkStorage; defaults to
    *  voi.ci hostname unless overridden. */
@@ -76,9 +76,9 @@ const RESERVED_LABELS = new Set([
 
 const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 
-/** POST /api/users/:u/apps/:appId/rename */
-export async function handleAppRename(
-  deps: AppRenameDeps,
+/** POST /api/users/:u/apps/:serviceId/rename */
+export async function handleServiceRename(
+  deps: ServiceRenameDeps,
   username: string,
   appIdFromUrl: string,
   body: unknown,
@@ -91,7 +91,7 @@ export async function handleAppRename(
   const r = b?.request ?? {};
   if (
     typeof r.username !== "string" ||
-    typeof r.appId !== "string" ||
+    typeof r.serviceId !== "string" ||
     typeof r.newDisplayLabel !== "string" ||
     typeof r.issuedAt !== "number" ||
     typeof b?.signature !== "string"
@@ -99,7 +99,7 @@ export async function handleAppRename(
     return malformed("malformed body");
   }
   if (r.username.toLowerCase() !== u) return forbidden("username / url mismatch");
-  if (r.appId !== appIdFromUrl) return forbidden("appId / url mismatch");
+  if (r.serviceId !== appIdFromUrl) return forbidden("serviceId / url mismatch");
   if (Math.abs(now - r.issuedAt) > DEFAULT_MAX_AGE_MS) return forbidden("stale request");
 
   const newLabel = r.newDisplayLabel.toLowerCase();
@@ -120,22 +120,22 @@ export async function handleAppRename(
   } catch {
     return malformed("invalid signature hex");
   }
-  const claim: AppRename = {
+  const claim: ServiceRename = {
     username: u,
-    appId: r.appId,
+    serviceId: r.serviceId,
     newDisplayLabel: newLabel,
     issuedAt: r.issuedAt,
   };
-  if (!verifyAppRename(claim, sig, hexToBytes(userRec.irkPubHex))) {
+  if (!verifyServiceRename(claim, sig, hexToBytes(userRec.irkPubHex))) {
     return forbidden("invalid signature");
   }
 
   // Uniqueness check — the new label must not collide with another
   // app's alias for the same user. Reading every alias is cheap (per-
   // user list, capped at the user's app count which is small).
-  const allAliases = await deps.userAppAliases.listForUser(u);
+  const allAliases = await deps.userServiceAliases.listForUser(u);
   const colliding = allAliases.find(
-    (a) => a.appId !== r.appId && a.displayLabel === newLabel,
+    (a) => a.serviceId !== r.serviceId && a.displayLabel === newLabel,
   );
   if (colliding) {
     return conflict(`another app already uses '${newLabel}' on your account`);
@@ -144,8 +144,8 @@ export async function handleAppRename(
   // Read the old label so we can:
   //  - tell the DNS publisher what to deprecate
   //  - emit an audit row that names both sides
-  const existing = await deps.userAppAliases.get(u, r.appId);
-  const oldLabel = existing?.displayLabel ?? deriveUrlFragment(r.appId, u);
+  const existing = await deps.userServiceAliases.get(u, r.serviceId);
+  const oldLabel = existing?.displayLabel ?? deriveUrlFragment(r.serviceId, u);
 
   // No-op fast path — if the user asked for the same label they
   // already have, skip the cascade so we don't churn voi.ci codes.
@@ -160,14 +160,14 @@ export async function handleAppRename(
   //   4. Best-effort DNS re-publish via the hook.
   //   5. Append audit row (truncated by recordAuditEvent on overflow).
   const ts = now;
-  await deps.userAppAliases.upsert({
+  await deps.userServiceAliases.upsert({
     username: u,
-    appId: r.appId,
+    serviceId: r.serviceId,
     displayLabel: newLabel,
     createdAt: existing?.createdAt ?? ts,
     updatedAt: ts,
   });
-  const deletedShortLinks = await deps.voiciLinks.deleteByApp(u, r.appId);
+  const deletedShortLinks = await deps.voiciLinks.deleteByService(u, r.serviceId);
 
   // Pick the canonical FQDN: prefer the leader pod's serverFqdn;
   // fall back to any registered server; if none, format against the
@@ -185,7 +185,7 @@ export async function handleAppRename(
     } satisfies VoiciDeps,
     {
       username: u,
-      appId: r.appId,
+      serviceId: r.serviceId,
       targetUrl: newCanonical,
       // App-bound short links don't get a TTL — they live as long as
       // the app's display label stays the same.
@@ -194,7 +194,7 @@ export async function handleAppRename(
 
   if (deps.publishDns) {
     try {
-      await deps.publishDns(u, oldLabel, newLabel, r.appId);
+      await deps.publishDns(u, oldLabel, newLabel, r.serviceId);
     } catch {
       // Best-effort — the alias row has flipped, the short code has
       // rotated; the daemon-side Caddy re-config can lag without
@@ -207,7 +207,7 @@ export async function handleAppRename(
     {
       username: u,
       eventKind: "app-renamed",
-      detail: `Renamed app '${r.appId}': ${oldLabel} → ${newLabel}`,
+      detail: `Renamed app '${r.serviceId}': ${oldLabel} → ${newLabel}`,
       devicePrefix: "",
       postedAt: ts,
     },
@@ -237,20 +237,20 @@ export async function handleAppRename(
   });
 }
 
-/** GET /api/users/:u/apps/:appId/links — surfaces { canonical, short,
+/** GET /api/users/:u/apps/:serviceId/links — surfaces { canonical, short,
  *  instances }. Public read so the apps-list BFF can fan it out
  *  without per-call auth; the canonical URL is already publishable
  *  (it's literally a DNS label). */
 export async function handleGetAppLinks(
-  deps: AppRenameDeps,
+  deps: ServiceRenameDeps,
   username: string,
-  appId: string,
+  serviceId: string,
 ): Promise<HandlerResponseWithHeaders> {
   const u = username.toLowerCase();
   if (!USERNAME_RE.test(u)) return malformed("malformed username");
 
-  const alias = await deps.userAppAliases.get(u, appId);
-  const displayLabel = alias?.displayLabel ?? deriveUrlFragment(appId, u);
+  const alias = await deps.userServiceAliases.get(u, serviceId);
+  const displayLabel = alias?.displayLabel ?? deriveUrlFragment(serviceId, u);
 
   const servers = await deps.servers.listForUser(u);
   const liveServers = servers.filter((s) => !s.revokedAt);
@@ -264,13 +264,13 @@ export async function handleGetAppLinks(
     url: `https://${displayLabel}.${s.serverDomain}`,
   }));
 
-  // V4 — Active app-bound short link via the new getByApp index.
-  // handleAppRename cascade-deletes prior rows before minting the
+  // V4 — Active app-bound short link via the new getByService index.
+  // handleServiceRename cascade-deletes prior rows before minting the
   // new one, so at most ONE row should match. If no row exists
   // (newly installed app that hasn't been renamed), lazy-mint
   // against the canonical so the first /links call already returns
   // a shareable voi.ci/<code>.
-  let shortLink = await deps.voiciLinks.getByApp(u, appId);
+  let shortLink = await deps.voiciLinks.getByService(u, serviceId);
   let shortLinkError: string | undefined;
   if (!shortLink && leader) {
     const minted = await mintShortLink(
@@ -280,13 +280,13 @@ export async function handleGetAppLinks(
         now: deps.now,
         shortHost: deps.shortHost,
       } satisfies VoiciDeps,
-      { username: u, appId, targetUrl: canonicalUrl },
+      { username: u, serviceId, targetUrl: canonicalUrl },
     );
     if ("code" in minted) {
       shortLink = {
         code: minted.code,
         username: u,
-        appId,
+        serviceId,
         targetUrl: canonicalUrl,
         createdAt: (deps.now ?? (() => Date.now()))(),
       };
@@ -303,11 +303,11 @@ export async function handleGetAppLinks(
   // the Phase-4 verifier confirms the CNAME. Absent → null (the iOS
   // apps-list "it's live" swap keys on confirmed===true).
   const cdo = deps.customDomainOrders
-    ? await deps.customDomainOrders.get(u, appId)
+    ? await deps.customDomainOrders.get(u, serviceId)
     : undefined;
 
   return ok({
-    appId,
+    serviceId,
     displayLabel,
     canonicalUrl,
     instances,
@@ -325,25 +325,25 @@ export async function handleGetAppLinks(
  *  reverse-proxy config (Caddy on the box).
  *
  *  Returns rows in the shape the daemon's AliasReconciler expects:
- *  `{ aliases: [{ appId, displayLabel, updatedAt }, ...] }`. updatedAt
+ *  `{ aliases: [{ serviceId, displayLabel, updatedAt }, ...] }`. updatedAt
  *  is a unix-ms timestamp so the daemon can short-circuit when
  *  nothing has moved since its last reconcile tick. */
 export async function handleListAppAliases(
-  deps: Pick<AppRenameDeps, "userAppAliases">,
+  deps: Pick<ServiceRenameDeps, "userServiceAliases">,
   username: string,
 ): Promise<HandlerResponseWithHeaders> {
   const u = username.toLowerCase();
   if (!USERNAME_RE.test(u)) return malformed("malformed username");
-  const rows = await deps.userAppAliases.listForUser(u);
+  const rows = await deps.userServiceAliases.listForUser(u);
   return ok({
     aliases: rows
       .map((r) => ({
-        appId: r.appId,
+        serviceId: r.serviceId,
         displayLabel: r.displayLabel,
         updatedAt: r.updatedAt,
       }))
       // Stable ordering for cache-friendliness on the daemon side.
-      .sort((a, b) => a.appId.localeCompare(b.appId)),
+      .sort((a, b) => a.serviceId.localeCompare(b.serviceId)),
   });
 }
 

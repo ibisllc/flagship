@@ -11,7 +11,7 @@ import type { FetchLike } from "@flagship/llm-providers";
  * repo even if its container is compromised). The admin operations below
  * use the LLM-harness service token, which has org-wide access; the daemon
  * is the single integration point that fans out to the right repo for the
- * caller's `appId`.
+ * caller's `serviceId`.
  */
 
 export interface ForgejoAppAdminOptions {
@@ -217,7 +217,7 @@ export class ForgejoAppAdmin {
    * Create a revert commit (as a PR) for the given SHA. Forgejo doesn't have
    * a single endpoint for this; we open a PR with the ref name `revert-<sha>`
    * which the user reviews. The daemon API exposes this as
-   * POST /apps/:appId/git/commits/:sha/revert.
+   * POST /apps/:serviceId/git/commits/:sha/revert.
    */
   async createRevertPr(appName: string, sha: string): Promise<ForgejoPullRequest> {
     const branch = `revert-${sha.slice(0, 12)}-${Date.now()}`;

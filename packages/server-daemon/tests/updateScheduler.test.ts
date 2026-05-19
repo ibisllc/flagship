@@ -1,6 +1,6 @@
 /**
  * Tests for the 6h-jittered update-pack scheduler. We exercise:
- *   - sweepNow iterates every appId in the store
+ *   - sweepNow iterates every serviceId in the store
  *   - per-app errors don't block the rest of the sweep
  *   - single-flight: a pull still in flight when a tick fires is skipped
  *   - start() is idempotent; stop() cancels future ticks
@@ -27,15 +27,15 @@ function fakeState(overrides: Partial<AppPullState> = {}): AppPullState {
 }
 
 describe("UpdateScheduler.sweepNow", () => {
-  it("walks every appId in the store and returns the pull result map", async () => {
+  it("walks every serviceId in the store and returns the pull result map", async () => {
     const store = new InMemoryAppPullStateStore();
     await store.put("alice-game1", fakeState());
     await store.put("bob-chat", fakeState());
 
     const calls: string[] = [];
     const client = {
-      pullOne: async ({ appId }: { appId: string }) => {
-        calls.push(appId);
+      pullOne: async ({ serviceId }: { serviceId: string }) => {
+        calls.push(serviceId);
         return { kind: "no-op", reason: "already-current" } as PullResult;
       },
     } as unknown as UpdateClient;
@@ -53,8 +53,8 @@ describe("UpdateScheduler.sweepNow", () => {
 
     const errors: string[] = [];
     const client = {
-      pullOne: async ({ appId }: { appId: string }) => {
-        if (appId === "bob-bad") throw new Error("boom");
+      pullOne: async ({ serviceId }: { serviceId: string }) => {
+        if (serviceId === "bob-bad") throw new Error("boom");
         return { kind: "no-op", reason: "already-current" } as PullResult;
       },
     } as unknown as UpdateClient;
@@ -62,7 +62,7 @@ describe("UpdateScheduler.sweepNow", () => {
     const sched = new UpdateScheduler({
       client,
       store,
-      onError: (appId, e) => errors.push(`${appId}:${e.message}`),
+      onError: (serviceId, e) => errors.push(`${serviceId}:${e.message}`),
     });
     const r = await sched.sweepNow();
     expect(r.has("alice-good")).toBe(true);

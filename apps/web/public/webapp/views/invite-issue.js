@@ -4,12 +4,12 @@
 //   1. Pick a random 16-byte opaqueTag (kept local; never to .com).
 //   2. Generate a random 32-byte share-secret.
 //   3. Sign an IssueInvite envelope with the user's PSK + POST it to
-//      the pod at /.flagship/app/:appId/invite. The daemon stores the
+//      the pod at /.flagship/app/:serviceId/invite. The daemon stores the
 //      secret hash and replies with the inviteId + the shareable
 //      secret echoed back.
-//   4. Compose the share URL (`<appUrl>/invite#k=<secret>&a=<appId>`).
+//   4. Compose the share URL (`<appUrl>/invite#k=<secret>&a=<serviceId>`).
 //   5. Record a local label (displayName / channel / sentTo) keyed on
-//      `(appId, opaqueTag)` so the manage view can resolve "John
+//      `(serviceId, opaqueTag)` so the manage view can resolve "John
 //      (work)" later. The daemon never sees this metadata.
 //   6. Open the Web Share API if available; fallback to a "Copy link"
 //      button. Both happen client-side — no upstream call.
@@ -40,7 +40,7 @@ export async function renderInviteIssue(app) {
   const root = $("invite-issue-content");
   root.innerHTML = `
     <div class="card">
-      <div class="card-title">${escapeHtml(app.slug ?? app.appId)}</div>
+      <div class="card-title">${escapeHtml(app.slug ?? app.serviceId)}</div>
       <div class="muted-sm">${escapeHtml(app.url ?? "")}</div>
     </div>
     <div class="card mt-2">
@@ -120,17 +120,17 @@ async function onIssue(app) {
     const body = await screensFetch(`/api/screens/app-invite/issue`, {
       method: "POST",
       body: JSON.stringify({
-        appId: app.appId,
+        serviceId: app.serviceId,
         role,
         opaqueTag,
         contextNote: contextNote || null,
       }),
     });
-    const link = buildShareUrl(app.url, body.secret, app.appId);
+    const link = buildShareUrl(app.url, body.secret, app.serviceId);
     // Persist the local label BEFORE we surface the link — if the user
     // then taps share & the page is closed mid-flow, the label still
     // exists for the manage view to resolve.
-    await putLabel(app.appId, opaqueTag, {
+    await putLabel(app.serviceId, opaqueTag, {
       displayName,
       channel,
       sentTo,
@@ -175,7 +175,7 @@ export function initInviteIssueView() {
   $("invite-issue-back")?.addEventListener("click", async () => {
     if (currentApp) {
       const { enterAppDetail } = await import("./app-detail.js");
-      await enterAppDetail(currentApp.appId);
+      await enterAppDetail(currentApp.serviceId);
     } else {
       show("view-home");
     }

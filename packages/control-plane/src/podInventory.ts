@@ -59,9 +59,9 @@ export async function handleGetUserPods(
       const routing = await deps.routing.get(s.serverDomain);
       const status = statusByDomain.get(s.serverDomain.toLowerCase());
       let appsServed: string[] = [];
-      if (status?.appsServedJson) {
+      if (status?.servicesServedJson) {
         try {
-          const parsed = JSON.parse(status.appsServedJson);
+          const parsed = JSON.parse(status.servicesServedJson);
           if (Array.isArray(parsed)) {
             appsServed = parsed.filter((x): x is string => typeof x === "string");
           }
@@ -160,7 +160,7 @@ export async function handlePostDaemonStatus(
     certSha256: r.certSha256 ?? null,
     certValidUntil: r.certValidUntil ?? null,
     certIssuer: r.certIssuer ?? null,
-    appsServedJson: JSON.stringify(apps),
+    servicesServedJson: JSON.stringify(apps),
     lastReported: (deps.now ?? (() => Date.now()))(),
   });
   return ok({ ok: true });

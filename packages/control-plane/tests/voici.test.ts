@@ -143,7 +143,7 @@ describe("handleVoiciShorten (phone-signed API)", () => {
   function signedBody(args: {
     irk: Keypair;
     username?: string;
-    appId?: string;
+    serviceId?: string;
     targetUrl?: string;
     issuedAt?: number;
   }) {
@@ -153,7 +153,7 @@ describe("handleVoiciShorten (phone-signed API)", () => {
     const sig = signVoiciShorten(
       {
         username,
-        ...(args.appId ? { appId: args.appId } : {}),
+        ...(args.serviceId ? { serviceId: args.serviceId } : {}),
         targetUrl,
         issuedAt,
       },
@@ -162,7 +162,7 @@ describe("handleVoiciShorten (phone-signed API)", () => {
     return {
       request: {
         username,
-        ...(args.appId ? { appId: args.appId } : {}),
+        ...(args.serviceId ? { serviceId: args.serviceId } : {}),
         targetUrl,
         issuedAt,
       },

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
   ed,
-  signAppAccessAcceptance,
-  type AppAccessAcceptance,
+  signServiceAccessAcceptance,
+  type ServiceAccessAcceptance,
   type Keypair,
 } from "@flagship/protocol";
 import {
@@ -13,7 +13,7 @@ import {
   evaluateAccess,
   InMemoryAccessModeStore,
   signAccessMode,
-} from "../src/appAccessGate.js";
+} from "../src/serviceAccessGate.js";
 import {
   buildInviteHandler,
   InMemoryAppInviteStore,
@@ -70,7 +70,7 @@ async function mintAccessToken(
   });
   const issueFields = {
     serverId: SERVER_FQDN,
-    appId: APP_ID,
+    serviceId: APP_ID,
     role: "reader",
     opaqueTag: new Uint8Array(16),
     expectedIrkPubKey: null,
@@ -83,7 +83,7 @@ async function mintAccessToken(
     makeReq("POST", `/.flagship/app/${APP_ID}/invite`, {
       request: {
         serverId: issueFields.serverId,
-        appId: issueFields.appId,
+        serviceId: issueFields.serviceId,
         role: issueFields.role,
         opaqueTag: bytesToHex(issueFields.opaqueTag),
         expectedIrkPubKey: null,
@@ -100,14 +100,14 @@ async function mintAccessToken(
     secretHash: string;
   };
   const secret = Buffer.from(ib.secret, "hex");
-  const acceptance: AppAccessAcceptance = {
+  const acceptance: ServiceAccessAcceptance = {
     inviteId: ib.inviteId,
     secretHash: sha256Hex(secret),
     consumerIrkPubKey: consumer.publicKey,
     acceptedAt: Date.now(),
     nonce: new Uint8Array([1, 2, 3, 4]),
   };
-  const accSig = signAppAccessAcceptance(acceptance, consumer);
+  const accSig = signServiceAccessAcceptance(acceptance, consumer);
   const accR = await handler(
     makeReq("POST", `/.flagship/app/${APP_ID}/invite/accept`, {
       request: {
@@ -129,7 +129,7 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const inviteStore = new InMemoryAppInviteStore();
     const modeStore = new InMemoryAccessModeStore();
     const decision = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: {},
@@ -143,7 +143,7 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const modeStore = new InMemoryAccessModeStore();
     await modeStore.set(APP_ID, true);
     const decision = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: {},
@@ -178,13 +178,13 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const token = await mintAccessToken(inviteStore, psk, consumer);
 
     const decision = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: { authorization: `Flagship-App-Session ${token}` },
     });
     expect(decision.pass).toBe(true);
-    expect(decision.matched?.appId).toBe(APP_ID);
+    expect(decision.matched?.serviceId).toBe(APP_ID);
     expect(decision.matched?.role).toBe("reader");
   });
 
@@ -197,7 +197,7 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const token = await mintAccessToken(inviteStore, psk, consumer);
 
     const decision = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: { cookie: `other=foo; Flagship-App-Session=${token}; trailing=bar` },
@@ -215,7 +215,7 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const token = await mintAccessToken(inviteStore, psk, consumer);
 
     const decision = await evaluateAccess({
-      appId: "alice-photos",
+      serviceId: "alice-photos",
       modeStore,
       inviteStore,
       headers: { authorization: `Flagship-App-Session ${token}` },
@@ -233,13 +233,13 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const token = await mintAccessToken(inviteStore, psk, consumer);
 
     await inviteStore.revokeAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       irkPubHex: bytesToHex(consumer.publicKey),
       revokedAt: Date.now(),
     });
 
     const decision = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: { authorization: `Flagship-App-Session ${token}` },
@@ -253,7 +253,7 @@ describe("appAccessGate.evaluateAccess (#84)", () => {
     const modeStore = new InMemoryAccessModeStore();
     await modeStore.set(APP_ID, true);
     const decision = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: { authorization: `Flagship-App-Session ${"00".repeat(32)}` },
@@ -281,7 +281,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     });
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       protectContent: true,
       issuedAt: Date.now(),
     };
@@ -313,7 +313,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     });
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       protectContent: false,
       issuedAt: Date.now(),
     };
@@ -342,7 +342,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     });
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       protectContent: true,
       issuedAt: Date.now(),
     };
@@ -356,7 +356,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     expect(r?.status).toBe(403);
   });
 
-  it("rejects mismatched serverId / appId", async () => {
+  it("rejects mismatched serverId / serviceId", async () => {
     const psk = makeKey();
     const handler = buildAccessModeHandler({
       serverFqdn: SERVER_FQDN,
@@ -366,7 +366,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     });
     const wrongServer = {
       serverId: "evil.alice.flagship.services",
-      appId: APP_ID,
+      serviceId: APP_ID,
       protectContent: true,
       issuedAt: Date.now(),
     };
@@ -380,7 +380,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
 
     const wrongApp = {
       serverId: SERVER_FQDN,
-      appId: "different-app",
+      serviceId: "different-app",
       protectContent: true,
       issuedAt: Date.now(),
     };
@@ -403,7 +403,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     });
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       protectContent: true,
       issuedAt: Date.now() - 10 * 60_000,
     };
@@ -439,7 +439,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     // 1. Public default: anonymous request passes; even an unknown
     //    token passes because the gate is off.
     const before = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: {},
@@ -455,7 +455,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     });
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       protectContent: true,
       issuedAt: Date.now(),
     };
@@ -469,7 +469,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
 
     // 3. Anonymous now denied.
     const anon = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: {},
@@ -478,7 +478,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
 
     // 4. Authenticated still passes.
     const authed = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: { authorization: `Flagship-App-Session ${token}` },
@@ -497,7 +497,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
 
     // 6. Anonymous passes again.
     const after = await evaluateAccess({
-      appId: APP_ID,
+      serviceId: APP_ID,
       modeStore,
       inviteStore,
       headers: {},
@@ -509,7 +509,7 @@ describe("appAccessGate /access-mode handler (#84)", () => {
     const psk = makeKey();
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       protectContent: true,
       issuedAt: 1234567890,
     };

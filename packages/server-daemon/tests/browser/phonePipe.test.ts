@@ -79,7 +79,7 @@ describe("PhonePipe", () => {
     const events = inbox.list();
     expect(events[0]?.alert).toMatchObject({
       kind: "browser-input-needed",
-      appId: "alice-shopper",
+      serviceId: "alice-shopper",
       tabId: "tab-1",
       domain: "amazon.com",
       inputKind: "password",

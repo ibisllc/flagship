@@ -132,7 +132,7 @@ export class AppUserAllocator {
   /**
    * Register or refresh a pod. `canonicals` are the FQDNs the pod is
    * entitled to serve (validated by the caller against the pod's
-   * AppEntitlement cert). The pod's own root canonical comes through
+   * ServiceEntitlement cert). The pod's own root canonical comes through
    * the same list.
    */
   addPod(args: {

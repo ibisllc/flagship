@@ -25,7 +25,7 @@
  * the .services edge.
  */
 
-import type { AppAuthTokens } from "../appAuthToken.js";
+import type { AppAuthTokens } from "../serviceAuthToken.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { UrlController } from "../runtime.js";
 
@@ -37,10 +37,10 @@ export interface UrlHttpDeps {
   /** This pod's serverId — used to compute canonical URLs for the list. */
   thisSiblingId: string;
   /**
-   * Resolver: given an appId, return the canonical app FQDNs that
+   * Resolver: given an serviceId, return the canonical app FQDNs that
    * always point here. Same shape as before; supplied by the runtime.
    */
-  canonicalFqdnsForApp: (appId: string) => string[];
+  canonicalFqdnsForApp: (serviceId: string) => string[];
   now?: () => number;
 }
 
@@ -56,11 +56,11 @@ export function buildUrlHttpHandlers(deps: UrlHttpDeps) {
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
     if (!req.path.startsWith("/api/url")) return null;
 
-    const appId = await resolveAppId(req, deps.appAuthTokens);
-    if (!appId) return jerr(401, "missing or invalid app token");
+    const serviceId = await resolveAppId(req, deps.appAuthTokens);
+    if (!serviceId) return jerr(401, "missing or invalid app token");
 
     if (req.path === "/api/url" && req.method === "GET") {
-      const entries = listEntries(appId, deps);
+      const entries = listEntries(serviceId, deps);
       return ok({ urls: entries });
     }
 
@@ -95,10 +95,10 @@ export function buildUrlHttpHandlers(deps: UrlHttpDeps) {
   };
 }
 
-function listEntries(appId: string, deps: UrlHttpDeps): UrlEntry[] {
+function listEntries(serviceId: string, deps: UrlHttpDeps): UrlEntry[] {
   const ownedSet = new Set(deps.urlController.list().map((s) => s.toLowerCase()));
   const out: UrlEntry[] = [];
-  for (const fqdn of deps.canonicalFqdnsForApp(appId)) {
+  for (const fqdn of deps.canonicalFqdnsForApp(serviceId)) {
     out.push({
       fqdn: fqdn.toLowerCase(),
       kind: "canonical",

@@ -9,7 +9,7 @@
 
 import type { PairedSessionGate } from "./alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
-import type { AppBackupService } from "./appBackup.js";
+import type { AppBackupService } from "./serviceBackup.js";
 
 export interface AppBackupHttpDeps {
   backups: AppBackupService;

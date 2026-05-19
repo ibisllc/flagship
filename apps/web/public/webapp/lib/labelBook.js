@@ -7,7 +7,7 @@
 // owner-only side of that mapping.
 //
 // Persistence: IndexedDB ("flagship-webapp", store "labelBook"), keyed
-// on `<appId>|<opaqueTagHex>`. Sync to the encrypted user-identity blob
+// on `<serviceId>|<opaqueTagHex>`. Sync to the encrypted user-identity blob
 // (#71) is lazy: every mutation writes locally first, then enqueues
 // a "dirty" flag the sync hook can pick up when online. Until the sync
 // hook lands, the local IDB is the source of truth — losing the
@@ -49,18 +49,18 @@ function txDone(tx) {
   });
 }
 
-function key(appId, tagHex) {
-  return `${appId}|${tagHex.toLowerCase()}`;
+function key(serviceId, tagHex) {
+  return `${serviceId}|${tagHex.toLowerCase()}`;
 }
 
 /**
  * Persist one label. Returns the stored entry.
  *
- * @param {string} appId
+ * @param {string} serviceId
  * @param {string} opaqueTagHex 32 lowercase hex chars
  * @param {{displayName: string, channel: string, sentTo?: string, notes?: string}} fields
  */
-export async function putLabel(appId, opaqueTagHex, fields) {
+export async function putLabel(serviceId, opaqueTagHex, fields) {
   const tag = opaqueTagHex.toLowerCase();
   if (!/^[0-9a-f]{32}$/.test(tag)) throw new Error("opaqueTag must be 32 hex chars");
   const entry = {
@@ -69,13 +69,13 @@ export async function putLabel(appId, opaqueTagHex, fields) {
     sentTo: (fields.sentTo ?? "").slice(0, 280),
     sentAt: Date.now(),
     notes: (fields.notes ?? "").slice(0, 2000),
-    appId,
+    serviceId,
     opaqueTagHex: tag,
     dirty: true,
   };
   const db = await openDb();
   const tx = db.transaction(STORE, "readwrite");
-  tx.objectStore(STORE).put(entry, key(appId, tag));
+  tx.objectStore(STORE).put(entry, key(serviceId, tag));
   await txDone(tx);
   return entry;
 }
@@ -83,17 +83,17 @@ export async function putLabel(appId, opaqueTagHex, fields) {
 /**
  * Read a single label. Undefined when missing.
  */
-export async function getLabel(appId, opaqueTagHex) {
+export async function getLabel(serviceId, opaqueTagHex) {
   const db = await openDb();
   const tx = db.transaction(STORE, "readonly");
-  const got = await reqToPromise(tx.objectStore(STORE).get(key(appId, opaqueTagHex)));
+  const got = await reqToPromise(tx.objectStore(STORE).get(key(serviceId, opaqueTagHex)));
   return got ?? undefined;
 }
 
 /**
  * List every label for one app. Sorted by sentAt descending.
  */
-export async function listLabelsForApp(appId) {
+export async function listLabelsForApp(serviceId) {
   const db = await openDb();
   const tx = db.transaction(STORE, "readonly");
   const store = tx.objectStore(STORE);
@@ -104,7 +104,7 @@ export async function listLabelsForApp(appId) {
     cur.onsuccess = () => {
       const c = cur.result;
       if (!c) return resolve();
-      if (c.value && c.value.appId === appId) items.push(c.value);
+      if (c.value && c.value.serviceId === serviceId) items.push(c.value);
       c.continue();
     };
   });
@@ -115,10 +115,10 @@ export async function listLabelsForApp(appId) {
 /**
  * Remove a label. Idempotent.
  */
-export async function removeLabel(appId, opaqueTagHex) {
+export async function removeLabel(serviceId, opaqueTagHex) {
   const db = await openDb();
   const tx = db.transaction(STORE, "readwrite");
-  tx.objectStore(STORE).delete(key(appId, opaqueTagHex));
+  tx.objectStore(STORE).delete(key(serviceId, opaqueTagHex));
   await txDone(tx);
 }
 
@@ -149,7 +149,7 @@ export async function clearDirty(entries) {
   const tx = db.transaction(STORE, "readwrite");
   const store = tx.objectStore(STORE);
   for (const e of entries) {
-    store.put({ ...e, dirty: false }, key(e.appId, e.opaqueTagHex));
+    store.put({ ...e, dirty: false }, key(e.serviceId, e.opaqueTagHex));
   }
   await txDone(tx);
 }
@@ -165,11 +165,11 @@ function normalizeChannel(c) {
 
 /**
  * Build the canonical share-URL the user copies. Mirrors the daemon's
- * /invite HTML page contract: `#k=<secretHex>&a=<appId>`.
+ * /invite HTML page contract: `#k=<secretHex>&a=<serviceId>`.
  */
-export function buildShareUrl(appUrl, secretHex, appId) {
+export function buildShareUrl(appUrl, secretHex, serviceId) {
   const base = appUrl.replace(/\/+$/, "");
-  return `${base}/invite#k=${secretHex}&a=${encodeURIComponent(appId)}`;
+  return `${base}/invite#k=${secretHex}&a=${encodeURIComponent(serviceId)}`;
 }
 
 /**

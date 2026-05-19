@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  appEntitlementCertId,
+  serviceEntitlementCertId,
   rootEntitlementCertId,
-  signAppEntitlement,
+  signServiceEntitlement,
   signEntitlementRevocationList,
   signRootEntitlement,
-  verifyAppEntitlement,
+  verifyServiceEntitlement,
   verifyEntitlementRevocationList,
   verifyRootEntitlement,
-  type AppEntitlement,
+  type ServiceEntitlement,
   type EntitlementRevocationList,
   type Keypair,
   type RootEntitlement,
@@ -84,11 +84,11 @@ describe("RootEntitlement", () => {
   });
 });
 
-describe("AppEntitlement", () => {
+describe("ServiceEntitlement", () => {
   it("round-trips with multiple canonicals (order-independent)", () => {
     const irk = makeKey();
     const pod = makeKey();
-    const certA: AppEntitlement = {
+    const certA: ServiceEntitlement = {
       username: USER,
       podPubKey: pod.publicKey,
       canonicals: [
@@ -98,29 +98,29 @@ describe("AppEntitlement", () => {
       issuedAt: 1_700_000_000_000,
       expiresAt: 1_700_000_000_000 + 90 * 24 * 60 * 60 * 1000,
     };
-    const certB: AppEntitlement = {
+    const certB: ServiceEntitlement = {
       ...certA,
       canonicals: [...certA.canonicals].reverse(),
     };
-    const sig = signAppEntitlement(certA, irk);
-    expect(verifyAppEntitlement(certA, sig, irk.publicKey)).toBe(true);
+    const sig = signServiceEntitlement(certA, irk);
+    expect(verifyServiceEntitlement(certA, sig, irk.publicKey)).toBe(true);
     // Order shouldn't break verification (canonical bytes sort the list).
-    expect(verifyAppEntitlement(certB, sig, irk.publicKey)).toBe(true);
+    expect(verifyServiceEntitlement(certB, sig, irk.publicKey)).toBe(true);
   });
 
   it("rejects a signature from a different IRK", () => {
     const real = makeKey();
     const other = makeKey();
     const pod = makeKey();
-    const cert: AppEntitlement = {
+    const cert: ServiceEntitlement = {
       username: USER,
       podPubKey: pod.publicKey,
       canonicals: ["x.kitchen.john.flagship.services"],
       issuedAt: 1,
       expiresAt: 2,
     };
-    const sig = signAppEntitlement(cert, other);
-    expect(verifyAppEntitlement(cert, sig, real.publicKey)).toBe(false);
+    const sig = signServiceEntitlement(cert, other);
+    expect(verifyServiceEntitlement(cert, sig, real.publicKey)).toBe(false);
   });
 
   it("certId differs from RootEntitlement of the same fields (different TAG prefix)", async () => {
@@ -131,7 +131,7 @@ describe("AppEntitlement", () => {
       podCanonical: POD_CANONICAL,
       issuedAt: 1,
     };
-    const app: AppEntitlement = {
+    const app: ServiceEntitlement = {
       username: USER,
       podPubKey: pod.publicKey,
       canonicals: [POD_CANONICAL],
@@ -139,24 +139,24 @@ describe("AppEntitlement", () => {
       expiresAt: 2,
     };
     const a = await rootEntitlementCertId(root);
-    const b = await appEntitlementCertId(app);
+    const b = await serviceEntitlementCertId(app);
     expect(a).not.toEqual(b);
   });
 
   it("canonicals are case-normalized in the certId computation", async () => {
     const pod = makeKey();
-    const lower: AppEntitlement = {
+    const lower: ServiceEntitlement = {
       username: USER,
       podPubKey: pod.publicKey,
       canonicals: ["x.kitchen.john.flagship.services"],
       issuedAt: 1,
       expiresAt: 2,
     };
-    const upper: AppEntitlement = {
+    const upper: ServiceEntitlement = {
       ...lower,
       canonicals: ["X.KITCHEN.JOHN.flagship.services"],
     };
-    expect(await appEntitlementCertId(lower)).toEqual(await appEntitlementCertId(upper));
+    expect(await serviceEntitlementCertId(lower)).toEqual(await serviceEntitlementCertId(upper));
   });
 });
 

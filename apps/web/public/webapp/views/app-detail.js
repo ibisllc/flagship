@@ -1,7 +1,7 @@
-// P2.3 — app-detail view. Calls /api/screens/app-detail/:appId (P1.3).
+// P2.3 — app-detail view. Calls /api/screens/app-detail/:serviceId (P1.3).
 // Includes a "backup this app" button that calls P1.19, and (when the
 // app declares a browser bundle) a "Open browser viewer" button that
-// drives the user into views/browser-viewer.js with appId pre-set.
+// drives the user into views/browser-viewer.js with serviceId pre-set.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
@@ -13,7 +13,7 @@ import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 const COM_BASE = "https://flagshipserver.com";
 
-/** V3 — cached app-links per appId for the current render. Carries
+/** V3 — cached app-links per serviceId for the current render. Carries
  *  `customDomain` + `customDomainConfirmed` from .com's /links. */
 let currentAppLinks = null;
 
@@ -41,13 +41,13 @@ function hasBrowserBundle(body) {
   return !!(m && typeof m === "object" && (m.browser || m.browserBundle));
 }
 
-export async function renderAppDetail(appId) {
-  currentAppId = appId;
+export async function renderAppDetail(serviceId) {
+  currentAppId = serviceId;
   const root = $("app-detail-content");
   root.innerHTML = skeletonCards(3);
   try {
     const body = await screensFetch(
-      `/api/screens/app-detail/${encodeURIComponent(appId)}`,
+      `/api/screens/app-detail/${encodeURIComponent(serviceId)}`,
     );
     const a = body.app;
     // V3 — fetch the per-app URL identity from .com in parallel with
@@ -56,14 +56,14 @@ export async function renderAppDetail(appId) {
     // urlLabel in that case.
     const session = getSession();
     currentAppLinks = session.username
-      ? await fetchAppLinks(session.username, appId).catch(() => null)
+      ? await fetchAppLinks(session.username, serviceId).catch(() => null)
       : null;
     root.innerHTML = `
       <div class="card">
         <div class="card-title">${escapeHtml(a.slug)}</div>
         <div class="muted-sm text-xs mt-1">${
           a.version ? `ver: ${escapeHtml(a.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : ""
-        }id: ${escapeHtml(a.appId)}</div>
+        }id: ${escapeHtml(a.serviceId)}</div>
         <div class="muted-sm mt-2 truncate">${escapeHtml(a.summary || "")}</div>
         <div class="row mt-2">
           <span class="label">creator</span><span class="value">${escapeHtml(a.creator)}</span>
@@ -136,9 +136,9 @@ export async function renderAppDetail(appId) {
       </div>
     `;
 
-    $("ad-backup-go")?.addEventListener("click", () => triggerBackup(a.appId));
+    $("ad-backup-go")?.addEventListener("click", () => triggerBackup(a.serviceId));
     $("ad-open-browser")?.addEventListener("click", () => {
-      enterBrowserViewer(a.appId).catch((e) => toast(String(e), "err"));
+      enterBrowserViewer(a.serviceId).catch((e) => toast(String(e), "err"));
     });
     $("ad-invite-issue")?.addEventListener("click", async () => {
       const { enterInviteIssue } = await import("./invite-issue.js");
@@ -159,7 +159,7 @@ export async function renderAppDetail(appId) {
   }
 }
 
-async function triggerBackup(appId) {
+async function triggerBackup(serviceId) {
   const status = $("ad-backup-status");
   const password = $("ad-password").value;
   const includeUserData = $("ad-include-data").checked;
@@ -168,7 +168,7 @@ async function triggerBackup(appId) {
     const body = await screensFetch("/api/screens/app-backup/start", {
       method: "POST",
       body: JSON.stringify({
-        appId,
+        serviceId,
         includeUserData,
         password: password || undefined,
       }),
@@ -197,9 +197,9 @@ export function initAppDetailView() {
   });
 }
 
-export async function enterAppDetail(appId) {
+export async function enterAppDetail(serviceId) {
   show("view-app-detail");
-  await renderAppDetail(appId);
+  await renderAppDetail(serviceId);
 }
 
 // ---------------------------------------------------------------
@@ -209,9 +209,9 @@ export async function enterAppDetail(appId) {
 /** Fetch the per-app links bundle from .com — { canonical, short,
  *  instances }. Falls back to the daemon's urlLabel if .com is
  *  unreachable so the section still renders. */
-async function fetchAppLinks(username, appId) {
+async function fetchAppLinks(username, serviceId) {
   const r = await fetch(
-    `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(appId)}/links`,
+    `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(serviceId)}/links`,
     { cache: "no-store" },
   );
   if (!r.ok) return null;
@@ -327,8 +327,8 @@ function bindWebDomainsHandlers(app) {
 
 const COOLDOWN_KEY_PREFIX = "flagship.customDomain.lastChanged.";
 
-function cdCooldownKey(appId) {
-  return `${COOLDOWN_KEY_PREFIX}${appId}`;
+function cdCooldownKey(serviceId) {
+  return `${COOLDOWN_KEY_PREFIX}${serviceId}`;
 }
 
 /** Remaining cooldown ms for the current app (0 = none). Rebuilt from
@@ -510,7 +510,7 @@ async function bindCustomDomain(fqdn) {
         body: JSON.stringify({
           request: {
             username: session.username,
-            appId: currentAppId,
+            serviceId: currentAppId,
             fqdn,
             issuedAt,
           },
@@ -545,15 +545,15 @@ async function bindCustomDomain(fqdn) {
 }
 
 /** Mirrors @flagship/protocol canonicalSetCustomDomain
- *  (flagship/custom-domain/v1 | username | appId | fqdn | issuedAt).
+ *  (flagship/custom-domain/v1 | username | serviceId | fqdn | issuedAt).
  *  Same shape the iOS Live client + the .com verifier expect. */
-function canonicalSetCustomDomain(username, appId, fqdn, issuedAt) {
+function canonicalSetCustomDomain(username, serviceId, fqdn, issuedAt) {
   const enc = new TextEncoder();
   return enc.encode(
     [
       "flagship/custom-domain/v1",
       username,
-      appId,
+      serviceId,
       fqdn.toLowerCase(),
       String(issuedAt),
     ].join("|"),
@@ -605,7 +605,7 @@ async function runRename(app, newLabel) {
   }
   toast("Renaming…");
   const issuedAt = Date.now();
-  const canonical = canonicalAppRename(session.username, app.appId, newLabel, issuedAt);
+  const canonical = canonicalServiceRename(session.username, app.serviceId, newLabel, issuedAt);
   let sig;
   try {
     sig = await signWithIrk(session.umk, canonical);
@@ -615,14 +615,14 @@ async function runRename(app, newLabel) {
   }
   try {
     const r = await fetch(
-      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(app.appId)}/rename`,
+      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(app.serviceId)}/rename`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           request: {
             username: session.username,
-            appId: app.appId,
+            serviceId: app.serviceId,
             newDisplayLabel: newLabel,
             issuedAt,
           },
@@ -643,7 +643,7 @@ async function runRename(app, newLabel) {
     }
     const body = await r.json();
     currentAppLinks = {
-      appId: app.appId,
+      serviceId: app.serviceId,
       displayLabel: body.displayLabel,
       canonicalUrl: body.canonicalUrl,
       instances: currentAppLinks?.instances ?? [],
@@ -651,21 +651,21 @@ async function runRename(app, newLabel) {
     };
     toast(`Renamed to ${body.displayLabel}. New short link minted.`);
     // Re-render the section in place.
-    if (currentAppId === app.appId) {
-      await renderAppDetail(app.appId);
+    if (currentAppId === app.serviceId) {
+      await renderAppDetail(app.serviceId);
     }
   } catch (e) {
     toast(`Couldn't rename: ${e.message ?? e}`, "err");
   }
 }
 
-function canonicalAppRename(username, appId, newDisplayLabel, issuedAt) {
+function canonicalServiceRename(username, serviceId, newDisplayLabel, issuedAt) {
   const enc = new TextEncoder();
   return enc.encode(
     [
-      "flagship/app-rename/v1",
+      "flagship/service-rename/v1",
       username,
-      appId,
+      serviceId,
       newDisplayLabel.toLowerCase(),
       String(issuedAt),
     ].join("|"),

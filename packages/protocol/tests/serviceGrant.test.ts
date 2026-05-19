@@ -1,33 +1,33 @@
 /**
- * AppGrant envelope tests.
+ * ServiceGrant envelope tests.
  *
- * The grant is the cornerstone of the AppGrant-based authorization
+ * The grant is the cornerstone of the ServiceGrant-based authorization
  * model (Thread C of the design pass). It subsumes RootEntitlement,
- * AppEntitlement, and ClaimUrlCapability into a single 7-day
+ * ServiceEntitlement, and ClaimUrlCapability into a single 7-day
  * IRK-signed envelope.
  */
 import { describe, expect, it } from "vitest";
 import {
-  type AppGrant,
-  appGrantActiveAt,
-  appGrantAuthorizesPod,
-  appGrantAuthorizesUrl,
-  appGrantId,
+  type ServiceGrant,
+  serviceGrantActiveAt,
+  serviceGrantAuthorizesPod,
+  serviceGrantAuthorizesUrl,
+  serviceGrantId,
   authorStableId,
-  signAppGrant,
-  verifyAppGrant,
+  signServiceGrant,
+  verifyServiceGrant,
 } from "../src/auth.js";
 import { deriveIRK, deriveSTK, deriveSWK } from "../src/keys.js";
 
 const umk = { seed: new Uint8Array(32).fill(7) };
 const otherUmk = { seed: new Uint8Array(32).fill(8) };
 
-function baseGrant(overrides: Partial<AppGrant> = {}): AppGrant {
+function baseGrant(overrides: Partial<ServiceGrant> = {}): ServiceGrant {
   const stkA = deriveSTK(deriveSWK(umk, "home"));
   return {
     grantId: "550e8400-e29b-41d4-a716-446655440000",
     username: "trent",
-    appCanonical: "notes@abc123def456",
+    serviceCanonical: "notes@abc123def456",
     serverDomains: ["home.trent.flagship.services"],
     serverIdentities: [stkA.publicKey],
     routes: [
@@ -40,63 +40,63 @@ function baseGrant(overrides: Partial<AppGrant> = {}): AppGrant {
   };
 }
 
-describe("AppGrant — sign + verify", () => {
+describe("ServiceGrant — sign + verify", () => {
   it("a valid grant verifies under the issuing IRK", () => {
     const irk = deriveIRK(umk);
     const g = baseGrant();
-    const sig = signAppGrant(g, irk);
-    expect(verifyAppGrant(g, sig, irk.publicKey)).toBe(true);
+    const sig = signServiceGrant(g, irk);
+    expect(verifyServiceGrant(g, sig, irk.publicKey)).toBe(true);
   });
 
   it("verification fails with a different IRK pubkey", () => {
     const irk = deriveIRK(umk);
     const other = deriveIRK(otherUmk);
     const g = baseGrant();
-    const sig = signAppGrant(g, irk);
-    expect(verifyAppGrant(g, sig, other.publicKey)).toBe(false);
+    const sig = signServiceGrant(g, irk);
+    expect(verifyServiceGrant(g, sig, other.publicKey)).toBe(false);
   });
 
   it("verification fails on any field tamper", () => {
     const irk = deriveIRK(umk);
     const g = baseGrant();
-    const sig = signAppGrant(g, irk);
-    const tampered: AppGrant = { ...g, username: "wendy" };
-    expect(verifyAppGrant(tampered, sig, irk.publicKey)).toBe(false);
+    const sig = signServiceGrant(g, irk);
+    const tampered: ServiceGrant = { ...g, username: "wendy" };
+    expect(verifyServiceGrant(tampered, sig, irk.publicKey)).toBe(false);
   });
 
   it("verification fails when a route is silently added", () => {
     const irk = deriveIRK(umk);
     const g = baseGrant();
-    const sig = signAppGrant(g, irk);
-    const tampered: AppGrant = {
+    const sig = signServiceGrant(g, irk);
+    const tampered: ServiceGrant = {
       ...g,
       routes: [...g.routes, { url: "evil.trent.flagship.services", scope: "non-canonical" }],
     };
-    expect(verifyAppGrant(tampered, sig, irk.publicKey)).toBe(false);
+    expect(verifyServiceGrant(tampered, sig, irk.publicKey)).toBe(false);
   });
 
   it("verification fails when a sibling pod identity is silently added", () => {
     const irk = deriveIRK(umk);
     const evilStk = deriveSTK(deriveSWK(otherUmk, "evil"));
     const g = baseGrant();
-    const sig = signAppGrant(g, irk);
-    const tampered: AppGrant = {
+    const sig = signServiceGrant(g, irk);
+    const tampered: ServiceGrant = {
       ...g,
       serverIdentities: [...g.serverIdentities, evilStk.publicKey],
     };
-    expect(verifyAppGrant(tampered, sig, irk.publicKey)).toBe(false);
+    expect(verifyServiceGrant(tampered, sig, irk.publicKey)).toBe(false);
   });
 
   it("identical grants produce identical canonical bytes (deterministic)", async () => {
-    const a = await appGrantId(baseGrant());
-    const b = await appGrantId(baseGrant());
+    const a = await serviceGrantId(baseGrant());
+    const b = await serviceGrantId(baseGrant());
     expect(a).toBe(b);
   });
 
   it("canonical bytes are order-independent on serverDomains, serverIdentities, and routes", async () => {
     const stkA = deriveSTK(deriveSWK(umk, "home"));
     const stkB = deriveSTK(deriveSWK(umk, "work"));
-    const a = await appGrantId(
+    const a = await serviceGrantId(
       baseGrant({
         serverDomains: ["home.trent.flagship.services", "work.trent.flagship.services"],
         serverIdentities: [stkA.publicKey, stkB.publicKey],
@@ -106,7 +106,7 @@ describe("AppGrant — sign + verify", () => {
         ],
       }),
     );
-    const b = await appGrantId(
+    const b = await serviceGrantId(
       baseGrant({
         serverDomains: ["work.trent.flagship.services", "home.trent.flagship.services"],
         serverIdentities: [stkB.publicKey, stkA.publicKey],
@@ -120,15 +120,15 @@ describe("AppGrant — sign + verify", () => {
   });
 });
 
-describe("AppGrant — separator + control-char rejection (H1 hardening)", () => {
+describe("ServiceGrant — separator + control-char rejection (H1 hardening)", () => {
   it("rejects '|' in username at sign time", () => {
     const irk = deriveIRK(umk);
-    expect(() => signAppGrant(baseGrant({ username: "ha|rry" }), irk)).toThrow(/separator/);
+    expect(() => signServiceGrant(baseGrant({ username: "ha|rry" }), irk)).toThrow(/separator/);
   });
 
-  it("rejects '|' in appCanonical at sign time", () => {
+  it("rejects '|' in serviceCanonical at sign time", () => {
     const irk = deriveIRK(umk);
-    expect(() => signAppGrant(baseGrant({ appCanonical: "no|tes@abc" }), irk)).toThrow(
+    expect(() => signServiceGrant(baseGrant({ serviceCanonical: "no|tes@abc" }), irk)).toThrow(
       /separator/,
     );
   });
@@ -136,14 +136,14 @@ describe("AppGrant — separator + control-char rejection (H1 hardening)", () =>
   it("rejects newline in serverDomains at sign time", () => {
     const irk = deriveIRK(umk);
     expect(() =>
-      signAppGrant(baseGrant({ serverDomains: ["home.trent.flagship.services\n"] }), irk),
+      signServiceGrant(baseGrant({ serverDomains: ["home.trent.flagship.services\n"] }), irk),
     ).toThrow(/control char/);
   });
 
   it("rejects '|' in route url at sign time", () => {
     const irk = deriveIRK(umk);
     expect(() =>
-      signAppGrant(
+      signServiceGrant(
         baseGrant({ routes: [{ url: "bad|url.trent.flagship.services", scope: "non-canonical" }] }),
         irk,
       ),
@@ -151,11 +151,11 @@ describe("AppGrant — separator + control-char rejection (H1 hardening)", () =>
   });
 });
 
-describe("AppGrant — well-formedness", () => {
+describe("ServiceGrant — well-formedness", () => {
   it("rejects expiresAt <= issuedAt", () => {
     const irk = deriveIRK(umk);
     expect(() =>
-      signAppGrant(
+      signServiceGrant(
         baseGrant({ issuedAt: 2_000_000_000_000, expiresAt: 2_000_000_000_000 }),
         irk,
       ),
@@ -164,59 +164,59 @@ describe("AppGrant — well-formedness", () => {
 
   it("rejects empty serverIdentities", () => {
     const irk = deriveIRK(umk);
-    expect(() => signAppGrant(baseGrant({ serverIdentities: [] }), irk)).toThrow(
+    expect(() => signServiceGrant(baseGrant({ serverIdentities: [] }), irk)).toThrow(
       /serverIdentities/,
     );
   });
 
   it("rejects empty routes", () => {
     const irk = deriveIRK(umk);
-    expect(() => signAppGrant(baseGrant({ routes: [] }), irk)).toThrow(/routes/);
+    expect(() => signServiceGrant(baseGrant({ routes: [] }), irk)).toThrow(/routes/);
   });
 });
 
-describe("AppGrant — query helpers", () => {
-  it("appGrantAuthorizesPod returns true for a pod identity in the list", () => {
+describe("ServiceGrant — query helpers", () => {
+  it("serviceGrantAuthorizesPod returns true for a pod identity in the list", () => {
     const stkA = deriveSTK(deriveSWK(umk, "home"));
     const g = baseGrant({ serverIdentities: [stkA.publicKey] });
-    expect(appGrantAuthorizesPod(g, stkA.publicKey)).toBe(true);
+    expect(serviceGrantAuthorizesPod(g, stkA.publicKey)).toBe(true);
   });
 
-  it("appGrantAuthorizesPod returns false for a pod identity NOT in the list", () => {
+  it("serviceGrantAuthorizesPod returns false for a pod identity NOT in the list", () => {
     const stkA = deriveSTK(deriveSWK(umk, "home"));
     const stkOther = deriveSTK(deriveSWK(otherUmk, "evil"));
     const g = baseGrant({ serverIdentities: [stkA.publicKey] });
-    expect(appGrantAuthorizesPod(g, stkOther.publicKey)).toBe(false);
+    expect(serviceGrantAuthorizesPod(g, stkOther.publicKey)).toBe(false);
   });
 
-  it("appGrantAuthorizesUrl matches exact (case-insensitive) URL", () => {
+  it("serviceGrantAuthorizesUrl matches exact (case-insensitive) URL", () => {
     const g = baseGrant({
       routes: [{ url: "Notes.Trent.Flagship.Services", scope: "non-canonical" }],
     });
-    expect(appGrantAuthorizesUrl(g, "notes.trent.flagship.services")).toBe(true);
-    expect(appGrantAuthorizesUrl(g, "NOTES.TRENT.FLAGSHIP.SERVICES")).toBe(true);
+    expect(serviceGrantAuthorizesUrl(g, "notes.trent.flagship.services")).toBe(true);
+    expect(serviceGrantAuthorizesUrl(g, "NOTES.TRENT.FLAGSHIP.SERVICES")).toBe(true);
   });
 
-  it("appGrantAuthorizesUrl rejects an unlisted URL", () => {
+  it("serviceGrantAuthorizesUrl rejects an unlisted URL", () => {
     const g = baseGrant();
-    expect(appGrantAuthorizesUrl(g, "other.trent.flagship.services")).toBe(false);
+    expect(serviceGrantAuthorizesUrl(g, "other.trent.flagship.services")).toBe(false);
   });
 
-  it("appGrantAuthorizesUrl matches subpath scope", () => {
+  it("serviceGrantAuthorizesUrl matches subpath scope", () => {
     const g = baseGrant({
       routes: [{ url: "home.trent.flagship.services/notes", scope: "subpath" }],
     });
-    expect(appGrantAuthorizesUrl(g, "home.trent.flagship.services/notes/page-1")).toBe(true);
-    expect(appGrantAuthorizesUrl(g, "home.trent.flagship.services/other")).toBe(false);
+    expect(serviceGrantAuthorizesUrl(g, "home.trent.flagship.services/notes/page-1")).toBe(true);
+    expect(serviceGrantAuthorizesUrl(g, "home.trent.flagship.services/other")).toBe(false);
   });
 
-  it("appGrantActiveAt is true inside the window, false outside", () => {
+  it("serviceGrantActiveAt is true inside the window, false outside", () => {
     const g = baseGrant({ issuedAt: 1000, expiresAt: 2000 });
-    expect(appGrantActiveAt(g, 999)).toBe(false);
-    expect(appGrantActiveAt(g, 1000)).toBe(true);
-    expect(appGrantActiveAt(g, 1999)).toBe(true);
-    expect(appGrantActiveAt(g, 2000)).toBe(false); // half-open
-    expect(appGrantActiveAt(g, 2001)).toBe(false);
+    expect(serviceGrantActiveAt(g, 999)).toBe(false);
+    expect(serviceGrantActiveAt(g, 1000)).toBe(true);
+    expect(serviceGrantActiveAt(g, 1999)).toBe(true);
+    expect(serviceGrantActiveAt(g, 2000)).toBe(false); // half-open
+    expect(serviceGrantActiveAt(g, 2001)).toBe(false);
   });
 });
 

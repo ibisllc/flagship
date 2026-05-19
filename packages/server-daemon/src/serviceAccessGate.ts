@@ -21,8 +21,8 @@
  * The toggle itself flips via a fifth signed endpoint on the per-app
  * surface:
  *
- *   POST /.flagship/app/:appId/access-mode    (PSK-signed)
- *     { protectContent: true|false, issuedAt: <ms>, serverId, appId }
+ *   POST /.flagship/app/:serviceId/access-mode    (PSK-signed)
+ *     { protectContent: true|false, issuedAt: <ms>, serverId, serviceId }
  *
  * When flipping `false → true`, the response surfaces a migration
  * warning containing the count of currently-active access rows so the
@@ -53,19 +53,19 @@ const J: Record<string, string> = { "content-type": "application/json" };
  */
 export interface AccessModeStore {
   /** Returns the current `protectContent` flag for the app. Default false. */
-  get(appId: string): Promise<boolean>;
+  get(serviceId: string): Promise<boolean>;
   /** Sets the flag. Returns the prior value. */
-  set(appId: string, protectContent: boolean): Promise<boolean>;
+  set(serviceId: string, protectContent: boolean): Promise<boolean>;
 }
 
 export class InMemoryAccessModeStore implements AccessModeStore {
   private readonly modes = new Map<string, boolean>();
-  async get(appId: string): Promise<boolean> {
-    return this.modes.get(appId) ?? false;
+  async get(serviceId: string): Promise<boolean> {
+    return this.modes.get(serviceId) ?? false;
   }
-  async set(appId: string, protectContent: boolean): Promise<boolean> {
-    const prior = this.modes.get(appId) ?? false;
-    this.modes.set(appId, protectContent);
+  async set(serviceId: string, protectContent: boolean): Promise<boolean> {
+    const prior = this.modes.get(serviceId) ?? false;
+    this.modes.set(serviceId, protectContent);
     return prior;
   }
 }
@@ -115,12 +115,12 @@ export interface AccessGateDecision {
  * `Authorization: Flagship-App-Session <token>`.
  */
 export async function evaluateAccess(args: {
-  appId: string;
+  serviceId: string;
   modeStore: AccessModeStore;
   inviteStore: AppInviteStore;
   headers: Record<string, string>;
 }): Promise<AccessGateDecision> {
-  const protectContent = await args.modeStore.get(args.appId);
+  const protectContent = await args.modeStore.get(args.serviceId);
   if (!protectContent) {
     return { pass: true, reason: null, matched: null };
   }
@@ -132,7 +132,7 @@ export async function evaluateAccess(args: {
   if (!row) {
     return { pass: false, reason: "unknown session token", matched: null };
   }
-  if (row.appId !== args.appId) {
+  if (row.serviceId !== args.serviceId) {
     return { pass: false, reason: "token bound to a different app", matched: null };
   }
   if (row.revokedAt !== null) {
@@ -196,21 +196,21 @@ function extractSessionToken(headers: Record<string, string>): string | null {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// POST /.flagship/app/:appId/access-mode handler
+// POST /.flagship/app/:serviceId/access-mode handler
 // ──────────────────────────────────────────────────────────────────────
 
 const TAG_ACCESS_MODE = "flagship/app-access-mode/v1";
 
 interface AccessModeFields {
   serverId: string;
-  appId: string;
+  serviceId: string;
   protectContent: boolean;
   issuedAt: number;
 }
 
 export function canonicalAccessMode(f: AccessModeFields): Uint8Array {
   return new TextEncoder().encode(
-    [TAG_ACCESS_MODE, f.serverId, f.appId, f.protectContent ? "1" : "0", f.issuedAt].join("|"),
+    [TAG_ACCESS_MODE, f.serverId, f.serviceId, f.protectContent ? "1" : "0", f.issuedAt].join("|"),
   );
 }
 
@@ -221,7 +221,7 @@ export function signAccessMode(f: AccessModeFields, psk: Keypair): Uint8Array {
 /**
  * Build the /access-mode handler. Path shape and verification follow the
  * same pattern as the rest of the invite surface (#80): PSK-signed,
- * fresh `issuedAt`, exact serverId + appId match.
+ * fresh `issuedAt`, exact serverId + serviceId match.
  */
 export function buildAccessModeHandler(deps: AccessGateDeps) {
   const now = deps.now ?? (() => Date.now());
@@ -234,7 +234,7 @@ export function buildAccessModeHandler(deps: AccessGateDeps) {
     const tail = pathOnly.slice("/.flagship/app/".length);
     const parts = tail.split("/");
     if (parts.length !== 2 || parts[1] !== "access-mode" || req.method !== "POST") return null;
-    const appId = parts[0]!;
+    const serviceId = parts[0]!;
 
     const body = safeJsonParse(req.body.toString("utf8")) as
       | { request?: unknown; signature?: unknown }
@@ -246,7 +246,7 @@ export function buildAccessModeHandler(deps: AccessGateDeps) {
     if (typeof r.serverId !== "string" || r.serverId !== deps.serverFqdn) {
       return jerr(403, "serverId mismatch");
     }
-    if (typeof r.appId !== "string" || r.appId !== appId) return jerr(400, "appId mismatch");
+    if (typeof r.serviceId !== "string" || r.serviceId !== serviceId) return jerr(400, "serviceId mismatch");
     if (typeof r.protectContent !== "boolean") return jerr(400, "protectContent must be a boolean");
     if (typeof r.issuedAt !== "number") return jerr(400, "issuedAt must be a number");
     if (Math.abs(now() - r.issuedAt) > maxAgeMs) return jerr(403, "stale request");
@@ -259,7 +259,7 @@ export function buildAccessModeHandler(deps: AccessGateDeps) {
     }
     const canonical = canonicalAccessMode({
       serverId: deps.serverFqdn,
-      appId,
+      serviceId,
       protectContent: r.protectContent,
       issuedAt: r.issuedAt,
     });
@@ -271,10 +271,10 @@ export function buildAccessModeHandler(deps: AccessGateDeps) {
       return jerr(403, "invalid signature");
     }
 
-    const prior = await deps.modeStore.set(appId, r.protectContent);
+    const prior = await deps.modeStore.set(serviceId, r.protectContent);
     let warning: { activeSessions: number } | null = null;
     if (!prior && r.protectContent) {
-      const active = await deps.inviteStore.listActiveAccess(appId);
+      const active = await deps.inviteStore.listActiveAccess(serviceId);
       warning = { activeSessions: active.length };
     }
     return {
@@ -282,7 +282,7 @@ export function buildAccessModeHandler(deps: AccessGateDeps) {
       headers: J,
       body: JSON.stringify({
         ok: true,
-        appId,
+        serviceId,
         protectContent: r.protectContent,
         prior,
         ...(warning ? { warning } : {}),

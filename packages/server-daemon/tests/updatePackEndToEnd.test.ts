@@ -24,7 +24,7 @@ import {
   type PhoneUpdateAlert,
 } from "../src/updateClient.js";
 import { InMemoryAlertInbox } from "../src/alertInbox.js";
-import type { InstalledApp } from "../src/appPlatform.js";
+import type { InstalledService } from "../src/servicePlatform.js";
 import type { HttpRequest } from "../src/runtime.js";
 
 const execFileP = promisify(execFile);
@@ -57,22 +57,22 @@ async function commit(repo: string, path: string, content: string, msg: string):
 
 class MemStore implements AppPullStateStore {
   private state = new Map<string, AppPullState>();
-  async get(appId: string): Promise<AppPullState | null> {
-    return this.state.get(appId) ?? null;
+  async get(serviceId: string): Promise<AppPullState | null> {
+    return this.state.get(serviceId) ?? null;
   }
-  async put(appId: string, state: AppPullState): Promise<void> {
-    this.state.set(appId, { ...state });
+  async put(serviceId: string, state: AppPullState): Promise<void> {
+    this.state.set(serviceId, { ...state });
   }
 }
 
-function makeApp(creator: string, slug: string): InstalledApp {
+function makeApp(creator: string, slug: string): InstalledService {
   return {
     creator,
     slug,
-    appId: `${creator}--${slug}`,
-    manifest: {} as InstalledApp["manifest"],
+    serviceId: `${creator}--${slug}`,
+    manifest: {} as InstalledService["manifest"],
     urlLabel: slug,
-    membership: undefined as unknown as InstalledApp["membership"],
+    membership: undefined as unknown as InstalledService["membership"],
     containerPort: 0,
     data: null,
     installedAt: 0,
@@ -86,7 +86,7 @@ function makeApp(creator: string, slug: string): InstalledApp {
  */
 function makeBridgeFetch(args: {
   server: UpdateServer;
-  serverApp: InstalledApp;
+  serverApp: InstalledService;
 }): (url: string, init: RequestInit) => Promise<Response> {
   return async (url, init) => {
     const u = new URL(url);
@@ -176,7 +176,7 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       },
       emitPhoneAlert: (a: PhoneUpdateAlert) => inbox.emit(a),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res).toMatchObject({
       kind: "applied",
       from: firstCommit,
@@ -219,7 +219,7 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       restartContainer: async () => {},
       emitPhoneAlert: (a: PhoneUpdateAlert) => inbox.emit(a),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res.kind).toBe("error");
     if (res.kind === "error") {
       expect(res.reason).toContain("403");
@@ -266,14 +266,14 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       },
       emitPhoneAlert: (a: PhoneUpdateAlert) => inbox.emit(a),
     });
-    const res = await client.pullOne({ appId: APP_ID });
+    const res = await client.pullOne({ serviceId: APP_ID });
     expect(res.kind).toBe("halted-lineage-break");
     expect(restartCount).toBe(0);
     expect(inbox.size()).toBe(1);
     const events = inbox.list();
     expect(events[0]?.alert).toMatchObject({
       kind: "lineage-break",
-      appId: APP_ID,
+      serviceId: APP_ID,
       upstreamTip: divergentTip,
     });
     await rm(divergent, { recursive: true, force: true });
@@ -312,13 +312,13 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       },
       emitPhoneAlert: (a: PhoneUpdateAlert) => inbox.emit(a),
     });
-    const first = await client.pullOne({ appId: APP_ID });
+    const first = await client.pullOne({ serviceId: APP_ID });
     expect(first.kind).toBe("halted-manual-pending");
     expect(restartCount).toBe(0);
     expect(inbox.size()).toBe(1);
 
     // Phone approves.
-    const second = await client.applyPending({ appId: APP_ID });
+    const second = await client.applyPending({ serviceId: APP_ID });
     expect(second.kind).toBe("applied");
     expect(restartCount).toBe(1);
 
@@ -358,12 +358,12 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       },
       emitPhoneAlert: (a: PhoneUpdateAlert) => inbox.emit(a),
     });
-    const first = await client.pullOne({ appId: APP_ID });
+    const first = await client.pullOne({ serviceId: APP_ID });
     expect(first.kind).toBe("applied");
     expect(restartCount).toBe(1);
 
     // No new commits upstream — second pull is a no-op.
-    const second = await client.pullOne({ appId: APP_ID });
+    const second = await client.pullOne({ serviceId: APP_ID });
     expect(second).toMatchObject({ kind: "no-op", reason: "already-current" });
     expect(restartCount).toBe(1); // unchanged
   });
@@ -378,8 +378,8 @@ describe("Update-pack end-to-end (UpdateServer ↔ UpdateClient)", () => {
       }),
       resolveServerPubkey: async () => pullerPub,
     });
-    const a = await server.buildPack({ appId: APP_ID, repoPath: upstream, since: "" });
-    const b = await server.buildPack({ appId: APP_ID, repoPath: upstream, since: "" });
+    const a = await server.buildPack({ serviceId: APP_ID, repoPath: upstream, since: "" });
+    const b = await server.buildPack({ serviceId: APP_ID, repoPath: upstream, since: "" });
     expect(Buffer.compare(a, b)).toBe(0);
     void readFile;
   });

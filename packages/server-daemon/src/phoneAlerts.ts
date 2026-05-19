@@ -6,7 +6,7 @@
  * PhoneUpdateAlert in updateClient.ts, etc.) and they get unioned into
  * `PhoneAlert` so AlertInbox stays feature-agnostic.
  *
- * Every variant carries `kind: <discriminator>` and `appId` (so dedup
+ * Every variant carries `kind: <discriminator>` and `serviceId` (so dedup
  * + filtering work uniformly across features).
  */
 
@@ -25,7 +25,7 @@ import type { PhoneUpdateAlert } from "./updateClient.js";
  */
 export type BrowserAlert = {
   kind: "browser-input-needed";
-  appId: string;
+  serviceId: string;
   /** The CDP target id the input is destined for. Validated on response. */
   tabId: string;
   /** The host the user is signing into — surfaced to the phone for context ("Sign in to amazon.com"). */
@@ -48,7 +48,7 @@ export type BrowserAlert = {
 export type ReissuanceAlert = {
   kind: "membership-reissued";
   /** App composite id (`<creator>--<slug>`). */
-  appId: string;
+  serviceId: string;
   /** Display slug for the UI. */
   slug: string;
   /** Rows we rewrote from old → new IRK in this app. */

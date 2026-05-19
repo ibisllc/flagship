@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import { AppMembership } from "../src/membership.js";
 import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
@@ -58,9 +58,9 @@ async function deploy(http: ReturnType<typeof buildDaemonHttp>, m: AppManifest) 
   expect(r.statusCode).toBe(200);
 }
 
-function getPeersToken(deployedApps: Map<string, DeployedApp>, appId: string): string {
-  const t = deployedApps.get(appId)?.peersToken;
-  if (!t) throw new Error(`no peersToken for ${appId}`);
+function getPeersToken(deployedApps: Map<string, DeployedApp>, serviceId: string): string {
+  const t = deployedApps.get(serviceId)?.peersToken;
+  if (!t) throw new Error(`no peersToken for ${serviceId}`);
   return t;
 }
 

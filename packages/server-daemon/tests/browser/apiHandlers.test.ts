@@ -4,7 +4,7 @@ import { TabRegistry } from "../../src/browser/tabRegistry.js";
 import { DomainGate } from "../../src/browser/domainGate.js";
 import { PhonePipe } from "../../src/browser/phonePipe.js";
 import { InMemoryAlertInbox } from "../../src/alertInbox.js";
-import { InMemoryAppAuthTokens } from "../../src/appAuthToken.js";
+import { InMemoryAppAuthTokens } from "../../src/serviceAuthToken.js";
 import { buildBrowserApiHandlers } from "../../src/browser/apiHandlers.js";
 import type { HttpRequest } from "../../src/runtime.js";
 import { FakeCdpServer } from "./fakeCdpServer.js";

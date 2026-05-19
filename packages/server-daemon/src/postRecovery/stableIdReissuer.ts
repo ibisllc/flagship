@@ -6,7 +6,7 @@
  * on the user's IRK pubkey (the canonical membership identity); when the
  * IRK rotates, every row that referenced the OLD IRK must be rewritten
  * to the NEW IRK so the user — and only the user — still has their own
- * memberships. The stable-id (derived from `(SWK, appId, irkPub)`) also
+ * memberships. The stable-id (derived from `(SWK, serviceId, irkPub)`) also
  * shifts as a side-effect; apps that have keyed user data on the stable
  * id will see those rows re-anchor to the new id after the rewrite.
  *
@@ -31,13 +31,13 @@
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import type { AppPlatform } from "../appPlatform.js";
+import type { ServicePlatform } from "../servicePlatform.js";
 import type { AppMembership } from "../membership.js";
 
 export type ReissuerStatus = "pending" | "running" | "complete" | "failed";
 
 export interface AppReissuanceSummary {
-  appId: string;
+  serviceId: string;
   slug: string;
   /** Rows rewritten OLD→NEW. */
   rewrittenCount: number;
@@ -72,7 +72,7 @@ export interface ReissuanceReport {
 
 export interface JournalEntry {
   /** App composite id `<creator>--<slug>`. */
-  appId: string;
+  serviceId: string;
   /** Hex of the OLD IRK pubkey (32 bytes). */
   oldIrkPubHex: string;
   /** Hex of the NEW IRK pubkey (32 bytes). */
@@ -87,7 +87,7 @@ export interface JournalEntry {
 
 export interface EncryptedJournalRow {
   /** App composite id, kept plaintext for the index. */
-  appId: string;
+  serviceId: string;
   /** AES-GCM IV (12 bytes), hex. */
   ivHex: string;
   /** AES-GCM ciphertext, hex. */
@@ -130,7 +130,7 @@ export class InMemoryJournalStore implements JournalStore {
 }
 
 export interface ReissuerDeps {
-  appPlatform: AppPlatform;
+  servicePlatform: ServicePlatform;
   /** Daemon SWK; used to derive the journal encryption key. */
   swk: Uint8Array;
   journal: JournalStore;
@@ -173,7 +173,7 @@ export async function reissueStableIds(args: {
   const journalSalt = rand(16);
   const journalKey = deriveJournalKey(deps.swk, journalSalt);
   const startedAt = now();
-  const apps = deps.appPlatform.list();
+  const apps = deps.servicePlatform.list();
 
   const summaries: AppReissuanceSummary[] = [];
   let totalRewritten = 0;
@@ -182,7 +182,7 @@ export async function reissueStableIds(args: {
 
   for (const installed of apps) {
     const summary = await walkSingleApp({
-      appId: installed.appId,
+      serviceId: installed.serviceId,
       slug: installed.slug,
       membership: installed.membership,
       oldHex,
@@ -215,7 +215,7 @@ export async function reissueStableIds(args: {
 }
 
 async function walkSingleApp(args: {
-  appId: string;
+  serviceId: string;
   slug: string;
   membership: AppMembership;
   oldHex: string;
@@ -240,7 +240,7 @@ async function walkSingleApp(args: {
         // undo window.
         args.membership.members.internalRemoveByHex(args.oldHex);
         const entry: JournalEntry = {
-          appId: args.appId,
+          serviceId: args.serviceId,
           oldIrkPubHex: args.oldHex,
           newIrkPubHex: args.newHex,
           role: m.role,
@@ -255,7 +255,7 @@ async function walkSingleApp(args: {
       }
     }
     return {
-      appId: args.appId,
+      serviceId: args.serviceId,
       slug: args.slug,
       rewrittenCount: rewritten,
       unchangedCount: unchanged,
@@ -264,7 +264,7 @@ async function walkSingleApp(args: {
     };
   } catch (e) {
     return {
-      appId: args.appId,
+      serviceId: args.serviceId,
       slug: args.slug,
       rewrittenCount: 0,
       unchangedCount: 0,
@@ -321,7 +321,7 @@ function encryptJournalEntry(
   const ct = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
   return {
-    appId: entry.appId,
+    serviceId: entry.serviceId,
     ivHex: bytesToHex(iv),
     ciphertextHex: ct.toString("hex"),
     tagHex: tag.toString("hex"),

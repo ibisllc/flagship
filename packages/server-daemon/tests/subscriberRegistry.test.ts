@@ -13,7 +13,7 @@ import {
   FileSubscriberRegistry,
   InMemorySubscriberRegistry,
 } from "../src/subscriberRegistry.js";
-import type { InstalledApp } from "../src/appPlatform.js";
+import type { InstalledService } from "../src/servicePlatform.js";
 
 describe("InMemorySubscriberRegistry", () => {
   it("starts empty", async () => {
@@ -113,11 +113,11 @@ describe("FileSubscriberRegistry", () => {
 });
 
 describe("buildAppDistribution", () => {
-  function fakeApp(args: { appId: string; public?: boolean }): InstalledApp {
+  function fakeApp(args: { serviceId: string; public?: boolean }): InstalledService {
     return {
       creator: "alice",
       slug: "x",
-      appId: args.appId,
+      serviceId: args.serviceId,
       manifest: {
         schema_version: 1,
         name: "x",
@@ -144,7 +144,7 @@ describe("buildAppDistribution", () => {
       registry: reg,
       repoPath: () => "/tmp/repo",
     });
-    const r = await f(fakeApp({ appId: "alice-x", public: true }));
+    const r = await f(fakeApp({ serviceId: "alice-x", public: true }));
     expect(r?.publicDistribution).toBe(true);
     expect(r?.subscribers.size).toBe(0);
   });
@@ -157,7 +157,7 @@ describe("buildAppDistribution", () => {
       registry: reg,
       repoPath: () => "/tmp/repo",
     });
-    const r = await f(fakeApp({ appId: "alice-x" }));
+    const r = await f(fakeApp({ serviceId: "alice-x" }));
     expect(r?.subscribers.has("home.bob.flagship.services")).toBe(true);
     expect(r?.publicDistribution).toBe(false);
   });
@@ -169,7 +169,7 @@ describe("buildAppDistribution", () => {
       registry: reg,
       repoPath: () => "",
     });
-    const r = await f(fakeApp({ appId: "alice-x" }));
+    const r = await f(fakeApp({ serviceId: "alice-x" }));
     expect(r).toBeNull();
   });
 });

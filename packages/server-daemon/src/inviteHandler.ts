@@ -1,17 +1,17 @@
 /**
  * Daemon-side invite + app-access plumbing (#80, #83).
  *
- * Three signed surfaces per app, all scoped under `/.flagship/app/:appId/`:
+ * Three signed surfaces per app, all scoped under `/.flagship/app/:serviceId/`:
  *
- *   POST /.flagship/app/:appId/invite          ← PSK-signed issue
- *   POST /.flagship/app/:appId/invite/accept   ← consumer-IRK-signed acceptance
- *   POST /.flagship/app/:appId/access/:irk/revoke ← PSK-signed revoke
+ *   POST /.flagship/app/:serviceId/invite          ← PSK-signed issue
+ *   POST /.flagship/app/:serviceId/invite/accept   ← consumer-IRK-signed acceptance
+ *   POST /.flagship/app/:serviceId/access/:irk/revoke ← PSK-signed revoke
  *
  * Plus one unsigned surface on each app's domain (loaded in a browser by
  * the consumer):
  *
  *   GET  /invite                                ← static HTML; reads
- *                                                  `#k=<secret>&a=<appId>`
+ *                                                  `#k=<secret>&a=<serviceId>`
  *                                                  and triggers acceptance.
  *
  * Storage is an interface (`AppInviteStore`) so production can later wire
@@ -33,8 +33,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   ed,
-  verifyAppAccessAcceptance,
-  type AppAccessAcceptance,
+  verifyServiceAccessAcceptance,
+  type ServiceAccessAcceptance,
   type Bytes,
   type Keypair,
 } from "@flagship/protocol";
@@ -44,7 +44,7 @@ export type Role = "owner" | "admin" | "member" | "reader" | string;
 
 export interface AppInviteRow {
   inviteId: string;
-  appId: string;
+  serviceId: string;
   /** SHA-256 hex of the random share-secret. */
   secretHash: string;
   role: Role;
@@ -62,7 +62,7 @@ export interface AppInviteRow {
 }
 
 export interface AppAccessRow {
-  appId: string;
+  serviceId: string;
   irkPubHex: string;
   role: Role;
   opaqueTag: Bytes;
@@ -83,24 +83,24 @@ export interface AppAccessRow {
  */
 export interface AppInviteStore {
   insertInvite(row: AppInviteRow): Promise<void>;
-  findInviteBySecretHash(appId: string, secretHash: string): Promise<AppInviteRow | null>;
+  findInviteBySecretHash(serviceId: string, secretHash: string): Promise<AppInviteRow | null>;
   /**
    * Atomically mark a pending invite as consumed by the supplied IRK.
    * Returns the consumed row on success; null if the invite was already
    * consumed, revoked, or doesn't exist.
    */
   consumeAtomically(args: {
-    appId: string;
+    serviceId: string;
     secretHash: string;
     consumerIrkPubHex: string;
     consumedAt: number;
   }): Promise<AppInviteRow | null>;
   insertAccess(row: AppAccessRow): Promise<void>;
-  findAccess(appId: string, irkPubHex: string): Promise<AppAccessRow | null>;
+  findAccess(serviceId: string, irkPubHex: string): Promise<AppAccessRow | null>;
   findAccessByToken(token: string): Promise<AppAccessRow | null>;
-  revokeAccess(args: { appId: string; irkPubHex: string; revokedAt: number }): Promise<boolean>;
+  revokeAccess(args: { serviceId: string; irkPubHex: string; revokedAt: number }): Promise<boolean>;
   /** For #84's access-gate. */
-  listActiveAccess(appId: string): Promise<AppAccessRow[]>;
+  listActiveAccess(serviceId: string): Promise<AppAccessRow[]>;
 }
 
 export class InMemoryAppInviteStore implements AppInviteStore {
@@ -108,27 +108,27 @@ export class InMemoryAppInviteStore implements AppInviteStore {
   private readonly access = new Map<string, AppAccessRow>();
   private readonly tokenIndex = new Map<string, string>();
 
-  private invKey(appId: string, secretHash: string): string {
-    return `${appId}|${secretHash}`;
+  private invKey(serviceId: string, secretHash: string): string {
+    return `${serviceId}|${secretHash}`;
   }
-  private accKey(appId: string, irkHex: string): string {
-    return `${appId}|${irkHex}`;
+  private accKey(serviceId: string, irkHex: string): string {
+    return `${serviceId}|${irkHex}`;
   }
 
   async insertInvite(row: AppInviteRow): Promise<void> {
-    this.invites.set(this.invKey(row.appId, row.secretHash), { ...row });
+    this.invites.set(this.invKey(row.serviceId, row.secretHash), { ...row });
   }
-  async findInviteBySecretHash(appId: string, secretHash: string): Promise<AppInviteRow | null> {
-    const r = this.invites.get(this.invKey(appId, secretHash));
+  async findInviteBySecretHash(serviceId: string, secretHash: string): Promise<AppInviteRow | null> {
+    const r = this.invites.get(this.invKey(serviceId, secretHash));
     return r ? { ...r } : null;
   }
   async consumeAtomically(args: {
-    appId: string;
+    serviceId: string;
     secretHash: string;
     consumerIrkPubHex: string;
     consumedAt: number;
   }): Promise<AppInviteRow | null> {
-    const key = this.invKey(args.appId, args.secretHash);
+    const key = this.invKey(args.serviceId, args.secretHash);
     const r = this.invites.get(key);
     if (!r) return null;
     if (r.status !== "pending") return null;
@@ -142,11 +142,11 @@ export class InMemoryAppInviteStore implements AppInviteStore {
     return { ...updated };
   }
   async insertAccess(row: AppAccessRow): Promise<void> {
-    this.access.set(this.accKey(row.appId, row.irkPubHex), { ...row });
-    this.tokenIndex.set(row.sessionToken, this.accKey(row.appId, row.irkPubHex));
+    this.access.set(this.accKey(row.serviceId, row.irkPubHex), { ...row });
+    this.tokenIndex.set(row.sessionToken, this.accKey(row.serviceId, row.irkPubHex));
   }
-  async findAccess(appId: string, irkPubHex: string): Promise<AppAccessRow | null> {
-    const r = this.access.get(this.accKey(appId, irkPubHex));
+  async findAccess(serviceId: string, irkPubHex: string): Promise<AppAccessRow | null> {
+    const r = this.access.get(this.accKey(serviceId, irkPubHex));
     return r ? { ...r } : null;
   }
   async findAccessByToken(token: string): Promise<AppAccessRow | null> {
@@ -155,17 +155,17 @@ export class InMemoryAppInviteStore implements AppInviteStore {
     const r = this.access.get(key);
     return r ? { ...r } : null;
   }
-  async revokeAccess(args: { appId: string; irkPubHex: string; revokedAt: number }): Promise<boolean> {
-    const key = this.accKey(args.appId, args.irkPubHex);
+  async revokeAccess(args: { serviceId: string; irkPubHex: string; revokedAt: number }): Promise<boolean> {
+    const key = this.accKey(args.serviceId, args.irkPubHex);
     const r = this.access.get(key);
     if (!r || r.revokedAt !== null) return false;
     this.access.set(key, { ...r, revokedAt: args.revokedAt });
     return true;
   }
-  async listActiveAccess(appId: string): Promise<AppAccessRow[]> {
+  async listActiveAccess(serviceId: string): Promise<AppAccessRow[]> {
     const out: AppAccessRow[] = [];
     for (const r of this.access.values()) {
-      if (r.appId === appId && r.revokedAt === null) out.push({ ...r });
+      if (r.serviceId === serviceId && r.revokedAt === null) out.push({ ...r });
     }
     return out;
   }
@@ -193,10 +193,10 @@ export interface InviteHandlerDeps {
   /**
    * When set, restrict issue/revoke + accept to the supplied set of known
    * appIds. Returns 404 for any other. Production injects this with a
-   * lookup into AppPlatform. Default: no check (any non-empty appId works
-   * — useful for unit tests that don't spin up AppPlatform).
+   * lookup into ServicePlatform. Default: no check (any non-empty serviceId works
+   * — useful for unit tests that don't spin up ServicePlatform).
    */
-  isKnownApp?: (appId: string) => boolean;
+  isKnownApp?: (serviceId: string) => boolean;
 }
 
 const J: Record<string, string> = { "content-type": "application/json" };
@@ -223,17 +223,17 @@ export function buildInviteHandler(deps: InviteHandlerDeps) {
     const pathOnly = qIdx === -1 ? req.path : req.path.slice(0, qIdx);
     const tail = pathOnly.slice("/.flagship/app/".length);
     const parts = tail.split("/");
-    const appId = parts[0];
-    if (!appId) return null;
-    if (deps.isKnownApp && !deps.isKnownApp(appId)) {
+    const serviceId = parts[0];
+    if (!serviceId) return null;
+    if (deps.isKnownApp && !deps.isKnownApp(serviceId)) {
       return jerr(404, "unknown app");
     }
 
     if (parts[1] === "invite" && parts.length === 2 && req.method === "POST") {
-      return issueInvite(deps, appId, req, { now, rand, maxAgeMs, maxTtlMs, defaultTtlMs });
+      return issueInvite(deps, serviceId, req, { now, rand, maxAgeMs, maxTtlMs, defaultTtlMs });
     }
     if (parts[1] === "invite" && parts[2] === "accept" && parts.length === 3 && req.method === "POST") {
-      return acceptInvite(deps, appId, req, { now, rand, maxAgeMs });
+      return acceptInvite(deps, serviceId, req, { now, rand, maxAgeMs });
     }
     if (parts[1] === "invite" && parts[2] === "preview" && parts.length === 3 && req.method === "GET") {
       // #83.3: serve the contextNote BEFORE the consumer is allowed to
@@ -246,11 +246,11 @@ export function buildInviteHandler(deps: InviteHandlerDeps) {
       const params = new URLSearchParams(q);
       const h = params.get("h");
       if (!h || !/^[0-9a-f]{64}$/i.test(h)) return jerr(400, "h required (sha256 hex)");
-      return previewInvite(deps, appId, h.toLowerCase(), now);
+      return previewInvite(deps, serviceId, h.toLowerCase(), now);
     }
     if (parts[1] === "access" && parts[3] === "revoke" && parts.length === 4 && req.method === "POST") {
       const irkHex = parts[2]!;
-      return revokeAccess(deps, appId, irkHex, req, { now, maxAgeMs });
+      return revokeAccess(deps, serviceId, irkHex, req, { now, maxAgeMs });
     }
     return null;
   };
@@ -258,11 +258,11 @@ export function buildInviteHandler(deps: InviteHandlerDeps) {
 
 async function previewInvite(
   deps: InviteHandlerDeps,
-  appId: string,
+  serviceId: string,
   secretHash: string,
   now: () => number,
 ): Promise<HttpResponse> {
-  const invite = await deps.store.findInviteBySecretHash(appId, secretHash);
+  const invite = await deps.store.findInviteBySecretHash(serviceId, secretHash);
   if (!invite) return jerr(404, "unknown invite");
   // Don't leak status (consumed/revoked vs pending) on preview — the
   // accept call surfaces that. We do gate on expiry so a stale preview
@@ -272,7 +272,7 @@ async function previewInvite(
     status: 200,
     headers: J,
     body: JSON.stringify({
-      appId,
+      serviceId,
       role: invite.role,
       contextNote: invite.contextNote,
       issuedAt: invite.issuedAt,
@@ -297,7 +297,7 @@ interface RuntimeBits {
 interface IssueBody {
   request?: {
     serverId?: unknown;
-    appId?: unknown;
+    serviceId?: unknown;
     role?: unknown;
     opaqueTag?: unknown;
     expectedIrkPubKey?: unknown;
@@ -321,7 +321,7 @@ interface IssueBody {
  *  {
  *    "request": {
  *      "serverId":   "<fqdn>",
- *      "appId":      "creator-slug",
+ *      "serviceId":      "creator-slug",
  *      "role":       "reader",
  *      "opaqueTag":  "<32 hex>",       // 16 bytes
  *      "expectedIrkPubKey": "<64 hex>" | null,
@@ -334,7 +334,7 @@ interface IssueBody {
  */
 async function issueInvite(
   deps: InviteHandlerDeps,
-  appId: string,
+  serviceId: string,
   req: HttpRequest,
   rb: RuntimeBits,
 ): Promise<HttpResponse> {
@@ -346,8 +346,8 @@ async function issueInvite(
   if (typeof r.serverId !== "string" || r.serverId !== deps.serverFqdn) {
     return jerr(403, "serverId mismatch");
   }
-  if (typeof r.appId !== "string" || r.appId !== appId) {
-    return jerr(400, "appId mismatch");
+  if (typeof r.serviceId !== "string" || r.serviceId !== serviceId) {
+    return jerr(400, "serviceId mismatch");
   }
   if (typeof r.role !== "string" || r.role.length === 0 || r.role.length > 64) {
     return jerr(400, "role missing or invalid");
@@ -407,7 +407,7 @@ async function issueInvite(
   // verify against PSK. The line covers every field the server enforces.
   const canonical = canonicalIssueInvite({
     serverId: deps.serverFqdn,
-    appId,
+    serviceId,
     role: r.role,
     opaqueTag,
     expectedIrkPubKey,
@@ -426,7 +426,7 @@ async function issueInvite(
   const expiresAt = issuedAt + ttlMs;
   const row: AppInviteRow = {
     inviteId,
-    appId,
+    serviceId,
     secretHash,
     role: r.role,
     opaqueTag,
@@ -465,7 +465,7 @@ interface AcceptBody {
 
 async function acceptInvite(
   deps: InviteHandlerDeps,
-  appId: string,
+  serviceId: string,
   req: HttpRequest,
   rb: RuntimeBits,
 ): Promise<HttpResponse> {
@@ -499,18 +499,18 @@ async function acceptInvite(
   } catch {
     return jerr(400, "invalid signature hex");
   }
-  const acceptance: AppAccessAcceptance = {
+  const acceptance: ServiceAccessAcceptance = {
     inviteId: r.inviteId,
     secretHash: r.secretHash,
     consumerIrkPubKey: consumerIrk,
     acceptedAt: r.acceptedAt,
     nonce,
   };
-  if (!verifyAppAccessAcceptance(acceptance, sig, consumerIrk)) {
+  if (!verifyServiceAccessAcceptance(acceptance, sig, consumerIrk)) {
     return jerr(403, "invalid acceptance signature");
   }
 
-  const invite = await deps.store.findInviteBySecretHash(appId, r.secretHash);
+  const invite = await deps.store.findInviteBySecretHash(serviceId, r.secretHash);
   if (!invite) return jerr(404, "unknown invite");
   if (invite.inviteId !== r.inviteId) return jerr(400, "inviteId / secretHash mismatch");
   if (rb.now() > invite.expiresAt) return jerr(410, "invite expired");
@@ -521,7 +521,7 @@ async function acceptInvite(
 
   const consumerHex = bytesToHex(consumerIrk);
   const consumed = await deps.store.consumeAtomically({
-    appId,
+    serviceId,
     secretHash: r.secretHash,
     consumerIrkPubHex: consumerHex,
     consumedAt: rb.now(),
@@ -533,7 +533,7 @@ async function acceptInvite(
 
   const sessionToken = bytesToHex(rb.rand(32));
   const access: AppAccessRow = {
-    appId,
+    serviceId,
     irkPubHex: consumerHex,
     role: consumed.role,
     opaqueTag: consumed.opaqueTag,
@@ -548,7 +548,7 @@ async function acceptInvite(
     headers: J,
     body: JSON.stringify({
       ok: true,
-      appId,
+      serviceId,
       role: access.role,
       sessionToken,
       grantedAt: access.grantedAt,
@@ -559,7 +559,7 @@ async function acceptInvite(
 interface RevokeBody {
   request?: {
     serverId?: unknown;
-    appId?: unknown;
+    serviceId?: unknown;
     irkPubKey?: unknown;
     issuedAt?: unknown;
   };
@@ -568,7 +568,7 @@ interface RevokeBody {
 
 async function revokeAccess(
   deps: InviteHandlerDeps,
-  appId: string,
+  serviceId: string,
   irkHexInPath: string,
   req: HttpRequest,
   rb: { now: () => number; maxAgeMs: number },
@@ -581,7 +581,7 @@ async function revokeAccess(
   if (typeof r.serverId !== "string" || r.serverId !== deps.serverFqdn) {
     return jerr(403, "serverId mismatch");
   }
-  if (typeof r.appId !== "string" || r.appId !== appId) return jerr(400, "appId mismatch");
+  if (typeof r.serviceId !== "string" || r.serviceId !== serviceId) return jerr(400, "serviceId mismatch");
   if (typeof r.irkPubKey !== "string" || r.irkPubKey.toLowerCase() !== irkHexInPath.toLowerCase()) {
     return jerr(400, "irkPubKey / path mismatch");
   }
@@ -604,14 +604,14 @@ async function revokeAccess(
 
   const canonical = canonicalRevokeAccess({
     serverId: deps.serverFqdn,
-    appId,
+    serviceId,
     irkPubKey: irkPub,
     issuedAt: r.issuedAt,
   });
   if (!verifyOver(canonical, sig, deps.pskPub)) return jerr(403, "invalid signature");
 
   const ok = await deps.store.revokeAccess({
-    appId,
+    serviceId,
     irkPubHex: irkHexInPath.toLowerCase(),
     revokedAt: rb.now(),
   });
@@ -635,7 +635,7 @@ const TAG_REVOKE_ACCESS = "flagship/app-access-revoke/v1";
 
 interface IssueInviteFields {
   serverId: string;
-  appId: string;
+  serviceId: string;
   role: string;
   opaqueTag: Bytes;
   expectedIrkPubKey: Bytes | null;
@@ -649,7 +649,7 @@ export function canonicalIssueInvite(f: IssueInviteFields): Uint8Array {
     [
       TAG_ISSUE_INVITE,
       f.serverId,
-      f.appId,
+      f.serviceId,
       f.role,
       bytesToHex(f.opaqueTag),
       f.expectedIrkPubKey ? bytesToHex(f.expectedIrkPubKey) : "",
@@ -662,14 +662,14 @@ export function canonicalIssueInvite(f: IssueInviteFields): Uint8Array {
 
 interface RevokeAccessFields {
   serverId: string;
-  appId: string;
+  serviceId: string;
   irkPubKey: Bytes;
   issuedAt: number;
 }
 
 export function canonicalRevokeAccess(f: RevokeAccessFields): Uint8Array {
   return new TextEncoder().encode(
-    [TAG_REVOKE_ACCESS, f.serverId, f.appId, bytesToHex(f.irkPubKey), f.issuedAt].join("|"),
+    [TAG_REVOKE_ACCESS, f.serverId, f.serviceId, bytesToHex(f.irkPubKey), f.issuedAt].join("|"),
   );
 }
 
@@ -750,9 +750,9 @@ const INVITE_HTML = `<!doctype html>
 (function(){
   const frag = new URLSearchParams(location.hash.slice(1));
   const secret = frag.get("k") || "";
-  const appId = frag.get("a") || "";
+  const serviceId = frag.get("a") || "";
   const status = document.getElementById("status");
-  if (!secret || !appId) {
+  if (!secret || !serviceId) {
     document.getElementById("lede").textContent = "This invite link is missing required parameters.";
     return;
   }
@@ -771,13 +771,13 @@ const INVITE_HTML = `<!doctype html>
   (async () => {
     try {
       const h = await sha256Hex(secret);
-      const r = await fetch("/.flagship/app/" + encodeURIComponent(appId) + "/invite/preview?h=" + h);
+      const r = await fetch("/.flagship/app/" + encodeURIComponent(serviceId) + "/invite/preview?h=" + h);
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
         throw new Error(j.error || ("HTTP " + r.status));
       }
       const j = await r.json();
-      document.getElementById("lede").textContent = "You've been invited to " + j.appId + " as " + j.role + ".";
+      document.getElementById("lede").textContent = "You've been invited to " + j.serviceId + " as " + j.role + ".";
       if (j.contextNote) {
         document.getElementById("context-note").textContent = j.contextNote;
         document.getElementById("context").hidden = false;
@@ -799,8 +799,8 @@ const INVITE_HTML = `<!doctype html>
       return;
     }
     try {
-      const accept = await handoff({ secret: secret, appId: appId });
-      const r = await fetch("/.flagship/app/" + encodeURIComponent(appId) + "/invite/accept", {
+      const accept = await handoff({ secret: secret, serviceId: serviceId });
+      const r = await fetch("/.flagship/app/" + encodeURIComponent(serviceId) + "/invite/accept", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(accept),
@@ -809,7 +809,7 @@ const INVITE_HTML = `<!doctype html>
       if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
       status.className = "status ok";
       status.textContent = "Accepted. You now have " + j.role + " access.";
-      sessionStorage.setItem("flagship-session-" + appId, j.sessionToken);
+      sessionStorage.setItem("flagship-session-" + serviceId, j.sessionToken);
     } catch (e) {
       status.className = "status err";
       status.textContent = String(e && e.message || e);

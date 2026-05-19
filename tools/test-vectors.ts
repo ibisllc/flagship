@@ -121,7 +121,7 @@ async function main() {
 
   // MembershipMutation (IRK)
   const mem: MembershipMutation = {
-    appId: "habit-tracker",
+    serviceId: "habit-tracker",
     targetIrkPub: irk.publicKey,
     role: "parent",
     issuedAt: ISSUED_AT,
@@ -137,7 +137,7 @@ async function main() {
 
   // MigrationRequest (IRK)
   const mig: MigrationRequest = {
-    appId: "habit-tracker",
+    serviceId: "habit-tracker",
     fromUser: "harry",
     toUser: "sarah",
     mode: "cut",
@@ -148,7 +148,7 @@ async function main() {
 
   // InviteToken (IRK)
   const tok: InviteToken = {
-    appId: "habit-tracker",
+    serviceId: "habit-tracker",
     role: "parent",
     nonce: FIXED_INVITE_NONCE,
     issuedAt: ISSUED_AT,
@@ -308,15 +308,15 @@ function payloadFor(v: Vector): Uint8Array {
       );
     case "membership":
       return enc(
-        `flagship/membership/v1|${i.appId}|${i.targetIrkPub}|${i.role ?? "REMOVE"}|${i.issuedAt}`,
+        `flagship/membership/v1|${i.serviceId}|${i.targetIrkPub}|${i.role ?? "REMOVE"}|${i.issuedAt}`,
       );
     case "migration":
       return enc(
-        `flagship/migration/v1|${i.appId}|${i.fromUser}|${i.toUser}|${i.mode}|${i.withData ? "1" : "0"}|${i.issuedAt}`,
+        `flagship/migration/v1|${i.serviceId}|${i.fromUser}|${i.toUser}|${i.mode}|${i.withData ? "1" : "0"}|${i.issuedAt}`,
       );
     case "invite":
       return enc(
-        `flagship/invite/v1|${i.appId}|${i.role}|${i.nonce}|${i.issuedAt}|${i.expiresAt}`,
+        `flagship/invite/v1|${i.serviceId}|${i.role}|${i.nonce}|${i.issuedAt}|${i.expiresAt}`,
       );
     case "invite-acceptance":
       return enc(

@@ -1,4 +1,4 @@
--- Per-user app aliases — collapses <slug>.<server>.<user>.flagship.services
+-- Per-user service aliases — collapses <slug>.<server>.<user>.flagship.services
 -- to <slug>.<user>.flagship.services when unambiguous.
 --
 -- Conflict semantics: PRIMARY KEY (username, slug) so a second install
@@ -7,7 +7,7 @@
 --
 -- See docs/multiplexing.md for full design.
 
-CREATE TABLE IF NOT EXISTS app_aliases (
+CREATE TABLE IF NOT EXISTS service_aliases (
   username                    TEXT NOT NULL,
   slug                        TEXT NOT NULL,
   -- "<slug>" or "<slug>-<creator>" — the long form's leftmost label,
@@ -24,5 +24,5 @@ CREATE TABLE IF NOT EXISTS app_aliases (
   PRIMARY KEY (username, slug)
 );
 
-CREATE INDEX IF NOT EXISTS idx_app_aliases_user ON app_aliases(username);
-CREATE INDEX IF NOT EXISTS idx_app_aliases_server ON app_aliases(server_domain);
+CREATE INDEX IF NOT EXISTS idx_service_aliases_user ON service_aliases(username);
+CREATE INDEX IF NOT EXISTS idx_service_aliases_server ON service_aliases(server_domain);

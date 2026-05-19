@@ -16,7 +16,7 @@
  * they never see the WebSocket directly. Cookies, localStorage, and
  * raw Runtime.evaluate stay daemon-local.
  *
- * Event subscriptions exist for the TabRegistry's appId tagging
+ * Event subscriptions exist for the TabRegistry's serviceId tagging
  * (Target.targetCreated, Target.targetDestroyed) and for PhonePipe's
  * focus detection (DOM.attributeModified or page-level events from
  * within a session).

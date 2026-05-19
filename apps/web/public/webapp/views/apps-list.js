@@ -1,7 +1,7 @@
 // P2.2 — apps-list view. Calls /api/screens/apps-list (P1.2).
 // V3 — surfaces the per-app voi.ci short link + canonical alongside
 // the daemon's slug/summary/status. Each row fans out to
-// /api/users/:u/apps/:appId/links on .com after the initial list
+// /api/users/:u/apps/:serviceId/links on .com after the initial list
 // renders, then patches the URL slot in place — keeps the first
 // paint snappy while the network catches up.
 
@@ -59,7 +59,7 @@ export async function renderAppsList() {
       return;
     }
     root.innerHTML = body.apps.map((a) => `
-      <div class="card" data-app-id="${escapeHtml(a.appId)}">
+      <div class="card" data-app-id="${escapeHtml(a.serviceId)}">
         <div class="row row-top">
           <div style="flex:1; min-width:0;">
             <div class="weight-600">${escapeHtml(a.slug)} <span class="pill">${escapeHtml(a.version || "")}</span></div>
@@ -67,9 +67,9 @@ export async function renderAppsList() {
             <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
               <span class="pill ${a.status === "running" ? "ok" : ""}">${escapeHtml(a.status || "")}</span>
             </div>
-            <div data-url-slot="${escapeHtml(a.appId)}">${urlRowHtml(a, null)}</div>
+            <div data-url-slot="${escapeHtml(a.serviceId)}">${urlRowHtml(a, null)}</div>
           </div>
-          <button class="secondary" data-action="open" data-id="${escapeHtml(a.appId)}">open</button>
+          <button class="secondary" data-action="open" data-id="${escapeHtml(a.serviceId)}">open</button>
         </div>
       </div>
     `).join("");
@@ -112,12 +112,12 @@ async function hydrateAppLinks(apps) {
   await Promise.all(apps.map(async (a) => {
     try {
       const r = await fetch(
-        `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(a.appId)}/links`,
+        `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(a.serviceId)}/links`,
         { cache: "no-store" },
       );
       if (!r.ok) return;
       const links = await r.json();
-      const slot = document.querySelector(`[data-url-slot="${cssEscape(a.appId)}"]`);
+      const slot = document.querySelector(`[data-url-slot="${cssEscape(a.serviceId)}"]`);
       if (slot) {
         slot.innerHTML = urlRowHtml(a, links);
         // Re-bind copy buttons inside this slot.
@@ -141,7 +141,7 @@ async function hydrateAppLinks(apps) {
 }
 
 /** CSS.escape isn't on every browser version; this is a safe subset
- *  for the alphanumerics + hyphens an appId actually contains. */
+ *  for the alphanumerics + hyphens an serviceId actually contains. */
 function cssEscape(s) {
   return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
 }

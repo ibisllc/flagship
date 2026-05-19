@@ -26,7 +26,7 @@
  *      carries the password or OTP.
  *
  * Pending refs expire after 5 min by default. AlertInbox dedupes
- * re-emit on (appId, tabId, inputKind) so a tight focus loop does
+ * re-emit on (serviceId, tabId, inputKind) so a tight focus loop does
  * not flood.
  */
 
@@ -50,7 +50,7 @@ export interface PhonePipeDeps {
 
 interface PendingAlert {
   tabId: string;
-  appId: string;
+  serviceId: string;
   inputKind: InputKind;
   screenshot: Buffer;
   expiresAt: number;
@@ -158,20 +158,20 @@ export class PhonePipe {
     inputKind: InputKind;
     host?: string;
   }): Promise<{ screenshotRef: string }> {
-    const appId = this.tabRegistry.appIdForTab(args.tabId);
-    if (!appId) throw new Error("tab not owned");
+    const serviceId = this.tabRegistry.appIdForTab(args.tabId);
+    if (!serviceId) throw new Error("tab not owned");
     const screenshot = await this.browser.screenshot(args.tabId);
     const ref = this.nextRef();
     this.pending.set(ref, {
       tabId: args.tabId,
-      appId,
+      serviceId,
       inputKind: args.inputKind,
       screenshot,
       expiresAt: this.now() + this.ttlMs,
     });
     this.inbox.emit({
       kind: "browser-input-needed",
-      appId,
+      serviceId,
       tabId: args.tabId,
       domain: args.host ?? "unknown",
       inputKind: args.inputKind,
@@ -256,8 +256,8 @@ export class PhonePipe {
     const kind = parsed.kind;
     if (typeof tabId !== "string") return;
     if (kind !== "password" && kind !== "otp" && kind !== "text") return;
-    const appId = this.tabRegistry.appIdForTab(tabId);
-    if (!appId) return; // unowned tab — daemon-internal, no app alert
+    const serviceId = this.tabRegistry.appIdForTab(tabId);
+    if (!serviceId) return; // unowned tab — daemon-internal, no app alert
     let screenshot: Buffer;
     try {
       screenshot = await this.browser.screenshot(tabId);
@@ -267,14 +267,14 @@ export class PhonePipe {
     const ref = this.nextRef();
     this.pending.set(ref, {
       tabId,
-      appId,
+      serviceId,
       inputKind: kind as InputKind,
       screenshot,
       expiresAt: this.now() + this.ttlMs,
     });
     this.inbox.emit({
       kind: "browser-input-needed",
-      appId,
+      serviceId,
       tabId,
       domain: parsed.host ?? "unknown",
       inputKind: kind as InputKind,

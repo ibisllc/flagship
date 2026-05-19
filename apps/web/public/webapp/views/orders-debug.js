@@ -43,14 +43,14 @@ const ORDER_SHAPES = {
   "add-subscriber": {
     tag: "flagship/order/add-subscriber/v1",
     fields: [
-      { name: "appId", type: "string" },
+      { name: "serviceId", type: "string" },
       { name: "fqdn", type: "string" },
     ],
   },
   "remove-subscriber": {
     tag: "flagship/order/remove-subscriber/v1",
     fields: [
-      { name: "appId", type: "string" },
+      { name: "serviceId", type: "string" },
       { name: "fqdn", type: "string" },
     ],
   },

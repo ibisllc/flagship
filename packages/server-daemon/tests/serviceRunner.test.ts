@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 
 class RecordingRunner implements CommandRunner {
   calls: { cmd: string; args: string[] }[] = [];
@@ -18,7 +18,7 @@ describe("AppRunner", () => {
     const rec = new RecordingRunner();
     const runner = new AppRunner(rec);
     await runner.deploy({
-      appId: "photos",
+      serviceId: "photos",
       image: "ghcr.io/flagship/photos:latest",
       env: { PORT: "8080" },
       port: 8080,
@@ -44,7 +44,7 @@ describe("AppRunner", () => {
   it("restart stops + rms + redeploys (handles stale containers)", async () => {
     const rec = new RecordingRunner();
     const runner = new AppRunner(rec);
-    await runner.restart({ appId: "photos", image: "img:2" });
+    await runner.restart({ serviceId: "photos", image: "img:2" });
     const verbs = rec.calls.map((c) => c.args[0]);
     expect(verbs).toEqual(["stop", "rm", "run"]);
   });
@@ -63,7 +63,7 @@ describe("AppRunner", () => {
       },
     };
     const runner = new AppRunner(flaky);
-    await expect(runner.restart({ appId: "photos", image: "img:2" })).resolves.toBeUndefined();
+    await expect(runner.restart({ serviceId: "photos", image: "img:2" })).resolves.toBeUndefined();
   });
 
   it("logs invokes docker logs --tail and returns stdout/stderr", async () => {

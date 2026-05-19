@@ -155,14 +155,14 @@ describe("/webapp PWA static surface", () => {
     }
   });
 
-  it("/webapp/lib/installApp.js signs canonical install-app + uninstall-app envelopes", async () => {
+  it("/webapp/lib/installService.js signs canonical install-app + uninstall-app envelopes", async () => {
     const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/webapp/lib/installApp.js" });
+    const r = await app.inject({ method: "GET", url: "/webapp/lib/installService.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain("flagship/install-app/v1");
-    expect(r.body).toContain("flagship/uninstall-app/v1");
+    expect(r.body).toContain("flagship/install-service/v1");
+    expect(r.body).toContain("flagship/uninstall-service/v1");
     expect(r.body).toContain("/api/marketplace/");
-    expect(r.body).toContain("/api/apps");
+    expect(r.body).toContain("/api/services");
   });
 
   it("service-worker exposes the offline-replay queue (P2.13)", async () => {

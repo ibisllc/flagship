@@ -19,7 +19,7 @@ import type { DataProvisioner } from "./dataLayer/index.js";
 export interface LlmAppContextOptions {
   manifest: AppManifest;
   credentials?: AppDataCredentials;
-  /** Manifests of every deployed app on this server, keyed by appId. Used to compute sister-app visibility. */
+  /** Manifests of every deployed app on this server, keyed by serviceId. Used to compute sister-app visibility. */
   deployedApps: Map<string, { manifest: AppManifest }>;
   /** Optional live admin to introspect the running schema. */
   dataProvisioner?: DataProvisioner;
@@ -28,11 +28,11 @@ export interface LlmAppContextOptions {
 }
 
 export interface LlmAppContext {
-  appId: string;
+  serviceId: string;
   markdown: string;
   /** Programmatic surface for clients that want to build their own UX. */
   envVars: { name: string; description: string; sample?: string }[];
-  sisterApps: { appId: string; subdomain: string }[];
+  sisterApps: { serviceId: string; subdomain: string }[];
 }
 
 export async function buildLlmAppContext(
@@ -144,7 +144,7 @@ export async function buildLlmAppContext(
     );
   } else {
     for (const s of sisterApps) {
-      md.push(`- \`${s.appId}\` — query at \`${s.subdomain}.<user>.flagship.services\``);
+      md.push(`- \`${s.serviceId}\` — query at \`${s.subdomain}.<user>.flagship.services\``);
     }
     md.push("");
     md.push(
@@ -175,19 +175,19 @@ export async function buildLlmAppContext(
   md.push("  prefix is reserved for the runtime.");
   md.push("");
 
-  return { appId: m.name, markdown: md.join("\n"), envVars, sisterApps };
+  return { serviceId: m.name, markdown: md.join("\n"), envVars, sisterApps };
 }
 
 function listVisibleSisterApps(
   selfAppId: string,
   deployedApps: Map<string, { manifest: AppManifest }>,
-): { appId: string; subdomain: string }[] {
-  const out: { appId: string; subdomain: string }[] = [];
-  for (const [appId, entry] of deployedApps) {
-    if (appId === selfAppId) continue;
+): { serviceId: string; subdomain: string }[] {
+  const out: { serviceId: string; subdomain: string }[] = [];
+  for (const [serviceId, entry] of deployedApps) {
+    if (serviceId === selfAppId) continue;
     const queryable = entry.manifest.access.queryable_by ?? [];
     if (queryable.includes(selfAppId)) {
-      out.push({ appId, subdomain: entry.manifest.network.subdomain });
+      out.push({ serviceId, subdomain: entry.manifest.network.subdomain });
     }
   }
   return out;
@@ -313,7 +313,7 @@ function enumerateEnvVars(
  * Flagship rules outrank app-author additions).
  *
  * Used by the daemon's box-side LLM orchestrator: phone sends a
- * regular ChatRequest + an appId; daemon resolves the app context
+ * regular ChatRequest + an serviceId; daemon resolves the app context
  * and prepends before calling the provider. Keeps the system prompt
  * generated server-side so it always reflects the live data layer
  * + manifest, not whatever the phone happened to know.

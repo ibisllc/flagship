@@ -26,7 +26,7 @@ function manifest(over: Partial<AppManifest> = {}): AppManifest {
 
 function entry(over: Partial<CaddyAppEntry> = {}): CaddyAppEntry {
   return {
-    appId: "habit-tracker",
+    serviceId: "habit-tracker",
     manifest: manifest(),
     containerHost: "app-habit-tracker.flagship.local",
     ...over,
@@ -62,7 +62,7 @@ describe("renderCaddyfile", () => {
   });
 
   it("calls forward_auth into the local daemon's /identity/decide", () => {
-    const out = renderCaddyfile(ctx, [entry({ appId: "habit-tracker" })]);
+    const out = renderCaddyfile(ctx, [entry({ serviceId: "habit-tracker" })]);
     expect(out).toMatch(/forward_auth "127\.0\.0\.1:9090" \{/);
     expect(out).toContain("uri /apps/habit-tracker/identity/decide");
     expect(out).toContain(
@@ -107,9 +107,9 @@ describe("renderCaddyfile", () => {
 
   it("renders multiple apps as independent site blocks under one server", () => {
     const out = renderCaddyfile(ctx, [
-      entry({ appId: "habits", manifest: manifest({ network: { subdomain: "habits" } }) }),
+      entry({ serviceId: "habits", manifest: manifest({ network: { subdomain: "habits" } }) }),
       entry({
-        appId: "blog",
+        serviceId: "blog",
         manifest: manifest({ name: "blog", network: { subdomain: "blog" } }),
         containerHost: "app-blog.local",
       }),

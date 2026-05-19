@@ -123,7 +123,7 @@ describe("end-to-end tunnel: TCP → SNI router → WS hub → TunnelClient → 
           podPubKey: stk.publicKey,
           username: "harry",
           podCanonical: SERVER_FQDN,
-          appCanonicals: ["photos.home.harry.flagship.services"],
+          serviceCanonicals: ["photos.home.harry.flagship.services"],
         }),
       resolveBackend: (sni) => {
         if (sni.endsWith(".harry.flagship.services")) {

@@ -1,13 +1,13 @@
 /**
- * Test helpers for minting RootEntitlement + AppEntitlement bundles.
+ * Test helpers for minting RootEntitlement + ServiceEntitlement bundles.
  * Production daemons load these from the on-disk cache populated by
  * PhoneOrders; tests inject a freshly-minted bundle here.
  */
 
 import {
-  signAppEntitlement,
+  signServiceEntitlement,
   signRootEntitlement,
-  type AppEntitlement,
+  type ServiceEntitlement,
   type RootEntitlement,
 } from "./auth.js";
 import type { Bytes, Keypair } from "./types.js";
@@ -15,8 +15,8 @@ import type { Bytes, Keypair } from "./types.js";
 export interface DevEntitlementBundle {
   rootEntitlement: RootEntitlement;
   rootEntitlementSig: Bytes;
-  appEntitlement?: AppEntitlement;
-  appEntitlementSig?: Bytes;
+  serviceEntitlement?: ServiceEntitlement;
+  serviceEntitlementSig?: Bytes;
 }
 
 export function mintDevEntitlements(args: {
@@ -24,9 +24,9 @@ export function mintDevEntitlements(args: {
   podPubKey: Bytes;
   username: string;
   podCanonical: string;
-  appCanonicals?: string[];
-  /** Defaults to a 90-day app entitlement. */
-  appExpiresInMs?: number;
+  serviceCanonicals?: string[];
+  /** Defaults to a 90-day service entitlement. */
+  serviceExpiresInMs?: number;
   now?: () => number;
 }): DevEntitlementBundle {
   const now = (args.now ?? (() => Date.now()))();
@@ -37,21 +37,21 @@ export function mintDevEntitlements(args: {
     issuedAt: now,
   };
   const rootSig = signRootEntitlement(root, args.irk);
-  if (!args.appCanonicals || args.appCanonicals.length === 0) {
+  if (!args.serviceCanonicals || args.serviceCanonicals.length === 0) {
     return { rootEntitlement: root, rootEntitlementSig: rootSig };
   }
-  const app: AppEntitlement = {
+  const service: ServiceEntitlement = {
     username: args.username,
     podPubKey: args.podPubKey,
-    canonicals: args.appCanonicals.map((s) => s.toLowerCase()),
+    canonicals: args.serviceCanonicals.map((s) => s.toLowerCase()),
     issuedAt: now,
-    expiresAt: now + (args.appExpiresInMs ?? 90 * 24 * 60 * 60 * 1000),
+    expiresAt: now + (args.serviceExpiresInMs ?? 90 * 24 * 60 * 60 * 1000),
   };
-  const appSig = signAppEntitlement(app, args.irk);
+  const serviceSig = signServiceEntitlement(service, args.irk);
   return {
     rootEntitlement: root,
     rootEntitlementSig: rootSig,
-    appEntitlement: app,
-    appEntitlementSig: appSig,
+    serviceEntitlement: service,
+    serviceEntitlementSig: serviceSig,
   };
 }

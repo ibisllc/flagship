@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { sha256 } from "@noble/hashes/sha256";
 import {
   ed,
-  signAppGrant,
+  signServiceGrant,
   signDns01Publish,
   signDns01Delete,
-  type AppGrant,
+  type ServiceGrant,
   type Dns01PublishRequest,
   type Dns01DeleteRequest,
 } from "@flagship/protocol";
@@ -291,8 +291,8 @@ describe("publishTxtChallenge — user-zone IRK authority", () => {
   });
 });
 
-// ─── publishTxtChallenge — user-zone AppGrant authority ───
-describe("publishTxtChallenge — user-zone AppGrant authority", () => {
+// ─── publishTxtChallenge — user-zone ServiceGrant authority ───
+describe("publishTxtChallenge — user-zone ServiceGrant authority", () => {
   const irkKey = kp(4);
   const podKey = kp(5);
   const username = "carl";
@@ -301,21 +301,21 @@ describe("publishTxtChallenge — user-zone AppGrant authority", () => {
   const hash = sha256(new TextEncoder().encode(recordValue));
 
   function makeGrantBody(routes: Array<{ url: string; scope: "canonical" | "non-canonical" | "subpath" }>): PublishTxtChallengeBody {
-    const grant: AppGrant = {
+    const grant: ServiceGrant = {
       grantId: "11111111-2222-3333-4444-555555555555",
       username,
-      appCanonical: "myapp@aaaaaaaaaaaa",
+      serviceCanonical: "myapp@aaaaaaaaaaaa",
       serverDomains: [`home.${username}.${APEX}`],
       serverIdentities: [podKey.publicKey],
       routes,
       issuedAt: NOW - 60_000,
       expiresAt: NOW + 60 * 60_000,
     };
-    const sig = signAppGrant(grant, irkKey);
+    const sig = signServiceGrant(grant, irkKey);
     const wire: AppGrantWire = {
       grantId: grant.grantId,
       username: grant.username,
-      appCanonical: grant.appCanonical,
+      serviceCanonical: grant.serviceCanonical,
       serverDomains: grant.serverDomains,
       serverIdentitiesHex: grant.serverIdentities.map(toHex),
       routes: grant.routes,
@@ -370,21 +370,21 @@ describe("publishTxtChallenge — user-zone AppGrant authority", () => {
     const state = freshState();
     state.irks[username] = irkKey.publicKey;
     // Build a grant whose expiresAt is before NOW
-    const grant: AppGrant = {
+    const grant: ServiceGrant = {
       grantId: "deadbeef-2222-3333-4444-555555555555",
       username,
-      appCanonical: "myapp@aaaaaaaaaaaa",
+      serviceCanonical: "myapp@aaaaaaaaaaaa",
       serverDomains: [`home.${username}.${APEX}`],
       serverIdentities: [podKey.publicKey],
       routes: [{ url: `https://*.${username}.${APEX}`, scope: "canonical" }],
       issuedAt: NOW - 8 * 24 * 60 * 60_000,
       expiresAt: NOW - 60_000,
     };
-    const sig = signAppGrant(grant, irkKey);
+    const sig = signServiceGrant(grant, irkKey);
     const wire: AppGrantWire = {
       grantId: grant.grantId,
       username: grant.username,
-      appCanonical: grant.appCanonical,
+      serviceCanonical: grant.serviceCanonical,
       serverDomains: grant.serverDomains,
       serverIdentitiesHex: grant.serverIdentities.map(toHex),
       routes: grant.routes,

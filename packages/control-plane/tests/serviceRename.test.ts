@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   ed,
-  signAppRename,
+  signServiceRename,
   type Keypair,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import {
-  handleAppRename,
+  handleServiceRename,
   handleGetAppLinks,
   handleListAppAliases,
-} from "../src/appRename.js";
+} from "../src/serviceRename.js";
 
 const USER = "alice";
-const APP = "meta-scratchpad"; // appId; default label: "scratchpad-meta"
+const APP = "meta-scratchpad"; // serviceId; default label: "scratchpad-meta"
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -42,7 +42,7 @@ async function seed(s: InMemoryStorage, irk: Keypair) {
 function makeDeps(s: InMemoryStorage, opts: { now?: () => number; publishDns?: (u: string, oldL: string, newL: string, app: string) => Promise<void> } = {}) {
   return {
     usernames: s.usernames,
-    userAppAliases: s.userAppAliases,
+    userServiceAliases: s.userServiceAliases,
     voiciLinks: s.voiciLinks,
     servers: s.servers,
     auditEvents: s.auditEvents,
@@ -54,29 +54,29 @@ function makeDeps(s: InMemoryStorage, opts: { now?: () => number; publishDns?: (
 function signedBody(args: {
   irk: Keypair;
   username?: string;
-  appId?: string;
+  serviceId?: string;
   newDisplayLabel: string;
   issuedAt?: number;
 }) {
   const issuedAt = args.issuedAt ?? Date.now();
   const username = args.username ?? USER;
-  const appId = args.appId ?? APP;
-  const sig = signAppRename(
-    { username, appId, newDisplayLabel: args.newDisplayLabel, issuedAt },
+  const serviceId = args.serviceId ?? APP;
+  const sig = signServiceRename(
+    { username, serviceId, newDisplayLabel: args.newDisplayLabel, issuedAt },
     args.irk,
   );
   return {
-    request: { username, appId, newDisplayLabel: args.newDisplayLabel, issuedAt },
+    request: { username, serviceId, newDisplayLabel: args.newDisplayLabel, issuedAt },
     signature: bytesToHex(sig),
   };
 }
 
-describe("handleAppRename — happy path", () => {
+describe("handleServiceRename — happy path", () => {
   it("upserts alias, mints fresh short link, returns canonical+short", async () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    const res = await handleAppRename(
+    const res = await handleServiceRename(
       makeDeps(s),
       USER,
       APP,
@@ -92,7 +92,7 @@ describe("handleAppRename — happy path", () => {
     expect(b.shortUrl).toMatch(/^https:\/\/voi\.ci\/[a-z0-9]{6}$/);
 
     // Alias row persisted.
-    const alias = await s.userAppAliases.get(USER, APP);
+    const alias = await s.userServiceAliases.get(USER, APP);
     expect(alias?.displayLabel).toBe("mynotes");
   });
 
@@ -101,19 +101,19 @@ describe("handleAppRename — happy path", () => {
     const irk = makeKey();
     await seed(s, irk);
     // First rename → some code "abc1".
-    await handleAppRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "first" }));
-    const code1 = (await s.voiciLinks.deleteByApp.bind(s.voiciLinks)) ? null : null; // noop guard
+    await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "first" }));
+    const code1 = (await s.voiciLinks.deleteByService.bind(s.voiciLinks)) ? null : null; // noop guard
     // Pre-check: at least one row exists for this app.
     let preCount = 0;
     for (const c of ["aaaaaa","bbbbbb","cccccc"]) { /* sample-not-applicable */ void c; }
     // Reach into the in-memory map via the public API: insert another
-    // bogus row tied to a different appId and verify it doesn't get
+    // bogus row tied to a different serviceId and verify it doesn't get
     // deleted.
-    const ok = await s.voiciLinks.insert({ code: "preservd", username: USER, appId: "other-app", targetUrl: "https://x.example.com/", createdAt: 1 });
+    const ok = await s.voiciLinks.insert({ code: "preservd", username: USER, serviceId: "other-app", targetUrl: "https://x.example.com/", createdAt: 1 });
     expect(ok.ok).toBe(true);
 
     // Second rename — bumps the same app's codes.
-    const res2 = await handleAppRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "second" }));
+    const res2 = await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "second" }));
     expect(res2.status).toBe(200);
     const b = res2.body as { deletedShortLinks: number };
     expect(b.deletedShortLinks).toBeGreaterThanOrEqual(1);
@@ -126,8 +126,8 @@ describe("handleAppRename — happy path", () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    await handleAppRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "samename" }));
-    const res = await handleAppRename(
+    await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "samename" }));
+    const res = await handleServiceRename(
       makeDeps(s),
       USER,
       APP,
@@ -146,7 +146,7 @@ describe("handleAppRename — happy path", () => {
       publishDns: async (_u, oldL, newL, app) => { captured = { oldL, newL, app }; },
     });
     // First rename → records the default oldLabel ("scratchpad-meta").
-    await handleAppRename(deps, USER, APP, signedBody({ irk, newDisplayLabel: "renamed" }));
+    await handleServiceRename(deps, USER, APP, signedBody({ irk, newDisplayLabel: "renamed" }));
     expect(captured).not.toBeNull();
     if (captured) {
       const c = captured as { oldL: string; newL: string; app: string };
@@ -160,7 +160,7 @@ describe("handleAppRename — happy path", () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    await handleAppRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "newname" }));
+    await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "newname" }));
     const audit = await s.auditEvents.list(USER, 0, 5);
     expect(audit.length).toBe(1);
     expect(audit[0]?.eventKind).toBe("app-renamed");
@@ -169,12 +169,12 @@ describe("handleAppRename — happy path", () => {
   });
 });
 
-describe("handleAppRename — validation", () => {
+describe("handleServiceRename — validation", () => {
   it("400 on malformed body", async () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    const res = await handleAppRename(makeDeps(s), USER, APP, { request: {} });
+    const res = await handleServiceRename(makeDeps(s), USER, APP, { request: {} });
     expect(res.status).toBe(400);
   });
 
@@ -182,7 +182,7 @@ describe("handleAppRename — validation", () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    const res = await handleAppRename(
+    const res = await handleServiceRename(
       makeDeps(s),
       USER,
       APP,
@@ -195,7 +195,7 @@ describe("handleAppRename — validation", () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    const res = await handleAppRename(
+    const res = await handleServiceRename(
       makeDeps(s),
       USER,
       APP,
@@ -208,7 +208,7 @@ describe("handleAppRename — validation", () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    const res = await handleAppRename(
+    const res = await handleServiceRename(
       makeDeps(s),
       "other",
       APP,
@@ -221,7 +221,7 @@ describe("handleAppRename — validation", () => {
     const s = new InMemoryStorage();
     const irk = makeKey();
     await seed(s, irk);
-    const res = await handleAppRename(
+    const res = await handleServiceRename(
       makeDeps(s),
       USER,
       APP,
@@ -235,7 +235,7 @@ describe("handleAppRename — validation", () => {
     const irk = makeKey();
     await seed(s, irk);
     const other = makeKey();
-    const res = await handleAppRename(
+    const res = await handleServiceRename(
       makeDeps(s),
       USER,
       APP,
@@ -249,14 +249,14 @@ describe("handleAppRename — validation", () => {
     const irk = makeKey();
     await seed(s, irk);
     // Pre-seed: app "other-note" has alias "taken".
-    await s.userAppAliases.upsert({
+    await s.userServiceAliases.upsert({
       username: USER,
-      appId: "other-note",
+      serviceId: "other-note",
       displayLabel: "taken",
       createdAt: 1,
       updatedAt: 1,
     });
-    const res = await handleAppRename(
+    const res = await handleServiceRename(
       makeDeps(s),
       USER,
       APP,
@@ -279,7 +279,7 @@ describe("handleGetAppLinks", () => {
   });
 
   it("parses a HYPHENATED slug correctly (split at first dash only)", async () => {
-    // appId `meta-notes-app`: creator=meta (hyphen-free username),
+    // serviceId `meta-notes-app`: creator=meta (hyphen-free username),
     // slug=notes-app (slug may contain hyphens). The default URL
     // label flips the order → `notes-app-meta`. This is the case
     // single-dash + the no-hyphen-username rule exists to make
@@ -298,7 +298,7 @@ describe("handleGetAppLinks", () => {
     const irk = makeKey();
     await seed(s, irk);
     // No prior short link.
-    expect(await s.voiciLinks.getByApp(USER, APP)).toBeUndefined();
+    expect(await s.voiciLinks.getByService(USER, APP)).toBeUndefined();
     const res = await handleGetAppLinks(makeDeps(s), USER, APP);
     const b = res.body as { shortUrl: string | null };
     expect(b.shortUrl).toMatch(/^https:\/\/voi\.ci\/[a-z0-9]{6}$/);
@@ -309,39 +309,39 @@ describe("handleGetAppLinks", () => {
 
   it("rejects malformed username on the alias-list endpoint", async () => {
     const s = new InMemoryStorage();
-    const res = await handleListAppAliases({ userAppAliases: s.userAppAliases }, "BAD..NAME");
+    const res = await handleListAppAliases({ userServiceAliases: s.userServiceAliases }, "BAD..NAME");
     expect(res.status).toBe(400);
   });
 
   it("listAppAliases returns flat sorted rows for the daemon's reconciler", async () => {
     const s = new InMemoryStorage();
-    await s.userAppAliases.upsert({
+    await s.userServiceAliases.upsert({
       username: USER,
-      appId: "zzz-later",
+      serviceId: "zzz-later",
       displayLabel: "later",
       createdAt: 2,
       updatedAt: 2,
     });
-    await s.userAppAliases.upsert({
+    await s.userServiceAliases.upsert({
       username: USER,
-      appId: "aaa-first",
+      serviceId: "aaa-first",
       displayLabel: "first",
       createdAt: 1,
       updatedAt: 1,
     });
     // Different user shouldn't pollute the result.
-    await s.userAppAliases.upsert({
+    await s.userServiceAliases.upsert({
       username: "bob",
-      appId: "x--y",
+      serviceId: "x--y",
       displayLabel: "y",
       createdAt: 1,
       updatedAt: 1,
     });
-    const res = await handleListAppAliases({ userAppAliases: s.userAppAliases }, USER);
+    const res = await handleListAppAliases({ userServiceAliases: s.userServiceAliases }, USER);
     expect(res.status).toBe(200);
-    const b = res.body as { aliases: Array<{ appId: string; displayLabel: string; updatedAt: number }> };
-    expect(b.aliases.map((a) => a.appId)).toEqual(["aaa-first", "zzz-later"]);
-    expect(b.aliases[0]).toEqual({ appId: "aaa-first", displayLabel: "first", updatedAt: 1 });
+    const b = res.body as { aliases: Array<{ serviceId: string; displayLabel: string; updatedAt: number }> };
+    expect(b.aliases.map((a) => a.serviceId)).toEqual(["aaa-first", "zzz-later"]);
+    expect(b.aliases[0]).toEqual({ serviceId: "aaa-first", displayLabel: "first", updatedAt: 1 });
   });
 
   it("surfaces the rename-minted short link (no re-mint)", async () => {
@@ -349,8 +349,8 @@ describe("handleGetAppLinks", () => {
     const irk = makeKey();
     await seed(s, irk);
     // Rename mints a fresh code.
-    await handleAppRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "renamed" }));
-    const row = await s.voiciLinks.getByApp(USER, APP);
+    await handleServiceRename(makeDeps(s), USER, APP, signedBody({ irk, newDisplayLabel: "renamed" }));
+    const row = await s.voiciLinks.getByService(USER, APP);
     expect(row).toBeDefined();
     const res = await handleGetAppLinks(makeDeps(s), USER, APP);
     const b = res.body as { shortUrl: string };
@@ -367,9 +367,9 @@ describe("handleGetAppLinks", () => {
       username: USER,
       addedAt: 2,
     });
-    await s.userAppAliases.upsert({
+    await s.userServiceAliases.upsert({
       username: USER,
-      appId: APP,
+      serviceId: APP,
       displayLabel: "scratch",
       createdAt: 1,
       updatedAt: 1,

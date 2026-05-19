@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import { AppMembership } from "../src/membership.js";
 import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
@@ -88,7 +88,7 @@ describe("daemon HTTP — POST /apps (deploy)", () => {
       payload: { sessionToken: "phone-token", manifest: manifest(), source: "git@abc123" },
     });
     expect(r.statusCode).toBe(200);
-    expect(JSON.parse(r.body).appId).toBe("habit-tracker");
+    expect(JSON.parse(r.body).serviceId).toBe("habit-tracker");
     expect(deployedApps.get("habit-tracker")?.source).toBe("git@abc123");
     const dockerRun = rec.calls.find((c) => c.args[0] === "run")!;
     expect(dockerRun.args).toContain("ghcr.io/x/habit:0.1");

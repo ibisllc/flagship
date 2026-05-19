@@ -35,7 +35,7 @@ function makeReq(method: string, path: string, body?: unknown) {
 }
 
 function issueEnvelope(args: {
-  appId: string;
+  serviceId: string;
   ttlMs?: number;
   contextNote?: string | null;
   issuedAt: number;
@@ -43,7 +43,7 @@ function issueEnvelope(args: {
 }) {
   const f = {
     serverId: SERVER_FQDN,
-    appId: args.appId,
+    serviceId: args.serviceId,
     role: "reader",
     opaqueTag: new Uint8Array(16),
     expectedIrkPubKey: null,
@@ -55,7 +55,7 @@ function issueEnvelope(args: {
   return {
     request: {
       serverId: f.serverId,
-      appId: f.appId,
+      serviceId: f.serviceId,
       role: f.role,
       opaqueTag: bytesToHex(f.opaqueTag),
       expectedIrkPubKey: null,
@@ -74,7 +74,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const handler = buildInviteHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, store });
     const fields = {
       serverId: SERVER_FQDN,
-      appId: APP_ID,
+      serviceId: APP_ID,
       role: "reader",
       opaqueTag: new Uint8Array(16),
       expectedIrkPubKey: null,
@@ -87,7 +87,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const env = {
       request: {
         serverId: fields.serverId,
-        appId: fields.appId,
+        serviceId: fields.serviceId,
         role: fields.role,
         opaqueTag: bytesToHex(fields.opaqueTag),
         expectedIrkPubKey: null,
@@ -109,7 +109,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const store = new InMemoryAppInviteStore();
     const handler = buildInviteHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, store });
     const env = issueEnvelope({
-      appId: APP_ID,
+      serviceId: APP_ID,
       ttlMs: 73 * 60 * 60_000,
       issuedAt: Date.now(),
       psk,
@@ -124,7 +124,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const store = new InMemoryAppInviteStore();
     const handler = buildInviteHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, store });
     const env = issueEnvelope({
-      appId: APP_ID,
+      serviceId: APP_ID,
       ttlMs: 5_000,
       issuedAt: Date.now(),
       psk,
@@ -139,7 +139,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const store = new InMemoryAppInviteStore();
     const handler = buildInviteHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, store });
     const env = issueEnvelope({
-      appId: APP_ID,
+      serviceId: APP_ID,
       ttlMs: 72 * 60 * 60_000,
       issuedAt: Date.now(),
       psk,
@@ -154,7 +154,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const handler = buildInviteHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, store });
     const note = "from harry's phone — work";
     const env = issueEnvelope({
-      appId: APP_ID,
+      serviceId: APP_ID,
       contextNote: note,
       issuedAt: Date.now(),
       psk,
@@ -170,12 +170,12 @@ describe("invite bearer-token mitigations (#83)", () => {
     );
     expect(preview?.status).toBe(200);
     const pb = JSON.parse(String(preview!.body)) as {
-      appId: string;
+      serviceId: string;
       role: string;
       contextNote: string | null;
       preBound: boolean;
     };
-    expect(pb.appId).toBe(APP_ID);
+    expect(pb.serviceId).toBe(APP_ID);
     expect(pb.role).toBe("reader");
     expect(pb.contextNote).toBe(note);
     expect(pb.preBound).toBe(false);
@@ -237,7 +237,7 @@ describe("invite bearer-token mitigations (#83)", () => {
       now: () => nowMs,
     });
     const env = issueEnvelope({
-      appId: APP_ID,
+      serviceId: APP_ID,
       ttlMs: 60_000,
       issuedAt: nowMs,
       psk,
@@ -262,7 +262,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const handler = buildInviteHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, store });
     const long = "x".repeat(281);
     const env = issueEnvelope({
-      appId: APP_ID,
+      serviceId: APP_ID,
       contextNote: long,
       issuedAt: Date.now(),
       psk,
@@ -278,7 +278,7 @@ describe("invite bearer-token mitigations (#83)", () => {
     const handler = buildInviteHandler({ serverFqdn: SERVER_FQDN, pskPub: psk.publicKey, store });
     const justfits = "y".repeat(280);
     const env = issueEnvelope({
-      appId: APP_ID,
+      serviceId: APP_ID,
       contextNote: justfits,
       issuedAt: Date.now(),
       psk,

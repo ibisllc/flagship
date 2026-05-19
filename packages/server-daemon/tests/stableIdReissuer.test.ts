@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ed, type Keypair } from "@flagship/protocol";
-import { AppPlatform } from "../src/appPlatform.js";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+import { ServicePlatform } from "../src/servicePlatform.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import {
   DataProvisioner,
   InMemoryMinioAdmin,
@@ -55,9 +55,9 @@ const MANIFEST = (slug: string) =>
     migration: { portable: true, verification: "standard" },
   });
 
-async function buildPlatformWith(memberKeys: Keypair[]): Promise<AppPlatform> {
+async function buildPlatformWith(memberKeys: Keypair[]): Promise<ServicePlatform> {
   const hostIrk = makeKey();
-  const platform = new AppPlatform({
+  const platform = new ServicePlatform({
     host: { username: HOST_USERNAME, irkPub: hostIrk.publicKey },
     swk: fakeSwk(),
     appRunner: fakeRunner(),
@@ -96,7 +96,7 @@ describe("J.4 stable-id re-issuer", () => {
     const platform = await buildPlatformWith([oldIrk, friend]);
     const journal = new InMemoryJournalStore();
     const report = await reissueStableIds({
-      deps: { appPlatform: platform, swk: fakeSwk(), journal },
+      deps: { servicePlatform: platform, swk: fakeSwk(), journal },
       oldIrkPubHex: bytesToHex(oldIrk.publicKey),
       newIrkPubHex: bytesToHex(newIrk.publicKey),
     });
@@ -119,7 +119,7 @@ describe("J.4 stable-id re-issuer", () => {
     const platform = await buildPlatformWith([stranger]);
     const journal = new InMemoryJournalStore();
     const report = await reissueStableIds({
-      deps: { appPlatform: platform, swk: fakeSwk(), journal },
+      deps: { servicePlatform: platform, swk: fakeSwk(), journal },
       oldIrkPubHex: bytesToHex(oldIrk.publicKey),
       newIrkPubHex: bytesToHex(newIrk.publicKey),
     });
@@ -135,7 +135,7 @@ describe("J.4 stable-id re-issuer", () => {
     const journal = new InMemoryJournalStore();
     const swk = fakeSwk(42);
     const report = await reissueStableIds({
-      deps: { appPlatform: platform, swk, journal },
+      deps: { servicePlatform: platform, swk, journal },
       oldIrkPubHex: bytesToHex(oldIrk.publicKey),
       newIrkPubHex: bytesToHex(newIrk.publicKey),
     });
@@ -144,13 +144,13 @@ describe("J.4 stable-id re-issuer", () => {
     for (const row of rows) {
       // App ID is plaintext (the index keeps it queryable) but the
       // OLD→NEW pubkey mapping is not retrievable without SWK + salt.
-      expect(row.appId).toMatch(/^alice-/);
+      expect(row.serviceId).toMatch(/^alice-/);
       expect(row.ciphertextHex.length).toBeGreaterThan(0);
       expect(row.ivHex.length).toBe(24);
       expect(row.tagHex.length).toBe(32);
     }
     const decrypted = await readJournalDecrypted(
-      { appPlatform: platform, swk, journal },
+      { servicePlatform: platform, swk, journal },
       report.journalSaltHex,
     );
     expect(decrypted.length).toBe(3);
@@ -168,12 +168,12 @@ describe("J.4 stable-id re-issuer", () => {
     const journal = new InMemoryJournalStore();
     const goodSwk = fakeSwk(1);
     const report = await reissueStableIds({
-      deps: { appPlatform: platform, swk: goodSwk, journal },
+      deps: { servicePlatform: platform, swk: goodSwk, journal },
       oldIrkPubHex: bytesToHex(oldIrk.publicKey),
       newIrkPubHex: bytesToHex(newIrk.publicKey),
     });
     const decrypted = await readJournalDecrypted(
-      { appPlatform: platform, swk: fakeSwk(99), journal },
+      { servicePlatform: platform, swk: fakeSwk(99), journal },
       report.journalSaltHex,
     );
     expect(decrypted.length).toBe(0);
@@ -185,7 +185,7 @@ describe("J.4 stable-id re-issuer", () => {
     const journal = new InMemoryJournalStore();
     await expect(
       reissueStableIds({
-        deps: { appPlatform: platform, swk: fakeSwk(), journal },
+        deps: { servicePlatform: platform, swk: fakeSwk(), journal },
         oldIrkPubHex: bytesToHex(irk.publicKey),
         newIrkPubHex: bytesToHex(irk.publicKey),
       }),
@@ -200,7 +200,7 @@ describe("J.4 stable-id re-issuer", () => {
     const fixed = 1_700_000_000_000;
     const report = await reissueStableIds({
       deps: {
-        appPlatform: platform,
+        servicePlatform: platform,
         swk: fakeSwk(),
         journal,
         now: () => fixed,

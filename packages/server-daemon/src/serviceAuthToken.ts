@@ -5,7 +5,7 @@
  * authenticate with `Authorization: Bearer <FLAGSHIP_APP_TOKEN>`. The
  * daemon mints a 32-byte random token at install time, injects it as the
  * `FLAGSHIP_APP_TOKEN` env var, and resolves the bearer back to an
- * appId on every request.
+ * serviceId on every request.
  *
  * This is a **separate boundary** from the existing daemon→app
  * identity-injection signature (X-Flagship-Signature, used to tell the
@@ -28,14 +28,14 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export interface AppAuthTokens {
-  /** Mint a new token for `appId`. Overwrites any existing token. */
-  mint(appId: string): Promise<string>;
-  /** Look up the appId behind a bearer token, or null if unknown. */
+  /** Mint a new token for `serviceId`. Overwrites any existing token. */
+  mint(serviceId: string): Promise<string>;
+  /** Look up the serviceId behind a bearer token, or null if unknown. */
   resolve(token: string): Promise<string | null>;
   /** Drop the token for an app (called on uninstall). Idempotent. */
-  forget(appId: string): Promise<void>;
+  forget(serviceId: string): Promise<void>;
   /** Read the current token for an app — useful for tests + env injection. */
-  tokenForApp(appId: string): Promise<string | null>;
+  tokenForApp(serviceId: string): Promise<string | null>;
 }
 
 /**
@@ -45,16 +45,16 @@ export interface AppAuthTokens {
  */
 export class InMemoryAppAuthTokens implements AppAuthTokens {
   private byToken = new Map<string, string>();
-  private byAppId = new Map<string, string>();
+  private byServiceId = new Map<string, string>();
 
-  async mint(appId: string): Promise<string> {
-    const existing = this.byAppId.get(appId);
+  async mint(serviceId: string): Promise<string> {
+    const existing = this.byServiceId.get(serviceId);
     if (existing) {
       this.byToken.delete(existing);
     }
     const token = generateToken();
-    this.byToken.set(token, appId);
-    this.byAppId.set(appId, token);
+    this.byToken.set(token, serviceId);
+    this.byServiceId.set(serviceId, token);
     return token;
   }
 
@@ -62,27 +62,27 @@ export class InMemoryAppAuthTokens implements AppAuthTokens {
     return this.byToken.get(token) ?? null;
   }
 
-  async forget(appId: string): Promise<void> {
-    const t = this.byAppId.get(appId);
+  async forget(serviceId: string): Promise<void> {
+    const t = this.byServiceId.get(serviceId);
     if (t) {
       this.byToken.delete(t);
-      this.byAppId.delete(appId);
+      this.byServiceId.delete(serviceId);
     }
   }
 
-  async tokenForApp(appId: string): Promise<string | null> {
-    return this.byAppId.get(appId) ?? null;
+  async tokenForApp(serviceId: string): Promise<string | null> {
+    return this.byServiceId.get(serviceId) ?? null;
   }
 }
 
 /**
  * File-backed write-through cache. Production default. One file per app
- * under `<dir>/<appId>.token` containing just the token string. On
+ * under `<dir>/<serviceId>.token` containing just the token string. On
  * construction call `load()` to populate the in-memory maps.
  */
 export class FileAppAuthTokens implements AppAuthTokens {
   private byToken = new Map<string, string>();
-  private byAppId = new Map<string, string>();
+  private byServiceId = new Map<string, string>();
 
   constructor(private readonly dir: string) {}
 
@@ -91,12 +91,12 @@ export class FileAppAuthTokens implements AppAuthTokens {
     if (!existsSync(this.dir)) return;
     for (const f of readdirSync(this.dir)) {
       if (!f.endsWith(".token")) continue;
-      const appId = f.slice(0, -".token".length);
+      const serviceId = f.slice(0, -".token".length);
       try {
         const token = (await readFile(join(this.dir, f), "utf8")).trim();
         if (token) {
-          this.byToken.set(token, appId);
-          this.byAppId.set(appId, token);
+          this.byToken.set(token, serviceId);
+          this.byServiceId.set(serviceId, token);
         }
       } catch {
         // ignore unreadable entries; missing tokens just mean the app
@@ -105,17 +105,17 @@ export class FileAppAuthTokens implements AppAuthTokens {
     }
   }
 
-  async mint(appId: string): Promise<string> {
+  async mint(serviceId: string): Promise<string> {
     if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const existing = this.byAppId.get(appId);
+    const existing = this.byServiceId.get(serviceId);
     if (existing) this.byToken.delete(existing);
     const token = generateToken();
-    const file = join(this.dir, `${appId}.token`);
+    const file = join(this.dir, `${serviceId}.token`);
     const tmp = `${file}.tmp`;
     await writeFile(tmp, token, { mode: 0o600 });
     await rename(tmp, file);
-    this.byToken.set(token, appId);
-    this.byAppId.set(appId, token);
+    this.byToken.set(token, serviceId);
+    this.byServiceId.set(serviceId, token);
     return token;
   }
 
@@ -123,18 +123,18 @@ export class FileAppAuthTokens implements AppAuthTokens {
     return this.byToken.get(token) ?? null;
   }
 
-  async forget(appId: string): Promise<void> {
-    const t = this.byAppId.get(appId);
+  async forget(serviceId: string): Promise<void> {
+    const t = this.byServiceId.get(serviceId);
     if (t) {
       this.byToken.delete(t);
-      this.byAppId.delete(appId);
+      this.byServiceId.delete(serviceId);
     }
-    const file = join(this.dir, `${appId}.token`);
+    const file = join(this.dir, `${serviceId}.token`);
     await rm(file, { force: true });
   }
 
-  async tokenForApp(appId: string): Promise<string | null> {
-    return this.byAppId.get(appId) ?? null;
+  async tokenForApp(serviceId: string): Promise<string | null> {
+    return this.byServiceId.get(serviceId) ?? null;
   }
 }
 

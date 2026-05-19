@@ -21,7 +21,7 @@ import type {
   ProviderConfig,
   StreamingLLMProvider,
 } from "@flagship/llm-providers";
-import { InMemoryAppEnvStore, type AppEnvStore } from "../../src/appEnvStore.js";
+import { InMemoryAppEnvStore, type AppEnvStore } from "../../src/serviceEnvStore.js";
 import { buildVibeCodeStartStreaming } from "../../src/llm/vibeCodeStartStreaming.js";
 import {
   VibeCodeSessionRegistry,
@@ -54,18 +54,18 @@ function capturingProvider(): {
 class NamesOnlyStore implements AppEnvStore {
   public getCalls = 0;
   constructor(private readonly inner: AppEnvStore) {}
-  put(appId: string, env: Record<string, string>): Promise<void> {
-    return this.inner.put(appId, env);
+  put(serviceId: string, env: Record<string, string>): Promise<void> {
+    return this.inner.put(serviceId, env);
   }
-  get(appId: string): Promise<Record<string, string> | null> {
+  get(serviceId: string): Promise<Record<string, string> | null> {
     this.getCalls++;
-    return this.inner.get(appId);
+    return this.inner.get(serviceId);
   }
-  names(appId: string): Promise<string[]> {
-    return this.inner.names(appId);
+  names(serviceId: string): Promise<string[]> {
+    return this.inner.names(serviceId);
   }
-  forget(appId: string): Promise<void> {
-    return this.inner.forget(appId);
+  forget(serviceId: string): Promise<void> {
+    return this.inner.forget(serviceId);
   }
 }
 

@@ -13,14 +13,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildRunMigration } from "../src/runMigration.js";
-import type { InstalledApp } from "../src/appPlatform.js";
+import type { InstalledService } from "../src/servicePlatform.js";
 import type { AppDataCredentials } from "../src/dataLayer/index.js";
 
-function fakeApp(args: { data?: AppDataCredentials | null }): InstalledApp {
+function fakeApp(args: { data?: AppDataCredentials | null }): InstalledService {
   return {
     creator: "alice",
     slug: "x",
-    appId: "alice-x",
+    serviceId: "alice-x",
     manifest: {
       schema_version: 1,
       name: "x",
@@ -64,12 +64,12 @@ describe("buildRunMigration — .sql dispatch", () => {
 
     const seen: { sql: string; pgUrl: string }[] = [];
     const run = buildRunMigration({
-      appByAppId: () => fakeApp({ data: PG_CREDS }),
+      serviceByServiceId: () => fakeApp({ data: PG_CREDS }),
       runSqlOverride: async (a) => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" });
+    await run({ serviceId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" });
     expect(seen).toHaveLength(1);
     expect(seen[0]?.sql).toContain("CREATE TABLE");
     expect(seen[0]?.pgUrl).toBe(PG_CREDS.postgres!.default!.url);
@@ -79,10 +79,10 @@ describe("buildRunMigration — .sql dispatch", () => {
     const sqlPath = join(tmp, "0001_init.sql");
     await writeFile(sqlPath, "SELECT 1;");
     const run = buildRunMigration({
-      appByAppId: () => fakeApp({ data: null }),
+      serviceByServiceId: () => fakeApp({ data: null }),
     });
     await expect(
-      run({ appId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" }),
+      run({ serviceId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" }),
     ).rejects.toThrow(/has no postgres store/);
   });
 
@@ -90,11 +90,11 @@ describe("buildRunMigration — .sql dispatch", () => {
     const sqlPath = join(tmp, "0001_init.sql");
     await writeFile(sqlPath, "SELECT 1;");
     const run = buildRunMigration({
-      appByAppId: () => null,
+      serviceByServiceId: () => null,
     });
     await expect(
-      run({ appId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" }),
-    ).rejects.toThrow(/unknown appId/);
+      run({ serviceId: "alice-x", absPath: sqlPath, filename: "0001_init.sql" }),
+    ).rejects.toThrow(/unknown serviceId/);
   });
 });
 
@@ -110,12 +110,12 @@ describe("buildRunMigration — .ts/.js dispatch", () => {
 
     const seen: { cmd: string; args: string[]; env: Record<string, string> }[] = [];
     const run = buildRunMigration({
-      appByAppId: () => fakeApp({ data: PG_CREDS }),
+      serviceByServiceId: () => fakeApp({ data: PG_CREDS }),
       runScriptOverride: async (a) => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
+    await run({ serviceId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
     expect(seen[0]?.cmd).toBe("tsx");
     expect(seen[0]?.args).toEqual([tsPath]);
     expect(seen[0]?.env.FLAGSHIP_APP_ID).toBe("alice-x");
@@ -130,12 +130,12 @@ describe("buildRunMigration — .ts/.js dispatch", () => {
 
     const seen: { cmd: string }[] = [];
     const run = buildRunMigration({
-      appByAppId: () => fakeApp({ data: null }),
+      serviceByServiceId: () => fakeApp({ data: null }),
       runScriptOverride: async (a) => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice-x", absPath: jsPath, filename: "0001_seed.js" });
+    await run({ serviceId: "alice-x", absPath: jsPath, filename: "0001_seed.js" });
     expect(seen[0]?.cmd).toBe("node");
   });
 
@@ -146,12 +146,12 @@ describe("buildRunMigration — .ts/.js dispatch", () => {
 
     const seen: { env: Record<string, string> }[] = [];
     const run = buildRunMigration({
-      appByAppId: () => fakeApp({ data: null }),
+      serviceByServiceId: () => fakeApp({ data: null }),
       runScriptOverride: async (a) => {
         seen.push(a);
       },
     });
-    await run({ appId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
+    await run({ serviceId: "alice-x", absPath: tsPath, filename: "0001_seed.ts" });
     expect(seen[0]?.env.FLAGSHIP_LEAKED).toBeUndefined();
     delete process.env.FLAGSHIP_LEAKED;
   });
@@ -169,7 +169,7 @@ describe("buildRunMigration — unknown extensions", () => {
     let sqlCalled = false;
     let scriptCalled = false;
     const run = buildRunMigration({
-      appByAppId: () => fakeApp({ data: null }),
+      serviceByServiceId: () => fakeApp({ data: null }),
       runSqlOverride: async () => {
         sqlCalled = true;
       },
@@ -177,7 +177,7 @@ describe("buildRunMigration — unknown extensions", () => {
         scriptCalled = true;
       },
     });
-    await run({ appId: "alice-x", absPath: readmePath, filename: "0001_README.md" });
+    await run({ serviceId: "alice-x", absPath: readmePath, filename: "0001_README.md" });
     expect(sqlCalled).toBe(false);
     expect(scriptCalled).toBe(false);
   });

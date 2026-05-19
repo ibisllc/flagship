@@ -138,7 +138,7 @@ function happyHttp() {
     // the container env, app reads it"). The proof value is random per
     // run; the mock reflects whatever the signed order carried.
     {
-      match: (u) => /\/api\/apps\/[^/]+\/env$/.test(u),
+      match: (u) => /\/api\/services\/[^/]+\/env$/.test(u),
       reply: (_u, _n, body) => {
         const env = (body as { request?: { env?: Record<string, string> } })?.request?.env ?? {};
         envState.proof = env["E2E_ENV_PROOF"] ?? "";
@@ -147,10 +147,10 @@ function happyHttp() {
     },
     { match: (u) => u.includes("/api/screens/orders/send"), reply: okJson({ orderId: "o1" }) },
     {
-      match: (u) => /\/api\/apps\/[^/]+\/health$/.test(u),
+      match: (u) => /\/api\/services\/[^/]+\/health$/.test(u),
       reply: () => okJson({ status: "ok", E2E_ENV_PROOF: envState.proof }),
     },
-    { match: (u) => u.includes("/api/apps") && !u.includes("health"), reply: okJson({ appId: "a1" }) },
+    { match: (u) => u.includes("/api/services") && !u.includes("health"), reply: okJson({ serviceId: "a1" }) },
     {
       match: (u) => u.includes("/pubkey-cert"),
       reply: okJson({ pubkey: "deadbeef", caSig: "..." }),

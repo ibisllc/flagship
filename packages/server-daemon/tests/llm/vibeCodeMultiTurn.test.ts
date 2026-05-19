@@ -166,7 +166,7 @@ describe("VibeCodeSession multi-turn", () => {
     s.pushUserMessage("x");
     s.receiveToolUse({ id: "tu_6", name: "talkToUser", input: { message: "?" } });
     expect(s.meta.status).toBe("awaiting-tool-response");
-    s.markDeployed({ appId: "x-y", url: "https://y.x.flagship.services" });
+    s.markDeployed({ serviceId: "x-y", url: "https://y.x.flagship.services" });
     // Should NOT have deployed — the guard emitted an error and left
     // the status alone.
     expect(s.meta.status).toBe("awaiting-tool-response");

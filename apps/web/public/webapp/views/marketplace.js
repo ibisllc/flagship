@@ -1,5 +1,5 @@
 // P2.4 — Marketplace browse + install. Calls /api/screens/marketplace-browse
-// (P1.4) for the listings and the daemon's /api/apps for install.
+// (P1.4) for the listings and the daemon's /api/services for install.
 //
 // Task #28 — scan-grade pill (A/B/C/F) per listing with explanatory
 // tooltip. Ungraded listings render an "ungraded" pill since the
@@ -9,7 +9,7 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
-import { installFromMarketplace } from "../lib/installApp.js";
+import { installFromMarketplace } from "../lib/installService.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 

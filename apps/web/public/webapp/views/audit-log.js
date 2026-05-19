@@ -12,7 +12,7 @@
 // `renderInlineActivityAuditLog()` from its Activity-tab enter handler.
 //
 // Consolidates every signed event the user has authored or that affects
-// them — AppGrant issue/renew/revoke, Pod register/revoke, URL
+// them — ServiceGrant issue/renew/revoke, Pod register/revoke, URL
 // claim/drop, AutoUnlockLease grant/consume/revoke, Cloud-recovery
 // setup/use, Username rename, App install/uninstall/update, Invite
 // issue/consume/revoke, Recovery J.3 events, MergeBack.

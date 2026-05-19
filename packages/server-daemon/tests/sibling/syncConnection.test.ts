@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ed,
-  signAppGrant,
+  signServiceGrant,
   signPodIdentityBinding,
-  type AppGrant,
+  type ServiceGrant,
   type Bytes,
   type Keypair,
   type PodIdentityBinding,
@@ -30,25 +30,25 @@ const OFFICE = "office.alice.flagship.services";
 function mintGrant(args: {
   irk: Keypair;
   grantId?: string;
-  appCanonical?: string;
+  serviceCanonical?: string;
   serverDomains: string[];
   serverIdentities: Bytes[];
   issuedAt?: number;
   expiresAt?: number;
-}): { grant: AppGrant; signature: Bytes } {
+}): { grant: ServiceGrant; signature: Bytes } {
   const issuedAt = args.issuedAt ?? Date.now();
   const expiresAt = args.expiresAt ?? issuedAt + 7 * 24 * 3600_000;
-  const grant: AppGrant = {
+  const grant: ServiceGrant = {
     grantId: args.grantId ?? "550e8400-e29b-41d4-a716-446655440000",
     username: USER,
-    appCanonical: args.appCanonical ?? "notes@abc123def456",
+    serviceCanonical: args.serviceCanonical ?? "notes@abc123def456",
     serverDomains: args.serverDomains,
     serverIdentities: args.serverIdentities,
     routes: [{ url: args.serverDomains[0]!, scope: "canonical" }],
     issuedAt,
     expiresAt,
   };
-  return { grant, signature: signAppGrant(grant, args.irk) };
+  return { grant, signature: signServiceGrant(grant, args.irk) };
 }
 
 function setupPair(opts?: {
@@ -611,7 +611,7 @@ describe("InMemoryAppGrantStore — fresher-cert-wins primitive", () => {
     expect(store.byGrantId("x")!.grant.issuedAt).toBe(200);
   });
 
-  it("rejects an older grantId targeting the same appCanonical", () => {
+  it("rejects an older grantId targeting the same serviceCanonical", () => {
     const store = new InMemoryAppGrantStore();
     const irk = key();
     const podKey = key();
@@ -633,7 +633,7 @@ describe("InMemoryAppGrantStore — fresher-cert-wins primitive", () => {
     expect(store.applyIfFresher(olderDifferentId)).toBe(false);
   });
 
-  it("accepts a fresher grantId rotation for the same appCanonical", () => {
+  it("accepts a fresher grantId rotation for the same serviceCanonical", () => {
     const store = new InMemoryAppGrantStore();
     const irk = key();
     const podKey = key();

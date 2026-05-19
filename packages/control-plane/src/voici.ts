@@ -3,7 +3,7 @@
 // Three concerns:
 //
 //   1. mintShortLink (internal helper) — Worker-private, called by
-//      handleAppRename + (future) one-off shorten endpoint. Picks a
+//      handleServiceRename + (future) one-off shorten endpoint. Picks a
 //      6-base36 code, retries on collision up to 5 times.
 //
 //   2. handleVoiciRedirect — public hostname route. The Worker's
@@ -12,7 +12,7 @@
 //      or 404 / 410 on miss / expired.
 //
 //   3. handleVoiciShorten — phone-facing API. Signed by IRK; mints
-//      a one-off code (no appId binding). For app-bound codes the
+//      a one-off code (no serviceId binding). For app-bound codes the
 //      caller is the rename handler, not this endpoint.
 //
 // Short code alphabet: lowercase base36 (`0-9a-z`). 6 chars = 2.18B
@@ -75,7 +75,7 @@ export async function mintShortLink(
   deps: VoiciDeps,
   args: {
     username: string;
-    appId?: string;
+    serviceId?: string;
     targetUrl: string;
     expiresAt?: number;
   },
@@ -92,7 +92,7 @@ export async function mintShortLink(
     const insert = await deps.voiciLinks.insert({
       code,
       username,
-      ...(args.appId ? { appId: args.appId } : {}),
+      ...(args.serviceId ? { serviceId: args.serviceId } : {}),
       targetUrl: args.targetUrl,
       createdAt: now,
       ...(args.expiresAt !== undefined ? { expiresAt: args.expiresAt } : {}),
@@ -106,8 +106,8 @@ export async function mintShortLink(
 }
 
 /** Phone-facing API. Signed by IRK over canonical bytes. Mints a
- *  one-off code (no appId binding). App-bound codes ride through
- *  handleAppRename instead — appId binding lets that handler cascade-
+ *  one-off code (no serviceId binding). App-bound codes ride through
+ *  handleServiceRename instead — serviceId binding lets that handler cascade-
  *  delete on subsequent renames. */
 export async function handleVoiciShorten(
   deps: VoiciDeps,
@@ -140,7 +140,7 @@ export async function handleVoiciShorten(
   }
   const claim: VoiciShorten = {
     username: r.username,
-    ...(typeof r.appId === "string" && r.appId.length > 0 ? { appId: r.appId } : {}),
+    ...(typeof r.serviceId === "string" && r.serviceId.length > 0 ? { serviceId: r.serviceId } : {}),
     targetUrl: r.targetUrl,
     issuedAt: r.issuedAt,
   };
@@ -150,7 +150,7 @@ export async function handleVoiciShorten(
 
   const minted = await mintShortLink(deps, {
     username: r.username,
-    ...(typeof r.appId === "string" && r.appId.length > 0 ? { appId: r.appId } : {}),
+    ...(typeof r.serviceId === "string" && r.serviceId.length > 0 ? { serviceId: r.serviceId } : {}),
     targetUrl: r.targetUrl,
     expiresAt: now + ONE_OFF_TTL_MS,
   });

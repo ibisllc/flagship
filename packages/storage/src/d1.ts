@@ -43,8 +43,8 @@ import type {
   UsernameStorage,
   DaemonStatusRecord,
   DaemonStatusStorage,
-  UserAppAliasRecord,
-  UserAppAliasStorage,
+  UserServiceAliasRecord,
+  UserServiceAliasStorage,
   VoiciLinkRecord,
   VoiciLinkStorage,
   CustomDomainOrderRecord,
@@ -641,57 +641,57 @@ export class D1AuditEventStorage implements AuditEventStorage {
   }
 }
 
-export class D1UserAppAliasStorage implements UserAppAliasStorage {
+export class D1UserServiceAliasStorage implements UserServiceAliasStorage {
   constructor(private db: D1Database) {}
-  async upsert(rec: UserAppAliasRecord): Promise<void> {
+  async upsert(rec: UserServiceAliasRecord): Promise<void> {
     const u = rec.username.toLowerCase();
     await this.db
       .prepare(
-        `INSERT INTO user_app_aliases (username, app_id, display_label, created_at, updated_at)
+        `INSERT INTO user_service_aliases (username, service_id, display_label, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(username, app_id) DO UPDATE SET
+         ON CONFLICT(username, service_id) DO UPDATE SET
            display_label = excluded.display_label,
            updated_at    = excluded.updated_at`,
       )
-      .bind(u, rec.appId, rec.displayLabel, rec.createdAt, rec.updatedAt)
+      .bind(u, rec.serviceId, rec.displayLabel, rec.createdAt, rec.updatedAt)
       .run();
   }
-  async get(username: string, appId: string): Promise<UserAppAliasRecord | undefined> {
+  async get(username: string, serviceId: string): Promise<UserServiceAliasRecord | undefined> {
     const r = await this.db
       .prepare(
-        `SELECT username, app_id, display_label, created_at, updated_at
-         FROM user_app_aliases WHERE username = ? AND app_id = ?`,
+        `SELECT username, service_id, display_label, created_at, updated_at
+         FROM user_service_aliases WHERE username = ? AND service_id = ?`,
       )
-      .bind(username.toLowerCase(), appId)
-      .first<{ username: string; app_id: string; display_label: string; created_at: number; updated_at: number }>();
+      .bind(username.toLowerCase(), serviceId)
+      .first<{ username: string; service_id: string; display_label: string; created_at: number; updated_at: number }>();
     return r ? {
       username: r.username,
-      appId: r.app_id,
+      serviceId: r.service_id,
       displayLabel: r.display_label,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     } : undefined;
   }
-  async listForUser(username: string): Promise<UserAppAliasRecord[]> {
+  async listForUser(username: string): Promise<UserServiceAliasRecord[]> {
     const r = await this.db
       .prepare(
-        `SELECT username, app_id, display_label, created_at, updated_at
-         FROM user_app_aliases WHERE username = ?`,
+        `SELECT username, service_id, display_label, created_at, updated_at
+         FROM user_service_aliases WHERE username = ?`,
       )
       .bind(username.toLowerCase())
-      .all<{ username: string; app_id: string; display_label: string; created_at: number; updated_at: number }>();
+      .all<{ username: string; service_id: string; display_label: string; created_at: number; updated_at: number }>();
     return (r.results ?? []).map((row) => ({
       username: row.username,
-      appId: row.app_id,
+      serviceId: row.service_id,
       displayLabel: row.display_label,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
   }
-  async delete(username: string, appId: string): Promise<boolean> {
+  async delete(username: string, serviceId: string): Promise<boolean> {
     const r = await this.db
-      .prepare("DELETE FROM user_app_aliases WHERE username = ? AND app_id = ?")
-      .bind(username.toLowerCase(), appId)
+      .prepare("DELETE FROM user_service_aliases WHERE username = ? AND service_id = ?")
+      .bind(username.toLowerCase(), serviceId)
       .run();
     return (r.meta?.changes ?? 0) > 0;
   }
@@ -703,13 +703,13 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
     try {
       await this.db
         .prepare(
-          `INSERT INTO voici_links (code, username, app_id, target_url, created_at, expires_at)
+          `INSERT INTO voici_links (code, username, service_id, target_url, created_at, expires_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           rec.code,
           rec.username.toLowerCase(),
-          rec.appId ?? null,
+          rec.serviceId ?? null,
           rec.targetUrl,
           rec.createdAt,
           rec.expiresAt ?? null,
@@ -727,50 +727,50 @@ export class D1VoiciLinkStorage implements VoiciLinkStorage {
   async get(code: string): Promise<VoiciLinkRecord | undefined> {
     const r = await this.db
       .prepare(
-        `SELECT code, username, app_id, target_url, created_at, expires_at
+        `SELECT code, username, service_id, target_url, created_at, expires_at
          FROM voici_links WHERE code = ?`,
       )
       .bind(code)
       .first<{
-        code: string; username: string; app_id: string | null;
+        code: string; username: string; service_id: string | null;
         target_url: string; created_at: number; expires_at: number | null;
       }>();
     return r ? {
       code: r.code,
       username: r.username,
-      ...(r.app_id ? { appId: r.app_id } : {}),
+      ...(r.service_id ? { serviceId: r.service_id } : {}),
       targetUrl: r.target_url,
       createdAt: r.created_at,
       ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
     } : undefined;
   }
-  async getByApp(username: string, appId: string): Promise<VoiciLinkRecord | undefined> {
+  async getByService(username: string, serviceId: string): Promise<VoiciLinkRecord | undefined> {
     const r = await this.db
       .prepare(
-        `SELECT code, username, app_id, target_url, created_at, expires_at
+        `SELECT code, username, service_id, target_url, created_at, expires_at
          FROM voici_links
-         WHERE username = ? AND app_id = ?
+         WHERE username = ? AND service_id = ?
          ORDER BY created_at DESC
          LIMIT 1`,
       )
-      .bind(username.toLowerCase(), appId)
+      .bind(username.toLowerCase(), serviceId)
       .first<{
-        code: string; username: string; app_id: string | null;
+        code: string; username: string; service_id: string | null;
         target_url: string; created_at: number; expires_at: number | null;
       }>();
     return r ? {
       code: r.code,
       username: r.username,
-      ...(r.app_id ? { appId: r.app_id } : {}),
+      ...(r.service_id ? { serviceId: r.service_id } : {}),
       targetUrl: r.target_url,
       createdAt: r.created_at,
       ...(r.expires_at !== null ? { expiresAt: r.expires_at } : {}),
     } : undefined;
   }
-  async deleteByApp(username: string, appId: string): Promise<number> {
+  async deleteByService(username: string, serviceId: string): Promise<number> {
     const r = await this.db
-      .prepare("DELETE FROM voici_links WHERE username = ? AND app_id = ?")
-      .bind(username.toLowerCase(), appId)
+      .prepare("DELETE FROM voici_links WHERE username = ? AND service_id = ?")
+      .bind(username.toLowerCase(), serviceId)
       .run();
     return r.meta?.changes ?? 0;
   }
@@ -1565,7 +1565,7 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
       .prepare(
         `INSERT OR REPLACE INTO daemon_status
          (server_domain, cert_sha256, cert_valid_until, cert_issuer,
-          apps_served_json, last_reported)
+          services_served_json, last_reported)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
       )
       .bind(
@@ -1573,7 +1573,7 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
         rec.certSha256,
         rec.certValidUntil,
         rec.certIssuer,
-        rec.appsServedJson,
+        rec.servicesServedJson,
         rec.lastReported,
       )
       .run();
@@ -1587,7 +1587,7 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
         cert_sha256: string | null;
         cert_valid_until: number | null;
         cert_issuer: string | null;
-        apps_served_json: string;
+        services_served_json: string;
         last_reported: number;
       }>();
     if (!r) return undefined;
@@ -1596,7 +1596,7 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
       certSha256: r.cert_sha256,
       certValidUntil: r.cert_valid_until,
       certIssuer: r.cert_issuer,
-      appsServedJson: r.apps_served_json,
+      servicesServedJson: r.services_served_json,
       lastReported: r.last_reported,
     };
   }
@@ -1612,7 +1612,7 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
         cert_sha256: string | null;
         cert_valid_until: number | null;
         cert_issuer: string | null;
-        apps_served_json: string;
+        services_served_json: string;
         last_reported: number;
       }>();
     return (r.results ?? []).map((row) => ({
@@ -1620,14 +1620,14 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
       certSha256: row.cert_sha256,
       certValidUntil: row.cert_valid_until,
       certIssuer: row.cert_issuer,
-      appsServedJson: row.apps_served_json,
+      servicesServedJson: row.services_served_json,
       lastReported: row.last_reported,
     }));
   }
 }
 
 interface CustomDomainOrderRow {
-  app_id: string;
+  service_id: string;
   user_id: string;
   fqdn: string;
   status: string;
@@ -1639,7 +1639,7 @@ interface CustomDomainOrderRow {
 }
 function rowToCustomDomainOrder(r: CustomDomainOrderRow): CustomDomainOrderRecord {
   return {
-    appId: r.app_id,
+    serviceId: r.service_id,
     userId: r.user_id,
     fqdn: r.fqdn,
     status: r.status as CustomDomainOrderRecord["status"],
@@ -1653,10 +1653,10 @@ function rowToCustomDomainOrder(r: CustomDomainOrderRow): CustomDomainOrderRecor
 
 export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
   constructor(private db: D1Database) {}
-  async get(userId: string, appId: string) {
+  async get(userId: string, serviceId: string) {
     const r = await this.db
-      .prepare("SELECT * FROM custom_domain_orders WHERE user_id = ? AND app_id = ?")
-      .bind(userId.toLowerCase(), appId)
+      .prepare("SELECT * FROM custom_domain_orders WHERE user_id = ? AND service_id = ?")
+      .bind(userId.toLowerCase(), serviceId)
       .first<CustomDomainOrderRow>();
     return r ? rowToCustomDomainOrder(r) : undefined;
   }
@@ -1667,16 +1667,16 @@ export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
     await this.db
       .prepare(
         "INSERT INTO custom_domain_orders " +
-          "(app_id, user_id, fqdn, status, pod_canonical, last_changed, fail_count, created_at, updated_at) " +
+          "(service_id, user_id, fqdn, status, pod_canonical, last_changed, fail_count, created_at, updated_at) " +
           "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-          "ON CONFLICT(app_id, user_id) DO UPDATE SET " +
+          "ON CONFLICT(service_id, user_id) DO UPDATE SET " +
           "fqdn=excluded.fqdn, status=excluded.status, " +
           "pod_canonical=excluded.pod_canonical, " +
           "last_changed=excluded.last_changed, fail_count=excluded.fail_count, " +
           "updated_at=excluded.updated_at",
       )
       .bind(
-        rec.appId, uid, rec.fqdn, rec.status, rec.podCanonical ?? null,
+        rec.serviceId, uid, rec.fqdn, rec.status, rec.podCanonical ?? null,
         rec.lastChanged, rec.failCount, rec.createdAt, rec.updatedAt,
       )
       .run();
@@ -1684,7 +1684,7 @@ export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
   }
   async setStatus(
     userId: string,
-    appId: string,
+    serviceId: string,
     fqdn: string,
     status: CustomDomainOrderRecord["status"],
     at: number,
@@ -1696,9 +1696,9 @@ export class D1CustomDomainOrderStorage implements CustomDomainOrderStorage {
       .prepare(
         "UPDATE custom_domain_orders SET status = ?, updated_at = ?, " +
           "fail_count = fail_count + ? " +
-          "WHERE user_id = ? AND app_id = ? AND fqdn = ?",
+          "WHERE user_id = ? AND service_id = ? AND fqdn = ?",
       )
-      .bind(status, at, failBump, userId.toLowerCase(), appId, fqdn)
+      .bind(status, at, failBump, userId.toLowerCase(), serviceId, fqdn)
       .run();
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
@@ -1807,7 +1807,7 @@ export class D1Storage implements Storage {
   tiers: TierStorage;
   entitlementRevocations: EntitlementRevocationStorage;
   userIdentity: UserIdentityRecordStorage;
-  userAppAliases: UserAppAliasStorage;
+  userServiceAliases: UserServiceAliasStorage;
   voiciLinks: VoiciLinkStorage;
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
@@ -1833,7 +1833,7 @@ export class D1Storage implements Storage {
     this.tiers = new D1TierStorage(db);
     this.entitlementRevocations = new D1EntitlementRevocationStorage(db);
     this.userIdentity = new D1UserIdentityRecordStorage(db);
-    this.userAppAliases = new D1UserAppAliasStorage(db);
+    this.userServiceAliases = new D1UserServiceAliasStorage(db);
     this.voiciLinks = new D1VoiciLinkStorage(db);
     this.customDomainOrders = new D1CustomDomainOrderStorage(db);
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);

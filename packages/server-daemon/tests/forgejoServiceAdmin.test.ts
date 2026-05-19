@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
 import type { FetchLike } from "@flagship/llm-providers";
-import { AppRunner, type CommandRunner } from "../src/appRunner.js";
+import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import { AppMembership } from "../src/membership.js";
 import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext, type DeployedApp } from "../src/httpApi.js";
-import { ForgejoAppAdmin } from "../src/forgejoAppAdmin.js";
+import { ForgejoAppAdmin } from "../src/forgejoServiceAdmin.js";
 
 const umk = { seed: new Uint8Array(32).fill(11) };
 const ownerIrk = deriveIRK(umk);
@@ -355,7 +355,7 @@ describe("ForgejoAppAdmin", () => {
   });
 });
 
-describe("daemon HTTP — /apps/:appId/git/*", () => {
+describe("daemon HTTP — /apps/:serviceId/git/*", () => {
   function makeCtx(forgejo?: ForgejoAppAdmin) {
     const apps = new Map<string, AppMembership>();
     apps.set("habit-tracker", new AppMembership("habit-tracker", "harry", ownerIrk.publicKey, swk));

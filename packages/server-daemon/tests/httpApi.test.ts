@@ -106,7 +106,7 @@ describe("daemon HTTP — invite redemption", () => {
     const nonce = newInviteNonce();
     const issuedAt = Date.now();
     const token: InviteToken = {
-      appId: "habit-tracker",
+      serviceId: "habit-tracker",
       role: "parent",
       nonce,
       issuedAt,
@@ -125,7 +125,7 @@ describe("daemon HTTP — invite redemption", () => {
       url: "/apps/habit-tracker/invites/redeem",
       payload: {
         token: {
-          appId: "habit-tracker",
+          serviceId: "habit-tracker",
           role: "parent",
           nonce: bytesToHex(nonce),
           issuedAt,
@@ -162,7 +162,7 @@ describe("daemon HTTP — invite redemption", () => {
     const nonce = newInviteNonce();
     const issuedAt = Date.now();
     const token: InviteToken = {
-      appId: "habit-tracker",
+      serviceId: "habit-tracker",
       role: "admin",
       nonce,
       issuedAt,
@@ -181,7 +181,7 @@ describe("daemon HTTP — invite redemption", () => {
       url: "/apps/habit-tracker/invites/redeem",
       payload: {
         token: {
-          appId: "habit-tracker",
+          serviceId: "habit-tracker",
           role: "admin",
           nonce: bytesToHex(nonce),
           issuedAt,
@@ -220,7 +220,7 @@ describe("daemon HTTP — membership mutation", () => {
     ctx.apps.get("habit-tracker")!.members.internalAdd(sarahIrk.publicKey, "parent");
 
     const mutation: MembershipMutation = {
-      appId: "habit-tracker",
+      serviceId: "habit-tracker",
       targetIrkPub: sarahIrk.publicKey,
       role: null,
       issuedAt: Date.now(),
@@ -232,7 +232,7 @@ describe("daemon HTTP — membership mutation", () => {
       url: "/apps/habit-tracker/membership/mutation",
       payload: {
         mutation: {
-          appId: "habit-tracker",
+          serviceId: "habit-tracker",
           targetIrkPub: bytesToHex(sarahIrk.publicKey),
           role: null,
           issuedAt: mutation.issuedAt,

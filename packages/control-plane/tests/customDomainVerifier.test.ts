@@ -44,7 +44,7 @@ async function seedPod(s: InMemoryStorage, revoked = false) {
 
 async function pendingOrder(s: InMemoryStorage, createdAt: number) {
   await s.customDomainOrders.upsert({
-    appId: APP, userId: USER, fqdn: FQDN, status: "pending",
+    serviceId: APP, userId: USER, fqdn: FQDN, status: "pending",
     lastChanged: createdAt, failCount: 0, createdAt, updatedAt: createdAt,
   });
 }
@@ -107,7 +107,7 @@ describe("runCustomDomainVerificationPass — pending", () => {
 describe("runCustomDomainVerificationPass — active #82 sweep", () => {
   async function activeOrder(s: InMemoryStorage, updatedAt: number, failCount = 0) {
     await s.customDomainOrders.upsert({
-      appId: APP, userId: USER, fqdn: FQDN, status: "active", podCanonical: POD,
+      serviceId: APP, userId: USER, fqdn: FQDN, status: "active", podCanonical: POD,
       lastChanged: updatedAt, failCount, createdAt: 1, updatedAt,
     });
   }

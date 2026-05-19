@@ -147,7 +147,7 @@ describe("sibling WS endpoint + outbound client (end-to-end over real sockets)",
       }
     });
     connection.sendAppMessage({
-      appId: "notes",
+      serviceId: "notes",
       fromSiblingId: ALICE,
       toSiblingId: BOB,
       payloadHex: "deadbeef",

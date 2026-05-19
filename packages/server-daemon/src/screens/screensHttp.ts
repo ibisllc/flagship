@@ -13,8 +13,8 @@
 
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import type { AppPlatform, InstalledApp } from "../appPlatform.js";
-import type { AppBackupService } from "../appBackup.js";
+import type { ServicePlatform, InstalledService } from "../servicePlatform.js";
+import type { AppBackupService } from "../serviceBackup.js";
 import type { AppMembership } from "../membership.js";
 import type { FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { TabRegistry } from "../browser/tabRegistry.js";
@@ -78,20 +78,20 @@ export interface InstallEventLog {
  *
  * The daemon's update-puller marks an app `lineagePaused: true` when
  * the lineage verifier refuses a new pack. The phone view fetches the
- * paused list, then POSTs `{ appId, decision }` to roll the anchor
+ * paused list, then POSTs `{ serviceId, decision }` to roll the anchor
  * forward (`accept`) or uninstall the app entirely (`revoke`).
  *
  * Wiring: production daemon supplies an adapter that:
  *   - `list()` walks the AppPullStateStore for entries with `lineagePaused`
- *   - `accept(appId)` delegates to `UpdateClient.acceptLineageBreak`
- *   - `revoke(appId)` calls `AppPlatform.uninstall` directly (it's a
+ *   - `accept(serviceId)` delegates to `UpdateClient.acceptLineageBreak`
+ *   - `revoke(serviceId)` calls `ServicePlatform.uninstall` directly (it's a
  *     phone-gated action; the BFF's paired-session check is the trust
  *     equivalent of the host's IRK signature in this context)
  */
 export interface LineageResolverLike {
   list(): Promise<LineagePauseSummary[]>;
-  accept(appId: string): Promise<{ ok: boolean; outcome: "accepted" | "already-clear"; reason?: string }>;
-  revoke(appId: string): Promise<{ ok: boolean; reason?: string }>;
+  accept(serviceId: string): Promise<{ ok: boolean; outcome: "accepted" | "already-clear"; reason?: string }>;
+  revoke(serviceId: string): Promise<{ ok: boolean; reason?: string }>;
 }
 
 export interface ScreensHttpDeps {
@@ -101,7 +101,7 @@ export interface ScreensHttpDeps {
   daemonVersion: string;
   /** Unix-ms when the daemon started. */
   startedAt: number;
-  appPlatform?: AppPlatform | null;
+  servicePlatform?: ServicePlatform | null;
   pairedSessions?: FilePairedSessionStore | null;
   /**
    * Live cert info for server-detail. The runtime supplies a small
@@ -217,7 +217,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path.startsWith("/api/screens/browser-tabs/") && path.endsWith("/stream")) {
       return jerr(
         501,
-        "framebuffer streaming not yet implemented; poll /api/screens/browser-tabs/list/<appId>",
+        "framebuffer streaming not yet implemented; poll /api/screens/browser-tabs/list/<serviceId>",
       );
     }
     if (path.startsWith("/api/screens/install-events/") && method === "GET") {
@@ -263,18 +263,18 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
 
     // ---- P1.2 GET /api/screens/apps-list
     if (path === "/api/screens/apps-list" && method === "GET") {
-      const apps = deps.appPlatform
-        ? deps.appPlatform.list().map((a) => toSummary(a, deps.serverFqdn))
+      const apps = deps.servicePlatform
+        ? deps.servicePlatform.list().map((a) => toSummary(a, deps.serverFqdn))
         : [];
       const body: AppsListResponse = { apps };
       return jok(body);
     }
 
-    // ---- P1.3 GET /api/screens/app-detail/:appId
+    // ---- P1.3 GET /api/screens/app-detail/:serviceId
     if (path.startsWith("/api/screens/app-detail/") && method === "GET") {
-      const appId = decodeURIComponent(path.slice("/api/screens/app-detail/".length));
-      if (!deps.appPlatform) return jerr(503, "app-platform not configured");
-      const app = deps.appPlatform.byAppId(appId);
+      const serviceId = decodeURIComponent(path.slice("/api/screens/app-detail/".length));
+      if (!deps.servicePlatform) return jerr(503, "app-platform not configured");
+      const app = deps.servicePlatform.byServiceId(serviceId);
       if (!app) return jerr(404, "app not found");
       return jok(appDetail(app, deps));
     }
@@ -389,7 +389,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!r.ok) return jerr(502, `marketplace fetch failed: ${r.status}`);
       const upstream = (await r.json()) as { listings?: unknown[] };
       const installed = new Set(
-        (deps.appPlatform?.list() ?? []).map((a) => `${a.creator}/${a.slug}`),
+        (deps.servicePlatform?.list() ?? []).map((a) => `${a.creator}/${a.slug}`),
       );
       const listings = (upstream.listings ?? []).map((raw) =>
         parseListing(raw, installed),
@@ -494,17 +494,17 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path === "/api/screens/app-backup/start" && method === "POST") {
       if (!deps.appBackup) return jerr(503, "app-backup not configured");
       const body = parseJson(req.body) as AppBackupStartRequest | null;
-      if (!body || typeof body.appId !== "string" || body.appId.length === 0) {
-        return jerr(400, "appId required");
+      if (!body || typeof body.serviceId !== "string" || body.serviceId.length === 0) {
+        return jerr(400, "serviceId required");
       }
       // `<creator>-<slug>`, single dash. Split at the FIRST hyphen —
       // creator (a username) is hyphen-free, so everything after the
       // first '-' is the slug (which itself may contain hyphens).
-      const dashIdx = body.appId.indexOf("-");
-      const creator = dashIdx > 0 ? body.appId.slice(0, dashIdx) : "";
-      const slug = dashIdx > 0 ? body.appId.slice(dashIdx + 1) : "";
+      const dashIdx = body.serviceId.indexOf("-");
+      const creator = dashIdx > 0 ? body.serviceId.slice(0, dashIdx) : "";
+      const slug = dashIdx > 0 ? body.serviceId.slice(dashIdx + 1) : "";
       if (!creator || !slug) {
-        return jerr(400, "appId must be '<creator>-<slug>'");
+        return jerr(400, "serviceId must be '<creator>-<slug>'");
       }
       try {
         const record = await deps.appBackup.createBackup({
@@ -577,20 +577,20 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path === "/api/screens/lineage-resolve" && method === "POST") {
       if (!deps.lineageResolver) return jerr(503, "lineage-resolver not configured");
       const body = parseJson(req.body) as LineageResolveRequest | null;
-      if (!body || typeof body.appId !== "string" || body.appId.length === 0) {
-        return jerr(400, "appId required");
+      if (!body || typeof body.serviceId !== "string" || body.serviceId.length === 0) {
+        return jerr(400, "serviceId required");
       }
       if (body.decision !== "accept" && body.decision !== "revoke") {
         return jerr(400, "decision must be 'accept' or 'revoke'");
       }
       try {
         if (body.decision === "accept") {
-          const r = await deps.lineageResolver.accept(body.appId);
+          const r = await deps.lineageResolver.accept(body.serviceId);
           if (!r.ok) return jerr(502, r.reason ?? "accept failed");
           const out: LineageResolveResponse = { ok: true, outcome: r.outcome };
           return jok(out);
         }
-        const r = await deps.lineageResolver.revoke(body.appId);
+        const r = await deps.lineageResolver.revoke(body.serviceId);
         if (!r.ok) return jerr(502, r.reason ?? "revoke failed");
         const out: LineageResolveResponse = { ok: true, outcome: "revoked" };
         return jok(out);
@@ -626,14 +626,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       }
     }
 
-    // ---- P1.10 GET /api/screens/browser-tabs/list/:appId
+    // ---- P1.10 GET /api/screens/browser-tabs/list/:serviceId
     if (path.startsWith("/api/screens/browser-tabs/list/") && method === "GET") {
-      const appId = decodeURIComponent(path.slice("/api/screens/browser-tabs/list/".length));
-      if (!deps.appPlatform) return jerr(503, "app-platform not configured");
-      const app = deps.appPlatform.byAppId(appId);
+      const serviceId = decodeURIComponent(path.slice("/api/screens/browser-tabs/list/".length));
+      if (!deps.servicePlatform) return jerr(503, "app-platform not configured");
+      const app = deps.servicePlatform.byServiceId(serviceId);
       if (!app) return jerr(404, "app not found");
-      const tabs: BrowserTab[] = (deps.tabRegistry?.tabsForApp(appId) ?? []).map(
-        (tabId) => ({ tabId, appId }),
+      const tabs: BrowserTab[] = (deps.tabRegistry?.tabsForApp(serviceId) ?? []).map(
+        (tabId) => ({ tabId, serviceId }),
       );
       const out: BrowserTabsListResponse = { tabs };
       return jok(out);
@@ -741,15 +741,15 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     certNotAfter: cert?.notAfter,
     certNotBefore: cert?.notBefore,
     certSans: cert?.sans,
-    appCount: deps.appPlatform?.list().length ?? 0,
+    serviceCount: deps.servicePlatform?.list().length ?? 0,
     pairedSessionCount: deps.pairedSessions?.list().length ?? 0,
     recentInstallEvents,
   };
 }
 
-function toSummary(app: InstalledApp, serverFqdn: string): AppSummary {
+function toSummary(app: InstalledService, serverFqdn: string): AppSummary {
   return {
-    appId: app.appId,
+    serviceId: app.serviceId,
     creator: app.creator,
     slug: app.slug,
     urlLabel: app.urlLabel,
@@ -761,10 +761,10 @@ function toSummary(app: InstalledApp, serverFqdn: string): AppSummary {
   };
 }
 
-function appDetail(app: InstalledApp, deps: ScreensHttpDeps): AppDetailResponse {
+function appDetail(app: InstalledService, deps: ScreensHttpDeps): AppDetailResponse {
   const dataLayerInstances = collectDataLayerInstances(app);
   const members = collectMembers(app.membership);
-  const browserTabs = (deps.tabRegistry?.tabsForApp(app.appId) ?? []).map((tabId) => ({
+  const browserTabs = (deps.tabRegistry?.tabsForApp(app.serviceId) ?? []).map((tabId) => ({
     tabId,
   }));
   return {
@@ -777,7 +777,7 @@ function appDetail(app: InstalledApp, deps: ScreensHttpDeps): AppDetailResponse 
   };
 }
 
-function collectDataLayerInstances(app: InstalledApp): Array<{ store: string; instanceName: string }> {
+function collectDataLayerInstances(app: InstalledService): Array<{ store: string; instanceName: string }> {
   if (!app.data) return [];
   const out: Array<{ store: string; instanceName: string }> = [];
   for (const store of ["postgres", "objects", "kv"] as const) {

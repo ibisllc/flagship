@@ -6,7 +6,7 @@
 // the human-readable "John (work)" mapping never leaves this device.
 //
 // Cross-worker dependency: the daemon's screens BFF surface for
-// `/api/screens/app-invite/list/:appId` and `/api/screens/app-invite/revoke`
+// `/api/screens/app-invite/list/:serviceId` and `/api/screens/app-invite/revoke`
 // is stubbed for now (the inviteHandler primitives exist server-side
 // at /.flagship/app/<id>/invite/* but a paired-session-gated BFF
 // wrapper isn't shipped yet). This view degrades to a "no data" state
@@ -28,7 +28,7 @@ export async function renderInviteManage(app) {
   const root = $("invite-manage-content");
   root.innerHTML = `
     <div class="card">
-      <div class="card-title">${escapeHtml(app.slug ?? app.appId)}</div>
+      <div class="card-title">${escapeHtml(app.slug ?? app.serviceId)}</div>
       <div class="muted-sm">${escapeHtml(app.url ?? "")}</div>
     </div>
     <h3 class="mt-4">Pending invites</h3>
@@ -37,7 +37,7 @@ export async function renderInviteManage(app) {
     <div id="im-active" class="mt-2"><div class="card placeholder">loading…</div></div>
   `;
 
-  const labels = await listLabelsForApp(app.appId);
+  const labels = await listLabelsForApp(app.serviceId);
   const labelByTag = new Map(labels.map((l) => [l.opaqueTagHex, l]));
 
   await renderPending(app, labelByTag);
@@ -48,7 +48,7 @@ async function renderPending(app, labelByTag) {
   const root = $("im-pending");
   try {
     const body = await screensFetch(
-      `/api/screens/app-invite/list/${encodeURIComponent(app.appId)}`,
+      `/api/screens/app-invite/list/${encodeURIComponent(app.serviceId)}`,
     );
     const pending = body.pending ?? [];
     if (pending.length === 0) {
@@ -100,7 +100,7 @@ async function renderActive(app, labelByTag) {
   const root = $("im-active");
   try {
     const body = await screensFetch(
-      `/api/screens/app-invite/access/${encodeURIComponent(app.appId)}`,
+      `/api/screens/app-invite/access/${encodeURIComponent(app.serviceId)}`,
     );
     const access = body.access ?? [];
     if (access.length === 0) {
@@ -139,9 +139,9 @@ async function onRevokeInvite(app, inviteId, tag) {
   try {
     await screensFetch(`/api/screens/app-invite/revoke`, {
       method: "POST",
-      body: JSON.stringify({ appId: app.appId, inviteId, scope: "invite" }),
+      body: JSON.stringify({ serviceId: app.serviceId, inviteId, scope: "invite" }),
     });
-    if (tag) await removeLabel(app.appId, tag);
+    if (tag) await removeLabel(app.serviceId, tag);
     toast("invite revoked", "ok");
     await renderInviteManage(app);
   } catch (e) {
@@ -153,9 +153,9 @@ async function onRevokeAccess(app, irkPubHex, tag) {
   try {
     await screensFetch(`/api/screens/app-invite/revoke`, {
       method: "POST",
-      body: JSON.stringify({ appId: app.appId, irkPubKey: irkPubHex, scope: "access" }),
+      body: JSON.stringify({ serviceId: app.serviceId, irkPubKey: irkPubHex, scope: "access" }),
     });
-    if (tag) await removeLabel(app.appId, tag);
+    if (tag) await removeLabel(app.serviceId, tag);
     toast("access revoked", "ok");
     await renderInviteManage(app);
   } catch (e) {
@@ -167,7 +167,7 @@ export function initInviteManageView() {
   $("invite-manage-back")?.addEventListener("click", async () => {
     if (currentApp) {
       const { enterAppDetail } = await import("./app-detail.js");
-      await enterAppDetail(currentApp.appId);
+      await enterAppDetail(currentApp.serviceId);
     } else {
       show("view-home");
     }

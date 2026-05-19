@@ -34,7 +34,7 @@ import {
   handleListAutoUnlockLeases,
   handleObjectRePair,
   handleWipeRestart,
-  handleAppRename,
+  handleServiceRename,
   handleGetAppLinks,
   handleListAppAliases,
   handleSetCustomDomain,
@@ -795,10 +795,10 @@ export async function tryControlPlane(
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.APP_RENAME))) {
     return finish(
-      await handleAppRename(
+      await handleServiceRename(
         {
           usernames: storage.usernames,
-          userAppAliases: storage.userAppAliases,
+          userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           servers: storage.servers,
           auditEvents: storage.auditEvents,
@@ -819,7 +819,7 @@ export async function tryControlPlane(
       await handleGetAppLinks(
         {
           usernames: storage.usernames,
-          userAppAliases: storage.userAppAliases,
+          userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           servers: storage.servers,
           auditEvents: storage.auditEvents,
@@ -912,7 +912,7 @@ export async function tryControlPlane(
   if (method === "GET" && (m = path.match(ROUTE_RE.APP_ALIASES))) {
     return finish(
       await handleListAppAliases(
-        { userAppAliases: storage.userAppAliases },
+        { userServiceAliases: storage.userServiceAliases },
         decodeURIComponent(m[1]!),
       ),
     );

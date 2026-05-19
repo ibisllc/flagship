@@ -1,4 +1,4 @@
--- Task #21 — Daemon-reported pod status (cert + apps).
+-- Task #21 — Daemon-reported pod status (cert + services).
 --
 -- Each user's daemon POSTs to /api/daemon-status on each tunnel HELLO
 -- and on cert rotation. .com keys this by the registered server
@@ -8,16 +8,17 @@
 -- no-KYC alternative to CT-log monitoring (which would couple to
 -- external infra and leak access patterns).
 --
--- All cert-* and apps_served fields are optional: a freshly-installed
--- daemon may not have a cert yet, and a daemon may report HELLO
--- without app metadata. Nullability lets readers fall back to a
--- "registered but not yet reporting" state instead of failing closed.
+-- All cert-* and services_served_json fields are optional: a freshly
+-- -installed daemon may not have a cert yet, and a daemon may report
+-- HELLO without service metadata. Nullability lets readers fall back
+-- to a "registered but not yet reporting" state instead of failing
+-- closed.
 CREATE TABLE IF NOT EXISTS daemon_status (
   server_domain TEXT PRIMARY KEY,
   cert_sha256 TEXT,
   cert_valid_until INTEGER,
   cert_issuer TEXT,
-  apps_served TEXT, -- JSON array of "appName@authorStableId"
+  services_served_json TEXT, -- JSON array of "serviceName@authorStableId"
   last_reported INTEGER NOT NULL
 );
 

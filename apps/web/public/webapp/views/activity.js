@@ -113,7 +113,7 @@ export async function renderActivity() {
       .map((e) => `
         <div class="card">
           <div class="row">
-            <span class="value">${escapeHtml(e.kind)}: ${escapeHtml(e.appId)}</span>
+            <span class="value">${escapeHtml(e.kind)}: ${escapeHtml(e.serviceId)}</span>
             <span class="pill">${escapeHtml(fmtDate(e.at))}</span>
           </div>
           ${e.detail ? `<p class="note small">${escapeHtml(e.detail)}</p>` : ""}

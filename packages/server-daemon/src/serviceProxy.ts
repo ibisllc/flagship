@@ -11,7 +11,7 @@
  *        X-Flagship-User       : "anonymous" or member id
  *        X-Flagship-Role       : "anonymous" / role
  *        X-Flagship-Signature  : Ed25519 over the canonical-bytes of
- *                                {appId, user, role, timestamp}
+ *                                {serviceId, user, role, timestamp}
  *   4. Forward the request to `127.0.0.1:<containerPort>` and pipe the
  *      response back.
  *
@@ -29,7 +29,7 @@
 
 import { request as httpRequest } from "node:http";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
-import type { InstalledApp } from "./appPlatform.js";
+import type { InstalledService } from "./servicePlatform.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { UpdateServer } from "./updateServer.js";
 
@@ -42,7 +42,7 @@ export interface SessionInfo {
   role: string;
 }
 
-export type SessionResolver = (req: HttpRequest, app: InstalledApp) => SessionInfo | null;
+export type SessionResolver = (req: HttpRequest, app: InstalledService) => SessionInfo | null;
 
 export interface AppProxyDeps {
   /**
@@ -94,7 +94,7 @@ const REQUEST_ACCESS_TEMPLATE = (appName: string, urlLabel: string): string =>
  * TLS handler will write back to the inbound socket.
  */
 export async function handleAppRequest(
-  app: InstalledApp,
+  app: InstalledService,
   req: HttpRequest,
   deps: AppProxyDeps,
 ): Promise<HttpResponse> {
@@ -131,7 +131,7 @@ export async function handleAppRequest(
 
   // (No AI-specific proxy path: a deployed app that wants an LLM reads
   // its provider key from its own env like any other var — env values
-  // are injected into the container at deploy time by AppPlatform.)
+  // are injected into the container at deploy time by ServicePlatform.)
 
   // Build the forwarded request: strip incoming X-Flagship-* and inject
   // signed identity headers.
@@ -139,9 +139,9 @@ export async function handleAppRequest(
   const ts = String((deps.now ?? Date.now)());
   const user = session ? session.stableId : "anonymous";
   const role = session ? session.role : "anonymous";
-  const canonical = [`flagship/inject/v1`, app.appId, user, role, ts].join("|");
+  const canonical = [`flagship/inject/v1`, app.serviceId, user, role, ts].join("|");
   const sig = ed.sign(new TextEncoder().encode(canonical), deps.injectorKey.privateKey);
-  forwardHeaders["x-flagship-app-id"] = app.appId;
+  forwardHeaders["x-flagship-app-id"] = app.serviceId;
   forwardHeaders["x-flagship-user"] = user;
   forwardHeaders["x-flagship-role"] = role;
   forwardHeaders["x-flagship-timestamp"] = ts;
@@ -160,7 +160,7 @@ export async function handleAppRequest(
  * the network plumbing.
  */
 export function decideAccess(
-  app: InstalledApp,
+  app: InstalledService,
   req: HttpRequest,
   session: SessionInfo | null,
 ): "allow" | "deny" {

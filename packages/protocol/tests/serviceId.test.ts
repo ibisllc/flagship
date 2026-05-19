@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { composeAppId, parseAppId, deriveUrlFragment } from "../src/appId.js";
+import { composeServiceId, parseServiceId, deriveUrlFragment } from "../src/serviceId.js";
 
-describe("composeAppId / parseAppId", () => {
+describe("composeServiceId / parseServiceId", () => {
   it("round-trips a simple id", () => {
-    expect(composeAppId("harry", "game1")).toBe("harry-game1");
-    expect(parseAppId("harry-game1")).toEqual({ creator: "harry", slug: "game1" });
+    expect(composeServiceId("harry", "game1")).toBe("harry-game1");
+    expect(parseServiceId("harry-game1")).toEqual({ creator: "harry", slug: "game1" });
   });
 
   it("splits at the FIRST hyphen so hyphenated slugs survive", () => {
-    expect(parseAppId("meta-notes-app")).toEqual({
+    expect(parseServiceId("meta-notes-app")).toEqual({
       creator: "meta",
       slug: "notes-app",
     });
   });
 
   it("returns null when there is no usable boundary", () => {
-    expect(parseAppId("nodash")).toBeNull();
-    expect(parseAppId("-leading")).toBeNull();
-    expect(parseAppId("trailing-")).toBeNull();
+    expect(parseServiceId("nodash")).toBeNull();
+    expect(parseServiceId("-leading")).toBeNull();
+    expect(parseServiceId("trailing-")).toBeNull();
   });
 });
 
@@ -27,7 +27,7 @@ describe("deriveUrlFragment", () => {
     expect(deriveUrlFragment("harry-game1", "harry")).toBe("game1");
   });
 
-  it("is slug-creator when running someone else's app", () => {
+  it("is slug-creator when running someone else's service", () => {
     // harry runs meta's meta-game1 -> game1-meta
     expect(deriveUrlFragment("meta-game1", "harry")).toBe("game1-meta");
   });

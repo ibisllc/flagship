@@ -1,7 +1,7 @@
 /**
  * Persistent sibling-sync CLIENT (#86).
  *
- * For each peer pod listed in any AppGrant the local pod shares, the
+ * For each peer pod listed in any ServiceGrant the local pod shares, the
  * runtime spins up a PersistentSiblingClient that dials
  * `wss://<peerDomain>/.flagship/sibling-sync` and keeps the connection
  * alive forever (with reconnect-on-close jitter). The actual cert+key
@@ -288,7 +288,7 @@ function defaultWsFactory(url: string): WsLike {
 
 /**
  * Manager — keeps a PersistentSiblingClient per peer domain. The
- * runtime calls `setPeers(domains)` whenever the AppGrant population
+ * runtime calls `setPeers(domains)` whenever the ServiceGrant population
  * changes; the manager spins up new clients and tears down stale ones.
  *
  * This is the layer #91's renewer + #6's HELLO gate eventually feed
