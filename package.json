@@ -9,13 +9,9 @@
     "apps/web",
     "apps/web/e2e",
     "apps/com",
-    "apps/dns-broker",
-    "maintainers/packages/protocol"
+    "apps/dns-broker"
   ],
   "scripts": {
-    "preinstall": "bash scripts/pull-maintainers.sh pull",
-    "postinstall": "bash scripts/pull-maintainers.sh bundle",
-    "pull-maintainers": "bash scripts/pull-maintainers.sh",
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",

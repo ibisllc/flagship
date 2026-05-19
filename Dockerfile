@@ -16,33 +16,21 @@ WORKDIR /app
 # is good-enough for a small monorepo.)
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json vitest.config.ts ./
 COPY packages packages/
-# scripts/pull-maintainers.sh + its pinned-SHA file are needed BEFORE the
-# preinstall hook on `npm install`. The pull-maintainers script needs git
-# at runtime; the rest of the build is plain Node.
-COPY scripts/pull-maintainers.sh scripts/maintainers.pinned-sha scripts/
-RUN apk add --no-cache git bash
-# Pull the maintainers tree from ibisllc/maintainers at the pinned SHA
-# (docs/maintainers-deployment.md). It's gitignored locally; the
-# Dockerfile is the canonical place this fetches in CI.
-# The bundle step is gated on esbuild being installed; it runs as
-# part of the npm install postinstall hook a few lines below, AFTER
-# node_modules/.bin/esbuild is on disk.
-RUN bash scripts/pull-maintainers.sh pull
+# The maintainers protocol is the published npm package
+# `@ibisllc/maintainers` (exact pin in packages/server-daemon/package.json).
+# It is fetched from the registry by `npm ci`/`npm install` below — no
+# git clone or build-time pull step.
 # services/marketplace-scanner is referenced from root tsconfig.json so
-# `tsc -b` walks into it. Same story as maintainers/ — needed only at
-# build time, not runtime.
+# `tsc -b` walks into it. Needed only at build time, not runtime.
 COPY services services/
 COPY apps/web/package.json apps/web/tsconfig.json apps/web/
 COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/
 COPY apps/com/package.json apps/com/
 
-# npm install runs preinstall (pull — fast-path, already pulled above)
-# and postinstall (bundle — esbuild present after deps install).
-# `npm ci` runs lifecycle scripts unless --ignore-scripts is passed;
-# we WANT them to run here so the bundle gets emitted. Fallback to
-# `npm install` (no --ignore-scripts) if `npm ci` fails for any
-# reason (e.g. lockfile drift).
+# Plain workspace install — `@ibisllc/maintainers` resolves from the npm
+# registry like any other dependency (no lifecycle pull/bundle hooks).
+# Fallback to `npm install` if `npm ci` fails (e.g. lockfile drift).
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --workspaces --include-workspace-root --no-audit --no-fund \
  || npm install --workspaces --include-workspace-root --no-audit --no-fund

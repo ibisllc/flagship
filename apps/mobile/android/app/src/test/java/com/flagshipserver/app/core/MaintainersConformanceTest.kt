@@ -2,12 +2,14 @@
 // Android half — mirror of iOS MaintainersConformanceTests.swift).
 //
 // This loads the SHARED, dependency-free conformance artifact from disk
-// AT RUNTIME (`maintainers/conformance/manifest.json` + `vectors/*.json`)
-// — the exact same set the TypeScript and Swift sides replay. The vectors
-// are NOT transcribed into Kotlin literals; they are read and parsed from
-// the real files. For EVERY vector we run the native Kotlin verifier for
-// that subject and assert the verdict (accepted, and on rejection the
-// EXACT rejectReason) equals the manifest entry.
+// AT RUNTIME. The artifact ships inside the published `@ibisllc/maintainers`
+// npm package, so it is resolved from
+// `<repoRoot>/node_modules/@ibisllc/maintainers/conformance/manifest.json`
+// + `vectors/*.json` — the exact same set the TypeScript and Swift sides
+// replay. The vectors are NOT transcribed into Kotlin literals; they are
+// read and parsed from the real files. For EVERY vector we run the native
+// Kotlin verifier for that subject and assert the verdict (accepted, and
+// on rejection the EXACT rejectReason) equals the manifest entry.
 //
 // "Conformant iff it produces the expected verdict for EVERY vector,
 // including every fail-closed negative."
@@ -40,10 +42,12 @@ class MaintainersConformanceTest {
     // ----- Locate the shared conformance artifact on disk --------------
 
     /** Walk up from the JVM unit-test working dir (and this class's
-     *  location) to find `maintainers/conformance/manifest.json`. Read at
-     *  runtime — never transcribed. An unlocatable artifact is a real
-     *  FAILURE here (never a skip). */
+     *  location) to find the published npm package's conformance artifact
+     *  at `node_modules/@ibisllc/maintainers/conformance/manifest.json`.
+     *  Read at runtime — never transcribed. An unlocatable artifact is a
+     *  real FAILURE here (never a skip). */
     private fun conformanceDir(): File {
+        val rel = "node_modules/@ibisllc/maintainers/conformance"
         val candidates = ArrayList<File>()
         System.getProperty("user.dir")?.let { candidates.add(File(it)) }
         try {
@@ -57,14 +61,14 @@ class MaintainersConformanceTest {
             var dir: File? = start.absoluteFile
             var hops = 0
             while (dir != null && hops < 12) {
-                val manifest = File(dir, "maintainers/conformance/manifest.json")
-                if (manifest.isFile) return File(dir, "maintainers/conformance")
+                val manifest = File(dir, "$rel/manifest.json")
+                if (manifest.isFile) return File(dir, rel)
                 dir = dir.parentFile
                 hops += 1
             }
         }
         fail(
-            "could not locate maintainers/conformance/manifest.json from " +
+            "could not locate $rel/manifest.json from " +
                 candidates.joinToString { it.absolutePath },
         )
         error("unreachable")

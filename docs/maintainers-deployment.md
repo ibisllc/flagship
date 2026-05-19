@@ -1,26 +1,42 @@
 # Maintainers protocol — deployment & operations
 
 Flagship dogfoods the [maintainers protocol](https://github.com/ibisllc/maintainers).
-This doc explains how the protocol's code is pulled at build time, where the
-UI is hosted, what keys it needs, and what's load-bearing for adopters who
-want to set up the same model for their own repository.
+This doc explains how the protocol's code is consumed, where the UI is
+hosted, what keys it needs, and what's load-bearing for adopters who want
+to set up the same model for their own repository.
 
-> tl;dr — `scripts/pull-maintainers.sh` clones `ibisllc/maintainers` at a
-> pinned SHA into `./maintainers/` (gitignored). The Flagship build then
-> consumes it as a normal npm workspace. Flagship's hosted UI lives at
+> tl;dr — Flagship consumes the **published `@ibisllc/maintainers` npm
+> package** (exact-pinned in `packages/server-daemon/package.json`,
+> resolved by `npm ci`/`npm install` with lockfile integrity) exactly
+> like any external adopter. The conformance test-vector artifact ships
+> inside that package (`node_modules/@ibisllc/maintainers/conformance/`)
+> and the iOS/Android cross-language replays read it from there. The
+> old build-time clone bootstrap (`scripts/pull-maintainers.sh` +
+> `scripts/maintainers.pinned-sha`) has been **removed** — see
+> "Adoption" below. Flagship's hosted UI lives at
 > `flagshipserver.com/maintainers/`, served by the Cloudflare Worker's
-> `[assets]` binding. No keys are required to *pull*; one fine-grained
-> GitHub PAT is required only if you also deploy the Model-A push adapter.
+> `[assets]` binding. No keys are required to consume the package; one
+> fine-grained GitHub PAT is required only if you also deploy the
+> Model-A push adapter.
 
 ---
 
-## Adoption: the pull-script is a bootstrap, NOT the distribution
+## Adoption: the transition to the published package is DONE
 
-**This is a load-bearing transition commitment, not a nicety.**
+**Status: COMPLETE (2026-05-19).** Flagship now consumes the published
+`@ibisllc/maintainers@0.1.0` from the public npm registry — exact-pinned
+in `packages/server-daemon/package.json`, integrity-locked in
+`package-lock.json`, fetched by `npm ci`/`npm install` like any other
+dependency. The build-time clone bootstrap
+(`scripts/pull-maintainers.sh` + `scripts/maintainers.pinned-sha`, plus
+the npm `preinstall`/`postinstall` hooks, the root workspace entry, and
+the TS project references into `maintainers/packages/protocol`) has been
+**deleted**. The rest of this section is retained as the rationale that
+drove the transition.
 
 `scripts/maintainers.pinned-sha` + `scripts/pull-maintainers.sh`
-(clone `ibisllc/maintainers` at a pinned commit SHA at build time) is
-**flagship's private pre-1.0 dogfooding bootstrap only**. It is *not*
+(clone `ibisllc/maintainers` at a pinned commit SHA at build time) was
+**flagship's private pre-1.0 dogfooding bootstrap only**. It was *not*
 a distribution mechanism and must never be presented to external
 adopters as one. A bespoke clone-at-build shell script is one of the
 highest-friction ways to depend on a library — the opposite of the
@@ -163,72 +179,47 @@ Considered and rejected for v1:
 
 A subdirectory is the cheapest deployment that still gives every adopter
 a copy-paste-able pattern. The Flagship-specific HTML host page lives at
-`apps/web/public/maintainers/index.html`; the library code (compiled
-JS from `@maintainers/web-ui`) is copied in by the pull-at-build script.
+`apps/web/public/maintainers/index.html`; its compiled web-ui bundle is
+a build artifact under `apps/web/public/maintainers/lib/` (gitignored,
+served by the Worker's `[assets]` binding) — independent of the protocol
+npm dependency described above.
 
 ---
 
-## How the code is pulled
+## How the code is consumed
 
-The whole `maintainers/` tree is **not** checked into this repo. Two
-reasons:
+The protocol code is **not** checked into this repo and is **not**
+cloned at build time. Flagship depends on the published npm package
+exactly like any external adopter:
 
 1. **Single source of truth.** `ibisllc/maintainers` is the canonical
-   home. Vendoring its sources here would invite drift the moment a
-   commit lands in one place but not the other.
-2. **Dogfood.** Pulling from a protocol-managed repo at build time is
-   the same shape adopters will use. We hit the same pain points they
-   will (auth, pinning, reproducibility) and our build is documentary.
+   home; `@ibisllc/maintainers` on npm is its published artifact.
+   Vendoring or cloning the sources here would invite drift.
+2. **Dogfood for real.** Consuming the published package is the same
+   shape adopters use — npm registry fetch, exact version pin, lockfile
+   integrity (`npm ci`). We hit the exact pinning/reproducibility story
+   they do, with none of the bespoke-clone friction.
 
-### The pull script — `scripts/pull-maintainers.sh`
+### The dependency — `@ibisllc/maintainers`
 
-```sh
-bash scripts/pull-maintainers.sh
-```
+- Declared exact-pinned in `packages/server-daemon/package.json`
+  (`"@ibisllc/maintainers": "0.1.0"` — no caret; matches the protocol's
+  pin-the-artifact ethos) and integrity-locked in the root
+  `package-lock.json`.
+- Resolved by ordinary `npm ci` / `npm install` from the public
+  registry. No git, no clone, no lifecycle hook, no env knobs.
+- Ships its compiled `dist/`, the `SPEC.md`, and the **conformance
+  test-vector artifact** at
+  `node_modules/@ibisllc/maintainers/conformance/` (the shared 17-vector
+  manifest + the additive `checkpoint-request/` set). The TypeScript,
+  iOS, and Android cross-language conformance replays all read that
+  on-disk artifact at runtime (never transcribed).
 
-What it does:
-
-1. Reads `MAINTAINERS_REPO_URL` (default
-   `https://github.com/ibisllc/maintainers.git`).
-2. Reads `MAINTAINERS_PINNED_SHA` (env override) or
-   `scripts/maintainers.pinned-sha` (a one-line file under version
-   control).
-3. If `maintainers/.git` exists and HEAD is already at the pinned SHA,
-   exits 0 silently — fast for repeat invocations.
-4. Otherwise `git clone`s (first run) or `git fetch + git reset --hard`s
-   to the pinned SHA.
-5. Runs `npm install --prefix maintainers --no-audit --no-fund` so the
-   maintainers tree has its own resolved `node_modules`.
-
-`scripts/maintainers.pinned-sha` is the *only* file in this repo that
-controls which `maintainers` revision Flagship trusts. To upgrade:
-overwrite it with a fresh SHA from `ibisllc/maintainers` (after CI
-reviews the diff) and commit.
-
-### Where the pull happens in each environment
-
-| Environment | When pull-maintainers runs |
-|---|---|
-| Local dev (first `git clone`) | `npm install` triggers `preinstall` → pull |
-| Local dev (subsequent rebuilds) | Cached on the SHA; near-instant no-op |
-| Docker build (Fly app) | First stage runs `pull-maintainers.sh` before `tsc -b` |
-| Cloudflare Worker deploy | Same — the Worker bundle includes assets the build pulled |
-| CI (GitHub Actions) | Same; the Actions cache keys on the pinned SHA |
-
----
-
-## Configuration surface
-
-Two knobs, both env-overridable:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `MAINTAINERS_REPO_URL` | `https://github.com/ibisllc/maintainers.git` | Where to clone from. Set to your fork if you've forked. |
-| `MAINTAINERS_PINNED_SHA` | contents of `scripts/maintainers.pinned-sha` | Pin to a specific commit. Tag refs (`v1.0.0`) work too — the script uses `git fetch` with the value verbatim. |
-
-Anything beyond these two knobs would be moving knobs around for the
-sake of moving them. The repo URL is the *only* thing an adopter needs
-to change to use their own fork; the SHA is the *only* trust knob.
+To upgrade: bump the exact version in
+`packages/server-daemon/package.json`, run `npm install` to refresh the
+lockfile integrity, and commit. Trust is anchored in the baked genesis
+pin (data), not the code channel, so the registry is purely an
+adoption-friction optimization.
 
 ---
 
@@ -236,15 +227,15 @@ to change to use their own fork; the SHA is the *only* trust knob.
 
 Three distinct scopes, kept deliberately separate:
 
-### 1. Build-time pull — **zero keys**
+### 1. Dependency fetch — **zero keys**
 
-`ibisllc/maintainers` is a public repo. Anonymous HTTPS clone works.
-No PAT, no deploy key, no secrets.
+`@ibisllc/maintainers` is a public npm package. `npm ci`/`npm install`
+fetches it anonymously from the public registry. No PAT, no deploy key,
+no secrets.
 
-For adopters whose fork is private, the same script reads
-`MAINTAINERS_REPO_URL`; point it at an SSH URL
-(`git@github.com:yourorg/maintainers.git`) and let your CI inject an
-SSH agent with a *read-only* deploy key scoped to one repo.
+Adopters who maintain a private fork can publish it to their own
+registry/scope and point the dependency at that — the same exact-pin +
+lockfile-integrity story applies.
 
 ### 2. Flagship maintainers UI hosted at `/maintainers/` — **zero keys**
 
@@ -351,14 +342,16 @@ pathological chains.
 
 If you want to set up the same model for *your* repository:
 
-1. Fork `github.com/ibisllc/maintainers` (or use it directly — read-only
-   from your build doesn't require a fork).
+1. Use `@ibisllc/maintainers` from npm directly (or fork
+   `github.com/ibisllc/maintainers` and publish your fork to your own
+   registry/scope if you need to diverge).
 2. In your own repo:
-   - Copy `scripts/pull-maintainers.sh` and
-     `scripts/maintainers.pinned-sha`.
-   - Set `MAINTAINERS_REPO_URL` to your fork (if forked).
-   - Add `maintainers/` to `.gitignore`.
-   - Add a `preinstall` script that runs `pull-maintainers.sh`.
+   - Add `@ibisllc/maintainers` as an **exact-pinned** dependency
+     (no caret) and commit the lockfile; install with `npm ci` so the
+     integrity hash is enforced.
+   - That's it — no clone script, no `preinstall` hook, no
+     `.gitignore` entry. The conformance artifact is shipped inside the
+     package at `node_modules/@ibisllc/maintainers/conformance/`.
 3. Run the [genesis ceremony](https://github.com/ibisllc/maintainers#genesis)
    to populate your `.maintainers/` folder with a root mandate.
 4. (Optional) Host the UI: copy

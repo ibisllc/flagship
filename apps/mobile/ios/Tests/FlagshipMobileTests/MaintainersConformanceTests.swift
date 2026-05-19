@@ -4,12 +4,14 @@ import XCTest
 /// Cross-language conformance replay for the maintainers trust port (#10).
 ///
 /// This loads the SHARED, dependency-free conformance artifact from disk
-/// at runtime (`maintainers/conformance/manifest.json` + `vectors/*.json`)
-/// — the exact same set the TypeScript side replays. The vectors are NOT
-/// transcribed into Swift literals; they are read and parsed from the
-/// real files. For EVERY vector we run the native Swift verifier for that
-/// subject and assert the verdict (accepted, and on rejection the EXACT
-/// rejectReason) equals the manifest entry.
+/// at runtime — the artifact ships inside the published
+/// `@ibisllc/maintainers` npm package, so it is resolved from
+/// `<repoRoot>/node_modules/@ibisllc/maintainers/conformance/manifest.json`
+/// + `vectors/*.json` — the exact same set the TypeScript side replays.
+/// The vectors are NOT transcribed into Swift literals; they are read and
+/// parsed from the real files. For EVERY vector we run the native Swift
+/// verifier for that subject and assert the verdict (accepted, and on
+/// rejection the EXACT rejectReason) equals the manifest entry.
 ///
 /// "Conformant iff it produces the expected verdict for EVERY vector,
 /// including every fail-closed negative."
@@ -170,13 +172,25 @@ final class MaintainersConformanceTests: XCTestCase {
 
     // MARK: - Locate the shared conformance artifact on disk
 
-    /// Walk up from this test file to the repo root and into
-    /// `maintainers/conformance`. Read at runtime — never transcribed.
+    private struct ConformanceArtifactMissing: Error, CustomStringConvertible {
+        let searchedFrom: String
+        var description: String {
+            "could not locate node_modules/@ibisllc/maintainers/conformance"
+                + "/manifest.json from \(searchedFrom)"
+        }
+    }
+
+    /// Walk up from this test file to the repo root and into the published
+    /// npm package's `conformance/` directory. Read at runtime — never
+    /// transcribed. An unlocatable artifact is a real FAILURE here (never
+    /// a skip): without it the cross-language guarantee is unverified.
     private func conformanceDir() throws -> URL {
         var dir = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // FlagshipMobileTests
         for _ in 0..<12 {
             let candidate = dir
+                .appendingPathComponent("node_modules")
+                .appendingPathComponent("@ibisllc")
                 .appendingPathComponent("maintainers")
                 .appendingPathComponent("conformance")
             if FileManager.default.fileExists(
@@ -186,7 +200,9 @@ final class MaintainersConformanceTests: XCTestCase {
             }
             dir = dir.deletingLastPathComponent()
         }
-        throw XCTSkip("could not locate maintainers/conformance from \(#filePath)")
+        let missing = ConformanceArtifactMissing(searchedFrom: #filePath)
+        XCTFail(missing.description)
+        throw missing
     }
 
     // MARK: - Replay (mirror of conformance.test.ts `replay`)

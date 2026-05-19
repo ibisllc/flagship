@@ -14,7 +14,6 @@
     { "path": "./packages/hello-daemon" },
     { "path": "./apps/web" },
     { "path": "./services/marketplace-scanner" },
-    { "path": "./tools/vps-e2e" },
-    { "path": "./maintainers/packages/protocol" }
+    { "path": "./tools/vps-e2e" }
   ]
 }
