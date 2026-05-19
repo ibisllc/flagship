@@ -171,6 +171,64 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PHASE H chunk 4
+  (checkpoint-bot Action adapter) = governed PR #13 OPEN; ★ AGENT-DOABLE
+  v1-LAUNCH BACKLOG EXHAUSTED after this):** Fresh subagent added
+  `packages/server-adapters/checkpoints-bot/` mirroring
+  `server-adapters/cloudflare-worker` (`bot.ts` PURE core
+  `runCheckpointBotOnSubmission(deps)` — all I/O injected, imports only
+  `@ibisllc/maintainers`, NO node:fs/net/child_process [confirmed:
+  the only match is the absence-asserting JSDoc at bot.ts:33], reuses
+  `validateCheckpointSubmission` VERBATIM, effects returned as data:
+  accept⇒one §7 4-col append-only line +iff rule-11 over-cap the
+  manual-verify ping; reject⇒PR decision; `action.ts` THIN real-I/O
+  entrypoint, node:fs/child_process only, NO @actions/octokit, wiring-
+  only/typechecked-not-run-here, its pure helpers unit-tested — one
+  caught+fixed a real `.git/` path bug). Verify-before-trust: confined
+  scope (`checkpoints-bot/**` + ONE root-tsconfig ref line;
+  protocol/cli/conformance/docs **git-clean**), no new dep, re-ran
+  gates independently — maintainers `tsc -b` clean + vitest
+  **467/467·41** (+25 hermetic incl rule-11-fail-open-ping /
+  prunable-witness-accept / append-only-single-line+forged-tail-reject
+  / each reject→decision; conformance 30 / wizard 12 / checkpointBot 22
+  / checkpointSubmit 12 unchanged; 0 failed); flagship `tsc -b` clean
+  (STANDALONE from repo root, pwd echoed = `/Users/harrywinner/
+  flagship`, exit 0 — NOT chained after a maintainers cd this time).
+  Branch `feat/checkpoint-bot-action-adapter` off pin `f27bbbe` (no
+  `Co-Authored-By`), pushed, **governed PR #13 OPEN**
+  (https://github.com/ibisllc/maintainers/pull/13). **★ NEXT —
+  HUMAN-MERGE GATE:** owner merges #13 → agent re-pins → pull →
+  re-gate → `npm i pcsclite --no-save`. Pin `f27bbbe` until #13
+  merges. **★★ AFTER #13 THE AGENT-DOABLE v1-LAUNCH BACKLOG IS
+  EXHAUSTED.** Everything remaining is HUMAN / CREDENTIAL / ENV /
+  LIVE-EXERCISE gated (see §0a "Remaining human-only punch list"
+  below) — the orchestrator should STOP spawning build chunks and hand
+  off cleanly, not invent speculative work.
+
+### §0a — Remaining human-only punch list (post-PR-#13; nothing here is agent-doable on this Mac)
+
+1. **Merge PR #13** → tell the agent → it does the final re-pin (this
+   is the only remaining agent action, and it is gated on the merge).
+2. **Create `github.com/ibisllc/maintainers-checkpoints`** (the public
+   witness repo) + wire its GitHub Action to the landed
+   `checkpoints-bot` adapter; submit Flagship's genesis `ca` mandate as
+   the inaugural checkpoint via `maintainers checkpoint submit`.
+3. **npm publish** `@ibisllc/maintainers` — the earlier pasted token is
+   BURNED (revoke `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` at
+   npmjs.com); create the `ibisllc` npm org + a fresh token; then
+   flagship can drop `pull-maintainers.sh`+pin+symlink (a later chunk).
+4. **iOS** TestFlight (archive+sign+upload+5 testers) — Mac-side human.
+5. **Android** Play internal track (signing+FCM+upload+5 testers) —
+   JDK/SDK now installed here, but store upload is human/credential.
+6. **Phase F** real personalized-ISO boot on a paid cloud VPS (this
+   Mac is darwin/arm64 — no qemu/docker/Linux; the repro-build CI is
+   already DONE/verified).
+7. **Phase G** the §S v1-alpha live-exercise checklist
+   (update-pack / lineage-break / STK rotation / recovery-from-lost-
+   phone / 7-day peer-backup) — each a live human exercise.
+8. **Rotate** the #7-exposed PIV PIN if not already (done in-session
+   per the genesis entry — re-confirm).
+
 - **2026-05-19 (v1-launch program session 9 cont. — PR #12 MERGED +
   re-pinned `f27bbbe`; next = Phase-H chunk 4 = bot Action adapter):**
   Owner merged PR #12 (`checkpoint submit` CLI verb). Governed re-pin:

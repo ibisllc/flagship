@@ -508,6 +508,25 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): Phase H chunk 4 (bot Action adapter) = PR #13 OPEN — ★ agent-doable backlog EXHAUSTED after this
+
+PR #12 merged → re-pinned `f27bbbe`. Chunk 4 (last agent-doable
+Phase-H unit): fresh subagent added `server-adapters/checkpoints-bot/`
+(mirrors cloudflare-worker: pure `bot.ts` `runCheckpointBotOnSubmission`
+reusing `validateCheckpointSubmission` verbatim, effects-as-data,
+append-only; thin `action.ts` wiring-only/not-run-here, no
+@actions/octokit, no new dep). Audited (confined; protocol/cli/
+conformance/docs git-clean; bot.ts pure) + re-ran gates: maintainers
+tsc clean + **467/41** (+25 hermetic incl rule-11-fail-open /
+prunable-witness / append-only / each reject→decision; all prior
+suites unchanged); flagship tsc clean (standalone, pwd-verified).
+Branch `feat/checkpoint-bot-action-adapter` off `f27bbbe`, pushed,
+**governed PR #13 OPEN** — awaiting human merge → final re-pin.
+**★★ After #13 the agent-doable v1-launch backlog is EXHAUSTED;**
+remaining work is human/credential/env/live-gated — full punch list in
+SESSION-HANDOFF §0a. The agent should hand off cleanly, not invent
+speculative chunks.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): Phase H chunk 3 — `checkpoint submit` CLI verb = governed PR #12 OPEN
 
 PR #11 merged → re-pinned `c8d3fc0`. Chunk 3: fresh subagent added the
