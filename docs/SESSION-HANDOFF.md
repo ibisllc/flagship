@@ -171,6 +171,35 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PHASE D started:
+  guided menu wizard = governed PR #9 OPEN, awaiting human merge):**
+  Per the owner steering (CLI is first-class), a fresh subagent added a
+  guided menu wizard: bare `maintainers` in an interactive terminal →
+  numbered menu (status/register-key/issue-renew-mandate/CA-endorsement/
+  verify/quit); `maintainers menu` forces it. THIN front-end — gathers
+  inputs, builds the SAME flag argv, re-dispatches through the existing
+  `dispatch()` handlers, so byte-preview/typed-confirm/no-echo-PIN/tap
+  are the UNCHANGED path. Orchestrator verify-before-trust: audited
+  scope (only `packages/cli/src/index.ts` + new `lib/wizard.ts` + new
+  `tests/wizard.test.ts`; protocol/conformance/.maintainers untouched),
+  grep-proved **ZERO `--yes`/skip-confirm emission** (only negative
+  comments), read the core (non-interactive ⇒ deterministic `CliError`
+  no-hang; PIN never menu-prompted; `--dry-run` only on explicit yes;
+  bare non-interactive byte-unchanged `printUsage`+0), re-ran both
+  gates independently — maintainers `tsc -b` clean + vitest **398/398·
+  38** (386/37 +12 hermetic wizard tests; conformance still 20/20; 0
+  failed). Committed on branch `feat/guided-menu-wizard` **`d8ffac1`**
+  off pin `393b7a7` (no `Co-Authored-By`), pushed, **governed PR #9
+  OPEN** (https://github.com/ibisllc/maintainers/pull/9). **★ NEXT —
+  HUMAN-MERGE GATE (agent never merges a governed maintainers PR /
+  never pins an unmerged tip):** owner merges PR #9 → agent re-pins
+  `scripts/maintainers.pinned-sha` → PR#9 first-parent merge SHA +
+  `bash scripts/pull-maintainers.sh pull` + re-run both gates +
+  re-install `pcsclite` (`cd maintainers/packages/cli && npm i pcsclite
+  --no-save` — the pull wipes the non-manifest dep). Phase D remainder
+  (more CLI polish / #31 web-ui already enforced / #32 NFC app
+  human-gated) continues after. Pin `393b7a7` until #9 merges.
+
 - **2026-05-19 (v1-launch program session 9 cont. — ★★ PHASE C
   COMPLETE: the genesis pin is baked + conformance-verified on EVERY
   surface):** **#10 Android** — fresh subagent built the Kotlin mirror

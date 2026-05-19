@@ -508,6 +508,20 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): Phase D started — guided menu wizard = governed PR #9 OPEN
+
+Per owner steering (CLI first-class), fresh subagent added a guided
+menu wizard (bare `maintainers` interactive → numbered menu; `menu`
+forces it) as a THIN front-end re-dispatching through the existing
+handlers (byte-preview/typed-confirm/no-echo-PIN/tap unchanged; ZERO
+`--yes` emission; non-interactive deterministic no-hang). Orchestrator
+audited (confined to packages/cli; grep-proved no --yes) + re-ran gates
+independently: tsc clean, vitest 386/37 → **398/38** (+12 hermetic
+wizard tests; conformance 20/20; 0 failed). Branch
+`feat/guided-menu-wizard` `d8ffac1` off pin `393b7a7`, pushed,
+**governed PR #9 OPEN** — awaiting human merge → re-pin. Detail:
+SESSION-HANDOFF §0 top.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): ★★ PHASE C COMPLETE — genesis pin baked + conformance-verified on ALL surfaces (#10 Android f946592)
 
 #10 Android: fresh subagent built the Kotlin mirror of #10 iOS
