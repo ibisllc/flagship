@@ -50,19 +50,19 @@ function okJson(body: unknown): HttpResponse {
 function scriptedHttp(
   routes: Array<{
     match: (url: string) => boolean;
-    reply: HttpResponse | ((url: string, n: number) => HttpResponse);
+    reply: HttpResponse | ((url: string, n: number, body: unknown) => HttpResponse);
   }>,
 ): { http: HttpClient; calls: string[] } {
   const calls: string[] = [];
   const counters = new Map<number, number>();
-  function handle(method: string, url: string): HttpResponse {
+  function handle(method: string, url: string, body: unknown): HttpResponse {
     calls.push(`${method} ${url}`);
     for (let i = 0; i < routes.length; i++) {
       const r = routes[i]!;
       if (r.match(url)) {
         const n = (counters.get(i) ?? 0) + 1;
         counters.set(i, n);
-        return typeof r.reply === "function" ? r.reply(url, n) : r.reply;
+        return typeof r.reply === "function" ? r.reply(url, n, body) : r.reply;
       }
     }
     return { status: 404, body: `no fake route for ${url}` };
@@ -70,8 +70,8 @@ function scriptedHttp(
   return {
     calls,
     http: {
-      get: async (url) => handle("GET", url),
-      post: async (url) => handle("POST", url),
+      get: async (url) => handle("GET", url, undefined),
+      post: async (url, jsonBody) => handle("POST", url, jsonBody),
     },
   };
 }
@@ -100,6 +100,9 @@ function fakeProvider(
 
 /** Happy-path HTTP: mint OK, pod registered+ready, padlock + health OK. */
 function happyHttp() {
+  // Mirrors the daemon: set-app-env stores the value; the deployed
+  // app's /health then echoes it (value-in-container, never to model).
+  const envState: { proof: string } = { proof: "" };
   return scriptedHttp([
     { match: (u) => u.includes("/api/username/claim"), reply: okJson({ ok: true }) },
     { match: (u) => u.includes("/api/auth-code/issue"), reply: okJson({ ok: true }) },
@@ -129,11 +132,25 @@ function happyHttp() {
       match: (u) => u === `https://${FQDN}/api/health`,
       reply: okJson({ status: "ok" }),
     },
-    // BYOK + CA endpoints: respond so the gated stages exercise their
-    // "not wired" branch (no providerKey loaded / no caEndorsement).
+    // Generic per-app env (vibeAppEnv, WIRED): faithfully simulate the
+    // daemon — the signed set-app-env POST records the value, then the
+    // deployed app's /health echoes it (mirroring "value injected into
+    // the container env, app reads it"). The proof value is random per
+    // run; the mock reflects whatever the signed order carried.
+    {
+      match: (u) => /\/api\/apps\/[^/]+\/env$/.test(u),
+      reply: (_u, _n, body) => {
+        const env = (body as { request?: { env?: Record<string, string> } })?.request?.env ?? {};
+        envState.proof = env["E2E_ENV_PROOF"] ?? "";
+        return okJson({ ok: true });
+      },
+    },
     { match: (u) => u.includes("/api/screens/orders/send"), reply: okJson({ orderId: "o1" }) },
+    {
+      match: (u) => /\/api\/apps\/[^/]+\/health$/.test(u),
+      reply: () => okJson({ status: "ok", E2E_ENV_PROOF: envState.proof }),
+    },
     { match: (u) => u.includes("/api/apps") && !u.includes("health"), reply: okJson({ appId: "a1" }) },
-    { match: (u) => u.includes("/api/apps/_e2e-byok/health"), reply: okJson({ providerKey: "absent" }) },
     {
       match: (u) => u.includes("/pubkey-cert"),
       reply: okJson({ pubkey: "deadbeef", caSig: "..." }),
@@ -154,9 +171,10 @@ function deps(http: HttpClient, provider: VpsProvider): E2EDeps {
 }
 
 describe("runE2E orchestration core", () => {
-  // Drives every wired stage in order and returns all-pass + the two
-  // pillars honestly reported known-gated.
-  it("happy path: wired stages pass in order, gated stages known-gated, teardown destroys", async () => {
+  // Drives every wired stage in order (incl. the now-wired generic
+  // per-app env stage) and returns all-pass + the CA pillar honestly
+  // reported known-gated.
+  it("happy path: wired stages pass in order, CA gated, teardown destroys", async () => {
     const { http } = happyHttp();
     const { provider, destroyed } = fakeProvider();
     const report = await runE2E(PLAN, deps(http, provider));
@@ -168,7 +186,7 @@ describe("runE2E orchestration core", () => {
       "awaitUnlock",
       "probeGreenPadlock",
       "createAccountServer",
-      "byokVibeApp",
+      "vibeAppEnv",
       "assertCaAuthorized",
       "teardown",
     ]);
@@ -180,14 +198,12 @@ describe("runE2E orchestration core", () => {
       "awaitUnlock",
       "probeGreenPadlock",
       "createAccountServer",
+      "vibeAppEnv",
       "teardown",
     ]) {
       expect(byName[n]!.status).toBe("pass");
     }
-    expect(byName["byokVibeApp"]!.status).toBe("known-gated");
-    expect(byName["byokVibeApp"]!.gatedReason).toMatch(
-      /appByokRuntime\.ts|order\/protocol carrier/,
-    );
+    expect(byName["vibeAppEnv"]!.detail).toMatch(/injected env value/);
     expect(byName["assertCaAuthorized"]!.status).toBe("known-gated");
     expect(byName["assertCaAuthorized"]!.gatedReason).toMatch(
       /CaEndorsement|caTrustChain\.ts/,
@@ -236,22 +252,23 @@ describe("runE2E orchestration core", () => {
       report.stages.find((s) => s.name === "probeGreenPadlock")!.status,
     ).toBe("skipped");
     expect(
-      report.stages.find((s) => s.name === "byokVibeApp")!.status,
-    ).toBe("known-gated");
+      report.stages.find((s) => s.name === "vibeAppEnv")!.status,
+    ).toBe("skipped");
     // Teardown ran despite the mid-chain failure.
     expect(destroyed).toEqual(["vps-1"]);
     expect(report.ok).toBe(false);
   });
 
   // A failing KNOWN-GATED stage is the documented gap — it must NOT
-  // turn the overall run red.
-  it("known-gated stages failing their assertion do not fail the run", async () => {
+  // turn the overall run red. (Only the CA stage remains gated; the
+  // generic per-app env stage is now WIRED and asserted.)
+  it("known-gated CA stage failing its assertion does not fail the run", async () => {
     const { http } = happyHttp();
     const { provider } = fakeProvider();
     const report = await runE2E(PLAN, deps(http, provider));
     expect(
-      report.stages.find((s) => s.name === "byokVibeApp")!.status,
-    ).toBe("known-gated");
+      report.stages.find((s) => s.name === "vibeAppEnv")!.status,
+    ).toBe("pass");
     expect(
       report.stages.find((s) => s.name === "assertCaAuthorized")!.status,
     ).toBe("known-gated");
@@ -335,9 +352,9 @@ describe("runE2E orchestration core", () => {
 });
 
 describe("plannedChain", () => {
-  // The static plan must list exactly the executed chain with both
-  // gates marked + reasoned.
-  it("matches the executed stage order and flags both gates", () => {
+  // The static plan must list exactly the executed chain; only the CA
+  // stage remains known-gated (vibeAppEnv is now WIRED).
+  it("matches the executed stage order and flags the CA gate", () => {
     const chain = plannedChain();
     expect(chain.map((s) => s.name)).toEqual([
       "mintBuildCode",
@@ -346,15 +363,13 @@ describe("plannedChain", () => {
       "awaitUnlock",
       "probeGreenPadlock",
       "createAccountServer",
-      "byokVibeApp",
+      "vibeAppEnv",
       "assertCaAuthorized",
       "teardown",
     ]);
+    expect(chain.find((s) => s.name === "vibeAppEnv")!.kind).toBe("wired");
     const gated = chain.filter((s) => s.kind === "known-gated");
-    expect(gated.map((s) => s.name)).toEqual([
-      "byokVibeApp",
-      "assertCaAuthorized",
-    ]);
+    expect(gated.map((s) => s.name)).toEqual(["assertCaAuthorized"]);
     expect(gated.every((s) => (s.gatedReason ?? "").length > 20)).toBe(true);
   });
 });

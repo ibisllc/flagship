@@ -489,6 +489,70 @@ describe("UpdatePullRequest — server-identity-signed app update pull", () => {
   });
 });
 
+describe("SetAppEnvRequest — IRK-signed per-app env (names+values both signed)", () => {
+  const irk = deriveIRK(umk);
+
+  it("round-trips sign/verify under the host IRK", async () => {
+    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const r = {
+      serverId: "home.alice.flagship.services",
+      creator: "alice",
+      slug: "weatherbot",
+      env: { OPENAI_API_KEY: "sk-secret-xyz", APP_REGION: "us" },
+      issuedAt: 1735689600000,
+    };
+    const sig = signSetAppEnv(r, irk);
+    expect(verifySetAppEnv(r, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("is order-independent over env keys (canonical sorts keys)", async () => {
+    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const r1 = {
+      serverId: "home.alice.flagship.services",
+      creator: "alice",
+      slug: "weatherbot",
+      env: { B: "2", A: "1" },
+      issuedAt: 1,
+    };
+    const sig = signSetAppEnv(r1, irk);
+    const r2 = { ...r1, env: { A: "1", B: "2" } };
+    expect(verifySetAppEnv(r2, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("rejects a swapped value — a MITM cannot change a value against a captured sig", async () => {
+    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const r = {
+      serverId: "home.alice.flagship.services",
+      creator: "alice",
+      slug: "weatherbot",
+      env: { OPENAI_API_KEY: "sk-real" },
+      issuedAt: 1,
+    };
+    const sig = signSetAppEnv(r, irk);
+    expect(
+      verifySetAppEnv({ ...r, env: { OPENAI_API_KEY: "sk-attacker" } }, sig, irk.publicKey),
+    ).toBe(false);
+    expect(
+      verifySetAppEnv({ ...r, env: { OPENAI_API_KEY: "sk-real", EXTRA: "x" } }, sig, irk.publicKey),
+    ).toBe(false);
+    expect(verifySetAppEnv({ ...r, slug: "other" }, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects under a different signer pubkey (wrong-signer)", async () => {
+    const { signSetAppEnv, verifySetAppEnv } = await import("../src/auth.js");
+    const other = deriveIRK({ seed: new Uint8Array(32).fill(0x77) });
+    const r = {
+      serverId: "home.alice.flagship.services",
+      creator: "alice",
+      slug: "weatherbot",
+      env: { K: "v" },
+      issuedAt: 1,
+    };
+    const sig = signSetAppEnv(r, irk);
+    expect(verifySetAppEnv(r, sig, other.publicKey)).toBe(false);
+  });
+});
+
 describe("PhoneOrder browser-input-response — PSK-signed input from phone", () => {
   const psk = deriveBAK(umk, "srv-browser-test");
 

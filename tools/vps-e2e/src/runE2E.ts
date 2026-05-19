@@ -45,15 +45,6 @@ import type {
   VpsInstance,
 } from "./ports.js";
 
-const GATED_BYOK =
-  "BYOK vibe-app cannot YET answer end-to-end on a live VPS: the " +
-  "daemon runtime IS now wired (packages/server-daemon/src/appByokStore.ts " +
-  "+ appByokRuntime.ts seal a per-app provider key at rest and the " +
-  "appProxy answers /.flagship/llm/chat with it), but no order/protocol " +
-  "carrier yet ships the user's key from the phone/webapp through the " +
-  "signed envelope to deploySession.resolveByok. Expected-fail until " +
-  "that @flagship/protocol + webapp carrier lands.";
-
 const GATED_CA =
   "Served pubkey-cert is signed with the raw FLAGSHIP_CA_PRIV_HEX and " +
   "there is NO CaEndorsement gate upstream on `.com`: links 2-4 in " +
@@ -399,64 +390,85 @@ async function createAccountServer(
 }
 
 /**
- * Stage 7 — KNOWN-GATED. Attempt to create a BYOK vibe-app and have it
- * answer using the user's own LLM provider key. Expected to NOT
- * succeed until vibeCodeSession.ts loads the stored provider key. A
- * failure here is the documented gap, not a harness failure.
+ * Stage 7 — WIRED. Set a per-app env var via an owner-IRK-signed
+ * `set-app-env` order, vibecode an app that reads it from its
+ * environment, and assert the deployed app answers using the injected
+ * value. This is the generic per-app env feature end-to-end: the
+ * value is sealed at rest, injected into the container, and NEVER
+ * sent to the model (the model only ever saw the NAME). Replaces the
+ * old AI-specific BYOK gated stage — the protocol + daemon layer now
+ * satisfies what its `gatedReason` was waiting on.
  */
-async function byokVibeApp(
+async function vibeAppEnv(
   plan: E2EPlan,
   deps: E2EDeps,
   st: RunState,
 ): Promise<StageResult> {
-  const name = "byokVibeApp";
-  try {
-    const orderUrl = `https://${st.serverFqdn}/api/screens/orders/send`;
-    const order = await deps.http.post(orderUrl, {
-      kind: "vibe-app",
-      prompt: "a one-page hello world that calls my LLM provider",
-    });
-    if (order.status < 200 || order.status >= 300) {
-      return gated(
-        name,
-        `vibe-app order rejected (HTTP ${order.status}) — pillar not wired`,
-        GATED_BYOK,
-      );
-    }
-    const createUrl = `https://${st.serverFqdn}/api/apps`;
-    const created = await deps.http.post(createUrl, {
-      from: "vibe-app",
-      order: JSON.parse(order.body || "{}"),
-    });
-    if (created.status < 200 || created.status >= 300) {
-      return gated(
-        name,
-        `app create rejected (HTTP ${created.status}) — pillar not wired`,
-        GATED_BYOK,
-      );
-    }
-    // The decisive assertion: the created app must actually answer
-    // using the user's provider key. It cannot yet.
-    const appResp = await deps.http.get(`https://${st.serverFqdn}/api/apps/_e2e-byok/health`);
-    const usedUserKey =
-      appResp.status === 200 && /"providerKey"\s*:\s*"loaded"/.test(appResp.body);
-    if (!usedUserKey) {
-      return gated(
-        name,
-        "created app does not answer using the user's stored provider key",
-        GATED_BYOK,
-      );
-    }
-    // If this ever turns true the pillar landed — surface it loudly as
-    // a pass so the harness flips the moment the wiring exists.
-    return pass(name, "BYOK vibe-app answered using the user's provider key");
-  } catch (e) {
-    return gated(
-      name,
-      `BYOK attempt errored (${e instanceof Error ? e.message : String(e)}) — pillar not wired`,
-      GATED_BYOK,
+  const name = "vibeAppEnv";
+  const { signSetAppEnv } = await import("@flagship/protocol");
+  const creator = plan.username;
+  const slug = "e2e-env";
+  // The decisive value: it must reach the container env but never the
+  // model. The model only ever sees the NAME `E2E_ENV_PROOF`.
+  const proof = `proof-${bytesToHex(randBytes(8))}`;
+
+  // 1. Owner-signed set-app-env order (same trust root as install).
+  const setReq = {
+    serverId: st.serverFqdn,
+    creator,
+    slug,
+    env: { E2E_ENV_PROOF: proof },
+    issuedAt: deps.clock(),
+  };
+  const setSig = signSetAppEnv(setReq, deps.identity.irk);
+  const setUrl = `https://${st.serverFqdn}/api/apps/${creator}-${slug}/env`;
+  const setRes = await deps.http.post(setUrl, {
+    request: setReq,
+    signature: bytesToHex(setSig),
+  });
+  if (setRes.status < 200 || setRes.status >= 300) {
+    throw new StageError(
+      fail(name, `set-app-env order rejected (HTTP ${setRes.status}): ${setRes.body.slice(0, 160)}`),
     );
   }
+
+  // 2. Vibecode the app (it reads E2E_ENV_PROOF from its env at runtime).
+  const orderUrl = `https://${st.serverFqdn}/api/screens/orders/send`;
+  const order = await deps.http.post(orderUrl, {
+    kind: "vibe-app",
+    prompt: `a one-page app named ${slug} whose /health echoes process.env.E2E_ENV_PROOF`,
+  });
+  if (order.status < 200 || order.status >= 300) {
+    throw new StageError(
+      fail(name, `vibe-app order rejected (HTTP ${order.status})`),
+    );
+  }
+  const created = await deps.http.post(`https://${st.serverFqdn}/api/apps`, {
+    from: "vibe-app",
+    order: JSON.parse(order.body || "{}"),
+  });
+  if (created.status < 200 || created.status >= 300) {
+    throw new StageError(
+      fail(name, `app create rejected (HTTP ${created.status})`),
+    );
+  }
+
+  // 3. Decisive assertion: the deployed app answers using the injected
+  // env value (proving the value reached the container env, sealed at
+  // rest, never to the model).
+  const appResp = await deps.http.get(`https://${st.serverFqdn}/api/apps/${creator}-${slug}/health`);
+  if (appResp.status !== 200 || !appResp.body.includes(proof)) {
+    throw new StageError(
+      fail(
+        name,
+        `deployed app did not echo the injected env value (HTTP ${appResp.status})`,
+      ),
+    );
+  }
+  return pass(
+    name,
+    "owner-signed set-app-env → vibecoded app answered using the injected env value (value sealed at rest, never to the model)",
+  );
 }
 
 /**
@@ -543,6 +555,7 @@ export async function runE2E(
     awaitUnlock,
     probeGreenPadlock,
     createAccountServer,
+    vibeAppEnv,
   ];
 
   let aborted = false;
@@ -575,18 +588,17 @@ export async function runE2E(
 
     // KNOWN-GATED stages always run (they are read-only attempts) and
     // never flip the run red — they document the gap honestly.
-    for (const gatedStage of [byokVibeApp, assertCaAuthorized]) {
+    for (const gatedStage of [assertCaAuthorized]) {
       try {
         stages.push(await gatedStage(plan, deps, st));
       } catch (e) {
         // Even an unexpected throw in a gated stage is the gap, not a
         // harness failure.
-        const reason = gatedStage === byokVibeApp ? GATED_BYOK : GATED_CA;
         stages.push(
           gated(
             gatedStage.name,
             `gated stage errored (${e instanceof Error ? e.message : String(e)})`,
-            reason,
+            GATED_CA,
           ),
         );
       }
@@ -689,11 +701,10 @@ export function plannedChain(): PlannedStage[] {
         "assert the free account/server path is live (per-server /api/health → 200)",
     },
     {
-      name: "byokVibeApp",
-      kind: "known-gated",
+      name: "vibeAppEnv",
+      kind: "wired",
       description:
-        "attempt to create a BYOK vibe-app and have it answer using the user's LLM provider key",
-      gatedReason: GATED_BYOK,
+        "owner-IRK-signed set-app-env order → vibecode an app that reads the var from its env → assert it answers using the injected value (value sealed at rest, NAME-only to the model)",
     },
     {
       name: "assertCaAuthorized",

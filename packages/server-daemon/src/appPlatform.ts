@@ -24,8 +24,10 @@ import {
   type InstallAppRequest,
   type Keypair,
   type MembershipMutation,
+  type SetAppEnvRequest,
   type UninstallAppRequest,
 } from "@flagship/protocol";
+import type { AppEnv } from "./appEnvStore.js";
 import { AppRunner, type AppSpec } from "./appRunner.js";
 import { AppMembership } from "./membership.js";
 import {
@@ -107,13 +109,13 @@ export interface AppPlatformDeps {
     canonicalUrl: string;
   }) => Promise<{ currentTip: string }>) | null;
   /**
-   * Per-app BYOK provider-key store. When set, install persists the
-   * app's own `{providerId, apiKey, baseUrl?}` (when the caller supplies
-   * one) so the runtime LLM-call seam can resolve it later; uninstall
-   * forgets it. The key is sealed at rest by the store itself. Optional
-   * — when null, BYOK apps simply can't make their own provider calls.
+   * Per-app generic env store. When set, the app's owner-set env vars
+   * (sealed at rest by the store) are injected into the deployed
+   * container's process environment at install/deploy; uninstall
+   * forgets them. Optional — when null, an app simply runs without any
+   * owner-set env vars (just the FLAGSHIP_* / data-layer ones).
    */
-  byokStore?: import("./appByokStore.js").AppByokStore | null;
+  envStore?: import("./appEnvStore.js").AppEnvStore | null;
   /** Reject mutations whose `issuedAt` is more than this old (ms). Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -195,14 +197,6 @@ export class AppPlatform {
     verify: (req: InstallAppRequest, sig: Bytes, irkPub: Bytes) => boolean;
     /** For tests + future port allocators. Default picks a random 49152–65535. */
     pickPort?: () => number;
-    /**
-     * The user's own LLM provider config for this app, if any. Persisted
-     * to `deps.byokStore` (sealed at rest by the store). This is a
-     * daemon-internal arg — it is deliberately NOT part of the signed
-     * `InstallAppRequest` protocol envelope, so it never crosses the
-     * `@flagship/protocol` boundary.
-     */
-    byok?: import("./appByokStore.js").AppByokConfig;
   }): Promise<InstallResult> {
     const { request: r, signature, verify } = args;
 
@@ -269,9 +263,18 @@ export class AppPlatform {
       }
     }
 
-    // 3. Deploy the container with FLAGSHIP_* env injected.
+    // 3. Deploy the container with FLAGSHIP_* env injected. Owner-set
+    // generic env vars (sealed at rest) are injected here too — they
+    // sit BELOW the data-layer + reserved FLAGSHIP_* vars so an owner
+    // can never shadow a reserved name. Keys with the reserved
+    // `FLAGSHIP_` prefix are dropped defensively. Values are read
+    // transiently for this deploy and never logged.
     const port = args.pickPort?.() ?? randomPort();
+    const ownerEnv = this.deps.envStore
+      ? sanitizeOwnerEnv(await this.deps.envStore.get(appId).catch(() => null))
+      : {};
     const env: Record<string, string> = {
+      ...ownerEnv,
       ...(parsed.manifest.runtime.env ?? {}),
       ...(data ? credentialsToEnv(data) : {}),
       FLAGSHIP_APP_ID: appId,
@@ -368,19 +371,49 @@ export class AppPlatform {
       }
     }
 
-    // Persist the app's own BYOK provider config (sealed at rest by the
-    // store) so the runtime LLM-call seam can resolve it later. Scoped
-    // strictly to this appId. A persist hiccup shouldn't kill the
-    // install — the app just can't make BYOK calls until reconfigured.
-    if (args.byok && this.deps.byokStore) {
-      try {
-        await this.deps.byokStore.put(appId, args.byok);
-      } catch {
-        // soft failure; never surface the key in a thrown error
+    return { ok: true, app: installed };
+  }
+
+  /**
+   * Apply an owner-signed `SetAppEnvRequest`: verify the IRK signature
+   * (same trust root as install/uninstall), then store the env sealed
+   * at rest. Full-replace semantics — the request carries the complete
+   * desired env set. The new values take effect on the next deploy
+   * (the app's process env is set at container start); we do not hot-
+   * swap a running container's env. Reserved `FLAGSHIP_`-prefixed keys
+   * are rejected so an owner can never shadow a daemon-injected var.
+   *
+   * The values are SECRET: this method never logs them, never returns
+   * them, and never surfaces them in an error.
+   */
+  async setEnv(args: {
+    request: SetAppEnvRequest;
+    signature: Bytes;
+    verify: (req: SetAppEnvRequest, sig: Bytes, irkPub: Bytes) => boolean;
+  }): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const { request: r, signature, verify } = args;
+    if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
+      return { ok: false, reason: "stale request" };
+    }
+    if (!verify(r, signature, this.deps.host.irkPub)) {
+      return { ok: false, reason: "invalid signature (must be host's IRK)" };
+    }
+    if (!this.deps.envStore) {
+      return { ok: false, reason: "no env store configured" };
+    }
+    for (const k of Object.keys(r.env)) {
+      if (k.startsWith("FLAGSHIP_")) {
+        return { ok: false, reason: "reserved FLAGSHIP_ env name" };
       }
     }
-
-    return { ok: true, app: installed };
+    const appId = AppPlatform.appId(r.creator, r.slug);
+    try {
+      await this.deps.envStore.put(appId, { ...r.env });
+    } catch {
+      // Never surface a value in a thrown error.
+      return { ok: false, reason: "failed to persist env" };
+    }
+    return { ok: true };
   }
 
   /**
@@ -458,9 +491,9 @@ export class AppPlatform {
     if (this.deps.appAuthTokens) {
       await this.deps.appAuthTokens.forget(appId).catch(() => {});
     }
-    // Drop the app's BYOK provider key so it doesn't outlive the app.
-    if (this.deps.byokStore) {
-      await this.deps.byokStore.forget(appId).catch(() => {});
+    // Drop the app's owner-set env so values don't outlive the app.
+    if (this.deps.envStore) {
+      await this.deps.envStore.forget(appId).catch(() => {});
     }
     // Browser feature: close any tabs the app opened, then revoke its
     // domain grant. Order matters — close tabs first so the gate is
@@ -559,7 +592,7 @@ function randomPort(): number {
 // HTTP surface (consumed by runtime.ts's default handler)
 // ──────────────────────────────────────────────────────────────────────
 
-import { verifyInstallApp, verifyUninstallApp, ed } from "@flagship/protocol";
+import { verifyInstallApp, verifyUninstallApp, verifySetAppEnv, ed } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
 export interface AppHttpDeps {
@@ -589,6 +622,12 @@ export function buildAppHttpHandlers(deps: AppHttpDeps) {
       if (req.method === "GET") return listApps(deps);
       if (req.method === "POST") return installApp(deps, req);
       return { status: 405, headers: J, body: JSON.stringify({ error: "method not allowed" }) };
+    }
+    // Owner-signed set-app-env. Mirrors the install/uninstall envelope
+    // trust root (host IRK). Values are SECRET — never echoed back.
+    const envM = /^\/api\/apps\/([^/]+)\/env$/.exec(req.path);
+    if (envM && req.method === "POST") {
+      return setAppEnv(deps, envM[1]!, req);
     }
     if (req.path.startsWith("/api/apps/") && req.method === "DELETE") {
       const appId = req.path.slice("/api/apps/".length);
@@ -716,7 +755,82 @@ async function uninstallApp(deps: AppHttpDeps, appId: string, req: HttpRequest):
   return { status: 200, headers: J, body: JSON.stringify({ ok: true, alreadyGone: result.alreadyGone ?? false }) };
 }
 
+/**
+ * Owner-signed set-app-env. The request body mirrors install/uninstall
+ * (`{ request, signature }`). The response NEVER echoes env values — a
+ * success is a bare `{ ok: true }`; an error is a generic reason that
+ * never interpolates a value.
+ */
+async function setAppEnv(deps: AppHttpDeps, appId: string, req: HttpRequest): Promise<HttpResponse> {
+  const body = safeJsonParse(req.body.toString("utf8")) as {
+    request?: Record<string, unknown>;
+    signature?: string;
+  } | null;
+  if (!body || typeof body.signature !== "string") {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed body" }) };
+  }
+  const r = body.request ?? {};
+  if (
+    typeof r.serverId !== "string" ||
+    typeof r.creator !== "string" ||
+    typeof r.slug !== "string" ||
+    typeof r.issuedAt !== "number" ||
+    typeof r.env !== "object" ||
+    r.env === null ||
+    Array.isArray(r.env)
+  ) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed request" }) };
+  }
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(r.env as Record<string, unknown>)) {
+    if (typeof v !== "string") {
+      return { status: 400, headers: J, body: JSON.stringify({ error: "env values must be strings" }) };
+    }
+    env[k] = v;
+  }
+  if (AppPlatform.appId(r.creator, r.slug) !== appId) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "appId / (creator,slug) mismatch" }) };
+  }
+  let signature: Uint8Array;
+  try {
+    signature = hexToBytes(body.signature);
+  } catch {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "invalid hex" }) };
+  }
+  const result = await deps.platform.setEnv({
+    request: {
+      serverId: r.serverId,
+      creator: r.creator,
+      slug: r.slug,
+      env,
+      issuedAt: r.issuedAt,
+    },
+    signature,
+    verify: verifySetAppEnv,
+  });
+  if (!result.ok) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: result.reason }) };
+  }
+  return { status: 200, headers: J, body: JSON.stringify({ ok: true }) };
+}
+
 void ed; // silence unused-import; kept for future when the daemon needs raw signing here
+
+/**
+ * Drop any reserved `FLAGSHIP_`-prefixed keys from owner-set env so it
+ * can never shadow a daemon-injected var (defense-in-depth — setEnv
+ * already rejects them at write time, this guards a legacy/forged blob
+ * on disk). Returns a plain map; values are not logged anywhere.
+ */
+function sanitizeOwnerEnv(env: AppEnv | null): Record<string, string> {
+  if (!env) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (k.startsWith("FLAGSHIP_")) continue;
+    out[k] = v;
+  }
+  return out;
+}
 
 function hexToBytes(hex: string): Uint8Array {
   if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) throw new Error("invalid hex");

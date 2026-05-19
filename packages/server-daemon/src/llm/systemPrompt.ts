@@ -218,6 +218,14 @@ export interface UserContextInput {
    * code. Defaults to false.
    */
   siblingsEnabled?: boolean;
+  /**
+   * The NAMES (only) of the owner-set per-app environment variables.
+   * Generated code may reference these via `process.env.<NAME>` (or the
+   * language equivalent) — the daemon injects the actual values into
+   * the deployed container's environment. The VALUES are NEVER part of
+   * this input and MUST NEVER reach the model. Empty / omitted ⇒ none.
+   */
+  appEnvNames?: string[];
 }
 
 export interface ExistingAppSummary {
@@ -269,6 +277,25 @@ export function buildUserContext(input: UserContextInput): string {
         "to one already installed, ask whether they want a second copy or " +
         "want to extend the existing app — don't silently overwrite.",
     );
+  }
+  // Owner-set env vars — NAMES ONLY. The values are injected into the
+  // deployed container by the daemon and MUST NEVER appear here. The
+  // model is told the names so generated code can read them from the
+  // process environment; it is told nothing about their contents.
+  const envNames = (input.appEnvNames ?? []).filter((n) => n.length > 0);
+  if (envNames.length > 0) {
+    lines.push("");
+    lines.push("## Owner-set environment variables (names only)");
+    lines.push("");
+    lines.push(
+      "These env vars are set on this app by the owner. Their VALUES are " +
+        "injected into your container's environment at runtime — you are " +
+        "given only the NAMES and must never ask for, guess, or hardcode " +
+        "their values. Read them from the process environment:",
+    );
+    for (const n of [...envNames].sort()) {
+      lines.push(`- \`${n}\``);
+    }
   }
   if (input.siblingsEnabled) {
     lines.push("");

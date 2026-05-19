@@ -6,8 +6,7 @@ import { ed, type Bytes, type Keypair } from "@flagship/protocol";
 import { AppPlatform, buildAppHttpHandlers } from "./appPlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
 import { handleAppRequest } from "./appProxy.js";
-import { FileAppByokStore, type AppByokStore } from "./appByokStore.js";
-import { AppByokRuntime } from "./appByokRuntime.js";
+import { FileAppEnvStore, type AppEnvStore } from "./appEnvStore.js";
 import { AppRunner } from "./appRunner.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
@@ -221,13 +220,13 @@ export interface DaemonRuntimeOptions {
     /** V5 — override the 60-second default. */
     aliasReconcilerIntervalMs?: number;
     /**
-     * Per-app BYOK provider-key store. When omitted, the runtime
-     * builds a `FileAppByokStore` under `<dataDir>/data/app-byok`
-     * automatically whenever `swk` + `dataDir` are present, so a
-     * deployed app can call its own provider via `/.flagship/llm/chat`.
-     * Tests inject an `InMemoryAppByokStore`.
+     * Per-app generic env store. When omitted, the runtime builds a
+     * `FileAppEnvStore` under `<dataDir>/data/app-env` automatically
+     * whenever `swk` + `dataDir` are present, so an owner's set-app-env
+     * order persists sealed and is injected into the deployed app's
+     * runtime environment. Tests inject an `InMemoryAppEnvStore`.
      */
-    byokStore?: import("./appByokStore.js").AppByokStore;
+    envStore?: import("./appEnvStore.js").AppEnvStore;
   };
 }
 
@@ -426,9 +425,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // is constructed below (after the cert + tunnel). The ref-cell lets
   // us bind the handler now and populate it later.
   const appPlatformRef: { current: AppPlatform | null } = { current: null };
-  // Same ref-cell pattern: the BYOK runtime is built with the store
-  // after startup; the per-app proxy closure reads it at request time.
-  const byokRuntimeRef: { current: AppByokRuntime | null } = { current: null };
   const baseHandleHttp = opts.handleHttp ?? buildDefaultHandler(opts, appPlatformRef);
   // Mutable handler chain. We push internally-built handlers (live_siblings,
   // url) into this AFTER startup wires their dependencies. The closure
@@ -480,7 +476,6 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
         return handleAppRequest(app, req, {
           injectorKey: identityKeypairForInjection,
           updateServer: opts.updateServer,
-          byokRuntime: byokRuntimeRef.current,
         });
       });
       return;
@@ -691,20 +686,20 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
 
   const apOpts = opts.appPlatform;
   let aliasReconciler: AliasReconciler | null = null;
-  let byokStore: AppByokStore | null = null;
+  let envStore: AppEnvStore | null = null;
   if (apOpts?.hostUsername && apOpts.hostIrkPub && apOpts.swk) {
-    // Per-app BYOK store. Injected variant wins (tests); otherwise a
-    // SWK-sealed file store under <dataDir>/data/app-byok. Without a
-    // dataDir we run store-less — BYOK calls then 503 cleanly.
-    if (apOpts.byokStore) {
-      byokStore = apOpts.byokStore;
+    // Per-app generic env store. Injected variant wins (tests);
+    // otherwise a SWK-sealed file store under <dataDir>/data/app-env.
+    // Without a dataDir we run store-less — apps just get no owner env.
+    if (apOpts.envStore) {
+      envStore = apOpts.envStore;
     } else if (opts.dataDir) {
-      const fileStore = new FileAppByokStore(
-        `${opts.dataDir}/data/app-byok`,
+      const fileStore = new FileAppEnvStore(
+        `${opts.dataDir}/data/app-env`,
         apOpts.swk,
       );
       await fileStore.load();
-      byokStore = fileStore;
+      envStore = fileStore;
     }
     appPlatformRef.current = new AppPlatform({
       host: { username: apOpts.hostUsername, irkPub: apOpts.hostIrkPub },
@@ -716,11 +711,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       tabRegistry: apOpts.tabRegistry ?? null,
       pullStateStore: apOpts.pullStateStore ?? null,
       cloneApp: apOpts.cloneApp ?? null,
-      byokStore,
+      envStore,
     });
-    if (byokStore) {
-      byokRuntimeRef.current = new AppByokRuntime({ store: byokStore });
-    }
     const extras: string[] = [];
     if (apOpts.appAuthTokens) extras.push("app-tokens");
     if (apOpts.domainGate) extras.push("browser-gate");

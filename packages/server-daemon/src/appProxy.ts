@@ -29,9 +29,7 @@
 
 import { request as httpRequest } from "node:http";
 import { ed, type Bytes, type Keypair } from "@flagship/protocol";
-import type { ChatRequest } from "@flagship/llm-providers";
 import type { InstalledApp } from "./appPlatform.js";
-import type { AppByokRuntime } from "./appByokRuntime.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { UpdateServer } from "./updateServer.js";
 
@@ -65,16 +63,6 @@ export interface AppProxyDeps {
    * consulted. Apps cannot ship their own /update.
    */
   updateServer?: UpdateServer;
-  /**
-   * BYOK runtime-call seam. When set, the proxy answers
-   * `POST /.flagship/llm/chat` for the resolved app by loading *that
-   * app's own* stored provider key and calling the resolved
-   * `@flagship/llm-providers` adapter. The container never sees the
-   * key — it only sees the model's response. Resolution is implicitly
-   * scoped to the app the inbound SNI resolved to, so an app can never
-   * reach another app's key.
-   */
-  byokRuntime?: import("./appByokRuntime.js").AppByokRuntime | null;
 }
 
 const STRIP_PREFIX = "x-flagship-";
@@ -141,15 +129,9 @@ export async function handleAppRequest(
     if (r) return r;
   }
 
-  // BYOK runtime LLM call. The proxy intercepts /.flagship/llm/chat
-  // before the container so the app never handles the user's provider
-  // key — the daemon loads it (scoped to THIS app, resolved from the
-  // inbound SNI) and calls the provider on the app's behalf. The
-  // response carries only the model output; the key never leaves the
-  // daemon, never appears in the response, and is never logged.
-  if (req.path === "/.flagship/llm/chat" && deps.byokRuntime) {
-    return handleByokChat(app, req, deps.byokRuntime);
-  }
+  // (No AI-specific proxy path: a deployed app that wants an LLM reads
+  // its provider key from its own env like any other var — env values
+  // are injected into the container at deploy time by AppPlatform.)
 
   // Build the forwarded request: strip incoming X-Flagship-* and inject
   // signed identity headers.
@@ -255,58 +237,6 @@ async function defaultForward(host: string, port: number, req: HttpRequest): Pro
     if (req.body.length > 0) proxyReq.write(req.body);
     proxyReq.end();
   });
-}
-
-/**
- * Answer a BYOK runtime chat call for `app` using its own stored
- * provider key. Body shape: `{ model, messages, maxTokens?, temperature? }`
- * (a `ChatRequest`). The response is only the model output — the
- * provider key never appears in the body and is never logged here.
- */
-async function handleByokChat(
-  app: InstalledApp,
-  req: HttpRequest,
-  runtime: AppByokRuntime,
-): Promise<HttpResponse> {
-  if (req.method !== "POST") {
-    return jsonResponse(405, { error: "method not allowed" });
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(req.body.toString("utf8"));
-  } catch {
-    return jsonResponse(400, { error: "invalid json" });
-  }
-  const body = parsed as Partial<ChatRequest> | null;
-  if (
-    !body ||
-    typeof body.model !== "string" ||
-    !Array.isArray(body.messages)
-  ) {
-    return jsonResponse(400, { error: "model + messages required" });
-  }
-  const chatReq: ChatRequest = {
-    model: body.model,
-    messages: body.messages,
-    maxTokens: body.maxTokens,
-    temperature: body.temperature,
-  };
-  const result = await runtime.chat(app.appId, chatReq);
-  if (!result.ok) {
-    // result.message is constructed in AppByokRuntime to never contain
-    // the key (provider id / status only). Surface as a clean error.
-    const status = result.code === "no-config" ? 503 : 502;
-    return jsonResponse(status, { error: result.message, code: result.code });
-  }
-  return jsonResponse(200, { response: result.response });
-}
-
-function jsonResponse(status: number, body: unknown): HttpResponse {
-  return {
-    status,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  };
 }
 
 function bytesToHex(b: Bytes): string {

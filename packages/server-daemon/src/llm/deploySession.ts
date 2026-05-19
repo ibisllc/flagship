@@ -56,17 +56,6 @@ export interface DeploySessionDeps {
    * tree only lives on disk — useful for tests and minimal dev runs.
    */
   forgejoAdmin?: ForgejoAppAdmin | null;
-  /**
-   * Resolves the user's own LLM provider config for the app about to
-   * be deployed, if the user supplied one for it. Returns null when no
-   * BYOK config applies. Daemon-internal — the key is persisted via
-   * AppPlatform.install's `byok` arg and never crosses the signed
-   * InstallAppRequest envelope. When unset, vibe-coded apps deploy
-   * without a provider key (they then can't make BYOK calls).
-   */
-  resolveByok?: (
-    session: VibeCodeSession,
-  ) => Promise<import("../appByokStore.js").AppByokConfig | null>;
   /** Override for tests / observability. */
   now?: () => number;
 }
@@ -176,18 +165,15 @@ export function buildDeploySession(deps: DeploySessionDeps) {
     };
     const signature = signInstallApp(request, deps.hostIrk);
 
-    // The user's own provider config for this app, if any. Resolved
-    // here (daemon-internal) and handed to install via the `byok` arg —
-    // it is deliberately NOT part of the signed request envelope.
-    const byok = deps.resolveByok ? await deps.resolveByok(session) : null;
-
     // 6. Install via AppPlatform — provisions data, mints token,
-    // deploys the container, persists the BYOK config (sealed at rest).
+    // deploys the container. Owner-set env vars (if any) are applied
+    // via a separate signed set-app-env order and injected into the
+    // container's process env on deploy; they are NOT part of this
+    // signed install envelope.
     const installResult = await deps.appPlatform.install({
       request,
       signature,
       verify: verifyInstallApp,
-      byok: byok ?? undefined,
     });
     if (!installResult.ok) {
       return { ok: false, reason: `install rejected: ${installResult.reason}` };

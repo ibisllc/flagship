@@ -43,14 +43,16 @@ describe("parseArgs", () => {
 });
 
 describe("renderPlan", () => {
-  // The plan text lists every stage and both KNOWN-GATED tags + reasons.
-  it("prints the ordered chain with both gates and their reasons", () => {
+  // The plan text lists every stage; vibeAppEnv is now WIRED (no
+  // KNOWN-GATED tag), only the CA stage remains gated.
+  it("prints the ordered chain with the CA gate and its reason", () => {
     const txt = renderPlan(plannedChain());
     expect(txt).toMatch(/1\.\s+mintBuildCode/);
-    expect(txt).toMatch(/byokVibeApp \[KNOWN-GATED\]/);
+    expect(txt).toMatch(/vibeAppEnv/);
+    expect(txt).not.toMatch(/vibeAppEnv \[KNOWN-GATED\]/);
     expect(txt).toMatch(/assertCaAuthorized \[KNOWN-GATED\]/);
     expect(txt).toMatch(/teardown \[ALWAYS — try\/finally\]/);
-    expect(txt).toMatch(/appByokRuntime\.ts|order\/protocol carrier/);
+    expect(txt).toMatch(/set-app-env/);
     expect(txt).toMatch(/CaEndorsement/);
   });
 });
@@ -84,7 +86,7 @@ describe("main (no I/O paths)", () => {
     expect(code).toBe(0);
     const out = logs.join("\n");
     expect(out).toMatch(/full ordered chain/);
-    expect(out).toMatch(/byokVibeApp \[KNOWN-GATED\]/);
+    expect(out).toMatch(/vibeAppEnv/);
     expect(out).toMatch(/assertCaAuthorized \[KNOWN-GATED\]/);
   });
 

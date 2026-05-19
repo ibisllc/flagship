@@ -1917,6 +1917,71 @@ export function verifyUninstallApp(r: UninstallAppRequest, sig: Bytes, irkPub: B
 }
 
 /**
+ * Phone/laptop request to set an app's per-app environment variables.
+ *
+ * IRK-signed by the host — the SAME trust root as install/uninstall.
+ * The owner sets `key=value` pairs on an app from the control surface;
+ * they are injected into the deployed app's runtime environment and
+ * sealed at rest on the box. The vibecoding model sees the env-var
+ * NAMES (so generated code can reference them) but NEVER the values.
+ *
+ * Semantics: **full replace**. `env` is the complete desired set for
+ * the app — the daemon stores exactly this map (an empty map clears
+ * all env). Full-replace is the simplest correct semantics: the phone
+ * always holds the authoritative key list (it's the only place the
+ * user types them), so there is no merge ambiguity and a removed key
+ * is just absent from the next signed order. The map values are part
+ * of the canonical bytes so a MITM can't swap a value against a
+ * captured signature; the values are SECRET — the daemon never logs
+ * them, never returns them on any surface, and seals them at rest.
+ */
+export interface SetAppEnvRequest {
+  serverId: ServerId;
+  creator: string;
+  slug: string;
+  /** Full desired env set for the app. Values are SECRET. */
+  env: Record<string, string>;
+  issuedAt: number;
+}
+
+const TAG_SET_APP_ENV = "flagship/set-app-env/v1";
+
+/**
+ * Canonical bytes for a set-app-env order. The env map is serialized
+ * with keys sorted so the byte string is deterministic regardless of
+ * insertion order, then each `name=value` joined under the `|`
+ * separator like every other envelope. Both name and value go into
+ * the signed bytes (a value swap must invalidate the signature).
+ */
+function canonicalSetAppEnv(r: SetAppEnvRequest): Bytes {
+  const pairs = Object.keys(r.env)
+    .sort()
+    .map((k) => `${k}=${r.env[k]}`);
+  return new TextEncoder().encode(
+    [
+      TAG_SET_APP_ENV,
+      r.serverId,
+      r.creator,
+      r.slug,
+      String(pairs.length),
+      ...pairs,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signSetAppEnv(r: SetAppEnvRequest, irk: Keypair): Bytes {
+  return ed.sign(canonicalSetAppEnv(r), irk.privateKey);
+}
+export function verifySetAppEnv(r: SetAppEnvRequest, sig: Bytes, irkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalSetAppEnv(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Pull-request envelope for the app update-pack distribution layer.
  *
  * Signed by the **puller's server identity key** (not the phone). The
