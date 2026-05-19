@@ -171,6 +171,55 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch s9 cont. — ★ CHUNK 3: the `.com` CA hot-key
+  gate landed DEPLOY-SAFE (`d507cda`); `/maintainers/` page dropped;
+  npm↔GH metadata = PR #15; CA pillar is now consumer-complete):**
+  Sequence this turn: dropped the non-load-bearing
+  `flagshipserver.com/maintainers/` web surface (`cdaa532` — not our
+  responsibility to host; adopters serve `.maintainers/` via git GET,
+  transparency = the checkpoints repo, ops = the CLI); opened governed
+  **PR #15** (`chore/npm-github-metadata`) adding
+  `repository`/`homepage`/`bugs` + README npm↔GitHub cross-links —
+  owner merges when ready, **no 0.1.0 republish**, zero flagship
+  impact; then **chunk 3**: wired the already-built #30 chokepoint so
+  the live `.com` hot `FLAGSHIP_CA_PRIV_HEX` (signs
+  `UserPubKeyBinding`@`pubkeyCert.ts:45` + `DemoDirective`@
+  `usersCheck.ts:129`) is authorized ONLY by a CaEndorsement that
+  verifies FORWARD from the baked genesis pin. **Two non-negotiables,
+  independently verified by the orchestrator:** (i) FULL real
+  verification — `apps/com/src/caTrustChainLoader.ts` static-imports
+  the committed ca-track mandate chain + `.maintainers/ca-endorsements/
+  bundle.json` and runs the REAL `verifyMandateChainFromPin`→
+  `authorizedCaKeys` per request (pure fns, Worker-safe; a wrong-pin
+  discriminating test proves no TTL/pre-verified shortcut); (ii)
+  DEPLOY-SAFE — there is NO committed CaEndorsement yet (needs the
+  human YubiKey ceremony), so the gate defaults to **OBSERVE** (runs
+  the verification, logs the verdict, does NOT block); ENFORCE engages
+  ONLY when `CA_ENDORSEMENT_ENFORCE === "true"` (literal). The decisive
+  `caGate.test.ts` asserts the OBSERVE response is `toEqual(noGate)`
+  byte-identical — landing+deploying changes NOTHING observable in
+  production until a human flips enforce. Independent gates: flagship
+  `tsc -b` clean + vitest **2602/229→2614/231** (+12; caGate 8 +
+  caTrustChainLoader 4); the disclosed `apps/com`-not-in-`tsc -b` gap
+  CLOSED by a standalone `tsc -p apps/com` (0 errors in the touched
+  Worker files; the 7 errors are pre-existing in untouched buildRelay/
+  rateLimit/route.test/pushBridge). Also: daemon `releaseVerifier.ts`
+  gained the `.maintainers/ca-endorsements` read + `caTrustChainFromFolder`
+  parity; `docs/ca-operations.md` "Operation 1b" = the full
+  CaEndorsement ceremony runbook + the explicit
+  deploy-OBSERVE-then-flip-ENFORCE steps. **GO-LIVE for CA-authorized
+  hot keys = human-only:** run `maintainers ca-endorsement` (ca-track
+  holder key#1 YubiKey, `--scope flagship/directory-attestation`,
+  ~7d) → verify → commit `.maintainers/ca-endorsements/` + regenerate
+  `bundle.json` → deploy OBSERVE + confirm `ca-gate authorized:true`
+  logs → `wrangler deploy --var CA_ENDORSEMENT_ENFORCE:true`. **★
+  Remaining to "finished" (honest):** agent-doable = ONLY the BYOK
+  `@flagship/protocol`+webapp signed-order carrier (turns harness
+  stage 7 green). Everything else is irreducibly human/credential:
+  the CaEndorsement YubiKey ceremony + enforce-flip + `.com`/`.services`
+  deploy; the live paid-VPS `create-vps --iso` run; PR #15 merge;
+  iOS TestFlight; Android Play; Phase G §S live exercises.
+
 - **2026-05-19 (v1-launch s9 cont. — ★★ npm LOOP CLOSED: flagship now
   consumes `@ibisllc/maintainers@0.1.0` from public npm as a real
   adopter; THE PINNED-CLONE/PULL-SCRIPT/RE-PIN WORKFLOW IS RETIRED):**
