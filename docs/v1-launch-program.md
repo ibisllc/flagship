@@ -51,7 +51,7 @@ open phase here.
 |---|---|---|
 | **1** | Genesis ceremony (keystone) — **now: the first `upsertMandate`, its hash pinned** | **▶ Gate A SATISFIED; #28 done. Gate B RE-SEQUENCED behind the Phase-2 v2 lock (s4).** The genesis is no longer "per-track self-signed Mandate v1 + bake pubkeys" — it is **the first `upsertMandate` (Mandate v2, inline policy), whose canonical hash is the per-surface pin** (#30 generalised). Because Gate B freezes the pinned-mandate shape **forever**, the **Phase-2 v2 protocol redesign MUST land + be re-pinned BEFORE Gate B.** Gate B itself stays TWO-PART (P: human provisions `pcsclite`+`ykman`, on-token keygen both YubiKeys, plug in, set policy/`maxDuration`; A: agent implements+live-verifies the `connectPcscChannel` libpcsclite wiring behind the tested seam, never blind) → `--dry-run` → human signs the from-scratch `upsertMandate` → agent verifies + bakes the **pinned-mandate hash** + re-runs #8. `file:` NOT acceptable. Deploy nothing. |
 | **2** | Maintainers as its own product — **v2 protocol redesign (now a Gate-B prerequisite)** | **✅ AGENT-SIDE PHASE A **and** AGENT-DOABLE PHASE E COMPLETE (s8). PR #3/#4/#5 merged + re-pinned `df992f2`; package `@ibisllc/maintainers`; gates green.** Phase E: marketplace scanner BUILT (`9aac1ec`, 2567/227); iOS verified green (human TestFlight gate); Recovery J.3/J.4 verified built+wired+tested (gap = live exercise); E2E rig+13 scenarios+CI all already built (gap = green Actions run). Android env-gated here (no JDK). **Next agent chunk = Phase F's agent-doable part: build the personalized ISO + local QEMU/KVM smoke (the real-VPS boot is a paid credential gate).** DEFERRED human/credential: npm publish (ibisllc org+fresh token; earlier token BURNED), Gate B genesis, iOS TestFlight, Android JDK-box, the §S live exercises, a green e2e Actions run. DEFERRED human follow-ups (off critical path): create `ibisllc` npm org + fresh `@ibisllc` token (earlier token BURNED — revoke) → npm publish → flagship drops pull-script/symlink; Gate B genesis; iOS TestFlight; Android on a JDK box. (Prior s8 detail:) **PR #3+#4 MERGED + re-pinned `4a272b9`; package RENAMED `@maintainers/protocol`→`@ibisllc/maintainers` (PR #5 OPEN→merged); per user "rename now, publish later → proceed critical-path".** Maintainer merged PR #3 (Phase-2 spine) + PR #4 (npm packaging-prep); agent re-pinned (`ea9f707`→`aceb204`), gates green at each pin. The `@maintainers` npm scope is permanently unobtainable (an unrelated unscoped `maintainers` pkg blocks the org), so renamed to `@ibisllc/maintainers` — maintainers `5f93129` (**governed PR #5 open**, pure specifier swap, no semantic change) + flagship `11f3a06` (consumer rename + regenerated workspace symlink + prose sweep); re-verified maintainers 370/36 · flagship 2529/225 · `npm pack`→`@ibisllc/maintainers@0.1.0`. **Next:** merge PR #5 → agent re-pin → **proceed critical-path** (Gate B prep / Phase E). npm publish + flagship-drops-pull-script(+symlink) are DEFERRED tracked follow-ups (off critical path; user revoke the leaked bypass-2FA token + create the `ibisllc` org for the later publish). **Prior state (all LANDED):** c4.6 maintainers `a8ac151` + flagship `c5995c9`; c4.7 `f509849`; c5 `6acca14` (spec §7.1/§12 + `fetch()` client + portable `maintainers/conformance/` 17-vector set); ceremony hardening maintainers `10979ab` (typed PC/SC taxonomy + no-hardware UX + dry-run byte-fidelity; native binding deliberately NOT written blind) + flagship `6cd2c55` (ca-operations Operation 0 reconciled). maintainers `feat/keyfile-register` tip `10979ab` (**370/36**); flagship `main` (**2529/225**); all pushed; pin UNCHANGED `833fa45`. **Remaining Phase-A + all Phase-B is HUMAN-gated** (governed PR merge → agent re-pin → HUMAN `npm publish` → flagship drops pull-script → HUMAN Gate B genesis ceremony). The exact copy-pasteable human steps are in SESSION-HANDOFF §0 (top entry) + `docs/ca-operations.md` Operation 0. Per the LOCKED v2 design below. **c1 `dc48559`** + **c2 `5f3b146`** (v2 core) + **c3a `23a4d35`** + **c3b `2fa2b0c`** (CLI verbs) — s5. **s6: c4.1 `6cfee83`** (v2 endorsement layer, additive — `verifyChainOfEndorsementsV2`/`verifyCaEndorsementsV2`/`authorizedCaKeysV2`, holder-signs; maintainers **371/36**) + **c4.3 `5fb2fdf`** (flagship #30 generalised → `MAINTAINER_PINNED_MANDATE_HASH`) + **c4.4 `ff8ce91`** (the LIVE flagship trust consumer `releaseVerifier.ts`/`caTrustChain.ts` migrated to verify-forward-from-pin; **flagship gate now a REAL v2 consumer check**, new baseline **2529/225**) — all LANDED + pushed on `feat/keyfile-register` / `main`; NOT pinned (`833fa45`). flagship no longer imports ANY v1 Mandate-path symbol. genesis/mandate/takeover + the v1 Mandate path remain (retired in **c4.5e**). **Remaining:** **c4.5 — the maintainers v1→v2 cutover, CONSUMER-FIRST decomposed (s7 verify-before-trust correction; the "one atomic commit" call is SUPERSEDED — the true blast radius is ~30 files / 5 packages incl. the forgotten `extension`; consumer-first→removal-last is safe because the v2 symbols already exist additively):** **c4.5a worker `650fee2` ✅** → **c4.5b web-ui `429a57c` ✅** (signing views onboard/renew/takeover DELETED per #31) → **c4.5c extension `fba0657` ✅** (pure verifier) → **c4.5d cli `616b8f9` ✅** (genesis/mandate/takeover verbs DELETED — collapsed into the landed upsert-mandate) → **c4.5e-pre flagship `def22ca` ✅** (verify-before-trust found 4 MISSED flagship v1 consumers — flagship resolves @maintainers/protocol via a LIVE symlink not the pin; re-based incl. the regenerated v2 .maintainers/ artifact) → **c4.5e protocol v1-removal `208978a` ✅ — DONE, v1 fully gone, v2 is the SOLE trust path** (maintainers **382/37 → 330/33**, flagship guard **2529/225 ALL PASS**). ~~**c4.5e protocol v1-removal (LAST;~~ re-home the shared VerifiedEndorsements/EndorsementFailReason/VerifiedCaEndorsements types)** — a–d order-free + independent, each its OWN green commit (v2 coexists with v1 until e), flagship guard 2529/225 throughout. → **c4.6 de-version rename `a8ac151` (maintainers) + `c5995c9` (flagship) ✅ — LANDED s8** (dropped the `V2` code-symbol suffix everywhere + reset the Mandate envelope `version 2→1` + canonical tag `maintainers/mandate/v2→/v1`; the real load-bearing tag site was the local `joinTagged2` builder, not the comment — renamed `joinTaggedMandate`/`/v1` so `mandatePinHash` genuinely changes; `.maintainers/` artifact regenerated to v1, KeyFiles byte-unchanged, byte-deterministic; NOT a trust-model change; maintainers 330/33, flagship 2529/225, pin UNCHANGED `833fa45`) → **c4.7** spec (authored directly under the final name) → **c5** published spec + `fetch()` client + conformance vectors → governed PR → re-pin → `npm publish` → drop pull-script. (The old separate-additive-`Envelope` "c4.2" was deleted as over-decomposition — folds into c4.5.) **This redesign PRECEDES Gate B** (it defines the artifact the ceremony freezes forever). |
-| 3 | The maintainers app (retire the CLI) — #31 + #32 | ☐ blocked on Phase 2 |
+| 3 | Maintainers app **+ first-class polished/GUI-like CLI** (NOT retire — owner steering 2026-05-19) — #31 + #32 | ☐ |
 | 4 | Real install chain on test hardware — #21 + #22 | ☐ seam built; human/hardware |
 | 5 | On-demand VPS + promo AI + real vibe-code | ☐ seam built (#83/#85); human/credential |
 | 6 | Mobile apps to stores — #16/#17/#18 + iOS/Android | ☐ seam built; human/accounts |
@@ -432,15 +432,35 @@ own succession rule; there is no privileged self-renewal."**
   (protocol-const, webapp via it, iOS, Android), sequenced:
   Phase-2-protocol-redesign → Gate B → per-surface re-bake.
 
-## PHASE 3 — THE MAINTAINERS APP (retire the CLI) — #31 + #32
+## PHASE 3 / "Phase D" — THE MAINTAINERS APP **+ a first-class polished CLI** — #31 + #32
 
+> **★ STEERING (2026-05-19, owner — supersedes every "retire the CLI"
+> framing in this doc, SESSION-HANDOFF, and the task list):** the
+> maintainers CLI is **NOT retired and NOT demoted to an air-gapped
+> escape hatch.** The repo MUST ship runnable, well-documented **sample
+> CLI code** that a maintainer can actually use day-to-day, and it must
+> be **very user-friendly with a GUI-like interface** (a guided,
+> menu/TUI-style management experience — not raw flags) that makes
+> key/mandate/endorsement management easy. The NFC-tap app is an
+> ADDITIONAL surface, not a replacement; CLI and app are co-equal
+> first-class paths. Wherever older text says "retire the CLI" /
+> "replacing the CLI path end-to-end" / "CLI is the escape hatch", read
+> this instead. (`ca-operations.md` "escape hatch" wording is likewise
+> superseded — the CLI is a primary, polished path.)
+
+- **CLI (first-class):** keep + harden the upstream `ibisllc/maintainers`
+  CLI; add a guided, GUI-like interactive mode (menu-driven ceremony /
+  mandate / endorsement / status flows with the same byte-preview +
+  typed-confirm safety as today) and shipped sample/runbook code so an
+  adopter can drive the whole protocol from the CLI without memorising
+  flags. Agent-doable, gate-verifiable.
 - **#31** upstream maintainers web-ui: status/preview/commit-trigger ONLY,
-  never a signing view.
+  never a signing view (unchanged).
 - **#32** the generic OSS maintainers NFC-tap app, Android-first (design
   100% in maintainer-ca §11+§12; tap → PIV-Ed25519 → app-direct-commit).
   Multi-week; incremental, each commit green. iOS port needs an Apple
-  device. HUMAN GATE: first real ceremony on the Android phone + YubiKey,
-  replacing the CLI path end-to-end.
+  device. HUMAN GATE: first real ceremony on the Android phone + YubiKey
+  — an ADDITIONAL surface alongside the CLI, not a replacement.
 
 ## PHASE 4 — REAL INSTALL CHAIN ON TEST HARDWARE — #21 + #22
 
@@ -487,6 +507,26 @@ every §S box is ☑ → v1-alpha.
 ---
 
 ## Progress log (newest first)
+
+### 2026-05-19 — session 9 cont. (Mac/darwin): #10 iOS landed (a67c1e5); CLI-not-retired steering; Android tooling installed
+
+#10 iOS: fresh subagent built the greenfield Swift maintainers
+verify-forward port (FlagshipCore/MaintainersTrust.swift, CryptoKit
+only) + baked the exact anchor + an XCTest replaying the shared
+17-vector conformance artifact from disk. Orchestrator audited (2 new
+additive files, loads-from-disk not transcribed) + independently re-ran
+`xcodebuild test` (iOS Sim) ⇒ TEST SUCCEEDED 234/234, conformance suite
+actually executed (not XCTSkip). Committed `a67c1e5` (no Co-Authored-By).
+`swift test` is the wrong gate here (pre-existing unguarded `import
+UIKit`); use `xcodebuild test -scheme FlagshipMobile-Package`. **Owner
+steering: the CLI is NOT retired** — ship user-friendly GUI-like sample
+CLI; NFC app is additive (Phase 3 banner added; supersedes "retire the
+CLI" everywhere). **Tooling installed** (owner-authorized): JDK17 +
+Android SDK 35 + Gradle wiring (every gradlew call must prefix
+`JAVA_HOME`); `./gradlew :app:help` BUILD SUCCESSFUL ⇒ #10 Android now
+agent-doable here. NEXT = #10 Android (Kotlin mirror). Detail:
+SESSION-HANDOFF §0 top + memory [[feedback-maintainers-cli-first-class]]
+/ [[reference-android-toolchain]].
 
 ### 2026-05-19 — session 9 cont. (Mac/darwin): PHASE C CORE LANDED — genesis pin baked into @flagship/protocol (d110675; daemon #8 + webapp #9)
 

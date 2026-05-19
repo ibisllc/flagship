@@ -171,6 +171,53 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — #10 iOS LANDED;
+  owner steering: CLI is FIRST-CLASS not retired; Android tooling
+  installed ⇒ #10 Android now agent-doable here):** **#10 iOS** —
+  fresh subagent built a greenfield Swift maintainers verify-forward
+  port (`apps/mobile/ios/Sources/FlagshipCore/MaintainersTrust.swift`,
+  CryptoKit only, no SwiftPM dep) mirroring the TS canonical bytes +
+  verifier + endorsement/CA-lease logic, baked
+  `MaintainersTrust.pinnedMandateHash` = the exact anchor
+  `5016749377de…01ae`, + a new XCTest that loads the SHARED
+  `maintainers/conformance/` artifact from disk at runtime and replays
+  all 17 vectors. Orchestrator verify-before-trust: audited scope (2
+  new additive files only; no Package.swift/TS/.maintainers/pin/docs
+  change; pbxproj pre-existing), confirmed loads-from-disk (not
+  transcribed), re-ran the gate independently — `xcodebuild test`
+  iOS-Sim ⇒ **TEST SUCCEEDED, 234/234, 0 failures**, and the
+  conformance suite **actually executed** (both tests started+passed,
+  NOT `XCTSkip`'d). Committed flagship `main` **`a67c1e5`** (2 files,
+  no `Co-Authored-By`). NOTE: `swift test` fails for this package
+  (pre-existing unguarded `import UIKit` in `FlagshipUI/Push/
+  PushRegistrar.swift`, commit `fb911f3` — NOT introduced here); the
+  correct gate is `xcodebuild test -scheme FlagshipMobile-Package
+  -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.5'`.
+  **★ OWNER STEERING (2026-05-19) — the maintainers CLI is NOT retired
+  / NOT demoted to an air-gapped escape hatch:** the repo must ship
+  runnable, user-friendly **GUI-like sample CLI code** (guided menu/TUI
+  management, not raw flags); the NFC app is an ADDITIONAL surface, not
+  a replacement. This SUPERSEDES every "retire the CLI" / "replace the
+  CLI path" / "CLI is the escape hatch" line in this file,
+  `v1-launch-program.md` (Phase 3 banner added), `ca-operations.md`,
+  and the task list. Captured in [[feedback-maintainers-cli-first-class]].
+  **★ TOOLING INSTALLED (owner-authorized):** Homebrew `openjdk@17`
+  (`/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`) +
+  `android-commandlinetools` cask + SDK `platform-tools`/`platforms;
+  android-35`/`build-tools;35.0.0` under `~/Library/Android/sdk`
+  (licenses accepted). `~/.gradle/gradle.properties`
+  `org.gradle.java.home=<JDK17>`; gitignored `apps/mobile/android/
+  local.properties` `sdk.dir=~/Library/Android/sdk`. **Gotcha:** the
+  `gradlew` launcher needs `JAVA_HOME` in the ENV (shell env doesn't
+  persist between tool calls) — every Gradle call must prefix
+  `export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`.
+  Smoke-verified `./gradlew :app:help` ⇒ BUILD SUCCESSFUL (Gradle
+  8.10.2). ⇒ **#10 Android is now agent-doable + gate-verifiable here**
+  (was env-gated). Details: [[reference-android-toolchain]]. **NEXT =
+  #10 Android** (Kotlin maintainers verify-forward port + baked pin +
+  conformance-replay JVM unit test — the Kotlin mirror of #10 iOS).
+  Pin `393b7a7`; nothing else changed.
+
 - **2026-05-19 (v1-launch program session 9 cont. — PHASE C CORE
   LANDED: the genesis pin is BAKED into `@flagship/protocol` (#30 →
   daemon #8 + webapp #9); #10 mobile decomposed):** One fresh subagent
