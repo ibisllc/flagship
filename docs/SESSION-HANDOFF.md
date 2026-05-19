@@ -171,6 +171,56 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch s9 cont. — ★ MULTI-TURN VIBECODE + structured
+  tools (`requestEnvVar` value-free + `talkToUser`) + live
+  `buildUserContext` wiring landed (`b1120e4`); the full daemon-side
+  "build an app on your box, chat with the AI, set env vars via clear
+  contract" foundation is complete):** Owner reframed BYOK→generic
+  env vars (9d9c79c) and then specified that the model needs a
+  clear-contract way to ask the owner for env vars + to chat as it
+  works (no on-phone pattern-matching). Recon honestly verdicted
+  "substantial" (one-shot today; providers don't forward tools; no
+  reply path). Built it: six layers — (1) provider adapters
+  (Anthropic/OpenAI/OpenRouter/Google) forward `tools` + parse native
+  tool-call deltas; Ollama documented as text-only fallback; (2)
+  parser unchanged for text — tool_use bypasses out-of-band; (3)
+  session multi-turn state machine (`awaiting-tool-response`,
+  `receiveToolUse`/`pushEnvVarAck`/`pushUserReply`, `endAssistant`
+  gated, deploy 409s from awaiting); (4) HTTP endpoints
+  `/sessions/<id>/{user-reply,tool-ack}`; (5) `vibeCodeTools.ts` —
+  `requestEnvVar`'s ack is the structural `EnvVarAckPayload`
+  (`readonly` + a compile-time `_NoValueField<T>` guard — adding a
+  `value` field is a TS error), `talkToUser` free-form non-secret;
+  (6) `vibeCodeStartStreaming.ts` assembles the system prompt via
+  `buildUserContext` (passing `appEnvStore.names(appId)` — NEVER
+  `.get()`), attaches `VIBE_CODE_TOOLS` to `ChatRequest.tools`. **Four
+  invariants, all structural + sentinel-tested:** A `requestEnvVar`
+  ack value-free (type-locked + runtime test); B chat-not-a-
+  secret-channel (system prompt forbids; observational secret-shape
+  heuristic logs but doesn't block); C live wiring uses `.names()`
+  only (NamesOnlyStore test asserts `getCalls===0`; orchestrator
+  independently grep-confirmed `envStore.get()` exists in the codebase
+  ONLY at `appPlatform.ts:274` — the runtime-injection point, not a
+  prompt/tool path); D tools array carries schemas only (sentinel-
+  absent on the wire). Orchestrator audited scope (only
+  `packages/llm-providers/` + `packages/server-daemon/src/llm/` +
+  `screens/types.ts` + tests; apps/com/web/maintainers/.maintainers/
+  protocol-auth/tools/vps-e2e untouched), re-ran gates: flagship
+  `tsc -b` clean + vitest **2624/231 → 2653/235** (+29 tests +4 files:
+  toolUse 8, vibeCodeToolHttp 6, vibeCodeMultiTurn 10,
+  vibeCodeStartStreaming 4, +1 streamIntoSession; every prior pass).
+  No new runtime dependency. **OUT OF SCOPE (still follow-on):** the
+  multi-surface UI (phone/webapp/iOS/Android) for the new
+  `request-env-var` event + the env-var KV editor + the `talk-to-user`
+  chat surface. This chunk is the foundation the UI hooks into. **★
+  The daemon/protocol/provider foundation of all four "finished
+  product" pillars is now complete and verified.** Remaining
+  agent-doable = the multi-surface UI (env-var editor + the new
+  vibecode events). Everything else is the human/credential/ceremony/
+  deploy path (CaEndorsement YubiKey ceremony + enforce-flip + deploy;
+  paid-VPS live `create-vps` run; PR #15 merge; iOS TestFlight;
+  Android Play; Phase G live exercises).
+
 - **2026-05-19 (v1-launch s9 cont. — ★ GENERIC per-app ENV VARS landed
   (`9d9c79c`), replacing chunk-2's AI-specific BYOK; the "finished
   product" foundation arc is COMPLETE):** Owner reframed BYOK →
