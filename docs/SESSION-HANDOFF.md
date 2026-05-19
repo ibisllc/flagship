@@ -171,6 +171,38 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PR #12 MERGED +
+  re-pinned `f27bbbe`; next = Phase-H chunk 4 = bot Action adapter):**
+  Owner merged PR #12 (`checkpoint submit` CLI verb). Governed re-pin:
+  `scripts/maintainers.pinned-sha` `c8d3fc0` →
+  **`f27bbbec5b39e7cf469a1e373ec6255366bcb41d`** (PR#12 first-parent
+  merge), `pull-maintainers.sh pull` (clone detached-clean), re-ran
+  BOTH gates — maintainers `tsc -b` clean + vitest **442/442·40**;
+  flagship `tsc -b` clean. **Process note (recurring, now 3×):** the
+  flagship gate was first chained after a `cd …/maintainers` and a
+  cwd-guard `test` short-circuited it — and the `|| echo CLEAN`
+  mislabeled the SKIPPED gate as CLEAN (the `cwd=…/maintainers` in the
+  message was the tell). Re-ran flagship tsc STANDALONE from the repo
+  root (pwd printed = `/Users/harrywinner/flagship`, exit 0, 0 TS) ⇒
+  genuinely CLEAN. **Lesson: run the flagship gate as its own command
+  with `pwd` echoed; never chain it after a maintainers-dir cd; never
+  let `||` turn a skip into a pass.** pcsclite re-installed. Pin
+  `f27bbbe`. **NEXT (program — the LAST agent-doable Phase-H unit,
+  governed maintainers PR):** chunk 4 = the **checkpoint-bot Action
+  adapter**: a PURE `runCheckpointBotOnSubmission(deps)` core (injected
+  fetch-chain / read-CSV / append-row / post-decision / now / rateCap
+  → calls `validateCheckpointSubmission`, maps accept→CSV-append +
+  rule-11 manual-verify ping, reject→PR-decision) fully hermetically
+  tested, PLUS a thin GitHub-Action entrypoint that wires real I/O
+  (authored + typechecked but only truly exercised once the
+  human-gated `ibisllc/maintainers-checkpoints` repo + a real PR
+  exist). Mirror the existing `server-adapters` pattern; keep the core
+  dependency-free (any `@actions/*` scoped to the entrypoint only +
+  flagged). After chunk 4 the agent-doable Phase-H backlog is
+  EXHAUSTED — remaining = human/credential/env gates (repo creation,
+  first real checkpoint, Phase F paid VPS, Phase G live, iOS/Android
+  store uploads).
+
 - **2026-05-19 (v1-launch program session 9 cont. — PHASE H chunk 3:
   `maintainers checkpoint submit` CLI verb = governed PR #12 OPEN,
   awaiting human merge):** Fresh subagent added `commands/
