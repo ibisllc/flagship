@@ -508,6 +508,22 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): Phase H chunk 2 — bot validation-rules library = governed PR #11 OPEN
+
+PR #10 merged → re-pinned `b497c5e` (gates 408/38). Next chunk: fresh
+subagent built `checkpointBot.ts` `validateCheckpointSubmission` — pure/
+runtime-agnostic (injected I/O; no fs/net/octokit), spec §10/§11/§12/§13,
+reusing landed verifiers (holder-signs via verifyCheckpointRequest, not
+quorum). Audited (rule 3 = validated chain not served log; §9
+replay-binding; §11 prunable-witness-safe; rule 11 only fail-open with
+correct boundary; pure; shared 17-set byte-untouched) + re-ran gates:
+maintainers tsc clean + **430/39** (+22 checkpointBot tests; conformance
+30 / wizard 12 unchanged); flagship tsc clean. Branch
+`feat/checkpoint-bot-rules` off pin `b497c5e`, pushed, **governed PR #11
+OPEN** — awaiting human merge → re-pin. Then chunk 3 = thin Action
+shell + `maintainers checkpoint submit` CLI. Detail: SESSION-HANDOFF §0
+top.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): Phase H foundation — checkpoint-request/v1 envelope = governed PR #10 OPEN
 
 Continuing the program: fresh subagent built the first-class

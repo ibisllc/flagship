@@ -171,6 +171,39 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PHASE H chunk 2:
+  bot validation-rules library = governed PR #11 OPEN, awaiting human
+  merge):** Fresh subagent built `checkpointBot.ts` —
+  `validateCheckpointSubmission(input)` pure/runtime-agnostic (all I/O
+  injected; no fs/net/octokit; Action shell + the
+  `ibisllc/maintainers-checkpoints` repo remain a later chunk / human
+  gate). Implements spec §10 rules 1–11 / §11 / §12 / §13, reusing the
+  landed verifiers verbatim (`verifyMandateChainFromPin`,
+  `currentAuthority`, `verifyCheckpointRequest` = rule 5 holder-signs
+  NOT quorum, `mandatePinHash`). Orchestrator verify-before-trust: read
+  the decision core — rule 3 anchors to the VALIDATED chain not the
+  served log; a §9 replay-binding guard (signed request must bind the
+  PR's repo/path/hash; `sourceCommit` advisory/unbound); §11 continuity
+  anchors to the verified gap-free chain NOT CSV completeness
+  (prunable-witness-safe — confirmed the sparse-CSV test asserts
+  accept:true); rule 11 the ONLY fail-open (over-cap N+1 ⇒ accept +
+  `flagged:"rate-cap"` + manual-verify action, never reject;
+  exactly-at-cap no flag — correct boundary); total/fail-closed like
+  the siblings — confirmed confined scope (`packages/protocol/**` only;
+  shared `conformance/manifest.json`+17 vectors **byte-untouched**;
+  pure, no new dep), re-ran gates independently — maintainers `tsc -b`
+  clean + vitest **430/430·39** (was 408/38; +22 hermetic
+  `checkpointBot.test.ts`; conformance 30 / wizard 12 unchanged; 0
+  failed); flagship `tsc -b` clean (additive, not imported). Branch
+  `feat/checkpoint-bot-rules` off pin `b497c5e` (no `Co-Authored-By`),
+  pushed, **governed PR #11 OPEN**
+  (https://github.com/ibisllc/maintainers/pull/11). **★ NEXT —
+  HUMAN-MERGE GATE:** owner merges #11 → agent re-pins → pull →
+  re-gate → `npm i pcsclite --no-save`. Pin `b497c5e` until #11
+  merges. Then Phase-H chunk 3 = the thin GitHub-Action shell over this
+  library + the `maintainers checkpoint submit` CLI verb (the
+  `maintainers-checkpoints` repo creation stays a human gate).
+
 - **2026-05-19 (v1-launch program session 9 cont. — PR #10 MERGED +
   re-pinned `b497c5e`; next Phase-H chunk = bot validation rules):**
   Owner merged PR #10 (checkpoint-request envelope). Governed re-pin:
