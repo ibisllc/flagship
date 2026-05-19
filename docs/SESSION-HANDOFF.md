@@ -171,6 +171,30 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PR #13 MERGED +
+  FINAL re-pin `016f263`; Phase H agent-side COMPLETE; building the
+  requested real-VPS e2e harness):** Owner merged PR #13. Final
+  governed re-pin `f27bbbe` → **`016f263d8b57b8288ac9c234c8dca1d21cf80f29`**
+  (PR#13 first-parent merge), pull + re-gate — maintainers `tsc -b`
+  clean + vitest **467/467·41**; flagship `tsc -b` clean (standalone,
+  pwd-verified); pcsclite re-installed. **The entire maintainers
+  protocol product is now landed + merged + pinned: genesis-signed `ca`
+  root → checkpoint-request envelope (#10) → bot validation-rules
+  (#11) → `checkpoint submit` CLI (#12) → bot Action adapter (#13);
+  plus the guided CLI wizard (#9) and the PIN-reader fix (#8).** Owner
+  asked (ultrathink) to drive to a finished, live-e2e-tested product
+  (CA-authorized hot keys; free account/server creation; BYOK
+  vibe-coded apps; a `create-vps --iso` end-to-end test tool). Honest
+  split recorded: the *buildable+verifiable* parts are agent-doable;
+  the *live cutover* is irreducibly gated (npm approval PENDING; no
+  cloud-provider token; YubiKey for the CA-endorsement ceremony; no
+  Linux/qemu here to build an ISO). Plan: build the `create-vps --iso`
+  harness (pure core + injected provider/HTTP/SSH I/O, hermetically
+  tested, one-command-from-live), audit the 3 pillars + close
+  agent-doable gaps, hand off the credentialed runbook. npm token
+  `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` still BURNED — revoke.
+  Pin `016f263` is now STABLE (no more maintainers chunks pending).
+
 - **2026-05-19 (v1-launch program session 9 cont. — PHASE H chunk 4
   (checkpoint-bot Action adapter) = governed PR #13 OPEN; ★ AGENT-DOABLE
   v1-LAUNCH BACKLOG EXHAUSTED after this):** Fresh subagent added
