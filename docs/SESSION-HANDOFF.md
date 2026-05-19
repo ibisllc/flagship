@@ -171,6 +171,44 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch s9 cont. — ★ ceremony starting; VPS-access
+  plan; SPEC ADDITIONS for the UI follow-on; "Apps"→"Service" rename
+  queued):** Owner decision: run the CaEndorsement ceremony NOW
+  (Op-1b → live `.com`/`.services` CA-authorized hot keys), provision
+  VPS-creation access so live e2e runs can happen, and pin four spec
+  additions for the UI follow-on. Recorded:
+  * **Env-var KV pane** on each app's page (signed `set-app-env` order
+    from chunk `9d9c79c`).
+  * **Phone-alert path** when the AI needs the user: wire the new
+    `request-env-var` and `talk-to-user` session events
+    (`vibeCodeSession.ts`, commit `b1120e4`) to the existing Web-Push
+    RFC8291 channel — when the model pauses on a tool-call, fire a
+    push to the owner's phone so they can come back and respond.
+  * **Chat UI for `talkToUser`** during vibecoding — a per-session
+    surface that displays the model's `talk-to-user` messages and
+    POSTs replies to `/api/llm/sessions/<id>/user-reply`.
+  * **"Apps" → "Service" rename in the user-facing UI** — Apple App
+    Store policy concern (avoid the "app-store-within-an-app" framing
+    Apple reviewers flag). Scope = user-visible labels/copy only:
+    iOS Swift strings, Android `strings.xml`, webapp PWA UI strings,
+    any marketing pages under `apps/web/public/` that say "Apps".
+    INTERNAL code symbols (`InstalledApp`, `AppPlatform`, the
+    `InstallAppRequest` protocol envelope, `/api/apps/*` routes) stay
+    as-is — they're not user-visible and renaming them is unnecessary
+    churn.
+  **VPS-access credential model (decided here; same discipline as the
+  npm token):** owner provisions a short-lived, scoped, budget-capped
+  cloud token (e.g. Hetzner Cloud project-scoped, 1-day expiry, cheapest
+  VPS class) in their own shell env (`export HCLOUD_TOKEN=...`); the
+  harness reads it via `--provider-token-env HCLOUD_TOKEN`; the
+  orchestrator can invoke the harness via Bash and the env var is
+  inherited but I never echo / pipe / paste the token. First live run
+  should be supervised (owner watching), then iterate. **Pin `1789a59`
+  stays the maintainers protocol pin** (npm consumption); the
+  maintainers clone at `flagship/maintainers/` (gitignored, branch
+  `chore/npm-github-metadata` @ `a908a1d`) is the dev workspace where
+  the ceremony CLI runs from.
+
 - **2026-05-19 (v1-launch s9 cont. — ★ MULTI-TURN VIBECODE + structured
   tools (`requestEnvVar` value-free + `talkToUser`) + live
   `buildUserContext` wiring landed (`b1120e4`); the full daemon-side
