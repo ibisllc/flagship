@@ -171,6 +171,28 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PR #10 MERGED +
+  re-pinned `b497c5e`; next Phase-H chunk = bot validation rules):**
+  Owner merged PR #10 (checkpoint-request envelope). Governed re-pin:
+  `scripts/maintainers.pinned-sha` `5a3079e` →
+  **`b497c5e4ea067a520ea71727b6c78a59c1d0fe1a`** (PR#10 first-parent
+  merge; carries `checkpointRequest.ts` + the additive conformance
+  set), `pull-maintainers.sh pull` (clone detached-clean at the pin),
+  re-ran BOTH gates — maintainers `tsc -b` clean + vitest **408/408·38**
+  (conformance.test 30); flagship `tsc -b` clean (run from repo root;
+  a cwd-poisoned first attempt that re-checked the CLI pkg was caught +
+  corrected) — re-installed the pull-wiped `pcsclite` (resolves). Pin
+  `b497c5e`. **NEXT (program, agent-doable, governed maintainers PR):**
+  Phase-H chunk 2 = the **bot validation rules** — implement the §10
+  rules (1–11, incl. holder-signs check #5 via `verifyCheckpointRequest`,
+  no-op rule 10, fail-OPEN rate-cap rule 11 → `flagged=rate-cap`),
+  §11 continuity (per (project,track), prunable-witness-aware), §12
+  first-checkpoint, the 4-col CSV append, as a pure runtime-agnostic
+  validator library in the maintainers protocol/package (NOT the
+  GitHub Action wiring or the `ibisllc/maintainers-checkpoints` repo —
+  that repo creation is a human gate; the Action is a thin shell over
+  the library). Then chunk 3 = `maintainers checkpoint submit` CLI.
+
 - **2026-05-19 (v1-launch program session 9 cont. — PHASE H
   FOUNDATION: `checkpoint-request/v1` signed envelope = governed PR
   #10 OPEN, awaiting human merge):** Continuing the program post-push,
