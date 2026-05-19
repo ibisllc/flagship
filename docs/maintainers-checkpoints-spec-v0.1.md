@@ -502,7 +502,44 @@ specifics to settle so the build is consistent with the LOCKED model:
 4. **New-repo creation** `github.com/ibisllc/maintainers-checkpoints`
    is a human/credential action (like the governed PR merges) — a
    human gate within the Phase-H build chunk.
-5. **Bot-as-attack-surface (acknowledged in §20).** The validating
+5. **Multi-track checkpoints (owner, 2026-05-18) — FOLD INTO v0.2
+   FORMAT.** A project may root multiple independent tracks (e.g. `ca`,
+   `release`), each its own lineage/head/continuity. The per-project
+   CSV therefore gains a `track` column:
+   `observed_at,track,current_mandate_hash`; the §11 continuity rule
+   (`H_old ∈ chain(H_new)`) and the §12 first-checkpoint rule are
+   enforced **per (project, track)**. One-file-per-project is kept; the
+   bot keys continuity by track. Purely additive to this still-draft
+   spec — adopt it before any Phase-H build.
+6. **Funding / anti-spam (owner question) — DEFERRED to v0.2+, NOT
+   v0.1.** The spam concern (a dev mass-submitting checkpoints) is real
+   for a public registry but is already structurally bounded: every
+   row is authority-signed (you can only checkpoint a project whose
+   maintainer key you control — mass-spam needs mass-key-control) and
+   event-driven (only on real security-state changes). A pay-per-line
+   fee is explicitly NOT recommended as the first lever: it adds
+   payment rails + a gatekeeper role + an economic relationship that
+   conflicts with the free-public-mirror ethos (§15) and could deter
+   the independent mirrors the security model depends on. If volume
+   ever materializes, prefer (in order): reject no-op/duplicate rows;
+   per-project/per-authority rate caps; a small *refundable* deposit;
+   sponsorship/academic hosting — only then a fee. At v0.1 the sole
+   project is Flagship — there is no spam problem to monetize a
+   solution for; designing payment now is premature complexity that
+   contradicts the simplicity value-prop.
+7. **Scope honesty re TUF/Sigstore (owner question) — recorded.** For
+   the *identity/CA-authority* plane (`ca` track) TUF does not fit
+   (it models artifacts, not "which online key may currently mint
+   live per-request attestations + freshness") — maintainers is the
+   right tool there. For the *release/update* plane (`release` track),
+   TUF / Sigstore + reproducible-build CI are mature, standard, and
+   arguably safer than a hand-rolled track; maintainers' `release`
+   track is a deliberately-simplified TUF-targets slice chosen for
+   uniformity + a minimal consumer. This justifies treating `release`
+   as deferrable / delegable (to app-store signing + repro-build now,
+   TUF/Sigstore later) rather than a hard v1 requirement; `ca` is the
+   non-negotiable maintainers root.
+8. **Bot-as-attack-surface (acknowledged in §20).** The validating
    bot's correctness is security-relevant; mitigations are the
    advisory-only consumer use + the §11 continuity rule + the public
    PR audit trail + mirrors. Keep the bot's verifier = the published
