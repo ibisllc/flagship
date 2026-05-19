@@ -163,6 +163,54 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8 cont. — genesis SCOPE
+  decided: `ca` ONLY; ops dropped; release deferred):** After a
+  multi-turn simplicity/threat-model dialogue (the owner pushed hard
+  on "maintainers must be simpler than existing frameworks or use
+  them"), the irreversible genesis scope is settled: **sign the `ca`
+  track ORIGIN only.** `ops` dropped (no concrete v1 consumer —
+  speculative ceremony complexity). `release` **deferred**: its own
+  small *isolated* later genesis if/when a release-role actually
+  exists; for v1-alpha, self-hosted-update integrity rides on
+  app-store signing + reproducible-build CI, and TUF/Sigstore are the
+  mature standards for that slice (recorded honestly — maintainers'
+  `release` track is a deliberately-simplified TUF-targets slice;
+  maintainers' genuine sweet spot is the `ca`/identity-authority plane
+  TUF cannot model). A later `release` genesis does NOT touch the `ca`
+  root; the checkpoint multi-track `track` column already accommodates
+  it. Key dialogue outcomes recorded so they are not re-litigated:
+  (a) hot-Cloudflare-key-signs-releases was REJECTED — it collapses
+  the cold/hot split (identity-attestation blast radius is time-boxed
+  + self-healing; a malicious release is persistent RCE on every box;
+  reproducible-build SHA = integrity, NOT authority/freshness);
+  (b) the *cold* key could sign both but two tracks cost the same now
+  and stay separable — not worth permanent coupling; (c) only TWO keys
+  exist (primary key#1 + backup key#2), held across track(s) — NOT
+  per-track-distinct; their distinctness = the no-escrow
+  threshold-1-of-{primary,backup} recovery. **Ceremony (ca-only),
+  about to run; NOTHING signed yet, pin `ce6691c`, tree clean:**
+  (1) `create-key #1` (key#1 on-token: "Harry Winner" /
+  hello@harrywinner.com / maintainer), (2) `upsert-mandate --track ca`
+  ORIGIN (key#1 self-signed; successors=[key#1 `2137e739…71d7`, key#2
+  `dba78ab5…0392`] both `file:` pubkeys; threshold 1; minSuccessors 1;
+  duration 100d; maxDuration 3650d; project flagship /
+  hello@harrywinner.com; `--path ../.maintainers`), — both with key#1
+  plugged in; then (3) **swap to key#2** → `create-key #2` (key#2
+  on-token: "Harry Winner (backup)" / hello+backup@harrywinner.com /
+  backup-maintainer). ★ `--signing-key file:<pubkey>` = a PRIVATE-key
+  source (the CLI derives a pub from it) — a verify-before-trust
+  dry-run catch; create-key #2 MUST use `--signing-key
+  yubikey-piv:slot=9c` with key#2 physically present, NOT a file
+  shortcut. `--successors file:<pubkey>` IS used literally (correct).
+  Real runs are human-performed (typed `CREATE-KEY`/`UPSERT-MANDATE`
+  confirm + PIN + tap; never `--yes`/`--dry-run`); orchestrator drives
+  the corrected create-key#2 dry-run + verifies every artifact +
+  records the single **ca-track `mandatePinHash`** (Phase C bakes that
+  one value into 4 surfaces) + commits `.maintainers/` (2 KeyFiles + 1
+  ca ORIGIN). All dry-runs were verified structurally correct
+  (FROM-SCRATCH ORIGIN recognised post-placeholder-cleanup; PIN/PUK
+  3/3 unchanged by dry-runs).
+
 - **2026-05-18 (v1-launch program session 8 cont. — genesis
   decision-gate RESOLVED; NEW Phase H "Maintainers Checkpoints"
   roadmapped, additive):** The owner sought an independent second

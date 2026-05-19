@@ -488,6 +488,27 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-18 — session 8 cont. (Mac/darwin): genesis scope decided — `ca` ONLY (ops dropped, release deferred); ceremony about to run
+
+Multi-turn simplicity/threat-model + TUF-comparison dialogue with the
+owner. Outcome: the irreversible genesis signs **`ca` only**. `ops`
+dropped (no v1 consumer). `release` deferred to its own isolated later
+genesis if a release-role materializes (app-store signing +
+reproducible-build CI + TUF/Sigstore cover the self-hosted-update slice
+for alpha; honest finding: maintainers' sweet spot is the
+`ca`/identity-authority plane TUF can't model — `release` is a
+simplified TUF-targets slice, deferrable/delegable). Rejected:
+hot-Cloudflare-key signing releases (collapses the cold/hot split;
+SHA=integrity≠authority). Two keys only (primary+backup), not
+per-track. Full reasoning + the exact ceremony in SESSION-HANDOFF §0;
+checkpoint-spec open-details updated (multi-track `track` column,
+funding-deferral, TUF scope-honesty) `f79b16f`. Ceremony (ca-only),
+about to run, nothing signed yet (pin `ce6691c`, tree clean):
+create-key#1 (key#1) → upsert-mandate --track ca ORIGIN (key#1,
+successors=[key#1,key#2], threshold 1, 100d/3650d) → swap → create-key#2
+(key#2). Then verify + record the single ca `mandatePinHash` (Phase C
+bakes it 4×) + commit `.maintainers/`.
+
 ### 2026-05-18 — session 8 cont. (Mac/darwin): NEW Phase H roadmapped — Maintainers Checkpoints witness layer (additive; post-genesis; does NOT block Gate B)
 
 After an external second opinion, the owner adopted a **Maintainers
