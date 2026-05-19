@@ -488,6 +488,32 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-18 — session 8 cont. (Mac/darwin): NEW Phase H roadmapped — Maintainers Checkpoints witness layer (additive; post-genesis; does NOT block Gate B)
+
+After an external second opinion, the owner adopted a **Maintainers
+Checkpoints** layer (full spec captured verbatim at
+`docs/maintainers-checkpoints-spec-v0.1.md`). It is a public,
+append-only, mirrorable **witness log** (`github.com/ibisllc/
+maintainers-checkpoints`, one CSV per project, PR-based, bot-validated:
+repo-reachable + claimed-hash-present + chain-valid + current-authority-
+signed + §11 continuity `H_old ∈ chain(H_new)` + append-only) plus a
+`maintainers checkpoint submit` CLI + an *optional advisory* consumer
+check. **It directly closes the previously-accepted gap (single
+bake-path / equivocation detection-not-prevention) at low cost and is
+PURELY ADDITIVE — zero change to the shipped Mandate format / canonical
+bytes / verifier / L1-L3/D3 / conformance vectors / pin model.** It is
+inherently post-genesis (cannot witness a non-existent mandate) ⇒ it
+does **NOT block Gate B**. Roadmapped as **Phase H** (build after
+genesis; or build the `checkpoint submit` tooling first so genesis is
+the inaugural checkpoint — a sequencing decision posed to the owner).
+Five open design details to pin before build are recorded at the foot
+of the spec file + SESSION-HANDOFF §0 (chief among them: authority-proof
+= holder-signs vs succession-quorum; make the request a first-class
+tagged signed envelope `maintainers/checkpoint-request/v1` + conformance
+vectors; new-repo creation is a human gate). Decision-gate that paused
+the genesis is RESOLVED — the owner's concern is addressed by this
+additive layer, so the genesis ceremony is unblocked.
+
 ### 2026-05-18 — session 8 cont. (Mac/darwin): Gate-B genesis prerequisite landed (placeholder scaffold retired; adopter-faithful); pre-ceremony dry-run caught 2 defects
 
 Re-pinned to PR#6 merge `ce6691c` (flagship `a1a53ed`; gates 372/36 ·

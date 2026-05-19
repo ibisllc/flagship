@@ -163,6 +163,40 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-18 (v1-launch program session 8 cont. — genesis
+  decision-gate RESOLVED; NEW Phase H "Maintainers Checkpoints"
+  roadmapped, additive):** The owner sought an independent second
+  opinion on "single pinned mandate-hash as the sole anchor" and
+  adopted a **Maintainers Checkpoints** witness layer — full spec
+  captured verbatim at `docs/maintainers-checkpoints-spec-v0.1.md`,
+  roadmapped as **Phase H**, recorded in the v1-launch progress log +
+  [[project-resume-2026-05-16]]. It is a public append-only mirrorable
+  witness log (separate `ibisllc/maintainers-checkpoints` repo, 1
+  CSV/project, PR-based, bot-validated incl. the §11 continuity rule
+  `H_old ∈ chain(H_new)`) + a `maintainers checkpoint submit` CLI + an
+  OPTIONAL advisory consumer check. **★ Verify-before-trust assessment
+  (confirmed to the owner): it is PURELY ADDITIVE — zero change to the
+  shipped Mandate/canonical/verifier/L1-L3/D3/conformance/pin; it does
+  NOT change "what is already built"; and being inherently post-genesis
+  it does NOT block Gate B.** ⇒ The decision-gate that paused the
+  genesis is resolved (the owner's "iffy on its own" concern is now
+  met by an additive layer, not a root change). 5 open Phase-H build
+  details (do NOT lose) are at the foot of the spec file: (1)
+  authority-proof signing = holder-signs vs succession-quorum
+  (the shipped model is holder-signs; pin this for bot/spec
+  consistency); (2) make the checkpoint request a first-class
+  canonical-bytes signed envelope `maintainers/checkpoint-request/v1`
+  + conformance vectors (not ad-hoc); (3) sequencing vs Gate B
+  (genesis-now vs build-tooling-first — posed to owner); (4) creating
+  `github.com/ibisllc/maintainers-checkpoints` is a human/credential
+  gate; (5) the validating bot is itself an attack surface (mitigated
+  by advisory-only + §11 continuity + public PR trail + mirrors; keep
+  its verifier = the published `@ibisllc/maintainers`, no bespoke
+  re-impl). **Genesis is UNBLOCKED; awaiting the owner's 2 pin-down
+  answers (sequencing; authority-signing-semantics) + the 2 persona
+  identities, then dry-runs → human-signed real runs.** Pin `ce6691c`
+  unchanged; nothing signed; tree clean.
+
 - **2026-05-18 (v1-launch program session 8 cont. — Gate-B genesis
   PREREQUISITE landed; pre-ceremony dry-run caught TWO real defects;
   Option-2 adopter-faithful path chosen):** Re-pinned to PR#6 merge
