@@ -171,6 +171,53 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch s9 cont. — ★★ npm LOOP CLOSED: flagship now
+  consumes `@ibisllc/maintainers@0.1.0` from public npm as a real
+  adopter; THE PINNED-CLONE/PULL-SCRIPT/RE-PIN WORKFLOW IS RETIRED):**
+  Owner published `@ibisllc/maintainers@0.1.0` (independently verified
+  live + consumable from registry.npmjs.org; ships
+  dist+conformance+SPEC). Flagship migrated (commit **`3c62147`**):
+  root `package.json` drops the `maintainers/packages/protocol`
+  workspace member + pull pre/postinstall; `packages/server-daemon`
+  dep `*`→exact **`0.1.0`**; root + server-daemon tsconfig drop the
+  clone project refs (types via NodeNext from
+  `node_modules/@ibisllc/maintainers/dist`); **`scripts/
+  pull-maintainers.sh` + `scripts/maintainers.pinned-sha` DELETED**;
+  Dockerfile git/bash clone+pull steps removed. Cross-language hazard
+  (iOS+Android conformance loaded the shared artifact via the clone
+  path, run under xcodebuild/gradle NOT vitest) fixed: both repoint to
+  `node_modules/@ibisllc/maintainers/conformance` (iOS XCTSkip→thrown
+  error, fail-not-skip). **All 3 gates independently re-run GREEN:**
+  flagship `tsc -b` clean + vitest **2602/229** unchanged; iOS
+  `xcodebuild` TEST SUCCEEDED, `MaintainersConformanceTests` 2 tests 0
+  skipped (artifact found at npm path); Android
+  `:app:testDebugUnitTest` BUILD SUCCESSFUL, `MaintainersConformanceTest`
+  2/0/0/0 (suite 192/0/0/0).
+  **★★★ OPERATING-MODEL CHANGE — read this, future sessions:** the
+  governed-maintainers-PR → re-pin `scripts/maintainers.pinned-sha` →
+  `pull-maintainers.sh pull` → re-gate loop that this entire session
+  used is **GONE**. Those files/commands no longer exist. The
+  `flagship/maintainers/` clone may still sit on disk (gitignored,
+  untouched) but flagship NO LONGER depends on it. **Future
+  maintainers-protocol changes = land in `ibisllc/maintainers`, `npm
+  publish` a NEW version, then bump
+  `packages/server-daemon/package.json`'s `@ibisllc/maintainers` to
+  that version + `npm install` + re-gate.** Any older §0 entry below
+  describing re-pin/pull-script is HISTORICAL — do not execute it.
+  **Known follow-up (flagged, owner decision pending — NOT silently
+  scoped):** the deleted pull-maintainers `bundle` step esbuilt the
+  gitignored static bundle `apps/web/public/maintainers/lib/web-ui.js`
+  for `flagshipserver.com/maintainers/`; the npm package ships no
+  web-ui source, so a clean Docker/CI build no longer regenerates it
+  (present on local disk; current deploy unaffected). Options posed to
+  owner: vendor the built bundle into git / publish web-ui separately /
+  drop the `/maintainers/` page (#31 already shrank it to status-only)
+  / accept as flagged. Remaining toward "finished": chunk 3 =
+  CA-endorsement consumer gate (+human YubiKey ceremony runbook); the
+  BYOK protocol/webapp signed-order carrier; then the irreducible human
+  gates (CaEndorsement signing, deploy, paid-VPS live `create-vps` run,
+  mobile store, Phase G).
+
 - **2026-05-19 (v1-launch program s9 cont. — "finished product" drive:
   e2e-VPS harness + BYOK daemon-half landed; npm-publish defect caught;
   npm org `ibisllc` GRANTED):** Owner asked (ultrathink) to drive to a
