@@ -171,6 +171,51 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch s9 cont. — ★ GENERIC per-app ENV VARS landed
+  (`9d9c79c`), replacing chunk-2's AI-specific BYOK; the "finished
+  product" foundation arc is COMPLETE):** Owner reframed BYOK →
+  generic per-app env vars (not an AI-credentials pipe; "set
+  OPENAI_API_KEY as a var"). Decided (owner): NAMES-ONLY to the
+  vibecode model; the generic store REPLACES chunk-2. Landed:
+  `appEnvStore.ts` (generic sealed `Record<string,string>`, kept
+  chunk-2's SWK-AEAD/0o600/forget; `names()` = names only) **replacing
+  deleted `appByokStore.ts`+`appByokRuntime.ts`+the `/.flagship/llm/
+  chat` proxy** (appByok 18 tests faithfully migrated→appEnv 24, +6);
+  a new owner-IRK-signed `SetAppEnvRequest` in `@flagship/protocol`
+  `auth.ts` (tag `flagship/set-app-env/v1`, sorted keys, mirrors
+  `InstallAppRequest`); daemon `setEnv` verifies IRK, rejects
+  wrong-signer/reserved `FLAGSHIP_*`, stores sealed; values injected
+  into the deployed app's runtime env below reserved vars. **Two
+  STRUCTURAL + sentinel-tested security invariants:** (1)
+  values-never-to-model — the prompt builder param is
+  `appEnvNames: string[]` (cannot carry a value); (2)
+  values-never-exported — values live only in the separate sealed
+  store dir, never in the app git-bundle (test walks the deployed
+  tree). Harness stage 7 un-gated → real `vibeAppEnv` (stage 8 CA
+  stays gated). Orchestrator verify-before-trust: scope confined
+  (apps/com/web/maintainers/.maintainers untouched ⇒ `tsc -b` fully
+  covers it — no standalone gap), chunk-2 removal clean (zero dangling
+  refs), both invariants re-verified, gates re-run independently:
+  flagship `tsc -b` clean + vitest **2614/231 → 2624/231** (+10;
+  auth 64, appEnv 24; all prior pass). **★ HONEST scope (subagent-
+  flagged, NOT hidden):** the FOUNDATION is built+proven and
+  values-to-runtime is LIVE; remaining agent-doable = (a) small: wire
+  `store.names(appId)` into the live vibecode `buildUserContext` call
+  (the names-only safety+rendering exist; live call-site population is
+  follow-on), (b) larger: the phone/webapp/iOS/Android key/value
+  editor UI + the Screens-BFF passthrough to `POST /api/apps/:appId/
+  env`. **Net of the whole "finished product" arc — the foundation of
+  ALL four pillars is now built+verified:** CA-authorized hot keys
+  (deploy-safe gate, `d507cda`; go-live = human Op-1b ceremony+enforce
+  +deploy), free account/server (already live), generic env vars to
+  develop-on-your-box-controlled-from-phone (`9d9c79c`; UI follow-on),
+  `create-vps --iso` harness (`75d9465`). npm loop closed (`3c62147`);
+  `/maintainers/` page dropped (`cdaa532`); npm↔GH metadata = PR #15.
+  EVERYTHING ELSE to a *live* finished product is human/credential:
+  the CaEndorsement YubiKey ceremony+enforce-flip+deploy, the paid-VPS
+  live `create-vps` run, PR #15 merge, iOS TestFlight, Android Play,
+  Phase G §S live exercises, + the env-var UI follow-on.
+
 - **2026-05-19 (v1-launch s9 cont. — ★ CHUNK 3: the `.com` CA hot-key
   gate landed DEPLOY-SAFE (`d507cda`); `/maintainers/` page dropped;
   npm↔GH metadata = PR #15; CA pillar is now consumer-complete):**
