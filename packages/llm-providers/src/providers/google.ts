@@ -26,13 +26,33 @@ function toGeminiContents(messages: ChatRequest["messages"]) {
   return { contents, systemInstruction };
 }
 
+function toolsToGemini(tools?: ChatRequest["tools"]) {
+  if (!tools || tools.length === 0) return undefined;
+  return [
+    {
+      function_declarations: tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.inputSchema,
+      })),
+    },
+  ];
+}
+
+/** Synthesize a deterministic tool-use id for Gemini calls — the API
+ *  doesn't include one natively; the orchestrator only needs it to be
+ *  unique within a single response so it can match acks. */
+function geminiToolId(name: string, seq: number): string {
+  return `gemini-${name}-${seq}`;
+}
+
 export const google: LLMProvider = {
   name: "google",
   async chat(req: ChatRequest, cfg: ProviderConfig, fetchImpl?: FetchLike): Promise<ChatResponse> {
     const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
     const base = cfg.baseUrl ?? DEFAULT_BASE;
     const { contents, systemInstruction } = toGeminiContents(req.messages);
-    const body = {
+    const body: Record<string, unknown> = {
       contents,
       systemInstruction,
       generationConfig: {
@@ -40,6 +60,8 @@ export const google: LLMProvider = {
         temperature: req.temperature,
       },
     };
+    const tools = toolsToGemini(req.tools);
+    if (tools) body.tools = tools;
     const url = `${base}/v1beta/models/${encodeURIComponent(req.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
     const res = await f(url, {
       method: "POST",
@@ -48,11 +70,31 @@ export const google: LLMProvider = {
     });
     if (!res.ok) throw new ProviderError("google", res.status, await res.text());
     const data = (await res.json()) as {
-      candidates?: { content: { parts: { text?: string }[] }; finishReason?: string }[];
+      candidates?: Array<{
+        content: {
+          parts: Array<{
+            text?: string;
+            functionCall?: { name?: string; args?: Record<string, unknown> };
+          }>;
+        };
+        finishReason?: string;
+      }>;
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     };
     const cand = data.candidates?.[0];
-    const text = cand?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+    const parts = cand?.content?.parts ?? [];
+    const text = parts.map((p) => p.text ?? "").join("");
+    const toolUses: { id: string; name: string; input: Record<string, unknown> }[] = [];
+    let seq = 0;
+    for (const p of parts) {
+      if (p.functionCall?.name) {
+        toolUses.push({
+          id: geminiToolId(p.functionCall.name, seq++),
+          name: p.functionCall.name,
+          input: (p.functionCall.args ?? {}) as Record<string, unknown>,
+        });
+      }
+    }
     return {
       content: text,
       model: req.model,
@@ -60,6 +102,7 @@ export const google: LLMProvider = {
       outputTokens: data.usageMetadata?.candidatesTokenCount,
       stopReason: cand?.finishReason,
       raw: data,
+      toolUses: toolUses.length > 0 ? toolUses : undefined,
     };
   },
 };
@@ -84,7 +127,7 @@ export const googleStreaming: StreamingLLMProvider = {
     }
     const base = cfg.baseUrl ?? DEFAULT_BASE;
     const { contents, systemInstruction } = toGeminiContents(req.messages);
-    const body = {
+    const body: Record<string, unknown> = {
       contents,
       systemInstruction,
       generationConfig: {
@@ -92,6 +135,8 @@ export const googleStreaming: StreamingLLMProvider = {
         temperature: req.temperature,
       },
     };
+    const tools = toolsToGemini(req.tools);
+    if (tools) body.tools = tools;
     const url = `${base}/v1beta/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(cfg.apiKey)}`;
     let res: Awaited<ReturnType<StreamingFetchLike>>;
     try {
@@ -112,13 +157,22 @@ export const googleStreaming: StreamingLLMProvider = {
     let inputTokens: number | undefined;
     let outputTokens: number | undefined;
     let stopReason: string | undefined;
+    let toolSeq = 0;
     try {
       for await (const line of res.lines()) {
         if (!line.startsWith("data:")) continue;
         const payload = line.slice("data:".length).trim();
         if (!payload) continue;
         let parsed: {
-          candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+          candidates?: Array<{
+            content?: {
+              parts?: Array<{
+                text?: string;
+                functionCall?: { name?: string; args?: Record<string, unknown> };
+              }>;
+            };
+            finishReason?: string;
+          }>;
           usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
         };
         try {
@@ -131,6 +185,14 @@ export const googleStreaming: StreamingLLMProvider = {
           for (const part of cand.content.parts) {
             if (typeof part.text === "string" && part.text.length > 0) {
               onEvent({ kind: "delta", text: part.text });
+            }
+            if (part.functionCall?.name) {
+              onEvent({
+                kind: "tool_use",
+                id: geminiToolId(part.functionCall.name, toolSeq++),
+                name: part.functionCall.name,
+                input: (part.functionCall.args ?? {}) as Record<string, unknown>,
+              });
             }
           }
         }

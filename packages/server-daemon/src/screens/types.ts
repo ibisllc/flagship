@@ -135,7 +135,14 @@ export type VibeCodeFrame =
 // ---------- P1.7 — /api/screens/vibe-code/:id --------------------------
 
 export interface VibeCodeStatusResponse {
-  status: "streaming" | "ready-to-deploy" | "deploying" | "deployed" | "failed" | "cancelled";
+  status:
+    | "streaming"
+    | "awaiting-tool-response"
+    | "ready-to-deploy"
+    | "deploying"
+    | "deployed"
+    | "failed"
+    | "cancelled";
   transcript: Array<{ role: "user" | "assistant"; content: string }>;
   files: Record<string, string>;
   deployedUrl?: string;

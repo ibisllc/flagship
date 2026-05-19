@@ -47,6 +47,33 @@ describe("streamIntoSession", () => {
     expect(session.files()["flagship.app.json"]).toContain("schema_version");
   });
 
+  it("forwards a streamed tool_use into session.receiveToolUse, pausing the session", async () => {
+    const session = new VibeCodeSession({
+      username: "alice",
+      serverFqdn: "home.alice.flagship.services",
+    });
+    session.pushUserMessage("describe an app");
+
+    const fetchFake = streamingFakeFetch([
+      `data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tu_1","name":"requestEnvVar","input":{}}}`,
+      `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"name\\":\\"OPENAI_API_KEY\\",\\"description\\":\\"oai\\",\\"why\\":\\"calls\\"}"}}`,
+      `data: {"type":"content_block_stop","index":0}`,
+      `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}`,
+      `data: {"type":"message_stop"}`,
+    ]);
+
+    await streamIntoSession({
+      session,
+      provider: anthropicStreaming,
+      request: { model: "claude", messages: [{ role: "user", content: "x" }] },
+      config: { apiKey: "k" },
+      fetchImpl: fetchFake,
+    });
+    expect(session.meta.status).toBe("awaiting-tool-response");
+    expect(session.pendingToolUses()).toHaveLength(1);
+    expect(session.pendingToolUses()[0]?.name).toBe("requestEnvVar");
+  });
+
   it("marks the session failed when the provider stream errors", async () => {
     const session = new VibeCodeSession({
       username: "alice",

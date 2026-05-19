@@ -31,7 +31,14 @@
 
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import type { VibeCodeSession, VibeCodeSessionRegistry } from "./vibeCodeSession.js";
+import type { AppEnvStore } from "../appEnvStore.js";
+import {
+  looksLikePastedSecret,
+  type EnvVarAckPayload,
+  type ToolAckStatus,
+  type VibeCodeSession,
+  type VibeCodeSessionRegistry,
+} from "./vibeCodeSession.js";
 
 export interface VibeCodeHttpDeps {
   registry: VibeCodeSessionRegistry;
@@ -44,6 +51,27 @@ export interface VibeCodeHttpDeps {
    * files; tests inject a stub.
    */
   deploySession?: (session: VibeCodeSession) => Promise<{ ok: true; appId: string; url: string } | { ok: false; reason: string }>;
+  /**
+   * Per-app env store — used by the tool-ack endpoint to compute
+   * `currentlySet` for `requestEnvVar` acks. Names ONLY; values never
+   * leave the store. Optional: in-tests we inject an InMemory; in
+   * production the daemon supplies the file-backed sealed store.
+   */
+  appEnvStore?: AppEnvStore | null;
+  /**
+   * The appId an in-flight session is editing. For brand-new sessions
+   * the appId may not exist yet — env vars get keyed by the eventual
+   * `creator-slug`. Tests inject; production resolves from the
+   * session's pending manifest once the model has emitted one.
+   */
+  resolveAppId?: (session: VibeCodeSession) => string | null;
+  /**
+   * Observational hook fired when a `user-reply` body matches a
+   * known-secret-shape heuristic. The orchestrator does NOT block; it
+   * surfaces a warning so the daemon's operator-visible logs flag the
+   * mistake. Defaults to a `console.warn`.
+   */
+  onPastedSecretSuspicion?: (args: { sessionId: string; toolUseId: string }) => void;
 }
 
 const J = { "content-type": "application/json" } as const;
@@ -107,9 +135,85 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
       session.cancel();
       return jok({ ok: true });
     }
+    if (verb === "user-reply" && req.method === "POST") {
+      // The owner's free-form reply to a `talkToUser` tool_use. By
+      // contract this channel is NOT a secret channel — the system
+      // prompt already forbids the model from soliciting secret VALUES
+      // through it. We log (but do not block) if the body looks like a
+      // pasted credential so the daemon operator can see a misuse.
+      const body = parseJson(req.body) as { text?: string; toolUseId?: string } | null;
+      if (!body || typeof body.text !== "string" || typeof body.toolUseId !== "string") {
+        return jerr(400, "text + toolUseId required");
+      }
+      if (looksLikePastedSecret(body.text)) {
+        const cb =
+          deps.onPastedSecretSuspicion ??
+          (({ sessionId, toolUseId }) => {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[vibecode] user-reply for session=${sessionId} tool=${toolUseId} ` +
+                `looks like a pasted secret — chat is NOT a secret channel; ` +
+                `route through requestEnvVar instead.`,
+            );
+          });
+        cb({ sessionId: session.meta.sessionId, toolUseId: body.toolUseId });
+      }
+      const r = session.pushUserReply({ toolUseId: body.toolUseId, text: body.text });
+      if (!r.ok) return jerr(409, r.reason ?? "user-reply rejected");
+      return jok({ ok: true });
+    }
+    if (verb === "tool-ack" && req.method === "POST") {
+      // The owner's decision on a `requestEnvVar` tool_use. The value
+      // (if any) flows entirely outside this endpoint — via the signed
+      // `set-app-env` order — and this body is value-free. The daemon
+      // reads `appEnvStore.names()` to compute `currentlySet`; the
+      // ACTUAL value never touches this code path.
+      const body = parseJson(req.body) as {
+        toolUseId?: string;
+        status?: ToolAckStatus;
+      } | null;
+      if (!body || typeof body.toolUseId !== "string") {
+        return jerr(400, "toolUseId required");
+      }
+      const status: ToolAckStatus | null =
+        body.status === "set" || body.status === "declined" || body.status === "deferred"
+          ? body.status
+          : null;
+      if (!status) return jerr(400, "status must be 'set' | 'declined' | 'deferred'");
+      const pending = session.pendingToolUses().find((p) => p.id === body.toolUseId);
+      if (!pending) return jerr(404, "no pending tool with that id");
+      if (pending.name !== "requestEnvVar") {
+        return jerr(400, `tool '${pending.name}' is not requestEnvVar; use user-reply`);
+      }
+      const name = typeof pending.input.name === "string" ? pending.input.name : "";
+      let currentlySet = false;
+      if (deps.appEnvStore && deps.resolveAppId) {
+        const appId = deps.resolveAppId(session);
+        if (appId) {
+          try {
+            const names = await deps.appEnvStore.names(appId);
+            currentlySet = name.length > 0 && names.includes(name);
+          } catch {
+            currentlySet = false;
+          }
+        }
+      }
+      const ack: EnvVarAckPayload = {
+        acknowledged: true,
+        name,
+        status,
+        currentlySet,
+      };
+      const r = session.pushEnvVarAck({ toolUseId: body.toolUseId, ack });
+      if (!r.ok) return jerr(409, r.reason ?? "tool-ack rejected");
+      return jok({ ok: true, ack });
+    }
     if (verb === "deploy" && req.method === "POST") {
       if (!deps.deploySession) {
         return jerr(503, "deploy not configured");
+      }
+      if (session.meta.status === "awaiting-tool-response") {
+        return jerr(409, "cannot deploy while awaiting a tool response");
       }
       const r = await deps.deploySession(session);
       if (!r.ok) {

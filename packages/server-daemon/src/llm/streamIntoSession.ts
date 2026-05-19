@@ -51,6 +51,10 @@ export async function streamIntoSession(
         args.session.feedAssistant(e.text);
         return;
       }
+      if (e.kind === "tool_use") {
+        args.session.receiveToolUse({ id: e.id, name: e.name, input: e.input });
+        return;
+      }
       if (e.kind === "end") {
         stopReason = e.stopReason;
         usage = e.usage;
