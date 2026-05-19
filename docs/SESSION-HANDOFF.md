@@ -171,6 +171,48 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program s9 cont. — "finished product" drive:
+  e2e-VPS harness + BYOK daemon-half landed; npm-publish defect caught;
+  npm org `ibisllc` GRANTED):** Owner asked (ultrathink) to drive to a
+  finished, live-e2e product. Honest split stated: buildable parts
+  agent-doable; live cutover irreducibly gated (npm/CaEndorsement-
+  YubiKey/paid-VPS/no-Linux). Explore mapped real state: build→install→
+  green-padlock + free account/server are LIVE; **CA-authorized hot
+  keys NOT live** (links 2-4 code-ready but uncalled — `.com` signs
+  pubkey-cert with raw `FLAGSHIP_CA_PRIV_HEX`, no CaEndorsement gate);
+  **BYOK vibe-apps NOT e2e** (key never persisted). Landed: **(chunk 1)
+  `tools/vps-e2e/` `create-vps --iso` harness** `75d9465` — pure core +
+  injected provider/HTTP, teardown-always, 9 stages with the 2
+  not-wired pillars HONESTLY `known-gated` (NOT faked), Hetzner
+  ref-adapter wiring-only, `--plan` runs zero-cred; flagship
+  2563/226→2584/228. **(chunk 2) per-app BYOK secure persistence +
+  runtime seam** `6f9fe22` — `appByokStore`(sealed-at-rest via the
+  existing `@flagship/protocol` AEAD, 0o600)+`appByokRuntime`+proxy;
+  key never in signed wire/logs/errors/public surface; recon found the
+  gap is (b) "key never persisted"; the full phone/webapp→signed-order
+  →deployed-app carrier is OUT OF SCOPE (needs `@flagship/protocol`+
+  webapp) — STOPPED there, harness stage 7 stays `known-gated` with
+  reason narrowed (daemon wired; carrier pending); flagship
+  2584/228→2602/229. **★ npm-publish-prep (verify-before-trust):** the
+  npm org `ibisllc` is GRANTED (owner). `maintainers/packages/protocol`
+  `@ibisllc/maintainers@0.1.0` `npm pack` is otherwise clean (ships
+  dist+conformance+SPEC, no src/secret leak) BUT top-level
+  `main`/`types` = `./src/index.ts` (NOT in `files[]` tarball) — modern
+  `exports`-aware consumers OK (exports→dist), legacy-resolution
+  consumers + an immutable first 0.1.0 = real defect. Fix = a
+  `publishConfig` override (publish-time main/types→dist; preserve the
+  `@maintainers/source` live-src condition for the workspace) via a
+  GOVERNED maintainers PR → re-pin → THEN owner runs the verified
+  one-command `npm publish` (NO token via the agent — the burned token
+  `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` still must be revoked).
+  After publish: agent chunk = flagship drops pull-script/pin/symlink,
+  consumes `@ibisllc/maintainers@0.1.0` like any adopter. Remaining
+  toward "finished": chunk 3 = CA-endorsement consumer gate (pillar 2,
+  + human YubiKey ceremony runbook); the BYOK protocol/webapp carrier;
+  then the irreducible human gates (CaEndorsement signing, deploy,
+  paid-VPS live `create-vps` run, mobile, Phase G). Pin `016f263`
+  until the publishConfig PR merges.
+
 - **2026-05-19 (v1-launch program session 9 cont. — PR #13 MERGED +
   FINAL re-pin `016f263`; Phase H agent-side COMPLETE; building the
   requested real-VPS e2e harness):** Owner merged PR #13. Final
