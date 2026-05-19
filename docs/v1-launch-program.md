@@ -488,6 +488,25 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): PHASE C CORE LANDED — genesis pin baked into @flagship/protocol (d110675; daemon #8 + webapp #9)
+
+Fresh subagent baked `MAINTAINER_PINNED_MANDATE_HASH` `""` →
+`5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae`
+(the one link-1 const → daemon #8 + webapp #9 via `?? default`). The
+empty⇒fail-closed → verify-forward behavior flip's 6 fallout tests (3
+files) reconciled faithfully (explicit `""` pin, same expectations;
+"ships empty" test now asserts the exact anchor + retains the empty
+invariant). Orchestrator audited (confined scope, zero production logic
+changed, it() counts unchanged, every test-body diff faithful) + re-ran
+ALL gates independently: flagship tsc clean + **2563/226·0-failed**
+(no hidden fallout), maintainers tsc clean + **386/37** incl **c5
+conformance ✓20/20**. Committed flagship `main` `d110675` (4 files, no
+Co-Authored-By). **#10 mobile decomposed:** iOS = agent-doable
+GREENFIELD follow-on (no Swift maintainers verifier/const yet; swift +
+xcodebuild + XCTest harness present) — NEXT chunk; Android =
+human/env-gated (no JDK here; no Kotlin maintainers code). Phase C core
+= the v1 load-bearing trust path, DONE. Detail: SESSION-HANDOFF §0 top.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): ★★ GATE B / PHASE B COMPLETE — genesis signed, verified, committed (1b86908); entering Phase C
 
 After PIN-rotate + token swap, the agent-driven corrected

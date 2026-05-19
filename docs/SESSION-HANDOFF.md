@@ -171,6 +171,44 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — PHASE C CORE
+  LANDED: the genesis pin is BAKED into `@flagship/protocol` (#30 →
+  daemon #8 + webapp #9); #10 mobile decomposed):** One fresh subagent
+  baked `MAINTAINER_PINNED_MANDATE_HASH` `""` →
+  `5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae`
+  in `packages/protocol/src/maintainerCa.ts`. This one const is the
+  link-1 anchor consumed via `?? default` by `releaseVerifier.ts` +
+  `caTrustChain.ts`, so it covers the daemon (#8) AND the webapp (#9)
+  in one edit. Flipping `""`→hash changes behavior everywhere
+  (empty⇒fail-closed → verify-forward-from-pin); the 6 fallout tests
+  (3 files) were reconciled FAITHFULLY — each now passes an explicit
+  `""` pin (same expectations: `pin-unconfigured` / `validMandates 0`
+  / port-not-consulted), and the "ships empty" test now asserts the
+  exact anchor AND retains `maintainerPinConfigured("")===false`.
+  Orchestrator verify-before-trust: audited the diff (scope confined
+  to the const+comment + those 4 files; **zero production logic
+  changed** — pure data flip; `it()` counts unchanged 9/9·9/9·8/8; no
+  skip/only/todo; read every test-body diff — faithful, no gutted
+  assertion/tautology), re-ran ALL gates independently: flagship
+  `tsc -b` clean + vitest **2563/2563·226·0-failed** (no hidden
+  fallout anywhere), maintainers `tsc -b` clean + vitest **386/386·37**
+  incl the **c5 conformance replay ✓20/20** (consumer verify-forward
+  correct, no wrong/empty pin shipped). Committed flagship `main`
+  **`d110675`** (4 files, no `Co-Authored-By`; pin `393b7a7`
+  unchanged). **#10 mobile re-bake decomposed (subagent investigation,
+  no mobile code changed):** iOS `apps/mobile/ios` (136 Swift files,
+  SwiftPM, `swift`+`xcodebuild`+built `.build` + XCTest harness all
+  present) has **NO maintainers verify-forward consumer and NO pin
+  const** — so #10-iOS is an **agent-doable GREENFIELD chunk** (add a
+  Swift pinned-hash const + a verify-forward consumer + an XCTest that
+  replays the c5 portable vectors; NOT a one-line bake) — NEXT. Android
+  `apps/mobile/android` (115 Kotlin files, Gradle) likewise has no
+  maintainers code AND **this machine has NO JDK** (`java`→"Unable to
+  locate a Java Runtime", no `gradle`) ⇒ #10-Android is **human/
+  env-gated** (author-blind possible but uncompilable/untestable here;
+  defer to a JDK box). No flagship-side conformance replay exists (not
+  invented). Phase C core = the load-bearing v1 trust path; DONE.
+
 - **2026-05-19 (v1-launch program session 9 cont. — ★★ GATE B / PHASE
   B COMPLETE: the genesis is SIGNED, VERIFIED, and COMMITTED; entering
   Phase C):** `create-key #2` (backup persona, key#2 `dba78ab5…0392`,
