@@ -171,6 +171,57 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch s9 cont. — ★★★ CEREMONY LANDED LIVE → "finished
+  product" pillar (a) DONE):** First-ever `FLAGSHIP_CA_PRIV_HEX` mint
+  on the `flagship-com` Worker, paired with a YubiKey-signed
+  `CaEndorsement` (14d window). `CA_ENDORSEMENT_ENFORCE = "true"`
+  flipped + deployed; three independent post-flip probes all green
+  (live `/api/users/{harry11911a,hk}/pubkey-cert` HTTP 200; signature
+  verifies under the new CA pubkey; `/api/health` 200). The #30
+  maintainer→CA chokepoint is now armed against live prod for the
+  first time — every CA-signed `UserPubKeyBinding` / `DemoDirective`
+  must verify forward from the baked pin
+  `5016749377…e801ae` over the committed ca-track mandate +
+  `bundle.json` at the per-request `now`. Concrete identities:
+  * **Hot CA pubkey:**
+    `230ad9ed20e56d79e836690e351cb5538fb4aca9e509d9adc9755da81cd235cc`
+  * **Endorsement signer:** YubiKey #1 (ca-track genesis holder,
+    `2137e739f00550b0e6a33a75366ebaf16f66f3492f733d0a8010ba91ab5e71d7`)
+  * **Lease window:** `2026-05-19T22:40:29.858Z` → `2026-06-02T22:40:29.858Z`
+  * **Endorsement file:**
+    `.maintainers/ca-endorsements/20260519T224029-5f02554c.json`
+  * **Worker versions:** OBSERVE deploy `fec232cf…`; ENFORCE deploy
+    `bd0b96c9-b6dd-498e-9019-854f82250824`.
+  * **Tooling that did it:** `scripts/rotate-and-endorse-ca.mjs` — a
+    new one-process driver that combines keygen + maintainers-CLI
+    YubiKey ceremony + local-verify + `bundle.json` regen + `wrangler
+    secret put`, ordering fail-safe (Cloudflare untouched if the
+    YubiKey step fails). Reuses `rotate-ca.mjs` pure helpers; 21 unit
+    tests; committed at `5f74c76`. Ceremony state at `d7f4fb6`;
+    ENFORCE flip at `0e7d1fb`.
+  * **Recurring chore:** re-run `node scripts/rotate-and-endorse-ca.mjs
+    --days 14` before `2026-06-02T22:40:29.858Z`. With ENFORCE armed,
+    a lapsed lease = hard directory-attestation outage by design;
+    stand-down = remove the `CA_ENDORSEMENT_ENFORCE` line and
+    redeploy.
+  * **What this unblocks:** every consumer that pins
+    `MAINTAINER_PINNED_MANDATE_HASH` (iOS, Android, server-daemon,
+    webapp) can now consume `signedBy`-anchored `UserPubKeyBinding`s
+    from `.com` and verify the directory attestation chain forward
+    from the pin — the trust root is no longer "stuff in a Worker
+    secret"; it's the genesis YubiKey, gated through a renewable
+    lease. The §S "v1-alpha done-when" item this satisfies is the
+    operational-CA-rotation discipline.
+  * **What's NOT done (still human, even after this):** running an
+    e2e VPS test against the live `.com`/`.services` (Phase F);
+    iOS TestFlight + Android Play (live app surfaces); the UI
+    follow-ons below (env-var KV pane, push-on-AI-ask, talkToUser
+    chat surface, Apps→Service rename).
+  Pillar (a) of the "finished product" 4-part definition is now LIVE.
+  Pillars (b)–(d) (free signup/server creation, vibecoded apps with
+  BYOK env-vars, CLI VPS-create harness) remain agent-doable in part
+  and human-gated in part — see §0a + §3.
+
 - **2026-05-19 (v1-launch s9 cont. — ★ ceremony starting; VPS-access
   plan; SPEC ADDITIONS for the UI follow-on; "Apps"→"Service" rename
   queued):** Owner decision: run the CaEndorsement ceremony NOW
