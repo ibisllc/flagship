@@ -171,6 +171,47 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19 (v1-launch program session 9 cont. — ★ GENESIS `ca`
+  ORIGIN SIGNED + independently verified; the root of trust now
+  EXISTS; REMAINING = rotate the exposed key#1 PIN + create-key#2
+  (backup persona) + commit `.maintainers/`):** The owner ran the real
+  ceremony at pin `393b7a7`: `create-key #1` (1st attempt failed
+  benignly — touch/PIN timing, nothing written; 2nd succeeded →
+  `keys/hello@harrywinner.com.json`, key#1 `2137e739…71d7`) then
+  `upsert-mandate --track ca` ORIGIN (hand-typed `UPSERT-MANDATE`, PIN
+  + tap) → **wrote `tracks/ca/mandates/20260519T120808-706880c9.json`**.
+  **★ THE CANONICAL ANCHOR (irreversible; bake per surface in Phase C):
+  `mandatePinHash = 5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae`**
+  — orchestrator INDEPENDENTLY recomputed `sha256(canonical bytes)` and
+  it matches the CLI's printed `PIN (canonical hash)` exactly; `verify`
+  exits 0 (`verify: OK`), `status` shows ca anchored 1/1 valid, holder
+  key#1, successors [key#1 `2137e739…71d7`, key#2 `dba78ab5…0392`],
+  rule 1-of-2 minSuccessors=1 maxDuration=315360000s(3650d), issued
+  2026-05-19T12:08:08.205Z → expires 2026-08-27T12:08:08.205Z (100d).
+  mandateId `706880c9-477e-4a8c-823c-9f8451b6930f`. Structure ==
+  the pre-verified dry-run (fresh id/timestamps as expected).
+  **PIN posture (honest, NOT a redo):** the owner did not confirm
+  rotating the exposed PIN before signing. The mandate is nonetheless
+  VALID and needs NO redo — the PIN is use-authorization, not key
+  material and not part of the Ed25519 signature; `mandatePinHash` is
+  PIN-independent. Residual risk is physical-theft-only (touch=ALWAYS
+  still required); fully closed by `ykman piv access change-pin` now,
+  which has zero effect on the signed mandate. **REMAINING (owner, own
+  terminal):** (1) `ykman piv access change-pin` (key#1 still inserted
+  — rotate before key#1 is reused/stored). (2) physically SWAP key#1
+  out / key#2 in → tell the agent → agent runs the corrected
+  `create-key #2` **dry-run** (`--signing-key yubikey-piv:slot=9c`,
+  NOT `file:` — the earlier privkey trap; must resolve key#2
+  `dba78ab5…0392`) → owner real `create-key #2` (`--display-name
+  "Harry Winner (backup)" --email hello+backup@harrywinner.com --role
+  backup-maintainer`, `--yes` OK, PIN + tap). (3) Agent final-verifies
+  + commits `.maintainers/` (2 KeyFiles + the 1 ca ORIGIN mandate;
+  pin `393b7a7`) → **Phase C** bakes `5016749377de…01ae` into the four
+  surfaces (protocol-const → daemon + webapp; iOS; Android — SAME
+  value). `.maintainers/` currently has key#1 KeyFile + the ca ORIGIN
+  mandate (uncommitted, intentionally — the commit is atomic after
+  create-key#2).
+
 - **2026-05-19 (v1-launch program session 9 cont. — PR #8 MERGED +
   re-pinned + HUMAN real-terminal selftest PASSED; ★ REMAINING = rotate
   PIN + re-run the `ca`-only ceremony; nothing signed, `.maintainers/`

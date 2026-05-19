@@ -488,6 +488,30 @@ every §S box is ☑ → v1-alpha.
 
 ## Progress log (newest first)
 
+### 2026-05-19 — session 9 cont. (Mac/darwin): ★ GENESIS `ca` ORIGIN SIGNED + independently verified — the root of trust EXISTS
+
+Owner ran the real ceremony at pin `393b7a7`: `create-key #1` (2nd
+attempt; 1st failed benignly on touch/PIN timing, nothing written) →
+`keys/hello@harrywinner.com.json` (key#1 `2137e739…71d7`); then
+`upsert-mandate --track ca` ORIGIN (hand-typed `UPSERT-MANDATE`, PIN +
+tap) → `tracks/ca/mandates/20260519T120808-706880c9.json`. **CANONICAL
+ANCHOR (irreversible — Phase C bakes it into 4 surfaces):
+`mandatePinHash = 5016749377de07fd3296e8207539bbe52b40fb58f971d946f4cc8990c7e801ae`.**
+Orchestrator INDEPENDENTLY recomputed `sha256(canonical)` = exact match
+to the CLI's printed hash; `verify` exit 0 (`verify: OK`); `status` =
+ca anchored 1/1 valid, holder key#1, successors [key#1,key#2], 1-of-2,
+100d (expires 2026-08-27T12:08:08.205Z). Structure == the pre-verified
+dry-run. **PIN (honest, NOT a redo):** owner did not confirm rotating
+the #7-exposed PIN before signing; the mandate is still VALID and needs
+NO redo (PIN ≠ key material, ∉ signature; `mandatePinHash`
+PIN-independent); residual risk is physical-theft-only (touch=ALWAYS),
+fully closed by `ykman piv access change-pin` now (zero effect on the
+signed mandate). **Remaining:** owner rotates key#1 PIN → swaps to
+key#2 → agent corrected `create-key #2` dry-run (`yubikey-piv:slot=9c`)
+→ owner real `create-key #2` (backup persona) → agent final-verify +
+commit `.maintainers/` (2 KeyFiles + 1 ca ORIGIN) → **Phase C**. Full
+detail + the anchor: SESSION-HANDOFF §0 top entry.
+
 ### 2026-05-19 — session 9 cont. (Mac/darwin): PR #8 merged + re-pinned 393b7a7 + HUMAN real-terminal selftest PASSED → remaining = rotate PIN + ceremony
 
 Owner merged governed PR #8 (squash `393b7a7` on `origin/main`). Agent
