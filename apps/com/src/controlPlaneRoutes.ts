@@ -1375,21 +1375,43 @@ export async function tryControlPlane(
   // Important matching order: `/create`, `/delete`, `/sample-user`
   // (list) must hit BEFORE the bare `/sample-user/{u}` GET (which
   // would otherwise swallow the literal "create" as a username).
-  const demoUsersConfigured = !!env.HCLOUD_TOKEN && !!env.DEMO_PUBLIC_SSH_KEY_ID;
+  //
+  // Lazy-construct Hetzner deps so the bootstrap path works:
+  //   - `create` writes a D1 row; doesn't touch Hetzner at all.
+  //   - `install-complete` updates the D1 row with snapshot_id;
+  //     also doesn't touch Hetzner.
+  //   - `delete` / `connect` / `heartbeat` / `get` / `list` need
+  //     Hetzner only when an active server actually exists.
+  //
+  // The operator's first `create-sample-user` run is the chicken-
+  // and-egg break: the CLI uses its OWN HCLOUD_TOKEN to upload an
+  // SSH key to Hetzner and gets back the numeric DEMO_PUBLIC_SSH_KEY_ID,
+  // which the operator THEN sets in wrangler.toml [vars] + redeploys.
+  // A pre-deploy gate that required DEMO_PUBLIC_SSH_KEY_ID would block
+  // the first create — bootstrap-impossible. Instead the deps stub
+  // throws lazily if a request actually tries to use the Worker-side
+  // Hetzner client without configuration.
   if (path.startsWith("/api/dev/sample-user")) {
-    if (!demoUsersConfigured) {
-      // Surface a clear 503 instead of a confusing 404 / 500 when the
-      // operator hasn't set the Hetzner secrets yet.
-      return finishPlain({
-        status: 503,
-        body: { error: "demo-user system not configured (HCLOUD_TOKEN or DEMO_PUBLIC_SSH_KEY_ID missing)" },
-      });
-    }
+    const lazyHetzner = env.HCLOUD_TOKEN
+      ? createHetznerClient(env.HCLOUD_TOKEN)
+      : {
+          createServerFromSnapshot() {
+            throw new Error("HCLOUD_TOKEN is not configured on the Worker");
+          },
+          getServerStatus() {
+            throw new Error("HCLOUD_TOKEN is not configured on the Worker");
+          },
+          destroyServer() {
+            throw new Error("HCLOUD_TOKEN is not configured on the Worker");
+          },
+        };
+    const sshKeyIdRaw = env.DEMO_PUBLIC_SSH_KEY_ID;
+    const sshKeyId = sshKeyIdRaw ? parseInt(sshKeyIdRaw, 10) : 0;
     const demoDeps = {
       storage: storage.demoUsers,
       usernames: storage.usernames,
-      hetzner: createHetznerClient(env.HCLOUD_TOKEN!),
-      sshKeyId: parseInt(env.DEMO_PUBLIC_SSH_KEY_ID!, 10),
+      hetzner: lazyHetzner,
+      sshKeyId,
       audit: storage.auditEvents,
     };
     if (method === "POST" && ROUTE_RE.DEMO_USER_CREATE.test(path)) {
