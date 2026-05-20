@@ -50,6 +50,19 @@ for d in /dev/nvme0n1 /dev/sda /dev/vda /dev/mmcblk0; do
     TARGET="$d"
     break
 done
+# Single-disk cloud VPS fallback (Hetzner cx23, DigitalOcean droplets,
+# Vultr, etc): when there is no SEPARATE install target — the rescue+dd
+# bridge wrote our ISO onto the VM's only disk — install in-place on
+# TRAILER_SRC. Safe because the Alpine init at this point runs entirely
+# from RAM (apkovl + initramfs); the kernel does not depend on
+# /dev/sda being readable after this point.
+if [ -z "$TARGET" ] && [ -b "$TRAILER_SRC" ]; then
+    SIZE=$(blockdev --getsize64 "$TRAILER_SRC" 2>/dev/null || echo 0)
+    if [ "$SIZE" -ge $((8 * 1024 * 1024 * 1024)) ]; then
+        echo "flagship: single-disk VPS — installing in-place on TRAILER_SRC ($TRAILER_SRC, ${SIZE} bytes)"
+        TARGET="$TRAILER_SRC"
+    fi
+fi
 if [ -z "$TARGET" ]; then
     echo "flagship: no install-target disk found"
     exit 1
