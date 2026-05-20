@@ -141,6 +141,37 @@ export function parseServerStatus(json: unknown): {
   };
 }
 
+/**
+ * Parse POST /servers/{id}/actions/create_image → `{ image: { id } }`.
+ * Hetzner returns an action envelope; we want the image id so the CLI
+ * can poll `GET /images/{id}` until `status: "available"`.
+ */
+export function parseCreateImageResponse(json: unknown): {
+  imageId: string;
+} {
+  const j = json as { image?: { id?: number | string } };
+  const id = j.image?.id;
+  if (id === undefined || id === null) {
+    throw new Error("Hetzner create_image response had no image.id");
+  }
+  return { imageId: String(id) };
+}
+
+/** Parse GET /images/{id} → `{ status }` ("creating" | "available" | …). */
+export function parseImageStatus(json: unknown): {
+  status: string;
+  available: boolean;
+} {
+  const j = json as { image?: { status?: string } };
+  const status = j.image?.status ?? "unknown";
+  return { status, available: status === "available" };
+}
+
+/** Build the create_image body (snapshot type + description). */
+export function buildCreateImageBody(description: string): Record<string, unknown> {
+  return { type: "snapshot", description };
+}
+
 /** Parse GET /ssh_keys → list of {id, name, public_key}. */
 export function parseSshKeyList(json: unknown): Array<{
   id: number;
@@ -457,6 +488,62 @@ export class HetznerProvider implements VpsProvider {
   async destroy(id: string): Promise<void> {
     try {
       await this.api("DELETE", `/servers/${id}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("HTTP 404")) throw e;
+    }
+  }
+
+  /**
+   * Snapshot the server's disk into a Hetzner image. Used by
+   * `create-sample-user`: after the rescue-dd install + ACME finishes
+   * on a temp VPS, snapshot it so subsequent on-connect provisions can
+   * boot from the image in ~30s instead of doing the full install.
+   *
+   * Two-step on the wire:
+   *   1. POST /servers/{id}/actions/create_image  → image.id, status=creating
+   *   2. GET  /images/{id}  (poll until status=available)
+   *
+   * Returns the numeric image id as a string — the CLI persists it as
+   * the demo user's `snapshot_id` via `/install-complete`.
+   */
+  async snapshot(
+    serverId: string,
+    description: string,
+  ): Promise<{ snapshotId: string }> {
+    const { imageId } = parseCreateImageResponse(
+      await this.api(
+        "POST",
+        `/servers/${serverId}/actions/create_image`,
+        buildCreateImageBody(description),
+      ),
+    );
+    // Poll until the image leaves `creating`. Snapshots on a quiet
+    // 40 GB CX22 disk take ~1-3 min in practice; budget 6 min.
+    const maxAttempts = this.pollMax;
+    for (let i = 0; i < maxAttempts; i++) {
+      const s = parseImageStatus(await this.api("GET", `/images/${imageId}`));
+      if (s.available) return { snapshotId: imageId };
+      if (s.status === "unavailable" || s.status === "failed") {
+        throw new Error(
+          `Hetzner snapshot ${imageId} entered terminal status ${s.status}`,
+        );
+      }
+      await sleep(this.pollMs);
+    }
+    throw new Error(
+      `Hetzner snapshot ${imageId} did not become available within ` +
+        `${maxAttempts} polls`,
+    );
+  }
+
+  /**
+   * Delete a Hetzner image (snapshot) by id. Idempotent — a 404 is
+   * treated as success, mirroring `destroy(serverId)`.
+   */
+  async destroyImage(imageId: string): Promise<void> {
+    try {
+      await this.api("DELETE", `/images/${imageId}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!msg.includes("HTTP 404")) throw e;
