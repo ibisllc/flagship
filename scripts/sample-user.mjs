@@ -678,10 +678,23 @@ async function getHetznerProvider(env) {
 function makeLiveProvisionTempVps(env) {
   return async ({ presignedUrl, region, size, label }) => {
     const provider = await getHetznerProvider(env);
+    // Auto-heal deprecated / unsupported-at-region combos. Hetzner
+    // ages out specific (name, location) pairs on its own schedule and
+    // the API returns 422 'unsupported location for server type' OR
+    // 'server type N is deprecated'. Discover what's currently valid
+    // at the requested region + auto-pick the cheapest x86 candidate
+    // that includes the size hint (or falls back to anything x86 + not
+    // deprecated + in the region).
+    const effectiveSize = await resolveValidServerType(env, region, size);
+    if (effectiveSize !== size) {
+      process.stderr.write(
+        `[create] note: requested size ${size} unavailable in ${region}; using ${effectiveSize} instead\n`,
+      );
+    }
     const instance = await provider.provision({
       iso: presignedUrl,
       region,
-      size,
+      size: effectiveSize,
       label,
     });
     // Wait for the dd-reboot cycle to complete — the box reboots once
@@ -689,6 +702,62 @@ function makeLiveProvisionTempVps(env) {
     await provider.awaitBoot(instance.id);
     return { serverId: instance.id, ipv4: instance.ip };
   };
+}
+
+/**
+ * Query Hetzner's server_types catalog + pick a currently-valid
+ * (size, region) combo. Tries the requested size first; if invalid,
+ * picks the cheapest x86 non-deprecated alternative available in the
+ * region. Falls back to throwing a clear error listing what IS
+ * available if nothing matches.
+ */
+async function resolveValidServerType(env, region, requestedSize) {
+  const res = await fetch(
+    "https://api.hetzner.cloud/v1/server_types?per_page=50",
+    { headers: { authorization: `Bearer ${env.hcloudToken}` } },
+  );
+  if (!res.ok) {
+    // If discovery fails, fall through with the requested size so we
+    // surface the original error from Hetzner's POST /servers.
+    process.stderr.write(
+      `[create] server_types discovery returned HTTP ${res.status}; using requested ${requestedSize}\n`,
+    );
+    return requestedSize;
+  }
+  const body = await res.json();
+  const types = Array.isArray(body?.server_types) ? body.server_types : [];
+
+  const isValid = (t) => {
+    if (t?.deprecated) return false;
+    if (t?.architecture && t.architecture !== "x86") return false; // ISO is x86_64
+    const locs = Array.isArray(t?.prices) ? t.prices.map((p) => p.location) : [];
+    return locs.includes(region);
+  };
+
+  // Strict match on the requested size first.
+  const requested = types.find((t) => t?.name === requestedSize);
+  if (requested && isValid(requested)) return requestedSize;
+
+  // Otherwise pick the cheapest x86 non-deprecated type available in
+  // the region. Prefer the cpx*/cx* shared-CPU families since the
+  // demo workload is light.
+  const candidates = types
+    .filter(isValid)
+    .filter((t) => /^(cpx|cx|ccx)\d+/.test(t.name))
+    .map((t) => {
+      const p = (t.prices || []).find((q) => q.location === region);
+      const monthly = parseFloat(p?.price_monthly?.gross ?? "999");
+      return { name: t.name, monthly };
+    })
+    .sort((a, b) => a.monthly - b.monthly);
+  if (candidates.length === 0) {
+    throw new Error(
+      `Hetzner: no valid x86 server type found in region ${region}. ` +
+        `Run \`curl -H "Authorization: Bearer $HCLOUD_TOKEN" ` +
+        `https://api.hetzner.cloud/v1/server_types | jq .\` to inspect.`,
+    );
+  }
+  return candidates[0].name;
 }
 
 /**
