@@ -361,6 +361,26 @@ export class HetznerProvider implements VpsProvider {
     // destroy it. Wrap every subsequent step in a try/catch that
     // best-effort cleans up before re-throwing the original error.
     try {
+      // Sanity-check: Hetzner SILENTLY creates a server without a
+      // public network when primary_ip_limit is exhausted, regardless
+      // of public_net.enable_ipv4 in the request. Detect that BEFORE
+      // wasting an enable_rescue call (which would 422 with the same
+      // private_net_only_server class) and surface a quota-classed
+      // error so the outer retry loop can halt fast.
+      if (!created.ip) {
+        const refreshed = parseServerStatus(
+          await this.api("GET", `/servers/${created.id}`),
+        );
+        if (!refreshed.ip) {
+          throw new Error(
+            `Hetzner server ${created.id} was created without a public ` +
+              `IPv4 — primary_ip_limit is likely exhausted. ` +
+              `code:"resource_limit_exceeded" (silent variant). Delete ` +
+              `orphan primary IPs and retry.`,
+          );
+        }
+        created.ip = refreshed.ip;
+      }
       // Enable rescue + reset. Hetzner queues both actions; the next
       // boot lands in the rescue image rather than the placeholder Ubuntu.
       await this.api(

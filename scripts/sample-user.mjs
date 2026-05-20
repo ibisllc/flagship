@@ -726,8 +726,53 @@ async function getHetznerProvider(env) {
   return provider;
 }
 
+/**
+ * Hetzner releases primary IPs asynchronously after a server destroy.
+ * Failed-provision cycles leave orphan (unattached) primary IPs that
+ * count against `primary_ip_limit`. Once that limit is hit, Hetzner
+ * SILENTLY creates new servers WITHOUT a public IP (private-net-only),
+ * which then trips `enable_rescue` with private_net_only_server.
+ *
+ * This helper deletes every unattached primary IP in the project so
+ * the next provision attempt has fresh quota. Idempotent + safe — it
+ * never touches IPs that are currently assigned to a running server.
+ */
+async function cleanupOrphanedPrimaryIps(env) {
+  try {
+    const res = await fetch("https://api.hetzner.cloud/v1/primary_ips", {
+      headers: { authorization: `Bearer ${env.hcloudToken}` },
+    });
+    if (!res.ok) return;
+    const body = await res.json();
+    const ips = Array.isArray(body?.primary_ips) ? body.primary_ips : [];
+    const orphans = ips.filter((p) => p?.assignee_id == null);
+    if (orphans.length === 0) return;
+    process.stderr.write(
+      `[create] cleaning up ${orphans.length} unattached primary IP(s) ` +
+        `to free primary_ip_limit quota…\n`,
+    );
+    for (const p of orphans) {
+      try {
+        await fetch(`https://api.hetzner.cloud/v1/primary_ips/${p.id}`, {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${env.hcloudToken}` },
+        });
+      } catch {
+        // Best effort — if Hetzner refuses one, move on.
+      }
+    }
+  } catch {
+    // Discovery error — skip the cleanup, let the provision attempt
+    // surface the real failure.
+  }
+}
+
 function makeLiveProvisionTempVps(env) {
   return async ({ presignedUrl, region, size, label }) => {
+    // Self-healing pre-flight: clean up primary IPs left orphaned by
+    // earlier failed runs. Hetzner's primary_ip_limit silently turns
+    // new servers into private-only when exhausted.
+    await cleanupOrphanedPrimaryIps(env);
     const provider = await getHetznerProvider(env);
     // Hetzner's `server_types` API lists historical `prices[]` per
     // location, but those entries are NOT a reliable signal of actual
