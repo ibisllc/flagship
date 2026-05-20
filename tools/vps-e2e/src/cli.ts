@@ -70,7 +70,7 @@ const DEFAULTS = {
   comBase: "https://flagshipserver.com",
   servicesBase: "https://flagship.services",
   region: "fsn1",
-  size: "cx22",
+  size: "cpx11",
   sshKeyPath: ".demo-ssh-key",
   uploadVia: "r2" as const,
   r2Bucket: "flagship-iso-temp",

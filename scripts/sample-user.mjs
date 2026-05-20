@@ -9,7 +9,7 @@
  * + Appendix C for the full contract.
  *
  * Subcommands:
- *   create <username> --display "<name>" [--region fsn1] [--size cx22] [--ttl-idle 30]
+ *   create <username> --display "<name>" [--region fsn1] [--size cpx11] [--ttl-idle 30]
  *   delete <username>
  *   list
  *   status <username>
@@ -293,7 +293,7 @@ export async function runCreate(deps, username, flags) {
   const { fetchFn, env, stderr, stdout, now } = deps;
   const display = flags.display ?? username;
   const region = flags.region ?? "fsn1";
-  const size = flags.size ?? "cx22";
+  const size = flags.size ?? "cpx11";
   const ttlIdleMinutes = flags.ttlIdleMinutes ?? 30;
   stderr.write(`[create] starting at ${new Date(now()).toISOString()}\n`);
 
@@ -425,7 +425,7 @@ export const USAGE = [
   "sample-user — operator CLI for Flagship demo users (Plan A Phase E)",
   "",
   "USAGE:",
-  "  node scripts/sample-user.mjs create <username> --display \"<name>\" [--region fsn1] [--size cx22] [--ttl-idle 30]",
+  "  node scripts/sample-user.mjs create <username> --display \"<name>\" [--region fsn1] [--size cpx11] [--ttl-idle 30]",
   "  node scripts/sample-user.mjs delete <username>",
   "  node scripts/sample-user.mjs list",
   "  node scripts/sample-user.mjs status <username>",

@@ -60,7 +60,7 @@ describe("parseArgs", () => {
       "--region",
       "fsn1",
       "--size",
-      "cx22",
+      "cpx11",
       "--ttl-idle",
       "30",
     ]);
@@ -68,7 +68,7 @@ describe("parseArgs", () => {
     expect(a.username).toBe("demo-alice");
     expect(a.flags.display).toBe("Demo Alice");
     expect(a.flags.region).toBe("fsn1");
-    expect(a.flags.size).toBe("cx22");
+    expect(a.flags.size).toBe("cpx11");
     expect(a.flags.ttlIdleMinutes).toBe(30);
   });
   it("rejects malformed args deterministically", () => {
@@ -362,7 +362,7 @@ describe("runCreate — orchestration", () => {
       username: "demo-alice",
       display: "Demo Alice",
       region: "fsn1",
-      size: "cx22",
+      size: "cpx11",
       ttlIdleMinutes: 30,
     });
     expect(calls[1].url).toBe(
