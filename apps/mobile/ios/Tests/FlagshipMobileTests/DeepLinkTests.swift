@@ -42,9 +42,9 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertNil(DeepLink.parse(url))
     }
 
-    func test_appDetail_withAppId_routesToDetail() {
-        let url = URL(string: "flagship://app?appId=plants")!
-        XCTAssertEqual(DeepLink.parse(url), .appDetail(appId: "plants"))
+    func test_appDetail_withServiceId_routesToDetail() {
+        let url = URL(string: "flagship://app?serviceId=plants")!
+        XCTAssertEqual(DeepLink.parse(url), .appDetail(serviceId: "plants"))
     }
 
     func test_marketplace_host_routes() {
@@ -87,7 +87,7 @@ final class DeepLinkTests: XCTestCase {
         // fresh widget tap.
         let l = DeepLinker()
         l.enqueue(.marketplace)
-        l.enqueue(.appDetail(appId: "wiki"))
-        XCTAssertEqual(l.pending, .appDetail(appId: "wiki"))
+        l.enqueue(.appDetail(serviceId: "wiki"))
+        XCTAssertEqual(l.pending, .appDetail(serviceId: "wiki"))
     }
 }

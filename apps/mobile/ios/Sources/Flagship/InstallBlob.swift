@@ -175,29 +175,29 @@ public enum RePairInitiate {
     }
 }
 
-/// V2 — App URL-stem rename envelope. Signed by the user's current
-/// IRK. The internal `appId` is preserved across renames; only the
+/// V2 — Service URL-stem rename envelope. Signed by the user's current
+/// IRK. The internal `serviceId` is preserved across renames; only the
 /// user-visible `newDisplayLabel` changes. Mirrors
-/// packages/protocol/src/auth.ts `TAG_APP_RENAME`.
-public enum AppRenameClaim {
-    public static let canonicalTag = "flagship/app-rename/v1"
+/// packages/protocol/src/auth.ts `TAG_SERVICE_RENAME`.
+public enum ServiceRenameClaim {
+    public static let canonicalTag = "flagship/service-rename/v1"
     public static func canonicalBytes(
         username: String,
-        appId: String,
+        serviceId: String,
         newDisplayLabel: String,
         issuedAt: Int64
     ) -> Data {
         Data([
             canonicalTag,
             username,
-            appId,
+            serviceId,
             newDisplayLabel.lowercased(),
             String(issuedAt),
         ].joined(separator: "|").utf8)
     }
 }
 
-/// #79A — attach an external (custom) domain to an app. Signed by the
+/// #79A — attach an external (custom) domain to a service. Signed by the
 /// user's current IRK. Mirrors @flagship/protocol
 /// canonicalSetCustomDomain + the Android/webapp clients byte-for-byte
 /// so Live == Mock on the wire (a drift here = "signed-by-IRK but .com
@@ -206,14 +206,14 @@ public enum SetCustomDomainClaim {
     public static let canonicalTag = "flagship/custom-domain/v1"
     public static func canonicalBytes(
         username: String,
-        appId: String,
+        serviceId: String,
         fqdn: String,
         issuedAt: Int64
     ) -> Data {
         Data([
             canonicalTag,
             username,
-            appId,
+            serviceId,
             fqdn.lowercased(),
             String(issuedAt),
         ].joined(separator: "|").utf8)
@@ -221,20 +221,20 @@ public enum SetCustomDomainClaim {
 }
 
 /// V2 — voi.ci one-off short link envelope. Signed by IRK. Optional
-/// `appId` binds the link to a specific app so a future rename can
+/// `serviceId` binds the link to a specific service so a future rename can
 /// cascade-delete it.
 public enum VoiciShortenClaim {
     public static let canonicalTag = "flagship/voici-shorten/v1"
     public static func canonicalBytes(
         username: String,
-        appId: String?,
+        serviceId: String?,
         targetUrl: String,
         issuedAt: Int64
     ) -> Data {
         Data([
             canonicalTag,
             username,
-            appId ?? "",
+            serviceId ?? "",
             targetUrl,
             String(issuedAt),
         ].joined(separator: "|").utf8)

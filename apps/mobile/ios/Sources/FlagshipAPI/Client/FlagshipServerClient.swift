@@ -94,7 +94,7 @@ public protocol FlagshipServerClient: Sendable {
     /// the new canonical URL, emits an audit row.
     func renameApp(
         username: String,
-        appId: String,
+        serviceId: String,
         body: AppRenameRequest
     ) async throws -> AppRenameResponse
 
@@ -103,7 +103,7 @@ public protocol FlagshipServerClient: Sendable {
     /// slug-creator default when no alias has been set.
     func getAppLinks(
         username: String,
-        appId: String
+        serviceId: String
     ) async throws -> AppLinksResponse
 
     /// Bind an external domain to the app (#79A). Decoupled
@@ -113,7 +113,7 @@ public protocol FlagshipServerClient: Sendable {
     /// Returns the refreshed links so callers reflect it immediately.
     func setCustomDomain(
         username: String,
-        appId: String,
+        serviceId: String,
         body: SetCustomDomainRequest
     ) async throws -> AppLinksResponse
 }
@@ -121,12 +121,12 @@ public protocol FlagshipServerClient: Sendable {
 public struct AppRenameRequest: Encodable, Sendable {
     public struct Inner: Encodable, Sendable {
         public let username: String
-        public let appId: String
+        public let serviceId: String
         public let newDisplayLabel: String
         public let issuedAt: Int64
-        public init(username: String, appId: String, newDisplayLabel: String, issuedAt: Int64) {
+        public init(username: String, serviceId: String, newDisplayLabel: String, issuedAt: Int64) {
             self.username = username
-            self.appId = appId
+            self.serviceId = serviceId
             self.newDisplayLabel = newDisplayLabel
             self.issuedAt = issuedAt
         }
@@ -140,17 +140,17 @@ public struct AppRenameRequest: Encodable, Sendable {
 
 /// #79A — IRK-signed external-domain attach request. Same envelope
 /// shape as AppRenameRequest; canonical bytes = SetCustomDomainClaim
-/// (flagship/custom-domain/v1 | username | appId | fqdn | issuedAt),
+/// (flagship/custom-domain/v1 | username | serviceId | fqdn | issuedAt),
 /// matching the .com verifier + the Android/webapp clients.
 public struct SetCustomDomainRequest: Encodable, Sendable {
     public struct Inner: Encodable, Sendable {
         public let username: String
-        public let appId: String
+        public let serviceId: String
         public let fqdn: String
         public let issuedAt: Int64
-        public init(username: String, appId: String, fqdn: String, issuedAt: Int64) {
+        public init(username: String, serviceId: String, fqdn: String, issuedAt: Int64) {
             self.username = username
-            self.appId = appId
+            self.serviceId = serviceId
             self.fqdn = fqdn
             self.issuedAt = issuedAt
         }
@@ -182,7 +182,7 @@ public struct AppLinkInstance: Decodable, Equatable, Sendable, Identifiable {
 }
 
 public struct AppLinksResponse: Decodable, Equatable, Sendable {
-    public let appId: String
+    public let serviceId: String
     public let displayLabel: String
     public let canonicalUrl: String
     public let instances: [AppLinkInstance]
@@ -200,7 +200,7 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
     /// the server keeps its own rate-limit timer in its DB.)
     public let customDomainConfirmed: Bool?
     public init(
-        appId: String,
+        serviceId: String,
         displayLabel: String,
         canonicalUrl: String,
         instances: [AppLinkInstance],
@@ -208,7 +208,7 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
         customDomain: String? = nil,
         customDomainConfirmed: Bool? = nil
     ) {
-        self.appId = appId
+        self.serviceId = serviceId
         self.displayLabel = displayLabel
         self.canonicalUrl = canonicalUrl
         self.instances = instances
@@ -804,16 +804,16 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public var appRenameBehavior: AppRenameBehavior = .ok
     public private(set) var lastAppRename: (
         username: String,
-        appId: String,
+        serviceId: String,
         body: AppRenameRequest
     )?
-    /// Scripted alias map per (username, appId). The links endpoint
+    /// Scripted alias map per (username, serviceId). The links endpoint
     /// returns these; the rename endpoint writes into them.
     public var appAliasByUser: [String: [String: (displayLabel: String, canonicalUrl: String)]] = [:]
-    /// Bound external domains, keyed [user][appId]. A Replace never
+    /// Bound external domains, keyed [user][serviceId]. A Replace never
     /// clears this — it's deliberately a separate store from aliases.
     public var customDomainByUser: [String: [String: String]] = [:]
-    /// Server-side rate limit mirror: [user][appId] → last change.
+    /// Server-side rate limit mirror: [user][serviceId] → last change.
     public var customDomainLastChangedByUser: [String: [String: Date]] = [:]
     /// Min seconds between custom-domain changes (server-enforced).
     public var customDomainMinInterval: TimeInterval = 300
@@ -824,11 +824,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func renameApp(
         username: String,
-        appId: String,
+        serviceId: String,
         body: AppRenameRequest
     ) async throws -> AppRenameResponse {
         try await tick()
-        lastAppRename = (username, appId, body)
+        lastAppRename = (username, serviceId, body)
         switch appRenameBehavior {
         case .collision:
             throw ScreensClientError.http(status: 409, message: "label collision")
@@ -837,13 +837,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         case .ok:
             let newLabel = body.request.newDisplayLabel
             let canonical = "https://\(newLabel).\(username.lowercased()).flagship.services"
-            appAliasByUser[username.lowercased(), default: [:]][appId] = (newLabel, canonical)
+            appAliasByUser[username.lowercased(), default: [:]][serviceId] = (newLabel, canonical)
             return AppRenameResponse(
                 ok: true,
                 displayLabel: newLabel,
                 canonicalUrl: canonical,
-                shortUrl: "https://voi.ci/\(synthesizeMockShortCode(forAppId: appId, label: newLabel))",
-                shortCode: synthesizeMockShortCode(forAppId: appId, label: newLabel),
+                shortUrl: "https://voi.ci/\(synthesizeMockShortCode(forServiceId: serviceId, label: newLabel))",
+                shortCode: synthesizeMockShortCode(forServiceId: serviceId, label: newLabel),
                 unchanged: false
             )
         }
@@ -851,35 +851,35 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func getAppLinks(
         username: String,
-        appId: String
+        serviceId: String
     ) async throws -> AppLinksResponse {
         try await tick()
-        let alias = appAliasByUser[username.lowercased()]?[appId]
-        // Mirrors @flagship/protocol deriveUrlFragment: appId is
+        let alias = appAliasByUser[username.lowercased()]?[serviceId]
+        // Mirrors @flagship/protocol deriveUrlFragment: serviceId is
         // `<creator>-<slug>` (single dash; FIRST hyphen splits, since
         // usernames are hyphen-free). The fragment is CONDITIONAL on
         // who runs it: just `<slug>` when the running user authored
         // it, else `<slug>-<creator>`.
         let defaultLabel: String = {
-            if let i = appId.firstIndex(of: "-"),
-               i != appId.startIndex,
-               appId.index(after: i) != appId.endIndex {
-                let creator = appId[appId.startIndex..<i].lowercased()
-                let slug = String(appId[appId.index(after: i)...]).lowercased()
+            if let i = serviceId.firstIndex(of: "-"),
+               i != serviceId.startIndex,
+               serviceId.index(after: i) != serviceId.endIndex {
+                let creator = serviceId[serviceId.startIndex..<i].lowercased()
+                let slug = String(serviceId[serviceId.index(after: i)...]).lowercased()
                 return creator == username.lowercased() ? slug : "\(slug)-\(creator)"
             }
-            return appId.lowercased()
+            return serviceId.lowercased()
         }()
         let label = alias?.displayLabel ?? defaultLabel
         let host = "\(username.lowercased()).flagship.services"
         let canonical = alias?.canonicalUrl ?? "https://\(label).\(host)"
         // V6 — Mock now mirrors the Worker's lazy-mint contract:
         // /links always returns a populated shortUrl. The code is a
-        // deterministic 6-char hex prefix of appId so the same app
+        // deterministic 6-char hex prefix of serviceId so the same app
         // surfaces the same link across calls (so a copy-paste in
         // demo mode is stable + previews stay snapshot-friendly).
-        let shortCode = synthesizeMockShortCode(forAppId: appId, label: label)
-        let lastChanged = customDomainLastChangedByUser[username.lowercased()]?[appId]
+        let shortCode = synthesizeMockShortCode(forServiceId: serviceId, label: label)
+        let lastChanged = customDomainLastChangedByUser[username.lowercased()]?[serviceId]
         // Demo: .com "confirms" the CNAME customDomainConfirmDelay
         // seconds after the request (a real server pushes the outcome).
         // The server keeps its own lastChanged timer for the rate
@@ -889,7 +889,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             Date().timeIntervalSince($0) >= customDomainConfirmDelay
         }
         return AppLinksResponse(
-            appId: appId,
+            serviceId: serviceId,
             displayLabel: label,
             canonicalUrl: canonical,
             instances: [
@@ -899,21 +899,21 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
                 ),
             ],
             shortUrl: "https://voi.ci/\(shortCode)",
-            customDomain: customDomainByUser[username.lowercased()]?[appId],
+            customDomain: customDomainByUser[username.lowercased()]?[serviceId],
             customDomainConfirmed: confirmed
         )
     }
 
     public func setCustomDomain(
         username: String,
-        appId: String,
+        serviceId: String,
         body: SetCustomDomainRequest
     ) async throws -> AppLinksResponse {
         try await tick()
         let u = username.lowercased()
         // Server-side rate limit (the lastChanged column). The client
         // mirrors this with a cooldown, but the server is the backstop.
-        if let last = customDomainLastChangedByUser[u]?[appId] {
+        if let last = customDomainLastChangedByUser[u]?[serviceId] {
             let elapsed = Date().timeIntervalSince(last)
             if elapsed < customDomainMinInterval {
                 let wait = Int((customDomainMinInterval - elapsed).rounded(.up))
@@ -927,29 +927,29 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // here and only commits if it points at the user's stub. The
         // Mock has no DNS, so it accepts the claim (the demo can't
         // exercise a real failure path). Record from the signed body.
-        customDomainByUser[u, default: [:]][appId] =
+        customDomainByUser[u, default: [:]][serviceId] =
             body.request.fqdn.trimmingCharacters(in: .whitespaces).lowercased()
-        customDomainLastChangedByUser[u, default: [:]][appId] = Date()
-        return try await getAppLinks(username: username, appId: appId)
+        customDomainLastChangedByUser[u, default: [:]][serviceId] = Date()
+        return try await getAppLinks(username: username, serviceId: serviceId)
     }
 
-    /// FNV-1a over (appId|label) → first 6 hex digits, lowercased.
+    /// FNV-1a over (serviceId|label) → first 6 hex digits, lowercased.
     /// Deterministic + stable across calls; not crypto-strong (it
     /// only feeds the Mock surface). The Worker's mintShortLink
     /// uses crypto.getRandomValues so production codes are random.
-    private static func synthesizeMockShortCode(forAppId appId: String, label: String) -> String {
+    private static func synthesizeMockShortCode(forServiceId serviceId: String, label: String) -> String {
         var h: UInt64 = 14695981039346656037
-        for byte in (appId + "|" + label).utf8 {
+        for byte in (serviceId + "|" + label).utf8 {
             h ^= UInt64(byte)
             h &*= 1099511628211
         }
         let hex = String(h, radix: 16)
-        // 6 chars; pad with the appId hash's own bits if short.
+        // 6 chars; pad with the serviceId hash's own bits if short.
         return String((hex + "000000").prefix(6))
     }
 
-    private func synthesizeMockShortCode(forAppId appId: String, label: String) -> String {
-        Self.synthesizeMockShortCode(forAppId: appId, label: label)
+    private func synthesizeMockShortCode(forServiceId serviceId: String, label: String) -> String {
+        Self.synthesizeMockShortCode(forServiceId: serviceId, label: label)
     }
 
     public func listDevices(username: String) async throws -> TrustedDevicesListResponse {
@@ -1231,11 +1231,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func renameApp(
         username: String,
-        appId: String,
+        serviceId: String,
         body: AppRenameRequest
     ) async throws -> AppRenameResponse {
         let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        let a = appId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? appId
+        let a = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/rename"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1251,10 +1251,10 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func getAppLinks(
         username: String,
-        appId: String
+        serviceId: String
     ) async throws -> AppLinksResponse {
         let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        let a = appId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? appId
+        let a = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/links"))
         req.httpMethod = "GET"
         let (data, resp) = try await urlSession.data(for: req)
@@ -1268,11 +1268,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func setCustomDomain(
         username: String,
-        appId: String,
+        serviceId: String,
         body: SetCustomDomainRequest
     ) async throws -> AppLinksResponse {
         let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        let a = appId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? appId
+        let a = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/custom-domain"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -1295,7 +1295,7 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // 200 = recorded only (the POST returns { recorded:true }, NOT
         // the links). Re-read links so the pending domain surfaces
         // optimistically; .com confirms the CNAME out-of-band.
-        return try await getAppLinks(username: username, appId: appId)
+        return try await getAppLinks(username: username, serviceId: serviceId)
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

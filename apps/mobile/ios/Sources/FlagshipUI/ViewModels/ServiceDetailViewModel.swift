@@ -5,13 +5,13 @@ import Flagship
 import FlagshipAPI
 import FlagshipCore
 
-/// Combined view-model for AppDetailScreen. Owns the app detail
+/// Combined view-model for ServiceDetailScreen. Owns the service detail
 /// response, the list of FQDNs the user owns (filtered to those that
-/// belong to this app), and the local edit buffer for pod placement +
-/// per-app lead pod. Save() ships the diff through `orders/send`.
+/// belong to this service), and the local edit buffer for pod placement +
+/// per-service lead pod. Save() ships the diff through `orders/send`.
 @Observable
 @MainActor
-public final class AppDetailViewModel {
+public final class ServiceDetailViewModel {
     public private(set) var detail: LoadingState<AppDetailResponse> = .idle
     public private(set) var ownedUrls: LoadingState<[OwnedUrl]> = .idle
     /// V2 — { canonical, short, instances } loaded from .com. Drives
@@ -31,10 +31,10 @@ public final class AppDetailViewModel {
         case failed(String)
     }
 
-    /// Pods the app should run on (server-set). Edited locally; reset
+    /// Pods the service should run on (server-set). Edited locally; reset
     /// by `cancelEdits()` and persisted by `save()`.
     public var runOnPodIds: Set<String> = []
-    /// Pod that gets the canonical short domain for this app. nil = use
+    /// Pod that gets the canonical short domain for this service. nil = use
     /// the global leader.
     public var leadPodId: String?
     /// Draft in the "Set custom domain" field.
@@ -48,12 +48,12 @@ public final class AppDetailViewModel {
     /// Cooldown after a successful custom-domain change.
     public static let customDomainCooldown: TimeInterval = 300
     /// The bound external domain, sourced from the links bundle so the
-    /// detail screen and the apps list agree. A Replace never clears it.
+    /// detail screen and the services list agree. A Replace never clears it.
     public var customDomain: String? { appLinks.value?.customDomain }
 
-    public let appId: String
+    public let serviceId: String
     private let client: any ScreensClient
-    /// V2 — flagshipServerClient for app-rename + app-links. Optional
+    /// V2 — flagshipServerClient for service-rename + service-links. Optional
     /// so test fixtures that don't care about WEB DOMAINS keep
     /// compiling against the existing (client, allPods, leader) init.
     private let server: (any FlagshipServerClient)?
@@ -62,14 +62,14 @@ public final class AppDetailViewModel {
     private let globalLeaderPodId: String?
 
     public init(
-        appId: String,
+        serviceId: String,
         client: any ScreensClient,
         allPods: [PodInfo],
         globalLeaderPodId: String?,
         server: (any FlagshipServerClient)? = nil,
         username: @escaping () -> String? = { nil }
     ) {
-        self.appId = appId
+        self.serviceId = serviceId
         self.client = client
         self.allPods = allPods
         self.globalLeaderPodId = globalLeaderPodId
@@ -84,11 +84,11 @@ public final class AppDetailViewModel {
         detail = .loading
         ownedUrls = .loading
         do {
-            async let d = client.appDetail(appId: appId)
+            async let d = client.appDetail(serviceId: serviceId)
             async let u = client.urlControllerOwned()
             let (di, uo) = try await (d, u)
             detail = .loaded(di)
-            ownedUrls = .loaded(uo.urls.filter { $0.fqdn.contains(appId) })
+            ownedUrls = .loaded(uo.urls.filter { $0.fqdn.contains(serviceId) })
             // Seed local edits from server state — currently we default
             // to running on the leader-only since the API doesn't yet
             // return a multi-pod policy. When the daemon contract
@@ -212,7 +212,7 @@ public final class AppDetailViewModel {
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
         let canonical = SetCustomDomainClaim.canonicalBytes(
-            username: user, appId: appId, fqdn: fqdn, issuedAt: issuedAt,
+            username: user, serviceId: serviceId, fqdn: fqdn, issuedAt: issuedAt,
         )
         let signature: Data
         do {
@@ -232,11 +232,11 @@ public final class AppDetailViewModel {
             // pending/unconfirmed state in the UI by design.
             let r = try await server.setCustomDomain(
                 username: user,
-                appId: appId,
+                serviceId: serviceId,
                 body: SetCustomDomainRequest(
                     request: .init(
                         username: user,
-                        appId: appId,
+                        serviceId: serviceId,
                         fqdn: fqdn,
                         issuedAt: issuedAt,
                     ),
@@ -274,7 +274,7 @@ public final class AppDetailViewModel {
     }
 
     /// V2 — fetch the canonical / short / instances triplet from .com.
-    /// Called lazily on AppDetailScreen first appearance; updated
+    /// Called lazily on ServiceDetailScreen first appearance; updated
     /// after each successful Replace.
     public func loadAppLinks() async {
         guard let server, let user = username(), !user.isEmpty else {
@@ -285,7 +285,7 @@ public final class AppDetailViewModel {
         }
         appLinks = .loading
         do {
-            let r = try await server.getAppLinks(username: user, appId: appId)
+            let r = try await server.getAppLinks(username: user, serviceId: serviceId)
             appLinks = .loaded(r)
             // Rebuild the countdown from the on-device timestamp so it
             // survives an app reload / VM recreation. The server keeps
@@ -298,7 +298,7 @@ public final class AppDetailViewModel {
     }
 
     private var cdLastChangedKey: String {
-        "flagship.customDomain.lastChanged.\(appId)"
+        "flagship.customDomain.lastChanged.\(serviceId)"
     }
 
     /// Persist the request time on-device + start the local cooldown.
@@ -320,7 +320,7 @@ public final class AppDetailViewModel {
     }
 
     /// V2 — Replace ceremony. Signs the canonical bytes with the
-    /// user's CURRENT IRK, POSTs to /api/users/:u/apps/:appId/rename,
+    /// user's CURRENT IRK, POSTs to /api/users/:u/apps/:serviceId/rename,
     /// updates `appLinks` from the response on success.
     ///
     /// The caller is expected to have just shown a biometric scare
@@ -341,15 +341,15 @@ public final class AppDetailViewModel {
         renamePhase = .signing
         let irk: Curve25519.Signing.PrivateKey
         do {
-            irk = try await Keystore.deriveIRK(reason: "Rename app URL stem")
+            irk = try await Keystore.deriveIRK(reason: "Rename service URL stem")
         } catch {
             renamePhase = .failed("Couldn't access your account keys: \(error.localizedDescription)")
             return false
         }
         let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        let canonical = AppRenameClaim.canonicalBytes(
+        let canonical = ServiceRenameClaim.canonicalBytes(
             username: user,
-            appId: appId,
+            serviceId: serviceId,
             newDisplayLabel: trimmed,
             issuedAt: issuedAt,
         )
@@ -364,11 +364,11 @@ public final class AppDetailViewModel {
         do {
             let resp = try await server.renameApp(
                 username: user,
-                appId: appId,
+                serviceId: serviceId,
                 body: AppRenameRequest(
                     request: .init(
                         username: user,
-                        appId: appId,
+                        serviceId: serviceId,
                         newDisplayLabel: trimmed,
                         issuedAt: issuedAt,
                     ),
@@ -379,7 +379,7 @@ public final class AppDetailViewModel {
             // network round-trip.
             if let label = resp.displayLabel, let canonical = resp.canonicalUrl {
                 appLinks = .loaded(AppLinksResponse(
-                    appId: appId,
+                    serviceId: serviceId,
                     displayLabel: label,
                     canonicalUrl: canonical,
                     // Instances are re-fetched on the next loadAppLinks
@@ -398,7 +398,7 @@ public final class AppDetailViewModel {
             await loadAppLinks()
             return true
         } catch ScreensClientError.http(let status, _) where status == 409 {
-            renamePhase = .failed("Another app already uses that name. Pick something else.")
+            renamePhase = .failed("Another service already uses that name. Pick something else.")
             return false
         } catch ScreensClientError.http(let status, _) where status == 400 {
             renamePhase = .failed("That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars).")
@@ -414,19 +414,19 @@ public final class AppDetailViewModel {
 
     public func save() async throws {
         // Ship the edits as an order envelope. The shape mirrors what
-        // packages/server-daemon expects for app-policy updates — a
+        // packages/server-daemon expects for service-policy updates — a
         // signed canonical-bytes wrapper. For now, mock client accepts
         // any envelope and returns ok=true.
         let payload: [String: Any] = [
-            "kind": "app-policy/v1",
-            "appId": appId,
+            "kind": "service-policy/v1",
+            "serviceId": serviceId,
             "runOnPodIds": Array(runOnPodIds),
             "leadPodId": leadPodId as Any,
             "customDomain": customDomain as Any
         ]
         let json = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         let envelope = json.base64EncodedString()
-        _ = try await client.ordersSend(.init(envelope: envelope, kind: "app-policy/v1"))
+        _ = try await client.ordersSend(.init(envelope: envelope, kind: "service-policy/v1"))
     }
 }
 

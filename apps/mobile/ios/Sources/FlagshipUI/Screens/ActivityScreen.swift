@@ -223,7 +223,7 @@ public struct ActivityScreen: View {
                 .foregroundColor(color(for: event.kind, c: c))
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(verb(event.kind)) \(event.appId)").foregroundColor(c.text)
+                Text("\(verb(event.kind)) \(event.serviceId)").foregroundColor(c.text)
                 if let detail = event.detail {
                     Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }

@@ -2,9 +2,10 @@ import SwiftUI
 import FlagshipCore
 import FlagshipAPI
 
-/// Apps tab: list → detail; marketplace; vibe-code launcher. Owns its
-/// own NavigationStack with AppsRoute as the path element type.
-public struct AppsTab: View {
+/// Services tab: list → detail; marketplace; vibe-code launcher. Owns its
+/// own NavigationStack with AppsRoute as the path element type. Surfaces
+/// as "Apps" in the UI for user-facing familiarity.
+public struct ServicesTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.colorScheme) private var scheme
@@ -12,7 +13,7 @@ public struct AppsTab: View {
     @Environment(DeepLinker.self) private var linker
 
     @State private var path: [AppsRoute] = []
-    @State private var vm: AppsListViewModel?
+    @State private var vm: ServicesListViewModel?
 
     public init() {}
 
@@ -29,8 +30,8 @@ public struct AppsTab: View {
         guard let link else { return }
         switch link {
         case .appDetail(let id):
-            if path.last != .appDetail(appId: id) {
-                path.append(.appDetail(appId: id))
+            if path.last != .appDetail(serviceId: id) {
+                path.append(.appDetail(serviceId: id))
             }
             _ = linker.consume()
         case .marketplace:
@@ -66,7 +67,7 @@ public struct AppsTab: View {
         }
         .task {
             if vm == nil {
-                vm = AppsListViewModel(
+                vm = ServicesListViewModel(
                     client: client,
                     server: server,
                     username: { [app] in app.currentUser }
@@ -88,7 +89,7 @@ public struct AppsTab: View {
     private func destination(for route: AppsRoute) -> some View {
         switch route {
         case .appDetail(let id):
-            AppDetailContainer(appId: id)
+            ServiceDetailContainer(serviceId: id)
         case .marketplace:
             MarketplaceContainer(path: $path)
         case .marketplaceDetail(let creator, let slug):
@@ -106,7 +107,7 @@ public struct AppsTab: View {
     }
 
     @ViewBuilder
-    private func header(c: FSColors, vm: AppsListViewModel) -> some View {
+    private func header(c: FSColors, vm: ServicesListViewModel) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             HStack {
                 Text("Apps")
@@ -143,13 +144,13 @@ public struct AppsTab: View {
     }
 
     @ViewBuilder
-    private func searchBar(vm: AppsListViewModel) -> some View {
+    private func searchBar(vm: ServicesListViewModel) -> some View {
         @Bindable var bindable = vm
         FSField(value: $bindable.searchQuery, label: "", placeholder: "Search apps")
     }
 
     @ViewBuilder
-    private func emptyOrList(vm: AppsListViewModel, c: FSColors) -> some View {
+    private func emptyOrList(vm: ServicesListViewModel, c: FSColors) -> some View {
         switch vm.state {
         case .idle, .loading:
             VStack(spacing: FS.space.s3) {
@@ -171,9 +172,9 @@ public struct AppsTab: View {
                 }
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
-                    ForEach(vm.filteredApps, id: \.appId) { appItem in
-                        Button(action: { path.append(.appDetail(appId: appItem.appId)) }) {
-                            AppRow(app: appItem, links: vm.linksByAppId[appItem.appId])
+                    ForEach(vm.filteredApps, id: \.serviceId) { appItem in
+                        Button(action: { path.append(.appDetail(serviceId: appItem.serviceId)) }) {
+                            AppRow(app: appItem, links: vm.linksByServiceId[appItem.serviceId])
                         }
                         .buttonStyle(.plain)
                     }
@@ -215,7 +216,7 @@ private struct AppRow: View {
     @Environment(\.colorScheme) private var scheme
     let app: FlagshipAPI.AppSummary
     /// V2 — per-app links (canonical + short + instances), loaded by
-    /// the AppsListViewModel after the daemon's apps-list returns.
+    /// the ServicesListViewModel after the daemon's apps-list returns.
     /// `nil` while still in flight — the row falls back to the
     /// daemon-provided urlLabel for the canonical hint.
     let links: AppLinksResponse?
@@ -318,21 +319,21 @@ private struct AppRow: View {
     }
 }
 
-struct AppDetailContainer: View {
-    let appId: String
+struct ServiceDetailContainer: View {
+    let serviceId: String
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
-    @State private var vm: AppDetailViewModel?
+    @State private var vm: ServiceDetailViewModel?
 
     var body: some View {
         let c = FSColors.scheme(scheme)
         ZStack(alignment: .top) {
             c.bg.ignoresSafeArea()
             if let vm {
-                AppDetailScreen(
+                ServiceDetailScreen(
                     vm: vm,
                     username: app.currentUser,
                     pods: app.pods,
@@ -346,8 +347,8 @@ struct AppDetailContainer: View {
         }
         .task {
             if vm == nil {
-                vm = AppDetailViewModel(
-                    appId: appId,
+                vm = ServiceDetailViewModel(
+                    serviceId: serviceId,
                     client: client,
                     allPods: app.pods,
                     globalLeaderPodId: app.leaderPodId,
@@ -360,10 +361,10 @@ struct AppDetailContainer: View {
         }
     }
 
-    private func save(vm: AppDetailViewModel) async {
+    private func save(vm: ServiceDetailViewModel) async {
         do {
             try await vm.save()
-            toasts.success("Saved \(vm.appId).")
+            toasts.success("Saved \(vm.serviceId).")
         } catch {
             toasts.error("Save failed: \(error.localizedDescription)")
         }

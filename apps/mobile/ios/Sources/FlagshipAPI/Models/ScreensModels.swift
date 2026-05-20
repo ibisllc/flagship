@@ -10,7 +10,7 @@ import Foundation
 // MARK: - Shared
 
 public struct AppSummary: Codable, Equatable, Sendable {
-    public let appId: String
+    public let serviceId: String
     public let creator: String
     public let slug: String
     public let urlLabel: String
@@ -24,7 +24,7 @@ public struct AppSummary: Codable, Equatable, Sendable {
 public struct RecentInstallEvent: Codable, Equatable, Sendable {
     public let at: Int64
     public let kind: String     // "installed" | "uninstalled" | "deploy" | "update-pulled"
-    public let appId: String
+    public let serviceId: String
     public let detail: String?
 }
 
@@ -39,7 +39,7 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public let certNotAfter: Int64?
     public let certNotBefore: Int64?
     public let certSans: [String]?
-    public let appCount: Int
+    public let serviceCount: Int
     public let pairedSessionCount: Int
     public let recentInstallEvents: [RecentInstallEvent]
 }
@@ -120,11 +120,11 @@ public enum VibeCodeFrame: Codable, Equatable {
     case repoCreate(repoFullName: String)
     case buildStart
     case buildLog(line: String)
-    case deploy(appId: String, url: String)
+    case deploy(serviceId: String, url: String)
     case done
     case error(message: String)
 
-    private enum CodingKeys: String, CodingKey { case kind, text, manifestJson, repoFullName, line, appId, url, message }
+    private enum CodingKeys: String, CodingKey { case kind, text, manifestJson, repoFullName, line, serviceId, url, message }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -136,7 +136,7 @@ public enum VibeCodeFrame: Codable, Equatable {
         case "build-log": self = .buildLog(line: try c.decode(String.self, forKey: .line))
         case "deploy":
             self = .deploy(
-                appId: try c.decode(String.self, forKey: .appId),
+                serviceId: try c.decode(String.self, forKey: .serviceId),
                 url: try c.decode(String.self, forKey: .url)
             )
         case "done": self = .done
@@ -152,7 +152,7 @@ public enum VibeCodeFrame: Codable, Equatable {
         case .repoCreate(let r): try c.encode("repo-create", forKey: .kind); try c.encode(r, forKey: .repoFullName)
         case .buildStart: try c.encode("build-start", forKey: .kind)
         case .buildLog(let l): try c.encode("build-log", forKey: .kind); try c.encode(l, forKey: .line)
-        case .deploy(let a, let u): try c.encode("deploy", forKey: .kind); try c.encode(a, forKey: .appId); try c.encode(u, forKey: .url)
+        case .deploy(let a, let u): try c.encode("deploy", forKey: .kind); try c.encode(a, forKey: .serviceId); try c.encode(u, forKey: .url)
         case .done: try c.encode("done", forKey: .kind)
         case .error(let m): try c.encode("error", forKey: .kind); try c.encode(m, forKey: .message)
         }
@@ -201,7 +201,7 @@ public struct UnlockApprovalApproveRequest: Codable, Equatable, Sendable {
 
 public struct BrowserTab: Codable, Equatable, Sendable {
     public let tabId: String
-    public let appId: String
+    public let serviceId: String
     public let currentUrl: String?
     public let title: String?
     public let screenshotKey: String?
@@ -421,11 +421,11 @@ public struct ServerMetricsResponse: Codable, Equatable, Sendable {
 // MARK: - P1.19 / P1.20 app-backup
 
 public struct AppBackupStartRequest: Codable, Equatable, Sendable {
-    public let appId: String
+    public let serviceId: String
     public let password: String?
     public let includeUserData: Bool?
-    public init(appId: String, password: String? = nil, includeUserData: Bool? = nil) {
-        self.appId = appId
+    public init(serviceId: String, password: String? = nil, includeUserData: Bool? = nil) {
+        self.serviceId = serviceId
         self.password = password
         self.includeUserData = includeUserData
     }
@@ -582,20 +582,20 @@ public struct ReissuanceReportPayload: Codable, Equatable, Sendable {
 }
 
 public struct AppReissuanceSummary: Codable, Equatable, Sendable, Identifiable {
-    public let appId: String
+    public let serviceId: String
     public let slug: String
     public let rewrittenCount: Int
     public let unchangedCount: Int
     public let error: String?
     public let completedAt: Int64
 
-    public var id: String { appId }
+    public var id: String { serviceId }
 
     public init(
-        appId: String, slug: String, rewrittenCount: Int, unchangedCount: Int,
+        serviceId: String, slug: String, rewrittenCount: Int, unchangedCount: Int,
         error: String?, completedAt: Int64
     ) {
-        self.appId = appId; self.slug = slug
+        self.serviceId = serviceId; self.slug = slug
         self.rewrittenCount = rewrittenCount; self.unchangedCount = unchangedCount
         self.error = error; self.completedAt = completedAt
     }

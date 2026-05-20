@@ -97,7 +97,7 @@ final class FlagshipServerClientTests: XCTestCase {
     }
 
     func test_usernameAvailable_rejectsHyphen() async throws {
-        // Usernames are hyphen-free so appId `<creator>-<slug>` parses
+        // Usernames are hyphen-free so serviceId `<creator>-<slug>` parses
         // unambiguously. Worker's labels.ts USERNAME_RE is
         // /^[a-z0-9]{1,63}$/ — the iOS Mock must agree.
         let c = makeClient()

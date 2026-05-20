@@ -2,7 +2,7 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// V2 — Replace App URL stem confirmation sheet.
+/// V2 — Replace Service URL stem confirmation sheet.
 ///
 /// Two-stage UX:
 ///   1. Editable text field pre-filled with the current stem.
@@ -19,17 +19,17 @@ import FlagshipCore
 /// the rename commits (.com cascade-deletes them). The body copy
 /// makes that explicit so a user doesn't blindly rotate a stem people
 /// are actively visiting.
-struct ReplaceAppStemSheet: View {
+struct ReplaceServiceStemSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Binding var draft: String
     /// The stem currently in every URL — interpolated into the body so
     /// the user sees exactly what is being replaced.
     let currentStem: String
-    let phase: AppDetailViewModel.RenamePhase
+    let phase: ServiceDetailViewModel.RenamePhase
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
-    /// Mirrors the Worker's `DNS_LABEL_RE` in appRename.ts. Keep in
+    /// Mirrors the Worker's `DNS_LABEL_RE` in serviceRename.ts. Keep in
     /// sync — drift means the button enables for stems the server
     /// then rejects.
     private static let stemRegex =

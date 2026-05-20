@@ -284,7 +284,7 @@ public struct HomeScreen: View {
                                     .foregroundColor(color(for: e.kind, c: c))
                                     .frame(width: 22)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(verb(for: e.kind)) \(e.appId)")
+                                    Text("\(verb(for: e.kind)) \(e.serviceId)")
                                         .font(FS.font.body())
                                         .foregroundColor(c.text)
                                     if let detail = e.detail {

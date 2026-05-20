@@ -14,31 +14,31 @@ final class MockScreensClientTests: XCTestCase {
         let d = try await c.serverDetail()
         XCTAssertEqual(d.username, "harry")
         XCTAssertEqual(d.serverFqdn, "home.harry.flagship.services")
-        XCTAssertGreaterThan(d.appCount, 0)
+        XCTAssertGreaterThan(d.serviceCount, 0)
         XCTAssertFalse(d.recentInstallEvents.isEmpty)
     }
 
     func test_appsList_returnsKnownApps() async throws {
         let c = makeClient()
         let r = try await c.appsList()
-        // appId is the immutable composite `<creator>-<slug>`.
+        // serviceId is the immutable composite `<creator>-<slug>`.
         XCTAssertEqual(
-            r.apps.map(\.appId).sorted(),
+            r.apps.map(\.serviceId).sorted(),
             ["harry-plants", "harry-wiki", "trent-scratchpad"]
         )
     }
 
     func test_appDetail_returnsRequestedApp() async throws {
         let c = makeClient()
-        let r = try await c.appDetail(appId: "harry-plants")
-        XCTAssertEqual(r.app.appId, "harry-plants")
+        let r = try await c.appDetail(serviceId: "harry-plants")
+        XCTAssertEqual(r.app.serviceId, "harry-plants")
         XCTAssertFalse(r.recentLogs.isEmpty)
     }
 
     func test_appDetail_throwsOnUnknownApp() async {
         let c = makeClient()
         do {
-            _ = try await c.appDetail(appId: "nope")
+            _ = try await c.appDetail(serviceId: "nope")
             XCTFail("expected throw")
         } catch let ScreensClientError.http(status, _) {
             XCTAssertEqual(status, 404)
@@ -107,7 +107,7 @@ final class MockScreensClientTests: XCTestCase {
             oldIrkPrefix: "aaaaaaaaaaaa", newIrkPrefix: "bbbbbbbbbbbb",
             apps: [
                 AppReissuanceSummary(
-                    appId: "alice--demo", slug: "demo",
+                    serviceId: "alice--demo", slug: "demo",
                     rewrittenCount: 3, unchangedCount: 0, error: nil, completedAt: 2
                 ),
             ],

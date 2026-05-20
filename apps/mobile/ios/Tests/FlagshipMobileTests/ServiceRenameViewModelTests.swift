@@ -4,10 +4,10 @@ import XCTest
 @testable import FlagshipCore
 @testable import Flagship
 
-/// V2 — AppDetailViewModel.renameApp ceremony. Exercises the
+/// V2 — ServiceDetailViewModel.renameApp ceremony. Exercises the
 /// signing + POST + state-machine paths against MockFlagshipServerClient.
 @MainActor
-final class AppRenameViewModelTests: XCTestCase {
+final class ServiceRenameViewModelTests: XCTestCase {
 
     override func tearDown() async throws {
         Keystore.wipe()
@@ -19,15 +19,15 @@ final class AppRenameViewModelTests: XCTestCase {
     }
 
     func test_canonicalBytes_matchProtocolFieldOrder() {
-        // Pin Worker contract: tag | username | appId | newLabel | issuedAt.
-        let bytes = AppRenameClaim.canonicalBytes(
+        // Pin Worker contract: tag | username | serviceId | newLabel | issuedAt.
+        let bytes = ServiceRenameClaim.canonicalBytes(
             username: "alice",
-            appId: "meta-scratchpad",
+            serviceId: "meta-scratchpad",
             newDisplayLabel: "mynotes",
             issuedAt: 1700000000000,
         )
         let s = String(data: bytes, encoding: .utf8)!
-        XCTAssertEqual(s, "flagship/app-rename/v1|alice|meta-scratchpad|mynotes|1700000000000")
+        XCTAssertEqual(s, "flagship/service-rename/v1|alice|meta-scratchpad|mynotes|1700000000000")
     }
 
     func test_renameApp_happyPath_postsSignedEnvelope_andUpdatesAppLinks() async throws {
@@ -35,8 +35,8 @@ final class AppRenameViewModelTests: XCTestCase {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
         server.appRenameBehavior = .ok
-        let vm = AppDetailViewModel(
-            appId: "meta-scratchpad",
+        let vm = ServiceDetailViewModel(
+            serviceId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -59,7 +59,7 @@ final class AppRenameViewModelTests: XCTestCase {
         // the ed25519 signature.
         let last = try XCTUnwrap(server.lastAppRename)
         XCTAssertEqual(last.username, "alice")
-        XCTAssertEqual(last.appId, "meta-scratchpad")
+        XCTAssertEqual(last.serviceId, "meta-scratchpad")
         XCTAssertEqual(last.body.request.newDisplayLabel, "mynotes")
         XCTAssertEqual(last.body.signature.count, 128) // 64-byte sig in hex
     }
@@ -69,8 +69,8 @@ final class AppRenameViewModelTests: XCTestCase {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
         server.appRenameBehavior = .collision
-        let vm = AppDetailViewModel(
-            appId: "meta-scratchpad",
+        let vm = ServiceDetailViewModel(
+            serviceId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -89,8 +89,8 @@ final class AppRenameViewModelTests: XCTestCase {
 
     func test_renameApp_emptyDraft_failsImmediately_withoutSigning() async {
         let server = MockFlagshipServerClient()
-        let vm = AppDetailViewModel(
-            appId: "meta-scratchpad",
+        let vm = ServiceDetailViewModel(
+            serviceId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -108,8 +108,8 @@ final class AppRenameViewModelTests: XCTestCase {
 
     func test_renameApp_noUsername_failsImmediately() async {
         let server = MockFlagshipServerClient()
-        let vm = AppDetailViewModel(
-            appId: "meta-scratchpad",
+        let vm = ServiceDetailViewModel(
+            serviceId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -123,8 +123,8 @@ final class AppRenameViewModelTests: XCTestCase {
     func test_loadAppLinks_storesResponse() async {
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
-        let vm = AppDetailViewModel(
-            appId: "meta-scratchpad",
+        let vm = ServiceDetailViewModel(
+            serviceId: "meta-scratchpad",
             client: MockScreensClient(),
             allPods: [],
             globalLeaderPodId: nil,
@@ -134,6 +134,6 @@ final class AppRenameViewModelTests: XCTestCase {
         await vm.loadAppLinks()
         // Mock returns a synthetic alias — verify we surfaced it.
         XCTAssertNotNil(vm.appLinks.value)
-        XCTAssertEqual(vm.appLinks.value?.appId, "meta-scratchpad")
+        XCTAssertEqual(vm.appLinks.value?.serviceId, "meta-scratchpad")
     }
 }

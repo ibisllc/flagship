@@ -81,7 +81,7 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
 
     func serverDetail() async throws -> ServerDetailResponse { try await real.serverDetail() }
     func appsList() async throws -> AppsListResponse { try await real.appsList() }
-    func appDetail(appId: String) async throws -> AppDetailResponse { try await real.appDetail(appId: appId) }
+    func appDetail(serviceId: String) async throws -> AppDetailResponse { try await real.appDetail(serviceId: serviceId) }
     func marketplaceBrowse() async throws -> MarketplaceBrowseResponse { try await real.marketplaceBrowse() }
     func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse {
         try await real.vibeCodeStart(req)
@@ -95,8 +95,8 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) async throws {
         try await real.approveUnlock(requestId: requestId, body: body)
     }
-    func browserTabsList(appId: String) async throws -> BrowserTabsListResponse {
-        try await real.browserTabsList(appId: appId)
+    func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse {
+        try await real.browserTabsList(serviceId: serviceId)
     }
     func pairedSessionsList() async throws -> PairedSessionsListResponse {
         try await real.pairedSessionsList()

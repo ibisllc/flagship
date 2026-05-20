@@ -61,7 +61,7 @@ public struct ServerDetailScreen: View {
                     .font(FS.font.mono())
                     .foregroundColor(c.text)
                 HStack(spacing: FS.space.s4) {
-                    stat("Apps", "\(d.appCount)", c: c)
+                    stat("Apps", "\(d.serviceCount)", c: c)
                     stat("Sessions", "\(d.pairedSessionCount)", c: c)
                     stat("Daemon", d.daemonVersion, c: c)
                 }
@@ -136,7 +136,7 @@ public struct ServerDetailScreen: View {
                             HStack(alignment: .top) {
                                 Circle().fill(c.primary).frame(width: 6, height: 6).padding(.top, 6)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(verb(e.kind)) \(e.appId)").foregroundColor(c.text)
+                                    Text("\(verb(e.kind)) \(e.serviceId)").foregroundColor(c.text)
                                     if let detail = e.detail {
                                         Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                                     }

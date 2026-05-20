@@ -198,7 +198,7 @@ private struct SidebarRow: View {
 private func destinationContent(_ dest: RootDestination) -> some View {
     switch dest {
     case .home:     HomeTab()
-    case .apps:     AppsTab()
+    case .apps:     ServicesTab()
     case .activity: ActivityTab()
     case .settings: SettingsTab()
     }

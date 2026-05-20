@@ -35,7 +35,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         // Vary fixture per current pod so the switcher visibly
         // changes what the screens render.
         let podName = podContext
-        let appCount = abs(podContext.hashValue) % 5 + 1   // 1–5 apps
+        let serviceCount = abs(podContext.hashValue) % 5 + 1   // 1–5 apps
         return ServerDetailResponse(
             serverFqdn: "\(podName).harry.flagship.services",
             username: "harry",
@@ -45,12 +45,12 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             certNotAfter: now + 67 * oneDay,
             certNotBefore: now - 23 * oneDay,
             certSans: ["\(podName).harry.flagship.services", "*.\(podName).harry.flagship.services"],
-            appCount: appCount,
+            serviceCount: serviceCount,
             pairedSessionCount: 2,
             recentInstallEvents: [
-                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", appId: "harry-plants", detail: "via vibe-code"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", appId: "harry-wiki", detail: "v1.4.0"),
-                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", appId: "harry-wiki", detail: "marketplace"),
+                RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "harry-plants", detail: "via vibe-code"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "harry-wiki", detail: "v1.4.0"),
+                RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "harry-wiki", detail: "marketplace"),
             ]
         )
     }
@@ -62,7 +62,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return AppsListResponse(apps: [
             AppSummary(
-                appId: "harry-plants",
+                serviceId: "harry-plants",
                 creator: "harry",
                 slug: "plants",
                 urlLabel: "plants",
@@ -73,7 +73,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 30
             ),
             AppSummary(
-                appId: "harry-wiki",
+                serviceId: "harry-wiki",
                 creator: "harry",
                 slug: "wiki",
                 urlLabel: "wiki",
@@ -84,7 +84,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 60 * 26
             ),
             AppSummary(
-                appId: "trent-scratchpad",
+                serviceId: "trent-scratchpad",
                 creator: "trent",
                 slug: "scratchpad",
                 urlLabel: "scratchpad-trent",
@@ -99,10 +99,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     // MARK: - P1.3 app-detail
 
-    public func appDetail(appId: String) async throws -> AppDetailResponse {
+    public func appDetail(serviceId: String) async throws -> AppDetailResponse {
         try await tick()
         let list = try await appsList()
-        guard let app = list.apps.first(where: { $0.appId == appId }) else {
+        guard let app = list.apps.first(where: { $0.serviceId == serviceId }) else {
             throw ScreensClientError.http(status: 404, message: "no such app")
         }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -203,7 +203,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     // MARK: - P1.10 browser-tabs
 
-    public func browserTabsList(appId: String) async throws -> BrowserTabsListResponse {
+    public func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse {
         try await tick()
         return BrowserTabsListResponse(tabs: [])
     }
@@ -425,7 +425,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                         continuation.yield(.buildLog(line: log))
                         try? await Task.sleep(nanoseconds: 300_000_000)
                     }
-                    continuation.yield(.deploy(appId: "habits", url: "https://habits.harry.flagship.services/"))
+                    continuation.yield(.deploy(serviceId: "habits", url: "https://habits.harry.flagship.services/"))
                     continuation.yield(.done)
                 }
                 continuation.finish()
@@ -441,7 +441,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return AppBackupStartResponse(
             backupId: "bk-\(UUID().uuidString.prefix(8).lowercased())",
-            fetchPath: "/api/screens/app-backup/\(req.appId)/fetch",
+            fetchPath: "/api/screens/app-backup/\(req.serviceId)/fetch",
             expiresAt: now + 3600 * 1000,
             bytes: 4_812_000,
             encrypted: req.password != nil

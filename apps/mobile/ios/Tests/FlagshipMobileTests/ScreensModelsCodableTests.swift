@@ -13,10 +13,10 @@ final class ScreensModelsCodableTests: XCTestCase {
             certNotAfter: 1_710_000_000_000,
             certNotBefore: 1_690_000_000_000,
             certSans: ["home.harry.flagship.services", "*.home.harry.flagship.services"],
-            appCount: 3,
+            serviceCount: 3,
             pairedSessionCount: 2,
             recentInstallEvents: [
-                RecentInstallEvent(at: 1_699_000_000_000, kind: "installed", appId: "plants", detail: "via vibe-code")
+                RecentInstallEvent(at: 1_699_000_000_000, kind: "installed", serviceId: "plants", detail: "via vibe-code")
             ]
         )
         let data = try JSONEncoder().encode(original)
@@ -31,7 +31,7 @@ final class ScreensModelsCodableTests: XCTestCase {
             .repoCreate(repoFullName: "ibisllc/plants"),
             .buildStart,
             .buildLog(line: "step 1/6"),
-            .deploy(appId: "plants", url: "https://plants.harry.flagship.services/"),
+            .deploy(serviceId: "plants", url: "https://plants.harry.flagship.services/"),
             .done,
             .error(message: "boom")
         ]

@@ -16,7 +16,7 @@ public protocol ScreensClient: Sendable {
     func appsList() async throws -> AppsListResponse
 
     // P1.3 app-detail
-    func appDetail(appId: String) async throws -> AppDetailResponse
+    func appDetail(serviceId: String) async throws -> AppDetailResponse
 
     // P1.4 marketplace-browse
     func marketplaceBrowse() async throws -> MarketplaceBrowseResponse
@@ -33,8 +33,8 @@ public protocol ScreensClient: Sendable {
     // P1.9 unlock-approvals/:requestId/approve
     func approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) async throws
 
-    // P1.10 browser-tabs/list/:appId
-    func browserTabsList(appId: String) async throws -> BrowserTabsListResponse
+    // P1.10 browser-tabs/list/:serviceId
+    func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse
 
     // P1.12 paired-sessions/list
     func pairedSessionsList() async throws -> PairedSessionsListResponse

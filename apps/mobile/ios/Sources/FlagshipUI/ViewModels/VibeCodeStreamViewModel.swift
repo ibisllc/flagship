@@ -11,7 +11,7 @@ public final class VibeCodeStreamViewModel {
     public private(set) var transcript: String = ""
     public private(set) var buildLogs: [String] = []
     public private(set) var manifestJson: String?
-    public private(set) var deployedAppId: String?
+    public private(set) var deployedServiceId: String?
     public private(set) var deployedUrl: String?
     public private(set) var errorMessage: String?
     public private(set) var status: Status = .streaming
@@ -56,8 +56,8 @@ public final class VibeCodeStreamViewModel {
             buildLogs.append("── BUILD START ──")
         case .buildLog(let line):
             buildLogs.append(line)
-        case .deploy(let appId, let url):
-            deployedAppId = appId
+        case .deploy(let serviceId, let url):
+            deployedServiceId = serviceId
             deployedUrl = url
             status = .deployed
         case .done:

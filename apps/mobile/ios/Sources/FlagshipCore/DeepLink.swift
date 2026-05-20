@@ -11,7 +11,7 @@ public enum DeepLink: Equatable, Sendable {
     /// when the user asks generically rather than from a push.
     case unlockApprovalsList
     case serverDetail(podId: String)
-    case appDetail(appId: String)
+    case appDetail(serviceId: String)
     case marketplace
     case createServer
     /// Open the recovery-setup flow on the Settings tab. Triggered
@@ -41,7 +41,7 @@ public enum DeepLink: Equatable, Sendable {
         case "server":
             if let id = params["podId"] { return .serverDetail(podId: id) }
         case "app":
-            if let id = params["appId"] { return .appDetail(appId: id) }
+            if let id = params["serviceId"] { return .appDetail(serviceId: id) }
         case "marketplace":
             return .marketplace
         case "create-server":

@@ -12,10 +12,10 @@ import FlagshipCore
 ///      claim, release, or add new ones.
 ///   4. Logs preview + last backup + Remove.
 ///
-/// Pure view: takes a `vm` (AppDetailViewModel) and a list of pods.
-public struct AppDetailScreen: View {
+/// Pure view: takes a `vm` (ServiceDetailViewModel) and a list of pods.
+public struct ServiceDetailScreen: View {
     @Environment(\.colorScheme) private var scheme
-    @Bindable var vm: AppDetailViewModel
+    @Bindable var vm: ServiceDetailViewModel
     let username: String?
     let pods: [PodInfo]
     let globalLeaderPodId: String?
@@ -26,7 +26,7 @@ public struct AppDetailScreen: View {
     var onRemove: () -> Void = {}
 
     public init(
-        vm: AppDetailViewModel,
+        vm: ServiceDetailViewModel,
         username: String?,
         pods: [PodInfo],
         globalLeaderPodId: String?,
@@ -86,8 +86,8 @@ public struct AppDetailScreen: View {
                 // V9 — `id:` is the IMMUTABLE composite package id
                 // (`<creator>--<slug>`, double-dash), NOT the URL
                 // label. urlLabel rotates whenever the user hits
-                // Replace stem; appId stays put for the life of the
-                // package — it's what the manifest, the membership
+                // Replace stem; serviceId stays put for the life of
+                // the package — it's what the manifest, the membership
                 // store, R2 backups, and the update-pack pull state
                 // are all keyed on. Showing urlLabel here (V6 bug)
                 // was wrong because a rename would silently change
@@ -98,7 +98,7 @@ public struct AppDetailScreen: View {
                         Text("ver: \(v)").font(FS.font.caption()).foregroundColor(c.textMuted)
                         Text("·").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
-                    Text("id: \(d.appId)")
+                    Text("id: \(d.serviceId)")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                         .accessibilityIdentifier("app-detail-package-id")
@@ -254,7 +254,7 @@ public struct AppDetailScreen: View {
             Text(prompt.message)
         }
         .sheet(isPresented: $showReplaceSheet) {
-            ReplaceAppStemSheet(
+            ReplaceServiceStemSheet(
                 draft: $replaceDraft,
                 currentStem: currentDisplayLabel ?? "the current stem",
                 phase: vm.renamePhase,

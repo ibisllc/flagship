@@ -52,8 +52,8 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func appsList() async throws -> AppsListResponse {
         try await request("/api/screens/apps-list")
     }
-    public func appDetail(appId: String) async throws -> AppDetailResponse {
-        try await request("/api/screens/app-detail/\(appId)")
+    public func appDetail(serviceId: String) async throws -> AppDetailResponse {
+        try await request("/api/screens/app-detail/\(serviceId)")
     }
     public func marketplaceBrowse() async throws -> MarketplaceBrowseResponse {
         try await request("/api/screens/marketplace-browse")
@@ -76,8 +76,8 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             body: payload
         )
     }
-    public func browserTabsList(appId: String) async throws -> BrowserTabsListResponse {
-        try await request("/api/screens/browser-tabs/list/\(appId)")
+    public func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse {
+        try await request("/api/screens/browser-tabs/list/\(serviceId)")
     }
     public func pairedSessionsList() async throws -> PairedSessionsListResponse {
         try await request("/api/screens/paired-sessions/list")

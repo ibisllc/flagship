@@ -91,7 +91,7 @@ final class ChooseUsernameViewModelTests: XCTestCase {
     }
 
     func test_hyphenatedUsername_rejected() async {
-        // Usernames are hyphen-free now (so appId `<creator>-<slug>`
+        // Usernames are hyphen-free now (so serviceId `<creator>-<slug>`
         // parses unambiguously). A hyphenated handle is invalid.
         let vm = makeViewModel(makeServer())
         await vm.evaluate("play-q2")

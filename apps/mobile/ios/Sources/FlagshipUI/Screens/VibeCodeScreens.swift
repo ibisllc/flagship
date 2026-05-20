@@ -212,8 +212,8 @@ public struct VibeCodeGeneratingScreen: View {
                 if !vm.buildLogs.isEmpty {
                     logsCard(c: c)
                 }
-                if let url = vm.deployedUrl, let appId = vm.deployedAppId {
-                    deployedCard(url: url, appId: appId, c: c)
+                if let url = vm.deployedUrl, let serviceId = vm.deployedServiceId {
+                    deployedCard(url: url, serviceId: serviceId, c: c)
                 }
                 if let err = vm.errorMessage {
                     ErrorCard(message: err)
@@ -274,7 +274,7 @@ public struct VibeCodeGeneratingScreen: View {
         }
     }
 
-    private func deployedCard(url: String, appId: String, c: FSColors) -> some View {
+    private func deployedCard(url: String, serviceId: String, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 HStack(spacing: FS.space.s2) {
@@ -282,7 +282,7 @@ public struct VibeCodeGeneratingScreen: View {
                     Text("Deployed").font(FS.font.h4()).foregroundColor(c.text)
                 }
                 Text(url).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
-                FSPrimaryButton("Open \(appId)", block: true) { onOpenApp(appId) }
+                FSPrimaryButton("Open \(serviceId)", block: true) { onOpenApp(serviceId) }
             }
         }
     }
