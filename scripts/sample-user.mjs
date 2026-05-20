@@ -755,9 +755,10 @@ function makeLiveProvisionTempVps(env) {
       // that entirely.
       const candidateLabel = `${label}-${candidate}-${attemptIdx}`;
       try {
-        if (candidate !== size) {
+        if (attemptIdx > 0) {
+          const prev = candidates[attemptIdx - 1];
           process.stderr.write(
-            `[create] retrying with ${candidate} (${size} was unavailable in ${region})\n`,
+            `[create] ${prev} failed; trying ${candidate} (attempt ${attemptIdx + 1}/${candidates.length})\n`,
           );
         }
         const instance = await provider.provision({
@@ -809,7 +810,12 @@ function makeLiveProvisionTempVps(env) {
     throw new Error(
       `Hetzner: no creatable server type in region ${region} (tried ${tried.join(", ")}). ` +
         `Last error: ${lastError ?? "unknown"}. ` +
-        `Try --region nbg1 / hel1 / ash / hil / sin instead.`,
+        `Hints: a) try --region nbg1 / hel1 / hil / sin if 'resource_unavailable'; ` +
+        `b) if 'resource_limit_exceeded' your account quota's hit — check ` +
+        `https://console.hetzner.cloud/limits or delete old servers; ` +
+        `c) override the allowed type prefixes via env ` +
+        `FLAGSHIP_HETZNER_TYPE_PREFIXES=cpx,cx,ccx if your account has ` +
+        `dedicated-core quota.`,
     );
   };
 }
@@ -846,7 +852,20 @@ async function discoverServerTypeCandidates(env, region, requestedSize) {
 
   const all = types
     .filter(isViable)
-    .filter((t) => /^(cpx|cx|ccx)\d+/.test(t.name))
+    // Restrict to shared-CPU families (cpx, cx). Dedicated (ccx*)
+    // requires an explicit quota grant on the Hetzner account
+    // (default `dedicated_core_limit: 0`), so trying ccx* on a
+    // standard account just burns retries on guaranteed 403s.
+    // Override by setting FLAGSHIP_HETZNER_TYPE_PREFIXES env var.
+    .filter((t) => {
+      const allowedPrefixes = (
+        process.env.FLAGSHIP_HETZNER_TYPE_PREFIXES || "cpx,cx"
+      )
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return allowedPrefixes.some((p) => t.name.startsWith(p));
+    })
     .map((t) => {
       const p = (t.prices || []).find((q) => q.location === region);
       const monthly = parseFloat(p?.price_monthly?.gross ?? "999");
