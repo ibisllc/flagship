@@ -727,43 +727,111 @@ async function getHetznerProvider(env) {
 }
 
 /**
+ * Probe Hetzner's project-level quota state. Hetzner doesn't expose
+ * the per-account *limits* via API; only the current counts can be
+ * read. We print them so the operator can correlate against the UI's
+ * `Limits` page.
+ */
+async function hetznerSnapshot(env) {
+  const [servers, ips] = await Promise.all([
+    fetch("https://api.hetzner.cloud/v1/servers", {
+      headers: { authorization: `Bearer ${env.hcloudToken}` },
+    }).then((r) => (r.ok ? r.json() : { servers: [] })),
+    fetch("https://api.hetzner.cloud/v1/primary_ips", {
+      headers: { authorization: `Bearer ${env.hcloudToken}` },
+    }).then((r) => (r.ok ? r.json() : { primary_ips: [] })),
+  ]);
+  const sCount = (servers.servers || []).length;
+  const iAll = ips.primary_ips || [];
+  const iAttached = iAll.filter((p) => p?.assignee_id != null).length;
+  const iOrphan = iAll.length - iAttached;
+  return { sCount, iCount: iAll.length, iAttached, iOrphan, primaryIps: iAll };
+}
+
+/**
  * Hetzner releases primary IPs asynchronously after a server destroy.
  * Failed-provision cycles leave orphan (unattached) primary IPs that
  * count against `primary_ip_limit`. Once that limit is hit, Hetzner
  * SILENTLY creates new servers WITHOUT a public IP (private-net-only),
  * which then trips `enable_rescue` with private_net_only_server.
  *
- * This helper deletes every unattached primary IP in the project so
- * the next provision attempt has fresh quota. Idempotent + safe — it
- * never touches IPs that are currently assigned to a running server.
+ * Deletes every unattached primary IP + POLLS until they actually
+ * disappear (or a 60s timeout fires). Hetzner DELETE on a primary IP
+ * is async — returns 204 immediately but the IP lingers in the list
+ * with `assignee_id: null` for seconds, occupying a quota slot.
  */
 async function cleanupOrphanedPrimaryIps(env) {
-  try {
-    const res = await fetch("https://api.hetzner.cloud/v1/primary_ips", {
-      headers: { authorization: `Bearer ${env.hcloudToken}` },
-    });
-    if (!res.ok) return;
-    const body = await res.json();
-    const ips = Array.isArray(body?.primary_ips) ? body.primary_ips : [];
-    const orphans = ips.filter((p) => p?.assignee_id == null);
-    if (orphans.length === 0) return;
-    process.stderr.write(
-      `[create] cleaning up ${orphans.length} unattached primary IP(s) ` +
-        `to free primary_ip_limit quota…\n`,
-    );
-    for (const p of orphans) {
-      try {
-        await fetch(`https://api.hetzner.cloud/v1/primary_ips/${p.id}`, {
-          method: "DELETE",
-          headers: { authorization: `Bearer ${env.hcloudToken}` },
-        });
-      } catch {
-        // Best effort — if Hetzner refuses one, move on.
+  const before = await hetznerSnapshot(env);
+  process.stderr.write(
+    `[create] Hetzner state: ${before.sCount} server(s), ` +
+      `${before.iCount} primary IP(s) (${before.iAttached} attached, ` +
+      `${before.iOrphan} orphan)\n`,
+  );
+  if (before.iOrphan === 0) return;
+  process.stderr.write(
+    `[create] deleting ${before.iOrphan} orphan primary IP(s)…\n`,
+  );
+  const orphans = before.primaryIps.filter((p) => p?.assignee_id == null);
+  for (const p of orphans) {
+    try {
+      await fetch(`https://api.hetzner.cloud/v1/primary_ips/${p.id}`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${env.hcloudToken}` },
+      });
+    } catch {
+      // Best effort.
+    }
+  }
+  // Wait up to 60s for the deletes to actually clear from the list.
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3_000));
+    const snap = await hetznerSnapshot(env);
+    if (snap.iOrphan === 0) {
+      process.stderr.write(
+        `[create] primary IP cleanup complete (${snap.iCount} IPs remain, all attached)\n`,
+      );
+      return;
+    }
+  }
+  process.stderr.write(
+    `[create] WARNING: orphan primary IPs did not clear within 60s; ` +
+      `Hetzner may be slow today. Proceeding anyway.\n`,
+  );
+}
+
+/**
+ * Wait until Hetzner's view of the project is settled — orphan IPs
+ * cleaned up if possible, total count stable for 10 consecutive
+ * seconds. Capped at 60s wall-clock. Best-effort: surfaces a notice
+ * but never throws.
+ */
+async function waitForHetznerToSettle(env) {
+  const deadline = Date.now() + 60_000;
+  let lastCount = -1;
+  let stableSince = Date.now();
+  while (Date.now() < deadline) {
+    const snap = await hetznerSnapshot(env);
+    // Cull any new orphans first.
+    if (snap.iOrphan > 0) {
+      for (const p of snap.primaryIps.filter((x) => x?.assignee_id == null)) {
+        try {
+          await fetch(`https://api.hetzner.cloud/v1/primary_ips/${p.id}`, {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${env.hcloudToken}` },
+          });
+        } catch {}
       }
     }
-  } catch {
-    // Discovery error — skip the cleanup, let the provision attempt
-    // surface the real failure.
+    if (snap.iCount === lastCount) {
+      if (Date.now() - stableSince >= 10_000 && snap.iOrphan === 0) {
+        return;
+      }
+    } else {
+      lastCount = snap.iCount;
+      stableSince = Date.now();
+    }
+    await new Promise((r) => setTimeout(r, 3_000));
   }
 }
 
@@ -846,10 +914,12 @@ function makeLiveProvisionTempVps(env) {
           throw e;
         }
         lastError = msg;
-        // Backoff: 5s by default; rapid create/destroy chews through
-        // Hetzner's async primary-IP release queue and gets us
-        // primary_ip_limit'd far short of a full sweep.
-        await new Promise((res) => setTimeout(res, 5_000));
+        // Between retries, wait for Hetzner state to actually settle.
+        // The 5s backoff was too short — primary-IP release lag was
+        // letting subsequent attempts inherit quota debt and silently
+        // create private-only servers. Now we re-poll until either the
+        // orphan-IP count is zero OR the count is stable for 10s.
+        await waitForHetznerToSettle(env);
       }
     }
     throw new Error(
