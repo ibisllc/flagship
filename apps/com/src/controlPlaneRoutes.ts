@@ -388,6 +388,11 @@ export async function tryControlPlane(
           // storage call is cheap (PK lookup) so we don't gate it
           // behind HCLOUD_TOKEN presence.
           demoUsers: storage.demoUsers,
+          // v2 device-addressing — wires the <u>.<device-label> dot-split
+          // path in handleUsersCheck. Without this, the dot-form falls
+          // through to the legacy validateUserLabel which rejects it.
+          // See docs/v2-device-addressing-and-real-ticket.md §5.1.
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
         },
         await readJson(request),
       ),

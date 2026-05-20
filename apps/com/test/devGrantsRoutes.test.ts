@@ -173,4 +173,24 @@ describe("devGrants routes — public endpoints", () => {
     expect(r).not.toBeNull();
     expect(r!.status).toBe(400);
   });
+
+  it("POST /users/check: dot-form (<u>.<label>) is dispatched to the device-grants path", async () => {
+    // Regression: the route MUST wire `deviceCapabilityGrants` into
+    // handleUsersCheck's deps, otherwise the dot-form falls through
+    // to validateUserLabel and is rejected for containing a `.`.
+    // With the wiring in place, an unknown demo user yields 404
+    // ("unknown demo device label") instead of available=false.
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/users/check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "demo-alice.reviewer" }),
+      }),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(404);
+    const body = await r!.json();
+    expect((body as { error: string }).error).toBe("unknown demo device label");
+  });
 });
