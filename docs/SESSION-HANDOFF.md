@@ -171,6 +171,100 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-19/20 (v1-launch s9 cont. — ★★★ marathon: Plan A demo
+  system + Plan B v1.2 security cascade ALL CODE-COMPLETE):** Long
+  sequential dispatch driving both plans to a green tree. Test count
+  rose from baseline 2675 to **2944 passing** (+269) across 248 test
+  files; `npx tsc -b` clean; iOS xcodebuild 266/266; Android gradle
+  439/439. Order:
+  1. **App → Service rename** (TS `cdfd676` + iOS `7ece3e8` + Android
+     `3b19cb3` + docs/webapp `6af50da`) — pre-release wire-format
+     break; 8 canonical-bytes tags + 11 protocol types + ~40 functions
+     + 24 daemon files. Avoids the Apple "app store within an app"
+     framing.
+  2. **Plan A — sample-user / Hetzner demo VPSs.** Six phases:
+     - `c6c30fa` Phase A: rescue-mode + dd Hetzner bridge in
+       `tools/vps-e2e/`. Hetzner Cloud has no custom-ISO upload API,
+       so the harness now boots Ubuntu, enables rescue, SSHes in, and
+       `wget | dd | reboot` the personalized ISO from a presigned R2
+       URL. Harness operator-runnable; **live run gated on operator
+       HCLOUD_TOKEN visibility** — agent processes can't see it.
+     - `b91296d` Phase B: `docs/sample-users.md` (1500-line
+       implementation-grade spec).
+     - `43612c5` Phase C: Worker side — `demo_users` table, 7
+       endpoints, R2-snapshot lifecycle, `*/10 * * * *` cron with
+       idle reaper + provisioning poller, MAX_CONCURRENT_DEMO_VPS=5
+       soft cap, `/api/users/check` extension embeds a `demoServer`
+       block.
+     - `f801fd1` Phase D: iOS/Android/webapp parse `demoServer`,
+       render ONE real device, POST `/connect`, poll until
+       `status='up'`. Backward-compat with legacy `testAccount`
+       fixtures path.
+     - `54dae28` + `228ef98` Phase E: `scripts/sample-user.mjs`
+       operator CLI; Phase A's HetznerProvider wired live for
+       `provisionTempVps` / `awaitDaemonReady` / `snapshot`.
+       Operator-runnable end-to-end with HCLOUD_TOKEN +
+       FLAGSHIP_ADMIN_SECRET + `~/.ssh/flagship-demo-ssh`.
+     - **Phase F (live test) is operator-driven** — needs HCLOUD_TOKEN
+       in a shell agent processes can't reach. To do the first live
+       run:
+       ```sh
+       export HCLOUD_TOKEN=<token>
+       export FLAGSHIP_ADMIN_SECRET=<secret>
+       wrangler secret put HCLOUD_TOKEN  # in apps/com
+       wrangler secret put DEMO_PUBLIC_SSH_KEY < ~/.ssh/flagship-demo-ssh.pub
+       wrangler r2 bucket create flagship-iso-temp
+       node scripts/sample-user.mjs create demo-alice --display "Demo Alice"
+       ```
+       Then verify by typing `demo-alice` on iOS/webapp.
+  3. **Plan B — v1.2 security cascade.** Five phases:
+     - `5970012` Phase 1: schema — `usernames.account_type/
+       totp_secret_encrypted/recovery_codes_hashes_json/totp_enrolled_at`,
+       `pending_re_pairs.grace_seconds/totp_required/totp_proof_consumed`,
+       `push_tokens.quarantine_until`. The doc said `users` /
+       `paired_sessions` but the actual tables are `usernames` /
+       `push_tokens` (the daemon's `pairedSessionStore` is a separate
+       JSON file irrelevant to Worker-enforced quarantine).
+     - `834c99a` Phase 2: re-pair grace mapping — single ⇒ 7-day,
+       multi ⇒ 24h + TOTP-required gate; 14-day quarantine on the
+       caller's `push_tokens` row blocking revoke-others power; new
+       `POST /api/users/:u/devices/:id/disconnect` endpoint;
+       T+0 / T+1d / T+3d / T+6d / urgent push schedule via
+       `*/10 * * * *` cron + bitfield idempotency.
+     - `e885908` Phase 3: TOTP — `otpauth` + AES-GCM-wrapped secret
+       (KEK from `FLAGSHIP_TOTP_KEK`), 10 single-use argon2id-hashed
+       recovery codes, four endpoints (`/totp/enroll-begin`,
+       `/enroll-confirm`, `/verify`, `/disable`), real re-pair
+       verification replacing Phase 2's structural placeholder.
+       Three new canonical-bytes envelopes.
+     - `ae8b2dd` Phase 4: iOS/Android/webapp UI — account-type badge,
+       enrollment QR + sample-code + 10-recovery-codes display gate,
+       Trusted-Devices quarantine indicator + disabled
+       Remove/Replace/Wipe menu entries during quarantine.
+     - `1e44eaf` Phase 5: audit + push fan-out — 7 new
+       `AuditEventKind` values + 3 new `audit_events` columns
+       (`account_type_at_event`, `quarantine_until`,
+       `recovery_method`); real push fan-out on the v1.2 events
+       (re-pair initiate, T+1d/T+3d/T+6d nudges, T+7d urgent,
+       quarantine-blocked-revoke, TOTP-failed-rate); `pushBridge`
+       adapter `wrapForwarderAsV12Fanout` shared between route +
+       cron paths.
+  4. **Plan A Phase F + Plan B operational steps remain (operator):**
+     - Plan A Phase F live test (HCLOUD_TOKEN + Hetzner project +
+       first `create-sample-user demo-alice`).
+     - Plan B: optionally enable for the operator's account — set
+       `wrangler secret put FLAGSHIP_TOTP_KEK` (32-byte hex), then
+       walk through the iOS / webapp enrollment flow to mint the
+       first TOTP enrollment, exercise recovery code consumption,
+       and observe the audit + push fan-out under live conditions.
+     - No regression risk to existing accounts: the migrations
+       default everyone to `account_type='single'` with the existing
+       (now extended) 7-day grace.
+
+  This entry supersedes the long sequence of intermediate Plan-A /
+  Plan-B phase entries that would otherwise repeat the per-commit
+  detail above.
+
 - **2026-05-19 (v1-launch s9 cont. — ★★★ CEREMONY LANDED LIVE → "finished
   product" pillar (a) DONE):** First-ever `FLAGSHIP_CA_PRIV_HEX` mint
   on the `flagship-com` Worker, paired with a YubiKey-signed
