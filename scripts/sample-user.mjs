@@ -1000,48 +1000,75 @@ async function discoverServerTypeCandidates(env, region, requestedSize) {
 
 /**
  * Poll the live .com for daemon registration. The daemon registers
- * itself in `install_events` after a successful first boot; we poll
- * `/api/install-events/<fqdn>` and treat any `registered` event after
- * `since` as success.
+ * itself by POSTing a /api/server/register envelope to .com; the
+ * registration becomes visible as a pod entry on
+ * /api/users/<username>/pods. This is the same signal Phase A's
+ * harness uses (tools/vps-e2e/src/runE2E.ts:awaitInstallRegistered).
  *
- * Timeout: 12 minutes (Alpine boot + LUKS + register + ACME).
+ * `/api/install-events/<X>` is keyed by SERIAL (26-hex from the build
+ * ticket), not by FQDN — pointing it at a hostname returns malformed
+ * serial. Don't go there.
+ *
+ * After the pod shows up we also HEAD-probe https://<fqdn>/ so we
+ * don't proceed before Let's Encrypt issues its cert.
+ *
+ * Timeout: 15 minutes (Alpine boot + LUKS + register + ACME).
  */
 function makeLiveAwaitDaemonReady(env) {
   return async ({ serverId, fqdn }) => {
     const since = Date.now();
-    const url = `${env.baseUrl}/api/install-events/${encodeURIComponent(fqdn)}`;
-    const deadline = since + 12 * 60_000;
+    const username = fqdn.split(".")[1]; // home.<username>.flagship.services
+    if (!username) {
+      throw new Error(`could not extract username from fqdn ${fqdn}`);
+    }
+    const podsUrl = `${env.baseUrl}/api/users/${encodeURIComponent(username)}/pods`;
+    const deadline = since + 15 * 60_000;
+    let lastLog = 0;
     while (Date.now() < deadline) {
+      // Heartbeat every 30s so the operator sees progress vs a frozen CLI.
+      if (Date.now() - lastLog > 30_000) {
+        process.stderr.write(
+          `[create] ${Math.floor((Date.now() - since) / 1000)}s — polling /pods for ${fqdn}…\n`,
+        );
+        lastLog = Date.now();
+      }
       try {
-        const res = await fetch(url, {
-          headers: { authorization: `Bearer ${env.adminSecret}` },
+        const res = await fetch(podsUrl, {
+          headers: { "x-admin-secret": env.adminSecret },
         });
         if (res.ok) {
-          const j = await res.json();
-          const events = Array.isArray(j?.events) ? j.events : [];
-          const registered = events.find(
-            (e) => e?.event === "registered" && Number(e?.timestamp) >= since,
-          );
-          if (registered) {
-            // Also probe the green padlock — confirms ACME finished.
-            try {
-              const probe = await fetch(`https://${fqdn}/`, {
-                method: "HEAD",
-                redirect: "manual",
-              });
-              if (probe.status > 0) return;
-            } catch {
-              // ACME may not be ready yet; loop.
+          const body = await res.text();
+          if (body.includes(fqdn)) {
+            process.stderr.write(`[create] daemon registered (${fqdn} in pod list)\n`);
+            // Now wait for the green padlock — confirms ACME finished.
+            const acmeDeadline = Date.now() + 5 * 60_000;
+            while (Date.now() < acmeDeadline) {
+              try {
+                const probe = await fetch(`https://${fqdn}/`, {
+                  method: "HEAD",
+                  redirect: "manual",
+                });
+                if (probe.status > 0) {
+                  process.stderr.write(`[create] green padlock — ACME complete (HTTP ${probe.status})\n`);
+                  return;
+                }
+              } catch {
+                // ACME not ready yet (cert invalid OR DNS not yet propagated).
+              }
+              await new Promise((r) => setTimeout(r, 5_000));
             }
+            throw new Error(`daemon registered but ACME never completed at ${fqdn}`);
           }
         }
-      } catch {
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/ACME never completed/.test(msg)) throw e;
         // Transient .com / DNS failures; loop.
       }
       await new Promise((r) => setTimeout(r, 5_000));
     }
     throw new Error(
-      `daemon at ${fqdn} did not register + serve TLS within 12 minutes (serverId=${serverId})`,
+      `daemon at ${fqdn} did not register within 15 minutes (serverId=${serverId})`,
     );
   };
 }
