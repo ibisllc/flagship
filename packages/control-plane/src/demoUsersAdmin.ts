@@ -359,13 +359,18 @@ export async function handleAdminClaimAndIssue(
 
   // Build-ticket — try a small handful of codes to avoid the random
   // collision case (3-group / 30^12 entropy makes it almost never).
-  const blobJson = installBlobToJson(blob);
+  // `blobObj` is the structured shape we echo on the response (so the
+  // CLI can write it as JSON to disk and personalize-iso --blob-json
+  // reads it back as an object). `blobStr` is the serialized form
+  // persisted under `build_tickets.blob_json` for later /redeem.
+  const blobObj = installBlobToJson(blob);
+  const blobStr = JSON.stringify(blobObj);
   let code = "";
   for (let attempts = 0; attempts < 8 && !code; attempts++) {
     const candidate = generateTicketCode(rand);
     const btResult = await deps.buildTickets.put({
       code: candidate,
-      blobJson,
+      blobJson: blobStr,
       blobSignatureHex: bytesToHex(blobSig),
       username,
       serverDomain,
@@ -410,7 +415,7 @@ export async function handleAdminClaimAndIssue(
 
   return ok({
     code,
-    blob: blobJson,
+    blob: blobObj,
     blobSignature: bytesToHex(blobSig),
     primaryGrant: {
       grantId,
@@ -554,8 +559,8 @@ interface InstallBlobJson {
   rckPubKey: string;
 }
 
-function installBlobToJson(b: InstallBlob): string {
-  const j: InstallBlobJson = {
+function installBlobToJson(b: InstallBlob): InstallBlobJson {
+  return {
     version: 1,
     serverDomain: b.serverDomain,
     username: b.username,
@@ -579,5 +584,4 @@ function installBlobToJson(b: InstallBlob): string {
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
   };
-  return JSON.stringify(j);
 }

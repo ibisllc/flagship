@@ -156,7 +156,37 @@ describe("handleAdminClaimAndIssue", () => {
 
     const body = r.body as {
       code: string;
-      blob: string;
+      // The blob MUST be a structured object (NOT a JSON-encoded
+      // string). personalize-iso --blob-json reads it back via
+      // JSON.parse(file) and feeds it to installBlobFromJson, which
+      // rejects strings as "unsupported InstallBlob version". The
+      // S3.3 implementation initially stringified this field and
+      // shipped to prod; the regression assertion below would have
+      // caught it.
+      blob: {
+        version: 1;
+        serverDomain: string;
+        username: string;
+        serverName: string;
+        phoneDelegatedPubKey: string;
+        registrationUrl: string;
+        authCode: {
+          version: 1;
+          serial: string;
+          username: string;
+          serverName: string;
+          serverDomain: string;
+          delegatedPubKey: string;
+          userPubKey: string;
+          issuedAt: number;
+          expiresAt: number;
+        };
+        authCodeUserSignature: string;
+        issuedAt: number;
+        expiresAt: number;
+        installerGitRef: string;
+        rckPubKey: string;
+      };
       blobSignature: string;
       primaryGrant: {
         grantId: string;
@@ -170,6 +200,13 @@ describe("handleAdminClaimAndIssue", () => {
       };
     };
 
+    // 0. Regression: `blob` is a structured object with `version: 1`
+    //    at the top level — NOT a JSON-encoded string. The
+    //    personalize-iso CLI requires this shape.
+    expect(typeof body.blob).toBe("object");
+    expect(body.blob.version).toBe(1);
+    expect(body.blob.authCode.version).toBe(1);
+
     const userIrk = deriveDemoUserIrk(KEK_BYTES, "demo-alice");
     const userPubHex = hex(userIrk.publicKey);
 
@@ -180,7 +217,7 @@ describe("handleAdminClaimAndIssue", () => {
     expect(userRec!.isDemo).toBe(true);
 
     // 2. Blob signature verifies under the derived User IRK pub.
-    const blobJson = JSON.parse(body.blob);
+    const blobJson = body.blob;
     const blob: InstallBlob = {
       version: 1,
       serverDomain: blobJson.serverDomain,
@@ -252,8 +289,8 @@ describe("handleAdminClaimAndIssue", () => {
       username: "demo-alice",
       serverName: "home",
     });
-    const b1 = JSON.parse((r1.body as { blob: string }).blob);
-    const b2 = JSON.parse((r2.body as { blob: string }).blob);
+    const b1 = (r1.body as { blob: { version: 1; serverDomain: string; serverName: string; username: string; phoneDelegatedPubKey: string; rckPubKey: string; authCode: { userPubKey: string; delegatedPubKey: string } } }).blob;
+    const b2 = (r2.body as { blob: { version: 1; serverDomain: string; serverName: string; username: string; phoneDelegatedPubKey: string; rckPubKey: string; authCode: { userPubKey: string; delegatedPubKey: string } } }).blob;
     expect(b1.username).toBe(b2.username);
     expect(b1.serverName).toBe(b2.serverName);
     expect(b1.serverDomain).toBe(b2.serverDomain);
