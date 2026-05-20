@@ -572,6 +572,34 @@ export function makeLiveDeps(env) {
         renameSync(tmp, baseIso);
         process.stderr.write(`[create] base ISO cached at ${baseIso}\n`);
       }
+      // Stable cache for personalized ISOs at
+      // ~/.cache/flagship-demo-isos/<username>-<serverName>-<base-sha8>.iso.
+      // The base-iso sha8 in the filename auto-invalidates the cache
+      // when the base ISO is upgraded (so an Alpine bump doesn't yield
+      // a stale personalized ISO with the old root).
+      const { mkdirSync } = await import("node:fs");
+      const { homedir } = await import("node:os");
+      const { createHash } = await import("node:crypto");
+      const { createReadStream } = await import("node:fs");
+      const { pipeline } = await import("node:stream/promises");
+      const cacheDir = join(homedir(), ".cache", "flagship-demo-isos");
+      mkdirSync(cacheDir, { recursive: true });
+      const baseHashH = createHash("sha256");
+      await pipeline(createReadStream(baseIso), baseHashH);
+      const baseSha8 = baseHashH.digest("hex").slice(0, 8);
+      const cachedIso = join(
+        cacheDir,
+        `${username}-${serverName}-${baseSha8}.iso`,
+      );
+      if (existsSync(cachedIso)) {
+        process.stderr.write(
+          `[create] reusing cached personalized ISO at ${cachedIso}\n`,
+        );
+        return { isoPath: cachedIso };
+      }
+      // Build into a temp file FIRST, then rename atomically into the
+      // cache dir, so a Ctrl-C mid-build doesn't leave a corrupted
+      // cache entry that future runs would happily reuse.
       const workDir = mkdtempSync(join(tmpdir(), `flagship-demo-${username}-`));
       const outIso = join(workDir, `flagship-demo-${username}.iso`);
       await runChild("node", [
@@ -585,10 +613,34 @@ export function makeLiveDeps(env) {
         "--server-name",
         serverName,
       ]);
-      return { isoPath: outIso };
+      const { renameSync } = await import("node:fs");
+      renameSync(outIso, cachedIso);
+      process.stderr.write(
+        `[create] personalized ISO cached at ${cachedIso}\n`,
+      );
+      return { isoPath: cachedIso };
     },
     uploadIso: async ({ isoPath, key }) => {
       const bucket = "flagship-iso-temp";
+      const base =
+        process.env.FLAGSHIP_R2_TEMP_PUBLIC_BASE ||
+        "https://pub-260717b8631044a0bcee80ce0de8f7f9.r2.dev";
+      const url = `${base.replace(/\/+$/, "")}/${key}`;
+      // HEAD-probe via the public dev-url first. If the object already
+      // exists at this exact content-keyed path, skip the upload —
+      // saves ~240 MB of bandwidth on retries.
+      try {
+        const probe = await fetch(url, { method: "HEAD" });
+        if (probe.ok) {
+          const sz = probe.headers.get("content-length");
+          process.stderr.write(
+            `[create] R2 object already exists (${sz ?? "?"} bytes); skipping upload\n`,
+          );
+          return { presignedUrl: url };
+        }
+      } catch {
+        // Network blip — proceed with upload.
+      }
       await runChild("npx", [
         "wrangler",
         "r2",
@@ -608,10 +660,6 @@ export function makeLiveDeps(env) {
       // ephemeral install ISOs we delete on teardown), so dev-url is
       // acceptable; the ISO objects sit there for ≤1h between upload
       // and rescue-VPS wget.
-      const base =
-        process.env.FLAGSHIP_R2_TEMP_PUBLIC_BASE ||
-        "https://pub-260717b8631044a0bcee80ce0de8f7f9.r2.dev";
-      const url = `${base.replace(/\/+$/, "")}/${key}`;
       return { presignedUrl: url };
     },
     // Live wiring of the three Hetzner steps. Built once per CLI
@@ -695,9 +743,17 @@ function makeLiveProvisionTempVps(env) {
     let lastError = null;
     const tried = [];
     const candidates = await discoverServerTypeCandidates(env, region, size);
-    for (const candidate of candidates) {
+    for (let attemptIdx = 0; attemptIdx < candidates.length; attemptIdx++) {
+      const candidate = candidates[attemptIdx];
       tried.push(candidate);
       let partialServerId = null;
+      // Each candidate gets its OWN unique server name. Even when the
+      // previous attempt's cleanup destroy() succeeded, Hetzner's
+      // name-reservation lag (action.status='running') can make the
+      // name still appear in-use on the very next POST /servers → 409
+      // 'server name is already used'. The candidate-suffix sidesteps
+      // that entirely.
+      const candidateLabel = `${label}-${candidate}-${attemptIdx}`;
       try {
         if (candidate !== size) {
           process.stderr.write(
@@ -708,7 +764,7 @@ function makeLiveProvisionTempVps(env) {
           iso: presignedUrl,
           region,
           size: candidate,
-          label,
+          label: candidateLabel,
         });
         partialServerId = instance.id;
         await provider.awaitBoot(instance.id);
