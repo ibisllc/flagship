@@ -186,7 +186,17 @@ export type AuditEventKind =
   | "wipe-restart"           // v1.1 — full UMK + passkey rotation
   | "recovery-set-up"
   | "recovery-rotated"
-  | "app-renamed";           // V2 — voi.ci-aware Replace stem
+  | "app-renamed"            // V2 — voi.ci-aware Replace stem
+  // Plan A — demo-user lifecycle (docs/sample-users.md §13). Stored
+  // under the demo username so the regular /api/users/:u/audit feed
+  // surfaces them; never emitted for non-demo accounts.
+  | "demo-user-created"
+  | "demo-user-deleted"
+  | "demo-vps-provisioned"
+  | "demo-vps-destroyed"
+  | "demo-vps-idle-reaped"
+  | "demo-connect-attempt-rate-limited"
+  | "demo-vps-stuck";
 
 export interface AuditEventRecord {
   seq: number;
@@ -482,6 +492,7 @@ export interface Storage {
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
+  demoUsers: DemoUsersStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -815,4 +826,64 @@ export interface CustomDomainOrderStorage {
   listByStatus(
     status: CustomDomainOrderRecord["status"],
   ): Promise<CustomDomainOrderRecord[]>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Demo users (Plan A — sample-user / on-connect Hetzner provisioning)
+// ──────────────────────────────────────────────────────────────────────
+
+/** Server lifecycle state — see docs/sample-users.md §4. */
+export type DemoUserState =
+  | "none"
+  | "provisioning"
+  | "up"
+  | "idle-pending-teardown";
+
+export interface DemoUserRecord {
+  /** Lowercased; PRIMARY KEY in D1. */
+  username: string;
+  /** Human-readable label used by /api/users/check + the demo UI. */
+  display: string;
+  /** Hetzner snapshot id, populated by /install-complete; NULL until then. */
+  snapshotId: string | null;
+  /** R2 object key under flagship-iso-temp; cleared on delete. */
+  isoR2Key: string | null;
+  ttlIdleMinutes: number;
+  region: string;
+  size: string;
+  /** Hetzner server id while state ∈ (provisioning, up, idle-pending-teardown). */
+  activeServerId: string | null;
+  /** FQDN we publish for the running demo, e.g. home.demoalice.flagship.services. */
+  activeServerFqdn: string | null;
+  /** Wall-clock ms of the last /connect or /heartbeat. */
+  lastActivityAt: number;
+  state: DemoUserState;
+  createdAt: number;
+}
+
+export interface DemoUsersStorage {
+  /** Insert a fresh row. Returns `ok:false` on PK collision so the caller
+   *  can decide whether to surface "already exists" or treat it as
+   *  idempotent. */
+  insert(rec: DemoUserRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(username: string): Promise<DemoUserRecord | undefined>;
+  list(): Promise<DemoUserRecord[]>;
+  /** Update an existing row's fields. No-op on missing username. */
+  update(username: string, patch: Partial<DemoUserRecord>): Promise<void>;
+  delete(username: string): Promise<void>;
+  /** Atomic CAS — only transitions when current state matches `from`.
+   *  Returns the updated row, or null if `from` no longer matches. */
+  transition(
+    username: string,
+    from: DemoUserState,
+    to: DemoUserState,
+    patch?: Partial<DemoUserRecord>,
+  ): Promise<DemoUserRecord | null>;
+  /** Idle-reaper query. Returns rows in (up, provisioning,
+   *  idle-pending-teardown) whose `lastActivityAt < cutoffMs`. Capped
+   *  at 50 rows so a single cron tick is bounded. */
+  findIdle(cutoffMs: number): Promise<DemoUserRecord[]>;
+  /** Count rows whose state is in (provisioning, up, idle-pending-teardown)
+   *  — drives the MAX_CONCURRENT_DEMO_VPS soft cap. */
+  countActive(): Promise<number>;
 }

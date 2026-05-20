@@ -50,6 +50,9 @@ import type {
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
+  DemoUserRecord,
+  DemoUserState,
+  DemoUsersStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
 } from "./types.js";
@@ -749,6 +752,77 @@ export class InMemoryInstallPolicyFanoutStorage
   }
 }
 
+const ACTIVE_DEMO_STATES = new Set<DemoUserState>([
+  "provisioning",
+  "up",
+  "idle-pending-teardown",
+]);
+
+export class InMemoryDemoUsersStorage implements DemoUsersStorage {
+  private byUsername = new Map<string, DemoUserRecord>();
+  private key(name: string) {
+    return name.toLowerCase();
+  }
+  async insert(rec: DemoUserRecord) {
+    const k = this.key(rec.username);
+    if (this.byUsername.has(k)) {
+      return { ok: false as const, reason: "demo username already exists" };
+    }
+    this.byUsername.set(k, { ...rec, username: k });
+    return { ok: true as const };
+  }
+  async get(username: string) {
+    const r = this.byUsername.get(this.key(username));
+    return r ? { ...r } : undefined;
+  }
+  async list() {
+    return [...this.byUsername.values()].map((r) => ({ ...r }));
+  }
+  async update(username: string, patch: Partial<DemoUserRecord>) {
+    const k = this.key(username);
+    const r = this.byUsername.get(k);
+    if (!r) return;
+    this.byUsername.set(k, { ...r, ...patch, username: k });
+  }
+  async delete(username: string) {
+    this.byUsername.delete(this.key(username));
+  }
+  async transition(
+    username: string,
+    from: DemoUserState,
+    to: DemoUserState,
+    patch?: Partial<DemoUserRecord>,
+  ) {
+    const k = this.key(username);
+    const r = this.byUsername.get(k);
+    if (!r) return null;
+    if (r.state !== from) return null;
+    const next: DemoUserRecord = { ...r, ...patch, state: to, username: k };
+    this.byUsername.set(k, next);
+    return { ...next };
+  }
+  async findIdle(cutoffMs: number) {
+    return [...this.byUsername.values()]
+      .filter(
+        (r) =>
+          (r.state === "up" ||
+            r.state === "provisioning" ||
+            r.state === "idle-pending-teardown") &&
+          r.lastActivityAt < cutoffMs,
+      )
+      .sort((a, b) => a.lastActivityAt - b.lastActivityAt)
+      .slice(0, 50)
+      .map((r) => ({ ...r }));
+  }
+  async countActive() {
+    let n = 0;
+    for (const r of this.byUsername.values()) {
+      if (ACTIVE_DEMO_STATES.has(r.state)) n++;
+    }
+    return n;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -775,4 +849,5 @@ export class InMemoryStorage implements Storage {
   customDomainOrders = new InMemoryCustomDomainOrderStorage();
   demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
+  demoUsers = new InMemoryDemoUsersStorage();
 }

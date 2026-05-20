@@ -41,7 +41,10 @@ import {
   runCustomDomainVerificationPass,
   resolveCnameChain,
   pushRedirection,
+  runDemoIdleReaper,
+  runDemoProvisioningPoller,
 } from "@flagship/control-plane";
+import { createHetznerClient } from "./hetzner.js";
 
 /** Scope of one row that the dump emits. */
 export type DumpRow =
@@ -58,6 +61,12 @@ export interface ScheduledEnv {
   SERVICES_BASE_URL?: string;
   /** Shared bearer for the .com↔.services control channel (#87). */
   SERVICES_CONTROL_SECRET?: string;
+  /** Plan A — Hetzner API token (idle reaper + provisioning poller).
+   *  Unset ⇒ the demo cron branch no-ops. */
+  HCLOUD_TOKEN?: string;
+  /** Plan A — numeric Hetzner SSH key id (set in [vars]). Unused by
+   *  the cron itself but plumbed for symmetry with the request path. */
+  DEMO_PUBLIC_SSH_KEY_ID?: string;
 }
 
 /**
@@ -296,8 +305,62 @@ export async function scheduled(
   ctx: { waitUntil(p: Promise<unknown>): void },
 ): Promise<void> {
   const now = new Date(controller.scheduledTime);
-  ctx.waitUntil(runBackup(env, now, controller.cron));
-  ctx.waitUntil(runCustomDomainVerify(env, now));
+  // The 6-hourly cron drives D1 backup + custom-domain verify (both
+  // were here before Plan A). The new 10-minute cron drives the
+  // demo-user reaper + provisioning poller.
+  if (controller.cron === "0 */6 * * *") {
+    ctx.waitUntil(runBackup(env, now, controller.cron));
+    ctx.waitUntil(runCustomDomainVerify(env, now));
+    return;
+  }
+  if (controller.cron === "*/10 * * * *") {
+    ctx.waitUntil(runDemoCron(env, now));
+    return;
+  }
+  // Unknown cron string — be defensive: do nothing rather than mis-
+  // dispatch. Cloudflare can't add crons without a deploy.
+}
+
+/**
+ * Plan A — demo-user cron pass. Idle reaper + provisioning poller.
+ * No-ops when HCLOUD_TOKEN isn't configured (lets a deploy ship the
+ * cron entry safely before the demo system is provisioned).
+ *
+ * See docs/sample-users.md §11.
+ */
+export async function runDemoCron(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<{ reaped: number; stuck: number; promoted: number } | null> {
+  if (!env.DB || !env.HCLOUD_TOKEN) return null;
+  const storage = new D1Storage(env.DB);
+  const hetzner = createHetznerClient(env.HCLOUD_TOKEN);
+  const deps = {
+    storage: storage.demoUsers,
+    usernames: storage.usernames,
+    hetzner,
+    sshKeyId: 0, // unused by reaper / poller
+    audit: storage.auditEvents,
+    now: () => now.getTime(),
+  };
+  const reaperResult = await runDemoIdleReaper(deps);
+  const pollerResult = await runDemoProvisioningPoller(
+    deps,
+    async (fqdn, createdAt) => {
+      const r = await env
+        .DB!.prepare(
+          "SELECT 1 FROM install_events WHERE server_fqdn = ? AND event = 'registered' AND created_at > ? LIMIT 1",
+        )
+        .bind(fqdn, createdAt)
+        .first();
+      return !!r;
+    },
+  );
+  return {
+    reaped: reaperResult.reaped,
+    stuck: reaperResult.stuck,
+    promoted: pollerResult.promoted,
+  };
 }
 
 /**

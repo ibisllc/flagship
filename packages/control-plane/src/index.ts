@@ -34,3 +34,4 @@ export * from "./userIdentity.js";
 export * from "./inheritance.js";
 export * from "./usernameHandover.js";
 export * from "./podInventory.js";
+export * from "./demoUsers.js";

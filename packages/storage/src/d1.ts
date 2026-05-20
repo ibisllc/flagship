@@ -50,6 +50,9 @@ import type {
   CustomDomainOrderRecord,
   CustomDomainOrderStorage,
   DemoLlmLedgerStorage,
+  DemoUserRecord,
+  DemoUserState,
+  DemoUsersStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
 } from "./types.js";
@@ -1786,6 +1789,190 @@ export class D1InstallPolicyFanoutStorage
   }
 }
 
+interface DemoUserRow {
+  username: string;
+  display: string;
+  snapshot_id: string | null;
+  iso_r2_key: string | null;
+  ttl_idle_minutes: number;
+  region: string;
+  size: string;
+  active_server_id: string | null;
+  active_server_fqdn: string | null;
+  last_activity_at: number;
+  state: string;
+  created_at: number;
+}
+
+function rowToDemoUser(r: DemoUserRow): DemoUserRecord {
+  return {
+    username: r.username,
+    display: r.display,
+    snapshotId: r.snapshot_id,
+    isoR2Key: r.iso_r2_key,
+    ttlIdleMinutes: r.ttl_idle_minutes,
+    region: r.region,
+    size: r.size,
+    activeServerId: r.active_server_id,
+    activeServerFqdn: r.active_server_fqdn,
+    lastActivityAt: r.last_activity_at,
+    state: r.state as DemoUserState,
+    createdAt: r.created_at,
+  };
+}
+
+export class D1DemoUsersStorage implements DemoUsersStorage {
+  constructor(private db: D1Database) {}
+  async insert(rec: DemoUserRecord) {
+    const u = rec.username.toLowerCase();
+    try {
+      await this.db
+        .prepare(
+          "INSERT INTO demo_users " +
+            "(username, display, snapshot_id, iso_r2_key, ttl_idle_minutes, " +
+            "region, size, active_server_id, active_server_fqdn, " +
+            "last_activity_at, state, created_at) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(
+          u,
+          rec.display,
+          rec.snapshotId,
+          rec.isoR2Key,
+          rec.ttlIdleMinutes,
+          rec.region,
+          rec.size,
+          rec.activeServerId,
+          rec.activeServerFqdn,
+          rec.lastActivityAt,
+          rec.state,
+          rec.createdAt,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // PK collision = clean idempotency signal. The handler decides
+      // whether to surface 409 or treat it as a re-insert.
+      return { ok: false as const, reason: msg };
+    }
+  }
+  async get(username: string) {
+    const r = await this.db
+      .prepare("SELECT * FROM demo_users WHERE username = ?")
+      .bind(username.toLowerCase())
+      .first<DemoUserRow>();
+    return r ? rowToDemoUser(r) : undefined;
+  }
+  async list() {
+    const r = await this.db
+      .prepare("SELECT * FROM demo_users ORDER BY created_at DESC")
+      .all<DemoUserRow>();
+    return (r.results ?? []).map(rowToDemoUser);
+  }
+  async update(username: string, patch: Partial<DemoUserRecord>) {
+    const setClauses: string[] = [];
+    const binds: unknown[] = [];
+    const map: Record<string, string> = {
+      display: "display",
+      snapshotId: "snapshot_id",
+      isoR2Key: "iso_r2_key",
+      ttlIdleMinutes: "ttl_idle_minutes",
+      region: "region",
+      size: "size",
+      activeServerId: "active_server_id",
+      activeServerFqdn: "active_server_fqdn",
+      lastActivityAt: "last_activity_at",
+      state: "state",
+    };
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === "username" || k === "createdAt") continue;
+      const col = map[k];
+      if (!col) continue;
+      setClauses.push(`${col} = ?`);
+      binds.push(v as unknown);
+    }
+    if (setClauses.length === 0) return;
+    binds.push(username.toLowerCase());
+    await this.db
+      .prepare(`UPDATE demo_users SET ${setClauses.join(", ")} WHERE username = ?`)
+      .bind(...binds)
+      .run();
+  }
+  async delete(username: string) {
+    await this.db
+      .prepare("DELETE FROM demo_users WHERE username = ?")
+      .bind(username.toLowerCase())
+      .run();
+  }
+  async transition(
+    username: string,
+    from: DemoUserState,
+    to: DemoUserState,
+    patch?: Partial<DemoUserRecord>,
+  ) {
+    // CAS in one UPDATE so two concurrent /connect handlers can't both
+    // win the none→provisioning race (docs/sample-users.md §4.4).
+    const map: Record<string, string> = {
+      display: "display",
+      snapshotId: "snapshot_id",
+      isoR2Key: "iso_r2_key",
+      ttlIdleMinutes: "ttl_idle_minutes",
+      region: "region",
+      size: "size",
+      activeServerId: "active_server_id",
+      activeServerFqdn: "active_server_fqdn",
+      lastActivityAt: "last_activity_at",
+    };
+    const setClauses: string[] = ["state = ?"];
+    const binds: unknown[] = [to];
+    if (patch) {
+      for (const [k, v] of Object.entries(patch)) {
+        if (k === "username" || k === "createdAt" || k === "state") continue;
+        const col = map[k];
+        if (!col) continue;
+        setClauses.push(`${col} = ?`);
+        binds.push(v as unknown);
+      }
+    }
+    const u = username.toLowerCase();
+    binds.push(u, from);
+    const res = await this.db
+      .prepare(
+        `UPDATE demo_users SET ${setClauses.join(", ")} ` +
+          "WHERE username = ? AND state = ?",
+      )
+      .bind(...binds)
+      .run();
+    const meta = (res as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return null;
+    // Re-read the row so the caller sees the merged record.
+    const after = await this.get(u);
+    return after ?? null;
+  }
+  async findIdle(cutoffMs: number) {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM demo_users " +
+          "WHERE state IN ('up', 'provisioning', 'idle-pending-teardown') " +
+          "AND last_activity_at < ? " +
+          "ORDER BY last_activity_at ASC LIMIT 50",
+      )
+      .bind(cutoffMs)
+      .all<DemoUserRow>();
+    return (r.results ?? []).map(rowToDemoUser);
+  }
+  async countActive() {
+    const r = await this.db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM demo_users " +
+          "WHERE state IN ('provisioning', 'up', 'idle-pending-teardown')",
+      )
+      .first<{ n: number }>();
+    return r?.n ?? 0;
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -1812,6 +1999,7 @@ export class D1Storage implements Storage {
   customDomainOrders: CustomDomainOrderStorage;
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
+  demoUsers: DemoUsersStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -1838,5 +2026,6 @@ export class D1Storage implements Storage {
     this.customDomainOrders = new D1CustomDomainOrderStorage(db);
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
+    this.demoUsers = new D1DemoUsersStorage(db);
   }
 }

@@ -18,7 +18,7 @@
 //      The list LIVES OFF-GIT (env.TEST_ACCOUNTS) so a curious user
 //      can't discover an active sandbox by reading the repo.
 
-import type { UsernameStorage } from "@flagship/storage";
+import type { UsernameStorage, DemoUsersStorage } from "@flagship/storage";
 import {
   signDemoDirective,
   verifyCaSignedDemoDirective,
@@ -29,6 +29,7 @@ import { ok, malformed } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { type CaIssuer, type CaGate, evaluateCaGate } from "./pubkeyCert.js";
 import { bytesToHex } from "./hex.js";
+import { demoServerBlockFromRow, type DemoServerBlock } from "./demoUsers.js";
 
 export interface TestAccountMeta {
   /** Human-readable name shown in the mobile UI's "Enter <X>" CTA. */
@@ -58,6 +59,13 @@ export interface UsersCheckDeps {
   /** Directive validity window. Default 7 days (matches the pubkey
    *  binding); the client re-fetches on every check anyway. */
   demoDirectiveTtlMs?: number;
+  /** Plan A — sample-user / on-connect Hetzner provisioning. When
+   *  wired AND the typed username has a matching demo_users row,
+   *  the response embeds a `demoServer` block (the fqdn + lifecycle
+   *  state) so mobile clients can render one real device and decide
+   *  whether to call /api/dev/sample-user/{u}/connect. Absent ⇒
+   *  legacy behavior unchanged. See docs/sample-users.md §10.9. */
+  demoUsers?: DemoUsersStorage;
 }
 
 export interface UsersCheckBody {
@@ -74,6 +82,11 @@ export interface UsersCheckResponse {
    *  flagship/demo-directive/v1 bytes with the published CA pubkey
    *  before honoring `directive.useMockRecovery`. */
   demoDirective?: { directive: DemoDirective; signature: string };
+  /** Plan A — present when the typed username matches a `demo_users`
+   *  row. Carries the FQDN + current server-lifecycle state so
+   *  mobile clients render one real device. See
+   *  docs/sample-users.md §10.9. */
+  demoServer?: DemoServerBlock;
 }
 
 export async function handleUsersCheck(
@@ -95,7 +108,19 @@ export async function handleUsersCheck(
     });
   }
 
-  // 2. Test-account secret list. Match-by-key (no enumeration leak —
+  // 2a. Demo-user (Plan A) lookup. Computed once so every return
+  //     branch can fold in the `demoServer` block. Independent of the
+  //     legacy test-account / is_demo flows; backward-compatible
+  //     (absent deps.demoUsers ⇒ never attached).
+  let demoServer: DemoServerBlock | undefined;
+  if (deps.demoUsers) {
+    const row = await deps.demoUsers.get(norm);
+    if (row) {
+      demoServer = demoServerBlockFromRow(row);
+    }
+  }
+
+  // 2b. Test-account secret list. Match-by-key (no enumeration leak —
   //    we never expose the full list, only the configured behavior
   //    for the specific username the caller asked about).
   const testHit = deps.testAccounts?.[norm];
@@ -109,6 +134,7 @@ export async function handleUsersCheck(
       available: false,
       reason: "test account",
       testAccount: { display: testHit.display, ttlHours: testHit.ttlHours },
+      demoServer,
     });
   }
 
@@ -123,6 +149,7 @@ export async function handleUsersCheck(
       username: norm,
       available: false,
       reason: "already claimed",
+      demoServer,
     };
     if (existing.isDemo && deps.ca) {
       const now = (deps.now ?? (() => Date.now()))();
@@ -163,6 +190,7 @@ export async function handleUsersCheck(
   return ok<UsersCheckResponse>({
     username: norm,
     available: true,
+    demoServer,
   });
 }
 

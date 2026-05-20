@@ -91,13 +91,21 @@ import {
   handleUploadWebauthnRecovery,
   handleGetUserIdentity,
   handlePutUserIdentity,
+  handleCreateDemoUser,
+  handleDeleteDemoUser,
+  handleDemoUserConnect,
+  handleDemoUserHeartbeat,
+  handleDemoUserInstallComplete,
+  handleGetDemoUser,
+  handleListDemoUsers,
   type CaIssuer,
   type CaGate,
   type HandlerResponse,
   type HandlerResponseWithHeaders,
 } from "@flagship/control-plane";
-import { D1Storage, type D1Database } from "@flagship/storage";
+import { D1Storage, D1DemoUsersStorage, type D1Database } from "@flagship/storage";
 import { workerCaTrustChain, caEnforceFromEnv } from "./caTrustChainLoader.js";
+import { createHetznerClient } from "./hetzner.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
@@ -174,6 +182,32 @@ export interface ControlPlaneEnv {
    * future-test-account-architecture memory note.
    */
   TEST_ACCOUNTS?: string;
+
+  /**
+   * Hetzner Cloud API token (Plan A — sample-user / on-connect VPS).
+   * Worker uses it to provision / destroy demo-user servers from
+   * pre-baked snapshots. NOT in git — set via `wrangler secret put
+   * HCLOUD_TOKEN`. Scope to a dedicated Hetzner project so demo
+   * provisioning can never reach unrelated infra. See
+   * docs/sample-users.md §9.1.
+   */
+  HCLOUD_TOKEN?: string;
+
+  /**
+   * Public-half SSH key Hetzner attaches to demo servers. Operator's
+   * laptop holds the private half (used by the rescue+dd path during
+   * create-sample-user). Set via `wrangler secret put
+   * DEMO_PUBLIC_SSH_KEY < ~/.ssh/flagship-demo-ssh.pub`. See
+   * docs/sample-users.md §9.2. */
+  DEMO_PUBLIC_SSH_KEY?: string;
+
+  /**
+   * Numeric Hetzner SSH key id (captured at first create-sample-user
+   * run, recorded under [vars] in wrangler.toml). Not sensitive — the
+   * id is the Hetzner-side handle for the public key above. See
+   * docs/sample-users.md §9.3.
+   */
+  DEMO_PUBLIC_SSH_KEY_ID?: string;
 }
 
 const ROUTE_RE = {
@@ -245,6 +279,17 @@ const ROUTE_RE = {
   INTERNAL_ACTIVE_REDIRECTIONS: /^\/api\/internal\/active-redirections$/,
   INTERNAL_REDIRECTION_LOOKUP: /^\/api\/internal\/redirection-lookup$/,
   INTERNAL_MARKETPLACE_SCAN_QUEUE: /^\/api\/internal\/marketplace-scan-queue$/,
+  // Plan A — demo-user / Hetzner on-connect provisioning. The two
+  // public-rate-limited endpoints (connect, heartbeat) live above the
+  // bare GET in matching order so `/connect` and `/heartbeat` win
+  // over the `/:u` matcher.
+  DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
+  DEMO_USER_DELETE: /^\/api\/dev\/sample-user\/delete$/,
+  DEMO_USER_INSTALL_COMPLETE: /^\/api\/dev\/sample-user\/([^/]+)\/install-complete$/,
+  DEMO_USER_CONNECT: /^\/api\/dev\/sample-user\/([^/]+)\/connect$/,
+  DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
+  DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
+  DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
 };
 
 export async function tryControlPlane(
@@ -285,6 +330,11 @@ export async function tryControlPlane(
           testAccounts: parseTestAccountsEnv(env.TEST_ACCOUNTS),
           ca,
           caGate,
+          // Plan A — when demo-user storage is wired, /users/check
+          // embeds a `demoServer` block for matched usernames. The
+          // storage call is cheap (PK lookup) so we don't gate it
+          // behind HCLOUD_TOKEN presence.
+          demoUsers: storage.demoUsers,
         },
         await readJson(request),
       ),
@@ -1180,6 +1230,75 @@ export async function tryControlPlane(
         },
       ),
     );
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // Plan A — demo-user / on-connect Hetzner provisioning
+  //
+  // The 5 admin endpoints (create / delete / install-complete / GET /
+  // LIST) gate behind FLAGSHIP_ADMIN_SECRET. The 2 public endpoints
+  // (connect / heartbeat) are rate-limited at the edge by the
+  // Worker's main fetch handler (see apps/com/src/index.ts); we only
+  // dispatch here.
+  //
+  // Important matching order: `/create`, `/delete`, `/sample-user`
+  // (list) must hit BEFORE the bare `/sample-user/{u}` GET (which
+  // would otherwise swallow the literal "create" as a username).
+  const demoUsersConfigured = !!env.HCLOUD_TOKEN && !!env.DEMO_PUBLIC_SSH_KEY_ID;
+  if (path.startsWith("/api/dev/sample-user")) {
+    if (!demoUsersConfigured) {
+      // Surface a clear 503 instead of a confusing 404 / 500 when the
+      // operator hasn't set the Hetzner secrets yet.
+      return finishPlain({
+        status: 503,
+        body: { error: "demo-user system not configured (HCLOUD_TOKEN or DEMO_PUBLIC_SSH_KEY_ID missing)" },
+      });
+    }
+    const demoDeps = {
+      storage: storage.demoUsers,
+      usernames: storage.usernames,
+      hetzner: createHetznerClient(env.HCLOUD_TOKEN!),
+      sshKeyId: parseInt(env.DEMO_PUBLIC_SSH_KEY_ID!, 10),
+      audit: storage.auditEvents,
+    };
+    if (method === "POST" && ROUTE_RE.DEMO_USER_CREATE.test(path)) {
+      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
+        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      }
+      return finishPlain(await handleCreateDemoUser(demoDeps, await readJson(request)));
+    }
+    if (method === "POST" && ROUTE_RE.DEMO_USER_DELETE.test(path)) {
+      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
+        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      }
+      return finishPlain(await handleDeleteDemoUser(demoDeps, await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_INSTALL_COMPLETE))) {
+      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
+        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      }
+      return finishPlain(
+        await handleDemoUserInstallComplete(demoDeps, decodeURIComponent(m[1]!), await readJson(request)),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_CONNECT))) {
+      return finishPlain(await handleDemoUserConnect(demoDeps, decodeURIComponent(m[1]!)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_HEARTBEAT))) {
+      return finishPlain(await handleDemoUserHeartbeat(demoDeps, decodeURIComponent(m[1]!)));
+    }
+    if (method === "GET" && ROUTE_RE.DEMO_USER_LIST.test(path)) {
+      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
+        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      }
+      return finishPlain(await handleListDemoUsers(demoDeps));
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.DEMO_USER_GET))) {
+      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
+        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      }
+      return finishPlain(await handleGetDemoUser(demoDeps, decodeURIComponent(m[1]!)));
+    }
   }
 
   return null;

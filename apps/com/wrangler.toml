@@ -70,11 +70,18 @@ bucket_name = "flagship-iso"
 binding = "BACKUPS_BUCKET"
 bucket_name = "flagship-backups"
 
-# Cron triggers. Every 6h runs the scheduled() handler in src/index.ts,
-# which dumps D1 → R2 as gzipped JSONL. The first run of each calendar
-# month (UTC) also writes a monthly snapshot kept forever.
+# Cron triggers.
+#  * `0 */6 * * *` — D1 → R2 backup (gzipped JSONL). First run of each
+#    calendar month (UTC) also writes a monthly snapshot kept forever.
+#    Also drives the custom-domain verification pass.
+#  * `*/10 * * * *` — Plan A demo-user reaper (destroys idle Hetzner
+#    VPSs past their per-row ttl_idle_minutes) AND provisioning poller
+#    (promotes provisioning → up rows when Hetzner reports running +
+#    install_events shows the daemon has registered). No-ops when
+#    HCLOUD_TOKEN isn't configured, so this cron is safe to ship
+#    before the demo-user system is provisioned.
 [triggers]
-crons = ["0 */6 * * *"]
+crons = ["0 */6 * * *", "*/10 * * * *"]
 
 # Rate-limit namespace shared across the four mutating control-plane
 # endpoints. The Worker composes per-request keys of the form
