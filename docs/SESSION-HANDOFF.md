@@ -171,6 +171,106 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-20 (v1-launch s9 cont. — Plan A live-run attempt
+  EXPOSED two architectural gaps; checkpoint before refactor):**
+  Drove the operator CLI (`node scripts/sample-user.mjs create
+  demo-alice --display "Demo Alice"`) against real Hetzner from
+  the operator's interactive shell. **14 incremental Hetzner-
+  client bug-fixes landed** (`ac0dc27` → `4027246`), making the
+  CLI walk all the way from D1 row reserve through ISO build /
+  R2 upload / Hetzner provision / rescue-mode + `dd` / reboot
+  cleanly. Then surfaced the two REAL blockers we hadn't yet seen:
+
+  **Gap 1 — `synthesizeBlob` is OFFLINE-ONLY.** The personalize-iso
+  CLI has two modes (`packages/iso-personalizer/src/cli.ts:8-13`):
+  `synthesizeBlob` (self-signed; "useful for offline tests that
+  just need the trailer to round-trip") vs. `--blob-json` (uses a
+  REAL build ticket from `.com`; what the harness's e2e mode
+  uses, per cli.ts:139-140). My Phase E CLI calls the
+  personalizer in synthesizeBlob mode — so the daemon's
+  first-boot `/api/server/register` is rejected by `.com`
+  because `.com` never issued the trailer's serial. The install
+  silently never completes; `/api/users/demo-alice/pods` never
+  shows the daemon. **The whole `create-sample-user` flow needs
+  to switch to mint-real-ticket-via-.com THEN `--blob-json`
+  personalize**. Roughly: derive deterministic IRK from username
+  → claim username with that IRK → mint auth-code → mint
+  build-ticket → install blob → pass to personalize via
+  --blob-json.
+
+  **Gap 2 — `/api/users/<u>/pods` returns HTTP 500 for ALL
+  users** (probed with both `demo-alice` AND the real
+  `harry11911a`; both 1101). This is a Worker-wide bug, NOT
+  demo-specific. Hypothesis: stale column reference fallout
+  from the App→Service rename — `daemon_status.apps_served` →
+  `daemon_status.services_served_json` migration in-place but
+  the prod D1 may have only the old column. `handleGetUserPods`
+  at `packages/control-plane/src/podInventory.ts:62` reads
+  `status.servicesServedJson` — if D1 still has the old
+  `apps_served`, the in-Worker read returns undefined and the
+  subsequent `JSON.parse(undefined)` throws an uncaught
+  exception → Cloudflare 1101. Needs a prod-D1 column probe
+  + (a) a `0031_daemon_status_services_served.sql` migration
+  if the column doesn't exist, or (b) handler-side tolerance
+  for the legacy column name.
+
+  **What's GREEN at code level** (all on main; tsc + vitest +
+  iOS xcodebuild + Android gradle all clean):
+  - Plan A Phases A-E shipped + 14 Hetzner-runtime fixes;
+    the CLI walks the full chain to a `temp server id=N;
+    awaiting daemon + ACME…` state. The only thing that
+    doesn't work past that is the daemon registering.
+  - Plan B Phases 1-5 shipped; account-type + TOTP +
+    quarantine + audit + push fan-out all in.
+  - Mobile mirrors (iOS+Android+webapp) for both plans.
+
+  **What's RED at runtime:**
+  - `/api/users/<u>/pods` 500 (probably stale column).
+  - `synthesizeBlob` path can't register on .com — the WHOLE
+    Phase F live test is blocked on this.
+  - Plan A Phase F (live e2e of the demo flow) → NOT
+    achievable until the --blob-json refactor lands.
+
+  **Action items captured for the next session** (see
+  `docs/next-session-prompt.md`):
+  1. Diagnose + fix `/pods` 500 (probably a 1-line column-name
+     migration or handler patch).
+  2. Refactor `scripts/sample-user.mjs` to mint a real auth-
+     code + build-ticket against `.com` BEFORE personalizing —
+     using deterministic IRK derived from the demo username.
+  3. Switch the personalize step from synthesizeBlob to
+     `--blob-json` with the real install-blob envelope.
+  4. Live re-run; iterate until the daemon actually registers
+     and the green padlock appears.
+  5. Mobile e2e: open iOS / webapp, type `demo-alice`, observe
+     the demo-mode connect flow against the real VPS.
+  6. NEW DESIGN ITEM: corporate / restricted-device addressing
+     (`harry` vs `harry.ipad` → `USERKEYHASH.*` vs
+     `USERKEYHASH.DEVICEKEYHASH`) — added to Plan B v2
+     hardening list.
+
+  Heap of committed-but-untested operational state right now:
+  - `0027_demo_users.sql` + `0028_account_type.sql` +
+    `0029_re_pair_alerts.sql` + `0030_audit_events_v12.sql` all
+    APPLIED to remote D1 in this session.
+  - Hetzner secrets `HCLOUD_TOKEN` + `DEMO_PUBLIC_SSH_KEY` NOT
+    yet set on Worker (operator-runnable from local shell
+    instead via the CLI's own `env.HCLOUD_TOKEN`).
+  - `flagship-iso-temp` R2 bucket exists with dev-url public
+    access enabled (the URL is baked into
+    scripts/sample-user.mjs:611-613).
+  - `apps/com/wrangler.toml [vars] DEMO_PUBLIC_SSH_KEY_ID` —
+    NOT set; only needed when the Worker provisions on
+    /connect, which we haven't reached.
+  - Personalized ISO cache at
+    `~/.cache/flagship-demo-isos/demo-alice-home-faafc1b9.iso`
+    on the operator's Mac. Auto-rebuilds when needed.
+  - The R2 object `demo-isos/demo-alice-0eaddd0f.iso` is still
+    in the bucket; orphaned but harmless.
+  - `demo-alice` D1 row: `region='fsn1', size='cpx11',
+    state='none', snapshot_id=NULL` — i.e. unprovisioned. Safe
+    to leave; the next attempt will re-use the row idempotently.
+
 - **2026-05-19/20 (v1-launch s9 cont. — ★★★ marathon: Plan A demo
   system + Plan B v1.2 security cascade ALL CODE-COMPLETE):** Long
   sequential dispatch driving both plans to a green tree. Test count
