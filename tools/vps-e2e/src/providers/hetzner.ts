@@ -223,27 +223,38 @@ export function buildDdCommand(isoUrl: string): string {
   // Hetzner rescue images expose the primary disk as /dev/sda on
   // x86_64 CX22; nothing in this codebase is multi-disk-aware yet.
   //
+  // QUOTING NOTE — the previous shape (`bash -lc ${JSON.stringify(script)}`)
+  // was broken: JSON.stringify encodes a real newline as the 2-char
+  // sequence `\n` inside a double-quoted JSON string. SSH delivers
+  // that 2-char sequence to the remote shell, which dequotes the
+  // double-quoted argument and (per POSIX) keeps `\n` as literal
+  // backslash-n. The result is bash -lc receiving a single physical
+  // line of gibberish: `set -e\necho ...\nwget ...`. Bash treats
+  // `set -e\necho` as one bad command, exits silently with code 1
+  // — but the outer ssh sees code 0 because bash -lc exits cleanly
+  // after the parse failure on its single-line input, so the CLI
+  // believes the dd-and-reboot ran. The VPS sits idle in rescue.
+  //
+  // Fix: single-quote the script via shellQuote, which preserves
+  // newlines literally over the wire. POSIX single quotes don't
+  // honor any escapes; the remote shell receives the multi-line
+  // script verbatim and bash -lc executes line by line as intended.
+  //
   // Joining with literal newlines (not "; ") because the backgrounded
   // `nohup ... &` line followed by ANY token (incl. ; exit 0) is a
-  // bash syntax error: '&' is itself a terminator, not chainable. New
-  // lines + 'set -e' give equivalent fail-fast semantics, with cleaner
-  // grammar.
-  return (
-    "bash -lc " +
-    JSON.stringify(
-      [
-        "set -euo pipefail",
-        "echo '[flagship-e2e] downloading ISO + writing to /dev/sda...'",
-        // -O- streams to stdout; pipefail makes the dd see a SIGPIPE if
-        // wget dies. status=none keeps the rescue serial console clean.
-        `wget --no-verbose -O- ${shellQuote(isoUrl)} | dd of=/dev/sda bs=4M conv=fsync status=none`,
-        "sync",
-        "echo '[flagship-e2e] dd complete; rebooting into the freshly-written disk...'",
-        // `nohup … &` lets SSH return cleanly before the box vanishes.
-        "nohup bash -c 'sleep 2 && reboot -f' >/dev/null 2>&1 &",
-      ].join("\n"),
-    )
-  );
+  // bash syntax error: '&' is itself a terminator, not chainable.
+  const script = [
+    "set -euo pipefail",
+    "echo '[flagship-e2e] downloading ISO + writing to /dev/sda...'",
+    // -O- streams to stdout; pipefail makes the dd see a SIGPIPE if
+    // wget dies. status=none keeps the rescue serial console clean.
+    `wget --no-verbose -O- ${shellQuote(isoUrl)} | dd of=/dev/sda bs=4M conv=fsync status=none`,
+    "sync",
+    "echo '[flagship-e2e] dd complete; rebooting into the freshly-written disk...'",
+    // `nohup … &` lets SSH return cleanly before the box vanishes.
+    "nohup bash -c 'sleep 2 && reboot -f' >/dev/null 2>&1 &",
+  ].join("\n");
+  return `bash -lc ${shellQuote(script)}`;
 }
 
 /** Minimal single-arg shell quoter (no command injection). */

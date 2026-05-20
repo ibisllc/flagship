@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCreateImageBody,
+  buildDdCommand,
   HetznerProvider,
   parseCreateImageResponse,
   parseImageStatus,
@@ -53,6 +54,49 @@ describe("buildCreateImageBody", () => {
       type: "snapshot",
       description: "flagship-demo-alice",
     });
+  });
+});
+
+describe("buildDdCommand", () => {
+  // Regression: an earlier version JSON.stringify'd the multi-line
+  // script. JSON encodes real newlines as the 2-character escape `\n`
+  // inside a double-quoted string, which SSH delivers verbatim and
+  // the remote shell's double-quote dequoting leaves as backslash-n.
+  // bash -lc then sees a single physical line of gibberish and exits
+  // silently with the script unrun — so the VPS sat idle in rescue
+  // and never installed Flagship. Locking the fix in: the wire form
+  // MUST contain actual newline characters AND MUST NOT contain the
+  // 2-character `\n` escape inside its quoted script body.
+  it("contains real newlines on the wire (not the JSON \\n escape)", () => {
+    const cmd = buildDdCommand("https://example.com/foo.iso");
+    expect(cmd).toContain("\n");
+    // The quoted script body must NOT contain the literal 2-char
+    // backslash-n sequence (which would mean we double-quoted).
+    expect(cmd).not.toMatch(/\\n/);
+  });
+
+  it("wraps the script in single quotes (newline-preserving) and references the URL", () => {
+    const cmd = buildDdCommand("https://example.com/foo.iso");
+    // bash -lc 'script' shape — single quotes, not double.
+    expect(cmd.startsWith("bash -lc '")).toBe(true);
+    expect(cmd.endsWith("'")).toBe(true);
+    // The inner single-quoted URL is rendered as the POSIX
+    // close-escape-open dance `'\''URL'\''` because the outer wrapper
+    // is also single quotes. shellQuote handles this correctly.
+    expect(cmd).toContain("wget --no-verbose -O- '\\''https://example.com/foo.iso'\\''");
+    expect(cmd).toContain("dd of=/dev/sda bs=4M");
+    expect(cmd).toContain("reboot -f");
+  });
+
+  it("ends each logical instruction on its own physical line", () => {
+    const cmd = buildDdCommand("https://example.com/foo.iso");
+    // Strip the leading `bash -lc '` and trailing `'`, then split.
+    const inner = cmd.slice(10, -1);
+    const lines = inner.split("\n");
+    expect(lines).toContain("set -euo pipefail");
+    expect(lines).toContain("sync");
+    expect(lines.some((l) => l.startsWith("wget "))).toBe(true);
+    expect(lines.some((l) => l.startsWith("nohup "))).toBe(true);
   });
 });
 
