@@ -1,4 +1,5 @@
 import type {
+  AccountType,
   AuditEventRecord,
   AuditEventStorage,
   AutoUnlockLeaseRecord,
@@ -93,6 +94,15 @@ interface UsernameRow {
   claimed_at: number;
   /** 0/1; nullable so a pre-migration row (no column) decodes safely. */
   is_demo?: number | null;
+  // v1.2 — security-cascade columns (migration 0028). All four are
+  // nullable here so a SELECT against a database that hasn't yet
+  // applied the migration decodes without throwing; the rowTo* helper
+  // defaults account_type to 'single' on absence, matching the
+  // column-DEFAULT semantics in the migration.
+  account_type?: string | null;
+  totp_secret_encrypted?: string | null;
+  recovery_codes_hashes_json?: string | null;
+  totp_enrolled_at?: number | null;
 }
 interface AuthCodeRow {
   serial: string;
@@ -131,11 +141,26 @@ interface ServerRow {
 }
 
 function rowToUsername(r: UsernameRow): UsernameRecord {
+  // v1.2 — account_type narrows TEXT to the AccountType union. A row
+  // from a database that hasn't yet applied 0028 lands as undefined
+  // here; we default to 'single' to mirror the column DEFAULT.
+  const accountType: AccountType =
+    r.account_type === "multi" || r.account_type === "demo"
+      ? r.account_type
+      : "single";
   return {
     username: r.username,
     irkPubHex: r.irk_pub_hex,
     claimedAt: r.claimed_at,
     isDemo: r.is_demo === 1,
+    accountType,
+    ...(r.totp_secret_encrypted != null
+      ? { totpSecretEncrypted: r.totp_secret_encrypted }
+      : {}),
+    ...(r.recovery_codes_hashes_json != null
+      ? { recoveryCodesHashesJson: r.recovery_codes_hashes_json }
+      : {}),
+    ...(r.totp_enrolled_at != null ? { totpEnrolledAt: r.totp_enrolled_at } : {}),
   };
 }
 function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
@@ -191,16 +216,29 @@ export class D1UsernameStorage implements UsernameStorage {
     if (existing && existing.irk_pub_hex !== rec.irkPubHex) {
       return { ok: false as const, reason: "username already claimed" };
     }
-    // ON CONFLICT deliberately updates only claimed_at — is_demo is
-    // never touched on a re-claim, so a benign re-put can't clear a
-    // flag set by the operator-gated provisioning path. setDemo() is
-    // the only way to change it after the first claim.
+    // ON CONFLICT deliberately updates only claimed_at — is_demo and
+    // the v1.2 cascade fields (account_type, TOTP artifacts) are never
+    // touched on a re-claim, so a benign re-put can't clear an
+    // operator-set demo flag or kick a multi-device account back to
+    // single. Mutation of those fields goes through setDemo() and the
+    // dedicated TOTP-enrollment paths (Phase 3) respectively.
     await this.db
       .prepare(
-        "INSERT INTO usernames (username, irk_pub_hex, claimed_at, is_demo) VALUES (?, ?, ?, ?) " +
+        "INSERT INTO usernames " +
+          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
           "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at",
       )
-      .bind(norm, rec.irkPubHex, rec.claimedAt, rec.isDemo ? 1 : 0)
+      .bind(
+        norm,
+        rec.irkPubHex,
+        rec.claimedAt,
+        rec.isDemo ? 1 : 0,
+        rec.accountType ?? "single",
+        rec.totpSecretEncrypted ?? null,
+        rec.recoveryCodesHashesJson ?? null,
+        rec.totpEnrolledAt ?? null,
+      )
       .run();
     return { ok: true as const };
   }
@@ -1017,13 +1055,29 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
   async initiate(rec: PendingRePairRecord) {
     const key = rec.username.toLowerCase();
     try {
+      // v1.2 — grace_seconds + totp_required + totp_proof_consumed are
+      // captured explicitly so a row crossing the cascade boundary
+      // keeps its original grace (the migration default of 86_400
+      // matches v1.1 behavior; Phase 2 widens to 604_800 for single-
+      // device callers).
       await this.db
         .prepare(
           `INSERT INTO pending_re_pairs
-             (username, new_irk_pub_hex, old_irk_pub_hex, initiated_at, completes_at, objected_at)
-           VALUES (?, ?, ?, ?, ?, NULL)`,
+             (username, new_irk_pub_hex, old_irk_pub_hex,
+              initiated_at, completes_at, objected_at,
+              grace_seconds, totp_required, totp_proof_consumed)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
         )
-        .bind(key, rec.newIrkPubHex, rec.oldIrkPubHex, rec.initiatedAt, rec.completesAt)
+        .bind(
+          key,
+          rec.newIrkPubHex,
+          rec.oldIrkPubHex,
+          rec.initiatedAt,
+          rec.completesAt,
+          rec.graceSeconds ?? 86_400,
+          rec.totpRequired ? 1 : 0,
+          rec.totpProofConsumed ? 1 : 0,
+        )
         .run();
       return { ok: true as const };
     } catch (e) {
@@ -1043,6 +1097,9 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
         initiated_at: number;
         completes_at: number;
         objected_at: number | null;
+        grace_seconds?: number | null;
+        totp_required?: number | null;
+        totp_proof_consumed?: number | null;
       }>();
     if (!r) return undefined;
     return {
@@ -1052,6 +1109,9 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
       initiatedAt: r.initiated_at,
       completesAt: r.completes_at,
       ...(r.objected_at != null ? { objectedAt: r.objected_at } : {}),
+      graceSeconds: r.grace_seconds ?? 86_400,
+      totpRequired: r.totp_required === 1,
+      totpProofConsumed: r.totp_proof_consumed === 1,
     };
   }
 
@@ -1300,9 +1360,16 @@ function rowToRecord(r: RawMarketplaceRow): MarketplaceListingRecord {
 export class D1PushTokenStorage implements PushTokenStorage {
   constructor(private readonly db: D1Database) {}
   async put(rec: PushTokenRecord): Promise<void> {
+    // v1.2 — quarantine_until is written on insert (default 0 =
+    // trusted-from-birth, matching the SQL column default and the
+    // post-migration pre-existing rows). ON CONFLICT does NOT
+    // overwrite quarantine_until on re-put: a benign push_token
+    // refresh must not silently clear a 14-day quarantine. Phase 2's
+    // device-admit handler bumps quarantine_until via a dedicated
+    // UPDATE.
     await this.db.prepare(
-      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, label, registered_at, last_seen_at)
-       VALUES (?,?,?,?,?,?,?,?,?)
+      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, label, registered_at, last_seen_at, quarantine_until)
+       VALUES (?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(token_id) DO UPDATE SET
          provider_token=excluded.provider_token,
          push_x25519_pub_hex=excluded.push_x25519_pub_hex,
@@ -1314,6 +1381,7 @@ export class D1PushTokenStorage implements PushTokenStorage {
       rec.pushX25519PubHex, rec.registrationSignatureHex,
       rec.label,
       rec.registeredAt, rec.lastSeenAt,
+      rec.quarantineUntil ?? 0,
     ).run();
   }
   async get(tokenId: string): Promise<PushTokenRecord | undefined> {
@@ -1337,6 +1405,9 @@ interface RawPushRow {
   push_x25519_pub_hex: string; registration_signature_hex: string;
   label: string | null;
   registered_at: number; last_seen_at: number;
+  // v1.2 — nullable so a SELECT against a pre-migration database
+  // decodes safely; rowToRecord defaults absence to 0.
+  quarantine_until?: number | null;
 }
 function pushRowToRecord(r: RawPushRow): PushTokenRecord {
   return {
@@ -1349,6 +1420,7 @@ function pushRowToRecord(r: RawPushRow): PushTokenRecord {
     label: r.label ?? "",
     registeredAt: r.registered_at,
     lastSeenAt: r.last_seen_at,
+    quarantineUntil: r.quarantine_until ?? 0,
   };
 }
 

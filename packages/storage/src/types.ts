@@ -8,6 +8,17 @@
  * without depending on Fastify, Workers, or any HTTP framework.
  */
 
+/**
+ * v1.2 security cascade — account-type discriminator. See
+ * docs/v1.2-security-cascade.md. The `demo` value is included for
+ * downstream-code completeness; Plan A's demo_users rows live in
+ * their OWN table (`demo_users`) and never get `accountType='demo'`
+ * stored on `usernames` in practice. The union exists so audit-log
+ * + push-fanout code can match all three account modes exhaustively
+ * without forgetting demo.
+ */
+export type AccountType = "single" | "multi" | "demo";
+
 export interface UsernameRecord {
   username: string;
   irkPubHex: string;
@@ -21,6 +32,30 @@ export interface UsernameRecord {
    * operator-gated provisionDemoUser path, never by the claim flow.
    */
   isDemo?: boolean;
+  /**
+   * v1.2 — account-type discriminator. Defaults to 'single' for
+   * every pre-migration row via the column DEFAULT; opting into
+   * 'multi' requires TOTP enrollment (Phase 3). Stored as TEXT in
+   * D1; the storage adapter narrows it to AccountType on read.
+   * Absent on records returned from pre-migration writes — readers
+   * should treat undefined as 'single'.
+   */
+  accountType?: AccountType;
+  /**
+   * v1.2 — TOTP secret encrypted with a Worker-side KEK
+   * (FLAGSHIP_TOTP_KEK; Phase 3 secret). Null until enrollment.
+   * Bytes are opaque to this layer.
+   */
+  totpSecretEncrypted?: string;
+  /**
+   * v1.2 — JSON array of argon2id-hashed recovery codes. Each code
+   * is single-use; the array is rewritten atomically on consume so
+   * a consumed code can't be reused. Null until enrollment; rotated
+   * on a fresh enroll-confirm.
+   */
+  recoveryCodesHashesJson?: string;
+  /** v1.2 — wall-clock ms of the successful enroll-confirm. Null until enrolled. */
+  totpEnrolledAt?: number;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";
@@ -308,6 +343,30 @@ export interface PendingRePairRecord {
   completesAt: number;
   /** Set when an objection is filed; blocks completion. */
   objectedAt?: number;
+  /**
+   * v1.2 — grace duration captured EXPLICITLY on the row in seconds.
+   * Phase 2 sets this to 7 days (604_800) for single-device accounts
+   * and 24h (86_400) for multi-device. Stored on the row (rather
+   * than recomputed from account_type at completion time) so a row
+   * that crossed the migration boundary keeps its original grace
+   * even if the account's type changes mid-flow. Defaults to 86_400
+   * on legacy rows.
+   */
+  graceSeconds?: number;
+  /**
+   * v1.2 — true iff the account was multi-device at initiation time,
+   * meaning the RePairInitiate must include a valid TOTP or
+   * recovery-code proof. Phase 2 rejects re-pair attempts that lack
+   * the proof; this flag preserves the requirement on the row for
+   * the eventual /complete step.
+   */
+  totpRequired?: boolean;
+  /**
+   * v1.2 — true once the TOTP/recovery proof has been verified for
+   * this pending row. Belt-and-braces guard so /complete can refuse
+   * to swap an unverified row even if the require-flag was set.
+   */
+  totpProofConsumed?: boolean;
 }
 
 export interface PendingRePairStorage {
@@ -607,6 +666,17 @@ export interface PushTokenRecord {
   label: string;
   registeredAt: number;
   lastSeenAt: number;
+  /**
+   * v1.2 — 14-day quarantine on the revoke-others power for a newly-
+   * admitted device. Wall-clock ms; 0 means already-trusted. The
+   * plan doc names this `paired_sessions.quarantine_until` but on
+   * the .com side the per-device record IS push_tokens — see the
+   * 0028 migration. Phase 2 wires the enforcement on
+   * /api/users/:u/devices/:id/disconnect + /api/re-pair (revoke-
+   * others endpoints reject when the calling token's
+   * quarantine_until > now).
+   */
+  quarantineUntil?: number;
 }
 
 export interface PushTokenStorage {

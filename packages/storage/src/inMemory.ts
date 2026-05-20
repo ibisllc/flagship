@@ -72,11 +72,21 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     }
     // A re-claim (same IRK) must not silently clear an already-set
     // demo flag: only an explicit isDemo on the incoming record, or
-    // setDemo(), changes it.
+    // setDemo(), changes it. The same preservation logic applies to
+    // the v1.2 fields (accountType + TOTP enrolment artifacts) — a
+    // benign re-put with `accountType` absent must keep the existing
+    // value, otherwise a recovery flow re-claim could silently kick
+    // a multi-device account back to single-device.
     this.byName.set(norm, {
       ...rec,
       username: norm,
       isDemo: rec.isDemo ?? existing?.isDemo ?? false,
+      accountType: rec.accountType ?? existing?.accountType ?? "single",
+      totpSecretEncrypted:
+        rec.totpSecretEncrypted ?? existing?.totpSecretEncrypted,
+      recoveryCodesHashesJson:
+        rec.recoveryCodesHashesJson ?? existing?.recoveryCodesHashesJson,
+      totpEnrolledAt: rec.totpEnrolledAt ?? existing?.totpEnrolledAt,
     });
     return { ok: true as const };
   }
@@ -143,7 +153,15 @@ export class InMemoryPendingRePairStorage implements PendingRePairStorage {
   async initiate(rec: PendingRePairRecord) {
     const key = rec.username.toLowerCase();
     if (this.rows.has(key)) return { ok: false as const, reason: "re-pair already pending" };
-    this.rows.set(key, { ...rec, username: key });
+    // v1.2 — capture defaults so callers that don't yet set the new
+    // fields land a 24h grace + no-TOTP row, matching the SQL DEFAULTs.
+    this.rows.set(key, {
+      ...rec,
+      username: key,
+      graceSeconds: rec.graceSeconds ?? 86_400,
+      totpRequired: rec.totpRequired ?? false,
+      totpProofConsumed: rec.totpProofConsumed ?? false,
+    });
     return { ok: true as const };
   }
   async get(username: string) {
@@ -400,7 +418,13 @@ export function computeMarketplaceRank(l: MarketplaceListingRecord): number {
 
 export class InMemoryPushTokenStorage implements PushTokenStorage {
   private byId = new Map<string, PushTokenRecord>();
-  async put(rec: PushTokenRecord): Promise<void> { this.byId.set(rec.tokenId, { ...rec }); }
+  async put(rec: PushTokenRecord): Promise<void> {
+    // v1.2 — default quarantineUntil to 0 (already-trusted) when the
+    // caller doesn't set it, matching the SQL column default. Lets
+    // pre-cascade callers (Phase 2 hasn't shipped yet) keep working
+    // without touching every put-site.
+    this.byId.set(rec.tokenId, { ...rec, quarantineUntil: rec.quarantineUntil ?? 0 });
+  }
   async get(tokenId: string): Promise<PushTokenRecord | undefined> {
     const r = this.byId.get(tokenId);
     return r ? { ...r } : undefined;
