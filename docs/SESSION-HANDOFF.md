@@ -171,6 +171,146 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-20 (v1-launch s9 cont. — Plan A Phase F live test
+  attempt #4: three blockers FIXED + verified live, one
+  architectural blocker EXPOSED + handed off):** With v2 device-
+  addressing + real-ticket all shipped (entry below), drove four
+  successive live `create-sample-user demo-alice` runs against
+  Hetzner cx23/fsn1 to validate end-to-end. Each attempt surfaced
+  + fixed a real bug; the 4th hit a more substantive limitation
+  in `installer/install.sh` that needs its own session.
+
+  **Bugs found + fixed live this evening:**
+
+  1. **`/api/users/<u>/pods` HTTP 500** (`31ce5c6` — S1 commit).
+     Root cause: `daemon_status` table missing from prod D1 (one
+     of 10 unapplied migrations dating back months). Backfilled
+     via `scripts/apply-prod-d1-backfill-2026-05-20.sql`.
+
+  2. **`handleUsersCheck` not wiring `deviceCapabilityGrants`**
+     (`f355c7e`). S3.3 added the `<u>.<device-label>` dot-split
+     path inside the handler but the Worker route at
+     `apps/com/src/controlPlaneRoutes.ts:380` only passed
+     `demoUsers` (not `deviceCapabilityGrants`). Without both
+     storages wired, the handler fell through to `validateUserLabel`
+     which rejected dotted form. Regression test added.
+
+  3. **`admin-claim-and-issue` returned blob as JSON-stringified
+     string instead of object** (`cfc3b9c`). The local
+     `installBlobToJson` in `demoUsersAdmin.ts` JSON.stringify'd
+     the blob. Downstream the CLI wrote `{"blob":"\"...\""...}`
+     to disk, personalize-iso JSON.parse'd it to a string, then
+     `installBlobFromJson(string).version` was undefined →
+     "unsupported InstallBlob version". Fixed by returning the
+     object; the build-tickets storage layer separately
+     stringifies for its TEXT column. Test expectations updated
+     + regression assertion added (`typeof blob === "object"`).
+
+  4. **`buildDdCommand` JSON.stringify ate the newlines**
+     (`1f3dd4b`). The rescue-mode dd script was wrapped in
+     `bash -lc ${JSON.stringify(script)}`. JSON encoding turns
+     real newlines into the 2-character `\n` escape inside a
+     double-quoted string. SSH delivered that verbatim; remote
+     bash dequoted double-quotes, leaving `\n` as literal
+     backslash-n. `bash -lc` then received one physical line of
+     gibberish (`set -euo pipefail\necho ...\nwget ...`), parsed
+     it as one bad command, exited cleanly with code 0 — so the
+     CLI believed dd+reboot ran. The VPS sat idle in rescue for
+     the entire 15-minute poll window; `/api/server/register`
+     never called because Alpine never booted because dd never
+     wrote the disk. **The prior 2026-05-20 session's "the CLI
+     walked all the way through rescue+dd+reboot cleanly" claim
+     was an artifact of this same bug — they THOUGHT it worked
+     because ssh returned 0.** Fix: switch to single-quote shell
+     escaping (newline-preserving). Three regression tests added.
+     Live-validated: Hetzner network metrics on the post-fix run
+     show heavy inbound traffic (peak 32 MB/s — the wget pulled
+     the ISO + the git clone of the flagship repo ran). Prior
+     attempts showed exactly zero post-rescue inbound bytes.
+
+  5. **`installer/install.sh` single-disk VPS support**
+     (`ee6446b`). The installer required a SEPARATE install-target
+     disk distinct from the boot medium (TRAILER_SRC). That
+     assumption fits the original USB-stick → internal-HDD flow
+     but BREAKS on every single-disk cloud VPS where rescue+dd
+     wrote our ISO onto the VM's only disk. install.sh's loop
+     skipped /dev/sda (== TRAILER_SRC), found no alternative,
+     and exited 1 ("no install-target disk found"). Hetzner
+     network metrics on attempt 3 confirmed: zero traffic after
+     rescue reboot — Alpine booted, install.sh exited 1
+     immediately, daemon never started. Fix adds an in-place
+     fallback on TRAILER_SRC after the loop yields nothing.
+
+  **The remaining blocker (NOT fixed this evening, needs its
+  own session):** With S5 in place, the post-rescue install
+  reached the heavy network phase (Hetzner metrics show 32 MB/s
+  inbound — the git clone of the flagship repo ran). Then CPU
+  + network went COMPLETELY idle at 17:17:57 local (~3 min
+  after the git clone peak) and stayed at 1% CPU / 0 B/s for
+  the next 10 min until the CLI timed out at 15 min.
+
+  Hypothesis: `installer/install.sh` runs `parted /dev/sda
+  mklabel gpt` (line 61) while parts of Alpine are still
+  mounted/active from /dev/sda. Even though the apkovl-mode
+  Alpine init runs from RAM, the running kernel almost certainly
+  has open file descriptors, mounted apkovl tarballs, and lazy
+  pulls from /dev/sda. Repartitioning under it crashes the
+  kernel. Network goes silent because the IP stack is gone.
+
+  The cloud-VPS-friendly fix is one of:
+    (a) Before `parted /dev/sda`, sync + unmount every active
+        reference to /dev/sda (`losetup -D`, `umount`, etc),
+        confirm with `fuser` / `lsof`, then proceed.
+    (b) Use a tmpfs pivot — copy the booted Alpine into RAM
+        (`pivot_root` style), unmount /dev/sda completely, then
+        repartition.
+    (c) Allocate a Hetzner volume + attach as /dev/sdb during
+        provision; CLI passes that as the install target via a
+        new bootstrap argument; install.sh uses /dev/sdb. Disks
+        cost €0.05/GB/month so a 10GB volume = ~€0.50/month per
+        demo. Cheapest option that avoids the in-place pivot
+        gymnastics.
+
+  This is the next session's primary task. The v2 layer is
+  fully landed + tested + the CLI now mints real `.com`
+  tickets — every layer ABOVE the install.sh disk issue is
+  proven.
+
+  **Concrete state at session end:**
+
+  - main: `ee6446b` (or later if the upcoming session-handoff
+    commit lands).
+  - prod-D1: all 31 migrations applied (0001-0031, including
+    today's `device_capability_grants`).
+  - Worker: `fe261337-808d-4f9b-9fb6-15953354465f`. All v2
+    routes live + verified (admin-claim-and-issue mints a
+    real ticket per probe).
+  - Secrets: `DEMO_IRK_KEK` set (generated via
+    `openssl rand -hex 32` piped into wrangler stdin; never in
+    agent context). `HCLOUD_TOKEN`, `DEMO_PUBLIC_SSH_KEY`,
+    `FLAGSHIP_ADMIN_SECRET`, `FLAGSHIP_CA_PRIV_HEX` all set.
+    `CA_ENDORSEMENT_ENFORCE=true` armed.
+  - demo-alice state in D1: `usernames` row claimed under the
+    derived IRK `a7955f17…` (`is_demo=1`). Multiple stale
+    auth-codes + build-tickets + device-grants from the four
+    attempts (revoked-on-re-issue cycle works correctly).
+  - No active Hetzner servers — all four attempt VPSes torn
+    down cleanly via the per-attempt destroy-on-fail logic
+    AND explicit `DELETE /servers/{id}` calls.
+  - Network gates: `npx vitest run` **3084/3084** (+3
+    from S3.5 baseline; the +3 are the new buildDdCommand
+    regression tests). `npx tsc -b` clean. iOS / Android gates
+    unchanged from earlier this session.
+
+  **Next session, primary task:** pick fix path (a) (sync +
+  umount before parted) OR (c) (Hetzner volume side-car).
+  Recommendation: (a) — it's a small change to install.sh,
+  no CLI surface area, no new Hetzner-volume API code, no
+  cost increase. The tradeoff is that it's a per-distro
+  exercise (works for Alpine apkovl mode; might need different
+  logic for DigitalOcean). For demo Phase F we only need
+  Alpine + Hetzner so (a) is sufficient.
+
 - **2026-05-20 (v1-launch s9 cont. — ★★★ v2 device-addressing +
   real-ticket refactor LANDED; both 2026-05-20 architectural gaps
   RESOLVED end-to-end):** Drove S1→S2→S3.1→S3.2→S3.3→S3.4→S3.5
