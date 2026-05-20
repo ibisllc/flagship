@@ -105,6 +105,7 @@ fun HomeTab() {
             val hasRecovery by app.hasCloudRecovery.collectAsState()
             val dismissed by app.recoveryNudgeDismissedThisSession.collectAsState()
             val reset by app.accountWasReset.collectAsState()
+            val capability by app.deviceCapability.collectAsState()
             val showNudge = !hasRecovery && !dismissed && pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
             HomeScreen(
                 state = vm.state.collectAsState().value,
@@ -122,6 +123,7 @@ fun HomeTab() {
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
                 accountWasReset = reset,
                 onSignInAgain = { app.signOut() },
+                deviceCapability = capability,
             )
         }
         composable("server-detail/{podId}") { entry ->

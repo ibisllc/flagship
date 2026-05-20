@@ -36,6 +36,7 @@
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.api.DemoServerBlock
+import com.flagshipserver.app.api.DeviceCapabilityBlock
 import java.util.UUID
 
 object DemoFixtures {
@@ -104,11 +105,17 @@ object DemoFixtures {
      *  with the server-supplied FQDN + lifecycle. When null (legacy),
      *  fall back to the three-fixture path so already-shipped
      *  binaries (and reviewers who don't want a live pod) keep
-     *  working. */
+     *  working.
+     *
+     *  When [deviceCapability] is non-null (v2 device-addressing),
+     *  the session inherits its scope set — the chip + the "this
+     *  device cannot install services" tooltip render. Legacy
+     *  callers omit it and get the implicit full scope set. */
     fun activate(
         appState: AppState,
         username: String,
         demoServer: DemoServerBlock? = null,
+        deviceCapability: DeviceCapabilityBlock? = null,
     ) {
         val pods = if (demoServer != null) {
             listOf(samplePodFromDemoServer(demoServer, username))
@@ -116,6 +123,9 @@ object DemoFixtures {
             samplePods(username)
         }
         appState.completeOnboarding(username = username, pods = pods)
+        // Install AFTER completeOnboarding so the capability survives;
+        // completeOnboarding intentionally does NOT touch this field.
+        appState.setDeviceCapability(deviceCapability)
     }
 
     private fun labelFromFqdn(fqdn: String): String? = fqdn.split(".").firstOrNull()

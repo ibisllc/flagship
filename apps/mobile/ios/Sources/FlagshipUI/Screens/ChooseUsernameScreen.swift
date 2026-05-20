@@ -26,13 +26,23 @@ public struct ChooseUsernameScreen: View {
     /// is present the demo renders ONE live device; otherwise the
     /// legacy 3-fixture path runs.
     var onDemoActivate: (String, TestAccountMeta, DemoServerBlock?) -> Void
+    /// v2 device-addressing continuation. Called when the typed
+    /// string was `<u>.<device-label>` AND the Worker returned a
+    /// matching DeviceCapabilityGrant. Carries the username (already
+    /// in dot-form), the demoServer block from the underlying
+    /// user-part row, and the capability block. The host hands all
+    /// three to DemoFixtures.activate so the session inherits the
+    /// restricted scope set.
+    var onDeviceCapabilityActivate: (String, DemoServerBlock, DeviceCapabilityBlock) -> Void
 
     public init(
         onContinue: @escaping (String) -> Void = { _ in },
-        onDemoActivate: @escaping (String, TestAccountMeta, DemoServerBlock?) -> Void = { _, _, _ in }
+        onDemoActivate: @escaping (String, TestAccountMeta, DemoServerBlock?) -> Void = { _, _, _ in },
+        onDeviceCapabilityActivate: @escaping (String, DemoServerBlock, DeviceCapabilityBlock) -> Void = { _, _, _ in }
     ) {
         self.onContinue = onContinue
         self.onDemoActivate = onDemoActivate
+        self.onDeviceCapabilityActivate = onDeviceCapabilityActivate
     }
 
     public var body: some View {
@@ -69,7 +79,14 @@ public struct ChooseUsernameScreen: View {
                     large: true
                 ) {
                     guard let vm else { return }
-                    if let meta = vm.status.testAccountMeta {
+                    if let cap = vm.status.deviceCapabilityBlock,
+                       let demo = vm.status.demoServerBlock {
+                        // v2 — device-capability branch. Forward the
+                        // capability so DemoFixtures installs it on
+                        // AppState; the home screen will then render
+                        // the chip + disable restricted buttons.
+                        onDeviceCapabilityActivate(username, demo, cap)
+                    } else if let meta = vm.status.testAccountMeta {
                         // Plan A — when the Worker also returned a
                         // `demoServer` block, pass it through so
                         // DemoFixtures renders the one-live-device
@@ -89,6 +106,9 @@ public struct ChooseUsernameScreen: View {
     }
 
     private var ctaLabel: String {
+        if case .deviceCapability(let label, _, _) = vm?.status {
+            return "Enter as \(label)"
+        }
         if let meta = vm?.status.testAccountMeta { return "Enter \(meta.display)" }
         return "Continue"
     }
@@ -102,6 +122,16 @@ public struct ChooseUsernameScreen: View {
         case .available:                 return "Available."
         case .networkFallbackAvailable:  return "Looks OK — we'll confirm when you continue."
         case .taken:                     return nil
+        case .deviceCapability(let label, _, let cap):
+            // v2 — show the device label + a short scope summary so
+            // a reviewer knows what the "Enter as <label>" CTA will
+            // unlock. `browse-only` is the canonical reviewer state;
+            // anything broader summarises as "N scopes" (the full
+            // breakdown lives in Settings → About this device).
+            if cap.scopes == [.browse] {
+                return "Device \(label) — browse-only."
+            }
+            return "Device \(label) — \(cap.scopes.count) scopes."
         case .testAccount(let meta, let demoServer):
             if let demoServer {
                 // Plan A — surface the live state so the user knows

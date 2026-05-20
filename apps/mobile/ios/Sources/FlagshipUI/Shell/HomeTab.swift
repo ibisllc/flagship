@@ -61,6 +61,7 @@ public struct HomeTab: View {
                     leaderPodId: app.leaderPodId,
                     showRecoveryNudge: app.shouldShowRecoveryNudge,
                     accountWasReset: app.accountWasReset,
+                    deviceCapability: app.deviceCapability,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onAddServer: { path.append(.addServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },

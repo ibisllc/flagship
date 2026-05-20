@@ -21,7 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.DeviceScope
+import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -107,6 +110,13 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
     val listing = remember { sampleDetail(creator, slug) }
     val pods = remember { samplePodsForInstall() }
     var selectedPod by remember { mutableStateOf<String?>(null) }
+    // v2 device-addressing — when the current session is a restricted
+    // sub-identity without `install-service`, the install CTA is
+    // disabled with a tooltip / accessibility hint. A null capability
+    // (legacy single-IRK) implicitly holds every scope.
+    val app = LocalAppState.current
+    val cap = app.deviceCapability.collectAsState().value
+    val canInstall = cap == null || DeviceScope.INSTALL_SERVICE in cap.scopeSet
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6),
@@ -153,13 +163,21 @@ fun MarketplaceDetailScreen(nav: NavController, creator: String, slug: String) {
         }
 
         Spacer(Modifier.height(FS.space.s8))
+        if (!canInstall) {
+            Text(
+                text = "This device cannot install services. Use a primary device.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                modifier = Modifier.padding(bottom = FS.space.s2),
+            )
+        }
         FSPrimaryButton(
             label = "Install",
             onClick = {
                 // TODO: phone signs InstallAppRequest + ships to .com /api/marketplace/<creator>/<slug>/install
             },
             block = true,
-            enabled = selectedPod != null,
+            enabled = selectedPod != null && canInstall,
         )
         Spacer(Modifier.height(FS.space.s3))
         FSGhostButton(

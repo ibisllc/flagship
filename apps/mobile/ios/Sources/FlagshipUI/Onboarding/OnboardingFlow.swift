@@ -51,6 +51,20 @@ public struct OnboardingFlow: View {
                                 username: username,
                                 demoServer: demoServer
                             )
+                        },
+                        onDeviceCapabilityActivate: { username, demoServer, capability in
+                            // v2 device-addressing — the typed string
+                            // was `<u>.<label>`. Materialise the same
+                            // live VPS as the primary device sees,
+                            // then install the capability so the home
+                            // screen renders the chip + the install /
+                            // vibe-code buttons grey out per scope.
+                            DemoFixtures.activate(
+                                app,
+                                username: username,
+                                demoServer: demoServer,
+                                deviceCapability: capability
+                            )
                         }
                     )
                 case .createServer(let username):

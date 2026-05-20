@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import FlagshipAPI
 
 /// App-wide observable state. The single source of truth for "who is the
 /// user, which servers do they own, which one is the leader."
@@ -54,6 +55,13 @@ public final class AppState {
     /// — if biometric isn't required, this is true by default so the
     /// content renders immediately.
     public var isUnlocked: Bool
+    /// v2 device-addressing — the effective scopes the current device
+    /// holds under the signed-in user. Nil ⇒ legacy single-IRK path,
+    /// no restriction (treat as full scope set). When non-nil, the
+    /// UI greys out actions absent from this set and renders the
+    /// device-label chip below the username. See
+    /// docs/v2-device-addressing-and-real-ticket.md §5.2.
+    public var deviceCapability: DeviceCapabilityBlock?
 
     public init(
         isPaired: Bool = false,
@@ -65,7 +73,8 @@ public final class AppState {
         recoveryNudgeDismissedThisSession: Bool = false,
         accountWasReset: Bool = false,
         requireBiometricAtLaunch: Bool = false,
-        isUnlocked: Bool? = nil
+        isUnlocked: Bool? = nil,
+        deviceCapability: DeviceCapabilityBlock? = nil
     ) {
         self.isPaired = isPaired
         self.currentUser = currentUser
@@ -79,6 +88,27 @@ public final class AppState {
         // Default isUnlocked: if biometric isn't required, start
         // unlocked. If required, start LOCKED (the gate view shows).
         self.isUnlocked = isUnlocked ?? !requireBiometricAtLaunch
+        self.deviceCapability = deviceCapability
+    }
+
+    /// v2 device-addressing — true iff the current device is a
+    /// restricted sub-identity (has a deviceCapability with a partial
+    /// scope set). UI uses this to gate the chip + tooltips. A nil
+    /// capability or a fully-scoped one render NO chip and NO
+    /// tooltips (legacy single-IRK behaviour).
+    public var isRestrictedDevice: Bool {
+        guard let cap = deviceCapability else { return false }
+        return !cap.isFullyScoped
+    }
+
+    /// v2 device-addressing — quick lookup helper. Returns true when
+    /// the device's scopes cover [scope] (or when no capability is
+    /// installed at all — the legacy single-IRK path holds every
+    /// scope implicitly). UI callsites use this to enable / disable
+    /// individual buttons.
+    public func hasScope(_ scope: DeviceScope) -> Bool {
+        guard let cap = deviceCapability else { return true }
+        return cap.scopeSet.contains(scope)
     }
 
     /// True when the recovery-setup nudge should be visible on Home /
@@ -140,6 +170,7 @@ public final class AppState {
         self.pods = []
         self.leaderPodId = nil
         self.currentPodId = nil
+        self.deviceCapability = nil
         // Welcome doesn't need the lock-screen gate (the user is
         // about to authenticate via passkey anyway). Keep the user
         // preference for next launch; just unlock the runtime latch.

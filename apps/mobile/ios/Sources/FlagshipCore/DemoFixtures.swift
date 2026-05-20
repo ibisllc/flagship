@@ -116,11 +116,17 @@ public enum DemoFixtures {
     /// the server-supplied FQDN + lifecycle. When nil (legacy), fall
     /// back to the three-fixture path so already-shipped binaries
     /// (and reviewers who don't want a live pod) keep working.
+    ///
+    /// When [deviceCapability] is non-nil (v2 device-addressing), the
+    /// session inherits its scope set — the AccountHeader chip + the
+    /// "this device cannot install services" tooltip render. Legacy
+    /// callers omit it and get full scopes.
     @MainActor
     public static func activate(
         _ appState: AppState,
         username: String,
-        demoServer: DemoServerBlock? = nil
+        demoServer: DemoServerBlock? = nil,
+        deviceCapability: DeviceCapabilityBlock? = nil
     ) {
         if let block = demoServer {
             appState.completeOnboarding(
@@ -133,6 +139,10 @@ public enum DemoFixtures {
                 pods: samplePods(username: username)
             )
         }
+        // Write the capability AFTER completeOnboarding so it survives
+        // the state mutation (completeOnboarding does NOT touch
+        // deviceCapability — it's session-scoped not pod-scoped).
+        appState.deviceCapability = deviceCapability
     }
 
     // Internal helper — first label of the FQDN ("home" from

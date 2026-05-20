@@ -710,16 +710,26 @@ public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
     /// legacy (testAccount-only) behaviour preserved. See
     /// docs/sample-users.md §10.9.
     public let demoServer: DemoServerBlock?
+    /// v2 device-addressing — present when the typed username matched
+    /// the `<u>.<device-label>` syntax AND a matching active grant
+    /// exists in `device_capability_grants` on the Worker. The mobile
+    /// client treats this as a strong declaration of "you are a
+    /// restricted device under this user" and greys out actions
+    /// absent from `scopes`. See
+    /// docs/v2-device-addressing-and-real-ticket.md §5.1.
+    public let deviceCapability: DeviceCapabilityBlock?
     public init(
         username: String,
         available: Bool,
         reason: String?,
         testAccount: TestAccountMeta? = nil,
-        demoServer: DemoServerBlock? = nil
+        demoServer: DemoServerBlock? = nil,
+        deviceCapability: DeviceCapabilityBlock? = nil
     ) {
         self.username = username; self.available = available; self.reason = reason
         self.testAccount = testAccount
         self.demoServer = demoServer
+        self.deviceCapability = deviceCapability
     }
 }
 
@@ -773,6 +783,109 @@ public struct DemoServerBlock: Codable, Equatable, Sendable {
     }
 }
 
+/// v2 device-addressing — mirror of the Worker's `deviceCapability`
+/// block in `packages/control-plane/src/usersCheck.ts`. Embedded into
+/// the `/api/users/check` response when the typed username matched
+/// the `<u>.<device-label>` syntax AND a matching active
+/// DeviceCapabilityGrant exists. See
+/// docs/v2-device-addressing-and-real-ticket.md §2 + §5.1.
+public struct DeviceCapabilityBlock: Codable, Equatable, Sendable {
+    /// Human-meaningful label the user typed after the dot
+    /// ("reviewer", "ipad", "work-laptop"). RFC-1035-ish (a-z, 0-9,
+    /// hyphen; not at start/end; ≤24 chars). Used in the chip below
+    /// the username.
+    public let label: String
+    /// Device's Ed25519 pubkey, 32 bytes hex. Identifies the device
+    /// across re-issuance. Not displayed in the UI; the client uses
+    /// it when signing requests on behalf of this device.
+    public let devicePubKey: String
+    /// Authorized scopes for this device. The Worker may return ANY
+    /// subset of `DeviceScope`; the UI greys out actions absent from
+    /// this set. Unknown future scope strings are parsed as nil and
+    /// silently dropped so an older client doesn't crash on a newer
+    /// Worker.
+    public let scopes: [DeviceScope]
+    /// Grant identifier (v4 UUID). Audit / debugging only.
+    public let grantId: String
+    /// ms since epoch. The client SHOULD treat the block as expired
+    /// after this and prompt re-enrollment.
+    public let expiresAt: Int64
+    /// Owner-IRK Ed25519 signature over the canonical bytes of the
+    /// underlying DeviceCapabilityGrant. 64 bytes hex. Verification
+    /// happens at the daemon layer; surfaced here for forward-compat
+    /// and parity with the Worker wire shape.
+    public let signature: String
+
+    public init(
+        label: String,
+        devicePubKey: String,
+        scopes: [DeviceScope],
+        grantId: String,
+        expiresAt: Int64,
+        signature: String
+    ) {
+        self.label = label
+        self.devicePubKey = devicePubKey
+        self.scopes = scopes
+        self.grantId = grantId
+        self.expiresAt = expiresAt
+        self.signature = signature
+    }
+
+    /// Forward-compat decoder: unknown scope strings (a newer Worker
+    /// emitting a scope this binary doesn't know about) are silently
+    /// dropped so the client falls open to whatever it CAN parse. The
+    /// daemon does the authoritative enforcement; this UI-layer parse
+    /// is best-effort for rendering.
+    private enum CodingKeys: String, CodingKey {
+        case label, devicePubKey, scopes, grantId, expiresAt, signature
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.label = try c.decode(String.self, forKey: .label)
+        self.devicePubKey = try c.decode(String.self, forKey: .devicePubKey)
+        self.grantId = try c.decode(String.self, forKey: .grantId)
+        self.expiresAt = try c.decode(Int64.self, forKey: .expiresAt)
+        self.signature = try c.decode(String.self, forKey: .signature)
+        let rawScopes = try c.decode([String].self, forKey: .scopes)
+        self.scopes = rawScopes.compactMap(DeviceScope.init(rawValue:))
+    }
+
+    /// Convenience: scopes as a Set for membership checks. Stable
+    /// across decode order; UI rendering callsites use this.
+    public var scopeSet: Set<DeviceScope> { Set(scopes) }
+
+    /// True iff this device's scopes cover the full DeviceScope set
+    /// — i.e. the device is a primary device with no restrictions.
+    /// The chip + button-disable surfaces hide when this is true.
+    public var isFullyScoped: Bool {
+        DeviceScope.allCases.allSatisfy(scopes.contains)
+    }
+}
+
+/// v2 device-addressing — scopes mirror the Worker wire strings in
+/// `packages/protocol/src/auth.ts` (`DEVICE_SCOPES`). Order MUST
+/// match the canonical sort order so a future audit-trail render
+/// stays stable. Unknown future values decode to nil and are dropped
+/// (forward-compat).
+public enum DeviceScope: String, Codable, Equatable, Sendable, CaseIterable {
+    case browse = "browse"
+    case installService = "install-service"
+    case vibeCode = "vibe-code"
+    case addDevice = "add-device"
+    case manageServices = "manage-services"
+    case revokeOthers = "revoke-others"
+    case demoProvision = "demo-provision"
+
+    /// Decoder that tolerates unknown future strings: an unrecognised
+    /// scope returns nil so `Array<DeviceScope?>.compactMap` drops it.
+    /// Used by the array decoder via a wrapper.
+    public init?(wire: String) {
+        self.init(rawValue: wire)
+    }
+}
+
 public struct RecoveryEnvelopeRequest: Codable, Equatable, Sendable {
     public let credentialId: String
     public let wrappedUmkBase64: String
@@ -816,6 +929,15 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// — a username may carry both (legacy reviewer compat) or just
     /// the new block (live demo only).
     public var demoServers: [String: DemoServerBlock] = [:]
+    /// v2 device-addressing — mirror of the Worker's
+    /// `device_capability_grants` D1 table. Keyed by the full
+    /// `<u>.<label>` string the user types. When `usernameAvailable`
+    /// is called with a key here AND the user-part has a `demoServers`
+    /// row, the response carries the `deviceCapability` block + the
+    /// `demoServer` block from the user-part row (the underlying
+    /// demo server the device is observing). See
+    /// docs/v2-device-addressing-and-real-ticket.md §5.1.
+    public var deviceCapabilities: [String: DeviceCapabilityBlock] = [:]
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
 
     /// Tracks usernames that have been claimed so the mock can return
@@ -865,6 +987,32 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         try await tick()
         let lower = username.lowercased()
+        // v2 device-addressing — `<u>.<label>` syntax precedes every
+        // other rule. The Worker behaves the same way: when a typed
+        // dot-form matches both a demo_users row AND an active
+        // device_capability_grants row, the response carries the
+        // `deviceCapability` block + the underlying demoServer. Any
+        // other dot-form returns 404 — we translate that to
+        // available=false + a `reason` mirroring the Worker.
+        if lower.contains(".") {
+            if let cap = deviceCapabilities[lower] {
+                let dot = lower.firstIndex(of: ".")!
+                let userPart = String(lower[..<dot])
+                let underlyingDemo = demoServers[userPart]
+                return .init(
+                    username: lower,
+                    available: false,
+                    reason: "device capability",
+                    demoServer: underlyingDemo,
+                    deviceCapability: cap
+                )
+            }
+            // Mirror the Worker's 404 → "unknown demo device label".
+            // Returning available=false here so the Mock's wire shape
+            // stays parseable; the Live client surfaces the 404 via
+            // `usernameLookupBadRequest` / errors.
+            throw ScreensClientError.http(status: 404, message: "unknown demo device label")
+        }
         // Plan A — every return branch folds in the demoServer block
         // when present. Independent of the testAccount / claim
         // branches; the Worker behaves the same way.

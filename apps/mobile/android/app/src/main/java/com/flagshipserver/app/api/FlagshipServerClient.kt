@@ -464,6 +464,13 @@ data class UsernameAvailabilityResponse(
      *  legacy (testAccount-only) behaviour preserved. See
      *  docs/sample-users.md §10.9. */
     val demoServer: DemoServerBlock? = null,
+    /** v2 device-addressing — present when the typed username matched
+     *  the `<u>.<device-label>` syntax AND a matching active
+     *  DeviceCapabilityGrant exists. The mobile client greys out
+     *  actions absent from `scopes` and renders the device-label chip
+     *  below the username. See
+     *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
+    val deviceCapability: DeviceCapabilityBlock? = null,
 )
 
 @Serializable
@@ -507,6 +514,75 @@ data class DemoServerBlock(
     }
 
     enum class Lifecycle { None, Provisioning, Up }
+}
+
+/** v2 device-addressing — mirror of the Worker's `deviceCapability`
+ *  block in `packages/control-plane/src/usersCheck.ts`. Embedded into
+ *  the `/api/users/check` response when the typed username matched
+ *  the `<u>.<device-label>` syntax AND a matching active
+ *  DeviceCapabilityGrant exists. See
+ *  docs/v2-device-addressing-and-real-ticket.md §2 + §5.1.
+ *
+ *  Note: `scopes` is a wire-format list of strings. Use [scopeSet]
+ *  for the typed forward-compat parse (unknown future scope strings
+ *  are silently dropped). */
+@Serializable
+data class DeviceCapabilityBlock(
+    /** Human-meaningful label the user typed after the dot
+     *  ("reviewer", "ipad", "work-laptop"). RFC-1035-ish (a-z, 0-9,
+     *  hyphen; not at start/end; ≤24 chars). Used in the chip below
+     *  the username. */
+    val label: String,
+    /** Device's Ed25519 pubkey, 32 bytes hex. Identifies the device
+     *  across re-issuance. */
+    val devicePubKey: String,
+    /** Authorized scopes for this device. The Worker may return ANY
+     *  subset of [DeviceScope]; unknown future strings are silently
+     *  dropped by [scopeSet] (forward-compat — an older binary on a
+     *  newer Worker doesn't crash). */
+    val scopes: List<String>,
+    /** Grant identifier (v4 UUID). Audit / debugging only. */
+    val grantId: String,
+    /** ms since epoch. The client SHOULD treat the block as expired
+     *  after this and prompt re-enrollment. */
+    val expiresAt: Long,
+    /** Owner-IRK Ed25519 signature over the canonical bytes of the
+     *  underlying DeviceCapabilityGrant. 64 bytes hex. Daemon-side
+     *  verification; surfaced here for parity with the Worker wire. */
+    val signature: String,
+) {
+    /** Typed scope set — drops unknown strings forward-compat-style.
+     *  UI callsites use this to gate the install / vibe-code buttons. */
+    val scopeSet: Set<DeviceScope> get() = scopes
+        .mapNotNull { DeviceScope.fromWire(it) }
+        .toSet()
+
+    /** True iff this device's scopes cover the full [DeviceScope] set
+     *  — a primary device with no restrictions. The chip + tooltips
+     *  suppress when this is true. */
+    val isFullyScoped: Boolean get() = DeviceScope.values().all { it in scopeSet }
+}
+
+/** v2 device-addressing — scopes mirror the Worker wire strings in
+ *  `packages/protocol/src/auth.ts` (`DEVICE_SCOPES`). Order MUST
+ *  match the canonical sort order so a future audit-trail render
+ *  stays stable. */
+enum class DeviceScope(val wire: String) {
+    BROWSE("browse"),
+    INSTALL_SERVICE("install-service"),
+    VIBE_CODE("vibe-code"),
+    ADD_DEVICE("add-device"),
+    MANAGE_SERVICES("manage-services"),
+    REVOKE_OTHERS("revoke-others"),
+    DEMO_PROVISION("demo-provision");
+
+    companion object {
+        /** Forward-compat: unknown future strings return null so an
+         *  older binary on a newer Worker silently drops them rather
+         *  than crashing. */
+        fun fromWire(wire: String): DeviceScope? =
+            values().firstOrNull { it.wire == wire }
+    }
 }
 
 @Serializable
@@ -572,6 +648,14 @@ class MockFlagshipServerClient(
      *  [testAccounts] — a username may carry both (legacy reviewer
      *  compat) or just the new block (live demo only). */
     var demoServers: MutableMap<String, DemoServerBlock> = mutableMapOf(),
+    /** v2 device-addressing — mirror of the Worker's
+     *  `device_capability_grants` D1 table. Keyed by the full
+     *  `<u>.<label>` string the user types. When `usernameAvailable`
+     *  is called with a key here AND the user-part has a [demoServers]
+     *  row, the response carries the `deviceCapability` block + the
+     *  `demoServer` block from the user-part row. See
+     *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
+    var deviceCapabilities: MutableMap<String, DeviceCapabilityBlock> = mutableMapOf(),
 ) : FlagshipServerClient {
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
@@ -618,6 +702,29 @@ class MockFlagshipServerClient(
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
         tick()
         val lower = username.lowercase()
+        // v2 device-addressing — `<u>.<label>` syntax precedes every
+        // other rule. The Worker behaves the same way: when a typed
+        // dot-form matches both a demo_users row AND an active
+        // device_capability_grants row, the response carries the
+        // `deviceCapability` block + the underlying demoServer. Any
+        // other dot-form returns 404 — the live client throws an
+        // HttpException(404) which the Mock mirrors so callers see
+        // the same failure mode.
+        if (lower.contains('.')) {
+            val cap = deviceCapabilities[lower]
+            if (cap != null) {
+                val userPart = lower.substringBefore('.')
+                val underlyingDemo = demoServers[userPart]
+                return UsernameAvailabilityResponse(
+                    username = lower,
+                    available = false,
+                    reason = "device capability",
+                    demoServer = underlyingDemo,
+                    deviceCapability = cap,
+                )
+            }
+            throw HttpException(404, "unknown demo device label")
+        }
         // Plan A — every return branch folds in the demoServer block
         // when present. Independent of testAccount / claim branches;
         // the Worker behaves the same way.

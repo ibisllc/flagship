@@ -12,10 +12,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyScopeGateToButton,
   checkUsername,
   connectDemoServer,
+  DEVICE_SCOPES,
   demoLifecycle,
   demoPodStatus,
+  deviceCapabilityAllows,
+  deviceCapabilityChipText,
+  deviceCapabilityScopeSet,
+  isDeviceFullyScoped,
   pollUntilDemoServerUp,
   samplePodFromDemoServer,
 } from "../public/webapp/lib/usersCheck.js";
@@ -174,5 +180,174 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
       timeoutMs: 1000,
       sleep: () => Promise.resolve(),
     })).rejects.toMatchObject({ code: "demoServerWentAway" });
+  });
+});
+
+describe("webapp usersCheck — v2 device-addressing deviceCapability", () => {
+  it("parses a response WITH a deviceCapability block (browse-only reviewer)", async () => {
+    // Wire shape mirrors packages/control-plane/src/usersCheck.ts.
+    const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {
+      username: "demo-alice.reviewer",
+      available: false,
+      reason: "device capability",
+      demoServer: {
+        fqdn: "home.demo-alice.flagship.services",
+        status: "up",
+        ttlIdleMinutes: 30,
+      },
+      deviceCapability: {
+        label: "reviewer",
+        devicePubKey: "0".repeat(64),
+        scopes: ["browse"],
+        grantId: "00000000-0000-4000-8000-000000000001",
+        expiresAt: 9_999_999_999_999,
+        signature: "0".repeat(128),
+      },
+    }));
+    const r = await checkUsername("demo-alice.reviewer", { fetch: fakeFetch as any });
+    expect(r.deviceCapability?.label).toBe("reviewer");
+    expect(r.deviceCapability?.scopes).toEqual(["browse"]);
+    expect(r.demoServer?.fqdn).toBe("home.demo-alice.flagship.services");
+  });
+
+  it("DEVICE_SCOPES exports the canonical list (mirror of protocol/auth.ts)", () => {
+    expect(DEVICE_SCOPES).toEqual([
+      "browse",
+      "install-service",
+      "vibe-code",
+      "add-device",
+      "manage-services",
+      "revoke-others",
+      "demo-provision",
+    ]);
+  });
+
+  it("deviceCapabilityScopeSet drops unknown future scope strings (forward-compat)", () => {
+    const block = {
+      label: "reviewer",
+      devicePubKey: "0".repeat(64),
+      scopes: ["browse", "new-future-scope"],
+      grantId: "g",
+      expiresAt: 0,
+      signature: "0".repeat(128),
+    };
+    const set = deviceCapabilityScopeSet(block);
+    expect(set).toEqual(new Set(["browse"]));
+  });
+
+  it("isDeviceFullyScoped is true only when every canonical scope is present", () => {
+    expect(isDeviceFullyScoped(null)).toBe(false);
+    expect(isDeviceFullyScoped({
+      label: "r", devicePubKey: "0", scopes: ["browse"], grantId: "g",
+      expiresAt: 0, signature: "0",
+    })).toBe(false);
+    expect(isDeviceFullyScoped({
+      label: "primary", devicePubKey: "0", scopes: [...DEVICE_SCOPES], grantId: "g",
+      expiresAt: 0, signature: "0",
+    })).toBe(true);
+  });
+
+  it("deviceCapabilityChipText returns null for null / fully-scoped (no chip)", () => {
+    expect(deviceCapabilityChipText(null)).toBeNull();
+    expect(deviceCapabilityChipText(undefined)).toBeNull();
+    expect(deviceCapabilityChipText({
+      label: "primary", devicePubKey: "0", scopes: [...DEVICE_SCOPES], grantId: "g",
+      expiresAt: 0, signature: "0",
+    })).toBeNull();
+  });
+
+  it("deviceCapabilityChipText renders 'browse-only' for the reviewer canonical state", () => {
+    expect(deviceCapabilityChipText({
+      label: "reviewer",
+      devicePubKey: "0",
+      scopes: ["browse"],
+      grantId: "g",
+      expiresAt: 0,
+      signature: "0",
+    })).toBe("Device: reviewer · browse-only");
+  });
+
+  it("deviceCapabilityChipText renders 'N scopes' for partial-but-multi sets", () => {
+    expect(deviceCapabilityChipText({
+      label: "work-laptop",
+      devicePubKey: "0",
+      scopes: ["browse", "install-service", "vibe-code"],
+      grantId: "g",
+      expiresAt: 0,
+      signature: "0",
+    })).toBe("Device: work-laptop · 3 scopes");
+  });
+
+  it("deviceCapabilityAllows lets every action through when the block is absent (legacy IRK)", () => {
+    expect(deviceCapabilityAllows(null, "install-service")).toBe(true);
+    expect(deviceCapabilityAllows(undefined, "vibe-code")).toBe(true);
+  });
+
+  it("deviceCapabilityAllows gates per-scope when the block is present", () => {
+    const cap = {
+      label: "reviewer",
+      devicePubKey: "0",
+      scopes: ["browse"],
+      grantId: "g",
+      expiresAt: 0,
+      signature: "0",
+    };
+    expect(deviceCapabilityAllows(cap, "browse")).toBe(true);
+    expect(deviceCapabilityAllows(cap, "install-service")).toBe(false);
+    expect(deviceCapabilityAllows(cap, "vibe-code")).toBe(false);
+  });
+
+  it("applyScopeGateToButton disables a button + sets tooltip when scope absent", () => {
+    // Minimal DOM stub — JSDom isn't in the vitest config, so we mock
+    // the surface the helper actually touches (disabled property + a
+    // small attribute store).
+    const attrs: Record<string, string> = {};
+    const fakeButton = {
+      disabled: false,
+      setAttribute: (k: string, v: string) => { attrs[k] = v; },
+      removeAttribute: (k: string) => { delete attrs[k]; },
+    };
+    const cap = {
+      label: "reviewer",
+      devicePubKey: "0",
+      scopes: ["browse"],
+      grantId: "g",
+      expiresAt: 0,
+      signature: "0",
+    };
+    applyScopeGateToButton(
+      fakeButton as any,
+      cap,
+      "install-service",
+      "This device cannot install services. Use a primary device.",
+    );
+    expect(fakeButton.disabled).toBe(true);
+    expect(attrs["aria-disabled"]).toBe("true");
+    expect(attrs["title"]).toBe("This device cannot install services. Use a primary device.");
+    expect(attrs["data-device-restricted"]).toBe("install-service");
+  });
+
+  it("applyScopeGateToButton re-enables when the gate is open (legacy / scope present)", () => {
+    const attrs: Record<string, string> = {
+      "aria-disabled": "true",
+      "title": "stale",
+      "data-device-restricted": "install-service",
+    };
+    const fakeButton = {
+      disabled: true,
+      setAttribute: (k: string, v: string) => { attrs[k] = v; },
+      removeAttribute: (k: string) => { delete attrs[k]; },
+    };
+    // Null block → every scope allowed (legacy single-IRK).
+    applyScopeGateToButton(fakeButton as any, null, "install-service", "ignored");
+    expect(fakeButton.disabled).toBe(false);
+    expect(attrs["aria-disabled"]).toBeUndefined();
+    expect(attrs["title"]).toBeUndefined();
+    expect(attrs["data-device-restricted"]).toBeUndefined();
+  });
+
+  it("applyScopeGateToButton is a no-op on null buttons", () => {
+    // Don't throw when the caller passes a missing element.
+    expect(() => applyScopeGateToButton(null, null, "install-service", "x")).not.toThrow();
   });
 });

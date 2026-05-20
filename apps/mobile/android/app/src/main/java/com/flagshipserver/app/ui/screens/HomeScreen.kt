@@ -23,6 +23,15 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import com.flagshipserver.app.api.DeviceCapabilityBlock
+import com.flagshipserver.app.api.DeviceScope
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.ui.components.FSCard
@@ -55,6 +64,14 @@ fun HomeScreen(
      *  the two banners don't stack. */
     accountWasReset: Boolean = false,
     onSignInAgain: () -> Unit = {},
+    /** v2 device-addressing — when non-null AND not fully-scoped, the
+     *  header renders a "Device: <label> · browse-only" chip below
+     *  the username. Nil ⇒ legacy single-IRK path, no chip. Source:
+     *  AppState.deviceCapability. The home screen itself doesn't yet
+     *  render the install / vibe-code quick-action buttons (those
+     *  live behind the marketplace tab on Android v1.0); the chip is
+     *  the first visible v2 surface here. */
+    deviceCapability: DeviceCapabilityBlock? = null,
 ) {
     val scroll = rememberScrollState()
     Column(
@@ -78,6 +95,11 @@ fun HomeScreen(
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
+
+        if (deviceCapability != null && !deviceCapability.isFullyScoped) {
+            Spacer(Modifier.height(FS.space.s2))
+            DeviceCapabilityChip(cap = deviceCapability)
+        }
 
         if (accountWasReset) {
             Spacer(Modifier.height(FS.space.s4))
@@ -122,6 +144,37 @@ fun HomeScreen(
             else -> ServerCardSkeleton()
         }
         Spacer(Modifier.height(FS.space.s12))
+    }
+}
+
+/// v2 device-addressing — "Device: <label> · browse-only" chip
+/// surfaced below the username when the active session is a
+/// restricted sub-identity. The detailed scope breakdown lives behind
+/// Settings → About this device (out-of-scope for this commit).
+/// `browse-only` is the canonical reviewer state; anything else
+/// summarises as "N scopes" so the chip stays one-line.
+@Composable
+private fun DeviceCapabilityChip(cap: DeviceCapabilityBlock) {
+    val summary = if (cap.scopeSet == setOf(DeviceScope.BROWSE)) {
+        "browse-only"
+    } else {
+        "${cap.scopes.size} scopes"
+    }
+    val label = "Device: ${cap.label} · $summary"
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(FS.radius.sm))
+            .background(FS.colors.textMuted.copy(alpha = 0.08f))
+            .padding(horizontal = FS.space.s3, vertical = 4.dp)
+            .semantics { contentDescription = label }
+            .testTag("device-capability-chip"),
+    ) {
+        Text(
+            text = label,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
+        )
     }
 }
 

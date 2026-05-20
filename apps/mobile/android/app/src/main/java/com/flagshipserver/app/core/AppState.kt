@@ -6,6 +6,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.api.DeviceCapabilityBlock
+import com.flagshipserver.app.api.DeviceScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +23,7 @@ class AppState(
     accountWasReset: Boolean = false,
     requireBiometricAtLaunch: Boolean = false,
     isUnlocked: Boolean? = null,
+    deviceCapability: DeviceCapabilityBlock? = null,
 ) {
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
@@ -92,6 +95,34 @@ class AppState(
         if (_requireBiometricAtLaunch.value) _isUnlocked.value = false
     }
 
+    /**
+     * v2 device-addressing — the effective scopes the current device
+     * holds under the signed-in user. Null ⇒ legacy single-IRK path
+     * (no restriction; every scope implicit). When non-null AND the
+     * scope set is partial, the home screen renders a chip below the
+     * username and greys out actions absent from `scopes`.
+     */
+    private val _deviceCapability = MutableStateFlow(deviceCapability)
+    val deviceCapability: StateFlow<DeviceCapabilityBlock?> = _deviceCapability.asStateFlow()
+    fun setDeviceCapability(value: DeviceCapabilityBlock?) { _deviceCapability.value = value }
+
+    /** v2 device-addressing — true iff the current device is a
+     *  restricted sub-identity (capability present AND scopes don't
+     *  cover the full DeviceScope set). UI gates the chip + tooltips
+     *  on this. */
+    fun isRestrictedDevice(): Boolean {
+        val cap = _deviceCapability.value ?: return false
+        return !cap.isFullyScoped
+    }
+
+    /** v2 device-addressing — true iff the current device may perform
+     *  [scope]. A null capability (legacy single-IRK) implicitly holds
+     *  every scope; the UI re-uses this to enable / disable buttons. */
+    fun hasScope(scope: DeviceScope): Boolean {
+        val cap = _deviceCapability.value ?: return true
+        return scope in cap.scopeSet
+    }
+
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod
 
@@ -146,6 +177,7 @@ class AppState(
         _pods.value = emptyList()
         _leaderPodId.value = null
         _currentPodId.value = null
+        _deviceCapability.value = null
         // Welcome doesn't need the gate (passkey auth coming up); the
         // preference itself stays so a future re-pair re-arms.
         _isUnlocked.value = true

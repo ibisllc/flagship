@@ -26,12 +26,27 @@ public final class ChooseUsernameViewModel {
         /// already-shipped binaries / reviewers without a live VPS
         /// still get the three-pod sandbox.
         case testAccount(TestAccountMeta, demoServer: DemoServerBlock?)
+        /// v2 device-addressing — the typed string was `<u>.<label>`
+        /// and the Worker returned a matching DeviceCapabilityGrant.
+        /// Carries the demoServer block from the underlying user-part
+        /// row (so the rendered pod is the SAME live VPS as the
+        /// primary device sees) plus the device's capability block
+        /// (label + scopes). Activation runs the same demoServer code
+        /// path, then installs the capability into AppState so the
+        /// UI greys out actions absent from `scopes`.
+        case deviceCapability(
+            label: String,
+            demoServer: DemoServerBlock,
+            capability: DeviceCapabilityBlock
+        )
         case networkFallbackAvailable  // regex passed but Worker unreachable
 
         public var allowsContinue: Bool {
             switch self {
-            case .available, .testAccount, .networkFallbackAvailable: return true
-            default: return false
+            case .available, .testAccount, .deviceCapability, .networkFallbackAvailable:
+                return true
+            default:
+                return false
             }
         }
 
@@ -47,6 +62,16 @@ public final class ChooseUsernameViewModel {
         /// real device" path is taken when available.
         public var demoServerBlock: DemoServerBlock? {
             if case .testAccount(_, let demo) = self { return demo }
+            if case .deviceCapability(_, let demo, _) = self { return demo }
+            return nil
+        }
+
+        /// v2 device-addressing — non-nil when the typed string was
+        /// `<u>.<label>` and the Worker returned a DeviceCapabilityGrant.
+        /// Onboarding passes this through to DemoFixtures.activate so
+        /// the session inherits the restricted scope set.
+        public var deviceCapabilityBlock: DeviceCapabilityBlock? {
+            if case .deviceCapability(_, _, let cap) = self { return cap }
             return nil
         }
     }
@@ -115,7 +140,19 @@ public final class ChooseUsernameViewModel {
             return
         }
         if Task.isCancelled { return }
-        if let meta = resp.testAccount {
+        if let cap = resp.deviceCapability, let demo = resp.demoServer {
+            // v2 device-addressing precedes the testAccount branch.
+            // The Worker only emits both blocks together when a
+            // `<u>.<label>` dot-form resolved AND the underlying user
+            // is a demo user. The activation path renders the SAME
+            // live VPS as the primary device, then installs the
+            // restricted scope set into AppState.
+            status = .deviceCapability(
+                label: cap.label,
+                demoServer: demo,
+                capability: cap
+            )
+        } else if let meta = resp.testAccount {
             // Plan A — propagate the optional demoServer block so the
             // host screen can hand it to DemoFixtures.activate. When
             // present, the host renders ONE live device backed by a

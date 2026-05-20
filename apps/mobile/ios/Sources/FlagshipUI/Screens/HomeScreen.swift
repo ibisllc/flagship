@@ -20,6 +20,12 @@ public struct HomeScreen: View {
     /// account was reset on another device" + a "Sign in again" CTA
     /// that drops the user to Welcome.
     let accountWasReset: Bool
+    /// v2 device-addressing — when non-nil AND not fully-scoped, the
+    /// header renders a "Device: <label> · browse-only" chip below
+    /// the username, and the quick-action buttons disable themselves
+    /// when their scope is absent. Nil ⇒ legacy single-IRK path; no
+    /// chip, all actions enabled. Source: AppState.deviceCapability.
+    let deviceCapability: DeviceCapabilityBlock?
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
@@ -37,6 +43,7 @@ public struct HomeScreen: View {
         leaderPodId: String?,
         showRecoveryNudge: Bool = false,
         accountWasReset: Bool = false,
+        deviceCapability: DeviceCapabilityBlock? = nil,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
@@ -53,6 +60,7 @@ public struct HomeScreen: View {
         self.leaderPodId = leaderPodId
         self.showRecoveryNudge = showRecoveryNudge
         self.accountWasReset = accountWasReset
+        self.deviceCapability = deviceCapability
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
@@ -158,18 +166,58 @@ public struct HomeScreen: View {
             Text(username + ".")
                 .font(.system(size: 34, weight: .medium))
                 .foregroundColor(c.text)
+            if let cap = deviceCapability, !cap.isFullyScoped {
+                deviceChip(cap, c: c)
+            }
         }
         .padding(.top, FS.space.s10)
     }
 
+    /// v2 device-addressing — "Device: <label> · browse-only" chip
+    /// surfaced below the username when the active session is a
+    /// restricted sub-identity. Tap target is informational only; the
+    /// detailed scope breakdown lives behind Settings → About this
+    /// device (out-of-scope for this commit). When the device holds
+    /// more than `browse` we show a count summary; reviewers (the
+    /// canonical `[browse]` case) see the explicit phrase so the
+    /// surface reads naturally for the demo flow.
+    private func deviceChip(_ cap: DeviceCapabilityBlock, c: FSColors) -> some View {
+        let summary = (cap.scopes == [.browse])
+            ? "browse-only"
+            : "\(cap.scopes.count) scopes"
+        return HStack(spacing: FS.space.s2) {
+            Image(systemName: "lock.shield")
+                .foregroundColor(c.textMuted)
+                .font(.system(size: 12, weight: .semibold))
+            Text("Device: \(cap.label) · \(summary)")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(c.textMuted)
+        }
+        .padding(.horizontal, FS.space.s3)
+        .padding(.vertical, 4)
+        .background(c.textMuted.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+        .accessibilityIdentifier("device-capability-chip")
+        .accessibilityLabel("Device \(cap.label), \(summary).")
+    }
+
     private func quickActions(c: FSColors) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
+        // v2 — when a deviceCapability is installed, individual
+        // actions disable themselves per their scope membership. A
+        // nil capability (legacy single-IRK path) enables everything.
+        let scopes = deviceCapability?.scopeSet
+        let canVibeCode = scopes == nil || scopes!.contains(.vibeCode)
+        let canInstall = scopes == nil || scopes!.contains(.installService)
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
             actionRow(
                 title: "Build a new app",
                 subtitle: "Describe it in plain English. Your server builds and runs it.",
                 systemImage: "sparkles",
                 accent: c.primary,
                 action: onVibeCode,
+                enabled: canVibeCode,
+                disabledReason: "This device cannot build new apps. Use a primary device.",
+                accessibilityId: "quick-action-vibe-code",
                 c: c
             )
             actionRow(
@@ -178,34 +226,56 @@ public struct HomeScreen: View {
                 systemImage: "square.grid.2x2",
                 accent: c.success,
                 action: onBrowseMarketplace,
+                enabled: canInstall,
+                disabledReason: "This device cannot install services. Use a primary device.",
+                accessibilityId: "quick-action-install-service",
                 c: c
             )
         }
     }
 
-    private func actionRow(title: String, subtitle: String, systemImage: String, accent: Color, action: @escaping () -> Void, c: FSColors) -> some View {
+    private func actionRow(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        accent: Color,
+        action: @escaping () -> Void,
+        enabled: Bool = true,
+        disabledReason: String? = nil,
+        accessibilityId: String? = nil,
+        c: FSColors
+    ) -> some View {
         Button(action: action) {
             FSCard {
                 HStack(alignment: .top, spacing: FS.space.s3) {
                     ZStack {
                         RoundedRectangle(cornerRadius: FS.radius.sm)
-                            .fill(accent.opacity(0.12))
+                            .fill(accent.opacity(enabled ? 0.12 : 0.06))
                         Image(systemName: systemImage)
-                            .foregroundColor(accent)
+                            .foregroundColor(enabled ? accent : c.textMuted)
                             .font(.system(size: 17, weight: .semibold))
                     }
                     .frame(width: 36, height: 36)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(c.text)
-                        Text(subtitle).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        Text(title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(enabled ? c.text : c.textMuted)
+                        Text(enabled ? subtitle : (disabledReason ?? subtitle))
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
-                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    Image(systemName: enabled ? "chevron.right" : "lock")
+                        .foregroundColor(c.textMuted)
                 }
             }
         }
         .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1.0 : 0.6)
+        .accessibilityHint(enabled ? "" : (disabledReason ?? ""))
+        .modifier(OptionalAccessibilityId(id: accessibilityId))
     }
 
     private func serversSection(c: FSColors) -> some View {
@@ -405,6 +475,18 @@ public struct PodCard: View {
         case .unknown: return .idle
         case .pending: return .provisioning
         }
+    }
+}
+
+/// View modifier that only stamps an accessibility identifier when
+/// the caller actually supplied one — keeps the v2 device-restricted
+/// buttons addressable from XCUITest / XCTest snapshot helpers, and
+/// keeps the legacy callsites a no-op so the diff against the
+/// previous identifier policy is minimal.
+private struct OptionalAccessibilityId: ViewModifier {
+    let id: String?
+    func body(content: Content) -> some View {
+        if let id { content.accessibilityIdentifier(id) } else { content }
     }
 }
 

@@ -29,7 +29,124 @@
  *  @property {string=} reason
  *  @property {TestAccountMeta=} testAccount
  *  @property {DemoServerBlock=} demoServer
+ *  @property {DeviceCapabilityBlock=} deviceCapability
  */
+
+/** v2 device-addressing — mirror of the Worker's `deviceCapability`
+ *  block in `packages/control-plane/src/usersCheck.ts`. Embedded into
+ *  the `/api/users/check` response when the typed username matched
+ *  the `<u>.<device-label>` syntax AND a matching active
+ *  DeviceCapabilityGrant exists. See
+ *  docs/v2-device-addressing-and-real-ticket.md §5.1.
+ *
+ *  Scopes are wire-format strings; use `deviceCapabilityScopeSet` for
+ *  forward-compat parsing (unknown future scope strings drop out).
+ *  @typedef {Object} DeviceCapabilityBlock
+ *  @property {string} label
+ *  @property {string} devicePubKey
+ *  @property {string[]} scopes
+ *  @property {string} grantId
+ *  @property {number} expiresAt
+ *  @property {string} signature
+ */
+
+/** Canonical scope list — mirror of `DEVICE_SCOPES` in
+ *  `packages/protocol/src/auth.ts`. Order MUST match the canonical
+ *  sort order so a future audit-trail render stays stable.
+ *  @type {readonly string[]}
+ */
+export const DEVICE_SCOPES = Object.freeze([
+  "browse",
+  "install-service",
+  "vibe-code",
+  "add-device",
+  "manage-services",
+  "revoke-others",
+  "demo-provision",
+]);
+
+/** Forward-compat scope set: unknown future strings are silently
+ *  dropped. Used by UI callsites to gate the install / vibe-code
+ *  buttons. Returns an empty set when the block is absent.
+ *  @param {DeviceCapabilityBlock|null|undefined} block
+ *  @returns {Set<string>}
+ */
+export function deviceCapabilityScopeSet(block) {
+  if (!block || !Array.isArray(block.scopes)) return new Set();
+  return new Set(block.scopes.filter((s) => DEVICE_SCOPES.includes(s)));
+}
+
+/** True iff the device's scopes cover the full DEVICE_SCOPES set —
+ *  i.e. the device is a primary device with no restrictions. The chip
+ *  + tooltips suppress when this is true; a null block also suppresses
+ *  (legacy single-IRK path).
+ *  @param {DeviceCapabilityBlock|null|undefined} block
+ *  @returns {boolean}
+ */
+export function isDeviceFullyScoped(block) {
+  if (!block) return false;
+  const set = deviceCapabilityScopeSet(block);
+  return DEVICE_SCOPES.every((s) => set.has(s));
+}
+
+/** Build a one-line summary suitable for the chip below the username.
+ *  `browse-only` is the canonical reviewer state; anything else
+ *  summarises as "N scopes" so the chip stays one line. Returns null
+ *  when the block is absent or fully-scoped (no chip should render).
+ *  @param {DeviceCapabilityBlock|null|undefined} block
+ *  @returns {string|null}
+ */
+export function deviceCapabilityChipText(block) {
+  if (!block) return null;
+  if (isDeviceFullyScoped(block)) return null;
+  const set = deviceCapabilityScopeSet(block);
+  const summary = (set.size === 1 && set.has("browse"))
+    ? "browse-only"
+    : `${block.scopes.length} scopes`;
+  return `Device: ${block.label} · ${summary}`;
+}
+
+/** Per-action capability gate. Returns true when the action is
+ *  allowed under the current device's scope set, OR when no capability
+ *  is installed (legacy single-IRK — every scope implicit).
+ *  @param {DeviceCapabilityBlock|null|undefined} block
+ *  @param {string} scope
+ *  @returns {boolean}
+ */
+export function deviceCapabilityAllows(block, scope) {
+  if (!block) return true;
+  return deviceCapabilityScopeSet(block).has(scope);
+}
+
+/** UI helper: mutate an `<button>` element in place so an
+ *  `install-service`-disabled session can't tap it. Sets disabled,
+ *  aria-disabled, title (tooltip), and a `data-device-restricted`
+ *  marker so styling hooks can target the state. Idempotent — calling
+ *  it with a fully-scoped block re-enables the button.
+ *
+ *  Pure DOM mutation so view-layer callsites can hand it any button
+ *  reference (marketplace install, vibe-code submit, "add device",
+ *  etc.) under the same gate.
+ *  @param {HTMLButtonElement|HTMLElement|null|undefined} button
+ *  @param {DeviceCapabilityBlock|null|undefined} block
+ *  @param {string} scope
+ *  @param {string} disabledTooltip
+ */
+export function applyScopeGateToButton(button, block, scope, disabledTooltip) {
+  if (!button) return;
+  const allowed = deviceCapabilityAllows(block, scope);
+  if (allowed) {
+    if ("disabled" in button) /** @type {any} */ (button).disabled = false;
+    button.removeAttribute("aria-disabled");
+    button.removeAttribute("title");
+    button.removeAttribute("data-device-restricted");
+    return;
+  }
+  if ("disabled" in button) /** @type {any} */ (button).disabled = true;
+  button.setAttribute("aria-disabled", "true");
+  button.setAttribute("title", disabledTooltip);
+  button.setAttribute("data-device-restricted", scope);
+}
 
 /** Map the raw status to the typed lifecycle. Forward-compat: an
  *  unknown future value collapses to `"provisioning"` so a client

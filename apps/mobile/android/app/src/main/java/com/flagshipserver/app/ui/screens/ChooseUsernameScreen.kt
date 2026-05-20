@@ -19,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.DemoServerBlock
+import com.flagshipserver.app.api.DeviceCapabilityBlock
+import com.flagshipserver.app.api.DeviceScope
 import com.flagshipserver.app.api.TestAccountMeta
 import com.flagshipserver.app.core.DemoFixtures
 import com.flagshipserver.app.core.LocalAppState
@@ -53,10 +55,12 @@ fun ChooseUsernameScreen(nav: NavController) {
     var status by remember { mutableStateOf<UsernameCheck>(UsernameCheck.Empty) }
     var testHit by remember { mutableStateOf<TestAccountMeta?>(null) }
     var demoServerHit by remember { mutableStateOf<DemoServerBlock?>(null) }
+    var capabilityHit by remember { mutableStateOf<DeviceCapabilityBlock?>(null) }
 
     LaunchedEffect(username) {
         testHit = null
         demoServerHit = null
+        capabilityHit = null
         if (username.isEmpty()) {
             status = UsernameCheck.Empty
             return@LaunchedEffect
@@ -71,6 +75,17 @@ fun ChooseUsernameScreen(nav: NavController) {
         } catch (_: Throwable) { null }
         if (resp == null) {
             status = if (usernameRegex.matches(username)) UsernameCheck.Available else UsernameCheck.Invalid
+            return@LaunchedEffect
+        }
+        // v2 device-addressing — `<u>.<label>` with a matching grant
+        // takes priority over every other branch. The Worker returns
+        // `deviceCapability` + `demoServer` together; both are needed
+        // to activate (the demoServer is the underlying pod the
+        // device observes).
+        if (resp.deviceCapability != null && resp.demoServer != null) {
+            capabilityHit = resp.deviceCapability
+            demoServerHit = resp.demoServer
+            status = UsernameCheck.DeviceCapability
             return@LaunchedEffect
         }
         if (resp.testAccount != null) {
@@ -118,6 +133,19 @@ fun ChooseUsernameScreen(nav: NavController) {
                 UsernameCheck.Checking -> "Checking…"
                 UsernameCheck.Available -> "Available."
                 UsernameCheck.Taken -> null
+                UsernameCheck.DeviceCapability -> capabilityHit?.let { cap ->
+                    // v2 — show the device label + a short scope
+                    // summary so a reviewer knows what the "Enter as
+                    // <label>" CTA will unlock. `browse-only` is the
+                    // canonical reviewer state; anything else
+                    // summarises as "N scopes".
+                    val summary = if (cap.scopeSet == setOf(DeviceScope.BROWSE)) {
+                        "browse-only"
+                    } else {
+                        "${cap.scopes.size} scopes"
+                    }
+                    "Device ${cap.label} — $summary."
+                }
                 UsernameCheck.TestAccount -> testHit?.let { meta ->
                     val demo = demoServerHit
                     if (demo != null) {
@@ -144,32 +172,48 @@ fun ChooseUsernameScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s8))
 
         val isTest = status == UsernameCheck.TestAccount
+        val isCap = status == UsernameCheck.DeviceCapability
         FSPrimaryButton(
             label = when {
+                isCap -> "Enter as ${capabilityHit?.label ?: "device"}"
                 isTest -> "Enter ${testHit?.display ?: "test mode"}"
                 else -> "Continue"
             },
             onClick = {
-                if (isTest) {
-                    // Plan A — pass the optional demoServer block so
-                    // DemoFixtures renders ONE live device when the
-                    // Worker reported one; otherwise the legacy
-                    // 3-fixture sandbox.
-                    DemoFixtures.activate(app, username, demoServer = demoServerHit)
-                    if (demoServerHit != null) {
-                        toasts.info("Live demo mode. Sign out to leave.")
-                    } else {
-                        toasts.info("Sandboxed test mode. Sign out to leave.")
+                when {
+                    isCap -> {
+                        // v2 device-addressing — materialise the
+                        // underlying demo VPS PLUS the device's
+                        // capability so the home screen renders the
+                        // chip + greys out actions absent from scopes.
+                        DemoFixtures.activate(
+                            app,
+                            username,
+                            demoServer = demoServerHit,
+                            deviceCapability = capabilityHit,
+                        )
+                        toasts.info("Device-restricted demo. Sign out to leave.")
                     }
-                } else {
-                    nav.navigate("biometric")
+                    isTest -> {
+                        // Plan A — pass the optional demoServer block
+                        // so DemoFixtures renders ONE live device when
+                        // the Worker reported one; otherwise the
+                        // legacy 3-fixture sandbox.
+                        DemoFixtures.activate(app, username, demoServer = demoServerHit)
+                        if (demoServerHit != null) {
+                            toasts.info("Live demo mode. Sign out to leave.")
+                        } else {
+                            toasts.info("Sandboxed test mode. Sign out to leave.")
+                        }
+                    }
+                    else -> nav.navigate("biometric")
                 }
             },
             block = true,
             large = true,
-            enabled = status == UsernameCheck.Available || isTest,
+            enabled = status == UsernameCheck.Available || isTest || isCap,
         )
     }
 }
 
-private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken, TestAccount }
+private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken, TestAccount, DeviceCapability }
