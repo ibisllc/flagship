@@ -1,10 +1,10 @@
 // Kotlin mirror of FlagshipUI/ViewModels/AppsListViewModel.swift.
 //
 // Loads the daemon's paired-session apps-list, then fans out a
-// per-app /api/users/:u/apps/:appId/links fetch (#20). The list
+// per-service /api/users/:u/apps/:serviceId/links fetch (#20). The list
 // paints as soon as appsList() returns; each row's voi.ci short URL,
 // canonical FQDN and bound custom domain fill in as the /links
-// results land. Per-app failure is tolerated (one row's .com blip
+// results land. Per-service failure is tolerated (one row's .com blip
 // must not nuke the whole list) — exactly the iOS behavior.
 //
 // When the contract changes, update this file AND
@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class AppsListViewModel(
+class ServicesListViewModel(
     private val client: ScreensClient,
     private val server: FlagshipServerClient?,
     private val username: () -> String?,
@@ -36,11 +36,11 @@ class AppsListViewModel(
     private val _state = MutableStateFlow<LoadingState<List<AppSummary>>>(LoadingState.Idle)
     val state: StateFlow<LoadingState<List<AppSummary>>> = _state.asStateFlow()
 
-    /** Per-app links cache, keyed by appId. Absent means still
+    /** Per-service links cache, keyed by serviceId. Absent means still
      *  loading or .com unreachable for that row; the row falls back
-     *  to the daemon-provided URL. Mirrors iOS `linksByAppId`. */
-    private val _linksByAppId = MutableStateFlow<Map<String, AppLinksResponse>>(emptyMap())
-    val linksByAppId: StateFlow<Map<String, AppLinksResponse>> = _linksByAppId.asStateFlow()
+     *  to the daemon-provided URL. Mirrors iOS `linksByServiceId`. */
+    private val _linksByServiceId = MutableStateFlow<Map<String, AppLinksResponse>>(emptyMap())
+    val linksByServiceId: StateFlow<Map<String, AppLinksResponse>> = _linksByServiceId.asStateFlow()
 
     fun load() = scope.launch {
         _state.value = LoadingState.Loading
@@ -51,29 +51,29 @@ class AppsListViewModel(
             // the URLs fill in as each result arrives.
             loadLinks(resp.apps)
         } catch (t: Throwable) {
-            _state.value = LoadingState.Failed(t.message ?: "couldn't load apps")
+            _state.value = LoadingState.Failed(t.message ?: "couldn't load services")
         }
     }
 
-    /** V2 — fan-out fetch of /api/users/:u/apps/:appId/links per app.
-     *  Tolerates per-app failure without nuking the list; updates
-     *  `linksByAppId` as each result lands. */
+    /** V2 — fan-out fetch of /api/users/:u/apps/:serviceId/links per
+     *  service. Tolerates per-service failure without nuking the list;
+     *  updates `linksByServiceId` as each result lands. */
     private suspend fun loadLinks(apps: List<AppSummary>) = coroutineScope {
         val srv = server ?: return@coroutineScope
         val user = username()?.takeIf { it.isNotEmpty() } ?: return@coroutineScope
         val deferred = apps.map { app ->
             async {
                 try {
-                    app.appId to srv.getAppLinks(user, app.appId)
+                    app.serviceId to srv.getAppLinks(user, app.serviceId)
                 } catch (t: Throwable) {
-                    app.appId to null
+                    app.serviceId to null
                 }
             }
         }
         for (d in deferred) {
-            val (appId, links) = d.await()
+            val (serviceId, links) = d.await()
             if (links != null) {
-                _linksByAppId.value = _linksByAppId.value + (appId to links)
+                _linksByServiceId.value = _linksByServiceId.value + (serviceId to links)
             }
         }
     }

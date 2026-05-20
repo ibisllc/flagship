@@ -15,7 +15,7 @@ import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class AppSummary(
-    val appId: String,
+    val serviceId: String,
     val creator: String,
     val slug: String,
     val urlLabel: String,
@@ -30,7 +30,7 @@ data class AppSummary(
 data class RecentInstallEvent(
     val at: Long,
     val kind: String,              // "installed" | "uninstalled" | "deploy" | "update-pulled"
-    val appId: String,
+    val serviceId: String,
     val detail: String? = null,
 )
 
@@ -46,7 +46,7 @@ data class ServerDetailResponse(
     val certNotAfter: Long? = null,
     val certNotBefore: Long? = null,
     val certSans: List<String>? = null,
-    val appCount: Int,
+    val serviceCount: Int,
     val pairedSessionCount: Int,
     val recentInstallEvents: List<RecentInstallEvent>,
 )
@@ -123,7 +123,7 @@ sealed class VibeCodeFrame {
     @Serializable @SerialName("repo-create") data class RepoCreate(val repoFullName: String) : VibeCodeFrame()
     @Serializable @SerialName("build-start") object BuildStart : VibeCodeFrame()
     @Serializable @SerialName("build-log") data class BuildLog(val line: String) : VibeCodeFrame()
-    @Serializable @SerialName("deploy") data class Deploy(val appId: String, val url: String) : VibeCodeFrame()
+    @Serializable @SerialName("deploy") data class Deploy(val serviceId: String, val url: String) : VibeCodeFrame()
     @Serializable @SerialName("done") object Done : VibeCodeFrame()
     @Serializable @SerialName("error") data class Err(val message: String) : VibeCodeFrame()
 }
@@ -167,7 +167,7 @@ data class UnlockApprovalApproveRequest(
 @Serializable
 data class BrowserTab(
     val tabId: String,
-    val appId: String,
+    val serviceId: String,
     val currentUrl: String? = null,
     val title: String? = null,
     val screenshotKey: String? = null,
@@ -248,7 +248,7 @@ data class UrlControllerClaimResponse(val ok: Boolean)
 
 @Serializable
 data class AppBackupStartRequest(
-    val appId: String,
+    val serviceId: String,
     val password: String? = null,
     val includeUserData: Boolean? = null,
 )
@@ -370,7 +370,7 @@ data class ReissuanceReportPayload(
 
 @Serializable
 data class AppReissuanceSummary(
-    val appId: String,
+    val serviceId: String,
     val slug: String,
     val rewrittenCount: Int,
     val unchangedCount: Int,

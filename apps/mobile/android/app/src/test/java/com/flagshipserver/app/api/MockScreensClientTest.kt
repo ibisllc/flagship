@@ -30,10 +30,10 @@ class MockScreensClientTest {
 
     @Test fun appsList_returnsKnownApps() = runTest {
         val r = makeClient().appsList()
-        // appId is the immutable composite `<creator>-<slug>`.
+        // serviceId is the immutable composite `<creator>-<slug>`.
         assertEquals(
             listOf("harry-plants", "harry-wiki", "trent-scratchpad").sorted(),
-            r.apps.map { it.appId }.sorted(),
+            r.apps.map { it.serviceId }.sorted(),
         )
     }
 

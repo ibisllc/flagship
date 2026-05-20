@@ -108,7 +108,7 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
             )
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 FSPill("Daemon ${detail.daemonVersion}", kind = FSPillKind.Idle)
-                FSPill("${detail.appCount} apps", kind = FSPillKind.Idle)
+                FSPill("${detail.serviceCount} apps", kind = FSPillKind.Idle)
                 FSPill("${detail.pairedSessionCount} devices", kind = FSPillKind.Idle)
             }
             val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())

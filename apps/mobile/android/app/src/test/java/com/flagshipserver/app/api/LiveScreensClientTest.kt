@@ -41,7 +41,7 @@ class LiveScreensClientTest {
             "startedAt":0,
             "uptimeMs":0,
             "certSans":[],
-            "appCount":1,
+            "serviceCount":1,
             "pairedSessionCount":2,
             "recentInstallEvents":[]
         }""".trimIndent()))
@@ -51,7 +51,7 @@ class LiveScreensClientTest {
         assertEquals("/api/screens/server-detail", recorded.path)
         assertEquals("deadbeef".repeat(8), recorded.getHeader("x-flagship-session"))
         assertEquals("home.h.flagship.services", r.serverFqdn)
-        assertEquals(1, r.appCount)
+        assertEquals(1, r.serviceCount)
     }
 
     @Test fun appsList_unwrapsAppsArray() = runTest {
@@ -117,7 +117,7 @@ class LiveScreensClientTest {
             "lastReissue":{
               "startedAt":1,"status":"complete",
               "oldIrkPrefix":"old","newIrkPrefix":"new",
-              "apps":[{"appId":"plants","slug":"plants","rewrittenCount":1,"unchangedCount":0,"completedAt":2}],
+              "apps":[{"serviceId":"plants","slug":"plants","rewrittenCount":1,"unchangedCount":0,"completedAt":2}],
               "totalRewritten":1,"reattachedCount":1,"unchangedCount":0,
               "undoWindowExpiresAt":99
             }

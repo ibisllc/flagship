@@ -95,8 +95,8 @@ class LiveScreensClient(
     override suspend fun appsList(): AppsListResponse =
         request("/api/screens/apps-list", AppsListResponse.serializer())
 
-    override suspend fun appDetail(appId: String): AppDetailResponse =
-        request("/api/screens/app-detail/$appId", AppDetailResponse.serializer())
+    override suspend fun appDetail(serviceId: String): AppDetailResponse =
+        request("/api/screens/app-detail/$serviceId", AppDetailResponse.serializer())
 
     override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse =
         request("/api/screens/marketplace-browse", MarketplaceBrowseResponse.serializer())
@@ -117,8 +117,8 @@ class LiveScreensClient(
         request<Unit>("/api/screens/unlock-approvals/$requestId/approve", null, "POST", bytes)
     }
 
-    override suspend fun browserTabsList(appId: String): BrowserTabsListResponse =
-        request("/api/screens/browser-tabs/list/$appId", BrowserTabsListResponse.serializer())
+    override suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse =
+        request("/api/screens/browser-tabs/list/$serviceId", BrowserTabsListResponse.serializer())
 
     override suspend fun pairedSessionsList(): PairedSessionsListResponse =
         request("/api/screens/paired-sessions/list", PairedSessionsListResponse.serializer())

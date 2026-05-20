@@ -76,24 +76,24 @@ interface FlagshipServerClient {
         ifMatch: String?,
     ): WipeRestartResponse
 
-    /** V3 — rename the user-visible URL stem for an app. Signed by
+    /** V3 — rename the user-visible URL stem for a service. Signed by
      *  the user's current IRK. The Worker upserts the alias,
      *  cascade-deletes old voi.ci codes, mints a fresh one. */
     suspend fun renameApp(
         username: String,
-        appId: String,
+        serviceId: String,
         body: AppRenameRequest,
     ): AppRenameResponse
 
-    /** V3 — read the per-user URL identity of an app:
+    /** V3 — read the per-user URL identity of a service:
      *  { displayLabel, canonicalUrl, instances, shortUrl,
      *    customDomain, customDomainConfirmed }. */
     suspend fun getAppLinks(
         username: String,
-        appId: String,
+        serviceId: String,
     ): AppLinksResponse
 
-    /** #79A — attach an external (custom) domain to an app. Signed by
+    /** #79A — attach an external (custom) domain to a service. Signed by
      *  the user's current IRK. Decoupled request/confirm: a 200 only
      *  RECORDS the request (.com verifies the CNAME out-of-band and
      *  pushes the outcome later); the ONLY synchronous denial is the
@@ -102,7 +102,7 @@ interface FlagshipServerClient {
      *  so callers surface the domain optimistically. */
     suspend fun setCustomDomain(
         username: String,
-        appId: String,
+        serviceId: String,
         body: SetCustomDomainRequest,
     ): AppLinksResponse
 }
@@ -115,7 +115,7 @@ data class AppRenameRequest(
     @Serializable
     data class Inner(
         val username: String,
-        val appId: String,
+        val serviceId: String,
         val newDisplayLabel: String,
         val issuedAt: Long,
     )
@@ -139,7 +139,7 @@ data class AppLinkInstance(
 
 @Serializable
 data class AppLinksResponse(
-    val appId: String,
+    val serviceId: String,
     val displayLabel: String,
     val canonicalUrl: String,
     val instances: List<AppLinkInstance>,
@@ -160,7 +160,7 @@ data class SetCustomDomainRequest(
     @Serializable
     data class Inner(
         val username: String,
-        val appId: String,
+        val serviceId: String,
         val fqdn: String,
         val issuedAt: Long,
     )
@@ -594,18 +594,18 @@ class MockFlagshipServerClient(
 
     override suspend fun renameApp(
         username: String,
-        appId: String,
+        serviceId: String,
         body: AppRenameRequest,
     ): AppRenameResponse {
         tick()
-        lastAppRename = Triple(username, appId, body)
+        lastAppRename = Triple(username, serviceId, body)
         return when (appRenameBehavior) {
             AppRenameBehavior.Collision -> throw IllegalStateException("409 label collision")
             AppRenameBehavior.StaleSignature -> throw IllegalStateException("403 bad signature")
             AppRenameBehavior.Ok -> {
                 val newLabel = body.request.newDisplayLabel
                 val canonical = "https://$newLabel.${username.lowercase()}.flagship.services"
-                appAliasByUser.getOrPut(username.lowercase()) { mutableMapOf() }[appId] = newLabel to canonical
+                appAliasByUser.getOrPut(username.lowercase()) { mutableMapOf() }[serviceId] = newLabel to canonical
                 AppRenameResponse(
                     ok = true,
                     displayLabel = newLabel,
@@ -620,29 +620,29 @@ class MockFlagshipServerClient(
 
     override suspend fun getAppLinks(
         username: String,
-        appId: String,
+        serviceId: String,
     ): AppLinksResponse {
         tick()
-        val alias = appAliasByUser[username.lowercase()]?.get(appId)
-        // Mirrors @flagship/protocol deriveUrlFragment: appId is
+        val alias = appAliasByUser[username.lowercase()]?.get(serviceId)
+        // Mirrors @flagship/protocol deriveUrlFragment: serviceId is
         // `<creator>-<slug>` (FIRST hyphen splits — usernames are
         // hyphen-free). Fragment is CONDITIONAL: `<slug>` when the
         // running user authored it, else `<slug>-<creator>`.
         val defaultLabel = run {
-            val i = appId.indexOf('-')
-            if (i > 0 && i < appId.length - 1) {
-                val creator = appId.substring(0, i).lowercase()
-                val slug = appId.substring(i + 1).lowercase()
+            val i = serviceId.indexOf('-')
+            if (i > 0 && i < serviceId.length - 1) {
+                val creator = serviceId.substring(0, i).lowercase()
+                val slug = serviceId.substring(i + 1).lowercase()
                 if (creator == username.lowercase()) slug else "$slug-$creator"
             } else {
-                appId.lowercase()
+                serviceId.lowercase()
             }
         }
         val label = alias?.first ?: defaultLabel
         val host = "${username.lowercase()}.flagship.services"
         val canonical = alias?.second ?: "https://$label.$host"
         val u = username.lowercase()
-        val lastChanged = customDomainLastChangedByUser[u]?.get(appId)
+        val lastChanged = customDomainLastChangedByUser[u]?.get(serviceId)
         // Demo: .com "confirms" the CNAME customDomainConfirmDelayMs
         // after the request (a real server pushes the outcome). The
         // server keeps its own lastChanged timer for the rate limit;
@@ -651,28 +651,28 @@ class MockFlagshipServerClient(
             System.currentTimeMillis() - it >= customDomainConfirmDelayMs
         }
         return AppLinksResponse(
-            appId = appId,
+            serviceId = serviceId,
             displayLabel = label,
             canonicalUrl = canonical,
             instances = listOf(
                 AppLinkInstance(serverDomain = host, url = canonical),
             ),
             shortUrl = null,
-            customDomain = customDomainByUser[u]?.get(appId),
+            customDomain = customDomainByUser[u]?.get(serviceId),
             customDomainConfirmed = confirmed,
         )
     }
 
     override suspend fun setCustomDomain(
         username: String,
-        appId: String,
+        serviceId: String,
         body: SetCustomDomainRequest,
     ): AppLinksResponse {
         tick()
         val u = username.lowercase()
         // Server-side rate limit (the lastChanged column). The client
         // mirrors this with a cooldown, but the server is the backstop.
-        val last = customDomainLastChangedByUser[u]?.get(appId)
+        val last = customDomainLastChangedByUser[u]?.get(serviceId)
         if (last != null) {
             val elapsed = System.currentTimeMillis() - last
             if (elapsed < customDomainMinIntervalMs) {
@@ -686,11 +686,11 @@ class MockFlagshipServerClient(
         // here and only commits if it points at the user's stub. The
         // Mock has no DNS, so it accepts the claim (the demo can't
         // exercise a real failure path).
-        customDomainByUser.getOrPut(u) { mutableMapOf() }[appId] =
+        customDomainByUser.getOrPut(u) { mutableMapOf() }[serviceId] =
             body.request.fqdn.trim().lowercase()
-        customDomainLastChangedByUser.getOrPut(u) { mutableMapOf() }[appId] =
+        customDomainLastChangedByUser.getOrPut(u) { mutableMapOf() }[serviceId] =
             System.currentTimeMillis()
-        return getAppLinks(username, appId)
+        return getAppLinks(username, serviceId)
     }
 
     override suspend fun wipeRestart(
@@ -925,11 +925,11 @@ class LiveFlagshipServerClient(
 
     override suspend fun renameApp(
         username: String,
-        appId: String,
+        serviceId: String,
         body: AppRenameRequest,
     ): AppRenameResponse {
         val u = java.net.URLEncoder.encode(username, "UTF-8")
-        val a = java.net.URLEncoder.encode(appId, "UTF-8")
+        val a = java.net.URLEncoder.encode(serviceId, "UTF-8")
         return transport.postJsonForResponse(
             url = "$base/api/users/$u/apps/$a/rename",
             body = body,
@@ -940,10 +940,10 @@ class LiveFlagshipServerClient(
 
     override suspend fun getAppLinks(
         username: String,
-        appId: String,
+        serviceId: String,
     ): AppLinksResponse {
         val u = java.net.URLEncoder.encode(username, "UTF-8")
-        val a = java.net.URLEncoder.encode(appId, "UTF-8")
+        val a = java.net.URLEncoder.encode(serviceId, "UTF-8")
         return transport.getJson(
             url = "$base/api/users/$u/apps/$a/links",
             responseSerializer = AppLinksResponse.serializer(),
@@ -952,11 +952,11 @@ class LiveFlagshipServerClient(
 
     override suspend fun setCustomDomain(
         username: String,
-        appId: String,
+        serviceId: String,
         body: SetCustomDomainRequest,
     ): AppLinksResponse {
         val u = java.net.URLEncoder.encode(username, "UTF-8")
-        val a = java.net.URLEncoder.encode(appId, "UTF-8")
+        val a = java.net.URLEncoder.encode(serviceId, "UTF-8")
         // The .com POST returns { recorded:true } (NOT links) and is
         // the ONLY synchronous step — a non-2xx (429 rate-limit /
         // 4xx) surfaces as HttpException(status, body) where body is
@@ -968,7 +968,7 @@ class LiveFlagshipServerClient(
             body = body,
             serializer = SetCustomDomainRequest.serializer(),
         )
-        return getAppLinks(username, appId)
+        return getAppLinks(username, serviceId)
     }
 }
 

@@ -38,35 +38,35 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
-import com.flagshipserver.app.viewmodels.AppsListViewModel
+import com.flagshipserver.app.viewmodels.ServicesListViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
 
 /**
- * Apps list — every app the user has installed across all their pods.
- * Tap a row to open the detail screen (where to run, let-instances-talk,
- * URL claims).
+ * Services list — every service the user has installed across all their
+ * pods. Tap a row to open the detail screen (where to run,
+ * let-instances-talk, URL claims).
  */
 @Composable
-fun AppsListScreen(nav: NavController) {
+fun ServicesListScreen(nav: NavController) {
     val screens = LocalScreensClient.current
     val server = LocalFlagshipServerClient.current
     val appState = LocalAppState.current
     val vm = remember {
-        AppsListViewModel(
+        ServicesListViewModel(
             client = screens,
             server = server,
             username = { appState.currentUser.value },
         )
     }
     val state by vm.state.collectAsState()
-    val linksByAppId by vm.linksByAppId.collectAsState()
+    val linksByServiceId by vm.linksByServiceId.collectAsState()
     LaunchedEffect(Unit) { vm.load() }
 
-    // Merge the daemon apps-list with the per-app /links fan-out
+    // Merge the daemon apps-list with the per-service /links fan-out
     // exactly as iOS AppsTab.AppRow does: slug.capitalized name,
     // status pill, confirmed-custom-domain → short-link swap.
     val apps: List<AppSummary> = when (val s = state) {
-        is LoadingState.Loaded -> s.value.map { toRow(it, linksByAppId[it.appId]) }
+        is LoadingState.Loaded -> s.value.map { toRow(it, linksByServiceId[it.serviceId]) }
         else -> emptyList()
     }
     val subtitle = when (val st = state) {
@@ -119,7 +119,7 @@ fun AppsListScreen(nav: NavController) {
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 apps.forEach { app ->
-                    AppRow(app, onClick = { nav.navigate("app-detail/${app.appId}") })
+                    AppRow(app, onClick = { nav.navigate("app-detail/${app.serviceId}") })
                 }
             }
         }
@@ -226,7 +226,7 @@ private fun copyToClipboard(context: Context, text: String) {
  *  swap itself lives in AppRow, gated on customDomainConfirmed). */
 private fun toRow(api: ApiAppSummary, links: AppLinksResponse?): AppSummary =
     AppSummary(
-        appId = api.appId,
+        serviceId = api.serviceId,
         name = api.slug.replaceFirstChar { it.uppercase() },
         runningPodCount = if (api.status == "running") 1 else 0,
         siblingsEnabled = false,
@@ -238,7 +238,7 @@ private fun toRow(api: ApiAppSummary, links: AppLinksResponse?): AppSummary =
     )
 
 data class AppSummary(
-    val appId: String,
+    val serviceId: String,
     val name: String,
     val runningPodCount: Int,
     val siblingsEnabled: Boolean,

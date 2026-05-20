@@ -1,14 +1,14 @@
-// V3 — Replace app URL stem. Kotlin mirror of FlagshipUI's
+// V3 — Replace service URL stem. Kotlin mirror of FlagshipUI's
 // AppDetailViewModel.renameApp.
 //
 //   1. Derive the user's IRK locally.
-//   2. Sign canonical flagship/app-rename/v1 bytes.
-//   3. POST /api/users/:u/apps/:appId/rename.
+//   2. Sign canonical flagship/service-rename/v1 bytes.
+//   3. POST /api/users/:u/apps/:serviceId/rename.
 //   4. Reflect the new canonical + short URL in `links`.
 //
 // Failure modes:
 //   - empty draft → reject before deriving keys (no biometric prompt).
-//   - 409 collision → friendly "another app uses that name" hint.
+//   - 409 collision → friendly "another service uses that name" hint.
 //   - 400 invalid label → friendly format hint.
 
 package com.flagshipserver.app.viewmodels
@@ -18,7 +18,7 @@ import com.flagshipserver.app.api.AppLinksResponse
 import com.flagshipserver.app.api.AppRenameRequest
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.SetCustomDomainRequest
-import com.flagshipserver.app.core.AppRenameClaim
+import com.flagshipserver.app.core.ServiceRenameClaim
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.SetCustomDomainClaim
@@ -27,40 +27,40 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-sealed interface RenameAppPhase {
-    data object Idle : RenameAppPhase
-    data object Signing : RenameAppPhase
-    data object Posting : RenameAppPhase
-    data class Completed(val displayLabel: String, val shortUrl: String?) : RenameAppPhase
-    data class Failed(val message: String) : RenameAppPhase
+sealed interface RenameServicePhase {
+    data object Idle : RenameServicePhase
+    data object Signing : RenameServicePhase
+    data object Posting : RenameServicePhase
+    data class Completed(val displayLabel: String, val shortUrl: String?) : RenameServicePhase
+    data class Failed(val message: String) : RenameServicePhase
 }
 
 /** On-device custom-domain rate-limit mirror. The .com last_changed
  *  column is the real backstop (429) — this is just the UX cooldown,
  *  so a lost local stamp simply means the server 429s instead. */
 interface CustomDomainCooldownStore {
-    /** Last successful change for the app, epoch ms (0 = none). */
-    fun lastChangedMs(appId: String): Long
-    fun recordNow(appId: String)
+    /** Last successful change for the service, epoch ms (0 = none). */
+    fun lastChangedMs(serviceId: String): Long
+    fun recordNow(serviceId: String)
 
     object Noop : CustomDomainCooldownStore {
-        override fun lastChangedMs(appId: String): Long = 0L
-        override fun recordNow(appId: String) {}
+        override fun lastChangedMs(serviceId: String): Long = 0L
+        override fun recordNow(serviceId: String) {}
     }
 
     companion object {
         /** SharedPreferences-backed store. Key shape mirrors iOS
-         *  UserDefaults: flagship.customDomain.lastChanged.<appId>. */
+         *  UserDefaults: flagship.customDomain.lastChanged.<serviceId>. */
         fun fromContext(ctx: android.content.Context): CustomDomainCooldownStore {
             val prefs = ctx.getSharedPreferences(
                 "flagship.customDomain", android.content.Context.MODE_PRIVATE,
             )
             return object : CustomDomainCooldownStore {
-                private fun key(appId: String) = "flagship.customDomain.lastChanged.$appId"
-                override fun lastChangedMs(appId: String): Long =
-                    prefs.getLong(key(appId), 0L)
-                override fun recordNow(appId: String) {
-                    prefs.edit().putLong(key(appId), System.currentTimeMillis()).apply()
+                private fun key(serviceId: String) = "flagship.customDomain.lastChanged.$serviceId"
+                override fun lastChangedMs(serviceId: String): Long =
+                    prefs.getLong(key(serviceId), 0L)
+                override fun recordNow(serviceId: String) {
+                    prefs.edit().putLong(key(serviceId), System.currentTimeMillis()).apply()
                 }
             }
         }
@@ -81,14 +81,14 @@ data class CustomDomainPrompt(
 /** 300s — identical to .com (CUSTOM_DOMAIN_RATE_LIMIT_MS) + iOS. */
 const val CUSTOM_DOMAIN_COOLDOWN_MS: Long = 300_000
 
-class RenameAppViewModel(
+class RenameServiceViewModel(
     private val server: FlagshipServerClient,
-    private val appId: String,
+    private val serviceId: String,
     private val username: () -> String?,
     private val cooldownStore: CustomDomainCooldownStore = CustomDomainCooldownStore.Noop,
 ) : ViewModel() {
-    private val _phase = MutableStateFlow<RenameAppPhase>(RenameAppPhase.Idle)
-    val phase: StateFlow<RenameAppPhase> = _phase.asStateFlow()
+    private val _phase = MutableStateFlow<RenameServicePhase>(RenameServicePhase.Idle)
+    val phase: StateFlow<RenameServicePhase> = _phase.asStateFlow()
 
     private val _links = MutableStateFlow<AppLinksResponse?>(null)
     val links: StateFlow<AppLinksResponse?> = _links.asStateFlow()
@@ -104,7 +104,7 @@ class RenameAppViewModel(
 
     suspend fun loadLinks() {
         val u = username() ?: return
-        runCatching { server.getAppLinks(u, appId) }
+        runCatching { server.getAppLinks(u, serviceId) }
             .onSuccess { _links.value = it }
         // Rebuild the countdown from the on-device timestamp so it
         // survives an app reload / VM recreation (mirrors iOS
@@ -187,7 +187,7 @@ class RenameAppViewModel(
         }
         val issuedAt = System.currentTimeMillis()
         val canonical = SetCustomDomainClaim.canonicalBytes(
-            username = user, appId = appId, fqdn = fqdn, issuedAt = issuedAt,
+            username = user, serviceId = serviceId, fqdn = fqdn, issuedAt = issuedAt,
         )
         val signature = signer.sign(canonical)
         try {
@@ -196,16 +196,16 @@ class RenameAppViewModel(
             // outcome arrives later as a pushed alert (backend #79B).
             val resp = server.setCustomDomain(
                 username = user,
-                appId = appId,
+                serviceId = serviceId,
                 body = SetCustomDomainRequest(
                     request = SetCustomDomainRequest.Inner(
-                        username = user, appId = appId, fqdn = fqdn, issuedAt = issuedAt,
+                        username = user, serviceId = serviceId, fqdn = fqdn, issuedAt = issuedAt,
                     ),
                     signature = HexUtil.encode(signature),
                 ),
             )
             _links.value = resp
-            cooldownStore.recordNow(appId)
+            cooldownStore.recordNow(serviceId)
             restoreCooldownFromLocal()
         } catch (e: Throwable) {
             // Non-200 is the ONLY synchronous denial — rate-limit /
@@ -226,7 +226,7 @@ class RenameAppViewModel(
         Regex("\"error\"\\s*:\\s*\"([^\"]*)\"").find(body)?.groupValues?.get(1) ?: body
 
     private fun restoreCooldownFromLocal() {
-        val ts = cooldownStore.lastChangedMs(appId)
+        val ts = cooldownStore.lastChangedMs(serviceId)
         if (ts <= 0L) {
             _customDomainCooldownUntilMs.value = null
             return
@@ -239,38 +239,38 @@ class RenameAppViewModel(
     suspend fun rename(draft: String): Boolean {
         val user = username()
         if (user.isNullOrEmpty()) {
-            _phase.value = RenameAppPhase.Failed("No active account on this device.")
+            _phase.value = RenameServicePhase.Failed("No active account on this device.")
             return false
         }
         val trimmed = draft.trim().lowercase()
         if (trimmed.isEmpty()) {
-            _phase.value = RenameAppPhase.Failed("Pick a non-empty label.")
+            _phase.value = RenameServicePhase.Failed("Pick a non-empty label.")
             return false
         }
-        _phase.value = RenameAppPhase.Signing
+        _phase.value = RenameServicePhase.Signing
         val signer = try {
-            Keystore.deriveIRK("Rename app URL stem")
+            Keystore.deriveIRK("Rename service URL stem")
         } catch (e: Throwable) {
-            _phase.value = RenameAppPhase.Failed("Couldn't access your account keys: ${e.message}")
+            _phase.value = RenameServicePhase.Failed("Couldn't access your account keys: ${e.message}")
             return false
         }
         val issuedAt = System.currentTimeMillis()
-        val canonical = AppRenameClaim.canonicalBytes(
+        val canonical = ServiceRenameClaim.canonicalBytes(
             username = user,
-            appId = appId,
+            serviceId = serviceId,
             newDisplayLabel = trimmed,
             issuedAt = issuedAt,
         )
         val signature = signer.sign(canonical)
-        _phase.value = RenameAppPhase.Posting
+        _phase.value = RenameServicePhase.Posting
         return try {
             val resp = server.renameApp(
                 username = user,
-                appId = appId,
+                serviceId = serviceId,
                 body = AppRenameRequest(
                     request = AppRenameRequest.Inner(
                         username = user,
-                        appId = appId,
+                        serviceId = serviceId,
                         newDisplayLabel = trimmed,
                         issuedAt = issuedAt,
                     ),
@@ -279,14 +279,14 @@ class RenameAppViewModel(
             )
             if (resp.displayLabel != null && resp.canonicalUrl != null) {
                 _links.value = AppLinksResponse(
-                    appId = appId,
+                    serviceId = serviceId,
                     displayLabel = resp.displayLabel,
                     canonicalUrl = resp.canonicalUrl,
                     instances = _links.value?.instances ?: emptyList(),
                     shortUrl = resp.shortUrl,
                 )
             }
-            _phase.value = RenameAppPhase.Completed(
+            _phase.value = RenameServicePhase.Completed(
                 displayLabel = resp.displayLabel ?: trimmed,
                 shortUrl = resp.shortUrl,
             )
@@ -295,12 +295,12 @@ class RenameAppViewModel(
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
             val friendly = when {
-                msg.contains("409") -> "Another app already uses that name. Pick something else."
+                msg.contains("409") -> "Another service already uses that name. Pick something else."
                 msg.contains("400") -> "That name isn't valid — use lowercase letters, digits, or hyphens (1–40 chars)."
                 msg.contains("403") -> "Sign-in is needed. Re-open the app and try again."
                 else -> "Couldn't rename: $msg"
             }
-            _phase.value = RenameAppPhase.Failed(friendly)
+            _phase.value = RenameServicePhase.Failed(friendly)
             false
         }
     }

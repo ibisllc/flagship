@@ -97,27 +97,27 @@ object AuthCodeRevoke {
             .joinToString("|").toByteArray()
 }
 
-/** V3 — App URL-stem rename envelope. Signed by the user's CURRENT
- *  IRK. The internal appId is preserved across renames; only the
+/** V3 — Service URL-stem rename envelope. Signed by the user's CURRENT
+ *  IRK. The internal serviceId is preserved across renames; only the
  *  user-visible newDisplayLabel changes. Mirrors
- *  packages/protocol/src/auth.ts TAG_APP_RENAME. */
-object AppRenameClaim {
-    const val CANONICAL_TAG = "flagship/app-rename/v1"
+ *  packages/protocol/src/auth.ts TAG_SERVICE_RENAME. */
+object ServiceRenameClaim {
+    const val CANONICAL_TAG = "flagship/service-rename/v1"
     fun canonicalBytes(
         username: String,
-        appId: String,
+        serviceId: String,
         newDisplayLabel: String,
         issuedAt: Long,
     ): ByteArray = listOf(
         CANONICAL_TAG,
         username,
-        appId,
+        serviceId,
         newDisplayLabel.lowercase(),
         issuedAt.toString(),
     ).joinToString("|").toByteArray()
 }
 
-/** #79A — attach an external (custom) domain to an app. Signed by the
+/** #79A — attach an external (custom) domain to a service. Signed by the
  *  user's current IRK. Mirrors @flagship/protocol
  *  canonicalSetCustomDomain (auth.ts TAG_SET_CUSTOM_DOMAIN) and the
  *  iOS / webapp clients byte-for-byte so Live == Mock on the wire. */
@@ -125,32 +125,32 @@ object SetCustomDomainClaim {
     const val CANONICAL_TAG = "flagship/custom-domain/v1"
     fun canonicalBytes(
         username: String,
-        appId: String,
+        serviceId: String,
         fqdn: String,
         issuedAt: Long,
     ): ByteArray = listOf(
         CANONICAL_TAG,
         username,
-        appId,
+        serviceId,
         fqdn.lowercase(),
         issuedAt.toString(),
     ).joinToString("|").toByteArray()
 }
 
 /** V3 — voi.ci one-off short link envelope. Signed by IRK. Optional
- *  appId binds the link to a specific app so a rename can cascade-
- *  delete it. Mirrors TAG_VOICI_SHORTEN. */
+ *  serviceId binds the link to a specific service so a rename can
+ *  cascade-delete it. Mirrors TAG_VOICI_SHORTEN. */
 object VoiciShortenClaim {
     const val CANONICAL_TAG = "flagship/voici-shorten/v1"
     fun canonicalBytes(
         username: String,
-        appId: String?,
+        serviceId: String?,
         targetUrl: String,
         issuedAt: Long,
     ): ByteArray = listOf(
         CANONICAL_TAG,
         username,
-        appId ?: "",
+        serviceId ?: "",
         targetUrl,
         issuedAt.toString(),
     ).joinToString("|").toByteArray()

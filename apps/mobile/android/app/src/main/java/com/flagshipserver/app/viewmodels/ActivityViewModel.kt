@@ -36,7 +36,7 @@ sealed interface ActivityItem {
     data class InstallEvent(
         val event: RecentInstallEvent,
         override val at: Long = event.at,
-        override val title: String = "${event.kind}: ${event.appId}",
+        override val title: String = "${event.kind}: ${event.serviceId}",
         override val subtitle: String? = event.detail,
     ) : ActivityItem
 

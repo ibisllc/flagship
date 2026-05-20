@@ -63,7 +63,7 @@ private class StubScreensClient(
         return ServerDetailResponse(
             serverFqdn = "home.test.flagship.services",
             username = "test", daemonVersion = "0", startedAt = 0, uptimeMs = 0,
-            certSans = emptyList(), appCount = 0, pairedSessionCount = 0,
+            certSans = emptyList(), serviceCount = 0, pairedSessionCount = 0,
             recentInstallEvents = recentEvents,
         )
     }
@@ -77,12 +77,12 @@ private class StubScreensClient(
     }
     // ---- not used in these tests; throw to catch accidental wiring ----
     override suspend fun appsList(): AppsListResponse = error("unused")
-    override suspend fun appDetail(appId: String): AppDetailResponse = error("unused")
+    override suspend fun appDetail(serviceId: String): AppDetailResponse = error("unused")
     override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse = error("unused")
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse = error("unused")
     override suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse = error("unused")
     override suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) = error("unused")
-    override suspend fun browserTabsList(appId: String): BrowserTabsListResponse = error("unused")
+    override suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse = error("unused")
     override suspend fun pairedSessionsList(): PairedSessionsListResponse = error("unused")
     override suspend fun revokePairedSession(tokenPrefix: String) = error("unused")
     override suspend fun ordersSend(req: OrdersSendRequest): OrdersSendResponse = error("unused")
@@ -114,8 +114,8 @@ class ActivityViewModelTest {
                     requestId = "r1", requestedAt = 100, ip = "10.0.0.1"),
             ),
             recentEvents = listOf(
-                RecentInstallEvent(at = 300, kind = "deploy", appId = "wiki", detail = "v1"),
-                RecentInstallEvent(at = 200, kind = "installed", appId = "plants", detail = null),
+                RecentInstallEvent(at = 300, kind = "deploy", serviceId = "wiki", detail = "v1"),
+                RecentInstallEvent(at = 200, kind = "installed", serviceId = "plants", detail = null),
             ),
             recoverySnapshot = PostRecoverySnapshot(
                 currentIrkPubHex = "ab", state = WatcherState(lastPolledAt = 0),

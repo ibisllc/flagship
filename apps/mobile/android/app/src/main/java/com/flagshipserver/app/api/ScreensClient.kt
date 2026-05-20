@@ -22,7 +22,7 @@ interface ScreensClient {
     suspend fun appsList(): AppsListResponse
 
     // P1.3 app-detail
-    suspend fun appDetail(appId: String): AppDetailResponse
+    suspend fun appDetail(serviceId: String): AppDetailResponse
 
     // P1.4 marketplace-browse
     suspend fun marketplaceBrowse(): MarketplaceBrowseResponse
@@ -39,8 +39,8 @@ interface ScreensClient {
     // P1.9 unlock-approvals/:requestId/approve
     suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest)
 
-    // P1.10 browser-tabs/list/:appId
-    suspend fun browserTabsList(appId: String): BrowserTabsListResponse
+    // P1.10 browser-tabs/list/:serviceId
+    suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse
 
     // P1.12 paired-sessions/list
     suspend fun pairedSessionsList(): PairedSessionsListResponse

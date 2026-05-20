@@ -34,7 +34,7 @@ class MockScreensClient(
         tick()
         val day = 24L * 3600 * 1000
         val pod = podContext
-        val appCount = (abs(pod.hashCode()) % 5) + 1
+        val serviceCount = (abs(pod.hashCode()) % 5) + 1
         return ServerDetailResponse(
             serverFqdn = "$pod.harry.flagship.services",
             username = "harry",
@@ -44,7 +44,7 @@ class MockScreensClient(
             certNotAfter = now() + 67L * day,
             certNotBefore = now() - 23L * day,
             certSans = listOf("$pod.harry.flagship.services", "*.$pod.harry.flagship.services"),
-            appCount = appCount,
+            serviceCount = serviceCount,
             pairedSessionCount = 2,
             recentInstallEvents = listOf(
                 RecentInstallEvent(now() - 60_000L * 30, "installed", "harry-plants", "via vibe-code"),
@@ -68,9 +68,9 @@ class MockScreensClient(
         )
     }
 
-    override suspend fun appDetail(appId: String): AppDetailResponse {
+    override suspend fun appDetail(serviceId: String): AppDetailResponse {
         tick()
-        val app = appsList().apps.firstOrNull { it.appId == appId }
+        val app = appsList().apps.firstOrNull { it.serviceId == serviceId }
             ?: throw ScreensError.Http(404, "no such app")
         return AppDetailResponse(
             app = app,
@@ -137,7 +137,7 @@ class MockScreensClient(
 
     override suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) { tick() }
 
-    override suspend fun browserTabsList(appId: String): BrowserTabsListResponse {
+    override suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse {
         tick(); return BrowserTabsListResponse(tabs = emptyList())
     }
 
@@ -189,7 +189,7 @@ class MockScreensClient(
         tick()
         return AppBackupStartResponse(
             backupId = "bk-${UUID.randomUUID().toString().take(8).lowercase()}",
-            fetchPath = "/api/screens/app-backup/${req.appId}/fetch",
+            fetchPath = "/api/screens/app-backup/${req.serviceId}/fetch",
             expiresAt = now() + 3600L * 1000,
             bytes = 4_812_000,
             encrypted = req.password != null,
@@ -284,12 +284,12 @@ class MockScreensClient(
                     newIrkPrefix = "feedbeef0123",
                     apps = listOf(
                         AppReissuanceSummary(
-                            appId = "harry-plants", slug = "plants",
+                            serviceId = "harry-plants", slug = "plants",
                             rewrittenCount = 1, unchangedCount = 0,
                             error = null, completedAt = now() - 2 * day + 1_500,
                         ),
                         AppReissuanceSummary(
-                            appId = "harry-wiki", slug = "wiki",
+                            serviceId = "harry-wiki", slug = "wiki",
                             rewrittenCount = 3, unchangedCount = 1,
                             error = null, completedAt = now() - 2 * day + 3_500,
                         ),

@@ -34,7 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.flagshipserver.app.core.RootDestination
 import com.flagshipserver.app.ui.shell.tabs.ActivityTab
-import com.flagshipserver.app.ui.shell.tabs.AppsTab
+import com.flagshipserver.app.ui.shell.tabs.ServicesTab
 import com.flagshipserver.app.ui.shell.tabs.HomeTab
 import com.flagshipserver.app.ui.shell.tabs.SettingsTab
 import com.flagshipserver.app.ui.theme.FS
@@ -126,7 +126,7 @@ private fun TabContent(selected: RootDestination, padding: PaddingValues) {
     Box(Modifier.fillMaxSize().padding(padding)) {
         when (selected) {
             RootDestination.HOME -> HomeTab()
-            RootDestination.APPS -> AppsTab()
+            RootDestination.APPS -> ServicesTab()
             RootDestination.ACTIVITY -> ActivityTab()
             RootDestination.SETTINGS -> SettingsTab()
         }

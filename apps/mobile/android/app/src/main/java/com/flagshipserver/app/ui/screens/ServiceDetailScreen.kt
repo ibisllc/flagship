@@ -50,13 +50,13 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.CustomDomainCooldownStore
 import com.flagshipserver.app.viewmodels.CustomDomainPrompt
-import com.flagshipserver.app.viewmodels.RenameAppPhase
-import com.flagshipserver.app.viewmodels.RenameAppViewModel
+import com.flagshipserver.app.viewmodels.RenameServicePhase
+import com.flagshipserver.app.viewmodels.RenameServiceViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * App detail — the canonical surface for the FINAL DESIGN UX:
+ * Service detail — the canonical surface for the FINAL DESIGN UX:
  *
  *   Where should it run?
  *     ☑ home box
@@ -71,14 +71,14 @@ import kotlinx.coroutines.launch
  *
  * Plus a URL section listing each FQDN's kind / owner / claim controls.
  *
- * Toggling "let them talk" on a previously-deployed multi-pod app
+ * Toggling "let them talk" on a previously-deployed multi-pod service
  * triggers a vibe-code-session re-open with the existing files
  * preloaded plus the N0k system-prompt chapter — that is NOT a
  * runtime config change; it's a regenerate workflow.
  */
 @Composable
-fun AppDetailScreen(nav: NavController, appId: String) {
-    val app = remember { sampleApp(appId) }
+fun ServiceDetailScreen(nav: NavController, serviceId: String) {
+    val app = remember { sampleApp(serviceId) }
     val pods = remember { samplePods() }
     val urls = remember { sampleUrls() }
     var policy by remember { mutableStateOf(app.policy) }
@@ -89,12 +89,12 @@ fun AppDetailScreen(nav: NavController, appId: String) {
     val appState = LocalAppState.current
     val server = LocalFlagshipServerClient.current
     val ctx = LocalContext.current
-    val renameVm: RenameAppViewModel = viewModel(
+    val renameVm: RenameServiceViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
-                RenameAppViewModel(
+                RenameServiceViewModel(
                     server = server,
-                    appId = appId,
+                    serviceId = serviceId,
                     username = { appState.currentUser.value },
                     cooldownStore = CustomDomainCooldownStore.fromContext(ctx),
                 )
@@ -107,7 +107,7 @@ fun AppDetailScreen(nav: NavController, appId: String) {
     val appLinks by renameVm.links.collectAsState()
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(appId) { renameVm.loadLinks() }
+    LaunchedEffect(serviceId) { renameVm.loadLinks() }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = FS.space.s6),
@@ -130,7 +130,7 @@ fun AppDetailScreen(nav: NavController, appId: String) {
         Text(
             text = buildString {
                 app.version?.let { append("ver: ").append(it).append("  ·  ") }
-                append("id: ").append(app.appId)
+                append("id: ").append(app.serviceId)
             },
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
@@ -325,8 +325,8 @@ private fun UrlRow(url: UrlEntry) {
     }
 }
 
-private fun sampleApp(appId: String) = AppDetail(
-    appId = appId,
+private fun sampleApp(serviceId: String) = AppDetail(
+    serviceId = serviceId,
     name = "Notes",
     creator = "alice",
     version = "0.1.0",
@@ -597,11 +597,11 @@ private fun ReplaceStemDialog(
     draft: String,
     currentStem: String,
     onDraftChange: (String) -> Unit,
-    phase: RenameAppPhase,
+    phase: RenameServicePhase,
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val busy = phase is RenameAppPhase.Signing || phase is RenameAppPhase.Posting
+    val busy = phase is RenameServicePhase.Signing || phase is RenameServicePhase.Posting
     val trimmed = draft.trim()
     val stemValid = STEM_RE.matches(trimmed) && trimmed != currentStem
     AlertDialog(
@@ -628,7 +628,7 @@ private fun ReplaceStemDialog(
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 11.sp),
                 )
-                (phase as? RenameAppPhase.Failed)?.let { f ->
+                (phase as? RenameServicePhase.Failed)?.let { f ->
                     Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 12.sp))
                 }
             }
@@ -640,8 +640,8 @@ private fun ReplaceStemDialog(
             ) {
                 Text(
                     when (phase) {
-                        is RenameAppPhase.Signing -> "Signing…"
-                        is RenameAppPhase.Posting -> "Replacing…"
+                        is RenameServicePhase.Signing -> "Signing…"
+                        is RenameServicePhase.Posting -> "Replacing…"
                         else -> "Replace"
                     },
                     color = FS.colors.danger,
@@ -663,7 +663,7 @@ private fun copyToClipboard(context: Context, text: String) {
 }
 
 data class AppDetail(
-    val appId: String,
+    val serviceId: String,
     val name: String,
     val creator: String,
     val version: String?,

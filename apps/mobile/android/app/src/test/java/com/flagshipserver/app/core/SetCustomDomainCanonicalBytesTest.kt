@@ -15,11 +15,11 @@ class SetCustomDomainCanonicalBytesTest {
     @Test fun matchesDocumentedFieldOrder() {
         val bytes = SetCustomDomainClaim.canonicalBytes(
             username = "alice",
-            appId = "meta-scratchpad",
+            serviceId = "meta-scratchpad",
             fqdn = "shop.example.com",
             issuedAt = 1700000000000L,
         )
-        // tag | username | appId | fqdn(lowercased) | issuedAt
+        // tag | username | serviceId | fqdn(lowercased) | issuedAt
         assertEquals(
             "flagship/custom-domain/v1|alice|meta-scratchpad|shop.example.com|1700000000000",
             String(bytes, Charsets.UTF_8),
@@ -27,12 +27,12 @@ class SetCustomDomainCanonicalBytesTest {
     }
 
     @Test fun lowercasesFqdnOnly() {
-        // The Worker preserves username + appId casing; only the fqdn
+        // The Worker preserves username + serviceId casing; only the fqdn
         // is lowercased on its way through canonical-bytes (auth.ts
         // canonicalSetCustomDomain: r.fqdn.toLowerCase()).
         val bytes = SetCustomDomainClaim.canonicalBytes(
             username = "Alice",
-            appId = "Meta--Scratchpad",
+            serviceId = "Meta--Scratchpad",
             fqdn = "Shop.Example.COM",
             issuedAt = 1L,
         )
@@ -45,7 +45,7 @@ class SetCustomDomainCanonicalBytesTest {
     @Test fun matchesIosAndWorkerByteForByte() {
         val bytes = SetCustomDomainClaim.canonicalBytes(
             username = "alice",
-            appId = "app-id",
+            serviceId = "app-id",
             fqdn = "www.example.com",
             issuedAt = 9L,
         )

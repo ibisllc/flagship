@@ -54,7 +54,7 @@ class HomeScreenComposeTest {
             startedAt = 0L,
             uptimeMs = 1000L,
             certSans = emptyList(),
-            appCount = 3,
+            serviceCount = 3,
             pairedSessionCount = 2,
             recentInstallEvents = emptyList<RecentInstallEvent>(),
         )
