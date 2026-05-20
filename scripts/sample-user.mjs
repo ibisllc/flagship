@@ -772,7 +772,7 @@ function makeLiveProvisionTempVps(env) {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         const isRetryable =
-          /unsupported location for server type|server type \d+ is deprecated|no public network interfaces/i.test(
+          /unsupported location for server type|server type \d+ is deprecated|no public network interfaces|resource_unavailable|error during placement|server name is already used/i.test(
             msg,
           );
         // Always try to clean up the partially-created server on
@@ -799,6 +799,10 @@ function makeLiveProvisionTempVps(env) {
           throw e;
         }
         lastError = msg;
+        // Brief backoff before the next candidate. Hetzner's capacity
+        // hiccups + name-reservation lag both benefit from ~2s of
+        // grace; doesn't slow the happy path materially.
+        await new Promise((res) => setTimeout(res, 2_000));
         // Continue to next candidate.
       }
     }
