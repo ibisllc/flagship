@@ -361,7 +361,7 @@ describe("runCreate — orchestration", () => {
     expect(JSON.parse(calls[0].body!)).toEqual({
       username: "demo-alice",
       display: "Demo Alice",
-      region: "fsn1",
+      region: "ash",
       size: "cpx11",
       ttlIdleMinutes: 30,
     });

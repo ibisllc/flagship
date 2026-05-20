@@ -292,7 +292,7 @@ export async function runDelete(deps, username) {
 export async function runCreate(deps, username, flags) {
   const { fetchFn, env, stderr, stdout, now } = deps;
   const display = flags.display ?? username;
-  const region = flags.region ?? "fsn1";
+  const region = flags.region ?? "ash";
   const size = flags.size ?? "cpx11";
   const ttlIdleMinutes = flags.ttlIdleMinutes ?? 30;
   stderr.write(`[create] starting at ${new Date(now()).toISOString()}\n`);
@@ -678,71 +678,91 @@ async function getHetznerProvider(env) {
 function makeLiveProvisionTempVps(env) {
   return async ({ presignedUrl, region, size, label }) => {
     const provider = await getHetznerProvider(env);
-    // Auto-heal deprecated / unsupported-at-region combos. Hetzner
-    // ages out specific (name, location) pairs on its own schedule and
-    // the API returns 422 'unsupported location for server type' OR
-    // 'server type N is deprecated'. Discover what's currently valid
-    // at the requested region + auto-pick the cheapest x86 candidate
-    // that includes the size hint (or falls back to anything x86 + not
-    // deprecated + in the region).
-    const effectiveSize = await resolveValidServerType(env, region, size);
-    if (effectiveSize !== size) {
-      process.stderr.write(
-        `[create] note: requested size ${size} unavailable in ${region}; using ${effectiveSize} instead\n`,
-      );
+    // Hetzner's `server_types` API lists historical `prices[]` per
+    // location, but those entries are NOT a reliable signal of actual
+    // creatability — combos can have a price but be unavailable at
+    // POST /servers time. The only ground truth is trying.
+    //
+    // Strategy: try the requested (size, region) first; on a 422 that
+    // indicates a deprecation or unsupported-location, fetch the
+    // server-types catalog + iterate through every x86 non-deprecated
+    // candidate that lists this region in its prices, cheapest first,
+    // until one succeeds. If everything in the region fails, throw a
+    // descriptive error listing what was attempted.
+    let lastError = null;
+    const tried = [];
+    const candidates = await discoverServerTypeCandidates(env, region, size);
+    for (const candidate of candidates) {
+      tried.push(candidate);
+      try {
+        if (candidate !== size) {
+          process.stderr.write(
+            `[create] retrying with ${candidate} (${size} was unavailable in ${region})\n`,
+          );
+        }
+        const instance = await provider.provision({
+          iso: presignedUrl,
+          region,
+          size: candidate,
+          label,
+        });
+        await provider.awaitBoot(instance.id);
+        return { serverId: instance.id, ipv4: instance.ip };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        const isUnsupported =
+          /unsupported location for server type|server type \d+ is deprecated|server_type/i.test(
+            msg,
+          );
+        if (!isUnsupported) {
+          // Non-recoverable error (auth, network, SSH issue, dd
+          // failure, etc.) — surface it immediately.
+          throw e;
+        }
+        lastError = msg;
+        // Continue to next candidate.
+      }
     }
-    const instance = await provider.provision({
-      iso: presignedUrl,
-      region,
-      size: effectiveSize,
-      label,
-    });
-    // Wait for the dd-reboot cycle to complete — the box reboots once
-    // into the freshly-written disk, then `install.sh` runs.
-    await provider.awaitBoot(instance.id);
-    return { serverId: instance.id, ipv4: instance.ip };
+    throw new Error(
+      `Hetzner: no creatable server type in region ${region} (tried ${tried.join(", ")}). ` +
+        `Last error: ${lastError ?? "unknown"}. ` +
+        `Try --region nbg1 / hel1 / ash / hil / sin instead.`,
+    );
   };
 }
 
 /**
- * Query Hetzner's server_types catalog + pick a currently-valid
- * (size, region) combo. Tries the requested size first; if invalid,
- * picks the cheapest x86 non-deprecated alternative available in the
- * region. Falls back to throwing a clear error listing what IS
- * available if nothing matches.
+ * Build the ordered list of server-type candidates to try, with the
+ * requested one first (if it's even in the catalog), then any
+ * region-priced x86 non-deprecated cpx-/cx-/ccx-family,
+ * cheapest-first.
  */
-async function resolveValidServerType(env, region, requestedSize) {
-  const res = await fetch(
-    "https://api.hetzner.cloud/v1/server_types?per_page=50",
-    { headers: { authorization: `Bearer ${env.hcloudToken}` } },
-  );
-  if (!res.ok) {
-    // If discovery fails, fall through with the requested size so we
-    // surface the original error from Hetzner's POST /servers.
-    process.stderr.write(
-      `[create] server_types discovery returned HTTP ${res.status}; using requested ${requestedSize}\n`,
+async function discoverServerTypeCandidates(env, region, requestedSize) {
+  let body;
+  try {
+    const res = await fetch(
+      "https://api.hetzner.cloud/v1/server_types?per_page=50",
+      { headers: { authorization: `Bearer ${env.hcloudToken}` } },
     );
-    return requestedSize;
+    if (!res.ok) {
+      // Catalog discovery failed — just try the requested size.
+      return [requestedSize];
+    }
+    body = await res.json();
+  } catch {
+    return [requestedSize];
   }
-  const body = await res.json();
   const types = Array.isArray(body?.server_types) ? body.server_types : [];
 
-  const isValid = (t) => {
+  const isViable = (t) => {
     if (t?.deprecated) return false;
-    if (t?.architecture && t.architecture !== "x86") return false; // ISO is x86_64
-    const locs = Array.isArray(t?.prices) ? t.prices.map((p) => p.location) : [];
-    return locs.includes(region);
+    if (t?.architecture && t.architecture !== "x86") return false;
+    if (!Array.isArray(t?.prices)) return false;
+    return t.prices.some((p) => p.location === region);
   };
 
-  // Strict match on the requested size first.
-  const requested = types.find((t) => t?.name === requestedSize);
-  if (requested && isValid(requested)) return requestedSize;
-
-  // Otherwise pick the cheapest x86 non-deprecated type available in
-  // the region. Prefer the cpx*/cx* shared-CPU families since the
-  // demo workload is light.
-  const candidates = types
-    .filter(isValid)
+  const all = types
+    .filter(isViable)
     .filter((t) => /^(cpx|cx|ccx)\d+/.test(t.name))
     .map((t) => {
       const p = (t.prices || []).find((q) => q.location === region);
@@ -750,14 +770,15 @@ async function resolveValidServerType(env, region, requestedSize) {
       return { name: t.name, monthly };
     })
     .sort((a, b) => a.monthly - b.monthly);
-  if (candidates.length === 0) {
-    throw new Error(
-      `Hetzner: no valid x86 server type found in region ${region}. ` +
-        `Run \`curl -H "Authorization: Bearer $HCLOUD_TOKEN" ` +
-        `https://api.hetzner.cloud/v1/server_types | jq .\` to inspect.`,
-    );
-  }
-  return candidates[0].name;
+
+  // Requested size first (if viable), then everyone else.
+  const requested = all.find((c) => c.name === requestedSize);
+  const others = all.filter((c) => c.name !== requestedSize);
+  const ordered = [];
+  if (requested) ordered.push(requested);
+  ordered.push(...others);
+  if (ordered.length === 0) return [requestedSize];
+  return ordered.map((c) => c.name);
 }
 
 /**
