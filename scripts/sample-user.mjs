@@ -637,7 +637,9 @@ let _cachedProvider = null;
 async function getHetznerProvider(env) {
   if (_cachedProvider) return _cachedProvider;
   const { readFileSync } = await import("node:fs");
-  const sshKeyPath = env.demoSshKeyPath;
+  // resolveEnv emits sshKeyPath (resolved from $DEMO_SSH_KEY_PATH or
+  // defaulted to $HOME/.ssh/flagship-demo-ssh).
+  const sshKeyPath = env.sshKeyPath;
   const pubKeyPath = `${sshKeyPath}.pub`;
   if (!existsSync(sshKeyPath) || !existsSync(pubKeyPath)) {
     throw new Error(
