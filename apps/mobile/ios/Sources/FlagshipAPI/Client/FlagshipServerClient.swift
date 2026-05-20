@@ -518,9 +518,22 @@ public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
     /// available=false to keep accidental claims impossible, while
     /// this field tells the client to enter the sandbox demo flow.
     public let testAccount: TestAccountMeta?
-    public init(username: String, available: Bool, reason: String?, testAccount: TestAccountMeta? = nil) {
+    /// Plan A — present when the typed username matches a `demo_users`
+    /// row on the Worker. Drives the new "one real device" rendering
+    /// in DemoFixtures + the on-connect-provisioning flow. Absent ⇒
+    /// legacy (testAccount-only) behaviour preserved. See
+    /// docs/sample-users.md §10.9.
+    public let demoServer: DemoServerBlock?
+    public init(
+        username: String,
+        available: Bool,
+        reason: String?,
+        testAccount: TestAccountMeta? = nil,
+        demoServer: DemoServerBlock? = nil
+    ) {
         self.username = username; self.available = available; self.reason = reason
         self.testAccount = testAccount
+        self.demoServer = demoServer
     }
 }
 
@@ -529,6 +542,48 @@ public struct TestAccountMeta: Codable, Equatable, Sendable {
     public let ttlHours: Int
     public init(display: String, ttlHours: Int = 24) {
         self.display = display; self.ttlHours = ttlHours
+    }
+}
+
+/// Plan A — embedded into the /api/users/check response when a typed
+/// username matches a `demo_users` row on the Worker. Mirrors the
+/// shape produced by `demoServerBlockFromRow` in
+/// packages/control-plane/src/demoUsers.ts. See
+/// docs/sample-users.md §10.9.
+public struct DemoServerBlock: Codable, Equatable, Sendable {
+    /// e.g. `home.demo-alice.flagship.services`. The single device the
+    /// new demo-mode renders.
+    public let fqdn: String
+    /// Server-lifecycle state surfaced to clients. The Worker collapses
+    /// the internal four-state machine into three public statuses (see
+    /// docs/sample-users.md §10.9 mapping table):
+    ///   "none"         — no Hetzner VPS yet; tap connect to provision.
+    ///   "provisioning" — POST /connect issued; client should poll.
+    ///   "up"           — VPS booted and registered; safe to open.
+    public let status: String
+    /// Operator-set idle-teardown horizon in minutes. UIs can surface
+    /// this in a tooltip; the cron lives on the Worker.
+    public let ttlIdleMinutes: Int
+    public init(fqdn: String, status: String, ttlIdleMinutes: Int = 30) {
+        self.fqdn = fqdn
+        self.status = status
+        self.ttlIdleMinutes = ttlIdleMinutes
+    }
+
+    /// Typed convenience over the raw string. Forward-compatible: an
+    /// unknown future value parses as `.provisioning` so a client that
+    /// hasn't been updated still polls instead of opening an unhealthy
+    /// pod.
+    public var lifecycle: Lifecycle {
+        switch status {
+        case "up":   return .up
+        case "none": return .none
+        default:     return .provisioning
+        }
+    }
+
+    public enum Lifecycle: String, Sendable, Equatable {
+        case none, provisioning, up
     }
 }
 
@@ -569,6 +624,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// exercise the test-account branch; production talks to the real
     /// Worker which reads its own off-git secret.
     public var testAccounts: [String: TestAccountMeta] = [:]
+    /// Plan A — mirror of the Worker's `demo_users` D1 table. When a
+    /// typed username is present here, `usernameAvailable` embeds the
+    /// corresponding `demoServer` block. Independent of `testAccounts`
+    /// — a username may carry both (legacy reviewer compat) or just
+    /// the new block (live demo only).
+    public var demoServers: [String: DemoServerBlock] = [:]
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
 
     /// Tracks usernames that have been claimed so the mock can return
@@ -618,11 +679,21 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         try await tick()
         let lower = username.lowercased()
+        // Plan A — every return branch folds in the demoServer block
+        // when present. Independent of the testAccount / claim
+        // branches; the Worker behaves the same way.
+        let demoBlock = demoServers[lower]
         // Test-account match precedes every other rule so a value
         // that would otherwise look invalid still surfaces the
         // testAccount block (Worker side does the same).
         if let meta = testAccounts[lower] {
-            return .init(username: lower, available: false, reason: "test account", testAccount: meta)
+            return .init(
+                username: lower,
+                available: false,
+                reason: "test account",
+                testAccount: meta,
+                demoServer: demoBlock
+            )
         }
         // Username rules. Mirrors the Worker's USERNAME_RE in
         // labels.ts so the Mock's wire shape (reason strings +
@@ -633,20 +704,32 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             return .init(
                 username: lower,
                 available: false,
-                reason: "username must be 1–63 lowercase letters or digits (no hyphens)"
+                reason: "username must be 1–63 lowercase letters or digits (no hyphens)",
+                demoServer: demoBlock
             )
         }
         if reservedUsernames.contains(lower) {
             return .init(
                 username: lower,
                 available: false,
-                reason: "username \"\(lower)\" is reserved"
+                reason: "username \"\(lower)\" is reserved",
+                demoServer: demoBlock
             )
         }
         if let prior = claimedUsernames[lower], prior != "_self" {
-            return .init(username: lower, available: false, reason: "already claimed")
+            return .init(
+                username: lower,
+                available: false,
+                reason: "already claimed",
+                demoServer: demoBlock
+            )
         }
-        return .init(username: lower, available: true, reason: nil)
+        return .init(
+            username: lower,
+            available: true,
+            reason: nil,
+            demoServer: demoBlock
+        )
     }
 
     public func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse {

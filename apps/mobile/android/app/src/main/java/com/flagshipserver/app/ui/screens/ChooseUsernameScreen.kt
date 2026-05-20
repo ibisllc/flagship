@@ -18,6 +18,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.DemoServerBlock
 import com.flagshipserver.app.api.TestAccountMeta
 import com.flagshipserver.app.core.DemoFixtures
 import com.flagshipserver.app.core.LocalAppState
@@ -51,9 +52,11 @@ fun ChooseUsernameScreen(nav: NavController) {
     var username by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<UsernameCheck>(UsernameCheck.Empty) }
     var testHit by remember { mutableStateOf<TestAccountMeta?>(null) }
+    var demoServerHit by remember { mutableStateOf<DemoServerBlock?>(null) }
 
     LaunchedEffect(username) {
         testHit = null
+        demoServerHit = null
         if (username.isEmpty()) {
             status = UsernameCheck.Empty
             return@LaunchedEffect
@@ -72,6 +75,11 @@ fun ChooseUsernameScreen(nav: NavController) {
         }
         if (resp.testAccount != null) {
             testHit = resp.testAccount
+            // Plan A — capture the optional `demoServer` block so the
+            // CTA can hand it to DemoFixtures.activate. When present,
+            // the demo renders ONE live device; when null, the legacy
+            // 3-fixture path runs.
+            demoServerHit = resp.demoServer
             status = UsernameCheck.TestAccount
             return@LaunchedEffect
         }
@@ -110,8 +118,20 @@ fun ChooseUsernameScreen(nav: NavController) {
                 UsernameCheck.Checking -> "Checking…"
                 UsernameCheck.Available -> "Available."
                 UsernameCheck.Taken -> null
-                UsernameCheck.TestAccount -> testHit?.let {
-                    "Sandboxed test mode (${it.display}). State resets every ${it.ttlHours} h."
+                UsernameCheck.TestAccount -> testHit?.let { meta ->
+                    val demo = demoServerHit
+                    if (demo != null) {
+                        when (demo.lifecycle) {
+                            DemoServerBlock.Lifecycle.Up ->
+                                "Live demo (${meta.display}) — server is up. Idle reset every ${demo.ttlIdleMinutes} min."
+                            DemoServerBlock.Lifecycle.Provisioning ->
+                                "Live demo (${meta.display}) — server is starting. Idle reset every ${demo.ttlIdleMinutes} min."
+                            DemoServerBlock.Lifecycle.None ->
+                                "Live demo (${meta.display}) — connect spins up a real server. Idle reset every ${demo.ttlIdleMinutes} min."
+                        }
+                    } else {
+                        "Sandboxed test mode (${meta.display}). State resets every ${meta.ttlHours} h."
+                    }
                 }
             },
             error = when (status) {
@@ -131,8 +151,16 @@ fun ChooseUsernameScreen(nav: NavController) {
             },
             onClick = {
                 if (isTest) {
-                    DemoFixtures.activate(app, username)
-                    toasts.info("Sandboxed test mode. Sign out to leave.")
+                    // Plan A — pass the optional demoServer block so
+                    // DemoFixtures renders ONE live device when the
+                    // Worker reported one; otherwise the legacy
+                    // 3-fixture sandbox.
+                    DemoFixtures.activate(app, username, demoServer = demoServerHit)
+                    if (demoServerHit != null) {
+                        toasts.info("Live demo mode. Sign out to leave.")
+                    } else {
+                        toasts.info("Sandboxed test mode. Sign out to leave.")
+                    }
                 } else {
                     nav.navigate("biometric")
                 }

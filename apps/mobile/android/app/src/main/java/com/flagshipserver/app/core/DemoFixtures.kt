@@ -1,36 +1,47 @@
 // Test-account / demo-mode fixtures.
 //
-// A typed username that the Worker confirms as a test account (via
-// /api/users/check returning a non-null testAccount field) short-
-// circuits the real claim + biometric + create-server flow and pre-
-// populates AppState with believable sample pods so an app reviewer
-// (or curious user) can explore the full surface without provisioning
-// real hardware.
+// Two coexisting modes drive demo accounts (mirror of iOS
+// DemoFixtures.swift):
+//
+//   1. Legacy fixtures-only (`testAccount`-only). The Worker
+//      returns a `testAccount` block but no `demoServer` block.
+//      `activate(_:username:)` materialises three obviously-fake
+//      sample pods so a reviewer can explore the surface without
+//      provisioning real hardware. This is the v1.0 behaviour and
+//      stays available so already-shipped binaries continue to work.
+//
+//   2. On-connect Hetzner (Plan A, Phase D). The Worker
+//      additionally returns a `demoServer` block describing one real
+//      VPS — its FQDN and lifecycle state (`none` / `provisioning` /
+//      `up`). `activate(_:username:demoServer:)` materialises ONE
+//      pod backed by that FQDN; tapping connect calls the
+//      `/api/dev/sample-user/{u}/connect` endpoint and polls until
+//      the lifecycle flips to `up`. See docs/sample-users.md §3.
 //
 // The list of test-account usernames LIVES OFF THE OPEN SOURCE —
-// it's stored as env.TEST_ACCOUNTS on the Worker. Mobile clients
-// learn that the typed string is a test account only by asking the
-// Worker; we never bake usernames into the app itself.
+// it's stored as env.TEST_ACCOUNTS (legacy) plus a `demo_users` D1
+// row (live) on the Worker. Mobile clients learn that the typed
+// string is a demo only by asking the Worker; we never bake
+// usernames into the app itself.
 //
-// Demo mode never:
+// Demo mode (legacy) never:
 //   - talks to flagshipserver.com (no auth-code mint, no DNS publish)
 //   - talks to a real pod (no /api/screens/* against a live daemon)
 //   - registers an FCM push token
 //   - touches the AndroidKeyStore (no UMK seed materialized)
 //
-// Everything renders against MockScreensClient + the in-memory
-// AppState. Sign-out clears the demo flag the same way it clears
-// everything else.
+// Demo mode (Plan A) DOES talk to a real pod, but only after the
+// user explicitly taps "Connect" on the single rendered device.
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.api.DemoServerBlock
 import java.util.UUID
 
 object DemoFixtures {
-    /// Pods the demo user starts with. The names + descriptions are
-    /// obviously sample data so a reviewer can't confuse them for real
-    /// pods, but realistic enough that Home / Apps / Activity / Settings
-    /// all render meaningfully.
+    /// Pods the legacy demo user starts with. Three obviously-fake
+    /// sample pods so a reviewer can explore Home / Apps / Activity /
+    /// Settings.
     fun samplePods(username: String): List<PodInfo> = listOf(
         PodInfo(
             podId = "demo-home-${UUID.randomUUID().toString().take(6)}",
@@ -55,14 +66,57 @@ object DemoFixtures {
         ),
     )
 
-    /** Apply demo state for [username] to [appState]. Called from the
-     *  username screen after the Worker confirms the typed name is a
-     *  test account. The username itself comes from the user; the
-     *  mobile app never assumes a specific one. */
-    fun activate(appState: AppState, username: String) {
-        appState.completeOnboarding(
-            username = username,
-            pods = samplePods(username),
+    /** Plan A — build ONE pod from a server-supplied [block]. Used by
+     *  the live demo flow: `/api/users/check` returned a `demoServer`
+     *  block and we render that single device instead of the three
+     *  legacy fixtures.
+     *
+     *  Status mapping:
+     *    - `none`         → PENDING (user hasn't tapped connect yet)
+     *    - `provisioning` → PENDING
+     *    - `up`           → ONLINE
+     */
+    fun samplePodFromDemoServer(block: DemoServerBlock, username: String): PodInfo {
+        val label = labelFromFqdn(block.fqdn) ?: "Home"
+        return PodInfo(
+            podId = "demo-server-$username",
+            name = label.replaceFirstChar { it.uppercaseChar() },
+            description = "Live demo on Hetzner",
+            fqdn = block.fqdn,
+            status = mapStatus(block.lifecycle),
         )
     }
+
+    /** Map the demoServer lifecycle enum to the Android pod-status
+     *  enum. Both NONE and Provisioning surface as PENDING so the
+     *  home-screen renders the same "waiting" affordance. */
+    fun mapStatus(lifecycle: DemoServerBlock.Lifecycle): PodInfo.Status = when (lifecycle) {
+        DemoServerBlock.Lifecycle.Up -> PodInfo.Status.ONLINE
+        DemoServerBlock.Lifecycle.None,
+        DemoServerBlock.Lifecycle.Provisioning -> PodInfo.Status.PENDING
+    }
+
+    /** Apply demo state for [username] to [appState]. Called from the
+     *  username screen after the Worker confirms the typed name is a
+     *  test account.
+     *
+     *  When [demoServer] is non-null (Plan A), materialise ONE pod
+     *  with the server-supplied FQDN + lifecycle. When null (legacy),
+     *  fall back to the three-fixture path so already-shipped
+     *  binaries (and reviewers who don't want a live pod) keep
+     *  working. */
+    fun activate(
+        appState: AppState,
+        username: String,
+        demoServer: DemoServerBlock? = null,
+    ) {
+        val pods = if (demoServer != null) {
+            listOf(samplePodFromDemoServer(demoServer, username))
+        } else {
+            samplePods(username)
+        }
+        appState.completeOnboarding(username = username, pods = pods)
+    }
+
+    private fun labelFromFqdn(fqdn: String): String? = fqdn.split(".").firstOrNull()
 }

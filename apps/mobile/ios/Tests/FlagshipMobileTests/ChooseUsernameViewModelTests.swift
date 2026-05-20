@@ -120,6 +120,11 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         XCTAssertFalse(ChooseUsernameViewModel.Status.taken.allowsContinue)
         XCTAssertTrue(ChooseUsernameViewModel.Status.available.allowsContinue)
         XCTAssertTrue(ChooseUsernameViewModel.Status.networkFallbackAvailable.allowsContinue)
-        XCTAssertTrue(ChooseUsernameViewModel.Status.testAccount(.init(display: "X", ttlHours: 6)).allowsContinue)
+        XCTAssertTrue(
+            ChooseUsernameViewModel.Status.testAccount(
+                .init(display: "X", ttlHours: 6),
+                demoServer: nil
+            ).allowsContinue
+        )
     }
 }

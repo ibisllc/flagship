@@ -20,7 +20,12 @@ public final class ChooseUsernameViewModel {
         case checking
         case available
         case taken
-        case testAccount(TestAccountMeta)
+        /// Legacy + Plan A demo branch. `demoServer` is non-nil when
+        /// the Worker also returned a live `demoServer` block (Plan A
+        /// — on-connect Hetzner). Nil ⇒ legacy fixtures-only path so
+        /// already-shipped binaries / reviewers without a live VPS
+        /// still get the three-pod sandbox.
+        case testAccount(TestAccountMeta, demoServer: DemoServerBlock?)
         case networkFallbackAvailable  // regex passed but Worker unreachable
 
         public var allowsContinue: Bool {
@@ -31,7 +36,17 @@ public final class ChooseUsernameViewModel {
         }
 
         public var testAccountMeta: TestAccountMeta? {
-            if case .testAccount(let m) = self { return m }
+            if case .testAccount(let m, _) = self { return m }
+            return nil
+        }
+
+        /// Plan A — the server-supplied `demoServer` block, when the
+        /// matched account has one. Nil for the legacy fixtures-only
+        /// path. Callers (OnboardingFlow / ChooseUsernameScreen) pass
+        /// this through to DemoFixtures.activate so the live "one
+        /// real device" path is taken when available.
+        public var demoServerBlock: DemoServerBlock? {
+            if case .testAccount(_, let demo) = self { return demo }
             return nil
         }
     }
@@ -101,7 +116,11 @@ public final class ChooseUsernameViewModel {
         }
         if Task.isCancelled { return }
         if let meta = resp.testAccount {
-            status = .testAccount(meta)
+            // Plan A — propagate the optional demoServer block so the
+            // host screen can hand it to DemoFixtures.activate. When
+            // present, the host renders ONE live device backed by a
+            // Hetzner VPS; when nil, the legacy 3-fixture path runs.
+            status = .testAccount(meta, demoServer: resp.demoServer)
         } else if resp.available {
             status = .available
         } else if resp.reason == "already claimed" {

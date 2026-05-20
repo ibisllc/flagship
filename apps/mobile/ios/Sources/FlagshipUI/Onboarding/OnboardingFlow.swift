@@ -39,8 +39,18 @@ public struct OnboardingFlow: View {
                         onContinue: { username in
                             path.append(.createServer(username: username))
                         },
-                        onDemoActivate: { username, _ in
-                            DemoFixtures.activate(app, username: username)
+                        onDemoActivate: { username, _, demoServer in
+                            // Plan A — when the Worker returned a
+                            // demoServer block, render ONE real device
+                            // backed by the Hetzner VPS. Otherwise
+                            // fall back to the legacy 3-fixture path
+                            // so already-shipped binaries / reviewers
+                            // without a live VPS still work.
+                            DemoFixtures.activate(
+                                app,
+                                username: username,
+                                demoServer: demoServer
+                            )
                         }
                     )
                 case .createServer(let username):

@@ -331,6 +331,12 @@ data class UsernameAvailabilityResponse(
      *  available=false to keep accidental claims impossible, while
      *  this field tells the client to enter the sandbox demo flow. */
     val testAccount: TestAccountMeta? = null,
+    /** Plan A — present when the typed username matches a `demo_users`
+     *  row on the Worker. Drives the new "one real device" rendering
+     *  in DemoFixtures + the on-connect-provisioning flow. Absent ⇒
+     *  legacy (testAccount-only) behaviour preserved. See
+     *  docs/sample-users.md §10.9. */
+    val demoServer: DemoServerBlock? = null,
 )
 
 @Serializable
@@ -342,6 +348,39 @@ data class TestAccountMeta(
      *  this so reviewers know what they're walking into. */
     val ttlHours: Int = 24,
 )
+
+/** Plan A — embedded into the /api/users/check response when a typed
+ *  username matches a `demo_users` row on the Worker. Mirrors the
+ *  shape produced by `demoServerBlockFromRow` in
+ *  packages/control-plane/src/demoUsers.ts (and DemoServerBlock on
+ *  iOS). See docs/sample-users.md §10.9. */
+@Serializable
+data class DemoServerBlock(
+    /** e.g. `home.demo-alice.flagship.services`. The single device the
+     *  new demo-mode renders. */
+    val fqdn: String,
+    /** Server-lifecycle state surfaced to clients. The Worker collapses
+     *  the internal four-state machine into three public statuses:
+     *   "none"         — no Hetzner VPS yet; tap connect to provision.
+     *   "provisioning" — POST /connect issued; client should poll.
+     *   "up"           — VPS booted and registered; safe to open. */
+    val status: String,
+    /** Operator-set idle-teardown horizon in minutes. UIs can surface
+     *  this in a tooltip; the cron lives on the Worker. */
+    val ttlIdleMinutes: Int = 30,
+) {
+    /** Typed convenience over the raw string. Forward-compatible: an
+     *  unknown future value parses as `Provisioning` so a client that
+     *  hasn't been updated still polls instead of opening an unhealthy
+     *  pod. */
+    val lifecycle: Lifecycle get() = when (status) {
+        "up" -> Lifecycle.Up
+        "none" -> Lifecycle.None
+        else -> Lifecycle.Provisioning
+    }
+
+    enum class Lifecycle { None, Provisioning, Up }
+}
 
 @Serializable
 data class RecoveryEnvelopeRequest(
@@ -400,6 +439,12 @@ class MockFlagshipServerClient(
      *  availability check; production uses the real Worker which reads
      *  its own off-git secret. */
     var testAccounts: Map<String, TestAccountMeta> = emptyMap(),
+    /** Plan A — mirror of the Worker's `demo_users` D1 table. When a
+     *  typed username is present here, `usernameAvailable` embeds the
+     *  corresponding `demoServer` block. Independent of
+     *  [testAccounts] — a username may carry both (legacy reviewer
+     *  compat) or just the new block (live demo only). */
+    var demoServers: MutableMap<String, DemoServerBlock> = mutableMapOf(),
 ) : FlagshipServerClient {
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
@@ -446,6 +491,10 @@ class MockFlagshipServerClient(
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
         tick()
         val lower = username.lowercase()
+        // Plan A — every return branch folds in the demoServer block
+        // when present. Independent of testAccount / claim branches;
+        // the Worker behaves the same way.
+        val demoBlock = demoServers[lower]
         // Test-account match precedes every other rule so a typed
         // value that looks "invalid" by length / regex (e.g. has
         // hyphens) still surfaces the testAccount block when the
@@ -456,22 +505,23 @@ class MockFlagshipServerClient(
                 available = false,
                 reason = "test account",
                 testAccount = it,
+                demoServer = demoBlock,
             )
         }
         if (lower.length < 2 || lower.length > 32) {
-            return UsernameAvailabilityResponse(lower, false, "Must be 2–32 chars.")
+            return UsernameAvailabilityResponse(lower, false, "Must be 2–32 chars.", demoServer = demoBlock)
         }
         if (lower in reservedUsernames) {
-            return UsernameAvailabilityResponse(lower, false, "Reserved.")
+            return UsernameAvailabilityResponse(lower, false, "Reserved.", demoServer = demoBlock)
         }
         if (!lower.matches(Regex("^[a-z0-9]+$"))) {
-            return UsernameAvailabilityResponse(lower, false, "Letters and digits only.")
+            return UsernameAvailabilityResponse(lower, false, "Letters and digits only.", demoServer = demoBlock)
         }
         val prior = _claimedUsernames[lower]
         if (prior != null && prior != "_self") {
-            return UsernameAvailabilityResponse(lower, false, "Already claimed.")
+            return UsernameAvailabilityResponse(lower, false, "Already claimed.", demoServer = demoBlock)
         }
-        return UsernameAvailabilityResponse(lower, true, null)
+        return UsernameAvailabilityResponse(lower, true, null, demoServer = demoBlock)
     }
 
     override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse {
