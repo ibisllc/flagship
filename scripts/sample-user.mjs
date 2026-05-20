@@ -694,6 +694,7 @@ function makeLiveProvisionTempVps(env) {
     const candidates = await discoverServerTypeCandidates(env, region, size);
     for (const candidate of candidates) {
       tried.push(candidate);
+      let partialServerId = null;
       try {
         if (candidate !== size) {
           process.stderr.write(
@@ -706,15 +707,34 @@ function makeLiveProvisionTempVps(env) {
           size: candidate,
           label,
         });
+        partialServerId = instance.id;
         await provider.awaitBoot(instance.id);
         return { serverId: instance.id, ipv4: instance.ip };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        const isUnsupported =
-          /unsupported location for server type|server type \d+ is deprecated|server_type/i.test(
+        const isRetryable =
+          /unsupported location for server type|server type \d+ is deprecated|no public network interfaces/i.test(
             msg,
           );
-        if (!isUnsupported) {
+        // Always try to clean up the partially-created server on
+        // failure — otherwise each failed attempt leaks a billable
+        // VPS until the operator hand-deletes it.
+        if (partialServerId) {
+          try {
+            await provider.destroy(partialServerId);
+            process.stderr.write(
+              `[create] cleaned up failed server ${partialServerId}\n`,
+            );
+          } catch (cleanupErr) {
+            const cmsg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+            process.stderr.write(
+              `[create] WARNING: failed to clean up server ${partialServerId}: ${cmsg}\n` +
+                `    delete manually: curl -X DELETE -H "Authorization: Bearer $HCLOUD_TOKEN" ` +
+                `https://api.hetzner.cloud/v1/servers/${partialServerId}\n`,
+            );
+          }
+        }
+        if (!isRetryable) {
           // Non-recoverable error (auth, network, SSH issue, dd
           // failure, etc.) — surface it immediately.
           throw e;

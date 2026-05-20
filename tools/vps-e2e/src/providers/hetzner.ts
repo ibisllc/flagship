@@ -71,6 +71,13 @@ export function buildCreateServerBody(
     ssh_keys: [sshKeyId],
     start_after_create: true,
     labels: { "flagship-e2e": "1" },
+    // Explicit public-network config. Modern Hetzner accounts can
+    // default to private-only (Primary-IPs feature), which would
+    // create a server with NO public IPv4/IPv6 — and then
+    // `enable_rescue` 422s with "no public network interfaces
+    // found, rescue system cannot be used". Force both on so the
+    // rescue+dd flow works regardless of account default.
+    public_net: { enable_ipv4: true, enable_ipv6: true },
   };
 }
 
