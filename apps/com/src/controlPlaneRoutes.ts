@@ -1393,20 +1393,32 @@ export async function tryControlPlane(
       audit: storage.auditEvents,
     };
     if (method === "POST" && ROUTE_RE.DEMO_USER_CREATE.test(path)) {
-      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
-        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
       }
       return finishPlain(await handleCreateDemoUser(demoDeps, await readJson(request)));
     }
     if (method === "POST" && ROUTE_RE.DEMO_USER_DELETE.test(path)) {
-      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
-        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
       }
       return finishPlain(await handleDeleteDemoUser(demoDeps, await readJson(request)));
     }
     if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_INSTALL_COMPLETE))) {
-      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
-        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
       }
       return finishPlain(
         await handleDemoUserInstallComplete(demoDeps, decodeURIComponent(m[1]!), await readJson(request)),
@@ -1419,14 +1431,22 @@ export async function tryControlPlane(
       return finishPlain(await handleDemoUserHeartbeat(demoDeps, decodeURIComponent(m[1]!)));
     }
     if (method === "GET" && ROUTE_RE.DEMO_USER_LIST.test(path)) {
-      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
-        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
       }
       return finishPlain(await handleListDemoUsers(demoDeps));
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.DEMO_USER_GET))) {
-      if (!authorizeAdmin(request, env.FLAGSHIP_ADMIN_SECRET)) {
-        return finishPlain({ status: 403, body: { error: "admin auth required" } });
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
       }
       return finishPlain(await handleGetDemoUser(demoDeps, decodeURIComponent(m[1]!)));
     }
