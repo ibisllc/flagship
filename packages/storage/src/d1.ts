@@ -275,6 +275,68 @@ export class D1UsernameStorage implements UsernameStorage {
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
+  async setTotpSecretEncrypted(username: string, encrypted: string) {
+    const r = await this.db
+      .prepare(
+        "UPDATE usernames SET totp_secret_encrypted = ? WHERE username = ?",
+      )
+      .bind(encrypted, username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async finalizeTotpEnrollment(
+    username: string,
+    at: number,
+    recoveryCodesHashesJson: string,
+  ) {
+    const r = await this.db
+      .prepare(
+        "UPDATE usernames SET account_type = 'multi', " +
+          "totp_enrolled_at = ?, recovery_codes_hashes_json = ? " +
+          "WHERE username = ?",
+      )
+      .bind(at, recoveryCodesHashesJson, username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async clearTotp(username: string) {
+    const r = await this.db
+      .prepare(
+        "UPDATE usernames SET account_type = 'single', " +
+          "totp_secret_encrypted = NULL, recovery_codes_hashes_json = NULL, " +
+          "totp_enrolled_at = NULL WHERE username = ?",
+      )
+      .bind(username.toLowerCase())
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+  async casRecoveryCodes(
+    username: string,
+    expectedJson: string,
+    newJson: string,
+  ) {
+    // CAS the JSON column. SQLite/D1 doesn't have a native "compare
+    // value or NULL" so we branch the WHERE: when the caller expects
+    // an empty baseline (""), match either NULL or literal "".
+    const norm = username.toLowerCase();
+    const sql =
+      expectedJson === ""
+        ? "UPDATE usernames SET recovery_codes_hashes_json = ? " +
+          "WHERE username = ? AND (recovery_codes_hashes_json IS NULL OR recovery_codes_hashes_json = '')"
+        : "UPDATE usernames SET recovery_codes_hashes_json = ? " +
+          "WHERE username = ? AND recovery_codes_hashes_json = ?";
+    const stmt = this.db.prepare(sql);
+    const bound =
+      expectedJson === ""
+        ? stmt.bind(newJson, norm)
+        : stmt.bind(newJson, norm, expectedJson);
+    const r = await bound.run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
 }
 
 export class D1UsernameAliasStorage implements UsernameAliasStorage {

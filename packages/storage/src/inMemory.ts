@@ -112,6 +112,58 @@ export class InMemoryUsernameStorage implements UsernameStorage {
     this.byName.set(norm, { ...r, isDemo });
     return true;
   }
+  async setTotpSecretEncrypted(username: string, encrypted: string) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    this.byName.set(norm, { ...r, totpSecretEncrypted: encrypted });
+    return true;
+  }
+  async finalizeTotpEnrollment(
+    username: string,
+    at: number,
+    recoveryCodesHashesJson: string,
+  ) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    this.byName.set(norm, {
+      ...r,
+      accountType: "multi",
+      totpEnrolledAt: at,
+      recoveryCodesHashesJson,
+    });
+    return true;
+  }
+  async clearTotp(username: string) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    const next: UsernameRecord = {
+      username: r.username,
+      irkPubHex: r.irkPubHex,
+      claimedAt: r.claimedAt,
+      accountType: "single",
+    };
+    if (r.isDemo !== undefined) next.isDemo = r.isDemo;
+    this.byName.set(norm, next);
+    return true;
+  }
+  async casRecoveryCodes(
+    username: string,
+    expectedJson: string,
+    newJson: string,
+  ) {
+    const norm = username.toLowerCase();
+    const r = this.byName.get(norm);
+    if (!r) return false;
+    // Match by string equality. `undefined ⇄ ""` collapses so the
+    // caller can pass `""` for the "no-codes" baseline.
+    const current = r.recoveryCodesHashesJson ?? "";
+    if (current !== expectedJson) return false;
+    this.byName.set(norm, { ...r, recoveryCodesHashesJson: newJson });
+    return true;
+  }
 }
 
 export class InMemoryUsernameAliasStorage implements UsernameAliasStorage {

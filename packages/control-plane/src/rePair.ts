@@ -12,6 +12,12 @@ import type {
 import { hexToBytes } from "./hex.js";
 import type { HandlerResponse } from "./types.js";
 import { computeDevicesEtag } from "./usersDevices.js";
+import {
+  consumeRecoveryCode,
+  peekVerifyAttempts,
+  recordVerifyAttempt,
+  validateTotpCode,
+} from "./totp.js";
 
 /**
  * Recovery re-pair endpoints (J.3).
@@ -100,6 +106,16 @@ export interface RePairDeps {
   quarantineMs?: number;
   maxAgeMs?: number;
   now?: () => number;
+  /**
+   * v1.2 Phase 3 — 32-byte hex Worker secret used to decrypt the
+   * stored TOTP secret for real `RePairInitiate.totpProof`
+   * verification on multi-device accounts. When ABSENT, the handler
+   * falls back to the Phase 2 structural-only check (matches the
+   * /totp/* endpoints which 503 without the KEK). Once a deployment
+   * sets `FLAGSHIP_TOTP_KEK`, this path activates and the structural
+   * fallback never fires.
+   */
+  totpKekHex?: string;
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
@@ -241,13 +257,19 @@ export async function handleInitiateRePair(
   const graceMs = isMultiDevice ? multiGraceMs : singleGraceMs;
   const totpRequired = isMultiDevice;
 
-  // v1.2 Phase 2 — when multi-device, the body MUST carry a
-  // structurally-valid totpProof beside the signed envelope. Phase 3
-  // replaces this presence check with `verifyTotp` (from the
-  // `otpauth` library) + an atomic recovery-code redemption against
-  // the stored argon2id-hashed codes. For now, the field's shape
-  // shape gates the flow + the row is stamped `totp_proof_consumed`
-  // so /complete (Phase 3) can refuse to swap unverified rows.
+  // v1.2 — when multi-device, the body MUST carry a totpProof beside
+  // the signed envelope. Phase 3 swapped the Phase 2 structural-only
+  // check for real verification: TOTP codes are validated against the
+  // decrypted stored secret with a ±1 period window; recovery codes
+  // are argon2id-verified against the stored hash array AND atomically
+  // CAS-consumed so a single code can never be replayed.
+  //
+  // The KEK is the production switch: when `totpKekHex` is wired we
+  // run the real path; when absent (early-deploy / dev) we fall back
+  // to the Phase 2 structural-only check so the call-sites that
+  // haven't been updated to pass `totpKekHex` still work. Once
+  // `FLAGSHIP_TOTP_KEK` is set in production, the structural fallback
+  // never fires.
   let totpProofConsumed = false;
   if (totpRequired) {
     const proof = b?.totpProof as { code?: unknown; method?: unknown } | undefined;
@@ -265,9 +287,67 @@ export async function handleInitiateRePair(
         },
       };
     }
-    // Phase 2 placeholder — structural-only validation. Phase 3
-    // wires the real check.
-    totpProofConsumed = true;
+    if (deps.totpKekHex) {
+      // Real verification path (Phase 3).
+      // Rate-limit the per-username verify counter so a brute-force
+      // attempt against the TOTP code is bounded.
+      const peek = peekVerifyAttempts(r.username, now());
+      if (peek.tripped) {
+        const retryAfterMs = Math.max(0, 15 * 60_000 - (now() - peek.windowStart));
+        return {
+          status: 429,
+          body: {
+            error: "too many TOTP verify attempts",
+            retryAfterMs,
+            retryAfterSec: Math.ceil(retryAfterMs / 1000),
+          },
+        };
+      }
+      const verdict = await validateTotpCode({
+        code: proof.code,
+        totpSecretEncrypted: userRec.totpSecretEncrypted,
+        recoveryCodesHashesJson: userRec.recoveryCodesHashesJson,
+        kekHex: deps.totpKekHex,
+        now: now(),
+      });
+      if (!verdict.valid) {
+        const post = recordVerifyAttempt(r.username, now());
+        return {
+          status: 401,
+          body: {
+            error: "invalid TOTP proof",
+            remainingAttempts: post.remaining,
+          },
+        };
+      }
+      // If the proof was a recovery code, consume it ATOMICALLY now.
+      // Two parallel re-pairs racing the same code: only one of the
+      // CAS calls in `consumeRecoveryCode` wins; the loser sees the
+      // code already gone and 401s.
+      if (verdict.method === "recovery") {
+        const consume = await consumeRecoveryCode(
+          { usernames: deps.usernames },
+          r.username,
+          proof.code,
+        );
+        if (!consume.consumed) {
+          return {
+            status: 401,
+            body: {
+              error: "recovery code already consumed",
+              reason: consume.reason,
+            },
+          };
+        }
+      }
+      totpProofConsumed = true;
+    } else {
+      // Pre-Phase-3 fallback — structural-only validation, exactly
+      // as the Phase 2 handler did. Deployments without
+      // FLAGSHIP_TOTP_KEK set never reach the real-verify path; this
+      // keeps the existing tests + dev paths green.
+      totpProofConsumed = true;
+    }
   }
 
   let newIrkPub: Uint8Array;

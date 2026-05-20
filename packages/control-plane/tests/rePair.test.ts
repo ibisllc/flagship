@@ -702,3 +702,311 @@ describe("v1.2 Phase 2 — 14-day quarantine", () => {
     expect(res.status).toBe(200);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// v1.2 Plan B Phase 3 — real TOTP / recovery code verification on
+// the re-pair multi-device path. Replaces the Phase 2 structural-
+// only gate when `totpKekHex` is wired on the deps.
+// ───────────────────────────────────────────────────────────────────
+
+import {
+  signTotpEnrollBegin,
+  signTotpEnrollConfirm,
+} from "@flagship/protocol";
+import * as OTPAuth from "otpauth";
+import {
+  _resetTotpVerifyRateLimitForTests,
+  handleTotpEnrollBegin,
+  handleTotpEnrollConfirm,
+} from "../src/totp.js";
+
+const TEST_KEK_HEX =
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+async function enrollMultiDevice(
+  storage: InMemoryStorage,
+  ownerIrk: Keypair,
+  fixedNow: number,
+): Promise<{ secretBase32: string; recoveryCodes: string[] }> {
+  const begin = await handleTotpEnrollBegin(
+    { usernames: storage.usernames, kekHex: TEST_KEK_HEX, now: () => fixedNow },
+    USERNAME,
+    {
+      request: { username: USERNAME, issuedAt: fixedNow },
+      signature: bytesToHex(
+        signTotpEnrollBegin(
+          { username: USERNAME, issuedAt: fixedNow },
+          ownerIrk,
+        ),
+      ),
+    },
+  );
+  const secretBase32 = (begin.body as { secret: string }).secret;
+  const totp = new OTPAuth.TOTP({
+    algorithm: "SHA1",
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(secretBase32),
+  });
+  const sample = totp.generate({ timestamp: fixedNow });
+  const confirm = await handleTotpEnrollConfirm(
+    {
+      usernames: storage.usernames,
+      kekHex: TEST_KEK_HEX,
+      now: () => fixedNow,
+      fastHash: true,
+    },
+    USERNAME,
+    {
+      request: { username: USERNAME, issuedAt: fixedNow },
+      signature: bytesToHex(
+        signTotpEnrollConfirm(
+          { username: USERNAME, issuedAt: fixedNow },
+          ownerIrk,
+        ),
+      ),
+      code: sample,
+    },
+  );
+  return {
+    secretBase32,
+    recoveryCodes: (confirm.body as { recoveryCodes: string[] }).recoveryCodes,
+  };
+}
+
+function codeAt(secret: string, t: number): string {
+  const totp = new OTPAuth.TOTP({
+    algorithm: "SHA1",
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(secret),
+  });
+  return totp.generate({ timestamp: t });
+}
+
+describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => {
+  it("accepts a valid TOTP proof on multi-device re-pair", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    const { secretBase32 } = await enrollMultiDevice(storage, oldIrk, fixedNow);
+    const code = codeAt(secretBase32, fixedNow);
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        totpKekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code, method: "totp" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const row = await storage.pendingRePairs.get(USERNAME);
+    expect(row?.totpProofConsumed).toBe(true);
+  });
+
+  it("accepts a valid recovery code on multi-device re-pair AND atomically consumes it", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    const { recoveryCodes } = await enrollMultiDevice(storage, oldIrk, fixedNow);
+    const target = recoveryCodes[0] as string;
+
+    const beforeRow = await storage.usernames.get(USERNAME);
+    const beforeRows = JSON.parse(beforeRow!.recoveryCodesHashesJson!);
+    expect(beforeRows).toHaveLength(10);
+
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        totpKekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: target, method: "recovery" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    // The matching recovery code is consumed.
+    const afterRow = await storage.usernames.get(USERNAME);
+    const afterRows = JSON.parse(afterRow!.recoveryCodesHashesJson!);
+    expect(afterRows).toHaveLength(9);
+  });
+
+  it("rejects a totally invalid TOTP code (401) and increments the failed-counter", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    await enrollMultiDevice(storage, oldIrk, fixedNow);
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        totpKekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: "000000", method: "totp" },
+      }),
+    );
+    expect(res.status).toBe(401);
+    // No pending row.
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeUndefined();
+    // The remaining-attempts hint is surfaced for the UI.
+    expect((res.body as { remainingAttempts: number }).remainingAttempts).toBe(4);
+  });
+
+  it("rejects an expired (>±1 period) TOTP code (401)", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    const { secretBase32 } = await enrollMultiDevice(storage, oldIrk, fixedNow);
+    // Code generated 90s ago — outside the ±1 period window.
+    const expired = codeAt(secretBase32, fixedNow - 90_000);
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        totpKekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: expired, method: "totp" },
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a replayed recovery code (consumed-once semantics)", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    const { recoveryCodes } = await enrollMultiDevice(storage, oldIrk, fixedNow);
+    const target = recoveryCodes[0] as string;
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      totpKekHex: TEST_KEK_HEX,
+      now: () => fixedNow,
+    };
+    // First use — consume.
+    const first = await handleInitiateRePair(
+      deps,
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: target, method: "recovery" },
+      }),
+    );
+    expect(first.status).toBe(200);
+    // Tidy up — drop the pending row so a second initiate would
+    // otherwise be allowed by the "no concurrent" gate.
+    await storage.pendingRePairs.delete(USERNAME);
+    // Second use — code is gone, must 401.
+    const second = await handleInitiateRePair(
+      deps,
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: target, method: "recovery" },
+      }),
+    );
+    expect(second.status).toBe(401);
+  });
+
+  it("triggers 429 after 5 failed verify attempts inside 15 min", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    await enrollMultiDevice(storage, oldIrk, fixedNow);
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      totpKekHex: TEST_KEK_HEX,
+      now: () => fixedNow,
+    };
+    for (let i = 0; i < 5; i++) {
+      const r = await handleInitiateRePair(
+        deps,
+        USERNAME,
+        initBody({
+          newIrk,
+          oldIrk,
+          issuedAt: fixedNow,
+          totpProof: { code: "000000", method: "totp" },
+        }),
+      );
+      expect(r.status).toBe(401);
+    }
+    const tripped = await handleInitiateRePair(
+      deps,
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: "000000", method: "totp" },
+      }),
+    );
+    expect(tripped.status).toBe(429);
+  });
+
+  it("structural-only fallback still works when totpKekHex isn't wired", async () => {
+    // Deploy-safe: a deployment without FLAGSHIP_TOTP_KEK keeps the
+    // Phase 2 behaviour — structural presence is enough to clear the
+    // gate. Once the env var lands, the real-verify path kicks in.
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        // NOTE: no totpKekHex.
+      },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        totpProof: { code: "000000", method: "totp" },
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+});

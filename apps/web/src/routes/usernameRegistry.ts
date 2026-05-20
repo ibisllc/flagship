@@ -123,6 +123,22 @@ export function adaptRegistryToStorage(
       // satisfy the UsernameStorage interface.
       return false;
     },
+    // v1.2 Phase 3 — the TOTP enrollment + verification endpoints
+    // live exclusively on .com (Worker). The legacy Fastify
+    // UsernameRegistry has no TOTP columns and no Fastify route calls
+    // these; required only to satisfy the UsernameStorage interface.
+    async setTotpSecretEncrypted() {
+      return false;
+    },
+    async finalizeTotpEnrollment() {
+      return false;
+    },
+    async clearTotp() {
+      return false;
+    },
+    async casRecoveryCodes() {
+      return false;
+    },
   };
 }
 

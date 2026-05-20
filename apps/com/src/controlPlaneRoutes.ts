@@ -34,6 +34,10 @@ import {
   handleInitiateRePair,
   handleListAutoUnlockLeases,
   handleObjectRePair,
+  handleTotpDisable,
+  handleTotpEnrollBegin,
+  handleTotpEnrollConfirm,
+  handleTotpVerify,
   handleWipeRestart,
   handleServiceRename,
   handleGetAppLinks,
@@ -209,6 +213,17 @@ export interface ControlPlaneEnv {
    * docs/sample-users.md §9.3.
    */
   DEMO_PUBLIC_SSH_KEY_ID?: string;
+
+  /**
+   * v1.2 Plan B Phase 3 — 32-byte hex Worker secret used as the KEK
+   * for `usernames.totp_secret_encrypted` (AES-GCM). When unset, the
+   * four `/api/users/:u/totp/*` endpoints return 503
+   * `{ error: "TOTP not configured" }` and the re-pair handler falls
+   * back to its Phase 2 structural-only `totpProof` gate. Once set
+   * via `wrangler secret put FLAGSHIP_TOTP_KEK`, all TOTP paths run
+   * the real verification + atomic recovery-code consumption.
+   */
+  FLAGSHIP_TOTP_KEK?: string;
 }
 
 const ROUTE_RE = {
@@ -253,6 +268,11 @@ const ROUTE_RE = {
   RE_PAIR_OBJECT: /^\/api\/users\/([^/]+)\/re-pair\/object$/,
   RE_PAIR_COMPLETE: /^\/api\/users\/([^/]+)\/re-pair\/complete$/,
   RE_PAIR_GET: /^\/api\/users\/([^/]+)\/re-pair$/,
+  // v1.2 Plan B Phase 3 — TOTP 2FA enrollment + verification.
+  TOTP_ENROLL_BEGIN: /^\/api\/users\/([^/]+)\/totp\/enroll-begin$/,
+  TOTP_ENROLL_CONFIRM: /^\/api\/users\/([^/]+)\/totp\/enroll-confirm$/,
+  TOTP_VERIFY: /^\/api\/users\/([^/]+)\/totp\/verify$/,
+  TOTP_DISABLE: /^\/api\/users\/([^/]+)\/totp\/disable$/,
   WIPE_RESTART: /^\/api\/users\/([^/]+)\/wipe-restart$/,
   APP_RENAME: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/rename$/,
   APP_LINKS: /^\/api\/users\/([^/]+)\/apps\/([^/]+)\/links$/,
@@ -837,10 +857,64 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           pendingRePairs: storage.pendingRePairs,
           pushTokens: storage.pushTokens,
+          // v1.2 Phase 3 — when the env var is wired, this turns on
+          // real TOTP verification + atomic recovery-code consumption
+          // for multi-device re-pair attempts. Absent ⇒ Phase 2
+          // structural-only check (deploy-safe degrade).
+          ...(env.FLAGSHIP_TOTP_KEK ? { totpKekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
         request.headers.get("if-match") ?? undefined,
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_ENROLL_BEGIN))) {
+    return finishPlain(
+      await handleTotpEnrollBegin(
+        {
+          usernames: storage.usernames,
+          ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_ENROLL_CONFIRM))) {
+    return finishPlain(
+      await handleTotpEnrollConfirm(
+        {
+          usernames: storage.usernames,
+          ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_VERIFY))) {
+    return finishPlain(
+      await handleTotpVerify(
+        {
+          usernames: storage.usernames,
+          ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_DISABLE))) {
+    return finishPlain(
+      await handleTotpDisable(
+        {
+          usernames: storage.usernames,
+          pushTokens: storage.pushTokens,
+          ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
       ),
     );
   }

@@ -164,6 +164,51 @@ export interface UsernameStorage {
    * must not silently un-demo an account).
    */
   setDemo(username: string, isDemo: boolean): Promise<boolean>;
+  /**
+   * v1.2 Phase 3 — stage a TOTP secret during enroll-begin. Writes
+   * `totp_secret_encrypted` only; the row stays single-device until
+   * `finalizeTotpEnrollment` lands. Returns false on unknown username.
+   * Repeated calls overwrite (a user mid-enrollment can restart).
+   */
+  setTotpSecretEncrypted(
+    username: string,
+    encrypted: string,
+  ): Promise<boolean>;
+  /**
+   * v1.2 Phase 3 — atomic finalize on enroll-confirm. Sets
+   * `totp_enrolled_at = at`, flips `account_type = 'multi'`, and
+   * writes the freshly-generated recovery-code-hashes JSON. All
+   * three fields update in ONE write so a partial-failure mid-call
+   * can't leave the row in a half-enrolled state. Returns false on
+   * unknown username.
+   */
+  finalizeTotpEnrollment(
+    username: string,
+    at: number,
+    recoveryCodesHashesJson: string,
+  ): Promise<boolean>;
+  /**
+   * v1.2 Phase 3 — disable: drops `totp_secret_encrypted`,
+   * `recovery_codes_hashes_json`, `totp_enrolled_at`, and flips
+   * `account_type` back to `'single'`. ONE write. Returns false on
+   * unknown username.
+   */
+  clearTotp(username: string): Promise<boolean>;
+  /**
+   * v1.2 Phase 3 — atomic compare-and-set on
+   * `recovery_codes_hashes_json` for single-use recovery-code
+   * consumption. Updates the column iff its current value equals
+   * `expectedJson` (string equality). Returns true on success; false
+   * when the row doesn't exist OR another concurrent consumer
+   * already swapped the column. The handler that lost the race
+   * MUST treat its candidate code as already-consumed and reject
+   * the re-pair / verify call.
+   */
+  casRecoveryCodes(
+    username: string,
+    expectedJson: string,
+    newJson: string,
+  ): Promise<boolean>;
 }
 
 export interface AuthCodeStorage {
