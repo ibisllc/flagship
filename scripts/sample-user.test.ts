@@ -220,7 +220,9 @@ describe("runList / runStatus / runDelete", () => {
     expect(calls[0].url).toBe(
       "https://flagshipserver.com/api/dev/sample-user",
     );
-    expect(calls[0].headers["authorization"]).toBe("Bearer admin-sek");
+    // The Worker reads x-admin-secret (packages/control-plane/src/admin.ts),
+    // NOT Authorization: Bearer. Match the Worker contract.
+    expect(calls[0].headers["x-admin-secret"]).toBe("admin-sek");
     expect(JSON.parse(stdout.data)).toEqual({ demoUsers: [] });
   });
   it("status → GET /api/dev/sample-user/{u}; 404 emits exit 1", async () => {

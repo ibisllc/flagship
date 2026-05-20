@@ -161,7 +161,10 @@ export async function adminFetch(fetchFn, url, init, adminSecret) {
   const headers = {
     ...(init?.headers || {}),
     "content-type": "application/json",
-    authorization: `Bearer ${adminSecret}`,
+    // The Worker's authorizeAdmin (packages/control-plane/src/admin.ts)
+    // reads `x-admin-secret` — NOT `authorization: Bearer`. Match the
+    // Worker contract exactly.
+    "x-admin-secret": adminSecret,
   };
   const res = await fetchFn(url, { ...init, headers });
   const text = await res.text();
@@ -503,6 +506,10 @@ export function makeLiveDeps(env) {
     processEnv: process.env,
     stderr: process.stderr,
     stdout: process.stdout,
+    // Use the global fetch (Node 18+ ships it natively). All admin
+    // endpoint calls (create / install-complete / delete / list /
+    // status) flow through adminFetch + this fetchFn.
+    fetchFn: globalThis.fetch.bind(globalThis),
     now: () => Date.now(),
     sha8For: (p) => isoSha8(p),
     buildIso: async ({ username, serverName }) => {
