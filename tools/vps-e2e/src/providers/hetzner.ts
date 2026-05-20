@@ -222,21 +222,26 @@ export function parseSshKeyCreate(json: unknown): {
 export function buildDdCommand(isoUrl: string): string {
   // Hetzner rescue images expose the primary disk as /dev/sda on
   // x86_64 CX22; nothing in this codebase is multi-disk-aware yet.
+  //
+  // Joining with literal newlines (not "; ") because the backgrounded
+  // `nohup ... &` line followed by ANY token (incl. ; exit 0) is a
+  // bash syntax error: '&' is itself a terminator, not chainable. New
+  // lines + 'set -e' give equivalent fail-fast semantics, with cleaner
+  // grammar.
   return (
     "bash -lc " +
     JSON.stringify(
       [
         "set -euo pipefail",
-        "echo '[flagship-e2e] downloading ISO + writing to /dev/sda…'",
+        "echo '[flagship-e2e] downloading ISO + writing to /dev/sda...'",
         // -O- streams to stdout; pipefail makes the dd see a SIGPIPE if
         // wget dies. status=none keeps the rescue serial console clean.
         `wget --no-verbose -O- ${shellQuote(isoUrl)} | dd of=/dev/sda bs=4M conv=fsync status=none`,
         "sync",
-        "echo '[flagship-e2e] dd complete; rebooting into the freshly-written disk…'",
-        // `nohup … &` + exit so SSH can return cleanly before the box vanishes.
+        "echo '[flagship-e2e] dd complete; rebooting into the freshly-written disk...'",
+        // `nohup … &` lets SSH return cleanly before the box vanishes.
         "nohup bash -c 'sleep 2 && reboot -f' >/dev/null 2>&1 &",
-        "exit 0",
-      ].join("; "),
+      ].join("\n"),
     )
   );
 }
