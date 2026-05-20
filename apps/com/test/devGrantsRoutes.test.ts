@@ -1,0 +1,176 @@
+/**
+ * Worker-level integration tests for the v2 device-addressing routes
+ * (S3.3). Targets `tryControlPlane` directly with a stub D1 binding
+ * — the deeper handler logic is tested at the control-plane level
+ * (deviceCapabilityGrants.test.ts + demoUsersAdmin.test.ts).
+ *
+ * Coverage:
+ *   - admin-bearer rejection paths for the two admin endpoints
+ *   - 503 when DEMO_IRK_KEK isn't configured
+ *   - public GET /device-grants returns 200 + empty list for an
+ *     unknown user (storage stub returns empty)
+ *   - public POST /device-grants/revoke rejects malformed body with 400
+ *   - public POST /device-grants rejects malformed body with 400
+ */
+
+import { describe, expect, it } from "vitest";
+import {
+  tryControlPlane,
+  type ControlPlaneEnv,
+} from "../src/controlPlaneRoutes.js";
+import type { D1Database } from "@flagship/storage";
+
+/** Stub D1 that returns "no rows everywhere". Sufficient for the
+ *  wiring-level tests below — we're verifying status codes + route
+ *  dispatch, not storage round-trips. The deeper functional coverage
+ *  lives in the control-plane test suite. */
+function stubDb(): D1Database {
+  return {
+    prepare: () => ({
+      bind: () => ({
+        first: async () => null,
+        all: async () => ({ results: [], success: true, meta: {} }),
+        run: async () => ({ success: true, meta: {} }),
+      }),
+    }),
+    batch: async () => [],
+  } as unknown as D1Database;
+}
+
+const ADMIN_SECRET = "test-admin-secret-fixed";
+const KEK_HEX = "42".repeat(32);
+
+function baseEnv(overrides: Partial<ControlPlaneEnv> = {}): ControlPlaneEnv {
+  return {
+    DB: stubDb(),
+    FLAGSHIP_ADMIN_SECRET: ADMIN_SECRET,
+    ...overrides,
+  };
+}
+
+describe("devGrants routes — admin endpoints", () => {
+  it("admin-claim-and-issue: 401 without x-admin-secret", async () => {
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue", {
+        method: "POST",
+        body: JSON.stringify({ username: "demo-alice", serverName: "home" }),
+      }),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(401);
+  });
+
+  it("admin-claim-and-issue: 403 with wrong x-admin-secret", async () => {
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue", {
+        method: "POST",
+        headers: { "x-admin-secret": "wrong" },
+        body: JSON.stringify({ username: "demo-alice", serverName: "home" }),
+      }),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(403);
+  });
+
+  it("admin-claim-and-issue: 503 when DEMO_IRK_KEK is unset", async () => {
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue", {
+        method: "POST",
+        headers: { "x-admin-secret": ADMIN_SECRET },
+        body: JSON.stringify({ username: "demo-alice", serverName: "home" }),
+      }),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(503);
+    const body = await r!.json();
+    expect((body as { error: string }).error).toMatch(/DEMO_IRK_KEK/);
+  });
+
+  it("admin-mint-device-grant: 401 without x-admin-secret", async () => {
+    const r = await tryControlPlane(
+      new Request(
+        "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+        {
+          method: "POST",
+          body: JSON.stringify({ deviceLabel: "reviewer", scopes: ["browse"] }),
+        },
+      ),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(401);
+  });
+
+  it("admin-mint-device-grant: 503 when DEMO_IRK_KEK is unset", async () => {
+    const r = await tryControlPlane(
+      new Request(
+        "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+        {
+          method: "POST",
+          headers: { "x-admin-secret": ADMIN_SECRET },
+          body: JSON.stringify({ deviceLabel: "reviewer", scopes: ["browse"] }),
+        },
+      ),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(503);
+  });
+
+  it("admin-mint-device-grant: 404 for unknown demo user when DEMO_IRK_KEK is set", async () => {
+    const r = await tryControlPlane(
+      new Request(
+        "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+        {
+          method: "POST",
+          headers: { "x-admin-secret": ADMIN_SECRET },
+          body: JSON.stringify({ deviceLabel: "reviewer", scopes: ["browse"] }),
+        },
+      ),
+      baseEnv({ DEMO_IRK_KEK: KEK_HEX }),
+    );
+    expect(r).not.toBeNull();
+    // Stub D1 returns null for the demo_users lookup → 404.
+    expect(r!.status).toBe(404);
+  });
+});
+
+describe("devGrants routes — public endpoints", () => {
+  it("GET /device-grants: returns 200 + empty list for unknown user", async () => {
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/users/alice/device-grants"),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(200);
+    const body = await r!.json();
+    expect((body as { grants: unknown[] }).grants).toEqual([]);
+  });
+
+  it("POST /device-grants: 400 on malformed body", async () => {
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/users/alice/device-grants", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(400);
+  });
+
+  it("POST /device-grants/revoke: 400 on malformed body", async () => {
+    const r = await tryControlPlane(
+      new Request("https://flagshipserver.com/api/users/alice/device-grants/revoke", {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+      baseEnv(),
+    );
+    expect(r).not.toBeNull();
+    expect(r!.status).toBe(400);
+  });
+});

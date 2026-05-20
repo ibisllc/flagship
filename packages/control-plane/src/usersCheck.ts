@@ -18,18 +18,26 @@
 //      The list LIVES OFF-GIT (env.TEST_ACCOUNTS) so a curious user
 //      can't discover an active sandbox by reading the repo.
 
-import type { UsernameStorage, DemoUsersStorage } from "@flagship/storage";
+import type {
+  UsernameStorage,
+  DemoUsersStorage,
+  DeviceCapabilityGrantStorage,
+} from "@flagship/storage";
 import {
   signDemoDirective,
   verifyCaSignedDemoDirective,
   type DemoDirective,
+  type DeviceScope,
 } from "@flagship/protocol";
 import { validateUserLabel } from "./labels.js";
-import { ok, malformed } from "./types.js";
+import { ok, malformed, notFound } from "./types.js";
 import type { HandlerResponseWithHeaders } from "./types.js";
 import { type CaIssuer, type CaGate, evaluateCaGate } from "./pubkeyCert.js";
 import { bytesToHex } from "./hex.js";
 import { demoServerBlockFromRow, type DemoServerBlock } from "./demoUsers.js";
+
+const DEMO_USERNAME_RE = /^[a-z0-9-]{3,32}$/;
+const DEVICE_LABEL_RE = /^[a-z0-9-]{1,24}$/;
 
 export interface TestAccountMeta {
   /** Human-readable name shown in the mobile UI's "Enter <X>" CTA. */
@@ -66,6 +74,12 @@ export interface UsersCheckDeps {
    *  whether to call /api/dev/sample-user/{u}/connect. Absent ⇒
    *  legacy behavior unchanged. See docs/sample-users.md §10.9. */
   demoUsers?: DemoUsersStorage;
+  /** v2 device-addressing — the `<u>.<device-label>` syntax embeds
+   *  the per-device DeviceCapabilityGrant in the response. OPTIONAL so
+   *  existing callers (without the v2 grant storage wired) keep
+   *  compiling + degrade to legacy behavior. See
+   *  docs/v2-device-addressing-and-real-ticket.md §5.1. */
+  deviceCapabilityGrants?: DeviceCapabilityGrantStorage;
 }
 
 export interface UsersCheckBody {
@@ -87,6 +101,19 @@ export interface UsersCheckResponse {
    *  mobile clients render one real device. See
    *  docs/sample-users.md §10.9. */
   demoServer?: DemoServerBlock;
+  /** v2 device-addressing — present when the typed username matched
+   *  the `<u>.<device-label>` syntax AND a matching active grant
+   *  exists. The mobile client treats this as a strong declaration
+   *  of "you are a restricted device under this user"; the UI greys
+   *  out actions absent from `scopes`. */
+  deviceCapability?: {
+    label: string;
+    devicePubKey: string;
+    scopes: DeviceScope[];
+    grantId: string;
+    expiresAt: number;
+    signature: string;
+  };
 }
 
 export async function handleUsersCheck(
@@ -97,6 +124,63 @@ export async function handleUsersCheck(
     return malformed("malformed body");
   }
   const norm = body.username.toLowerCase();
+
+  // 0. v2 device-addressing: `<u>.<device-label>` syntax. The dot is
+  //    a client-side separator the Worker resolves into the
+  //    `device_capability_grants` table — it never appears in a real
+  //    TLS hostname. Resolves only when (a) we have grants storage
+  //    wired, (b) the username part is a demo username with a row,
+  //    and (c) an active grant exists for the (user, label) pair.
+  //    Any of those failing → 404 with a structured reason so the
+  //    mobile UI can surface the typo with the device-label suffix
+  //    visible. See docs/v2-device-addressing-and-real-ticket.md §5.1.
+  if (norm.includes(".") && deps.deviceCapabilityGrants && deps.demoUsers) {
+    const dot = norm.indexOf(".");
+    const userPart = norm.slice(0, dot);
+    const labelPart = norm.slice(dot + 1);
+    const userPartOk = DEMO_USERNAME_RE.test(userPart);
+    const labelPartOk =
+      DEVICE_LABEL_RE.test(labelPart) &&
+      !labelPart.startsWith("-") &&
+      !labelPart.endsWith("-");
+    if (!userPartOk || !labelPartOk) {
+      return notFound("unknown demo device label");
+    }
+    const demoRow = await deps.demoUsers.get(userPart);
+    if (!demoRow) {
+      return notFound("unknown demo device label");
+    }
+    const grant = await deps.deviceCapabilityGrants.getActiveForUserLabel(
+      userPart,
+      labelPart,
+    );
+    if (!grant) {
+      return notFound("unknown demo device label");
+    }
+    let scopes: DeviceScope[] = [];
+    try {
+      const parsed = JSON.parse(grant.scopesJson);
+      if (Array.isArray(parsed)) scopes = parsed as DeviceScope[];
+    } catch {
+      // A corrupted scopes_json blob is operationally equivalent to a
+      // missing grant from the client's perspective — same 404 path.
+      return notFound("unknown demo device label");
+    }
+    return ok<UsersCheckResponse>({
+      username: norm,
+      available: false,
+      reason: "device capability",
+      demoServer: demoServerBlockFromRow(demoRow),
+      deviceCapability: {
+        label: grant.deviceLabel,
+        devicePubKey: grant.devicePubHex,
+        scopes,
+        grantId: grant.grantId,
+        expiresAt: grant.expiresAt,
+        signature: grant.signatureHex,
+      },
+    });
+  }
 
   // 1. Label rules first (rejects "" / non-ASCII / reserved labels)
   const labelCheck = validateUserLabel(norm);

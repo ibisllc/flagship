@@ -180,6 +180,140 @@ describe("handleUsersCheck", () => {
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────
+// v2 device-addressing: `<u>.<device-label>` syntax (S3.3)
+// ──────────────────────────────────────────────────────────────────────
+
+describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
+  it.concurrent("with a matching grant: response embeds deviceCapability + demoServer", async () => {
+    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
+      "@flagship/storage"
+    );
+    const demoUsers = new InMemoryDemoUsersStorage();
+    await demoUsers.insert({
+      username: "demo-alice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: null,
+      activeServerFqdn: null,
+      lastActivityAt: 0,
+      state: "none",
+      createdAt: 1,
+    });
+    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
+    await deviceCapabilityGrants.put({
+      grantId: "g-uuid-1",
+      username: "demo-alice",
+      deviceLabel: "reviewer",
+      devicePubHex: "cc".repeat(32),
+      scopesJson: JSON.stringify(["browse"]),
+      issuedAt: 1,
+      expiresAt: 9_999_999_999,
+      signatureHex: "ab".repeat(64),
+      revokedAt: null,
+    });
+    const r = await handleUsersCheck(
+      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
+      { username: "demo-alice.reviewer" },
+    );
+    expect(r.status).toBe(200);
+    const body = r.body as UsersCheckResponse;
+    expect(body.available).toBe(false);
+    expect(body.deviceCapability).toBeDefined();
+    expect(body.deviceCapability!.label).toBe("reviewer");
+    expect(body.deviceCapability!.scopes).toEqual(["browse"]);
+    expect(body.deviceCapability!.devicePubKey).toBe("cc".repeat(32));
+    expect(body.deviceCapability!.grantId).toBe("g-uuid-1");
+    expect(body.demoServer).toBeDefined();
+  });
+
+  it.concurrent("without a matching grant: returns 404", async () => {
+    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
+      "@flagship/storage"
+    );
+    const demoUsers = new InMemoryDemoUsersStorage();
+    await demoUsers.insert({
+      username: "demo-alice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: null,
+      activeServerFqdn: null,
+      lastActivityAt: 0,
+      state: "none",
+      createdAt: 1,
+    });
+    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
+    const r = await handleUsersCheck(
+      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
+      { username: "demo-alice.nope" },
+    );
+    expect(r.status).toBe(404);
+    expect((r.body as { error?: string }).error).toBe("unknown demo device label");
+  });
+
+  it.concurrent("revoked grant: returns 404 (excluded from active lookup)", async () => {
+    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
+      "@flagship/storage"
+    );
+    const demoUsers = new InMemoryDemoUsersStorage();
+    await demoUsers.insert({
+      username: "demo-alice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: null,
+      activeServerFqdn: null,
+      lastActivityAt: 0,
+      state: "none",
+      createdAt: 1,
+    });
+    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
+    await deviceCapabilityGrants.put({
+      grantId: "g-uuid-rev",
+      username: "demo-alice",
+      deviceLabel: "reviewer",
+      devicePubHex: "dd".repeat(32),
+      scopesJson: JSON.stringify(["browse"]),
+      issuedAt: 1,
+      expiresAt: 9_999_999_999,
+      signatureHex: "ab".repeat(64),
+      revokedAt: 100,
+    });
+    const r = await handleUsersCheck(
+      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
+      { username: "demo-alice.reviewer" },
+    );
+    expect(r.status).toBe(404);
+  });
+
+  it.concurrent("plain `<u>` without a dot: unchanged legacy response (no deviceCapability)", async () => {
+    const { InMemoryDemoUsersStorage, InMemoryDeviceCapabilityGrantStorage } = await import(
+      "@flagship/storage"
+    );
+    const demoUsers = new InMemoryDemoUsersStorage();
+    const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
+    const r = await handleUsersCheck(
+      { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
+      { username: "harry" },
+    );
+    expect(r.status).toBe(200);
+    const body = r.body as UsersCheckResponse;
+    expect(body.deviceCapability).toBeUndefined();
+    expect(body.available).toBe(true);
+  });
+});
+
 describe("parseTestAccountsEnv", () => {
   it("returns null on missing or non-string input", () => {
     expect(parseTestAccountsEnv(undefined)).toBeNull();

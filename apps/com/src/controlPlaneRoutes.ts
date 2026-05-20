@@ -104,6 +104,11 @@ import {
   handleDemoUserInstallComplete,
   handleGetDemoUser,
   handleListDemoUsers,
+  handleAdminClaimAndIssue,
+  handleAdminMintDeviceGrant,
+  handleMintDeviceGrant,
+  handleListDeviceGrants,
+  handleRevokeDeviceGrant,
   type CaIssuer,
   type CaGate,
   type HandlerResponse,
@@ -225,6 +230,19 @@ export interface ControlPlaneEnv {
    * the real verification + atomic recovery-code consumption.
    */
   FLAGSHIP_TOTP_KEK?: string;
+
+  /**
+   * v2 device-addressing (S3.3) — 32-byte hex Worker secret used as
+   * the KEK from which `admin-claim-and-issue` derives a deterministic
+   * User IRK for a demo username (HKDF salt="flagship-demo-irk-v1",
+   * info="user-irk"; see packages/control-plane/src/demoUsersAdmin.ts).
+   * Generate once via `openssl rand -hex 32` and set via
+   * `wrangler secret put DEMO_IRK_KEK`. When unset, both new admin
+   * endpoints (admin-claim-and-issue + admin-mint-device-grant) return
+   * 503; legacy demo handlers (create/connect/heartbeat) keep working.
+   * NEVER appears in code, logs, or D1.
+   */
+  DEMO_IRK_KEK?: string;
 }
 
 const ROUTE_RE = {
@@ -310,11 +328,21 @@ const ROUTE_RE = {
   // over the `/:u` matcher.
   DEMO_USER_CREATE: /^\/api\/dev\/sample-user\/create$/,
   DEMO_USER_DELETE: /^\/api\/dev\/sample-user\/delete$/,
+  // v2 device-addressing admin endpoints (S3.3). The
+  // `/admin-claim-and-issue` literal must hit BEFORE the bare
+  // `/sample-user/{u}` GET (since "admin-claim-and-issue" would
+  // otherwise be parsed as a username); the per-user
+  // `/admin-mint-device-grant` matches similarly to /install-complete.
+  DEMO_USER_ADMIN_CLAIM_AND_ISSUE: /^\/api\/dev\/sample-user\/admin-claim-and-issue$/,
+  DEMO_USER_ADMIN_MINT_DEVICE_GRANT: /^\/api\/dev\/sample-user\/([^/]+)\/admin-mint-device-grant$/,
   DEMO_USER_INSTALL_COMPLETE: /^\/api\/dev\/sample-user\/([^/]+)\/install-complete$/,
   DEMO_USER_CONNECT: /^\/api\/dev\/sample-user\/([^/]+)\/connect$/,
   DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
+  // v2 device-addressing public endpoints (S3.3).
+  DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
+  DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
 };
 
 export async function tryControlPlane(
@@ -813,6 +841,42 @@ export async function tryControlPlane(
     return finish(
       await handleGetUsersDevices(
         { pushTokens: storage.pushTokens },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // v2 device-addressing public endpoints (S3.3). The revoke route's
+  // `/revoke` suffix must hit BEFORE the bare DEVICE_GRANTS_LIST match
+  // for the same path prefix.
+  if (method === "POST" && (m = path.match(ROUTE_RE.DEVICE_GRANTS_REVOKE))) {
+    return finish(
+      await handleRevokeDeviceGrant(
+        {
+          storage: storage.deviceCapabilityGrants,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.DEVICE_GRANTS_LIST))) {
+    return finish(
+      await handleMintDeviceGrant(
+        {
+          storage: storage.deviceCapabilityGrants,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.DEVICE_GRANTS_LIST))) {
+    return finish(
+      await handleListDeviceGrants(
+        {
+          storage: storage.deviceCapabilityGrants,
+          usernames: storage.usernames,
+        },
         decodeURIComponent(m[1]!),
       ),
     );
@@ -1414,6 +1478,63 @@ export async function tryControlPlane(
       sshKeyId,
       audit: storage.auditEvents,
     };
+    // The v2 admin routes additionally need the auth-codes, build-tickets,
+    // and device-capability-grants storages PLUS the DEMO_IRK_KEK
+    // worker-secret. Built lazily so the legacy demo endpoints don't
+    // fail-closed when the new KEK isn't configured.
+    const adminDeps = env.DEMO_IRK_KEK
+      ? {
+          ...demoDeps,
+          authCodes: storage.authCodes,
+          buildTickets: storage.buildTickets,
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
+          demoIrkKek: hexDecode(env.DEMO_IRK_KEK),
+        }
+      : null;
+    if (
+      method === "POST" &&
+      ROUTE_RE.DEMO_USER_ADMIN_CLAIM_AND_ISSUE.test(path)
+    ) {
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
+      }
+      if (!adminDeps) {
+        return jsonResponse(
+          { error: "DEMO_IRK_KEK not configured on this Worker" },
+          503,
+        );
+      }
+      return finishPlain(await handleAdminClaimAndIssue(adminDeps, await readJson(request)));
+    }
+    if (
+      method === "POST" &&
+      (m = path.match(ROUTE_RE.DEMO_USER_ADMIN_MINT_DEVICE_GRANT))
+    ) {
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
+      }
+      if (!adminDeps) {
+        return jsonResponse(
+          { error: "DEMO_IRK_KEK not configured on this Worker" },
+          503,
+        );
+      }
+      return finishPlain(
+        await handleAdminMintDeviceGrant(
+          adminDeps,
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
     if (method === "POST" && ROUTE_RE.DEMO_USER_CREATE.test(path)) {
       {
         const _adminAuth = authorizeAdmin({
@@ -1599,4 +1720,19 @@ function buildPushUserDevices(
       // later poll outside the window will retry.
     }
   };
+}
+
+/** Decode a hex string into bytes. Used by the DEMO_IRK_KEK secret
+ *  loader; throws on non-hex / odd-length input so a malformed secret
+ *  surfaces at deploy time rather than at the first admin-claim
+ *  request. */
+function hexDecode(s: string): Uint8Array {
+  if (s.length % 2 !== 0) throw new Error("DEMO_IRK_KEK must be even-length hex");
+  const out = new Uint8Array(s.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    const v = parseInt(s.slice(i * 2, i * 2 + 2), 16);
+    if (Number.isNaN(v)) throw new Error("DEMO_IRK_KEK contains non-hex characters");
+    out[i] = v;
+  }
+  return out;
 }

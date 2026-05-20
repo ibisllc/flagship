@@ -52,7 +52,18 @@ export type RateLimitEndpoint =
   | "auth-code-issue"
   | "server-register"
   | "recovery-by-username"
-  | "qr-pipe-upgrade";
+  | "qr-pipe-upgrade"
+  // v2 device-addressing (S3.3). The five buckets:
+  //   admin-* are admin-bearer gated, so per-IP only — there's no
+  //   per-IRK identifier on the admin side.
+  //   device-grants-list is a public read; cheap + per-IP.
+  //   device-grants-revoke is IRK-signed; per-IRK + per-IP.
+  //   device-grants-mint is IRK-signed; per-IRK + per-IP.
+  | "admin-claim-and-issue"
+  | "admin-mint-device-grant"
+  | "device-grants-list"
+  | "device-grants-revoke"
+  | "device-grants-mint";
 
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
@@ -86,6 +97,33 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "recovery-by-username": [
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "usernameHash", limit: 3, windowSec: 900 },
+  ],
+  // qr-pipe-upgrade is enforced through a dedicated namespace
+  // binding (`RATE_LIMITER_QR_PIPE`) — no entry needed in the
+  // general LIMITS table, but the discriminated-union completeness
+  // forces a key here.
+  "qr-pipe-upgrade": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  // v2 device-addressing (S3.3). Per-IP only for the admin tier
+  // (admin-bearer already gates; the per-IP cap stops a credential-
+  // theft from being used to mint a huge backlog of grants in tight
+  // succession). The public read path is generous (60/min). Mutating
+  // public paths get the same per-IP+per-IRK shape as auth-code-issue.
+  "admin-claim-and-issue": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
+  ],
+  "admin-mint-device-grant": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 200, windowSec: 3600 },
+  ],
+  "device-grants-list": [{ axis: "ip", limit: 60, windowSec: 60 }],
+  "device-grants-revoke": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 20, windowSec: 3600 },
+  ],
+  "device-grants-mint": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 50, windowSec: 3600 },
   ],
 };
 
@@ -204,6 +242,29 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   ) {
     return "recovery-by-username";
   }
+  // v2 device-addressing (S3.3). Order matters: the longer `/revoke`
+  // suffix must hit BEFORE the bare `/device-grants` literal.
+  if (m === "POST" && pathname === "/api/dev/sample-user/admin-claim-and-issue") {
+    return "admin-claim-and-issue";
+  }
+  if (
+    m === "POST" &&
+    /^\/api\/dev\/sample-user\/[^/]+\/admin-mint-device-grant$/.test(pathname)
+  ) {
+    return "admin-mint-device-grant";
+  }
+  if (
+    m === "POST" &&
+    /^\/api\/users\/[^/]+\/device-grants\/revoke$/.test(pathname)
+  ) {
+    return "device-grants-revoke";
+  }
+  if (m === "GET" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
+    return "device-grants-list";
+  }
+  if (m === "POST" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
+    return "device-grants-mint";
+  }
   return null;
 }
 
@@ -225,7 +286,20 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
   if (endpoint === "username-claim") candidate = b.request?.irkPub;
   else if (endpoint === "auth-code-issue") candidate = b.code?.userPubKey;
   else if (endpoint === "server-register") candidate = b.request?.authCode?.userPubKey;
-  else return undefined;
+  else if (endpoint === "device-grants-mint") {
+    // The grant body itself doesn't carry the user IRK pub directly —
+    // the signer IS the user IRK, but the wire shape exposes the
+    // grant's devicePubKey, not the IRK. Per-IRK throttling here
+    // would need a username→IRK lookup we don't want at edge speed.
+    // We fall back to per-IP (the bucket's first axis); the per-IRK
+    // axis effectively no-ops when extractIrkPub returns undefined.
+    candidate = undefined;
+  } else if (endpoint === "device-grants-revoke") {
+    // Same shape — the revoke envelope identifies the user by
+    // `request.username`, not by IRK pub. Per-IP suffices at the
+    // edge; the handler does the full IRK signature check.
+    candidate = undefined;
+  } else return undefined;
   return typeof candidate === "string" && /^[0-9a-fA-F]{64}$/.test(candidate)
     ? candidate.toLowerCase()
     : undefined;

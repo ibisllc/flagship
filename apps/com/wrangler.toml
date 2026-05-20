@@ -213,3 +213,15 @@ CA_ENDORSEMENT_ENFORCE = "true"
 # All three platforms hit the same /api/push/register endpoint, so
 # the webapp registration path doesn't need a separate "is webapp"
 # branch on .com — `platform=webpush` does the dispatch.
+
+# v2 device-addressing (S3.3). DEMO_IRK_KEK is a 32-byte hex Worker
+# secret used to derive deterministic User IRKs for demo accounts via
+# HKDF (salt='flagship-demo-irk-v1', info='user-irk'). When unset, the
+# two new admin endpoints (admin-claim-and-issue + admin-mint-device-
+# grant) return 503 and the CLI's `create-sample-user` falls back to
+# its synthesizeBlob path (which produces a daemon-incompatible blob
+# — non-production). Generate once via:
+#   wrangler secret put DEMO_IRK_KEK   # paste output of `openssl rand -hex 32`
+# Never appears in code, logs, or D1. Rotating it invalidates every
+# previously-issued demo IRK — a re-create of every demo user is
+# required after rotation.
