@@ -116,6 +116,44 @@ public protocol FlagshipServerClient: Sendable {
         serviceId: String,
         body: SetCustomDomainRequest
     ) async throws -> AppLinksResponse
+
+    /// v1.2 Phase 4 — read the account-type / TOTP-enrolled state for
+    /// the Settings security badge. Maps to GET /api/users/:u — public
+    /// read; the Worker echoes `accountType` ("single" | "multi") +
+    /// `totpEnrolledAt` (ms epoch or null). The TOTP secret itself
+    /// is NEVER returned here.
+    func getUsernameRecord(username: String) async throws -> UsernameLookupResponse
+
+    /// v1.2 Phase 3/4 — begin TOTP enrollment. IRK-signed envelope
+    /// over the `flagship/totp-enroll-begin/v1` canonical bytes; the
+    /// Worker stages an encrypted TOTP secret + returns the otpauth
+    /// URL + a base64-PNG QR code the UI can render in an <img>.
+    /// The account stays `'single'` until enroll-confirm.
+    func totpEnrollBegin(
+        username: String,
+        body: TotpEnrollBeginRequest
+    ) async throws -> TotpEnrollBeginResponse
+
+    /// v1.2 Phase 3/4 — finalize TOTP enrollment. IRK-signed envelope
+    /// (canonical `flagship/totp-enroll-confirm/v1`) + the user-entered
+    /// sample 6-digit code (carried beside the signed body — codes are
+    /// ephemeral and don't belong in canonical bytes). On success the
+    /// Worker flips `account_type='multi'`, stamps `totp_enrolled_at`,
+    /// generates 10 single-use recovery codes (returned ONCE here),
+    /// and writes their argon2id hashes.
+    func totpEnrollConfirm(
+        username: String,
+        body: TotpEnrollConfirmRequest
+    ) async throws -> TotpEnrollConfirmResponse
+
+    /// v1.2 Phase 3 — disable TOTP (drop secret + recovery codes,
+    /// flip back to `'single'`). Refused by the Worker if other
+    /// paired sessions exist (single-device state requires single-
+    /// device count).
+    func totpDisable(
+        username: String,
+        body: TotpDisableRequest
+    ) async throws -> TotpDisableResponse
 }
 
 public struct AppRenameRequest: Encodable, Sendable {
@@ -319,14 +357,162 @@ public struct TrustedDevice: Codable, Equatable, Sendable, Identifiable {
     public let platform: String   // "apns" | "fcm" | "webpush"
     public let addedAt: Int64
     public let lastSeenAt: Int64
+    /// v1.2 Phase 4 — wall-clock ms before which this device cannot
+    /// revoke another device on the account. Nil / 0 / past = the
+    /// 14-day quarantine has elapsed (or never applied), so Remove
+    /// / Replace flow as normal. A future value means the row was
+    /// freshly admitted and the UI must show a clock indicator +
+    /// gate the destructive actions.
+    public let quarantineUntil: Int64?
 
     public var id: String { tokenId }
 
-    public init(tokenId: String, tokenPrefix: String, label: String, platform: String, addedAt: Int64, lastSeenAt: Int64) {
+    /// Convenience for the UI — returns true iff the quarantine
+    /// window is in the future relative to `now`. Surfacing here so
+    /// view code doesn't replicate the `> now` comparison everywhere.
+    public func isQuarantined(now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> Bool {
+        guard let until = quarantineUntil, until > 0 else { return false }
+        return until > now
+    }
+
+    public init(
+        tokenId: String,
+        tokenPrefix: String,
+        label: String,
+        platform: String,
+        addedAt: Int64,
+        lastSeenAt: Int64,
+        quarantineUntil: Int64? = nil
+    ) {
         self.tokenId = tokenId; self.tokenPrefix = tokenPrefix
         self.label = label; self.platform = platform
         self.addedAt = addedAt; self.lastSeenAt = lastSeenAt
+        self.quarantineUntil = quarantineUntil
     }
+}
+
+/// v1.2 Phase 4 — GET /api/users/:u response shape. The Worker
+/// returns the canonical claimedAt + accountType + totpEnrolledAt
+/// columns; nothing else security-sensitive is echoed. Used by the
+/// Settings → Account security screen to render the account-type
+/// badge ("Single-device" vs "Multi-device + 2FA") without a
+/// separate roundtrip.
+public struct UsernameLookupResponse: Codable, Equatable, Sendable {
+    public let username: String
+    public let irkPub: String
+    public let claimedAt: Int64
+    /// "single" or "multi". Pre-migration rows default to "single".
+    public let accountType: String
+    /// Wall-clock ms of the successful TOTP enroll-confirm, or nil.
+    public let totpEnrolledAt: Int64?
+
+    public init(
+        username: String,
+        irkPub: String,
+        claimedAt: Int64,
+        accountType: String,
+        totpEnrolledAt: Int64?
+    ) {
+        self.username = username
+        self.irkPub = irkPub
+        self.claimedAt = claimedAt
+        self.accountType = accountType
+        self.totpEnrolledAt = totpEnrolledAt
+    }
+}
+
+/// v1.2 Phase 3 — POST /api/users/:u/totp/enroll-begin. The signed
+/// body's canonical-bytes spec lives in @flagship/protocol
+/// `TAG_TOTP_ENROLL_BEGIN`. The Worker rejects unless the IRK
+/// signature matches the row's stored irkPubHex AND the issuedAt
+/// is within the 5-minute freshness window.
+public struct TotpEnrollBeginRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let issuedAt: Int64
+        public init(username: String, issuedAt: Int64) {
+            self.username = username; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String  // hex Ed25519 by the user's IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
+public struct TotpEnrollBeginResponse: Decodable, Equatable, Sendable {
+    /// Base32 secret the user can paste into an authenticator app
+    /// that doesn't support QR scanning.
+    public let secret: String
+    /// Full otpauth:// URL — used for "Copy link" affordances and as
+    /// the source of the QR rendering.
+    public let otpauthUrl: String
+    /// PNG-encoded QR code, base64-encoded WITHOUT a data-URL prefix.
+    /// SwiftUI clients prepend `data:image/png;base64,` before
+    /// feeding it into an Image view (see AccountSecurityEnableSheet).
+    public let qrPngBase64: String
+    /// "Flagship" — surfaced as the authenticator app's issuer label.
+    public let issuer: String
+}
+
+/// v1.2 Phase 3 — POST /api/users/:u/totp/enroll-confirm. Canonical
+/// bytes match `TAG_TOTP_ENROLL_CONFIRM`. The 6-digit `code` is
+/// validated against the staged secret synchronously beside the
+/// signature check; the code is NOT in the canonical bytes (codes
+/// are ephemeral, see RePairInitiate.totpProof for the same
+/// rationale).
+public struct TotpEnrollConfirmRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let issuedAt: Int64
+        public init(username: String, issuedAt: Int64) {
+            self.username = username; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String  // hex
+    public let code: String       // 6-digit TOTP sample
+    public init(request: Inner, signature: String, code: String) {
+        self.request = request; self.signature = signature; self.code = code
+    }
+}
+
+public struct TotpEnrollConfirmResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    /// Always "multi" on success.
+    public let accountType: String
+    public let totpEnrolledAt: Int64
+    /// 10 plaintext recovery codes. This is the ONE time they leave
+    /// the Worker — losing this response means the user has to
+    /// re-enroll. The UI MUST gate dismissal of the codes screen
+    /// behind an explicit "I've saved these" confirmation.
+    public let recoveryCodes: [String]
+}
+
+/// v1.2 Phase 3 — POST /api/users/:u/totp/disable.
+public struct TotpDisableRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let issuedAt: Int64
+        public init(username: String, issuedAt: Int64) {
+            self.username = username; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String
+    /// Live 6-digit TOTP OR a 10-char recovery code. Same dual-mode
+    /// shape as RePairInitiate.totpProof.
+    public let code: String
+    public init(request: Inner, signature: String, code: String) {
+        self.request = request; self.signature = signature; self.code = code
+    }
+}
+
+public struct TotpDisableResponse: Decodable, Equatable, Sendable {
+    public let ok: Bool
+    /// Always "single" on success.
+    public let accountType: String
 }
 
 /// Response wrapper that surfaces the ETag header alongside the body.
@@ -1098,6 +1284,122 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             cursor: starting + slice.count
         )
     }
+
+    // v1.2 Phase 4 — scripted account-type + TOTP state per username,
+    // mirroring the Worker's `usernames` row + the four /totp/*
+    // handlers. Tests drive these to exercise the Mobile flow without
+    // a live Worker.
+
+    /// Per-username `account_type`. Defaults to "single" when absent
+    /// (matching the column DEFAULT). Tests set this to "multi" to
+    /// drive the multi-device badge / re-pair branch.
+    public var accountTypeByUser: [String: String] = [:]
+
+    /// Per-username `totp_enrolled_at` (ms epoch). Nil while the row
+    /// is still single-device.
+    public var totpEnrolledAtByUser: [String: Int64] = [:]
+
+    /// Per-username staged TOTP secret (base32). Set on enroll-begin
+    /// + cleared on disable; mirrors the Worker's
+    /// `totp_secret_encrypted` row column.
+    public var totpSecretByUser: [String: String] = [:]
+
+    /// Per-username recovery codes (plaintext mirror). The Worker
+    /// stores argon2id hashes — for the Mock we store plaintexts so
+    /// tests can assert on the round-trip without standing up a
+    /// hashing primitive.
+    public var recoveryCodesByUser: [String: [String]] = [:]
+
+    /// Scripted enroll-confirm code that the Mock accepts. Tests set
+    /// this to drive happy-path (match) vs sad-path (mismatch) flows.
+    public var totpExpectedConfirmCode: String = "123456"
+
+    /// Scripted recovery codes to hand back on enroll-confirm. Tests
+    /// can assert on these directly; the default is deterministic.
+    public var totpRecoveryCodesToIssue: [String] = [
+        "AAAA-BBBB", "CCCC-DDDD", "EEEE-FFFF", "GGGG-HHHH", "IIII-JJJJ",
+        "KKKK-LLLL", "MMMM-NNNN", "OOOO-PPPP", "QQQQ-RRRR", "SSSS-TTTT",
+    ]
+
+    public func getUsernameRecord(username: String) async throws -> UsernameLookupResponse {
+        try await tick()
+        let u = username.lowercased()
+        guard claimedUsernames[u] != nil else {
+            throw ScreensClientError.http(status: 404, message: "not found")
+        }
+        return UsernameLookupResponse(
+            username: u,
+            irkPub: claimedUsernames[u] ?? "",
+            claimedAt: 0,
+            accountType: accountTypeByUser[u] ?? "single",
+            totpEnrolledAt: totpEnrolledAtByUser[u]
+        )
+    }
+
+    public func totpEnrollBegin(
+        username: String,
+        body: TotpEnrollBeginRequest
+    ) async throws -> TotpEnrollBeginResponse {
+        try await tick()
+        let u = username.lowercased()
+        // Synthesize a deterministic base32 secret per username so
+        // tests can assert on it without depending on Mock-internal
+        // randomness.
+        let secret = "JBSWY3DPEHPK3PXP\(u.prefix(4).uppercased().padding(toLength: 4, withPad: "X", startingAt: 0))"
+        totpSecretByUser[u] = secret
+        let issuer = "Flagship"
+        let otpauthUrl = "otpauth://totp/\(issuer):\(u)?secret=\(secret)&issuer=\(issuer)&algorithm=SHA1&digits=6&period=30"
+        // 4×4 hex sample (44 bytes) -> "fake QR" base64 placeholder
+        // the iOS Image renderer can decode as a 1×1 PNG. Real Worker
+        // returns a 4×-scale PNG; tests don't pixel-compare.
+        let qrPngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        return TotpEnrollBeginResponse(
+            secret: secret,
+            otpauthUrl: otpauthUrl,
+            qrPngBase64: qrPngBase64,
+            issuer: issuer
+        )
+    }
+
+    public func totpEnrollConfirm(
+        username: String,
+        body: TotpEnrollConfirmRequest
+    ) async throws -> TotpEnrollConfirmResponse {
+        try await tick()
+        let u = username.lowercased()
+        guard totpSecretByUser[u] != nil else {
+            throw ScreensClientError.http(status: 409, message: "no staged TOTP secret; call enroll-begin first")
+        }
+        guard body.code == totpExpectedConfirmCode else {
+            throw ScreensClientError.http(status: 401, message: "invalid TOTP code")
+        }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        accountTypeByUser[u] = "multi"
+        totpEnrolledAtByUser[u] = now
+        recoveryCodesByUser[u] = totpRecoveryCodesToIssue
+        return TotpEnrollConfirmResponse(
+            ok: true,
+            accountType: "multi",
+            totpEnrolledAt: now,
+            recoveryCodes: totpRecoveryCodesToIssue
+        )
+    }
+
+    public func totpDisable(
+        username: String,
+        body: TotpDisableRequest
+    ) async throws -> TotpDisableResponse {
+        try await tick()
+        let u = username.lowercased()
+        guard body.code == totpExpectedConfirmCode else {
+            throw ScreensClientError.http(status: 401, message: "invalid TOTP code")
+        }
+        accountTypeByUser[u] = "single"
+        totpEnrolledAtByUser.removeValue(forKey: u)
+        totpSecretByUser.removeValue(forKey: u)
+        recoveryCodesByUser.removeValue(forKey: u)
+        return TotpDisableResponse(ok: true, accountType: "single")
+    }
 }
 
 // MARK: - Live
@@ -1397,5 +1699,72 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(AuditEventListResponse.self, from: data)
+    }
+
+    public func getUsernameRecord(username: String) async throws -> UsernameLookupResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(UsernameLookupResponse.self, from: data)
+    }
+
+    public func totpEnrollBegin(
+        username: String,
+        body: TotpEnrollBeginRequest
+    ) async throws -> TotpEnrollBeginResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/totp/enroll-begin"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(TotpEnrollBeginResponse.self, from: data)
+    }
+
+    public func totpEnrollConfirm(
+        username: String,
+        body: TotpEnrollConfirmRequest
+    ) async throws -> TotpEnrollConfirmResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/totp/enroll-confirm"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(TotpEnrollConfirmResponse.self, from: data)
+    }
+
+    public func totpDisable(
+        username: String,
+        body: TotpDisableRequest
+    ) async throws -> TotpDisableResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/totp/disable"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(TotpDisableResponse.self, from: data)
     }
 }

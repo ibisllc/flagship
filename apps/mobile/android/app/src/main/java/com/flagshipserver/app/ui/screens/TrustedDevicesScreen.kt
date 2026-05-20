@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.PhoneAndroid
@@ -155,7 +156,13 @@ fun TrustedDevicesScreen(nav: NavController) {
     // Per-device actions: ModalBottomSheet is the Android idiom for
     // "tap a row, see options" — feels more native than an iOS-style
     // contextual menu.
+    //
+    // v1.2 Phase 4 — Disconnect / Replace / Wipe entries are DISABLED
+    // when the row is in quarantine (the 14-day freshly-admitted
+    // window). Tapping a disabled entry posts a toast explaining the
+    // window so users aren't confused by silent failure.
     sheetTarget?.let { target ->
+        val isQuarantined = target.isQuarantined()
         ModalBottomSheet(onDismissRequest = { sheetTarget = null }) {
             Column(Modifier.padding(FS.space.s4), verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Text(
@@ -168,11 +175,26 @@ fun TrustedDevicesScreen(nav: NavController) {
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp),
                 )
+                if (isQuarantined) {
+                    Text(
+                        quarantineToast(target),
+                        color = FS.colors.danger,
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.semantics {
+                            contentDescription = "trusted-device-quarantine-msg-${target.tokenPrefix}"
+                        },
+                    )
+                }
                 TextButton(
                     onClick = {
-                        confirmDisconnect = target
+                        if (isQuarantined) {
+                            snackbarMsg = quarantineToast(target)
+                        } else {
+                            confirmDisconnect = target
+                        }
                         sheetTarget = null
                     },
+                    enabled = !isQuarantined,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-disconnect" },
                 ) {
                     Text("Disconnect", color = FS.colors.danger)
@@ -181,9 +203,15 @@ fun TrustedDevicesScreen(nav: NavController) {
                 // confirmation drives the ReplaceDeviceViewModel.
                 TextButton(
                     onClick = {
-                        confirmReplace = true
-                        sheetTarget = null
+                        if (isQuarantined) {
+                            snackbarMsg = quarantineToast(target)
+                            sheetTarget = null
+                        } else {
+                            confirmReplace = true
+                            sheetTarget = null
+                        }
                     },
+                    enabled = !isQuarantined,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-replace" },
                 ) {
                     Text("Replace device", color = FS.colors.danger)
@@ -191,9 +219,15 @@ fun TrustedDevicesScreen(nav: NavController) {
                 // E5 — Wipe & restart. Live ceremony.
                 TextButton(
                     onClick = {
-                        confirmWipe = true
-                        sheetTarget = null
+                        if (isQuarantined) {
+                            snackbarMsg = quarantineToast(target)
+                            sheetTarget = null
+                        } else {
+                            confirmWipe = true
+                            sheetTarget = null
+                        }
                     },
+                    enabled = !isQuarantined,
                     modifier = Modifier.semantics { contentDescription = "trusted-device-wipe" },
                 ) {
                     Text("Wipe & restart", color = FS.colors.danger)
@@ -338,6 +372,7 @@ private fun EmptyRow() {
 
 @Composable
 private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
+    val isQuarantined = device.isQuarantined()
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -351,17 +386,38 @@ private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
                 modifier = Modifier.size(28.dp),
             )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    device.label,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        device.label,
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    if (isQuarantined) {
+                        Icon(
+                            imageVector = Icons.Outlined.AccessTime,
+                            contentDescription = null,
+                            tint = FS.colors.danger,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .semantics {
+                                    contentDescription =
+                                        "trusted-device-quarantine-icon-${device.tokenPrefix}"
+                                },
+                        )
+                    }
+                }
                 Text(
                     "${platformDisplay(device.platform)} · added ${relative(device.addedAt)}",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 12.sp),
                 )
-                if (device.lastSeenAt > device.addedAt) {
+                if (isQuarantined) {
+                    Text(
+                        quarantineToast(device),
+                        color = FS.colors.danger,
+                        style = TextStyle(fontSize = 12.sp),
+                    )
+                } else if (device.lastSeenAt > device.addedAt) {
                     Text(
                         "last seen ${relative(device.lastSeenAt)}",
                         color = FS.colors.textMuted,
@@ -379,6 +435,16 @@ private fun TrustedDeviceRow(device: TrustedDevice, onMenu: () -> Unit) {
             }
         }
     }
+}
+
+/** Tooltip / toast copy for a quarantined device row. Kept as a
+ *  top-level helper so the QuarantineIndicatorTest can assert on the
+ *  exact byte-string without going through SwiftUI / Compose
+ *  scaffolding. */
+internal fun quarantineToast(device: TrustedDevice): String {
+    val until = device.quarantineUntil ?: return "This device is in quarantine. Use another device."
+    val when_ = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(until))
+    return "Quarantined until $when_. Use another device."
 }
 
 private fun platformIcon(raw: String): ImageVector = when (raw) {

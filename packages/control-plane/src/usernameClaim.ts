@@ -66,9 +66,17 @@ export async function handleUsernameLookup(
 ): Promise<HandlerResponseWithHeaders> {
   const rec = await storage.get(username);
   if (!rec) return notFound("not found");
+  // v1.2 Phase 4 — surface accountType + totpEnrolledAt so the
+  // mobile / webapp Settings surface can render the "Single-device"
+  // vs "Multi-device + 2FA" badge without needing a separate call.
+  // Defaults to `'single'` for pre-migration rows (matching the
+  // column DEFAULT). The totp_secret_encrypted blob is NEVER echoed
+  // here — only the enrolled-at timestamp, which is non-sensitive.
   return ok({
     username: rec.username,
     irkPub: rec.irkPubHex,
     claimedAt: rec.claimedAt,
+    accountType: rec.accountType ?? "single",
+    totpEnrolledAt: rec.totpEnrolledAt ?? null,
   });
 }

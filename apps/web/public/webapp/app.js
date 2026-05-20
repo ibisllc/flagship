@@ -42,6 +42,7 @@ import { initCreateServerView, enterCreateServer } from "./views/create-server.j
 import { initActivityView, renderActivity } from "./views/activity.js";
 import { initPendingServerView, enterPendingServer } from "./views/pending-server.js";
 import { initTrustedDevicesView } from "./views/trusted-devices.js";
+import { initAccountSecurityView } from "./views/account-security.js";
 
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
@@ -66,6 +67,7 @@ const SUB_VIEW_TABS = {
   "view-unlock-approvals": "activity",
   "view-install-progress": "activity",
   "view-settings": "settings",
+  "view-account-security": "settings",
   "view-recovery": "settings",
   "view-post-recovery": "settings",
   "view-tier-status": "settings",
@@ -148,6 +150,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-recovery", enterRecovery);
   wire("settings-tab-tier", enterTierStatus);
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
+  wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-sessions", enterPairedSessions);
   wire("settings-tab-orders-debug", enterOrdersDebug);
   wire("settings-tab-create-server", enterCreateServer);
@@ -204,6 +207,7 @@ async function boot() {
   initInviteManageView();
   initPairedSessionsView();
   initTrustedDevicesView();
+  initAccountSecurityView();
   initTierStatusView();
   initMarketplaceView();
   initVibeCodeView();

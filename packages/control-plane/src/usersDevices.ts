@@ -51,6 +51,14 @@ export interface DeviceSummary {
   platform: "apns" | "fcm" | "webpush";
   addedAt: number;
   lastSeenAt: number;
+  /**
+   * v1.2 Phase 4 — wall-clock ms before which this device can't
+   * revoke other devices on the account (14-day quarantine on
+   * freshly-admitted devices). 0 (or absent) means already-trusted.
+   * Surfaced so iOS / Android / webapp can render a clock icon +
+   * disable the Remove/Replace actions until the window elapses.
+   */
+  quarantineUntil?: number;
 }
 
 export interface UsersDevicesResponse {
@@ -71,14 +79,23 @@ export async function handleGetUsersDevices(
   // ETag computation is deterministic for the same row set regardless
   // of storage-layer return order.
   const devices: DeviceSummary[] = rows
-    .map((r) => ({
-      tokenId: r.tokenId,
-      tokenPrefix: r.tokenId.slice(0, 8),
-      label: r.label || `Untitled ${r.platform}`,
-      platform: r.platform,
-      addedAt: r.registeredAt,
-      lastSeenAt: r.lastSeenAt,
-    }))
+    .map((r) => {
+      const base: DeviceSummary = {
+        tokenId: r.tokenId,
+        tokenPrefix: r.tokenId.slice(0, 8),
+        label: r.label || `Untitled ${r.platform}`,
+        platform: r.platform,
+        addedAt: r.registeredAt,
+        lastSeenAt: r.lastSeenAt,
+      };
+      // Phase 4 — surface the quarantine clock to the UI. We omit
+      // the key entirely when 0 / absent so existing clients that
+      // didn't yet decode the field don't see a confusing zero.
+      if (r.quarantineUntil && r.quarantineUntil > 0) {
+        base.quarantineUntil = r.quarantineUntil;
+      }
+      return base;
+    })
     .sort((a, b) => a.addedAt - b.addedAt || a.tokenId.localeCompare(b.tokenId));
 
   const etag = await computeDevicesEtag(devices);

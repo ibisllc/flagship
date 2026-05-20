@@ -119,6 +119,7 @@
         <h2>Account</h2>
         <div class="card stack-md">
           <button class="secondary full-width" id="settings-tab-providers">AI providers</button>
+          <button class="secondary full-width" id="settings-tab-account-security">Account security</button>
           <button class="secondary full-width" id="settings-tab-push">Browser notifications</button>
           <button class="secondary full-width" id="settings-tab-recovery">Recovery</button>
           <button class="secondary full-width" id="settings-tab-tier">Tier &amp; usage</button>
@@ -439,6 +440,19 @@
           <button class="secondary" id="post-recovery-refresh">Refresh</button>
           <button class="secondary" id="post-recovery-back">← Back</button>
         </div>
+      </section>
+
+      <!-- v1.2 Phase 4 — Account security drill-down. Surfaces the
+           account-type badge (single vs multi-device + 2FA) and
+           drives the enroll / disable / recovery-codes flow. The
+           IRK-signed envelopes are owned by the mobile app for now;
+           the webapp surface mirrors the badge + lets users print
+           recovery codes from a larger screen. -->
+      <section id="view-account-security" class="hidden">
+        <h2>Account security</h2>
+        <p class="note">Single-device vs multi-device + 2FA.</p>
+        <div id="account-security-content"></div>
+        <button class="secondary full-width mt-2" id="account-security-back">← Back</button>
       </section>
 
       <!-- View 15: Recovery (P2.12) -->

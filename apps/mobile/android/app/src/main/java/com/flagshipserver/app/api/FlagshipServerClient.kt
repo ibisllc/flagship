@@ -105,6 +105,31 @@ interface FlagshipServerClient {
         serviceId: String,
         body: SetCustomDomainRequest,
     ): AppLinksResponse
+
+    /** v1.2 Phase 4 — read the account-type / TOTP-enrolled state for
+     *  the Settings security badge. Maps to GET /api/users/:u. */
+    suspend fun getUsernameRecord(username: String): UsernameLookupResponse
+
+    /** v1.2 Phase 3/4 — begin TOTP enrollment. IRK-signed envelope
+     *  over canonical `flagship/totp-enroll-begin/v1` bytes. */
+    suspend fun totpEnrollBegin(
+        username: String,
+        body: TotpEnrollBeginRequest,
+    ): TotpEnrollBeginResponse
+
+    /** v1.2 Phase 3/4 — finalize TOTP enrollment. Returns 10 single-
+     *  use recovery codes ONCE; the UI must gate dismissal behind an
+     *  explicit "I've saved these" confirmation. */
+    suspend fun totpEnrollConfirm(
+        username: String,
+        body: TotpEnrollConfirmRequest,
+    ): TotpEnrollConfirmResponse
+
+    /** v1.2 Phase 3 — disable TOTP and flip back to single-device. */
+    suspend fun totpDisable(
+        username: String,
+        body: TotpDisableRequest,
+    ): TotpDisableResponse
 }
 
 @Serializable
@@ -241,6 +266,108 @@ data class TrustedDevice(
     val platform: String,        // "apns" | "fcm" | "webpush"
     val addedAt: Long,
     val lastSeenAt: Long,
+    /** v1.2 Phase 4 — wall-clock ms before which this device cannot
+     *  revoke another device on the account. Null / 0 / past = the
+     *  14-day quarantine has elapsed (or never applied). A future
+     *  value tells the UI to show a clock indicator + disable the
+     *  Remove / Replace actions. */
+    val quarantineUntil: Long? = null,
+) {
+    /** Convenience for the UI; returns true iff the quarantine window
+     *  is in the future relative to [now]. */
+    fun isQuarantined(now: Long = System.currentTimeMillis()): Boolean {
+        val until = quarantineUntil ?: return false
+        return until > 0 && until > now
+    }
+}
+
+/**
+ * v1.2 Phase 4 — GET /api/users/:u response shape. Mirrors the iOS
+ * UsernameLookupResponse exactly. The TOTP secret itself is NEVER
+ * returned here; only the enrolled-at timestamp (non-sensitive).
+ */
+@Serializable
+data class UsernameLookupResponse(
+    val username: String,
+    val irkPub: String,
+    val claimedAt: Long,
+    /** "single" or "multi". Pre-migration rows default to "single". */
+    val accountType: String,
+    /** Wall-clock ms of the successful TOTP enroll-confirm, or null. */
+    val totpEnrolledAt: Long? = null,
+)
+
+/** v1.2 Phase 3 — POST /api/users/:u/totp/enroll-begin. */
+@Serializable
+data class TotpEnrollBeginRequest(
+    val request: Inner,
+    val signature: String,  // hex
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class TotpEnrollBeginResponse(
+    /** Base32 secret for manual entry. */
+    val secret: String,
+    /** otpauth:// URL — used as the source of the QR rendering. */
+    val otpauthUrl: String,
+    /** PNG base64 (no data: prefix). Composables prepend
+     *  `data:image/png;base64,` before feeding into an
+     *  Image / AsyncImage primitive. */
+    val qrPngBase64: String,
+    /** Always "Flagship". */
+    val issuer: String,
+)
+
+/** v1.2 Phase 3 — POST /api/users/:u/totp/enroll-confirm. */
+@Serializable
+data class TotpEnrollConfirmRequest(
+    val request: Inner,
+    val signature: String,
+    /** 6-digit TOTP sample. NOT in the canonical bytes (codes are
+     *  ephemeral). */
+    val code: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class TotpEnrollConfirmResponse(
+    val ok: Boolean,
+    val accountType: String,
+    val totpEnrolledAt: Long,
+    /** 10 plaintext recovery codes. The ONE time they leave the
+     *  Worker. */
+    val recoveryCodes: List<String>,
+)
+
+/** v1.2 Phase 3 — POST /api/users/:u/totp/disable. */
+@Serializable
+data class TotpDisableRequest(
+    val request: Inner,
+    val signature: String,
+    val code: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class TotpDisableResponse(
+    val ok: Boolean,
+    val accountType: String,
 )
 
 /**
@@ -781,6 +908,110 @@ class MockFlagshipServerClient(
         return TrustedDevicesListResponse(devices = sorted, etag = etagFor(sorted))
     }
 
+    // ── v1.2 Phase 4 — account-type + TOTP scripted state ─────────
+
+    /** Per-username `account_type`. "single" (default) or "multi". */
+    var accountTypeByUser: MutableMap<String, String> = mutableMapOf()
+
+    /** Per-username `totp_enrolled_at` ms. Null while single-device. */
+    var totpEnrolledAtByUser: MutableMap<String, Long> = mutableMapOf()
+
+    /** Per-username staged TOTP secret (base32). Set on enroll-begin
+     *  + cleared on disable; mirrors `usernames.totp_secret_encrypted`
+     *  on the Worker. */
+    var totpSecretByUser: MutableMap<String, String> = mutableMapOf()
+
+    /** Per-username plaintext recovery codes (Mock-only; the Worker
+     *  stores argon2id hashes). */
+    var recoveryCodesByUser: MutableMap<String, List<String>> = mutableMapOf()
+
+    /** Code the Mock accepts on enroll-confirm / disable. Tests drive
+     *  the mismatch branch by changing this. */
+    var totpExpectedConfirmCode: String = "123456"
+
+    /** Recovery codes to hand back on enroll-confirm. Default is
+     *  deterministic so tests don't need to mock the RNG. */
+    var totpRecoveryCodesToIssue: List<String> = listOf(
+        "AAAA-BBBB", "CCCC-DDDD", "EEEE-FFFF", "GGGG-HHHH", "IIII-JJJJ",
+        "KKKK-LLLL", "MMMM-NNNN", "OOOO-PPPP", "QQQQ-RRRR", "SSSS-TTTT",
+    )
+
+    override suspend fun getUsernameRecord(username: String): UsernameLookupResponse {
+        tick()
+        val u = username.lowercase()
+        val irk = _claimedUsernames[u] ?: throw HttpException(404, "not found")
+        return UsernameLookupResponse(
+            username = u,
+            irkPub = irk,
+            claimedAt = 0L,
+            accountType = accountTypeByUser[u] ?: "single",
+            totpEnrolledAt = totpEnrolledAtByUser[u],
+        )
+    }
+
+    override suspend fun totpEnrollBegin(
+        username: String,
+        body: TotpEnrollBeginRequest,
+    ): TotpEnrollBeginResponse {
+        tick()
+        val u = username.lowercase()
+        val secret = "JBSWY3DPEHPK3PXP" + u.take(4).uppercase().padEnd(4, 'X')
+        totpSecretByUser[u] = secret
+        val issuer = "Flagship"
+        val otpauthUrl =
+            "otpauth://totp/$issuer:$u?secret=$secret&issuer=$issuer&algorithm=SHA1&digits=6&period=30"
+        // 1×1 PNG transparent placeholder — same shape as the iOS Mock.
+        // The real Worker returns a 4×-scaled QR; tests don't pixel-compare.
+        val qrPngBase64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        return TotpEnrollBeginResponse(
+            secret = secret,
+            otpauthUrl = otpauthUrl,
+            qrPngBase64 = qrPngBase64,
+            issuer = issuer,
+        )
+    }
+
+    override suspend fun totpEnrollConfirm(
+        username: String,
+        body: TotpEnrollConfirmRequest,
+    ): TotpEnrollConfirmResponse {
+        tick()
+        val u = username.lowercase()
+        if (totpSecretByUser[u] == null) {
+            throw HttpException(409, "no staged TOTP secret; call enroll-begin first")
+        }
+        if (body.code != totpExpectedConfirmCode) {
+            throw HttpException(401, "invalid TOTP code")
+        }
+        val now = System.currentTimeMillis()
+        accountTypeByUser[u] = "multi"
+        totpEnrolledAtByUser[u] = now
+        recoveryCodesByUser[u] = totpRecoveryCodesToIssue
+        return TotpEnrollConfirmResponse(
+            ok = true,
+            accountType = "multi",
+            totpEnrolledAt = now,
+            recoveryCodes = totpRecoveryCodesToIssue,
+        )
+    }
+
+    override suspend fun totpDisable(
+        username: String,
+        body: TotpDisableRequest,
+    ): TotpDisableResponse {
+        tick()
+        val u = username.lowercase()
+        if (body.code != totpExpectedConfirmCode) {
+            throw HttpException(401, "invalid TOTP code")
+        }
+        accountTypeByUser[u] = "single"
+        totpEnrolledAtByUser.remove(u)
+        totpSecretByUser.remove(u)
+        recoveryCodesByUser.remove(u)
+        return TotpDisableResponse(ok = true, accountType = "single")
+    }
+
     private fun etagFor(devices: List<TrustedDevice>): String {
         // Identity-significant subset only; lastSeenAt deliberately
         // excluded so test push-delivery doesn't flutter the ETag.
@@ -1019,6 +1250,53 @@ class LiveFlagshipServerClient(
             serializer = SetCustomDomainRequest.serializer(),
         )
         return getAppLinks(username, serviceId)
+    }
+
+    override suspend fun getUsernameRecord(username: String): UsernameLookupResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.getJson(
+            url = "$base/api/users/$encoded",
+            responseSerializer = UsernameLookupResponse.serializer(),
+        )
+    }
+
+    override suspend fun totpEnrollBegin(
+        username: String,
+        body: TotpEnrollBeginRequest,
+    ): TotpEnrollBeginResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/totp/enroll-begin",
+            body = body,
+            serializer = TotpEnrollBeginRequest.serializer(),
+            responseSerializer = TotpEnrollBeginResponse.serializer(),
+        )
+    }
+
+    override suspend fun totpEnrollConfirm(
+        username: String,
+        body: TotpEnrollConfirmRequest,
+    ): TotpEnrollConfirmResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/totp/enroll-confirm",
+            body = body,
+            serializer = TotpEnrollConfirmRequest.serializer(),
+            responseSerializer = TotpEnrollConfirmResponse.serializer(),
+        )
+    }
+
+    override suspend fun totpDisable(
+        username: String,
+        body: TotpDisableRequest,
+    ): TotpDisableResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/totp/disable",
+            body = body,
+            serializer = TotpDisableRequest.serializer(),
+            responseSerializer = TotpDisableResponse.serializer(),
+        )
     }
 }
 

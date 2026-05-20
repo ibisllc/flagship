@@ -166,4 +166,35 @@ describe("GET /api/users/:u/devices", () => {
     const etag = await computeDevicesEtag(sample);
     expect(etag).toMatch(/^W\/"[0-9a-f]{16}"$/);
   });
+
+  // v1.2 Phase 4 — UI needs the quarantine window so the
+  // "freshly-admitted device" row can render the clock icon +
+  // disable Remove/Replace until the 14-day grace expires.
+  it("surfaces quarantineUntil when the row has one", async () => {
+    const s = makeStore();
+    const future = Date.now() + 7 * 86_400_000;
+    await s.put({
+      tokenId: "qq",
+      username: "harry",
+      platform: "apns",
+      providerToken: "p",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "New iPhone",
+      registeredAt: 100,
+      lastSeenAt: 200,
+      quarantineUntil: future,
+    });
+    const r = await handleGetUsersDevices({ pushTokens: s }, "harry");
+    const body = r.body as UsersDevicesResponse;
+    expect(body.devices[0]!.quarantineUntil).toBe(future);
+  });
+
+  it("omits quarantineUntil when the row is already-trusted (0 / absent)", async () => {
+    const s = makeStore();
+    await seed(s, "harry", [{ tokenId: "ok", label: "Old", platform: "apns", addedAt: 1 }]);
+    const r = await handleGetUsersDevices({ pushTokens: s }, "harry");
+    const body = r.body as UsersDevicesResponse;
+    expect(body.devices[0]!.quarantineUntil).toBeUndefined();
+  });
 });

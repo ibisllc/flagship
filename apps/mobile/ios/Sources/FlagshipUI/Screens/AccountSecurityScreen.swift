@@ -1,0 +1,369 @@
+import SwiftUI
+import FlagshipAPI
+import FlagshipCore
+
+/// v1.2 Phase 4 — Settings → Account security. Surfaces the
+/// account-type badge ("Single-device" vs "Multi-device + 2FA") +
+/// the entry point into the four-step enrollment sheet.
+///
+/// The screen is intentionally lightweight. The heavy lifting lives
+/// in AccountSecurityEnableSheet — this is just the badge + toggle.
+public struct AccountSecurityScreen: View {
+    @Environment(\.colorScheme) private var scheme
+    @State private var showEnableSheet = false
+    @State private var showDisableSheet = false
+    @State private var disableCode: String = ""
+    @Bindable var viewModel: AccountSecurityViewModel
+
+    public init(viewModel: AccountSecurityViewModel) {
+        self.viewModel = viewModel
+    }
+
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s6) {
+                Text("Account security")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundColor(c.text)
+                    .padding(.top, FS.space.s4)
+
+                badge(c: c)
+                explainer(c: c)
+                actions(c: c)
+
+                Spacer().frame(height: FS.space.s12)
+            }
+            .padding(.horizontal, FS.space.s6)
+        }
+        .background(c.bg.ignoresSafeArea())
+        .task { await viewModel.load() }
+        .sheet(isPresented: $showEnableSheet) {
+            AccountSecurityEnableSheet(viewModel: viewModel) {
+                showEnableSheet = false
+                Task { await viewModel.load() }
+            }
+        }
+        .alert(
+            "Disable multi-device + 2FA?",
+            isPresented: $showDisableSheet
+        ) {
+            TextField("6-digit code or recovery code", text: $disableCode)
+                .keyboardType(.numbersAndPunctuation)
+                .textInputAutocapitalization(.never)
+            Button("Disable", role: .destructive) {
+                Task {
+                    await viewModel.disableEnrollment(code: disableCode)
+                    disableCode = ""
+                    showDisableSheet = false
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                disableCode = ""
+                showDisableSheet = false
+            }
+        } message: {
+            Text("Drops your TOTP secret + recovery codes. The account goes back to single-device + 7-day recovery grace. Refused while other trusted devices exist.")
+        }
+    }
+
+    @ViewBuilder
+    private func badge(c: FSColors) -> some View {
+        FSCard {
+            HStack(alignment: .top, spacing: FS.space.s3) {
+                Image(systemName: viewModel.isMultiDevice ? "checkmark.shield.fill" : "shield.lefthalf.filled")
+                    .imageScale(.large)
+                    .foregroundColor(viewModel.isMultiDevice ? c.success : c.primary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(viewModel.isMultiDevice ? "Multi-device + 2FA" : "Single-device account")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(c.text)
+                        .accessibilityIdentifier("account-security-badge")
+                    Text(viewModel.isMultiDevice
+                         ? "Account recovery requires a 6-digit TOTP code (or a recovery code) plus a 24-hour grace window."
+                         : "Account recovery uses a 7-day waiting period during which your other devices can object.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func explainer(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text(viewModel.isMultiDevice ? "Currently enabled" : "Why enable this?")
+                .font(.system(size: 12, weight: .semibold)).tracking(1)
+                .foregroundColor(c.textMuted)
+            Text(viewModel.isMultiDevice
+                 ? "Your TOTP secret was generated on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost."
+                 : "A second factor outside Apple's iCloud Keychain. If your iCloud password is ever compromised, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")
+                .font(FS.font.bodySm())
+                .foregroundColor(c.text)
+        }
+    }
+
+    @ViewBuilder
+    private func actions(c: FSColors) -> some View {
+        VStack(spacing: FS.space.s3) {
+            if viewModel.isMultiDevice {
+                FSDangerButton("Disable multi-device + 2FA", block: true) {
+                    showDisableSheet = true
+                }
+                .accessibilityIdentifier("account-security-disable-btn")
+            } else {
+                FSPrimaryButton("Enable multi-device + 2FA", block: true, large: true) {
+                    showEnableSheet = true
+                }
+                .accessibilityIdentifier("account-security-enable-btn")
+            }
+            if case .failed(let msg) = viewModel.phase {
+                Text(msg)
+                    .font(FS.font.caption())
+                    .foregroundColor(c.danger)
+                    .accessibilityIdentifier("account-security-failed-msg")
+            }
+        }
+    }
+
+    private func formattedDate(_ ms: Int64?) -> String {
+        guard let ms else { return "an unknown date" }
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f.string(from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
+    }
+}
+
+/// v1.2 Phase 4 — four-step enrollment sheet. Step indices follow
+/// the spec literally:
+///
+///   1. Explainer + Continue.
+///   2. POST /enroll-begin → render QR + show base32 secret.
+///   3. User enters sample 6-digit code → POST /enroll-confirm.
+///   4. Recovery-codes display gated behind "I've saved these".
+///
+/// On success the host re-loads the parent screen so the badge
+/// flips from "Single-device" to "Multi-device + 2FA".
+struct AccountSecurityEnableSheet: View {
+    @Environment(\.colorScheme) private var scheme
+    @Bindable var viewModel: AccountSecurityViewModel
+    @State private var sampleCode: String = ""
+    @State private var savedRecoveryCodes = false
+    var onClose: () -> Void
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: FS.space.s4) {
+                    switch viewModel.phase {
+                    case .idle, .beginning:
+                        step1(c: c)
+                    case .staged(let s):
+                        step2(c: c, staged: s)
+                    case .confirming:
+                        step3Pending(c: c)
+                    case .confirmed(let result):
+                        step4(c: c, codes: result.recoveryCodes)
+                    case .failed(let msg):
+                        failedRow(c: c, message: msg)
+                    case .disabling, .disabled:
+                        // Not reachable from the enable sheet — the
+                        // disable flow lives on the parent screen.
+                        EmptyView()
+                    }
+                }
+                .padding(FS.space.s6)
+            }
+            .background(c.bg.ignoresSafeArea())
+            .navigationTitle("Enable multi-device + 2FA")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { onClose() }
+                        .disabled(viewModel.isMidEnrollment && !savedRecoveryCodes && !viewModel.canCloseEarly)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func step1(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            Text("Step 1 of 4")
+                .font(.system(size: 12, weight: .semibold)).tracking(1)
+                .foregroundColor(c.textMuted)
+            Text("You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.")
+                .foregroundColor(c.text)
+            Text("After 2FA is on, account recovery becomes a 24-hour grace window that requires your 6-digit code (or a recovery code) instead of the 7-day waiting period.")
+                .font(FS.font.bodySm())
+                .foregroundColor(c.textMuted)
+            FSPrimaryButton("Continue", block: true, large: true) {
+                Task { await viewModel.beginEnrollment() }
+            }
+            .accessibilityIdentifier("account-security-step1-continue")
+            if case .beginning = viewModel.phase {
+                ProgressView().padding(.top, FS.space.s2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func step2(c: FSColors, staged: AccountSecurityViewModel.StagedSecret) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            Text("Step 2 of 4 — scan or paste")
+                .font(.system(size: 12, weight: .semibold)).tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                if let image = pngImage(fromBase64: staged.qrPngBase64) {
+                    image
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
+                        .accessibilityIdentifier("account-security-qr")
+                } else {
+                    // QR generation failed on the Worker side — surface
+                    // the otpauth URL as a tappable alternative.
+                    Text(staged.otpauthUrl)
+                        .font(FS.font.mono())
+                        .foregroundColor(c.text)
+                        .textSelection(.enabled)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Or paste this manual key:")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                Text(staged.secret)
+                    .font(FS.font.mono())
+                    .foregroundColor(c.text)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("account-security-manual-secret")
+            }
+            Text("Step 3 — enter the 6-digit code your authenticator shows.")
+                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+            TextField("123456", text: $sampleCode)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .font(.system(size: 22, weight: .medium, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 12)
+                .background(c.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: FS.radius.md)
+                        .stroke(c.border, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .accessibilityIdentifier("account-security-sample-code")
+            FSPrimaryButton(
+                "Verify code",
+                enabled: sampleCode.trimmingCharacters(in: .whitespaces).count == 6,
+                block: true,
+                large: true
+            ) {
+                Task { await viewModel.confirmEnrollment(sampleCode: sampleCode) }
+            }
+            .accessibilityIdentifier("account-security-verify-btn")
+        }
+    }
+
+    @ViewBuilder
+    private func step3Pending(c: FSColors) -> some View {
+        VStack(alignment: .center, spacing: FS.space.s4) {
+            ProgressView()
+            Text("Verifying your code…").foregroundColor(c.textMuted)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func step4(c: FSColors, codes: [String]) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s4) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
+                Text("Step 4 of 4 — save your recovery codes")
+                    .font(.system(size: 14, weight: .semibold)).foregroundColor(c.text)
+            }
+            Text("Print these or store them in a password manager. Each code works once if you lose your authenticator. They're the ONLY way back in.")
+                .foregroundColor(c.text)
+            FSCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(codes.enumerated()), id: \.offset) { _, code in
+                        Text(code)
+                            .font(FS.font.mono())
+                            .foregroundColor(c.text)
+                            .textSelection(.enabled)
+                    }
+                }
+                .accessibilityIdentifier("account-security-recovery-codes")
+            }
+            Toggle(isOn: $savedRecoveryCodes) {
+                Text("I've saved these somewhere safe")
+                    .foregroundColor(c.text)
+            }
+            .accessibilityIdentifier("account-security-saved-toggle")
+            FSPrimaryButton(
+                "Done",
+                enabled: savedRecoveryCodes,
+                block: true,
+                large: true
+            ) {
+                viewModel.dismissEnrollment()
+                onClose()
+            }
+            .accessibilityIdentifier("account-security-done-btn")
+        }
+    }
+
+    @ViewBuilder
+    private func failedRow(c: FSColors, message: String) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundColor(c.danger)
+                Text("Something went wrong")
+                    .font(.system(size: 14, weight: .semibold)).foregroundColor(c.danger)
+            }
+            Text(message).foregroundColor(c.text)
+                .accessibilityIdentifier("account-security-failed-msg")
+            FSSecondaryButton("Start over", block: true) {
+                viewModel.dismissEnrollment()
+                sampleCode = ""
+            }
+            FSGhostButton("Close", block: true) {
+                viewModel.dismissEnrollment()
+                onClose()
+            }
+        }
+    }
+
+    /// Decode the base64 PNG returned by the Worker. Returns nil on
+    /// a decode failure; the caller falls back to rendering the
+    /// otpauth URL as plain text so manual entry still works.
+    private func pngImage(fromBase64 base64: String) -> Image? {
+        guard let data = Data(base64Encoded: base64), let ui = UIImage(data: data) else {
+            return nil
+        }
+        return Image(uiImage: ui)
+    }
+}
+
+extension AccountSecurityViewModel {
+    /// True iff the user is mid-enrollment AND closing now would lose
+    /// the recovery codes. Used by the sheet's toolbar Close button
+    /// to gate dismissal until the codes are saved.
+    var isMidEnrollment: Bool {
+        switch phase {
+        case .staged, .confirming, .confirmed: return true
+        default: return false
+        }
+    }
+
+    /// Only step-2 (staged) can be cancelled cleanly without losing
+    /// state; step-4 (confirmed-but-codes-not-saved) MUST gate.
+    var canCloseEarly: Bool {
+        if case .confirmed = phase { return false }
+        return true
+    }
+}

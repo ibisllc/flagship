@@ -74,6 +74,15 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "AI providers", description = "BYO LLM provider keys (Anthropic, OpenAI, Google, Groq, Ollama).") {
             nav.navigate("providers")
         }
+        // v1.2 Phase 4 — Account security badge + drill-down. Placed
+        // immediately under AI providers so the account-type state is
+        // one of the first things the user notices.
+        SettingsRow(
+            label = "Account security",
+            description = "Single-device vs multi-device + 2FA.",
+        ) {
+            nav.navigate("account-security")
+        }
         SettingsRow(label = "Trusted devices", description = "Phones and tablets that hold your account keys.") {
             nav.navigate("trusted-devices")
         }

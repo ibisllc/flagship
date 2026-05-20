@@ -42,11 +42,19 @@ public struct SettingsScreen: View {
     let trustedDevices: LoadingState<[TrustedDevice]>
     var onDisconnectTrustedDevice: (TrustedDevice) async -> Bool = { _ in false }
     let showDeveloper: Bool
+    /// v1.2 Phase 4 — "Multi-device + 2FA" badge state read out of the
+    /// Worker `usernames` row. Nil while the load is in flight or if
+    /// the call failed; "single" / "multi" otherwise.
+    var accountType: String? = nil
     var onAddControlDevice: () -> Void = {}
     var onRevokeDevice: (PairedSessionSummary) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onOpenProviders: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
+    /// v1.2 Phase 4 — open the Account-security drill-down. The
+    /// container hosts AccountSecurityScreen + drives the enable /
+    /// disable flows.
+    var onOpenAccountSecurity: () -> Void = {}
     var onOpenAbout: () -> Void = {}
     var onOpenDeveloper: () -> Void = {}
     var onOpenPrivacy: () -> Void = {}
@@ -75,12 +83,14 @@ public struct SettingsScreen: View {
         controlDevices: LoadingState<[PairedSessionSummary]>,
         trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
         showDeveloper: Bool = false,
+        accountType: String? = nil,
         onAddControlDevice: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
         onDisconnectTrustedDevice: @escaping (TrustedDevice) async -> Bool = { _ in false },
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
+        onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
         onOpenDeveloper: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
@@ -96,11 +106,13 @@ public struct SettingsScreen: View {
         self.trustedDevices = trustedDevices
         self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
         self.showDeveloper = showDeveloper
+        self.accountType = accountType
         self.onAddControlDevice = onAddControlDevice
         self.onRevokeDevice = onRevokeDevice
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
         self.onOpenRecovery = onOpenRecovery
+        self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenAbout = onOpenAbout
         self.onOpenDeveloper = onOpenDeveloper
         self.onOpenPrivacy = onOpenPrivacy
@@ -121,6 +133,11 @@ public struct SettingsScreen: View {
                     .padding(.top, FS.space.s4)
 
                 account(c: c)
+                // v1.2 Phase 4 — account-security badge + entry. Placed
+                // immediately after Account so the "Single-device" /
+                // "Multi-device + 2FA" state is one of the first
+                // things the user sees.
+                accountSecuritySection(c: c)
                 subscription(c: c)
                 trustedDevicesSection(c: c)
                 controlDevicesSection(c: c)
@@ -235,6 +252,38 @@ public struct SettingsScreen: View {
         }
     }
 
+    /// v1.2 Phase 4 — Account-security entry. Badge surfaces the
+    /// current account type ("Single-device" / "Multi-device + 2FA");
+    /// the row drills into AccountSecurityScreen for enroll / disable.
+    private func accountSecuritySection(c: FSColors) -> some View {
+        section("ACCOUNT SECURITY", c: c) {
+            Button(action: onOpenAccountSecurity) {
+                FSCard {
+                    HStack(alignment: .top, spacing: FS.space.s3) {
+                        Image(systemName: accountType == "multi" ? "checkmark.shield.fill" : "shield.lefthalf.filled")
+                            .foregroundColor(accountType == "multi" ? c.success : c.primary)
+                            .imageScale(.large)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(accountType == "multi" ? "Multi-device + 2FA" : "Single-device account")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(c.text)
+                                .accessibilityIdentifier("settings-account-type-badge")
+                            Text(accountType == "multi"
+                                 ? "Recovery requires a 6-digit code + 24-hour grace."
+                                 : "Recovery is a 7-day waiting period.")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings-open-account-security")
+        }
+    }
+
     private func trustedDevicesSection(c: FSColors) -> some View {
         section("TRUSTED DEVICES", c: c) {
             VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -272,21 +321,41 @@ public struct SettingsScreen: View {
     /// One row per peer device. Carries the Disconnect / Replace
     /// (B7) actions via a contextual Menu on iOS — feels native
     /// versus a button stack and keeps the row visually clean.
+    ///
+    /// v1.2 Phase 4 — when the row is quarantined (the 14-day
+    /// freshly-admitted window), surface a clock icon + tooltip and
+    /// disable the destructive menu entries. Tapping a disabled
+    /// entry surfaces a toast explaining why.
     private func trustedDeviceRow(_ d: TrustedDevice, c: FSColors) -> some View {
-        FSCard {
+        let quarantined = d.isQuarantined()
+        return FSCard {
             HStack(alignment: .top, spacing: FS.space.s3) {
                 Image(systemName: platformIcon(d.platform))
                     .foregroundColor(c.primary)
                     .imageScale(.large)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(d.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                    HStack(spacing: 6) {
+                        Text(d.label).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
+                        if quarantined {
+                            Image(systemName: "clock.badge.exclamationmark")
+                                .foregroundColor(c.danger)
+                                .imageScale(.small)
+                                .accessibilityIdentifier("trusted-device-quarantine-icon-\(d.tokenPrefix)")
+                                .help(quarantineTooltip(for: d))
+                        }
+                    }
                     HStack(spacing: 4) {
                         Text(platformDisplay(d.platform))
                         Text("·").foregroundColor(c.textMuted)
                         Text("added \(relative(ms: d.addedAt))")
                     }
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
-                    if d.lastSeenAt > d.addedAt {
+                    if quarantined {
+                        Text(quarantineTooltip(for: d))
+                            .font(FS.font.caption())
+                            .foregroundColor(c.danger)
+                            .accessibilityIdentifier("trusted-device-quarantine-msg-\(d.tokenPrefix)")
+                    } else if d.lastSeenAt > d.addedAt {
                         Text("last seen \(relative(ms: d.lastSeenAt))")
                             .font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
@@ -294,27 +363,42 @@ public struct SettingsScreen: View {
                 Spacer()
                 Menu {
                     Button(role: .destructive) {
-                        disconnectTarget = d
+                        if quarantined {
+                            disconnectMessage = quarantineTooltip(for: d)
+                        } else {
+                            disconnectTarget = d
+                        }
                     } label: {
                         Label("Disconnect", systemImage: "wifi.slash")
                     }
+                    .disabled(quarantined)
                     // B7 — Replace device. Tap opens a two-stage scare
                     // sheet; the container drives the actual IRK
                     // rotation ceremony through ReplaceDeviceViewModel.
                     Button(role: .destructive) {
-                        replaceConfirm = true
+                        if quarantined {
+                            disconnectMessage = quarantineTooltip(for: d)
+                        } else {
+                            replaceConfirm = true
+                        }
                     } label: {
                         Label("Replace device", systemImage: "arrow.triangle.2.circlepath")
                     }
+                    .disabled(quarantined)
                     Divider()
                     // E2/E3 — Wipe & restart. Live ceremony. The
                     // container observes onWipeRestart and routes
                     // through WipeRestartViewModel.
                     Button(role: .destructive) {
-                        wipeConfirm = true
+                        if quarantined {
+                            disconnectMessage = quarantineTooltip(for: d)
+                        } else {
+                            wipeConfirm = true
+                        }
                     } label: {
                         Label("Wipe & restart…", systemImage: "trash")
                     }
+                    .disabled(quarantined)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundColor(c.textMuted)
@@ -323,6 +407,20 @@ public struct SettingsScreen: View {
                 .accessibilityIdentifier("trusted-device-menu-\(d.tokenPrefix)")
             }
         }
+    }
+
+    /// Tooltip + toast copy for a quarantined device. Surfaced both
+    /// next to the clock icon AND on a disabled-menu tap. Kept
+    /// here (not inline) so the test asserts on the exact string.
+    private func quarantineTooltip(for d: TrustedDevice) -> String {
+        guard let until = d.quarantineUntil else {
+            return "This device is in quarantine. Use another device."
+        }
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        let when = f.string(from: Date(timeIntervalSince1970: TimeInterval(until) / 1000))
+        return "Quarantined until \(when). Use another device."
     }
 
     private func platformIcon(_ raw: String) -> String {

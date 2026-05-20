@@ -11,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
+import com.flagshipserver.app.ui.screens.AccountSecurityScreen
 import com.flagshipserver.app.ui.screens.AddControlDeviceScreen
 import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
@@ -37,6 +38,7 @@ fun SettingsTab() {
     NavHost(navController = nav, startDestination = "settings-root") {
         composable("settings-root") { SettingsScreen(nav) }
         composable("trusted-devices") { TrustedDevicesScreen(nav) }
+        composable("account-security") { AccountSecurityScreen(nav) }
         composable("paired-sessions") { PairedSessionsScreen(nav) }
         composable("add-control-device") { AddControlDeviceScreen(nav) }
         composable("recovery") { RecoveryScreen(nav) }

@@ -14,6 +14,10 @@ public final class SettingsViewModel {
     /// pass it as If-Match on Disconnect / Replace requests, fencing
     /// the device-list-changed-mid-action race (cf. A3).
     public private(set) var devicesEtag: String?
+    /// v1.2 Phase 4 — account-type badge state read from
+    /// `GET /api/users/:u`. Nil while loading or on failure;
+    /// "single" / "multi" otherwise.
+    public private(set) var accountType: String?
     /// Per-pod browser sessions on the user's daemon. Kept around for
     /// the existing "Browser sessions" surface; a separate section
     /// from the peer trusted devices.
@@ -51,6 +55,23 @@ public final class SettingsViewModel {
             browserSessions = .failed(error.localizedDescription)
         }
         await loadTrustedDevices()
+        await loadAccountType()
+    }
+
+    /// v1.2 Phase 4 — read the account-type badge state. Non-fatal:
+    /// failures leave the badge as nil and the Settings row falls
+    /// back to the "Single-device" default copy.
+    public func loadAccountType() async {
+        guard let username = currentUsername(), !username.isEmpty else {
+            accountType = nil
+            return
+        }
+        do {
+            let rec = try await server.getUsernameRecord(username: username)
+            accountType = rec.accountType
+        } catch {
+            accountType = nil
+        }
     }
 
     /// Refresh just the trusted-devices section. Used by pull-to-

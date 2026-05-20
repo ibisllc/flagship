@@ -88,15 +88,41 @@ async function disconnectDevice(device) {
   }
 }
 
+/** v1.2 Phase 4 — a row is quarantined while its 14-day window from
+ *  admission has not yet elapsed. The clock icon + disabled Remove
+ *  button surface the state to the user. */
+function isQuarantined(device) {
+  const until = device.quarantineUntil;
+  return typeof until === "number" && until > 0 && until > Date.now();
+}
+
+/** Tooltip / toast copy for a quarantined row. Mirrors the iOS +
+ *  Android helpers so the message is byte-stable across surfaces. */
+function quarantineMessage(device) {
+  const until = device.quarantineUntil;
+  if (!until) return "This device is in quarantine. Use another device.";
+  const when = new Date(until).toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+  });
+  return `Quarantined until ${when}. Use another device.`;
+}
+
 function renderDeviceCard(device) {
+  const quarantined = isQuarantined(device);
+  const quarantineMsg = quarantined ? quarantineMessage(device) : "";
   return `
-    <div class="card" data-token-prefix="${escapeHtml(device.tokenPrefix)}">
+    <div class="card" data-token-prefix="${escapeHtml(device.tokenPrefix)}"
+         ${quarantined ? `data-quarantined="true"` : ""}>
       <div class="row">
         <div class="weight-600">
           <span aria-hidden="true">${platformIcon(device.platform)}</span>
           ${escapeHtml(device.label || `Untitled ${device.platform}`)}
+          ${quarantined ? `<span aria-hidden="true" title="${escapeHtml(quarantineMsg)}"
+                  data-quarantine-icon="${escapeHtml(device.tokenPrefix)}"
+                  style="margin-left: 4px;">⏱</span>` : ""}
         </div>
-        <button class="secondary danger" data-disconnect="${escapeHtml(device.tokenId)}">
+        <button class="secondary danger" data-disconnect="${escapeHtml(device.tokenId)}"
+                ${quarantined ? "disabled" : ""}>
           Disconnect
         </button>
       </div>
@@ -109,6 +135,9 @@ function renderDeviceCard(device) {
             : ""
         }
       </div>
+      ${quarantined
+        ? `<div class="note small err-text" data-quarantine-msg="${escapeHtml(device.tokenPrefix)}">${escapeHtml(quarantineMsg)}</div>`
+        : ""}
     </div>
   `;
 }
@@ -186,6 +215,13 @@ async function renderTrustedDevices() {
         const tokenId = ev.currentTarget.getAttribute("data-disconnect");
         const device = state.devices.find((d) => d.tokenId === tokenId);
         if (!device) return;
+        // v1.2 Phase 4 — even though the button has `disabled` while
+        // quarantined, surface the explainer toast if an enabled
+        // copy somehow gets a click through (e.g. a stale DOM).
+        if (isQuarantined(device)) {
+          toast(quarantineMessage(device), "err");
+          return;
+        }
         const { inlineConfirm } = await import("../lib/modal.js");
         const ok = await inlineConfirm({
           title: `Disconnect ${device.label}?`,
