@@ -564,27 +564,144 @@ export function makeLiveDeps(env) {
       if (!m) throw new Error(`wrangler presign produced no URL: ${out.slice(0, 240)}`);
       return { presignedUrl: m[0] };
     },
-    provisionTempVps: async ({ presignedUrl, region, size, label }) => {
-      // The live wiring would import + use HetznerProvider from
-      // tools/vps-e2e/dist; documented here as a hard requirement so
-      // the orchestrator fails fast in the live path. The test path
-      // stubs this method entirely.
-      throw new Error(
-        "live provisionTempVps not wired into the CLI in this build — use tools/vps-e2e/dist/cli.js for now",
-      );
-    },
-    awaitDaemonReady: async () => {
-      throw new Error(
-        "live awaitDaemonReady not wired into the CLI in this build",
-      );
-    },
-    snapshot: async () => {
-      throw new Error("live snapshot not wired into the CLI in this build");
-    },
-    destroyVps: async () => {
-      // Best-effort idempotent: no-op for unwired live path.
-    },
+    // Live wiring of the three Hetzner steps. Built once per CLI
+    // invocation and lazily cached so the test path (which stubs
+    // these out entirely via deps overrides) doesn't pay the import
+    // cost.
+    provisionTempVps: makeLiveProvisionTempVps(env),
+    awaitDaemonReady: makeLiveAwaitDaemonReady(env),
+    snapshot: makeLiveSnapshot(env),
+    destroyVps: makeLiveDestroyVps(env),
     env,
+  };
+}
+
+/**
+ * Lazy-build a HetznerProvider on first use. The harness's compiled
+ * dist is co-located at tools/vps-e2e/dist/providers/hetzner.js. We
+ * import once, cache, and reuse.
+ *
+ * The provider needs the local SSH key on disk (path passed into the
+ * constructor) AND a Hetzner-side SSH key id (uploaded idempotently
+ * via `ensureSshKey`). The first create-sample-user run produces the
+ * numeric id; subsequent runs reuse it via cache.
+ */
+let _cachedProvider = null;
+async function getHetznerProvider(env) {
+  if (_cachedProvider) return _cachedProvider;
+  const { readFileSync } = await import("node:fs");
+  const sshKeyPath = env.demoSshKeyPath;
+  const pubKeyPath = `${sshKeyPath}.pub`;
+  if (!existsSync(sshKeyPath) || !existsSync(pubKeyPath)) {
+    throw new Error(
+      `SSH key pair not found at ${sshKeyPath}{,.pub} — generate with: ` +
+        `ssh-keygen -t ed25519 -f ${sshKeyPath} -N "" -C "flagship-demo"`,
+    );
+  }
+  const pubKey = readFileSync(pubKeyPath, "utf8");
+  const here = dirname(fileURLToPath(import.meta.url));
+  // Compiled by Phase A's tsc -b; if it's missing we tell the operator
+  // exactly how to fix it.
+  const providerModulePath = resolve(
+    here,
+    "..",
+    "tools",
+    "vps-e2e",
+    "dist",
+    "providers",
+    "hetzner.js",
+  );
+  if (!existsSync(providerModulePath)) {
+    throw new Error(
+      `tools/vps-e2e/dist not built — run \`npx tsc -b tools/vps-e2e\` first`,
+    );
+  }
+  const { HetznerProvider } = await import(providerModulePath);
+  const provider = new HetznerProvider({
+    token: env.hcloudToken,
+    sshKeyPath,
+  });
+  await provider.ensureSshKey(pubKey);
+  _cachedProvider = provider;
+  return provider;
+}
+
+function makeLiveProvisionTempVps(env) {
+  return async ({ presignedUrl, region, size, label }) => {
+    const provider = await getHetznerProvider(env);
+    const instance = await provider.provision({
+      iso: presignedUrl,
+      region,
+      size,
+      label,
+    });
+    // Wait for the dd-reboot cycle to complete — the box reboots once
+    // into the freshly-written disk, then `install.sh` runs.
+    await provider.awaitBoot(instance.id);
+    return { serverId: instance.id, ipv4: instance.ip };
+  };
+}
+
+/**
+ * Poll the live .com for daemon registration. The daemon registers
+ * itself in `install_events` after a successful first boot; we poll
+ * `/api/install-events/<fqdn>` and treat any `registered` event after
+ * `since` as success.
+ *
+ * Timeout: 12 minutes (Alpine boot + LUKS + register + ACME).
+ */
+function makeLiveAwaitDaemonReady(env) {
+  return async ({ serverId, fqdn }) => {
+    const since = Date.now();
+    const url = `${env.baseUrl}/api/install-events/${encodeURIComponent(fqdn)}`;
+    const deadline = since + 12 * 60_000;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(url, {
+          headers: { authorization: `Bearer ${env.adminSecret}` },
+        });
+        if (res.ok) {
+          const j = await res.json();
+          const events = Array.isArray(j?.events) ? j.events : [];
+          const registered = events.find(
+            (e) => e?.event === "registered" && Number(e?.timestamp) >= since,
+          );
+          if (registered) {
+            // Also probe the green padlock — confirms ACME finished.
+            try {
+              const probe = await fetch(`https://${fqdn}/`, {
+                method: "HEAD",
+                redirect: "manual",
+              });
+              if (probe.status > 0) return;
+            } catch {
+              // ACME may not be ready yet; loop.
+            }
+          }
+        }
+      } catch {
+        // Transient .com / DNS failures; loop.
+      }
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+    throw new Error(
+      `daemon at ${fqdn} did not register + serve TLS within 12 minutes (serverId=${serverId})`,
+    );
+  };
+}
+
+function makeLiveSnapshot(env) {
+  return async ({ serverId, description }) => {
+    const provider = await getHetznerProvider(env);
+    const { snapshotId } = await provider.snapshot(serverId, description);
+    return { snapshotId };
+  };
+}
+
+function makeLiveDestroyVps(env) {
+  return async ({ serverId }) => {
+    const provider = await getHetznerProvider(env);
+    await provider.destroy(serverId);
   };
 }
 
