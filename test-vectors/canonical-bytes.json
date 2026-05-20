@@ -161,6 +161,34 @@
         "issuedAt": 1735689600000
       },
       "signatureHex": "42b418bd66cbaff7ecd1883641cca3abedef5fa8a4672dd9b7e9b22315f4275059318e5d700bfb7db852cca7ba136980d52a2704da25f905e5575e19d85c9f0f"
+    },
+    {
+      "name": "device-capability-grant",
+      "signedBy": "irk",
+      "input": {
+        "grantId": "550e8400-e29b-41d4-a716-446655440000",
+        "username": "harry",
+        "deviceLabel": "ipad",
+        "devicePubKey": "0b0e1114171a1d202326292c2f3235383b3e4144474a4d505356595c5f626568",
+        "scopes": [
+          "install-service",
+          "browse"
+        ],
+        "issuedAt": 1735689600000,
+        "expiresAt": 1743465600000
+      },
+      "signatureHex": "ecd1ba57aed74782f54fdd05a86db025812ff7e97c6c9d0daed3cddd41b4f586141c513db92fcd016b1f0158be6e65e235f61e1c3ffb06142c8f8925a2ba650e"
+    },
+    {
+      "name": "revoke-device-capability-grant",
+      "signedBy": "irk",
+      "input": {
+        "grantId": "550e8400-e29b-41d4-a716-446655440000",
+        "username": "harry",
+        "reason": "lost",
+        "issuedAt": 1735689601000
+      },
+      "signatureHex": "7e380cc3c8364808b1c00f2d213e9dfdf7dec496fe9cd97ea0e18f592b6083e7c6967293e2dc2977d822bedfef6c45ba8905ede2362ddb64fd98c2cc6b552308"
     }
   ]
 }

@@ -5,6 +5,7 @@ import {
   ed,
   verifyAccountRecovery,
   verifyBootApproval,
+  verifyDeviceCapabilityGrant,
   verifyInvite,
   verifyInviteAcceptance,
   verifyMembershipMutation,
@@ -15,7 +16,9 @@ import {
   verifyRebuildRequest,
   verifyRegisterServer,
   verifyRevocation,
+  verifyRevokeDeviceCapabilityGrant,
   verifyTunnelHello,
+  type DeviceScope,
 } from "../src/index.js";
 
 const PATH = resolve(__dirname, "..", "..", "..", "test-vectors", "canonical-bytes.json");
@@ -209,6 +212,31 @@ describe("cross-language canonical-bytes vectors", () => {
           },
           sig,
           stkPub,
+        );
+      case "device-capability-grant":
+        return verifyDeviceCapabilityGrant(
+          {
+            grantId: i.grantId as string,
+            username: i.username as string,
+            deviceLabel: i.deviceLabel as string,
+            devicePubKey: fromHex("devicePubKey"),
+            scopes: i.scopes as DeviceScope[],
+            issuedAt: i.issuedAt as number,
+            expiresAt: i.expiresAt as number,
+          },
+          sig,
+          irkPub,
+        );
+      case "revoke-device-capability-grant":
+        return verifyRevokeDeviceCapabilityGrant(
+          {
+            grantId: i.grantId as string,
+            username: i.username as string,
+            reason: i.reason as "lost" | "stolen" | "decommissioned" | "replaced",
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
         );
     }
     throw new Error(`unknown vector name: ${v.name}`);

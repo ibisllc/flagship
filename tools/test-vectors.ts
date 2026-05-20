@@ -24,6 +24,7 @@ import {
   signBootApproval,
   signInvite,
   signInviteAcceptance,
+  signDeviceCapabilityGrant,
   signMembershipMutation,
   signMigrationRequest,
   signPbAnnounce,
@@ -32,9 +33,11 @@ import {
   signRebuildRequest,
   signRegisterServer,
   signRevocation,
+  signRevokeDeviceCapabilityGrant,
   signTunnelHello,
   type AccountRecovery,
   type BootChallenge,
+  type DeviceCapabilityGrant,
   type ImageRebuildRequest,
   type InviteAcceptance,
   type InviteToken,
@@ -45,6 +48,7 @@ import {
   type PbPeerConfirm,
   type PbRequestPeers,
   type RegisterServer,
+  type RevokeDeviceCapabilityGrant,
   type ServerRevocation,
   type TunnelHello,
 } from "@flagship/protocol";
@@ -252,6 +256,45 @@ async function main() {
     makeVector("pb-peer-confirm", "stk", peerConfirm, signPbPeerConfirm(peerConfirm, stk)),
   );
 
+  // DeviceCapabilityGrant (IRK) — v2 device-addressing (S3.1).
+  // Fixed device pubkey so the canonical bytes are stable across runs.
+  const DEMO_DEVICE_PUB = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) DEMO_DEVICE_PUB[i] = (i * 3 + 11) & 0xff;
+  const dcg: DeviceCapabilityGrant = {
+    grantId: "550e8400-e29b-41d4-a716-446655440000",
+    username: "harry",
+    deviceLabel: "ipad",
+    devicePubKey: DEMO_DEVICE_PUB,
+    // Deliberately unsorted on input — canonical bytes must sort by DEVICE_SCOPES index.
+    scopes: ["install-service", "browse"],
+    issuedAt: ISSUED_AT,
+    expiresAt: ISSUED_AT + 90 * 24 * 60 * 60_000,
+  };
+  vectors.push(
+    makeVector(
+      "device-capability-grant",
+      "irk",
+      { ...dcg, devicePubKey: hex(dcg.devicePubKey) },
+      signDeviceCapabilityGrant(dcg, irk),
+    ),
+  );
+
+  // RevokeDeviceCapabilityGrant (IRK) — v2 device-addressing (S3.1).
+  const rdcg: RevokeDeviceCapabilityGrant = {
+    grantId: "550e8400-e29b-41d4-a716-446655440000",
+    username: "harry",
+    reason: "lost",
+    issuedAt: ISSUED_AT + 1000,
+  };
+  vectors.push(
+    makeVector(
+      "revoke-device-capability-grant",
+      "irk",
+      rdcg,
+      signRevokeDeviceCapabilityGrant(rdcg, irk),
+    ),
+  );
+
   // Sanity-check: every recorded signature verifies.
   const verifyKeys: Record<string, Keypair> = { irk, bak, stk };
   for (const v of vectors) {
@@ -367,6 +410,44 @@ function payloadFor(v: Vector): Uint8Array {
           i.peerServerId,
           i.requesterServerId,
           i.shardId,
+          i.issuedAt,
+        ].join("|"),
+      );
+    case "device-capability-grant": {
+      // Re-sort scopes here by the canonical DEVICE_SCOPES index so the
+      // self-test reproduces the canonicalization rule. The order in
+      // DEVICE_SCOPES is the authoritative source.
+      const order = [
+        "browse",
+        "install-service",
+        "vibe-code",
+        "add-device",
+        "manage-services",
+        "revoke-others",
+        "demo-provision",
+      ];
+      const idx = (s: string) => order.indexOf(s);
+      const sorted = [...(i.scopes as string[])].sort((a, b) => idx(a) - idx(b)).join(",");
+      return enc(
+        [
+          "flagship/device-capability-grant/v1",
+          i.grantId,
+          i.username,
+          i.deviceLabel,
+          i.devicePubKey,
+          sorted,
+          i.issuedAt,
+          i.expiresAt,
+        ].join("|"),
+      );
+    }
+    case "revoke-device-capability-grant":
+      return enc(
+        [
+          "flagship/revoke-device-capability-grant/v1",
+          i.grantId,
+          i.username,
+          i.reason,
           i.issuedAt,
         ].join("|"),
       );
