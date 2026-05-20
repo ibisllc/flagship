@@ -25,6 +25,7 @@ import {
   handleCaCert,
   handleCleanupApex,
   handleCompleteRePair,
+  handleDeviceDisconnect,
   handleConsumeUnlockKey,
   handleDepositAutoUnlockLease,
   handleDepositUnlockKey,
@@ -243,6 +244,9 @@ const ROUTE_RE = {
   UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
   USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
+  // v1.2 Phase 2 — IRK-signed disconnect-a-sibling. Quarantine-gated
+  // on the caller's push_token row.
+  USER_DEVICE_DISCONNECT: /^\/api\/users\/([^/]+)\/devices\/([^/]+)\/disconnect$/,
   USER_AUDIT: /^\/api\/users\/([^/]+)\/audit$/,
   DAEMON_STATUS: /^\/api\/daemon-status$/,
   RE_PAIR_INITIATE: /^\/api\/users\/([^/]+)\/re-pair$/,
@@ -757,7 +761,13 @@ export async function tryControlPlane(
   if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_COMPLETE))) {
     return finishPlain(
       await handleCompleteRePair(
-        { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+        {
+          usernames: storage.usernames,
+          pendingRePairs: storage.pendingRePairs,
+          // v1.2 Phase 2 — wired so completion stamps the 14-day
+          // quarantine on every push_token row for the user.
+          pushTokens: storage.pushTokens,
+        },
         decodeURIComponent(m[1]!),
       ),
     );
@@ -779,6 +789,20 @@ export async function tryControlPlane(
       await handleGetUsersDevices(
         { pushTokens: storage.pushTokens },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.USER_DEVICE_DISCONNECT))) {
+    return finishPlain(
+      await handleDeviceDisconnect(
+        {
+          pushTokens: storage.pushTokens,
+          usernames: storage.usernames,
+          auditEvents: storage.auditEvents,
+        },
+        decodeURIComponent(m[1]!),
+        decodeURIComponent(m[2]!),
+        await readJson(request),
       ),
     );
   }

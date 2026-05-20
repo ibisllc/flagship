@@ -196,6 +196,93 @@ describe("InMemoryPendingRePairStorage v1.2 fields", () => {
   });
 });
 
+describe("InMemoryPendingRePairStorage v1.2 Phase 2 alert bitmap", () => {
+  // The migration file is referenced from a separate path because
+  // 0029 is its own file (Phase 2's additive column on top of 0028).
+  const ALERTS_MIGRATION_PATH = resolve(HERE, "../migrations/0029_re_pair_alerts.sql");
+  const ALERTS_SQL = readFileSync(ALERTS_MIGRATION_PATH, "utf8");
+
+  it("0029 migration adds alerts_fired_bitmap column", () => {
+    expect(ALERTS_SQL).toMatch(
+      /ALTER TABLE pending_re_pairs ADD COLUMN alerts_fired_bitmap INTEGER NOT NULL DEFAULT 0/,
+    );
+  });
+
+  it("defaults alertsFiredBitmap to 0 on an initiate without the field", async () => {
+    const s = new InMemoryStorage();
+    await s.pendingRePairs.initiate(rePair());
+    const row = await s.pendingRePairs.get("alice");
+    expect(row?.alertsFiredBitmap).toBe(0);
+  });
+
+  it("round-trips alertsFiredBitmap=1 (T+0 stamped by the initiate handler)", async () => {
+    const s = new InMemoryStorage();
+    await s.pendingRePairs.initiate(rePair({ alertsFiredBitmap: 1 }));
+    const row = await s.pendingRePairs.get("alice");
+    expect(row?.alertsFiredBitmap).toBe(1);
+  });
+
+  it("orInAlertsFiredBit is atomic OR — repeated calls with the same bit are no-ops", async () => {
+    const s = new InMemoryStorage();
+    await s.pendingRePairs.initiate(rePair({ alertsFiredBitmap: 1 }));
+    expect(await s.pendingRePairs.orInAlertsFiredBit("alice", 2)).toBe(3);
+    expect(await s.pendingRePairs.orInAlertsFiredBit("alice", 2)).toBe(3);
+    expect(await s.pendingRePairs.orInAlertsFiredBit("alice", 8)).toBe(11);
+    const row = await s.pendingRePairs.get("alice");
+    expect(row?.alertsFiredBitmap).toBe(11);
+  });
+
+  it("orInAlertsFiredBit returns 0 on an unknown username (no row to OR into)", async () => {
+    const s = new InMemoryStorage();
+    expect(await s.pendingRePairs.orInAlertsFiredBit("ghost", 1)).toBe(0);
+  });
+
+  it("listActive returns non-objected rows in initiatedAt-ascending order, capped at limit", async () => {
+    const s = new InMemoryStorage();
+    await s.pendingRePairs.initiate(rePair({ username: "u2", initiatedAt: 200 }));
+    await s.pendingRePairs.initiate(rePair({ username: "u1", initiatedAt: 100 }));
+    await s.pendingRePairs.initiate(rePair({ username: "u3", initiatedAt: 300 }));
+    const all = await s.pendingRePairs.listActive();
+    expect(all.map((r) => r.username)).toEqual(["u1", "u2", "u3"]);
+    const capped = await s.pendingRePairs.listActive(2);
+    expect(capped.map((r) => r.username)).toEqual(["u1", "u2"]);
+  });
+
+  it("listActive skips objected rows", async () => {
+    const s = new InMemoryStorage();
+    await s.pendingRePairs.initiate(rePair({ username: "u1", initiatedAt: 100 }));
+    await s.pendingRePairs.initiate(rePair({ username: "u2", initiatedAt: 200 }));
+    await s.pendingRePairs.object("u1", 250);
+    const active = await s.pendingRePairs.listActive();
+    expect(active.map((r) => r.username)).toEqual(["u2"]);
+  });
+});
+
+describe("InMemoryPushTokenStorage v1.2 setQuarantineUntil", () => {
+  it("sets quarantineUntil on an existing row", async () => {
+    const s = new InMemoryStorage();
+    await s.pushTokens.put(pushRow());
+    const future = 1_700_000_000_000 + 14 * 86_400_000;
+    expect(await s.pushTokens.setQuarantineUntil("tok-aaaa", future)).toBe(true);
+    const row = await s.pushTokens.get("tok-aaaa");
+    expect(row?.quarantineUntil).toBe(future);
+  });
+
+  it("returns false on an unknown tokenId (no row to stamp)", async () => {
+    const s = new InMemoryStorage();
+    expect(await s.pushTokens.setQuarantineUntil("ghost", 12345)).toBe(false);
+  });
+
+  it("last-writer-wins semantics — a second setQuarantineUntil overwrites the first", async () => {
+    const s = new InMemoryStorage();
+    await s.pushTokens.put(pushRow());
+    await s.pushTokens.setQuarantineUntil("tok-aaaa", 1_000_000);
+    await s.pushTokens.setQuarantineUntil("tok-aaaa", 2_000_000);
+    const row = await s.pushTokens.get("tok-aaaa");
+    expect(row?.quarantineUntil).toBe(2_000_000);
+  });
+});
+
 describe("InMemoryPushTokenStorage v1.2 quarantine", () => {
   it("defaults quarantineUntil to 0 (already-trusted) on a put without the field", async () => {
     const s = new InMemoryStorage();

@@ -1059,14 +1059,18 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
       // captured explicitly so a row crossing the cascade boundary
       // keeps its original grace (the migration default of 86_400
       // matches v1.1 behavior; Phase 2 widens to 604_800 for single-
-      // device callers).
+      // device callers). alerts_fired_bitmap defaults to 1 (bit 0 =
+      // T+0 fired-on-initiate) when callers stamp it; otherwise the
+      // column DEFAULT 0 takes over and the cron scheduler will fire
+      // the T+0 alert + OR-in the bit on its next pass.
       await this.db
         .prepare(
           `INSERT INTO pending_re_pairs
              (username, new_irk_pub_hex, old_irk_pub_hex,
               initiated_at, completes_at, objected_at,
-              grace_seconds, totp_required, totp_proof_consumed)
-           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+              grace_seconds, totp_required, totp_proof_consumed,
+              alerts_fired_bitmap)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
         )
         .bind(
           key,
@@ -1077,6 +1081,7 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
           rec.graceSeconds ?? 86_400,
           rec.totpRequired ? 1 : 0,
           rec.totpProofConsumed ? 1 : 0,
+          rec.alertsFiredBitmap ?? 0,
         )
         .run();
       return { ok: true as const };
@@ -1090,29 +1095,9 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
     const r = await this.db
       .prepare("SELECT * FROM pending_re_pairs WHERE username = ?")
       .bind(username.toLowerCase())
-      .first<{
-        username: string;
-        new_irk_pub_hex: string;
-        old_irk_pub_hex: string;
-        initiated_at: number;
-        completes_at: number;
-        objected_at: number | null;
-        grace_seconds?: number | null;
-        totp_required?: number | null;
-        totp_proof_consumed?: number | null;
-      }>();
+      .first<RawPendingRePairRow>();
     if (!r) return undefined;
-    return {
-      username: r.username,
-      newIrkPubHex: r.new_irk_pub_hex,
-      oldIrkPubHex: r.old_irk_pub_hex,
-      initiatedAt: r.initiated_at,
-      completesAt: r.completes_at,
-      ...(r.objected_at != null ? { objectedAt: r.objected_at } : {}),
-      graceSeconds: r.grace_seconds ?? 86_400,
-      totpRequired: r.totp_required === 1,
-      totpProofConsumed: r.totp_proof_consumed === 1,
-    };
+    return rawPendingRePairToRecord(r);
   }
 
   async object(username: string, at: number): Promise<boolean> {
@@ -1132,6 +1117,68 @@ export class D1PendingRePairStorage implements PendingRePairStorage {
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
+
+  async listActive(limit = 100): Promise<PendingRePairRecord[]> {
+    // Phase 2's alert scheduler only cares about rows that haven't
+    // been objected to — an objected row's grace is moot. Caller
+    // (schedulePendingRePairAlerts) further filters by alert-due-at
+    // time vs. its internal now() against the row's initiatedAt
+    // + threshold offsets.
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM pending_re_pairs WHERE objected_at IS NULL ORDER BY initiated_at ASC LIMIT ?",
+      )
+      .bind(limit)
+      .all<RawPendingRePairRow>();
+    return (r.results ?? []).map(rawPendingRePairToRecord);
+  }
+
+  async orInAlertsFiredBit(username: string, bit: number): Promise<number> {
+    // bit is a power-of-2 offset (1, 2, 4, 8, 16). SQLite supports
+    // the bitwise-OR operator (`|`) inside UPDATE expressions, so
+    // the OR-in is atomic at the database without a read-modify-write
+    // round-trip. Reading the post-state needs a follow-up SELECT —
+    // D1 does not yet support `RETURNING`.
+    await this.db
+      .prepare(
+        "UPDATE pending_re_pairs SET alerts_fired_bitmap = alerts_fired_bitmap | ? WHERE username = ?",
+      )
+      .bind(bit, username.toLowerCase())
+      .run();
+    const after = await this.db
+      .prepare("SELECT alerts_fired_bitmap FROM pending_re_pairs WHERE username = ?")
+      .bind(username.toLowerCase())
+      .first<{ alerts_fired_bitmap: number | null }>();
+    return after?.alerts_fired_bitmap ?? 0;
+  }
+}
+
+interface RawPendingRePairRow {
+  username: string;
+  new_irk_pub_hex: string;
+  old_irk_pub_hex: string;
+  initiated_at: number;
+  completes_at: number;
+  objected_at: number | null;
+  grace_seconds?: number | null;
+  totp_required?: number | null;
+  totp_proof_consumed?: number | null;
+  alerts_fired_bitmap?: number | null;
+}
+
+function rawPendingRePairToRecord(r: RawPendingRePairRow): PendingRePairRecord {
+  return {
+    username: r.username,
+    newIrkPubHex: r.new_irk_pub_hex,
+    oldIrkPubHex: r.old_irk_pub_hex,
+    initiatedAt: r.initiated_at,
+    completesAt: r.completes_at,
+    ...(r.objected_at != null ? { objectedAt: r.objected_at } : {}),
+    graceSeconds: r.grace_seconds ?? 86_400,
+    totpRequired: r.totp_required === 1,
+    totpProofConsumed: r.totp_proof_consumed === 1,
+    alertsFiredBitmap: r.alerts_fired_bitmap ?? 0,
+  };
 }
 
 export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
@@ -1397,6 +1444,20 @@ export class D1PushTokenStorage implements PushTokenStorage {
   }
   async touchLastSeen(tokenId: string, at: number): Promise<void> {
     await this.db.prepare(`UPDATE push_tokens SET last_seen_at = ? WHERE token_id = ?`).bind(at, tokenId).run();
+  }
+  async setQuarantineUntil(tokenId: string, untilMs: number): Promise<boolean> {
+    // Direct UPDATE — D1 reports affected-row count via meta.changes.
+    // We deliberately don't constrain on the existing value: callers
+    // (re-pair completion handler, future device-add path) want
+    // last-writer-wins semantics so a longer quarantine extends the
+    // window, not just replaces it. If clamp-only behavior is ever
+    // wanted, callers can read-modify-write at the call site.
+    const r = await this.db
+      .prepare(`UPDATE push_tokens SET quarantine_until = ? WHERE token_id = ?`)
+      .bind(untilMs, tokenId)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
   }
 }
 

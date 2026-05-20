@@ -43,6 +43,7 @@ import {
   pushRedirection,
   runDemoIdleReaper,
   runDemoProvisioningPoller,
+  schedulePendingRePairAlerts,
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
 
@@ -315,6 +316,11 @@ export async function scheduled(
   }
   if (controller.cron === "*/10 * * * *") {
     ctx.waitUntil(runDemoCron(env, now));
+    // v1.2 Phase 2 — pending-re-pair alert ladder. Fires the
+    // schedule-1d/3d/6d/urgent pings for any pending row that's
+    // crossed a threshold since the last tick. Inline alongside the
+    // demo cron so a single 10-minute tick handles both.
+    ctx.waitUntil(runRePairAlertsCron(env, now));
     return;
   }
   // Unknown cron string — be defensive: do nothing rather than mis-
@@ -361,6 +367,41 @@ export async function runDemoCron(
     stuck: reaperResult.stuck,
     promoted: pollerResult.promoted,
   };
+}
+
+/**
+ * v1.2 Phase 2 — pending-re-pair alert scheduler. Fires
+ * fire-and-forget push (stubbed for Phase 2; Phase 5 will wire the
+ * real APNs/FCM/Web Push bridge with the encrypted deep-link
+ * payload) whenever a pending re-pair row crosses one of the
+ * documented offsets relative to its initiatedAt:
+ *
+ *   T+1d, T+3d, T+6d  (single-device 7-day grace only)
+ *   completesAt - 1h  (both single + multi)
+ *
+ * No-op when DB binding isn't configured. Errors are swallowed —
+ * a failed push won't block the next cron tick (idempotency lives
+ * in the bitmap).
+ */
+export async function runRePairAlertsCron(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<{ scanned: number; fired: number } | null> {
+  if (!env.DB) return null;
+  const storage = new D1Storage(env.DB);
+  // Phase 2 stub forwarder. Phase 5 replaces this with a real
+  // pushBridge fan-out that signs an encrypted payload to each
+  // device's pushX25519Pub. For Phase 2 we just observe the
+  // (row, bit) progression — the firePush is what stamps the
+  // bitmap, so it has to be at least a resolved promise.
+  const result = await schedulePendingRePairAlerts({
+    pendingRePairs: storage.pendingRePairs,
+    firePush: async () => {
+      /* Phase 5 — fire via pushBridge */
+    },
+    now: () => now.getTime(),
+  });
+  return { scanned: result.scanned, fired: result.fired.length };
 }
 
 /**

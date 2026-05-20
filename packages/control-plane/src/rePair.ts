@@ -47,7 +47,30 @@ import { computeDevicesEtag } from "./usersDevices.js";
  *     commit (A3) before even reaching the rotation. Belt + braces.
  */
 
+/**
+ * v1.1 baseline grace — kept exported so existing callers + tests
+ * still reference a single canonical multi-device value. Phase 2 of
+ * the v1.2 cascade lets `handleInitiateRePair` widen this to
+ * `RE_PAIR_SINGLE_GRACE_MS` (7 days) when the target account is
+ * single-device. The multi-device path stays at 24h on purpose:
+ * a TOTP proof is required before the grace even starts, so a
+ * shorter waiting period is the right trade-off for that mode.
+ */
 export const RE_PAIR_GRACE_MS = 24 * 60 * 60_000;
+
+/** v1.2 — 7-day grace for single-device accounts. Wide enough that a
+ * user on vacation / asleep / without their device doesn't miss the
+ * objection window. See docs/v1.2-security-cascade.md §"Re-pair J.3
+ * grace extension". */
+export const RE_PAIR_SINGLE_GRACE_MS = 7 * 24 * 60 * 60_000;
+
+/** v1.2 — 14-day quarantine on a freshly-admitted device's revoke-
+ *  others power. The legitimate owner's existing devices remain at
+ *  quarantineUntil=0 and can revoke a quarantined device immediately;
+ *  the new device cannot lock out other devices until this window
+ *  has elapsed. See docs/v1.2-security-cascade.md §"14-day quarantine
+ *  on revoke-others power". */
+export const RE_PAIR_QUARANTINE_MS = 14 * 24 * 60 * 60_000;
 
 export interface RePairDeps {
   usernames: UsernameStorage;
@@ -59,9 +82,22 @@ export interface RePairDeps {
    * the "another device registered between fetch-list and submit-
    * rotate" race. Older callers without the dep degrade to the
    * existing un-fenced behavior.
+   *
+   * v1.2 Phase 2 — also used by the quarantine check when the body
+   * carries a `callerTokenId`: the handler reads the row and rejects
+   * with 403 if `quarantineUntil > now`. New devices admitted to a
+   * multi-device account can't kick out other devices for 14 days.
    */
   pushTokens?: PushTokenStorage;
   graceMs?: number;
+  /**
+   * v1.2 — explicit override for the single-device grace. Tests
+   * inject a smaller value so the swap-after-grace assertion doesn't
+   * have to wait 7 days. Production callers leave this unset and the
+   * handler uses RE_PAIR_SINGLE_GRACE_MS.
+   */
+  singleDeviceGraceMs?: number;
+  quarantineMs?: number;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -85,9 +121,30 @@ export async function handleInitiateRePair(
 ): Promise<HandlerResponse> {
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
-  const graceMs = deps.graceMs ?? RE_PAIR_GRACE_MS;
+  const multiGraceMs = deps.graceMs ?? RE_PAIR_GRACE_MS;
+  const singleGraceMs = deps.singleDeviceGraceMs ?? RE_PAIR_SINGLE_GRACE_MS;
+  const quarantineMs = deps.quarantineMs ?? RE_PAIR_QUARANTINE_MS;
 
-  const b = body as { request?: Record<string, unknown>; signature?: unknown };
+  const b = body as {
+    request?: Record<string, unknown>;
+    signature?: unknown;
+    /**
+     * v1.2 Phase 2 — out-of-canonical-bytes proof for multi-device
+     * recovery. Not part of the signed envelope (codes are
+     * ephemeral). Phase 2 only checks structural presence;
+     * Phase 3 replaces this with real `verifyTotp` + atomic
+     * recovery-code redemption.
+     */
+    totpProof?: unknown;
+    /**
+     * v1.2 Phase 2 — when an existing device initiates the re-pair
+     * (impersonation-attempt path) it sends its own push tokenId so
+     * the Worker can reject if that device is itself quarantined.
+     * Absent on the genuine "lost device → new device claims back"
+     * J.3 path (the recovering device has no push_tokens row yet).
+     */
+    callerTokenId?: unknown;
+  };
   const r = b?.request ?? {};
   if (
     typeof r.username !== "string" ||
@@ -135,6 +192,31 @@ export async function handleInitiateRePair(
     }
   }
 
+  // v1.2 Phase 2 — quarantine gate on the CALLER's push_token row.
+  // Only fires when the body identifies a caller (existing-device
+  // initiation) AND the deps include pushTokens. The new-IRK / lost-
+  // device J.3 path leaves callerTokenId unset, so the gate is a
+  // no-op for genuine recovery — the gate exists only to stop a
+  // freshly-admitted (quarantined) device from kicking out a
+  // legitimate sibling via the re-pair endpoint.
+  if (
+    typeof b?.callerTokenId === "string" &&
+    b.callerTokenId.length > 0 &&
+    deps.pushTokens
+  ) {
+    const callerRow = await deps.pushTokens.get(b.callerTokenId);
+    if (callerRow && (callerRow.quarantineUntil ?? 0) > now()) {
+      return {
+        status: 403,
+        body: {
+          reason: "quarantine",
+          until: new Date(callerRow.quarantineUntil ?? 0).toISOString(),
+          hint: "use a device you've had for longer",
+        },
+      };
+    }
+  }
+
   const userRec = await deps.usernames.get(r.username);
   if (!userRec) return { status: 404, body: { error: "unknown username" } };
 
@@ -146,6 +228,46 @@ export async function handleInitiateRePair(
   // No-op when the new IRK already equals the registered one — nothing to swap.
   if (userRec.irkPubHex.toLowerCase() === r.newIrkPub.toLowerCase()) {
     return { status: 400, body: { error: "newIrkPub equals current IRK" } };
+  }
+
+  // v1.2 Phase 2 — account-type discriminator drives the grace +
+  // TOTP-required flags. Absent / 'demo' falls through as 'single'
+  // (the demo path lives in demo_users + never gets accountType
+  // stamped on usernames, but treating an accidentally-set 'demo'
+  // value as 'single' is the safe default — single is the more
+  // restrictive recovery mode, not less).
+  const accountType = userRec.accountType ?? "single";
+  const isMultiDevice = accountType === "multi";
+  const graceMs = isMultiDevice ? multiGraceMs : singleGraceMs;
+  const totpRequired = isMultiDevice;
+
+  // v1.2 Phase 2 — when multi-device, the body MUST carry a
+  // structurally-valid totpProof beside the signed envelope. Phase 3
+  // replaces this presence check with `verifyTotp` (from the
+  // `otpauth` library) + an atomic recovery-code redemption against
+  // the stored argon2id-hashed codes. For now, the field's shape
+  // shape gates the flow + the row is stamped `totp_proof_consumed`
+  // so /complete (Phase 3) can refuse to swap unverified rows.
+  let totpProofConsumed = false;
+  if (totpRequired) {
+    const proof = b?.totpProof as { code?: unknown; method?: unknown } | undefined;
+    if (
+      !proof ||
+      typeof proof.code !== "string" ||
+      proof.code.length === 0 ||
+      (proof.method !== "totp" && proof.method !== "recovery")
+    ) {
+      return {
+        status: 401,
+        body: {
+          error: "totpProof required for multi-device recovery",
+          accountType: "multi",
+        },
+      };
+    }
+    // Phase 2 placeholder — structural-only validation. Phase 3
+    // wires the real check.
+    totpProofConsumed = true;
   }
 
   let newIrkPub: Uint8Array;
@@ -166,7 +288,9 @@ export async function handleInitiateRePair(
   };
   // The NEW IRK signs — that's the entity proving they hold the
   // recovered private key. .com verifies against the body's
-  // newIrkPub (not the stored old one).
+  // newIrkPub (not the stored old one). totpProof is NOT in the
+  // canonical bytes (see RePairInitiate jsdoc) so its presence /
+  // absence doesn't affect signature verification.
   if (!verifyRePairInitiate(claim, sig, newIrkPub)) {
     return { status: 403, body: { error: "invalid signature" } };
   }
@@ -177,6 +301,13 @@ export async function handleInitiateRePair(
     oldIrkPubHex: r.oldIrkPub,
     initiatedAt: now(),
     completesAt: now() + graceMs,
+    graceSeconds: Math.floor(graceMs / 1000),
+    totpRequired,
+    totpProofConsumed,
+    // Bit 0 = T+0 fires immediately on initiate (the existing v1.1
+    // push-on-rotation already covers this; we stamp the bit so the
+    // cron scheduler doesn't re-fire it on its next sweep).
+    alertsFiredBitmap: 1,
   });
   if (!insert.ok) return { status: 409, body: { error: insert.reason } };
   return {
@@ -185,6 +316,14 @@ export async function handleInitiateRePair(
       ok: true,
       completesAt: now() + graceMs,
       graceMs,
+      // Phase 2 surfaces the account-type back to the client so the
+      // mobile UI (Phase 4) can render the correct copy ("7-day
+      // grace" vs "24h grace + TOTP"). Quarantine-on-admit length
+      // is also returned so the new device can show the "you're
+      // approved but can't kick others for N days" hint.
+      accountType,
+      totpRequired,
+      quarantineMs,
     },
   };
 }
@@ -251,6 +390,7 @@ export async function handleCompleteRePair(
   // and we return 404; if we haven't, we check completion conditions
   // and either swap or return why we can't.
   const now = deps.now ?? (() => Date.now());
+  const quarantineMs = deps.quarantineMs ?? RE_PAIR_QUARANTINE_MS;
   const pending = await deps.pendingRePairs.get(username);
   if (!pending) return { status: 404, body: { error: "no pending re-pair" } };
   if (pending.objectedAt) {
@@ -287,6 +427,31 @@ export async function handleCompleteRePair(
       body: { error: "username's current IRK no longer matches the pending old IRK" },
     };
   }
+  // v1.2 Phase 2 — stamp the 14-day quarantine on every push_token
+  // row currently registered for this user. The re-paired account
+  // is, by construction, in a state where the new IRK has just taken
+  // over — any push_tokens that were re-registered AFTER the new IRK
+  // signed the J.3 initiate envelope might be the new device's own
+  // push tokens (in which case quarantining them is exactly right)
+  // OR a leftover from the old device (in which case the quarantine
+  // is moot — the old device's tokens will be revoked by the next
+  // re-registration on the new IRK). Either way, this fail-safe
+  // sets a 14-day floor.
+  //
+  // Pre-quarantine devices on a single-device migration path
+  // (quarantineUntil=0 from the column default) stay at 0 here
+  // because the docs spell out that pre-existing rows are
+  // already-trusted; on a re-pair, we treat the swap event as the
+  // moment the new device joins, so every active push_token gets a
+  // fresh 14-day clock. Future Phase 4 UI ("Replace device") gives
+  // the legitimate owner a clean affordance to lift it manually.
+  if (deps.pushTokens) {
+    const rows = await deps.pushTokens.listByUser(username);
+    const until = now() + quarantineMs;
+    for (const row of rows) {
+      await deps.pushTokens.setQuarantineUntil(row.tokenId, until);
+    }
+  }
   await deps.pendingRePairs.delete(username);
   return {
     status: 200,
@@ -294,6 +459,7 @@ export async function handleCompleteRePair(
       ok: true,
       newIrkPub: pending.newIrkPubHex,
       swappedAt: now(),
+      quarantineUntil: now() + quarantineMs,
     },
   };
 }

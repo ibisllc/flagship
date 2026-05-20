@@ -1435,6 +1435,34 @@ export interface RePairInitiate {
   /** Old IRK pubkey, included so .com can show "is this old key really yours to retire?" copy on the objection prompt. */
   oldIrkPub: Bytes;
   issuedAt: number;
+  /**
+   * v1.2 — REQUIRED when the target account_type === 'multi'.
+   *
+   * Carries a 6-digit TOTP or a 10-char recovery code so the Worker
+   * can gate the multi-device recovery path on out-of-Apple proof
+   * before the 24h grace even starts. Phase 2 only checks structural
+   * presence (the code is non-empty + the method is one of the two
+   * allowed literals) and stamps `totp_proof_consumed` on the
+   * pending row; Phase 3 (TOTP enrollment + verification) replaces
+   * the structural check with `verifyTotp` from the `otpauth`
+   * library + an atomic single-use recovery-code redemption.
+   *
+   * **NOT** part of the canonical-bytes signed envelope. Codes are
+   * ephemeral by design (TOTP rolls every 30s; recovery codes are
+   * single-use) and a code embedded in a long-lived signature would
+   * either leak the code to anyone with replay access to the
+   * signature, or force the canonical bytes to invalidate within
+   * seconds. Instead the body MAY carry the proof beside the signed
+   * envelope; the Worker validates the IRK signature against the
+   * canonical envelope (no totpProof bytes) and validates the proof
+   * against the stored TOTP secret + recovery-codes table
+   * synchronously.
+   */
+  totpProof?: {
+    /** 6-digit TOTP code OR 10-char base32 recovery code. */
+    code: string;
+    method: "totp" | "recovery";
+  };
 }
 
 /**

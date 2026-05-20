@@ -161,6 +161,7 @@ export class InMemoryPendingRePairStorage implements PendingRePairStorage {
       graceSeconds: rec.graceSeconds ?? 86_400,
       totpRequired: rec.totpRequired ?? false,
       totpProofConsumed: rec.totpProofConsumed ?? false,
+      alertsFiredBitmap: rec.alertsFiredBitmap ?? 0,
     });
     return { ok: true as const };
   }
@@ -176,6 +177,19 @@ export class InMemoryPendingRePairStorage implements PendingRePairStorage {
   }
   async delete(username: string) {
     return this.rows.delete(username.toLowerCase());
+  }
+  async listActive(limit = 100): Promise<PendingRePairRecord[]> {
+    const all = [...this.rows.values()]
+      .filter((r) => r.objectedAt === undefined)
+      .sort((a, b) => a.initiatedAt - b.initiatedAt)
+      .slice(0, Math.max(0, limit));
+    return all.map((r) => ({ ...r }));
+  }
+  async orInAlertsFiredBit(username: string, bit: number): Promise<number> {
+    const r = this.rows.get(username.toLowerCase());
+    if (!r) return 0;
+    r.alertsFiredBitmap = (r.alertsFiredBitmap ?? 0) | bit;
+    return r.alertsFiredBitmap;
   }
 }
 
@@ -436,6 +450,12 @@ export class InMemoryPushTokenStorage implements PushTokenStorage {
   async touchLastSeen(tokenId: string, at: number): Promise<void> {
     const r = this.byId.get(tokenId);
     if (r) r.lastSeenAt = at;
+  }
+  async setQuarantineUntil(tokenId: string, untilMs: number): Promise<boolean> {
+    const r = this.byId.get(tokenId);
+    if (!r) return false;
+    r.quarantineUntil = untilMs;
+    return true;
   }
 }
 

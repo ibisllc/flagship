@@ -1,0 +1,34 @@
+-- v1.2 security cascade Phase 2 — re-pair grace-period alert bitmap.
+-- See docs/v1.2-security-cascade.md §"Push notifications during grace".
+--
+-- Single new column on pending_re_pairs:
+--
+--   alerts_fired_bitmap  INTEGER NOT NULL DEFAULT 0
+--
+-- Bitfield tracking which scheduled push alerts have ALREADY fired for
+-- this pending row. Bit positions are stable so the scheduler can use
+-- them as gating idempotency keys:
+--
+--   bit 0 (1 ) = T+0   — fired immediately on initiate
+--   bit 1 (2 ) = T+1d  — single-device 7-day grace reminder #1
+--   bit 2 (4 ) = T+3d  — single-device 7-day grace reminder #2
+--   bit 3 (8 ) = T+6d  — single-device 7-day grace reminder #3
+--   bit 4 (16) = T+7d  — last-chance urgent ping (~1h before completesAt)
+--
+-- Multi-device flows use only bits 0 + 4 (the 24h grace is too short
+-- for intermediate reminders), so they end at bitmap=17 after T+0
+-- and T+24h-1h. Single-device flows end at bitmap=31 after all five
+-- pushes fired.
+--
+-- The bitmap is a fast-and-loose record — the scheduler MUST treat a
+-- power-of-2 increment as the only legal mutation (OR-in a single bit).
+-- Out-of-order or repeated fires are no-ops (the bit's already set).
+--
+-- Why a single bitmap instead of one column per alert? Cheaper schema,
+-- one read+write per cron tick, and the set of alert offsets is fixed
+-- by Phase 2. If Phase 5 ever needs to ADD an alert offset, it shifts
+-- everything to a new column anyway (alerts_fired_v2_bitmap) rather
+-- than migrating live data into a wider column — bit ordering is part
+-- of the row's contract.
+
+ALTER TABLE pending_re_pairs ADD COLUMN alerts_fired_bitmap INTEGER NOT NULL DEFAULT 0;

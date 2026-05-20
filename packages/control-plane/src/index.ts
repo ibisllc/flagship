@@ -35,3 +35,5 @@ export * from "./inheritance.js";
 export * from "./usernameHandover.js";
 export * from "./podInventory.js";
 export * from "./demoUsers.js";
+export * from "./deviceDisconnect.js";
+export * from "./rePairAlerts.js";

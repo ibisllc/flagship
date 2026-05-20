@@ -12,6 +12,8 @@ import {
   handleInitiateRePair,
   handleObjectRePair,
   RE_PAIR_GRACE_MS,
+  RE_PAIR_SINGLE_GRACE_MS,
+  RE_PAIR_QUARANTINE_MS,
 } from "../src/rePair.js";
 
 const USERNAME = "alice";
@@ -27,22 +29,47 @@ function bytesToHex(b: Uint8Array): string {
   return s;
 }
 
-async function setup(oldIrk: Keypair): Promise<InMemoryStorage> {
+/**
+ * Default setup lands a 'multi'-device account so the historical
+ * v1.1 24h-grace assertions stay intact under v1.2 Phase 2. The
+ * single-device 7-day-grace path has its own dedicated tests below
+ * (search for "single-device 7-day grace"). Callers that need the
+ * 'single' default explicitly pass `accountType: 'single'`.
+ */
+async function setup(
+  oldIrk: Keypair,
+  opts: { accountType?: "single" | "multi" } = {},
+): Promise<InMemoryStorage> {
   const s = new InMemoryStorage();
   await s.usernames.put({
     username: USERNAME,
     irkPubHex: bytesToHex(oldIrk.publicKey),
     claimedAt: 1,
+    accountType: opts.accountType ?? "multi",
   });
   return s;
 }
 
-function initBody(args: { newIrk: Keypair; oldIrk: Keypair; issuedAt?: number }) {
+function initBody(args: {
+  newIrk: Keypair;
+  oldIrk: Keypair;
+  issuedAt?: number;
+  /** v1.2 — needed when the target account is multi-device. The
+   *  default `setup` lands on 'multi', so initBody always supplies
+   *  a structurally-valid proof unless the caller explicitly opts
+   *  out via `{ totpProof: null }`. */
+  totpProof?: { code: string; method: "totp" | "recovery" } | null;
+  callerTokenId?: string;
+}) {
   const issuedAt = args.issuedAt ?? Date.now();
   const sig = signRePairInitiate(
     { username: USERNAME, newIrkPub: args.newIrk.publicKey, oldIrkPub: args.oldIrk.publicKey, issuedAt },
     args.newIrk,
   );
+  const proof =
+    args.totpProof === null
+      ? undefined
+      : args.totpProof ?? { code: "123456", method: "totp" as const };
   return {
     request: {
       username: USERNAME,
@@ -51,6 +78,8 @@ function initBody(args: { newIrk: Keypair; oldIrk: Keypair; issuedAt?: number })
       issuedAt,
     },
     signature: bytesToHex(sig),
+    ...(proof ? { totpProof: proof } : {}),
+    ...(args.callerTokenId ? { callerTokenId: args.callerTokenId } : {}),
   };
 }
 
@@ -117,6 +146,11 @@ describe("re-pair initiate", () => {
           issuedAt,
         },
         signature: bytesToHex(forgedSig),
+        // v1.2 — multi-device requires a structural totpProof; the
+        // test asserts the SIGNATURE-verification path returns 403,
+        // not the missing-proof 401, so we supply a valid-shape
+        // proof here.
+        totpProof: { code: "123456", method: "totp" as const },
       },
     );
     expect(res.status).toBe(403);
@@ -421,5 +455,250 @@ describe("re-pair GET (status read)", () => {
     const body = res.body as { pending: { newIrkPub: string; objectedAt: number | null } };
     expect(body.pending.newIrkPub).toBe(bytesToHex(newIrk.publicKey));
     expect(body.pending.objectedAt).toBeGreaterThan(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// v1.2 Plan B Phase 2 — single-device 7-day grace + TOTP gate
+// ───────────────────────────────────────────────────────────────────
+
+describe("v1.2 Phase 2 — single-device 7-day grace", () => {
+  it("stamps graceSeconds=604800 on a single-device account's pending row", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      // No totpProof — single-device doesn't require one.
+      initBody({ newIrk, oldIrk, totpProof: null }),
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as { graceMs: number; accountType: string; totpRequired: boolean };
+    expect(body.graceMs).toBe(RE_PAIR_SINGLE_GRACE_MS);
+    expect(body.accountType).toBe("single");
+    expect(body.totpRequired).toBe(false);
+    const row = await storage.pendingRePairs.get(USERNAME);
+    expect(row?.graceSeconds).toBe(604_800);
+    expect(row?.totpRequired).toBe(false);
+    expect(row?.totpProofConsumed).toBe(false);
+    // Bit 0 (T+0) stamped on initiate — the scheduler must not
+    // re-fire the T+0 push on its first sweep.
+    expect(row?.alertsFiredBitmap).toBe(1);
+  });
+
+  it("stamps graceSeconds=86400 + totpRequired=true on a multi-device account's pending row", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      initBody({ newIrk, oldIrk, totpProof: { code: "654321", method: "totp" } }),
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as { graceMs: number; accountType: string; totpRequired: boolean };
+    expect(body.graceMs).toBe(RE_PAIR_GRACE_MS);
+    expect(body.accountType).toBe("multi");
+    expect(body.totpRequired).toBe(true);
+    const row = await storage.pendingRePairs.get(USERNAME);
+    expect(row?.graceSeconds).toBe(86_400);
+    expect(row?.totpRequired).toBe(true);
+    expect(row?.totpProofConsumed).toBe(true);
+  });
+
+  it("rejects a multi-device re-pair with NO totpProof (401)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      initBody({ newIrk, oldIrk, totpProof: null }),
+    );
+    expect(res.status).toBe(401);
+    expect((res.body as { error: string }).error).toMatch(/totpProof/i);
+  });
+
+  it("rejects a multi-device re-pair with an empty totpProof.code (401)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      initBody({ newIrk, oldIrk, totpProof: { code: "", method: "totp" } }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a multi-device re-pair with a totpProof.method outside the allowed set", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        // method must be "totp" | "recovery"
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        totpProof: { code: "123456", method: "sms" as any },
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts a recovery-code proof on multi-device", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const res = await handleInitiateRePair(
+      { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
+      USERNAME,
+      initBody({ newIrk, oldIrk, totpProof: { code: "AAAA-BBBB-CC", method: "recovery" } }),
+    );
+    expect(res.status).toBe(200);
+    const row = await storage.pendingRePairs.get(USERNAME);
+    expect(row?.totpProofConsumed).toBe(true);
+  });
+
+  it("swaps the IRK after 7 days for a single-device account", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    // 24h is too early.
+    const earlyRes = await handleCompleteRePair(
+      { ...deps, now: () => Date.now() + RE_PAIR_GRACE_MS + 1_000 },
+      USERNAME,
+    );
+    expect(earlyRes.status).toBe(425);
+    // 7 days + 1s is enough.
+    const lateRes = await handleCompleteRePair(
+      { ...deps, now: () => Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000 },
+      USERNAME,
+    );
+    expect(lateRes.status).toBe(200);
+    const after = await storage.usernames.get(USERNAME);
+    expect(after?.irkPubHex).toBe(bytesToHex(newIrk.publicKey));
+  });
+});
+
+describe("v1.2 Phase 2 — 14-day quarantine", () => {
+  async function seedDevice(
+    s: InMemoryStorage,
+    args: { tokenId: string; quarantineUntil?: number },
+  ): Promise<void> {
+    await s.pushTokens.put({
+      tokenId: args.tokenId,
+      username: USERNAME,
+      platform: "apns",
+      providerToken: "p",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "device",
+      registeredAt: 1,
+      lastSeenAt: 1,
+      quarantineUntil: args.quarantineUntil ?? 0,
+    });
+  }
+
+  it("stamps quarantineUntil = now + 14d on every push_token after a re-pair completes", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    await seedDevice(storage, { tokenId: "devA" });
+    await seedDevice(storage, { tokenId: "devB" });
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      pushTokens: storage.pushTokens,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    expect(res.status).toBe(200);
+    const after = await Promise.all([
+      storage.pushTokens.get("devA"),
+      storage.pushTokens.get("devB"),
+    ]);
+    for (const row of after) {
+      expect(row?.quarantineUntil).toBe(finishAt + RE_PAIR_QUARANTINE_MS);
+    }
+  });
+
+  it("response body returns quarantineUntil so the client UI can render the lift-time", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      pushTokens: storage.pushTokens,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    expect((res.body as { quarantineUntil: number }).quarantineUntil).toBe(
+      finishAt + RE_PAIR_QUARANTINE_MS,
+    );
+  });
+
+  it("rejects a re-pair initiate when the callerTokenId is quarantined (403)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const future = Date.now() + RE_PAIR_QUARANTINE_MS;
+    await seedDevice(storage, { tokenId: "freshDev", quarantineUntil: future });
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        pushTokens: storage.pushTokens,
+      },
+      USERNAME,
+      initBody({ newIrk, oldIrk, callerTokenId: "freshDev" }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { reason: string }).reason).toBe("quarantine");
+    expect((res.body as { until: string }).until).toBe(new Date(future).toISOString());
+  });
+
+  it("re-pair initiate from a non-quarantined existing device is allowed", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    // quarantineUntil = 0 (default) — already-trusted.
+    await seedDevice(storage, { tokenId: "trustedDev", quarantineUntil: 0 });
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        pushTokens: storage.pushTokens,
+      },
+      USERNAME,
+      initBody({ newIrk, oldIrk, callerTokenId: "trustedDev" }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("re-pair initiate WITHOUT callerTokenId (J.3 lost-device path) is not quarantine-gated", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    // No push tokens at all — the recovering device hasn't registered yet.
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        pushTokens: storage.pushTokens,
+      },
+      USERNAME,
+      initBody({ newIrk, oldIrk }),
+    );
+    expect(res.status).toBe(200);
   });
 });

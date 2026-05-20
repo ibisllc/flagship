@@ -367,6 +367,21 @@ export interface PendingRePairRecord {
    * to swap an unverified row even if the require-flag was set.
    */
   totpProofConsumed?: boolean;
+  /**
+   * v1.2 Phase 2 — bitfield tracking which scheduled push alerts
+   * have ALREADY fired for this pending row. See migration
+   * 0029_re_pair_alerts.sql for the bit layout. The scheduler MUST
+   * treat a power-of-2 increment as the only legal mutation
+   * (OR-in a single bit); repeated fires of the same offset are
+   * no-ops (the bit's already set). Absent / 0 = nothing fired yet.
+   *
+   *   bit 0 = T+0  (fired on initiate)
+   *   bit 1 = T+1d
+   *   bit 2 = T+3d
+   *   bit 3 = T+6d
+   *   bit 4 = T+7d (~1h before completesAt; single-device only)
+   */
+  alertsFiredBitmap?: number;
 }
 
 export interface PendingRePairStorage {
@@ -380,6 +395,22 @@ export interface PendingRePairStorage {
   object(username: string, at: number): Promise<boolean>;
   /** Delete the row (called after `complete` succeeds). */
   delete(username: string): Promise<boolean>;
+  /**
+   * v1.2 Phase 2 — walk every non-objected pending row, capped at
+   * `limit` (default 100). Used by the cron-driven alert scheduler
+   * (`schedulePendingRePairAlerts`) so it can OR-in the next-due
+   * bit on each row crossing a T+1d/T+3d/T+6d/T+7d threshold.
+   * Returns rows in initiation-ascending order so the scheduler
+   * processes the oldest pendings first.
+   */
+  listActive(limit?: number): Promise<PendingRePairRecord[]>;
+  /**
+   * v1.2 Phase 2 — OR a single new bit into `alerts_fired_bitmap`
+   * for the given username. Returns the post-write bitmap so the
+   * caller can confirm idempotency. No-op (returns the existing
+   * value) if the bit was already set.
+   */
+  orInAlertsFiredBit(username: string, bit: number): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -685,6 +716,15 @@ export interface PushTokenStorage {
   listByUser(username: string): Promise<PushTokenRecord[]>;
   remove(tokenId: string): Promise<void>;
   touchLastSeen(tokenId: string, at: number): Promise<void>;
+  /**
+   * v1.2 Phase 2 — stamp `quarantine_until` on a freshly-admitted
+   * device's row. Called by the re-pair completion handler (the
+   * new IRK's first push_token, if any, gets `now + 14*86_400_000`)
+   * and by the device-add path once that endpoint exists.
+   * Returns true iff the row exists (false on unknown tokenId).
+   * Idempotent — repeated calls with the same untilMs are no-ops.
+   */
+  setQuarantineUntil(tokenId: string, untilMs: number): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
