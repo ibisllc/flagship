@@ -741,18 +741,12 @@ function makeLiveProvisionTempVps(env) {
     // until one succeeds. If everything in the region fails, throw a
     // descriptive error listing what was attempted.
     let lastError = null;
+    const errorCounts = new Map();
     const tried = [];
     const candidates = await discoverServerTypeCandidates(env, region, size);
     for (let attemptIdx = 0; attemptIdx < candidates.length; attemptIdx++) {
       const candidate = candidates[attemptIdx];
       tried.push(candidate);
-      let partialServerId = null;
-      // Each candidate gets its OWN unique server name. Even when the
-      // previous attempt's cleanup destroy() succeeded, Hetzner's
-      // name-reservation lag (action.status='running') can make the
-      // name still appear in-use on the very next POST /servers → 409
-      // 'server name is already used'. The candidate-suffix sidesteps
-      // that entirely.
       const candidateLabel = `${label}-${candidate}-${attemptIdx}`;
       try {
         if (attemptIdx > 0) {
@@ -767,44 +761,50 @@ function makeLiveProvisionTempVps(env) {
           size: candidate,
           label: candidateLabel,
         });
-        partialServerId = instance.id;
         await provider.awaitBoot(instance.id);
         return { serverId: instance.id, ipv4: instance.ip };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        // Extract a short error class for repeat-suppression.
+        const errClass =
+          msg.match(/"code":\s*"([^"]+)"/)?.[1] ??
+          msg.match(/HTTP (\d+)/)?.[1] ??
+          msg.slice(0, 60);
+        const seen = errorCounts.get(errClass) ?? 0;
+        errorCounts.set(errClass, seen + 1);
+        // Always show the FIRST occurrence of each error class so the
+        // operator sees what's actually breaking. Suppress repeats
+        // (we just print "(same as previous)" so the log stays small).
+        if (seen === 0) {
+          process.stderr.write(
+            `[create]   ${candidate}: ${msg.slice(0, 280)}\n`,
+          );
+        }
+        // HetznerProvider.provision() now destroys-on-throw internally
+        // (post-POST/servers), so the outer loop no longer needs its
+        // own cleanup. Hetzner's primary_ip release is asynchronous
+        // though — rapid retries can still trip primary_ip_limit if
+        // a dozen IPs are mid-release. Stop early if we've already
+        // hit a quota class.
+        if (/primary_ip_limit|server_limit|resource_limit_exceeded/i.test(msg)) {
+          throw new Error(
+            `Hetzner account quota hit (${errClass}); halting retries. ` +
+              `Wait ~60s for in-flight primary-IP releases or check ` +
+              `https://console.hetzner.cloud/limits. Tried ${tried.join(", ")}.`,
+          );
+        }
         const isRetryable =
           /unsupported location for server type|server type \d+ is deprecated|no public network interfaces|resource_unavailable|error during placement|server name is already used/i.test(
             msg,
           );
-        // Always try to clean up the partially-created server on
-        // failure — otherwise each failed attempt leaks a billable
-        // VPS until the operator hand-deletes it.
-        if (partialServerId) {
-          try {
-            await provider.destroy(partialServerId);
-            process.stderr.write(
-              `[create] cleaned up failed server ${partialServerId}\n`,
-            );
-          } catch (cleanupErr) {
-            const cmsg = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
-            process.stderr.write(
-              `[create] WARNING: failed to clean up server ${partialServerId}: ${cmsg}\n` +
-                `    delete manually: curl -X DELETE -H "Authorization: Bearer $HCLOUD_TOKEN" ` +
-                `https://api.hetzner.cloud/v1/servers/${partialServerId}\n`,
-            );
-          }
-        }
         if (!isRetryable) {
-          // Non-recoverable error (auth, network, SSH issue, dd
-          // failure, etc.) — surface it immediately.
           throw e;
         }
         lastError = msg;
-        // Brief backoff before the next candidate. Hetzner's capacity
-        // hiccups + name-reservation lag both benefit from ~2s of
-        // grace; doesn't slow the happy path materially.
-        await new Promise((res) => setTimeout(res, 2_000));
-        // Continue to next candidate.
+        // Backoff: 5s by default; rapid create/destroy chews through
+        // Hetzner's async primary-IP release queue and gets us
+        // primary_ip_limit'd far short of a full sweep.
+        await new Promise((res) => setTimeout(res, 5_000));
       }
     }
     throw new Error(
