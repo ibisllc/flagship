@@ -171,6 +171,177 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-20 (v1-launch s9 cont. — ★★★ v2 device-addressing +
+  real-ticket refactor LANDED; both 2026-05-20 architectural gaps
+  RESOLVED end-to-end):** Drove S1→S2→S3.1→S3.2→S3.3→S3.4→S3.5
+  per `docs/next-session-prompt.md`. All sub-phases code-complete +
+  gate-green on `main`. Sequence + commits:
+
+  * **S1 — fix /api/users/<u>/pods 500** (`31ce5c6`). Root cause
+    deeper than the prompt's hypothesis: not a column-rename gap
+    but a 10-migration backlog never executed against prod D1
+    (`daemon_status` missing entirely from 0015; +9 other tables/
+    columns from 0006/0007/0012/0013/0014/0019/0020/0023/0026
+    also missing while 0021+ were applied — someone skipped
+    forward and left an island). Authored
+    `scripts/apply-prod-d1-backfill-2026-05-20.sql` as a single
+    auditable bundle (CREATE-IF-NOT-EXISTS + one-shot ALTERs),
+    operator-applied via `wrangler d1 execute flagship-state
+    --remote --file=...`. Post-apply: `/api/users/harry11911a/pods`
+    returns HTTP 200; daemon_status, custom_domain_orders.pod_canonical,
+    custom_domain_orders.service_id, webauthn_recovery_records.
+    fetch_token_hash + prf_salt_hash all present.
+
+  * **S2 — spec for v2 device-addressing + real-ticket
+    integration** (`8b1fb12`, `docs/v2-device-addressing-and-real-
+    ticket.md`, 761 lines). Captures: DeviceCapabilityGrant
+    envelope (modeled on ServiceGrant), RevokeDeviceCapabilityGrant,
+    two-level addressing at `/api/users/check`, deterministic demo
+    IRK derivation inside the Worker via HKDF over a Worker-only
+    `DEMO_IRK_KEK` secret (so spec readers cannot reconstruct
+    alice's IRK), D1 migration 0031, two new admin endpoints
+    (`/api/dev/sample-user/admin-claim-and-issue` +
+    `/admin-mint-device-grant`), CLI refactor (synthesizeBlob →
+    real-ticket via admin endpoint + `personalize-iso --blob-json`),
+    mobile/webapp UI surface (device-label chip + scope-gated
+    buttons), file-by-file appendix decomposing S3.1→S3.5. All 5
+    open design questions resolved with best-judgment defaults
+    inline. Owner-decision-locked: SSH-runner stays on operator
+    laptop; demos showcase the corporate device-addressing layer;
+    Phase G queued post-F.
+
+  * **S3.1 — protocol envelopes + canonical-bytes** (`49dca52`,
+    `worktree-agent-a95f783b2e35ed02c`). `packages/protocol/src/
+    auth.ts` gains `DeviceScope` enum + `DEVICE_SCOPES`,
+    `DeviceCapabilityGrant`, `RevokeDeviceCapabilityGrant`,
+    sign/verify pairs, `deviceCapabilityGrantId`, and
+    `deviceCapabilityGrantAuthorizesScope` helper. Canonical-bytes
+    tag `flagship/device-capability-grant/v1`; scope sort uses
+    `DEVICE_SCOPES` index (NOT alphabetical) for stable audit
+    vectors. 31 new tests in `deviceCapabilityGrant.test.ts`; 2
+    new canonical-bytes vectors. tsc clean; 2944→2978 (+34).
+    Honest deviation: vectors landed at the existing
+    `test-vectors/canonical-bytes.json` (repo root), not the
+    non-existent path in the spec — kept Swift/Kotlin parity.
+
+  * **S3.2 — storage schema + adapters** (`2c0c0d8`,
+    `worktree-agent-a78beef7690982ee1`). Migration
+    `0031_device_capability_grants.sql` (unique partial index on
+    `(username, device_label) WHERE revoked_at IS NULL` for the
+    re-issuance flow). InMemory + D1 adapters share contract;
+    `getActiveForUserLabel` defensively throws if >1 active row
+    (unreachable, but locks the invariant). 29 new tests; D1 path
+    exercised via an inline query-pattern-matching fake that
+    enforces the partial-active uniqueness end-to-end. 2978→3007
+    (+29).
+
+  * **S3.3 — Worker admin endpoints + capability checks**
+    (`402ba6b`, `worktree-agent-af94b65fbde7357ec`). New
+    `packages/control-plane/src/deviceCapabilityGrants.ts`
+    (`handleMintDeviceGrant`, `handleListDeviceGrants`,
+    `handleRevokeDeviceGrant`, `requireDeviceScope`) + new
+    `demoUsersAdmin.ts` (`handleAdminClaimAndIssue` +
+    `handleAdminMintDeviceGrant`). HKDF derivation pinned EXACTLY
+    to spec (`salt='flagship-demo-irk-v1'`, `info='user-irk'`,
+    etc); deterministic across restarts. `/api/users/check`
+    extended to split `<u>.<device-label>` and embed
+    `deviceCapability` block. Five new routes wired in
+    `controlPlaneRoutes.ts` (admin-claim-and-issue,
+    admin-mint-device-grant, list-grants, revoke-grant,
+    mint-grant). `DEMO_IRK_KEK` documented in `wrangler.toml`.
+    Five rate-limit buckets added. 49 new tests across 4 files.
+    3007→3056 (+49). One deferred sub-item: the daemon-side
+    `requireDeviceScope` call at install-time. The helper is
+    fully tested and ready for adoption; the daemon doesn't yet
+    talk to `device_capability_grants` storage — out of v2 scope
+    per the spec.
+
+  * **S3.4 — CLI refactor (real ticket + --blob-json)**
+    (`b1b33d7`, `worktree-agent-a1bf54af19c70b6d5`).
+    `scripts/sample-user.mjs runCreate` calls
+    `/api/dev/sample-user/admin-claim-and-issue` BEFORE
+    personalize-iso, writes the `{blob, blobSignature}` envelope
+    to a temp file, invokes `personalize-iso --blob-json` (no
+    `--seed-hex`/`--username`/`--server-name`). Live `buildIso`
+    fail-closes if the envelope is absent — no silent regress to
+    `synthesizeBlob`. New subcommand `grant-device <user> <label>
+    --scopes <comma-list>`; URL-encoded label; doesn't require
+    HCLOUD_TOKEN (pure-Worker). Cache key mixes `blobSignature`
+    prefix so re-issuance never serves stale ISOs. 12 new tests.
+    3056→3068 (+12). `docs/sample-users.md` §14 + `docs/sample-
+    user-vps-plan.md` Phase F updated to reflect the resolution.
+
+  * **S3.5 — mobile + webapp device-label UI** (`eb857e5`,
+    `worktree-agent-a816b8cef4762ff69`). iOS (`Sources/FlagshipAPI/
+    Client/FlagshipServerClient.swift` + `FlagshipCore/AppState.
+    swift` + `FlagshipCore/DemoFixtures.swift` + `FlagshipUI/
+    Screens/ChooseUsernameScreen.swift` + `FlagshipUI/Screens/
+    HomeScreen.swift` + `FlagshipUI/Shell/HomeTab.swift`): new
+    `DeviceCapabilityBlock` struct + `DeviceScope` enum + forward-
+    compat decoder; `app.deviceCapability` wired through onboarding;
+    chip rendered below username on Home; "Build a new app" /
+    "Browse the marketplace" actions disable + surface
+    "Use a primary device" subtitle when their scope is absent.
+    iOS Mock client emits the new block for `<u>.<label>` keys
+    (wire-fidelity invariant from `feedback_ios_mock_matches_
+    worker_wire.md`). Android parallel changes across 7 files
+    (FlagshipServerClient.kt, AppState.kt, DemoFixtures.kt,
+    ChooseUsernameScreen.kt, HomeScreen.kt, MarketplaceScreens.kt,
+    HomeTab.kt). Webapp `usersCheck.js` exports the
+    `applyScopeGateToButton(button, block, scope, tooltip)`
+    helper for one-line scope-gated DOM mutation. 12 new vitest
+    tests + 9 new XCTests + 9 new Robolectric tests (run twice
+    across debug/release configs → +18 in gradle's tally).
+    Repo: 3068→3080 (+12); iOS: 266→275 (+9); Android: 439→457
+    (+18).
+
+  * **Final gate snapshot** (post S3.5 merge on main `eb857e5`):
+    - `npx tsc -b` (repo root): exit 0
+    - `npx vitest run`: 3080/3080 across 257 files
+    - `apps/mobile/ios && xcodebuild -scheme FlagshipMobile-Package
+      ... test`: 275/275 (TEST SUCCEEDED)
+    - `apps/mobile/android && ./gradlew test`: BUILD SUCCESSFUL
+      (cached + fresh paths both green; 457 unit tests across
+      debug + release configs)
+    - `npx tsc -p apps/com/tsconfig.json --noEmit`: 6 pre-existing
+      errors (buildRelay × 1, pushBridge × 4, route.test × 1);
+      NO new errors introduced.
+
+  * **What's now unblocked operator-side** (for Plan A Phase F
+    live test, irreducibly human/credential-gated):
+    1. Operator paths in `~/.zshrc`: `HCLOUD_TOKEN`,
+       `FLAGSHIP_ADMIN_SECRET`. Existing.
+    2. Once-per-cluster: `wrangler secret put DEMO_IRK_KEK` with
+       `openssl rand -hex 32`. The Worker will 503 on the new
+       admin endpoints until this is set.
+    3. Once-per-cluster: `wrangler secret put HCLOUD_TOKEN` +
+       `DEMO_PUBLIC_SSH_KEY` (per `docs/next-session-prompt.md`
+       OPERATOR PREREQS).
+    4. Live run: `node scripts/sample-user.mjs create demo-alice
+       --display "Demo Alice"`. The new flow mints a real
+       `.com`-issued ticket BEFORE personalization, so the
+       daemon's first-boot `/api/server/register` will be
+       accepted — the 2026-05-20 gap is closed.
+    5. `node scripts/sample-user.mjs grant-device demo-alice
+       reviewer --scopes browse` to mint the reviewer
+       sub-identity.
+    6. iOS/webapp: type `demo-alice` for full demo; type
+       `demo-alice.reviewer` to see the chip + disabled buttons.
+
+  * **Backward-compatible.** v2 is opt-in. Existing single-IRK
+    accounts work unchanged. No migration forced. Legacy clients
+    ignore the new `deviceCapability` block.
+
+  Heap of operationally-significant facts:
+  - prod-D1 has all 30 migrations applied through 2026-05-20.
+  - 0031 (`device_capability_grants`) is NOT yet applied to prod
+    — the v2 endpoints will 500 until `wrangler d1 execute
+    flagship-state --remote --file=packages/storage/migrations/
+    0031_device_capability_grants.sql` runs.
+  - `DEMO_IRK_KEK` not yet set as Worker secret; the new admin
+    endpoints `admin-claim-and-issue` + `admin-mint-device-grant`
+    will 503 until that ships.
+
 - **2026-05-20 (v1-launch s9 cont. — Plan A live-run attempt
   EXPOSED two architectural gaps; checkpoint before refactor):**
   Drove the operator CLI (`node scripts/sample-user.mjs create
