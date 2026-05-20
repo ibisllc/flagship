@@ -57,12 +57,12 @@ describe("webapp invite views (#82)", () => {
     expect(r.body).toContain('"labelBook"');
   });
 
-  it("/views/app-detail.js wires the 'Invite people' button to the invite views", async () => {
+  it("/views/service-detail.js wires the 'Invite people' button to the invite views", async () => {
     const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/webapp/views/app-detail.js" });
+    const r = await app.inject({ method: "GET", url: "/webapp/views/service-detail.js" });
     expect(r.statusCode).toBe(200);
-    expect(r.body).toContain("ad-invite-issue");
-    expect(r.body).toContain("ad-invite-manage");
+    expect(r.body).toContain("sd-invite-issue");
+    expect(r.body).toContain("sd-invite-manage");
     expect(r.body).toContain("./invite-issue.js");
     expect(r.body).toContain("./invite-manage.js");
   });

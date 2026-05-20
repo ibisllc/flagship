@@ -7,9 +7,9 @@
 import { describe, expect, it } from "vitest";
 
 function canonicalServiceRename(username: string, serviceId: string, newDisplayLabel: string, issuedAt: number): string {
-  // Mirror of canonicalServiceRename in views/app-detail.js (which uses
+  // Mirror of canonicalServiceRename in views/service-detail.js (which uses
   // TextEncoder under the hood). Worker side: packages/protocol/src/auth.ts
-  // canonicalServiceRename in TAG_APP_RENAME.
+  // canonicalServiceRename in TAG_SERVICE_RENAME.
   return [
     "flagship/service-rename/v1",
     username,
@@ -19,7 +19,7 @@ function canonicalServiceRename(username: string, serviceId: string, newDisplayL
   ].join("|");
 }
 
-describe("V3 app-rename canonical bytes", () => {
+describe("V3 service-rename canonical bytes", () => {
   it("matches the documented field order", () => {
     const bytes = canonicalServiceRename("alice", "meta-scratchpad", "MyNotes", 1700000000000);
     expect(bytes).toBe("flagship/service-rename/v1|alice|meta-scratchpad|mynotes|1700000000000");
@@ -44,7 +44,7 @@ describe("V3 app-rename canonical bytes", () => {
   });
 });
 
-describe("V3 apps-list URL row contract", () => {
+describe("V3 services-list URL row contract", () => {
   // Pin the truth-table the urlRowHtml renderer uses so a future
   // refactor that swaps the short-URL fallback ('voi.ci/…') for
   // something else trips a named test failure.

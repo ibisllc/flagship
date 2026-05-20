@@ -35,7 +35,7 @@ follow-up; this is the design + scenario inventory.
 │ /api/*  │  │ Worker      │    │ /api/screens/*   │
 │ control │  │ via host-   │    │ /api/orders-     │
 │ plane   │  │ routing     │    │   from-user      │
-│ + D1    │  │             │    │ /api/apps        │
+│ + D1    │  │             │    │ /api/services    │
 │ (test)  │  │             │    │ /api/browser/*   │
 └─────────┘  └─────────────┘    └──────────────────┘
                    │                    ▲
@@ -79,14 +79,14 @@ exercises:
 |---|---|
 | `POST /api/orders-from-user` | Verifies PSK signature (using `verifyPhoneOrder`); records the order in an in-memory list the tests can read. |
 | `GET /api/screens/server-detail` | Returns a fixture object with FQDN, daemon version, cert info, counters. |
-| `GET /api/screens/apps-list` | Returns whatever the test seeded via the `seedApps()` helper. |
-| `GET /api/screens/app-detail/:appId` | Same. |
+| `GET /api/screens/apps-list` | Returns whatever the test seeded via the `seedApps()` helper. (BFF endpoint name kept stable from the rename — see `packages/server-daemon/src/screens/screensHttp.ts`.) |
+| `GET /api/screens/app-detail/:serviceId` | Same. |
 | `GET /api/screens/marketplace-browse` | Returns a fixture marketplace (proxied to .com in production, faked here). |
 | `GET /api/screens/unlock-approvals/pending` | Returns whatever the test seeded — used to test that a pending request renders + the Approve button fires the right POST. |
 | `WS /api/screens/vibe-code/stream/:sessionId` | Streams pre-canned LLM tokens + a manifest snapshot. |
 | `GET /api/screens/paired-sessions/list` | Returns the orders we recorded. |
 | `GET /api/screens/tier-status` | Static fixture. |
-| `POST /api/apps` | IRK-verified install — records the install. |
+| `POST /api/services` | IRK-verified install — records the install. |
 
 What the pod-sim does NOT do:
 - Real LUKS unsealing (the test seeds a known sealed blob into a fake
@@ -130,11 +130,11 @@ block. All scenarios start from a clean Playwright `BrowserContext`
 1. From home, open Marketplace.
 2. **Assert** the apex's seeded marketplace listing is rendered.
 3. Click Install on the listing.
-4. **Assert** pod-sim received `POST /api/apps` with an IRK-signed
-   `install-app/v1` envelope.
-5. Open Apps list; **assert** the new app appears.
+4. **Assert** pod-sim received `POST /api/services` with an IRK-signed
+   `install-service/v1` envelope.
+5. Open Services list; **assert** the new service appears.
 
-### S4 — Vibe-code an app
+### S4 — Vibe-code a service
 1. Open Vibe-code dialog.
 2. Type a prompt, click Start.
 3. **Assert** WS connects to `/api/screens/vibe-code/stream/<sessionId>`,

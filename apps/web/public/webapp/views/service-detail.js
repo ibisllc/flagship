@@ -1,6 +1,6 @@
-// P2.3 — app-detail view. Calls /api/screens/app-detail/:serviceId (P1.3).
-// Includes a "backup this app" button that calls P1.19, and (when the
-// app declares a browser bundle) a "Open browser viewer" button that
+// P2.3 — service-detail view. Calls /api/screens/app-detail/:serviceId (P1.3).
+// Includes a "backup this service" button that calls P1.19, and (when the
+// service declares a browser bundle) a "Open browser viewer" button that
 // drives the user into views/browser-viewer.js with serviceId pre-set.
 
 import { $, registerView, show } from "../lib/router.js";
@@ -13,13 +13,13 @@ import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 const COM_BASE = "https://flagshipserver.com";
 
-/** V3 — cached app-links per serviceId for the current render. Carries
+/** V3 — cached service-links per serviceId for the current render. Carries
  *  `customDomain` + `customDomainConfirmed` from .com's /links. */
-let currentAppLinks = null;
+let currentServiceLinks = null;
 
-registerView("view-app-detail");
+registerView("view-service-detail");
 
-let currentAppId = null;
+let currentServiceId = null;
 
 /** Custom-domain change rate limit, mirrored on-device (the .com
  *  last_changed column is the real backstop — this is just the UX
@@ -41,37 +41,37 @@ function hasBrowserBundle(body) {
   return !!(m && typeof m === "object" && (m.browser || m.browserBundle));
 }
 
-export async function renderAppDetail(serviceId) {
-  currentAppId = serviceId;
-  const root = $("app-detail-content");
+export async function renderServiceDetail(serviceId) {
+  currentServiceId = serviceId;
+  const root = $("service-detail-content");
   root.innerHTML = skeletonCards(3);
   try {
     const body = await screensFetch(
       `/api/screens/app-detail/${encodeURIComponent(serviceId)}`,
     );
-    const a = body.app;
-    // V3 — fetch the per-app URL identity from .com in parallel with
+    const s = body.app;
+    // V3 — fetch the per-service URL identity from .com in parallel with
     // the daemon's detail. Tolerated as null if .com is unreachable;
     // the WEB DOMAINS section falls back to the daemon-provided
     // urlLabel in that case.
     const session = getSession();
-    currentAppLinks = session.username
-      ? await fetchAppLinks(session.username, serviceId).catch(() => null)
+    currentServiceLinks = session.username
+      ? await fetchServiceLinks(session.username, serviceId).catch(() => null)
       : null;
     root.innerHTML = `
       <div class="card">
-        <div class="card-title">${escapeHtml(a.slug)}</div>
+        <div class="card-title">${escapeHtml(s.slug)}</div>
         <div class="muted-sm text-xs mt-1">${
-          a.version ? `ver: ${escapeHtml(a.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : ""
-        }id: ${escapeHtml(a.serviceId)}</div>
-        <div class="muted-sm mt-2 truncate">${escapeHtml(a.summary || "")}</div>
+          s.version ? `ver: ${escapeHtml(s.version)}&nbsp;&nbsp;·&nbsp;&nbsp;` : ""
+        }id: ${escapeHtml(s.serviceId)}</div>
+        <div class="muted-sm mt-2 truncate">${escapeHtml(s.summary || "")}</div>
         <div class="row mt-2">
-          <span class="label">creator</span><span class="value">${escapeHtml(a.creator)}</span>
+          <span class="label">creator</span><span class="value">${escapeHtml(s.creator)}</span>
         </div>
       </div>
 
-      ${renderWebDomainsSection(a, currentAppLinks)}
-      <div id="ad-custom-domains">${renderCustomDomainsSection()}</div>
+      ${renderWebDomainsSection(s, currentServiceLinks)}
+      <div id="sd-custom-domains">${renderCustomDomainsSection()}</div>
       <h2 class="mt-4">Manifest</h2>
       <div class="card">
         <pre class="json-block">${escapeHtml(JSON.stringify(body.manifest, null, 2))}</pre>
@@ -101,11 +101,11 @@ export async function renderAppDetail(serviceId) {
         <h2 class="mt-4">Browser bundle</h2>
         <div class="card">
           <p class="note">
-            This app ships a Chromium tab the daemon runs on your pod. Open
+            This service ships a Chromium tab the daemon runs on your pod. Open
             the viewer to drive a sign-in or paste-a-cookie flow against it
             from your webapp — frames stream over the paired-session WS.
           </p>
-          <button id="ad-open-browser" class="full-width">Open browser viewer</button>
+          <button id="sd-open-browser" class="full-width">Open browser viewer</button>
         </div>
       ` : ""}
       <h2 class="mt-4">Invites</h2>
@@ -116,39 +116,39 @@ export async function renderAppDetail(serviceId) {
           daemon and flagshipserver.com never see them.
         </p>
         <div class="row-2 mt-2">
-          <button id="ad-invite-issue" class="secondary">Invite people</button>
-          <button id="ad-invite-manage" class="secondary">Manage invites</button>
+          <button id="sd-invite-issue" class="secondary">Invite people</button>
+          <button id="sd-invite-manage" class="secondary">Manage invites</button>
         </div>
       </div>
       <h2 class="mt-4">Backup</h2>
       <div class="card">
         <p class="note">
-          Phone-driven backup of this app's source + (optionally) user data.
+          Phone-driven backup of this service's source + (optionally) user data.
           Bytes flow daemon → this device only — flagshipserver.com is never
           in the path.
         </p>
         <label class="inline-check">
-          <input type="checkbox" id="ad-include-data" /> Include user data
+          <input type="checkbox" id="sd-include-data" /> Include user data
         </label>
-        <input type="password" id="ad-password" placeholder="Optional password (encrypts archive)" autocomplete="off" class="mt-2" />
-        <button id="ad-backup-go" class="full-width mt-2">Create backup</button>
-        <div id="ad-backup-status" class="mt-2 text-sm"></div>
+        <input type="password" id="sd-password" placeholder="Optional password (encrypts archive)" autocomplete="off" class="mt-2" />
+        <button id="sd-backup-go" class="full-width mt-2">Create backup</button>
+        <div id="sd-backup-status" class="mt-2 text-sm"></div>
       </div>
     `;
 
-    $("ad-backup-go")?.addEventListener("click", () => triggerBackup(a.serviceId));
-    $("ad-open-browser")?.addEventListener("click", () => {
-      enterBrowserViewer(a.serviceId).catch((e) => toast(String(e), "err"));
+    $("sd-backup-go")?.addEventListener("click", () => triggerBackup(s.serviceId));
+    $("sd-open-browser")?.addEventListener("click", () => {
+      enterBrowserViewer(s.serviceId).catch((e) => toast(String(e), "err"));
     });
-    $("ad-invite-issue")?.addEventListener("click", async () => {
+    $("sd-invite-issue")?.addEventListener("click", async () => {
       const { enterInviteIssue } = await import("./invite-issue.js");
-      await enterInviteIssue(a);
+      await enterInviteIssue(s);
     });
-    $("ad-invite-manage")?.addEventListener("click", async () => {
+    $("sd-invite-manage")?.addEventListener("click", async () => {
       const { enterInviteManage } = await import("./invite-manage.js");
-      await enterInviteManage(a);
+      await enterInviteManage(s);
     });
-    bindWebDomainsHandlers(a);
+    bindWebDomainsHandlers(s);
     bindCustomDomainsHandlers();
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -160,9 +160,9 @@ export async function renderAppDetail(serviceId) {
 }
 
 async function triggerBackup(serviceId) {
-  const status = $("ad-backup-status");
-  const password = $("ad-password").value;
-  const includeUserData = $("ad-include-data").checked;
+  const status = $("sd-backup-status");
+  const password = $("sd-password").value;
+  const includeUserData = $("sd-include-data").checked;
   status.textContent = "creating backup…";
   try {
     const body = await screensFetch("/api/screens/app-backup/start", {
@@ -187,29 +187,29 @@ async function triggerBackup(serviceId) {
   }
 }
 
-export function initAppDetailView() {
-  $("app-detail-back")?.addEventListener("click", async () => {
-    const { enterAppsList } = await import("./apps-list.js");
-    await enterAppsList();
+export function initServiceDetailView() {
+  $("service-detail-back")?.addEventListener("click", async () => {
+    const { enterServicesList } = await import("./services-list.js");
+    await enterServicesList();
   });
-  $("app-detail-refresh")?.addEventListener("click", () => {
-    if (currentAppId) renderAppDetail(currentAppId).catch((e) => toast(String(e), "err"));
+  $("service-detail-refresh")?.addEventListener("click", () => {
+    if (currentServiceId) renderServiceDetail(currentServiceId).catch((e) => toast(String(e), "err"));
   });
 }
 
-export async function enterAppDetail(serviceId) {
-  show("view-app-detail");
-  await renderAppDetail(serviceId);
+export async function enterServiceDetail(serviceId) {
+  show("view-service-detail");
+  await renderServiceDetail(serviceId);
 }
 
 // ---------------------------------------------------------------
 // V3 — WEB DOMAINS section + Replace ceremony
 // ---------------------------------------------------------------
 
-/** Fetch the per-app links bundle from .com — { canonical, short,
+/** Fetch the per-service links bundle from .com — { canonical, short,
  *  instances }. Falls back to the daemon's urlLabel if .com is
  *  unreachable so the section still renders. */
-async function fetchAppLinks(username, serviceId) {
+async function fetchServiceLinks(username, serviceId) {
   const r = await fetch(
     `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(serviceId)}/links`,
     { cache: "no-store" },
@@ -220,7 +220,7 @@ async function fetchAppLinks(username, serviceId) {
 
 /** Three-group layout: SHORT (top, bold) → CANONICAL → INSTANCES.
  *  Header carries a Replace button that fires the rename ceremony. */
-function renderWebDomainsSection(app, links) {
+function renderWebDomainsSection(service, links) {
   const stripScheme = (s) => s.replace(/^https?:\/\//, "");
   // Show the bare host (no scheme), HTML-escaped, with a zero-width
   // space after each dot so a long FQDN wraps between segments rather
@@ -228,7 +228,7 @@ function renderWebDomainsSection(app, links) {
   // visible text carries the ZWSP. Mirrors iOS/Android wrapAtDots.
   const displayUrl = (s) =>
     escapeHtml(stripScheme(s)).replace(/\./g, ".&#8203;");
-  const fallbackCanonical = `https://${app.urlLabel}.${getSession().username || "you"}.flagship.services`;
+  const fallbackCanonical = `https://${service.urlLabel}.${getSession().username || "you"}.flagship.services`;
   const shortUrl = links?.shortUrl ?? null;
   const canonical = links?.canonicalUrl ?? fallbackCanonical;
   const instances = links?.instances ?? [];
@@ -256,9 +256,9 @@ function renderWebDomainsSection(app, links) {
 
   // CUSTOM DOMAIN sits at the very top of the card, only when one is
   // bound. It's the user's own name — show it first. Surfaced as soon
-  // as the order is recorded (even pending); the apps-list short→
+  // as the order is recorded (even pending); the services-list short→
   // custom swap is what waits for .com to confirm. Mirrors iOS
-  // AppDetailScreen.customDomainGroup.
+  // ServiceDetailScreen.customDomainGroup.
   const cd = links?.customDomain ?? null;
   const customDomainBlock = !cd ? "" : `
       <div class="label-tiny">CUSTOM DOMAIN</div>
@@ -283,7 +283,7 @@ function renderWebDomainsSection(app, links) {
   return `
     <div class="row mt-4" style="align-items:baseline;">
       <h2 style="margin:0;">Web domains</h2>
-      <button class="danger small" id="ad-replace-stem">Replace</button>
+      <button class="danger small" id="sd-replace-stem">Replace</button>
     </div>
     <div class="card">
       ${customDomainBlock}
@@ -299,7 +299,7 @@ function renderWebDomainsSection(app, links) {
 }
 
 /** Wire copy buttons + the Replace flow. */
-function bindWebDomainsHandlers(app) {
+function bindWebDomainsHandlers(service) {
   document.querySelectorAll("[data-copy]").forEach((btn) => {
     btn.addEventListener("click", async (ev) => {
       const url = ev.currentTarget.getAttribute("data-copy");
@@ -311,7 +311,7 @@ function bindWebDomainsHandlers(app) {
       }
     });
   });
-  $("ad-replace-stem")?.addEventListener("click", () => openReplaceModal(app));
+  $("sd-replace-stem")?.addEventListener("click", () => openReplaceModal(service));
 }
 
 // ---------------------------------------------------------------
@@ -321,8 +321,8 @@ function bindWebDomainsHandlers(app) {
 // verifies the CNAME out-of-band and pushes the outcome. Non-200 is
 // the ONLY synchronous denial (the 300s rate limit / busy). No
 // phone-side CNAME check, no pending UI; the bound domain shows in
-// the CUSTOM DOMAIN group on 200, the apps-list swap waits for the
-// confirm. Mirrors AppDetailViewModel.submitCustomDomain exactly.
+// the CUSTOM DOMAIN group on 200, the services-list swap waits for the
+// confirm. Mirrors ServiceDetailViewModel.submitCustomDomain exactly.
 // ---------------------------------------------------------------
 
 const COOLDOWN_KEY_PREFIX = "flagship.customDomain.lastChanged.";
@@ -331,12 +331,12 @@ function cdCooldownKey(serviceId) {
   return `${COOLDOWN_KEY_PREFIX}${serviceId}`;
 }
 
-/** Remaining cooldown ms for the current app (0 = none). Rebuilt from
+/** Remaining cooldown ms for the current service (0 = none). Rebuilt from
  *  the on-device timestamp so it survives a reload — the server 429
  *  is the real backstop if local state is lost. */
 function cdCooldownRemainingMs() {
   try {
-    const ts = Number(localStorage.getItem(cdCooldownKey(currentAppId)));
+    const ts = Number(localStorage.getItem(cdCooldownKey(currentServiceId)));
     if (!ts) return 0;
     return Math.max(0, ts + CUSTOM_DOMAIN_COOLDOWN_MS - Date.now());
   } catch {
@@ -346,7 +346,7 @@ function cdCooldownRemainingMs() {
 
 function recordCustomDomainChangeLocally() {
   try {
-    localStorage.setItem(cdCooldownKey(currentAppId), String(Date.now()));
+    localStorage.setItem(cdCooldownKey(currentServiceId), String(Date.now()));
   } catch {
     /* private mode / disabled storage — the server 429 still backstops */
   }
@@ -373,11 +373,11 @@ function renderCustomDomainsSection() {
     <div class="card">
       <div class="row" style="align-items:baseline;">
         <div class="label-tiny" style="flex:1;">SET CUSTOM DOMAIN</div>
-        <div class="label-tiny mono" id="ad-cd-cooldown" ${cooling ? "" : "hidden"}>${cooling ? cooldownLabel(remaining) : ""}</div>
+        <div class="label-tiny mono" id="sd-cd-cooldown" ${cooling ? "" : "hidden"}>${cooling ? cooldownLabel(remaining) : ""}</div>
       </div>
       <div class="row mt-2">
-        <input id="ad-cd-input" placeholder="www.mydomain.com" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" style="flex:1;" />
-        <button class="secondary" id="ad-cd-add" ${cooling ? "disabled" : ""}>Add</button>
+        <input id="sd-cd-input" placeholder="www.mydomain.com" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" style="flex:1;" />
+        <button class="secondary" id="sd-cd-add" ${cooling ? "disabled" : ""}>Add</button>
       </div>
       <div class="muted-sm text-xs mt-2">
         Prior to claiming a FQDN, you must set a CNAME record targeting
@@ -388,7 +388,7 @@ function renderCustomDomainsSection() {
 }
 
 function rerenderCustomDomains() {
-  const el = $("ad-custom-domains");
+  const el = $("sd-custom-domains");
   if (!el) return;
   el.innerHTML = renderCustomDomainsSection();
   bindCustomDomainsHandlers();
@@ -399,8 +399,8 @@ function rerenderCustomDomains() {
 function startCooldownTicker() {
   if (cdCooldownTicker) clearInterval(cdCooldownTicker);
   cdCooldownTicker = setInterval(() => {
-    const label = $("ad-cd-cooldown");
-    const addBtn = $("ad-cd-add");
+    const label = $("sd-cd-cooldown");
+    const addBtn = $("sd-cd-add");
     if (!label || !addBtn) {
       clearInterval(cdCooldownTicker);
       cdCooldownTicker = null;
@@ -421,18 +421,18 @@ function startCooldownTicker() {
 }
 
 function bindCustomDomainsHandlers() {
-  $("ad-cd-add")?.addEventListener("click", () => {
+  $("sd-cd-add")?.addEventListener("click", () => {
     submitCustomDomain().catch((e) => toast(String(e?.message ?? e), "err"));
   });
   if (cdCooldownRemainingMs() > 0) startCooldownTicker();
 }
 
 /** Validate the draft and either raise an explanatory prompt or issue
- *  the binding request. Mirrors AppDetailViewModel.submitCustomDomain:
+ *  the binding request. Mirrors ServiceDetailViewModel.submitCustomDomain:
  *  normalize → cooldown gate → apex→www → destructive-replace confirm
  *  → decoupled request. */
 async function submitCustomDomain() {
-  const input = $("ad-cd-input");
+  const input = $("sd-cd-input");
   const fqdn = (input?.value || "")
     .trim()
     .toLowerCase()
@@ -468,7 +468,7 @@ async function submitCustomDomain() {
   // destructive + irreversible: this device drops its memory of the
   // old domain immediately, even if the new one never confirms
   // (there's no "forget a domain" affordance otherwise).
-  const existing = currentAppLinks?.customDomain ?? null;
+  const existing = currentServiceLinks?.customDomain ?? null;
   if (existing && existing !== fqdn) {
     const ok = await inlineConfirm({
       title: "Replace custom domain?",
@@ -492,7 +492,7 @@ async function bindCustomDomain(fqdn) {
   }
   const issuedAt = Date.now();
   const canonical = canonicalSetCustomDomain(
-    session.username, currentAppId, fqdn, issuedAt,
+    session.username, currentServiceId, fqdn, issuedAt,
   );
   let sig;
   try {
@@ -503,14 +503,14 @@ async function bindCustomDomain(fqdn) {
   }
   try {
     const r = await fetch(
-      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(currentAppId)}/custom-domain`,
+      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(currentServiceId)}/custom-domain`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           request: {
             username: session.username,
-            serviceId: currentAppId,
+            serviceId: currentServiceId,
             fqdn,
             issuedAt,
           },
@@ -536,9 +536,9 @@ async function bindCustomDomain(fqdn) {
     // 200 = recorded (NOT yet confirmed). Start the cooldown + re-
     // render: /links now returns the pending domain so the CUSTOM
     // DOMAIN group surfaces it optimistically. No pending UI by
-    // design; the apps-list swap waits for the async confirm.
+    // design; the services-list swap waits for the async confirm.
     recordCustomDomainChangeLocally();
-    if (currentAppId) await renderAppDetail(currentAppId);
+    if (currentServiceId) await renderServiceDetail(currentServiceId);
   } catch (e) {
     toast(`Couldn't request custom domain: ${e.message ?? e}`, "err");
   }
@@ -562,9 +562,9 @@ function canonicalSetCustomDomain(username, serviceId, fqdn, issuedAt) {
 
 /** Modal-style scare sheet for the Replace ceremony. Inline (no
  *  external modal lib) so this view stays self-contained. */
-async function openReplaceModal(app) {
+async function openReplaceModal(service) {
   const { inlineConfirm } = await import("../lib/modal.js");
-  const currentLabel = currentAppLinks?.displayLabel ?? app.urlLabel ?? "";
+  const currentLabel = currentServiceLinks?.displayLabel ?? service.urlLabel ?? "";
   const draft = window.prompt(
     "Replace access URLs.\n\n" +
       `This will update all the links to this service, replacing "${currentLabel}" ` +
@@ -576,7 +576,7 @@ async function openReplaceModal(app) {
   if (draft === null) return; // cancelled
   const trimmed = (draft || "").trim().toLowerCase();
   if (trimmed === "" || trimmed === currentLabel) return;
-  // Mirrors the Worker's DNS_LABEL_RE in appRename.ts.
+  // Mirrors the Worker's DNS_LABEL_RE in serviceRename.ts.
   if (!/^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/.test(trimmed)) {
     toast("Stem must be a DNS label: lowercase, [a-z0-9-], 1–40 chars, no leading/trailing hyphen.", "err");
     return;
@@ -592,12 +592,12 @@ async function openReplaceModal(app) {
     danger: true,
   });
   if (!ok) return;
-  await runRename(app, trimmed);
+  await runRename(service, trimmed);
 }
 
 /** Sign the canonical bytes with the user's IRK, POST to .com, swap
  *  the surfaced URLs in place on success. */
-async function runRename(app, newLabel) {
+async function runRename(service, newLabel) {
   const session = getSession();
   if (!session.username || !session.umk) {
     toast("Sign in first.", "err");
@@ -605,7 +605,7 @@ async function runRename(app, newLabel) {
   }
   toast("Renaming…");
   const issuedAt = Date.now();
-  const canonical = canonicalServiceRename(session.username, app.serviceId, newLabel, issuedAt);
+  const canonical = canonicalServiceRename(session.username, service.serviceId, newLabel, issuedAt);
   let sig;
   try {
     sig = await signWithIrk(session.umk, canonical);
@@ -615,14 +615,14 @@ async function runRename(app, newLabel) {
   }
   try {
     const r = await fetch(
-      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(app.serviceId)}/rename`,
+      `${COM_BASE}/api/users/${encodeURIComponent(session.username)}/apps/${encodeURIComponent(service.serviceId)}/rename`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           request: {
             username: session.username,
-            serviceId: app.serviceId,
+            serviceId: service.serviceId,
             newDisplayLabel: newLabel,
             issuedAt,
           },
@@ -633,7 +633,7 @@ async function runRename(app, newLabel) {
     if (!r.ok) {
       const text = await r.text();
       if (r.status === 409) {
-        toast("Another app already uses that name.", "err");
+        toast("Another service already uses that name.", "err");
       } else if (r.status === 400) {
         toast("That name isn't valid (lowercase letters, digits, hyphens; 1–40 chars).", "err");
       } else {
@@ -642,17 +642,17 @@ async function runRename(app, newLabel) {
       return;
     }
     const body = await r.json();
-    currentAppLinks = {
-      serviceId: app.serviceId,
+    currentServiceLinks = {
+      serviceId: service.serviceId,
       displayLabel: body.displayLabel,
       canonicalUrl: body.canonicalUrl,
-      instances: currentAppLinks?.instances ?? [],
+      instances: currentServiceLinks?.instances ?? [],
       shortUrl: body.shortUrl,
     };
     toast(`Renamed to ${body.displayLabel}. New short link minted.`);
     // Re-render the section in place.
-    if (currentAppId === app.serviceId) {
-      await renderAppDetail(app.serviceId);
+    if (currentServiceId === service.serviceId) {
+      await renderServiceDetail(service.serviceId);
     }
   } catch (e) {
     toast(`Couldn't rename: ${e.message ?? e}`, "err");

@@ -173,33 +173,33 @@
         </div>
       </section>
 
-      <!-- View 8: Apps list (P2.2) — also acts as the "Apps" tab landing. -->
-      <section id="view-apps-list" class="hidden" data-tab="apps">
+      <!-- View 8: Services list (P2.2) — also acts as the "Services" tab landing. -->
+      <section id="view-services-list" class="hidden" data-tab="apps">
         <h2>Installed</h2>
-        <div id="apps-list-content"></div>
+        <div id="services-list-content"></div>
         <div class="card mt-3">
           <p class="note">
-            Browse the marketplace, vibe-code a new app, or share-install one
+            Browse the marketplace, vibe-code a new service, or share-install one
             from a creator.
           </p>
           <div class="row-2">
-            <button class="secondary" id="apps-list-open-marketplace">Marketplace</button>
-            <button class="secondary" id="apps-list-open-vibe-code">Vibe-code</button>
+            <button class="secondary" id="services-list-open-marketplace">Marketplace</button>
+            <button class="secondary" id="services-list-open-vibe-code">Vibe-code</button>
           </div>
         </div>
         <div class="row-2">
-          <button class="secondary" id="apps-list-refresh">Refresh</button>
-          <button class="secondary" id="apps-list-back">← Back</button>
+          <button class="secondary" id="services-list-refresh">Refresh</button>
+          <button class="secondary" id="services-list-back">← Back</button>
         </div>
       </section>
 
-      <!-- View 9: App detail (P2.3) -->
-      <section id="view-app-detail" class="hidden">
-        <h2>App</h2>
-        <div id="app-detail-content"></div>
+      <!-- View 9: Service detail (P2.3) -->
+      <section id="view-service-detail" class="hidden">
+        <h2>Service</h2>
+        <div id="service-detail-content"></div>
         <div class="row-2">
-          <button class="secondary" id="app-detail-refresh">Refresh</button>
-          <button class="secondary" id="app-detail-back">← Back</button>
+          <button class="secondary" id="service-detail-refresh">Refresh</button>
+          <button class="secondary" id="service-detail-back">← Back</button>
         </div>
       </section>
 
@@ -254,10 +254,10 @@
 
       <!-- View 13: Vibe-code dialog (P2.5) -->
       <section id="view-vibe-code" class="hidden">
-        <h2>Vibe-code an app</h2>
+        <h2>Vibe-code a service</h2>
         <div class="card">
           <p class="note">
-            Describe an app. The LLM emits a manifest + Dockerfile + source; the daemon commits to your Forgejo, builds the container, and deploys.
+            Describe a service. The LLM emits a manifest + Dockerfile + source; the daemon commits to your Forgejo, builds the container, and deploys.
           </p>
           <textarea id="vc-prompt" rows="4" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible, JSON-persisted."></textarea>
           <button id="vc-start" class="full-width mt-2">Start</button>
@@ -273,7 +273,7 @@
         </div>
         <div id="vc-deploy-box" class="card hidden mt-2">
           <p class="note">
-            Session ready to deploy. Tapping deploy runs docker build + AppPlatform.install on your pod.
+            Session ready to deploy. Tapping deploy runs docker build + ServicePlatform.install on your pod.
           </p>
           <button id="vc-deploy-go" class="full-width">Deploy</button>
         </div>
@@ -315,7 +315,7 @@
       <section id="view-browser-viewer" class="hidden">
         <h2>Browser viewer</h2>
         <div class="card">
-          <div class="row"><span class="label">app</span><span class="value" id="bv-app-id">…</span></div>
+          <div class="row"><span class="label">service</span><span class="value" id="bv-app-id">…</span></div>
           <div class="row"><span class="label">stream</span><span class="value" id="bv-stream-status">no tab selected</span></div>
         </div>
         <h3 class="mt-4">Tabs</h3>
@@ -431,7 +431,7 @@
         <h2>Reattach progress</h2>
         <div class="card warning">
           <p class="note">
-            After a recovery rebinds your identity, the daemon walks every installed app and rewrites membership rows from the OLD IRK to the NEW one. The OLD pubkey is then wiped from app data; a 7-day encrypted journal lets you undo the rewrite if needed.
+            After a recovery rebinds your identity, the daemon walks every installed service and rewrites membership rows from the OLD IRK to the NEW one. The OLD pubkey is then wiped from service data; a 7-day encrypted journal lets you undo the rewrite if needed.
           </p>
         </div>
         <div id="post-recovery-content"></div>
@@ -473,7 +473,7 @@
         </div>
         <div class="card mt-2">
           <p class="note">
-            <strong>After recovery (J.4):</strong> if you've recently rebooted your identity, the daemon walks every installed app and rewrites memberships from the OLD IRK to the NEW one. Watch progress + see the 7-day undo window.
+            <strong>After recovery (J.4):</strong> if you've recently rebooted your identity, the daemon walks every installed service and rewrites memberships from the OLD IRK to the NEW one. Watch progress + see the 7-day undo window.
           </p>
           <button class="secondary full-width mt-2" id="recovery-open-reattach">Open reattach progress</button>
         </div>
@@ -592,9 +592,9 @@
         <span class="icon" data-tab-icon="home"></span>
         <span class="tab-bar-label">Home</span>
       </button>
-      <button class="tab-bar-btn" data-tab-target="apps" role="tab" aria-label="Apps">
+      <button class="tab-bar-btn" data-tab-target="apps" role="tab" aria-label="Services">
         <span class="icon" data-tab-icon="apps"></span>
-        <span class="tab-bar-label">Apps</span>
+        <span class="tab-bar-label">Services</span>
       </button>
       <button class="tab-bar-btn" data-tab-target="activity" role="tab" aria-label="Activity">
         <span class="icon" data-tab-icon="activity"></span>

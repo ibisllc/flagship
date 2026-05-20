@@ -26,7 +26,7 @@
 //         app.js, style.css, manifest + icon, router/state/api libs)
 //         rejects install. A single missing view module no longer
 //         bricks every webapp install on the planet.
-const SHELL_VERSION = "v12";
+const SHELL_VERSION = "v13";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -69,8 +69,8 @@ const OPTIONAL_SHELL = [
   "/views/settings.js",
   "/views/pod-pair.js",
   "/views/server-detail.js",
-  "/views/apps-list.js",
-  "/views/app-detail.js",
+  "/views/services-list.js",
+  "/views/service-detail.js",
   "/views/paired-sessions.js",
   "/views/tier-status.js",
   "/views/marketplace.js",

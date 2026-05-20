@@ -1,5 +1,5 @@
-// P2.2 — apps-list view. Calls /api/screens/apps-list (P1.2).
-// V3 — surfaces the per-app voi.ci short link + canonical alongside
+// P2.2 — services-list view. Calls /api/screens/apps-list (P1.2).
+// V3 — surfaces the per-service voi.ci short link + canonical alongside
 // the daemon's slug/summary/status. Each row fans out to
 // /api/users/:u/apps/:serviceId/links on .com after the initial list
 // renders, then patches the URL slot in place — keeps the first
@@ -13,7 +13,7 @@ import { escapeHtml, skeletonCards } from "../lib/util.js";
 
 const COM_BASE = "https://flagshipserver.com";
 
-registerView("view-apps-list");
+registerView("view-services-list");
 
 function stripScheme(s) {
   return s.replace(/^https?:\/\//, "");
@@ -23,11 +23,11 @@ function stripScheme(s) {
  *  control; canonical BELOW it, full-width, single-line truncate.
  *  Placeholder shape stays vertically stable when links haven't
  *  loaded yet so the list doesn't jump as fetches resolve. */
-function urlRowHtml(app, links) {
-  const canonical = links?.canonicalUrl ?? app.url;
+function urlRowHtml(service, links) {
+  const canonical = links?.canonicalUrl ?? service.url;
   // A bound custom domain takes the short link's slot ONLY once .com
   // has confirmed it (order flipped active) — that swap is the subtle
-  // "it's live" cue. Mirrors iOS AppsTab.urlRow + the app-detail view.
+  // "it's live" cue. Mirrors iOS ServicesTab.urlRow + the service-detail view.
   const confirmedCustom =
     links?.customDomainConfirmed === true && links?.customDomain
       ? `https://${links.customDomain}`
@@ -49,34 +49,34 @@ function urlRowHtml(app, links) {
   `;
 }
 
-export async function renderAppsList() {
-  const root = $("apps-list-content");
+export async function renderServicesList() {
+  const root = $("services-list-content");
   root.innerHTML = skeletonCards(3);
   try {
     const body = await screensFetch("/api/screens/apps-list");
     if (!body.apps?.length) {
-      root.innerHTML = '<div class="card placeholder">no apps installed yet</div>';
+      root.innerHTML = '<div class="card placeholder">no services installed yet</div>';
       return;
     }
-    root.innerHTML = body.apps.map((a) => `
-      <div class="card" data-app-id="${escapeHtml(a.serviceId)}">
+    root.innerHTML = body.apps.map((s) => `
+      <div class="card" data-service-id="${escapeHtml(s.serviceId)}">
         <div class="row row-top">
           <div style="flex:1; min-width:0;">
-            <div class="weight-600">${escapeHtml(a.slug)} <span class="pill">${escapeHtml(a.version || "")}</span></div>
-            <div class="muted-sm truncate">${escapeHtml(a.summary || "")}</div>
+            <div class="weight-600">${escapeHtml(s.slug)} <span class="pill">${escapeHtml(s.version || "")}</span></div>
+            <div class="muted-sm truncate">${escapeHtml(s.summary || "")}</div>
             <div class="row mt-1" style="gap:6px; flex-wrap:wrap;">
-              <span class="pill ${a.status === "running" ? "ok" : ""}">${escapeHtml(a.status || "")}</span>
+              <span class="pill ${s.status === "running" ? "ok" : ""}">${escapeHtml(s.status || "")}</span>
             </div>
-            <div data-url-slot="${escapeHtml(a.serviceId)}">${urlRowHtml(a, null)}</div>
+            <div data-url-slot="${escapeHtml(s.serviceId)}">${urlRowHtml(s, null)}</div>
           </div>
-          <button class="secondary" data-action="open" data-id="${escapeHtml(a.serviceId)}">open</button>
+          <button class="secondary" data-action="open" data-id="${escapeHtml(s.serviceId)}">open</button>
         </div>
       </div>
     `).join("");
-    bindAppsListHandlers();
-    // Fan out the per-app /links fetch in the background — patches
+    bindServicesListHandlers();
+    // Fan out the per-service /links fetch in the background — patches
     // each row's URL slot as the response lands.
-    void hydrateAppLinks(body.apps);
+    void hydrateServiceLinks(body.apps);
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;
@@ -86,11 +86,11 @@ export async function renderAppsList() {
   }
 }
 
-function bindAppsListHandlers() {
+function bindServicesListHandlers() {
   document.querySelectorAll('[data-action="open"]').forEach((b) => {
     b.addEventListener("click", async () => {
-      const { enterAppDetail } = await import("./app-detail.js");
-      await enterAppDetail(b.getAttribute("data-id"));
+      const { enterServiceDetail } = await import("./service-detail.js");
+      await enterServiceDetail(b.getAttribute("data-id"));
     });
   });
   document.querySelectorAll("[data-copy]").forEach((btn) => {
@@ -106,20 +106,20 @@ function bindAppsListHandlers() {
   });
 }
 
-async function hydrateAppLinks(apps) {
+async function hydrateServiceLinks(services) {
   const username = getSession().username;
   if (!username) return;
-  await Promise.all(apps.map(async (a) => {
+  await Promise.all(services.map(async (s) => {
     try {
       const r = await fetch(
-        `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(a.serviceId)}/links`,
+        `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(s.serviceId)}/links`,
         { cache: "no-store" },
       );
       if (!r.ok) return;
       const links = await r.json();
-      const slot = document.querySelector(`[data-url-slot="${cssEscape(a.serviceId)}"]`);
+      const slot = document.querySelector(`[data-url-slot="${cssEscape(s.serviceId)}"]`);
       if (slot) {
-        slot.innerHTML = urlRowHtml(a, links);
+        slot.innerHTML = urlRowHtml(s, links);
         // Re-bind copy buttons inside this slot.
         slot.querySelectorAll("[data-copy]").forEach((btn) => {
           btn.addEventListener("click", async (ev) => {
@@ -134,26 +134,26 @@ async function hydrateAppLinks(apps) {
         });
       }
     } catch {
-      // Per-app failure tolerated — leave the placeholder + canonical
+      // Per-service failure tolerated — leave the placeholder + canonical
       // fallback in place rather than nuking the row.
     }
   }));
 }
 
 /** CSS.escape isn't on every browser version; this is a safe subset
- *  for the alphanumerics + hyphens an serviceId actually contains. */
+ *  for the alphanumerics + hyphens a serviceId actually contains. */
 function cssEscape(s) {
   return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
 }
 
-export function initAppsListView() {
-  $("apps-list-back")?.addEventListener("click", () => show("view-home"));
-  $("apps-list-refresh")?.addEventListener("click", () => {
-    renderAppsList().catch((e) => toast(String(e), "err"));
+export function initServicesListView() {
+  $("services-list-back")?.addEventListener("click", () => show("view-home"));
+  $("services-list-refresh")?.addEventListener("click", () => {
+    renderServicesList().catch((e) => toast(String(e), "err"));
   });
 }
 
-export async function enterAppsList() {
-  show("view-apps-list");
-  await renderAppsList();
+export async function enterServicesList() {
+  show("view-services-list");
+  await renderServicesList();
 }

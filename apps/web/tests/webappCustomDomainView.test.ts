@@ -14,9 +14,9 @@ async function asset(path: string): Promise<string> {
   return r.body;
 }
 
-describe("webapp apps-list — short→custom swap (#81)", () => {
+describe("webapp services-list — short→custom swap (#81)", () => {
   it("swaps the short slot to the custom domain only once confirmed", async () => {
-    const body = await asset("/webapp/views/apps-list.js");
+    const body = await asset("/webapp/views/services-list.js");
     // Gated strictly on customDomainConfirmed === true (the .com
     // active-order signal), not merely on a present customDomain.
     expect(body).toContain("links?.customDomainConfirmed === true");
@@ -25,9 +25,9 @@ describe("webapp apps-list — short→custom swap (#81)", () => {
   });
 });
 
-describe("webapp app-detail — SET CUSTOM DOMAIN (#80)", () => {
+describe("webapp service-detail — SET CUSTOM DOMAIN (#80)", () => {
   it("signs the exact .com canonical bytes and hits the custom-domain POST", async () => {
-    const body = await asset("/webapp/views/app-detail.js");
+    const body = await asset("/webapp/views/service-detail.js");
     expect(body).toContain('"flagship/custom-domain/v1"');
     expect(body).toContain("/custom-domain`");
     expect(body).toContain("signWithIrk(session.umk, canonical)");
@@ -36,8 +36,8 @@ describe("webapp app-detail — SET CUSTOM DOMAIN (#80)", () => {
   });
 
   it("mirrors the iOS apex→www and destructive-replace prompts verbatim", async () => {
-    const body = await asset("/webapp/views/app-detail.js");
-    // U+2014 em dash, byte-identical to AppDetailViewModel.
+    const body = await asset("/webapp/views/service-detail.js");
+    // U+2014 em dash, byte-identical to ServiceDetailViewModel.
     expect(body).toContain(
       "This only supports subdomains — an apex like ${fqdn} can't take a CNAME. Use ${suggested}?",
     );
@@ -50,7 +50,7 @@ describe("webapp app-detail — SET CUSTOM DOMAIN (#80)", () => {
   });
 
   it("has a 300s on-device cooldown, M:SS countdown and CNAME guidance", async () => {
-    const body = await asset("/webapp/views/app-detail.js");
+    const body = await asset("/webapp/views/service-detail.js");
     expect(body).toContain("CUSTOM_DOMAIN_COOLDOWN_MS = 300_000");
     expect(body).toContain('"flagship.customDomain.lastChanged."');
     expect(body).toContain("startCooldownTicker");
@@ -62,7 +62,7 @@ describe("webapp app-detail — SET CUSTOM DOMAIN (#80)", () => {
   });
 
   it("dropped the legacy P1.22 TXT-verify custom-domain model", async () => {
-    const body = await asset("/webapp/views/app-detail.js");
+    const body = await asset("/webapp/views/service-detail.js");
     expect(body).not.toContain("/api/screens/url-controller/verify");
     expect(body).not.toContain("expectedTxtRecord");
   });

@@ -1,12 +1,17 @@
 # Manifest reference — `flagship.app.json`
 
-Every Flagship app has a `flagship.app.json` at the root of its git
+Every Flagship service has a `flagship.app.json` at the root of its git
 repo. The LLM emits it; the platform validates it on install. It is
-the single source of truth for how the app is deployed, what it
+the single source of truth for how the service is deployed, what it
 exposes, who can access it, and whether it can be migrated.
 
+> The on-disk filename is still `flagship.app.json` for backward
+> compatibility — internal types and wire envelopes were renamed
+> `App → Service` in 2026-05-19, but the manifest filename was kept
+> stable so existing repos don't need a rename pass.
+
 This page is a field-by-field reference. For workflow + how-to, see
-[the app developer guide](app-developer-guide.md).
+[the service developer guide](app-developer-guide.md).
 
 ## Top-level shape
 
@@ -37,7 +42,7 @@ This page is a field-by-field reference. For workflow + how-to, see
 | `runtime` | yes | Container image + port + env. |
 | `data` | yes | Persistence (Postgres / objects / kv) + scratch path. |
 | `network` | yes | Subdomain under `<user>.flagship.services`. |
-| `access` | yes | Identity gate + roles + public routes + sister-app allowlist. |
+| `access` | yes | Identity gate + roles + public routes + sister-service allowlist. |
 | `migration` | yes | "standard" (biometric only) or "elevated" (biometric + 2FA). |
 | `browser` | no | Pod-resident-browser entitlement. |
 | `distribution` | no | Update-pack distribution policy. |
@@ -56,7 +61,7 @@ This page is a field-by-field reference. For workflow + how-to, see
 |---|---|---|
 | `image` | yes | OCI ref the daemon can pull. |
 | `port` | yes | Container's listening port. |
-| `env` | no | Plain string→string. **Reserved**: keys starting with `FLAGSHIP_` are managed by the runtime — apps cannot set them. The runtime injects `FLAGSHIP_APP_ID`, `FLAGSHIP_APP_TOKEN`, and any data-store URLs (see `data.stores`). |
+| `env` | no | Plain string→string. **Reserved**: keys starting with `FLAGSHIP_` are managed by the runtime — services cannot set them. The runtime injects `FLAGSHIP_APP_ID`, `FLAGSHIP_APP_TOKEN`, and any data-store URLs (see `data.stores`). |
 
 ## `data`
 
@@ -84,7 +89,7 @@ Set a flag to `true` for a single default instance; to a string list
 for named instances; to `false`/omit if the store is unused. Instance
 names are RFC 1035 labels (lowercase, 1-32 chars, `[a-z0-9-]`).
 
-Names are scoped to `<username>_<appname>` so the data layer is
+Names are scoped to `<username>_<servicename>` so the data layer is
 portable: `pg_dump` filtered on the prefix is the migration unit.
 
 ## `network`
@@ -93,12 +98,12 @@ portable: `pg_dump` filtered on the prefix is the migration unit.
 "network": { "subdomain": "habits" }
 ```
 
-The app is served at `<subdomain>.<server>.<user>.flagship.services`.
+The service is served at `<subdomain>.<server>.<user>.flagship.services`.
 Cross-creator installs get a `-creator` suffix automatically:
 `habits-alice.<server>.<user>.flagship.services`.
 
 The user-zone alias `<subdomain>.<user>.flagship.services` is NOT
-auto-claimed; an app must explicitly claim it via `/api/url/claim` (with
+auto-claimed; a service must explicitly claim it via `/api/url/claim` (with
 a phone-issued capability). See [docs/multiplexing.md](multiplexing.md).
 
 ## `access`
@@ -115,11 +120,11 @@ a phone-issued capability). See [docs/multiplexing.md](multiplexing.md).
 
 | Field | Required | Notes |
 |---|---|---|
-| `enabled` | yes | Must be `true`. Apps cannot opt out of identity injection. |
+| `enabled` | yes | Must be `true`. Services cannot opt out of identity injection. |
 | `default_role` | yes | One of `owner` / `admin` / `member` / `viewer`. |
-| `custom_roles` | no | App-specific role labels. The platform passes them through unchanged in `X-Flagship-Role`. |
+| `custom_roles` | no | Service-specific role labels. The platform passes them through unchanged in `X-Flagship-Role`. |
 | `public_routes` | no | Routes anonymous visitors can hit (`X-Flagship-User: anonymous`). Default empty — every route is membership-gated. |
-| `queryable_by` | no | Sister-app allowlist. Listed app ids may call `GET /.flagship/peers/<this-app-id>/installed` and learn whether this app is installed. Apps NOT listed always see `installed: false`. |
+| `queryable_by` | no | Sister-service allowlist. Listed service ids may call `GET /.flagship/peers/<this-service-id>/installed` and learn whether this service is installed. Services NOT listed always see `installed: false`. |
 
 ## `migration`
 
@@ -132,7 +137,7 @@ a phone-issued capability). See [docs/multiplexing.md](multiplexing.md).
 | `standard` | Biometric only on both ends. |
 | `elevated` | Biometric + 2FA (TOTP or WebAuthn) on both ends. |
 
-Default to `elevated` for apps holding financial, medical, or password
+Default to `elevated` for services holding financial, medical, or password
 material.
 
 ## `browser` (optional)
@@ -144,9 +149,9 @@ material.
 }
 ```
 
-Apps that drive the pod-resident Chromium declare which web hosts they
+Services that drive the pod-resident Chromium declare which web hosts they
 may navigate to. The user reviews + approves at install time; the
-daemon hard-blocks any navigation outside the set. Apps without a
+daemon hard-blocks any navigation outside the set. Services without a
 `browser` block cannot use the browser API at all.
 
 | Domain entry | Matches |
@@ -155,7 +160,7 @@ daemon hard-blocks any navigation outside the set. Apps without a
 | `*.example.com` | any single-label-deep subdomain (matches `accounts.example.com`, NOT `example.com` itself) |
 
 `login_required: true` is a UX hint — the install screen tells the
-user "this app needs you to log in to its declared domains." It
+user "this service needs you to log in to its declared domains." It
 doesn't change daemon behavior.
 
 ## `distribution` (optional)
@@ -166,7 +171,7 @@ doesn't change daemon behavior.
 
 When `public: true`, any signed puller can fetch update packs from the
 canonical-home pod without being on the subscriber list. Useful for
-open-source apps that want anyone hosting the app to receive updates.
+open-source services that want anyone hosting the service to receive updates.
 The puller's identity is still verified (sig auth on every request).
 Default `false` (subscriber-list-gated).
 

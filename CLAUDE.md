@@ -20,7 +20,7 @@ apps/mobile/               iOS Swift + Android Kotlin clients — substantial co
 packages/protocol/         Canonical-bytes + Ed25519 sign/verify for every signed message
 packages/storage/          Storage interfaces + InMemory + D1 adapters + SQL migrations
 packages/control-plane/    Pure runtime-agnostic handlers (used by Worker AND Fastify)
-packages/server-daemon/    PRODUCTION daemon entry (acme, tunnel client, app runner, lease store, browser bundle)
+packages/server-daemon/    PRODUCTION daemon entry (acme, tunnel client, service runner, lease store, browser bundle)
 packages/hello-daemon/     Minimal demo daemon — kept around for chain smoke-testing only
 packages/iso-personalizer/ Trailer format (build/parse/personalize-stream)
 packages/installer-apkovl/ Builds the apkovl tarball baked into the Alpine ISO
@@ -39,7 +39,7 @@ fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API 
 
 ## Architecture in one sentence
 
-**`.com` (Worker + D1 + R2)** owns identity & persistent state. **`.services` (single Fly app)** is a stateless pipe: SNI passthrough on :443 + tunnel-hub WebSocket on :8443. **The user's daemon** runs ACME locally (TLS-ALPN-01 over the same passthrough chain), holds the Let's Encrypt cert, and serves apps. **Routing-Control-Key (RCK)** is a phone-held primitive that decouples "who can claim a subdomain's traffic" from "which server is currently handling it" — enables failover/migration/delegation.
+**`.com` (Worker + D1 + R2)** owns identity & persistent state. **`.services` (single Fly app)** is a stateless pipe: SNI passthrough on :443 + tunnel-hub WebSocket on :8443. **The user's daemon** runs ACME locally (TLS-ALPN-01 over the same passthrough chain), holds the Let's Encrypt cert, and serves services. **Routing-Control-Key (RCK)** is a phone-held primitive that decouples "who can claim a subdomain's traffic" from "which server is currently handling it" — enables failover/migration/delegation.
 
 ## Live URLs
 

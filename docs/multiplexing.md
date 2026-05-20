@@ -1,7 +1,7 @@
 # URL multiplexing — final design
 
 > **The shape.** Pods declare what they serve. The .services tunnel hub
-> uses that declaration as the only source of truth. Apps own their own
+> uses that declaration as the only source of truth. Services own their own
 > consistency model. The harness is plumbing.
 
 This doc replaces the v1 alias system that briefly shipped in commit
@@ -16,7 +16,7 @@ is no D1 mirror.
 |---|---|---|
 | Canonical, self-authored | `<slug>.<server>.<user>.flagship.services` | Yes — pod-zone wildcard cert + base controlledDomains. |
 | Canonical, cross-creator | `<slug>-<creator>.<server>.<user>.flagship.services` | Yes — same. |
-| User-zone alias | `<slug>.<user>.flagship.services` | Only when an app explicitly claims it (or via a phone-driven `claim-url` order). |
+| User-zone alias | `<slug>.<user>.flagship.services` | Only when a service explicitly claims it (or via a phone-driven `claim-url` order). |
 | Custom domain | `<host>` | Same — explicit claim. |
 
 ## Runtime architecture
@@ -82,9 +82,9 @@ Issued via DNS-01 against the .com Worker. SAN list:
 ```
 
 `*.<user>.flagship.services` covers single-label-deep names —
-`<server>.<user>.flagship.services` AND any `<app>.<user>.flagship.services`
-alias. `*.<server>.<user>.flagship.services` covers the canonical app
-URLs `<app>.<server>.<user>.flagship.services`.
+`<server>.<user>.flagship.services` AND any `<service>.<user>.flagship.services`
+alias. `*.<server>.<user>.flagship.services` covers the canonical service
+URLs `<service>.<server>.<user>.flagship.services`.
 
 ### One wildcard CNAME per user
 
@@ -100,7 +100,7 @@ Idempotent on re-register.
 ### Sibling coordination
 
 Sibling-WS at `/.flagship/sibling-handshake` between pods. Mutual STK
-auth on connect, then the WS carries opaque app-message bytes. The
+auth on connect, then the WS carries opaque service-message bytes. The
 harness does not bless any one coordination shape.
 
 Frame catalogue — deliberately minimal:
@@ -108,7 +108,7 @@ Frame catalogue — deliberately minimal:
 | Byte | Frame | Direction |
 |---|---|---|
 | `0x01` | `sibling-hello` | both — challenge + signed response + `liveSiblings` gossip |
-| `0x06` | `sibling-app-message` | bidirectional — opaque per-app payloads |
+| `0x06` | `sibling-app-message` | bidirectional — opaque per-service payloads (frame tag retained for wire compat) |
 
 Separately, the **tunnel-hub control surface** carries one extra frame
 that the daemon receives over its `.services` WS (not the sibling-WS):
@@ -117,20 +117,20 @@ that the daemon receives over its `.services` WS (not the sibling-WS):
 |---|---|---|
 | `0x12` | `domain-granted` | hub → every tunnel — `{fqdn, ownerServerId}` whenever a grant happens |
 
-Everything app-level — URL-takeover dances, leader election, state
+Everything service-level — URL-takeover dances, leader election, state
 sync, RPC, exactly-once delivery — is built on top of
 `sibling-app-message`. The harness owns auth and the WS lifecycle;
-apps own everything else.
+services own everything else.
 
 #### Boot sweep
 
-On boot, the daemon iterates every cap an installed app holds. For
+On boot, the daemon iterates every cap an installed service holds. For
 each cap it opens an HTTPS handshake to the FQDN.
 
 - If TCP/handshake reaches a sibling, mutual auth runs and the WS is
   held open. **The incumbent stays — no automatic takeover.** The
   sibling exchanges its `liveSiblings` set on the hello; ours grows.
-  New entries surface to apps as `new-sibling` events on
+  New entries surface to services as `new-sibling` events on
   `/api/live_siblings/poll`.
 - If nobody answers (DNS NXDOMAIN, TCP refused, TLS error), the pod
   sends a HELLO update claiming the FQDN — filling the vacuum.
@@ -141,8 +141,8 @@ A pod is free to call `/api/url/claim` for any FQDN it has a cap for,
 at any time. `.services` checks the cap and last-HELLO-wins applies.
 Whether the previous holder also wanted that URL is not the harness's
 concern; the previous holder finds out by hub-side route eviction.
-Apps that want graceful state handoff coordinate over
-`sibling-app-message` before/after the call — that is purely an app
+Services that want graceful state handoff coordinate over
+`sibling-app-message` before/after the call — that is purely a service
 concern.
 
 ### Domain-granted broadcast
@@ -151,7 +151,7 @@ Every time `.services` accepts a HELLO that grants an FQDN to a tunnel
 (register OR update), the hub broadcasts a `domain-granted` control
 frame (`0x12`, payload `{fqdn, ownerServerId}`) to **every connected
 tunnel** for that user — including the new owner. The daemon plumbs
-this into its in-pod live-siblings router so apps observe the grant
+this into its in-pod live-siblings router so services observe the grant
 through `/api/live_siblings/poll` as:
 
 ```json
@@ -162,7 +162,7 @@ through `/api/live_siblings/poll` as:
 }
 ```
 
-Apps know their pod's canonical and react accordingly: if
+Services know their pod's canonical and react accordingly: if
 `ownerSiblingId === my-canonical` they're the new holder; otherwise
 some sibling is. Either way nothing changes silently.
 
@@ -175,7 +175,7 @@ When a visitor's SNI hits .services for a FQDN that:
 
 …the SNI matches the `*.<user>` wildcard claim of whichever pod
 currently holds it (last-HELLO-wins). That pod's daemon serves a small
-disambiguation HTML page: "no app here right now."
+disambiguation HTML page: "no service here right now."
 
 Static fallback at `https://flagshipserver.com/disambiguate.html` exists
 for the .services edge fallback path.
@@ -185,7 +185,9 @@ for the .services edge fallback path.
 Every URL claim must present a `ClaimUrlCapability` matching all three
 of:
 
-- **`appId`** — the app behind the calling FLAGSHIP_APP_TOKEN.
+- **`appId`** — the service behind the calling FLAGSHIP_APP_TOKEN (field
+  name retained for wire compat; the rename to `service` was scoped to
+  outer envelopes).
 - **`siblingId`** — this specific pod's serverId.
 - **`fqdn`** — the URL being claimed.
 
@@ -218,7 +220,7 @@ All FLAGSHIP_APP_TOKEN gated.
 ```
 GET  /api/live_siblings/list    [{siblingId, fqdns:[...], online, lastSeenMs}, ...]
 POST /api/live_siblings/send    {toSiblingId, payloadHex}
-GET  /api/live_siblings/poll    long-poll for inbound app-messages
+GET  /api/live_siblings/poll    long-poll for inbound service-messages
                                 (real WS endpoint lands in N0e-2)
 
 GET  /api/url                   [{fqdn, kind, ownedBy, canClaim, capabilityExpiresAt}, ...]
@@ -230,16 +232,16 @@ GET  /api/url/owned             [{fqdn}, ...]
 The `live_siblings` name is deliberate: this surface only ever exposes
 peers we have an authenticated WS to right now (or that one of those
 peers gossiped to us via `sibling-hello.liveSiblings` in the current
-session). There is no persisted "siblings I once knew" set — apps must
+session). There is no persisted "siblings I once knew" set — services must
 roll with the punches as the user adds and removes pods.
 
 `kind`: `"canonical" | "alias" | "custom"`.
 `ownedBy`: `"self" | "<siblingId>" | null`.
 
-## Phone UX (per app)
+## Phone UX (per service)
 
 ```
-This app: notes
+This service: notes
 
 Where should it run?
   ☑ home box
@@ -255,34 +257,34 @@ Let instances talk to each other?
 
 That is the whole UI. No "failover," no "leader," no "primary," no
 "consistency mode." Past these two checkboxes, everything is between
-the user and their app code.
+the user and their service code.
 
 ## Vibe-code LLM workflow
 
 - "home only" → LLM writes single-instance code. Standard CRUD.
 - "home + office" + "let instances talk" → LLM gets the replication-
   patterns chapter (sibling + URL APIs, 2-3 worked patterns,
-  consistency tradeoff guidance). LLM writes app-specific replication
+  consistency tradeoff guidance). LLM writes service-specific replication
   code.
 - "multi-pod" + NOT "let them talk" → LLM writes per-pod independent
   state.
 - Toggling "let them talk" later → phone offers to **regenerate** the
-  app with sibling-aware code. The vibe-code session re-opens with
+  service with sibling-aware code. The vibe-code session re-opens with
   existing files preloaded plus the system-prompt chapter. Not a
-  runtime config change; the AI rewrites the app, asks the user about
+  runtime config change; the AI rewrites the service, asks the user about
   consistency tradeoffs if it matters for this domain, redeploys.
 
 ## What the harness explicitly does NOT do
 
 - ❌ Postgres / MinIO / Redis replication (no streaming, no diff sync).
 - ❌ Leader election (the URL holder is the leader by definition).
-- ❌ Heartbeat-based auto-failover (apps decide via sibling-WS).
+- ❌ Heartbeat-based auto-failover (services decide via sibling-WS).
 - ❌ Schema-migration coordination during replication (no replication).
 - ❌ Auto-claiming the alias URL on multi-pod installs.
 - ❌ Saying "primary" / "leader" / "failover" in any phone surface.
 - ❌ Mirroring the URL-ownership state at .com.
 
-Apps own consistency. The harness owns distribution fabric.
+Services own consistency. The harness owns distribution fabric.
 
 ## Code map
 
@@ -294,8 +296,8 @@ Apps own consistency. The harness owns distribution fabric.
 | URL controller (per-pod claim state) | `packages/server-daemon/src/runtime.ts` |
 | Capability store + checkCapability | `packages/server-daemon/src/capabilityStore.ts` |
 | Sibling-WS protocol + handshake | `packages/server-daemon/src/sibling/{frames,handshake}.ts` |
-| App-facing /api/live_siblings/* | `packages/server-daemon/src/sibling/httpHandlers.ts` |
-| App-facing /api/url/* | `packages/server-daemon/src/sibling/urlHttpHandlers.ts` |
+| Service-facing /api/live_siblings/* | `packages/server-daemon/src/sibling/httpHandlers.ts` |
+| Service-facing /api/url/* | `packages/server-daemon/src/sibling/urlHttpHandlers.ts` |
 | Disambiguation fallback | `packages/server-daemon/src/runtime.ts` (`disambiguationResponse`) |
 
 ## Open follow-ups

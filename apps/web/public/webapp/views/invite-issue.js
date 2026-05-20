@@ -174,8 +174,8 @@ async function copyIt(link) {
 export function initInviteIssueView() {
   $("invite-issue-back")?.addEventListener("click", async () => {
     if (currentApp) {
-      const { enterAppDetail } = await import("./app-detail.js");
-      await enterAppDetail(currentApp.serviceId);
+      const { enterServiceDetail } = await import("./service-detail.js");
+      await enterServiceDetail(currentApp.serviceId);
     } else {
       show("view-home");
     }

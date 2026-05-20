@@ -19,8 +19,8 @@ stores only:
   recovery). Encrypted client-side; `.com` sees ciphertext only.
 - **Routing and registration records** keyed by pubkey hashes and
   subdomain labels. No emails, no names, no contact information.
-- **AppGrants and revocations**, signed by the user's IRK. These name
-  application canonical IDs (themselves derived from author pubkeys, not
+- **ServiceGrants and revocations**, signed by the user's IRK. These name
+  service canonical IDs (themselves derived from author pubkeys, not
   usernames) and server identity pubkeys.
 
 That's the complete list. Everything else lives on the user's own devices.

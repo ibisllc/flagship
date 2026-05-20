@@ -4,15 +4,15 @@
 // pointer / keyboard input back. Used to drive a paired-app's
 // browser-resident login flow from the user's webapp.
 //
-// #32 — only reachable from views/app-detail.js's "Open browser viewer"
+// #32 — only reachable from views/service-detail.js's "Open browser viewer"
 // button (rendered when the manifest declares a browser bundle or the
-// app already has open tabs). The legacy home-grid entry point — which
+// service already has open tabs). The legacy home-grid entry point — which
 // fell back to a window.prompt() for the serviceId — is gone. Calling
 // enterBrowserViewer() without an serviceId now toasts an error and bails
 // instead of prompting.
 //
 // Lookup flow:
-//   1. app-detail invokes enterBrowserViewer(serviceId).
+//   1. service-detail invokes enterBrowserViewer(serviceId).
 //   2. We poll P1.10 for the app's tab list.
 //   3. User picks a tab → we open a WS to P1.11 and start streaming.
 
@@ -167,10 +167,10 @@ export function initBrowserViewerView() {
 export async function enterBrowserViewer(serviceId) {
   closeSocket();
   // #30 + #32 — serviceId must be provided by the caller (only reachable
-  // from app-detail.js for apps that declare a browser bundle). The
+  // from service-detail.js for services that declare a browser bundle). The
   // legacy window.prompt() fallback is gone.
   if (!serviceId) {
-    toast("open the browser viewer from an app's detail screen", "err");
+    toast("open the browser viewer from a service's detail screen", "err");
     return;
   }
   activeAppId = serviceId;

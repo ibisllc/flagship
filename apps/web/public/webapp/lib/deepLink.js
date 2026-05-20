@@ -24,9 +24,9 @@ export async function dispatchInitialView() {
       const { enterHome } = await import("../views/home.js");
       return enterHome();
     }
-    if (q.view === "view-apps-list") {
-      const { enterAppsList } = await import("../views/apps-list.js");
-      return enterAppsList();
+    if (q.view === "view-services-list" || q.view === "view-apps-list") {
+      const { enterServicesList } = await import("../views/services-list.js");
+      return enterServicesList();
     }
     if (q.view === "view-unlock-approvals") {
       const { enterUnlockApprovals } = await import("../views/unlock-approvals.js");

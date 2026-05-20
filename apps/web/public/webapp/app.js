@@ -25,8 +25,8 @@ import { initPairView, startPairing } from "./views/pair.js";
 import { initSettingsView, renderProviders } from "./views/settings.js";
 import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
-import { initAppsListView, enterAppsList } from "./views/apps-list.js";
-import { initAppDetailView } from "./views/app-detail.js";
+import { initServicesListView, enterServicesList } from "./views/services-list.js";
+import { initServiceDetailView } from "./views/service-detail.js";
 import { initInviteIssueView } from "./views/invite-issue.js";
 import { initInviteManageView } from "./views/invite-manage.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
@@ -56,8 +56,8 @@ const SUB_VIEW_TABS = {
   "view-pod-pair": "home",
   "view-pair": "home",
   "view-create-server": "home",
-  "view-apps-list": "apps",
-  "view-app-detail": "apps",
+  "view-services-list": "apps",
+  "view-service-detail": "apps",
   "view-invite-issue": "apps",
   "view-invite-manage": "apps",
   "view-marketplace": "apps",
@@ -120,7 +120,7 @@ function wireTabBar() {
   const go = async (tab) => {
     try {
       if (tab === "home") await enterHome();
-      else if (tab === "apps") await enterAppsList();
+      else if (tab === "apps") await enterServicesList();
       else if (tab === "activity") await enterActivityTab();
       else if (tab === "settings") await enterSettingsTab();
     } catch (e) {
@@ -176,11 +176,11 @@ function wireActivityEntries() {
   wire("activity-open-install-progress", enterInstallProgress);
 }
 
-function wireAppsTabEntries() {
+function wireServicesTabEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
-  wire("apps-list-open-marketplace", enterMarketplace);
-  wire("apps-list-open-vibe-code", enterVibeCode);
+  wire("services-list-open-marketplace", enterMarketplace);
+  wire("services-list-open-vibe-code", enterVibeCode);
 }
 
 async function boot() {
@@ -198,8 +198,8 @@ async function boot() {
   initSettingsView();
   initPodPairView();
   initServerDetailView();
-  initAppsListView();
-  initAppDetailView();
+  initServicesListView();
+  initServiceDetailView();
   initInviteIssueView();
   initInviteManageView();
   initPairedSessionsView();
@@ -235,7 +235,7 @@ async function boot() {
   wireTabBar();
   wireSettingsTabEntries();
   wireActivityEntries();
-  wireAppsTabEntries();
+  wireServicesTabEntries();
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");

@@ -165,8 +165,8 @@ A.9.2 ☐ refresh `/api/_status/probe` to also surface marketplace + LLM-promo h
 
 C.1.1 ☑ TLS terminator + tunnel client + ACME (DNS-01 wildcard).
 C.1.2 ☑ Reverse proxy with member gate + signed-header injection.
-C.1.3 ☑ AppPlatform install/uninstall + per-app data provisioning + per-app auth tokens.
-C.1.4 ☑ AppRunner (docker compose).
+C.1.3 ☑ ServicePlatform install/uninstall + per-service data provisioning + per-service auth tokens.
+C.1.4 ☑ ServiceRunner (docker compose).
 C.1.5 ☑ Phone-orders endpoint (PSK-signed; 11 order types).
 C.1.6 ☑ Pod-resident browser bundle (BrowserManager + TabRegistry + DomainGate + PhonePipe + apiHandlers).
 C.1.7 ☑ Update-pack server + client + scheduler + lineage.
@@ -182,7 +182,7 @@ C.1.11 ☑ buildCloneApp via /.flagship/update.
 | C.2.1 | Provider adapters in `packages/llm-providers` — already partial; complete Anthropic + OpenAI + Google | M | — |
 | C.2.2 | `LlmHarness` class on the daemon: streams user prompt → manifest + sources → builds + deploys | L | C.2.1 |
 | C.2.3 | Forgejo-side: programmatic repo creation, initial commit, tag | M | C.2.2 |
-| C.2.4 | Build pipeline: `docker build` from cloned source, push to local registry, AppRunner deploy | M | C.2.2 |
+| C.2.4 | Build pipeline: `docker build` from cloned source, push to local registry, ServiceRunner deploy | M | C.2.2 |
 | C.2.5 | HTTP surface `/api/llm/sessions` + WS `/api/llm/sessions/<id>/stream` (paired-session gated) | M | C.2.2 |
 | C.2.6 | System prompt + manifest constraints: tells the LLM the manifest schema, X-Flagship-* contract, "no own auth" rule | M | C.2.2 |
 | C.2.7 | Iteration: edit-and-revise within a session; reuses Forgejo repo for diff-based commits | M | C.2.5 |
@@ -205,7 +205,7 @@ C.1.11 ☑ buildCloneApp via /.flagship/update.
 
 | ID | Task | Effort |
 |---|---|---|
-| C.4.1 | `restartContainer(appId)` — `AppRunner.restart` to pick up new bind-mounted source | S |
+| C.4.1 | `restartContainer(serviceId)` — `ServiceRunner.restart` to pick up new bind-mounted source | S |
 
 ### C.5 LAN/BLE fallback
 
@@ -236,8 +236,8 @@ C.1.11 ☑ buildCloneApp via /.flagship/update.
 
 | ID | Task | Effort | Deps |
 |---|---|---|---|
-| C.8.1 | `GET /api/apps/<id>/logs?tail=200` (paired-session gated, hostIRK-only role) | S | C.1.3 |
-| C.8.2 | WS `/api/apps/<id>/logs/stream` for tail-f | M | C.8.1 |
+| C.8.1 | `GET /api/services/<id>/logs?tail=200` (paired-session gated, hostIRK-only role) | S | C.1.3 |
+| C.8.2 | WS `/api/services/<id>/logs/stream` for tail-f | M | C.8.1 |
 
 ### C.9 Forgejo first-boot provisioning
 
@@ -303,7 +303,7 @@ Existing scaffolds: `Keystore.swift`, `BiometricGate.swift`, `BootAuthorization.
 |---|---|---|
 | D.5.1 | `AppsListView` | Per-server filter; status pills; "+ Vibe-code" / "+ Install someone else's" |
 | D.5.2 | `AppOverviewView` | URL, version, members count, last update; Restart / Stop / Settings |
-| D.5.3 | `AppMembersView` | List + invite + remove |
+| D.5.3 | `ServiceMembersView` | List + invite + remove |
 | D.5.4 | `InviteCreateView` | Role picker, share method (link / username) |
 | D.5.5 | `InviteAcceptView` | App preview, role, accept Face ID |
 | D.5.6 | `AppDataView` | Per-store size + status; embed Adminer/MinIO/Redis via SafariView with paired-session token |
@@ -669,7 +669,7 @@ task IDs:
 | N0i | App-level sibling API (/api/live_siblings/list,send,poll) | ☑ |
 | N0j | App-claim primitives (/api/url/*) with capability enforcement | ☑ |
 | N0k | Replication-patterns chapter for the LLM system prompt | ☑ |
-| N1 | Wire deploySession end-to-end (vibe-code → AppPlatform.install + Forgejo + docker) | ☐ |
+| N1 | Wire deploySession end-to-end (vibe-code → ServicePlatform.install + Forgejo + docker) | ☐ |
 | N2 | Real LLM provider streaming (Anthropic, OpenAI, Google) | ☐ |
 | N3 | APNs + FCM push bridge (replaces /api/push/relay simulated:true) | ☐ |
 | N4 | Apps list + Apps detail screens (iOS + Android) | ☑ |

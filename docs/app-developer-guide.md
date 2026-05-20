@@ -1,10 +1,15 @@
-# App developer guide
+# Service developer guide
 
-A "Flagship app" is a containerized service that runs on a user's pod
+A "Flagship service" is a containerized workload that runs on a user's pod
 and reaches the daemon for identity, data, browser automation, and
-sibling coordination. Most apps are vibe-coded — the user describes
+sibling coordination. Most services are vibe-coded — the user describes
 what they want and the LLM emits the manifest + code. This guide is
-for the small population of humans who hand-write Flagship apps.
+for the small population of humans who hand-write Flagship services.
+
+> Internal types and wire envelopes use `Service` naming (e.g.
+> `InstalledService`, `InstallServiceRequest`, `flagship/install-service/v1`)
+> as of the 2026-05-19 rename. The on-disk manifest filename
+> `flagship.app.json` was kept stable for backward compatibility.
 
 For the manifest schema field-by-field, see
 [the manifest reference](manifest.md).
@@ -13,7 +18,7 @@ For the URL-multiplexing model + sibling-WS protocol, see
 
 ## What you ship
 
-Every app's git repo has at the root:
+Every service's git repo has at the root:
 
 ```
 flagship.app.json   # the manifest (schema_version=1)
@@ -24,7 +29,7 @@ src/, etc.          # whatever your runtime needs
 
 The manifest's `runtime.image` is the OCI ref the daemon pulls. You
 can build it yourself and push to a registry, or include a Dockerfile
-that the daemon's build pipeline (when the user vibe-codes the app)
+that the daemon's build pipeline (when the user vibe-codes the service)
 runs in-place.
 
 ## Identity injection
@@ -37,18 +42,18 @@ forwarding the request to your container:
 | `X-Flagship-User` | The visitor's stable id (`anonymous` for public routes). |
 | `X-Flagship-Role` | One of `owner` / `admin` / `member` / `viewer` or your `custom_roles[]` value. |
 | `X-Flagship-Timestamp` | ms since epoch — bind your reads + writes to this if you care about freshness. |
-| `X-Flagship-Signature` | hex Ed25519 signature over `flagship/inject/v1|<appId>|<user>|<role>|<timestamp>`. |
+| `X-Flagship-Signature` | hex Ed25519 signature over `flagship/inject/v1|<serviceId>|<user>|<role>|<timestamp>`. |
 
 Verifying the signature is optional but recommended in production. The
 daemon's pubkey is at `GET /.flagship/runtime-pubkey` (relative to
-your app's URL). Cache it.
+your service's URL). Cache it.
 
-## App-facing daemon API
+## Service-facing daemon API
 
 Your container's environment includes `FLAGSHIP_APP_TOKEN`. Every call
-to the daemon's app-facing API uses
+to the daemon's service-facing API uses
 `Authorization: Bearer <FLAGSHIP_APP_TOKEN>`. The daemon resolves the
-token to your app id and uses it as the scoping key for everything
+token to your service id and uses it as the scoping key for everything
 below.
 
 The daemon is reachable from inside the container at the local
@@ -83,18 +88,18 @@ The canonical URL `<your-subdomain>.<server>.<user>.flagship.services`
 is always reachable; you can't claim or release it. Aliases like
 `<your-subdomain>.<user>.flagship.services` and custom domains require
 a phone-issued capability (the user's phone mints them when the user
-toggles "claim this URL" in your app's detail screen). See
+toggles "claim this URL" in your service's detail screen). See
 [multiplexing](multiplexing.md) for the full model.
 
-### Sibling coordination (multi-pod apps)
+### Sibling coordination (multi-pod services)
 
-When the user installs your app on multiple pods AND enables "let
+When the user installs your service on multiple pods AND enables "let
 instances talk to each other," your code can use:
 
 ```
 GET  /api/live_siblings/list      list of {siblingId, fqdns, online, lastSeenMs}
 POST /api/live_siblings/send      {toSiblingId, payloadHex} — route to peer
-GET  /api/live_siblings/poll      long-poll for inbound app-messages
+GET  /api/live_siblings/poll      long-poll for inbound service-messages
 ```
 
 `live_siblings` is the deliberate name: the harness gives you only
@@ -117,7 +122,7 @@ the new holder, an old holder who just lost it, or simply tracking
 ownership in your user's zone. Nothing changes silently.
 
 The harness does NOT replicate Postgres / MinIO / Redis for you. If
-your app needs cross-pod consistency, you implement it on top of these
+your service needs cross-pod consistency, you implement it on top of these
 primitives. Three patterns the LLM is taught to use (see N0k):
 
 1. **Eventual-consistency LWW**: every write broadcasts to siblings
@@ -128,13 +133,13 @@ primitives. Three patterns the LLM is taught to use (see N0k):
 3. **Per-pod independent state** (default when "let them talk" is
    off): each pod has its own data, no coordination.
 
-Apps own consistency. The harness owns distribution fabric.
+Services own consistency. The harness owns distribution fabric.
 
 ### Update-pack distribution
 
 The canonical-home pod (the creator's pod) serves
 `/.flagship/update?since=<sha>` as the update channel. Subscriber
-pods (anyone hosting your app cross-creator) pull this every 6 hours
+pods (anyone hosting your service cross-creator) pull this every 6 hours
 via a daemon-side scheduler. You don't need to do anything special —
 the harness handles fetch + verify + apply + lineage check.
 
@@ -148,9 +153,9 @@ otherwise the canonical-home's subscriber list is the gate.
 | `X-Flagship-Signature` verify | Confirm the request really came from the daemon. |
 | `X-Flagship-User` | Stable per-user id; key your data on this. |
 | Anonymous `public_routes` | Add a route to `access.public_routes` to expose it without membership. |
-| `queryable_by` allowlist | Let a sibling app discover whether you're installed. Direction is target-controlled. |
+| `queryable_by` allowlist | Let a sibling service discover whether you're installed. Direction is target-controlled. |
 | Browser API | High-level Puppeteer-style only — no raw CDP, no cookies, no localStorage. |
-| Sibling API | Frame routing for app-defined replication strategies. |
+| Sibling API | Frame routing for service-defined replication strategies. |
 
 ## Hooks the daemon explicitly does NOT offer
 
@@ -164,10 +169,10 @@ otherwise the canonical-home's subscriber list is the gate.
 ## Testing locally
 
 The daemon ships with a vitest suite under `packages/server-daemon/tests`
-that mocks the data layer + browser + sibling routing. To smoke an app
+that mocks the data layer + browser + sibling routing. To smoke a service
 locally:
 
-1. Build the image: `docker build -t my-app:dev .`
+1. Build the image: `docker build -t my-service:dev .`
 2. Use the dev pod compose (instructions in `installer/`) to point at
    your local image.
 3. The dev pod registers with `flagshipserver.com` as a normal pod;
@@ -175,7 +180,7 @@ locally:
 
 ## Publishing to the marketplace
 
-The marketplace is a directory of public apps. To list yours:
+The marketplace is a directory of public services. To list yours:
 
 1. Make sure your manifest is complete (schema_version=1, network,
    access, migration all set).
@@ -199,8 +204,8 @@ or reject (stop pulling).
 | Topic | Source |
 |---|---|
 | Manifest validation | `packages/protocol/src/manifest.ts` |
-| App platform (install / uninstall) | `packages/server-daemon/src/appPlatform.ts` |
-| Identity injection | `packages/server-daemon/src/identityInjector.ts`, `appProxy.ts` |
+| Service platform (install / uninstall) | `packages/server-daemon/src/servicePlatform.ts` |
+| Identity injection | `packages/server-daemon/src/identityInjector.ts`, `serviceProxy.ts` |
 | Browser API | `packages/server-daemon/src/browser/` |
 | Sibling API | `packages/server-daemon/src/sibling/` |
 | Update-pack server | `packages/server-daemon/src/updateServer.ts` |

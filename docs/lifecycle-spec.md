@@ -4,7 +4,7 @@ This is a builder's reference. Every component named here is a place
 holder for "design + implement + test"; the spec covers every screen,
 button, API call, container, and wire format you'll touch from a brand
 new visitor's first hit on `flagshipserver.com` to a long-lived shared
-app's update propagation. Read once end-to-end before opening tickets.
+service's update propagation. Read once end-to-end before opening tickets.
 
 > Conventions
 > - **Screen** names are quoted in `[brackets]`.
@@ -63,7 +63,7 @@ iCloud-Keychain / Google Block Store-wrapped UMK + biometrics.
 ### Screens
 
 #### `[Landing]` — `https://flagshipserver.com/`
-- **Hero**: "Your apps. Your hardware. Your keys."
+- **Hero**: "Your services. Your hardware. Your keys."
 - Buttons: `Download Flagship` (→ `[Download]`), `Build a server` (→ `[Build]`),
   `How it works` (anchor scroll), `Status` (→ `/status/`).
 - Below the fold: trust model, BUSL note + Change Date, abuse contact.
@@ -347,15 +347,15 @@ the app):
     the `/.flagship/admin/*` proxy
   - **System** — server identity, certs, peer-backup status, restart,
     revoke-self.
-  - **Subscribers** — per-app: who's mirroring this app's update
+  - **Subscribers** — per-service: who's mirroring this service's update
     packs.
 - Every tab loads via the paired-session cookie → no separate login.
 
-### Apps tab — `[Apps]`
+### Services tab — `[Services]`
 
 ```
 ┌──────────────────────────────────────┐
-│  [+ Vibe-code a new app]             │
+│  [+ Vibe-code a new service]         │
 │  [⤓ Install someone else's]          │
 ├──────────────────────────────────────┤
 │ ◯ habit-tracker     · running · v0.4 │
@@ -367,7 +367,7 @@ the app):
 Per row: name, status, version, dropdown (`Restart`, `Stop`, `Settings`,
 `Share`, `Update now`, `Uninstall`).
 
-### Per-app drawer — `[App: habit-tracker]`
+### Per-service drawer — `[Service: habit-tracker]`
 
 Tabs:
 - **Overview**: URL, ports, members, install date.
@@ -384,7 +384,7 @@ Tabs:
 
 ---
 
-## 7. FIRST-APP DEPLOY — vibe coding with an LLM
+## 7. FIRST-SERVICE DEPLOY — vibe coding with an LLM
 
 ### Screens
 
@@ -393,7 +393,7 @@ Tabs:
    - `Use Flagship promo (50 free credits / day, 200 lifetime)` — this
      is the Flagship-promo path, see §7.5.
    - `Use my own API key` — this is the BYOK path.
-2. **Describe your app**: free-text textarea. Examples preset
+2. **Describe your service**: free-text textarea. Examples preset
    buttons: *Habit tracker*, *Shared family wishlist*, *Personal
    inventory*, *Sleep journal*.
 3. `Generate` button.
@@ -421,18 +421,18 @@ Daemon's LLM harness:
   2. Create Forgejo repo at `git/<host>/<slug>.git`,
      initial commit + tag v0.1.0.
   3. Build docker image (`docker build -t flagship/<host>-<slug>:v0.1.0`).
-  4. Phone-side mints an InstallAppRequest → POST /api/apps with
+  4. Phone-side mints an InstallServiceRequest → POST /api/services with
      IRK sig.
-  5. AppPlatform.install:
+  5. ServicePlatform.install:
      - Provisions data stores (RealPostgresAdmin / Redis / MinIO).
      - Mints FLAGSHIP_APP_TOKEN.
      - Deploys container.
      - Adds host as `owner` in the membership store.
-     - Records initial AppPullState (canonical-home is THIS box).
-  6. Daemon emits 'app-deployed' event → phone shows the URL.
+     - Records initial ServicePullState (canonical-home is THIS box).
+  6. Daemon emits 'service-deployed' event → phone shows the URL.
 ```
 
-### `[App URL ready]`
+### `[Service URL ready]`
 - "https://habit-tracker.home.harry.flagship.services" big text + copy.
 - Buttons: `Open it`, `Share with someone`, `Generate another revision`.
 
@@ -503,7 +503,7 @@ This is its own section because the security model is delicate.
 
 ### Tier escalation
 - `[Settings]` shows a "Tier" widget:
-  - **Free**: 50/200, only 1 vibe-coded app at a time.
+  - **Free**: 50/200, only 1 vibe-coded service at a time.
   - **Hobby ($5/mo)**: 100/1000, up to 5 apps, 5GB peer-backup.
   - **Maker ($15/mo)**: 500/unlimited, up to 25 apps, 100GB peer-backup,
     marketplace listing eligible.
@@ -514,7 +514,7 @@ This is its own section because the security model is delicate.
 
 ## 8. ACCESS CONTROL — sharing within / outside the household
 
-### `[App: habit-tracker → Members]`
+### `[Service: habit-tracker → Members]`
 
 ```
 ┌──────────────────────────────┐
@@ -542,7 +542,7 @@ This is its own section because the security model is delicate.
 - `[Invite from harry]` shows app name, role, host info.
 - Tap `Accept` → phone signs `InviteAcceptance{token, accepterIrkPub}`.
 - POST to host's daemon: `/.flagship/invite/redeem?t=<token>`.
-- Daemon's `AppMembership.redeemInvite` validates both signatures,
+- Daemon's `ServiceMembership.redeemInvite` validates both signatures,
   adds the member, returns `{stableId, role}`.
 - Now the new user can hit `https://habit-tracker.home.harry.flagship.services/`
   and load with `X-Flagship-User: <stableId>` injected.
@@ -556,8 +556,8 @@ This is its own section because the security model is delicate.
 
 ### Locking down (panic button)
 
-#### `[App → Settings → Lock]`
-- Big red button: `Lock this app`.
+#### `[Service → Settings → Lock]`
+- Big red button: `Lock this service`.
 - Confirms with a face-ID prompt + reason text.
 - Phone signs `MembershipMutation{kind: "freeze"}` (TODO new variant) +
   the daemon adds a soft block on every member except `owner`.
@@ -570,7 +570,7 @@ This is its own section because the security model is delicate.
 
 ### 9.1 Listing your app
 
-#### `[App: habit-tracker → Sharing → Make public]`
+#### `[Service: habit-tracker → Sharing → Make public]`
 - Tabs:
   - **Status**: Currently `Private` / `Listed` / `Listed + Verified`.
   - **Listing details**: Description (markdown), screenshots (up to 5
@@ -578,7 +578,7 @@ This is its own section because the security model is delicate.
   - **Pricing of your listing** — most apps: free.
     `Pay for security scan ($49 — re-runs on every release)`.
     `Pay for Top Featured slot ($199 / month)`.
-- Submit → phone IRK-signs `ListAppRequest{appId, manifestHash, description, ...}`.
+- Submit → phone IRK-signs `ListServiceRequest{serviceId, manifestHash, description, ...}`.
 - POST to `flagshipserver.com/api/marketplace/list`.
 - **Worker only stores: appId, creator, description, screenshots in R2,
   canonical URL (the creator's pod), tags, ranking score.**
@@ -622,13 +622,13 @@ If user paid for the scan:
 User Bob clicks `Install on my server` while logged into his phone:
 1. **Trust prompt**: Phone shows the manifest declarations (data
    stores requested, browser domains, etc.) and asks face-ID approval.
-2. Phone IRK-signs `InstallAppRequest` with `creator: "alice", slug: "habit-tracker"`.
-3. Daemon's `AppPlatform.install`:
+2. Phone IRK-signs `InstallServiceRequest` with `creator: "alice", slug: "habit-tracker"`.
+3. Daemon's `ServicePlatform.install`:
    - Provisions Bob's data stores (`_bob_habit-tracker` Postgres, etc.).
-   - Calls `cloneApp({appId, canonicalUrl: "habit-tracker.alice.flagship.services"})`
+   - Calls `cloneService({serviceId, canonicalUrl: "habit-tracker.alice.flagship.services"})`
      — the daemon GETs `/.flagship/update?since=` against Alice's
      pod, gets a full git bundle, materializes the working tree.
-   - Records `AppPullState{canonicalUrl, lineageAnchor=<HEAD>, currentTip=<HEAD>}`.
+   - Records `AppPullState{canonicalUrl, lineageAnchor=<HEAD>, currentTip=<HEAD>}` (this internal store name was not renamed in the 2026-05-19 cutover).
    - Builds the docker image from the cloned source.
    - Deploys.
 4. URL: `https://habit-tracker-alice.bob.flagship.services/`.
@@ -648,7 +648,7 @@ For Alice's pod to honor Bob's pull, Bob must be a subscriber:
 Bob installed Alice's `shopper` app (which has `browser.domains:
 ["amazon.com"]`). To use it Bob must log into amazon.com on his pod.
 
-- `[App: shopper → Browser]` → big `Log in to amazon.com` button.
+- `[Service: shopper → Browser]` → big `Log in to amazon.com` button.
 - Tapping opens **`[Browser viewer]`** — a phone-paired full-screen
   view of the actual Chromium tab on Bob's pod, streamed via:
   - Daemon takes screenshots every 2 sec and pushes to phone via
@@ -679,14 +679,14 @@ Bob installed Alice's `shopper` app (which has `browser.domains:
     - If policy=auto: `git update-ref main` → run new migrations
       via `runMigration` dispatcher → restart container.
     - If policy=manual: stage `pendingPullCommit`, alert "Update
-      ready — review changes". Bob's `[App → Updates]` shows the
+      ready — review changes". Bob's `[Service → Updates]` shows the
       diff; `Apply` button calls `UpdateClient.applyPending`.
     - If policy=frozen: the scheduler skips it.
 
 ### Canonical-home side — Alice's pod
 
 - Bob's POST hits the daemon's reverse proxy.
-- `appProxy` routes `/.flagship/update` to `UpdateServer.handle`.
+- `serviceProxy` routes `/.flagship/update` to `UpdateServer.handle`.
 - `UpdateServer`:
   - Verifies sig + pull envelope.
   - `resolveServerPubkey(<bob's fqdn>)` → calls `flagshipserver.com/api/server/by-domain/<fqdn>`.
@@ -698,7 +698,7 @@ Bob installed Alice's `shopper` app (which has `browser.domains:
 ### Migrations
 
 Numbered files under `migrations/`. Naming `^[0-9]+_.+`. Examples:
-- `0001_init.sql` — schema bootstrap (per-app PG role).
+- `0001_init.sql` — schema bootstrap (per-service PG role).
 - `0002_add_habit_count_column.sql`.
 - `0003_seed_demo_data.ts` — runs via `tsx` with `FLAGSHIP_PG_URL` injected.
 - `0004_recalc_streaks.js` — runs via `node`.
@@ -713,9 +713,9 @@ Migration failure (`runMigration` throws):
 Alice force-pushes (rare but possible). Next time Bob's scheduler
 runs, the lineage check fails:
 - `lineage-break` alert with `upstreamTip=<new>` and `lineageAnchor=<old>`.
-- Bob's `[App → Updates]` shows: "habit-tracker's history was rewritten.
+- Bob's `[Service → Updates]` shows: "habit-tracker's history was rewritten.
   Continue tracking from the new lineage? Your local data stays."
-- Buttons: `Re-anchor & continue`, `Freeze app`, `Uninstall`.
+- Buttons: `Re-anchor & continue`, `Freeze service`, `Uninstall`.
 - `Re-anchor` updates `lineageAnchor = upstreamTip` and resumes.
 
 ---
@@ -726,10 +726,10 @@ runs, the lineage check fails:
 
 - A box at home that runs their apps, holds their data, and
   authenticates them via their phone.
-- A marketplace of community-built apps, no app store gatekeeping,
+- A marketplace of community-built services, no app store gatekeeping,
   no platform tax (free listing; security scan and ranking boost are
   optional paid services).
-- Daily LLM credits to vibe-code new apps without paying for an API
+- Daily LLM credits to vibe-code new services without paying for an API
   key.
 - Real green-padlock HTTPS on the user's own subdomain.
 
@@ -791,11 +791,11 @@ byte-identical across all three; the test-vector JSON in
 
 ### Phone (iOS / Android / PWA — pixel-identical)
 
-Tab bar: `Servers`, `Apps`, `Activity`, `Settings`.
+Tab bar: `Servers`, `Services`, `Activity`, `Settings`.
 
 - **Servers**: `[Server]` per box. Per-server: status, uptime, disk,
   alerts, `Restart`, `Backup policy`, `Rotate identity`.
-- **Apps**: per-app list with quick toggles + drawer.
+- **Services**: per-service list with quick toggles + drawer.
 - **Activity**: AlertInbox feed (lineage breaks, manual updates,
   browser-input requests, security events, daily-LLM-promo limit).
 - **Settings**: Tier, AI provider, Pairing, Recovery (re-wrap UMK to
@@ -804,13 +804,13 @@ Tab bar: `Servers`, `Apps`, `Activity`, `Settings`.
 ### Desktop (browser, paired-session)
 
 - Same tabs, more screen real-estate: side-by-side editors for
-  vibe-coding, embedded terminal for app logs, Adminer for SQL.
+  vibe-coding, embedded terminal for service logs, Adminer for SQL.
 
 ### `[Browser viewer]` — phone full-screen
 
 Edge-to-edge live screenshot of the pod's Chromium tab. Bottom bar
 shows the current URL. Top-right `(X)` closes the relay (does NOT
-close the pod's tab — apps may still be using it).
+close the pod's tab — services may still be using it).
 
 ### Notifications / alerts
 
@@ -819,8 +819,8 @@ close the pod's tab — apps may still be using it).
 - Notification categories with quick-actions:
   - **Unlock requested** → `Approve` / `Decline` inline.
   - **Browser input needed** → opens directly to `[Browser viewer]`.
-  - **Update ready (manual)** → opens `[App → Updates]`.
-  - **Lineage break** → opens `[App → Updates]` with re-anchor flow.
+  - **Update ready (manual)** → opens `[Service → Updates]`.
+  - **Lineage break** → opens `[Service → Updates]` with re-anchor flow.
   - **Promo limit reached** → opens `[Settings → AI provider]`.
 
 ### Accessibility
@@ -870,7 +870,7 @@ A short open-questions list for the founder:
 6. **Default "promo" provider** — Anthropic Claude Sonnet vs GPT-4o
    mini. Probably Anthropic given the Flagship.services brand pairs
    well; cost more but quality first impression matters.
-7. **Apps that need outbound web traffic but NOT a browser** (e.g.,
+7. **Services that need outbound web traffic but NOT a browser** (e.g.,
    webhook receivers): we already allow this (containers can
    `fetch()` anywhere). Decide whether to add an opt-in egress proxy
    for compliance-conscious users.
@@ -890,7 +890,7 @@ Tick when shipped:
       subscriber) over 7 days of use
 - [ ] Lineage-break + re-anchor flow exercised live
 - [ ] Identity rotation exercised live
-- [ ] At least one community-listed app installed by someone other
+- [ ] At least one community-listed service installed by someone other
       than the creator
 - [ ] Recovery (lost phone → new phone) exercised live with an iCloud
       / Google-Block-Store wrapped UMK

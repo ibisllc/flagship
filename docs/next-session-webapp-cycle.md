@@ -27,7 +27,7 @@ those should remain modest, since the OSS code lets anyone bypass them.
 | What we charge for | Why a user would pay | Free-tier behavior |
 |---|---|---|
 | LLM-promo bootstrap credits | Try Flagship without provisioning a BYOK first | Daily/lifetime cap; transition to BYOK is one tap |
-| Dispatcher relay overage | Bandwidth-heavy app exceeds the free monthly quota | Free quota covers ordinary personal use indefinitely |
+| Dispatcher relay overage | Bandwidth-heavy service exceeds the free monthly quota | Free quota covers ordinary personal use indefinitely |
 | Custom domain (`example.com` → user's pod) | Vanity / migration off `<pod>.<user>.flagship.services` | Default subdomain is forever-free |
 | Reserved / trademark account name | Hold a name a brand owns even if not actively used | Normal usernames are first-come-first-served, free |
 
@@ -79,7 +79,7 @@ the dev VM with a paired-session cookie.
 
 | ID | Task | Effort |
 |---|---|---|
-| P1.X1 | Wire `llmHarness` → `forgejoAppAdmin.createRepo()` → commit manifest+Dockerfile+migrations → trigger build. Currently the LLM streams into a void; the deploy step has no repo to push to. Fix in `packages/server-daemon/src/llmHarness.ts` + add an end-to-end test that vibe-codes a hello-world app against a fixture LLM and asserts the deployed container responds. | M |
+| P1.X1 | Wire `llmHarness` → `forgejoAppAdmin.createRepo()` → commit manifest+Dockerfile+migrations → trigger build. Currently the LLM streams into a void; the deploy step has no repo to push to. Fix in `packages/server-daemon/src/llmHarness.ts` + add an end-to-end test that vibe-codes a hello-world service against a fixture LLM and asserts the deployed container responds. | M |
 
 ---
 
@@ -92,8 +92,8 @@ presentation; all auth + state is via paired-session cookie.
 |---|---|---|---|
 | P2.0 | Refactor `app.js` into a router + view modules (one JS file per view). Today it's a 500-line monolith — splitting it now is the BFF analogue: each view module is the caller of one P1 endpoint. | M |
 | P2.1 | Server-detail view (current "home" expanded) | P1.1 | S |
-| P2.2 | Apps-list view | P1.2 | S |
-| P2.3 | App-detail view (manifest dump, URLs with copy-to-clipboard, logs, restart, backup, uninstall) | P1.3, P1.18, P1.19 | M |
+| P2.2 | Services-list view | P1.2 | S |
+| P2.3 | Service-detail view (manifest dump, URLs with copy-to-clipboard, logs, restart, backup, uninstall) | P1.3, P1.18, P1.19 | M |
 | P2.4 | Marketplace browse view | P1.4 | S |
 | P2.5 | Vibe-code dialog: prompt input → live token stream → manifest preview → deploy log → final URL chip | P1.5, P1.6, P1.7 | L |
 | P2.6 | Unlock-approval push handler + view (push notification or polling-based; signs with IRK in-page) | P1.8, P1.9 | M |
@@ -161,8 +161,8 @@ these are the holes.
 6. **P3 (2–3 days)** — website gaps; can run in parallel with P2 on a different track.
 7. **P4 (1 day)** — fast contract sync at the end so the next person to pick up mobile starts from a synced baseline.
 
-**Cycle target.** Webapp can: pair to a server, list apps, install an app
-from marketplace, vibe-code a new app and watch it deploy, claim a custom
+**Cycle target.** Webapp can: pair to a server, list services, install a service
+from marketplace, vibe-code a new service and watch it deploy, claim a custom
 URL for it, drive a browser login through it, approve a LUKS unlock,
 revoke a paired session, monitor LLM-promo credits, and recover after
 device loss. End-to-end on this dev VM, with no manual `curl`s. That's the

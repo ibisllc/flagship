@@ -111,8 +111,8 @@ describe("/webapp PWA static surface", () => {
     const app = buildServer();
     for (const path of [
       "/webapp/views/server-detail.js",
-      "/webapp/views/apps-list.js",
-      "/webapp/views/app-detail.js",
+      "/webapp/views/services-list.js",
+      "/webapp/views/service-detail.js",
       "/webapp/views/paired-sessions.js",
       "/webapp/views/tier-status.js",
       "/webapp/views/pod-pair.js",
@@ -137,8 +137,8 @@ describe("/webapp PWA static surface", () => {
     const app = buildServer();
     const want = [
       ["/api/screens/server-detail", "/webapp/views/server-detail.js"],
-      ["/api/screens/apps-list", "/webapp/views/apps-list.js"],
-      ["/api/screens/app-detail/", "/webapp/views/app-detail.js"],
+      ["/api/screens/apps-list", "/webapp/views/services-list.js"],
+      ["/api/screens/app-detail/", "/webapp/views/service-detail.js"],
       ["/api/screens/paired-sessions/list", "/webapp/views/paired-sessions.js"],
       ["/api/screens/tier-status", "/webapp/views/tier-status.js"],
       ["/api/screens/marketplace-browse", "/webapp/views/marketplace.js"],
@@ -342,7 +342,8 @@ describe("/webapp PWA static surface", () => {
     // personalises the body with the requesting server FQDN.
     // v11 added an e2e simulate-push message shim; harmless in prod.
     // v12 dropped skipWaiting/clients.claim + adopted per-URL precache.
-    expect(r.body).toContain('SHELL_VERSION = "v12"');
+    // v13 renames the apps-list/app-detail views to services-list/service-detail.
+    expect(r.body).toContain('SHELL_VERSION = "v13"');
     expect(r.body).toContain("event.data?.json");
     expect(r.body).toContain("serverFqdn");
     // Must keep the empty-payload fallback (some pushes have no body).

@@ -11,14 +11,14 @@ Today every envelope uses `|`-joined canonical bytes:
 flagship/<purpose>/v1|<field1>|<field2>|...
 ```
 
-The per-field separator-rejection added in #12 + the AppGrant envelope
+The per-field separator-rejection added in #12 + the ServiceGrant envelope
 forecloses the canonicalization-ambiguity attack class on **new** envelopes
 authored after that hardening. Legacy envelopes (BootChallenge,
 ImageRebuildRequest, ServerRevocation, MembershipMutation, MigrationRequest,
 InviteToken, InviteAcceptance, AuthCode, AuthCodeRevocation, InstallBlob,
 PublishServerDns, Dns01PublishRequest, Dns01DeleteRequest, ClaimUsername,
 LlmPromoIssueRequest, RegisterRck, SetRoutingTarget, EntitlementRevocationList,
-RootEntitlement, AppEntitlement, TunnelHelloV2, etc.) still use raw `|`-join
+RootEntitlement, ServiceEntitlement, TunnelHelloV2, etc.) still use raw `|`-join
 without per-field validation.
 
 The v2 format eliminates the separator concern by structural framing:
@@ -79,7 +79,7 @@ risk + freshness sensitivity:
 | Group | Envelopes | Earliest v2 ship | Reason |
 |---|---|---|---|
 | A — short-lived runtime | BootChallenge, TunnelHelloV2, SetRoutingTarget, PublishServerDns, Dns01PublishRequest, Dns01DeleteRequest, LlmPromoIssue | 2026-09 | Reissued frequently; quickest to roll over |
-| B — moderate-lived | AppEntitlement (deprecated; skip), EntitlementRevocationList, RootEntitlement (deprecated; skip), PushTokenRegister, AuthCode | 2026-11 | 90-day cycles; one window per envelope |
+| B — moderate-lived | ServiceEntitlement (deprecated; skip), EntitlementRevocationList, RootEntitlement (deprecated; skip), PushTokenRegister, AuthCode | 2026-11 | 90-day cycles; one window per envelope |
 | C — long-lived state | InstallBlob, RegisterServer, ClaimUsername, MembershipMutation, MigrationRequest, InviteToken/InviteAcceptance | 2027-02 | Persisted state may live years; longer overlap |
 
 Group A starts first; Group B follows once A is stable; Group C waits
@@ -90,8 +90,8 @@ on B. All target full sunset of v1 by 2027-12.
 These envelopes were either added after the H1 hardening or built with
 length-aware framing from the start:
 
-- AppGrant (#90)
-- AppAccessInvite + AppAccessAcceptance (#79)
+- ServiceGrant (#90)
+- ServiceAccessInvite + ServiceAccessAcceptance (#79)
 - RotateRck / RecoverRck / RevokeRecoverRck (#75)
 - MergeBack (#76)
 - PodIdentityBinding (#89)
