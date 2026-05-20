@@ -357,36 +357,53 @@ export class HetznerProvider implements VpsProvider {
       await this.api("POST", "/servers", buildCreateServerBody(req, sshKeyId)),
     );
 
-    // Enable rescue + reset. Hetzner queues both actions; the next
-    // boot lands in the rescue image rather than the placeholder Ubuntu.
-    await this.api(
-      "POST",
-      `/servers/${created.id}/actions/enable_rescue`,
-      enableRescueBody(sshKeyId),
-    );
-    await this.api("POST", `/servers/${created.id}/actions/reset`);
-
-    // Re-poll for IP if the create response didn't carry one.
-    let ip = created.ip;
-    if (!ip) {
-      const refreshed = parseServerStatus(
-        await this.api("GET", `/servers/${created.id}`),
+    // From here on, any failure leaks a billable server unless we
+    // destroy it. Wrap every subsequent step in a try/catch that
+    // best-effort cleans up before re-throwing the original error.
+    try {
+      // Enable rescue + reset. Hetzner queues both actions; the next
+      // boot lands in the rescue image rather than the placeholder Ubuntu.
+      await this.api(
+        "POST",
+        `/servers/${created.id}/actions/enable_rescue`,
+        enableRescueBody(sshKeyId),
       );
-      ip = refreshed.ip;
+      await this.api("POST", `/servers/${created.id}/actions/reset`);
+
+      // Re-poll for IP if the create response didn't carry one.
+      let ip = created.ip;
+      if (!ip) {
+        const refreshed = parseServerStatus(
+          await this.api("GET", `/servers/${created.id}`),
+        );
+        ip = refreshed.ip;
+      }
+      if (!ip) {
+        throw new Error(
+          `Hetzner server ${created.id} did not expose a public IPv4`,
+        );
+      }
+
+      // Wait for rescue SSHD: status=running + tcp 22 open.
+      await this.awaitRescueReady(created.id, ip);
+
+      // Stream the ISO into /dev/sda and reboot.
+      await this.ddIsoOnto(ip, req.iso);
+
+      return { id: created.id, ip };
+    } catch (e) {
+      // POST /servers already succeeded so a server EXISTS on Hetzner
+      // — destroy it before re-raising so the retry loop doesn't
+      // accumulate billable orphans.
+      try {
+        await this.destroy(created.id);
+      } catch {
+        // Surface the ORIGINAL error, not a secondary cleanup error.
+        // The orphan is now an operational concern surfaced in the
+        // re-thrown error's text.
+      }
+      throw e;
     }
-    if (!ip) {
-      throw new Error(
-        `Hetzner server ${created.id} did not expose a public IPv4`,
-      );
-    }
-
-    // Wait for rescue SSHD: status=running + tcp 22 open.
-    await this.awaitRescueReady(created.id, ip);
-
-    // Stream the ISO into /dev/sda and reboot.
-    await this.ddIsoOnto(ip, req.iso);
-
-    return { id: created.id, ip };
   }
 
   /** Poll until status=running AND `nc -z <ip> 22` succeeds. */
