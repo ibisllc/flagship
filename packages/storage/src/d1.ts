@@ -56,6 +56,8 @@ import type {
   DemoUsersStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
+  DeviceCapabilityGrantRecord,
+  DeviceCapabilityGrantStorage,
 } from "./types.js";
 
 /**
@@ -2205,6 +2207,146 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+interface DeviceCapabilityGrantRow {
+  grant_id: string;
+  username: string;
+  device_label: string;
+  device_pub_hex: string;
+  scopes_json: string;
+  issued_at: number;
+  expires_at: number;
+  signature_hex: string;
+  revoked_at: number | null;
+}
+function rowToDeviceCapabilityGrant(
+  r: DeviceCapabilityGrantRow,
+): DeviceCapabilityGrantRecord {
+  return {
+    grantId: r.grant_id,
+    username: r.username,
+    deviceLabel: r.device_label,
+    devicePubHex: r.device_pub_hex,
+    scopesJson: r.scopes_json,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    signatureHex: r.signature_hex,
+    revokedAt: r.revoked_at,
+  };
+}
+
+export class D1DeviceCapabilityGrantStorage
+  implements DeviceCapabilityGrantStorage
+{
+  constructor(private readonly db: D1Database) {}
+  async put(rec: DeviceCapabilityGrantRecord) {
+    // The unique partial index `idx_dcg_username_label_active`
+    // enforces "at most one ACTIVE grant per (username, device_label)"
+    // at the DB level — re-issuance MUST revoke the old row first.
+    // We catch the surfaced UNIQUE-constraint message rather than
+    // pre-checking, both to avoid the read-then-write race and to keep
+    // the InMemory / D1 reason strings byte-identical.
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO device_capability_grants
+            (grant_id, username, device_label, device_pub_hex,
+             scopes_json, issued_at, expires_at, signature_hex, revoked_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+        )
+        .bind(
+          rec.grantId,
+          rec.username.toLowerCase(),
+          rec.deviceLabel.toLowerCase(),
+          rec.devicePubHex.toLowerCase(),
+          rec.scopesJson,
+          rec.issuedAt,
+          rec.expiresAt,
+          rec.signatureHex,
+          rec.revokedAt,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE/i.test(msg)) {
+        return {
+          ok: false as const,
+          reason: "duplicate active grant for (username, device_label)",
+        };
+      }
+      throw e;
+    }
+  }
+  async get(grantId: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM device_capability_grants WHERE grant_id = ?1`,
+      )
+      .bind(grantId)
+      .first<DeviceCapabilityGrantRow>();
+    return r ? rowToDeviceCapabilityGrant(r) : undefined;
+  }
+  async listForUser(username: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM device_capability_grants
+         WHERE username = ?1
+         ORDER BY issued_at DESC`,
+      )
+      .bind(username.toLowerCase())
+      .all<DeviceCapabilityGrantRow>();
+    return (r.results ?? []).map(rowToDeviceCapabilityGrant);
+  }
+  async getActiveForUserLabel(username: string, deviceLabel: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM device_capability_grants
+         WHERE username = ?1 AND device_label = ?2 AND revoked_at IS NULL`,
+      )
+      .bind(username.toLowerCase(), deviceLabel.toLowerCase())
+      .all<DeviceCapabilityGrantRow>();
+    const rows = r.results ?? [];
+    if (rows.length > 1) {
+      // Defensive — the unique partial index should make this
+      // unreachable. Fail loudly so a misconfigured DB is impossible
+      // to silently keep using.
+      throw new Error(
+        `getActiveForUserLabel: more than one active grant for ` +
+          `${username}/${deviceLabel}`,
+      );
+    }
+    return rows[0] ? rowToDeviceCapabilityGrant(rows[0]) : undefined;
+  }
+  async getByDevicePub(devicePubHex: string) {
+    // Most-recent ACTIVE row for the pubkey. ORDER BY issued_at DESC
+    // + LIMIT 1 picks the right one when a device has been re-labeled
+    // and the old grant tombstoned; the partial-active filter excludes
+    // tombstones outright.
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM device_capability_grants
+         WHERE device_pub_hex = ?1 AND revoked_at IS NULL
+         ORDER BY issued_at DESC
+         LIMIT 1`,
+      )
+      .bind(devicePubHex.toLowerCase())
+      .first<DeviceCapabilityGrantRow>();
+    return r ? rowToDeviceCapabilityGrant(r) : undefined;
+  }
+  async revoke(grantId: string, revokedAt: number) {
+    const r = await this.db
+      .prepare(
+        `UPDATE device_capability_grants SET revoked_at = ?1 WHERE grant_id = ?2`,
+      )
+      .bind(revokedAt, grantId)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) {
+      throw new Error("unknown grantId");
+    }
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -2232,6 +2374,7 @@ export class D1Storage implements Storage {
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
+  deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -2259,5 +2402,6 @@ export class D1Storage implements Storage {
     this.demoLlmLedger = new D1DemoLlmLedgerStorage(db);
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
     this.demoUsers = new D1DemoUsersStorage(db);
+    this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
   }
 }

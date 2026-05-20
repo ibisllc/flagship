@@ -669,6 +669,7 @@ export interface Storage {
   demoLlmLedger: DemoLlmLedgerStorage;
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
+  deviceCapabilityGrants: DeviceCapabilityGrantStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1082,4 +1083,88 @@ export interface DemoUsersStorage {
   /** Count rows whose state is in (provisioning, up, idle-pending-teardown)
    *  — drives the MAX_CONCURRENT_DEMO_VPS soft cap. */
   countActive(): Promise<number>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Device capability grants (v2 device-addressing — S3.2)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Persisted row for a `DeviceCapabilityGrant` envelope (see
+ * `@flagship/protocol`'s auth.ts + docs/v2-device-addressing-and-real-
+ * ticket.md §2). The envelope itself lives on the phone / Worker / daemon
+ * as canonical bytes + Ed25519 signature; this row is the .com-side
+ * persistence layer keyed by the grant id (SHA-256 of canonical bytes).
+ *
+ * `scopesJson` is the sorted JSON array of DeviceScope strings as
+ * serialized by the protocol layer's canonicalization; storing it as
+ * text keeps D1 schema-agnostic while preserving the exact byte shape
+ * the envelope was signed over. Readers MUST `JSON.parse` and validate
+ * against the protocol's `DEVICE_SCOPES` set before trusting it.
+ *
+ * `revokedAt` is null while the grant is active; a successful
+ * `RevokeDeviceCapabilityGrant` flips it to ms-since-epoch. The row is
+ * NEVER deleted — historic grants remain queryable for audit + replay.
+ */
+export interface DeviceCapabilityGrantRecord {
+  grantId: string;
+  username: string;
+  deviceLabel: string;
+  devicePubHex: string;
+  scopesJson: string;
+  issuedAt: number;
+  expiresAt: number;
+  signatureHex: string;
+  revokedAt: number | null;
+}
+
+/**
+ * Store contract for `device_capability_grants`. Implementations live
+ * in `inMemory.ts` (tests + dev runs) and `d1.ts` (Worker production).
+ *
+ * Invariants enforced by the storage layer:
+ *
+ *   • `put` rejects a duplicate ACTIVE grant for the same
+ *     `(username, deviceLabel)` — re-issuance MUST call `revoke` on
+ *     the prior grant first. The D1 adapter relies on the unique
+ *     partial index (`idx_dcg_username_label_active`) for this; the
+ *     InMemory adapter checks explicitly. The shared reason string
+ *     `'duplicate active grant for (username, device_label)'` makes
+ *     the failure mode caller-checkable across both adapters.
+ *
+ *   • `getActiveForUserLabel` returns AT MOST one row. Both adapters
+ *     fail loudly (throw) if the invariant is somehow violated —
+ *     defense-in-depth against a future migration that drops the
+ *     partial index.
+ *
+ *   • `listForUser` returns rows sorted by `issuedAt` DESCENDING
+ *     (most-recent first). Callers that want chronological order
+ *     reverse the array — the docs/spec audit feeds want
+ *     newest-first.
+ *
+ *   • `revoke` mutates `revokedAt` only; the row stays so a later
+ *     `get(grantId)` still resolves. Throws on unknown grantId — the
+ *     handler that issued the revoke should have read the row
+ *     immediately before, so a missing row indicates a logic bug.
+ */
+export interface DeviceCapabilityGrantStorage {
+  /** Insert a fresh grant row. Returns `ok:false` with the well-known
+   *  reason `'duplicate active grant for (username, device_label)'`
+   *  when another ACTIVE row already exists for that pair AND the
+   *  incoming row is itself ACTIVE (`revokedAt === null`). */
+  put(rec: DeviceCapabilityGrantRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(grantId: string): Promise<DeviceCapabilityGrantRecord | undefined>;
+  /** All grants for a user, ACTIVE + revoked, sorted issued_at DESC
+   *  (most-recent first). */
+  listForUser(username: string): Promise<DeviceCapabilityGrantRecord[]>;
+  /** The SINGLE active grant matching `(username, deviceLabel)`, or
+   *  undefined. */
+  getActiveForUserLabel(username: string, deviceLabel: string): Promise<DeviceCapabilityGrantRecord | undefined>;
+  /** Look up by device pubkey hex. When more than one grant covers
+   *  the same pubkey (a device that's been re-labeled), returns the
+   *  most-recent ACTIVE grant; undefined when no active row matches. */
+  getByDevicePub(devicePubHex: string): Promise<DeviceCapabilityGrantRecord | undefined>;
+  /** Stamp `revoked_at` on the matching grant. Throws Error
+   *  `'unknown grantId'` if no row exists. */
+  revoke(grantId: string, revokedAt: number): Promise<void>;
 }

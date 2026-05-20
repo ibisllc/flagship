@@ -55,6 +55,8 @@ import type {
   DemoUsersStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
+  DeviceCapabilityGrantRecord,
+  DeviceCapabilityGrantStorage,
 } from "./types.js";
 
 /**
@@ -919,6 +921,94 @@ export class InMemoryDemoUsersStorage implements DemoUsersStorage {
   }
 }
 
+export class InMemoryDeviceCapabilityGrantStorage
+  implements DeviceCapabilityGrantStorage
+{
+  // Two indexes share the underlying record map. Records are cloned
+  // on every read/write so callers can mutate the returned object
+  // without poisoning the store.
+  private byId = new Map<string, DeviceCapabilityGrantRecord>();
+  private clone(r: DeviceCapabilityGrantRecord): DeviceCapabilityGrantRecord {
+    return { ...r };
+  }
+  async put(rec: DeviceCapabilityGrantRecord) {
+    // Duplicate-active guard mirrors the D1 unique partial index. A
+    // tombstoned (revoked_at !== null) row never blocks a new active
+    // grant — that's the re-issuance flow.
+    if (rec.revokedAt === null) {
+      const u = rec.username.toLowerCase();
+      const l = rec.deviceLabel.toLowerCase();
+      for (const other of this.byId.values()) {
+        if (
+          other.grantId !== rec.grantId &&
+          other.revokedAt === null &&
+          other.username.toLowerCase() === u &&
+          other.deviceLabel.toLowerCase() === l
+        ) {
+          return {
+            ok: false as const,
+            reason: "duplicate active grant for (username, device_label)",
+          };
+        }
+      }
+    }
+    this.byId.set(rec.grantId, this.clone(rec));
+    return { ok: true as const };
+  }
+  async get(grantId: string) {
+    const r = this.byId.get(grantId);
+    return r ? this.clone(r) : undefined;
+  }
+  async listForUser(username: string) {
+    const u = username.toLowerCase();
+    const out: DeviceCapabilityGrantRecord[] = [];
+    for (const r of this.byId.values()) {
+      if (r.username.toLowerCase() === u) out.push(this.clone(r));
+    }
+    out.sort((a, b) => b.issuedAt - a.issuedAt);
+    return out;
+  }
+  async getActiveForUserLabel(username: string, deviceLabel: string) {
+    const u = username.toLowerCase();
+    const l = deviceLabel.toLowerCase();
+    const matches: DeviceCapabilityGrantRecord[] = [];
+    for (const r of this.byId.values()) {
+      if (
+        r.revokedAt === null &&
+        r.username.toLowerCase() === u &&
+        r.deviceLabel.toLowerCase() === l
+      ) {
+        matches.push(r);
+      }
+    }
+    if (matches.length > 1) {
+      // Defensive — the put-time guard should make this unreachable.
+      throw new Error(
+        `getActiveForUserLabel: more than one active grant for ${u}/${l}`,
+      );
+    }
+    return matches[0] ? this.clone(matches[0]) : undefined;
+  }
+  async getByDevicePub(devicePubHex: string) {
+    const p = devicePubHex.toLowerCase();
+    // Most-recent ACTIVE grant for the pubkey. Re-labeling a device
+    // produces two grants sharing the same devicePubHex; the active
+    // one (newest by issuedAt) is what callers actually care about.
+    let best: DeviceCapabilityGrantRecord | undefined;
+    for (const r of this.byId.values()) {
+      if (r.revokedAt !== null) continue;
+      if (r.devicePubHex.toLowerCase() !== p) continue;
+      if (!best || r.issuedAt > best.issuedAt) best = r;
+    }
+    return best ? this.clone(best) : undefined;
+  }
+  async revoke(grantId: string, revokedAt: number) {
+    const r = this.byId.get(grantId);
+    if (!r) throw new Error("unknown grantId");
+    r.revokedAt = revokedAt;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -946,4 +1036,5 @@ export class InMemoryStorage implements Storage {
   demoLlmLedger = new InMemoryDemoLlmLedgerStorage();
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
   demoUsers = new InMemoryDemoUsersStorage();
+  deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
 }
