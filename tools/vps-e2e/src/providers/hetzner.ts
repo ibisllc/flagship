@@ -61,6 +61,7 @@ export const SSH_KEY_NAME = "flagship-vps-e2e";
 export function buildCreateServerBody(
   req: ProvisionRequest,
   sshKeyId: number | string,
+  primaryIpv4Id?: number,
   placeholderImage = "ubuntu-22.04",
 ): Record<string, unknown> {
   return {
@@ -71,13 +72,14 @@ export function buildCreateServerBody(
     ssh_keys: [sshKeyId],
     start_after_create: true,
     labels: { "flagship-e2e": "1" },
-    // Explicit public-network config. Modern Hetzner accounts can
-    // default to private-only (Primary-IPs feature), which would
-    // create a server with NO public IPv4/IPv6 — and then
-    // `enable_rescue` 422s with "no public network interfaces
-    // found, rescue system cannot be used". Force both on so the
-    // rescue+dd flow works regardless of account default.
-    public_net: { enable_ipv4: true, enable_ipv6: true },
+    // Explicit primary IP pre-allocated by allocatePrimaryIpv4(). The
+    // earlier 'public_net: { enable_ipv4: true }' shape was silently
+    // ignored by Hetzner on some accounts — the server got created
+    // with no public network, and enable_rescue 422'd. Passing a
+    // concrete primaryIpv4Id forces the binding to happen explicitly.
+    public_net: primaryIpv4Id
+      ? { enable_ipv4: true, ipv4: primaryIpv4Id, enable_ipv6: true }
+      : { enable_ipv4: true, enable_ipv6: true },
   };
 }
 
@@ -310,6 +312,44 @@ export class HetznerProvider implements VpsProvider {
   }
 
   /** Upload the local SSH pubkey (idempotent — name-keyed). */
+  /**
+   * Pre-allocate a public IPv4 in the given location. `auto_delete:
+   * true` makes Hetzner release the IP when the server it's attached
+   * to is destroyed — no orphans accumulate even if a provision fails
+   * mid-flight. Returns the numeric Hetzner primary-ip id + the
+   * v4 address.
+   */
+  async allocatePrimaryIpv4(
+    name: string,
+    location: string,
+  ): Promise<{ id: number; ip: string }> {
+    const body = {
+      name,
+      type: "ipv4" as const,
+      assignee_type: "server" as const,
+      auto_delete: true,
+      datacenter: undefined as string | undefined,
+      location,
+    };
+    // Hetzner accepts EITHER `datacenter` OR `location` for primary
+    // IPs. `location` is the higher-level handle (e.g. fsn1 picks any
+    // DC in Falkenstein); we pass it through and omit datacenter so
+    // the API picks the best fit.
+    delete (body as { datacenter?: string }).datacenter;
+    const res = await this.api("POST", "/primary_ips", body);
+    const j = res as {
+      primary_ip?: { id?: number | string; ip?: string };
+    };
+    const id = j?.primary_ip?.id;
+    const ip = j?.primary_ip?.ip;
+    if (id === undefined || id === null || !ip) {
+      throw new Error(
+        `Hetzner POST /primary_ips returned no id/ip: ${JSON.stringify(res).slice(0, 240)}`,
+      );
+    }
+    return { id: Number(id), ip };
+  }
+
   async ensureSshKey(pubKeyContent: string): Promise<number> {
     if (this.cachedSshKeyId !== null) return this.cachedSshKeyId;
     const list = parseSshKeyList(
@@ -353,8 +393,24 @@ export class HetznerProvider implements VpsProvider {
           "CLI must upload the local SSH pubkey first.",
       );
     }
+    // Pre-allocate a primary IPv4 explicitly + pass its id to the
+    // server-create. Hetzner's "implicit public IP" via
+    // public_net.enable_ipv4 has been observed to be silently ignored
+    // on some accounts (server gets created with no public net, then
+    // enable_rescue 422s with private_net_only_server). Explicit
+    // allocation surfaces any account-level rejection up-front AND
+    // auto_delete: true ensures the IP is released when the server
+    // dies — no orphan accumulation.
+    const primaryIp = await this.allocatePrimaryIpv4(
+      sanitizeServerName(req.label) + "-ip",
+      req.region,
+    );
     const created = parseCreateServerResponse(
-      await this.api("POST", "/servers", buildCreateServerBody(req, sshKeyId)),
+      await this.api(
+        "POST",
+        "/servers",
+        buildCreateServerBody(req, sshKeyId, primaryIp.id),
+      ),
     );
 
     // From here on, any failure leaks a billable server unless we
