@@ -711,13 +711,27 @@ export class D1AuditEventStorage implements AuditEventStorage {
   constructor(private db: D1Database) {}
   async append(rec: Omit<AuditEventRecord, "seq">): Promise<AuditEventRecord> {
     const username = rec.username.toLowerCase();
+    // v1.2 Phase 5 — the three account-type-aware columns are
+    // NULLable on storage so pre-migration rows don't break; we bind
+    // null when the caller didn't provide them.
     const r = await this.db
       .prepare(
-        `INSERT INTO audit_events (username, event_kind, detail, device_prefix, posted_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO audit_events
+           (username, event_kind, detail, device_prefix, posted_at,
+            account_type_at_event, quarantine_until, recovery_method)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING seq`,
       )
-      .bind(username, rec.eventKind, rec.detail, rec.devicePrefix, rec.postedAt)
+      .bind(
+        username,
+        rec.eventKind,
+        rec.detail,
+        rec.devicePrefix,
+        rec.postedAt,
+        rec.accountTypeAtEvent ?? null,
+        rec.quarantineUntil ?? null,
+        rec.recoveryMethod ?? null,
+      )
       .first<{ seq: number }>();
     return { ...rec, username, seq: r?.seq ?? 0 };
   }
@@ -725,22 +739,45 @@ export class D1AuditEventStorage implements AuditEventStorage {
     const u = username.toLowerCase();
     const r = await this.db
       .prepare(
-        `SELECT seq, username, event_kind, detail, device_prefix, posted_at
+        `SELECT seq, username, event_kind, detail, device_prefix, posted_at,
+                account_type_at_event, quarantine_until, recovery_method
          FROM audit_events
          WHERE username = ? AND seq > ?
          ORDER BY seq DESC
          LIMIT ?`,
       )
       .bind(u, sinceSeq, limit)
-      .all<{ seq: number; username: string; event_kind: string; detail: string; device_prefix: string; posted_at: number }>();
-    return (r.results ?? []).map((row) => ({
-      seq: row.seq,
-      username: row.username,
-      eventKind: row.event_kind as AuditEventRecord["eventKind"],
-      detail: row.detail,
-      devicePrefix: row.device_prefix,
-      postedAt: row.posted_at,
-    }));
+      .all<{
+        seq: number;
+        username: string;
+        event_kind: string;
+        detail: string;
+        device_prefix: string;
+        posted_at: number;
+        account_type_at_event: string | null;
+        quarantine_until: number | null;
+        recovery_method: string | null;
+      }>();
+    return (r.results ?? []).map((row) => {
+      const base: AuditEventRecord = {
+        seq: row.seq,
+        username: row.username,
+        eventKind: row.event_kind as AuditEventRecord["eventKind"],
+        detail: row.detail,
+        devicePrefix: row.device_prefix,
+        postedAt: row.posted_at,
+      };
+      if (row.account_type_at_event !== null && row.account_type_at_event !== undefined) {
+        base.accountTypeAtEvent = row.account_type_at_event as AuditEventRecord["accountTypeAtEvent"];
+      }
+      if (row.quarantine_until !== null && row.quarantine_until !== undefined) {
+        base.quarantineUntil = row.quarantine_until;
+      }
+      if (row.recovery_method !== null && row.recovery_method !== undefined) {
+        base.recoveryMethod = row.recovery_method as AuditEventRecord["recoveryMethod"];
+      }
+      return base;
+    });
   }
 }
 

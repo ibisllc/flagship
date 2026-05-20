@@ -38,6 +38,8 @@
 import type { D1Database } from "@flagship/storage";
 import { D1Storage } from "@flagship/storage";
 import {
+  buildPushForwarder,
+  wrapForwarderAsV12Fanout,
   runCustomDomainVerificationPass,
   resolveCnameChain,
   pushRedirection,
@@ -68,6 +70,20 @@ export interface ScheduledEnv {
   /** Plan A — numeric Hetzner SSH key id (set in [vars]). Unused by
    *  the cron itself but plumbed for symmetry with the request path. */
   DEMO_PUBLIC_SSH_KEY_ID?: string;
+  // v1.2 Plan B Phase 5 — push provider secrets used by the
+  // re-pair-alerts cron's real fan-out path. When any are missing,
+  // the helper returns null and the scheduler falls back to
+  // "audit-only" alerting.
+  APNS_KEY_ID?: string;
+  APNS_TEAM_ID?: string;
+  APNS_PRIVATE_KEY_PEM?: string;
+  APNS_BUNDLE_ID?: string;
+  APNS_HOST?: string;
+  FCM_SERVICE_ACCOUNT_JSON?: string;
+  FCM_PROJECT_ID?: string;
+  WEBPUSH_VAPID_PRIVATE_KEY_PEM?: string;
+  WEBPUSH_VAPID_PUBLIC_KEY_B64URL?: string;
+  WEBPUSH_CONTACT?: string;
 }
 
 /**
@@ -389,16 +405,18 @@ export async function runRePairAlertsCron(
 ): Promise<{ scanned: number; fired: number } | null> {
   if (!env.DB) return null;
   const storage = new D1Storage(env.DB);
-  // Phase 2 stub forwarder. Phase 5 replaces this with a real
-  // pushBridge fan-out that signs an encrypted payload to each
-  // device's pushX25519Pub. For Phase 2 we just observe the
-  // (row, bit) progression — the firePush is what stamps the
-  // bitmap, so it has to be at least a resolved promise.
+  // v1.2 Phase 5 — real fan-out via the high-level pushFanout +
+  // pushTokens + auditEvents deps. When push provider secrets aren't
+  // configured (dev / pre-launch), buildOptionalV12PushFanoutFromEnv
+  // returns null and the scheduler falls back to "audit-only"
+  // alerting (the bit still stamps, the activity feed captures the
+  // alert, but the device doesn't get a push).
+  const fanout = buildOptionalV12PushFanoutFromEnv(env);
   const result = await schedulePendingRePairAlerts({
     pendingRePairs: storage.pendingRePairs,
-    firePush: async () => {
-      /* Phase 5 — fire via pushBridge */
-    },
+    pushTokens: storage.pushTokens,
+    auditEvents: storage.auditEvents,
+    ...(fanout ? { pushFanout: fanout } : {}),
     now: () => now.getTime(),
   });
   return { scanned: result.scanned, fired: result.fired.length };
@@ -432,6 +450,56 @@ export async function runCustomDomainVerify(
   });
 }
 
+/**
+ * v1.2 Plan B Phase 5 — wrap the env-derived push forwarder into the
+ * V12PushFanout shape. Returns null when no push provider's secrets
+ * are configured (dev / pre-launch).
+ */
+function buildOptionalV12PushFanoutFromEnv(env: ScheduledEnv) {
+  const apnsConfigured =
+    !!env.APNS_KEY_ID &&
+    !!env.APNS_TEAM_ID &&
+    !!env.APNS_PRIVATE_KEY_PEM &&
+    !!env.APNS_BUNDLE_ID;
+  const fcmConfigured = !!env.FCM_SERVICE_ACCOUNT_JSON && !!env.FCM_PROJECT_ID;
+  const webpushConfigured =
+    !!env.WEBPUSH_VAPID_PRIVATE_KEY_PEM &&
+    !!env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL &&
+    !!env.WEBPUSH_CONTACT;
+  if (!apnsConfigured && !fcmConfigured && !webpushConfigured) return null;
+  const forwarder = buildPushForwarder({
+    ...(apnsConfigured
+      ? {
+          apns: {
+            keyId: env.APNS_KEY_ID!,
+            teamId: env.APNS_TEAM_ID!,
+            privateKeyPem: env.APNS_PRIVATE_KEY_PEM!,
+            bundleId: env.APNS_BUNDLE_ID!,
+            ...(env.APNS_HOST ? { host: env.APNS_HOST } : {}),
+          },
+        }
+      : {}),
+    ...(fcmConfigured
+      ? {
+          fcm: {
+            serviceAccountJson: env.FCM_SERVICE_ACCOUNT_JSON!,
+            projectId: env.FCM_PROJECT_ID!,
+          },
+        }
+      : {}),
+    ...(webpushConfigured
+      ? {
+          webpush: {
+            vapidPrivateKeyPem: env.WEBPUSH_VAPID_PRIVATE_KEY_PEM!,
+            vapidPublicKeyB64Url: env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL!,
+            contact: env.WEBPUSH_CONTACT!,
+          },
+        }
+      : {}),
+  });
+  return wrapForwarderAsV12Fanout(forwarder);
+}
+
 export const _internal = {
   HOURLY_PREFIX,
   MONTHLY_PREFIX,
@@ -441,4 +509,5 @@ export const _internal = {
   formatHourlyKey,
   formatMonthlyKey,
   HOURLY_KEY_RE,
+  buildOptionalV12PushFanoutFromEnv,
 };

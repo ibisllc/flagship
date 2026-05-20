@@ -266,6 +266,109 @@ describe("TOTP enroll-confirm", () => {
   });
 });
 
+describe("v1.2 Plan B Phase 5 — TOTP enroll-confirm audit emissions", () => {
+  it("appends `account-type-changed-single-to-multi` + `totp-enrolled` rows on success", async () => {
+    const irk = makeKey();
+    const storage = await seedUser(irk);
+    const beginRes = await handleTotpEnrollBegin(
+      { usernames: storage.usernames, kekHex: TEST_KEK_HEX },
+      USERNAME,
+      beginBody({ irk }),
+    );
+    expect(beginRes.status).toBe(200);
+    const beginBody_ = beginRes.body as { secret: string };
+    const totp = new OTPAuth.TOTP({
+      issuer: "Flagship",
+      label: USERNAME,
+      algorithm: "SHA1",
+      digits: 6,
+      period: 30,
+      secret: OTPAuth.Secret.fromBase32(beginBody_.secret),
+    });
+    const fixedNow = 1_700_000_000_000;
+    const code = totp.generate({ timestamp: fixedNow });
+    const confirmRes = await handleTotpEnrollConfirm(
+      {
+        usernames: storage.usernames,
+        auditEvents: storage.auditEvents,
+        kekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+        fastHash: true,
+      },
+      USERNAME,
+      confirmBody({ irk, code, issuedAt: fixedNow }),
+    );
+    expect(confirmRes.status).toBe(200);
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    // Two rows: the account-type change + the totp-specific.
+    expect(events.map((e) => e.eventKind)).toEqual(
+      expect.arrayContaining([
+        "account-type-changed-single-to-multi",
+        "totp-enrolled",
+      ]),
+    );
+    // Both rows snapshot accountTypeAtEvent='multi'.
+    for (const e of events) {
+      expect(e.accountTypeAtEvent).toBe("multi");
+    }
+  });
+
+  it("does NOT emit audit rows when the code is wrong (failure path)", async () => {
+    const irk = makeKey();
+    const storage = await seedUser(irk);
+    await handleTotpEnrollBegin(
+      { usernames: storage.usernames, kekHex: TEST_KEK_HEX },
+      USERNAME,
+      beginBody({ irk }),
+    );
+    const res = await handleTotpEnrollConfirm(
+      {
+        usernames: storage.usernames,
+        auditEvents: storage.auditEvents,
+        kekHex: TEST_KEK_HEX,
+      },
+      USERNAME,
+      confirmBody({ irk, code: "000000" }),
+    );
+    expect(res.status).toBe(401);
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events).toHaveLength(0);
+  });
+
+  it("dep `auditEvents` is optional — old callers still get 200 without audit", async () => {
+    const irk = makeKey();
+    const storage = await seedUser(irk);
+    const beginRes = await handleTotpEnrollBegin(
+      { usernames: storage.usernames, kekHex: TEST_KEK_HEX },
+      USERNAME,
+      beginBody({ irk }),
+    );
+    const totp = new OTPAuth.TOTP({
+      issuer: "Flagship",
+      label: USERNAME,
+      algorithm: "SHA1",
+      digits: 6,
+      period: 30,
+      secret: OTPAuth.Secret.fromBase32(
+        (beginRes.body as { secret: string }).secret,
+      ),
+    });
+    const fixedNow = 1_700_000_000_000;
+    const code = totp.generate({ timestamp: fixedNow });
+    const confirmRes = await handleTotpEnrollConfirm(
+      {
+        usernames: storage.usernames,
+        kekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+        fastHash: true,
+      },
+      USERNAME,
+      confirmBody({ irk, code, issuedAt: fixedNow }),
+    );
+    expect(confirmRes.status).toBe(200);
+  });
+});
+
 describe("TOTP encryption helpers", () => {
   it("encrypt then decrypt round-trips arbitrary bytes", async () => {
     const secret = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

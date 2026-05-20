@@ -218,6 +218,146 @@ describe("schedulePendingRePairAlerts — multi-device 24h grace", () => {
   });
 });
 
+describe("v1.2 Plan B Phase 5 — real-push fan-out", () => {
+  async function seedAlice(s: InMemoryStorage): Promise<void> {
+    await s.usernames.put({
+      username: USERNAME,
+      irkPubHex: "aa".repeat(32),
+      claimedAt: 1,
+    });
+  }
+
+  async function seedPushTokens(s: InMemoryStorage, tokenIds: string[]): Promise<void> {
+    for (const tokenId of tokenIds) {
+      await s.pushTokens.put({
+        tokenId,
+        username: USERNAME,
+        platform: "apns",
+        providerToken: `provider-${tokenId}`,
+        pushX25519PubHex: "01".repeat(32),
+        registrationSignatureHex: "00".repeat(64),
+        label: `Device ${tokenId}`,
+        registeredAt: 1,
+        lastSeenAt: 1,
+      });
+    }
+  }
+
+  it("when pushFanout + pushTokens are wired (no legacy firePush), the scheduler resolves the user's tokens and calls pushFanout with a typed payload", async () => {
+    const s = new InMemoryStorage();
+    await seedAlice(s);
+    await seedPushTokens(s, ["devA", "devB"]);
+    await seed(s, pending({ alertsFiredBitmap: 0 }));
+    const fires: Array<{
+      username: string;
+      tokenIds: string[];
+      category: string;
+      body: string;
+      deepLink: string;
+    }> = [];
+    const res = await schedulePendingRePairAlerts({
+      pendingRePairs: s.pendingRePairs,
+      pushTokens: s.pushTokens,
+      auditEvents: s.auditEvents,
+      pushFanout: async ({ username, targets, payload }) => {
+        fires.push({
+          username,
+          tokenIds: targets.map((t) => t.tokenId),
+          category: payload.category,
+          body: payload.body,
+          deepLink: payload.deepLink,
+        });
+      },
+      now: () => FIXED_NOW,
+    });
+    expect(res.scanned).toBe(1);
+    expect(fires).toHaveLength(1);
+    expect(new Set(fires[0]!.tokenIds)).toEqual(new Set(["devA", "devB"]));
+    expect(fires[0]!.category).toBe("re-pair-initiated");
+    expect(fires[0]!.body).toMatch(/new device.*account/i);
+    expect(fires[0]!.deepLink).toMatch(/^flagship:\/\/account\/re-pair\?u=alice/);
+    // Bit was stamped after the successful fan-out.
+    const after = await s.pendingRePairs.get(USERNAME);
+    expect(after?.alertsFiredBitmap).toBe(ALERT_BIT_T0);
+    // Audit row captured the fired alert.
+    const events = await s.auditEvents.list(USERNAME, 0, 10);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.eventKind).toBe("device-replaced");
+    expect(events[0]?.detail).toMatch(/re-pair-initiated/);
+  });
+
+  it("urgent ping carries the 1h-before copy", async () => {
+    const s = new InMemoryStorage();
+    await seedAlice(s);
+    await seedPushTokens(s, ["devA"]);
+    await seed(
+      s,
+      pending({
+        alertsFiredBitmap:
+          ALERT_BIT_T0 | ALERT_BIT_T1D | ALERT_BIT_T3D | ALERT_BIT_T6D,
+      }),
+    );
+    const fires: Array<{ category: string; body: string }> = [];
+    await schedulePendingRePairAlerts({
+      pendingRePairs: s.pendingRePairs,
+      pushTokens: s.pushTokens,
+      auditEvents: s.auditEvents,
+      pushFanout: async ({ payload }) => {
+        fires.push({ category: payload.category, body: payload.body });
+      },
+      now: () => FIXED_NOW + 7 * 86_400_000 - 30 * 60_000,
+    });
+    expect(fires).toHaveLength(1);
+    expect(fires[0]!.category).toBe("re-pair-urgent");
+    expect(fires[0]!.body).toMatch(/1 hour/);
+  });
+
+  it("zero registered push tokens ⇒ no push fan-out but the bit still stamps + audit row still lands", async () => {
+    const s = new InMemoryStorage();
+    await seedAlice(s);
+    await seed(s, pending({ alertsFiredBitmap: 0 }));
+    const fires: number[] = [];
+    await schedulePendingRePairAlerts({
+      pendingRePairs: s.pendingRePairs,
+      pushTokens: s.pushTokens,
+      auditEvents: s.auditEvents,
+      pushFanout: async () => {
+        fires.push(1);
+      },
+      now: () => FIXED_NOW,
+    });
+    expect(fires).toHaveLength(0);
+    const after = await s.pendingRePairs.get(USERNAME);
+    expect(after?.alertsFiredBitmap).toBe(ALERT_BIT_T0);
+    const events = await s.auditEvents.list(USERNAME, 0, 10);
+    expect(events).toHaveLength(1);
+  });
+
+  it("legacy `firePush` callback OVERRIDES the high-level deps (backward-compat)", async () => {
+    const s = new InMemoryStorage();
+    await seedAlice(s);
+    await seedPushTokens(s, ["devA"]);
+    await seed(s, pending({ alertsFiredBitmap: 0 }));
+    const legacyFires: Array<{ username: string; bit: number }> = [];
+    const realFires: Array<{ username: string }> = [];
+    await schedulePendingRePairAlerts({
+      pendingRePairs: s.pendingRePairs,
+      pushTokens: s.pushTokens,
+      auditEvents: s.auditEvents,
+      pushFanout: async ({ username }) => {
+        realFires.push({ username });
+      },
+      firePush: async (req) => {
+        legacyFires.push({ username: req.username, bit: req.bit });
+      },
+      now: () => FIXED_NOW,
+    });
+    // Only legacy fired.
+    expect(legacyFires).toHaveLength(1);
+    expect(realFires).toHaveLength(0);
+  });
+});
+
 describe("schedulePendingRePairAlerts — guards", () => {
   it("skips objected rows", async () => {
     const s = new InMemoryStorage();

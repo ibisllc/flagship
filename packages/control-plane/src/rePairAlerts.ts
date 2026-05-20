@@ -30,9 +30,13 @@
  */
 
 import type {
+  AuditEventStorage,
   PendingRePairRecord,
   PendingRePairStorage,
+  PushTokenStorage,
 } from "@flagship/storage";
+import { recordAuditEvent } from "./auditEvents.js";
+import type { V12PushFanout } from "./totp.js";
 
 export const ALERT_BIT_T0 = 1;
 export const ALERT_BIT_T1D = 2;
@@ -75,18 +79,37 @@ export interface PushFireRequest {
 export interface RePairAlertsDeps {
   pendingRePairs: PendingRePairStorage;
   /**
-   * Fire-and-forget push. Phase 5 (Audit + push) will replace this
-   * stub-friendly callback with a real bridge that fans out to APNs
-   * / FCM / Web Push with the correct category + deep-link payload.
-   * For Phase 2 we just need a hook so tests can confirm the
-   * scheduler chose the right (row, bit) pair.
+   * Phase 2 contract — fire-and-forget push. Phase 5 keeps this
+   * stub-friendly callback intact so existing tests + dev paths
+   * still pass a recording stub, BUT the Worker injects the real
+   * fan-out via the high-level deps below
+   * (`pushFanout` + `pushTokens` + `auditEvents`) and leaves
+   * `firePush` unset; the scheduler then synthesises a default
+   * `firePush` from those high-level deps.
    *
    * The callback is awaited so a real implementation can defer to
    * `ctx.waitUntil` upstream; failures are caught by the scheduler
    * and a failed push doesn't block the bitmap-OR (the next tick
    * retries automatically because the bit isn't set yet).
+   *
+   * Exactly one of `firePush` OR the trio
+   * `pushFanout + pushTokens + auditEvents` must be provided; when
+   * both are passed, `firePush` wins (the explicit override).
    */
-  firePush: (req: PushFireRequest) => Promise<void>;
+  firePush?: (req: PushFireRequest) => Promise<void>;
+  /**
+   * v1.2 Phase 5 — real push fan-out. Same shape as the
+   * pushBridge.buildPushForwarder output (the Worker wraps the
+   * forwarder for this callback). When wired, the scheduler:
+   *   1. Resolves the user's push tokens via `pushTokens.listByUser`.
+   *   2. Emits a "re-pair-alert" audit row capturing the bit fired.
+   *   3. Calls pushFanout with the targets + a typed payload.
+   * The `firePush` legacy callback is left unwired by the Worker;
+   * Phase 5 tests prove both paths.
+   */
+  pushFanout?: V12PushFanout;
+  pushTokens?: PushTokenStorage;
+  auditEvents?: AuditEventStorage;
   /** Cron tick wall-clock; tests inject a fixed value. */
   now: () => number;
   /** Defaults to 100; only matters for very large fan-outs. */
@@ -110,6 +133,15 @@ export async function schedulePendingRePairAlerts(
   const urgentLeadMs = deps.urgentLeadMs ?? 60 * 60_000;
   const rows = await deps.pendingRePairs.listActive(deps.scanLimit ?? 100);
 
+  // v1.2 Phase 5 — synthesise a default firePush from the high-
+  // level real-fan-out deps when the caller didn't pass an explicit
+  // stub. Worker injects (pushFanout, pushTokens, auditEvents) and
+  // leaves firePush unset; tests inject a recording firePush and
+  // leave the trio unset. When BOTH are passed, the explicit
+  // firePush wins (the override knob).
+  const firePush: (req: PushFireRequest) => Promise<void> =
+    deps.firePush ?? buildDefaultFirePush(deps);
+
   const fired: Array<{ username: string; bit: number; category: string }> = [];
   for (const row of rows) {
     const bits = row.alertsFiredBitmap ?? 0;
@@ -123,13 +155,13 @@ export async function schedulePendingRePairAlerts(
     for (const off of ladder) {
       if (bits & off.bit) continue;
       if (now - row.initiatedAt < off.msSinceInitiated) continue;
-      await firePushAndStamp(deps, row, off.bit, off.label);
+      await firePushAndStamp(deps, firePush, row, off.bit, off.label);
       fired.push({ username: row.username, bit: off.bit, category: off.label });
     }
 
     // Urgent ping = completesAt - urgentLeadMs ≤ now < completesAt.
     if (!(bits & ALERT_BIT_URGENT) && now + urgentLeadMs >= row.completesAt && now < row.completesAt) {
-      await firePushAndStamp(deps, row, ALERT_BIT_URGENT, "re-pair-urgent");
+      await firePushAndStamp(deps, firePush, row, ALERT_BIT_URGENT, "re-pair-urgent");
       fired.push({ username: row.username, bit: ALERT_BIT_URGENT, category: "re-pair-urgent" });
     }
   }
@@ -137,14 +169,110 @@ export async function schedulePendingRePairAlerts(
   return { scanned: rows.length, fired };
 }
 
+/**
+ * v1.2 Phase 5 — wrap the high-level (pushFanout, pushTokens,
+ * auditEvents) deps into a firePush callback. The wrapped function:
+ *   - resolves the user's push tokens (no-op fan-out if zero),
+ *   - composes a typed payload (title/body/deepLink/meta) keyed off
+ *     the bit + grace window so the device renders the right copy,
+ *   - invokes pushFanout with the resolved targets,
+ *   - emits an audit row tagging the bit that fired.
+ *
+ * The synthesised callback throws on push failure exactly the same
+ * way the legacy stub does, so the existing
+ * "transient outage → bit stays clear" guarantee is preserved.
+ */
+function buildDefaultFirePush(
+  deps: RePairAlertsDeps,
+): (req: PushFireRequest) => Promise<void> {
+  return async (req: PushFireRequest) => {
+    if (deps.pushFanout && deps.pushTokens) {
+      const rows = await deps.pushTokens.listByUser(req.username);
+      // Don't error out on a user with zero registered devices —
+      // that's a "lost everything" recovery scenario; the audit row
+      // still captures the timeline.
+      if (rows.length > 0) {
+        const isUrgent = req.bit === ALERT_BIT_URGENT;
+        const dayLabel = labelForBit(req.bit);
+        let body: string;
+        if (isUrgent) {
+          body = "Your account is about to be taken over in 1 hour. Object now if this isn't you.";
+        } else if (dayLabel === "T+0") {
+          body = "A new device is trying to take over your account. Tap to review or object.";
+        } else {
+          body = `Account recovery still pending (${dayLabel}). Tap to review or object.`;
+        }
+        await deps.pushFanout({
+          username: req.username.toLowerCase(),
+          targets: rows.map((p) => ({
+            tokenId: p.tokenId,
+            platform: p.platform,
+            providerToken: p.providerToken,
+          })),
+          payload: {
+            category: req.category,
+            title: isUrgent
+              ? "Account takeover in 1 hour"
+              : "Account recovery attempt",
+            body,
+            deepLink: `flagship://account/re-pair?u=${encodeURIComponent(
+              req.username.toLowerCase(),
+            )}`,
+            meta: {
+              eventKind: req.category,
+              bit: req.bit,
+              completesAt: req.completesAt,
+              graceSeconds: req.graceSeconds,
+              initiatedAt: req.initiatedAt,
+            },
+          },
+        });
+      }
+    }
+    if (deps.auditEvents) {
+      // Audit each bit fired so the Activity feed has a paper trail
+      // of how many nudges the user received before the
+      // grace window closed. accountTypeAtEvent we don't have on
+      // the row directly; infer from grace duration as a pragmatic
+      // approximation (multi grace = 24h ⇒ 'multi'; otherwise
+      // 'single'). The completion-time audit captures the real
+      // type read-through from the username row.
+      const isSingle = (req.graceSeconds ?? 86_400) >= 7 * 86_400;
+      await recordAuditEvent(
+        { auditEvents: deps.auditEvents },
+        {
+          username: req.username.toLowerCase(),
+          eventKind: "device-replaced",
+          detail: `Re-pair alert (${req.category})`,
+          devicePrefix: req.newIrkPubHex.slice(0, 8),
+          postedAt: Date.now(),
+          accountTypeAtEvent: isSingle ? "single" : "multi",
+        },
+      );
+    }
+  };
+}
+
+function labelForBit(bit: number): string {
+  switch (bit) {
+    case ALERT_BIT_T0: return "T+0";
+    case ALERT_BIT_T1D: return "T+1d";
+    case ALERT_BIT_T3D: return "T+3d";
+    case ALERT_BIT_T6D: return "T+6d";
+    case ALERT_BIT_URGENT: return "urgent";
+    default: return `bit ${bit}`;
+  }
+}
+
 async function firePushAndStamp(
   deps: RePairAlertsDeps,
+  firePush: (req: PushFireRequest) => Promise<void>,
   row: PendingRePairRecord,
   bit: number,
   category: string,
 ): Promise<void> {
   try {
-    await deps.firePush({
+    await firePush({
       username: row.username,
       category,
       newIrkPubHex: row.newIrkPubHex,

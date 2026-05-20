@@ -273,4 +273,142 @@ describe("TOTP verify", () => {
     );
     expect(res.status).toBe(503);
   });
+
+  // ──────────────────────────────────────────────────────────────
+  // v1.2 Plan B Phase 5 — failed-TOTP-rate alert
+  // ──────────────────────────────────────────────────────────────
+
+  it("Phase 5: fires the failed-rate push + audit row exactly once per 15-min window when the verify counter crosses the limit", async () => {
+    const { storage, fixedNow } = await setupEnrolled();
+    // Seed two registered push tokens so the fan-out has targets.
+    await storage.pushTokens.put({
+      tokenId: "devA",
+      username: USERNAME,
+      platform: "apns",
+      providerToken: "providerA",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "iPhone",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    await storage.pushTokens.put({
+      tokenId: "devB",
+      username: USERNAME,
+      platform: "fcm",
+      providerToken: "providerB",
+      pushX25519PubHex: "02".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "Pixel",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    const fires: Array<{ username: string; category: string; targetCount: number }> = [];
+    const deps = {
+      usernames: storage.usernames,
+      pushTokens: storage.pushTokens,
+      auditEvents: storage.auditEvents,
+      kekHex: TEST_KEK_HEX,
+      now: () => fixedNow,
+    };
+    const fanout = async ({
+      username,
+      targets,
+      payload,
+    }: {
+      username: string;
+      targets: Array<{ tokenId: string }>;
+      payload: { category: string };
+    }) => {
+      fires.push({ username, category: payload.category, targetCount: targets.length });
+    };
+    // 5 failures — only on the 5th does the alert fire (boundary).
+    for (let i = 0; i < 5; i++) {
+      const r = await handleTotpVerify(deps, USERNAME, { code: "000000" }, fanout);
+      expect(r.status).toBe(401);
+    }
+    expect(fires).toHaveLength(1);
+    expect(fires[0]!.category).toBe("totp-failed-rate");
+    expect(fires[0]!.targetCount).toBe(2);
+    // Audit row was written.
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events.filter((e) => e.eventKind === "totp-failed-rate")).toHaveLength(1);
+    expect(events[0]?.accountTypeAtEvent).toBe("multi");
+  });
+
+  it("Phase 5: subsequent failures inside the same window do NOT re-fire the alert", async () => {
+    const { storage, fixedNow } = await setupEnrolled();
+    await storage.pushTokens.put({
+      tokenId: "trusted",
+      username: USERNAME,
+      platform: "apns",
+      providerToken: "providerTrust",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "iPhone",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    const fires: number[] = [];
+    const deps = {
+      usernames: storage.usernames,
+      pushTokens: storage.pushTokens,
+      auditEvents: storage.auditEvents,
+      kekHex: TEST_KEK_HEX,
+      now: () => fixedNow,
+    };
+    const fanout = async () => {
+      fires.push(1);
+    };
+    // Burn through 5 failed attempts to trip the limit + fire ONCE.
+    for (let i = 0; i < 5; i++) {
+      await handleTotpVerify(deps, USERNAME, { code: "000000" }, fanout);
+    }
+    // 6th request hits the 429 (so the failed-rate slot isn't even
+    // re-claimed); 5th already fired the alert.
+    expect(fires).toHaveLength(1);
+    const r = await handleTotpVerify(deps, USERNAME, { code: "000000" }, fanout);
+    expect(r.status).toBe(429);
+    expect(fires).toHaveLength(1);
+    // Audit row count stays at 1 too.
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events.filter((e) => e.eventKind === "totp-failed-rate")).toHaveLength(1);
+  });
+
+  it("Phase 5: a new window after 15 min re-arms the alert", async () => {
+    const { storage, fixedNow } = await setupEnrolled();
+    await storage.pushTokens.put({
+      tokenId: "trusted",
+      username: USERNAME,
+      platform: "apns",
+      providerToken: "providerTrust",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "iPhone",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    const fires: number[] = [];
+    let clock = fixedNow;
+    const deps = {
+      usernames: storage.usernames,
+      pushTokens: storage.pushTokens,
+      auditEvents: storage.auditEvents,
+      kekHex: TEST_KEK_HEX,
+      now: () => clock,
+    };
+    const fanout = async () => {
+      fires.push(1);
+    };
+    for (let i = 0; i < 5; i++) {
+      await handleTotpVerify(deps, USERNAME, { code: "000000" }, fanout);
+    }
+    expect(fires).toHaveLength(1);
+    // Advance past the window.
+    clock = fixedNow + 15 * 60_000 + 1;
+    for (let i = 0; i < 5; i++) {
+      await handleTotpVerify(deps, USERNAME, { code: "000000" }, fanout);
+    }
+    expect(fires).toHaveLength(2);
+  });
 });

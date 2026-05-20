@@ -276,7 +276,28 @@ export type AuditEventKind =
   | "demo-vps-destroyed"
   | "demo-vps-idle-reaped"
   | "demo-connect-attempt-rate-limited"
-  | "demo-vps-stuck";
+  | "demo-vps-stuck"
+  // Plan B Phase 5 — v1.2 security cascade audit kinds. The first
+  // four track the multi-device toggle; recovery-code-consumed
+  // logs single-use recovery-code spend; quarantine-blocked-revoke
+  // flags a freshly-admitted-quarantined device trying to kick
+  // siblings; totp-failed-rate marks the >5-in-15min failure burst
+  // that also fires a push to all the user's trusted devices.
+  | "totp-enrolled"
+  | "totp-disabled"
+  | "account-type-changed-single-to-multi"
+  | "account-type-changed-multi-to-single"
+  | "recovery-code-consumed"
+  | "quarantine-blocked-revoke"
+  | "totp-failed-rate";
+
+/**
+ * Plan B Phase 5 — recovery-method tag stored next to a re-pair
+ * audit row so the Activity feed can render "Recovered via TOTP" /
+ * "Recovered via recovery code" / "Recovered without 2FA". Mirrors
+ * the `RePairInitiate.totpProof.method` discriminator.
+ */
+export type AuditRecoveryMethod = "totp" | "recovery-code" | "none";
 
 export interface AuditEventRecord {
   seq: number;
@@ -287,6 +308,26 @@ export interface AuditEventRecord {
   /** Token-prefix of the device involved (empty when not device-scoped). */
   devicePrefix: string;
   postedAt: number;
+  /**
+   * Plan B Phase 5 — snapshot of `usernames.account_type` AT THE
+   * TIME the event was recorded. Stored on the row because the
+   * type can change later (totp-disabled flips `multi` → `single`
+   * but the row must remember the user was multi-device when the
+   * disable fired). Absent on pre-v1.2 rows.
+   */
+  accountTypeAtEvent?: AccountType;
+  /**
+   * Plan B Phase 5 — set when the row reflects a device admission
+   * event that landed under a quarantine window (most commonly the
+   * `device-added` row that lands during a re-pair completion).
+   * Wall-clock ms; absent / undefined otherwise.
+   */
+  quarantineUntil?: number;
+  /**
+   * Plan B Phase 5 — set on re-pair completion / recovery-code
+   * consumption rows so the UI can render the method used.
+   */
+  recoveryMethod?: AuditRecoveryMethod;
 }
 
 export interface AuditEventStorage {

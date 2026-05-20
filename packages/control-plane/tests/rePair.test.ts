@@ -1010,3 +1010,181 @@ describe("v1.2 Phase 3 — real TOTP / recovery verification on re-pair", () => 
     expect(res.status).toBe(200);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// v1.2 Plan B Phase 5 — audit + push fan-out on re-pair endpoints
+// ───────────────────────────────────────────────────────────────────
+
+describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
+  it("emits `recovery-code-consumed` on a successful recovery-code re-pair (with recoveryMethod='recovery-code')", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    const { recoveryCodes } = await enrollMultiDevice(storage, oldIrk, fixedNow);
+    const target = recoveryCodes[0] as string;
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        auditEvents: storage.auditEvents,
+        totpKekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: target, method: "recovery" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    const rc = events.find((e) => e.eventKind === "recovery-code-consumed");
+    expect(rc).toBeDefined();
+    expect(rc?.recoveryMethod).toBe("recovery-code");
+    expect(rc?.accountTypeAtEvent).toBe("multi");
+  });
+
+  it("emits `device-replaced` + `device-added` on complete, with quarantineUntil + recoveryMethod", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    const { secretBase32 } = await enrollMultiDevice(storage, oldIrk, fixedNow);
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        auditEvents: storage.auditEvents,
+        totpKekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      initBody({
+        newIrk,
+        oldIrk,
+        issuedAt: fixedNow,
+        totpProof: { code: codeAt(secretBase32, fixedNow), method: "totp" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    // Fast-forward past completesAt and complete the re-pair.
+    const future = fixedNow + 25 * 3_600_000;
+    const completion = await handleCompleteRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        auditEvents: storage.auditEvents,
+        now: () => future,
+      },
+      USERNAME,
+    );
+    expect(completion.status).toBe(200);
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    const replaced = events.find((e) => e.eventKind === "device-replaced");
+    const added = events.find((e) => e.eventKind === "device-added");
+    expect(replaced).toBeDefined();
+    expect(added).toBeDefined();
+    // Both rows carry recoveryMethod='totp' (the proof method) and
+    // device-added carries quarantineUntil = now() + RE_PAIR_QUARANTINE_MS.
+    expect(replaced?.recoveryMethod).toBe("totp");
+    expect(added?.recoveryMethod).toBe("totp");
+    expect(added?.quarantineUntil).toBe(future + RE_PAIR_QUARANTINE_MS);
+  });
+
+  it("fires the T+0 push on a successful initiate via pushFanout", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    // Seed an existing trusted device so push fan-out has a target.
+    await storage.pushTokens.put({
+      tokenId: "oldDevice",
+      username: USERNAME,
+      platform: "apns",
+      providerToken: "providerOld",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "Old iPhone",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    const fires: Array<{ username: string; category: string; tokenIds: string[]; deepLink: string }> = [];
+    const res = await handleInitiateRePair(
+      {
+        usernames: storage.usernames,
+        pendingRePairs: storage.pendingRePairs,
+        pushTokens: storage.pushTokens,
+        pushFanout: async ({ username, targets, payload }) => {
+          fires.push({
+            username,
+            category: payload.category,
+            tokenIds: targets.map((t) => t.tokenId),
+            deepLink: payload.deepLink,
+          });
+        },
+      },
+      USERNAME,
+      initBody({ newIrk, oldIrk, totpProof: null }),
+    );
+    expect(res.status).toBe(200);
+    expect(fires).toHaveLength(1);
+    expect(fires[0]!.category).toBe("re-pair-initiated");
+    expect(fires[0]!.tokenIds).toEqual(["oldDevice"]);
+    expect(fires[0]!.deepLink).toMatch(/^flagship:\/\/account\/re-pair\?u=alice/);
+  });
+
+  it("fires the failed-TOTP-rate alert via pushFanout when the re-pair gate trips the limit", async () => {
+    _resetTotpVerifyRateLimitForTests();
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "multi" });
+    const fixedNow = 1_700_000_000_000;
+    await enrollMultiDevice(storage, oldIrk, fixedNow);
+    await storage.pushTokens.put({
+      tokenId: "trusted",
+      username: USERNAME,
+      platform: "apns",
+      providerToken: "providerTrust",
+      pushX25519PubHex: "01".repeat(32),
+      registrationSignatureHex: "00".repeat(64),
+      label: "Trusted iPhone",
+      registeredAt: 1,
+      lastSeenAt: 1,
+    });
+    const fires: Array<{ category: string }> = [];
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      pushTokens: storage.pushTokens,
+      auditEvents: storage.auditEvents,
+      pushFanout: async ({ payload }: { payload: { category: string } }) => {
+        fires.push({ category: payload.category });
+      },
+      totpKekHex: TEST_KEK_HEX,
+      now: () => fixedNow,
+    };
+    for (let i = 0; i < 5; i++) {
+      await handleInitiateRePair(
+        deps,
+        USERNAME,
+        initBody({
+          newIrk,
+          oldIrk,
+          issuedAt: fixedNow,
+          totpProof: { code: "000000", method: "totp" },
+        }),
+      );
+    }
+    // At least one totp-failed-rate fire happened.
+    const failedRate = fires.filter((f) => f.category === "totp-failed-rate");
+    expect(failedRate.length).toBe(1);
+    // Audit row was written.
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events.filter((e) => e.eventKind === "totp-failed-rate")).toHaveLength(1);
+  });
+});

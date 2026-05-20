@@ -149,6 +149,48 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
   };
 }
 
+/**
+ * v1.2 Plan B Phase 5 — wrap a `forwardToProviders` impl into the
+ * `V12PushFanout` shape that the re-pair / deviceDisconnect / totp
+ * handlers expect. Marshals (title, body, deepLink, meta) into a
+ * JSON plaintext for Web Push (RFC 8291) and leaves the APNs/FCM
+ * sealed-payload hex empty — those platforms wake the device on
+ * the category alone and the device opens the audit feed for
+ * specifics. Same trade-off as the v1.1 unlock-approve push.
+ */
+export function wrapForwarderAsV12Fanout(
+  forwarder: ReturnType<typeof buildPushForwarder>,
+): (args: {
+  username: string;
+  targets: Array<{
+    tokenId: string;
+    platform: "apns" | "fcm" | "webpush";
+    providerToken: string;
+  }>;
+  payload: {
+    category: string;
+    title: string;
+    body: string;
+    deepLink: string;
+    meta?: Record<string, string | number>;
+  };
+}) => Promise<void> {
+  return async (args) => {
+    const payloadJson = JSON.stringify({
+      title: args.payload.title,
+      body: args.payload.body,
+      deepLink: args.payload.deepLink,
+      ...(args.payload.meta ? { meta: args.payload.meta } : {}),
+    });
+    await forwarder({
+      targets: args.targets,
+      category: args.payload.category,
+      sealedPayloadHex: "",
+      webpushPayloadBytes: new TextEncoder().encode(payloadJson),
+    });
+  };
+}
+
 // ────────────────────────────────────────────────────────────────────
 // APNs
 // ────────────────────────────────────────────────────────────────────

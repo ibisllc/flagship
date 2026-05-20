@@ -21,9 +21,11 @@
 // triggering operation.
 
 import type {
+  AccountType,
   AuditEventStorage,
   AuditEventKind,
   AuditEventRecord,
+  AuditRecoveryMethod,
 } from "@flagship/storage";
 import { malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
 
@@ -37,6 +39,16 @@ export interface AuditEventSummary {
   detail: string;
   devicePrefix: string;
   postedAt: number;
+  /**
+   * v1.2 Plan B Phase 5 — account-type snapshot at the time the
+   * event landed. Omitted on pre-v1.2 rows that pre-date the
+   * 0030_audit_events_v12 migration.
+   */
+  accountTypeAtEvent?: AccountType;
+  /** v1.2 Plan B Phase 5 — quarantine wall-clock ms; omitted unless set. */
+  quarantineUntil?: number;
+  /** v1.2 Plan B Phase 5 — recovery method ('totp' | 'recovery-code' | 'none'). */
+  recoveryMethod?: AuditRecoveryMethod;
 }
 
 export interface AuditListResponse {
@@ -61,13 +73,29 @@ export async function handleGetAuditEvents(
   const rows = await deps.auditEvents.list(norm, cappedSince, cappedLimit);
   return ok<AuditListResponse>(
     {
-      events: rows.map((r) => ({
-        seq: r.seq,
-        eventKind: r.eventKind,
-        detail: r.detail,
-        devicePrefix: r.devicePrefix,
-        postedAt: r.postedAt,
-      })),
+      events: rows.map((r) => {
+        const summary: AuditEventSummary = {
+          seq: r.seq,
+          eventKind: r.eventKind,
+          detail: r.detail,
+          devicePrefix: r.devicePrefix,
+          postedAt: r.postedAt,
+        };
+        // v1.2 Plan B Phase 5 — only echo the new fields when set so
+        // legacy clients that don't know about them just see the
+        // unchanged old shape. (Optional fields ⇒ no breaking change
+        // for the mobile UI follow-up that wires the rendering.)
+        if (r.accountTypeAtEvent !== undefined) {
+          summary.accountTypeAtEvent = r.accountTypeAtEvent;
+        }
+        if (r.quarantineUntil !== undefined) {
+          summary.quarantineUntil = r.quarantineUntil;
+        }
+        if (r.recoveryMethod !== undefined) {
+          summary.recoveryMethod = r.recoveryMethod;
+        }
+        return summary;
+      }),
     },
     { "cache-control": "private, no-cache" },
   );

@@ -270,4 +270,55 @@ describe("TOTP disable", () => {
     );
     expect(res.status).toBe(200);
   });
+
+  it("v1.2 Phase 5 — emits `account-type-changed-multi-to-single` + `totp-disabled` on success", async () => {
+    const { storage, irk, secretBase32, fixedNow } = await enrollFully();
+    const res = await handleTotpDisable(
+      {
+        usernames: storage.usernames,
+        auditEvents: storage.auditEvents,
+        kekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      disableBody({
+        irk,
+        code: codeAt(secretBase32, fixedNow),
+        issuedAt: fixedNow,
+      }),
+    );
+    expect(res.status).toBe(200);
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events.map((e) => e.eventKind)).toEqual(
+      expect.arrayContaining([
+        "account-type-changed-multi-to-single",
+        "totp-disabled",
+      ]),
+    );
+    // accountTypeAtEvent='multi' on both rows — the row remembers
+    // the OLD state at the moment of the disable.
+    for (const e of events.filter((x) =>
+      x.eventKind === "account-type-changed-multi-to-single" ||
+      x.eventKind === "totp-disabled",
+    )) {
+      expect(e.accountTypeAtEvent).toBe("multi");
+    }
+  });
+
+  it("v1.2 Phase 5 — failure path emits NO audit rows", async () => {
+    const { storage, irk, fixedNow } = await enrollFully();
+    const res = await handleTotpDisable(
+      {
+        usernames: storage.usernames,
+        auditEvents: storage.auditEvents,
+        kekHex: TEST_KEK_HEX,
+        now: () => fixedNow,
+      },
+      USERNAME,
+      disableBody({ irk, code: "000000", issuedAt: fixedNow }),
+    );
+    expect(res.status).toBe(401);
+    const events = await storage.auditEvents.list(USERNAME, 0, 10);
+    expect(events).toHaveLength(0);
+  });
 });

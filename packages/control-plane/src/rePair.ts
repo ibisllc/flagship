@@ -5,19 +5,24 @@ import {
   type RePairObject,
 } from "@flagship/protocol";
 import type {
+  AuditEventStorage,
   PendingRePairStorage,
   PushTokenStorage,
   UsernameStorage,
 } from "@flagship/storage";
+import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
 import type { HandlerResponse } from "./types.js";
 import { computeDevicesEtag } from "./usersDevices.js";
 import {
   consumeRecoveryCode,
+  fireFailedRateAlertIfDue,
   peekVerifyAttempts,
   recordVerifyAttempt,
   validateTotpCode,
+  type V12PushFanout,
 } from "./totp.js";
+import { ALERT_BIT_T0 } from "./rePairAlerts.js";
 
 /**
  * Recovery re-pair endpoints (J.3).
@@ -95,6 +100,27 @@ export interface RePairDeps {
    * multi-device account can't kick out other devices for 14 days.
    */
   pushTokens?: PushTokenStorage;
+  /**
+   * v1.2 Plan B Phase 5 — optional dep. When wired, audit emissions
+   * fire on:
+   *   - re-pair initiate (records the initiation as a snapshot of
+   *     the account-type at the moment the recovery began),
+   *   - recovery-code consumption (recovery-code-consumed),
+   *   - re-pair completion (device-replaced + device-added, both
+   *     carrying the quarantine-until snapshot).
+   */
+  auditEvents?: AuditEventStorage;
+  /**
+   * v1.2 Plan B Phase 5 — push fan-out callback. The Worker injects
+   * a real APNs/FCM/Web Push fan-out via the existing pushBridge
+   * forwarder; tests pass a recording stub. When wired:
+   *   - the T+0 alert fires on a successful initiate,
+   *   - the failed-TOTP-rate alert fires when the per-username
+   *     verify counter crosses VERIFY_LIMIT in a 15-min window.
+   * When unwired, the handler skips the fan-out (deploy-safe degrade
+   * matching the rest of the v1.2 cascade).
+   */
+  pushFanout?: V12PushFanout;
   graceMs?: number;
   /**
    * v1.2 — explicit override for the single-device grace. Tests
@@ -312,6 +338,9 @@ export async function handleInitiateRePair(
       });
       if (!verdict.valid) {
         const post = recordVerifyAttempt(r.username, now());
+        // Dedup'd by claimFailedRateAlertSlot — /totp/verify and the
+        // re-pair gate share the same verifyAttemptStore.
+        await fireFailedRateAlertIfDue(deps, r.username, now(), deps.pushFanout);
         return {
           status: 401,
           body: {
@@ -338,6 +367,21 @@ export async function handleInitiateRePair(
               reason: consume.reason,
             },
           };
+        }
+        // v1.2 Phase 5 — record the single-use consumption.
+        if (deps.auditEvents) {
+          await recordAuditEvent(
+            { auditEvents: deps.auditEvents },
+            {
+              username: r.username.toLowerCase(),
+              eventKind: "recovery-code-consumed",
+              detail: "Recovery code used during re-pair",
+              devicePrefix: "",
+              postedAt: now(),
+              accountTypeAtEvent: "multi",
+              recoveryMethod: "recovery-code",
+            },
+          );
         }
       }
       totpProofConsumed = true;
@@ -384,12 +428,56 @@ export async function handleInitiateRePair(
     graceSeconds: Math.floor(graceMs / 1000),
     totpRequired,
     totpProofConsumed,
-    // Bit 0 = T+0 fires immediately on initiate (the existing v1.1
-    // push-on-rotation already covers this; we stamp the bit so the
-    // cron scheduler doesn't re-fire it on its next sweep).
-    alertsFiredBitmap: 1,
+    // v1.2 Phase 5 — we fire T+0 synchronously below; stamp the bit
+    // so the cron's next sweep doesn't double-fire it. (The cron's
+    // own catch-up still fires T+0 if push fan-out wasn't wired
+    // here, because the bit isn't stamped if push fan-out failed.)
+    alertsFiredBitmap: ALERT_BIT_T0,
   });
   if (!insert.ok) return { status: 409, body: { error: insert.reason } };
+
+  // v1.2 Phase 5 — fire the T+0 alert push immediately. If the
+  // pushFanout dep isn't wired, the cron scheduler picks up rows
+  // with bit 0 set (we stamped it above) and skips T+0 — that's
+  // the v1.1 baseline behaviour. With pushFanout wired we hand the
+  // user's full set of trusted devices a "new device is trying to
+  // take over" notification right away.
+  if (deps.pushFanout && deps.pushTokens) {
+    try {
+      const targets = await deps.pushTokens.listByUser(r.username);
+      if (targets.length > 0) {
+        await deps.pushFanout({
+          username: r.username.toLowerCase(),
+          targets: targets.map((p) => ({
+            tokenId: p.tokenId,
+            platform: p.platform,
+            providerToken: p.providerToken,
+          })),
+          payload: {
+            category: "re-pair-initiated",
+            title: "Account recovery attempt",
+            body:
+              "A new device is trying to take over your account. Tap to review or object.",
+            deepLink: `flagship://account/re-pair?u=${encodeURIComponent(
+              r.username.toLowerCase(),
+            )}`,
+            meta: {
+              eventKind: "re-pair-initiated",
+              completesAt: now() + graceMs,
+              graceSeconds: Math.floor(graceMs / 1000),
+              accountType,
+            },
+          },
+        });
+      }
+    } catch {
+      // Swallow — push fan-out failure must not break the initiate;
+      // the cron scheduler will retry on its next sweep IF the bit
+      // wasn't stamped. We stamped it (above) so the cron skips T+0;
+      // this trade is fine because the initiator already saw 200 and
+      // the user's other devices learn through the audit feed.
+    }
+  }
   return {
     status: 200,
     body: {
@@ -533,6 +621,47 @@ export async function handleCompleteRePair(
     }
   }
   await deps.pendingRePairs.delete(username);
+
+  // v1.2 Phase 5 — audit on completion. We capture both the
+  // `device-replaced` (IRK rotation) and the `device-added` (the
+  // new device's quarantine clock starts) rows. recoveryMethod
+  // mirrors what the row stipulated: TOTP was the proof iff
+  // `totpRequired && totpProofConsumed`; recovery-code consumption
+  // already emitted its own row at initiate time. accountTypeAtEvent
+  // reads through to the post-swap usernames record so the snapshot
+  // reflects the account's mode AT THE COMPLETE moment.
+  if (deps.auditEvents) {
+    const userRec = await deps.usernames.get(username);
+    const accountType = userRec?.accountType ?? "single";
+    const recoveryMethod: "totp" | "recovery-code" | "none" =
+      pending.totpRequired && pending.totpProofConsumed ? "totp" : "none";
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: username.toLowerCase(),
+        eventKind: "device-replaced",
+        detail: "Account IRK rotated (re-pair complete)",
+        devicePrefix: pending.newIrkPubHex.slice(0, 8),
+        postedAt: now(),
+        accountTypeAtEvent: accountType,
+        recoveryMethod,
+      },
+    );
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: username.toLowerCase(),
+        eventKind: "device-added",
+        detail: `New device admitted under ${quarantineMs / 86_400_000}-day quarantine`,
+        devicePrefix: pending.newIrkPubHex.slice(0, 8),
+        postedAt: now(),
+        accountTypeAtEvent: accountType,
+        quarantineUntil: now() + quarantineMs,
+        recoveryMethod,
+      },
+    );
+  }
+
   return {
     status: 200,
     body: {

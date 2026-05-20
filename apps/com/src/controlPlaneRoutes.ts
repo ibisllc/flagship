@@ -82,6 +82,7 @@ import {
   handleMarketplaceScanResult,
   handleMarketplaceScanQueue,
   buildPushForwarder,
+  wrapForwarderAsV12Fanout,
   handleGetEntitlementRevocations,
   handleListRevocations,
   handlePostEntitlementRevocations,
@@ -787,6 +788,10 @@ export async function tryControlPlane(
           // v1.2 Phase 2 — wired so completion stamps the 14-day
           // quarantine on every push_token row for the user.
           pushTokens: storage.pushTokens,
+          // v1.2 Phase 5 — emits `device-replaced` + `device-added`
+          // rows on a successful swap so the Activity feed shows the
+          // takeover under the right account-type snapshot.
+          auditEvents: storage.auditEvents,
         },
         decodeURIComponent(m[1]!),
       ),
@@ -813,12 +818,18 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.USER_DEVICE_DISCONNECT))) {
+    const ddFanout = buildOptionalV12PushFanout(env);
     return finishPlain(
       await handleDeviceDisconnect(
         {
           pushTokens: storage.pushTokens,
           usernames: storage.usernames,
           auditEvents: storage.auditEvents,
+          // v1.2 Phase 5 — when a quarantined device's
+          // disconnect attempt is blocked, the user's OTHER trusted
+          // devices get a push alert (and the audit log captures
+          // the attempt under accountTypeAtEvent).
+          ...(ddFanout ? { pushFanout: ddFanout } : {}),
         },
         decodeURIComponent(m[1]!),
         decodeURIComponent(m[2]!),
@@ -851,12 +862,19 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_INITIATE))) {
+    const rePairFanout = buildOptionalV12PushFanout(env);
     return finishPlain(
       await handleInitiateRePair(
         {
           usernames: storage.usernames,
           pendingRePairs: storage.pendingRePairs,
           pushTokens: storage.pushTokens,
+          // v1.2 Phase 5 — audit emission + push fan-out on initiate.
+          // Audit captures recovery-code-consumed (when applicable);
+          // push fans out a T+0 "new device taking over" alert to
+          // every trusted device.
+          auditEvents: storage.auditEvents,
+          ...(rePairFanout ? { pushFanout: rePairFanout } : {}),
           // v1.2 Phase 3 — when the env var is wired, this turns on
           // real TOTP verification + atomic recovery-code consumption
           // for multi-device re-pair attempts. Absent ⇒ Phase 2
@@ -886,6 +904,10 @@ export async function tryControlPlane(
       await handleTotpEnrollConfirm(
         {
           usernames: storage.usernames,
+          // v1.2 Phase 5 — appends `account-type-changed-…` +
+          // `totp-enrolled` rows on success so the Activity feed shows
+          // the upgrade.
+          auditEvents: storage.auditEvents,
           ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
         decodeURIComponent(m[1]!),
@@ -894,14 +916,22 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.TOTP_VERIFY))) {
+    const totpFanout = buildOptionalV12PushFanout(env);
     return finishPlain(
       await handleTotpVerify(
         {
           usernames: storage.usernames,
+          // v1.2 Phase 5 — pushTokens + auditEvents enable the
+          // failed-rate alert: when the 5-in-15-min counter trips,
+          // we fan a push out to all the user's trusted devices
+          // AND append a `totp-failed-rate` audit row.
+          pushTokens: storage.pushTokens,
+          auditEvents: storage.auditEvents,
           ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
+        totpFanout ?? undefined,
       ),
     );
   }
@@ -911,6 +941,9 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           pushTokens: storage.pushTokens,
+          // v1.2 Phase 5 — appends `account-type-changed-…` +
+          // `totp-disabled` rows on success.
+          auditEvents: storage.auditEvents,
           ...(env.FLAGSHIP_TOTP_KEK ? { kekHex: env.FLAGSHIP_TOTP_KEK } : {}),
         },
         decodeURIComponent(m[1]!),
@@ -1400,6 +1433,12 @@ export async function tryControlPlane(
   }
 
   return null;
+}
+
+/** v1.2 Phase 5 — null when no push provider is configured. */
+function buildOptionalV12PushFanout(env: ControlPlaneEnv) {
+  const forwarder = buildOptionalPushForwarder(env);
+  return forwarder ? wrapForwarderAsV12Fanout(forwarder) : null;
 }
 
 function buildOptionalPushForwarder(env: ControlPlaneEnv) {

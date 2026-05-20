@@ -58,11 +58,13 @@ import {
   type TotpDisable,
 } from "@flagship/protocol";
 import type {
+  AuditEventStorage,
   PushTokenStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { argon2id } from "@noble/hashes/argon2";
 import * as OTPAuth from "otpauth";
+import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
 import type { HandlerResponse } from "./types.js";
 
@@ -74,6 +76,13 @@ export interface TotpDeps {
    * on enroll-begin from a freshly-admitted device.
    */
   pushTokens?: PushTokenStorage;
+  /**
+   * v1.2 Plan B Phase 5 — optional dep. When wired, enroll-confirm
+   * + disable + the failed-rate-detector emit account-type-aware
+   * audit rows so the Activity feed surfaces them. Old callers (tests
+   * + dev paths that don't care about audit) leave this unset.
+   */
+  auditEvents?: AuditEventStorage;
   /** 32-byte hex KEK. Required for any side-effect path; absent ⇒ 503. */
   kekHex?: string;
   /** TOTP issuer label used in the otpauth:// URI. Default "Flagship". */
@@ -122,6 +131,13 @@ const VERIFY_WINDOW_MS = 15 * 60_000;
 interface VerifyAttempts {
   windowStart: number;
   count: number;
+  /**
+   * v1.2 Plan B Phase 5 — wall-clock ms of the last failed-rate
+   * audit + push fan-out fired for this window. Stays 0 / undefined
+   * until the count crosses VERIFY_LIMIT for the first time in the
+   * window; subsequent fires within the same window are dedup'd.
+   */
+  lastAlertAt?: number;
 }
 const verifyAttemptStore = new Map<string, VerifyAttempts>();
 
@@ -152,6 +168,31 @@ export function recordVerifyAttempt(
     windowStart: existing.windowStart,
     remaining: Math.max(0, VERIFY_LIMIT - existing.count),
   };
+}
+
+/**
+ * v1.2 Plan B Phase 5 — atomic "claim the failed-rate alert slot
+ * for this window". Returns true exactly once per username per
+ * window. Subsequent calls in the same window return false so the
+ * caller doesn't double-fire the push fan-out / audit row.
+ * Returns false when the username has no active window OR the count
+ * hasn't crossed VERIFY_LIMIT yet (caller usually pre-checks this
+ * with `peekVerifyAttempts`).
+ */
+export function claimFailedRateAlertSlot(
+  username: string,
+  now: number,
+): boolean {
+  const key = username.toLowerCase();
+  const existing = verifyAttemptStore.get(key);
+  if (!existing) return false;
+  if (now - existing.windowStart >= VERIFY_WINDOW_MS) return false;
+  if (existing.count < VERIFY_LIMIT) return false;
+  if (existing.lastAlertAt && existing.lastAlertAt >= existing.windowStart) {
+    return false;
+  }
+  existing.lastAlertAt = now;
+  return true;
 }
 
 export function peekVerifyAttempts(
@@ -876,6 +917,42 @@ export async function handleTotpEnrollConfirm(
   );
   if (!ok) return { status: 404, body: { error: "unknown username" } };
 
+  // v1.2 Plan B Phase 5 — audit emission. Two rows on a successful
+  // enroll-confirm:
+  //   1. account-type-changed-single-to-multi — the structural change.
+  //      The "AT_EVENT" snapshot reflects the NEW state (multi) since
+  //      the finalize has already committed; the kind itself
+  //      ('single-to-multi') captures the OLD→NEW transition.
+  //   2. totp-enrolled — the TOTP-specific row that the UI can render
+  //      with a key icon. Same accountTypeAtEvent='multi'.
+  // Both rows fire as a best-effort (recordAuditEvent never throws).
+  // The mobile UI is free to render either; current Activity feed
+  // shows both for full transparency.
+  if (deps.auditEvents) {
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: r.username.toLowerCase(),
+        eventKind: "account-type-changed-single-to-multi",
+        detail: "Account upgraded to multi-device + 2FA",
+        devicePrefix: "",
+        postedAt: now(),
+        accountTypeAtEvent: "multi",
+      },
+    );
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: r.username.toLowerCase(),
+        eventKind: "totp-enrolled",
+        detail: "TOTP 2FA enrolled (10 recovery codes issued)",
+        devicePrefix: "",
+        postedAt: now(),
+        accountTypeAtEvent: "multi",
+      },
+    );
+  }
+
   return {
     status: 200,
     body: {
@@ -885,6 +962,94 @@ export async function handleTotpEnrollConfirm(
       recoveryCodes: plaintexts,
     },
   };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Failed-rate alert + push fan-out (Phase 5)
+// ───────────────────────────────────────────────────────────────────
+
+/**
+ * v1.2 Plan B Phase 5 — push-fan-out target shape that mirrors the
+ * `forwardToProviders` argument in `pushBridge.buildPushForwarder`.
+ * The Phase-5-specific fan-out paths (TOTP failed-rate / quarantine-
+ * blocked-revoke / re-pair alerts) all share this contract so a
+ * single recording stub in tests covers all three.
+ */
+export interface V12PushTarget {
+  tokenId: string;
+  platform: "apns" | "fcm" | "webpush";
+  providerToken: string;
+}
+
+export interface V12PushPayload {
+  category: string;
+  title: string;
+  body: string;
+  deepLink: string;
+  /**
+   * Optional metadata the push handler can echo into the sealed
+   * payload. Stays JSON-serializable so the Worker can mint a
+   * sealed-X25519 blob from it for APNs/FCM (or use the plaintext
+   * for the Web Push RFC 8291 path).
+   */
+  meta?: Record<string, string | number>;
+}
+
+export type V12PushFanout = (args: {
+  username: string;
+  targets: V12PushTarget[];
+  payload: V12PushPayload;
+}) => Promise<void>;
+
+/**
+ * Fire the "too many failed 2FA codes" push + audit row. Dedup'd
+ * via `claimFailedRateAlertSlot`; calling this from inside the
+ * 401-invalid-code branch of multiple handlers is therefore safe.
+ *
+ * Exported so the re-pair handler (which shares the same
+ * verifyAttemptStore) can fire the same alert from its own
+ * 401-invalid-TOTP branch without duplicating the audit + push
+ * logic.
+ */
+export async function fireFailedRateAlertIfDue(
+  deps: TotpDeps,
+  username: string,
+  now: number,
+  pushFanout?: V12PushFanout,
+): Promise<void> {
+  if (!claimFailedRateAlertSlot(username, now)) return;
+  if (deps.auditEvents) {
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: username.toLowerCase(),
+        eventKind: "totp-failed-rate",
+        detail: "5+ incorrect 2FA codes in 15 min",
+        devicePrefix: "",
+        postedAt: now,
+        accountTypeAtEvent: "multi",
+      },
+    );
+  }
+  if (!pushFanout || !deps.pushTokens) return;
+  const rows = await deps.pushTokens.listByUser(username);
+  if (rows.length === 0) return;
+  await pushFanout({
+    username: username.toLowerCase(),
+    targets: rows.map((p) => ({
+      tokenId: p.tokenId,
+      platform: p.platform,
+      providerToken: p.providerToken,
+    })),
+    payload: {
+      category: "totp-failed-rate",
+      title: "Suspicious 2FA activity",
+      body:
+        "Several incorrect 2FA codes for your account. If this isn't you, re-enroll or contact support.",
+      deepLink: "flagship://settings/two-factor",
+      meta: { eventKind: "totp-failed-rate" },
+    },
+  });
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -899,6 +1064,7 @@ export async function handleTotpVerify(
   deps: TotpDeps,
   username: string,
   body: unknown,
+  pushFanout?: V12PushFanout,
 ): Promise<HandlerResponse> {
   if (!deps.kekHex) {
     return { status: 503, body: { error: "TOTP not configured" } };
@@ -938,6 +1104,7 @@ export async function handleTotpVerify(
   });
   if (!verdict.valid) {
     const post = recordVerifyAttempt(username, t);
+    await fireFailedRateAlertIfDue(deps, username, t, pushFanout);
     return {
       status: 401,
       body: {
@@ -1051,6 +1218,37 @@ export async function handleTotpDisable(
   const ok = await deps.usernames.clearTotp(r.username);
   if (!ok) return { status: 404, body: { error: "unknown username" } };
 
+  // v1.2 Plan B Phase 5 — audit emission. The "AT_EVENT" snapshot
+  // captures the OLD state ('multi') because the user WAS multi-
+  // device when they triggered the disable; the kind discriminator
+  // names the direction of the transition. We use 'multi' rather
+  // than 'single' here so the Activity feed can render "you
+  // downgraded from multi" instead of "you were always single".
+  if (deps.auditEvents) {
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: r.username.toLowerCase(),
+        eventKind: "account-type-changed-multi-to-single",
+        detail: "Account downgraded to single-device",
+        devicePrefix: "",
+        postedAt: now(),
+        accountTypeAtEvent: "multi",
+      },
+    );
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: r.username.toLowerCase(),
+        eventKind: "totp-disabled",
+        detail: "TOTP 2FA disabled",
+        devicePrefix: "",
+        postedAt: now(),
+        accountTypeAtEvent: "multi",
+      },
+    );
+  }
+
   return {
     status: 200,
     body: { ok: true, accountType: "single" },
@@ -1081,4 +1279,5 @@ export const _internal = {
   verifyRecoveryCode,
   generateRecoveryCodes,
   qrMatrixFromText,
+  fireFailedRateAlertIfDue,
 };

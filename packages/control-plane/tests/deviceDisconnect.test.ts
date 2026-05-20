@@ -102,9 +102,15 @@ describe("handleDeviceDisconnect — quarantine + happy path", () => {
     expect(res.status).toBe(403);
     expect((res.body as { reason: string }).reason).toBe("quarantine");
     expect((res.body as { until: string }).until).toBe(new Date(future).toISOString());
-    // Target row preserved + no audit event.
+    // Target row preserved (caller blocked from removing it).
     expect(await s.pushTokens.get("target")).not.toBeUndefined();
-    expect(await s.auditEvents.list(USERNAME, 0, 10)).toHaveLength(0);
+    // v1.2 Plan B Phase 5 — the blocked attempt is captured in the
+    // audit log with a quarantine-blocked-revoke row so the
+    // legitimate owner can spot a suspicious attempt later.
+    const events = await s.auditEvents.list(USERNAME, 0, 10);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.eventKind).toBe("quarantine-blocked-revoke");
+    expect(events[0]?.quarantineUntil).toBe(future);
   });
 
   it("404s on an unknown targetTokenId (idempotent on a stale UI)", async () => {
@@ -240,5 +246,99 @@ describe("handleDeviceDisconnect — quarantine + happy path", () => {
       disconnectBody({ targetTokenId: "target", callerTokenId: "caller" }),
     );
     expect(res.status).toBe(403);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // v1.2 Plan B Phase 5 — quarantine-blocked-revoke push fan-out
+  // ──────────────────────────────────────────────────────────────
+
+  it("Phase 5: fires push to all the user's OTHER devices when a quarantined caller is blocked", async () => {
+    const s = await setup();
+    const future = Date.now() + RE_PAIR_QUARANTINE_MS;
+    await seedDevice(s, { tokenId: "caller", quarantineUntil: future });
+    await seedDevice(s, { tokenId: "target" });
+    await seedDevice(s, { tokenId: "trustedOld" });
+    const fires: Array<{
+      username: string;
+      tokenIds: string[];
+      category: string;
+    }> = [];
+    const res = await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+        pushFanout: async ({ username, targets, payload }) => {
+          fires.push({
+            username,
+            tokenIds: targets.map((t) => t.tokenId),
+            category: payload.category,
+          });
+        },
+      },
+      USERNAME,
+      "target",
+      disconnectBody({ targetTokenId: "target", callerTokenId: "caller" }),
+    );
+    expect(res.status).toBe(403);
+    expect(fires).toHaveLength(1);
+    // Fan-out targets every device EXCEPT the quarantined caller.
+    expect(new Set(fires[0]!.tokenIds)).toEqual(new Set(["target", "trustedOld"]));
+    expect(fires[0]!.category).toBe("quarantine-blocked-revoke");
+    expect(fires[0]!.username).toBe(USERNAME);
+  });
+
+  it("Phase 5: quarantine-blocked-revoke audit row carries `quarantineUntil` + `accountTypeAtEvent`", async () => {
+    const s = await setup();
+    const future = Date.now() + RE_PAIR_QUARANTINE_MS;
+    await s.usernames.put({
+      username: USERNAME,
+      irkPubHex: "aa".repeat(32),
+      claimedAt: 1,
+      accountType: "multi",
+    });
+    await seedDevice(s, { tokenId: "caller", quarantineUntil: future });
+    await seedDevice(s, { tokenId: "target" });
+    await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+      },
+      USERNAME,
+      "target",
+      disconnectBody({ targetTokenId: "target", callerTokenId: "caller" }),
+    );
+    const events = await s.auditEvents.list(USERNAME, 0, 10);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.eventKind).toBe("quarantine-blocked-revoke");
+    expect(events[0]?.quarantineUntil).toBe(future);
+    expect(events[0]?.accountTypeAtEvent).toBe("multi");
+  });
+
+  it("Phase 5: device-disconnected happy-path audit row carries accountTypeAtEvent", async () => {
+    const s = await setup();
+    await s.usernames.put({
+      username: USERNAME,
+      irkPubHex: "aa".repeat(32),
+      claimedAt: 1,
+      accountType: "multi",
+    });
+    await seedDevice(s, { tokenId: "caller" });
+    await seedDevice(s, { tokenId: "target" });
+    await handleDeviceDisconnect(
+      {
+        pushTokens: s.pushTokens,
+        usernames: s.usernames,
+        auditEvents: s.auditEvents,
+      },
+      USERNAME,
+      "target",
+      disconnectBody({ targetTokenId: "target", callerTokenId: "caller" }),
+    );
+    const events = await s.auditEvents.list(USERNAME, 0, 10);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.eventKind).toBe("device-disconnected");
+    expect(events[0]?.accountTypeAtEvent).toBe("multi");
   });
 });
