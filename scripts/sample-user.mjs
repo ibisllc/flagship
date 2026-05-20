@@ -342,7 +342,10 @@ export async function runCreate(deps, username, flags) {
       presignedUrl,
       region,
       size,
-      label: `flagship-demo-${username}`,
+      // Per-attempt suffix so a retry never collides with a previous
+      // server still being cleaned up on Hetzner's side (or a stale
+      // orphan from an earlier abandoned attempt).
+      label: `flagship-demo-${username}-${Date.now().toString(36).slice(-6)}`,
     });
     serverId = prov.serverId;
     stderr.write(`[create] temp server id=${serverId}; awaiting daemon + ACME…\n`);
