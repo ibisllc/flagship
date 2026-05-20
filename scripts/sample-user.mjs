@@ -525,14 +525,21 @@ export function makeLiveDeps(env) {
         "bin",
         "personalize-iso.mjs",
       );
-      const baseIso = resolve(
-        here,
-        "..",
-        "apps",
-        "web",
-        "public",
-        "build",
-        "iso",
+      // Base ISO cached at ~/.cache/flagship/base-isos/<file>.iso,
+      // NOT in apps/web/public/build/iso/ — that path is the Worker's
+      // [assets] binding root and `wrangler deploy` would refuse to
+      // upload the 239 MiB ISO (25 MiB per-asset cap). The Worker
+      // serves the ISO at runtime via the ISO_BUCKET R2 binding,
+      // never as a static asset.
+      const { homedir: _homedir } = await import("node:os");
+      const baseIsoDir = join(
+        _homedir(),
+        ".cache",
+        "flagship",
+        "base-isos",
+      );
+      const baseIso = join(
+        baseIsoDir,
         "flagship-base-alpine-3.21.0-x86_64.iso",
       );
       if (!existsSync(baseIso)) {

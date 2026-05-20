@@ -24,6 +24,13 @@ These move the demo system's runtime to the Worker so future demos
 don't need the operator's laptop:
 
 ```sh
+# 0. Remove the 239 MiB base ISO from apps/com's [assets] dir if a
+#    prior CLI run cached it there. The Worker serves it at runtime
+#    from R2 (ISO_BUCKET), never as a static asset, but `wrangler
+#    deploy` will refuse to upload it (25 MiB per-asset cap). The
+#    file is .gitignored so this is a no-op against the repo.
+rm -f /Users/harrywinner/flagship/apps/web/public/build/iso/flagship-base-alpine-3.21.0-x86_64.iso
+
 # 1. Push HCLOUD_TOKEN to the Worker (currently only in operator shell;
 #    Worker can't provision on-connect without it)
 cd /Users/harrywinner/flagship/apps/com
