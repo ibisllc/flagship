@@ -144,6 +144,15 @@ export interface R2UploaderOptions {
   spawnFn?: SpawnLike;
   /** Presign TTL in seconds. Default 3600 (1 hour). */
   presignTtlSeconds?: number;
+  /**
+   * Public r2.dev base URL the rescue VPS will wget from. Enable via
+   * `wrangler r2 bucket dev-url enable <bucket>` once; the printed
+   * `https://pub-<hash>.r2.dev` is what goes here. Wrangler 4.x does
+   * NOT ship an `r2 object presign` subcommand, so we can't mint a
+   * signed URL through wrangler alone — the only zero-extra-creds
+   * path is the bucket's public dev-url + ephemeral object lifecycle.
+   */
+  publicBaseUrl?: string;
 }
 
 export class R2Uploader {
@@ -151,6 +160,7 @@ export class R2Uploader {
   private readonly bin: string;
   private readonly spawnFn: SpawnLike;
   private readonly ttl: number;
+  private readonly publicBaseUrl: string | undefined;
 
   constructor(opts: R2UploaderOptions) {
     if (!opts.bucket) throw new Error("R2Uploader needs a bucket name");
@@ -158,9 +168,13 @@ export class R2Uploader {
     this.bin = opts.wranglerBin ?? "npx";
     this.spawnFn = opts.spawnFn ?? (spawn as SpawnLike);
     this.ttl = opts.presignTtlSeconds ?? 3_600;
+    this.publicBaseUrl =
+      opts.publicBaseUrl ??
+      process.env.FLAGSHIP_R2_TEMP_PUBLIC_BASE ??
+      undefined;
   }
 
-  /** Upload + presign in one call. */
+  /** Upload + return public URL in one call. */
   async upload(localPath: string, key: string): Promise<R2UploadResult> {
     const putRes = await this.run(putArgs(this.bucket, key, localPath));
     if (putRes.code !== 0) {
@@ -168,13 +182,14 @@ export class R2Uploader {
         `wrangler r2 object put failed (code ${putRes.code}): ${putRes.stderr.slice(0, 400)}`,
       );
     }
-    const presignRes = await this.run(presignArgs(this.bucket, key, this.ttl));
-    if (presignRes.code !== 0) {
+    if (!this.publicBaseUrl) {
       throw new Error(
-        `wrangler r2 object presign failed (code ${presignRes.code}): ${presignRes.stderr.slice(0, 400)}`,
+        `R2Uploader: publicBaseUrl is required (set FLAGSHIP_R2_TEMP_PUBLIC_BASE or pass opts.publicBaseUrl). ` +
+          `Wrangler 4.x has no r2 object presign; enable bucket dev-url via ` +
+          `'wrangler r2 bucket dev-url enable ${this.bucket}' and pass the printed pub-*.r2.dev URL.`,
       );
     }
-    const url = parsePresignedUrl(presignRes.stdout);
+    const url = `${this.publicBaseUrl.replace(/\/+$/, "")}/${key}`;
     return { bucket: this.bucket, key, presignedUrl: url };
   }
 

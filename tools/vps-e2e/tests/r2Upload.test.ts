@@ -112,32 +112,47 @@ describe("parsePresignedUrl", () => {
 });
 
 describe("R2Uploader", () => {
-  it("upload runs put + presign and returns the parsed URL", async () => {
+  it("upload runs put + returns the dev-url-based public URL", async () => {
+    // Wrangler 4.x dropped `r2 object presign` (only get/put/delete on
+    // r2 object remain). R2Uploader now constructs the URL from the
+    // bucket's r2.dev public base instead of minting a signed URL.
     const { spawnFn, calls } = fakeSpawn([
       {
         match: (_c, a) => a.includes("put"),
         stdout: "uploaded ok",
         exitCode: 0,
       },
-      {
-        match: (_c, a) => a.includes("presign"),
-        stdout: "presigned URL: https://r2.example/bkt/k?sig=xyz",
-        exitCode: 0,
-      },
     ]);
     const up = new R2Uploader({
       bucket: "bkt",
       spawnFn: spawnFn as never,
-      presignTtlSeconds: 60,
+      publicBaseUrl: "https://pub-abc123.r2.dev",
     });
     const r = await up.upload("/tmp/x.iso", "e2e-runs/foo.iso");
     expect(r.bucket).toBe("bkt");
     expect(r.key).toBe("e2e-runs/foo.iso");
-    expect(r.presignedUrl).toBe("https://r2.example/bkt/k?sig=xyz");
-    // Default `npx` binary path; forwards full `wrangler …` vector.
+    expect(r.presignedUrl).toBe("https://pub-abc123.r2.dev/e2e-runs/foo.iso");
+    // Only ONE wrangler invocation now (put). Default `npx` binary path
+    // forwards the full `wrangler …` vector.
+    expect(calls).toHaveLength(1);
     expect(calls[0]?.args[0]).toBe("wrangler");
-    expect(calls[1]?.args.includes("presign")).toBe(true);
-    expect(calls[1]?.args.includes("60")).toBe(true);
+    expect(calls[0]?.args.includes("put")).toBe(true);
+  });
+
+  it("upload throws when publicBaseUrl + env var are both missing", async () => {
+    const { spawnFn } = fakeSpawn([
+      { match: (_c, a) => a.includes("put"), exitCode: 0 },
+    ]);
+    const oldEnv = process.env.FLAGSHIP_R2_TEMP_PUBLIC_BASE;
+    delete process.env.FLAGSHIP_R2_TEMP_PUBLIC_BASE;
+    try {
+      const up = new R2Uploader({ bucket: "bkt", spawnFn: spawnFn as never });
+      await expect(up.upload("/tmp/x.iso", "k")).rejects.toThrow(
+        /publicBaseUrl is required/,
+      );
+    } finally {
+      if (oldEnv !== undefined) process.env.FLAGSHIP_R2_TEMP_PUBLIC_BASE = oldEnv;
+    }
   });
 
   it("upload throws when wrangler put exits non-zero", async () => {

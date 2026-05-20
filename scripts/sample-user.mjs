@@ -596,14 +596,20 @@ export function makeLiveDeps(env) {
         isoPath,
         "--remote",
       ]);
-      const { stdout: out } = await runChild(
-        "npx",
-        ["wrangler", "r2", "object", "presign", `${bucket}/${key}`, "--ttl", "3600"],
-        { capture: true },
-      );
-      const m = out.match(/https:\/\/[^\s'"<>]+/);
-      if (!m) throw new Error(`wrangler presign produced no URL: ${out.slice(0, 240)}`);
-      return { presignedUrl: m[0] };
+      // Wrangler 4.x does NOT ship an `r2 object presign` subcommand
+      // (only get/put/delete on r2 object; presign is only available
+      // via the S3 API + R2 access keys, which would need extra setup).
+      // Cheapest path: enable public dev-url on the bucket
+      // (`wrangler r2 bucket dev-url enable flagship-iso-temp`) and
+      // construct the URL ourselves. Bucket has zero PII in it (only
+      // ephemeral install ISOs we delete on teardown), so dev-url is
+      // acceptable; the ISO objects sit there for ≤1h between upload
+      // and rescue-VPS wget.
+      const base =
+        process.env.FLAGSHIP_R2_TEMP_PUBLIC_BASE ||
+        "https://pub-260717b8631044a0bcee80ce0de8f7f9.r2.dev";
+      const url = `${base.replace(/\/+$/, "")}/${key}`;
+      return { presignedUrl: url };
     },
     // Live wiring of the three Hetzner steps. Built once per CLI
     // invocation and lazily cached so the test path (which stubs
