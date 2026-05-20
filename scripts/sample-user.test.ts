@@ -15,6 +15,9 @@
  *   - partial-failure rollback: if the snapshot step fails, the temp
  *     VPS is destroyed AND the CLI prints a clean error AND exit 3.
  */
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error — .mjs sibling, no types
 import {
@@ -28,6 +31,7 @@ import {
   runList,
   runStatus,
   runDelete,
+  runGrantDevice,
   main,
 } from "./sample-user.mjs";
 
@@ -84,6 +88,68 @@ describe("parseArgs", () => {
       /positive integer/,
     );
   });
+  it("parses `grant-device <user> <label> --scopes a,b,c`", () => {
+    const a = parseArgs([
+      "grant-device",
+      "demo-alice",
+      "reviewer",
+      "--scopes",
+      "browse",
+    ]);
+    expect(a.command).toBe("grant-device");
+    expect(a.username).toBe("demo-alice");
+    expect(a.deviceLabel).toBe("reviewer");
+    expect(a.flags.scopes).toEqual(["browse"]);
+
+    const b = parseArgs([
+      "grant-device",
+      "demo-alice",
+      "work-laptop",
+      "--scopes",
+      "browse,install-service,vibe-code",
+    ]);
+    expect(b.flags.scopes).toEqual([
+      "browse",
+      "install-service",
+      "vibe-code",
+    ]);
+  });
+  it("`grant-device` trims whitespace and rejects empty / missing --scopes", () => {
+    const a = parseArgs([
+      "grant-device",
+      "demo-alice",
+      "reviewer",
+      "--scopes",
+      " browse , install-service ",
+    ]);
+    expect(a.flags.scopes).toEqual(["browse", "install-service"]);
+
+    expect(() => parseArgs(["grant-device"])).toThrow(/requires a <username>/);
+    expect(() => parseArgs(["grant-device", "demo-alice"])).toThrow(
+      /requires a <device-label>/,
+    );
+    expect(() =>
+      parseArgs(["grant-device", "demo-alice", "reviewer"]),
+    ).toThrow(/requires --scopes/);
+    expect(() =>
+      parseArgs([
+        "grant-device",
+        "demo-alice",
+        "reviewer",
+        "--scopes",
+        ",,",
+      ]),
+    ).toThrow(/non-empty comma-separated list/);
+    expect(() =>
+      parseArgs([
+        "grant-device",
+        "demo-alice",
+        "reviewer",
+        "--unknown",
+        "x",
+      ]),
+    ).toThrow(/unknown flag/);
+  });
 });
 
 /* ─────────────────────── env resolution ──────────────────────────────── */
@@ -121,6 +187,10 @@ describe("resolveEnv", () => {
     expect(list.missing).toEqual([]);
     const status = resolveEnv("status", { FLAGSHIP_ADMIN_SECRET: "x" });
     expect(status.missing).toEqual([]);
+    // grant-device is a pure-Worker call (no Hetzner side-effect) so
+    // it must NOT demand HCLOUD_TOKEN.
+    const grant = resolveEnv("grant-device", { FLAGSHIP_ADMIN_SECRET: "x" });
+    expect(grant.missing).toEqual([]);
   });
   it("FLAGSHIP_BASE_URL override is honored", () => {
     const { env } = resolveEnv("list", {
@@ -270,16 +340,47 @@ describe("runList / runStatus / runDelete", () => {
 /* ─────────────────────── create — happy + rollback paths ─────────────── */
 
 describe("runCreate — orchestration", () => {
+  // Default issued-ticket envelope returned by the Worker's
+  // /api/dev/sample-user/admin-claim-and-issue endpoint. Shape matches
+  // packages/control-plane/src/demoUsersAdmin.ts:handleAdminClaimAndIssue.
+  const DEFAULT_TICKET = {
+    code: "AAAA-BBBB-CCCC",
+    blob: {
+      version: 1,
+      serverDomain: "home.demo-alice.flagship.services",
+      username: "demo-alice",
+      serverName: "home",
+      authCode: { serial: "deadbeef".repeat(4) },
+      issuedAt: 1,
+      expiresAt: 86_400_001,
+    },
+    blobSignature: "ff".repeat(64),
+    primaryGrant: {
+      grantId: "00000000-0000-4000-8000-000000000001",
+      username: "demo-alice",
+      deviceLabel: "primary",
+      devicePubKey: "ab".repeat(32),
+      scopes: ["browse", "install-service"],
+      issuedAt: 1,
+      expiresAt: 86_400_001,
+      signature: "ee".repeat(64),
+    },
+  };
+
   // Track the full step ordering via a journal the stubbed deps append
   // to. The journal is asserted at the end so we can be precise about
   // which step ran after which.
   function makeCreateDeps(opts: {
     reserveStatus?: number;
     reserveBody?: unknown;
+    issueStatus?: number;
+    issueBody?: unknown;
     persistStatus?: number;
     persistBody?: unknown;
     snapshotFails?: boolean;
     journal: string[];
+    capturedBuildIso?: { args: unknown[] };
+    capturedPersonalize?: { argv: string[]; blobPath: string; blob: unknown };
   }) {
     const reserveStatus = opts.reserveStatus ?? 200;
     const reserveBody = opts.reserveBody ?? {
@@ -287,14 +388,21 @@ describe("runCreate — orchestration", () => {
       state: "none",
       createdAt: 1,
     };
+    const issueStatus = opts.issueStatus ?? 200;
+    const issueBody = opts.issueBody ?? DEFAULT_TICKET;
     const persistStatus = opts.persistStatus ?? 200;
     const persistBody = opts.persistBody ?? {
       username: "demo-alice",
       snapshotId: "snap-7",
       ready: true,
     };
+    // Order matches the runCreate sequence:
+    //   1) POST /create (reserve)
+    //   2) POST /admin-claim-and-issue (real-ticket)
+    //   3) POST /<u>/install-complete (persist snapshot)
     const scripted = [
       { status: reserveStatus, body: reserveBody },
+      { status: issueStatus, body: issueBody },
       { status: persistStatus, body: persistBody },
     ];
     const { fn, calls } = stubFetch(scripted);
@@ -306,7 +414,42 @@ describe("runCreate — orchestration", () => {
       stderr,
       stdout,
       now: () => 0,
-      buildIso: async () => {
+      buildIso: async (a: {
+        username: string;
+        serverName: string;
+        blob: unknown;
+        blobSignature: string;
+      }) => {
+        if (opts.capturedBuildIso) opts.capturedBuildIso.args.push(a);
+        // Mirror the live wiring's contract: refuse to build without
+        // a real blob envelope, AND write a temp blob.json that the
+        // (stubbed) personalize-iso could read via --blob-json. The
+        // test assertion below reads this file back from disk.
+        if (!a.blob || typeof a.blobSignature !== "string") {
+          throw new Error("buildIso: missing blob/blobSignature");
+        }
+        if (opts.capturedPersonalize) {
+          const workDir = mkdtempSync(
+            join(tmpdir(), `flagship-test-${a.username}-`),
+          );
+          const blobJsonPath = join(workDir, "blob.json");
+          writeFileSync(
+            blobJsonPath,
+            JSON.stringify({ blob: a.blob, blobSignature: a.blobSignature }),
+          );
+          opts.capturedPersonalize.argv = [
+            "--base-iso",
+            "/dev/null",
+            "--output",
+            `/tmp/${a.username}.iso`,
+            "--blob-json",
+            blobJsonPath,
+          ];
+          opts.capturedPersonalize.blobPath = blobJsonPath;
+          opts.capturedPersonalize.blob = JSON.parse(
+            readFileSync(blobJsonPath, "utf8"),
+          );
+        }
         opts.journal.push("buildIso");
         return { isoPath: "/tmp/demo-alice.iso" };
       },
@@ -339,9 +482,13 @@ describe("runCreate — orchestration", () => {
     return { deps, calls, stderr, stdout };
   }
 
-  it("happy path runs all 6 steps in order + posts /install-complete", async () => {
+  it("happy path runs all 7 steps in order + posts /install-complete", async () => {
     const journal: string[] = [];
-    const { deps, calls, stderr, stdout } = makeCreateDeps({ journal });
+    const capturedBuildIso = { args: [] as unknown[] };
+    const { deps, calls, stderr, stdout } = makeCreateDeps({
+      journal,
+      capturedBuildIso,
+    });
     const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
     expect(code).toBe(0);
     expect(journal).toEqual([
@@ -353,8 +500,8 @@ describe("runCreate — orchestration", () => {
       "snapshot",
       "destroyVps:srv-1",
     ]);
-    // 2 admin calls: reserve + install-complete.
-    expect(calls).toHaveLength(2);
+    // 3 admin calls: reserve + admin-claim-and-issue + install-complete.
+    expect(calls).toHaveLength(3);
     expect(calls[0].url).toBe(
       "https://flagshipserver.com/api/dev/sample-user/create",
     );
@@ -366,12 +513,27 @@ describe("runCreate — orchestration", () => {
       ttlIdleMinutes: 30,
     });
     expect(calls[1].url).toBe(
-      "https://flagshipserver.com/api/dev/sample-user/demo-alice/install-complete",
+      "https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue",
     );
     expect(JSON.parse(calls[1].body!)).toEqual({
+      username: "demo-alice",
+      serverName: "home",
+    });
+    expect(calls[2].url).toBe(
+      "https://flagshipserver.com/api/dev/sample-user/demo-alice/install-complete",
+    );
+    expect(JSON.parse(calls[2].body!)).toEqual({
       snapshot_id: "snap-7",
       iso_r2_key: "demo-isos/demo-alice-deadbeef.iso",
     });
+    // buildIso received the issued blob + signature verbatim.
+    expect(capturedBuildIso.args).toHaveLength(1);
+    const buildArg = capturedBuildIso.args[0] as {
+      blob: { username: string };
+      blobSignature: string;
+    };
+    expect(buildArg.blob.username).toBe("demo-alice");
+    expect(buildArg.blobSignature).toBe(DEFAULT_TICKET.blobSignature);
     // Final stdout JSON for piping.
     expect(JSON.parse(stdout.data)).toEqual({
       username: "demo-alice",
@@ -381,6 +543,62 @@ describe("runCreate — orchestration", () => {
     });
     expect(stderr.data).toContain("[create] starting at");
     expect(stderr.data).toContain("[create] snapshotting…");
+    expect(stderr.data).toContain(
+      "[create] claiming + issuing real install ticket via .com…",
+    );
+  });
+
+  it("personalize-iso invocation uses --blob-json and NOT --seed-hex", async () => {
+    const journal: string[] = [];
+    const capturedPersonalize = {
+      argv: [] as string[],
+      blobPath: "",
+      blob: undefined as unknown,
+    };
+    const { deps } = makeCreateDeps({ journal, capturedPersonalize });
+    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    expect(code).toBe(0);
+    // The argv we'd hand to `personalize-iso` includes --blob-json and
+    // explicitly NOT --seed-hex / --username / --server-name (those
+    // belong to the deprecated synthesizeBlob path).
+    expect(capturedPersonalize.argv).toContain("--blob-json");
+    expect(capturedPersonalize.argv).not.toContain("--seed-hex");
+    expect(capturedPersonalize.argv).not.toContain("--username");
+    expect(capturedPersonalize.argv).not.toContain("--server-name");
+    // The blob.json file on disk has the {blob, blobSignature} shape
+    // the iso-personalizer CLI consumes (re-read after write).
+    const onDisk = capturedPersonalize.blob as {
+      blob: { username: string };
+      blobSignature: string;
+    };
+    expect(onDisk.blob.username).toBe("demo-alice");
+    expect(onDisk.blobSignature).toBe(DEFAULT_TICKET.blobSignature);
+  });
+
+  it("admin-claim-and-issue 5xx → exits before touching Hetzner", async () => {
+    const journal: string[] = [];
+    const { deps, stderr } = makeCreateDeps({
+      journal,
+      issueStatus: 503,
+      issueBody: { error: "demo backend down" },
+    });
+    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    expect(code).toBe(3); // 503 → exit 3 per §14.2
+    // None of the I/O-side steps should have run.
+    expect(journal).toEqual([]);
+    expect(stderr.data).toContain("admin-claim-and-issue failed");
+  });
+
+  it("admin-claim-and-issue returns malformed body → exit 1", async () => {
+    const journal: string[] = [];
+    const { deps, stderr } = makeCreateDeps({
+      journal,
+      issueBody: { code: "X", primaryGrant: {} },
+    });
+    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    expect(code).toBe(1);
+    expect(journal).toEqual([]);
+    expect(stderr.data).toContain("malformed body");
   });
 
   it("snapshot failure rolls back the temp server AND exits 3", async () => {
@@ -421,6 +639,147 @@ describe("runCreate — orchestration", () => {
   });
 });
 
+/* ─────────────────────── grant-device ─────────────────────────────────── */
+
+describe("runGrantDevice", () => {
+  it("POSTs /admin-mint-device-grant with deviceLabel+scopes and prints JSON", async () => {
+    const responseBody = {
+      grant: {
+        grantId: "00000000-0000-4000-8000-000000000099",
+        username: "demo-alice",
+        deviceLabel: "reviewer",
+        devicePubKey: "cc".repeat(32),
+        scopes: ["browse"],
+        issuedAt: 1,
+        expiresAt: 90 * 24 * 3_600_000 + 1,
+      },
+      signature: "aa".repeat(64),
+      devicePubHex: "cc".repeat(32),
+    };
+    const { fn, calls } = stubFetch([{ status: 200, body: responseBody }]);
+    const stderr = captureStream();
+    const stdout = captureStream();
+    const code = await runGrantDevice(
+      { fetchFn: fn, env: ENV_OK, stderr, stdout },
+      "demo-alice",
+      "reviewer",
+      ["browse"],
+    );
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].url).toBe(
+      "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+    );
+    expect(JSON.parse(calls[0].body!)).toEqual({
+      deviceLabel: "reviewer",
+      scopes: ["browse"],
+    });
+    // Bearer-equivalent header from adminFetch.
+    expect(calls[0].headers["x-admin-secret"]).toBe("admin-sek");
+    // Machine-readable response on stdout.
+    expect(JSON.parse(stdout.data)).toEqual(responseBody);
+    // Human summary on stderr.
+    expect(stderr.data).toContain(
+      "Granted reviewer device with scopes: browse",
+    );
+  });
+
+  it("URL-encodes the username path segment", async () => {
+    const { fn, calls } = stubFetch([
+      { status: 200, body: { grant: {}, signature: "x", devicePubHex: "y" } },
+    ]);
+    const stderr = captureStream();
+    const stdout = captureStream();
+    await runGrantDevice(
+      { fetchFn: fn, env: ENV_OK, stderr, stdout },
+      "weird user",
+      "reviewer",
+      ["browse"],
+    );
+    expect(calls[0].url).toContain(
+      "/api/dev/sample-user/weird%20user/admin-mint-device-grant",
+    );
+  });
+
+  it("multiple scopes are forwarded verbatim", async () => {
+    const { fn, calls } = stubFetch([
+      { status: 200, body: { grant: {}, signature: "x", devicePubHex: "y" } },
+    ]);
+    const stderr = captureStream();
+    const stdout = captureStream();
+    const code = await runGrantDevice(
+      { fetchFn: fn, env: ENV_OK, stderr, stdout },
+      "demo-alice",
+      "work-laptop",
+      ["browse", "install-service", "vibe-code"],
+    );
+    expect(code).toBe(0);
+    expect(JSON.parse(calls[0].body!)).toEqual({
+      deviceLabel: "work-laptop",
+      scopes: ["browse", "install-service", "vibe-code"],
+    });
+    expect(stderr.data).toContain(
+      "Granted work-laptop device with scopes: browse, install-service, vibe-code",
+    );
+  });
+
+  it("Worker rejection (400) surfaces the error message AND exits 1", async () => {
+    const { fn } = stubFetch([
+      {
+        status: 400,
+        body: {
+          error: "scopes must be a non-empty array of known DeviceScope strings",
+        },
+      },
+    ]);
+    const stderr = captureStream();
+    const stdout = captureStream();
+    const code = await runGrantDevice(
+      { fetchFn: fn, env: ENV_OK, stderr, stdout },
+      "demo-alice",
+      "reviewer",
+      ["bogus-scope"],
+    );
+    expect(code).toBe(1);
+    expect(stderr.data).toContain(
+      "scopes must be a non-empty array of known DeviceScope strings",
+    );
+    // No JSON on stdout when the call failed — keep the pipe contract clean.
+    expect(stdout.data).toBe("");
+  });
+
+  it("admin-auth failure (403) → exit 2", async () => {
+    const { fn } = stubFetch([{ status: 403, body: { error: "no admin" } }]);
+    const stderr = captureStream();
+    const stdout = captureStream();
+    const code = await runGrantDevice(
+      { fetchFn: fn, env: ENV_OK, stderr, stdout },
+      "demo-alice",
+      "reviewer",
+      ["browse"],
+    );
+    expect(code).toBe(2);
+    expect(stderr.data).toContain("no admin");
+  });
+
+  it("404 demo user → exit 1 with a clear message", async () => {
+    const { fn } = stubFetch([
+      { status: 404, body: { error: "demo user does not exist" } },
+    ]);
+    const stderr = captureStream();
+    const stdout = captureStream();
+    const code = await runGrantDevice(
+      { fetchFn: fn, env: ENV_OK, stderr, stdout },
+      "ghost-alice",
+      "reviewer",
+      ["browse"],
+    );
+    expect(code).toBe(1);
+    expect(stderr.data).toContain("demo user does not exist");
+  });
+});
+
 /* ─────────────────────── main() end-to-end exit-code contracts ───────── */
 
 describe("main() — env-gate + exit-code contracts", () => {
@@ -454,10 +813,73 @@ describe("main() — env-gate + exit-code contracts", () => {
     expect(code).toBe(0);
     expect(stdout.data).toContain("sample-user — operator CLI");
     expect(stdout.data).toContain("create <username>");
+    expect(stdout.data).toContain(
+      "grant-device <username> <device-label>",
+    );
   });
   it("USAGE constant is the same string that --help prints", () => {
     expect(USAGE).toContain("create <username>");
     expect(USAGE).toContain("FLAGSHIP_ADMIN_SECRET");
+    expect(USAGE).toContain("grant-device <username> <device-label>");
+  });
+  it("`grant-device` flows through main() with admin-secret only (no HCLOUD_TOKEN)", async () => {
+    // grant-device is a pure-Worker call. main() must NOT demand
+    // HCLOUD_TOKEN; the run reaches runGrantDevice and POSTs via the
+    // injected fetchFn.
+    const stderr = captureStream();
+    const stdout = captureStream();
+    const fetchFn = vi.fn(async () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            grant: {
+              grantId: "g1",
+              username: "demo-alice",
+              deviceLabel: "reviewer",
+              devicePubKey: "cc".repeat(32),
+              scopes: ["browse"],
+              issuedAt: 1,
+              expiresAt: 2,
+            },
+            signature: "aa".repeat(64),
+            devicePubHex: "cc".repeat(32),
+          }),
+      }) as Response,
+    );
+    const code = await main(
+      [
+        "grant-device",
+        "demo-alice",
+        "reviewer",
+        "--scopes",
+        "browse",
+      ],
+      {
+        processEnv: { FLAGSHIP_ADMIN_SECRET: "sek" },
+        stderr,
+        stdout,
+        now: () => 0,
+        fetchFn,
+        sha8For: vi.fn(),
+        buildIso: vi.fn(),
+        uploadIso: vi.fn(),
+        provisionTempVps: vi.fn(),
+        awaitDaemonReady: vi.fn(),
+        snapshot: vi.fn(),
+        destroyVps: vi.fn(),
+      },
+    );
+    expect(code).toBe(0);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const url = (fetchFn.mock.calls[0] as unknown[])[0] as string;
+    expect(url).toBe(
+      "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+    );
+    expect(stderr.data).toContain(
+      "Granted reviewer device with scopes: browse",
+    );
   });
   it("`create` with NO env → exit 3 (HCLOUD_TOKEN beats FLAGSHIP_ADMIN_SECRET)", async () => {
     const { stderr, run } = callMain(

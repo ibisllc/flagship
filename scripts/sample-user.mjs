@@ -13,6 +13,7 @@
  *   delete <username>
  *   list
  *   status <username>
+ *   grant-device <username> <label> --scopes <comma-list>
  *   help
  *
  * Env (per §14.1):
@@ -45,11 +46,24 @@ import { fileURLToPath } from "node:url";
 
 /* ─────────────────────── arg parsing ────────────────────────────────── */
 
-const SUBCOMMANDS = new Set(["create", "delete", "list", "status", "help"]);
+const SUBCOMMANDS = new Set([
+  "create",
+  "delete",
+  "list",
+  "status",
+  "grant-device",
+  "help",
+]);
 
 /**
  * Pure arg parser. Throws on malformed input. Returns:
- *   { command, username?, flags: { display?, region?, size?, ttlIdleMinutes? } }
+ *   { command, username?, deviceLabel?, flags: { display?, region?, size?, ttlIdleMinutes?, scopes? } }
+ *
+ * `scopes` is parsed as an array of trimmed non-empty tokens; the
+ * Worker is the source of truth for which strings are valid scopes, so
+ * the CLI deliberately does not gate them locally — a typo surfaces as
+ * a 400 from `/admin-mint-device-grant` with the offending string in
+ * the body.
  */
 export function parseArgs(argv) {
   if (argv.length === 0) return { command: "help", username: null, flags: {} };
@@ -75,6 +89,43 @@ export function parseArgs(argv) {
     }
     if (argv.length > 2) throw new Error(`${command} takes only <username>`);
     return { command, username: u, flags: {} };
+  }
+  // `grant-device <username> <label> --scopes <comma-list>`.
+  if (command === "grant-device") {
+    const u = argv[1];
+    if (!u || u.startsWith("--")) {
+      throw new Error("grant-device requires a <username>");
+    }
+    const label = argv[2];
+    if (!label || label.startsWith("--")) {
+      throw new Error("grant-device requires a <device-label>");
+    }
+    let i = 3;
+    while (i < argv.length) {
+      const tok = argv[i];
+      if (!tok.startsWith("--")) {
+        throw new Error(`unexpected positional argument: ${tok}`);
+      }
+      const key = tok.slice(2);
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith("--")) {
+        throw new Error(`flag --${key} requires a value`);
+      }
+      if (key === "scopes") {
+        const list = next.split(",").map((s) => s.trim()).filter(Boolean);
+        if (list.length === 0) {
+          throw new Error("--scopes must be a non-empty comma-separated list");
+        }
+        flags.scopes = list;
+      } else {
+        throw new Error(`unknown flag: --${key}`);
+      }
+      i += 2;
+    }
+    if (!flags.scopes) {
+      throw new Error("grant-device requires --scopes <comma-list>");
+    }
+    return { command, username: u, deviceLabel: label, flags };
   }
   // `create` takes <username> + named flags.
   const u = argv[1];
@@ -127,6 +178,9 @@ export function resolveEnv(command, processEnv) {
   // All subcommands need admin auth (the live admin endpoints are bearer-gated).
   if (!adminSecret) missing.push({ name: "FLAGSHIP_ADMIN_SECRET", code: 2 });
   // Only Hetzner-touching subcommands need HCLOUD_TOKEN.
+  // `grant-device` is a pure-Worker call (no rescue/dd/snapshot), so it
+  // intentionally does NOT require HCLOUD_TOKEN — it works the same as
+  // `list`/`status`.
   if ((command === "create" || command === "delete") && !hcloudToken) {
     missing.push({ name: "HCLOUD_TOKEN", code: 3 });
   }
@@ -277,7 +331,10 @@ export async function runDelete(deps, username) {
  *   - env { baseUrl, adminSecret, hcloudToken, sshKeyPath }
  *   - stderr / stdout                      → output streams
  *   - now()                                → for log timestamps
- *   - buildIso({ username, serverName })   → { isoPath } (real-I/O step)
+ *   - buildIso({ username, serverName, blob, blobSignature })
+ *                                          → { isoPath } (real-I/O step;
+ *                                            invokes personalize-iso
+ *                                            with --blob-json)
  *   - uploadIso({ isoPath, key })          → { presignedUrl } (R2 upload)
  *   - provisionTempVps({ presignedUrl, ... }) → { serverId, ipv4 }
  *   - awaitDaemonReady({ serverId, fqdn }) → resolves when ACME green
@@ -321,9 +378,54 @@ export async function runCreate(deps, username, flags) {
     stderr.write("[create] row inserted (state=none)\n");
   }
 
-  // 2. Build the personalized ISO locally.
+  // 2. Real-ticket: ask the Worker to claim the demo username under
+  //    its deterministic IRK + mint a signed InstallBlob envelope.
+  //    This replaces the offline `synthesizeBlob` path that produced
+  //    an install blob whose serial `.com` never recognized (the
+  //    2026-05-20 Phase F regression). See
+  //    `docs/v2-device-addressing-and-real-ticket.md` §4.
+  stderr.write("[create] claiming + issuing real install ticket via .com…\n");
+  const issued = await adminFetch(
+    fetchFn,
+    adminUrl(env.baseUrl, "/api/dev/sample-user/admin-claim-and-issue"),
+    {
+      method: "POST",
+      // `scopes` omitted on purpose — the Worker fills in the §2.2
+      // default for a demo-primary device (full demo power).
+      body: JSON.stringify({ username, serverName: "home" }),
+    },
+    env.adminSecret,
+  );
+  if (issued.status !== 200) {
+    stderr.write(
+      `[create] admin-claim-and-issue failed: HTTP ${issued.status} ${JSON.stringify(issued.json)}\n`,
+    );
+    return exitCodeForHttp(issued.status);
+  }
+  const ticket = issued.json ?? {};
+  if (
+    !ticket.blob ||
+    typeof ticket.blobSignature !== "string"
+  ) {
+    stderr.write(
+      `[create] admin-claim-and-issue returned malformed body: ${JSON.stringify(ticket).slice(0, 200)}\n`,
+    );
+    return 1;
+  }
+  stderr.write(
+    `[create] ticket minted (code=${typeof ticket.code === "string" ? ticket.code : "?"}; primary grant=${ticket.primaryGrant?.grantId ?? "?"})\n`,
+  );
+
+  // 3. Build the personalized ISO locally, passing the issued blob
+  //    envelope so personalize-iso uses --blob-json mode (NOT the
+  //    offline synthesizeBlob fallback).
   stderr.write("[create] building personalized ISO…\n");
-  const { isoPath } = await deps.buildIso({ username, serverName: "home" });
+  const { isoPath } = await deps.buildIso({
+    username,
+    serverName: "home",
+    blob: ticket.blob,
+    blobSignature: ticket.blobSignature,
+  });
   const sha8 = await deps.sha8For(isoPath);
   const key = r2KeyFor(username, sha8);
   stderr.write(`[create] ISO sha8=${sha8}; key=${key}\n`);
@@ -422,6 +524,56 @@ export async function runCreate(deps, username, flags) {
   return 0;
 }
 
+/* ─────────────────────── subcommand: grant-device ───────────────────── */
+
+/**
+ * Mint a DeviceCapabilityGrant for an additional device under an
+ * existing demo user. Wraps the Worker's
+ * `/api/dev/sample-user/<u>/admin-mint-device-grant` endpoint
+ * (S3.3); see `docs/v2-device-addressing-and-real-ticket.md` §4.2.
+ *
+ * Output:
+ *   - stdout: a single JSON line containing the full `{grant, signature,
+ *     devicePubHex}` envelope returned by the Worker. Pipe-friendly.
+ *   - stderr: a one-line human summary ("Granted <label> device with
+ *     scopes: <comma-list>"). Lets the operator eyeball the result
+ *     without parsing JSON.
+ *
+ * Scope validation lives ENTIRELY on the Worker — the CLI forwards
+ * the typed list verbatim and surfaces any rejection message back to
+ * the operator. That keeps the valid-scope list in exactly one place
+ * (`packages/control-plane/src/demoUsersAdmin.ts`).
+ */
+export async function runGrantDevice(deps, username, deviceLabel, scopes) {
+  const { fetchFn, env, stderr, stdout } = deps;
+  stderr.write(
+    `[grant-device] minting grant for ${username}.${deviceLabel} (scopes: ${scopes.join(",")})…\n`,
+  );
+  const r = await adminFetch(
+    fetchFn,
+    adminUrl(
+      env.baseUrl,
+      `/api/dev/sample-user/${encodeURIComponent(username)}/admin-mint-device-grant`,
+    ),
+    {
+      method: "POST",
+      body: JSON.stringify({ deviceLabel, scopes }),
+    },
+    env.adminSecret,
+  );
+  if (r.status !== 200) {
+    const errMsg =
+      typeof r.json?.error === "string" ? r.json.error : `HTTP ${r.status}`;
+    stderr.write(`[grant-device] failed: ${errMsg}\n`);
+    return exitCodeForHttp(r.status);
+  }
+  stdout.write(JSON.stringify(r.json ?? {}) + "\n");
+  stderr.write(
+    `[grant-device] Granted ${deviceLabel} device with scopes: ${scopes.join(", ")}\n`,
+  );
+  return 0;
+}
+
 /* ─────────────────────── usage / help ───────────────────────────────── */
 
 export const USAGE = [
@@ -432,6 +584,7 @@ export const USAGE = [
   "  node scripts/sample-user.mjs delete <username>",
   "  node scripts/sample-user.mjs list",
   "  node scripts/sample-user.mjs status <username>",
+  "  node scripts/sample-user.mjs grant-device <username> <device-label> --scopes <comma-list>",
   "",
   "ENV:",
   "  HCLOUD_TOKEN          required for create/delete (touches Hetzner)",
@@ -490,6 +643,13 @@ export async function main(argv, deps) {
       return runDelete(subDeps, parsed.username);
     case "create":
       return runCreate(subDeps, parsed.username, parsed.flags);
+    case "grant-device":
+      return runGrantDevice(
+        subDeps,
+        parsed.username,
+        parsed.deviceLabel,
+        parsed.flags.scopes,
+      );
     default:
       stderr.write(`error: unhandled subcommand ${parsed.command}\n`);
       return 1;
@@ -515,7 +675,18 @@ export function makeLiveDeps(env) {
     fetchFn: globalThis.fetch.bind(globalThis),
     now: () => Date.now(),
     sha8For: (p) => isoSha8(p),
-    buildIso: async ({ username, serverName }) => {
+    buildIso: async ({ username, serverName, blob, blobSignature }) => {
+      if (!blob || typeof blobSignature !== "string") {
+        // The orchestrator owns the admin-claim-and-issue step now; if
+        // the live wiring is reached without a real `.com`-issued blob
+        // we MUST fail closed rather than silently fall back to the
+        // offline synthesizeBlob path (which produced the 2026-05-20
+        // unrecognized-serial regression). See
+        // docs/v2-device-addressing-and-real-ticket.md §4.
+        throw new Error(
+          "buildIso: missing { blob, blobSignature } — refusing to fall back to synthesizeBlob",
+        );
+      }
       const here = dirname(fileURLToPath(import.meta.url));
       const cli = resolve(
         here,
@@ -580,10 +751,15 @@ export function makeLiveDeps(env) {
         process.stderr.write(`[create] base ISO cached at ${baseIso}\n`);
       }
       // Stable cache for personalized ISOs at
-      // ~/.cache/flagship-demo-isos/<username>-<serverName>-<base-sha8>.iso.
-      // The base-iso sha8 in the filename auto-invalidates the cache
-      // when the base ISO is upgraded (so an Alpine bump doesn't yield
-      // a stale personalized ISO with the old root).
+      // ~/.cache/flagship-demo-isos/<username>-<serverName>-<base-sha8>-<sig8>.iso.
+      //
+      // The base-iso sha8 invalidates the cache on Alpine bumps. The
+      // blob-signature sha8 invalidates whenever the Worker mints a new
+      // install ticket (so we never reuse an ISO whose serial `.com`
+      // already considers expired/replaced). This pair keeps cache
+      // hits for retries of the SAME ticket (orchestrator interrupted
+      // mid-flight + reran) while guaranteeing freshness across
+      // distinct admin-claim-and-issue calls.
       const { mkdirSync } = await import("node:fs");
       const { homedir } = await import("node:os");
       const { createHash } = await import("node:crypto");
@@ -594,9 +770,10 @@ export function makeLiveDeps(env) {
       const baseHashH = createHash("sha256");
       await pipeline(createReadStream(baseIso), baseHashH);
       const baseSha8 = baseHashH.digest("hex").slice(0, 8);
+      const sig8 = blobSignature.slice(0, 8);
       const cachedIso = join(
         cacheDir,
-        `${username}-${serverName}-${baseSha8}.iso`,
+        `${username}-${serverName}-${baseSha8}-${sig8}.iso`,
       );
       if (existsSync(cachedIso)) {
         process.stderr.write(
@@ -609,17 +786,30 @@ export function makeLiveDeps(env) {
       // cache entry that future runs would happily reuse.
       const workDir = mkdtempSync(join(tmpdir(), `flagship-demo-${username}-`));
       const outIso = join(workDir, `flagship-demo-${username}.iso`);
+      // Write the blob envelope JSON next to the ISO so personalize-iso
+      // can read it via --blob-json. Shape is `{blob, blobSignature}`,
+      // exactly what /api/dev/sample-user/admin-claim-and-issue returns.
+      const blobJsonPath = join(workDir, "blob.json");
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(
+        blobJsonPath,
+        JSON.stringify({ blob, blobSignature }),
+      );
       await runChild("node", [
         cli,
         "--base-iso",
         baseIso,
         "--output",
         outIso,
-        "--username",
-        username,
-        "--server-name",
-        serverName,
+        "--blob-json",
+        blobJsonPath,
       ]);
+      // serverName is intentionally NOT passed to personalize-iso — it
+      // lives inside the blob (`blob.serverName`) and the CLI's
+      // --blob-json mode reads it from there. Kept as a parameter on
+      // the buildIso signature so the cached-path filename stays
+      // human-meaningful (`<username>-<serverName>-<base-sha8>.iso`).
+      void serverName;
       const { renameSync } = await import("node:fs");
       renameSync(outIso, cachedIso);
       process.stderr.write(

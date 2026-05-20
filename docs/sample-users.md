@@ -1222,15 +1222,22 @@ the admin endpoints + drives the operator-side ISO build and
 snapshot flow.
 
 ```sh
-# Create a new demo user (uploads ISO, provisions temp VPS, snapshots,
-# destroys temp VPS, persists snapshot_id).
+# Create a new demo user. The CLI now drives a REAL `.com`-issued
+# install ticket end-to-end (see §14.4 below):
+#   1. POST /api/dev/sample-user/create (reserve D1 row)
+#   2. POST /api/dev/sample-user/admin-claim-and-issue (mint
+#      AuthCode + signed InstallBlob + primary DeviceCapabilityGrant)
+#   3. personalize-iso --blob-json (NOT --seed-hex)
+#   4. R2 upload + Hetzner rescue+dd + ACME + snapshot
+#   5. POST /api/dev/sample-user/<u>/install-complete
 node scripts/sample-user.mjs create <username> \
     --display "<display string>" \
     [--region fsn1] \
     [--size cx22] \
     [--ttl-idle 30]
 
-# Tear down everything: server (if up), snapshot, R2 ISO, D1 row.
+# Tear down everything: server (if up), snapshot, R2 ISO, D1 row, AND
+# every DeviceCapabilityGrant for that user.
 node scripts/sample-user.mjs delete <username>
 
 # List all demo users.
@@ -1238,6 +1245,18 @@ node scripts/sample-user.mjs list
 
 # Show one demo user, including a live Hetzner status poll.
 node scripts/sample-user.mjs status <username>
+
+# Mint a DeviceCapabilityGrant for a NEW device under an existing
+# demo user. Pure-Worker call (no Hetzner side-effect; needs only
+# FLAGSHIP_ADMIN_SECRET). The Worker validates the scopes — a typo
+# surfaces as a 400 with the offending string in the body.
+node scripts/sample-user.mjs grant-device <username> <device-label> \
+    --scopes <comma-list>
+
+# Examples:
+node scripts/sample-user.mjs grant-device demo-alice reviewer --scopes browse
+node scripts/sample-user.mjs grant-device demo-alice work-laptop \
+    --scopes browse,install-service,vibe-code
 
 # (Optional internal helper — used during create-sample-user; not for
 # direct operator use.) Upload a pre-built ISO to R2.
@@ -1272,6 +1291,58 @@ tools:
 {"username":"demo-alice","ready":true,"snapshotId":"12345678"}
 ```
 
+`grant-device` writes a single JSON line to stdout containing the
+full `{grant, signature, devicePubHex}` envelope returned by the
+Worker, and a one-line summary ("`Granted reviewer device with
+scopes: browse`") to stderr for human eyeballing.
+
+### 14.4 Real-ticket install flow (v2; supersedes synthesizeBlob)
+
+The `create` subcommand uses a real `.com`-issued install blob so
+the trailer's `AuthCode.serial` lines up with the `auth_codes` row
+on the Worker. First-boot `/api/server/register` then succeeds and
+the install actually completes.
+
+This replaces the previous offline `personalize-iso --seed-hex`
+path (the `synthesizeBlob` mode of the iso-personalizer CLI), which
+produced a self-signed install blob whose serial `.com` had no
+record of — the 2026-05-20 Phase F regression. The
+`synthesizeBlob` mode of `personalize-iso` is now DEPRECATED for
+demo flows; it remains in the CLI only for unit/integration tests
+that need an ISO without a Worker round-trip. See
+`docs/v2-device-addressing-and-real-ticket.md` §4 for the full
+spec.
+
+Call sequence executed by `node scripts/sample-user.mjs create
+<u>`:
+
+1. `POST /api/dev/sample-user/create` — reserve / re-attach the
+   demo_users row (idempotent on `reused: true`).
+2. `POST /api/dev/sample-user/admin-claim-and-issue` — Worker
+   derives the deterministic user IRK from `DEMO_IRK_KEK` + the
+   username, claims the username, mints a signed `AuthCode` +
+   `InstallBlob`, persists a build-ticket, and writes the primary
+   `DeviceCapabilityGrant` (full demo-primary scopes per §2.2 of
+   the v2 spec). Returns `{code, blob, blobSignature,
+   primaryGrant}`.
+3. The CLI writes `{blob, blobSignature}` to a temp `blob.json`
+   and invokes `personalize-iso --base-iso <cached> --output
+   <out.iso> --blob-json <blob.json>` (NOT `--seed-hex`,
+   `--username`, or `--server-name` — those are the deprecated
+   path).
+4. R2 upload + Hetzner provision + rescue+dd + `awaitDaemonReady`
+   on `/api/users/<u>/pods` (unchanged from Phase A).
+5. `POST /api/dev/sample-user/<u>/install-complete` —
+   persist `snapshot_id` + `iso_r2_key` on the demo_users row.
+
+`grant-device <u> <label> --scopes <comma-list>` is a one-step
+wrapper around `POST /api/dev/sample-user/<u>/admin-mint-device-
+grant`. Use it to add reviewer / corporate / work-laptop sub-
+identities to an existing demo user. The grant is a real
+`DeviceCapabilityGrant` envelope (same shape Plan A consumes for
+two-level addressing), signed by the demo user's IRK
+Worker-side.
+
 Implementation-ready bullets:
 
 - Phase E: new file `scripts/sample-user.mjs`.
@@ -1281,6 +1352,9 @@ Implementation-ready bullets:
   `HetznerProvider.snapshot(serverId, description)` and
   `HetznerProvider.destroyImage(imageId)` (used by the CLI's
   `delete` path).
+- S3.4: `scripts/sample-user.mjs` refactored to call
+  `admin-claim-and-issue` and `personalize-iso --blob-json` (per
+  this section); new `grant-device` subcommand added.
 
 ---
 

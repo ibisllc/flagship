@@ -370,6 +370,27 @@ run ≤ 25 min; subsequent re-connects ≤ 60 s.
 
 Commit: any final fixes that surface during live testing.
 
+### 2026-05-20 gap — RESOLVED by S3.4
+
+The 2026-05-20 live run died at step 2: `scripts/sample-user.mjs`
+personalised its ISO via the offline `synthesizeBlob` mode of
+`personalize-iso` (no `--blob-json`), so the trailer carried a
+self-signed install blob whose `AuthCode.serial` was never
+registered with `.com`. First-boot `/api/server/register` then
+rejected the daemon and the install silently never completed.
+
+S3.4 (commit lands in this PR) fixes this end-to-end. The CLI now
+calls the v2 `/api/dev/sample-user/admin-claim-and-issue` admin
+endpoint to mint a real `.com`-issued install blob (signed under
+the deterministic demo user IRK), writes `{blob, blobSignature}` to
+a temp file, and invokes `personalize-iso --blob-json` so the
+trailer matches the live ticket. Phase F is no longer blocked on
+CLI plumbing; the remaining gate is operator-shell credentials
+(`HCLOUD_TOKEN` + `FLAGSHIP_ADMIN_SECRET` + a Hetzner SSH keypair
+on disk). See
+`docs/v2-device-addressing-and-real-ticket.md` §4 for the design;
+`docs/sample-users.md` §14.4 for the call sequence.
+
 ---
 
 ## Demo-user multi-device model (ratified)
