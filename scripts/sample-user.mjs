@@ -533,7 +533,41 @@ export function makeLiveDeps(env) {
         "flagship-base-alpine-3.21.0-x86_64.iso",
       );
       if (!existsSync(baseIso)) {
-        throw new Error(`base ISO not found at ${baseIso}`);
+        // Auto-fetch the base ISO from .com (one-time bootstrap; ~600 MB).
+        // The ISO is served by the Worker out of the `flagship-iso` R2
+        // bucket; SHA256 is recorded in apps/com/wrangler.toml as
+        // BASE_ISO_SHA256 (same file, same bytes; we verify after
+        // download).
+        const url = process.env.FLAGSHIP_BASE_ISO_URL ||
+          "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso";
+        const expectedSha = process.env.FLAGSHIP_BASE_ISO_SHA256 ||
+          "faafc1b9f868c47c99733c2c6d453e8202d93f9b36df6d6b653eb774914736b2";
+        process.stderr.write(`[create] base ISO not present — fetching ${url}…\n`);
+        const { mkdirSync, createWriteStream } = await import("node:fs");
+        const { pipeline } = await import("node:stream/promises");
+        const { Readable } = await import("node:stream");
+        mkdirSync(dirname(baseIso), { recursive: true });
+        const res = await fetch(url);
+        if (!res.ok || !res.body) {
+          throw new Error(`base ISO download failed: HTTP ${res.status}`);
+        }
+        const tmp = baseIso + ".part";
+        await pipeline(Readable.fromWeb(res.body), createWriteStream(tmp));
+        // Verify sha256 BEFORE renaming into place so a corrupted/partial
+        // download never gets cached.
+        const { createHash } = await import("node:crypto");
+        const { createReadStream, renameSync, unlinkSync } = await import("node:fs");
+        const h = createHash("sha256");
+        await pipeline(createReadStream(tmp), h);
+        const got = h.digest("hex");
+        if (got !== expectedSha) {
+          unlinkSync(tmp);
+          throw new Error(
+            `base ISO sha256 mismatch: expected ${expectedSha}, got ${got}`,
+          );
+        }
+        renameSync(tmp, baseIso);
+        process.stderr.write(`[create] base ISO cached at ${baseIso}\n`);
       }
       const workDir = mkdtempSync(join(tmpdir(), `flagship-demo-${username}-`));
       const outIso = join(workDir, `flagship-demo-${username}.iso`);
