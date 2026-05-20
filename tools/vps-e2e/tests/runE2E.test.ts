@@ -4,11 +4,15 @@ import { runE2E, plannedChain } from "../src/runE2E.js";
 import { makeIdentity } from "../src/identity.js";
 import {
   buildCreateServerBody,
-  sanitizeServerName,
-  resolveIsoSelector,
-  attachIsoBody,
+  buildDdCommand,
+  enableRescueBody,
   parseCreateServerResponse,
   parseServerStatus,
+  parseSshKeyCreate,
+  parseSshKeyList,
+  sanitizeServerName,
+  shellQuote,
+  assertIsoUrl,
 } from "../src/providers/hetzner.js";
 import type {
   E2EDeps,
@@ -181,6 +185,7 @@ describe("runE2E orchestration core", () => {
 
     expect(report.stages.map((s) => s.name)).toEqual([
       "mintBuildCode",
+      "publishIso",
       "provisionVps",
       "awaitInstallRegistered",
       "awaitUnlock",
@@ -193,6 +198,7 @@ describe("runE2E orchestration core", () => {
     const byName = Object.fromEntries(report.stages.map((s) => [s.name, s]));
     for (const n of [
       "mintBuildCode",
+      "publishIso",
       "provisionVps",
       "awaitInstallRegistered",
       "awaitUnlock",
@@ -306,6 +312,51 @@ describe("runE2E orchestration core", () => {
     expect(destroyed).toEqual([]);
   });
 
+  // When an IsoPublisher is injected, the core threads its returned
+  // URL into provider.provision({iso, ...}). This is the load-bearing
+  // wire between the personalize-iso layer and the rescue-mode adapter.
+  it("publishIso passes the publisher's URL into provider.provision (iso URL is NOT plan.iso)", async () => {
+    const { http } = happyHttp();
+    let isoSeenByProvider = "";
+    let publishedBlob: unknown;
+    const { provider, destroyed } = fakeProvider({
+      provision: async (): Promise<{ id: string; ip: string }> => {
+        return { id: "vps-1", ip: "203.0.113.7" };
+      },
+    });
+    // Wrap to capture the iso arg.
+    const wrapped: VpsProvider = {
+      name: provider.name,
+      provision: async (req) => {
+        isoSeenByProvider = req.iso;
+        return provider.provision(req);
+      },
+      awaitBoot: provider.awaitBoot.bind(provider),
+      destroy: provider.destroy.bind(provider),
+    };
+    const baseDeps = deps(http, wrapped);
+    const isoPublisher = {
+      publish: async (args: { blobJson: unknown; blobSignatureHex: string }): Promise<string> => {
+        publishedBlob = args.blobJson;
+        // sanity: signature is 64-byte hex (Ed25519)
+        expect(args.blobSignatureHex).toMatch(/^[0-9a-f]{128}$/);
+        return "https://r2.example/personalized-abcdef.iso?sig=xyz";
+      },
+    };
+    const report = await runE2E(PLAN, { ...baseDeps, isoPublisher });
+    expect(report.ok).toBe(true);
+    expect(isoSeenByProvider).toBe(
+      "https://r2.example/personalized-abcdef.iso?sig=xyz",
+    );
+    // The blob shape carried into the publisher matches what the
+    // iso-personalizer's `installBlobFromJson` expects (verifies the
+    // marshalling at the runE2E ↔ publisher seam).
+    const j = publishedBlob as { username?: string; serverDomain?: string };
+    expect(j.username).toBe("alice");
+    expect(j.serverDomain).toBe(FQDN);
+    expect(destroyed).toEqual(["vps-1"]);
+  });
+
   // The IRK signature the core sends must verify against the same
   // canonical bytes — proves we mirror the live wire format.
   it("mintBuildCode signs claim with a verifiable IRK signature", async () => {
@@ -358,6 +409,7 @@ describe("plannedChain", () => {
     const chain = plannedChain();
     expect(chain.map((s) => s.name)).toEqual([
       "mintBuildCode",
+      "publishIso",
       "provisionVps",
       "awaitInstallRegistered",
       "awaitUnlock",
@@ -384,28 +436,75 @@ describe("hetzner adapter pure helpers", () => {
     expect(sanitizeServerName("a".repeat(80)).length).toBe(63);
   });
 
-  // create body shape uses size as server_type, region as location.
-  it("buildCreateServerBody maps size→server_type, region→location", () => {
-    const b = buildCreateServerBody({
-      iso: "iso-x",
-      region: "nbg1",
-      size: "cx22",
-      label: "flagship-e2e-alice-home",
-    });
+  // create body shape uses size as server_type, region as location;
+  // the ubuntu-22.04 placeholder + ssh_keys + start_after_create:true
+  // are the rescue-dd path's create payload.
+  it("buildCreateServerBody maps size→server_type, region→location and includes ssh_keys", () => {
+    const b = buildCreateServerBody(
+      {
+        iso: "https://r2.example/personalized.iso",
+        region: "fsn1",
+        size: "cx22",
+        label: "flagship-e2e-alice-home",
+      },
+      42,
+    );
     expect(b["server_type"]).toBe("cx22");
-    expect(b["location"]).toBe("nbg1");
-    expect(b["start_after_create"]).toBe(false);
+    expect(b["location"]).toBe("fsn1");
+    expect(b["start_after_create"]).toBe(true);
+    expect(b["image"]).toBe("ubuntu-22.04");
+    expect(b["ssh_keys"]).toEqual([42]);
     expect(b["name"]).toBe("flagship-e2e-alice-home");
   });
 
-  // ISO must be a Hetzner name/id; a path/url is a fail-closed error.
-  it("resolveIsoSelector rejects path/url, accepts a name", () => {
-    expect(resolveIsoSelector("alpine-flagship-v1")).toBe(
-      "alpine-flagship-v1",
-    );
-    expect(() => resolveIsoSelector("/tmp/x.iso")).toThrow(/by name\/id/);
-    expect(() => resolveIsoSelector("https://x/y.iso")).toThrow(/by name\/id/);
-    expect(attachIsoBody("my-iso")).toEqual({ iso: "my-iso" });
+  // ISO must be an http(s) URL the rescue VPS can wget; a Hetzner name
+  // or local path is a fail-closed error (we cannot upload custom ISOs
+  // to Hetzner — that's the whole reason for the rescue+dd bridge).
+  it("assertIsoUrl rejects names/paths, accepts http(s) URLs", () => {
+    expect(assertIsoUrl("https://r2/x.iso")).toBe("https://r2/x.iso");
+    expect(() => assertIsoUrl("alpine-flagship-v1")).toThrow(/http\(s\)/);
+    expect(() => assertIsoUrl("/tmp/x.iso")).toThrow(/http\(s\)/);
+  });
+
+  it("enableRescueBody carries type=linux64 + ssh_keys", () => {
+    expect(enableRescueBody(7)).toEqual({ type: "linux64", ssh_keys: [7] });
+  });
+
+  it("shellQuote single-quotes safely (handles embedded single quotes)", () => {
+    expect(shellQuote("hello")).toBe("'hello'");
+    expect(shellQuote("a'b")).toBe(`'a'\\''b'`);
+  });
+
+  it("buildDdCommand drops the iso URL into the wget|dd|reboot pipeline", () => {
+    const cmd = buildDdCommand("https://r2.example/personalized.iso");
+    expect(cmd).toMatch(/wget.*-O-.*r2\.example/);
+    expect(cmd).toMatch(/dd of=\/dev\/sda bs=4M/);
+    expect(cmd).toMatch(/reboot/);
+    // safety: the URL is single-quoted so the rescue shell can't eval it
+    expect(cmd).toMatch(/'https:\/\/r2\.example\/personalized\.iso'/);
+  });
+
+  it("parseSshKeyList tolerates partial entries", () => {
+    expect(
+      parseSshKeyList({
+        ssh_keys: [
+          { id: 1, name: "k1", public_key: "ssh-ed25519 AAAA…" },
+          { id: 2, name: "k2" },
+          { name: "nope" },
+        ],
+      }),
+    ).toEqual([
+      { id: 1, name: "k1", public_key: "ssh-ed25519 AAAA…" },
+      { id: 2, name: "k2", public_key: "" },
+    ]);
+  });
+
+  it("parseSshKeyCreate pulls id + name from the documented shape", () => {
+    expect(parseSshKeyCreate({ ssh_key: { id: 9, name: "flagship-vps-e2e" } })).toEqual({
+      id: 9,
+      name: "flagship-vps-e2e",
+    });
+    expect(() => parseSshKeyCreate({})).toThrow(/malformed/);
   });
 
   // Response parsers tolerate the documented Hetzner JSON shape.

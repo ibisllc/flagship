@@ -155,6 +155,27 @@ export interface IdentityHelper {
   signWithIrk(msg: Uint8Array): Uint8Array;
 }
 
+/**
+ * Optional ISO publisher — the harness uses this to personalize the
+ * base ISO with a `.com`-signed install blob and put it somewhere the
+ * cloud rescue VPS can `wget` it from (typically R2 + a 1h presigned
+ * URL). The pure core defines the contract; the CLI edge supplies a
+ * real-I/O implementation; tests pass a fake that returns a fixed URL.
+ *
+ * If absent, the core falls through to the old behaviour: the
+ * `E2EPlan.iso` value is passed verbatim to `provider.provision`.
+ */
+export interface IsoPublisher {
+  /**
+   * @param args.blobJson the InstallBlob in its JSON-encoded shape
+   *                      (same as `installBlobToJson` produces).
+   * @param args.blobSignatureHex hex Ed25519 signature over the
+   *                              canonical install-blob bytes.
+   * @returns the URL the cloud rescue VPS will fetch the ISO from.
+   */
+  publish(args: { blobJson: unknown; blobSignatureHex: string }): Promise<string>;
+}
+
 /** Everything `runE2E` needs; ALL side effects live here. */
 export interface E2EDeps {
   provider: VpsProvider;
@@ -164,6 +185,14 @@ export interface E2EDeps {
   sleep: Sleep;
   logger: Logger;
   identity: IdentityHelper;
+  /**
+   * Optional. If present, after `mintBuildCode` succeeds the core
+   * calls `isoPublisher.publish({...})` and threads the returned URL
+   * into the `provider.provision({ iso, ... })` call. Without it the
+   * core falls through to `plan.iso` verbatim (the legacy behaviour
+   * used by the unit-test fakes).
+   */
+  isoPublisher?: IsoPublisher;
 }
 
 /** The immutable inputs of one run. */

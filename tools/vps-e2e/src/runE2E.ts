@@ -41,9 +41,12 @@ import type {
   E2EDeps,
   E2EPlan,
   E2EReport,
+  IsoPublisher,
   StageResult,
   VpsInstance,
 } from "./ports.js";
+
+export type { IsoPublisher };
 
 const GATED_CA =
   "Served pubkey-cert is signed with the raw FLAGSHIP_CA_PRIV_HEX and " +
@@ -58,6 +61,19 @@ interface RunState {
   serverFqdn: string;
   buildCode?: string;
   instance?: VpsInstance;
+  /**
+   * The InstallBlob in its JSON-encoded form (same shape the apkovl
+   * boot chain parses) + the IRK signature over its canonical bytes.
+   * Captured by `mintBuildCode` so the publisher can bake them into
+   * the personalized ISO trailer.
+   */
+  blobJson?: unknown;
+  blobSignatureHex?: string;
+  /**
+   * The URL the provider will hand to the rescue VPS. Falls back to
+   * `plan.iso` when `deps.isoPublisher` is absent (legacy test path).
+   */
+  isoUrlForProvider?: string;
 }
 
 function pass(name: string, detail: string): StageResult {
@@ -201,6 +217,34 @@ async function mintBuildCode(
     throw new StageError(fail(name, "build-ticket issue returned no code"));
   }
   st.buildCode = ticket.code;
+  // Capture the install-blob JSON + IRK signature so the publisher can
+  // bake them into the trailer of the personalized ISO. The shape
+  // matches `installBlobToJson(blob)` in @flagship/iso-personalizer.
+  st.blobJson = {
+    version: 1,
+    serverDomain: blob.serverDomain,
+    username: blob.username,
+    serverName: blob.serverName,
+    phoneDelegatedPubKey: blob.phoneDelegatedPubKeyHex,
+    registrationUrl: blob.registrationUrl,
+    authCode: {
+      version: blob.authCode.version,
+      serial: blob.authCode.serial,
+      username: blob.authCode.username,
+      serverName: blob.authCode.serverName,
+      serverDomain: blob.authCode.serverDomain,
+      delegatedPubKey: blob.authCode.delegatedPubKeyHex,
+      userPubKey: blob.authCode.userPubKeyHex,
+      issuedAt: blob.authCode.issuedAt,
+      expiresAt: blob.authCode.expiresAt,
+    },
+    authCodeUserSignature: blob.authCodeUserSignatureHex,
+    issuedAt: blob.issuedAt,
+    expiresAt: blob.expiresAt,
+    installerGitRef: blob.installerGitRef,
+    rckPubKey: blob.rckPubKeyHex,
+  };
+  st.blobSignatureHex = bytesToHex(blobSig);
   deps.logger.info("minted build code", { code: ticket.code });
   return pass(
     name,
@@ -208,15 +252,56 @@ async function mintBuildCode(
   );
 }
 
-/** Stage 2 — provision the VPS from the supplied personalized ISO. */
+/**
+ * Stage 1.5 — publish the personalized ISO (build the trailer with the
+ * just-issued install blob + signature, upload to R2, mint presigned
+ * URL). Skipped when no publisher is injected (legacy unit-test path).
+ */
+async function publishIso(
+  plan: E2EPlan,
+  deps: E2EDeps,
+  st: RunState,
+): Promise<StageResult> {
+  const name = "publishIso";
+  if (!deps.isoPublisher) {
+    st.isoUrlForProvider = plan.iso;
+    return pass(
+      name,
+      `no IsoPublisher injected — provider will be given plan.iso verbatim (${plan.iso})`,
+    );
+  }
+  if (!st.blobJson || !st.blobSignatureHex) {
+    throw new StageError(
+      fail(name, "blob/signature missing — mintBuildCode did not capture them"),
+    );
+  }
+  const url = await deps.isoPublisher.publish({
+    blobJson: st.blobJson,
+    blobSignatureHex: st.blobSignatureHex,
+  });
+  if (!/^https?:\/\//i.test(url)) {
+    throw new StageError(
+      fail(name, `IsoPublisher.publish returned a non-URL value: ${url.slice(0, 200)}`),
+    );
+  }
+  st.isoUrlForProvider = url;
+  deps.logger.info("published personalized ISO", { url });
+  return pass(
+    name,
+    `built personalized ISO from .com-signed blob, uploaded; rescue URL: ${url.slice(0, 120)}…`,
+  );
+}
+
+/** Stage 2 — provision the VPS from the published personalized ISO URL. */
 async function provisionVps(
   plan: E2EPlan,
   deps: E2EDeps,
   st: RunState,
 ): Promise<StageResult> {
   const name = "provisionVps";
+  const isoForProvider = st.isoUrlForProvider ?? plan.iso;
   const inst = await deps.provider.provision({
-    iso: plan.iso,
+    iso: isoForProvider,
     region: plan.region,
     size: plan.size,
     label: `flagship-e2e-${plan.username}-${plan.serverName}`,
@@ -226,7 +311,7 @@ async function provisionVps(
   await deps.provider.awaitBoot(inst.id);
   return pass(
     name,
-    `provider ${deps.provider.name} booted ${inst.id} (${inst.ip}) from ${plan.iso}`,
+    `provider ${deps.provider.name} booted ${inst.id} (${inst.ip}) from the rescue-dd path`,
   );
 }
 
@@ -550,6 +635,7 @@ export async function runE2E(
     (p: E2EPlan, d: E2EDeps, s: RunState) => Promise<StageResult>
   > = [
     mintBuildCode,
+    publishIso,
     provisionVps,
     awaitInstallRegistered,
     awaitUnlock,
@@ -671,10 +757,16 @@ export function plannedChain(): PlannedStage[] {
         "claim username + issue auth-code + register RCK + issue build ticket on .com (IRK-signed via @flagship/protocol)",
     },
     {
+      name: "publishIso",
+      kind: "wired",
+      description:
+        "personalize the base ISO with the .com-signed install blob, upload to R2, mint a 1h presigned URL the rescue VPS will fetch",
+    },
+    {
       name: "provisionVps",
       kind: "wired",
       description:
-        "provider.provision({iso,region,size}) from the supplied personalized ISO, then awaitBoot",
+        "Hetzner rescue-mode + dd: POST /servers (ubuntu-22.04 + ssh_keys) → enable_rescue → reset → ssh root@<ip> 'wget <presigned> | dd of=/dev/sda && reboot'",
     },
     {
       name: "awaitInstallRegistered",

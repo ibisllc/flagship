@@ -8,6 +8,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "bin": {
+    "personalize-iso": "./bin/personalize-iso.mjs"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --dir tests"
