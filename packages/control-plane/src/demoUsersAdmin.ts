@@ -166,15 +166,24 @@ export function deriveDemoDeviceIrk(
 /** Derive the phone-delegated pubkey embedded in the InstallBlob /
  *  AuthCode. The daemon never sees the private half (it lives only
  *  inside the Worker); the pubkey is what the daemon registers under
- *  for the first ServerRegister. */
-function deriveDelegatedKey(kek: Uint8Array, username: string): Keypair {
+ *  for the first ServerRegister. Exported so the W11 provisioning
+ *  handler can re-mint a fresh blob without reaching into private
+ *  helpers. */
+export function deriveDemoDelegatedKey(
+  kek: Uint8Array,
+  username: string,
+): Keypair {
   const ikm = deriveUserIkm(kek, username);
   const seed = hkdfSha256(HKDF_USER_IRK_SALT, ikm, HKDF_DELEGATED_INFO, 32);
   return seedToKeypair(seed);
 }
 
-/** Derive the Routing-Control-Key pubkey embedded in the InstallBlob. */
-function deriveRckKey(kek: Uint8Array, username: string): Keypair {
+/** Derive the Routing-Control-Key pubkey embedded in the InstallBlob.
+ *  Exported for the same W11 reason as `deriveDemoDelegatedKey`. */
+export function deriveDemoRckKey(
+  kek: Uint8Array,
+  username: string,
+): Keypair {
   const ikm = deriveUserIkm(kek, username);
   const seed = hkdfSha256(HKDF_USER_IRK_SALT, ikm, HKDF_RCK_INFO, 32);
   return seedToKeypair(seed);
@@ -281,8 +290,8 @@ export async function handleAdminClaimAndIssue(
   }
 
   const userIrk = deriveDemoUserIrk(deps.demoIrkKek, username);
-  const delegated = deriveDelegatedKey(deps.demoIrkKek, username);
-  const rck = deriveRckKey(deps.demoIrkKek, username);
+  const delegated = deriveDemoDelegatedKey(deps.demoIrkKek, username);
+  const rck = deriveDemoRckKey(deps.demoIrkKek, username);
   const userIrkHex = bytesToHex(userIrk.publicKey);
 
   // Claim the username under the derived IRK. The username storage's

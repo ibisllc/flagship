@@ -106,6 +106,7 @@ import {
   handleListDemoUsers,
   handleAdminClaimAndIssue,
   handleAdminMintDeviceGrant,
+  handleAdminSnapshotNow,
   handleMintDeviceGrant,
   handleListDeviceGrants,
   handleRevokeDeviceGrant,
@@ -243,6 +244,55 @@ export interface ControlPlaneEnv {
    * NEVER appears in code, logs, or D1.
    */
   DEMO_IRK_KEK?: string;
+
+  /**
+   * W11 — base Alpine ISO bucket binding. Holds the unmodified
+   * Alpine + apkovl ISO that the build-relay serves to the browser
+   * AND the W11 admin-snapshot-now handler streams through
+   * `streamPersonalize` into ISO_TEMP_BUCKET. Bound via
+   * `[[r2_buckets]] binding = "ISO_BUCKET"`.
+   */
+  ISO_BUCKET?: ProvisioningBaseBucket;
+
+  /**
+   * W11 — temp bucket for personalized demo ISOs. The cloud-init
+   * `user_data` script wgets from this bucket's public dev-url.
+   * Bound via `[[r2_buckets]] binding = "ISO_TEMP_BUCKET"`.
+   */
+  ISO_TEMP_BUCKET?: ProvisioningTempBucket;
+
+  /**
+   * W11 — public dev-url base for `ISO_TEMP_BUCKET`. Set in
+   * `wrangler.toml [vars]` once the bucket has public access enabled
+   * via `wrangler r2 bucket dev-url enable flagship-iso-temp`. The
+   * cloud-init script wgets `${base}/${key}`.
+   */
+  FLAGSHIP_R2_TEMP_PUBLIC_BASE?: string;
+
+  /**
+   * W11 — base ISO key inside `ISO_BUCKET`. Defaults to the
+   * `flagship-base-alpine-…iso` path the build-relay serves. Set in
+   * `wrangler.toml [vars]` if you bump Alpine versions.
+   */
+  FLAGSHIP_BASE_ISO_KEY?: string;
+}
+
+// Structural shapes for the R2 bindings the W11 handler uses. Kept
+// inline so the control-plane package's structural types stay
+// decoupled from @cloudflare/workers-types.
+interface ProvisioningBaseBucket {
+  get(key: string): Promise<{
+    body: ReadableStream<Uint8Array> | null;
+    size: number;
+  } | null>;
+}
+
+interface ProvisioningTempBucket {
+  put(
+    key: string,
+    value: ReadableStream<Uint8Array> | Uint8Array | string,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>;
 }
 
 const ROUTE_RE = {
@@ -335,6 +385,11 @@ const ROUTE_RE = {
   // `/admin-mint-device-grant` matches similarly to /install-complete.
   DEMO_USER_ADMIN_CLAIM_AND_ISSUE: /^\/api\/dev\/sample-user\/admin-claim-and-issue$/,
   DEMO_USER_ADMIN_MINT_DEVICE_GRANT: /^\/api\/dev\/sample-user\/([^/]+)\/admin-mint-device-grant$/,
+  // W11 — Worker-side provisioning kickoff. Replaces the laptop's
+  // SSH+dd dance with a cloud-init `user_data` script the Worker
+  // hands to Hetzner. Path must be matched BEFORE the bare
+  // `/sample-user/{u}` GET below.
+  DEMO_USER_ADMIN_SNAPSHOT_NOW: /^\/api\/dev\/sample-user\/([^/]+)\/admin-snapshot-now$/,
   DEMO_USER_INSTALL_COMPLETE: /^\/api\/dev\/sample-user\/([^/]+)\/install-complete$/,
   DEMO_USER_CONNECT: /^\/api\/dev\/sample-user\/([^/]+)\/connect$/,
   DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
@@ -1557,6 +1612,70 @@ export async function tryControlPlane(
       return finishPlain(
         await handleAdminMintDeviceGrant(
           adminDeps,
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    // W11 — admin-snapshot-now. Worker-side provisioning kickoff
+    // (replaces the laptop's HCLOUD_TOKEN + SSH+dd dance with a
+    // cloud-init `user_data` script). Fails closed when the W11 deps
+    // (DEMO_IRK_KEK + HCLOUD_TOKEN + ISO_BUCKET + ISO_TEMP_BUCKET +
+    // FLAGSHIP_R2_TEMP_PUBLIC_BASE) aren't all configured.
+    if (
+      method === "POST" &&
+      (m = path.match(ROUTE_RE.DEMO_USER_ADMIN_SNAPSHOT_NOW))
+    ) {
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
+      }
+      if (!adminDeps) {
+        return jsonResponse(
+          { error: "DEMO_IRK_KEK not configured on this Worker" },
+          503,
+        );
+      }
+      if (
+        !env.HCLOUD_TOKEN ||
+        !env.ISO_BUCKET ||
+        !env.ISO_TEMP_BUCKET ||
+        !env.FLAGSHIP_R2_TEMP_PUBLIC_BASE
+      ) {
+        return jsonResponse(
+          {
+            error:
+              "W11 admin-snapshot-now requires HCLOUD_TOKEN + ISO_BUCKET + ISO_TEMP_BUCKET + FLAGSHIP_R2_TEMP_PUBLIC_BASE on the Worker",
+          },
+          503,
+        );
+      }
+      const provisionHetzner = createHetznerClient(env.HCLOUD_TOKEN);
+      const provisionDeps = {
+        storage: adminDeps.storage,
+        usernames: adminDeps.usernames,
+        authCodes: adminDeps.authCodes,
+        buildTickets: adminDeps.buildTickets,
+        deviceCapabilityGrants: adminDeps.deviceCapabilityGrants,
+        isoBucket: env.ISO_BUCKET,
+        isoTempBucket: env.ISO_TEMP_BUCKET,
+        isoTempPublicBase: env.FLAGSHIP_R2_TEMP_PUBLIC_BASE,
+        baseIsoKey:
+          env.FLAGSHIP_BASE_ISO_KEY ??
+          "build/iso/flagship-base-alpine-3.21.0-x86_64.iso",
+        hetzner: provisionHetzner,
+        demoIrkKek: adminDeps.demoIrkKek,
+        ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
+        defaultRegion: "fsn1",
+        defaultSize: "cpx11",
+        fallbackServerTypes: ["cx22", "cpx21", "cx32"] as const,
+      };
+      return finishPlain(
+        await handleAdminSnapshotNow(
+          provisionDeps,
           decodeURIComponent(m[1]!),
           await readJson(request),
         ),

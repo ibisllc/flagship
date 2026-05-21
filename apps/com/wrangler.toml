@@ -58,6 +58,17 @@ run_worker_first = ["/*"]
 binding = "ISO_BUCKET"
 bucket_name = "flagship-iso"
 
+# W11 — temp bucket the Worker streams personalized demo ISOs into.
+# Cloud-init `user_data` on the temp Hetzner VPS wgets from this
+# bucket's PUBLIC dev-url base (no presigned URL needed — the ISO is
+# ephemeral and contains no PII). Enable public access once via:
+#   wrangler r2 bucket dev-url enable flagship-iso-temp
+# then copy the resulting `pub-…r2.dev` host into
+# `FLAGSHIP_R2_TEMP_PUBLIC_BASE` under [vars] below.
+[[r2_buckets]]
+binding = "ISO_TEMP_BUCKET"
+bucket_name = "flagship-iso-temp"
+
 # D1 → R2 backup destination. Separate bucket from flagship-iso so a
 # blast-radius event on user-facing ISO serving doesn't compromise the
 # backup tail. Provision once via:
@@ -157,6 +168,19 @@ SERVICES_BASE_URL = "https://flagship-services.fly.dev:8443"
 BASE_ISO_URL = "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso"
 BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl2"
 BASE_ISO_SHA256 = "faafc1b9f868c47c99733c2c6d453e8202d93f9b36df6d6b653eb774914736b2"
+
+# W11 — `[varname]` block consumed by the admin-snapshot-now handler.
+# `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the
+# `flagship-iso-temp` R2 bucket (enabled once via
+# `wrangler r2 bucket dev-url enable flagship-iso-temp`). The
+# cloud-init `user_data` script concatenates `${BASE}/${R2_KEY}` and
+# wgets the result. Update if the bucket is re-created (the
+# `pub-…r2.dev` host changes).
+FLAGSHIP_R2_TEMP_PUBLIC_BASE = "https://pub-260717b8631044a0bcee80ce0de8f7f9.r2.dev"
+# Optional override — bumps with Alpine version. When unset the
+# handler defaults to `build/iso/flagship-base-alpine-3.21.0-x86_64.iso`
+# inside ISO_BUCKET.
+FLAGSHIP_BASE_ISO_KEY = "build/iso/flagship-base-alpine-3.21.0-x86_64.iso"
 
 # Fly anycast IPs of the .services SNI passthrough listener. When DNS
 # auto-publish is enabled (CLOUDFLARE_DNS_API_TOKEN secret set), the

@@ -545,7 +545,13 @@ export async function runDemoIdleReaper(deps: DemoUsersDeps): Promise<{
  *  `.com` (we use an injected `isRegistered(fqdn, createdAt)` check
  *  since the install-events table lives in apps/com's storage layer
  *  and is not shared via this package). See docs/sample-users.md
- *  §11.4. */
+ *  §11.4.
+ *
+ *  W11 carve-out: rows whose `snapshotId` is null AND `isoR2Key` is
+ *  set were created by `admin-snapshot-now` (the W11 Worker-side
+ *  provisioning path). For those, the cron snapshots the temp VPS
+ *  instead of promoting it — see `runDemoW11SnapshotPoller`. The
+ *  promoter SKIPS them so the two paths don't race on the same row. */
 export async function runDemoProvisioningPoller(
   deps: DemoUsersDeps,
   isRegistered: (fqdn: string, createdAt: number) => Promise<boolean>,
@@ -555,6 +561,9 @@ export async function runDemoProvisioningPoller(
   for (const row of rows) {
     if (row.state !== "provisioning") continue;
     if (!row.activeServerId) continue;
+    // W11 rows have no snapshot id yet; they go through
+    // runDemoW11SnapshotPoller instead.
+    if (!row.snapshotId) continue;
     let live: { status: string; ipv4: string | null };
     try {
       live = await deps.hetzner.getServerStatus(row.activeServerId);
@@ -581,6 +590,182 @@ export async function runDemoProvisioningPoller(
     }
   }
   return { promoted };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// W11 snapshot + destroy cron (replaces the operator's laptop flow)
+// ──────────────────────────────────────────────────────────────────────
+
+/** Structural subset of the Worker-side Hetzner client used ONLY by
+ *  the W11 snapshot poller. Kept here so the control-plane package
+ *  stays decoupled from apps/com. */
+export interface HetznerSnapshotter {
+  destroyServer(serverId: string): Promise<void>;
+  createImageSnapshot(
+    serverId: string,
+    description: string,
+  ): Promise<{ imageId: string }>;
+  getImageStatus(
+    imageId: string,
+  ): Promise<{ status: "creating" | "available" | "unknown" }>;
+}
+
+export interface DemoW11SnapshotDeps {
+  storage: DemoUsersStorage;
+  hetzner: HetznerSnapshotter;
+  audit?: AuditEventStorage;
+  now?: () => number;
+  /** Grace before the snapshot attempt — keeps a flapping daemon from
+   *  being snapshotted mid-boot. Default: 3 minutes. */
+  preSnapshotGraceMs?: number;
+  /** Hard timeout — declare failure when a W11 row sits in
+   *  provisioning longer than this. Default: 20 minutes. */
+  failTimeoutMs?: number;
+  /** Recency threshold for the "pod recently reported" check. The
+   *  caller is expected to feed in a function that consults the
+   *  install_events / daemon_status tables for the W11 row's fqdn.
+   *  Default: 5 minutes. */
+  podRecentMs?: number;
+}
+
+/**
+ * W11 snapshot + teardown driver. Runs on the same 10-minute cron as
+ * the legacy reaper / promoter. For each W11 row
+ * (`state='provisioning' && isoR2Key !== null`):
+ *
+ *   1. Within `preSnapshotGraceMs` of last_state_change: skip (let
+ *      the cloud-init dd-and-reboot finish + the daemon register).
+ *   2. Caller-injected `isRegistered(fqdn, recencyMs)` says no: skip
+ *      and try again next tick.
+ *   3. snapshotId NULL → call `createImageSnapshot`; stamp snapshotId.
+ *   4. snapshotId NOT NULL → poll `getImageStatus`; when 'available',
+ *      `destroyServer(activeServerId)` + transition to 'none' with
+ *      activeServerId cleared.
+ *   5. Older than `failTimeoutMs` with no /pods registration: declare
+ *      failure, destroy the temp VPS, set state='none' WITHOUT
+ *      snapshot_id. Operator can re-run admin-snapshot-now.
+ */
+export async function runDemoW11SnapshotPoller(
+  deps: DemoW11SnapshotDeps,
+  isRegistered: (fqdn: string, recencyMs: number) => Promise<boolean>,
+): Promise<{ snapshotted: number; finalized: number; failed: number }> {
+  const now = (deps.now ?? Date.now)();
+  const graceMs = deps.preSnapshotGraceMs ?? 3 * 60_000;
+  const failMs = deps.failTimeoutMs ?? 20 * 60_000;
+  const podRecentMs = deps.podRecentMs ?? 5 * 60_000;
+  const rows = await deps.storage.list();
+  let snapshotted = 0;
+  let finalized = 0;
+  let failed = 0;
+  for (const row of rows) {
+    if (row.state !== "provisioning") continue;
+    if (!row.isoR2Key) continue; // not W11
+    if (!row.activeServerId) continue;
+    const ageMs = now - row.createdAt;
+    if (ageMs < graceMs) continue;
+    const fqdn = row.activeServerFqdn ?? demoServerFqdn(row.username);
+
+    // Already snapshotting: poll image, finalize on 'available'.
+    if (row.snapshotId) {
+      let imgStatus: { status: "creating" | "available" | "unknown" };
+      try {
+        imgStatus = await deps.hetzner.getImageStatus(row.snapshotId);
+      } catch {
+        continue;
+      }
+      if (imgStatus.status !== "available") continue;
+      try {
+        await deps.hetzner.destroyServer(row.activeServerId);
+      } catch {
+        // Leave the row for the next tick; we don't want to lose the
+        // snapshot id because of a transient destroy failure.
+        continue;
+      }
+      const transitioned = await deps.storage.transition(
+        row.username,
+        "provisioning",
+        "none",
+        {
+          activeServerId: null,
+          activeServerFqdn: null,
+          lastActivityAt: now,
+        },
+      );
+      if (transitioned) {
+        if (deps.audit) {
+          try {
+            await deps.audit.append({
+              username: row.username,
+              eventKind: "demo-vps-provisioned",
+              detail: `w11-snapshot ready snapshot_id=${row.snapshotId}`,
+              devicePrefix: "",
+              postedAt: now,
+            });
+          } catch {
+            // best-effort
+          }
+        }
+        finalized++;
+      }
+      continue;
+    }
+
+    // No snapshot yet: check daemon registration first.
+    if (!(await isRegistered(fqdn, podRecentMs))) {
+      if (ageMs > failMs) {
+        // Give up — destroy the VPS, clear active_server_id, surface
+        // the failure via audit. Operator can re-run.
+        try {
+          await deps.hetzner.destroyServer(row.activeServerId);
+        } catch {
+          // Stay provisioning; next tick will retry the destroy.
+          continue;
+        }
+        await deps.storage.transition(
+          row.username,
+          "provisioning",
+          "none",
+          {
+            activeServerId: null,
+            activeServerFqdn: null,
+            isoR2Key: null,
+            lastActivityAt: now,
+          },
+        );
+        if (deps.audit) {
+          try {
+            await deps.audit.append({
+              username: row.username,
+              eventKind: "demo-vps-stuck",
+              detail: `w11-provision-timeout ageMs=${ageMs}`,
+              devicePrefix: "",
+              postedAt: now,
+            });
+          } catch {}
+        }
+        failed++;
+      }
+      continue;
+    }
+
+    // Daemon registered. Kick off the snapshot.
+    let snap: { imageId: string };
+    try {
+      snap = await deps.hetzner.createImageSnapshot(
+        row.activeServerId,
+        `flagship-demo-${row.username}`,
+      );
+    } catch {
+      continue;
+    }
+    await deps.storage.update(row.username, {
+      snapshotId: snap.imageId,
+      activeServerFqdn: fqdn,
+      lastActivityAt: now,
+    });
+    snapshotted++;
+  }
+  return { snapshotted, finalized, failed };
 }
 
 // ──────────────────────────────────────────────────────────────────────

@@ -202,3 +202,142 @@ describe("createHetznerClient construction", () => {
     }
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────
+// W11 — cloud-init user_data provisioning + snapshot lifecycle
+// ──────────────────────────────────────────────────────────────────────
+
+describe("createHetznerClient.createServerWithUserData (W11)", () => {
+  it("posts ubuntu-22.04 + user_data + flagship-demo label and parses ipv4", async () => {
+    const { fn, calls } = fakeFetch(() => ({
+      status: 201,
+      body: {
+        server: { id: 1234, public_net: { ipv4: { ip: "10.20.30.40" } } },
+      },
+    }));
+    const client = createHetznerClient({ token: "TKN", fetch: fn });
+    const out = await client.createServerWithUserData({
+      name: "flagship-demo-alice-1a2b",
+      location: "fsn1",
+      serverType: "cpx11",
+      userData: "#!/bin/bash\necho hi\n",
+      username: "demo-alice",
+    });
+    expect(out).toEqual({ serverId: "1234", ipv4: "10.20.30.40" });
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0]!.body ?? "{}");
+    expect(body).toMatchObject({
+      name: "flagship-demo-alice-1a2b",
+      image: "ubuntu-22.04",
+      location: "fsn1",
+      server_type: "cpx11",
+      user_data: "#!/bin/bash\necho hi\n",
+      start_after_create: true,
+      labels: { "flagship-demo": "demo-alice" },
+    });
+    expect(body.ssh_keys).toBeUndefined();
+  });
+
+  it("attaches ssh_keys when sshKeyId is provided (for operator debugging)", async () => {
+    const { fn, calls } = fakeFetch(() => ({
+      status: 201,
+      body: { server: { id: 1, public_net: { ipv4: { ip: "1.1.1.1" } } } },
+    }));
+    const client = createHetznerClient({ token: "TKN", fetch: fn });
+    await client.createServerWithUserData({
+      name: "n",
+      location: "fsn1",
+      serverType: "cpx11",
+      userData: "#!/bin/bash\n:\n",
+      username: "u",
+      sshKeyId: 99,
+    });
+    const body = JSON.parse(calls[0]!.body ?? "{}");
+    expect(body.ssh_keys).toEqual([99]);
+  });
+
+  it("retries through fallbackServerTypes on a 422 and succeeds on the first match", async () => {
+    let i = 0;
+    const { fn, calls } = fakeFetch(() => {
+      i++;
+      if (i === 1) return { status: 422, body: { error: { code: "unsupported_location" } } };
+      return {
+        status: 201,
+        body: { server: { id: 9, public_net: { ipv4: { ip: "2.2.2.2" } } } },
+      };
+    });
+    const client = createHetznerClient({ token: "T", fetch: fn });
+    const out = await client.createServerWithUserData({
+      name: "n",
+      location: "fsn1",
+      serverType: "cpx11",
+      userData: "#!/bin/bash\n:\n",
+      username: "u",
+      fallbackServerTypes: ["cx22", "cpx21"],
+    });
+    expect(out.serverId).toBe("9");
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[0]!.body ?? "{}").server_type).toBe("cpx11");
+    expect(JSON.parse(calls[1]!.body ?? "{}").server_type).toBe("cx22");
+  });
+
+  it("does NOT retry on non-422 errors", async () => {
+    const { fn, calls } = fakeFetch(() => ({ status: 403, body: { error: "no" } }));
+    const client = createHetznerClient({ token: "T", fetch: fn });
+    await expect(
+      client.createServerWithUserData({
+        name: "n",
+        location: "fsn1",
+        serverType: "cpx11",
+        userData: "#!/bin/bash\n:\n",
+        username: "u",
+        fallbackServerTypes: ["cx22"],
+      }),
+    ).rejects.toBeInstanceOf(HetznerClientError);
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe("createHetznerClient image lifecycle (W11)", () => {
+  it("createImageSnapshot POSTs create_image and returns image.id as string", async () => {
+    const { fn, calls } = fakeFetch(() => ({
+      status: 201,
+      body: { image: { id: 55, status: "creating" } },
+    }));
+    const client = createHetznerClient({ token: "T", fetch: fn });
+    const out = await client.createImageSnapshot("123", "flagship-demo-alice");
+    expect(out).toEqual({ imageId: "55" });
+    expect(calls[0]!.method).toBe("POST");
+    expect(calls[0]!.url).toBe(
+      "https://api.hetzner.cloud/v1/servers/123/actions/create_image",
+    );
+    expect(JSON.parse(calls[0]!.body ?? "{}")).toEqual({
+      type: "snapshot",
+      description: "flagship-demo-alice",
+    });
+  });
+
+  it("getImageStatus maps creating/available verbatim and coerces anything else to unknown", async () => {
+    for (const status of ["creating", "available", "weird"]) {
+      const { fn } = fakeFetch(() => ({
+        status: 200,
+        body: { image: { status } },
+      }));
+      const client = createHetznerClient({ token: "T", fetch: fn });
+      const out = await client.getImageStatus("55");
+      expect(out.status).toBe(
+        status === "creating" || status === "available" ? status : "unknown",
+      );
+    }
+  });
+
+  it("destroyImage collapses 404 to success", async () => {
+    const { fn, calls } = fakeFetch(() => ({
+      status: 404,
+      body: { error: "not_found" },
+    }));
+    const client = createHetznerClient({ token: "T", fetch: fn });
+    await expect(client.destroyImage("99")).resolves.toBeUndefined();
+    expect(calls[0]!.method).toBe("DELETE");
+  });
+});

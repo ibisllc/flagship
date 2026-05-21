@@ -40,10 +40,12 @@ import {
   handleListDemoUsers,
   runDemoIdleReaper,
   runDemoProvisioningPoller,
+  runDemoW11SnapshotPoller,
   demoServerBlockFromRow,
   demoServerFqdn,
   type DemoUsersDeps,
   type HetznerProvisioner,
+  type HetznerSnapshotter,
 } from "../src/demoUsers.js";
 
 import type { DemoUserRecord } from "@flagship/storage";
@@ -517,6 +519,210 @@ describe("runDemoProvisioningPoller", () => {
     h.hetzner.setStatus("running");
     const { promoted } = await runDemoProvisioningPoller(h.deps, async () => false);
     expect(promoted).toBe(0);
+  });
+});
+
+describe("runDemoProvisioningPoller — W11 carve-out", () => {
+  it("SKIPS rows whose snapshotId is null (those go through the W11 snapshot poller)", async () => {
+    const h = mkHarness();
+    await seedDemoUser(h.deps, {
+      state: "provisioning",
+      activeServerId: "555",
+      snapshotId: null, // W11 row, has no snapshot yet
+      isoR2Key: "demo-isos/demoalice-xyz.iso",
+    });
+    h.hetzner.setStatus("running");
+    const { promoted } = await runDemoProvisioningPoller(
+      h.deps,
+      async () => true,
+    );
+    expect(promoted).toBe(0);
+    const row = await h.deps.storage.get("demoalice");
+    expect(row?.state).toBe("provisioning"); // unchanged
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// W11 snapshot poller
+// ──────────────────────────────────────────────────────────────────────
+
+interface W11Calls {
+  snapshot: Array<{ serverId: string; description: string }>;
+  imageStatus: Array<string>;
+  destroy: Array<string>;
+}
+
+function makeW11Hetzner(): {
+  client: HetznerSnapshotter;
+  calls: W11Calls;
+  imageStatuses: Map<string, "creating" | "available" | "unknown">;
+  failNextDestroy: () => void;
+} {
+  const calls: W11Calls = { snapshot: [], imageStatus: [], destroy: [] };
+  const imageStatuses = new Map<string, "creating" | "available" | "unknown">();
+  let nextDestroyFails = false;
+  let nextImage = 1;
+  const client: HetznerSnapshotter = {
+    async createImageSnapshot(serverId, description) {
+      calls.snapshot.push({ serverId, description });
+      const id = `img-${nextImage++}`;
+      imageStatuses.set(id, "creating");
+      return { imageId: id };
+    },
+    async getImageStatus(imageId) {
+      calls.imageStatus.push(imageId);
+      return { status: imageStatuses.get(imageId) ?? "unknown" };
+    },
+    async destroyServer(serverId) {
+      if (nextDestroyFails) {
+        nextDestroyFails = false;
+        throw new Error("destroy boom");
+      }
+      calls.destroy.push(serverId);
+    },
+  };
+  return {
+    client,
+    calls,
+    imageStatuses,
+    failNextDestroy: () => {
+      nextDestroyFails = true;
+    },
+  };
+}
+
+describe("runDemoW11SnapshotPoller", () => {
+  it("skips rows still within the pre-snapshot grace window", async () => {
+    const h = mkHarness();
+    h.clock.now = 1_000_000 + 10_000; // 10s after createdAt
+    await seedDemoUser(h.deps, {
+      state: "provisioning",
+      activeServerId: "srv-1",
+      snapshotId: null,
+      isoR2Key: "demo-isos/demoalice.iso",
+      createdAt: 1_000_000,
+    });
+    const w11 = makeW11Hetzner();
+    const { snapshotted } = await runDemoW11SnapshotPoller(
+      {
+        storage: h.deps.storage,
+        hetzner: w11.client,
+        now: () => h.clock.now,
+        preSnapshotGraceMs: 3 * 60_000,
+      },
+      async () => true,
+    );
+    expect(snapshotted).toBe(0);
+    expect(w11.calls.snapshot).toEqual([]);
+  });
+
+  it("kicks off snapshot when daemon registered + past grace, then finalizes on 'available'", async () => {
+    const h = mkHarness();
+    h.clock.now = 1_000_000 + 5 * 60_000;
+    await seedDemoUser(h.deps, {
+      state: "provisioning",
+      activeServerId: "srv-1",
+      snapshotId: null,
+      isoR2Key: "demo-isos/demoalice.iso",
+      createdAt: 1_000_000,
+    });
+    const w11 = makeW11Hetzner();
+
+    const r1 = await runDemoW11SnapshotPoller(
+      {
+        storage: h.deps.storage,
+        hetzner: w11.client,
+        now: () => h.clock.now,
+      },
+      async () => true,
+    );
+    expect(r1.snapshotted).toBe(1);
+    expect(w11.calls.snapshot).toHaveLength(1);
+    const row1 = await h.deps.storage.get("demoalice");
+    expect(row1?.snapshotId).toMatch(/^img-/);
+    expect(row1?.state).toBe("provisioning");
+
+    // Next tick: image still 'creating' → no finalize.
+    const r2 = await runDemoW11SnapshotPoller(
+      {
+        storage: h.deps.storage,
+        hetzner: w11.client,
+        now: () => h.clock.now,
+      },
+      async () => true,
+    );
+    expect(r2.finalized).toBe(0);
+
+    // Flip the image to available; next tick: destroy + state=none.
+    w11.imageStatuses.set(row1!.snapshotId!, "available");
+    const r3 = await runDemoW11SnapshotPoller(
+      {
+        storage: h.deps.storage,
+        hetzner: w11.client,
+        now: () => h.clock.now,
+      },
+      async () => true,
+    );
+    expect(r3.finalized).toBe(1);
+    expect(w11.calls.destroy).toEqual(["srv-1"]);
+    const row3 = await h.deps.storage.get("demoalice");
+    expect(row3?.state).toBe("none");
+    expect(row3?.activeServerId).toBeNull();
+    expect(row3?.snapshotId).toBe(row1?.snapshotId); // snapshot preserved
+  });
+
+  it("declares failure + destroys VPS after failTimeoutMs with no registration", async () => {
+    const h = mkHarness();
+    h.clock.now = 1_000_000 + 30 * 60_000;
+    await seedDemoUser(h.deps, {
+      state: "provisioning",
+      activeServerId: "srv-1",
+      snapshotId: null,
+      isoR2Key: "demo-isos/demoalice.iso",
+      createdAt: 1_000_000,
+    });
+    const w11 = makeW11Hetzner();
+    const r = await runDemoW11SnapshotPoller(
+      {
+        storage: h.deps.storage,
+        hetzner: w11.client,
+        now: () => h.clock.now,
+        failTimeoutMs: 20 * 60_000,
+        preSnapshotGraceMs: 3 * 60_000,
+      },
+      async () => false,
+    );
+    expect(r.failed).toBe(1);
+    expect(w11.calls.destroy).toEqual(["srv-1"]);
+    const row = await h.deps.storage.get("demoalice");
+    expect(row?.state).toBe("none");
+    expect(row?.activeServerId).toBeNull();
+    expect(row?.isoR2Key).toBeNull();
+    expect(row?.snapshotId).toBeNull();
+  });
+
+  it("SKIPS non-W11 rows (snapshotId set from the beginning)", async () => {
+    const h = mkHarness();
+    h.clock.now = 1_000_000 + 5 * 60_000;
+    await seedDemoUser(h.deps, {
+      state: "provisioning",
+      activeServerId: "srv-1",
+      snapshotId: "pre-existing-snap-from-on-connect",
+      isoR2Key: null, // distinguishes from W11 — they have isoR2Key set
+    });
+    const w11 = makeW11Hetzner();
+    const r = await runDemoW11SnapshotPoller(
+      {
+        storage: h.deps.storage,
+        hetzner: w11.client,
+        now: () => h.clock.now,
+      },
+      async () => true,
+    );
+    expect(r.snapshotted).toBe(0);
+    expect(r.finalized).toBe(0);
+    expect(r.failed).toBe(0);
+    expect(w11.calls.snapshot).toEqual([]);
   });
 });
 

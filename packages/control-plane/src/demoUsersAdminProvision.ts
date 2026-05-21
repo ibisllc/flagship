@@ -1,0 +1,541 @@
+/**
+ * W11 — Worker-side provisioning admin handler.
+ *
+ * Replaces the laptop's `HCLOUD_TOKEN` + SSH-key + R2 upload + ISO build
+ * pipeline with a single admin POST. The Worker:
+ *
+ *   1. Looks up the demo_users row + the usernames row.
+ *   2. Re-derives the deterministic User IRK from `DEMO_IRK_KEK` + the
+ *      username (same HKDF call as `admin-claim-and-issue` — re-exported
+ *      here so a freshly-built install ticket can be signed without
+ *      reaching into private helpers).
+ *   3. Mints a fresh AuthCode + InstallBlob signed under that IRK and
+ *      persists the auth-code + build-ticket rows.
+ *   4. Streams the base ISO out of R2 through the trailer-glueing
+ *      `streamPersonalize` and into the temp R2 bucket — never landing
+ *      the 240 MB ISO in V8 heap.
+ *   5. Builds a cloud-init `user_data` shell script that wgets the
+ *      personalized ISO from R2's public dev-url and `dd`s it onto
+ *      /dev/sda + reboots — same primitive as nixos-infect /
+ *      hetzner-installimage. NO SSH is involved.
+ *   6. POSTs Hetzner `/servers` with the cloud-init script as
+ *      `user_data` and an `ubuntu-22.04` image. Cloud-init runs the
+ *      script as root at first boot.
+ *   7. Stamps `demo_users` with `state='provisioning'` + the active
+ *      server id + the R2 key.
+ *
+ * The existing 10-minute demo cron handles the rest (poll
+ * `/api/users/<u>/pods` until the daemon registers, then snapshot +
+ * destroy the temp VPS — see `runDemoProvisioningPoller`).
+ *
+ * NOT in this handler:
+ *   - Re-claiming the username (W11 assumes `admin-claim-and-issue`
+ *     was called first; the W11 happy path is `create` →
+ *     `admin-claim-and-issue` → `admin-snapshot-now`).
+ *   - The actual snapshot + destroy of the temp VPS (those happen on
+ *     the cron).
+ */
+
+import {
+  signAuthCode,
+  signDeviceCapabilityGrant,
+  signInstallBlob,
+  type AuthCode,
+  type DeviceCapabilityGrant,
+  type InstallBlob,
+  type DeviceScope,
+} from "@flagship/protocol";
+import { streamPersonalize } from "@flagship/iso-personalizer";
+import type {
+  AuthCodeStorage,
+  BuildTicketStorage,
+  DemoUsersStorage,
+  DeviceCapabilityGrantStorage,
+  UsernameStorage,
+} from "@flagship/storage";
+import { bytesToHex } from "./hex.js";
+import { generateTicketCode } from "./buildTicket.js";
+import {
+  deriveDemoDelegatedKey,
+  deriveDemoRckKey,
+  deriveDemoUserIrk,
+  _internalDefaultDemoPrimaryScopes,
+} from "./demoUsersAdmin.js";
+import {
+  conflict,
+  malformed,
+  notFound,
+  type HandlerResponseWithHeaders,
+} from "./types.js";
+
+// ──────────────────────────────────────────────────────────────────────
+// Hetzner + R2 structural deps (kept inline so this module doesn't
+// depend on apps/com — concrete implementations live there.)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface ProvisioningHetznerClient {
+  createServerWithUserData(args: {
+    name: string;
+    location: string;
+    serverType: string;
+    image?: string;
+    userData: string;
+    username: string;
+    sshKeyId?: number;
+    fallbackServerTypes?: readonly string[];
+  }): Promise<{ serverId: string; ipv4: string | null }>;
+}
+
+export interface ReadableR2Bucket {
+  get(key: string): Promise<{
+    body: ReadableStream<Uint8Array> | null;
+    size: number;
+  } | null>;
+}
+
+export interface WritableR2Bucket {
+  put(
+    key: string,
+    value: ReadableStream<Uint8Array> | Uint8Array | string,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Deps + body shapes
+// ──────────────────────────────────────────────────────────────────────
+
+export interface DemoProvisionDeps {
+  storage: DemoUsersStorage;
+  usernames: UsernameStorage;
+  authCodes: AuthCodeStorage;
+  buildTickets: BuildTicketStorage;
+  deviceCapabilityGrants: DeviceCapabilityGrantStorage;
+  /** R2 bucket holding the BASE Alpine ISO. */
+  isoBucket: ReadableR2Bucket;
+  /** R2 bucket the personalized ISO is written to. Cloud-init wgets
+   *  from here over the public dev-url base. */
+  isoTempBucket: WritableR2Bucket;
+  /** Public-dev-url base for the temp bucket, e.g.
+   *  `https://pub-260717…r2.dev`. Concatenated with the R2 key by the
+   *  cloud-init script. */
+  isoTempPublicBase: string;
+  /** R2 key of the base ISO. */
+  baseIsoKey: string;
+  hetzner: ProvisioningHetznerClient;
+  demoIrkKek: Uint8Array;
+  /** OPTIONAL — when present, Hetzner attaches this numeric SSH key id
+   *  to the temp VPS. The W11 flow does NOT depend on SSH; this is
+   *  only useful if the operator wants to ssh in to debug a stalled
+   *  cloud-init. */
+  demoSshKeyId?: number;
+  /** Default Hetzner location. */
+  defaultRegion: string;
+  /** Default Hetzner server_type. */
+  defaultSize: string;
+  /** Ordered fallback list tried on a 422. */
+  fallbackServerTypes?: readonly string[];
+  random?: (n: number) => Uint8Array;
+  now?: () => number;
+}
+
+export interface AdminSnapshotNowBody {
+  region?: unknown;
+  size?: unknown;
+}
+
+const USERNAME_RE = /^[a-z0-9-]{3,32}$/;
+
+function defaultRandom(n: number): Uint8Array {
+  const out = new Uint8Array(n);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(out);
+  } else {
+    for (let i = 0; i < n; i++) out[i] = Math.floor(Math.random() * 256);
+  }
+  return out;
+}
+
+function nowOf(deps: DemoProvisionDeps): number {
+  return (deps.now ?? Date.now)();
+}
+
+function v4Uuid(rand: (n: number) => Uint8Array): string {
+  const b = rand(16);
+  b[6] = ((b[6] ?? 0) & 0x0f) | 0x40;
+  b[8] = ((b[8] ?? 0) & 0x3f) | 0x80;
+  const h = bytesToHex(b);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+const DEFAULT_DEMO_PRIMARY_SCOPES: readonly DeviceScope[] =
+  _internalDefaultDemoPrimaryScopes;
+
+// ──────────────────────────────────────────────────────────────────────
+// Cloud-init user_data script
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Build the cloud-init `user_data` shell script that wgets the
+ * personalized ISO and dd's it onto /dev/sda. Exported for the unit
+ * test in `tests/demoUsersAdminProvision.test.ts` so the operator can
+ * eyeball the exact script Hetzner runs.
+ *
+ * Why these specific flags:
+ *   - `set -euo pipefail` — fail-fast on any error (wget retry exhaust,
+ *     dd I/O error, missing /dev/sda).
+ *   - `wget --no-verbose -O /tmp/flagship.iso <url>` — explicit
+ *     filename + quiet progress (cloud-init's log is the only sink).
+ *   - `dd if=…iso of=/dev/sda bs=4M conv=fsync status=none` —
+ *     bs=4M is empirically fastest on Hetzner's NVMe; conv=fsync
+ *     flushes per-block so a power-cut in the dd window doesn't leave
+ *     a half-written disk; status=none keeps the log clean.
+ *   - `sync; reboot -f` — `sync` flushes the page cache (defense in
+ *     depth on top of conv=fsync); `-f` skips userspace teardown
+ *     because the rootfs underneath us no longer matches what's on
+ *     disk.
+ *
+ * CORRUPTION WINDOW: dd'ing the running root disk overwrites the very
+ * partition table the running kernel was booted from. This is
+ * intentional — same model as nixos-infect / hetzner-installimage /
+ * DigitalOcean's "Reinstall from URL". Safe because the script runs
+ * end-to-end without touching anything that re-reads /dev/sda mid-
+ * stream. A power-cut during the dd would brick the temp VPS; the
+ * failure mode is "VPS won't boot" not "data loss" — we just destroy
+ * + re-provision.
+ */
+export function buildCloudInitUserData(isoUrl: string): string {
+  return `#!/bin/bash
+set -euo pipefail
+echo "[flagship-cloud-init] starting at $(date)" > /var/log/flagship-cloud-init.log
+wget --no-verbose -O /tmp/flagship.iso '${isoUrl}' >> /var/log/flagship-cloud-init.log 2>&1
+echo "[flagship-cloud-init] iso downloaded; dd-ing onto /dev/sda" >> /var/log/flagship-cloud-init.log
+dd if=/tmp/flagship.iso of=/dev/sda bs=4M conv=fsync status=none >> /var/log/flagship-cloud-init.log 2>&1
+sync
+echo "[flagship-cloud-init] dd complete; rebooting" >> /var/log/flagship-cloud-init.log
+sleep 2
+reboot -f
+`;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// POST /api/dev/sample-user/<u>/admin-snapshot-now
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Worker-side provisioning kickoff. Idempotent: if the row is already
+ * `provisioning` or `up`, returns 200 with the current state.
+ *
+ * Why this endpoint name (rather than e.g. `admin-provision`):
+ *   The operator's mental model is "give me a snapshot of this user
+ *   right now"; the endpoint kicks off the dance that ultimately ends
+ *   in `snapshot_id` being stamped on the row by the cron. The name
+ *   matches that user-facing verb even though "snapshot" itself
+ *   doesn't happen until the cron tick that follows registration.
+ */
+export async function handleAdminSnapshotNow(
+  deps: DemoProvisionDeps,
+  username: string,
+  body?: AdminSnapshotNowBody,
+): Promise<HandlerResponseWithHeaders> {
+  const u = username.toLowerCase();
+  if (!USERNAME_RE.test(u)) {
+    return malformed("username must match [a-z0-9-]{3,32}");
+  }
+  const row = await deps.storage.get(u);
+  if (!row) return notFound("no such demo user");
+
+  // Idempotency: don't spawn a second Hetzner VPS if one's already in
+  // flight.
+  if (row.state === "up" || row.state === "provisioning") {
+    return {
+      status: 200,
+      body: {
+        state: row.state,
+        activeServerId: row.activeServerId,
+        isoR2Key: row.isoR2Key,
+        reused: true,
+      },
+    };
+  }
+
+  // The usernames row must already exist — admin-claim-and-issue is
+  // a prerequisite. We could re-call it inline, but keeping the two
+  // endpoints separate makes the orchestration trace easier to read
+  // and lets a Worker outage at admin-claim-and-issue not leak into
+  // an unrelated provisioning attempt.
+  const userRow = await deps.usernames.get(u);
+  if (!userRow) {
+    return conflict(
+      "usernames row missing; call /admin-claim-and-issue first",
+    );
+  }
+
+  const rand = deps.random ?? defaultRandom;
+  const now = nowOf(deps);
+  const region = typeof body?.region === "string" ? body.region : deps.defaultRegion;
+  const size = typeof body?.size === "string" ? body.size : deps.defaultSize;
+  const serverName = "home";
+
+  // Re-derive the User IRK + delegated + RCK keypair from the KEK +
+  // username. Mirrors handleAdminClaimAndIssue's mint logic exactly so
+  // the trailer's signer matches the previously-claimed usernames
+  // row's IRK pub.
+  const userIrk = deriveDemoUserIrk(deps.demoIrkKek, u);
+  const delegated = deriveDemoDelegatedKey(deps.demoIrkKek, u);
+  const rck = deriveDemoRckKey(deps.demoIrkKek, u);
+  const userIrkHex = bytesToHex(userIrk.publicKey);
+  if (userRow.irkPubHex !== userIrkHex) {
+    // Should be impossible — if the username was claimed via
+    // admin-claim-and-issue with this same KEK + username, the
+    // derivation MUST agree. If it doesn't, something has rotated the
+    // KEK; fail closed.
+    return conflict(
+      "derived User IRK mismatches the claimed usernames row; KEK rotated?",
+    );
+  }
+
+  const serial = bytesToHex(rand(16));
+  const serverDomain = `${serverName}.${u}.flagship.services`;
+  const issuedAt = now;
+  const expiresAt = now + 24 * 3_600_000;
+
+  const authCode: AuthCode = {
+    version: 1,
+    serial,
+    username: u,
+    serverName,
+    serverDomain,
+    delegatedPubKey: delegated.publicKey,
+    userPubKey: userIrk.publicKey,
+    issuedAt,
+    expiresAt,
+  };
+  const authCodeSig = signAuthCode(authCode, userIrk);
+  const acResult = await deps.authCodes.put({
+    serial,
+    username: u,
+    serverName,
+    serverDomain,
+    delegatedPubKeyHex: bytesToHex(delegated.publicKey),
+    userPubKeyHex: userIrkHex,
+    userSignatureHex: bytesToHex(authCodeSig),
+    issuedAt,
+    expiresAt,
+    status: "active",
+    recordedAt: now,
+  });
+  if (!acResult.ok) {
+    return conflict(`auth-code persist failed: ${acResult.reason}`);
+  }
+
+  const blob: InstallBlob = {
+    version: 1,
+    serverDomain,
+    username: u,
+    serverName,
+    phoneDelegatedPubKey: delegated.publicKey,
+    registrationUrl: "https://flagshipserver.com/api/server/register",
+    authCode,
+    authCodeUserSignature: authCodeSig,
+    issuedAt,
+    expiresAt,
+    installerGitRef: "main",
+    rckPubKey: rck.publicKey,
+  };
+  const blobSig = signInstallBlob(blob, userIrk);
+
+  // Persist a build-ticket so the conventional /redeem path still
+  // works for an operator that wants to share the install code.
+  let code = "";
+  for (let attempts = 0; attempts < 8 && !code; attempts++) {
+    const candidate = generateTicketCode(rand);
+    const btResult = await deps.buildTickets.put({
+      code: candidate,
+      blobJson: JSON.stringify(installBlobToJsonShort(blob)),
+      blobSignatureHex: bytesToHex(blobSig),
+      username: u,
+      serverDomain,
+      createdAt: now,
+      expiresAt: now + 60 * 60_000,
+      status: "active",
+      redemptions: 0,
+    });
+    if (btResult.ok) code = candidate;
+  }
+  if (!code) {
+    return { status: 500, body: { error: "could not allocate build-ticket code" } };
+  }
+
+  // Also (re-)mint the primary DeviceCapabilityGrant. The Worker's
+  // re-issuance flow is "revoke active then put new" — preserves the
+  // semantics admin-claim-and-issue uses.
+  const existing = await deps.deviceCapabilityGrants.getActiveForUserLabel(
+    u,
+    "primary",
+  );
+  if (existing) {
+    await deps.deviceCapabilityGrants.revoke(existing.grantId, now);
+  }
+  const grantId = v4Uuid(rand);
+  const grant: DeviceCapabilityGrant = {
+    grantId,
+    username: u,
+    deviceLabel: "primary",
+    devicePubKey: userIrk.publicKey,
+    scopes: [...DEFAULT_DEMO_PRIMARY_SCOPES],
+    issuedAt: now,
+    expiresAt: now + 90 * 24 * 3_600_000,
+  };
+  const grantSig = signDeviceCapabilityGrant(grant, userIrk);
+  await deps.deviceCapabilityGrants.put({
+    grantId,
+    username: u,
+    deviceLabel: "primary",
+    devicePubHex: userIrkHex,
+    scopesJson: JSON.stringify(grant.scopes),
+    issuedAt: grant.issuedAt,
+    expiresAt: grant.expiresAt,
+    signatureHex: bytesToHex(grantSig),
+    revokedAt: null,
+  });
+
+  // Stream the personalized ISO out of the base bucket + into the temp
+  // bucket. The R2 key embeds an 8-hex tag from the blob signature so
+  // a retry of the same admin-snapshot-now produces the same key (the
+  // R2 PUT is a no-op when the object already exists with the same
+  // content — bandwidth saver on flapping operator retries).
+  const sig8 = bytesToHex(blobSig.subarray(0, 4));
+  const isoR2Key = `demo-isos/${u}-${sig8}.iso`;
+
+  const baseObj = await deps.isoBucket.get(deps.baseIsoKey);
+  if (!baseObj || !baseObj.body) {
+    return {
+      status: 503,
+      body: { error: `base ISO ${deps.baseIsoKey} not found in ISO_BUCKET` },
+    };
+  }
+  const personalized = streamPersonalize({
+    baseIsoStream: baseObj.body,
+    baseIsoSize: baseObj.size,
+    blob,
+    blobSignature: blobSig,
+  });
+  await deps.isoTempBucket.put(isoR2Key, personalized.stream, {
+    httpMetadata: { contentType: "application/octet-stream" },
+  });
+
+  const isoUrl = `${deps.isoTempPublicBase.replace(/\/+$/, "")}/${isoR2Key}`;
+  const userData = buildCloudInitUserData(isoUrl);
+
+  let prov: { serverId: string; ipv4: string | null };
+  try {
+    prov = await deps.hetzner.createServerWithUserData({
+      name: `flagship-demo-${u}-${bytesToHex(rand(4))}`,
+      location: region,
+      serverType: size,
+      image: "ubuntu-22.04",
+      userData,
+      username: u,
+      ...(deps.demoSshKeyId !== undefined ? { sshKeyId: deps.demoSshKeyId } : {}),
+      ...(deps.fallbackServerTypes
+        ? { fallbackServerTypes: deps.fallbackServerTypes }
+        : {}),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      status: 502,
+      body: { error: "hetzner upstream rejected", detail: msg.slice(0, 280) },
+    };
+  }
+
+  // CAS none → provisioning so a concurrent /connect or duplicate
+  // /admin-snapshot-now doesn't race us. If the CAS misses (i.e. the
+  // row already transitioned), we still stamp the activeServerId so
+  // the next cron pass can act on it.
+  const transitioned = await deps.storage.transition(u, "none", "provisioning", {
+    activeServerId: prov.serverId,
+    isoR2Key,
+    lastActivityAt: now,
+  });
+  if (!transitioned) {
+    await deps.storage.update(u, {
+      activeServerId: prov.serverId,
+      isoR2Key,
+    });
+  }
+
+  return {
+    status: 202,
+    body: {
+      state: "provisioning",
+      activeServerId: prov.serverId,
+      isoR2Key,
+      ticketCode: code,
+      ipv4: prov.ipv4,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Local InstallBlob → JSON serializer
+//
+// Duplicated from demoUsersAdmin.ts so we don't depend on a private
+// helper. The build-ticket consumer never re-reads this JSON for crypto
+// purposes (the daemon reads the trailer the ISO carries — built by
+// streamPersonalize from the same blob + signature), so the shape just
+// has to round-trip through JSON.stringify/parse.
+// ──────────────────────────────────────────────────────────────────────
+
+interface InstallBlobJsonShort {
+  version: number;
+  serverDomain: string;
+  username: string;
+  serverName: string;
+  phoneDelegatedPubKey: string;
+  registrationUrl: string;
+  authCode: {
+    version: number;
+    serial: string;
+    username: string;
+    serverName: string;
+    serverDomain: string;
+    delegatedPubKey: string;
+    userPubKey: string;
+    issuedAt: number;
+    expiresAt: number;
+  };
+  authCodeUserSignature: string;
+  issuedAt: number;
+  expiresAt: number;
+  installerGitRef: string;
+  rckPubKey: string;
+}
+
+function installBlobToJsonShort(b: InstallBlob): InstallBlobJsonShort {
+  return {
+    version: 1,
+    serverDomain: b.serverDomain,
+    username: b.username,
+    serverName: b.serverName,
+    phoneDelegatedPubKey: bytesToHex(b.phoneDelegatedPubKey),
+    registrationUrl: b.registrationUrl,
+    authCode: {
+      version: 1,
+      serial: b.authCode.serial,
+      username: b.authCode.username,
+      serverName: b.authCode.serverName,
+      serverDomain: b.authCode.serverDomain,
+      delegatedPubKey: bytesToHex(b.authCode.delegatedPubKey),
+      userPubKey: bytesToHex(b.authCode.userPubKey),
+      issuedAt: b.authCode.issuedAt,
+      expiresAt: b.authCode.expiresAt,
+    },
+    authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
+    issuedAt: b.issuedAt,
+    expiresAt: b.expiresAt,
+    installerGitRef: b.installerGitRef,
+    rckPubKey: bytesToHex(b.rckPubKey),
+  };
+}

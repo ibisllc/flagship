@@ -339,13 +339,23 @@ Commit: `feat(scripts): create-sample-user / delete-sample-user CLI`.
 
 ## Phase F — live end-to-end demo test
 
-1. `HCLOUD_TOKEN=<your token>` in this Mac's env.
+**W11 (2026-05-21) — `HCLOUD_TOKEN` no longer needs to be on the
+laptop.** The Worker handles every Hetzner operation via cloud-init
+`user_data` (no laptop SSH). The pre-W11 step "1. `HCLOUD_TOKEN=...`
+in this Mac's env" is GONE; only `FLAGSHIP_ADMIN_SECRET` remains on
+the laptop. The Worker holds `HCLOUD_TOKEN` (via
+`wrangler secret put`) as the single owner.
+
+1. `FLAGSHIP_ADMIN_SECRET=<bearer>` in this Mac's env. (No
+   `HCLOUD_TOKEN` — the Worker owns it.)
 2. `node scripts/sample-user.mjs create demo-alice --display "Demo Alice"`.
-   - Watch ISO build (~30s).
-   - Watch R2 upload (~30s for a ~600 MB ISO).
-   - Watch first Hetzner provision + install + ACME (~10 min).
-   - Watch snapshot create (~3 min).
-   - Watch temp server destroy.
+   - Worker streams personalized ISO into R2 (~5s).
+   - Worker POSTs Hetzner `/servers` with cloud-init `user_data`
+     that wgets + dd's the ISO onto /dev/sda + reboots (~3 min
+     until Alpine boots from the new disk).
+   - CLI polls `/api/dev/sample-user/<u>` until state=none AND
+     snapshotId set (the `*/10 * * * *` cron snapshots once the
+     daemon registers + destroys the temp VPS).
    - Final: `demo-alice` ready; D1 row has `snapshot_id`; no server
      running.
 3. Open `https://flagshipserver.com/dev/create-server` (or iOS

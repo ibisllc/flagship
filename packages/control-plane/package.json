@@ -13,6 +13,7 @@
     "test": "vitest run --dir tests"
   },
   "dependencies": {
+    "@flagship/iso-personalizer": "*",
     "@flagship/protocol": "*",
     "@flagship/storage": "*",
     "@noble/hashes": "^1.5.0",

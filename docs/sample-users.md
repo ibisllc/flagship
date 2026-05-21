@@ -1265,14 +1265,29 @@ node scripts/sample-user.mjs upload-iso <username> <iso-path>
 
 ### 14.1 Env vars the CLI reads
 
-- `HCLOUD_TOKEN` — required for `create` / `delete` (any operation
-  that touches Hetzner).
-- `FLAGSHIP_ADMIN_SECRET` — required for all subcommands (bearer
-  token for the admin endpoints).
+As of W11 (2026-05-21), **the laptop no longer needs `HCLOUD_TOKEN`
+or a Hetzner SSH key**. The Worker handles every Hetzner operation
+end-to-end via cloud-init `user_data` (a `#!/bin/bash` script Hetzner
+runs as root at first boot — no SSH involved). The only remaining
+laptop secret is the admin bearer; replacing that with a
+YubiKey-signed envelope is tracked separately as the v3 admin-auth
+refactor.
+
+- `FLAGSHIP_ADMIN_SECRET` — required for ALL subcommands (admin
+  bearer the Worker checks via `x-admin-secret`).
 - `FLAGSHIP_BASE_URL` — defaults to `https://flagshipserver.com`;
   overridable for local-dev (`http://localhost:8787`).
-- `DEMO_SSH_KEY_PATH` — defaults to `~/.ssh/flagship-demo-ssh`;
-  private half for the rescue+dd step.
+
+Worker-side secrets (set once via `wrangler secret put`, NOT in any
+operator shell):
+
+- `HCLOUD_TOKEN` — Hetzner API token. Now lives ONLY on the Worker.
+- `DEMO_PUBLIC_SSH_KEY` — OPTIONAL after W11. Useful only if the
+  operator wants to ssh into a temp VPS to debug a stuck cloud-init.
+  The W11 happy path does not depend on SSH.
+- `DEMO_IRK_KEK` — 32-byte hex KEK; unchanged.
+- `FLAGSHIP_R2_TEMP_PUBLIC_BASE` (var) — public dev-url host for the
+  `flagship-iso-temp` bucket.
 
 ### 14.2 Exit codes
 

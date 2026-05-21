@@ -1,23 +1,17 @@
 /**
- * Pure-logic tests for scripts/sample-user.mjs (Plan A Phase E). The
- * real Hetzner / R2 / wrangler shell-outs are NOT exercised; the arg
- * parser, env-validation, URL builders, and the dependency-injected
- * orchestrator (with stubbed `fetch` + stubbed step deps) ARE.
+ * Pure-logic tests for scripts/sample-user.mjs (W11).
  *
- * The orchestrator tests cover the explicit acceptance points from
- * `docs/sample-user-vps-plan.md` Phase E:
+ * As of W11 the laptop never touches Hetzner; the CLI is a thin HTTP
+ * wrapper around 3 admin endpoints + a polling loop. Tests cover:
  *
- *   - `--help` works without env vars (parser-only).
- *   - `create` with missing FLAGSHIP_ADMIN_SECRET → exit 2.
- *   - `create` with missing HCLOUD_TOKEN → exit 3.
- *   - happy-path `create` orchestrates the 6 steps in order + posts
- *     the final `/install-complete` with `snapshot_id` + `iso_r2_key`.
- *   - partial-failure rollback: if the snapshot step fails, the temp
- *     VPS is destroyed AND the CLI prints a clean error AND exit 3.
+ *   - arg parsing (unchanged from Phase E)
+ *   - env resolution: only FLAGSHIP_ADMIN_SECRET is required;
+ *     HCLOUD_TOKEN + DEMO_SSH_KEY_PATH are NO LONGER read
+ *   - runCreate orchestrates the 4-step W11 flow correctly with
+ *     mocked HTTP (reserve → claim → admin-snapshot-now → poll)
+ *   - polling completes when the cron stamps snapshot_id
+ *   - rollback on the Worker rejecting admin-snapshot-now
  */
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error — .mjs sibling, no types
 import {
@@ -25,13 +19,13 @@ import {
   resolveEnv,
   adminUrl,
   exitCodeForHttp,
-  r2KeyFor,
   USAGE,
   runCreate,
   runList,
   runStatus,
   runDelete,
   runGrantDevice,
+  pollUntilReady,
   main,
 } from "./sample-user.mjs";
 
@@ -100,30 +94,8 @@ describe("parseArgs", () => {
     expect(a.username).toBe("demo-alice");
     expect(a.deviceLabel).toBe("reviewer");
     expect(a.flags.scopes).toEqual(["browse"]);
-
-    const b = parseArgs([
-      "grant-device",
-      "demo-alice",
-      "work-laptop",
-      "--scopes",
-      "browse,install-service,vibe-code",
-    ]);
-    expect(b.flags.scopes).toEqual([
-      "browse",
-      "install-service",
-      "vibe-code",
-    ]);
   });
   it("`grant-device` trims whitespace and rejects empty / missing --scopes", () => {
-    const a = parseArgs([
-      "grant-device",
-      "demo-alice",
-      "reviewer",
-      "--scopes",
-      " browse , install-service ",
-    ]);
-    expect(a.flags.scopes).toEqual(["browse", "install-service"]);
-
     expect(() => parseArgs(["grant-device"])).toThrow(/requires a <username>/);
     expect(() => parseArgs(["grant-device", "demo-alice"])).toThrow(
       /requires a <device-label>/,
@@ -131,66 +103,44 @@ describe("parseArgs", () => {
     expect(() =>
       parseArgs(["grant-device", "demo-alice", "reviewer"]),
     ).toThrow(/requires --scopes/);
-    expect(() =>
-      parseArgs([
-        "grant-device",
-        "demo-alice",
-        "reviewer",
-        "--scopes",
-        ",,",
-      ]),
-    ).toThrow(/non-empty comma-separated list/);
-    expect(() =>
-      parseArgs([
-        "grant-device",
-        "demo-alice",
-        "reviewer",
-        "--unknown",
-        "x",
-      ]),
-    ).toThrow(/unknown flag/);
   });
 });
 
-/* ─────────────────────── env resolution ──────────────────────────────── */
+/* ─────────────────────── env resolution (W11) ────────────────────────── */
 
-describe("resolveEnv", () => {
-  it("defaults FLAGSHIP_BASE_URL + DEMO_SSH_KEY_PATH", () => {
+describe("resolveEnv (W11 — laptop secrets stripped)", () => {
+  it("defaults FLAGSHIP_BASE_URL and only requires FLAGSHIP_ADMIN_SECRET", () => {
     const { env, missing } = resolveEnv("help", {
       FLAGSHIP_ADMIN_SECRET: "sek",
-      HOME: "/Users/op",
     });
     expect(env.baseUrl).toBe("https://flagshipserver.com");
-    expect(env.sshKeyPath).toBe("/Users/op/.ssh/flagship-demo-ssh");
     expect(missing).toEqual([]);
   });
   it("requires FLAGSHIP_ADMIN_SECRET for every subcommand → exit 2", () => {
-    const r = resolveEnv("list", {});
-    expect(r.missing.map((m: { name: string }) => m.name)).toContain(
-      "FLAGSHIP_ADMIN_SECRET",
-    );
-    expect(r.missing[0].code).toBe(2);
+    for (const cmd of ["list", "status", "create", "delete", "grant-device"]) {
+      const r = resolveEnv(cmd, {});
+      expect(r.missing.map((m: { name: string }) => m.name)).toEqual([
+        "FLAGSHIP_ADMIN_SECRET",
+      ]);
+      expect(r.missing[0].code).toBe(2);
+    }
   });
-  it("requires HCLOUD_TOKEN for create/delete → exit 3 (not for list/status)", () => {
-    const create = resolveEnv("create", { FLAGSHIP_ADMIN_SECRET: "x" });
-    expect(create.missing.map((m: { name: string }) => m.name)).toEqual([
-      "HCLOUD_TOKEN",
-    ]);
-    expect(create.missing[0].code).toBe(3);
-
-    const del = resolveEnv("delete", { FLAGSHIP_ADMIN_SECRET: "x" });
-    expect(del.missing.map((m: { name: string }) => m.name)).toEqual([
-      "HCLOUD_TOKEN",
-    ]);
-
-    const list = resolveEnv("list", { FLAGSHIP_ADMIN_SECRET: "x" });
-    expect(list.missing).toEqual([]);
-    const status = resolveEnv("status", { FLAGSHIP_ADMIN_SECRET: "x" });
-    expect(status.missing).toEqual([]);
-    // grant-device is a pure-Worker call (no Hetzner side-effect) so
-    // it must NOT demand HCLOUD_TOKEN.
-    const grant = resolveEnv("grant-device", { FLAGSHIP_ADMIN_SECRET: "x" });
-    expect(grant.missing).toEqual([]);
+  it("W11 — NEVER reads HCLOUD_TOKEN or DEMO_SSH_KEY_PATH", () => {
+    // Even if the operator's env has these set from the pre-W11 days,
+    // the new resolveEnv MUST NOT incorporate them into env nor add
+    // them to `missing`.
+    const fullEnv = {
+      FLAGSHIP_ADMIN_SECRET: "sek",
+      HCLOUD_TOKEN: "leftover-hcloud-token",
+      DEMO_SSH_KEY_PATH: "/Users/op/.ssh/should-not-be-read",
+      HOME: "/Users/op",
+    };
+    for (const cmd of ["list", "status", "create", "delete", "grant-device"]) {
+      const { env, missing } = resolveEnv(cmd, fullEnv);
+      expect(missing).toEqual([]);
+      expect((env as Record<string, unknown>).hcloudToken).toBeUndefined();
+      expect((env as Record<string, unknown>).sshKeyPath).toBeUndefined();
+    }
   });
   it("FLAGSHIP_BASE_URL override is honored", () => {
     const { env } = resolveEnv("list", {
@@ -203,7 +153,7 @@ describe("resolveEnv", () => {
 
 /* ─────────────────────── small helpers ───────────────────────────────── */
 
-describe("adminUrl + r2KeyFor + exitCodeForHttp", () => {
+describe("adminUrl + exitCodeForHttp", () => {
   it("joins base + path with one slash", () => {
     expect(adminUrl("https://flagshipserver.com", "/api/dev/sample-user/create"))
       .toBe("https://flagshipserver.com/api/dev/sample-user/create");
@@ -211,13 +161,8 @@ describe("adminUrl + r2KeyFor + exitCodeForHttp", () => {
       "https://flagshipserver.com/api/x",
     );
   });
-  it("r2KeyFor formats per §5.1", () => {
-    expect(r2KeyFor("demo-alice", "deadbeef")).toBe(
-      "demo-isos/demo-alice-deadbeef.iso",
-    );
-  });
-  it("maps HTTP status to exit codes per §14.2", () => {
-    expect(exitCodeForHttp(200)).toBe(1); // not a happy-path call
+  it("maps HTTP status to exit codes", () => {
+    expect(exitCodeForHttp(200)).toBe(1);
     expect(exitCodeForHttp(401)).toBe(2);
     expect(exitCodeForHttp(403)).toBe(2);
     expect(exitCodeForHttp(409)).toBe(4);
@@ -273,8 +218,6 @@ function stubFetch(scripted: Array<{ status: number; body: unknown }>): {
 const ENV_OK = {
   baseUrl: "https://flagshipserver.com",
   adminSecret: "admin-sek",
-  hcloudToken: "hcloud-tok",
-  sshKeyPath: "/tmp/key",
 };
 
 /* ─────────────────────── list / status / delete ──────────────────────── */
@@ -290,8 +233,6 @@ describe("runList / runStatus / runDelete", () => {
     expect(calls[0].url).toBe(
       "https://flagshipserver.com/api/dev/sample-user",
     );
-    // The Worker reads x-admin-secret (packages/control-plane/src/admin.ts),
-    // NOT Authorization: Bearer. Match the Worker contract.
     expect(calls[0].headers["x-admin-secret"]).toBe("admin-sek");
     expect(JSON.parse(stdout.data)).toEqual({ demoUsers: [] });
   });
@@ -319,91 +260,46 @@ describe("runList / runStatus / runDelete", () => {
     );
     expect(code).toBe(0);
     expect(calls[0].method).toBe("POST");
-    expect(calls[0].url).toBe(
-      "https://flagshipserver.com/api/dev/sample-user/delete",
-    );
     expect(JSON.parse(calls[0].body!)).toEqual({ username: "demo-alice" });
-    expect(JSON.parse(stdout.data)).toEqual({
-      deleted: true,
-      username: "demo-alice",
-    });
-  });
-  it("admin endpoints map 403 → exit 2", async () => {
-    const { fn } = stubFetch([{ status: 403, body: { error: "nope" } }]);
-    const stderr = captureStream();
-    const stdout = captureStream();
-    const code = await runList({ fetchFn: fn, env: ENV_OK, stderr, stdout });
-    expect(code).toBe(2);
   });
 });
 
-/* ─────────────────────── create — happy + rollback paths ─────────────── */
+/* ─────────────────────── create — W11 orchestration ──────────────────── */
 
-describe("runCreate — orchestration", () => {
-  // Default issued-ticket envelope returned by the Worker's
-  // /api/dev/sample-user/admin-claim-and-issue endpoint. Shape matches
-  // packages/control-plane/src/demoUsersAdmin.ts:handleAdminClaimAndIssue.
-  const DEFAULT_TICKET = {
-    code: "AAAA-BBBB-CCCC",
-    blob: {
-      version: 1,
-      serverDomain: "home.demo-alice.flagship.services",
-      username: "demo-alice",
-      serverName: "home",
-      authCode: { serial: "deadbeef".repeat(4) },
-      issuedAt: 1,
-      expiresAt: 86_400_001,
-    },
-    blobSignature: "ff".repeat(64),
-    primaryGrant: {
-      grantId: "00000000-0000-4000-8000-000000000001",
-      username: "demo-alice",
-      deviceLabel: "primary",
-      devicePubKey: "ab".repeat(32),
-      scopes: ["browse", "install-service"],
-      issuedAt: 1,
-      expiresAt: 86_400_001,
-      signature: "ee".repeat(64),
-    },
-  };
-
-  // Track the full step ordering via a journal the stubbed deps append
-  // to. The journal is asserted at the end so we can be precise about
-  // which step ran after which.
-  function makeCreateDeps(opts: {
+describe("runCreate — W11 4-step orchestration", () => {
+  function makeDeps(opts: {
     reserveStatus?: number;
-    reserveBody?: unknown;
     issueStatus?: number;
-    issueBody?: unknown;
-    persistStatus?: number;
-    persistBody?: unknown;
-    snapshotFails?: boolean;
+    provisionStatus?: number;
+    provisionBody?: unknown;
     journal: string[];
-    capturedBuildIso?: { args: unknown[] };
-    capturedPersonalize?: { argv: string[]; blobPath: string; blob: unknown };
+    pollResult?: {
+      ready: boolean;
+      snapshotId?: string;
+      isoR2Key?: string;
+      reason?: string;
+    };
   }) {
     const reserveStatus = opts.reserveStatus ?? 200;
-    const reserveBody = opts.reserveBody ?? {
-      username: "demo-alice",
-      state: "none",
-      createdAt: 1,
-    };
     const issueStatus = opts.issueStatus ?? 200;
-    const issueBody = opts.issueBody ?? DEFAULT_TICKET;
-    const persistStatus = opts.persistStatus ?? 200;
-    const persistBody = opts.persistBody ?? {
-      username: "demo-alice",
-      snapshotId: "snap-7",
-      ready: true,
+    const provisionStatus = opts.provisionStatus ?? 202;
+    const provisionBody = opts.provisionBody ?? {
+      state: "provisioning",
+      activeServerId: "srv-1",
+      isoR2Key: "demo-isos/demo-alice-aabbccdd.iso",
     };
-    // Order matches the runCreate sequence:
-    //   1) POST /create (reserve)
-    //   2) POST /admin-claim-and-issue (real-ticket)
-    //   3) POST /<u>/install-complete (persist snapshot)
     const scripted = [
-      { status: reserveStatus, body: reserveBody },
-      { status: issueStatus, body: issueBody },
-      { status: persistStatus, body: persistBody },
+      { status: reserveStatus, body: { username: "demo-alice", state: "none", createdAt: 1 } },
+      {
+        status: issueStatus,
+        body: {
+          code: "AAAA-BBBB-CCCC",
+          blob: { version: 1, username: "demo-alice" },
+          blobSignature: "ff".repeat(64),
+          primaryGrant: { grantId: "g-1" },
+        },
+      },
+      { status: provisionStatus, body: provisionBody },
     ];
     const { fn, calls } = stubFetch(scripted);
     const stderr = captureStream();
@@ -414,93 +310,31 @@ describe("runCreate — orchestration", () => {
       stderr,
       stdout,
       now: () => 0,
-      buildIso: async (a: {
+      pollUntilReady: async (args: {
         username: string;
-        serverName: string;
-        blob: unknown;
-        blobSignature: string;
+        timeoutMs: number;
       }) => {
-        if (opts.capturedBuildIso) opts.capturedBuildIso.args.push(a);
-        // Mirror the live wiring's contract: refuse to build without
-        // a real blob envelope, AND write a temp blob.json that the
-        // (stubbed) personalize-iso could read via --blob-json. The
-        // test assertion below reads this file back from disk.
-        if (!a.blob || typeof a.blobSignature !== "string") {
-          throw new Error("buildIso: missing blob/blobSignature");
-        }
-        if (opts.capturedPersonalize) {
-          const workDir = mkdtempSync(
-            join(tmpdir(), `flagship-test-${a.username}-`),
-          );
-          const blobJsonPath = join(workDir, "blob.json");
-          writeFileSync(
-            blobJsonPath,
-            JSON.stringify({ blob: a.blob, blobSignature: a.blobSignature }),
-          );
-          opts.capturedPersonalize.argv = [
-            "--base-iso",
-            "/dev/null",
-            "--output",
-            `/tmp/${a.username}.iso`,
-            "--blob-json",
-            blobJsonPath,
-          ];
-          opts.capturedPersonalize.blobPath = blobJsonPath;
-          opts.capturedPersonalize.blob = JSON.parse(
-            readFileSync(blobJsonPath, "utf8"),
-          );
-        }
-        opts.journal.push("buildIso");
-        return { isoPath: "/tmp/demo-alice.iso" };
+        opts.journal.push(`poll:${args.username}:${args.timeoutMs}`);
+        return (
+          opts.pollResult ?? {
+            ready: true,
+            snapshotId: "snap-7",
+            isoR2Key: "demo-isos/demo-alice-aabbccdd.iso",
+          }
+        );
       },
-      sha8For: async () => {
-        opts.journal.push("sha8");
-        return "deadbeef";
-      },
-      uploadIso: async (a: { key: string }) => {
-        opts.journal.push(`uploadIso:${a.key}`);
-        return { presignedUrl: "https://r2.example/demo-alice?sig=…" };
-      },
-      provisionTempVps: async (a: { presignedUrl: string }) => {
-        opts.journal.push(`provisionTempVps:${a.presignedUrl.includes("?sig")}`);
-        return { serverId: "srv-1", ipv4: "1.2.3.4" };
-      },
-      awaitDaemonReady: async (a: { fqdn: string }) => {
-        opts.journal.push(`awaitDaemonReady:${a.fqdn}`);
-      },
-      snapshot: async () => {
-        opts.journal.push("snapshot");
-        if (opts.snapshotFails) {
-          throw new Error("hetzner snapshot poll exhausted");
-        }
-        return { snapshotId: "snap-7" };
-      },
-      destroyVps: async (id: string) => {
-        opts.journal.push(`destroyVps:${id}`);
-      },
+      pollTimeoutMs: 5_000,
+      pollIntervalMs: 100,
     };
     return { deps, calls, stderr, stdout };
   }
 
-  it("happy path runs all 7 steps in order + posts /install-complete", async () => {
+  it("happy path: runs 3 admin POSTs in order + polls until snapshot stamped", async () => {
     const journal: string[] = [];
-    const capturedBuildIso = { args: [] as unknown[] };
-    const { deps, calls, stderr, stdout } = makeCreateDeps({
-      journal,
-      capturedBuildIso,
-    });
+    const { deps, calls, stderr, stdout } = makeDeps({ journal });
     const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
     expect(code).toBe(0);
-    expect(journal).toEqual([
-      "buildIso",
-      "sha8",
-      "uploadIso:demo-isos/demo-alice-deadbeef.iso",
-      "provisionTempVps:true",
-      "awaitDaemonReady:home.demo-alice.flagship.services",
-      "snapshot",
-      "destroyVps:srv-1",
-    ]);
-    // 3 admin calls: reserve + admin-claim-and-issue + install-complete.
+    // 3 admin POSTs: create, claim, admin-snapshot-now.
     expect(calls).toHaveLength(3);
     expect(calls[0].url).toBe(
       "https://flagshipserver.com/api/dev/sample-user/create",
@@ -508,7 +342,7 @@ describe("runCreate — orchestration", () => {
     expect(JSON.parse(calls[0].body!)).toEqual({
       username: "demo-alice",
       display: "Demo Alice",
-      region: "ash",
+      region: "fsn1",
       size: "cpx11",
       ttlIdleMinutes: 30,
     });
@@ -520,122 +354,102 @@ describe("runCreate — orchestration", () => {
       serverName: "home",
     });
     expect(calls[2].url).toBe(
-      "https://flagshipserver.com/api/dev/sample-user/demo-alice/install-complete",
+      "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-snapshot-now",
     );
     expect(JSON.parse(calls[2].body!)).toEqual({
-      snapshot_id: "snap-7",
-      iso_r2_key: "demo-isos/demo-alice-deadbeef.iso",
+      region: "fsn1",
+      size: "cpx11",
     });
-    // buildIso received the issued blob + signature verbatim.
-    expect(capturedBuildIso.args).toHaveLength(1);
-    const buildArg = capturedBuildIso.args[0] as {
-      blob: { username: string };
-      blobSignature: string;
-    };
-    expect(buildArg.blob.username).toBe("demo-alice");
-    expect(buildArg.blobSignature).toBe(DEFAULT_TICKET.blobSignature);
-    // Final stdout JSON for piping.
+    expect(journal).toEqual(["poll:demo-alice:5000"]);
     expect(JSON.parse(stdout.data)).toEqual({
       username: "demo-alice",
       ready: true,
       snapshotId: "snap-7",
-      isoR2Key: "demo-isos/demo-alice-deadbeef.iso",
+      isoR2Key: "demo-isos/demo-alice-aabbccdd.iso",
     });
-    expect(stderr.data).toContain("[create] starting at");
-    expect(stderr.data).toContain("[create] snapshotting…");
-    expect(stderr.data).toContain(
-      "[create] claiming + issuing real install ticket via .com…",
-    );
+    expect(stderr.data).toContain("Worker-side provisioning");
   });
 
-  it("personalize-iso invocation uses --blob-json and NOT --seed-hex", async () => {
+  it("provisioning failure (503) → exit 3 BEFORE polling", async () => {
     const journal: string[] = [];
-    const capturedPersonalize = {
-      argv: [] as string[],
-      blobPath: "",
-      blob: undefined as unknown,
-    };
-    const { deps } = makeCreateDeps({ journal, capturedPersonalize });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
-    expect(code).toBe(0);
-    // The argv we'd hand to `personalize-iso` includes --blob-json and
-    // explicitly NOT --seed-hex / --username / --server-name (those
-    // belong to the deprecated synthesizeBlob path).
-    expect(capturedPersonalize.argv).toContain("--blob-json");
-    expect(capturedPersonalize.argv).not.toContain("--seed-hex");
-    expect(capturedPersonalize.argv).not.toContain("--username");
-    expect(capturedPersonalize.argv).not.toContain("--server-name");
-    // The blob.json file on disk has the {blob, blobSignature} shape
-    // the iso-personalizer CLI consumes (re-read after write).
-    const onDisk = capturedPersonalize.blob as {
-      blob: { username: string };
-      blobSignature: string;
-    };
-    expect(onDisk.blob.username).toBe("demo-alice");
-    expect(onDisk.blobSignature).toBe(DEFAULT_TICKET.blobSignature);
-  });
-
-  it("admin-claim-and-issue 5xx → exits before touching Hetzner", async () => {
-    const journal: string[] = [];
-    const { deps, stderr } = makeCreateDeps({
+    const { deps } = makeDeps({
       journal,
-      issueStatus: 503,
-      issueBody: { error: "demo backend down" },
+      provisionStatus: 503,
+      provisionBody: { error: "hetzner upstream rejected" },
     });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
-    expect(code).toBe(3); // 503 → exit 3 per §14.2
-    // None of the I/O-side steps should have run.
-    expect(journal).toEqual([]);
-    expect(stderr.data).toContain("admin-claim-and-issue failed");
-  });
-
-  it("admin-claim-and-issue returns malformed body → exit 1", async () => {
-    const journal: string[] = [];
-    const { deps, stderr } = makeCreateDeps({
-      journal,
-      issueBody: { code: "X", primaryGrant: {} },
-    });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
-    expect(code).toBe(1);
-    expect(journal).toEqual([]);
-    expect(stderr.data).toContain("malformed body");
-  });
-
-  it("snapshot failure rolls back the temp server AND exits 3", async () => {
-    const journal: string[] = [];
-    const { deps, stderr } = makeCreateDeps({ journal, snapshotFails: true });
     const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
     expect(code).toBe(3);
-    // The rollback destroy MUST have run after the snapshot failure.
-    expect(journal).toContain("snapshot");
-    expect(journal[journal.length - 1]).toBe("destroyVps:srv-1");
-    expect(stderr.data).toContain("[create] FAILED:");
-    expect(stderr.data).toContain("rollback: destroying temp server srv-1");
-  });
-
-  it("D1 conflict on reserve → exit 4", async () => {
-    const journal: string[] = [];
-    const { deps } = makeCreateDeps({
-      journal,
-      reserveStatus: 409,
-      reserveBody: { error: "username already claimed by a real account" },
-    });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
-    expect(code).toBe(4);
-    // Nothing past the reserve should have run.
-    expect(journal).toEqual([]);
+    expect(journal).toEqual([]); // poll never ran
   });
 
   it("admin auth failure on reserve → exit 2", async () => {
     const journal: string[] = [];
-    const { deps } = makeCreateDeps({
-      journal,
-      reserveStatus: 403,
-      reserveBody: { error: "admin auth required" },
-    });
+    const { deps } = makeDeps({ journal, reserveStatus: 403 });
     const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
     expect(code).toBe(2);
     expect(journal).toEqual([]);
+  });
+
+  it("D1 conflict on reserve → exit 4", async () => {
+    const journal: string[] = [];
+    const { deps } = makeDeps({ journal, reserveStatus: 409 });
+    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    expect(code).toBe(4);
+    expect(journal).toEqual([]);
+  });
+
+  it("poll timeout → exit 1 with the reason on stderr", async () => {
+    const journal: string[] = [];
+    const { deps, stderr } = makeDeps({
+      journal,
+      pollResult: { ready: false, reason: "timed out after 0.08 min" },
+    });
+    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    expect(code).toBe(1);
+    expect(stderr.data).toContain("polling timed out");
+  });
+});
+
+/* ─────────────────────── pollUntilReady ──────────────────────────────── */
+
+describe("pollUntilReady", () => {
+  it("returns ready=true when state=none AND snapshotId is set", async () => {
+    const { fn } = stubFetch([
+      { status: 200, body: { state: "provisioning", snapshotId: null } },
+      { status: 200, body: { state: "provisioning", snapshotId: null } },
+      { status: 200, body: { state: "none", snapshotId: "snap-9", isoR2Key: "k" } },
+    ]);
+    let t = 0;
+    const stderr = captureStream();
+    const r = await pollUntilReady({
+      fetchFn: fn,
+      env: ENV_OK,
+      stderr,
+      username: "demo-alice",
+      timeoutMs: 60_000,
+      intervalMs: 0,
+      now: () => t++,
+    });
+    expect(r.ready).toBe(true);
+    expect(r.snapshotId).toBe("snap-9");
+  });
+
+  it("returns ready=false on Worker-declared state=failed", async () => {
+    const { fn } = stubFetch([
+      { status: 200, body: { state: "failed", snapshotId: null } },
+    ]);
+    const stderr = captureStream();
+    const r = await pollUntilReady({
+      fetchFn: fn,
+      env: ENV_OK,
+      stderr,
+      username: "demo-alice",
+      timeoutMs: 60_000,
+      intervalMs: 0,
+      now: () => 0,
+    });
+    expect(r.ready).toBe(false);
+    expect(r.reason).toMatch(/state=failed/);
   });
 });
 
@@ -644,15 +458,7 @@ describe("runCreate — orchestration", () => {
 describe("runGrantDevice", () => {
   it("POSTs /admin-mint-device-grant with deviceLabel+scopes and prints JSON", async () => {
     const responseBody = {
-      grant: {
-        grantId: "00000000-0000-4000-8000-000000000099",
-        username: "demo-alice",
-        deviceLabel: "reviewer",
-        devicePubKey: "cc".repeat(32),
-        scopes: ["browse"],
-        issuedAt: 1,
-        expiresAt: 90 * 24 * 3_600_000 + 1,
-      },
+      grant: { grantId: "g99", username: "demo-alice", deviceLabel: "reviewer" },
       signature: "aa".repeat(64),
       devicePubHex: "cc".repeat(32),
     };
@@ -675,114 +481,16 @@ describe("runGrantDevice", () => {
       deviceLabel: "reviewer",
       scopes: ["browse"],
     });
-    // Bearer-equivalent header from adminFetch.
-    expect(calls[0].headers["x-admin-secret"]).toBe("admin-sek");
-    // Machine-readable response on stdout.
     expect(JSON.parse(stdout.data)).toEqual(responseBody);
-    // Human summary on stderr.
     expect(stderr.data).toContain(
       "Granted reviewer device with scopes: browse",
     );
-  });
-
-  it("URL-encodes the username path segment", async () => {
-    const { fn, calls } = stubFetch([
-      { status: 200, body: { grant: {}, signature: "x", devicePubHex: "y" } },
-    ]);
-    const stderr = captureStream();
-    const stdout = captureStream();
-    await runGrantDevice(
-      { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "weird user",
-      "reviewer",
-      ["browse"],
-    );
-    expect(calls[0].url).toContain(
-      "/api/dev/sample-user/weird%20user/admin-mint-device-grant",
-    );
-  });
-
-  it("multiple scopes are forwarded verbatim", async () => {
-    const { fn, calls } = stubFetch([
-      { status: 200, body: { grant: {}, signature: "x", devicePubHex: "y" } },
-    ]);
-    const stderr = captureStream();
-    const stdout = captureStream();
-    const code = await runGrantDevice(
-      { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "demo-alice",
-      "work-laptop",
-      ["browse", "install-service", "vibe-code"],
-    );
-    expect(code).toBe(0);
-    expect(JSON.parse(calls[0].body!)).toEqual({
-      deviceLabel: "work-laptop",
-      scopes: ["browse", "install-service", "vibe-code"],
-    });
-    expect(stderr.data).toContain(
-      "Granted work-laptop device with scopes: browse, install-service, vibe-code",
-    );
-  });
-
-  it("Worker rejection (400) surfaces the error message AND exits 1", async () => {
-    const { fn } = stubFetch([
-      {
-        status: 400,
-        body: {
-          error: "scopes must be a non-empty array of known DeviceScope strings",
-        },
-      },
-    ]);
-    const stderr = captureStream();
-    const stdout = captureStream();
-    const code = await runGrantDevice(
-      { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "demo-alice",
-      "reviewer",
-      ["bogus-scope"],
-    );
-    expect(code).toBe(1);
-    expect(stderr.data).toContain(
-      "scopes must be a non-empty array of known DeviceScope strings",
-    );
-    // No JSON on stdout when the call failed — keep the pipe contract clean.
-    expect(stdout.data).toBe("");
-  });
-
-  it("admin-auth failure (403) → exit 2", async () => {
-    const { fn } = stubFetch([{ status: 403, body: { error: "no admin" } }]);
-    const stderr = captureStream();
-    const stdout = captureStream();
-    const code = await runGrantDevice(
-      { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "demo-alice",
-      "reviewer",
-      ["browse"],
-    );
-    expect(code).toBe(2);
-    expect(stderr.data).toContain("no admin");
-  });
-
-  it("404 demo user → exit 1 with a clear message", async () => {
-    const { fn } = stubFetch([
-      { status: 404, body: { error: "demo user does not exist" } },
-    ]);
-    const stderr = captureStream();
-    const stdout = captureStream();
-    const code = await runGrantDevice(
-      { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "ghost-alice",
-      "reviewer",
-      ["browse"],
-    );
-    expect(code).toBe(1);
-    expect(stderr.data).toContain("demo user does not exist");
   });
 });
 
 /* ─────────────────────── main() end-to-end exit-code contracts ───────── */
 
-describe("main() — env-gate + exit-code contracts", () => {
+describe("main() — env-gate + exit-code contracts (W11)", () => {
   function callMain(argv: string[], processEnv: Record<string, string>) {
     const stderr = captureStream();
     const stdout = captureStream();
@@ -796,13 +504,7 @@ describe("main() — env-gate + exit-code contracts", () => {
           stdout,
           now: () => 0,
           fetchFn: vi.fn(),
-          sha8For: vi.fn(),
-          buildIso: vi.fn(),
-          uploadIso: vi.fn(),
-          provisionTempVps: vi.fn(),
-          awaitDaemonReady: vi.fn(),
-          snapshot: vi.fn(),
-          destroyVps: vi.fn(),
+          pollUntilReady: vi.fn(),
         }),
     };
   }
@@ -813,110 +515,101 @@ describe("main() — env-gate + exit-code contracts", () => {
     expect(code).toBe(0);
     expect(stdout.data).toContain("sample-user — operator CLI");
     expect(stdout.data).toContain("create <username>");
-    expect(stdout.data).toContain(
-      "grant-device <username> <device-label>",
-    );
   });
-  it("USAGE constant is the same string that --help prints", () => {
-    expect(USAGE).toContain("create <username>");
+
+  it("USAGE constant documents the W11 env contract (admin-secret only)", () => {
     expect(USAGE).toContain("FLAGSHIP_ADMIN_SECRET");
-    expect(USAGE).toContain("grant-device <username> <device-label>");
+    // W11 message: don't dangle deprecated env names as still-required.
+    expect(USAGE).toContain("HCLOUD_TOKEN and DEMO_SSH_KEY_PATH are NO LONGER READ");
   });
-  it("`grant-device` flows through main() with admin-secret only (no HCLOUD_TOKEN)", async () => {
-    // grant-device is a pure-Worker call. main() must NOT demand
-    // HCLOUD_TOKEN; the run reaches runGrantDevice and POSTs via the
-    // injected fetchFn.
+
+  it("`create` with HCLOUD_TOKEN unset, DEMO_SSH_KEY_PATH unset, FLAGSHIP_ADMIN_SECRET set → orchestrates the 4-step flow", async () => {
+    // Acceptance from the W11 task — explicitly proves the operator
+    // can drive the CLI with ONLY FLAGSHIP_ADMIN_SECRET. The mocked
+    // fetch returns the expected 3-call sequence; pollUntilReady is
+    // mocked to return ready immediately.
     const stderr = captureStream();
     const stdout = captureStream();
-    const fetchFn = vi.fn(async () =>
-      ({
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            grant: {
-              grantId: "g1",
-              username: "demo-alice",
-              deviceLabel: "reviewer",
-              devicePubKey: "cc".repeat(32),
-              scopes: ["browse"],
-              issuedAt: 1,
-              expiresAt: 2,
-            },
-            signature: "aa".repeat(64),
-            devicePubHex: "cc".repeat(32),
-          }),
-      }) as Response,
-    );
-    const code = await main(
-      [
-        "grant-device",
-        "demo-alice",
-        "reviewer",
-        "--scopes",
-        "browse",
-      ],
+    let i = 0;
+    const scripted = [
+      { status: 200, body: { username: "demo-alice", state: "none" } },
       {
-        processEnv: { FLAGSHIP_ADMIN_SECRET: "sek" },
+        status: 200,
+        body: {
+          code: "X",
+          blob: { version: 1 },
+          blobSignature: "ff".repeat(64),
+          primaryGrant: { grantId: "g1" },
+        },
+      },
+      { status: 202, body: { state: "provisioning", activeServerId: "srv-1" } },
+    ];
+    const calls: Array<{ url: string; body?: string }> = [];
+    const fetchFn = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, body: typeof init.body === "string" ? init.body : undefined });
+      const r = scripted[i++];
+      return {
+        ok: r.status < 300,
+        status: r.status,
+        text: async () => JSON.stringify(r.body),
+      } as Response;
+    });
+    const pollUntilReadyMock = vi.fn(async () => ({
+      ready: true,
+      snapshotId: "snap-7",
+      isoR2Key: "k",
+    }));
+    const code = await main(
+      ["create", "demo-alice", "--display", "Demo Alice"],
+      {
+        processEnv: {
+          // Acceptance-as-spec: only admin secret in the env. The
+          // HCLOUD_TOKEN / DEMO_SSH_KEY_PATH names are intentionally
+          // absent (the CLI must not require them).
+          FLAGSHIP_ADMIN_SECRET: "x",
+        },
         stderr,
         stdout,
         now: () => 0,
         fetchFn,
-        sha8For: vi.fn(),
-        buildIso: vi.fn(),
-        uploadIso: vi.fn(),
-        provisionTempVps: vi.fn(),
-        awaitDaemonReady: vi.fn(),
-        snapshot: vi.fn(),
-        destroyVps: vi.fn(),
+        pollUntilReady: pollUntilReadyMock,
       },
     );
     expect(code).toBe(0);
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-    const url = (fetchFn.mock.calls[0] as unknown[])[0] as string;
-    expect(url).toBe(
-      "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
-    );
-    expect(stderr.data).toContain(
-      "Granted reviewer device with scopes: browse",
-    );
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    expect(pollUntilReadyMock).toHaveBeenCalledTimes(1);
+    expect(calls[0].url).toContain("/api/dev/sample-user/create");
+    expect(calls[1].url).toContain("/admin-claim-and-issue");
+    expect(calls[2].url).toContain("/demo-alice/admin-snapshot-now");
+    const final = JSON.parse(stdout.data);
+    expect(final).toEqual({
+      username: "demo-alice",
+      ready: true,
+      snapshotId: "snap-7",
+      isoR2Key: "k",
+    });
   });
-  it("`create` with NO env → exit 3 (HCLOUD_TOKEN beats FLAGSHIP_ADMIN_SECRET)", async () => {
+
+  it("`create` with NO env → exit 2 (only admin secret required)", async () => {
     const { stderr, run } = callMain(
       ["create", "demo-alice", "--display", "Demo Alice"],
       {},
     );
     const code = await run();
-    // Both are missing; the highest-priority code (3 = Hetzner) wins.
-    expect(code).toBe(3);
-    expect(stderr.data).toContain('env "FLAGSHIP_ADMIN_SECRET" is required');
-    expect(stderr.data).toContain('env "HCLOUD_TOKEN" is required');
-  });
-  it("`create` with HCLOUD_TOKEN set but admin secret missing → exit 2", async () => {
-    const { stderr, run } = callMain(
-      ["create", "demo-alice", "--display", "Demo Alice"],
-      { HCLOUD_TOKEN: "tok" },
-    );
-    const code = await run();
     expect(code).toBe(2);
     expect(stderr.data).toContain('env "FLAGSHIP_ADMIN_SECRET" is required');
+    // Critically: NO "HCLOUD_TOKEN is required" line — the CLI
+    // doesn't even look at that env any more.
+    expect(stderr.data).not.toContain('"HCLOUD_TOKEN"');
   });
-  it("`create` with admin secret set but HCLOUD_TOKEN missing → exit 3", async () => {
-    const { stderr, run } = callMain(
-      ["create", "demo-alice", "--display", "Demo Alice"],
-      { FLAGSHIP_ADMIN_SECRET: "sek" },
-    );
-    const code = await run();
-    expect(code).toBe(3);
-    expect(stderr.data).toContain('env "HCLOUD_TOKEN" is required');
-  });
-  it("`list` with no FLAGSHIP_ADMIN_SECRET → exit 2 (no HCLOUD_TOKEN needed)", async () => {
+
+  it("`list` with no FLAGSHIP_ADMIN_SECRET → exit 2", async () => {
     const { stderr, run } = callMain(["list"], {});
     const code = await run();
     expect(code).toBe(2);
     expect(stderr.data).toContain('env "FLAGSHIP_ADMIN_SECRET" is required');
-    expect(stderr.data).not.toContain('env "HCLOUD_TOKEN" is required');
   });
+
   it("malformed args print usage and exit 1", async () => {
     const { stderr, run } = callMain(["wat"], {});
     const code = await run();

@@ -45,6 +45,7 @@ import {
   pushRedirection,
   runDemoIdleReaper,
   runDemoProvisioningPoller,
+  runDemoW11SnapshotPoller,
   schedulePendingRePairAlerts,
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
@@ -353,7 +354,14 @@ export async function scheduled(
 export async function runDemoCron(
   env: ScheduledEnv,
   now: Date,
-): Promise<{ reaped: number; stuck: number; promoted: number } | null> {
+): Promise<{
+  reaped: number;
+  stuck: number;
+  promoted: number;
+  w11Snapshotted: number;
+  w11Finalized: number;
+  w11Failed: number;
+} | null> {
   if (!env.DB || !env.HCLOUD_TOKEN) return null;
   const storage = new D1Storage(env.DB);
   const hetzner = createHetznerClient(env.HCLOUD_TOKEN);
@@ -378,10 +386,37 @@ export async function runDemoCron(
       return !!r;
     },
   );
+  // W11 — snapshot + destroy the temp VPS once the daemon registers.
+  // Same Hetzner client; uses the new createImageSnapshot /
+  // getImageStatus / destroyServer methods. isRegistered consults the
+  // SAME install_events table the legacy poller uses but with a
+  // recency filter so we don't snapshot a daemon that registered
+  // hours ago and then died.
+  const w11Result = await runDemoW11SnapshotPoller(
+    {
+      storage: storage.demoUsers,
+      hetzner,
+      audit: storage.auditEvents,
+      now: () => now.getTime(),
+    },
+    async (fqdn, recencyMs) => {
+      const cutoff = now.getTime() - recencyMs;
+      const r = await env
+        .DB!.prepare(
+          "SELECT 1 FROM install_events WHERE server_fqdn = ? AND event = 'registered' AND created_at > ? LIMIT 1",
+        )
+        .bind(fqdn, cutoff)
+        .first();
+      return !!r;
+    },
+  );
   return {
     reaped: reaperResult.reaped,
     stuck: reaperResult.stuck,
     promoted: pollerResult.promoted,
+    w11Snapshotted: w11Result.snapshotted,
+    w11Finalized: w11Result.finalized,
+    w11Failed: w11Result.failed,
   };
 }
 

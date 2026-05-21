@@ -22,26 +22,62 @@ cd apps/com && npx wrangler deploy
 
 This picks up W1 + W6 + W7 + the v2 endpoints' final wiring. The Worker won't 503 without this — the existing routes still work — but the device-thief veto vector is still open and the recovery-wipe policy is unused until the Worker handler is updated.
 
-### 2. Live Phase F test attempt #5
+### 2. Live Phase F test attempt #5 (W11 — laptop credentials shrunk)
 
-The agent ran four attempts during the autonomous session. The first three were blocked by code bugs (all five now fixed: `cfc3b9c`, `f355c7e`, `1f3dd4b`, `ee6446b`). Attempt #4 got past the dd dance but the install.sh on the VPS was the pre-W2 version (from the still-private-at-that-time repo). With the repo now public + W2 quiescing the disk before parted + the fully-deployed Worker, attempt #5 should hit a green padlock.
+**W11 update (2026-05-21):** the laptop no longer needs
+`HCLOUD_TOKEN` or a Hetzner SSH key. The Worker handles every
+Hetzner operation via cloud-init `user_data` — a `#!/bin/bash`
+script Hetzner runs as root at first boot (no SSH involved). The
+pre-W11 `export HCLOUD_TOKEN=…` step is GONE; only
+`FLAGSHIP_ADMIN_SECRET` lives on the laptop now.
+
+Required laptop env:
+
+```sh
+export FLAGSHIP_ADMIN_SECRET=<bearer>      # admin endpoint auth
+# No HCLOUD_TOKEN, no DEMO_SSH_KEY_PATH.
+```
+
+Required Worker-side bindings (already set per "State at session
+end" above):
+
+- `wrangler secret put HCLOUD_TOKEN`
+- `wrangler secret put DEMO_IRK_KEK`
+- `wrangler.toml [vars] FLAGSHIP_R2_TEMP_PUBLIC_BASE`
+  ⇒ enabled once via
+  `wrangler r2 bucket dev-url enable flagship-iso-temp`
+- `[[r2_buckets]] binding = "ISO_TEMP_BUCKET" bucket_name = "flagship-iso-temp"`
+
+Now run:
 
 ```sh
 node scripts/sample-user.mjs create demo-alice --display "Demo Alice"
 ```
 
 Expected end state:
-- Hetzner provisions a cx23 (cpx11+fsn1 will 422 first per Hetzner inventory, the CLI auto-falls to cx23).
-- Rescue + dd writes the personalized ISO onto /dev/sda.
-- Alpine reboots; bootstrap fetches install.sh from the now-public GitHub raw.
-- install.sh sync+umounts /dev/sda (the W2 fix), repartitions, LUKS-init, mkfs, grub-install.
-- Alpine + Flagship daemon boots; daemon registers with `.com`; ACME runs.
-- `/api/users/demo-alice/pods` shows `home.demo-alice.flagship.services`.
-- Hetzner snapshot lands.
-- Temp VPS destroyed.
-- CLI exits 0 with `{"username": "demo-alice", "ready": true, "snapshotId": "<numeric>"}`.
+- Worker streams personalized ISO into the `flagship-iso-temp`
+  bucket (~5s).
+- Worker POSTs Hetzner `/servers` with `image: 'ubuntu-22.04'` +
+  `user_data: '<bash wget+dd+reboot script>'`.
+- Stock Ubuntu boots, cloud-init runs the script as root, dd's the
+  ISO onto /dev/sda, reboots.
+- Alpine boots from the now-written disk; bootstrap fetches
+  install.sh from the public GitHub raw.
+- install.sh sync+umounts /dev/sda (W2 fix), repartitions, LUKS-init,
+  mkfs, grub-install.
+- Daemon registers with `.com`; ACME runs.
+- `/api/users/demo-alice/pods` shows
+  `home.demo-alice.flagship.services`.
+- The 10-minute cron snapshots the temp VPS + destroys it.
+- CLI exits 0 with `{"username": "demo-alice", "ready": true,
+  "snapshotId": "<numeric>"}`.
 
-If anything fails: ssh into the VPS while it's still in rescue or before snapshot, tail `/var/log/flagship-install.log` + `/var/log/flagship-bootstrap.log`. The IP is in the CLI output.
+If anything fails: there is no laptop SSH key, so debugging is via
+Hetzner's web console (or by setting `DEMO_PUBLIC_SSH_KEY` on the
+Worker — the W11 handler attaches it to the temp VPS if present).
+Tail `/var/log/flagship-cloud-init.log` for the wget/dd phase,
+`/var/log/flagship-install.log` + `/var/log/flagship-bootstrap.log`
+for the Alpine install phase.
 
 ### 3. Mint a reviewer sub-identity + smoke v2 device-addressing
 
