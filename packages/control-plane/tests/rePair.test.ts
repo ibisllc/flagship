@@ -336,6 +336,54 @@ describe("re-pair object (cancel) by old IRK", () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it("releases the recovery lock after veto — a new initiate is accepted", async () => {
+    // Recovery-lock release regression: pending_re_pairs.username is the
+    // PK. Before this fix, a veto stamped objected_at but left the row,
+    // which meant the next initiate hit a PK collision and returned 409
+    // "re-pair already pending" — permanently locking the cloud from any
+    // future legitimate recovery. The handler now sweeps dead rows
+    // (vetoed OR expired-without-complete) on the next initiate.
+    const oldIrk = makeKey();
+    const firstNew = makeKey();
+    const storage = await setup(oldIrk);
+    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+
+    // 1. First initiate succeeds.
+    expect((await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: firstNew, oldIrk }))).status).toBe(200);
+
+    // 2. Old IRK vetoes — row gets objected_at stamped but persists.
+    const veto = await handleObjectRePair(
+      deps,
+      USERNAME,
+      objectBody({ oldIrk, newIrkPub: firstNew.publicKey }),
+    );
+    expect(veto.status).toBe(200);
+
+    // 3. New initiate from a DIFFERENT new-IRK must succeed.
+    //    Lock released because the existing row is dead (vetoed).
+    const secondNew = makeKey();
+    const r = await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: secondNew, oldIrk }));
+    expect(r.status).toBe(200);
+  });
+
+  it("KEEPS the lock while a live dispute is in flight — a second initiate is 409", async () => {
+    // The lock-release path must NOT release the lock during a live
+    // dispute. Concurrent admin recoveries are rejected with 409 to
+    // prevent two competing recoveries from racing inside the same
+    // grace window. The legitimate owner's veto-from-existing-device
+    // path is the resolution channel; nothing else.
+    const oldIrk = makeKey();
+    const firstNew = makeKey();
+    const storage = await setup(oldIrk);
+    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    expect((await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: firstNew, oldIrk }))).status).toBe(200);
+    // Second concurrent initiate (different new-IRK) MUST be rejected.
+    const secondNew = makeKey();
+    const r = await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: secondNew, oldIrk }));
+    expect(r.status).toBe(409);
+    expect((r.body as { error: string }).error).toMatch(/already pending/i);
+  });
 });
 
 describe("re-pair complete (atomic IRK swap after grace)", () => {

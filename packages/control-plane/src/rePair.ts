@@ -419,6 +419,35 @@ export async function handleInitiateRePair(
     return { status: 403, body: { error: "invalid signature" } };
   }
 
+  // Recovery-lock release: pending_re_pairs.username is the PK, so the
+  // INSERT below fails with "re-pair already pending" if ANY row exists
+  // for this cloud — that's the lock that prevents two simultaneous
+  // recoveries from racing. But the row sticks around after veto (the
+  // veto handler only stamps objected_at) and after expiry (the cron
+  // alert scheduler doesn't delete), which would leave the cloud
+  // permanently locked from any future legitimate recovery. Sweep dead
+  // rows here, on the next initiate, so the lock releases naturally
+  // when a dispute resolves but stays armed during a live one.
+  //
+  // A row is "dead" if either: (a) it was vetoed (objectedAt != null),
+  // OR (b) its grace window passed without a successful complete
+  // (completesAt <= now AND objectedAt == null). A live row is one
+  // whose grace window is still open AND that hasn't been vetoed —
+  // exactly the dispute state we want to keep locked.
+  const existing = await deps.pendingRePairs.get(r.username);
+  if (existing) {
+    // objectedAt is `number | undefined` (PendingRePairRecord), NOT
+    // `number | null`. A vetoed row has a numeric objectedAt; a live
+    // row has it unset. Treat unset as "no veto."
+    const vetoed = typeof existing.objectedAt === "number";
+    const expired = existing.completesAt <= now() && !vetoed;
+    if (vetoed || expired) {
+      await deps.pendingRePairs.delete(r.username);
+    }
+    // else: live dispute → fall through; the storage layer's PK
+    // collision below returns the proper 409 "re-pair already pending".
+  }
+
   const insert = await deps.pendingRePairs.initiate({
     username: r.username,
     newIrkPubHex: r.newIrkPub,
