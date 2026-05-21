@@ -65,15 +65,58 @@ describe("handleUsersCheck", () => {
     expect((r.body as UsersCheckResponse).available).toBe(true);
   });
 
-  it("rejects usernames containing a hyphen (no-hyphen rule)", async () => {
-    // Hyphens are banned from usernames so the composite app id
+  it("rejects usernames containing a hyphen (no-hyphen rule) — REAL accounts only", async () => {
+    // Hyphens are banned from REAL usernames so the composite app id
     // `<creator>-<slug>` parses unambiguously. A hyphenated handle
-    // must come back available=false with a clear reason.
+    // with NO demo/test-account row backing it must come back
+    // available=false with a clear reason.
+    //
+    // NOTE: hyphenated usernames that ARE registered as demo accounts
+    // get a separate, demo-aware response — see the test below
+    // "hyphenated DEMO username returns demoServer block before
+    // validateUserLabel rejection."
     const r = await handleUsersCheck({ storage: fakeStorage() }, { username: "maria-jose" });
     expect(r.status).toBe(200);
     const body = r.body as UsersCheckResponse;
     expect(body.available).toBe(false);
     expect(body.reason).toMatch(/no hyphens/i);
+  });
+
+  it("hyphenated DEMO username returns demoServer block before validateUserLabel rejection", async () => {
+    // Bug fix: previously the validateUserLabel hyphen guard fired
+    // BEFORE the demoUsers lookup, so /users/check for `demo-alice`
+    // would return `{available: false, reason: "no hyphens"}` even
+    // though demo_users had a row for that username. Mobile demo-mode
+    // never got the demoServer block and broke for every hyphenated
+    // demo name. Fix: demoUsers / testAccounts lookup runs FIRST;
+    // if either matches, return demo-aware response; only if neither
+    // matches does validateUserLabel fire.
+    const { InMemoryDemoUsersStorage } = await import("@flagship/storage");
+    const demoUsers = new InMemoryDemoUsersStorage();
+    await demoUsers.insert({
+      username: "demo-alice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: null,
+      activeServerFqdn: null,
+      lastActivityAt: 0,
+      state: "none",
+      createdAt: 1,
+    });
+    const r = await handleUsersCheck(
+      { storage: fakeStorage(), demoUsers },
+      { username: "demo-alice" },
+    );
+    expect(r.status).toBe(200);
+    const body = r.body as UsersCheckResponse;
+    expect(body.available).toBe(false);
+    expect(body.demoServer).toBeDefined();
+    expect(body.demoServer!.fqdn).toBe("home.demo-alice.flagship.services");
+    expect(body.reason).not.toMatch(/no hyphens/i);
   });
 
   it("accepts a long all-alphanumeric username up to 63 chars", async () => {

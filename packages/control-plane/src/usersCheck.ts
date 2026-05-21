@@ -182,7 +182,47 @@ export async function handleUsersCheck(
     });
   }
 
-  // 1. Label rules first (rejects "" / non-ASCII / reserved labels)
+  // 1a. Demo-user / test-account lookups happen BEFORE the
+  //     validateUserLabel hyphen guard. Reason: real-account usernames
+  //     are constrained to hyphen-free (so the serviceId composite
+  //     `<creator>-<slug>` parses unambiguously by splitting at the
+  //     first hyphen), but DEMO usernames legitimately carry hyphens
+  //     ("demo-alice", "office-tour"). Per demoUsers.ts:USERNAME_RE
+  //     `^[a-z0-9-]{3,32}$`. Running validateUserLabel first would
+  //     reject "demo-alice" with "no hyphens" BEFORE the demoUsers
+  //     row gets queried, breaking mobile demo-mode for every demo
+  //     name that contains a hyphen.
+  //
+  //     Strict matching here: the demoUsers/testAccounts hit MUST
+  //     be a literal-string lookup against the supplied username
+  //     (already lowercased into `norm`). No reformatting; if the
+  //     lookup hits we trust it and short-circuit. If it misses we
+  //     fall through to the canonical validateUserLabel path, which
+  //     handles every real (hyphen-free) account uniformly.
+
+  let demoServer: DemoServerBlock | undefined;
+  if (deps.demoUsers) {
+    const row = await deps.demoUsers.get(norm);
+    if (row) {
+      demoServer = demoServerBlockFromRow(row);
+    }
+  }
+
+  const testHit = deps.testAccounts?.[norm];
+  if (demoServer || testHit) {
+    // Demo / test account path. We return BEFORE validateUserLabel so
+    // hyphenated demo usernames work end-to-end.
+    return ok<UsersCheckResponse>({
+      username: norm,
+      available: false,
+      reason: testHit ? "test account" : "demo account",
+      ...(testHit ? { testAccount: { display: testHit.display, ttlHours: testHit.ttlHours } } : {}),
+      demoServer,
+    });
+  }
+
+  // 1b. Now the standard label check (rejects "" / non-ASCII / hyphens
+  //     / reserved labels). Demo accounts already escaped above.
   const labelCheck = validateUserLabel(norm);
   if (!labelCheck.ok) {
     return ok<UsersCheckResponse>({
@@ -192,37 +232,7 @@ export async function handleUsersCheck(
     });
   }
 
-  // 2a. Demo-user (Plan A) lookup. Computed once so every return
-  //     branch can fold in the `demoServer` block. Independent of the
-  //     legacy test-account / is_demo flows; backward-compatible
-  //     (absent deps.demoUsers ⇒ never attached).
-  let demoServer: DemoServerBlock | undefined;
-  if (deps.demoUsers) {
-    const row = await deps.demoUsers.get(norm);
-    if (row) {
-      demoServer = demoServerBlockFromRow(row);
-    }
-  }
-
-  // 2b. Test-account secret list. Match-by-key (no enumeration leak —
-  //    we never expose the full list, only the configured behavior
-  //    for the specific username the caller asked about).
-  const testHit = deps.testAccounts?.[norm];
-  if (testHit) {
-    return ok<UsersCheckResponse>({
-      username: norm,
-      // We deliberately return available=false so any caller that
-      // wasn't expecting a test-account hit can't accidentally claim
-      // the slot. Mobile clients branch on testAccount being non-null
-      // BEFORE looking at available.
-      available: false,
-      reason: "test account",
-      testAccount: { display: testHit.display, ttlHours: testHit.ttlHours },
-      demoServer,
-    });
-  }
-
-  // 3. Real claim lookup. A demo account is a real claim — it still
+  // Real claim lookup. A demo account is a real claim — it still
   //    reports "already claimed" — but when the CA key is wired it
   //    additionally carries a signed directive telling the client to
   //    run recovery through the Mock (#84). Signed server-side so a
