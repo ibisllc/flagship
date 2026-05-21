@@ -1,296 +1,110 @@
-# Next-session prompt — Plan A Phase F (with v2 device-addressing pulled in)
+# Next-session prompt — Flagship Burner + cloud demo end-to-end
 
-Paste this verbatim into the next Claude Code session. Designed to
-preserve the working style we've used:
+Paste this verbatim into the next Claude Code session. The session before this one (2026-05-21) landed the W13 cloud-init-direct path for the cloud demo; this session ships the **Burner**, drives the demo to "fully alive", and proves the real-USB story on a metal box.
 
+Style we kept across the marathon:
 - **Deep-think before edits** — recon current state before writing code.
-- **Sequential sub-workers** — dispatch one focused sub-agent per
-  phase, isolated in a worktree, merge to main when verified.
-- **Logical commits** — one PR-sized commit per landed phase, with
-  a body explaining WHY not just WHAT.
-- **Verify before trust** — always re-run `npx tsc -b` + `npx vitest
-  run` + mobile gates after each merge.
-- **Cloud-first** — push as much as possible into the Worker; minimize
-  laptop dependence.
-- **No mid-session pauses for "ready for next phase?"** — flow
-  continuously across sub-agents. Only stop for genuine design
-  ambiguity.
+- **Sequential sub-workers** — one focused sub-agent per phase, isolated in worktree, merge to main when verified.
+- **Logical commits** — one PR-sized commit per landed phase, body explains WHY not WHAT.
+- **Verify before trust** — re-run `npx tsc -b` + `npx vitest run` + mobile gates after each merge.
+- **No mid-session pauses for "ready for next phase?"** — flow continuously.
 
 ---
 
-## OPERATOR PREREQS (done ONCE, before pasting this prompt)
+## Where we left off (state at 2026-05-21 16:30 UTC)
 
-These move the demo system's runtime to the Worker so future demos
-don't need the operator's laptop:
+**W13 cloud-init-direct path landed** (commit chain on `main`, see most recent commits). Skips custom ISO + d-i entirely:
+- Hetzner debian-12 base image
+- cloud-init runs our `flagship-bootstrap.sh` on first boot
+- Pulls Node 20 from NodeSource (Debian-12 ships Node 18 which is too old)
+- `npm install --workspaces` (vs `npm ci` which silently no-ops workspaces)
+- Inline registration to `/api/server/register`
+- ~2 minutes from VPS creation → daemon registered in `.com`
 
-```sh
-# 0. Remove the 239 MiB base ISO from apps/com's [assets] dir if a
-#    prior CLI run cached it there. The Worker serves it at runtime
-#    from R2 (ISO_BUCKET), never as a static asset, but `wrangler
-#    deploy` will refuse to upload it (25 MiB per-asset cap). The
-#    file is .gitignored so this is a no-op against the repo.
-rm -f /Users/harrywinner/flagship/apps/web/public/build/iso/flagship-base-alpine-3.21.0-x86_64.iso
+The custom-ISO W12 path is preserved in tree (`packages/installer-netboot/`) but **unused** by the demo. It's a debugging artifact; don't delete — keep for real-USB referencework.
 
-# 1. Push HCLOUD_TOKEN to the Worker (currently only in operator shell;
-#    Worker can't provision on-connect without it)
-cd /Users/harrywinner/flagship/apps/com
-printf '%s' "$HCLOUD_TOKEN" | npx wrangler secret put HCLOUD_TOKEN
+**Live demo at session-end**: VPS `132252195` (IP `188.245.202.158`) is provisioned, registered, awaiting promotion to `state='up'` at the next 16:30 cron tick. If the next session inherits a stale row, just `npx wrangler d1 execute flagship-state --remote --command "UPDATE demo_users SET state='none', active_server_id=NULL WHERE username='demo-alice'"` and re-launch via `curl -sS -X POST https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-cloud-init-now -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" -H "content-type: application/json" -d '{"display":"Demo Alice"}'`.
 
-# 2. Push the demo SSH public key to the Worker (for completeness;
-#    Worker uses it only to label provisioned snapshots, never SSHes)
-cat ~/.ssh/flagship-demo-ssh.pub | npx wrangler secret put DEMO_PUBLIC_SSH_KEY
+**Debug endpoints added** (admin-gated via `FLAGSHIP_ADMIN_SECRET`):
+- `POST /api/dev/rescue/<serverId>` — enable Hetzner rescue + return root password
+- `POST /api/dev/destroy/<serverId>` — destroy any Hetzner VPS by id
+- `GET /api/dev/server/<serverId>` — Hetzner server record (status, IP)
+- `PUT /api/dev/upload-iso/<filename>` — upload an ISO into `ISO_BUCKET`
+- `POST/GET /api/dev/late-log/<label>` — install-stage exfil log
 
-# 3. Re-deploy the Worker so the new secrets land
-npx wrangler deploy
+Keep these around; they unblock rescue-mode forensics from the laptop without ever having `HCLOUD_TOKEN` locally.
 
-cd /Users/harrywinner/flagship
-```
-
-After these run ONCE, the only ongoing laptop work is the one-time
-`create-sample-user demo-alice` per demo user (the rescue+dd dance
-can't run in the Worker — no SSH). Everything else — on-connect
-provisioning, idle teardown, status polls — runs Worker-side.
+**Memory contains** the Burner spec (`project_flagship_burner.md`) — read it first.
 
 ---
 
-## The prompt to paste
+## Punch list — in no particular order, all of these are FOR THIS SESSION
 
-> Continuing the v1-launch program from 2026-05-20's checkpoint. Read
-> `docs/SESSION-HANDOFF.md` §0 (top entry, dated 2026-05-20) FIRST —
-> that's the authoritative record of where we are. Then read
-> `docs/sample-user-vps-plan.md` Phase F, `docs/v1.2-security-
-> cascade.md` (esp. the corporate-device-addressing v2 section we
-> just added), and this file's "Locked Decisions" section below.
->
-> **Current state in one sentence**: Plan A Phases A-E + Plan B
-> Phases 1-5 are all code-complete + tests-green on main (sha
-> `d15cd1d`); the live Phase F demo-alice run reached `awaiting
-> daemon + ACME…` but the install never registered because we used
-> the personalize CLI's `synthesizeBlob` (offline test) mode instead
-> of `--blob-json` mode with a real `.com`-issued ticket. Separately,
-> `/api/users/<u>/pods` is throwing HTTP 500 for ALL users —
-> probable column-rename fallout from the App→Service rename.
->
-> **The owner has decided** (steered at session close 2026-05-20):
-> 1. SSH-runner stays on operator laptop (one-time per demo user).
-> 2. Demo accounts get the per-device IRK + corporate-style
->    scopes from Plan B's v2 hardening list. The `harry` vs
->    `harry.ipad` two-level addressing must be in PLACE before
->    Phase F is declared green — demos are the first use site.
-> 3. Phase G (§S v1-launch live exercises) is queued after Phase F.
->
-> **Work plan, sequential and continuous** (no pauses between):
->
-> **S1 — fix /api/users/<u>/pods 500** (~30 min, one sub-agent,
-> one commit). Probe prod D1's `daemon_status` table schema via
-> `wrangler d1 execute flagship-state --remote --command "PRAGMA
-> table_info(daemon_status)"`. If the column rename
-> `apps_served` → `services_served_json` (migration 0015 edited
-> in-place during the App→Service rename) never reached prod,
-> author a `0031_daemon_status_services_served.sql` migration that
-> ALTER TABLE RENAMEs the column on prod, apply it, redeploy
-> `apps/com`. Verify with a `curl` probe to `/api/users/harry11911a/pods`
-> showing HTTP 200. Commit + push.
->
-> **S2 — DESIGN: spec the combined real-ticket + per-device-IRK
-> architecture** (~1 hour, in-context, no sub-agent). Write
-> `docs/v2-device-addressing-and-real-ticket.md` (~400 lines)
-> capturing:
-> - Per-device IRK derivation: each device gets its own IRK as
->   a child of the user's master IRK (or a stand-alone IRK signed
->   by the user IRK). `<user>` addresses the user-level IRK;
->   `<user>.<device-label>` addresses the device-level IRK.
-> - DeviceCapabilityGrant envelope: signed by the user IRK, lists
->   `device_label` + allowed scopes (`install-service`,
->   `vibe-code`, `add-device`, `browse`, plus the demo-specific
->   `demo-provision`).
-> - Schema additions: `paired_sessions.device_label` +
->   `device_capability_grants` table.
-> - Real-ticket integration: at `create-sample-user` time,
->   derive a deterministic user IRK from `HKDF(salt='flagship-
->   demo-v1', info='demo-' + username)`, claim the username with
->   that IRK, mint auth-code + build-ticket against `.com`, pass
->   the install blob to `personalize-iso --blob-json`.
-> - Demo flow integration: mobile clients typing `demo-alice` get
->   the user IRK from the deterministic derivation; clients
->   typing `demo-alice.ipad` get a device-scoped sub-identity
->   with reviewer-friendly capability restrictions (read-only
->   browse vs full install).
-> - File-by-file appendix listing every touch site for the
->   downstream sub-agents (similar to `docs/sample-users.md`'s
->   structure).
->
-> Use the open design questions at the bottom of this prompt to
-> guide the spec; resolve them by writing your best-judgment
-> answer with a note flagging where the operator should sanity-
-> check before implementation. Don't ask mid-spec — capture
-> uncertainty in the doc + flag for owner review at the end.
->
-> Single commit `docs: spec for v2 per-device addressing + real-ticket
-> integration (Plan A Phase F live blocker)`.
->
-> **S3+ — implement the spec** (parallel sub-agents allowed for
-> non-overlapping surface areas; sequential for layered ones).
-> Suggested phase decomposition:
-> - S3.1: Protocol envelopes + canonical-bytes (`packages/protocol`).
->   Single sub-agent, single commit.
-> - S3.2: Storage schema + adapters (D1 migration 0032 + InMemory).
->   Single sub-agent, single commit.
-> - S3.3: Worker — username claim, auth-code, build-ticket admin
->   endpoints + capability checks at every privileged route.
->   Single sub-agent, single commit.
-> - S3.4: CLI refactor — `scripts/sample-user.mjs` mints real
->   ticket via the new admin endpoints + calls `personalize-iso
->   --blob-json`. Single sub-agent, single commit.
-> - S3.5: Mobile surfaces — iOS/Android/webapp render device-
->   label + capability badges; reviewer-friendly demo UI.
->   Single sub-agent, single commit.
->
-> Between S3.x sub-agents, merge to main + re-verify gates. Don't
-> dispatch the next sub-agent until the previous one's verifier
-> is green on main.
->
-> **S4 — live e2e** (operator-driven; agent can't run the SSH
-> dance). The operator runs `node scripts/sample-user.mjs create
-> demo-alice --display "Demo Alice" --region fsn1` ONCE; the
-> snapshot lands; from then on the Worker handles everything.
-> Agent verifies the green-padlock + mobile demo-mode probe via
-> automated checks.
->
-> **Acceptance for Phase F done** (matches the original Phase F
-> bar from `docs/sample-user-vps-plan.md`, expanded for the new
-> device-addressing requirement):
-> 1. `node scripts/sample-user.mjs create demo-alice --display
->    "Demo Alice"` completes with stdout JSON `{"username":
->    "demo-alice","ready":true,"snapshotId":"<numeric>"}`.
-> 2. `curl /api/users/demo-alice/pods` shows the daemon.
-> 3. `/api/users/check` returns `demoServer` block.
-> 4. `/api/dev/sample-user/demo-alice/connect` provisions from
->    snapshot in <60s.
-> 5. iOS / webapp, type `demo-alice`, advances to real-device
->    path with green padlock at `home.demo-alice.flagship.services`.
-> 6. iOS / webapp, type `demo-alice.reviewer`, advances to a
->    device-scoped sub-identity with restricted capabilities
->    visible in the UI (e.g. "this device cannot install
->    services").
-> 7. Idle teardown destroys VPS; re-connect re-provisions.
-> 8. `delete-sample-user` cleans up snapshot + R2 + D1.
->
-> **Constraints (per CLAUDE.md + prior session)**:
-> - No `Co-Authored-By: Claude` trailer on commits — user
->   preference.
-> - Imperative commit subjects; body explains WHY not WHAT.
-> - `npx tsc -b` + `npx vitest run` + (when mobile is touched)
->   xcodebuild + `./gradlew test` must stay green.
-> - `apps/com` isn't in workspace `tsc -b` references; also run
->   `npx tsc -p apps/com/tsconfig.json --noEmit` to catch the
->   bugs `-b` misses.
-> - Wrangler 4.x has NO `r2 object presign` (use dev-url
->   public bucket).
-> - The operator's `HCLOUD_TOKEN` + `FLAGSHIP_ADMIN_SECRET` are
->   in `~/.zshrc` (per session close); the Worker now has
->   `HCLOUD_TOKEN` too (per the prereqs above).
->
-> Walk slowly. Verify each step. Commit after each phase. Use
-> sub-agents in worktrees for the implementation phases (S3.x),
-> in-context for the spec phase (S2) and the small /pods fix
-> (S1).
+### 1. Flagship Burner (Mac / Win / Linux)
+
+The single tool a real user installs. Replaces "download personalized ISO + balenaEtcher" with "download stock Ubuntu ISO once + Burner + recipe". See `project_flagship_burner.md` in memory for the full threat model + requirements.
+
+- **CLI prototype first** (`flagship-burn` — single Go or Rust static binary, works on all three OSes).
+  - Reads recipe (copy-paste OR JSON file)
+  - Verifies stock Ubuntu/Debian ISO against Canonical/Debian GPG signature
+  - Writes ISO to USB
+  - Injects cloud-init `user-data` overlay so first boot runs flagship-bootstrap
+  - **Auto-shreds recipe file** after successful flash (consumes-and-deletes)
+- **Distro allowlist with pinned SHA + GPG fingerprint** baked into the binary
+- **Native GUIs** layered on top:
+  - Mac: SwiftUI or Tauri-on-Rust wrapper
+  - Windows: signed exe, admin elevation for raw disk
+  - Linux: AppImage + Flatpak
+- **Reproducible builds + signed releases** — users can verify the binary
+- **Copy-paste recipe + download-JSON both supported** — copy-paste is preferred for same-device flow (no file at rest)
+- **Test on the operator's iPhone + Linux laptop combo** until perfect
+
+### 2. Graphical end-to-end test of the cloud demo
+
+- iOS Simulator + TestFlight build pointing at `flagshipserver.com`
+- Walk the full flow: build code → claim → admin-cloud-init-now → registration arrives → user sees pod alive in iOS app
+- Stress edge cases: network drops mid-bootstrap, daemon crash on first boot, recipe expired, recipe replayed, dupe install
+- Capture screenshots for marketing / TestFlight metadata
+
+### 3. Generalize to other app platforms
+
+- Android (Kotlin) parity
+- Web app at `web.flagshipserver.com` exercising the same backend
+- All three render the same `DeviceCapabilityBlock` + scope buttons consistently
+
+### 4. Real-metal install
+
+- Use the Burner (item 1) to write a USB
+- Boot a real laptop or thinkmini from it
+- Confirm the daemon registers from the user's network (not Hetzner)
+- This is the **proof point for opening the site publicly**
+
+### 5. Vibecode "hello world" with user access
+
+- Show that a fresh-installed pod can run a tiny user-authored service end-to-end
+- Phone-mediated auth → daemon serves "hello, harry" with green padlock at `home.harry.flagship.services`
+- Foundational demo for the "vibecode an app on your pod" pillar
+- Use the existing vibecode infrastructure (multi-turn + per-app env vars + signed orders)
+
+### 6. Stretch / nice-to-have
+
+- Recipe TTL audit — make sure phone-issued tickets actually expire (replay-protect spec)
+- Auto-promote W13 row even when daemon-status (not just servers) registers — current promotion uses `servers` table but a robust cron also handles the `lastReported` signal
+- Build-relay reliability under load
 
 ---
 
-## Locked Decisions (do not re-litigate)
+## Pinned threat reminders
 
-1. **SSH-runner location**: operator laptop, one-time per demo
-   user. Acceptable because each `create-sample-user` is rare
-   (one per demo user, ever) and the Worker handles every
-   subsequent operation without the laptop.
+- **Recipe file at rest** is a real attack surface. Burner ships copy-paste as default; download-JSON for cross-device; auto-shred after consume.
+- **CA endorsement** must be re-signed before `2026-06-02T22:40:29.858Z` (see `[[project_resume_2026_05_16]]`). Don't let it expire without renewing.
+- **No Co-Authored-By trailer** on commits.
 
-2. **Demo IRK model**: per-device IRK with corporate-style
-   scopes. The `harry` vs `harry.ipad` two-level addressing is
-   implemented as part of Phase F (not deferred). Demos
-   showcase the capability surface.
+## Where to dig
 
-3. **Post-Phase F priority**: Phase G — the §S live exercises
-   from `docs/build-tasks.md`. NOT polish, NOT marketing.
-
----
-
-## Open design questions (S2 spec phase should resolve)
-
-1. **Device label assignment**: at pairing time the user types a
-   label (`ipad`, `work-laptop`)? Or auto-derived from a stable
-   hardware identifier? Or both (auto-suggest + editable)?
-
-2. **Default capability set for a fresh device**: when a new
-   device is admitted, does it default to FULL capabilities
-   (user explicitly restricts later) or RESTRICTED (user
-   explicitly grants)? Trade-off: usability vs corporate
-   security posture.
-
-3. **Demo-account scoping**: when multiple reviewers type
-   `demo-alice` simultaneously, do they share state (one VPS,
-   one set of installed apps) or each get a sub-identity
-   `demo-alice.<reviewer-derived-label>` with isolated state?
-   The Hetzner-snapshot architecture currently supports ONE
-   server per demo user; isolated sub-sandboxes would require
-   per-device snapshots (multiplies cost + complexity).
-
-4. **DeviceCapabilityGrant revocation**: how is a grant
-   revoked? Mint a new grant with smaller scope and the daemon
-   honors most-recent? Explicit revocation envelope? CAS on
-   D1?
-
-5. **Pre-rename pivot decision**: should we ALSO refactor the
-   existing user-key model to use the explicit two-level
-   addressing for ALL accounts (not just demos), even
-   single-device ones? Long-term tax of dual-mode logic
-   vs short-term refactor cost. Probably defer to v2 proper.
-
----
-
-## Hard requirements to satisfy before declaring Phase F done
-
-(Same list as the original prompt, expanded for the new
-device-addressing acceptance criteria.)
-
-1. `node scripts/sample-user.mjs create demo-alice --display
-   "Demo Alice" --region fsn1` completes with stdout JSON:
-   `{"username":"demo-alice","ready":true,"snapshotId":"<numeric>"}`.
-2. `curl https://flagshipserver.com/api/users/demo-alice/pods`
-   shows `home.demo-alice.flagship.services` in the response
-   (HTTP 200, not 500).
-3. `curl -X POST https://flagshipserver.com/api/users/check
-   -H 'content-type: application/json'
-   -d '{"username":"demo-alice"}'` returns a `demoServer`
-   block with `status: "none"` (post-snapshot, pre-connect).
-4. POSTing to `/api/dev/sample-user/demo-alice/connect`
-   provisions a fresh VPS from the snapshot in <60s; status
-   transitions `provisioning` → `up`.
-5. iOS simulator or webapp, typed `demo-alice`, advances to
-   the real-device path (NOT legacy 3-fixtures) and shows the
-   green padlock at `home.demo-alice.flagship.services`.
-6. iOS simulator or webapp, typed `demo-alice.reviewer`,
-   advances to a device-scoped sub-identity with restricted
-   capabilities visible in the UI ("this device cannot
-   install services" or similar).
-7. Idle teardown (30 min default) destroys the VPS; the next
-   `/connect` re-provisions from the snapshot in <60s.
-8. `node scripts/sample-user.mjs delete demo-alice` tears down
-   the snapshot + R2 ISO + D1 row cleanly.
-
-## Recovery state if anything goes sideways
-
-- The orphan-IP cleanup at start of every CLI invocation
-  handles primary-IP quota debt automatically.
-- The destroy-on-failure inside `HetznerProvider.provision`
-  handles partial-VPS cleanup automatically.
-- Heartbeat lines every 30s during `awaitDaemonReady` so the
-  operator knows the CLI isn't frozen.
-- The personalize-iso cache at `~/.cache/flagship-demo-isos/`
-  is intact; first run after the --blob-json refactor will
-  rebuild the cache entry (different bytes, different sha8 →
-  different R2 key, expected).
-- If Hetzner has capacity issues in `fsn1`, `--region nbg1` /
-  `hel1` are the proven EU alternatives. `ash`/`hil` are
-  US-only with CCX (dedicated; needs quota grant) or CAX
-  (ARM; ISO incompatible).
+- W13 design: `docs/cloud-init-direct-provisioning.md`
+- W13 handler: `packages/control-plane/src/demoUsersAdminCloudInit.ts`
+- Bootstrap script (the runcmd that runs on the user's VPS): inline in `demoUsersAdminCloudInit.ts`'s `buildCloudConfigUserData`
+- Burner spec: memory `project_flagship_burner.md`
+- Cron fixes: `apps/com/src/scheduled.ts`, `packages/control-plane/src/demoUsers.ts`
+- Old W12 d-i path (kept for reference): `packages/installer-netboot/` + `scripts/build-flagship-netboot-iso.sh`
