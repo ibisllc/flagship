@@ -176,7 +176,7 @@ export function synthesizeBlob(args: {
   };
   const userSig = signAuthCode(code, irk);
   const blob: InstallBlob = {
-    version: 1,
+    version: 2,
     serverDomain,
     username: args.username,
     serverName: args.serverName,
@@ -184,8 +184,6 @@ export function synthesizeBlob(args: {
     registrationUrl: "https://flagship.services/api/server/register",
     authCode: code,
     authCodeUserSignature: userSig,
-    issuedAt,
-    expiresAt,
     installerGitRef: "main",
     rckPubKey: rckPub,
   };

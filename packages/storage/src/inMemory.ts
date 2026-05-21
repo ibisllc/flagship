@@ -13,8 +13,6 @@ import type {
   EntitlementRevocationStorage,
   AuthCodeRecord,
   AuthCodeStorage,
-  BuildTicketRecord,
-  BuildTicketStorage,
   InstallEvent,
   InstallEventStorage,
   LlmPromoLifetimeRecord,
@@ -287,35 +285,6 @@ export class InMemoryAuthCodeStorage implements AuthCodeStorage {
     r.status = "revoked";
     r.revokedAt = now;
     return { ok: true as const };
-  }
-}
-
-export class InMemoryBuildTicketStorage implements BuildTicketStorage {
-  private byCode = new Map<string, BuildTicketRecord>();
-  async put(rec: BuildTicketRecord) {
-    if (this.byCode.has(rec.code)) {
-      return { ok: false as const, reason: "code collision" };
-    }
-    this.byCode.set(rec.code, { ...rec });
-    return { ok: true as const };
-  }
-  async get(code: string) {
-    const r = this.byCode.get(code);
-    return r ? { ...r } : undefined;
-  }
-  async refresh(code: string, expiresAt: number) {
-    const r = this.byCode.get(code);
-    if (!r) return { ok: false as const, reason: "unknown code" };
-    if (r.status === "revoked") return { ok: false as const, reason: "revoked" };
-    r.expiresAt = expiresAt;
-    return { ok: true as const };
-  }
-  async markRedeemed(code: string, now: number) {
-    const r = this.byCode.get(code);
-    if (!r) return;
-    r.status = "redeemed";
-    r.redeemedAt = now;
-    r.redemptions += 1;
   }
 }
 
@@ -1024,7 +993,6 @@ export class InMemoryStorage implements Storage {
   usernameAliases = new InMemoryUsernameAliasStorage();
   daemonStatus = new InMemoryDaemonStatusStorage();
   authCodes = new InMemoryAuthCodeStorage();
-  buildTickets = new InMemoryBuildTicketStorage();
   servers = new InMemoryServerStorage();
   routing = new InMemoryRoutingStorage();
   installEvents = new InMemoryInstallEventStorage();

@@ -94,9 +94,11 @@ describe("Debian preseed.cfg (W12)", () => {
 
   it("late_command copies our scripts in and exec's via in-target", () => {
     expect(src).toContain("d-i preseed/late_command string");
-    expect(src).toContain("/cdrom/flagship/install.sh");
-    expect(src).toContain("/cdrom/flagship/parse-trailer.sh");
-    expect(src).toContain("/cdrom/flagship/late-command.sh");
+    // Paths are /flagship/ now (initrd root), not /cdrom/flagship/
+    // (mini.iso doesn't auto-mount the boot medium at /cdrom).
+    expect(src).toContain("/flagship/install.sh");
+    expect(src).toContain("/flagship/parse-trailer.sh");
+    expect(src).toContain("/flagship/late-command.sh");
     // in-target = run inside the chrooted /target where the LUKS root +
     // /dev/sda are both visible.
     expect(src).toContain("in-target /root/late-command.sh");

@@ -48,13 +48,11 @@ import {
 } from "@flagship/protocol";
 import type {
   AuthCodeStorage,
-  BuildTicketStorage,
   DemoUsersStorage,
   DeviceCapabilityGrantStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
-import { generateTicketCode } from "./buildTicket.js";
 import {
   deriveDemoDelegatedKey,
   deriveDemoRckKey,
@@ -77,7 +75,6 @@ export interface DemoCloudInitDeps {
   storage: DemoUsersStorage;
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
-  buildTickets: BuildTicketStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   hetzner: ProvisioningHetznerClient;
   demoIrkKek: Uint8Array;
@@ -539,7 +536,7 @@ export async function handleAdminCloudInitNow(
   }
 
   const blob: InstallBlob = {
-    version: 1,
+    version: 2,
     serverDomain,
     username: u,
     serverName,
@@ -547,35 +544,15 @@ export async function handleAdminCloudInitNow(
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature: authCodeSig,
-    issuedAt,
-    expiresAt,
     installerGitRef,
     rckPubKey: rck.publicKey,
   };
   const blobSig = signInstallBlob(blob, userIrk);
   const blobJson = installBlobJsonShortString(blob, blobSig);
 
-  // Build-ticket so /redeem still works (operator convenience). Same
-  // shape as W11.
-  let code = "";
-  for (let attempts = 0; attempts < 8 && !code; attempts++) {
-    const candidate = generateTicketCode(rand);
-    const btResult = await deps.buildTickets.put({
-      code: candidate,
-      blobJson,
-      blobSignatureHex: bytesToHex(blobSig),
-      username: u,
-      serverDomain,
-      createdAt: now,
-      expiresAt: now + 60 * 60_000,
-      status: "active",
-      redemptions: 0,
-    });
-    if (btResult.ok) code = candidate;
-  }
-  if (!code) {
-    return { status: 500, body: { error: "could not allocate build-ticket code" } };
-  }
+  // No build-ticket emission — QR-pipe is the only flow; the cloud-
+  // init demo path embeds the signed blob directly into the VPS's
+  // user_data, so .com never stores the blob at rest.
 
   // (Re-)mint the primary DeviceCapabilityGrant — same revoke-then-put
   // dance as handleAdminSnapshotNow so re-running admin-cloud-init-now
@@ -659,7 +636,6 @@ export async function handleAdminCloudInitNow(
     body: {
       state: "provisioning",
       activeServerId: prov.serverId,
-      ticketCode: code,
       ipv4: prov.ipv4,
       // Diagnostic — surfaces the actual image the Worker requested so
       // the operator can confirm cloud-init-direct is in play and not
@@ -675,7 +651,7 @@ export async function handleAdminCloudInitNow(
 // ──────────────────────────────────────────────────────────────────────
 
 interface InstallBlobJsonShort {
-  version: number;
+  version: 2;
   serverDomain: string;
   username: string;
   serverName: string;
@@ -693,15 +669,13 @@ interface InstallBlobJsonShort {
     expiresAt: number;
   };
   authCodeUserSignature: string;
-  issuedAt: number;
-  expiresAt: number;
   installerGitRef: string;
   rckPubKey: string;
 }
 
 function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): string {
   const json: InstallBlobJsonShort = {
-    version: 1,
+    version: 2,
     serverDomain: b.serverDomain,
     username: b.username,
     serverName: b.serverName,
@@ -719,8 +693,6 @@ function installBlobJsonShortString(b: InstallBlob, _sig: Uint8Array): string {
       expiresAt: b.authCode.expiresAt,
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
-    issuedAt: b.issuedAt,
-    expiresAt: b.expiresAt,
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
   };

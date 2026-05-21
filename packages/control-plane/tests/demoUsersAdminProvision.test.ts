@@ -20,7 +20,6 @@ import { ed } from "@flagship/protocol";
 import {
   InMemoryAuditEventStorage,
   InMemoryAuthCodeStorage,
-  InMemoryBuildTicketStorage,
   InMemoryDemoUsersStorage,
   InMemoryDeviceCapabilityGrantStorage,
   InMemoryUsernameStorage,
@@ -159,7 +158,6 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
     storage,
     usernames,
     authCodes: new InMemoryAuthCodeStorage(),
-    buildTickets: new InMemoryBuildTicketStorage(),
     deviceCapabilityGrants: new InMemoryDeviceCapabilityGrantStorage(),
     isoTempBucket: r2helpers.isoTempBucket,
     isoTempPublicBase: "https://pub-xyz.r2.dev",
@@ -234,13 +232,11 @@ describe("handleAdminSnapshotNow (W11)", () => {
       state: string;
       activeServerId: string;
       isoR2Key: string;
-      ticketCode: string;
       ipv4: string | null;
     };
     expect(body.state).toBe("provisioning");
     expect(body.activeServerId).toBe("srv-abc");
     expect(body.isoR2Key).toMatch(/^demo-isos\/demo-alice-[0-9a-f]{8}\.trailer$/);
-    expect(body.ticketCode.length).toBeGreaterThan(0);
 
     // demo_users row is stamped + transitioned to provisioning.
     const row = await deps.storage.get("demo-alice");

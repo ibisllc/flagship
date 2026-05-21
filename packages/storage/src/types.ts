@@ -104,23 +104,6 @@ export interface AuthCodeRecord {
   revokedAt?: number;
 }
 
-export type BuildTicketStatus = "active" | "redeemed" | "revoked";
-
-export interface BuildTicketRecord {
-  code: string;
-  /** The signed InstallBlob serialized as JSON. Stored opaquely; readers
-   *  parse it with @flagship/iso-personalizer's installBlobFromJson. */
-  blobJson: string;
-  blobSignatureHex: string;
-  username: string;
-  serverDomain: string;
-  createdAt: number;
-  expiresAt: number;
-  status: BuildTicketStatus;
-  redeemedAt?: number;
-  redemptions: number;
-}
-
 export interface ServerRecord {
   serverDomain: string;
   username: string;
@@ -245,14 +228,6 @@ export interface AuthCodeStorage {
   /** Atomic active+now<=expiresAt → used. Returns the post-state. */
   markUsed(serial: string, now: number): Promise<{ ok: true } | { ok: false; reason: string }>;
   markRevoked(serial: string, now: number): Promise<{ ok: true } | { ok: false; reason: string }>;
-}
-
-export interface BuildTicketStorage {
-  put(rec: BuildTicketRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
-  get(code: string): Promise<BuildTicketRecord | undefined>;
-  refresh(code: string, expiresAt: number): Promise<{ ok: true } | { ok: false; reason: string }>;
-  /** Increment redemption count and stamp redeemedAt; idempotent for the same now. */
-  markRedeemed(code: string, now: number): Promise<void>;
 }
 
 export interface ServerStorage {
@@ -675,7 +650,6 @@ export interface Storage {
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
-  buildTickets: BuildTicketStorage;
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;

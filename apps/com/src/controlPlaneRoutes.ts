@@ -18,10 +18,6 @@ import {
   handleAuthCodeIssue,
   handleAuthCodeLookup,
   handleAuthCodeRevoke,
-  handleBuildTicketIssue,
-  handleBuildTicketLookup,
-  handleBuildTicketRedeem,
-  handleBuildTicketRefresh,
   handleCaCert,
   handleCleanupApex,
   handleCompleteRePair,
@@ -324,10 +320,6 @@ const ROUTE_RE = {
   AUTH_CODE_ISSUE: /^\/api\/auth-code\/issue$/,
   AUTH_CODE_REVOKE: /^\/api\/auth-code\/([^/]+)\/revoke$/,
   AUTH_CODE_LOOKUP: /^\/api\/auth-code\/([^/]+)$/,
-  BUILD_TICKET_ISSUE: /^\/api\/build-tickets\/issue$/,
-  BUILD_TICKET_REDEEM: /^\/api\/build-tickets\/redeem$/,
-  BUILD_TICKET_REFRESH: /^\/api\/build-tickets\/([^/]+)\/refresh$/,
-  BUILD_TICKET_LOOKUP: /^\/api\/build-tickets\/([^/]+)$/,
   SERVER_REGISTER: /^\/api\/server\/register$/,
   SERVER_LOOKUP: /^\/api\/server\/by-domain\/([^/]+)$/,
   SERVER_REVOKE_BY_SELF: /^\/api\/server\/by-domain\/([^/]+)\/revoke$/,
@@ -545,40 +537,9 @@ export async function tryControlPlane(
     );
   }
 
-  if (method === "POST" && ROUTE_RE.BUILD_TICKET_ISSUE.test(path)) {
-    return finish(
-      await handleBuildTicketIssue(
-        { storage: storage.buildTickets, usernames: storage.usernames },
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "POST" && ROUTE_RE.BUILD_TICKET_REDEEM.test(path)) {
-    return finish(
-      await handleBuildTicketRedeem(
-        { storage: storage.buildTickets, usernames: storage.usernames },
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "POST" && (m = path.match(ROUTE_RE.BUILD_TICKET_REFRESH))) {
-    return finish(
-      await handleBuildTicketRefresh(
-        { storage: storage.buildTickets, usernames: storage.usernames },
-        decodeURIComponent(m[1]!),
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "GET" && (m = path.match(ROUTE_RE.BUILD_TICKET_LOOKUP))) {
-    if (m[1] === "issue" || m[1] === "redeem") return null;
-    return finish(
-      await handleBuildTicketLookup(
-        { storage: storage.buildTickets, usernames: storage.usernames },
-        decodeURIComponent(m[1]!),
-      ),
-    );
-  }
+  // Build-ticket flow removed (QR-pipe is the only path). The phone
+  // posts the signed blob directly to a per-session DO and the
+  // desktop reads from it; .com no longer stores the blob at rest.
 
   if (method === "POST" && ROUTE_RE.SERVER_REGISTER.test(path)) {
     // Prefer the broker (production posture). Fall back to direct

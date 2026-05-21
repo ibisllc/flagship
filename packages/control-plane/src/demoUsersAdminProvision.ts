@@ -48,13 +48,11 @@ import {
 import { streamPersonalize } from "@flagship/iso-personalizer";
 import type {
   AuthCodeStorage,
-  BuildTicketStorage,
   DemoUsersStorage,
   DeviceCapabilityGrantStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
-import { generateTicketCode } from "./buildTicket.js";
 import {
   deriveDemoDelegatedKey,
   deriveDemoRckKey,
@@ -109,7 +107,6 @@ export interface DemoProvisionDeps {
   storage: DemoUsersStorage;
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
-  buildTickets: BuildTicketStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   /** R2 bucket the per-demo TRAILER (~1 KB) is written to. Cloud-init
    *  wgets the trailer from here over the public dev-url base + cats
@@ -383,7 +380,7 @@ export async function handleAdminSnapshotNow(
   }
 
   const blob: InstallBlob = {
-    version: 1,
+    version: 2,
     serverDomain,
     username: u,
     serverName,
@@ -391,36 +388,15 @@ export async function handleAdminSnapshotNow(
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature: authCodeSig,
-    issuedAt,
-    expiresAt,
     installerGitRef: "main",
     rckPubKey: rck.publicKey,
   };
   const blobSig = signInstallBlob(blob, userIrk);
 
-  // Persist a build-ticket so the conventional /redeem path still
-  // works for an operator that wants to share the install code.
-  let code = "";
-  for (let attempts = 0; attempts < 8 && !code; attempts++) {
-    const candidate = generateTicketCode(rand);
-    const btResult = await deps.buildTickets.put({
-      code: candidate,
-      blobJson: JSON.stringify(installBlobToJsonShort(blob)),
-      blobSignatureHex: bytesToHex(blobSig),
-      username: u,
-      serverDomain,
-      createdAt: now,
-      expiresAt: now + 60 * 60_000,
-      status: "active",
-      redemptions: 0,
-    });
-    if (btResult.ok) code = candidate;
-  }
-  if (!code) {
-    return { status: 500, body: { error: "could not allocate build-ticket code" } };
-  }
+  // No build-ticket emission — QR-pipe is the only flow; cloud-init
+  // embeds the signed blob directly in user_data.
 
-  // Also (re-)mint the primary DeviceCapabilityGrant. The Worker's
+  // (Re-)mint the primary DeviceCapabilityGrant. The Worker's
   // re-issuance flow is "revoke active then put new" — preserves the
   // semantics admin-claim-and-issue uses.
   const existing = await deps.deviceCapabilityGrants.getActiveForUserLabel(
@@ -540,7 +516,6 @@ export async function handleAdminSnapshotNow(
       state: "provisioning",
       activeServerId: prov.serverId,
       isoR2Key,
-      ticketCode: code,
       ipv4: prov.ipv4,
     },
   };
@@ -557,7 +532,7 @@ export async function handleAdminSnapshotNow(
 // ──────────────────────────────────────────────────────────────────────
 
 interface InstallBlobJsonShort {
-  version: number;
+  version: 2;
   serverDomain: string;
   username: string;
   serverName: string;
@@ -575,15 +550,13 @@ interface InstallBlobJsonShort {
     expiresAt: number;
   };
   authCodeUserSignature: string;
-  issuedAt: number;
-  expiresAt: number;
   installerGitRef: string;
   rckPubKey: string;
 }
 
 function installBlobToJsonShort(b: InstallBlob): InstallBlobJsonShort {
   return {
-    version: 1,
+    version: 2,
     serverDomain: b.serverDomain,
     username: b.username,
     serverName: b.serverName,
@@ -601,8 +574,6 @@ function installBlobToJsonShort(b: InstallBlob): InstallBlobJsonShort {
       expiresAt: b.authCode.expiresAt,
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
-    issuedAt: b.issuedAt,
-    expiresAt: b.expiresAt,
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
   };

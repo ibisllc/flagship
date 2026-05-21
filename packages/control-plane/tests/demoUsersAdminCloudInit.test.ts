@@ -18,7 +18,6 @@
 import { describe, expect, it } from "vitest";
 import {
   InMemoryAuthCodeStorage,
-  InMemoryBuildTicketStorage,
   InMemoryDemoUsersStorage,
   InMemoryDeviceCapabilityGrantStorage,
   InMemoryUsernameStorage,
@@ -110,7 +109,6 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
     storage,
     usernames,
     authCodes: new InMemoryAuthCodeStorage(),
-    buildTickets: new InMemoryBuildTicketStorage(),
     deviceCapabilityGrants: new InMemoryDeviceCapabilityGrantStorage(),
     hetzner,
     demoIrkKek: KEK,
@@ -236,13 +234,11 @@ describe("handleAdminCloudInitNow (W13)", () => {
     const body = r.body as {
       state: string;
       activeServerId: string;
-      ticketCode: string;
       ipv4: string | null;
       image: string;
     };
     expect(body.state).toBe("provisioning");
     expect(body.activeServerId).toBe("srv-ci-abc");
-    expect(body.ticketCode.length).toBeGreaterThan(0);
     expect(body.image).toBe("debian-12");
 
     // The demo_users row transitioned. isoR2Key is null on this path.

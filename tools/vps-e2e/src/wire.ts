@@ -146,16 +146,15 @@ export interface InstallBlobParts {
   registrationUrl: string;
   authCode: AuthCode;
   authCodeUserSignatureHex: string;
-  issuedAt: number;
-  expiresAt: number;
   installerGitRef: string;
   rckPubKeyHex: string;
 }
 
 export function installBlobCanonical(b: InstallBlobParts): Uint8Array {
+  // v2: blob.issuedAt + blob.expiresAt dropped from canonical bytes.
   return canonical([
     TAG_INSTALL_BLOB,
-    1,
+    2,
     b.serverDomain,
     b.username,
     b.serverName,
@@ -164,45 +163,9 @@ export function installBlobCanonical(b: InstallBlobParts): Uint8Array {
     b.authCode.serial,
     b.authCode.userPubKeyHex,
     b.authCodeUserSignatureHex,
-    b.issuedAt,
-    b.expiresAt,
     b.installerGitRef,
     b.rckPubKeyHex,
   ]);
 }
 
-/** Exact /api/build-tickets/issue body. */
-export function buildTicketIssueBody(
-  b: InstallBlobParts,
-  blobSignatureHex: string,
-  ttlMs: number,
-): unknown {
-  return {
-    blob: {
-      version: 1,
-      serverDomain: b.serverDomain,
-      username: b.username,
-      serverName: b.serverName,
-      phoneDelegatedPubKey: b.phoneDelegatedPubKeyHex,
-      registrationUrl: b.registrationUrl,
-      authCode: {
-        version: b.authCode.version,
-        serial: b.authCode.serial,
-        username: b.authCode.username,
-        serverName: b.authCode.serverName,
-        serverDomain: b.authCode.serverDomain,
-        delegatedPubKey: b.authCode.delegatedPubKeyHex,
-        userPubKey: b.authCode.userPubKeyHex,
-        issuedAt: b.authCode.issuedAt,
-        expiresAt: b.authCode.expiresAt,
-      },
-      authCodeUserSignature: b.authCodeUserSignatureHex,
-      issuedAt: b.issuedAt,
-      expiresAt: b.expiresAt,
-      installerGitRef: b.installerGitRef,
-      rckPubKey: b.rckPubKeyHex,
-    },
-    signature: blobSignatureHex,
-    ttlMs,
-  };
-}
+// buildTicketIssueBody removed — QR-pipe is the only flow.

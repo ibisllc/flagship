@@ -28,7 +28,6 @@ import {
 import {
   InMemoryAuditEventStorage,
   InMemoryAuthCodeStorage,
-  InMemoryBuildTicketStorage,
   InMemoryDemoUsersStorage,
   InMemoryDeviceCapabilityGrantStorage,
   InMemoryUsernameStorage,
@@ -89,7 +88,6 @@ async function mkHarness(opts: { seed?: boolean } = {}): Promise<Harness> {
     sshKeyId: 42,
     audit: new InMemoryAuditEventStorage(),
     authCodes: new InMemoryAuthCodeStorage(),
-    buildTickets: new InMemoryBuildTicketStorage(),
     deviceCapabilityGrants: new InMemoryDeviceCapabilityGrantStorage(),
     demoIrkKek: KEK_BYTES,
     random,
@@ -200,11 +198,11 @@ describe("handleAdminClaimAndIssue", () => {
       };
     };
 
-    // 0. Regression: `blob` is a structured object with `version: 1`
+    // 0. Regression: `blob` is a structured object with `version: 2`
     //    at the top level — NOT a JSON-encoded string. The
     //    personalize-iso CLI requires this shape.
     expect(typeof body.blob).toBe("object");
-    expect(body.blob.version).toBe(1);
+    expect(body.blob.version).toBe(2);
     expect(body.blob.authCode.version).toBe(1);
 
     const userIrk = deriveDemoUserIrk(KEK_BYTES, "demo-alice");
@@ -219,7 +217,7 @@ describe("handleAdminClaimAndIssue", () => {
     // 2. Blob signature verifies under the derived User IRK pub.
     const blobJson = body.blob;
     const blob: InstallBlob = {
-      version: 1,
+      version: 2,
       serverDomain: blobJson.serverDomain,
       username: blobJson.username,
       serverName: blobJson.serverName,
@@ -237,8 +235,6 @@ describe("handleAdminClaimAndIssue", () => {
         expiresAt: blobJson.authCode.expiresAt,
       },
       authCodeUserSignature: hexToBytes(blobJson.authCodeUserSignature),
-      issuedAt: blobJson.issuedAt,
-      expiresAt: blobJson.expiresAt,
       installerGitRef: blobJson.installerGitRef,
       rckPubKey: hexToBytes(blobJson.rckPubKey),
     };
@@ -252,12 +248,10 @@ describe("handleAdminClaimAndIssue", () => {
     expect(ac!.username).toBe("demo-alice");
     expect(ac!.status).toBe("active");
 
-    // 4. BuildTicket stamped under the returned code.
-    const bt = await h.deps.buildTickets.get(body.code);
-    expect(bt).toBeDefined();
-    expect(bt!.username).toBe("demo-alice");
+    // BuildTicket flow removed — QR-pipe is the only path; the
+    // signed blob is returned inline and never stored at rest on .com.
 
-    // 5. Primary grant verifies AND is persisted.
+    // 4. Primary grant verifies AND is persisted.
     expect(body.primaryGrant.deviceLabel).toBe("primary");
     expect(body.primaryGrant.devicePubKey).toBe(userPubHex);
     expect(body.primaryGrant.scopes).toEqual([..._internalDefaultDemoPrimaryScopes]);
@@ -289,8 +283,8 @@ describe("handleAdminClaimAndIssue", () => {
       username: "demo-alice",
       serverName: "home",
     });
-    const b1 = (r1.body as { blob: { version: 1; serverDomain: string; serverName: string; username: string; phoneDelegatedPubKey: string; rckPubKey: string; authCode: { userPubKey: string; delegatedPubKey: string } } }).blob;
-    const b2 = (r2.body as { blob: { version: 1; serverDomain: string; serverName: string; username: string; phoneDelegatedPubKey: string; rckPubKey: string; authCode: { userPubKey: string; delegatedPubKey: string } } }).blob;
+    const b1 = (r1.body as { blob: { version: 2; serverDomain: string; serverName: string; username: string; phoneDelegatedPubKey: string; rckPubKey: string; authCode: { userPubKey: string; delegatedPubKey: string } }}).blob;
+    const b2 = (r2.body as { blob: { version: 2; serverDomain: string; serverName: string; username: string; phoneDelegatedPubKey: string; rckPubKey: string; authCode: { userPubKey: string; delegatedPubKey: string } }}).blob;
     expect(b1.username).toBe(b2.username);
     expect(b1.serverName).toBe(b2.serverName);
     expect(b1.serverDomain).toBe(b2.serverDomain);

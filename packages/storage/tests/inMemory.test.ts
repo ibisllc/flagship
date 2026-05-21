@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InMemoryStorage } from "../src/inMemory.js";
-import type { AuthCodeRecord, BuildTicketRecord } from "../src/types.js";
+import type { AuthCodeRecord } from "../src/types.js";
 
 function authCode(serial: string, status: AuthCodeRecord["status"] = "active"): AuthCodeRecord {
   return {
@@ -15,20 +15,6 @@ function authCode(serial: string, status: AuthCodeRecord["status"] = "active"): 
     expiresAt: 1_700_000_000_000 + 3_600_000,
     status,
     recordedAt: 1_700_000_000_000,
-  };
-}
-
-function ticket(code: string): BuildTicketRecord {
-  return {
-    code,
-    blobJson: '{"v":1}',
-    blobSignatureHex: "33".repeat(64),
-    username: "harry",
-    serverDomain: "home.harry.flagship.services",
-    createdAt: 1_700_000_000_000,
-    expiresAt: 1_700_000_000_000 + 3_600_000,
-    status: "active",
-    redemptions: 0,
   };
 }
 
@@ -86,19 +72,6 @@ describe("InMemoryStorage", () => {
     expect(await s.authCodes.markRevoked("S003", 1)).toEqual({ ok: true });
     expect(await s.authCodes.markRevoked("S003", 2)).toEqual({ ok: true });
     expect(await s.authCodes.markUsed("S003", 1_700_000_500_000)).toMatchObject({ ok: false });
-  });
-
-  it("build tickets: put/get/refresh/markRedeemed all behave", async () => {
-    const s = new InMemoryStorage();
-    await s.buildTickets.put(ticket("ABCD-EFGH-JKMN"));
-    const before = await s.buildTickets.get("ABCD-EFGH-JKMN");
-    expect(before?.expiresAt).toBe(1_700_000_000_000 + 3_600_000);
-    await s.buildTickets.refresh("ABCD-EFGH-JKMN", 1_800_000_000_000);
-    expect((await s.buildTickets.get("ABCD-EFGH-JKMN"))?.expiresAt).toBe(1_800_000_000_000);
-    await s.buildTickets.markRedeemed("ABCD-EFGH-JKMN", 1_700_000_500_000);
-    expect((await s.buildTickets.get("ABCD-EFGH-JKMN"))?.redemptions).toBe(1);
-    await s.buildTickets.markRedeemed("ABCD-EFGH-JKMN", 1_700_000_600_000);
-    expect((await s.buildTickets.get("ABCD-EFGH-JKMN"))?.redemptions).toBe(2);
   });
 
   it("servers: put/get/listForUser/revoke", async () => {

@@ -123,7 +123,8 @@ export function parseTrailer(image: Uint8Array): ParsedTrailer | null {
 }
 
 interface InstallBlobJson {
-  version: 1;
+  /** v2: blob.issuedAt + blob.expiresAt dropped. authCode.expiresAt is the sole TTL. */
+  version: 2;
   serverDomain: string;
   username: string;
   serverName: string;
@@ -141,8 +142,6 @@ interface InstallBlobJson {
     expiresAt: number;
   };
   authCodeUserSignature: string;
-  issuedAt: number;
-  expiresAt: number;
   installerGitRef: string;
   rckPubKey: string;
 }
@@ -179,18 +178,16 @@ export function installBlobToJson(b: InstallBlob): InstallBlobJson {
       expiresAt: b.authCode.expiresAt,
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
-    issuedAt: b.issuedAt,
-    expiresAt: b.expiresAt,
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
   };
 }
 
 export function installBlobFromJson(j: InstallBlobJson): InstallBlob {
-  if (j.version !== 1) throw new Error("unsupported InstallBlob version");
+  if (j.version !== 2) throw new Error("unsupported InstallBlob version");
   if (j.authCode.version !== 1) throw new Error("unsupported AuthCode version");
   return {
-    version: 1,
+    version: 2,
     serverDomain: j.serverDomain,
     username: j.username,
     serverName: j.serverName,
@@ -208,8 +205,6 @@ export function installBlobFromJson(j: InstallBlobJson): InstallBlob {
       expiresAt: j.authCode.expiresAt,
     },
     authCodeUserSignature: hexToBytes(j.authCodeUserSignature),
-    issuedAt: j.issuedAt,
-    expiresAt: j.expiresAt,
     installerGitRef: j.installerGitRef ?? "",
     rckPubKey: hexToBytes(j.rckPubKey),
   };

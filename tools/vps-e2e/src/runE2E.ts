@@ -26,7 +26,6 @@
 import {
   authCodeCanonical,
   authCodeIssueBody,
-  buildTicketIssueBody,
   claimBody,
   claimCanonical,
   installBlobCanonical,
@@ -192,36 +191,19 @@ async function mintBuildCode(
     registrationUrl: `${plan.servicesBase}/api/server/register`,
     authCode: code,
     authCodeUserSignatureHex: bytesToHex(acSig),
-    issuedAt: acAt,
-    expiresAt: acAt + 60 * 60_000,
     installerGitRef: "main",
     rckPubKeyHex: rckPubHex,
   };
   const blobSig = identity.signWithIrk(installBlobCanonical(blob));
-  const ticketResp = await expectOk(
-    name,
-    http.post(
-      `${plan.comBase}/api/build-tickets/issue`,
-      buildTicketIssueBody(blob, bytesToHex(blobSig), 60 * 60_000),
-    ),
-  );
-  let ticket: { code?: unknown };
-  try {
-    ticket = JSON.parse(ticketResp.body);
-  } catch {
-    throw new StageError(
-      fail(name, `build-ticket issue returned non-JSON: ${ticketResp.body.slice(0, 120)}`),
-    );
-  }
-  if (typeof ticket.code !== "string" || ticket.code.length === 0) {
-    throw new StageError(fail(name, "build-ticket issue returned no code"));
-  }
-  st.buildCode = ticket.code;
+  // Build-ticket flow removed (QR-pipe is the only path). The harness
+  // is gated until rewritten to drive the QR-pipe DO instead — see
+  // tools/vps-e2e/tests/runE2E.test.ts (describe.skip).
+  st.buildCode = "RIPPED-NO-BUILD-CODE";
   // Capture the install-blob JSON + IRK signature so the publisher can
   // bake them into the trailer of the personalized ISO. The shape
   // matches `installBlobToJson(blob)` in @flagship/iso-personalizer.
   st.blobJson = {
-    version: 1,
+    version: 2,
     serverDomain: blob.serverDomain,
     username: blob.username,
     serverName: blob.serverName,
@@ -239,17 +221,11 @@ async function mintBuildCode(
       expiresAt: blob.authCode.expiresAt,
     },
     authCodeUserSignature: blob.authCodeUserSignatureHex,
-    issuedAt: blob.issuedAt,
-    expiresAt: blob.expiresAt,
     installerGitRef: blob.installerGitRef,
     rckPubKey: blob.rckPubKeyHex,
   };
   st.blobSignatureHex = bytesToHex(blobSig);
-  deps.logger.info("minted build code", { code: ticket.code });
-  return pass(
-    name,
-    `claimed ${plan.username}, issued auth-code + RCK + build ticket ${ticket.code}`,
-  );
+  return pass(name, `claimed ${plan.username}, issued auth-code + RCK`);
 }
 
 /**

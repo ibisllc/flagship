@@ -31,7 +31,7 @@ function buildBlob(): InstallBlob {
   };
   const userSig = signAuthCode(code, harryIrk);
   return {
-    version: 1,
+    version: 2,
     serverDomain: code.serverDomain,
     username: code.username,
     serverName: code.serverName,
@@ -39,8 +39,6 @@ function buildBlob(): InstallBlob {
     registrationUrl: "https://flagship.services/api/server/register",
     authCode: code,
     authCodeUserSignature: userSig,
-    issuedAt: code.issuedAt,
-    expiresAt: code.expiresAt,
     installerGitRef: "main",
     rckPubKey: freshKeypair().publicKey,
   };

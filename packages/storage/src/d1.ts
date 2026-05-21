@@ -15,8 +15,6 @@ import type {
   EntitlementRevocationStorage,
   AuthCodeRecord,
   AuthCodeStorage,
-  BuildTicketRecord,
-  BuildTicketStorage,
   InstallEvent,
   InstallEventStorage,
   LlmPromoLifetimeRecord,
@@ -125,18 +123,6 @@ interface AuthCodeRow {
   used_at: number | null;
   revoked_at: number | null;
 }
-interface BuildTicketRow {
-  code: string;
-  blob_json: string;
-  blob_signature_hex: string;
-  username: string;
-  server_domain: string;
-  created_at: number;
-  expires_at: number;
-  status: string;
-  redeemed_at: number | null;
-  redemptions: number;
-}
 interface ServerRow {
   server_domain: string;
   username: string;
@@ -190,20 +176,6 @@ function rowToAuthCode(r: AuthCodeRow): AuthCodeRecord {
     recordedAt: r.recorded_at,
     usedAt: r.used_at ?? undefined,
     revokedAt: r.revoked_at ?? undefined,
-  };
-}
-function rowToBuildTicket(r: BuildTicketRow): BuildTicketRecord {
-  return {
-    code: r.code,
-    blobJson: r.blob_json,
-    blobSignatureHex: r.blob_signature_hex,
-    username: r.username,
-    serverDomain: r.server_domain,
-    createdAt: r.created_at,
-    expiresAt: r.expires_at,
-    status: r.status as BuildTicketRecord["status"],
-    redeemedAt: r.redeemed_at ?? undefined,
-    redemptions: r.redemptions,
   };
 }
 function rowToServer(r: ServerRow): ServerRecord {
@@ -474,70 +446,6 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
     const cur = await this.get(serial);
     if (!cur) return { ok: false as const, reason: "unknown serial" };
     return { ok: true as const };
-  }
-}
-
-export class D1BuildTicketStorage implements BuildTicketStorage {
-  constructor(private db: D1Database) {}
-  async put(rec: BuildTicketRecord) {
-    try {
-      await this.db
-        .prepare(
-          `INSERT INTO build_tickets (
-            code, blob_json, blob_signature_hex, username, server_domain,
-            created_at, expires_at, status, redemptions
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          rec.code,
-          rec.blobJson,
-          rec.blobSignatureHex,
-          rec.username,
-          rec.serverDomain,
-          rec.createdAt,
-          rec.expiresAt,
-          rec.status,
-          rec.redemptions,
-        )
-        .run();
-      return { ok: true as const };
-    } catch (e) {
-      const msg = String((e as Error).message ?? e);
-      if (/UNIQUE/i.test(msg)) {
-        return { ok: false as const, reason: "code collision" };
-      }
-      throw e;
-    }
-  }
-  async get(code: string) {
-    const r = await this.db
-      .prepare("SELECT * FROM build_tickets WHERE code = ?")
-      .bind(code)
-      .first<BuildTicketRow>();
-    return r ? rowToBuildTicket(r) : undefined;
-  }
-  async refresh(code: string, expiresAt: number) {
-    const r = await this.db
-      .prepare(
-        "UPDATE build_tickets SET expires_at = ? WHERE code = ? AND status != 'revoked'",
-      )
-      .bind(expiresAt, code)
-      .run();
-    if (r.meta.changes && r.meta.changes > 0) return { ok: true as const };
-    const cur = await this.get(code);
-    if (!cur) return { ok: false as const, reason: "unknown code" };
-    if (cur.status === "revoked") return { ok: false as const, reason: "revoked" };
-    return { ok: true as const };
-  }
-  async markRedeemed(code: string, now: number) {
-    await this.db
-      .prepare(
-        `UPDATE build_tickets
-         SET status = 'redeemed', redeemed_at = ?, redemptions = redemptions + 1
-         WHERE code = ?`,
-      )
-      .bind(now, code)
-      .run();
   }
 }
 
@@ -2363,7 +2271,6 @@ export class D1Storage implements Storage {
   usernameAliases: UsernameAliasStorage;
   daemonStatus: DaemonStatusStorage;
   authCodes: AuthCodeStorage;
-  buildTickets: BuildTicketStorage;
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
@@ -2391,7 +2298,6 @@ export class D1Storage implements Storage {
     this.usernameAliases = new D1UsernameAliasStorage(db);
     this.daemonStatus = new D1DaemonStatusStorage(db);
     this.authCodes = new D1AuthCodeStorage(db);
-    this.buildTickets = new D1BuildTicketStorage(db);
     this.servers = new D1ServerStorage(db);
     this.routing = new D1RoutingStorage(db);
     this.installEvents = new D1InstallEventStorage(db);

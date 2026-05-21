@@ -305,8 +305,17 @@ export interface AuthCodeRevocation {
   issuedAt: number;
 }
 
+/**
+ * InstallBlob v2.
+ *
+ * v1→v2: dropped `issuedAt` and `expiresAt`. The only meaningful TTL
+ * on a recipe is `authCode.expiresAt` (gated by .com at
+ * /api/server/register). The blob's own time fields were never
+ * enforced post-issue and existed only as defense-in-depth that no
+ * code path actually defended. See ADR / commit body for context.
+ */
 export interface InstallBlob {
-  version: 1;
+  version: 2;
   serverDomain: string;
   username: string;
   serverName: string;
@@ -314,20 +323,18 @@ export interface InstallBlob {
   registrationUrl: string;
   authCode: AuthCode;
   authCodeUserSignature: Bytes;
-  issuedAt: number;
-  expiresAt: number;
   /**
-   * Git ref the apkovl will pull installer/ from at first boot. Tag is
-   * preferred (`v0.1.0`); branch (`main`) acceptable for early releases.
-   * Empty string is treated as "main" by the bootstrap. The phone signs
-   * over this so a compromised network/control-plane cannot swap the
+   * Git ref the bootstrap will pull installer/ from at first boot. Tag
+   * preferred (`v0.1.0`); branch (`main`) acceptable for early
+   * releases. Empty string treated as "main". The phone signs over
+   * this so a compromised network/control-plane cannot swap the
    * installer revision.
    */
   installerGitRef: string;
   /**
    * Routing-Control-Key public key for this server's subdomain. Daemon
-   * uses it to verify SetRoutingTarget mutations it sees in the routing
-   * record (defense-in-depth against a compromised .com).
+   * uses it to verify SetRoutingTarget mutations it sees in the
+   * routing record (defense-in-depth against a compromised .com).
    */
   rckPubKey: Bytes;
 }
@@ -896,8 +903,6 @@ function canonicalInstallBlob(b: InstallBlob): Bytes {
       b.authCode.serial,
       hex(b.authCode.userPubKey),
       hex(b.authCodeUserSignature),
-      b.issuedAt,
-      b.expiresAt,
       b.installerGitRef,
       hex(b.rckPubKey),
     ].join("|"),

@@ -84,7 +84,9 @@ describe("build-flagship-netboot-iso.sh", () => {
     expect(src).toContain("SOURCE_DATE_EPOCH");
     // Auto-preseed kernel args MUST land in the rewritten isolinux
     // + grub configs.
-    expect(src).toContain("auto=true priority=critical preseed/file=/cdrom/preseed.cfg");
+    // mini.iso flavor doesn't auto-mount /cdrom; preseed lives at
+    // /preseed.cfg in the initrd root (overlay cpio).
+    expect(src).toContain("auto=true priority=critical preseed/file=/preseed.cfg");
     // sha256 verification happens BEFORE any extract/repack work.
     expect(src).toMatch(/sha256sum.*\$DEBIAN_ISO/);
   });
@@ -94,6 +96,8 @@ describe("build-flagship-netboot-iso.sh", () => {
     // declare -A DEBIAN_SHA256 + at least one entry of the form
     //   DEBIAN_SHA256["<v>-<arch>"]="<64 hex chars>"
     expect(src).toContain("declare -A DEBIAN_SHA256");
-    expect(src).toMatch(/DEBIAN_SHA256\["[\d.]+-[a-z0-9]+"\]="[0-9a-f]{64}"/);
+    // Release id can be a code-name ("trixie") or a numeric version
+    // ("12.5.0"); we just require something that looks like a release-arch key.
+    expect(src).toMatch(/DEBIAN_SHA256\["[a-z0-9.]+-[a-z0-9]+"\]="[0-9a-f]{64}"/);
   });
 });

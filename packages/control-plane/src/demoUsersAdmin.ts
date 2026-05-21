@@ -38,12 +38,10 @@ import {
 } from "@flagship/protocol";
 import type {
   AuthCodeStorage,
-  BuildTicketStorage,
   DeviceCapabilityGrantStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { bytesToHex } from "./hex.js";
-import { generateTicketCode } from "./buildTicket.js";
 import type { DemoUsersDeps } from "./demoUsers.js";
 import {
   conflict,
@@ -202,7 +200,6 @@ export interface DemoAdminDeps extends DemoUsersDeps {
   authCodes: AuthCodeStorage;
   /** Build-ticket table — admin-claim-and-issue stores the personalized
    *  InstallBlob keyed by a fresh build-code. */
-  buildTickets: BuildTicketStorage;
   /** Device-capability-grants table — both admin endpoints persist into
    *  it (admin-claim-and-issue: the primary; mint-device-grant: the
    *  child). */
@@ -351,7 +348,7 @@ export async function handleAdminClaimAndIssue(
   }
 
   const blob: InstallBlob = {
-    version: 1,
+    version: 2,
     serverDomain,
     username,
     serverName,
@@ -359,40 +356,16 @@ export async function handleAdminClaimAndIssue(
     registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode,
     authCodeUserSignature: authCodeSig,
-    issuedAt,
-    expiresAt,
     installerGitRef: "main",
     rckPubKey: rck.publicKey,
   };
   const blobSig = signInstallBlob(blob, userIrk);
 
-  // Build-ticket — try a small handful of codes to avoid the random
-  // collision case (3-group / 30^12 entropy makes it almost never).
-  // `blobObj` is the structured shape we echo on the response (so the
-  // CLI can write it as JSON to disk and personalize-iso --blob-json
-  // reads it back as an object). `blobStr` is the serialized form
-  // persisted under `build_tickets.blob_json` for later /redeem.
+  // No build-ticket emission anymore — QR-pipe is the only flow, .com
+  // never stores the signed blob at rest. The caller (CLI / demo
+  // operator) gets the blob inline in the response and personalizes
+  // the ISO from it directly.
   const blobObj = installBlobToJson(blob);
-  const blobStr = JSON.stringify(blobObj);
-  let code = "";
-  for (let attempts = 0; attempts < 8 && !code; attempts++) {
-    const candidate = generateTicketCode(rand);
-    const btResult = await deps.buildTickets.put({
-      code: candidate,
-      blobJson: blobStr,
-      blobSignatureHex: bytesToHex(blobSig),
-      username,
-      serverDomain,
-      createdAt: now,
-      expiresAt: now + 60 * 60_000,
-      status: "active",
-      redemptions: 0,
-    });
-    if (btResult.ok) code = candidate;
-  }
-  if (!code) {
-    return { status: 500, body: { error: "could not allocate build-ticket code" } };
-  }
 
   // Primary DeviceCapabilityGrant. devicePubKey == user IRK pub for
   // demo accounts — the user IRK literally IS the primary device for
@@ -423,7 +396,6 @@ export async function handleAdminClaimAndIssue(
   });
 
   return ok({
-    code,
     blob: blobObj,
     blobSignature: bytesToHex(blobSig),
     primaryGrant: {
@@ -544,7 +516,7 @@ export async function handleAdminMintDeviceGrant(
 // ──────────────────────────────────────────────────────────────────────
 
 interface InstallBlobJson {
-  version: number;
+  version: 2;
   serverDomain: string;
   username: string;
   serverName: string;
@@ -562,15 +534,13 @@ interface InstallBlobJson {
     expiresAt: number;
   };
   authCodeUserSignature: string;
-  issuedAt: number;
-  expiresAt: number;
   installerGitRef: string;
   rckPubKey: string;
 }
 
 function installBlobToJson(b: InstallBlob): InstallBlobJson {
   return {
-    version: 1,
+    version: 2,
     serverDomain: b.serverDomain,
     username: b.username,
     serverName: b.serverName,
@@ -588,8 +558,6 @@ function installBlobToJson(b: InstallBlob): InstallBlobJson {
       expiresAt: b.authCode.expiresAt,
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
-    issuedAt: b.issuedAt,
-    expiresAt: b.expiresAt,
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
   };

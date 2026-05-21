@@ -27,19 +27,10 @@ CREATE TABLE IF NOT EXISTS auth_codes (
 CREATE INDEX IF NOT EXISTS idx_auth_codes_username ON auth_codes(username);
 CREATE INDEX IF NOT EXISTS idx_auth_codes_status ON auth_codes(status);
 
-CREATE TABLE IF NOT EXISTS build_tickets (
-  code TEXT PRIMARY KEY,
-  blob_json TEXT NOT NULL,
-  blob_signature_hex TEXT NOT NULL,
-  username TEXT NOT NULL,
-  server_domain TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('active', 'redeemed', 'revoked')),
-  redeemed_at INTEGER,
-  redemptions INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_build_tickets_username ON build_tickets(username);
+-- build_tickets table removed (QR-pipe is the only flow now; .com no
+-- longer stores signed blobs at rest). Pre-existing prod rows are
+-- ignored. A future migration may DROP TABLE — for now we just stop
+-- creating it on fresh deploys.
 
 CREATE TABLE IF NOT EXISTS servers (
   server_domain TEXT PRIMARY KEY,
