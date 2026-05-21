@@ -242,6 +242,46 @@ export function clampRecipeTtlMs(raw) {
   return Math.min(Math.max(n, MIN_RECIPE_TTL_MS), MAX_RECIPE_TTL_MS);
 }
 
+/**
+ * Wire the "Download recipe" button to emit a JSON file the Burner
+ * CLI can consume verbatim. Schema matches `flagship-burner`'s
+ * `loadBlobFromFile()` exactly:
+ *
+ *   {
+ *     version: 2,
+ *     serverDomain, username, serverName,
+ *     phoneDelegatedPubKey, registrationUrl,
+ *     authCode: { ..., issuedAt, expiresAt, ... },
+ *     authCodeUserSignature,
+ *     installerGitRef, rckPubKey,
+ *     blobSignatureHex,
+ *   }
+ *
+ * The bundle the webapp already produces (`onWireBlob`) is identical
+ * to that shape; we just splat the signature into `blobSignatureHex`.
+ */
+function enableRecipeDownload(blobBundle) {
+  const btn = $("cs-download-recipe");
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = "Download recipe (.json)";
+  const recipe = { ...blobBundle.blob, blobSignatureHex: blobBundle.blobSignature };
+  btn.onclick = () => {
+    const json = JSON.stringify(recipe, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const stamp = new Date(recipe.authCode.expiresAt)
+      .toISOString()
+      .replace(/[:.]/g, "-")
+      .slice(0, 19);
+    a.download = `flagship-recipe-${recipe.serverDomain}-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+}
+
 async function handleSaveDraft() {
   try {
     const inputs = readInputs();
@@ -282,6 +322,12 @@ async function handleDeliverNow() {
     setStatus("error", String(e.message || e));
     return;
   }
+
+  // Enable the "Download recipe" button now that we have a freshly
+  // signed bundle. The Burner CLI accepts this exact JSON via
+  // `flagship-burn verify <file>` / `flagship-burn user-data <file>
+  // out.yaml` / `flagship-burn prepare <file> <iso> out.iso`.
+  enableRecipeDownload(blobBundle);
 
   setStatus("active", "connecting to relay…");
   try {
