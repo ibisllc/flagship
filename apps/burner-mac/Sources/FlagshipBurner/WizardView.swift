@@ -11,8 +11,6 @@ import FlagshipBurnerCore
 struct WizardView: View {
     @StateObject private var model = WizardModel()
     @State private var showLog = false
-    @State private var showPaste = false
-    @State private var pasted = ""
 
     var body: some View {
         VStack(spacing: 0) {
