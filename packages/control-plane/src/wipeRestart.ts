@@ -33,6 +33,7 @@ import {
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  DeviceCapabilityGrantStorage,
   PushTokenStorage,
   UsernameStorage,
   WebauthnRecoveryStorage,
@@ -55,6 +56,20 @@ export interface WipeRestartDeps {
   auditEvents: AuditEventStorage;
   /** Optional. Required only for the ETag-fence path. */
   pushTokens?: PushTokenStorage;
+  /**
+   * v2 — when wired, wipe-restart ALSO revokes every active
+   * DeviceCapabilityGrant on the username. This matches the
+   * "nuclear option" framing: the old IRK is gone, every grant
+   * signed under it is now meaningless (its signature won't verify
+   * against the new cloud-root anyway), so the right safety move
+   * is to mark them revoked atomically with the IRK rotation. The
+   * graceful-vs-strict policy from W6 does NOT apply to wipe-restart
+   * — wipe-restart IS the nuclear path by definition.
+   *
+   * Deploy-safe degrade: when the dep isn't wired the behavior
+   * matches v1.1 (no grant accounting).
+   */
+  deviceCapabilityGrants?: DeviceCapabilityGrantStorage;
   maxAgeMs?: number;
   rateLimitMs?: number;
   idempotencyWindowMs?: number;
@@ -259,6 +274,34 @@ export async function handleWipeRestart(
     createdAt: t,
     updatedAt: t,
   });
+  // 2b. v2 — revoke every active DeviceCapabilityGrant on the cloud.
+  //     Their signatures (made by the OLD IRK that just got rotated
+  //     out) no longer verify under the cloud root, so leaving them
+  //     active would just produce confusing "invalid grant" errors
+  //     on the family-device side. Explicit revocation is cleaner.
+  //     Best-effort: a failure here MUST NOT crash the wipe-restart
+  //     flow (the IRK has already rotated; the audit row needs to
+  //     land regardless). Each grant gets its own revoke call so a
+  //     transient storage hiccup doesn't fail-stop the loop.
+  let revokedGrantIds: string[] = [];
+  if (deps.deviceCapabilityGrants) {
+    try {
+      const grants = await deps.deviceCapabilityGrants.listForUser(r.username);
+      for (const g of grants) {
+        if (g.revokedAt !== null) continue;
+        try {
+          await deps.deviceCapabilityGrants.revoke(g.grantId, t);
+          revokedGrantIds.push(g.grantId);
+        } catch {
+          // swallow — the grant's old-IRK signature is dead anyway.
+        }
+      }
+    } catch {
+      // Same. The cloud is still wiped at the IRK level; family
+      // devices will be forced to re-onboard.
+    }
+  }
+
   // 3. Append the audit row.
   const audit = await recordAuditEvent(
     { auditEvents: deps.auditEvents },
@@ -298,6 +341,10 @@ export async function handleWipeRestart(
       ok: true,
       auditSeq: audit.seq,
       newIrkPub: r.newIrkPub,
+      // v2 — surfaces every grant we just revoked so the client UI
+      // can render "These family devices need to re-onboard" with
+      // concrete counts. Empty array on legacy / no-grants accounts.
+      revokedGrantIds,
       ...(freshEtag ? { etag: freshEtag } : {}),
     },
     freshEtag ? { etag: freshEtag, "cache-control": "private, no-cache" } : undefined,

@@ -326,6 +326,79 @@ describe("handleWipeRestart — ETag fence", () => {
   });
 });
 
+describe("handleWipeRestart — v2 device-capability-grant revocation", () => {
+  it("revokes every active grant on the cloud + surfaces revokedGrantIds", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await setup(oldIrk);
+    // Seed two active grants under the OLD IRK. These will be revoked
+    // by wipe-restart (their signatures are dead under the new root).
+    const now = 1_000_000_000_000;
+    await s.deviceCapabilityGrants.put({
+      grantId: "11111111-1111-1111-1111-111111111111",
+      username: USERNAME,
+      deviceLabel: "primary",
+      devicePubHex: bytesToHex(oldIrk.publicKey),
+      scopesJson: '["browse","install-service"]',
+      issuedAt: now - 1000,
+      expiresAt: now + 90 * 86_400_000,
+      signatureHex: "00".repeat(64),
+      revokedAt: null,
+    });
+    await s.deviceCapabilityGrants.put({
+      grantId: "22222222-2222-2222-2222-222222222222",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubHex: bytesToHex(makeKey().publicKey),
+      scopesJson: '["browse"]',
+      issuedAt: now - 500,
+      expiresAt: now + 90 * 86_400_000,
+      signatureHex: "00".repeat(64),
+      revokedAt: null,
+    });
+    const body = await makeBody({ oldIrk, newIrk });
+    const dwithGrants = { ...deps(s), deviceCapabilityGrants: s.deviceCapabilityGrants };
+    const res = await handleWipeRestart(dwithGrants, USERNAME, body);
+    expect(res.status).toBe(200);
+    const respBody = res.body as { revokedGrantIds: string[] };
+    expect(respBody.revokedGrantIds).toHaveLength(2);
+    expect(respBody.revokedGrantIds.sort()).toEqual([
+      "11111111-1111-1111-1111-111111111111",
+      "22222222-2222-2222-2222-222222222222",
+    ]);
+    // Both grants must be marked revoked on disk.
+    for (const id of respBody.revokedGrantIds) {
+      const g = await s.deviceCapabilityGrants.get(id);
+      expect(g?.revokedAt).not.toBeNull();
+    }
+  });
+
+  it("legacy: no grants → revokedGrantIds is [] and the wipe still succeeds", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await setup(oldIrk);
+    const body = await makeBody({ oldIrk, newIrk });
+    const res = await handleWipeRestart(
+      { ...deps(s), deviceCapabilityGrants: s.deviceCapabilityGrants },
+      USERNAME,
+      body,
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as { revokedGrantIds: string[] }).revokedGrantIds).toEqual([]);
+  });
+
+  it("dep absent: revokedGrantIds is [] and the wipe still succeeds (deploy-safe degrade)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const s = await setup(oldIrk);
+    const body = await makeBody({ oldIrk, newIrk });
+    // Note: deps() doesn't pass deviceCapabilityGrants — legacy path.
+    const res = await handleWipeRestart(deps(s), USERNAME, body);
+    expect(res.status).toBe(200);
+    expect((res.body as { revokedGrantIds: string[] }).revokedGrantIds).toEqual([]);
+  });
+});
+
 describe("handleWipeRestart — concurrency", () => {
   it("409 when the IRK was rotated between read and CAS by a sibling write", async () => {
     const oldIrk = makeKey();

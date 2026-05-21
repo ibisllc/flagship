@@ -1055,6 +1055,9 @@ export async function tryControlPlane(
           webauthnRecovery: storage.webauthnRecovery,
           auditEvents: storage.auditEvents,
           pushTokens: storage.pushTokens,
+          // v2 — wipe also revokes every active DeviceCapabilityGrant
+          // on the cloud (their old-IRK signatures are now dead anyway).
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
