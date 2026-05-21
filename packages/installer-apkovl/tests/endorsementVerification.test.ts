@@ -303,7 +303,12 @@ describe("flagship-bootstrap.start wires the endorsement gate in the right place
 
   it("calls validate_ref BEFORE the verification gate", () => {
     const validateIdx = source.lastIndexOf("validate_ref \"$REF\" \"installerGitRef\"");
-    const verifyIdx = source.indexOf("verify-endorsement.mjs");
+    // Use the EXEC line, not the doc comment about verify-endorsement.
+    // The exec line is the `node --import tsx scripts/verify-endorsement.mjs`
+    // invocation; documentation references appear earlier in the file
+    // and would cause indexOf() to falsely report verify "before"
+    // validate.
+    const verifyIdx = source.indexOf("node --import tsx scripts/verify-endorsement.mjs");
     expect(validateIdx).toBeGreaterThanOrEqual(0);
     expect(verifyIdx).toBeGreaterThan(validateIdx);
   });
