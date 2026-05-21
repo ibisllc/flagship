@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Tests target plain net8.0 (no WPF) so they can be exercised on
+         macOS/Linux CI runners that don't have the Windows desktop
+         workload. The non-test project (FlagshipBurner.csproj) is
+         net8.0-windows + WPF; the test project explicitly references
+         the source files we want to cover without dragging in the WPF
+         dependency tree. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Flagship.Burner.Tests</RootNamespace>
+    <AssemblyName>FlagshipBurner.Tests</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pull in the platform-agnostic source files we want to test.
+         Skip Wizard.cs / MainWindow.* / App.* because they depend on
+         WPF. The disk enumerator + verify-result parser + CLI locator
+         + CLI args are all WPF-free. -->
+    <Compile Include="..\src\DiskEnumerator.cs"/>
+    <Compile Include="..\src\VerifyResult.cs"/>
+    <Compile Include="..\src\CliLocator.cs"/>
+    <Compile Include="..\src\CliRunner.cs"/>
+    <!-- CliArgs lives in Wizard.cs alongside the view-model; we extract
+         it into a tiny shim for the test target to keep WPF out. -->
+    <Compile Include="CliArgsShim.cs"/>
+    <Compile Include="DiskEnumeratorTests.cs"/>
+    <Compile Include="VerifyResultTests.cs"/>
+    <Compile Include="CliLocatorTests.cs"/>
+    <Compile Include="CliArgsTests.cs"/>
+    <Compile Include="WizardStateMachineTests.cs"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0"/>
+    <PackageReference Include="xunit" Version="2.9.0"/>
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2"/>
+  </ItemGroup>
+
+</Project>

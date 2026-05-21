@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Flagship.Burner</RootNamespace>
+    <AssemblyName>FlagshipBurner</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <Version>0.0.1</Version>
+    <Authors>Flagship</Authors>
+    <Product>Flagship Burner</Product>
+    <Description>Single-window USB burner for Flagship recipes</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="src\App.xaml" Generator="MSBuild:Compile" />
+    <Page Include="src\MainWindow.xaml" Generator="MSBuild:Compile" />
+    <Compile Include="src\App.xaml.cs" />
+    <Compile Include="src\MainWindow.xaml.cs" />
+    <Compile Include="src\Wizard.cs" />
+    <Compile Include="src\CliRunner.cs" />
+    <Compile Include="src\CliLocator.cs" />
+    <Compile Include="src\DiskEnumerator.cs" />
+    <Compile Include="src\VerifyResult.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="app.manifest" />
+    <None Include="README.md" />
+  </ItemGroup>
+
+</Project>

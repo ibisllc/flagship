@@ -1,0 +1,147 @@
+<Application x:Class="Flagship.Burner.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Flagship.Burner">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Flagship design tokens, mirrored from apps/burner-mac Theme.swift.
+                 Cool neutral surfaces, warm primary, no AI-template gradients. -->
+            <SolidColorBrush x:Key="FB.Bg"               Color="#F7F8FA"/>
+            <SolidColorBrush x:Key="FB.Surface"          Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="FB.SurfaceElevated"  Color="#F0F2F5"/>
+            <SolidColorBrush x:Key="FB.Border"           Color="#D9DDE3"/>
+            <SolidColorBrush x:Key="FB.Text"             Color="#1A1D22"/>
+            <SolidColorBrush x:Key="FB.TextMuted"        Color="#6B7280"/>
+            <SolidColorBrush x:Key="FB.Primary"          Color="#D97742"/>
+            <SolidColorBrush x:Key="FB.PrimaryFaded"     Color="#FAEDE5"/>
+            <SolidColorBrush x:Key="FB.Success"          Color="#2F8F5E"/>
+            <SolidColorBrush x:Key="FB.SuccessFaded"     Color="#E5F4EC"/>
+            <SolidColorBrush x:Key="FB.Warning"          Color="#C28A1F"/>
+            <SolidColorBrush x:Key="FB.WarningFaded"     Color="#F8EFD7"/>
+            <SolidColorBrush x:Key="FB.Danger"           Color="#B23A3A"/>
+            <SolidColorBrush x:Key="FB.DangerFaded"      Color="#F5E0E0"/>
+
+            <!-- Native Segoe stack: Segoe UI Variable on 11, Semibold for the
+                 title, Cascadia for monospaced log. -->
+            <FontFamily x:Key="FB.Font.Body">Segoe UI Variable, Segoe UI, Arial</FontFamily>
+            <FontFamily x:Key="FB.Font.Title">Segoe UI Semibold, Segoe UI, Arial</FontFamily>
+            <FontFamily x:Key="FB.Font.Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
+
+            <!-- Drop-row card style — used for all three rows. The visual
+                 state (idle/dragOver/ready/error) is toggled via attached
+                 Tag because WPF Triggers on a string property are the
+                 path of least resistance. -->
+            <!-- Tag holds the bound state ("ready" / "error" / "").
+                 The transient drag-over highlight rides on a separate
+                 attached property (DragHelper.IsDragOver) so we don't
+                 stomp on the binding when the cursor leaves. -->
+            <Style x:Key="DropRowBorder" TargetType="Border">
+                <Setter Property="CornerRadius" Value="10"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="14"/>
+                <Setter Property="Background" Value="{StaticResource FB.Surface}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource FB.Border}"/>
+                <Setter Property="AllowDrop" Value="True"/>
+                <Setter Property="MinHeight" Value="60"/>
+                <Style.Triggers>
+                    <Trigger Property="Tag" Value="ready">
+                        <Setter Property="BorderBrush" Value="{StaticResource FB.Success}"/>
+                    </Trigger>
+                    <Trigger Property="Tag" Value="error">
+                        <Setter Property="BorderBrush" Value="{StaticResource FB.Danger}"/>
+                    </Trigger>
+                    <Trigger Property="local:DragHelper.IsDragOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{StaticResource FB.Primary}"/>
+                        <Setter Property="Background" Value="{StaticResource FB.PrimaryFaded}"/>
+                        <Setter Property="BorderThickness" Value="1.5"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <Style x:Key="IconCircle" TargetType="Border">
+                <Setter Property="Width" Value="36"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="CornerRadius" Value="18"/>
+                <Setter Property="Background" Value="{StaticResource FB.SurfaceElevated}"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+
+            <Style x:Key="RowTitle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FB.Font.Title}"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Foreground" Value="{StaticResource FB.Text}"/>
+            </Style>
+
+            <Style x:Key="RowHint" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FB.Font.Body}"/>
+                <Setter Property="FontSize" Value="12.5"/>
+                <Setter Property="Foreground" Value="{StaticResource FB.TextMuted}"/>
+                <Setter Property="TextWrapping" Value="Wrap"/>
+            </Style>
+
+            <Style x:Key="RowValue" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FB.Font.Body}"/>
+                <Setter Property="FontSize" Value="12.5"/>
+                <Setter Property="Foreground" Value="{StaticResource FB.Text}"/>
+                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            </Style>
+
+            <Style x:Key="Caption" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FB.Font.Body}"/>
+                <Setter Property="FontSize" Value="11.5"/>
+                <Setter Property="Foreground" Value="{StaticResource FB.TextMuted}"/>
+            </Style>
+
+            <!-- The big Bake button — primary + ample padding. -->
+            <Style x:Key="BakeButton" TargetType="Button">
+                <Setter Property="MinWidth" Value="200"/>
+                <Setter Property="Height" Value="40"/>
+                <Setter Property="FontFamily" Value="{StaticResource FB.Font.Title}"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Background" Value="{StaticResource FB.Primary}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                    CornerRadius="8"
+                                    Padding="14,0">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.45"/>
+                    </Trigger>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Opacity" Value="0.92"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <Style x:Key="LinkButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Foreground" Value="{StaticResource FB.TextMuted}"/>
+                <Setter Property="Padding" Value="4,2"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="FontFamily" Value="{StaticResource FB.Font.Body}"/>
+                <Setter Property="FontSize" Value="11.5"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="Transparent">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
