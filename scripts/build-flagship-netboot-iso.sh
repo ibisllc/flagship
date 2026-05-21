@@ -98,7 +98,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 INJECT_DIR="$REPO_ROOT/packages/installer-netboot"
-for f in preseed.cfg install.sh parse-trailer.sh late-command.sh; do
+for f in preseed.cfg install.sh parse-trailer.sh late-command.sh early-scan.sh post-log.sh; do
   if [[ ! -f "$INJECT_DIR/$f" ]]; then
     echo "error: missing inject source $INJECT_DIR/$f" >&2
     exit 2
@@ -144,13 +144,80 @@ xorriso -osirrox on -indev "$DEBIAN_ISO" -extract / "$EXTRACTED" >/dev/null
 chmod -R u+w "$EXTRACTED"
 
 # ── 3. Inject Flagship preseed + scripts ───────────────────────
-echo "[netboot-iso] injecting preseed.cfg + /flagship/*"
-cp "$INJECT_DIR/preseed.cfg" "$EXTRACTED/preseed.cfg"
+# We bake preseed.cfg + the /flagship/* helpers DIRECTLY INTO the
+# initrd.gz. Reason: d-i mini.iso is designed for netboot/PXE and
+# doesn't auto-mount /cdrom on first boot — so the preseed-on-ISO
+# approach used by full netinst.iso silently misses. Bake-into-initrd
+# is the d-i canonical fallback (see Appendix B of the d-i manual):
+# d-i checks /preseed.cfg in the initrd FIRST, before consulting the
+# kernel cmdline preseed/file= or preseed/url=.
+echo "[netboot-iso] baking preseed.cfg + /flagship/* into initrd"
+INITRD_GZ="$EXTRACTED/initrd.gz"
+if [[ ! -f "$INITRD_GZ" ]]; then
+  echo "error: $INITRD_GZ not found (mini.iso layout assumption broken)" >&2
+  exit 4
+fi
+# GNU cpio is needed for `--reproducible`. macOS ships bsdcpio
+# which silently emits 142 bytes when given --reproducible. Probe
+# for a working GNU cpio (Homebrew installs as keg-only at
+# /opt/homebrew/Cellar/cpio/<v>/bin/cpio; Linux distros' /bin/cpio
+# is GNU). Fail fast with a clear message if neither works.
+CPIO=""
+for c in /opt/homebrew/Cellar/cpio/*/bin/cpio /usr/bin/cpio /bin/cpio cpio; do
+  if "$c" --version 2>&1 | head -1 | grep -q 'GNU cpio'; then
+    CPIO="$c"; break
+  fi
+done
+if [[ -z "$CPIO" ]]; then
+  echo "error: need GNU cpio for --reproducible. \`brew install cpio\` on macOS." >&2
+  exit 4
+fi
+echo "[netboot-iso] cpio: $CPIO"
+
+# We APPEND a tiny cpio overlay to the existing initrd rather than
+# extract + rebuild. Reason: macOS cpio can't mknod the device-node
+# entries the d-i initrd contains (Operation not permitted), so a
+# round-trip would lose /dev/console, /dev/null, etc. and break the
+# initrd. Linux's initrd reader (init/initramfs.c) natively
+# concatenates multi-archive initrds: gzip(A) || gzip(B) extracts
+# into the same in-RAM filesystem, with B's files taking precedence
+# on collision. d-i has used this multi-initrd trick since the
+# Sarge installer (~2005).
+INITRD_OVERLAY_WORK="$WORK_DIR/initrd-overlay"
+mkdir -p "$INITRD_OVERLAY_WORK/flagship"
+cp "$INJECT_DIR/preseed.cfg"         "$INITRD_OVERLAY_WORK/preseed.cfg"
+cp "$INJECT_DIR/install.sh"          "$INITRD_OVERLAY_WORK/flagship/install.sh"
+cp "$INJECT_DIR/parse-trailer.sh"    "$INITRD_OVERLAY_WORK/flagship/parse-trailer.sh"
+cp "$INJECT_DIR/late-command.sh"     "$INITRD_OVERLAY_WORK/flagship/late-command.sh"
+cp "$INJECT_DIR/early-scan.sh"       "$INITRD_OVERLAY_WORK/flagship/early-scan.sh"
+cp "$INJECT_DIR/post-log.sh"         "$INITRD_OVERLAY_WORK/flagship/post-log.sh"
+chmod 755 "$INITRD_OVERLAY_WORK/flagship"/*.sh
+# Reproducible cpio: --null + sort -z + GNU cpio --reproducible.
+# gzip -n suppresses the original-filename + mtime header.
+OVERLAY_CPIO_GZ="$WORK_DIR/overlay.cpio.gz"
+( cd "$INITRD_OVERLAY_WORK" && find . -print0 \
+    | sort -z \
+    | "$CPIO" --null -o -H newc --reproducible 2>/dev/null \
+    | gzip -n -9 \
+    > "$OVERLAY_CPIO_GZ" )
+overlay_bytes=$(stat -c %s "$OVERLAY_CPIO_GZ" 2>/dev/null || stat -f %z "$OVERLAY_CPIO_GZ")
+echo "[netboot-iso] overlay cpio.gz: $overlay_bytes bytes"
+
+# Append overlay to the original initrd. Same `cat` shape the kernel
+# expects: gzip-stream || gzip-stream.
+cat "$INITRD_GZ" "$OVERLAY_CPIO_GZ" > "$INITRD_GZ.new"
+mv "$INITRD_GZ.new" "$INITRD_GZ"
+echo "[netboot-iso] new initrd.gz: $(stat -c %s "$INITRD_GZ" 2>/dev/null || stat -f %z "$INITRD_GZ") bytes"
+# Also stage flagship/* on the ISO root as a belt-and-suspenders;
+# late-command.sh may pick it up from there if the initrd path
+# vanishes during pivot. Cheap (each script ~5 KB).
 mkdir -p "$EXTRACTED/flagship"
 cp "$INJECT_DIR/install.sh"          "$EXTRACTED/flagship/install.sh"
 cp "$INJECT_DIR/parse-trailer.sh"    "$EXTRACTED/flagship/parse-trailer.sh"
 cp "$INJECT_DIR/late-command.sh"     "$EXTRACTED/flagship/late-command.sh"
-chmod 755 "$EXTRACTED/flagship/install.sh" "$EXTRACTED/flagship/parse-trailer.sh" "$EXTRACTED/flagship/late-command.sh"
+cp "$INJECT_DIR/early-scan.sh"       "$EXTRACTED/flagship/early-scan.sh"
+cp "$INJECT_DIR/post-log.sh"         "$EXTRACTED/flagship/post-log.sh"
+chmod 755 "$EXTRACTED/flagship"/*.sh
 
 # ── 4. Modify boot configs for auto-preseed ────────────────────
 # Two layouts to handle:
@@ -193,7 +260,7 @@ timeout 1
 
 label flagship-auto
     kernel ${KERNEL_PATH}
-    append vga=normal initrd=${INITRD_PATH} auto=true priority=critical preseed/file=/cdrom/preseed.cfg --- quiet
+    append vga=normal initrd=${INITRD_PATH} auto=true priority=critical preseed/file=/preseed.cfg file=/preseed.cfg DEBCONF_DEBUG=5 console=ttyS0,115200n8 console=tty0 --- quiet
 ISOCFG
 fi
 
@@ -209,14 +276,20 @@ set default="flagship-auto"
 
 menuentry --id=flagship-auto "Flagship auto-install" {
     set background_color=black
-    linux ${KERNEL_PATH} auto=true priority=critical preseed/file=/cdrom/preseed.cfg --- quiet
+    linux ${KERNEL_PATH} auto=true priority=critical preseed/file=/preseed.cfg file=/preseed.cfg DEBCONF_DEBUG=5 console=ttyS0,115200n8 console=tty0 --- quiet
     initrd ${INITRD_PATH}
 }
 GRUBCFG
 fi
 
 # Clamp every file's mtime so the resulting ISO is bit-stable.
-find "$EXTRACTED" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
+# macOS BSD touch doesn't grok `-d @epoch`; use coreutils gtouch when
+# present (Homebrew install).
+if command -v gtouch >/dev/null 2>&1; then
+    find "$EXTRACTED" -exec gtouch -h -d "@$SOURCE_DATE_EPOCH" {} +
+else
+    find "$EXTRACTED" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
+fi
 
 # ── 5. Re-pack with xorriso, deterministic flags ───────────────
 echo "[netboot-iso] re-packing → $OUT_PATH"

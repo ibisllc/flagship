@@ -31,20 +31,39 @@ echo "[flagship] late-command starting at $(date)"
 
 REPO_URL="${FLAGSHIP_REPO_URL:-https://github.com/ibisllc/flagship.git}"
 
-# ── 1. Parse + validate the trailer ──────────────────────────────
-# The trailer was written by the Worker's cloud-init at offset
-# disk_size - trailer_size. parse-trailer.sh reads the last ~4 bytes
-# (TOTAL_SIZE field) → seeks back trailer-size bytes → verifies the
-# header magic, version, footer magic, AND the embedded Ed25519
-# signature over the canonical-bytes of the InstallBlob. Returns
-# non-zero on any failure; we treat that as fatal here because there's
-# nothing useful we can do without an authenticated blob.
-echo "[flagship] parsing trailer from /dev/sda"
-if ! eval "$(/root/parse-trailer.sh /dev/sda)"; then
-    echo "[flagship] FATAL: trailer parse/verify failed" >&2
-    exit 1
+# Best-effort post-log helper (no-op if missing).
+post_stage() {
+    [ -x /root/post-log.sh ] && /root/post-log.sh "$1" "${2:-/var/log/flagship-late-command.log}" || true
+}
+
+# ── 1. Get the trailer-derived env ──────────────────────────────
+# preseed's early_command parsed the trailer BEFORE partman wiped the
+# install target (Hetzner) or while the USB was still mounted (real
+# install). Parsed values were stashed at /tmp/flagship-blob.env in
+# initrd RAM, then copied to /root/flagship-blob.env across the
+# chroot boundary. Prefer that pre-parsed env; fall back to parsing
+# /dev/sda directly only if the stash is missing (older preseed).
+if [ -f /root/flagship-blob.env ]; then
+    echo "[flagship] sourcing pre-parsed trailer env from /root/flagship-blob.env"
+    set -a
+    . /root/flagship-blob.env
+    set +a
+    # post-log.sh inside the chroot needs /tmp/flagship-username to
+    # default to the right label.
+    mkdir -p /tmp
+    printf '%s\n' "$FLAGSHIP_USERNAME" > /tmp/flagship-username
+else
+    echo "[flagship] no pre-parsed env — falling back to direct /dev/sda parse"
+    if ! eval "$(/root/parse-trailer.sh /dev/sda)"; then
+        echo "[flagship] FATAL: trailer parse/verify failed" >&2
+        post_stage "FATAL-trailer-parse-failed"
+        exit 1
+    fi
+    mkdir -p /tmp
+    printf '%s\n' "$FLAGSHIP_USERNAME" > /tmp/flagship-username
 fi
 echo "[flagship] trailer verified — username=$FLAGSHIP_USERNAME domain=$FLAGSHIP_SERVER_DOMAIN ref=$FLAGSHIP_INSTALLER_GIT_REF"
+post_stage "trailer-loaded"
 
 # Validate installer git-ref shape (same allowlist as the apkovl
 # bootstrap's validate_ref). Refs go onto a git CLI; defense in depth.
@@ -119,6 +138,8 @@ else
     fi
 fi
 
+post_stage "luks-rotation-done"
+
 # ── 3. Clone the Flagship repo at the pinned ref ────────────────
 echo "[flagship] cloning $REPO_URL @ $FLAGSHIP_INSTALLER_GIT_REF into /opt/flagship"
 rm -rf /opt/flagship
@@ -129,13 +150,17 @@ if ! git clone --depth 50 --branch "$FLAGSHIP_INSTALLER_GIT_REF" "$REPO_URL" /op
     git -C /opt/flagship checkout "$FLAGSHIP_INSTALLER_GIT_REF"
 fi
 
+post_stage "git-clone-done"
+
 cd /opt/flagship
 echo "[flagship] npm ci"
 npm ci --omit=optional --no-audit --no-fund || {
     echo "[flagship] npm ci failed — daemon will not start until repaired" >&2
 }
+post_stage "npm-ci-done"
 echo "[flagship] tsc -b"
 npx tsc -b || echo "[flagship] tsc -b reported errors — daemon may still start" >&2
+post_stage "tsc-done"
 
 # ── 4. Generate server identity ─────────────────────────────────
 echo "[flagship] generating server identity"
@@ -280,3 +305,4 @@ fi
 # Mark installed.
 date > /var/flagship/installed.flag
 echo "[flagship] late-command done at $(date)"
+post_stage "late-command-done"
