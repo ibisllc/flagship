@@ -36,37 +36,15 @@ import {
 const KEK = new Uint8Array(32).fill(0x42);
 
 interface FakeR2 {
-  base: Map<string, Uint8Array>;
   temp: Map<string, Uint8Array>;
 }
 
-function makeR2(baseBytes: Uint8Array, baseKey: string): {
-  isoBucket: DemoProvisionDeps["isoBucket"];
+function makeR2(): {
   isoTempBucket: DemoProvisionDeps["isoTempBucket"];
   state: FakeR2;
 } {
   const state: FakeR2 = {
-    base: new Map([[baseKey, baseBytes]]),
     temp: new Map(),
-  };
-  const isoBucket = {
-    async get(key: string) {
-      const v = state.base.get(key);
-      if (!v) return null;
-      let off = 0;
-      const stream = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          if (off >= v.length) {
-            controller.close();
-            return;
-          }
-          const end = Math.min(off + 4096, v.length);
-          controller.enqueue(v.subarray(off, end));
-          off = end;
-        },
-      });
-      return { body: stream, size: v.length };
-    },
   };
   const isoTempBucket = {
     async put(
@@ -99,7 +77,7 @@ function makeR2(baseBytes: Uint8Array, baseKey: string): {
       return {};
     },
   };
-  return { isoBucket, isoTempBucket, state };
+  return { isoTempBucket, state };
 }
 
 interface FakeHetzner extends ProvisioningHetznerClient {
@@ -137,10 +115,7 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
   hetzner: FakeHetzner;
   r2: FakeR2;
 }> {
-  const baseBytes = new Uint8Array(8 * 1024);
-  for (let i = 0; i < baseBytes.length; i++) baseBytes[i] = (i * 11) & 0xff;
-  const baseKey = "build/iso/flagship-base.iso";
-  const r2helpers = makeR2(baseBytes, baseKey);
+  const r2helpers = makeR2();
   const hetzner = makeHetzner();
   let counter = 0;
   const rand = (n: number) => {
@@ -186,10 +161,9 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
     authCodes: new InMemoryAuthCodeStorage(),
     buildTickets: new InMemoryBuildTicketStorage(),
     deviceCapabilityGrants: new InMemoryDeviceCapabilityGrantStorage(),
-    isoBucket: r2helpers.isoBucket,
     isoTempBucket: r2helpers.isoTempBucket,
     isoTempPublicBase: "https://pub-xyz.r2.dev",
-    baseIsoKey: baseKey,
+    baseIsoUrl: "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso",
     hetzner,
     demoIrkKek: KEK,
     defaultRegion: "fsn1",
@@ -201,14 +175,17 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
 }
 
 describe("buildCloudInitUserData", () => {
-  it("renders wget → dd → sync → reboot with the iso URL inline", () => {
-    const url =
-      "https://pub-xyz.r2.dev/demo-isos/demo-alice-deadbeef.iso";
-    const s = buildCloudInitUserData(url);
+  it("renders cat(base + trailer) | dd → sync → reboot with both URLs", () => {
+    const baseIsoUrl =
+      "https://flagshipserver.com/build/iso/flagship-base-alpine.iso";
+    const trailerUrl =
+      "https://pub-xyz.r2.dev/demo-isos/demo-alice-deadbeef.trailer";
+    const s = buildCloudInitUserData({ baseIsoUrl, trailerUrl });
     expect(s.startsWith("#!/bin/bash\n")).toBe(true);
     expect(s).toContain("set -euo pipefail");
-    expect(s).toContain(`wget --no-verbose -O /tmp/flagship.iso '${url}'`);
-    expect(s).toContain("dd if=/tmp/flagship.iso of=/dev/sda bs=4M");
+    expect(s).toContain(`wget -qO- '${baseIsoUrl}'`);
+    expect(s).toContain(`wget -qO- '${trailerUrl}'`);
+    expect(s).toContain("dd of=/dev/sda bs=4M");
     expect(s).toContain("conv=fsync");
     expect(s).toMatch(/\nsync\n/);
     expect(s).toMatch(/reboot -f/);
@@ -242,7 +219,7 @@ describe("handleAdminSnapshotNow (W11)", () => {
     };
     expect(body.state).toBe("provisioning");
     expect(body.activeServerId).toBe("srv-abc");
-    expect(body.isoR2Key).toMatch(/^demo-isos\/demo-alice-[0-9a-f]{8}\.iso$/);
+    expect(body.isoR2Key).toMatch(/^demo-isos\/demo-alice-[0-9a-f]{8}\.trailer$/);
     expect(body.ticketCode.length).toBeGreaterThan(0);
 
     // demo_users row is stamped + transitioned to provisioning.
@@ -258,53 +235,23 @@ describe("handleAdminSnapshotNow (W11)", () => {
     expect(call.username).toBe("demo-alice");
     expect(call.location).toBe("fsn1");
     expect(call.serverType).toBe("cpx11");
+    // cloud-init must wget BOTH the base ISO (public URL) AND the
+    // per-demo trailer (R2 temp dev-url) — concatenating onto dd.
+    expect(call.userData).toContain(
+      "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso",
+    );
     expect(call.userData).toContain(
       `https://pub-xyz.r2.dev/${body.isoR2Key}`,
     );
-    expect(call.userData).toContain("dd if=/tmp/flagship.iso of=/dev/sda");
+    expect(call.userData).toContain("dd of=/dev/sda");
 
-    // R2 temp bucket has the personalized ISO + it's larger than the
-    // base ISO (by the trailer length).
+    // R2 temp bucket has the trailer — small (~1-2 KB), much less than
+    // the full ISO. This is the W11-rev-2 fix: Worker writes only the
+    // trailer; cloud-init cats it onto the base on the VPS.
     const tempObj = r2.temp.get(body.isoR2Key);
     expect(tempObj).toBeDefined();
-    expect(tempObj!.length).toBeGreaterThan(8 * 1024);
-  });
-
-  it("uses FixedLengthStream when the Workers runtime provides it (regression)", async () => {
-    // R2 PUT on the live Workers runtime requires a stream with a
-    // known length. A bare ReadableStream throws:
-    //   TypeError: Provided readable stream must have a known length
-    //   (request/response body or readable half of FixedLengthStream)
-    // Live-observed on 2026-05-21 attempt 2 of the W11 live test.
-    // This test installs a global FixedLengthStream mock and verifies
-    // the handler reaches for it and pipes through its readable half.
-    type FLLike = { writable: WritableStream<Uint8Array>; readable: ReadableStream<Uint8Array> };
-    const flCalls: Array<{ length: number }> = [];
-    class FLMock {
-      readable: ReadableStream<Uint8Array>;
-      writable: WritableStream<Uint8Array>;
-      constructor(length: number) {
-        flCalls.push({ length });
-        const ts = new TransformStream<Uint8Array, Uint8Array>();
-        this.readable = ts.readable;
-        this.writable = ts.writable;
-      }
-    }
-    const g = globalThis as unknown as { FixedLengthStream?: new (length: number) => FLLike };
-    const had = g.FixedLengthStream;
-    g.FixedLengthStream = FLMock as unknown as new (length: number) => FLLike;
-    try {
-      const { deps } = await mkDeps({ seedDemo: true, seedUsername: true });
-      const r = await handleAdminSnapshotNow(deps, "demo-alice");
-      expect(r.status).toBe(202);
-      // The handler MUST have constructed the FixedLengthStream
-      // exactly once with the streamPersonalize totalBytes value.
-      expect(flCalls).toHaveLength(1);
-      expect(flCalls[0]!.length).toBeGreaterThan(8 * 1024);
-    } finally {
-      if (had === undefined) delete g.FixedLengthStream;
-      else g.FixedLengthStream = had;
-    }
+    expect(tempObj!.length).toBeGreaterThan(100);
+    expect(tempObj!.length).toBeLessThan(4 * 1024);
   });
 
   it("idempotent — second call with state=provisioning returns 200 + reused", async () => {

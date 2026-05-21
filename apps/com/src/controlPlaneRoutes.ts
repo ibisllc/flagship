@@ -1641,14 +1641,13 @@ export async function tryControlPlane(
       }
       if (
         !env.HCLOUD_TOKEN ||
-        !env.ISO_BUCKET ||
         !env.ISO_TEMP_BUCKET ||
         !env.FLAGSHIP_R2_TEMP_PUBLIC_BASE
       ) {
         return jsonResponse(
           {
             error:
-              "W11 admin-snapshot-now requires HCLOUD_TOKEN + ISO_BUCKET + ISO_TEMP_BUCKET + FLAGSHIP_R2_TEMP_PUBLIC_BASE on the Worker",
+              "W11 admin-snapshot-now requires HCLOUD_TOKEN + ISO_TEMP_BUCKET + FLAGSHIP_R2_TEMP_PUBLIC_BASE on the Worker",
           },
           503,
         );
@@ -1660,12 +1659,14 @@ export async function tryControlPlane(
         authCodes: adminDeps.authCodes,
         buildTickets: adminDeps.buildTickets,
         deviceCapabilityGrants: adminDeps.deviceCapabilityGrants,
-        isoBucket: env.ISO_BUCKET,
         isoTempBucket: env.ISO_TEMP_BUCKET,
         isoTempPublicBase: env.FLAGSHIP_R2_TEMP_PUBLIC_BASE,
-        baseIsoKey:
-          env.FLAGSHIP_BASE_ISO_KEY ??
-          "build/iso/flagship-base-alpine-3.21.0-x86_64.iso",
+        // Public URL of the base ISO; cloud-init wgets it directly,
+        // bypassing the Worker. Falls back to the BASE_ISO_URL var the
+        // existing /build/ flow already uses.
+        baseIsoUrl:
+          env.BASE_ISO_URL ??
+          "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso",
         hetzner: provisionHetzner,
         demoIrkKek: adminDeps.demoIrkKek,
         ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),

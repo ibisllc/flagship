@@ -111,17 +111,18 @@ export interface DemoProvisionDeps {
   authCodes: AuthCodeStorage;
   buildTickets: BuildTicketStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
-  /** R2 bucket holding the BASE Alpine ISO. */
-  isoBucket: ReadableR2Bucket;
-  /** R2 bucket the personalized ISO is written to. Cloud-init wgets
-   *  from here over the public dev-url base. */
+  /** R2 bucket the per-demo TRAILER (~1 KB) is written to. Cloud-init
+   *  wgets the trailer from here over the public dev-url base + cats
+   *  it onto the base ISO on the VPS. */
   isoTempBucket: WritableR2Bucket;
   /** Public-dev-url base for the temp bucket, e.g.
-   *  `https://pub-260717…r2.dev`. Concatenated with the R2 key by the
-   *  cloud-init script. */
+   *  `https://pub-260717…r2.dev`. Concatenated with the trailer R2 key
+   *  by the cloud-init script. */
   isoTempPublicBase: string;
-  /** R2 key of the base ISO. */
-  baseIsoKey: string;
+  /** Public URL of the BASE Alpine ISO. Cloud-init wgets this directly
+   *  (no Worker pass-through), then cats the trailer onto it. Typically
+   *  `https://flagshipserver.com/build/iso/flagship-base-alpine-…iso`. */
+  baseIsoUrl: string;
   hetzner: ProvisioningHetznerClient;
   demoIrkKek: Uint8Array;
   /** OPTIONAL — when present, Hetzner attaches this numeric SSH key id
@@ -204,13 +205,28 @@ const DEFAULT_DEMO_PRIMARY_SCOPES: readonly DeviceScope[] =
  * failure mode is "VPS won't boot" not "data loss" — we just destroy
  * + re-provision.
  */
-export function buildCloudInitUserData(isoUrl: string): string {
+/**
+ * Cloud-init shell script. Originally tried to wget a single
+ * pre-personalized ISO from R2, but the Worker can't stream the 240 MB
+ * personalized ISO into R2 within the CPU budget (every chunk costs JS
+ * pull/enqueue time → Workers hit the CPU limit at ~30s on the live
+ * 2026-05-21 attempt 3). Fix: have the Worker write only the small
+ * trailer (~1 KB) and let the VPS itself concatenate the base ISO
+ * (publicly served at `flagshipserver.com/build/iso/…`) with the
+ * trailer (publicly served at the R2-temp-bucket dev-url). The cat is
+ * piped into dd so neither file ever needs to land on disk.
+ */
+export function buildCloudInitUserData(args: {
+  baseIsoUrl: string;
+  trailerUrl: string;
+}): string {
   return `#!/bin/bash
 set -euo pipefail
 echo "[flagship-cloud-init] starting at $(date)" > /var/log/flagship-cloud-init.log
-wget --no-verbose -O /tmp/flagship.iso '${isoUrl}' >> /var/log/flagship-cloud-init.log 2>&1
-echo "[flagship-cloud-init] iso downloaded; dd-ing onto /dev/sda" >> /var/log/flagship-cloud-init.log
-dd if=/tmp/flagship.iso of=/dev/sda bs=4M conv=fsync status=none >> /var/log/flagship-cloud-init.log 2>&1
+echo "[flagship-cloud-init] fetching base + trailer; piping into dd" >> /var/log/flagship-cloud-init.log
+( wget -qO- '${args.baseIsoUrl}' && wget -qO- '${args.trailerUrl}' ) \
+    | dd of=/dev/sda bs=4M conv=fsync status=none \
+    >> /var/log/flagship-cloud-init.log 2>&1
 sync
 echo "[flagship-cloud-init] dd complete; rebooting" >> /var/log/flagship-cloud-init.log
 sleep 2
@@ -400,63 +416,48 @@ export async function handleAdminSnapshotNow(
     revokedAt: null,
   });
 
-  // Stream the personalized ISO out of the base bucket + into the temp
-  // bucket. The R2 key embeds an 8-hex tag from the blob signature so
-  // a retry of the same admin-snapshot-now produces the same key (the
-  // R2 PUT is a no-op when the object already exists with the same
-  // content — bandwidth saver on flapping operator retries).
+  // Write JUST the small trailer (~1 KB) to R2. The cloud-init script
+  // on the VPS wgets the base ISO from its existing public URL +
+  // wgets the trailer from R2 + pipes both into dd. This avoids
+  // streaming 240 MB through the Worker (which busts the CPU budget;
+  // see the comment on buildCloudInitUserData).
+  //
+  // The R2 key embeds an 8-hex tag from the blob signature so a retry
+  // of admin-snapshot-now produces the same trailer + key — R2 PUT
+  // becomes a no-op on flapping operator retries.
   const sig8 = bytesToHex(blobSig.subarray(0, 4));
-  const isoR2Key = `demo-isos/${u}-${sig8}.iso`;
+  const trailerR2Key = `demo-isos/${u}-${sig8}.trailer`;
 
-  const baseObj = await deps.isoBucket.get(deps.baseIsoKey);
-  if (!baseObj || !baseObj.body) {
-    return {
-      status: 503,
-      body: { error: `base ISO ${deps.baseIsoKey} not found in ISO_BUCKET` },
-    };
-  }
+  // Build the trailer envelope by running streamPersonalize against an
+  // empty base stream — we only need its trailerBytes field. (The
+  // streamPersonalize import stays in case a later use-case needs the
+  // full streaming path again.)
+  const emptyBase = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.close();
+    },
+  });
   const personalized = streamPersonalize({
-    baseIsoStream: baseObj.body,
-    baseIsoSize: baseObj.size,
+    baseIsoStream: emptyBase,
+    baseIsoSize: 0,
     blob,
     blobSignature: blobSig,
   });
-  // R2 PUT requires a stream with a known length. A bare ReadableStream
-  // throws on the Workers runtime:
-  //   TypeError: Provided readable stream must have a known length
-  //   (request/response body or readable half of FixedLengthStream)
-  // FixedLengthStream wraps `personalized.stream` and exposes a
-  // length-tagged readable half that R2 accepts. The `totalBytes`
-  // value comes from `streamPersonalize` (baseIsoSize + trailer
-  // bytes), so it matches exactly what will flow through.
-  //
-  // The constructor only exists on the Workers runtime; in vitest the
-  // R2 stub doesn't care about stream-length tagging, so we fall back
-  // to the bare stream when FixedLengthStream is absent.
-  const FL = (
-    globalThis as unknown as {
-      FixedLengthStream?: new (length: number) => {
-        writable: WritableStream<Uint8Array>;
-        readable: ReadableStream<Uint8Array>;
-      };
-    }
-  ).FixedLengthStream;
-  let streamForR2: ReadableStream<Uint8Array> = personalized.stream;
-  if (FL) {
-    const fixed = new FL(personalized.totalBytes);
-    // Pipe in the background — R2.put consumes `fixed.readable` while
-    // streamPersonalize pumps into `fixed.writable`.
-    personalized.stream.pipeTo(fixed.writable).catch(() => {
-      // pipeTo errors will surface on the readable side as PUT failures.
-    });
-    streamForR2 = fixed.readable;
-  }
-  await deps.isoTempBucket.put(isoR2Key, streamForR2, {
+  // Tiny PUT — trailer is < ~2 KB. Pass the Uint8Array directly; no
+  // FixedLengthStream needed.
+  await deps.isoTempBucket.put(trailerR2Key, personalized.trailerBytes, {
     httpMetadata: { contentType: "application/octet-stream" },
   });
+  // For backward-compat in tests + the response payload, keep the
+  // legacy field name. The semantic shifted (now points at the trailer
+  // not the personalized ISO) but the field name is informational.
+  const isoR2Key = trailerR2Key;
 
-  const isoUrl = `${deps.isoTempPublicBase.replace(/\/+$/, "")}/${isoR2Key}`;
-  const userData = buildCloudInitUserData(isoUrl);
+  const trailerUrl = `${deps.isoTempPublicBase.replace(/\/+$/, "")}/${trailerR2Key}`;
+  const userData = buildCloudInitUserData({
+    baseIsoUrl: deps.baseIsoUrl,
+    trailerUrl,
+  });
 
   let prov: { serverId: string; ipv4: string | null };
   try {
