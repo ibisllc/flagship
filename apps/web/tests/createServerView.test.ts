@@ -92,10 +92,10 @@ describe("create-server view — static structure (#24)", () => {
 });
 
 describe("buildDraft helpers — pure functions (#24)", () => {
-  it("canonicalInstallBlob produces deterministic '|'-joined bytes", async () => {
+  it("canonicalInstallBlob produces deterministic '|'-joined bytes (v2)", async () => {
     const { canonicalInstallBlob } = await import("../public/webapp/lib/buildDraft.js");
     const blob = {
-      version: 1,
+      version: 2,
       serverDomain: "home.alice.flagship.services",
       username: "alice",
       serverName: "home",
@@ -106,17 +106,41 @@ describe("buildDraft helpers — pure functions (#24)", () => {
         userPubKey: new Uint8Array(32).fill(0xbb),
       },
       authCodeUserSignature: new Uint8Array(64).fill(0xcc),
-      issuedAt: 1_700_000_000_000,
-      expiresAt: 1_700_003_600_000,
       installerGitRef: "main",
       rckPubKey: new Uint8Array(32).fill(0xdd),
     };
     const bytes = canonicalInstallBlob(blob);
     const text = new TextDecoder().decode(bytes);
-    expect(text.startsWith("flagship/install-blob/v1|1|home.alice.flagship.services|alice|home|")).toBe(true);
+    expect(text.startsWith("flagship/install-blob/v1|2|home.alice.flagship.services|alice|home|")).toBe(true);
     expect(text).toContain("01ABCDEF0123456789ABCDEF01");
     expect(text).toContain("|main|");
+    // v2 invariant: NO blob.issuedAt or blob.expiresAt field in canonical-bytes.
+    expect(text.split("|").length).toBe(12);
     expect(new TextDecoder().decode(canonicalInstallBlob(blob))).toBe(text);
+  });
+});
+
+describe("recipe TTL — single user-facing knob", () => {
+  it("clampRecipeTtlMs floors at 5 minutes and ceilings at 24 hours", async () => {
+    const { clampRecipeTtlMs, MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS, DEFAULT_RECIPE_TTL_MS } =
+      await import("../public/webapp/views/create-server.js");
+    expect(MIN_RECIPE_TTL_MS).toBe(5 * 60_000);
+    expect(MAX_RECIPE_TTL_MS).toBe(24 * 60 * 60_000);
+    expect(DEFAULT_RECIPE_TTL_MS).toBe(6 * 60 * 60_000);
+    expect(clampRecipeTtlMs(0)).toBe(MIN_RECIPE_TTL_MS);
+    expect(clampRecipeTtlMs(-1)).toBe(MIN_RECIPE_TTL_MS);
+    expect(clampRecipeTtlMs(1_000_000_000)).toBe(MAX_RECIPE_TTL_MS);
+    expect(clampRecipeTtlMs(60 * 60_000)).toBe(60 * 60_000);          // 1h
+    expect(clampRecipeTtlMs(6 * 60 * 60_000)).toBe(6 * 60 * 60_000);  // 6h
+    expect(clampRecipeTtlMs(NaN)).toBe(DEFAULT_RECIPE_TTL_MS);
+    expect(clampRecipeTtlMs("not a number" as unknown as number)).toBe(DEFAULT_RECIPE_TTL_MS);
+  });
+
+  it("exposes a cs-ttl-hours input wired to clampRecipeTtlMs", () => {
+    expect(INDEX_HTML).toMatch(/id="cs-ttl-hours"/);
+    expect(VIEW_SRC).toContain("cs-ttl-hours");
+    expect(VIEW_SRC).toContain("clampRecipeTtlMs");
+    expect(VIEW_SRC).toContain("recipeTtlMs");
   });
 });
 
