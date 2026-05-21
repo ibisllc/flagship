@@ -165,9 +165,9 @@ SERVICES_BASE_URL = "https://flagship-services.fly.dev:8443"
 # On boot, Alpine's overlay-init loads the apkovl, the bootstrap script
 # probes the boot media for the trailer, validates the signature, and
 # fetches installer/install.sh from GitHub at the trailer-pinned ref.
-BASE_ISO_URL = "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64-apkovl3.iso"
-BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl3"
-BASE_ISO_SHA256 = "b1a9a1376f78afc7608471b065c52e7904c39ad732685e4503ee39f09da64889"
+BASE_ISO_URL = "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64-apkovl3-debug3.iso"
+BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl3-debug"
+BASE_ISO_SHA256 = "52bbb7432dade2b6a86be483d00edd95df02a34b84bb4d9ca9a8dfddd71cc653"
 
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.
 # `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the
@@ -182,7 +182,7 @@ FLAGSHIP_R2_TEMP_PUBLIC_BASE = "https://pub-260717b8631044a0bcee80ce0de8f7f9.r2.
 # (The `/build/iso/:filename` route in apps/com/src/route.ts strips
 # the prefix before calling ISO_BUCKET.get(), so the on-disk key is
 # unprefixed. Probed live 2026-05-21: 250 937 344 bytes at this key.)
-FLAGSHIP_BASE_ISO_KEY = "flagship-base-alpine-3.21.0-x86_64-apkovl3.iso"
+FLAGSHIP_BASE_ISO_KEY = "flagship-base-alpine-3.21.0-x86_64-apkovl3-debug3.iso"
 
 # Fly anycast IPs of the .services SNI passthrough listener. When DNS
 # auto-publish is enabled (CLOUDFLARE_DNS_API_TOKEN secret set), the

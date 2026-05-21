@@ -14,6 +14,21 @@
 #   - Idempotent: presence of /var/flagship/installed.flag short-circuits
 #     to boot-stage on subsequent boots.
 
+# DEBUG: write a "bootstrap-was-invoked" marker to /dev/sda at offset
+# 1 GiB as the VERY FIRST command, before any potentially-failing
+# step (set -eu, redirection, mkdir). The post-mortem rescue can read
+# this offset; if it shows "ALIVE @ <timestamp>", we know /etc/local.d/
+# at least invoked us. If it doesn't, Alpine's apkovl boot is dropping
+# the script on the floor before execution — different problem.
+{
+    echo "FLAGSHIP-BOOTSTRAP-ALIVE @ $(date)"
+    echo "PATH=$PATH"
+    echo "/dev/sda accessible: $([ -b /dev/sda ] && echo YES || echo NO)"
+    echo "----"
+} > /tmp/bootstrap-alive.txt 2>&1
+dd if=/tmp/bootstrap-alive.txt of=/dev/sda seek=1073741824 oflag=seek_bytes conv=notrunc,fsync bs=4K 2>/dev/null || true
+sync || true
+
 set -eu
 
 LOG=/var/log/flagship-bootstrap.log
@@ -23,7 +38,52 @@ DEFAULT_REF="main"
 
 mkdir -p /var/flagship /var/log
 exec >>"$LOG" 2>&1
+set -x  # DEBUG: trace every command. Useful while the bootstrap is
+        # still being shaken out. Drop once Phase F goes green.
 date
+
+# DEBUG: copy the bootstrap log to /dev/sda at offset 1 GiB on every
+# exit (success or failure). The Alpine apkovl-mode root is tmpfs so
+# the log vanishes on reboot; persisting it to a known disk offset
+# lets a post-mortem rescue boot read the failure cause. The offset
+# is past the 240 MB ISO bytes + plenty of slack, and well before
+# the disk-end trailer copy (40 GB - ~1 KB).
+LOG_DEVICE_OFFSET=$((1 * 1024 * 1024 * 1024))   # 1 GiB
+LOG_MAX_BYTES=$((1 * 1024 * 1024))               # 1 MiB cap
+persist_log() {
+    sync || true
+    head -c "$LOG_MAX_BYTES" "$LOG" 2>/dev/null \
+        | dd of=/dev/sda seek="$LOG_DEVICE_OFFSET" oflag=seek_bytes conv=notrunc,fsync bs=4K 2>/dev/null || true
+    sync || true
+}
+trap persist_log EXIT
+trap persist_log ERR
+
+# DEBUG: also force network up + verify DNS BEFORE apk-add. Alpine's
+# default ordering puts `networking` in `boot` runlevel and `local`
+# (where this script runs) in `default`, but cx23 may race. Pin it.
+#
+# DHCP needs AF_PACKET (raw L2 sockets). Alpine 3.21 `linux-lts` ships
+# AF_PACKET as a kernel MODULE (`af_packet.ko`), not built-in, and
+# nothing autoloads it during the apkovl-mode boot path — so udhcpc
+# fails with `socket(AF_PACKET,2,8): Address family not supported by
+# protocol` before issuing any DHCP discover. Live-confirmed
+# 2026-05-21 by post-mortem of the bootstrap log persisted to disk
+# offset 1 GiB. modprobe + retry the DHCP.
+echo "[debug] modprobing af_packet (DHCP needs AF_PACKET raw sockets)"
+modprobe af_packet 2>&1 || echo "[debug] modprobe af_packet failed"
+echo "[debug] bringing eth0 up and waiting for DHCP"
+ifconfig eth0 up 2>&1 || true
+udhcpc -i eth0 -t 8 -n 2>&1 || true
+sleep 2
+echo "[debug] /etc/resolv.conf:"
+cat /etc/resolv.conf 2>&1 || true
+echo "[debug] ip a:"
+ip a 2>&1 | head -20 || ifconfig 2>&1 | head -20 || true
+echo "[debug] testing DNS:"
+nslookup dl-cdn.alpinelinux.org 2>&1 | head -5 || true
+echo "[debug] testing HTTPS to alpine cdn:"
+wget --spider --no-verbose --timeout=10 https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz 2>&1 | head -3 || true
 
 # Install the deps the rest of the bootstrap depends on. Vanilla Alpine
 # ships busybox + apk-tools + the kernel but no node / git / npm / curl /
