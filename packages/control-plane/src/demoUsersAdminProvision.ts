@@ -421,7 +421,37 @@ export async function handleAdminSnapshotNow(
     blob,
     blobSignature: blobSig,
   });
-  await deps.isoTempBucket.put(isoR2Key, personalized.stream, {
+  // R2 PUT requires a stream with a known length. A bare ReadableStream
+  // throws on the Workers runtime:
+  //   TypeError: Provided readable stream must have a known length
+  //   (request/response body or readable half of FixedLengthStream)
+  // FixedLengthStream wraps `personalized.stream` and exposes a
+  // length-tagged readable half that R2 accepts. The `totalBytes`
+  // value comes from `streamPersonalize` (baseIsoSize + trailer
+  // bytes), so it matches exactly what will flow through.
+  //
+  // The constructor only exists on the Workers runtime; in vitest the
+  // R2 stub doesn't care about stream-length tagging, so we fall back
+  // to the bare stream when FixedLengthStream is absent.
+  const FL = (
+    globalThis as unknown as {
+      FixedLengthStream?: new (length: number) => {
+        writable: WritableStream<Uint8Array>;
+        readable: ReadableStream<Uint8Array>;
+      };
+    }
+  ).FixedLengthStream;
+  let streamForR2: ReadableStream<Uint8Array> = personalized.stream;
+  if (FL) {
+    const fixed = new FL(personalized.totalBytes);
+    // Pipe in the background — R2.put consumes `fixed.readable` while
+    // streamPersonalize pumps into `fixed.writable`.
+    personalized.stream.pipeTo(fixed.writable).catch(() => {
+      // pipeTo errors will surface on the readable side as PUT failures.
+    });
+    streamForR2 = fixed.readable;
+  }
+  await deps.isoTempBucket.put(isoR2Key, streamForR2, {
     httpMetadata: { contentType: "application/octet-stream" },
   });
 

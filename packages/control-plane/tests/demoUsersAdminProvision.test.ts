@@ -270,6 +270,43 @@ describe("handleAdminSnapshotNow (W11)", () => {
     expect(tempObj!.length).toBeGreaterThan(8 * 1024);
   });
 
+  it("uses FixedLengthStream when the Workers runtime provides it (regression)", async () => {
+    // R2 PUT on the live Workers runtime requires a stream with a
+    // known length. A bare ReadableStream throws:
+    //   TypeError: Provided readable stream must have a known length
+    //   (request/response body or readable half of FixedLengthStream)
+    // Live-observed on 2026-05-21 attempt 2 of the W11 live test.
+    // This test installs a global FixedLengthStream mock and verifies
+    // the handler reaches for it and pipes through its readable half.
+    type FLLike = { writable: WritableStream<Uint8Array>; readable: ReadableStream<Uint8Array> };
+    const flCalls: Array<{ length: number }> = [];
+    class FLMock {
+      readable: ReadableStream<Uint8Array>;
+      writable: WritableStream<Uint8Array>;
+      constructor(length: number) {
+        flCalls.push({ length });
+        const ts = new TransformStream<Uint8Array, Uint8Array>();
+        this.readable = ts.readable;
+        this.writable = ts.writable;
+      }
+    }
+    const g = globalThis as unknown as { FixedLengthStream?: new (length: number) => FLLike };
+    const had = g.FixedLengthStream;
+    g.FixedLengthStream = FLMock as unknown as new (length: number) => FLLike;
+    try {
+      const { deps } = await mkDeps({ seedDemo: true, seedUsername: true });
+      const r = await handleAdminSnapshotNow(deps, "demo-alice");
+      expect(r.status).toBe(202);
+      // The handler MUST have constructed the FixedLengthStream
+      // exactly once with the streamPersonalize totalBytes value.
+      expect(flCalls).toHaveLength(1);
+      expect(flCalls[0]!.length).toBeGreaterThan(8 * 1024);
+    } finally {
+      if (had === undefined) delete g.FixedLengthStream;
+      else g.FixedLengthStream = had;
+    }
+  });
+
   it("idempotent — second call with state=provisioning returns 200 + reused", async () => {
     const { deps } = await mkDeps({ seedDemo: true, seedUsername: true });
     await handleAdminSnapshotNow(deps, "demo-alice");
