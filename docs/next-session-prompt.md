@@ -1,110 +1,143 @@
-# Next-session prompt — Flagship Burner + cloud demo end-to-end
+# Next-session prompt — drive Flagship to a public v1 launch
 
-Paste this verbatim into the next Claude Code session. The session before this one (2026-05-21) landed the W13 cloud-init-direct path for the cloud demo; this session ships the **Burner**, drives the demo to "fully alive", and proves the real-USB story on a metal box.
+The 2026-05-21 session shipped the protocol cleanup (`v2`), the buildTicket
+removal (QR-pipe is the only flow), the recipe-TTL knob (6h default), the
+Burner CLI Phase-1, the Mac SwiftUI GUI, and a fully-green vitest. This
+session's job: ship the last mile — real-metal USB install, native Windows +
+Linux Burner GUIs, iOS / Android store uploads, vibecode "hello world" demo,
+and a polished public-facing flagshipserver.com.
 
-Style we kept across the marathon:
+Style we've kept (and you should keep):
+
 - **Deep-think before edits** — recon current state before writing code.
-- **Sequential sub-workers** — one focused sub-agent per phase, isolated in worktree, merge to main when verified.
-- **Logical commits** — one PR-sized commit per landed phase, body explains WHY not WHAT.
-- **Verify before trust** — re-run `npx tsc -b` + `npx vitest run` + mobile gates after each merge.
+- **Sequential sub-workers** — one focused sub-agent per phase in an
+  isolated worktree, merge to main when verified.
+- **Logical commits** — one PR-sized commit per landed phase, body explains
+  WHY not WHAT. No Co-Authored-By trailer (CLAUDE.md user pref).
+- **Verify before trust** — re-run `npx tsc -b` + `npx vitest run` + mobile
+  gates after each merge.
 - **No mid-session pauses for "ready for next phase?"** — flow continuously.
+- **Ask before architectural / UX / security changes** — owner pref locked
+  in the 2026-05-21 session.
+- **Push to origin frequently.** Owner wants commits to land on `origin/main`
+  as they're proven, not batched.
 
 ---
 
-## Where we left off (state at 2026-05-21 16:30 UTC)
+## Where we left off (state at 2026-05-21 end of day)
 
-**W13 cloud-init-direct path landed** (commit chain on `main`, see most recent commits). Skips custom ISO + d-i entirely:
-- Hetzner debian-12 base image
-- cloud-init runs our `flagship-bootstrap.sh` on first boot
-- Pulls Node 20 from NodeSource (Debian-12 ships Node 18 which is too old)
-- `npm install --workspaces` (vs `npm ci` which silently no-ops workspaces)
-- Inline registration to `/api/server/register`
-- ~2 minutes from VPS creation → daemon registered in `.com`
+### Architecture (locked + tested + live)
 
-The custom-ISO W12 path is preserved in tree (`packages/installer-netboot/`) but **unused** by the demo. It's a debugging artifact; don't delete — keep for real-USB referencework.
+- **W13 cloud-init-direct demo path** — `home.demo-alice.flagship.services`
+  registers in ~2 minutes from Hetzner debian-12 VPS launch. Cron promotes
+  `provisioning → up` once `servers` table has the entry. The custom-ISO
+  W12 path is preserved in tree but unused.
+- **QR-pipe is the only handoff flow** — phone signs blob, sends through a
+  per-session Durable Object, desktop reads. Build-ticket flow (`POST
+  /api/build-tickets/issue` etc.) entirely ripped — endpoints gone, D1
+  table dropped via migration 0033, mobile + webapp paths updated.
+- **InstallBlob v2** — canonical-bytes layout dropped `blob.issuedAt` and
+  `blob.expiresAt`. `authCode.expiresAt` is the sole TTL. Tag stays
+  `flagship/install-blob/v1`; the inner `version: 2` is the discriminator.
+  See `docs/recipe-schema-v2.md` for the spec.
+- **Recipe TTL knob** — default 6h, clamped [5min, 24h]. Picker on iOS
+  (`CreateServerStubScreen.swift` design page slider), Android (`CreateServerScreen.kt`
+  Compose slider), webapp (`#cs-ttl-hours` number input). Worker enforces
+  the 24h cap unilaterally in `serverRegister.ts` (defense in depth).
+- **Burner CLI Phase-1** at `packages/flagship-burner/` — `verify` /
+  `verify-iso` / `user-data` / `prepare` / `distros` subcommands. Never
+  calls `flagshipserver.com`; verifies the phone-signed Ed25519 locally.
+  Auto-shreds the recipe file after successful consume. Pinned distro
+  allowlist (Ubuntu Server 22.04 only at launch).
+- **Mac SwiftUI Burner GUI** at `apps/burner-mac/` — drives the CLI;
+  21/21 swift tests pass. User needs `node` 20+ on their machine (Phase-2
+  bundles node into the app).
+- **Webapp "Download recipe" button** — emits a `.json` file matching the
+  Burner's `loadBlobFromFile()` schema verbatim, for cross-device flows.
 
-**Live demo at session-end**: VPS `132252195` (IP `188.245.202.158`) is provisioned, registered, awaiting promotion to `state='up'` at the next 16:30 cron tick. If the next session inherits a stale row, just `npx wrangler d1 execute flagship-state --remote --command "UPDATE demo_users SET state='none', active_server_id=NULL WHERE username='demo-alice'"` and re-launch via `curl -sS -X POST https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-cloud-init-now -H "x-admin-secret: $FLAGSHIP_ADMIN_SECRET" -H "content-type: application/json" -d '{"display":"Demo Alice"}'`.
+### Test gates as of session end
 
-**Debug endpoints added** (admin-gated via `FLAGSHIP_ADMIN_SECRET`):
-- `POST /api/dev/rescue/<serverId>` — enable Hetzner rescue + return root password
-- `POST /api/dev/destroy/<serverId>` — destroy any Hetzner VPS by id
-- `GET /api/dev/server/<serverId>` — Hetzner server record (status, IP)
-- `PUT /api/dev/upload-iso/<filename>` — upload an ISO into `ISO_BUCKET`
-- `POST/GET /api/dev/late-log/<label>` — install-stage exfil log
+- `npx vitest run` → **3166/3174 pass, 8 skipped** (vps-e2e harness gated
+  pending its own QR-pipe rewrite)
+- `npx tsc -b` → clean across the whole workspace
+- iOS xcodebuild test → **300/300** (incl. 8 new TTL + v2 canonical-bytes
+  regression tests)
+- Android `./gradlew test` → BUILD SUCCESSFUL
+- `apps/burner-mac/` `swift test` → **21/21**
 
-Keep these around; they unblock rescue-mode forensics from the laptop without ever having `HCLOUD_TOKEN` locally.
+### Operator follow-ups (irreducible — needs human shell + credentials)
 
-**Memory contains** the Burner spec (`project_flagship_burner.md`) — read it first.
+- `wrangler secret put DEMO_IRK_KEK` (`openssl rand -hex 32`) — admin-claim-
+  and-issue endpoints return 503 without it
+- `wrangler d1 execute flagship-state --remote --file=packages/storage/migrations/0033_drop_build_tickets.sql`
+  — drops the now-unused `build_tickets` table on prod D1
+- CA endorsement re-signing before `2026-06-02T22:40:29.858Z`
 
 ---
 
-## Punch list — in no particular order, all of these are FOR THIS SESSION
+## Punch list — in priority order
 
-### 1. Flagship Burner (Mac / Win / Linux)
+### P0 (gate for opening flagshipserver.com to the public)
 
-The single tool a real user installs. Replaces "download personalized ISO + balenaEtcher" with "download stock Ubuntu ISO once + Burner + recipe". See `project_flagship_burner.md` in memory for the full threat model + requirements.
+1. **Real-metal USB install proof point.** Use today's Burner CLI to write a
+   stock Ubuntu Server ISO + a real recipe (minted from your phone) onto a
+   USB stick. Boot a laptop from it. Confirm the daemon registers from your
+   home network (not Hetzner). This is the single proof point that says
+   "the install path actually works for real users."
+2. **`flagship-burn write` subcommand.** Direct raw-disk write. The other
+   parallel worktree (`.claude/worktrees/agent-ae04553a499422f1d/`) was
+   building this; merge it in, run gates, ship. Phase-2 alternative to the
+   `prepare`-then-`dd` two-step.
+3. **Webapp recipe-download UX polish.** The button works (`#cs-download-recipe`)
+   but it sits in a card the user has to scroll to. Lift it to a more
+   prominent spot once the cross-device flow is the recommended path.
 
-- **CLI prototype first** (`flagship-burn` — single Go or Rust static binary, works on all three OSes).
-  - Reads recipe (copy-paste OR JSON file)
-  - Verifies stock Ubuntu/Debian ISO against Canonical/Debian GPG signature
-  - Writes ISO to USB
-  - Injects cloud-init `user-data` overlay so first boot runs flagship-bootstrap
-  - **Auto-shreds recipe file** after successful flash (consumes-and-deletes)
-- **Distro allowlist with pinned SHA + GPG fingerprint** baked into the binary
-- **Native GUIs** layered on top:
-  - Mac: SwiftUI or Tauri-on-Rust wrapper
-  - Windows: signed exe, admin elevation for raw disk
-  - Linux: AppImage + Flatpak
-- **Reproducible builds + signed releases** — users can verify the binary
-- **Copy-paste recipe + download-JSON both supported** — copy-paste is preferred for same-device flow (no file at rest)
-- **Test on the operator's iPhone + Linux laptop combo** until perfect
+### P1 (broader reach)
 
-### 2. Graphical end-to-end test of the cloud demo
+4. **Windows Burner GUI.** Same shape as `apps/burner-mac/` but in
+   WinUI or Tauri-on-Rust (your call). Bundles a signed `node` runtime so
+   end users don't need to install one.
+5. **Linux Burner GUI.** AppImage or Flatpak. Same architecture as Mac.
+6. **iOS TestFlight upload.** Substantial work — Xcode project setup,
+   Apple Developer cert wrangling, App Store Connect metadata, 5 external
+   testers. See memory `project-testflight-blockers.md`.
+7. **Android Play internal track.** Same shape, FCM setup, signing key.
+8. **iOS XCUITest graphical e2e.** Requires converting the SwiftPM library
+   to an xcodeproj with an app target. Substantial; defer if TestFlight
+   manual QA is sufficient.
 
-- iOS Simulator + TestFlight build pointing at `flagshipserver.com`
-- Walk the full flow: build code → claim → admin-cloud-init-now → registration arrives → user sees pod alive in iOS app
-- Stress edge cases: network drops mid-bootstrap, daemon crash on first boot, recipe expired, recipe replayed, dupe install
-- Capture screenshots for marketing / TestFlight metadata
+### P2 (showcase / story)
 
-### 3. Generalize to other app platforms
-
-- Android (Kotlin) parity
-- Web app at `web.flagshipserver.com` exercising the same backend
-- All three render the same `DeviceCapabilityBlock` + scope buttons consistently
-
-### 4. Real-metal install
-
-- Use the Burner (item 1) to write a USB
-- Boot a real laptop or thinkmini from it
-- Confirm the daemon registers from the user's network (not Hetzner)
-- This is the **proof point for opening the site publicly**
-
-### 5. Vibecode "hello world" with user access
-
-- Show that a fresh-installed pod can run a tiny user-authored service end-to-end
-- Phone-mediated auth → daemon serves "hello, harry" with green padlock at `home.harry.flagship.services`
-- Foundational demo for the "vibecode an app on your pod" pillar
-- Use the existing vibecode infrastructure (multi-turn + per-app env vars + signed orders)
-
-### 6. Stretch / nice-to-have
-
-- Recipe TTL audit — make sure phone-issued tickets actually expire (replay-protect spec)
-- Auto-promote W13 row even when daemon-status (not just servers) registers — current promotion uses `servers` table but a robust cron also handles the `lastReported` signal
-- Build-relay reliability under load
+9. **Vibecode "hello world" demo.** Show the foundational pillar: user
+   types a prompt on their phone → daemon spins up a tiny app → renders
+   at `home.harry.flagship.services/hello`. The infra (multi-turn
+   protocol + per-app env vars + signed orders) is built; needs a demo
+   recipe that ties it together end-to-end.
+10. **Marketplace scanner.** `marketplace_listings.scan_grade` column
+    is still NULL today. v1 launch requirement before opening the
+    public marketplace.
 
 ---
 
 ## Pinned threat reminders
 
-- **Recipe file at rest** is a real attack surface. Burner ships copy-paste as default; download-JSON for cross-device; auto-shred after consume.
-- **CA endorsement** must be re-signed before `2026-06-02T22:40:29.858Z` (see `[[project_resume_2026_05_16]]`). Don't let it expire without renewing.
+- **Recipe file at rest** is a real attack surface. The current mitigations
+  (auto-shred, 5min-24h TTL, copy-paste flow on same-device) are documented
+  in `packages/flagship-burner/README.md` § threat model. Don't widen the
+  TTL ceiling without weighing the cost.
+- **CA endorsement** must be re-signed before `2026-06-02T22:40:29.858Z`.
 - **No Co-Authored-By trailer** on commits.
 
 ## Where to dig
 
-- W13 design: `docs/cloud-init-direct-provisioning.md`
-- W13 handler: `packages/control-plane/src/demoUsersAdminCloudInit.ts`
-- Bootstrap script (the runcmd that runs on the user's VPS): inline in `demoUsersAdminCloudInit.ts`'s `buildCloudConfigUserData`
-- Burner spec: memory `project_flagship_burner.md`
-- Cron fixes: `apps/com/src/scheduled.ts`, `packages/control-plane/src/demoUsers.ts`
-- Old W12 d-i path (kept for reference): `packages/installer-netboot/` + `scripts/build-flagship-netboot-iso.sh`
+| Topic | Path |
+|---|---|
+| Recipe schema | `docs/recipe-schema-v2.md` |
+| Cloud-init demo design | `docs/cloud-init-direct-provisioning.md` |
+| W13 handler | `packages/control-plane/src/demoUsersAdminCloudInit.ts` |
+| Burner CLI | `packages/flagship-burner/` + `README.md` |
+| Mac Burner GUI | `apps/burner-mac/` + `README.md` |
+| Cron fixes | `apps/com/src/scheduled.ts`, `packages/control-plane/src/demoUsers.ts` |
+| Old W12 d-i path (kept for reference) | `packages/installer-netboot/` |
+| Memory: Burner spec | `project-flagship-burner.md` |
+| Memory: this session's progress | the latest `MEMORY.md` entry |
