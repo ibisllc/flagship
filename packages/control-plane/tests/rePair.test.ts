@@ -83,11 +83,15 @@ function initBody(args: {
   };
 }
 
-function objectBody(args: { oldIrk: Keypair; newIrkPub: Uint8Array; issuedAt?: number }) {
+function objectBody(args: { signer: Keypair; newIrkPub: Uint8Array; issuedAt?: number }) {
+  // Self-cancel: the NEW IRK (the recoverer's own key) signs the
+  // RePairObject envelope. Pre-W1 the OLD IRK signed; that gave
+  // device-thieves veto power. See docs/v1.2-security-cascade.md
+  // "Recovery threat model".
   const issuedAt = args.issuedAt ?? Date.now();
   const sig = signRePairObject(
     { username: USERNAME, newIrkPub: args.newIrkPub, issuedAt },
-    args.oldIrk,
+    args.signer,
   );
   return {
     request: { username: USERNAME, newIrkPub: bytesToHex(args.newIrkPub), issuedAt },
@@ -273,17 +277,18 @@ describe("re-pair initiate", () => {
   });
 });
 
-describe("re-pair object (cancel) by old IRK", () => {
+describe("re-pair object (self-cancel by NEW IRK)", () => {
   it("marks the row objected; subsequent complete returns 409", async () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
     const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
+    // Recoverer self-cancels: NEW IRK signs the object envelope.
     const objRes = await handleObjectRePair(
       deps,
       USERNAME,
-      objectBody({ oldIrk, newIrkPub: newIrk.publicKey }),
+      objectBody({ signer: newIrk, newIrkPub: newIrk.publicKey }),
     );
     expect(objRes.status).toBe(200);
     // Even past the grace, complete now refuses.
@@ -302,25 +307,51 @@ describe("re-pair object (cancel) by old IRK", () => {
     const storage = await setup(oldIrk);
     const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
+    // body claims a DIFFERENT newIrkPub than the pending row.
     const res = await handleObjectRePair(
       deps,
       USERNAME,
-      objectBody({ oldIrk, newIrkPub: otherIrk.publicKey }),
+      objectBody({ signer: otherIrk, newIrkPub: otherIrk.publicKey }),
     );
     expect(res.status).toBe(409);
   });
 
-  it("rejects when signed by anything other than the registered old IRK", async () => {
+  it("rejects an OLD-IRK-signed object — the device-thief veto vector", async () => {
+    // SECURITY REGRESSION: under the old (rejected) model, an
+    // attacker who stole the legitimate owner's device could sign a
+    // RePairObject with the OLD IRK and block the legitimate owner's
+    // recovery from a fresh device. The new model requires the NEW
+    // IRK to sign — a key the device-thief does NOT hold (the
+    // legitimate owner generated it on their fresh recovery device).
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk);
     const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
     await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
-    const otherIrk = makeKey();
+    // Attacker signs with the OLD IRK (stolen from the device) but
+    // references the legitimate recoverer's NEW IRK pub.
     const res = await handleObjectRePair(
       deps,
       USERNAME,
-      objectBody({ oldIrk: otherIrk, newIrkPub: newIrk.publicKey }),
+      objectBody({ signer: oldIrk, newIrkPub: newIrk.publicKey }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects when signed by an unrelated key (not the new IRK on the pending row)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk);
+    const deps = { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk }));
+    const stranger = makeKey();
+    // Signer is the STRANGER, but body's newIrkPub matches the
+    // pending row — passes the newIrkPub-match check at line 557,
+    // then fails the signature verification at line 588.
+    const res = await handleObjectRePair(
+      deps,
+      USERNAME,
+      objectBody({ signer: stranger, newIrkPub: newIrk.publicKey }),
     );
     expect(res.status).toBe(403);
   });
@@ -332,7 +363,7 @@ describe("re-pair object (cancel) by old IRK", () => {
     const res = await handleObjectRePair(
       { usernames: storage.usernames, pendingRePairs: storage.pendingRePairs },
       USERNAME,
-      objectBody({ oldIrk, newIrkPub: newIrk.publicKey }),
+      objectBody({ signer: newIrk, newIrkPub: newIrk.publicKey }),
     );
     expect(res.status).toBe(404);
   });
@@ -352,11 +383,12 @@ describe("re-pair object (cancel) by old IRK", () => {
     // 1. First initiate succeeds.
     expect((await handleInitiateRePair(deps, USERNAME, initBody({ newIrk: firstNew, oldIrk }))).status).toBe(200);
 
-    // 2. Old IRK vetoes — row gets objected_at stamped but persists.
+    // 2. Recoverer self-cancels (NEW IRK signs) — row gets
+    //    objected_at stamped but persists.
     const veto = await handleObjectRePair(
       deps,
       USERNAME,
-      objectBody({ oldIrk, newIrkPub: firstNew.publicKey }),
+      objectBody({ signer: firstNew, newIrkPub: firstNew.publicKey }),
     );
     expect(veto.status).toBe(200);
 
@@ -496,7 +528,7 @@ describe("re-pair GET (status read)", () => {
     await handleObjectRePair(
       deps,
       USERNAME,
-      objectBody({ oldIrk, newIrkPub: newIrk.publicKey }),
+      objectBody({ signer: newIrk, newIrkPub: newIrk.publicKey }),
     );
     const res = await handleGetRePair(deps, USERNAME);
     expect(res.status).toBe(200);

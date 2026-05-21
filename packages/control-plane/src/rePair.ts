@@ -560,17 +560,32 @@ export async function handleObjectRePair(
 
   let newIrkPub: Uint8Array;
   let sig: Uint8Array;
-  let oldIrkPub: Uint8Array;
   try {
     newIrkPub = hexToBytes(r.newIrkPub);
     sig = hexToBytes(b.signature);
-    oldIrkPub = hexToBytes(pending.oldIrkPubHex);
   } catch {
     return { status: 400, body: { error: "invalid hex" } };
   }
   const claim: RePairObject = { username: r.username, newIrkPub, issuedAt: r.issuedAt };
-  // The OLD IRK signs (proving they still hold the displaced key).
-  if (!verifyRePairObject(claim, sig, oldIrkPub)) {
+  // SELF-CANCEL ONLY: the NEW IRK (the recoverer's own key) signs.
+  //
+  // Earlier model accepted OLD-IRK signatures here, treating /object
+  // as "existing-device veto." That gives a device-thief the power
+  // to block the legitimate owner's recovery from a fresh device.
+  // Since device-possession is often correlated with credential-
+  // possession (laptop thief usually also gets the iCloud keychain),
+  // the OLD-IRK veto power is a NET-NEGATIVE for security.
+  //
+  // New model: credentials (iCloud + 2FA) are the sole gate for
+  // recovery. Once initiated, recovery is INEVITABLE at T+grace.
+  // /object only exists as an UNDO for the recoverer themselves
+  // ("oops, I started recovery on the wrong device, let me cancel").
+  // Verifying against newIrkPub closes the device-thief vector
+  // while preserving the accidental-self-cancel UX.
+  //
+  // See docs/v1.2-security-cascade.md "Recovery threat model" for
+  // the full reasoning.
+  if (!verifyRePairObject(claim, sig, newIrkPub)) {
     return { status: 403, body: { error: "invalid signature" } };
   }
 
