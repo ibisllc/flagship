@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -93,6 +95,9 @@ fun CreateServerScreen(
     var pendingDelivery by remember { mutableStateOf<PendingDelivery?>(null) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Recipe TTL in MILLIS — default 6h, clamped 5min..24h. Single
+    // user-facing TTL on the recipe; drives authCode.expiresAt.
+    var recipeTtlMs by remember { mutableStateOf(DEFAULT_RECIPE_TTL_MS) }
 
     val scroll = rememberScrollState()
     Column(
@@ -116,6 +121,10 @@ fun CreateServerScreen(
                 description = description,
                 onDescription = { description = it.clampedServerDescription() },
                 username = app.currentUser.value ?: "you",
+                recipeTtlMs = recipeTtlMs,
+                onRecipeTtlMs = {
+                    recipeTtlMs = it.coerceIn(MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS)
+                },
                 error = error,
                 onContinue = {
                     if (name.isBlank()) { error = "Name required."; return@DesignPhase }
@@ -140,6 +149,7 @@ fun CreateServerScreen(
                                 rawQr = scanned,
                                 username = username,
                                 serverName = name,
+                                recipeTtlMs = recipeTtlMs,
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -204,6 +214,12 @@ fun CreateServerScreen(
     }
 }
 
+// Recipe TTL bounds — single user-facing knob on the design page.
+// Drives authCode.expiresAt (the only meaningful TTL on the recipe).
+internal const val DEFAULT_RECIPE_TTL_MS: Long = 6L * 60L * 60_000L  // 6h
+internal const val MIN_RECIPE_TTL_MS: Long = 5L * 60_000L            // 5min
+internal const val MAX_RECIPE_TTL_MS: Long = 24L * 60L * 60_000L     // 24h
+
 @Composable
 private fun DesignPhase(
     name: String,
@@ -211,6 +227,8 @@ private fun DesignPhase(
     description: String,
     onDescription: (String) -> Unit,
     username: String,
+    recipeTtlMs: Long,
+    onRecipeTtlMs: (Long) -> Unit,
     error: String?,
     onContinue: () -> Unit,
     onCancel: () -> Unit,
@@ -232,6 +250,8 @@ private fun DesignPhase(
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 12.sp),
             )
+            Spacer(Modifier.height(FS.space.s4))
+            RecipeTtlPicker(recipeTtlMs = recipeTtlMs, onRecipeTtlMs = onRecipeTtlMs)
         }
     }
     if (error != null) {
@@ -241,6 +261,44 @@ private fun DesignPhase(
     Spacer(Modifier.height(FS.space.s4))
     FSPrimaryButton(label = "Continue", onClick = onContinue, block = true)
     FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+}
+
+@Composable
+private fun RecipeTtlPicker(
+    recipeTtlMs: Long,
+    onRecipeTtlMs: (Long) -> Unit,
+) {
+    val hours = recipeTtlMs.toDouble() / 3_600_000.0
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Recipe expires in",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 14.sp),
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            ttlLabel(hours),
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        )
+    }
+    Slider(
+        value = hours.toFloat(),
+        onValueChange = { onRecipeTtlMs((it * 3_600_000.0).toLong()) },
+        valueRange = 0.5f..24f,
+        steps = 47, // (24-0.5)/0.5 = 47 stops
+    )
+    Text(
+        "After this window, the unused USB can't install — re-mint from this screen.",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 12.sp),
+    )
+}
+
+private fun ttlLabel(hours: Double): String = when {
+    hours < 1.0 -> "${(hours * 60).toInt()} min"
+    hours == hours.toInt().toDouble() -> "${hours.toInt()} hour${if (hours == 1.0) "" else "s"}"
+    else -> String.format("%.1f hours", hours)
 }
 
 @Composable
@@ -321,6 +379,7 @@ private suspend fun prepareDelivery(
     rawQr: String,
     username: String,
     serverName: String,
+    recipeTtlMs: Long = DEFAULT_RECIPE_TTL_MS,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -330,7 +389,7 @@ private suspend fun prepareDelivery(
     val serverDomain = "$slug.$username.flagship.services"
     val serial = SerialGen.random()
     val now = System.currentTimeMillis()
-    val expiresAt = now + 60 * 60 * 1000L  // 1 hour
+    val expiresAt = now + recipeTtlMs.coerceIn(MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS)
 
     val irk = Keystore.deriveIRK("Create server $serverName")
     val irkPubHex = Keystore.irkPubHex()
@@ -363,8 +422,6 @@ private suspend fun prepareDelivery(
         phoneDelegatedPubKey = delegated.publicKey,
         authCode = authCodeBytesObj,
         authCodeUserSignature = authCodeUserSig,
-        issuedAt = now,
-        expiresAt = expiresAt,
         rckPubKey = rck.publicKey,
     )
     val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
@@ -386,8 +443,6 @@ private suspend fun prepareDelivery(
                 expiresAt = expiresAt,
             ),
             authCodeUserSignature = authCodeUserSigHex,
-            issuedAt = now,
-            expiresAt = expiresAt,
             rckPubKey = rckPubHex,
         ),
         blobSignature = blobSigHex,

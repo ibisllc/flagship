@@ -25,13 +25,13 @@ public struct InstallBlob: Equatable, Sendable {
     public var registrationUrl: String
     public var authCode: AuthCode
     public var authCodeUserSignature: Data   // 64 bytes Ed25519
-    public var issuedAt: Int64
-    public var expiresAt: Int64
+    // v2: blob.issuedAt + blob.expiresAt removed. authCode.expiresAt is
+    // the sole TTL on the recipe.
     public var installerGitRef: String
     public var rckPubKey: Data               // 32 bytes Ed25519
 
     public init(
-        version: Int = 1,
+        version: Int = 2,
         serverDomain: String,
         username: String,
         serverName: String,
@@ -39,8 +39,6 @@ public struct InstallBlob: Equatable, Sendable {
         registrationUrl: String = "https://flagship.services/api/server/register",
         authCode: AuthCode,
         authCodeUserSignature: Data,
-        issuedAt: Int64,
-        expiresAt: Int64,
         installerGitRef: String = "main",
         rckPubKey: Data
     ) {
@@ -52,14 +50,14 @@ public struct InstallBlob: Equatable, Sendable {
         self.registrationUrl = registrationUrl
         self.authCode = authCode
         self.authCodeUserSignature = authCodeUserSignature
-        self.issuedAt = issuedAt
-        self.expiresAt = expiresAt
         self.installerGitRef = installerGitRef
         self.rckPubKey = rckPubKey
     }
 
-    /// Canonical bytes — pipe-separated, with `flagship/install-blob/v1`
-    /// tag prefix. MUST match the JS `canonicalInstallBlob` byte-for-byte.
+    /// Canonical bytes — pipe-separated, tag prefix kept at v1 for the
+    /// signature domain (the inner `version` field discriminates v1
+    /// vs v2 inputs by byte difference). MUST match the TS
+    /// `canonicalInstallBlob` byte-for-byte.
     public func canonicalBytes() -> Data {
         let parts: [String] = [
             InstallBlob.canonicalTag,
@@ -72,8 +70,6 @@ public struct InstallBlob: Equatable, Sendable {
             authCode.serial,
             HexUtil.encode(authCode.userPubKey),
             HexUtil.encode(authCodeUserSignature),
-            String(issuedAt),
-            String(expiresAt),
             installerGitRef,
             HexUtil.encode(rckPubKey),
         ]

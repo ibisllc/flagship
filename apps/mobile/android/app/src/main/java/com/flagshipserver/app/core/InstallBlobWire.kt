@@ -17,7 +17,7 @@ data class InstallBlobBundle(
 
 @Serializable
 data class WireBlob(
-    val version: Int = 1,
+    val version: Int = 2,
     val serverDomain: String,
     val username: String,
     val serverName: String,
@@ -25,8 +25,6 @@ data class WireBlob(
     val registrationUrl: String = "https://flagship.services/api/server/register",
     val authCode: WireAuthCode,
     val authCodeUserSignature: String,   // hex
-    val issuedAt: Long,
-    val expiresAt: Long,
     val installerGitRef: String = "main",
     val rckPubKey: String,               // hex
 )

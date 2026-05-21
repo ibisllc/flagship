@@ -24,13 +24,12 @@ final class InstallBlobTests: XCTestCase {
             phoneDelegatedPubKey: Data(repeating: 0x33, count: 32),
             authCode: auth,
             authCodeUserSignature: Data(repeating: 0x44, count: 64),
-            issuedAt: 1,
-            expiresAt: 2,
             rckPubKey: Data(repeating: 0x55, count: 32)
         )
         let s = String(data: blob.canonicalBytes(), encoding: .utf8)!
         // Must start with the canonical tag, must be pipe-separated.
-        XCTAssertTrue(s.hasPrefix("flagship/install-blob/v1|1|home.harry.flagship.services|harry|home|"))
+        // v2: blob.issuedAt+expiresAt dropped; tag stays v1.
+        XCTAssertTrue(s.hasPrefix("flagship/install-blob/v1|2|home.harry.flagship.services|harry|home|"))
         XCTAssertTrue(s.contains("\(String(repeating: "33", count: 32))|"))   // phoneDelegatedPubKey hex
         XCTAssertTrue(s.contains("|01ABCD|"))                                  // authCode serial
         XCTAssertTrue(s.contains("|\(String(repeating: "55", count: 32))"))   // rckPubKey trailing
@@ -128,8 +127,6 @@ final class InstallBlobTests: XCTestCase {
             phoneDelegatedPubKey: Data(repeating: 0x10, count: 32),
             authCode: auth,
             authCodeUserSignature: try irk.signature(for: auth.canonicalBytes()),
-            issuedAt: 1,
-            expiresAt: 2,
             rckPubKey: Data(repeating: 0x50, count: 32)
         )
         let sig = try irk.signature(for: blob.canonicalBytes())

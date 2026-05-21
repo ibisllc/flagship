@@ -223,7 +223,23 @@ function readInputs() {
         return { providerId: (providerId || "").trim(), modelName: (modelName || "").trim() };
       })
     : [];
-  return { serverName, backupPolicy, llmPreferences };
+  // Recipe TTL in millis. Picker UI emits hours via #cs-ttl-hours;
+  // absent input = default 6 hours.
+  const ttlEl = $("cs-ttl-hours");
+  const ttlHours = ttlEl ? parseFloat(ttlEl.value) : 6;
+  const recipeTtlMs = clampRecipeTtlMs(Math.round(ttlHours * 60 * 60_000));
+  return { serverName, backupPolicy, llmPreferences, recipeTtlMs };
+}
+
+// Recipe TTL bounds — single user-facing knob. 5 min floor, 24 hour
+// ceiling. Mirrors the iOS/Android pickers byte-for-byte semantics.
+export const DEFAULT_RECIPE_TTL_MS = 6 * 60 * 60_000;
+export const MIN_RECIPE_TTL_MS = 5 * 60_000;
+export const MAX_RECIPE_TTL_MS = 24 * 60 * 60_000;
+export function clampRecipeTtlMs(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_RECIPE_TTL_MS;
+  return Math.min(Math.max(n, MIN_RECIPE_TTL_MS), MAX_RECIPE_TTL_MS);
 }
 
 async function handleSaveDraft() {
@@ -296,7 +312,8 @@ function setStatus(kind, text) {
 }
 
 async function mintInstallBlobBundle(session, username, inputs) {
-  const { serverName } = inputs;
+  const { serverName, recipeTtlMs } = inputs;
+  const ttlMs = clampRecipeTtlMs(recipeTtlMs);
   const irkPubHex = bytesToHex(session.irk.publicKey);
 
   // 1. Claim username (idempotent).
@@ -317,7 +334,7 @@ async function mintInstallBlobBundle(session, username, inputs) {
 
   const delegated = await genEd25519();
   const acIssuedAt = Date.now();
-  const acExpiresAt = acIssuedAt + 60 * 60_000;
+  const acExpiresAt = acIssuedAt + ttlMs;
   const code = {
     version: 1,
     serial: genSerial(),
@@ -367,8 +384,11 @@ async function mintInstallBlobBundle(session, username, inputs) {
   });
   if (!rckResp.ok) throw new Error(`RCK register failed (${rckResp.status})`);
 
+  // v2: blob.issuedAt + blob.expiresAt dropped. The authCode's own
+  // expiresAt is the sole TTL on the recipe (gated by .com at
+  // /api/server/register).
   const blob = {
-    version: 1,
+    version: 2,
     serverDomain: code.serverDomain,
     username,
     serverName,
@@ -376,8 +396,6 @@ async function mintInstallBlobBundle(session, username, inputs) {
     registrationUrl: "https://flagship.services/api/server/register",
     authCode: code,
     authCodeUserSignature: acSig,
-    issuedAt: acIssuedAt,
-    expiresAt: acExpiresAt,
     installerGitRef: "main",
     rckPubKey: rck.publicKey,
   };
@@ -399,7 +417,6 @@ async function mintInstallBlobBundle(session, username, inputs) {
       issuedAt: code.issuedAt, expiresAt: code.expiresAt,
     },
     authCodeUserSignature: bytesToHex(acSig),
-    issuedAt: blob.issuedAt, expiresAt: blob.expiresAt,
     installerGitRef: blob.installerGitRef,
     rckPubKey: bytesToHex(blob.rckPubKey),
   };

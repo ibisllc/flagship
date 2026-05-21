@@ -83,9 +83,13 @@ export function loadBlobFromString(
   if (!blob) {
     throw new BurnerLoadError("InstallBlob fields incomplete/malformed", "missing-field");
   }
-  if (Date.now() > blob.expiresAt) {
+  // v2: the auth-code expiry IS the recipe expiry. The Burner refuses
+  // an expired recipe before doing any work so the user gets a clean
+  // error instead of "daemon registered fine but then .com rejected
+  // the auth-code 4 hours later".
+  if (Date.now() > blob.authCode.expiresAt) {
     throw new BurnerLoadError(
-      `blob expired at ${new Date(blob.expiresAt).toISOString()}`,
+      `recipe expired at ${new Date(blob.authCode.expiresAt).toISOString()}`,
       "expired",
     );
   }
@@ -111,9 +115,9 @@ function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {
   const userPub = hexToBytes(authCode.userPubKey as string);
   const delegated = hexToBytes(authCode.delegatedPubKey as string);
   if (!phonePub || !authUserSig || !rckPub || !userPub || !delegated) return null;
-  if (o.version !== 1) return null;
+  if (o.version !== 2) return null;
   return {
-    version: 1,
+    version: 2,
     serverDomain: String(o.serverDomain),
     username: String(o.username),
     serverName: String(o.serverName),
@@ -131,8 +135,6 @@ function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {
       expiresAt: Number(authCode.expiresAt),
     },
     authCodeUserSignature: authUserSig,
-    issuedAt: Number(o.issuedAt),
-    expiresAt: Number(o.expiresAt),
     installerGitRef: String(o.installerGitRef ?? ""),
     rckPubKey: rckPub,
   };

@@ -124,6 +124,8 @@ export async function deleteDraft(id) {
  * bytes are guaranteed identical.
  */
 export function canonicalInstallBlob(b) {
+  // v2: blob.issuedAt + blob.expiresAt dropped. Tag stays v1; the
+  // inner `version` field (2) discriminates v1-vs-v2 inputs.
   return new TextEncoder().encode(
     [
       TAG_INSTALL_BLOB,
@@ -136,8 +138,6 @@ export function canonicalInstallBlob(b) {
       b.authCode.serial,
       bytesToHex(b.authCode.userPubKey),
       bytesToHex(b.authCodeUserSignature),
-      b.issuedAt,
-      b.expiresAt,
       b.installerGitRef,
       bytesToHex(b.rckPubKey),
     ].join("|"),

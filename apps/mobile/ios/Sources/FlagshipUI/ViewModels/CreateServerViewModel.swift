@@ -51,6 +51,27 @@ public final class CreateServerViewModel {
         }
     }
     public var qrUrl: String = ""
+    /// Recipe TTL in MILLISECONDS. The phone signs an auth-code whose
+    /// `expiresAt = now + recipeTtlMs`; that's the single deadline
+    /// gating "can the freshly-booted daemon register with .com?".
+    /// Default 6 hours (`6 * 60 * 60_000`), capped at 24 hours.
+    /// Anything outside `[5min, 24h]` is clamped by `setRecipeTtlHours`.
+    public var recipeTtlMs: Int64 = 6 * 60 * 60_000  // 6h default
+    public static let defaultRecipeTtlMs: Int64 = 6 * 60 * 60_000
+    public static let minRecipeTtlMs: Int64 = 5 * 60_000
+    public static let maxRecipeTtlMs: Int64 = 24 * 60 * 60_000
+    /// Defense-in-depth clamp — applied when minting so an out-of-range
+    /// value can't slip past the picker (e.g. via API misuse in tests).
+    static func clampedRecipeTtlMs(_ raw: Int64) -> Int64 {
+        return min(max(raw, minRecipeTtlMs), maxRecipeTtlMs)
+    }
+    /// Convenience for the picker — bidirectional binding to a Double
+    /// hour count is awkward when the underlying type is millis. The
+    /// picker emits whole hours; we clamp here.
+    public func setRecipeTtlHours(_ h: Double) {
+        let clamped = max(min(h, 24.0), 5.0 / 60.0)
+        recipeTtlMs = Int64(clamped * 60 * 60_000)
+    }
     /// Set after the .delivered transition. Container reads this so
     /// the new pending pod records the auth-code serial that Cancel-
     /// order will revoke.
@@ -180,7 +201,9 @@ public final class CreateServerViewModel {
 
         let delegated = Curve25519.Signing.PrivateKey()
         let acIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)
-        let acExpiresAt = acIssuedAt + 60 * 60_000
+        // Recipe TTL — single phone-set knob. Defaults to 6h
+        // (`defaultRecipeTtlMs`); user can dial it on the design page.
+        let acExpiresAt = acIssuedAt + Self.clampedRecipeTtlMs(recipeTtlMs)
         let authCode = AuthCode(
             serial: SerialGen.random(),
             username: username,
@@ -233,8 +256,6 @@ public final class CreateServerViewModel {
             phoneDelegatedPubKey: delegated.publicKey.rawRepresentation,
             authCode: authCode,
             authCodeUserSignature: acSig,
-            issuedAt: acIssuedAt,
-            expiresAt: acExpiresAt,
             rckPubKey: rck.publicKey.rawRepresentation
         )
         let blobSig = try irk.signature(for: blob.canonicalBytes())
@@ -259,8 +280,6 @@ public struct SignedInstallBlob: Sendable {
         public let registrationUrl: String
         public let authCode: OnWireAuthCode
         public let authCodeUserSignature: String
-        public let issuedAt: Int64
-        public let expiresAt: Int64
         public let installerGitRef: String
         public let rckPubKey: String
     }
@@ -297,8 +316,6 @@ public struct SignedInstallBlob: Sendable {
                     expiresAt: blob.authCode.expiresAt
                 ),
                 authCodeUserSignature: HexUtil.encode(blob.authCodeUserSignature),
-                issuedAt: blob.issuedAt,
-                expiresAt: blob.expiresAt,
                 installerGitRef: blob.installerGitRef,
                 rckPubKey: HexUtil.encode(blob.rckPubKey)
             ),

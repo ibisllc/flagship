@@ -8,8 +8,10 @@
 
 package com.flagshipserver.app.core
 
+// v2: blob.issuedAt + blob.expiresAt dropped. authCode.expiresAt is
+// the sole TTL on the recipe.
 data class InstallBlob(
-    var version: Int = 1,
+    var version: Int = 2,
     var serverDomain: String,
     var username: String,
     var serverName: String,
@@ -17,12 +19,13 @@ data class InstallBlob(
     var registrationUrl: String = "https://flagship.services/api/server/register",
     var authCode: AuthCode,
     var authCodeUserSignature: ByteArray,
-    var issuedAt: Long,
-    var expiresAt: Long,
     var installerGitRef: String = "main",
     var rckPubKey: ByteArray,
 ) {
     companion object {
+        // Tag stays v1 — the inner `version` field discriminates the
+        // v1-vs-v2 inputs by byte difference. MUST match the TS
+        // canonicalInstallBlob byte-for-byte.
         const val CANONICAL_TAG = "flagship/install-blob/v1"
     }
 
@@ -38,8 +41,6 @@ data class InstallBlob(
             authCode.serial,
             HexUtil.encode(authCode.userPubKey),
             HexUtil.encode(authCodeUserSignature),
-            issuedAt.toString(),
-            expiresAt.toString(),
             installerGitRef,
             HexUtil.encode(rckPubKey),
         )

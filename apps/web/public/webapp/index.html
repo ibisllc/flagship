@@ -415,6 +415,9 @@
           </select>
           <label>LLM preferences <span class="faint-sm">(one per line, <code>providerId:modelName</code>)</span></label>
           <textarea id="cs-llm-pref" rows="3" placeholder="anthropic:claude-sonnet-4-6&#10;openai:gpt-4"></textarea>
+          <label>Recipe expires in <span class="faint-sm">(hours; 0.5–24, default 6)</span></label>
+          <input id="cs-ttl-hours" type="number" min="0.5" max="24" step="0.5" value="6" />
+          <p class="faint-sm">After this window, the unused recipe can't install — re-mint here.</p>
           <div class="row-2 mt-2">
             <button class="secondary" id="cs-save-draft">Save draft</button>
             <button class="secondary" id="cs-new">New</button>

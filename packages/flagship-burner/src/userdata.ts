@@ -182,8 +182,6 @@ function installBlobToJson(
       expiresAt: b.authCode.expiresAt,
     },
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
-    issuedAt: b.issuedAt,
-    expiresAt: b.expiresAt,
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
     blobSignatureHex,

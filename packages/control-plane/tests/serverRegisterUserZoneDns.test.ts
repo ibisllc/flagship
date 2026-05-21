@@ -61,7 +61,8 @@ describe("serverRegister — user-zone DNS publishing (N0c)", () => {
       delegatedPubKey: makeKey().publicKey,
       userPubKey: irk.publicKey,
       issuedAt: 1_000,
-      expiresAt: 9_999_999_999_999,
+      // 1h after issue — within the 24h server-side cap.
+      expiresAt: 1_000 + 60 * 60_000,
     };
     const acSig = signAuthCode(issued, irk);
     await authCodes.put({

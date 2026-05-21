@@ -75,6 +75,7 @@ public struct CreateServerStubScreen: View {
                         helper: "Up to ~40 characters."
                     )
                     .accessibilityIdentifier("cs-description-field")
+                    recipeTtlPicker(c: c)
                 }
             }
 
@@ -93,6 +94,50 @@ public struct CreateServerStubScreen: View {
                 .accessibilityIdentifier("cs-skip-button")
             }
         }
+    }
+
+    // MARK: - Recipe TTL picker
+    //
+    // The recipe TTL gates how long the freshly-burned USB can sit
+    // before booting + registering. Once the daemon registers it
+    // doesn't matter — but a stolen/lost recipe is bounded by this
+    // window. Default 6 hours; 5 min floor, 24 hour ceiling.
+    private func recipeTtlPicker(c: FSColors) -> some View {
+        let hoursDouble = Double(vm.recipeTtlMs) / 3_600_000.0
+        return VStack(alignment: .leading, spacing: FS.space.s2) {
+            HStack {
+                Text("Recipe expires in")
+                    .font(.subheadline)
+                    .foregroundStyle(c.text)
+                Spacer()
+                Text(ttlLabel(hoursDouble))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(c.text)
+                    .accessibilityIdentifier("cs-ttl-label")
+            }
+            Slider(
+                value: Binding(
+                    get: { hoursDouble },
+                    set: { vm.setRecipeTtlHours($0) }
+                ),
+                in: 0.5...24,
+                step: 0.5
+            )
+            .accessibilityIdentifier("cs-ttl-slider")
+            Text("After this window, the unused USB can't install — re-mint from this screen.")
+                .font(.caption)
+                .foregroundStyle(c.textMuted)
+        }
+    }
+
+    private func ttlLabel(_ hours: Double) -> String {
+        if hours < 1 {
+            return "\(Int(round(hours * 60))) min"
+        }
+        if hours == floor(hours) {
+            return "\(Int(hours)) hour\(hours == 1 ? "" : "s")"
+        }
+        return String(format: "%.1f hours", hours)
     }
 
     // MARK: - Phase 2: Scan

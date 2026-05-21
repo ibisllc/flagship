@@ -15,3 +15,4 @@ export {
   type UserDataOptions,
 } from "./userdata.js";
 export { verifyIsoHash, type VerifyIsoResult } from "./verifyIso.js";
+export { writeIsoWithCidata, type WriteIsoArgs } from "./writeIsoWithCidata.js";

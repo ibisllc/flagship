@@ -46,11 +46,11 @@ class InstallBlobTest {
             phoneDelegatedPubKey = ByteArray(32) { 0x33 },
             authCode = auth,
             authCodeUserSignature = ByteArray(64) { 0x44 },
-            issuedAt = 1L, expiresAt = 2L,
             rckPubKey = ByteArray(32) { 0x55 },
         )
         val s = String(blob.canonicalBytes())
-        assertTrue(s.startsWith("flagship/install-blob/v1|1|home.harry.flagship.services|harry|home|"))
+        // v2: blob.issuedAt+expiresAt removed; tag stays v1.
+        assertTrue(s.startsWith("flagship/install-blob/v1|2|home.harry.flagship.services|harry|home|"))
         assertTrue(s.contains("33".repeat(32)))
         assertTrue(s.contains("|01ABCD|"))
         assertTrue(s.endsWith("|" + "55".repeat(32)))

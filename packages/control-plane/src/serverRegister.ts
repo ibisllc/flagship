@@ -147,6 +147,14 @@ export async function handleServerRegister(
     return forbidden("invalid auth-code signature");
   }
   if (now > authCode.expiresAt) return forbidden("auth-code expired");
+  // Anti-spam cap — the phone's TTL picker tops out at 24h; reject
+  // anything longer regardless of what the signed envelope says.
+  // Defense-in-depth: an outdated client could try to set arbitrarily
+  // long expiries; .com enforces the ceiling unilaterally.
+  const RECIPE_TTL_MAX_MS = 24 * 60 * 60_000;
+  if (authCode.expiresAt - authCode.issuedAt > RECIPE_TTL_MAX_MS) {
+    return forbidden("auth-code TTL exceeds the 24h server cap");
+  }
 
   const identityPub = hexToBytes(r.serverIdentityPubKey);
   const nonce = hexToBytes(r.nonce);
