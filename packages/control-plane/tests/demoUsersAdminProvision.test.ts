@@ -189,6 +189,12 @@ describe("buildCloudInitUserData", () => {
     expect(s).toContain("conv=fsync");
     expect(s).toMatch(/\nsync\n/);
     expect(s).toMatch(/reboot -f/);
+    // The cloud-init MUST also write the trailer at the disk's END so
+    // flagship-trailer-probe (which reads last ~20 bytes for the
+    // FLAGSHIP-END magic) finds it on a Hetzner cx23 (40 GB disk).
+    expect(s).toContain("blockdev --getsize64 /dev/sda");
+    expect(s).toContain("seek=$SEEK oflag=seek_bytes");
+    expect(s).toContain("conv=notrunc,fsync");
   });
 });
 

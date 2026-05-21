@@ -222,13 +222,39 @@ export function buildCloudInitUserData(args: {
 }): string {
   return `#!/bin/bash
 set -euo pipefail
-echo "[flagship-cloud-init] starting at $(date)" > /var/log/flagship-cloud-init.log
-echo "[flagship-cloud-init] fetching base + trailer; piping into dd" >> /var/log/flagship-cloud-init.log
+LOG=/var/log/flagship-cloud-init.log
+echo "[flagship-cloud-init] starting at $(date)" > "$LOG"
+
+# Phase 1: stream the base ISO + trailer into /dev/sda starting at
+# offset 0. Hybrid ISO bootloader at offset 0 → ISO9660 content →
+# trailer immediately after. End-of-disk past offset 240 MB stays as
+# whatever Hetzner provisioned (typically zero on a fresh VM).
+echo "[flagship-cloud-init] writing base+trailer to /dev/sda offset 0" >> "$LOG"
 ( wget -qO- '${args.baseIsoUrl}' && wget -qO- '${args.trailerUrl}' ) \
     | dd of=/dev/sda bs=4M conv=fsync status=none \
-    >> /var/log/flagship-cloud-init.log 2>&1
+    >> "$LOG" 2>&1
+
+# Phase 2: ALSO write the trailer at the END of /dev/sda. The
+# bootstrap's flagship-trailer-probe reads the last ~20 bytes of the
+# block device looking for the FLAGSHIP-END magic — on a Hetzner cx23
+# (40 GB virtual disk) with the ISO occupying only the first 240 MB,
+# the magic at offset 240 MB is invisible to that probe. Writing the
+# trailer a SECOND time at offset (disk_size - trailer_size) puts the
+# magic where the probe expects it. The mid-disk copy + the
+# end-of-disk copy are byte-identical; daemon's parseTrailerFromHandle
+# reads the END copy on first boot.
+echo "[flagship-cloud-init] fetching trailer to disk-end" >> "$LOG"
+wget -qO /tmp/flagship.trailer '${args.trailerUrl}' >> "$LOG" 2>&1
+TRAILER_SIZE=$(stat -c %s /tmp/flagship.trailer)
+DISK_SIZE=$(blockdev --getsize64 /dev/sda)
+SEEK=$((DISK_SIZE - TRAILER_SIZE))
+echo "[flagship-cloud-init] trailer=$TRAILER_SIZE bytes; disk=$DISK_SIZE bytes; seek=$SEEK" >> "$LOG"
+dd if=/tmp/flagship.trailer of=/dev/sda \
+    seek=$SEEK oflag=seek_bytes conv=notrunc,fsync status=none \
+    >> "$LOG" 2>&1
+
 sync
-echo "[flagship-cloud-init] dd complete; rebooting" >> /var/log/flagship-cloud-init.log
+echo "[flagship-cloud-init] dd complete; rebooting" >> "$LOG"
 sleep 2
 reboot -f
 `;
