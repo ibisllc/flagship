@@ -81,18 +81,37 @@ flagship-burn prepare ~/recipe.json ~/ubuntu-22.04.iso ~/flagship-ready.iso
 sudo dd if=~/flagship-ready.iso of=/dev/diskN bs=4M status=progress
 ```
 
+### `write <recipe.json> <iso> [--device /dev/diskN|auto] [--yes]`
+
+Full one-step burn. Verifies the recipe + ISO, picks a removable USB target
+(interactive picker by default), gets a typed-yes confirmation, raw-writes
+the ISO bytes + appended CIDATA FAT image, then fsyncs.
+
+```sh
+sudo flagship-burn write ~/recipe.json ~/ubuntu-22.04.iso
+# Or non-interactive:
+sudo flagship-burn write ~/recipe.json ~/ubuntu-22.04.iso --device /dev/disk6 --yes
+# Or auto-pick when there's exactly one eligible USB:
+sudo flagship-burn write ~/recipe.json ~/ubuntu-22.04.iso --device auto --yes
+```
+
+Defense in depth: `/dev/disk0`, drives > 500 GB (probably internal), drives
+< 500 MB, internal-flagged, and virtual disks are all hard-refused EVEN
+with `--device` and `--yes`. The check does not bend to a flag.
+
+`--device auto` requires `--yes` (CI-friendly, never prompts) and refuses
+if there are 0 or > 1 eligible removable-usb devices.
+
 ### `distros`
 
 List the pinned distro allowlist (Ubuntu Server 22.04 as of v1).
 
 ## Phase-2 roadmap
 
-- `flagship-burn write <recipe.json> <iso> --device /dev/diskN` — one-step
-  raw-disk write. Interactive device picker by default; refuses any drive
-  larger than 500 GB (probably internal) or smaller than 500 MB (too small
-  for an ISO).
-- Native single-binary distribution (Rust port via Tauri or Bun bundle).
-- Windows + Linux GUIs.
+- Native single-binary distribution (Rust port via Tauri or Bun bundle) —
+  no Node prereq.
+- Windows GUI.
+- Linux GUI.
 - GPG verification of upstream ISO signing keys (additional to SHA pinning).
 
 ## Threat model
