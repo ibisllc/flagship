@@ -171,6 +171,127 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 
 ## 0. Drift log (verify-before-trust findings, newest first)
 
+- **2026-05-20 (v1-launch s9 cont. — autonomous-build session
+  end: 12 commits across protocol/storage/control-plane/installer/
+  mobile/webapp landed; multi-profile + Keychain split + vibe-code
+  env-var UI all green):** User stepped away with "build EVERYTHING,
+  defer complicated decisions for when I'm back, GO GO GO." Drove
+  six discrete workstreams (W1, W2, W6, W7, W3+W8 combined, W10)
+  through to gates-green on `main`. Two parallel sub-agents ran in
+  worktrees + the main tree; merged cleanly with one trivial
+  doc-§12 collision. Commits in order:
+
+  - `6ccef63` **W1 — /re-pair/object is self-cancel only**:
+    repurpose the veto endpoint to verify against NEW IRK
+    (recoverer's own key) instead of OLD IRK. Closes the device-
+    thief veto vector: a thief holding the legitimate owner's
+    device + the OLD IRK could previously block every legitimate
+    recovery from a fresh device. New principle locked into the
+    docs ("credentials-are-the-sole-gate"; existing devices
+    cannot block).
+  - `5d27acb` **W2 — install.sh: sync+umount before parted**:
+    on single-disk cloud VPSes, the rescue+dd → reboot path
+    boots Alpine from /dev/sda but still holds open handles
+    (hybrid ISO mount, apk cache). `parted /dev/sda mklabel gpt`
+    on a busy device wedged the kernel entirely (live-observed
+    Hetzner cx23, 2026-05-20 attempt #4). The fix: sync;
+    umount-everything-on-target; losetup -D; blockdev --flushbufs;
+    udevadm settle; sleep 1 — THEN parted. No-op on the multi-
+    disk path.
+  - `5035403` **W6 — per-cloud recovery-wipe policy**: migration
+    0032 adds `usernames.recovery_wipe_policy TEXT NOT NULL
+    DEFAULT 'graceful'` (`'strict' | 'graceful'`).
+    handleCompleteRePair branches: strict revokes every
+    DeviceCapabilityGrant on the cloud; graceful accepts a
+    `refreshedGrants` array signed by the NEW IRK and atomically
+    revokes-then-replaces each old grant with the new one. The
+    recovering device's UI gets `wipedGrantIds` +
+    `refreshedGrantIds` so it can render concrete family-device
+    counts.
+  - `9c26866` **W7 — wipe-restart revokes every grant**: the v1.1
+    nuclear option now also revokes every active grant on the
+    cloud after the IRK swap. Matches strict-mode semantics.
+    Best-effort loop (transient storage hiccup doesn't fail-stop
+    the rotation).
+  - `e94d705` **Lock-release-on-resolution**: pending_re_pairs.username
+    PK is the structural concurrent-recovery lock. Pre-fix, vetoed
+    OR expired-without-complete rows persisted forever, blocking
+    every legitimate future recovery. Fix: sweep dead rows on next
+    initiate. Lock armed during live disputes; releases on
+    resolution.
+  - `4315993` **Hyphenated demo usernames work in /users/check**:
+    demoUsers + testAccounts lookup moved BEFORE validateUserLabel.
+    Pre-fix, `/users/check {"username":"demo-alice"}` returned
+    `{available: false, reason: "no hyphens"}` even though the
+    demo existed. Mobile demo-mode silently broke for every
+    hyphenated demo name. Hidden because no live test completed.
+  - `e88dc12` (in `Merge W3+W8 9fd3283`) **W3+W8 — multi-profile
+    + iCloud Keychain split**: iOS+Android+webapp gain a `Profile`
+    data type and an `AppState.profiles[]` + `activeCloudName`.
+    Legacy single-identity accessors mirror the active profile so
+    existing callsites don't need to change. iOS Keystore gains
+    a `KeychainSyncClass` enum (`cloudRoot`/`deviceLocal`); the
+    `cloudRoot` write sets `kSecAttrSynchronizable=true` so the
+    cloud root key syncs through iCloud Keychain; future device-IRKs
+    use `deviceLocal` (=false) so a freshly restored iPad doesn't
+    clone an existing device's identity.
+  - `113bf09` **W10 — vibe-code env-var UI + push-on-AI-ask**:
+    Screens BFF endpoints for the per-service env-var KV editor
+    (names only; values never echoed) + a vibe-code session
+    chat surface (talkToUser / requestEnvVar pending-request
+    rendering). Daemon-side `notifyOwner` hook fires exactly once
+    on the streaming → awaiting-tool-response transition,
+    coalesces same-pause tool_uses, re-arms after ack. Production
+    wire is log-only; operator binds to `/api/push/relay` when
+    push fan-out is desired. iOS + Android + webapp screens land
+    in parallel; the value path never persists value on the phone.
+  - `31ce5c6`+`f355c7e`+`cfc3b9c`+`1f3dd4b`+`ee6446b` — five
+    live-test bug fixes from earlier this evening (S1 prod-D1
+    backfill; /users/check device-grants wiring;
+    admin-claim-and-issue blob-as-object; dd-newline; install.sh
+    single-disk fallback). All carried forward.
+
+  **Final gate snapshot (commit `9fd3283`):**
+  - `npx tsc -b`: clean.
+  - `npx vitest run`: **3122 passing** across 261 files (up from
+    2944 baseline at session start; +178 across this evening).
+  - iOS `xcodebuild -scheme FlagshipMobile-Package test`: in
+    flight at session-handoff write time (W38 reported 284 + W10
+    reported 283; merge should land near both).
+  - Android `./gradlew test`: in flight.
+
+  **What the live Phase F attempt #5 needs from the operator (in
+  order):**
+
+  1. Redeploy Worker: `cd apps/com && npx wrangler deploy`. The
+     Worker on `flagshipserver.com` is at `fe261337` from earlier
+     today; all the W1/W6/W7/lock/hyphen handler updates need
+     this deploy to land live. Worker secrets (`DEMO_IRK_KEK`,
+     `HCLOUD_TOKEN`, `DEMO_PUBLIC_SSH_KEY`, etc.) are all set.
+  2. Migration 0032 applied to prod D1 ALREADY during this
+     session (via `wrangler d1 execute --file=…`). New columns
+     visible (`recovery_wipe_policy`).
+  3. Repo `ibisllc/flagship` is PUBLIC (verified at session end).
+     The bootstrap can now `curl` install.sh from raw.githubusercontent.
+  4. Run live test: `node scripts/sample-user.mjs create demo-alice
+     --display "Demo Alice"`.
+  5. If green, mint reviewer + smoke mobile demo-mode flow.
+
+  Operator-facing checklist: `docs/operator-next-steps-2026-05-20.md`.
+
+  **Deferred design decisions** (the user asked to keep complicated
+  decisions for their return; none of these block live test #5):
+  - Full username→cloud vocabulary rename across UI strings.
+  - Explicit `'admin'` DeviceScope (we already have the wipe-restart
+    + un-vouched-recovery destroy paths; an admin scope is purely
+    additive if you want it later).
+  - Daemon-side `requireDeviceScope` integration (helper exists +
+    tested; wiring into servicePlatform.install requires a
+    daemon-side grant cache).
+  - Multi-admin clouds (husband+wife both-admin requires sharing the
+    cloud-root-key across two Apple IDs; iCloud Keychain doesn't
+    do this natively).
+
 - **2026-05-20 (v1-launch s9 cont. — Plan A Phase F live test
   attempt #4: three blockers FIXED + verified live, one
   architectural blocker EXPOSED + handed off):** With v2 device-
@@ -1004,7 +1125,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
   CORRECTED tree — DO NOT publish from `016f263`, it still has the
   src-pointer bug) → (3) owner, from the re-pinned `maintainers/
   packages/protocol` with their `ibisllc` npm login (NO token via the
-  agent; revoke the burned `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`):
+  agent; revoke the burned `npm_REDACTED_BURNED_TOKEN`):
   `npm whoami` → `npm view @ibisllc/maintainers version` (expect E404)
   → `npm publish --dry-run` → `npm publish` (access:public + prepack
   build automatic) → (4) confirm `npm view @ibisllc/maintainers` shows
@@ -1039,7 +1160,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
   harness (pure core + injected provider/HTTP/SSH I/O, hermetically
   tested, one-command-from-live), audit the 3 pillars + close
   agent-doable gaps, hand off the credentialed runbook. npm token
-  `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` still BURNED — revoke.
+  `npm_REDACTED_BURNED_TOKEN` still BURNED — revoke.
   Pin `016f263` is now STABLE (no more maintainers chunks pending).
 
 - **2026-05-19 (v1-launch program session 9 cont. — PHASE H chunk 4
@@ -1085,7 +1206,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
    `checkpoints-bot` adapter; submit Flagship's genesis `ca` mandate as
    the inaugural checkpoint via `maintainers checkpoint submit`.
 3. **npm publish** `@ibisllc/maintainers` — the earlier pasted token is
-   BURNED (revoke `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` at
+   BURNED (revoke `npm_REDACTED_BURNED_TOKEN` at
    npmjs.com); create the `ibisllc` npm org + a fresh token; then
    flagship can drop `pull-maintainers.sh`+pin+symlink (a later chunk).
 4. **iOS** TestFlight (archive+sign+upload+5 testers) — Mac-side human.
