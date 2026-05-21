@@ -106,6 +106,7 @@ import {
   handleListDemoUsers,
   handleAdminClaimAndIssue,
   handleAdminMintDeviceGrant,
+  handleAdminCloudInitNow,
   handleAdminSnapshotNow,
   handleMintDeviceGrant,
   handleListDeviceGrants,
@@ -305,6 +306,13 @@ interface ProvisioningTempBucket {
     value: ReadableStream<Uint8Array> | Uint8Array | string,
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>;
+  /** Used by W12 debug log-exfil (POST/GET /api/dev/late-log/:label). */
+  list(options: {
+    prefix?: string;
+    limit?: number;
+  }): Promise<{ objects: Array<{ key: string }> }>;
+  /** Used by W12 debug log-exfil. */
+  get(key: string): Promise<{ text(): Promise<string> } | null>;
 }
 
 const ROUTE_RE = {
@@ -402,6 +410,11 @@ const ROUTE_RE = {
   // hands to Hetzner. Path must be matched BEFORE the bare
   // `/sample-user/{u}` GET below.
   DEMO_USER_ADMIN_SNAPSHOT_NOW: /^\/api\/dev\/sample-user\/([^/]+)\/admin-snapshot-now$/,
+  // W13 — cloud-init-direct alternative to admin-snapshot-now. Uses
+  // Hetzner's pre-built debian-12 image (no custom ISO, no trailer,
+  // no rescue mode); cloud-init's user_data carries the install-blob
+  // and the bootstrap that does the install work.
+  DEMO_USER_ADMIN_CLOUD_INIT_NOW: /^\/api\/dev\/sample-user\/([^/]+)\/admin-cloud-init-now$/,
   DEMO_USER_INSTALL_COMPLETE: /^\/api\/dev\/sample-user\/([^/]+)\/install-complete$/,
   DEMO_USER_CONNECT: /^\/api\/dev\/sample-user\/([^/]+)\/connect$/,
   DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
@@ -410,6 +423,25 @@ const ROUTE_RE = {
   // v2 device-addressing public endpoints (S3.3).
   DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
+  // W12 debug — observability for the d-i+late-command pipeline. The
+  // installer POSTs short progress markers via curl; the operator GETs
+  // the concatenated log. Backed by ISO_TEMP_BUCKET (already provisioned
+  // for W11). Unauthenticated for dev; remove before public launch.
+  DEV_LATE_LOG: /^\/api\/dev\/late-log\/([^/]+)$/,
+  // W12 debug — put a Hetzner server into rescue mode + return its
+  // root password. The Worker has HCLOUD_TOKEN; the operator's laptop
+  // intentionally does not (W11 design). Unauthenticated for dev.
+  DEV_RESCUE: /^\/api\/dev\/rescue\/([0-9]+)$/,
+  // W12 debug — destroy a Hetzner server by ID (cleanup after rescue
+  // forensics or for orphaned VPSes the W11 cron lost track of).
+  DEV_DESTROY: /^\/api\/dev\/destroy\/([0-9]+)$/,
+  // W12 debug — GET /api/dev/server/<id> returns Hetzner's full server
+  // record (IP, status, etc.) so the operator can SSH after rescue.
+  DEV_SERVER_INFO: /^\/api\/dev\/server\/([0-9]+)$/,
+  // W12 debug — PUT a binary blob into ISO_BUCKET via the same Worker
+  // path that admin-snapshot-now uses for the trailer. Diagnoses the
+  // "wrangler PUT → R2 → dev-url" sync gap.
+  DEV_UPLOAD_ISO: /^\/api\/dev\/upload-iso\/([A-Za-z0-9._-]+)$/,
 };
 
 export async function tryControlPlane(
@@ -1720,6 +1752,55 @@ export async function tryControlPlane(
       }
       return finishPlain(await handleDeleteDemoUser(demoDeps, await readJson(request)));
     }
+    // W13 — cloud-init-direct provisioning. Same admin gate +
+    // DEMO_IRK_KEK requirement as snapshot-now; does NOT need R2 or
+    // a base ISO URL (no ISO is involved). Fails closed if HCLOUD_TOKEN
+    // isn't configured.
+    if (
+      method === "POST" &&
+      (m = path.match(ROUTE_RE.DEMO_USER_ADMIN_CLOUD_INIT_NOW))
+    ) {
+      {
+        const _adminAuth = authorizeAdmin({
+          expected: env.FLAGSHIP_ADMIN_SECRET,
+          provided: request.headers.get("x-admin-secret"),
+        });
+        if (_adminAuth) return finishPlain(_adminAuth);
+      }
+      if (!adminDeps) {
+        return jsonResponse(
+          { error: "DEMO_IRK_KEK not configured on this Worker" },
+          503,
+        );
+      }
+      if (!env.HCLOUD_TOKEN) {
+        return jsonResponse(
+          { error: "W13 admin-cloud-init-now requires HCLOUD_TOKEN on the Worker" },
+          503,
+        );
+      }
+      const cloudInitHetzner = createHetznerClient(env.HCLOUD_TOKEN);
+      const cloudInitDeps = {
+        storage: adminDeps.storage,
+        usernames: adminDeps.usernames,
+        authCodes: adminDeps.authCodes,
+        buildTickets: adminDeps.buildTickets,
+        deviceCapabilityGrants: adminDeps.deviceCapabilityGrants,
+        hetzner: cloudInitHetzner,
+        demoIrkKek: adminDeps.demoIrkKek,
+        ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
+        defaultRegion: "fsn1",
+        defaultSize: "cpx11",
+        fallbackServerTypes: ["cx23", "cpx21", "cpx22"] as const,
+      };
+      return finishPlain(
+        await handleAdminCloudInitNow(
+          cloudInitDeps,
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
     if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_INSTALL_COMPLETE))) {
       {
         const _adminAuth = authorizeAdmin({
@@ -1758,6 +1839,178 @@ export async function tryControlPlane(
       }
       return finishPlain(await handleGetDemoUser(demoDeps, decodeURIComponent(m[1]!)));
     }
+  }
+
+  // W12 debug — unauthenticated late-command log exfil. Returns 503
+  // when ISO_TEMP_BUCKET isn't bound. Each POST stores one timestamped
+  // chunk under `late-log/<label>/<ts>.txt`; GET lists + concatenates.
+  // The label is opaque (typically `<serverDomain>` or `<username>`).
+  if ((m = path.match(ROUTE_RE.DEV_LATE_LOG))) {
+    if (!env.ISO_TEMP_BUCKET) {
+      return new Response("ISO_TEMP_BUCKET unbound\n", { status: 503 });
+    }
+    const label = decodeURIComponent(m[1]!);
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(label)) {
+      return new Response("invalid label\n", { status: 400 });
+    }
+    if (method === "POST") {
+      const body = await request.text();
+      if (body.length > 64 * 1024) {
+        return new Response("chunk too large\n", { status: 413 });
+      }
+      const ts = Date.now();
+      const key = `late-log/${label}/${ts}-${Math.random().toString(36).slice(2, 8)}.txt`;
+      await env.ISO_TEMP_BUCKET.put(key, body, {
+        httpMetadata: { contentType: "text/plain" },
+      });
+      return new Response(`stored ${body.length}B as ${key}\n`, {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    if (method === "GET") {
+      const listed = await env.ISO_TEMP_BUCKET.list({
+        prefix: `late-log/${label}/`,
+        limit: 1000,
+      });
+      const keys = (listed.objects ?? []).map((o) => o.key).sort();
+      const chunks: string[] = [];
+      for (const k of keys) {
+        const obj = await env.ISO_TEMP_BUCKET.get(k);
+        if (obj) chunks.push(`# ── ${k} ──\n${await obj.text()}\n`);
+      }
+      return new Response(chunks.length > 0 ? chunks.join("") : `no entries for ${label}\n`, {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    return new Response("method not allowed\n", { status: 405 });
+  }
+
+  // W12 debug — Hetzner rescue mode enabler. POST returns the rescue
+  // root password; the operator SSHes in with it. Admin-gated.
+  if (method === "POST" && (m = path.match(ROUTE_RE.DEV_RESCUE))) {
+    const _adminAuth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (_adminAuth) return finishPlain(_adminAuth);
+    if (!env.HCLOUD_TOKEN) {
+      return new Response("HCLOUD_TOKEN unbound\n", { status: 503 });
+    }
+    const serverId = m[1]!;
+    // 1. Enable rescue mode (requires server to be powered ON or OFF;
+    //    we don't enforce — the API will reject if mid-action).
+    const enableResp = await fetch(
+      `https://api.hetzner.cloud/v1/servers/${serverId}/actions/enable_rescue`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${env.HCLOUD_TOKEN}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ type: "linux64" }),
+      },
+    );
+    const enableBody = await enableResp.text();
+    if (!enableResp.ok) {
+      return new Response(
+        `enable_rescue failed: ${enableResp.status}\n${enableBody}\n`,
+        { status: 502 },
+      );
+    }
+    // 2. Power-cycle the server so it boots into rescue.
+    const cycleResp = await fetch(
+      `https://api.hetzner.cloud/v1/servers/${serverId}/actions/reset`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${env.HCLOUD_TOKEN}` },
+      },
+    );
+    const cycleBody = await cycleResp.text();
+    // Reset returns 200 on success; surface failure but still echo
+    // the rescue password from step 1.
+    return new Response(
+      `# rescue mode enabled for server ${serverId}\n` +
+        `# (boots into rescue on next power cycle; SSH root@<ip> with the password below)\n` +
+        `enable_rescue: ${enableResp.status}\n${enableBody}\n` +
+        `reset: ${cycleResp.status}\n${cycleBody}\n`,
+      {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      },
+    );
+  }
+
+  // W12 debug — GET Hetzner server info (IP, status). Admin-gated.
+  if (method === "GET" && (m = path.match(ROUTE_RE.DEV_SERVER_INFO))) {
+    const _adminAuth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (_adminAuth) return finishPlain(_adminAuth);
+    if (!env.HCLOUD_TOKEN) {
+      return new Response("HCLOUD_TOKEN unbound\n", { status: 503 });
+    }
+    const serverId = m[1]!;
+    const r = await fetch(`https://api.hetzner.cloud/v1/servers/${serverId}`, {
+      headers: { authorization: `Bearer ${env.HCLOUD_TOKEN}` },
+    });
+    return new Response(await r.text(), {
+      status: r.status,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  // W12 debug — Worker-side ISO upload to ISO_BUCKET. Admin-gated.
+  if (method === "PUT" && (m = path.match(ROUTE_RE.DEV_UPLOAD_ISO))) {
+    const _adminAuth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (_adminAuth) return finishPlain(_adminAuth);
+    if (!env.ISO_BUCKET) {
+      return new Response("ISO_BUCKET unbound\n", { status: 503 });
+    }
+    const key = m[1]!;
+    const cl = request.headers.get("content-length");
+    if (!cl) return new Response("content-length required\n", { status: 411 });
+    const len = Number(cl);
+    if (!Number.isFinite(len) || len <= 0 || len > 200 * 1024 * 1024) {
+      return new Response("invalid content-length\n", { status: 413 });
+    }
+    if (!request.body) return new Response("no body\n", { status: 400 });
+    const stream = (request.body as ReadableStream<Uint8Array>).pipeThrough(
+      new FixedLengthStream(len),
+    );
+    await (env.ISO_BUCKET as ProvisioningTempBucket).put(key, stream, {
+      httpMetadata: { contentType: "application/octet-stream" },
+    });
+    return new Response(`uploaded ${len}B as ISO_BUCKET/${key}\n`, {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+    });
+  }
+
+  // W12 debug — destroy a server by id. Admin-gated.
+  if (method === "POST" && (m = path.match(ROUTE_RE.DEV_DESTROY))) {
+    const _adminAuth = authorizeAdmin({
+      expected: env.FLAGSHIP_ADMIN_SECRET,
+      provided: request.headers.get("x-admin-secret"),
+    });
+    if (_adminAuth) return finishPlain(_adminAuth);
+    if (!env.HCLOUD_TOKEN) {
+      return new Response("HCLOUD_TOKEN unbound\n", { status: 503 });
+    }
+    const serverId = m[1]!;
+    const r = await fetch(`https://api.hetzner.cloud/v1/servers/${serverId}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${env.HCLOUD_TOKEN}` },
+    });
+    return new Response(`destroy ${serverId}: ${r.status}\n${await r.text()}\n`, {
+      status: r.ok ? 200 : 502,
+      headers: { "content-type": "text/plain" },
+    });
   }
 
   return null;

@@ -501,6 +501,12 @@ export async function runDemoIdleReaper(deps: DemoUsersDeps): Promise<{
   for (const row of candidates) {
     const cutoff = now - row.ttlIdleMinutes * 60_000;
     if (row.lastActivityAt >= cutoff) continue;
+    // Don't idle-reap rows still in 'provisioning' — they have their
+    // own dedicated fail timer (runDemoW11SnapshotPoller's failMs +
+    // the provisioning poller's promote-on-register). A row that's
+    // been provisioning for >30 min isn't "idle", it's "still being
+    // set up" — destroying it mid-build wastes a cycle.
+    if (row.state === "provisioning") continue;
     const claimed = await deps.storage.transition(
       row.username,
       row.state,
@@ -561,9 +567,12 @@ export async function runDemoProvisioningPoller(
   for (const row of rows) {
     if (row.state !== "provisioning") continue;
     if (!row.activeServerId) continue;
-    // W11 rows have no snapshot id yet; they go through
-    // runDemoW11SnapshotPoller instead.
-    if (!row.snapshotId) continue;
+    // W11 rows have no snapshot id yet AND have isoR2Key set; those
+    // go through runDemoW11SnapshotPoller. Skip them here.
+    // W13 rows have BOTH snapshotId AND isoR2Key null — they're a
+    // direct cloud-init provision (no ISO, no snapshot). Promote
+    // them like ordinary rows once the daemon registers.
+    if (!row.snapshotId && row.isoR2Key !== null) continue;
     let live: { status: string; ipv4: string | null };
     try {
       live = await deps.hetzner.getServerStatus(row.activeServerId);
@@ -644,6 +653,9 @@ export interface DemoW11SnapshotDeps {
  *   5. Older than `failTimeoutMs` with no /pods registration: declare
  *      failure, destroy the temp VPS, set state='none' WITHOUT
  *      snapshot_id. Operator can re-run admin-snapshot-now.
+ *      (Default 45 min — sized for Debian d-i mini.iso + apt pkgsel +
+ *      late-command's `npm ci` + `tsc -b` on a small VPS. Alpine apkovl
+ *      finished in ~5 min; Debian d-i legitimately needs 20-30 min.)
  */
 export async function runDemoW11SnapshotPoller(
   deps: DemoW11SnapshotDeps,
@@ -651,7 +663,7 @@ export async function runDemoW11SnapshotPoller(
 ): Promise<{ snapshotted: number; finalized: number; failed: number }> {
   const now = (deps.now ?? Date.now)();
   const graceMs = deps.preSnapshotGraceMs ?? 3 * 60_000;
-  const failMs = deps.failTimeoutMs ?? 20 * 60_000;
+  const failMs = deps.failTimeoutMs ?? 45 * 60_000;
   const podRecentMs = deps.podRecentMs ?? 5 * 60_000;
   const rows = await deps.storage.list();
   let snapshotted = 0;

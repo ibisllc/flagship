@@ -377,9 +377,17 @@ export async function runDemoCron(
   const pollerResult = await runDemoProvisioningPoller(
     deps,
     async (fqdn, createdAt) => {
+      // The signal that "registration succeeded" is a row in the
+      // `servers` table keyed by server_domain (created by
+      // /api/server/register). The legacy install_events lookup
+      // referenced columns that don't exist in the migration —
+      // silently never promoting anything. We check `servers` directly
+      // and additionally require the registration to be newer than
+      // the row's createdAt so stale records can't promote a fresh
+      // provision.
       const r = await env
         .DB!.prepare(
-          "SELECT 1 FROM install_events WHERE server_fqdn = ? AND event = 'registered' AND created_at > ? LIMIT 1",
+          "SELECT 1 FROM servers WHERE server_domain = ? AND registered_at > ? AND revoked_at IS NULL LIMIT 1",
         )
         .bind(fqdn, createdAt)
         .first();
@@ -401,9 +409,11 @@ export async function runDemoCron(
     },
     async (fqdn, recencyMs) => {
       const cutoff = now.getTime() - recencyMs;
+      // Same fix as the legacy poller above — daemon_status is the
+      // table that gets a row when the daemon successfully reports.
       const r = await env
         .DB!.prepare(
-          "SELECT 1 FROM install_events WHERE server_fqdn = ? AND event = 'registered' AND created_at > ? LIMIT 1",
+          "SELECT 1 FROM daemon_status WHERE server_domain = ? AND last_reported > ? LIMIT 1",
         )
         .bind(fqdn, cutoff)
         .first();
