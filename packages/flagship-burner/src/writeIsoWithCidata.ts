@@ -76,14 +76,18 @@ export async function writeIsoWithCidata(args: WriteIsoArgs): Promise<void> {
   await rm(work, { recursive: true, force: true });
 }
 
-interface BuildFatArgs {
+export interface BuildFatArgs {
   dir: string;
   fileNames: string[];
   outImg: string;
   label: string;
 }
 
-async function buildFatImage(args: BuildFatArgs): Promise<void> {
+/** Build a tiny FAT12 image at `outImg` containing the given files from
+ *  `dir`, with the volume label `label`. Used by both the prepare path
+ *  (writes the image into an ISO file) and the write path (reads the
+ *  image back as bytes and dd's them onto a raw disk after the ISO). */
+export async function buildFatImage(args: BuildFatArgs): Promise<void> {
   if (platform() === "darwin") {
     // hdiutil — build a 64 KB FAT12 image, copy the files in.
     // `-fs MS-DOS` makes it FAT12/16 depending on size; small dirs end

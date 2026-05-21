@@ -12,6 +12,7 @@
     { "path": "./packages/storage" },
     { "path": "./packages/control-plane" },
     { "path": "./packages/hello-daemon" },
+    { "path": "./packages/flagship-burner" },
     { "path": "./apps/web" },
     { "path": "./services/marketplace-scanner" },
     { "path": "./tools/vps-e2e" }

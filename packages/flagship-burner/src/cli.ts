@@ -6,16 +6,13 @@
  *   flagship-burn verify-iso <iso-path>                check ISO against pinned distros
  *   flagship-burn user-data <recipe.json> <out>        emit cloud-init user-data
  *   flagship-burn prepare <recipe.json> <iso> <out>    bake a flashable ISO
+ *   flagship-burn write <recipe.json> <iso>            raw-write ISO + CIDATA to USB
  *   flagship-burn distros                              list supported distros
  *
  * The recipe is the signed InstallBlob the website produces after the
  * user scans the QR with their phone. The Burner NEVER fetches it from
  * flagshipserver.com — the phone's signature is the trust root and
  * .com's involvement in the burn step is a non-feature.
- *
- * Phase 1 omits the "actually write USB" step. That gets added once
- * the recipe + user-data plumbing is end-to-end verified on a real
- * laptop boot.
  */
 import { writeFile, unlink } from "node:fs/promises";
 import {
@@ -24,6 +21,7 @@ import {
   buildAutoinstallUserData,
   verifyIsoHash,
   PINNED_DISTROS,
+  runWriteCommand,
 } from "./index.js";
 import { writeIsoWithCidata } from "./writeIsoWithCidata.js";
 
@@ -40,6 +38,8 @@ async function main(): Promise<void> {
       return cmdUserData(args.slice(1));
     case "prepare":
       return cmdPrepare(args.slice(1));
+    case "write":
+      return cmdWrite(args.slice(1));
     case "distros":
       return cmdDistros();
     case undefined:
@@ -70,7 +70,7 @@ async function cmdVerify(rest: string[]): Promise<void> {
           serverDomain: blob.serverDomain,
           username: blob.username,
           serverName: blob.serverName,
-          expiresAt: new Date(blob.expiresAt).toISOString(),
+          expiresAt: new Date(blob.authCode.expiresAt).toISOString(),
           installerGitRef: blob.installerGitRef,
           signatureValid: true,
         },
@@ -120,7 +120,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
   await writeFile(outPath, yaml, { mode: 0o600 });
   console.log(`wrote ${yaml.length} bytes to ${outPath}`);
   console.log(`server-domain: ${loaded.blob.serverDomain}`);
-  console.log(`expires:       ${new Date(loaded.blob.expiresAt).toISOString()}`);
+  console.log(`expires:       ${new Date(loaded.blob.authCode.expiresAt).toISOString()}`);
   // Auto-shred the recipe file after we've consumed it. The signed
   // ticket is single-use; leaving it on disk extends the attack window.
   // User can pass --keep-recipe to skip if they want.
@@ -184,6 +184,59 @@ async function cmdPrepare(rest: string[]): Promise<void> {
   }
 }
 
+async function cmdWrite(rest: string[]): Promise<void> {
+  // `write` — full burn: verify recipe + ISO, pick a removable USB
+  // target (interactive picker by default), get a typed-yes from the
+  // user, then raw-write the ISO bytes + CIDATA FAT trailer straight to
+  // the device. Auto-shreds the recipe on success.
+  const positional = rest.filter((a) => !a.startsWith("--"));
+  const recipePath = positional[0];
+  const isoPath = positional[1];
+  if (!recipePath || !isoPath) {
+    console.error(
+      "usage: flagship-burn write <recipe.json> <iso-path> [--device /dev/diskN|auto] [--yes] [--keep-recipe]",
+    );
+    process.exit(2);
+  }
+  const device = extractFlagValue(rest, "--device");
+  const yes = rest.includes("--yes");
+  const keepRecipe = rest.includes("--keep-recipe");
+  if (device === "auto" && !yes) {
+    console.error("--device auto requires --yes (CI-friendly only; never prompts).");
+    process.exit(2);
+  }
+  const result = await runWriteCommand({
+    recipePath,
+    isoPath,
+    device,
+    yes,
+    keepRecipe,
+  });
+  if (!result.ok) {
+    console.error(`write failed: ${result.reason}`);
+    process.exit(result.exitCode);
+  }
+  console.log(`wrote ${result.bytesWritten} bytes to ${result.devicePath}`);
+  if (!keepRecipe) {
+    console.log(`shredded recipe: ${recipePath}`);
+  }
+}
+
+/** Extract `--flag value` or `--flag=value` from argv. */
+function extractFlagValue(argv: string[], flag: string): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]!;
+    if (a === flag) {
+      const next = argv[i + 1];
+      if (next && !next.startsWith("--")) return next;
+    }
+    if (a.startsWith(`${flag}=`)) {
+      return a.slice(flag.length + 1);
+    }
+  }
+  return undefined;
+}
+
 function cmdDistros(): void {
   for (const d of PINNED_DISTROS) {
     console.log(`${d.id}  ${d.displayName}`);
@@ -198,20 +251,21 @@ function cmdHelp(): void {
   console.log(`flagship-burn — flash a Flagship install onto a USB drive
 
 usage:
-  flagship-burn verify <recipe.json>           verify the signed blob
-  flagship-burn verify-iso <path>              check ISO against pinned distros
-  flagship-burn user-data <recipe.json> <out>  emit cloud-init user-data
-                                               (auto-shreds recipe after use;
-                                                pass --keep-recipe to skip)
-  flagship-burn distros                        list supported distros
+  flagship-burn verify <recipe.json>                       verify the signed blob
+  flagship-burn verify-iso <path>                          check ISO against pinned distros
+  flagship-burn user-data <recipe.json> <out>              emit cloud-init user-data
+                                                           (auto-shreds recipe; pass --keep-recipe to skip)
+  flagship-burn prepare <recipe.json> <iso> <out.iso>      bake a flashable ISO (burn elsewhere)
+  flagship-burn write <recipe.json> <iso>                  raw-write ISO + CIDATA to a USB device
+                                                           [--device /dev/diskN | auto] [--yes] [--keep-recipe]
+                                                           (needs sudo; interactive picker if no --device)
+  flagship-burn distros                                    list supported distros
 
 The recipe is the signed JSON the website produces after you scan the
 QR code with your phone. Bring it here — the Burner verifies the
 phone's signature locally and never phones home to flagshipserver.com.
 
-Phase-1 prototype. The "write to USB" step is not yet implemented;
-once the recipe + user-data plumbing is end-to-end verified on a real
-laptop boot, the next phase adds the raw-disk write.`);
+\`write\` requires root (raw block-device access). macOS + Linux only.`);
 }
 
 main().catch((e) => {
