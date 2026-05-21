@@ -1681,7 +1681,7 @@ export async function tryControlPlane(
         baseIsoUrl:
           env.FLAGSHIP_NETBOOT_ISO_URL ??
           env.BASE_ISO_URL ??
-          "https://flagshipserver.com/build/iso/flagship-netboot-debian-12.7.0-x86_64.iso",
+          "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64.iso",
         hetzner: provisionHetzner,
         demoIrkKek: adminDeps.demoIrkKek,
         ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),

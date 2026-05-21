@@ -147,11 +147,11 @@ Our late-command then:
 #    and produces a ~600 MB ISO. Takes ~5 min on a fast box.).
 SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
     bash scripts/build-flagship-netboot-iso.sh \
-        out/flagship-netboot-debian-12.7.0-x86_64.iso
+        out/flagship-netboot-debian-13.5.0-x86_64.iso
 
 # 2. Upload to R2.
-npx wrangler r2 object put flagship-iso/flagship-netboot-debian-12.7.0-x86_64.iso \
-    --file out/flagship-netboot-debian-12.7.0-x86_64.iso
+npx wrangler r2 object put flagship-iso/flagship-netboot-debian-13.5.0-x86_64.iso \
+    --file out/flagship-netboot-debian-13.5.0-x86_64.iso
 
 # 3. Update wrangler.toml [vars] if the version pin changed.
 # 4. Deploy the Worker.

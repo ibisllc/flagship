@@ -202,7 +202,7 @@ describe("buildCloudInitUserData", () => {
     // cloud-init script is the same shape for both Alpine + Debian
     // netinst — only the baseIsoUrl differs.
     const netbootIsoUrl =
-      "https://flagshipserver.com/build/iso/flagship-netboot-debian-12.7.0-x86_64.iso";
+      "https://flagshipserver.com/build/iso/flagship-netboot-debian-13.5.0-x86_64.iso";
     const trailerUrl =
       "https://pub-xyz.r2.dev/demo-isos/demo-alice-deadbeef.trailer";
     const s = buildCloudInitUserData({ baseIsoUrl: netbootIsoUrl, trailerUrl });

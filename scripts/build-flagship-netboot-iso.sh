@@ -28,7 +28,7 @@
 # Inputs (env):
 #   SOURCE_DATE_EPOCH  — required, for deterministic build (mtimes,
 #                        volid date, etc.). Defaults to 1700000000.
-#   DEBIAN_VERSION     — default '12.7.0' (latest Bookworm netinst).
+#   DEBIAN_VERSION     — default '13.5.0' (latest Trixie netinst).
 #   DEBIAN_ARCH        — default 'amd64'.
 #
 # Output:
@@ -47,23 +47,29 @@
 set -euo pipefail
 
 # ── Pinned inputs ──────────────────────────────────────────────────
-DEBIAN_VERSION="${DEBIAN_VERSION:-12.7.0}"
+# d-i `mini.iso` (NOT netinst.iso): just the installer kernel + initrd
+# + boot config. 67 MB instead of netinst's 791 MB. The installer
+# downloads EVERY package from the Debian CDN at install time — which
+# is what we want anyway (it's a "net-install" by definition). This
+# fits under Wrangler's 300 MiB R2 upload cap and shrinks the
+# per-demo cloud-init wget. Same d-i underneath; same preseed
+# contract; same kernel with every common driver built IN, which is
+# the property we actually need (no AF_PACKET / modloop dance).
+DEBIAN_RELEASE="${DEBIAN_RELEASE:-trixie}"   # codename — trixie = Debian 13
 DEBIAN_ARCH="${DEBIAN_ARCH:-amd64}"
 
-# Official Debian mirror. The release tree under /cdimage/release/<v>/
-# moves into /cdimage/archive/<v>/ a few months after each point
-# release; if a future build complains "404 not found", try
-#   DEBIAN_BASE_URL=https://cdimage.debian.org/cdimage/archive/12.7.0/amd64/iso-cd
 # Mirror is pinned to .org over HTTPS; SHA-256 is canonical (below).
-DEBIAN_BASE_URL="${DEBIAN_BASE_URL:-https://cdimage.debian.org/cdimage/release/${DEBIAN_VERSION}/${DEBIAN_ARCH}/iso-cd}"
-DEBIAN_ISO_NAME="debian-${DEBIAN_VERSION}-${DEBIAN_ARCH}-netinst.iso"
+# The /current/ symlink moves as Debian updates the installer in-place
+# (typically every few weeks); SHA gets bumped here when that happens.
+DEBIAN_BASE_URL="${DEBIAN_BASE_URL:-https://deb.debian.org/debian/dists/${DEBIAN_RELEASE}/main/installer-${DEBIAN_ARCH}/current/images/netboot}"
+DEBIAN_ISO_NAME="mini.iso"
 DEBIAN_URL="${DEBIAN_BASE_URL}/${DEBIAN_ISO_NAME}"
 
 # To bump: download the new ISO, sha256sum it, paste here. Mismatched
 # checksum aborts the build before any further work. Debian publishes
-# SHA256SUMS alongside the ISO; verify upstream.
+# SHA256SUMS alongside the installer tree; verify upstream.
 declare -A DEBIAN_SHA256
-DEBIAN_SHA256["12.7.0-amd64"]="e7e09b4bf03075cf3a6dc4e63ff03c2c0cd9b836447632d2c5cc1b5d68a87b88"
+DEBIAN_SHA256["trixie-amd64"]="32c6ccde10426cfc278613aea55df6a4e49b2c73883e04fe13bdb61d402a2370"
 
 OUT_PATH="${1:?usage: build-flagship-netboot-iso.sh <out.iso>}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
@@ -81,9 +87,9 @@ done
 WORK_DIR="$(mktemp -d -t flagship-netboot-iso.XXXXXX)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-EXPECTED_SHA="${DEBIAN_SHA256["${DEBIAN_VERSION}-${DEBIAN_ARCH}"]:-}"
+EXPECTED_SHA="${DEBIAN_SHA256["${DEBIAN_RELEASE}-${DEBIAN_ARCH}"]:-}"
 if [[ -z "$EXPECTED_SHA" ]]; then
-  echo "error: no pinned sha256 for Debian ${DEBIAN_VERSION}-${DEBIAN_ARCH}; update DEBIAN_SHA256 in $0" >&2
+  echo "error: no pinned sha256 for Debian ${DEBIAN_RELEASE}-${DEBIAN_ARCH}; update DEBIAN_SHA256 in $0" >&2
   exit 2
 fi
 
@@ -99,7 +105,7 @@ for f in preseed.cfg install.sh parse-trailer.sh late-command.sh; do
   fi
 done
 
-echo "[netboot-iso] Debian $DEBIAN_VERSION ($DEBIAN_ARCH-netinst)"
+echo "[netboot-iso] Debian ${DEBIAN_RELEASE} (${DEBIAN_ARCH}-mini.iso)"
 echo "[netboot-iso] SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
 echo "[netboot-iso] work dir: $WORK_DIR"
 echo "[netboot-iso] inject dir: $INJECT_DIR"
@@ -147,48 +153,64 @@ cp "$INJECT_DIR/late-command.sh"     "$EXTRACTED/flagship/late-command.sh"
 chmod 755 "$EXTRACTED/flagship/install.sh" "$EXTRACTED/flagship/parse-trailer.sh" "$EXTRACTED/flagship/late-command.sh"
 
 # ── 4. Modify boot configs for auto-preseed ────────────────────
-# Debian netinst's isolinux uses /isolinux/isolinux.cfg + included
-# txt.cfg / menu.cfg under /isolinux/. We replace the menu so the
-# default action is "auto install with /cdrom/preseed.cfg" with NO
-# user interaction (priority=critical suppresses every prompt that
-# isn't a hard-required preseed answer).
-ISOLINUX_DIR="$EXTRACTED/isolinux"
-if [[ -d "$ISOLINUX_DIR" ]]; then
-  echo "[netboot-iso] patching isolinux config for auto-preseed"
-  # The Bookworm isolinux.cfg includes adtxt.cfg / menu.cfg via
-  # `include`. The simplest portable hack is to write a NEW isolinux.cfg
-  # that defaults to a single auto-install entry. We retain the
-  # original under .orig in case a future operator needs the rescue
-  # entries.
-  if [[ -f "$ISOLINUX_DIR/isolinux.cfg" ]]; then
-    cp "$ISOLINUX_DIR/isolinux.cfg" "$ISOLINUX_DIR/isolinux.cfg.orig"
-  fi
-  cat > "$ISOLINUX_DIR/isolinux.cfg" <<'ISOCFG'
+# Two layouts to handle:
+#   - Full netinst.iso: kernel + initrd at /install.amd/vmlinuz +
+#     /install.amd/initrd.gz; isolinux config at /isolinux/.
+#   - mini.iso: kernel + initrd at /linux + /initrd.gz; isolinux
+#     config at the ROOT (no /isolinux/ dir).
+# We auto-detect + emit the right preseed-auto cfg.
+if [[ -f "$EXTRACTED/install.amd/vmlinuz" ]]; then
+  KERNEL_PATH="/install.amd/vmlinuz"
+  INITRD_PATH="/install.amd/initrd.gz"
+elif [[ -f "$EXTRACTED/linux" ]]; then
+  KERNEL_PATH="/linux"
+  INITRD_PATH="/initrd.gz"
+else
+  echo "error: can't locate kernel; tried /install.amd/vmlinuz and /linux" >&2
+  exit 4
+fi
+echo "[netboot-iso] kernel=$KERNEL_PATH initrd=$INITRD_PATH"
+
+# isolinux cfg lives at /isolinux/isolinux.cfg (netinst) or
+# /isolinux.cfg (mini). Patch whichever is present.
+if [[ -f "$EXTRACTED/isolinux/isolinux.cfg" ]]; then
+  ISOLINUX_CFG="$EXTRACTED/isolinux/isolinux.cfg"
+elif [[ -f "$EXTRACTED/isolinux.cfg" ]]; then
+  ISOLINUX_CFG="$EXTRACTED/isolinux.cfg"
+else
+  ISOLINUX_CFG=""
+fi
+if [[ -n "$ISOLINUX_CFG" ]]; then
+  echo "[netboot-iso] patching isolinux config at $ISOLINUX_CFG"
+  cp "$ISOLINUX_CFG" "$ISOLINUX_CFG.orig"
+  # Sed-replace the kernel/initrd path placeholders in the heredoc so
+  # the file we emit references the right layout.
+  cat > "$ISOLINUX_CFG" <<ISOCFG
 # Flagship netboot: auto-install via preseed, no menu, no timeout.
 default flagship-auto
 prompt 0
 timeout 1
 
 label flagship-auto
-    kernel /install.amd/vmlinuz
-    append vga=normal initrd=/install.amd/initrd.gz auto=true priority=critical preseed/file=/cdrom/preseed.cfg --- quiet
+    kernel ${KERNEL_PATH}
+    append vga=normal initrd=${INITRD_PATH} auto=true priority=critical preseed/file=/cdrom/preseed.cfg --- quiet
 ISOCFG
 fi
 
-# Likewise for UEFI / grub.
+# UEFI / grub config (only present in netinst — mini is BIOS-only).
 GRUB_CFG="$EXTRACTED/boot/grub/grub.cfg"
 if [[ -f "$GRUB_CFG" ]]; then
   echo "[netboot-iso] patching grub config for auto-preseed"
   cp "$GRUB_CFG" "$GRUB_CFG.orig"
-  cat > "$GRUB_CFG" <<'GRUBCFG'
+  cat > "$GRUB_CFG" <<GRUBCFG
 # Flagship netboot — auto preseed, no menu wait.
 set timeout=1
 set default="flagship-auto"
 
 menuentry --id=flagship-auto "Flagship auto-install" {
     set background_color=black
-    linux /install.amd/vmlinuz auto=true priority=critical preseed/file=/cdrom/preseed.cfg --- quiet
-    initrd /install.amd/initrd.gz
+    linux ${KERNEL_PATH} auto=true priority=critical preseed/file=/cdrom/preseed.cfg --- quiet
+    initrd ${INITRD_PATH}
 }
 GRUBCFG
 fi
@@ -199,34 +221,37 @@ find "$EXTRACTED" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 # ── 5. Re-pack with xorriso, deterministic flags ───────────────
 echo "[netboot-iso] re-packing → $OUT_PATH"
 mkdir -p "$(dirname "$OUT_PATH")"
+# Auto-detect isolinux boot files. Debian's full netinst.iso ships
+# them under /isolinux/; the mini.iso ships them at the ROOT. Probe
+# the extracted tree and adapt the xorriso flags accordingly.
+if [[ -f "$EXTRACTED/isolinux/isolinux.bin" ]]; then
+  ISOLINUX_BIN_PATH="/isolinux/isolinux.bin"
+  ISOLINUX_CAT_PATH="/isolinux/boot.cat"
+elif [[ -f "$EXTRACTED/isolinux.bin" ]]; then
+  ISOLINUX_BIN_PATH="/isolinux.bin"
+  ISOLINUX_CAT_PATH="/boot.cat"
+else
+  echo "error: neither /isolinux/isolinux.bin nor /isolinux.bin in extracted tree" >&2
+  exit 4
+fi
+echo "[netboot-iso] using boot_image bin=$ISOLINUX_BIN_PATH cat=$ISOLINUX_CAT_PATH"
+
+# Extract the MBR from the source ISO unconditionally (the first 432
+# bytes of any hybrid-bootable ISO). Skipping the /usr/share/syslinux/
+# isohdpfx.bin guess avoids one fallback branch.
+dd if="$DEBIAN_ISO" of="$WORK_DIR/mbr.bin" bs=1 count=432 2>/dev/null
+
 xorriso \
   -outdev "$OUT_PATH" \
-  -volid "FLAGSHIP_DEBIAN_${DEBIAN_VERSION//./_}" \
+  -volid "FLAGSHIP_DEBIAN_${DEBIAN_RELEASE}" \
   -volume_date "all_file_dates" "=$SOURCE_DATE_EPOCH" \
   -volume_date "uuid" "$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00 2>/dev/null || date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00)" \
   -joliet on \
   -map "$EXTRACTED" / \
-  -boot_image isolinux bin_path=/isolinux/isolinux.bin \
-  -boot_image isolinux cat_path=/isolinux/boot.cat \
-  -boot_image isolinux system_area=/usr/share/syslinux/isohdpfx.bin \
-  -- >/dev/null 2>&1 || {
-    # Fall back: some environments don't have isohdpfx at the standard
-    # path. Extract the MBR from the source ISO (the first 432 bytes of
-    # any hybrid-bootable ISO).
-    echo "[netboot-iso] system_area fallback — extracting MBR from source"
-    dd if="$DEBIAN_ISO" of="$WORK_DIR/mbr.bin" bs=1 count=432 2>/dev/null
-    xorriso \
-      -outdev "$OUT_PATH" \
-      -volid "FLAGSHIP_DEBIAN_${DEBIAN_VERSION//./_}" \
-      -volume_date "all_file_dates" "=$SOURCE_DATE_EPOCH" \
-      -volume_date "uuid" "$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00 2>/dev/null || date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00)" \
-      -joliet on \
-      -map "$EXTRACTED" / \
-      -boot_image isolinux bin_path=/isolinux/isolinux.bin \
-      -boot_image isolinux cat_path=/isolinux/boot.cat \
-      -boot_image isolinux system_area="$WORK_DIR/mbr.bin" \
-      -- >/dev/null
-  }
+  -boot_image isolinux bin_path="$ISOLINUX_BIN_PATH" \
+  -boot_image isolinux cat_path="$ISOLINUX_CAT_PATH" \
+  -boot_image isolinux system_area="$WORK_DIR/mbr.bin" \
+  --
 
 # ── 6. Compute + write SHA-256 sidecar ───────────────────────────
 sha=$(sha256sum "$OUT_PATH" | awk '{print $1}')

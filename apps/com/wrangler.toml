@@ -177,8 +177,8 @@ BASE_ISO_SHA256 = "52bbb7432dade2b6a86be483d00edd95df02a34b84bb4d9ca9a8dfddd71cc
 #   scripts/build-flagship-netboot-iso.sh out/flagship-netboot.iso
 # Upload to R2 under FLAGSHIP_NETBOOT_ISO_KEY and serve via the
 # existing /build/iso/:filename Worker route.
-FLAGSHIP_NETBOOT_ISO_URL = "https://flagshipserver.com/build/iso/flagship-netboot-debian-12.7.0-x86_64.iso"
-FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-debian-12.7.0-x86_64.iso"
+FLAGSHIP_NETBOOT_ISO_URL = "https://flagshipserver.com/build/iso/flagship-netboot-trixie-amd64.iso"
+FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-trixie-amd64.iso"
 
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.
 # `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the

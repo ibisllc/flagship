@@ -60,3 +60,4 @@ test-results/
 # adopters expose `.maintainers/` via their own git host's GET, public
 # transparency is the checkpoints repo, and operators use the CLI.
 /maintainers/
+out/
