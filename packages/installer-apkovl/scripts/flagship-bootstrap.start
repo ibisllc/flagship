@@ -25,6 +25,32 @@ mkdir -p /var/flagship /var/log
 exec >>"$LOG" 2>&1
 date
 
+# Install the deps the rest of the bootstrap depends on. Vanilla Alpine
+# ships busybox + apk-tools + the kernel but no node / git / npm / curl /
+# jq, all of which this script needs (node for flagship-trailer-probe,
+# git/npm/node for the verify-endorsement.mjs verifier, curl/jq for the
+# CA cross-check + install.sh fetch). The bootstrap previously assumed
+# these were pre-installed, but the base ISO's apks/x86_64/ doesn't bundle
+# them — live-confirmed 2026-05-21 by mounting the dd'd disk from rescue
+# and listing the apk repo (101 packages, none of which are node/npm/git).
+#
+# Network is up by this point (Alpine's setup-interfaces / udhcpc fired
+# during the runlevel ascent before local.d scripts execute). apk uses
+# the mirror configured in /etc/apk/repositories — Alpine's default
+# during ISO boot is the in-ISO apks/ dir for the base layer, which we
+# extend to the public CDN here for the extra packages.
+if ! grep -q dl-cdn.alpinelinux.org /etc/apk/repositories 2>/dev/null; then
+    cat >> /etc/apk/repositories <<'REPOS'
+http://dl-cdn.alpinelinux.org/alpine/v3.21/main
+http://dl-cdn.alpinelinux.org/alpine/v3.21/community
+REPOS
+fi
+echo "flagship: apk-adding bootstrap deps (nodejs npm git curl jq)"
+if ! apk add --no-cache nodejs npm git curl jq; then
+    echo "flagship: apk add failed — network down or repos misconfigured"
+    exit 1
+fi
+
 # Validate that an installer ref string is safe to interpolate into the
 # GitHub raw URL. Rejects:
 #   - empty / "null"
