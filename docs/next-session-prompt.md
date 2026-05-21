@@ -44,26 +44,43 @@ Style we've kept (and you should keep):
   (`CreateServerStubScreen.swift` design page slider), Android (`CreateServerScreen.kt`
   Compose slider), webapp (`#cs-ttl-hours` number input). Worker enforces
   the 24h cap unilaterally in `serverRegister.ts` (defense in depth).
-- **Burner CLI Phase-1** at `packages/flagship-burner/` — `verify` /
-  `verify-iso` / `user-data` / `prepare` / `distros` subcommands. Never
-  calls `flagshipserver.com`; verifies the phone-signed Ed25519 locally.
-  Auto-shreds the recipe file after successful consume. Pinned distro
-  allowlist (Ubuntu Server 22.04 only at launch).
-- **Mac SwiftUI Burner GUI** at `apps/burner-mac/` — drives the CLI;
-  21/21 swift tests pass. User needs `node` 20+ on their machine (Phase-2
-  bundles node into the app).
-- **Webapp "Download recipe" button** — emits a `.json` file matching the
-  Burner's `loadBlobFromFile()` schema verbatim, for cross-device flows.
+- **Burner CLI** at `packages/flagship-burner/` — `verify` /
+  `verify-iso` / `user-data` / `prepare` / **`write`** / `distros`
+  subcommands. Never calls `flagshipserver.com`; verifies the phone-
+  signed Ed25519 locally. Auto-shreds the recipe file after successful
+  consume. Pinned distro allowlist (Ubuntu Server 22.04 only at
+  launch). 59/59 burner tests pass.
+- **Mac SwiftUI Burner GUI** at `apps/burner-mac/` — single-screen
+  redesign with 3 compact drop-rows (Recipe / ISO / USB), one-click
+  Bake (admin prompt via `osascript do shell script ... with
+  administrator privileges`), live expiry countdown on the recipe
+  row, log drawer collapsed by default. 28/28 swift tests pass.
+  `make release` produces a codesigned + notarized + stapled DMG once
+  Developer ID Application cert is in env.
+- **Linux GTK4 + Python Burner GUI** at `apps/burner-linux/` — same
+  3-row layout, PolicyKit elevation for the write step. 62/62 pytest
+  pass. AppImage + Flatpak manifests included.
+- **Windows WPF + .NET 8 Burner GUI** at `apps/burner-windows/` — same
+  layout, `requireAdministrator` UAC manifest, single-file self-
+  contained publish. Builds on any box with the .NET 8 SDK; this
+  Mac doesn't have it so gates run on the build host.
+- **Webapp "Download recipe" button** — emits a `.json` file matching
+  the Burner's `loadBlobFromFile()` schema verbatim, for cross-
+  device flows.
 
 ### Test gates as of session end
 
-- `npx vitest run` → **3166/3174 pass, 8 skipped** (vps-e2e harness gated
-  pending its own QR-pipe rewrite)
+- `npx vitest run` → **3214/3222** (8 skipped — vps-e2e harness
+  pending its own QR-pipe rewrite); previously-broken apkovl-
+  endorsement test ALSO fixed in 6a7fd28
 - `npx tsc -b` → clean across the whole workspace
-- iOS xcodebuild test → **300/300** (incl. 8 new TTL + v2 canonical-bytes
-  regression tests)
+- iOS xcodebuild test → **300/300** (incl. 8 new TTL + v2 canonical-
+  bytes regression tests)
 - Android `./gradlew test` → BUILD SUCCESSFUL
-- `apps/burner-mac/` `swift test` → **21/21**
+- `apps/burner-mac/` `swift test` → **28/28** (+7 expiry tests)
+- `apps/burner-linux/` `pytest` → **62/62**
+- `apps/burner-windows/` → source ships; gates run on a Windows host
+  with `dotnet build` + `dotnet test`
 
 ### Operator follow-ups (irreducible — needs human shell + credentials)
 
