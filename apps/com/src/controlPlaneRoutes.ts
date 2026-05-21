@@ -275,6 +275,18 @@ export interface ControlPlaneEnv {
    * `wrangler.toml [vars]` if you bump Alpine versions.
    */
   FLAGSHIP_BASE_ISO_KEY?: string;
+
+  /**
+   * W12 — public URL of the Debian-12-netinst-based netboot ISO used
+   * by the cloud demo (admin-snapshot-now) path. Cloud-init wgets
+   * this directly from the VPS. Build with
+   *   scripts/build-flagship-netboot-iso.sh out/flagship-netboot.iso
+   * and upload to R2. Falls back to FLAGSHIP_NETBOOT_ISO_URL → the
+   * pinned default below.
+   */
+  FLAGSHIP_NETBOOT_ISO_URL?: string;
+  /** R2 object key for the netboot ISO inside `ISO_BUCKET`. */
+  FLAGSHIP_NETBOOT_ISO_KEY?: string;
 }
 
 // Structural shapes for the R2 bindings the W11 handler uses. Kept
@@ -1662,11 +1674,14 @@ export async function tryControlPlane(
         isoTempBucket: env.ISO_TEMP_BUCKET,
         isoTempPublicBase: env.FLAGSHIP_R2_TEMP_PUBLIC_BASE,
         // Public URL of the base ISO; cloud-init wgets it directly,
-        // bypassing the Worker. Falls back to the BASE_ISO_URL var the
-        // existing /build/ flow already uses.
+        // bypassing the Worker. W12: prefer the Debian-12-netinst-based
+        // netboot ISO (Alpine apkovl-mode doesn't load kernel modules on
+        // Hetzner cloud VMs). Falls back to the netboot default URL,
+        // then to the legacy Alpine BASE_ISO_URL.
         baseIsoUrl:
+          env.FLAGSHIP_NETBOOT_ISO_URL ??
           env.BASE_ISO_URL ??
-          "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0-x86_64.iso",
+          "https://flagshipserver.com/build/iso/flagship-netboot-debian-12.7.0-x86_64.iso",
         hetzner: provisionHetzner,
         demoIrkKek: adminDeps.demoIrkKek,
         ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),

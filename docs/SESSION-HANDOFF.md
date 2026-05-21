@@ -1,5 +1,70 @@
 # Session handoff — portable cold-start (works on ANY dev machine)
 
+## §0 W12 — Debian-netinst installer (2026-05-21)
+
+Root-caused every silent W11 live-test failure to date: Alpine 3.21
+standard ISO, in apkovl-mode on a Hetzner cx23 cloud VM, **does not
+mount its modloop-lts kernel-modules squashfs**. `/lib/modules` stays
+empty, `af_packet` cannot load, `udhcpc` fails on the AF_PACKET raw
+socket, DHCP never sends Discover, the bootstrap has no network to
+`apk add nodejs git curl jq` from, exits silently. Live-confirmed by
+reading the bootstrap log we persisted to /dev/sda offset 1 GiB from a
+rescue boot.
+
+**Fix shipped** (single commit on this worktree): swapped the base ISO
+from Alpine to **Debian 12 (Bookworm) netinst**. d-i's installer kernel
+has every common driver built IN (not modular) — virtio_net, realtek,
+intel, af_packet all live in the vmlinuz, not a separately-mounted
+squashfs. The trailer-at-disk-end mechanism stays unchanged.
+
+New artefacts:
+
+- `scripts/build-flagship-netboot-iso.sh` — Debian-12-netinst-based
+  builder (mirror of `build-flagship-iso.sh` for the Alpine path).
+  `SOURCE_DATE_EPOCH` + xorriso deterministic flags + sha256-pinned
+  upstream ISO.
+- `packages/installer-netboot/preseed.cfg` — full d-i automation:
+  encrypted LVM, placeholder LUKS passphrase, pkgsel/include with
+  `openssh-server git curl jq nodejs npm cryptsetup lvm2 ca-certs xxd`,
+  `preseed/late_command` → `in-target /root/late-command.sh`.
+- `packages/installer-netboot/parse-trailer.sh` — pure-bash trailer
+  parser + Ed25519 verify (openssl primary path; inline-python RFC-8032
+  fallback). No `@noble/ed25519` dep — d-i has neither node nor jq's
+  workspace.
+- `packages/installer-netboot/late-command.sh` — port of
+  `installer/install.sh` to Debian + systemd. LUKS-key rotate (from
+  placeholder → fresh 64 random bytes) → repo clone + npm ci + tsc -b
+  → identity gen → systemd units (data-services, boot-stage, daemon,
+  first-boot-register) → seal LUKS key + queue registration.
+- `apps/com/wrangler.toml` — `FLAGSHIP_NETBOOT_ISO_URL` +
+  `FLAGSHIP_NETBOOT_ISO_KEY` vars; baseIsoUrl in
+  `controlPlaneRoutes.ts` now prefers the netboot URL.
+- `packages/control-plane/src/demoUsersAdminProvision.ts` — doc-update
+  on `baseIsoUrl` field (the cloud-init flow is ISO-agnostic so no
+  semantic change). The existing dd-base+trailer flow stays.
+- `docs/installer-netboot.md` — full runbook (build → upload → deploy
+  → live-test).
+- Tests: `packages/installer-netboot/tests/preseed.test.ts` (12 tests,
+  config-shape assertions on every load-bearing preseed directive);
+  `scripts/build-flagship-netboot-iso.test.ts` (5 tests, bash -n + sh -n
+  + arg-parse + missing-inject-source + deterministic-flag presence +
+  sha256 pin shape); existing
+  `packages/control-plane/tests/demoUsersAdminProvision.test.ts`
+  extended with a netboot-URL substitution case.
+
+**Scope clearly bounded** — the legacy Alpine + apkovl ISO + the
+`/build/` flow on real hardware are **untouched**. Cloud demo path
+(admin-snapshot-now) uses the netboot ISO; bare-metal /build/ stays
+on Alpine. Cutover of /build/ is a follow-up commit after the cloud
+demo is live-verified.
+
+**Operator follow-ups** (irreducible — needs human shell):
+
+1. `SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) bash scripts/build-flagship-netboot-iso.sh out/flagship-netboot-debian-12.7.0-x86_64.iso` — produces ~600 MB ISO.
+2. `npx wrangler r2 object put flagship-iso/flagship-netboot-debian-12.7.0-x86_64.iso --file out/flagship-netboot-debian-12.7.0-x86_64.iso` — uploads.
+3. `cd apps/com && npx wrangler deploy` — picks up `FLAGSHIP_NETBOOT_ISO_URL`.
+4. `HCLOUD_TOKEN=... node scripts/sample-user.mjs create demo-alice` — live test. Expect register within ~6-10 min (Debian install is slower than Alpine but reliable).
+
 **Read this FIRST.** This file is the in-repo, machine-portable source of
 truth. The richer agent-memory (`~/.claude/projects/.../memory/
 project_resume_2026_05_16.md`) is local to one machine and the harness

@@ -169,6 +169,17 @@ BASE_ISO_URL = "https://flagshipserver.com/build/iso/flagship-base-alpine-3.21.0
 BASE_ISO_VERSION = "flagship-alpine-3.21.0-x86_64-apkovl3-debug"
 BASE_ISO_SHA256 = "52bbb7432dade2b6a86be483d00edd95df02a34b84bb4d9ca9a8dfddd71cc653"
 
+# W12 — Debian-12-netinst-based base ISO used by the cloud demo path
+# (admin-snapshot-now). Alpine apkovl-mode boot doesn't load the
+# modloop kernel-modules squashfs on Hetzner cloud VMs so DHCP never
+# comes up; the netboot ISO uses d-i, whose installer kernel has
+# every common driver built IN. Build via:
+#   scripts/build-flagship-netboot-iso.sh out/flagship-netboot.iso
+# Upload to R2 under FLAGSHIP_NETBOOT_ISO_KEY and serve via the
+# existing /build/iso/:filename Worker route.
+FLAGSHIP_NETBOOT_ISO_URL = "https://flagshipserver.com/build/iso/flagship-netboot-debian-12.7.0-x86_64.iso"
+FLAGSHIP_NETBOOT_ISO_KEY = "flagship-netboot-debian-12.7.0-x86_64.iso"
+
 # W11 — `[varname]` block consumed by the admin-snapshot-now handler.
 # `FLAGSHIP_R2_TEMP_PUBLIC_BASE` is the public dev-url host for the
 # `flagship-iso-temp` R2 bucket (enabled once via
