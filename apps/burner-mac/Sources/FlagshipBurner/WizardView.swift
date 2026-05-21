@@ -129,7 +129,7 @@ struct WizardView: View {
             } else if model.isFinished {
                 doneCard
             } else {
-                Button(action: { Task { await model.runPrepare() } }) {
+                Button(action: { Task { await model.runWrite() } }) {
                     Text("Bake")
                         .font(FB.Font.rowTitle())
                         .frame(minWidth: 200, minHeight: 28)
@@ -140,11 +140,20 @@ struct WizardView: View {
                 .disabled(!model.canFlash)
             }
             if !model.isFinished {
-                Text(model.canFlash
-                     ? "Writes to \(model.selectedDisk?.deviceNode ?? "—") · erases what's there"
-                     : model.readinessSummary)
+                if model.canFlash {
+                    Text("Writes to \(model.selectedDisk?.deviceNode ?? "—") · erases what's there")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                    Button("Or save an ISO file to flash later…") {
+                        Task { await model.runPrepare() }
+                    }
+                    .buttonStyle(.link)
                     .font(FB.Font.caption())
-                    .foregroundStyle(FB.Colors.textMuted)
+                } else {
+                    Text(model.readinessSummary)
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
             }
         }
         .frame(maxWidth: .infinity)

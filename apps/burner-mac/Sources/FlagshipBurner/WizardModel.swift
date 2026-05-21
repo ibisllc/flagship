@@ -125,6 +125,99 @@ final class WizardModel: ObservableObject {
         })
     }
 
+    /// One-click "Bake" — write the recipe + ISO directly to the
+    /// selected USB device. Needs root, so we wrap the CLI invocation
+    /// in `osascript do shell script with administrator privileges`,
+    /// which surfaces the standard macOS Touch-ID / password prompt.
+    func runWrite() async {
+        guard let recipe = recipe, let iso = iso, let disk = selectedDisk else { return }
+        guard !isRunning else { return }
+        isRunning = true
+        defer { isRunning = false }
+
+        let resolved: CLILocator.Resolved
+        do { resolved = try CLILocator.locate() }
+        catch {
+            appendLog(stream: .stderr, text: "CLI locate failed: \(error)")
+            return
+        }
+        // Compose the command. We single-quote each argument for the
+        // shell. AppleScript single-quote escaping: ' becomes '\''.
+        // The signed envelope already gates everything; sudo is just
+        // for raw-disk write access.
+        let args = CLIArgs.write(entryPath: resolved.entryPath,
+                                 recipePath: recipe.path,
+                                 isoPath: iso.path,
+                                 devicePath: disk.deviceNode,
+                                 keepRecipe: false)
+        let shellCmd = ([resolved.nodePath] + args)
+            .map { Self.shellQuote($0) }
+            .joined(separator: " ")
+        appendLog(stream: .stdout, text: "+ sudo \(shellCmd)")
+
+        // `do shell script` returns stdout on success; on non-zero it
+        // throws. We capture both via the script's standard pipes by
+        // wrapping in a /tmp logfile that we tail ourselves.
+        let logFile = "/tmp/flagship-burner-\(UUID().uuidString).log"
+        let wrapped = "(\(shellCmd)) > \(logFile) 2>&1"
+        let appleScript = "do shell script \"\(Self.appleScriptQuote(wrapped))\" with administrator privileges"
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        task.arguments = ["-e", appleScript]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        do {
+            try task.run()
+        } catch {
+            appendLog(stream: .stderr, text: "could not spawn osascript: \(error)")
+            return
+        }
+        // Tail the log file in parallel so the user sees progress.
+        let stopTail = Box(false)
+        Task.detached {
+            var lastSize: Int = 0
+            while !stopTail.value {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard let data = try? Data(contentsOf: URL(fileURLWithPath: logFile)),
+                      data.count > lastSize else { continue }
+                let new = data.subdata(in: lastSize..<data.count)
+                lastSize = data.count
+                if let s = String(data: new, encoding: .utf8) {
+                    for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
+                        if line.isEmpty { continue }
+                        await MainActor.run { [weak self] in
+                            self?.appendLog(stream: .stdout, text: String(line))
+                        }
+                    }
+                }
+            }
+        }
+        task.waitUntilExit()
+        stopTail.value = true
+        if task.terminationStatus == 0 {
+            isFinished = true
+        } else {
+            appendLog(stream: .stderr, text: "osascript exited \(task.terminationStatus)")
+        }
+    }
+
+    private final class Box<T> {
+        var value: T
+        init(_ value: T) { self.value = value }
+    }
+
+    private static func shellQuote(_ s: String) -> String {
+        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func appleScriptQuote(_ s: String) -> String {
+        return s
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     func cancel() {
         currentRunner?.cancel()
     }

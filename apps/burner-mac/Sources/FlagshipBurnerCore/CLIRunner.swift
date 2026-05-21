@@ -22,6 +22,19 @@ public enum CLIArgs {
         if keepRecipe { a.append("--keep-recipe") }
         return a
     }
+
+    /// `write` needs root. The caller is responsible for spawning the
+    /// command with admin privileges (e.g. via NSAppleScript's
+    /// `do shell script ... with administrator privileges`).
+    public static func write(entryPath: String,
+                             recipePath: String,
+                             isoPath: String,
+                             devicePath: String,
+                             keepRecipe: Bool) -> [String] {
+        var a = [entryPath, "write", recipePath, isoPath, "--device", devicePath, "--yes"]
+        if keepRecipe { a.append("--keep-recipe") }
+        return a
+    }
 }
 
 /// One line of subprocess output, tagged with its stream of origin.
