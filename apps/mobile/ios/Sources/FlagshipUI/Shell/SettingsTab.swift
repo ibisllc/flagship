@@ -71,6 +71,7 @@ public struct SettingsTab: View {
                     },
                     onOpenProviders: { path.append(.providers) },
                     onOpenRecovery: { path.append(.recovery) },
+                    onOpenProfiles: { path.append(.profiles) },
                     onOpenAbout: { path.append(.about) },
                     onOpenDeveloper: { path.append(.developer) },
                     onOpenPrivacy: { path.append(.privacy) },
@@ -204,6 +205,22 @@ public struct SettingsTab: View {
             })
         case .privacy:
             PrivacyScreen()
+        case .profiles:
+            ProfilesScreen(
+                profiles: app.profiles,
+                activeCloudName: app.activeProfileCloudName,
+                onSelect: { name in app.setActiveProfile(name) },
+                onSetUpNew: {
+                    // No active profile + the user wants to set one up:
+                    // sign the session out so the OnboardingFlow takes
+                    // over. Cheaper than threading a dedicated
+                    // "Add cloud" route through this commit; that's the
+                    // v2 follow-up.
+                    Task { @MainActor in
+                        app.signOut()
+                    }
+                }
+            )
         }
     }
 }

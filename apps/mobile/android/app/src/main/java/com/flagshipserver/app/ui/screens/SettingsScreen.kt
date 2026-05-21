@@ -95,6 +95,9 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "Recovery", description = "Cloud recovery + offline recovery codes.") {
             nav.navigate("recovery")
         }
+        SettingsRow(label = "Profiles", description = "Switch between your clouds.") {
+            nav.navigate("profiles")
+        }
         SettingsRow(label = "Privacy", description = "Face unlock at launch, app-level gating.") {
             nav.navigate("privacy")
         }

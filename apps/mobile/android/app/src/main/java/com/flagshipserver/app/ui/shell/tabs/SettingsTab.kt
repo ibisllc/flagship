@@ -16,6 +16,7 @@ import com.flagshipserver.app.ui.screens.AddControlDeviceScreen
 import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.PrivacyScreen
+import com.flagshipserver.app.ui.screens.ProfilesScreen
 import com.flagshipserver.app.ui.screens.ProvidersScreen
 import com.flagshipserver.app.ui.screens.RecoveryScreen
 import com.flagshipserver.app.ui.screens.SettingsScreen
@@ -45,5 +46,6 @@ fun SettingsTab() {
         composable("developer") { DeveloperScreen(nav) }
         composable("providers") { ProvidersScreen(nav) }
         composable("privacy") { PrivacyScreen(nav) }
+        composable("profiles") { ProfilesScreen(nav) }
     }
 }

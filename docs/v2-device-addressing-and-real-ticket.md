@@ -759,3 +759,93 @@ Replaces the v2 Phase F acceptance in `docs/next-session-prompt.md`:
   device-capability UI; corporate deployments later consume the same
   endpoints. The implementation cost of "ship demos" already buys
   "ship corporate v2".
+
+---
+
+## 12. Multi-profile mobile model (W3 + W8)
+
+A "cloud" is what we've been calling a "username." Each cloud has one
+root key (today's IRK). One phone can host MULTIPLE profiles — e.g.
+the user's personal cloud `harry`, their family cloud `jay-family`,
+and a corporate cloud `work-acme`. Each profile binds the phone to
+one cloud. The Phase F demo case is one profile per phone;
+multi-profile is the v2 capability that makes corporate / family
+setups work.
+
+### Wire shape
+
+Each profile descriptor carries:
+
+```
+Profile {
+    cloudName         : the cloud's username
+    cloudRootPubHex   : the IRK pubkey (32-byte hex). PUBLIC identifier
+                        — the matching private key never leaves the
+                        Keychain / Android Keystore.
+    deviceLabel       : optional human label ("phone", "ipad", "reviewer")
+                        from the v2 DeviceCapabilityGrant
+    deviceCapability  : optional embedded DeviceCapabilityBlock (the
+                        same wire shape returned from /api/users/check;
+                        see §5.1)
+    demoServer        : optional DemoServerBlock (Plan A demo mode)
+    createdAt         : timestamp the profile was first added
+}
+```
+
+iOS: `apps/mobile/ios/Sources/FlagshipCore/AppState.swift` — `Profile`
+struct + `AppState.profiles` + `activeProfileCloudName`.
+
+Android: `apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppState.kt`
+— `Profile` data class + `AppState.profiles` + `activeCloudName`.
+
+Webapp: `apps/web/public/webapp/lib/profiles.js` — `loadProfiles`,
+`saveProfiles`, `addProfile`, `setActiveProfile`, `getActiveProfile`,
+`renderProfilesDropdown`. Persisted in localStorage under
+`flagship.profiles.v1`.
+
+### Switching profiles
+
+`setActiveProfile(cloudName)` mirrors the chosen profile's session
+state into the legacy single-identity fields (`currentUser`,
+`deviceCapability`) so existing callsites that read those don't need
+to change. Pods are NOT carried across — the new cloud's pods are
+fetched fresh from `/api/users/<u>/devices` after the switch.
+
+### W8 — iCloud Keychain attribute split (security invariant)
+
+iCloud Keychain syncs items across the user's Apple-ID devices when
+`kSecAttrSynchronizable` is true. The cloud ROOT key (today's wrapped
+UMK / IRK / ephemeral pubkey) MUST sync — otherwise iCloud-restore on
+a new iPad can't pull the cloud identity through and the user is
+locked out. Per-device DEVICE-IRKs (when we ship the device-IRK split)
+MUST NOT sync — otherwise a freshly restored iPad clones an existing
+device's identity, defeating per-device addressability.
+
+The `Keystore` wrapper exposes a `KeychainSyncClass` enum
+(`cloudRoot` / `deviceLocal`) and a `keychainWrite(..., sync:)`
+variant that sets the right flag:
+
+| `KeychainSyncClass` | `kSecAttrSynchronizable` | `kSecAttrAccessible`                                     |
+| ------------------- | ------------------------ | -------------------------------------------------------- |
+| `.cloudRoot`        | `true`                   | `kSecAttrAccessibleAfterFirstUnlock` (syncs across)      |
+| `.deviceLocal`      | `false`                  | `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`       |
+
+Today every key the production daemon writes is cloud-root class
+(we still hold the cloud IRK directly — no separate device-IRK yet).
+The enum is plumbed in so the future device-IRK split has a typed
+home and the cross-platform sync discipline is reviewable in one
+place.
+
+Android has no iCloud-style auto-sync of secrets across devices
+sharing a Google account. `KeychainSyncClass` is carried as a
+type-level marker only — every Android write is implicitly
+device-local today. If we ever ship Google-Account-backed sync, the
+same discipline applies.
+
+### Test surface
+
+- iOS: `Tests/FlagshipMobileTests/MultiProfileTests.swift` +
+  `KeychainSyncClassTests.swift`.
+- Android:
+  `app/src/test/java/com/flagshipserver/app/core/MultiProfileTest.kt`.
+- Webapp: `apps/web/tests/profiles.test.ts`.

@@ -55,6 +55,8 @@ public struct SettingsScreen: View {
     /// container hosts AccountSecurityScreen + drives the enable /
     /// disable flows.
     var onOpenAccountSecurity: () -> Void = {}
+    /// W3 — open the Profiles picker (multi-cloud).
+    var onOpenProfiles: () -> Void = {}
     var onOpenAbout: () -> Void = {}
     var onOpenDeveloper: () -> Void = {}
     var onOpenPrivacy: () -> Void = {}
@@ -91,6 +93,7 @@ public struct SettingsScreen: View {
         onOpenProviders: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
+        onOpenProfiles: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
         onOpenDeveloper: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
@@ -113,6 +116,7 @@ public struct SettingsScreen: View {
         self.onOpenProviders = onOpenProviders
         self.onOpenRecovery = onOpenRecovery
         self.onOpenAccountSecurity = onOpenAccountSecurity
+        self.onOpenProfiles = onOpenProfiles
         self.onOpenAbout = onOpenAbout
         self.onOpenDeveloper = onOpenDeveloper
         self.onOpenPrivacy = onOpenPrivacy
@@ -506,6 +510,7 @@ public struct SettingsScreen: View {
         section("RECOVERY", c: c) {
             VStack(spacing: FS.space.s3) {
                 linkRow("Recovery setup", subtitle: "If you lose this phone", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
+                linkRow("Profiles", subtitle: "Switch between your clouds", icon: "person.2.circle.fill", c: c, action: onOpenProfiles)
                 linkRow("Privacy", subtitle: "Face ID lock, app-level gating", icon: "lock.shield.fill", c: c, action: onOpenPrivacy)
                 linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)
                 if showDeveloper {

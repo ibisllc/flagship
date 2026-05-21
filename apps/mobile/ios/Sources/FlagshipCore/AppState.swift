@@ -2,6 +2,44 @@ import Foundation
 import Observation
 import FlagshipAPI
 
+/// W3 — durable profile descriptor. A "cloud" is what we used to call
+/// a "username" — each cloud has one root key (today's IRK). One phone
+/// can host multiple profiles (personal cloud + family cloud + work
+/// cloud) and switch between them. The Phase F demo case is one
+/// profile per phone; multi-profile is the v2 capability that makes
+/// corporate / family setups work.
+///
+/// W8 NOTE: `cloudRootPubHex` is the IDENTITY of the cloud's root key;
+/// the corresponding *private* IRK lives in the Keychain under the
+/// `.cloudRoot` sync class (kSecAttrSynchronizable=true → iCloud
+/// Keychain). Per-device device-IRKs (when we ship them) land under
+/// `.deviceLocal` (kSecAttrSynchronizable=false) so a restored iPad
+/// mints its own device key instead of cloning an existing device.
+public struct Profile: Codable, Equatable, Sendable {
+    public let cloudName: String
+    public let cloudRootPubHex: String
+    public let deviceLabel: String?
+    public let deviceCapability: DeviceCapabilityBlock?
+    public let demoServer: DemoServerBlock?
+    public let createdAt: Date
+
+    public init(
+        cloudName: String,
+        cloudRootPubHex: String = "",
+        deviceLabel: String? = nil,
+        deviceCapability: DeviceCapabilityBlock? = nil,
+        demoServer: DemoServerBlock? = nil,
+        createdAt: Date = Date()
+    ) {
+        self.cloudName = cloudName
+        self.cloudRootPubHex = cloudRootPubHex
+        self.deviceLabel = deviceLabel
+        self.deviceCapability = deviceCapability
+        self.demoServer = demoServer
+        self.createdAt = createdAt
+    }
+}
+
 /// App-wide observable state. The single source of truth for "who is the
 /// user, which servers do they own, which one is the leader."
 ///
@@ -9,6 +47,13 @@ import FlagshipAPI
 /// presented as a full-screen cover. The first pod added is automatically
 /// marked leader; users can change which pod is leader later from the
 /// pod card context menu.
+///
+/// W3 multi-profile shape: in addition to the single-identity session
+/// fields (`currentUser`, `pods`, `deviceCapability`, …), AppState
+/// carries a `profiles` list + `activeProfileCloudName`. The
+/// single-identity fields continue to reflect the ACTIVE profile;
+/// existing callsites that read `currentUser` need no changes. The
+/// Phase F demo case stays at one profile per phone.
 @Observable
 public final class AppState {
     public var isPaired: Bool
@@ -63,6 +108,16 @@ public final class AppState {
     /// docs/v2-device-addressing-and-real-ticket.md §5.2.
     public var deviceCapability: DeviceCapabilityBlock?
 
+    /// W3 — durable list of clouds this phone is a member of. The
+    /// single-identity `currentUser` / `pods` / `deviceCapability`
+    /// fields reflect the ACTIVE profile (the one the rest of the UI
+    /// currently renders). Empty in the unpaired state.
+    public var profiles: [Profile]
+    /// W3 — `cloudName` of the entry in `profiles` whose session state
+    /// is mirrored into `currentUser` / `pods` / `deviceCapability`.
+    /// Nil ⇒ no active profile (unpaired, or every profile was wiped).
+    public var activeProfileCloudName: String?
+
     public init(
         isPaired: Bool = false,
         currentUser: String? = nil,
@@ -74,7 +129,9 @@ public final class AppState {
         accountWasReset: Bool = false,
         requireBiometricAtLaunch: Bool = false,
         isUnlocked: Bool? = nil,
-        deviceCapability: DeviceCapabilityBlock? = nil
+        deviceCapability: DeviceCapabilityBlock? = nil,
+        profiles: [Profile] = [],
+        activeProfileCloudName: String? = nil
     ) {
         self.isPaired = isPaired
         self.currentUser = currentUser
@@ -89,6 +146,16 @@ public final class AppState {
         // unlocked. If required, start LOCKED (the gate view shows).
         self.isUnlocked = isUnlocked ?? !requireBiometricAtLaunch
         self.deviceCapability = deviceCapability
+        self.profiles = profiles
+        self.activeProfileCloudName = activeProfileCloudName ?? profiles.first(where: { $0.cloudName == currentUser })?.cloudName
+    }
+
+    /// W3 — the active Profile, or nil if none is active. Convenience
+    /// for surfaces that want the full descriptor (deviceLabel,
+    /// demoServer, createdAt) and not just the cloud name.
+    public var activeProfile: Profile? {
+        guard let name = activeProfileCloudName else { return nil }
+        return profiles.first(where: { $0.cloudName == name })
     }
 
     /// v2 device-addressing — true iff the current device is a
@@ -140,6 +207,53 @@ public final class AppState {
         self.leaderPodId = pods.first?.podId
         self.currentPodId = pods.first?.podId
         self.isPaired = true
+        // W3 — record the cloud in the durable profile list and mark
+        // it active. Idempotent: re-running onboarding for an already
+        // known cloud refreshes its capability/demoServer/createdAt
+        // rather than appending a duplicate.
+        upsertProfile(Profile(
+            cloudName: username,
+            cloudRootPubHex: "",
+            deviceLabel: deviceCapability?.label,
+            deviceCapability: deviceCapability,
+            demoServer: nil,
+            createdAt: Date()
+        ))
+        self.activeProfileCloudName = username
+    }
+
+    /// W3 — register a new profile (or refresh an existing one with the
+    /// same `cloudName`) and set it active.
+    public func addProfile(_ profile: Profile, setActive: Bool = true) {
+        upsertProfile(profile)
+        if setActive {
+            setActiveProfile(profile.cloudName)
+        }
+    }
+
+    /// W3 — switch the active profile. Mirrors the chosen profile's
+    /// session state into the single-identity fields so callsites
+    /// reading `currentUser` / `deviceCapability` see the new cloud.
+    /// Pods are NOT carried across — switching profiles drops the
+    /// pod list (the new cloud's pods are fetched fresh from /devices).
+    /// No-op if `cloudName` isn't in `profiles`.
+    public func setActiveProfile(_ cloudName: String) {
+        guard let p = profiles.first(where: { $0.cloudName == cloudName }) else { return }
+        self.activeProfileCloudName = cloudName
+        self.currentUser = p.cloudName
+        self.deviceCapability = p.deviceCapability
+        self.pods = []
+        self.leaderPodId = nil
+        self.currentPodId = nil
+        self.isPaired = true
+    }
+
+    private func upsertProfile(_ profile: Profile) {
+        if let idx = profiles.firstIndex(where: { $0.cloudName == profile.cloudName }) {
+            profiles[idx] = profile
+        } else {
+            profiles.append(profile)
+        }
     }
 
     public func addPod(_ pod: PodInfo) {
@@ -171,6 +285,7 @@ public final class AppState {
         self.leaderPodId = nil
         self.currentPodId = nil
         self.deviceCapability = nil
+        self.activeProfileCloudName = nil
         // Welcome doesn't need the lock-screen gate (the user is
         // about to authenticate via passkey anyway). Keep the user
         // preference for next launch; just unlock the runtime latch.

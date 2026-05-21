@@ -6,11 +6,45 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.api.DemoServerBlock
 import com.flagshipserver.app.api.DeviceCapabilityBlock
 import com.flagshipserver.app.api.DeviceScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.Serializable
+
+// W8 NOTE: Android doesn't have iCloud-style auto-sync of secrets across
+// devices the way Apple does. Keys live in the AndroidKeyStore (or in
+// EncryptedSharedPreferences wrapped under an AndroidKeyStore master
+// key), and they DO NOT replicate to other devices that share the
+// user's Google account. The Keychain sync-class split that the iOS
+// build needs (root keys MUST sync via iCloud Keychain; device keys
+// MUST NOT) is a no-op here. We carry [KeychainSyncClass] as a
+// type-level marker so the future "Google Account–backed sync" feature
+// (if we ever ship it) can wire the same discipline through; today
+// every Android write is implicitly device-local.
+
+/** W8 marker — see header comment. Android writes are always
+ *  device-local; the enum exists for parity with the iOS Keychain
+ *  wrapper and so the v2 device-IRK split has a shared vocabulary. */
+enum class KeychainSyncClass { CloudRoot, DeviceLocal }
+
+/** W3 — durable profile descriptor. A "cloud" is what we used to call
+ *  a "username" — each cloud has one root key (today's IRK). One
+ *  phone can hold multiple profiles (personal + family + work) and
+ *  switch between them. Phase F demo case is one profile per phone;
+ *  multi-profile is the v2 capability that makes corporate / family
+ *  setups work. */
+@Serializable
+data class Profile(
+    val cloudName: String,
+    val cloudRootPubHex: String = "",
+    val deviceLabel: String? = null,
+    val deviceCapability: DeviceCapabilityBlock? = null,
+    val demoServer: DemoServerBlock? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+)
 
 class AppState(
     isPaired: Boolean = false,
@@ -24,6 +58,8 @@ class AppState(
     requireBiometricAtLaunch: Boolean = false,
     isUnlocked: Boolean? = null,
     deviceCapability: DeviceCapabilityBlock? = null,
+    profiles: List<Profile> = emptyList(),
+    activeCloudName: String? = null,
 ) {
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
@@ -123,6 +159,26 @@ class AppState(
         return scope in cap.scopeSet
     }
 
+    /** W3 — durable list of clouds this phone is a member of. The
+     *  single-identity fields (`currentUser`, `pods`, `deviceCapability`)
+     *  reflect the ACTIVE profile. Empty in the unpaired state. */
+    private val _profiles = MutableStateFlow(profiles)
+    val profiles: StateFlow<List<Profile>> = _profiles.asStateFlow()
+
+    /** W3 — `cloudName` of the entry in [profiles] whose session state
+     *  is mirrored into [currentUser] / [pods] / [deviceCapability].
+     *  Null ⇒ no active profile (unpaired). */
+    private val _activeCloudName = MutableStateFlow(
+        activeCloudName ?: profiles.firstOrNull { it.cloudName == currentUser }?.cloudName,
+    )
+    val activeCloudName: StateFlow<String?> = _activeCloudName.asStateFlow()
+
+    /** Convenience: the active [Profile] descriptor, or null. */
+    val activeProfile: Profile? get() {
+        val name = _activeCloudName.value ?: return null
+        return _profiles.value.firstOrNull { it.cloudName == name }
+    }
+
     val leaderPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _leaderPodId.value }
     val currentPod: PodInfo? get() = _pods.value.firstOrNull { it.podId == _currentPodId.value } ?: leaderPod
 
@@ -147,6 +203,52 @@ class AppState(
         _leaderPodId.value = pods.firstOrNull()?.podId
         _currentPodId.value = pods.firstOrNull()?.podId
         _isPaired.value = true
+        // W3 — record the cloud in the durable profile list and mark
+        // it active. Idempotent for re-onboarding the same cloud.
+        upsertProfile(
+            Profile(
+                cloudName = username,
+                cloudRootPubHex = "",
+                deviceLabel = _deviceCapability.value?.label,
+                deviceCapability = _deviceCapability.value,
+                demoServer = null,
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
+        _activeCloudName.value = username
+    }
+
+    /** W3 — register a new profile (or refresh an existing entry with
+     *  the same `cloudName`) and optionally make it active. */
+    fun addProfile(profile: Profile, setActive: Boolean = true) {
+        upsertProfile(profile)
+        if (setActive) setActiveProfile(profile.cloudName)
+    }
+
+    /** W3 — switch the active profile. Mirrors the chosen profile's
+     *  session state into the single-identity fields so callsites
+     *  reading [currentUser] / [deviceCapability] see the new cloud.
+     *  Pods are NOT carried across — the new cloud's pods are fetched
+     *  fresh from /devices. No-op if [cloudName] isn't in [profiles]. */
+    fun setActiveProfile(cloudName: String) {
+        val p = _profiles.value.firstOrNull { it.cloudName == cloudName } ?: return
+        _activeCloudName.value = cloudName
+        _currentUser.value = p.cloudName
+        _deviceCapability.value = p.deviceCapability
+        _pods.value = emptyList()
+        _leaderPodId.value = null
+        _currentPodId.value = null
+        _isPaired.value = true
+    }
+
+    private fun upsertProfile(profile: Profile) {
+        val current = _profiles.value
+        val idx = current.indexOfFirst { it.cloudName == profile.cloudName }
+        _profiles.value = if (idx >= 0) {
+            current.toMutableList().also { it[idx] = profile }
+        } else {
+            current + profile
+        }
     }
 
     fun addPod(pod: PodInfo) {
@@ -178,6 +280,7 @@ class AppState(
         _leaderPodId.value = null
         _currentPodId.value = null
         _deviceCapability.value = null
+        _activeCloudName.value = null
         // Welcome doesn't need the gate (passkey auth coming up); the
         // preference itself stays so a future re-pair re-arms.
         _isUnlocked.value = true

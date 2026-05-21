@@ -299,15 +299,44 @@ public struct Keystore {
     }
 
     fileprivate static func keychainWrite(account: String, data: Data) throws {
-        let baseQuery: [String: Any] = [
+        try keychainWrite(account: account, data: data, sync: .cloudRoot)
+    }
+
+    /// W8 — write a Keychain item under the iCloud-sync class indicated
+    /// by `sync`. `.cloudRoot` keys (the IRK / wrapped UMK / ephemeral
+    /// pubkey — anything that represents the CLOUD root identity) set
+    /// `kSecAttrSynchronizable=true` so iCloud Keychain replicates them
+    /// across the user's Apple-ID devices; restoring on a new iPad
+    /// pulls them through. `.deviceLocal` keys (per-device device-IRKs,
+    /// not yet shipped) set the flag to false so a restored device
+    /// MUST mint its own device key rather than cloning an existing
+    /// device's identity.
+    internal static func keychainWrite(account: String, data: Data, sync: KeychainSyncClass) throws {
+        // We must filter by Synchronizable to avoid stale ghost entries
+        // from a prior class. Without Synchronizable, SecItemDelete only
+        // matches non-synced items; an existing synced item under the
+        // same account would silently shadow the new write.
+        var baseQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: account
         ]
+        baseQuery[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         SecItemDelete(baseQuery as CFDictionary)
 
-        var add: [String: Any] = baseQuery
+        var add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: account
+        ]
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        switch sync {
+        case .cloudRoot:
+            add[kSecAttrSynchronizable as String] = kCFBooleanTrue
+            // iCloud-syncing items can't use *ThisDeviceOnly accessibility.
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        case .deviceLocal:
+            add[kSecAttrSynchronizable as String] = kCFBooleanFalse
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        }
         let status = SecItemAdd(add as CFDictionary, nil)
         if status == errSecSuccess { return }
         // Test bundles on the iOS Simulator (no app host) run without
@@ -317,18 +346,22 @@ public struct Keystore {
         // sim runs always have the entitlement; this branch is
         // entirely for the test harness.
         if status == errSecMissingEntitlement {
-            InMemoryStore.shared.write(account: account, data: data)
+            InMemoryStore.shared.write(account: account, data: data, sync: sync)
             return
         }
         throw KeystoreError.keychainFailed(status)
     }
 
     fileprivate static func keychainRead(account: String) -> Data? {
+        // Read matches BOTH synced and non-synced items so a legacy
+        // device-local UMK can still be unlocked by code that now stores
+        // new writes under .cloudRoot. The first match wins.
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(q as CFDictionary, &result)
@@ -338,26 +371,80 @@ public struct Keystore {
     }
 }
 
+/// W8 — iCloud Keychain sync class for stored items.
+///
+///   - `.cloudRoot` items set `kSecAttrSynchronizable=true`. The cloud
+///     root identity (today's wrapped UMK / IRK / ephemeral pubkey)
+///     MUST sync so iCloud-restore on a new device pulls the same
+///     identity through.
+///   - `.deviceLocal` items set `kSecAttrSynchronizable=false`. Per-
+///     device device-IRKs (not yet shipped — we still hold the cloud
+///     IRK directly) MUST NOT sync; an iPad restored from another
+///     iPad's iCloud backup needs to mint its OWN device IRK rather
+///     than cloning the source iPad's identity. The enum is plumbed
+///     in today so the future device-IRK split has a typed home.
+public enum KeychainSyncClass: Sendable, Equatable {
+    case cloudRoot
+    case deviceLocal
+}
+
 /// Process-local fallback for environments where the Keychain refuses
 /// writes (notably iOS Simulator test bundles with no app host).
 /// NEVER hit on real devices or production-sim runs — production paths
 /// always have the Keychain entitlement.
-fileprivate final class InMemoryStore: @unchecked Sendable {
+final class InMemoryStore: @unchecked Sendable {
     static let shared = InMemoryStore()
     private let lock = NSLock()
     private var items: [String: Data] = [:]
+    /// W8 test surface — last-write sync class per account. Production
+    /// reads ignore this; KeychainSyncClassTests asserts on it to verify
+    /// that `keychainWrite(..., sync:)` plumbs the flag through.
+    private var syncClasses: [String: KeychainSyncClass] = [:]
 
     func read(account: String) -> Data? {
         lock.lock(); defer { lock.unlock() }
         return items[account]
     }
     func write(account: String, data: Data) {
+        write(account: account, data: data, sync: .cloudRoot)
+    }
+    func write(account: String, data: Data, sync: KeychainSyncClass) {
         lock.lock(); defer { lock.unlock() }
         items[account] = data
+        syncClasses[account] = sync
     }
     func remove(account: String) {
         lock.lock(); defer { lock.unlock() }
         items.removeValue(forKey: account)
+        syncClasses.removeValue(forKey: account)
+    }
+    /// W8 test-only — last-write sync class for `account`, or nil if
+    /// nothing has been written.
+    func syncClass(account: String) -> KeychainSyncClass? {
+        lock.lock(); defer { lock.unlock() }
+        return syncClasses[account]
+    }
+}
+
+/// W8 test surface — internal accessors for the in-memory fallback
+/// store. Lives at module scope so the test target can call them
+/// without piercing `fileprivate`.
+public enum KeystoreTestSupport {
+    /// Write through the production keychainWrite path under the chosen
+    /// sync class. On the simulator test bundle this lands in the
+    /// in-memory store (no Keychain entitlement); the result is
+    /// observable via `lastWrittenSyncClass`.
+    public static func write(account: String, data: Data, sync: KeychainSyncClass) throws {
+        try Keystore.keychainWrite(account: account, data: data, sync: sync)
+    }
+    /// The sync class the in-memory fallback recorded for the last write
+    /// to `account`. Nil before the first write.
+    public static func lastWrittenSyncClass(account: String) -> KeychainSyncClass? {
+        InMemoryStore.shared.syncClass(account: account)
+    }
+    /// Clear the in-memory store so test ordering doesn't leak.
+    public static func wipeInMemory(account: String) {
+        InMemoryStore.shared.remove(account: account)
     }
 }
 

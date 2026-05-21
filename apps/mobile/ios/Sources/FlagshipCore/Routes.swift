@@ -35,6 +35,9 @@ public enum SettingsRoute: Hashable, Sendable {
     case addControlDevice
     case developer
     case privacy
+    /// W3 — multi-profile picker; lists the clouds this phone is a
+    /// member of and lets the user switch active profile.
+    case profiles
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad
