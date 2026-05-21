@@ -1672,7 +1672,10 @@ export async function tryControlPlane(
         ...(sshKeyId ? { demoSshKeyId: sshKeyId } : {}),
         defaultRegion: "fsn1",
         defaultSize: "cpx11",
-        fallbackServerTypes: ["cx22", "cpx21", "cx32"] as const,
+        // Server types known available + non-deprecated in fsn1 as of
+        // 2026-05-21. cx22 + cx32 are deprecated; cx23 is the in-place
+        // upgrade and is what worked on the legacy CLI's live runs.
+        fallbackServerTypes: ["cx23", "cpx21", "cpx22"] as const,
       };
       return finishPlain(
         await handleAdminSnapshotNow(
