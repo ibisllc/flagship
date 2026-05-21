@@ -69,12 +69,51 @@ if [ -z "$TARGET" ]; then
 fi
 echo "flagship: target = $TARGET"
 
+# 1a. Cloud-VPS in-place safety: when TARGET == TRAILER_SRC, the disk
+#     we're about to repartition is the same disk Alpine booted from.
+#     The Alpine apkovl runtime lives in RAM, but the kernel may
+#     still hold open handles into /dev/sda from initramfs caches,
+#     mounted ISO9660 filesystems (Alpine's hybrid ISO mounts itself
+#     read-only at /media/sda or /media/cdrom), or the apk cache.
+#     `parted` on a busy device returns a "Device or resource busy"
+#     warning, fails silently in some cases, and on Hetzner cx23 has
+#     been observed to wedge the kernel entirely (zero CPU + zero
+#     network for 10+ minutes; full session lost).
+#
+#     Sync + unmount + losetup -D + udevadm settle every reference
+#     to TARGET before repartitioning. This is a no-op on the multi-
+#     disk path (TARGET != TRAILER_SRC) because nothing's mounted on
+#     a fresh internal disk. Safe to run unconditionally.
+echo "flagship: quiescing $TARGET before repartition..."
+sync
+# Unmount any filesystem currently using TARGET or its partitions.
+# Iterate in reverse depth (longest path first) so child mounts go
+# before parents. busybox awk + sort -r is enough; no GNU-isms.
+for mnt in $(awk -v t="$TARGET" '$1 ~ "^" t { print $2 }' /proc/mounts | sort -r); do
+    echo "flagship:   unmounting $mnt"
+    umount -f "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+done
+# Drop any loop devices backed by TARGET (the Alpine hybrid ISO
+# sometimes mounts itself via loop0 → /dev/sda).
+losetup -D 2>/dev/null || true
+# Flush in-kernel block-device caches before partition operations.
+blockdev --flushbufs "$TARGET" 2>/dev/null || true
+# Let udev catch up so the kernel re-reads the (now-clean) device.
+udevadm settle 2>/dev/null || true
+sleep 1
+echo "flagship: $TARGET is quiesced"
+
 # 2. Partition: 256 MiB unencrypted boot partition (carries trailer copy
 #    + boot-stage code), rest LUKS-encrypted.
 parted -s "$TARGET" mklabel gpt
 parted -s "$TARGET" mkpart "FLAGSHIP_BOOT" ext4 1MiB 257MiB
 parted -s "$TARGET" mkpart "FLAGSHIP_ROOT" 257MiB 100%
 parted -s "$TARGET" set 1 esp on
+# Re-read the partition table after parted so the kernel sees the
+# new geometry. partprobe is the standard tool; fall back to
+# blockdev --rereadpt if it's not installed in the apkovl base.
+partprobe "$TARGET" 2>/dev/null || blockdev --rereadpt "$TARGET" 2>/dev/null || true
+udevadm settle 2>/dev/null || true
 
 # Detect partition naming (sda1 vs nvme0n1p1)
 case "$TARGET" in
