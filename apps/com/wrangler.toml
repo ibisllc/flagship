@@ -177,10 +177,12 @@ BASE_ISO_SHA256 = "faafc1b9f868c47c99733c2c6d453e8202d93f9b36df6d6b653eb77491473
 # wgets the result. Update if the bucket is re-created (the
 # `pub-…r2.dev` host changes).
 FLAGSHIP_R2_TEMP_PUBLIC_BASE = "https://pub-260717b8631044a0bcee80ce0de8f7f9.r2.dev"
-# Optional override — bumps with Alpine version. When unset the
-# handler defaults to `build/iso/flagship-base-alpine-3.21.0-x86_64.iso`
-# inside ISO_BUCKET.
-FLAGSHIP_BASE_ISO_KEY = "build/iso/flagship-base-alpine-3.21.0-x86_64.iso"
+# R2 object key for the base Alpine ISO inside ISO_BUCKET. NOTE: the
+# stored key is the BARE filename — NOT prefixed with `build/iso/`.
+# (The `/build/iso/:filename` route in apps/com/src/route.ts strips
+# the prefix before calling ISO_BUCKET.get(), so the on-disk key is
+# unprefixed. Probed live 2026-05-21: 250 937 344 bytes at this key.)
+FLAGSHIP_BASE_ISO_KEY = "flagship-base-alpine-3.21.0-x86_64.iso"
 
 # Fly anycast IPs of the .services SNI passthrough listener. When DNS
 # auto-publish is enabled (CLOUDFLARE_DNS_API_TOKEN secret set), the
