@@ -39,4 +39,37 @@ public struct VerifyResult: Codable, Equatable, Sendable {
         let data = Data(tail.utf8)
         return try? JSONDecoder().decode(VerifyResult.self, from: data)
     }
+
+    /// Parsed expiry as a Date, or nil if the CLI didn't emit one or
+    /// the timestamp didn't parse. Uses ISO 8601 — the CLI prints
+    /// `new Date(blob.authCode.expiresAt).toISOString()`.
+    public var expiresAtDate: Date? {
+        guard let s = expiresAt else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: s)
+    }
+
+    /// Human-readable "expires in 5h 47m" / "expired 3m ago" string,
+    /// computed against `now` so callers can drive a timer.
+    public func expiryLabel(now: Date = Date()) -> String? {
+        guard let exp = expiresAtDate else { return nil }
+        let remaining = exp.timeIntervalSince(now)
+        if remaining < 0 {
+            return "expired \(Self.formatDuration(-remaining)) ago"
+        }
+        return "expires in \(Self.formatDuration(remaining))"
+    }
+
+    static func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h >= 1 { return "\(h)h \(m)m" }
+        if m >= 1 { return "\(m)m" }
+        return "\(s)s"
+    }
 }

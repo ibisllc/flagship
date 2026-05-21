@@ -75,8 +75,12 @@ struct WizardView: View {
             return .error(err)
         }
         if let v = model.verified {
-            return .success(primary: v.serverDomain,
-                            secondary: v.expiresAt.map { "Expires \($0)" })
+            // Live-tick the expiry countdown via the TimelineView the
+            // DropRow wraps the success state in. The label is computed
+            // from `now` each refresh, so a 5h 47m → 5h 46m transition
+            // is visible without the user reloading anything.
+            return .successDynamic(primary: v.serverDomain,
+                                   secondary: { now in v.expiryLabel(now: now) })
         }
         if let r = model.recipe {
             return .pending(r.lastPathComponent)
@@ -234,6 +238,10 @@ enum DropRowState {
     case empty(hint: String)
     case pending(String)
     case success(primary: String, secondary: String?)
+    /// Same as `.success` but the secondary string is computed live
+    /// each minute via `TimelineView` — used by the recipe row's
+    /// "expires in 5h 47m" countdown.
+    case successDynamic(primary: String, secondary: (Date) -> String?)
     case error(String)
 }
 
@@ -304,7 +312,7 @@ private struct DropRow: View {
     private var statusIcon: some View {
         Group {
             switch state {
-            case .success:
+            case .success, .successDynamic:
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(FB.Colors.success)
             case .pending:
@@ -339,6 +347,22 @@ private struct DropRow: View {
                     if let s = secondary {
                         Text(s).font(FB.Font.caption())
                             .foregroundStyle(FB.Colors.textMuted)
+                    }
+                }
+            case .successDynamic(let primary, let secondary):
+                // 1-minute heartbeat for the countdown. TimelineView
+                // re-evaluates the closure each tick, no manual @State
+                // bookkeeping needed.
+                TimelineView(.periodic(from: Date(), by: 60)) { context in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(primary)
+                            .font(FB.Font.rowHint())
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if let s = secondary(context.date) {
+                            Text(s).font(FB.Font.caption())
+                                .foregroundStyle(FB.Colors.textMuted)
+                        }
                     }
                 }
             case .error(let msg):
