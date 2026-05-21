@@ -674,7 +674,14 @@ async function streamIsoFromR2(filename: string, env: RouteEnv): Promise<Respons
   const headers = new Headers({
     "content-type": "application/octet-stream",
     "content-length": String(obj.size),
-    "cache-control": "public, max-age=86400, immutable",
+    // W12 iteration — we're rebuilding the netboot ISO multiple times
+    // a day. The CF edge cache hangs on to `immutable` even after R2
+    // delete+reupload (the cache-control directive says "never
+    // revalidate"). Drop `immutable` and shorten max-age to 60s so
+    // each new R2 PUT propagates within a minute. Switch back to a
+    // long immutable lifetime once we ship build-hash-suffixed
+    // filenames (build/iso/flagship-netboot-<sha>.iso).
+    "cache-control": "public, max-age=60, must-revalidate",
     "content-disposition": `attachment; filename="${filename}"`,
   });
   if (obj.httpEtag) headers.set("etag", obj.httpEtag);
