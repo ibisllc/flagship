@@ -93,4 +93,77 @@ class MockScreensClientTest {
         assertTrue(frames.any { it is VibeCodeFrame.Deploy })
         assertTrue(frames.any { it is VibeCodeFrame.Done })
     }
+
+    // ── W10 — per-app env-var KV editor + vibe-code session ─────────
+
+    @Test fun serviceEnvList_returnsSortedNamesOnly() = runTest {
+        val c = makeClient()
+        val r = c.serviceEnvList("harry-plants")
+        assertTrue(r.names.contains("WEATHER_API_KEY"))
+    }
+
+    @Test fun serviceEnvSet_thenList_includesNewName() = runTest {
+        val c = makeClient()
+        val envelope = ServiceEnvSetEnvelope(
+            serverId = "home.harry.flagship.services",
+            creator = "harry", slug = "plants",
+            env = mapOf("FOO" to "bar-NEVER-LEAKED"),
+            issuedAt = 1L,
+        )
+        c.serviceEnvSet(
+            "harry-plants",
+            ServiceEnvSetRequest(name = "FOO", value = "bar-NEVER-LEAKED", request = envelope, signature = "00"),
+        )
+        val r = c.serviceEnvList("harry-plants")
+        assertTrue(r.names.contains("FOO"))
+    }
+
+    @Test fun serviceEnvUnset_dropsName() = runTest {
+        val c = makeClient()
+        val envelope = ServiceEnvSetEnvelope(
+            serverId = "home.harry.flagship.services",
+            creator = "harry", slug = "plants",
+            env = emptyMap(),
+            issuedAt = 1L,
+        )
+        c.serviceEnvUnset(
+            "harry-plants",
+            ServiceEnvUnsetRequest(name = "WEATHER_API_KEY", request = envelope, signature = "00"),
+        )
+        val r = c.serviceEnvList("harry-plants")
+        assertTrue(!r.names.contains("WEATHER_API_KEY"))
+    }
+
+    @Test fun vibeCodeSessionState_surfacesPendingRequestEnvVar() = runTest {
+        val c = makeClient()
+        val r = c.vibeCodeSessionState("sess-42")
+        assertEquals("awaiting-tool-response", r.status)
+        val pending = r.pendingRequest
+        assertNotNull(pending)
+        val ev = pending as VibeCodePendingRequest.RequestEnvVar
+        assertEquals("WEATHER_API_KEY", ev.payload.name)
+        assertEquals(true, ev.payload.secret)
+    }
+
+    @Test fun vibeCodePendingRequest_serializationHasNoValueField() {
+        // STRUCTURAL invariant — the pendingRequest wire shape must not
+        // carry a `value` key. Mirrors the screensHttpW10.test.ts assertion.
+        val pending: VibeCodePendingRequest = VibeCodePendingRequest.RequestEnvVar(
+            toolUseId = "tu_1",
+            payload = RequestEnvVarPayload(
+                name = "OPENAI_API_KEY",
+                description = "your key",
+                why = "for completions",
+                example = "sk-…",
+                secret = true,
+            ),
+        )
+        val json = kotlinx.serialization.json.Json {
+            classDiscriminator = "kind"
+            encodeDefaults = true
+        }
+        val s = json.encodeToString(VibeCodePendingRequest.serializer(), pending)
+        assertTrue(s.contains("requestEnvVar"))
+        assertTrue(!s.contains("\"value\""))
+    }
 }

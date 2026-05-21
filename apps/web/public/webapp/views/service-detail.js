@@ -134,11 +134,29 @@ export async function renderServiceDetail(serviceId) {
         <button id="sd-backup-go" class="full-width mt-2">Create backup</button>
         <div id="sd-backup-status" class="mt-2 text-sm"></div>
       </div>
+      <h2 class="mt-4">Environment variables</h2>
+      <div class="card">
+        <p class="note">
+          Per-app key/value pairs (e.g. <code>OPENAI_API_KEY</code>) the app
+          reads at runtime. Names appear in the editor; values stay sealed
+          on your pod.
+        </p>
+        <button id="sd-configure-env" class="full-width mt-2">Configure environment</button>
+      </div>
     `;
 
     $("sd-backup-go")?.addEventListener("click", () => triggerBackup(s.serviceId));
     $("sd-open-browser")?.addEventListener("click", () => {
       enterBrowserViewer(s.serviceId).catch((e) => toast(String(e), "err"));
+    });
+    $("sd-configure-env")?.addEventListener("click", async () => {
+      const { enterServiceEnv } = await import("./service-env.js");
+      // serverFqdn is whatever pod we're paired to right now; the
+      // serverFqdn is canonical-bytes input to the signed envelope.
+      const serverFqdn = (getPodBaseUrl() ?? "")
+        .replace(/^https?:\/\//, "")
+        .replace(/\/+$/, "");
+      await enterServiceEnv(s.serviceId, s.creator, s.slug, serverFqdn);
     });
     $("sd-invite-issue")?.addEventListener("click", async () => {
       const { enterInviteIssue } = await import("./invite-issue.js");

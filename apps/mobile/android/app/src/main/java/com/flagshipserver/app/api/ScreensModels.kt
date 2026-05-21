@@ -377,3 +377,94 @@ data class AppReissuanceSummary(
     val error: String? = null,
     val completedAt: Long,
 )
+
+// ---------- W10 — per-app env-var KV editor -----------------------------
+
+/** Daemon NEVER returns values; this DTO has no `values` field by design. */
+@Serializable
+data class ServiceEnvListResponse(val names: List<String>)
+
+/** Mirror of @flagship/protocol SetServiceEnvRequest. */
+@Serializable
+data class ServiceEnvSetEnvelope(
+    val serverId: String,
+    val creator: String,
+    val slug: String,
+    val env: Map<String, String>,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class ServiceEnvSetRequest(
+    val name: String,
+    val value: String,
+    val request: ServiceEnvSetEnvelope,
+    /** Hex Ed25519 signature over canonicalSetServiceEnv(request). */
+    val signature: String,
+)
+
+@Serializable
+data class ServiceEnvUnsetRequest(
+    val name: String,
+    val request: ServiceEnvSetEnvelope,
+    val signature: String,
+)
+
+@Serializable
+data class ServiceEnvOpResponse(val ok: Boolean)
+
+// ---------- W10 — vibe-code session public state + reply ----------------
+
+@Serializable
+data class VibeCodeSessionMessage(
+    val role: String,           // "user" | "assistant"
+    val text: String,
+    val timestamp: Long,
+)
+
+@Serializable
+data class TalkToUserPayload(val message: String)
+
+@Serializable
+data class RequestEnvVarPayload(
+    val name: String,
+    val description: String,
+    val why: String,
+    val example: String? = null,
+    val secret: Boolean? = null,
+)
+
+@Serializable
+sealed class VibeCodePendingRequest {
+    abstract val toolUseId: String
+    @Serializable @SerialName("talkToUser")
+    data class TalkToUser(
+        override val toolUseId: String,
+        val payload: TalkToUserPayload,
+    ) : VibeCodePendingRequest()
+    @Serializable @SerialName("requestEnvVar")
+    data class RequestEnvVar(
+        override val toolUseId: String,
+        val payload: RequestEnvVarPayload,
+    ) : VibeCodePendingRequest()
+}
+
+@Serializable
+data class VibeCodeSessionPublicState(
+    val id: String,
+    val appId: String? = null,
+    val status: String,
+    val messages: List<VibeCodeSessionMessage>,
+    val pendingRequest: VibeCodePendingRequest? = null,
+)
+
+@Serializable
+data class VibeCodeReplyRequest(
+    val text: String? = null,
+    /** "set" | "declined" | "deferred" — only meaningful when the
+     *  pending tool is `requestEnvVar`. */
+    val envVarStatus: String? = null,
+)
+
+@Serializable
+data class VibeCodeReplyResponse(val ok: Boolean)

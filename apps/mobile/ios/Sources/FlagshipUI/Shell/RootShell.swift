@@ -74,7 +74,7 @@ public struct RootShell: View {
         switch link {
         case .unlockApprove, .unlockApprovalsList:   return .activity
         case .serverDetail, .createServer:            return .home
-        case .appDetail, .marketplace:                return .apps
+        case .appDetail, .marketplace, .vibeCodeChat: return .apps
         case .recoverySetup:                          return .settings
         }
     }

@@ -22,6 +22,10 @@ sealed interface DeepLink {
      *  in-app from the Home nudge (C9). Internal-only — not parsed
      *  from a URI. */
     data object RecoverySetup : DeepLink
+    /** W10 — vibe-code chat surface for the given session id. Fired
+     *  by the `vibecode-needs-you` push when the AI is awaiting an
+     *  env-var or talkToUser response. */
+    data class VibeCodeChat(val sessionId: String) : DeepLink
 
     companion object {
         /// Parse a `flagship://...` URI. Keep in sync with iOS
@@ -37,6 +41,14 @@ sealed interface DeepLink {
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "marketplace" -> Marketplace
                 "create-server" -> CreateServer
+                "vibecode" -> {
+                    // Accept either path form `flagship://vibecode/<id>`
+                    // or query form `flagship://vibecode?sessionId=<id>`.
+                    val pathId = uri.path?.trim('/').orEmpty()
+                    val queryId = params["sessionId"].orEmpty()
+                    val id = if (pathId.isNotEmpty()) pathId else queryId
+                    if (id.isEmpty()) null else VibeCodeChat(id)
+                }
                 else -> null
             }
         }

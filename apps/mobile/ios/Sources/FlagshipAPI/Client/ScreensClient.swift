@@ -78,6 +78,18 @@ public protocol ScreensClient: Sendable {
     // walk so the phone's recovery confirmation screen can render
     // per-app re-anchoring counts + the undo deadline.
     func postRecoveryStatus() async throws -> PostRecoveryStatusResponse
+
+    // W10 — per-app env-var KV editor. Values flow ONLY through /set;
+    // /list returns names only; /unset removes a name.
+    func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse
+    func serviceEnvSet(appId: String, _ req: ServiceEnvSetRequest) async throws -> ServiceEnvOpResponse
+    func serviceEnvUnset(appId: String, _ req: ServiceEnvUnsetRequest) async throws -> ServiceEnvOpResponse
+
+    // W10 — vibe-code session public state + reply. The chat surface
+    // polls /sessions/<id>; the owner POSTs /reply when the AI is
+    // awaiting a tool response (talkToUser or requestEnvVar ack).
+    func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState
+    func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {

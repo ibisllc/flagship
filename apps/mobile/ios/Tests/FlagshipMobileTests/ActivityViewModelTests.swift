@@ -132,4 +132,19 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func postRecoveryStatus() async throws -> PostRecoveryStatusResponse {
         throw ScreensClientError.http(status: 503, message: "daemon does not implement P1.23")
     }
+    func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse {
+        try await real.serviceEnvList(appId: appId)
+    }
+    func serviceEnvSet(appId: String, _ req: ServiceEnvSetRequest) async throws -> ServiceEnvOpResponse {
+        try await real.serviceEnvSet(appId: appId, req)
+    }
+    func serviceEnvUnset(appId: String, _ req: ServiceEnvUnsetRequest) async throws -> ServiceEnvOpResponse {
+        try await real.serviceEnvUnset(appId: appId, req)
+    }
+    func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState {
+        try await real.vibeCodeSessionState(sessionId: sessionId)
+    }
+    func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
+        try await real.vibeCodeSessionReply(sessionId: sessionId, req)
+    }
 }

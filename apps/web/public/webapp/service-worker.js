@@ -75,6 +75,8 @@ const OPTIONAL_SHELL = [
   "/views/tier-status.js",
   "/views/marketplace.js",
   "/views/vibe-code.js",
+  "/views/vibecode-chat.js",
+  "/views/service-env.js",
   "/views/unlock-approvals.js",
   "/views/recovery.js",
   "/views/install-progress.js",
@@ -248,14 +250,44 @@ self.addEventListener("online", () => {
 // otherwise opens the root (the SPA routes the user to the
 // unlock-approvals view from there).
 self.addEventListener("push", (event) => {
-  let serverFqdn = null;
+  let data = null;
   try {
-    const data = event.data?.json?.();
-    if (data && typeof data.serverFqdn === "string") {
-      serverFqdn = data.serverFqdn;
-    }
+    data = event.data?.json?.() ?? null;
   } catch (_e) {
     // Malformed payload — fall back to the generic body below.
+  }
+
+  // W10 — vibecode-needs-you push. The daemon fires this when the AI
+  // hits a tool_use (requestEnvVar / talkToUser) and pauses the
+  // session. Route to the vibe-code chat surface for the session id.
+  if (data && data.kind === "vibecode-needs-you" && typeof data.sessionId === "string") {
+    const which = typeof data.request === "string" ? data.request : "input";
+    const body = which === "requestEnvVar"
+      ? "The AI needs an environment variable to continue."
+      : "The AI is asking you a question.";
+    const deepLink = typeof data.deepLink === "string"
+      ? data.deepLink
+      : `/?view=vibecode-chat&sessionId=${encodeURIComponent(data.sessionId)}`;
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body,
+        tag: `flagship-vibecode-${data.sessionId}`,
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: {
+          kind: "vibecode-needs-you",
+          sessionId: data.sessionId,
+          deepLink,
+        },
+      }),
+    );
+    return;
+  }
+
+  let serverFqdn = null;
+  if (data && typeof data.serverFqdn === "string") {
+    serverFqdn = data.serverFqdn;
   }
   const body = serverFqdn
     ? `${serverFqdn} is asking to boot — tap to review.`

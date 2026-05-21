@@ -90,4 +90,21 @@ final class DeepLinkTests: XCTestCase {
         l.enqueue(.appDetail(serviceId: "wiki"))
         XCTAssertEqual(l.pending, .appDetail(serviceId: "wiki"))
     }
+
+    // MARK: - W10 vibecode deep link
+
+    func test_vibecode_path_form_routes_to_chat() {
+        let url = URL(string: "flagship://vibecode/sess-abc-42")!
+        XCTAssertEqual(DeepLink.parse(url), .vibeCodeChat(sessionId: "sess-abc-42"))
+    }
+
+    func test_vibecode_query_form_routes_to_chat() {
+        let url = URL(string: "flagship://vibecode?sessionId=sess-xyz-99")!
+        XCTAssertEqual(DeepLink.parse(url), .vibeCodeChat(sessionId: "sess-xyz-99"))
+    }
+
+    func test_vibecode_without_id_returns_nil() {
+        let url = URL(string: "flagship://vibecode")!
+        XCTAssertNil(DeepLink.parse(url))
+    }
 }

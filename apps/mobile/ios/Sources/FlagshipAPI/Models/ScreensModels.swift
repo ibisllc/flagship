@@ -600,3 +600,150 @@ public struct AppReissuanceSummary: Codable, Equatable, Sendable, Identifiable {
         self.error = error; self.completedAt = completedAt
     }
 }
+
+// MARK: - W10 — per-app env-var KV editor
+
+/// /api/screens/services/:appId/env — returns env var NAMES only.
+/// The daemon NEVER returns values; this struct intentionally has no
+/// `values` field.
+public struct ServiceEnvListResponse: Codable, Equatable, Sendable {
+    public let names: [String]
+    public init(names: [String]) { self.names = names }
+}
+
+/// SetServiceEnvRequest mirror — canonical bytes per
+/// @flagship/protocol auth.ts signSetServiceEnv. The phone composes,
+/// signs (IRK from the Keychain), and POSTs this. `value` is SECRET —
+/// the phone holds it transiently, sends it once over the daemon's
+/// TLS, and forgets.
+public struct ServiceEnvSetEnvelope: Codable, Equatable, Sendable {
+    public let serverId: String
+    public let creator: String
+    public let slug: String
+    public let env: [String: String]
+    public let issuedAt: Int64
+    public init(serverId: String, creator: String, slug: String, env: [String: String], issuedAt: Int64) {
+        self.serverId = serverId; self.creator = creator; self.slug = slug
+        self.env = env; self.issuedAt = issuedAt
+    }
+}
+
+public struct ServiceEnvSetRequest: Codable, Equatable, Sendable {
+    public let name: String
+    public let value: String
+    public let request: ServiceEnvSetEnvelope
+    /// Hex Ed25519 signature over canonicalSetServiceEnv(request).
+    public let signature: String
+    public init(name: String, value: String, request: ServiceEnvSetEnvelope, signature: String) {
+        self.name = name; self.value = value; self.request = request; self.signature = signature
+    }
+}
+
+public struct ServiceEnvUnsetRequest: Codable, Equatable, Sendable {
+    public let name: String
+    public let request: ServiceEnvSetEnvelope
+    public let signature: String
+    public init(name: String, request: ServiceEnvSetEnvelope, signature: String) {
+        self.name = name; self.request = request; self.signature = signature
+    }
+}
+
+public struct ServiceEnvOpResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public init(ok: Bool) { self.ok = ok }
+}
+
+// MARK: - W10 — vibe-code session public state + reply
+
+public struct VibeCodeSessionMessage: Codable, Equatable, Sendable {
+    public let role: String          // "user" | "assistant"
+    public let text: String
+    public let timestamp: Int64
+    public init(role: String, text: String, timestamp: Int64) {
+        self.role = role; self.text = text; self.timestamp = timestamp
+    }
+}
+
+public enum VibeCodePendingRequest: Codable, Equatable, Sendable {
+    case talkToUser(toolUseId: String, message: String)
+    case requestEnvVar(toolUseId: String, name: String, description: String, why: String, example: String?, secret: Bool?)
+
+    private enum CodingKeys: String, CodingKey { case kind, toolUseId, payload }
+    private enum PayloadKeys: String, CodingKey { case message, name, description, why, example, secret }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try c.decode(String.self, forKey: .kind)
+        let toolUseId = try c.decode(String.self, forKey: .toolUseId)
+        let payload = try c.nestedContainer(keyedBy: PayloadKeys.self, forKey: .payload)
+        switch kind {
+        case "talkToUser":
+            self = .talkToUser(
+                toolUseId: toolUseId,
+                message: try payload.decode(String.self, forKey: .message)
+            )
+        case "requestEnvVar":
+            self = .requestEnvVar(
+                toolUseId: toolUseId,
+                name: try payload.decode(String.self, forKey: .name),
+                description: try payload.decode(String.self, forKey: .description),
+                why: try payload.decode(String.self, forKey: .why),
+                example: try payload.decodeIfPresent(String.self, forKey: .example),
+                secret: try payload.decodeIfPresent(Bool.self, forKey: .secret)
+            )
+        case let other:
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "unknown pendingRequest kind: \(other)")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .talkToUser(let id, let message):
+            try c.encode("talkToUser", forKey: .kind)
+            try c.encode(id, forKey: .toolUseId)
+            var p = c.nestedContainer(keyedBy: PayloadKeys.self, forKey: .payload)
+            try p.encode(message, forKey: .message)
+        case .requestEnvVar(let id, let name, let description, let why, let example, let secret):
+            try c.encode("requestEnvVar", forKey: .kind)
+            try c.encode(id, forKey: .toolUseId)
+            var p = c.nestedContainer(keyedBy: PayloadKeys.self, forKey: .payload)
+            try p.encode(name, forKey: .name)
+            try p.encode(description, forKey: .description)
+            try p.encode(why, forKey: .why)
+            try p.encodeIfPresent(example, forKey: .example)
+            try p.encodeIfPresent(secret, forKey: .secret)
+        }
+    }
+}
+
+public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
+    public let id: String
+    public let appId: String?
+    public let status: String
+    public let messages: [VibeCodeSessionMessage]
+    public let pendingRequest: VibeCodePendingRequest?
+    public init(
+        id: String,
+        appId: String?,
+        status: String,
+        messages: [VibeCodeSessionMessage],
+        pendingRequest: VibeCodePendingRequest?
+    ) {
+        self.id = id; self.appId = appId; self.status = status
+        self.messages = messages; self.pendingRequest = pendingRequest
+    }
+}
+
+public struct VibeCodeReplyRequest: Codable, Equatable, Sendable {
+    public let text: String?
+    public let envVarStatus: String?   // "set" | "declined" | "deferred"
+    public init(text: String? = nil, envVarStatus: String? = nil) {
+        self.text = text; self.envVarStatus = envVarStatus
+    }
+}
+
+public struct VibeCodeReplyResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public init(ok: Bool) { self.ok = ok }
+}

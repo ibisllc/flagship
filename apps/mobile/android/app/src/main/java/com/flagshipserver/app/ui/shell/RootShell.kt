@@ -62,6 +62,7 @@ fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPAC
             is com.flagshipserver.app.core.DeepLink.UnlockApprove -> RootDestination.ACTIVITY
             is com.flagshipserver.app.core.DeepLink.ServerDetail -> RootDestination.HOME
             is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS
+            is com.flagshipserver.app.core.DeepLink.VibeCodeChat -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.Marketplace -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.CreateServer -> RootDestination.HOME
             com.flagshipserver.app.core.DeepLink.RecoverySetup -> RootDestination.SETTINGS

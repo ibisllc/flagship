@@ -393,6 +393,23 @@ async function main(): Promise<void> {
     });
     runtime.addHandler(vibeCodeHandle);
 
+    // W10 — fire a notify-owner callback whenever a vibe-code session
+    // transitions into awaiting-tool-response. The default impl logs
+    // (operator-visible) so the chain is provably wired; production
+    // deployments that integrate with .com's push relay replace this
+    // hook with a real fan-out (POST `<controlPlane>/api/push/relay`
+    // with a category of "vibecode-needs-you"). The callback is
+    // value-free by construction — it receives only the session id,
+    // the tool kind, and the tool-use id. No model arguments, no env
+    // values, no chat messages.
+    vibeRegistry.setNotifyOwner(({ sessionId, kind, toolUseId }) => {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
+          `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
+      );
+    });
+
     const lineageResolver = buildLineageResolverAdapter({
       store: pullStateStore,
       client: updateClient,
@@ -442,6 +459,25 @@ async function main(): Promise<void> {
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
       lineageResolver,
       postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
+      // W10 — per-app env-var KV editor + vibe-code session BFF deps.
+      appEnvStore: runtime.envStore,
+      // Resolve the session's app id from the pending manifest. The
+      // session emits `flagship.app.json` mid-stream; once the manifest
+      // is parsed we derive `<creator>-<slug>`. Pre-manifest sessions
+      // surface a null appId — the chat UI shows "(pre-manifest)".
+      resolveSessionAppId: (session) => {
+        const mj = session.manifestJson();
+        if (!mj) return null;
+        try {
+          const m = JSON.parse(mj) as { name?: unknown };
+          if (typeof m.name === "string" && m.name.length > 0) {
+            return `${username}-${m.name}`;
+          }
+        } catch {
+          // ignore malformed mid-stream JSON
+        }
+        return null;
+      },
     });
     runtime.addHandler(screensHandle);
     runtime.addUpgradeHandler(

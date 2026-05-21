@@ -30,3 +30,23 @@ val LocalDeveloperSettings = staticCompositionLocalOf<DeveloperSettings?> { null
 /** C12 — PrivacySettings persistence handle. Null on previews and in
  *  unit tests; the production MainActivity always installs a real one. */
 val LocalPrivacySettings = staticCompositionLocalOf<PrivacySettings?> { null }
+
+/**
+ * W10 — `SetServiceEnvRequest` envelope signer. Production wires this
+ * to the platform Keystore (derive IRK → sign canonical bytes). Tests
+ * + previews use the default no-op which returns a placeholder hex
+ * string (the daemon rejects it on signature verify — correct
+ * behavior for an offline preview surface).
+ *
+ * Canonical-bytes shape mirrors `@flagship/protocol/auth.ts`
+ * `signSetServiceEnv`:
+ *
+ *     "flagship/set-service-env/v1"
+ *         | serverId | creator | slug | <pairCount>
+ *         | <sortedKey>=<value>... | issuedAt
+ */
+typealias VibeCodeEnvelopeSigner = suspend (com.flagshipserver.app.api.ServiceEnvSetEnvelope) -> String
+
+val LocalVibeCodeEnvelopeSigner = staticCompositionLocalOf<VibeCodeEnvelopeSigner> {
+    { _ -> "0".repeat(128) }
+}

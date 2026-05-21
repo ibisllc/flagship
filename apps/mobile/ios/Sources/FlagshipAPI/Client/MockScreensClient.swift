@@ -454,4 +454,59 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         fmt.dateFormat = "HH:mm:ss"
         return fmt.string(from: d)
     }
+
+    // MARK: - W10 — per-app env vars + vibe-code session
+
+    /// Mock store keyed by appId; values are SECRET — held only in the
+    /// mock's in-memory map. Never echoed in any response (mirrors the
+    /// daemon's "values never leave" invariant).
+    private var mockEnvNames: [String: [String]] = [
+        "harry-plants": ["WEATHER_API_KEY"],
+        "harry-wiki": []
+    ]
+
+    public func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse {
+        try await tick()
+        return ServiceEnvListResponse(names: (mockEnvNames[appId] ?? []).sorted())
+    }
+    public func serviceEnvSet(appId: String, _ req: ServiceEnvSetRequest) async throws -> ServiceEnvOpResponse {
+        try await tick()
+        var names = Set(mockEnvNames[appId] ?? [])
+        names.insert(req.name)
+        mockEnvNames[appId] = Array(names).sorted()
+        return ServiceEnvOpResponse(ok: true)
+    }
+    public func serviceEnvUnset(appId: String, _ req: ServiceEnvUnsetRequest) async throws -> ServiceEnvOpResponse {
+        try await tick()
+        var names = Set(mockEnvNames[appId] ?? [])
+        names.remove(req.name)
+        mockEnvNames[appId] = Array(names).sorted()
+        return ServiceEnvOpResponse(ok: true)
+    }
+
+    public func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState {
+        try await tick()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return VibeCodeSessionPublicState(
+            id: sessionId,
+            appId: "harry-plants",
+            status: "awaiting-tool-response",
+            messages: [
+                VibeCodeSessionMessage(role: "user", text: "Build me a plants tracker", timestamp: now - 30_000),
+                VibeCodeSessionMessage(role: "assistant", text: "Sure — I need a weather API key to send notifications when a plant has been thirsty too long.", timestamp: now - 5_000)
+            ],
+            pendingRequest: .requestEnvVar(
+                toolUseId: "tu_mock_42",
+                name: "WEATHER_API_KEY",
+                description: "OpenWeather API key",
+                why: "to look up today's high temperature for the dehydration warning",
+                example: "abc123…",
+                secret: true
+            )
+        )
+    }
+    public func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
+        try await tick()
+        return VibeCodeReplyResponse(ok: true)
+    }
 }

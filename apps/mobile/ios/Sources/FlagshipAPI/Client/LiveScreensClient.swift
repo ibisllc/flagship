@@ -162,6 +162,25 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         try await request("/api/screens/post-recovery/status")
     }
 
+    public func serviceEnvList(appId: String) async throws -> ServiceEnvListResponse {
+        try await request("/api/screens/services/\(appId)/env")
+    }
+    public func serviceEnvSet(appId: String, _ req: ServiceEnvSetRequest) async throws -> ServiceEnvOpResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(appId)/env/set", method: "POST", body: body)
+    }
+    public func serviceEnvUnset(appId: String, _ req: ServiceEnvUnsetRequest) async throws -> ServiceEnvOpResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(appId)/env/unset", method: "POST", body: body)
+    }
+    public func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState {
+        try await request("/api/screens/llm/sessions/\(sessionId)")
+    }
+    public func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/llm/sessions/\(sessionId)/reply", method: "POST", body: body)
+    }
+
     /// WebSocket stream of vibe-code frames. The daemon currently
     /// stubs this to a poll-driven proxy; we model the SDK-level
     /// API as a true AsyncStream so the UI doesn't care.

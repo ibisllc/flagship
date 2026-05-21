@@ -18,6 +18,10 @@ public enum DeepLink: Equatable, Sendable {
     /// in-app from the Home nudge (B9). Not parseable from a URL —
     /// it's an internal-only deep link.
     case recoverySetup
+    /// W10 — open the vibe-code chat surface for the given session
+    /// id. Fired by the `vibecode-needs-you` push when the AI is
+    /// awaiting an env-var or talkToUser response.
+    case vibeCodeChat(sessionId: String)
 
     /// Parse a `flagship://...` URL. Mirrors the webapp's `?view=...`
     /// scheme (apps/web/public/webapp/lib/router.js → parseViewQuery).
@@ -46,6 +50,20 @@ public enum DeepLink: Equatable, Sendable {
             return .marketplace
         case "create-server":
             return .createServer
+        case "vibecode":
+            // Two URL shapes accepted:
+            //   flagship://vibecode/<sessionId>           (path)
+            //   flagship://vibecode?sessionId=<sessionId> (query)
+            // The push payload uses the path form; we accept either
+            // so deep-link tests can use whichever is more readable.
+            let pathSession = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if !pathSession.isEmpty {
+                return .vibeCodeChat(sessionId: pathSession)
+            }
+            if let id = params["sessionId"], !id.isEmpty {
+                return .vibeCodeChat(sessionId: id)
+            }
+            return nil
         default:
             break
         }

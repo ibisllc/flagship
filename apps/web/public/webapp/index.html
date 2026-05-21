@@ -285,6 +285,43 @@
         </div>
       </section>
 
+      <!-- W10 — per-app env-var KV editor -->
+      <section id="view-service-env" class="hidden">
+        <h2>Configure environment</h2>
+        <div class="card">
+          <p class="note">
+            Names appear here; values stay on this server. They're sealed at rest and never leave your pod.
+          </p>
+        </div>
+        <div id="service-env-list" class="mt-2"></div>
+        <div class="card mt-2">
+          <h3>Add a variable</h3>
+          <input id="service-env-name" type="text" placeholder="NAME (e.g. OPENAI_API_KEY)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <input id="service-env-value" type="password" placeholder="value" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" class="mt-2">
+          <p class="note mt-2">The value is sent once to your server. The browser does not save it.</p>
+          <button id="service-env-save" class="full-width mt-2">Save</button>
+        </div>
+        <div class="row-2 mt-2">
+          <button class="secondary" id="service-env-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- W10 — vibe-code chat surface -->
+      <section id="view-vibecode-chat" class="hidden">
+        <h2>Vibe-code session</h2>
+        <div class="card">
+          <div class="row"><span class="label">status</span><span class="value" id="vibecode-chat-status">idle</span></div>
+          <div class="row"><span class="label">session</span><span class="value" id="vibecode-chat-id"></span></div>
+          <div class="row"><span class="label">app</span><span class="value" id="vibecode-chat-appid"></span></div>
+        </div>
+        <h3 class="mt-2">Conversation</h3>
+        <div id="vibecode-chat-messages"></div>
+        <div id="vibecode-chat-pending" class="hidden mt-2"></div>
+        <div class="row-2 mt-2">
+          <button class="secondary" id="vibecode-chat-back">← Back</button>
+        </div>
+      </section>
+
       <!-- View 14: Unlock approvals (P2.6) -->
       <section id="view-unlock-approvals" class="hidden">
         <h2>Pending unlock requests</h2>

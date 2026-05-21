@@ -282,6 +282,13 @@ export interface DaemonRuntime {
    */
   appBackup: import("./serviceBackup.js").AppBackupService | null;
   /**
+   * W10 — per-app env-var sealed store. Names-only accessor for the
+   * `/api/screens/services/:appId/env` editor; the value path goes
+   * through ServicePlatform.setEnv (signed envelope). Null when no
+   * ServicePlatform is wired or no envStore is configured.
+   */
+  envStore: AppEnvStore | null;
+  /**
    * Append a handler to the live HTTP-handler chain. Handlers are
    * tried in registration order; the first non-null response wins.
    * Use this to wire surfaces that depend on the runtime's own
@@ -857,6 +864,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     urlController,
     siblingRouter,
     appBackup,
+    envStore,
     addHandler(h) {
       extras.push(h);
     },

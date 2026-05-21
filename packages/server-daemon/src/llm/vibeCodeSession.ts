@@ -253,6 +253,24 @@ export interface PendingToolUse {
 }
 
 /**
+ * W10 — callback fired when the session transitions into
+ * `awaiting-tool-response` (i.e. the AI just emitted a `requestEnvVar`
+ * or `talkToUser`). The daemon production wiring routes this to a Web
+ * Push fan-out so the owner's phone wakes up; tests inject a stub and
+ * assert it fires exactly once per transition.
+ *
+ * The callback receives ONLY the session id + the pending tool kind +
+ * the tool-use id. No tool arguments, no model output, no env-var
+ * value — only enough to identify the session on the phone and route
+ * a deep link.
+ */
+export type NotifyOwnerCallback = (args: {
+  sessionId: string;
+  kind: "requestEnvVar" | "talkToUser";
+  toolUseId: string;
+}) => void;
+
+/**
  * One end-to-end session. Holds the parser, the conversation history,
  * the deploy phase emitter, and the pending tool-use slot.
  */
@@ -260,10 +278,14 @@ export class VibeCodeSession extends EventEmitter {
   readonly meta: VibeCodeSessionMeta;
   readonly parser = new VibeCodeStreamParser();
   private readonly history: Array<{ role: "user" | "assistant"; content: string }> = [];
+  /** Unix-ms per history entry — parallel to `history`. */
+  private readonly historyTimestamps: number[] = [];
   private cancelled = false;
   /** Active tool-uses indexed by id. At most one is meaningful in V1 but
    *  multi-tool turns are tolerated; the orchestrator clears each on ack. */
   private readonly pendingTools = new Map<string, PendingToolUse>();
+  /** W10 — owner-notify hook fired on awaiting-tool-response transition. */
+  private notifyOwner: NotifyOwnerCallback | null = null;
 
   constructor(args: { username: string; serverFqdn: string; sessionId?: string }) {
     super();
@@ -277,8 +299,18 @@ export class VibeCodeSession extends EventEmitter {
     this.parser.on("event", (e: VibeCodeEvent) => this.emit("event", e));
   }
 
+  /**
+   * W10 — install the owner-notify hook. Production wires this to the
+   * Web Push fan-out at session-start time; tests inject a stub.
+   * Subsequent calls replace the prior callback (last-writer-wins).
+   */
+  setNotifyOwner(cb: NotifyOwnerCallback | null): void {
+    this.notifyOwner = cb;
+  }
+
   pushUserMessage(text: string): void {
     this.history.push({ role: "user", content: text });
+    this.historyTimestamps.push(Date.now());
   }
 
   /** Feed a chunk of streamed assistant output. */
@@ -289,6 +321,7 @@ export class VibeCodeSession extends EventEmitter {
       last.content += chunk;
     } else {
       this.history.push({ role: "assistant", content: chunk });
+      this.historyTimestamps.push(Date.now());
     }
     this.parser.feed(chunk);
   }
@@ -299,6 +332,7 @@ export class VibeCodeSession extends EventEmitter {
    */
   receiveToolUse(args: { id: string; name: string; input: Record<string, unknown> }): void {
     if (this.cancelled) return;
+    const wasStreaming = this.meta.status === "streaming";
     this.pendingTools.set(args.id, {
       id: args.id,
       name: args.name,
@@ -306,6 +340,26 @@ export class VibeCodeSession extends EventEmitter {
       createdAt: Date.now(),
     });
     this.meta.status = "awaiting-tool-response";
+    // W10 — fire the owner-notify hook on the streaming →
+    // awaiting-tool-response transition. We only fire on the FIRST
+    // pending tool so a multi-tool turn doesn't fan out a flurry of
+    // pushes. Subsequent acks return to streaming; if the model emits
+    // another tool, the next call re-enters this branch.
+    if (
+      wasStreaming &&
+      this.notifyOwner &&
+      (args.name === "requestEnvVar" || args.name === "talkToUser")
+    ) {
+      try {
+        this.notifyOwner({
+          sessionId: this.meta.sessionId,
+          kind: args.name,
+          toolUseId: args.id,
+        });
+      } catch {
+        // The notify hook must never break the session. Swallow.
+      }
+    }
     if (args.name === "requestEnvVar") {
       const name = typeof args.input.name === "string" ? args.input.name : "";
       const description =
@@ -359,6 +413,7 @@ export class VibeCodeSession extends EventEmitter {
       role: "user",
       content: `[tool_result:${args.toolUseId}] ${json}`,
     });
+    this.historyTimestamps.push(Date.now());
     this.pendingTools.delete(args.toolUseId);
     if (this.pendingTools.size === 0 && this.meta.status === "awaiting-tool-response") {
       this.meta.status = "streaming";
@@ -374,6 +429,7 @@ export class VibeCodeSession extends EventEmitter {
       return { ok: false, reason: `tool id is not talkToUser (got '${entry.name}')` };
     }
     this.history.push({ role: "user", content: args.text });
+    this.historyTimestamps.push(Date.now());
     this.pendingTools.delete(args.toolUseId);
     if (this.pendingTools.size === 0 && this.meta.status === "awaiting-tool-response") {
       this.meta.status = "streaming";
@@ -453,6 +509,47 @@ export class VibeCodeSession extends EventEmitter {
   conversation(): ReadonlyArray<{ role: "user" | "assistant"; content: string }> {
     return [...this.history];
   }
+
+  /**
+   * W10 — public message log shaped for the BFF chat surface. Drops
+   * synthetic `[tool_result:<id>] …` entries (those are model-facing
+   * metadata, not human chat) and surfaces a unix-ms timestamp per
+   * message. The role mapping is the same as `conversation()`.
+   */
+  messages(): Array<{ role: "user" | "assistant"; text: string; timestamp: number }> {
+    const out: Array<{ role: "user" | "assistant"; text: string; timestamp: number }> = [];
+    for (let i = 0; i < this.history.length; i++) {
+      const h = this.history[i];
+      if (!h) continue;
+      if (h.content.startsWith("[tool_result:")) continue;
+      out.push({
+        role: h.role,
+        text: h.content,
+        timestamp: this.historyTimestamps[i] ?? this.meta.startedAt,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * W10 — the single pending tool the AI is waiting on, if any. Returns
+   * the FIRST pending tool when more than one is active (the chat
+   * surface drives them one at a time). Value-free by construction —
+   * the input map is the model's emitted arguments, never an owner
+   * response.
+   */
+  pendingRequest():
+    | { kind: "requestEnvVar"; toolUseId: string; input: Record<string, unknown> }
+    | { kind: "talkToUser"; toolUseId: string; input: Record<string, unknown> }
+    | null {
+    const next = this.pendingTools.values().next();
+    if (next.done) return null;
+    const t = next.value;
+    if (t.name === "requestEnvVar" || t.name === "talkToUser") {
+      return { kind: t.name, toolUseId: t.id, input: { ...t.input } };
+    }
+    return null;
+  }
 }
 
 function generateSessionId(): string {
@@ -462,12 +559,26 @@ function generateSessionId(): string {
 /**
  * In-memory session registry. Production daemon-startup builds this
  * once; HTTP handlers look up sessions by ID.
+ *
+ * W10 — accepts an optional `notifyOwner` callback that the registry
+ * installs on every freshly-`create()`'d session so the production
+ * Web Push fan-out fires on the awaiting-tool-response transition.
+ * Tests pass a stub here and assert it fires once per tool_use.
  */
 export class VibeCodeSessionRegistry {
   private byId = new Map<string, VibeCodeSession>();
+  private notifyOwner: NotifyOwnerCallback | null = null;
+
+  setNotifyOwner(cb: NotifyOwnerCallback | null): void {
+    this.notifyOwner = cb;
+    // Apply to any already-created sessions so a late wiring still
+    // gets coverage on the next tool_use that fires.
+    for (const s of this.byId.values()) s.setNotifyOwner(cb);
+  }
 
   create(args: { username: string; serverFqdn: string }): VibeCodeSession {
     const session = new VibeCodeSession(args);
+    if (this.notifyOwner) session.setNotifyOwner(this.notifyOwner);
     this.byId.set(session.meta.sessionId, session);
     return session;
   }

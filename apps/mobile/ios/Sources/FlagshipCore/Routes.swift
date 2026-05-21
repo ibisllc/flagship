@@ -16,6 +16,12 @@ public enum AppsRoute: Hashable, Sendable {
     case vibeCodeProviderPick
     case vibeCodeDescribe
     case vibeCodeGenerating(sessionId: String)
+    /// W10 — vibe-code chat surface. Reached via push deep link
+    /// `flagship://vibecode/<sessionId>` when the AI needs the owner.
+    case vibeCodeChat(sessionId: String)
+    /// W10 — per-app env-var KV editor. Reached from the per-service
+    /// detail screen's "Configure environment" menu item.
+    case serviceEnv(appId: String, creator: String, slug: String)
 }
 
 public enum ActivityRoute: Hashable, Sendable {

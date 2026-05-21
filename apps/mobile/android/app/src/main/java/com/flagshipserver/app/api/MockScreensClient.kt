@@ -263,6 +263,66 @@ class MockScreensClient(
         }
     }
 
+    // W10 — per-app env vars + vibe-code session mock state.
+    //
+    // Values are SECRET — held only in this in-memory map and never
+    // echoed by any response (mirrors the daemon's "values never leave"
+    // invariant). The test surface exposes only the NAMES.
+    private val mockEnvNames: MutableMap<String, MutableSet<String>> =
+        mutableMapOf(
+            "harry-plants" to mutableSetOf("WEATHER_API_KEY"),
+            "harry-wiki" to mutableSetOf(),
+        )
+
+    override suspend fun serviceEnvList(appId: String): ServiceEnvListResponse {
+        tick()
+        return ServiceEnvListResponse(
+            names = (mockEnvNames[appId] ?: emptySet()).toList().sorted()
+        )
+    }
+
+    override suspend fun serviceEnvSet(appId: String, req: ServiceEnvSetRequest): ServiceEnvOpResponse {
+        tick()
+        val set = mockEnvNames.getOrPut(appId) { mutableSetOf() }
+        set.add(req.name)
+        return ServiceEnvOpResponse(ok = true)
+    }
+
+    override suspend fun serviceEnvUnset(appId: String, req: ServiceEnvUnsetRequest): ServiceEnvOpResponse {
+        tick()
+        mockEnvNames[appId]?.remove(req.name)
+        return ServiceEnvOpResponse(ok = true)
+    }
+
+    override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState {
+        tick()
+        val n = now()
+        return VibeCodeSessionPublicState(
+            id = sessionId,
+            appId = "harry-plants",
+            status = "awaiting-tool-response",
+            messages = listOf(
+                VibeCodeSessionMessage(role = "user", text = "Build me a plants tracker", timestamp = n - 30_000),
+                VibeCodeSessionMessage(role = "assistant", text = "Sure — I need a weather API key for the dehydration warning.", timestamp = n - 5_000),
+            ),
+            pendingRequest = VibeCodePendingRequest.RequestEnvVar(
+                toolUseId = "tu_mock_42",
+                payload = RequestEnvVarPayload(
+                    name = "WEATHER_API_KEY",
+                    description = "OpenWeather API key",
+                    why = "to look up today's high temperature",
+                    example = "abc123…",
+                    secret = true,
+                ),
+            ),
+        )
+    }
+
+    override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse {
+        tick()
+        return VibeCodeReplyResponse(ok = true)
+    }
+
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse {
         tick()
         val day = 24L * 3600 * 1000

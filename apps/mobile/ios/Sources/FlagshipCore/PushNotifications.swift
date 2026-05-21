@@ -92,6 +92,19 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         if let requestId = info["requestId"] as? String,
            let kind = info["kind"] as? String, kind == "unlock-approve" {
             linker.enqueue(.unlockApprove(requestId: requestId))
+            return
+        }
+        // W10 — vibecode-needs-you push.
+        //
+        // The .com Web Push fan-out (RFC 8291 encrypted) carries
+        // { kind, sessionId, appId, request, deepLink } where deepLink
+        // is `flagship://vibecode/<sessionId>`. If the iOS notification
+        // unwraps that payload, the deepLink path above handles it; the
+        // fallback here is for sealed-payload pushes that surface only
+        // the discrete fields in `userInfo`.
+        if let kind = info["kind"] as? String, kind == "vibecode-needs-you",
+           let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
+            linker.enqueue(.vibeCodeChat(sessionId: sessionId))
         }
     }
 }

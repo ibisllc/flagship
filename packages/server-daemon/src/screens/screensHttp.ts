@@ -18,8 +18,13 @@ import type { AppBackupService } from "../serviceBackup.js";
 import type { AppMembership } from "../membership.js";
 import type { FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { TabRegistry } from "../browser/tabRegistry.js";
-import type { VibeCodeSessionRegistry } from "../llm/vibeCodeSession.js";
+import type {
+  VibeCodeSession,
+  VibeCodeSessionRegistry,
+} from "../llm/vibeCodeSession.js";
+import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { FetchLike } from "@flagship/llm-providers";
+import { verifySetServiceEnv } from "@flagship/protocol";
 import type {
   AppBackupStartRequest,
   AppBackupStartResponse,
@@ -41,6 +46,10 @@ import type {
   RecentInstallEvent,
   ReleaseStatusResponse,
   ServerDetailResponse,
+  ServiceEnvListResponse,
+  ServiceEnvOpResponse,
+  ServiceEnvSetRequest,
+  ServiceEnvUnsetRequest,
   TierStatusResponse,
   UnlockApprovalApproveRequest,
   UnlockApprovalsPendingResponse,
@@ -49,6 +58,9 @@ import type {
   VerifyCustomDomainRequest,
   VerifyCustomDomainResponse,
   ServerMetricsResponse,
+  VibeCodeReplyRequest,
+  VibeCodeReplyResponse,
+  VibeCodeSessionPublicState,
   VibeCodeStartRequest,
   VibeCodeStartResponse,
   VibeCodeStatusResponse,
@@ -161,6 +173,23 @@ export interface ScreensHttpDeps {
    * uses Cloudflare DoH (no native dependency); tests inject a stub.
    */
   dnsResolver?: DnsResolver | null;
+  /**
+   * W10 — per-app env-var store. Required by the
+   * /api/screens/services/:appId/env/* handlers. Same store the
+   * `vibeCode.appEnvStore` injection point uses; surfaces names ONLY
+   * (the .names() accessor) for `GET /env`, and routes signed
+   * SetServiceEnvRequest envelopes into the running ServicePlatform's
+   * setEnv() for /set + /unset. Values never echo through any response.
+   */
+  appEnvStore?: AppEnvStore | null;
+  /**
+   * W10 — resolver for the vibe-code session's editing app id. The
+   * /api/screens/llm/sessions/<id>/reply handler uses this to decide
+   * which app to credit a requestEnvVar ack against. Same shape as
+   * VibeCodeHttpDeps.resolveAppId; default is "first installed app's
+   * id" in tests, production reads from the session's pending manifest.
+   */
+  resolveSessionAppId?: ((session: VibeCodeSession) => string | null) | null;
 }
 
 export interface VibeCodeRuntime {
@@ -700,6 +729,176 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       return jok({ report: report ?? null });
     }
 
+    // ---- W10 — per-app env-var KV editor ------------------------------
+    //
+    // GET  /api/screens/services/:appId/env         → list NAMES (no values)
+    // POST /api/screens/services/:appId/env/set     → IRK-signed set
+    // POST /api/screens/services/:appId/env/unset   → IRK-signed unset
+    //
+    // Values flow ONLY over the request body of /set. The /get path
+    // returns names only (the appEnvStore.names() accessor is the only
+    // non-runtime accessor exposed by the sealed store). The response
+    // shape NEVER echoes a value, and the error path never interpolates
+    // one — defense in depth on the "values never leave" invariant.
+    const envBaseM = /^\/api\/screens\/services\/([^/]+)\/env$/.exec(path);
+    if (envBaseM && method === "GET") {
+      if (!deps.appEnvStore) return jerr(503, "env store not configured");
+      const appId = decodeURIComponent(envBaseM[1]!);
+      try {
+        const names = await deps.appEnvStore.names(appId);
+        const out: ServiceEnvListResponse = { names };
+        return jok(out);
+      } catch {
+        return jerr(502, "failed to list env names");
+      }
+    }
+    const envSetM = /^\/api\/screens\/services\/([^/]+)\/env\/set$/.exec(path);
+    if (envSetM && method === "POST") {
+      if (!deps.servicePlatform) return jerr(503, "service platform not configured");
+      const appId = decodeURIComponent(envSetM[1]!);
+      const body = parseJson(req.body) as ServiceEnvSetRequest | null;
+      if (!body || typeof body.name !== "string" || body.name.length === 0) {
+        return jerr(400, "name required");
+      }
+      if (typeof body.value !== "string") return jerr(400, "value required");
+      if (typeof body.signature !== "string") return jerr(400, "signature required");
+      const r = body.request;
+      if (!r || typeof r.serverId !== "string" || typeof r.creator !== "string" ||
+          typeof r.slug !== "string" || typeof r.issuedAt !== "number" ||
+          typeof r.env !== "object" || r.env === null) {
+        return jerr(400, "malformed request envelope");
+      }
+      // Cross-check: the envelope's (creator,slug) must compose to the
+      // URL's appId, and `name`+`value` must be present in `request.env`.
+      const expectedAppId = `${r.creator}-${r.slug}`;
+      if (expectedAppId !== appId) {
+        return jerr(400, "envelope (creator,slug) does not match :appId");
+      }
+      if (!(body.name in r.env) || r.env[body.name] !== body.value) {
+        return jerr(400, "name/value not present in request.env");
+      }
+      let signatureBytes: Uint8Array;
+      try {
+        signatureBytes = hexToBytesLocal(body.signature);
+      } catch {
+        return jerr(400, "invalid hex signature");
+      }
+      const result = await deps.servicePlatform.setEnv({
+        request: r,
+        signature: signatureBytes,
+        verify: verifySetServiceEnv,
+      });
+      if (!result.ok) {
+        // Generic reason — never include the value.
+        return jerr(400, result.reason);
+      }
+      const out: ServiceEnvOpResponse = { ok: true };
+      return jok(out);
+    }
+    const envUnsetM = /^\/api\/screens\/services\/([^/]+)\/env\/unset$/.exec(path);
+    if (envUnsetM && method === "POST") {
+      if (!deps.servicePlatform) return jerr(503, "service platform not configured");
+      const appId = decodeURIComponent(envUnsetM[1]!);
+      const body = parseJson(req.body) as ServiceEnvUnsetRequest | null;
+      if (!body || typeof body.name !== "string" || body.name.length === 0) {
+        return jerr(400, "name required");
+      }
+      if (typeof body.signature !== "string") return jerr(400, "signature required");
+      const r = body.request;
+      if (!r || typeof r.serverId !== "string" || typeof r.creator !== "string" ||
+          typeof r.slug !== "string" || typeof r.issuedAt !== "number" ||
+          typeof r.env !== "object" || r.env === null) {
+        return jerr(400, "malformed request envelope");
+      }
+      const expectedAppId = `${r.creator}-${r.slug}`;
+      if (expectedAppId !== appId) {
+        return jerr(400, "envelope (creator,slug) does not match :appId");
+      }
+      // Defense-in-depth: the new env map must NOT include the unset
+      // name. The owner is asserting "the new state lacks this name."
+      if (body.name in r.env) {
+        return jerr(400, "request.env still contains the name being unset");
+      }
+      let signatureBytes: Uint8Array;
+      try {
+        signatureBytes = hexToBytesLocal(body.signature);
+      } catch {
+        return jerr(400, "invalid hex signature");
+      }
+      const result = await deps.servicePlatform.setEnv({
+        request: r,
+        signature: signatureBytes,
+        verify: verifySetServiceEnv,
+      });
+      if (!result.ok) return jerr(400, result.reason);
+      const out: ServiceEnvOpResponse = { ok: true };
+      return jok(out);
+    }
+
+    // ---- W10 — vibe-code session public state + reply -----------------
+    //
+    // GET  /api/screens/llm/sessions/:sessionId   → public state
+    // POST /api/screens/llm/sessions/:sessionId/reply  → owner reply
+    const sessionM = /^\/api\/screens\/llm\/sessions\/([^/]+)$/.exec(path);
+    if (sessionM && method === "GET") {
+      if (!deps.vibeCode) return jerr(503, "vibe-code not configured");
+      const sessionId = decodeURIComponent(sessionM[1]!);
+      const session = deps.vibeCode.registry.get(sessionId);
+      if (!session) return jerr(404, "session not found");
+      const out: VibeCodeSessionPublicState =
+        toVibeCodePublicState(session, deps);
+      return jok(out);
+    }
+    const replyM = /^\/api\/screens\/llm\/sessions\/([^/]+)\/reply$/.exec(path);
+    if (replyM && method === "POST") {
+      if (!deps.vibeCode) return jerr(503, "vibe-code not configured");
+      const sessionId = decodeURIComponent(replyM[1]!);
+      const session = deps.vibeCode.registry.get(sessionId);
+      if (!session) return jerr(404, "session not found");
+      const body = parseJson(req.body) as VibeCodeReplyRequest | null;
+      if (!body) return jerr(400, "body required");
+      const pending = session.pendingRequest();
+      if (!pending) return jerr(409, "no pending tool to reply to");
+      if (pending.kind === "talkToUser") {
+        if (typeof body.text !== "string") return jerr(400, "text required");
+        const r = session.pushUserReply({
+          toolUseId: pending.toolUseId,
+          text: body.text,
+        });
+        if (!r.ok) return jerr(409, r.reason ?? "reply rejected");
+        const out: VibeCodeReplyResponse = { ok: true };
+        return jok(out);
+      }
+      // pending.kind === "requestEnvVar"
+      const status = body.envVarStatus;
+      if (status !== "set" && status !== "declined" && status !== "deferred") {
+        return jerr(400, "envVarStatus must be 'set' | 'declined' | 'deferred'");
+      }
+      const name = typeof pending.input.name === "string" ? pending.input.name : "";
+      let currentlySet = false;
+      if (deps.appEnvStore && deps.resolveSessionAppId) {
+        const sid = deps.resolveSessionAppId(session);
+        if (sid && name.length > 0) {
+          try {
+            const names = await deps.appEnvStore.names(sid);
+            currentlySet = names.includes(name);
+          } catch {
+            currentlySet = false;
+          }
+        }
+      }
+      const ack = {
+        acknowledged: true as const,
+        name,
+        status,
+        currentlySet,
+      };
+      const r = session.pushEnvVarAck({ toolUseId: pending.toolUseId, ack });
+      if (!r.ok) return jerr(409, r.reason ?? "ack rejected");
+      const out: VibeCodeReplyResponse = { ok: true };
+      return jok(out);
+    }
+
     return jerr(404, "screen route not found");
   };
 }
@@ -854,4 +1053,74 @@ function jok(body: unknown): HttpResponse {
 
 function jerr(status: number, message: string): HttpResponse {
   return { status, headers: J, body: JSON.stringify({ error: message }) };
+}
+
+function hexToBytesLocal(hex: string): Uint8Array {
+  if (!/^[0-9a-fA-F]*$/.test(hex) || hex.length % 2 !== 0) throw new Error("invalid hex");
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+function toVibeCodePublicState(
+  session: VibeCodeSession,
+  deps: ScreensHttpDeps,
+): VibeCodeSessionPublicState {
+  const pending = session.pendingRequest();
+  const appId = (() => {
+    if (deps.resolveSessionAppId) {
+      try {
+        return deps.resolveSessionAppId(session) ?? null;
+      } catch {
+        return null;
+      }
+    }
+    // Fallback — if the session has emitted a manifest, derive from it.
+    const mj = session.manifestJson();
+    if (!mj) return null;
+    try {
+      const m = JSON.parse(mj) as { name?: unknown };
+      if (typeof m.name === "string") {
+        return `${session.meta.username}-${m.name}`;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  })();
+  const out: VibeCodeSessionPublicState = {
+    id: session.meta.sessionId,
+    appId,
+    status: session.meta.status,
+    messages: session.messages(),
+  };
+  if (pending) {
+    if (pending.kind === "talkToUser") {
+      const message =
+        typeof pending.input.message === "string" ? pending.input.message : "";
+      out.pendingRequest = {
+        kind: "talkToUser",
+        toolUseId: pending.toolUseId,
+        payload: { message },
+      };
+    } else {
+      const name =
+        typeof pending.input.name === "string" ? pending.input.name : "";
+      const description =
+        typeof pending.input.description === "string" ? pending.input.description : "";
+      const why = typeof pending.input.why === "string" ? pending.input.why : "";
+      const example =
+        typeof pending.input.example === "string" ? pending.input.example : undefined;
+      const secret =
+        typeof pending.input.secret === "boolean" ? pending.input.secret : undefined;
+      out.pendingRequest = {
+        kind: "requestEnvVar",
+        toolUseId: pending.toolUseId,
+        payload: { name, description, why, example, secret },
+      };
+    }
+  }
+  return out;
 }

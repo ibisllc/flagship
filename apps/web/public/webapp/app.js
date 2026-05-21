@@ -33,6 +33,8 @@ import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sess
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
+import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
+import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
 import { initUnlockApprovalsView, enterUnlockApprovals } from "./views/unlock-approvals.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
@@ -63,6 +65,8 @@ const SUB_VIEW_TABS = {
   "view-invite-manage": "apps",
   "view-marketplace": "apps",
   "view-vibe-code": "apps",
+  "view-vibecode-chat": "apps",
+  "view-service-env": "apps",
   "view-browser-viewer": "apps",
   "view-unlock-approvals": "activity",
   "view-install-progress": "activity",
@@ -211,6 +215,8 @@ async function boot() {
   initTierStatusView();
   initMarketplaceView();
   initVibeCodeView();
+  initServiceEnvView();
+  initVibeCodeChatView();
   initUnlockApprovalsView();
   initRecoveryView();
   // post-recovery is owned by another worker; init it best-effort so

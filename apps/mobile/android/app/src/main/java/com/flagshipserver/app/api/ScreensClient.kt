@@ -72,6 +72,16 @@ interface ScreensClient {
     // P1.23 post-recovery status — daemon's J.3/J.4 reattach snapshot
     suspend fun postRecoveryStatus(): PostRecoveryStatusResponse
 
+    // W10 — per-app env-var KV editor. Values flow ONLY through /set;
+    // /list returns names only; /unset removes a name.
+    suspend fun serviceEnvList(appId: String): ServiceEnvListResponse
+    suspend fun serviceEnvSet(appId: String, req: ServiceEnvSetRequest): ServiceEnvOpResponse
+    suspend fun serviceEnvUnset(appId: String, req: ServiceEnvUnsetRequest): ServiceEnvOpResponse
+
+    // W10 — vibe-code session public state + reply.
+    suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState
+    suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse
+
     // P1.15 install-events SSE — streams provisioning progress
     fun installEvents(serial: String): Flow<InstallEvent>
 

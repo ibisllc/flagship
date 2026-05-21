@@ -39,6 +39,11 @@ public struct ServicesTab: View {
                 path.append(.marketplace)
             }
             _ = linker.consume()
+        case .vibeCodeChat(let sessionId):
+            if path.last != .vibeCodeChat(sessionId: sessionId) {
+                path.append(.vibeCodeChat(sessionId: sessionId))
+            }
+            _ = linker.consume()
         default:
             break
         }
@@ -89,7 +94,7 @@ public struct ServicesTab: View {
     private func destination(for route: AppsRoute) -> some View {
         switch route {
         case .appDetail(let id):
-            ServiceDetailContainer(serviceId: id)
+            ServiceDetailContainer(serviceId: id, path: $path)
         case .marketplace:
             MarketplaceContainer(path: $path)
         case .marketplaceDetail(let creator, let slug):
@@ -103,6 +108,10 @@ public struct ServicesTab: View {
             VibeCodeDescribeContainer(path: $path)
         case .vibeCodeGenerating(let sessionId):
             VibeCodeGeneratingContainer(sessionId: sessionId)
+        case .vibeCodeChat(let sessionId):
+            VibeCodeChatContainer(sessionId: sessionId)
+        case .serviceEnv(let appId, let creator, let slug):
+            ServiceEnvContainer(appId: appId, creator: creator, slug: slug)
         }
     }
 
@@ -321,6 +330,7 @@ private struct AppRow: View {
 
 struct ServiceDetailContainer: View {
     let serviceId: String
+    @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.colorScheme) private var scheme
@@ -343,6 +353,27 @@ struct ServiceDetailContainer: View {
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        // W10 — open the per-app env-var KV editor.
+                        // serviceId = "<creator>-<slug>"; split at the
+                        // first '-' (creator is hyphen-free).
+                        if let dashIdx = serviceId.firstIndex(of: "-") {
+                            let creator = String(serviceId[..<dashIdx])
+                            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
+                            path.append(.serviceEnv(appId: serviceId, creator: creator, slug: slug))
+                        }
+                    } label: {
+                        Label("Configure environment", systemImage: "key")
+                    }
+                    .accessibilityIdentifier("service-detail-env-menu-item")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
             }
         }
         .task {
@@ -368,6 +399,48 @@ struct ServiceDetailContainer: View {
         } catch {
             toasts.error("Save failed: \(error.localizedDescription)")
         }
+    }
+}
+
+// W10 — chat-surface container. Resolves the serverFqdn from AppState
+// and wires a default signEnvelope closure that's a no-op stub for
+// previews; production replaces this via an environment value.
+struct VibeCodeChatContainer: View {
+    let sessionId: String
+    @Environment(\.screensClient) private var client
+    @Environment(AppState.self) private var app
+    @Environment(\.vibeCodeEnvelopeSigner) private var signer
+
+    var body: some View {
+        VibeCodeChatScreen(
+            sessionId: sessionId,
+            serverFqdn: app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
+            username: app.currentUser ?? "user",
+            client: client,
+            signEnvelope: signer
+        )
+    }
+}
+
+// W10 — env editor container. Same envelope signer hook as the chat
+// surface; signs via the platform Keystore in production.
+struct ServiceEnvContainer: View {
+    let appId: String
+    let creator: String
+    let slug: String
+    @Environment(\.screensClient) private var client
+    @Environment(AppState.self) private var app
+    @Environment(\.vibeCodeEnvelopeSigner) private var signer
+
+    var body: some View {
+        ServiceEnvScreen(
+            appId: appId,
+            serverFqdn: app.leaderPod?.fqdn ?? app.pods.first?.fqdn ?? "unknown",
+            creator: creator,
+            slug: slug,
+            client: client,
+            signEnvelope: signer
+        )
     }
 }
 

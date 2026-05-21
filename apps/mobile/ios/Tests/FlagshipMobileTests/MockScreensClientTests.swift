@@ -127,4 +127,85 @@ final class MockScreensClientTests: XCTestCase {
         XCTAssertEqual(r.report?.lastReissue?.totalRewritten, 3)
         XCTAssertEqual(r.report?.lastReissue?.apps.first?.slug, "demo")
     }
+
+    // MARK: - W10 per-app env-var KV editor + vibecode session state
+
+    func test_serviceEnvList_returnsSortedNamesOnly() async throws {
+        let c = makeClient()
+        let r = try await c.serviceEnvList(appId: "harry-plants")
+        // The mock seeds WEATHER_API_KEY by default; the response shape
+        // is name-only by construction (ServiceEnvListResponse has no
+        // `values` field).
+        XCTAssertTrue(r.names.contains("WEATHER_API_KEY"))
+    }
+
+    func test_serviceEnvSet_then_list_includesNewName() async throws {
+        let c = makeClient()
+        let envelope = ServiceEnvSetEnvelope(
+            serverId: "home.harry.flagship.services",
+            creator: "harry", slug: "plants",
+            env: ["FOO": "bar-NEVER-LEAKED"],
+            issuedAt: 1
+        )
+        let _ = try await c.serviceEnvSet(
+            appId: "harry-plants",
+            ServiceEnvSetRequest(
+                name: "FOO", value: "bar-NEVER-LEAKED",
+                request: envelope, signature: "00"
+            )
+        )
+        let r = try await c.serviceEnvList(appId: "harry-plants")
+        XCTAssertTrue(r.names.contains("FOO"))
+    }
+
+    func test_serviceEnvUnset_dropsName() async throws {
+        let c = makeClient()
+        let envelope = ServiceEnvSetEnvelope(
+            serverId: "home.harry.flagship.services",
+            creator: "harry", slug: "plants",
+            env: [:], issuedAt: 1
+        )
+        let _ = try await c.serviceEnvUnset(
+            appId: "harry-plants",
+            ServiceEnvUnsetRequest(name: "WEATHER_API_KEY", request: envelope, signature: "00")
+        )
+        let r = try await c.serviceEnvList(appId: "harry-plants")
+        XCTAssertFalse(r.names.contains("WEATHER_API_KEY"))
+    }
+
+    func test_vibeCodeSessionState_surfacesPendingRequestEnvVar() async throws {
+        let c = makeClient()
+        let r = try await c.vibeCodeSessionState(sessionId: "sess-42")
+        XCTAssertEqual(r.status, "awaiting-tool-response")
+        guard let pending = r.pendingRequest else {
+            return XCTFail("expected pendingRequest")
+        }
+        switch pending {
+        case .requestEnvVar(_, let name, _, _, _, let secret):
+            XCTAssertEqual(name, "WEATHER_API_KEY")
+            XCTAssertEqual(secret, true)
+        case .talkToUser:
+            XCTFail("expected requestEnvVar")
+        }
+    }
+
+    func test_vibeCodePendingRequest_codable_roundTrip() throws {
+        // Wire-shape mirror with the daemon — encode + decode the
+        // requestEnvVar variant and verify nothing decays.
+        let original = VibeCodePendingRequest.requestEnvVar(
+            toolUseId: "tu_1",
+            name: "OPENAI_API_KEY",
+            description: "your key",
+            why: "for completions",
+            example: "sk-…",
+            secret: true
+        )
+        let data = try JSONEncoder().encode(original)
+        // The encoded JSON must NOT carry any "value" key (structural
+        // invariant: pendingRequest is value-free).
+        let s = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertFalse(s.contains("\"value\""))
+        let decoded = try JSONDecoder().decode(VibeCodePendingRequest.self, from: data)
+        XCTAssertEqual(decoded, original)
+    }
 }

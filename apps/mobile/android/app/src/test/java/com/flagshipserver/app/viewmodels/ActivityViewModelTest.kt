@@ -31,7 +31,14 @@ import com.flagshipserver.app.api.UrlControllerClaimResponse
 import com.flagshipserver.app.api.UrlControllerOwnedResponse
 import com.flagshipserver.app.api.VerifyCustomDomainRequest
 import com.flagshipserver.app.api.VerifyCustomDomainResponse
+import com.flagshipserver.app.api.ServiceEnvListResponse
+import com.flagshipserver.app.api.ServiceEnvOpResponse
+import com.flagshipserver.app.api.ServiceEnvSetRequest
+import com.flagshipserver.app.api.ServiceEnvUnsetRequest
 import com.flagshipserver.app.api.VibeCodeFrame
+import com.flagshipserver.app.api.VibeCodeReplyRequest
+import com.flagshipserver.app.api.VibeCodeReplyResponse
+import com.flagshipserver.app.api.VibeCodeSessionPublicState
 import com.flagshipserver.app.api.VibeCodeStartRequest
 import com.flagshipserver.app.api.VibeCodeStartResponse
 import com.flagshipserver.app.api.VibeCodeStatusResponse
@@ -92,6 +99,11 @@ private class StubScreensClient(
     override suspend fun appBackupStart(req: AppBackupStartRequest): AppBackupStartResponse = error("unused")
     override suspend fun serverMetrics(podId: String): ServerMetricsResponse = error("unused")
     override suspend fun verifyCustomDomain(req: VerifyCustomDomainRequest): VerifyCustomDomainResponse = error("unused")
+    override suspend fun serviceEnvList(appId: String): ServiceEnvListResponse = error("unused")
+    override suspend fun serviceEnvSet(appId: String, req: ServiceEnvSetRequest): ServiceEnvOpResponse = error("unused")
+    override suspend fun serviceEnvUnset(appId: String, req: ServiceEnvUnsetRequest): ServiceEnvOpResponse = error("unused")
+    override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState = error("unused")
+    override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse = error("unused")
     override fun installEvents(serial: String): Flow<InstallEvent> = emptyFlow()
     override fun vibeCodeStream(sessionId: String): Flow<VibeCodeFrame> = emptyFlow()
 }

@@ -37,6 +37,11 @@ class LiveScreensClient(
         ignoreUnknownKeys = true
         encodeDefaults = true
         explicitNulls = false
+        // W10 — vibe-code pendingRequest + (legacy) VibeCodeFrame use
+        // `kind` as the polymorphic discriminator; the daemon shapes
+        // its JSON the same way. Default kotlinx-serialization uses
+        // `type`, so we explicitly opt into `kind` here.
+        classDiscriminator = "kind"
     },
 ) : ScreensClient {
 
@@ -158,6 +163,27 @@ class LiveScreensClient(
 
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse =
         request("/api/screens/post-recovery/status", PostRecoveryStatusResponse.serializer())
+
+    override suspend fun serviceEnvList(appId: String): ServiceEnvListResponse =
+        request("/api/screens/services/$appId/env", ServiceEnvListResponse.serializer())
+
+    override suspend fun serviceEnvSet(appId: String, req: ServiceEnvSetRequest): ServiceEnvOpResponse {
+        val body = json.encodeToString(ServiceEnvSetRequest.serializer(), req).toByteArray()
+        return request("/api/screens/services/$appId/env/set", ServiceEnvOpResponse.serializer(), "POST", body)
+    }
+
+    override suspend fun serviceEnvUnset(appId: String, req: ServiceEnvUnsetRequest): ServiceEnvOpResponse {
+        val body = json.encodeToString(ServiceEnvUnsetRequest.serializer(), req).toByteArray()
+        return request("/api/screens/services/$appId/env/unset", ServiceEnvOpResponse.serializer(), "POST", body)
+    }
+
+    override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState =
+        request("/api/screens/llm/sessions/$sessionId", VibeCodeSessionPublicState.serializer())
+
+    override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse {
+        val body = json.encodeToString(VibeCodeReplyRequest.serializer(), req).toByteArray()
+        return request("/api/screens/llm/sessions/$sessionId/reply", VibeCodeReplyResponse.serializer(), "POST", body)
+    }
 
     /** SSE stream of install events. Frame format: `data: <json>\n\n` */
     override fun installEvents(serial: String): Flow<InstallEvent> = channelFlow {
