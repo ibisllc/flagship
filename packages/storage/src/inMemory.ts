@@ -89,6 +89,12 @@ export class InMemoryUsernameStorage implements UsernameStorage {
       recoveryCodesHashesJson:
         rec.recoveryCodesHashesJson ?? existing?.recoveryCodesHashesJson,
       totpEnrolledAt: rec.totpEnrolledAt ?? existing?.totpEnrolledAt,
+      // v2.1 — recovery-wipe policy survives a benign re-put. Absent
+      // on incoming + existing → 'graceful' (the migration default).
+      recoveryWipePolicy:
+        rec.recoveryWipePolicy ??
+        existing?.recoveryWipePolicy ??
+        "graceful",
     });
     return { ok: true as const };
   }
@@ -148,6 +154,10 @@ export class InMemoryUsernameStorage implements UsernameStorage {
       accountType: "single",
     };
     if (r.isDemo !== undefined) next.isDemo = r.isDemo;
+    // v2.1 — wipe policy is independent of TOTP state. Preserve it.
+    if (r.recoveryWipePolicy !== undefined) {
+      next.recoveryWipePolicy = r.recoveryWipePolicy;
+    }
     this.byName.set(norm, next);
     return true;
   }

@@ -19,6 +19,27 @@
  */
 export type AccountType = "single" | "multi" | "demo";
 
+/**
+ * v2.1 — per-cloud recovery-wipe policy. Selected at cloud creation
+ * (default `'graceful'`); honored by the re-pair completion handler:
+ *
+ *   - `'strict'`   — every existing DeviceCapabilityGrant for the
+ *                    username is revoked at swap time. The new admin
+ *                    must re-mint grants for every device that needs
+ *                    continued access. Corporate default — the forced
+ *                    re-onboarding is the point.
+ *   - `'graceful'` — the /complete RPC body carries `refreshedGrants`
+ *                    signed by the NEW IRK; the handler validates each
+ *                    under the new IRK pub, confirms each `devicePubKey`
+ *                    matches an existing active grant (scopes MUST be
+ *                    a subset — no inflation), and atomically swaps the
+ *                    old grants for the new. Family default — non-admin
+ *                    devices keep working without re-onboarding.
+ *
+ * See docs/v1.2-security-cascade.md §"Recovery wipe policy".
+ */
+export type RecoveryWipePolicy = "strict" | "graceful";
+
 export interface UsernameRecord {
   username: string;
   irkPubHex: string;
@@ -56,6 +77,13 @@ export interface UsernameRecord {
   recoveryCodesHashesJson?: string;
   /** v1.2 — wall-clock ms of the successful enroll-confirm. Null until enrolled. */
   totpEnrolledAt?: number;
+  /**
+   * v2.1 — per-cloud recovery-wipe policy. Defaults to `'graceful'`
+   * at the handler boundary so pre-migration rows behave gracefully.
+   * Stored as TEXT in D1; the storage adapter narrows it to
+   * RecoveryWipePolicy on read.
+   */
+  recoveryWipePolicy?: RecoveryWipePolicy;
 }
 
 export type AuthCodeStatus = "active" | "used" | "revoked";

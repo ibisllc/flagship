@@ -1,11 +1,17 @@
 import {
+  verifyDeviceCapabilityGrant,
   verifyRePairInitiate,
   verifyRePairObject,
+  type DeviceCapabilityGrant,
+  type DeviceScope,
   type RePairInitiate,
   type RePairObject,
+  DEVICE_SCOPES,
 } from "@flagship/protocol";
 import type {
   AuditEventStorage,
+  DeviceCapabilityGrantRecord,
+  DeviceCapabilityGrantStorage,
   PendingRePairStorage,
   PushTokenStorage,
   UsernameStorage,
@@ -142,6 +148,25 @@ export interface RePairDeps {
    * fallback never fires.
    */
   totpKekHex?: string;
+  /**
+   * v2.1 (W6) — when wired, `handleCompleteRePair` honors the cloud's
+   * `recovery_wipe_policy`:
+   *   - `'strict'`   → every active DeviceCapabilityGrant for the
+   *                    username gets `revoked_at = now` so family
+   *                    devices must be re-onboarded by the new admin.
+   *   - `'graceful'` → the /complete body MAY carry `refreshedGrants`
+   *                    signed by the NEW IRK; each refreshed grant is
+   *                    validated under the new IRK pub, must match an
+   *                    existing active grant's `devicePubKey`, must
+   *                    NOT inflate scopes, and is persisted as a fresh
+   *                    row; the old grants get `revoked_at = now`
+   *                    atomically after the new ones are in.
+   *
+   * When the dep is absent the handler falls through to the v1.2
+   * behaviour (no grant accounting) — deploy-safe degrade matching
+   * the rest of the cascade.
+   */
+  deviceCapabilityGrants?: DeviceCapabilityGrantStorage;
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
@@ -593,9 +618,185 @@ export async function handleObjectRePair(
   return { status: 200, body: { ok: true, objected: true } };
 }
 
+/**
+ * v2.1 (W6) — body shape for /api/users/:u/re-pair/complete. All
+ * fields optional so legacy callers (curl with no body, or pre-W6
+ * clients) still work.
+ *
+ * `refreshedGrants` is only meaningful when the cloud's
+ * `recovery_wipe_policy === 'graceful'`. Each entry is a fresh
+ * DeviceCapabilityGrant signed by the NEW IRK (whose private key
+ * lives on the recovering device, so server-side re-signing is
+ * impossible); the handler verifies under the new IRK pub that just
+ * landed via `swapIrkPub`, confirms each `devicePubKey` maps to an
+ * existing active grant for the user, refuses any scope inflation
+ * (refreshed scopes MUST be a SUBSET of the old grant's scopes), and
+ * persists the new rows before revoking the old ones. See
+ * docs/v1.2-security-cascade.md §"Recovery wipe policy".
+ */
+export interface CompleteRePairBody {
+  refreshedGrants?: Array<{
+    grantId: string;
+    deviceLabel: string;
+    devicePubKey: string;
+    scopes: string[];
+    issuedAt: number;
+    expiresAt: number;
+    signature: string;
+  }>;
+}
+
+/**
+ * Validate `refreshedGrants` against the user's existing active
+ * DeviceCapabilityGrants. Returns `{ ok: true, pairs }` where each
+ * pair is `{ next, old }` so the caller can atomically persist next +
+ * revoke old. Returns `{ ok: false, status, error }` on any mismatch.
+ *
+ * - Each refreshed grant's signature MUST verify under the NEW IRK pub.
+ * - Each refreshed `devicePubKey` MUST match an existing active grant
+ *   for the user (no new-device admission via the re-sign path).
+ * - Refreshed `scopes` MUST be a SUBSET of the old grant's scopes (no
+ *   privilege escalation).
+ * - Refreshed `deviceLabel` MUST equal the old grant's label (renaming
+ *   a device under the new IRK is its own /device-grants/mint flow).
+ */
+async function validateRefreshedGrants(
+  storage: DeviceCapabilityGrantStorage,
+  username: string,
+  newIrkPubBytes: Uint8Array,
+  refreshed: NonNullable<CompleteRePairBody["refreshedGrants"]>,
+): Promise<
+  | { ok: true; pairs: Array<{ next: DeviceCapabilityGrantRecord; old: DeviceCapabilityGrantRecord }> }
+  | { ok: false; status: number; error: string }
+> {
+  const validScopes = new Set<string>(DEVICE_SCOPES);
+  const existing = (await storage.listForUser(username)).filter(
+    (g) => g.revokedAt === null,
+  );
+  const byDevicePub = new Map<string, DeviceCapabilityGrantRecord>();
+  for (const g of existing) byDevicePub.set(g.devicePubHex.toLowerCase(), g);
+
+  const seenDevicePubs = new Set<string>();
+  const pairs: Array<{ next: DeviceCapabilityGrantRecord; old: DeviceCapabilityGrantRecord }> = [];
+
+  for (const rg of refreshed) {
+    if (
+      typeof rg.grantId !== "string" ||
+      rg.grantId.length === 0 ||
+      typeof rg.deviceLabel !== "string" ||
+      typeof rg.devicePubKey !== "string" ||
+      typeof rg.issuedAt !== "number" ||
+      typeof rg.expiresAt !== "number" ||
+      typeof rg.signature !== "string" ||
+      !Array.isArray(rg.scopes)
+    ) {
+      return { ok: false, status: 400, error: "malformed refreshedGrant entry" };
+    }
+    const scopes: DeviceScope[] = [];
+    for (const s of rg.scopes) {
+      if (typeof s !== "string" || !validScopes.has(s)) {
+        return {
+          ok: false,
+          status: 400,
+          error: `refreshedGrant carries unknown scope: ${String(s)}`,
+        };
+      }
+      scopes.push(s as DeviceScope);
+    }
+    const devPubLower = rg.devicePubKey.toLowerCase();
+    if (seenDevicePubs.has(devPubLower)) {
+      return {
+        ok: false,
+        status: 400,
+        error: "refreshedGrants contain duplicate devicePubKey",
+      };
+    }
+    seenDevicePubs.add(devPubLower);
+
+    const old = byDevicePub.get(devPubLower);
+    if (!old) {
+      return {
+        ok: false,
+        status: 403,
+        error: "refreshedGrant devicePubKey does not match an existing active grant",
+      };
+    }
+    if (old.deviceLabel !== rg.deviceLabel) {
+      return {
+        ok: false,
+        status: 403,
+        error: "refreshedGrant deviceLabel must match the existing grant's label",
+      };
+    }
+    // No scope inflation. Refreshed scopes MUST be a subset of the
+    // old grant's scopes — the recovering admin can re-sign an
+    // existing grant, NOT escalate a family member to a power they
+    // never had.
+    let oldScopes: DeviceScope[];
+    try {
+      oldScopes = JSON.parse(old.scopesJson) as DeviceScope[];
+    } catch {
+      return {
+        ok: false,
+        status: 500,
+        error: "existing grant row corrupted",
+      };
+    }
+    const oldScopeSet = new Set(oldScopes);
+    for (const s of scopes) {
+      if (!oldScopeSet.has(s)) {
+        return {
+          ok: false,
+          status: 403,
+          error: `refreshedGrant inflates scope "${s}" not on the existing grant`,
+        };
+      }
+    }
+
+    let devicePubBytes: Uint8Array;
+    let sigBytes: Uint8Array;
+    try {
+      devicePubBytes = hexToBytes(rg.devicePubKey);
+      sigBytes = hexToBytes(rg.signature);
+    } catch {
+      return { ok: false, status: 400, error: "refreshedGrant has invalid hex" };
+    }
+    const grant: DeviceCapabilityGrant = {
+      grantId: rg.grantId,
+      username,
+      deviceLabel: rg.deviceLabel,
+      devicePubKey: devicePubBytes,
+      scopes,
+      issuedAt: rg.issuedAt,
+      expiresAt: rg.expiresAt,
+    };
+    if (!verifyDeviceCapabilityGrant(grant, sigBytes, newIrkPubBytes)) {
+      return {
+        ok: false,
+        status: 403,
+        error: "refreshedGrant signature does not verify under the new IRK",
+      };
+    }
+    const next: DeviceCapabilityGrantRecord = {
+      grantId: rg.grantId,
+      username: username.toLowerCase(),
+      deviceLabel: rg.deviceLabel,
+      devicePubHex: devPubLower,
+      scopesJson: JSON.stringify(scopes),
+      issuedAt: rg.issuedAt,
+      expiresAt: rg.expiresAt,
+      signatureHex: rg.signature.toLowerCase(),
+      revokedAt: null,
+    };
+    pairs.push({ next, old });
+  }
+  return { ok: true, pairs };
+}
+
 export async function handleCompleteRePair(
   deps: RePairDeps,
   username: string,
+  body?: CompleteRePairBody,
 ): Promise<HandlerResponse> {
   // Public read — no signature gate. A successful complete is
   // idempotent: if we've already swapped, the pending row is gone
@@ -624,6 +825,44 @@ export async function handleCompleteRePair(
       },
     };
   }
+
+  // v2.1 (W6) — read the cloud's wipe policy BEFORE the swap so we
+  // can pre-validate refreshedGrants under the incoming new IRK pub.
+  // The handler defaults absent/legacy rows to 'graceful'.
+  const userRecBefore = await deps.usernames.get(username);
+  const wipePolicy = userRecBefore?.recoveryWipePolicy ?? "graceful";
+
+  // Pre-validate refreshedGrants up-front (under the pending row's
+  // newIrkPubHex — which is what the swap is about to install). A
+  // validation failure here returns BEFORE the IRK swap so the cloud
+  // stays in a clean state. The strict path ignores `refreshedGrants`
+  // entirely — silently dropping them on the floor is fine (the
+  // recovering device will just see the wipe happen and re-onboard).
+  let validatedPairs: Array<{ next: DeviceCapabilityGrantRecord; old: DeviceCapabilityGrantRecord }> = [];
+  if (
+    wipePolicy === "graceful" &&
+    body?.refreshedGrants &&
+    body.refreshedGrants.length > 0 &&
+    deps.deviceCapabilityGrants
+  ) {
+    let newIrkPubBytes: Uint8Array;
+    try {
+      newIrkPubBytes = hexToBytes(pending.newIrkPubHex);
+    } catch {
+      return { status: 500, body: { error: "pending row has invalid newIrkPubHex" } };
+    }
+    const verdict = await validateRefreshedGrants(
+      deps.deviceCapabilityGrants,
+      username.toLowerCase(),
+      newIrkPubBytes,
+      body.refreshedGrants,
+    );
+    if (!verdict.ok) {
+      return { status: verdict.status, body: { error: verdict.error } };
+    }
+    validatedPairs = verdict.pairs;
+  }
+
   const swapped = await deps.usernames.swapIrkPub(
     username,
     pending.oldIrkPubHex,
@@ -638,6 +877,59 @@ export async function handleCompleteRePair(
       status: 409,
       body: { error: "username's current IRK no longer matches the pending old IRK" },
     };
+  }
+
+  // v2.1 (W6) — per-cloud wipe-policy enforcement on the freshly-
+  // swapped cloud. Strict: revoke every active grant so the new admin
+  // must re-mint. Graceful: persist any pre-validated refreshedGrants
+  // first, THEN revoke the old grants the refreshed ones replaced.
+  // Active grants whose devicePubKey wasn't covered by a refreshed
+  // entry stay live under the OLD IRK's signature — they'll fail
+  // verification at requireDeviceScope (defense-in-depth re-verify
+  // under the new cloud root) and the family device's UI will prompt
+  // a re-onboard. That's the "the user chose graceful but only
+  // re-signed for some devices" case; it's a soft-fail by design.
+  let wipedGrantIds: string[] = [];
+  let refreshedGrantIds: string[] = [];
+  if (deps.deviceCapabilityGrants) {
+    if (wipePolicy === "strict") {
+      const active = (
+        await deps.deviceCapabilityGrants.listForUser(username.toLowerCase())
+      ).filter((g) => g.revokedAt === null);
+      for (const g of active) {
+        await deps.deviceCapabilityGrants.revoke(g.grantId, now());
+        wipedGrantIds.push(g.grantId);
+      }
+    } else if (wipePolicy === "graceful" && validatedPairs.length > 0) {
+      // Two-step per pair: revoke the OLD first (so the storage
+      // layer's duplicate-active guard for (username, deviceLabel)
+      // doesn't reject the matching new row), then put the NEW.
+      // Doing it the other way would make every put fail because the
+      // refreshed grant has the SAME (username, deviceLabel) as the
+      // old. The window where neither row is active is the same wall-
+      // clock tick on the InMemory adapter; on D1 it's bounded by the
+      // adjacent UPDATE + INSERT and the read endpoint is eventually-
+      // consistent on top of that anyway.
+      for (const { old, next } of validatedPairs) {
+        await deps.deviceCapabilityGrants.revoke(old.grantId, now());
+        const r = await deps.deviceCapabilityGrants.put(next);
+        if (!r.ok) {
+          // Should not happen — we revoked the only blocker above.
+          // Surface a 500 so an operator notices but keep going (the
+          // swap already landed; reverting the IRK is worse than a
+          // missing grant).
+          return {
+            status: 500,
+            body: {
+              error: "graceful re-sign: failed to persist refreshed grant",
+              grantId: next.grantId,
+              reason: r.reason,
+            },
+          };
+        }
+        refreshedGrantIds.push(next.grantId);
+      }
+    }
   }
   // v1.2 Phase 2 — stamp the 14-day quarantine on every push_token
   // row currently registered for this user. The re-paired account
@@ -713,6 +1005,13 @@ export async function handleCompleteRePair(
       newIrkPub: pending.newIrkPubHex,
       swappedAt: now(),
       quarantineUntil: now() + quarantineMs,
+      // v2.1 (W6) — surface the policy applied + the IDs affected so
+      // the recovering device's UI can render "All other devices need
+      // to re-onboard" (strict) or "Kept N family devices working"
+      // (graceful) without a separate /audit fetch.
+      recoveryWipePolicy: wipePolicy,
+      ...(wipedGrantIds.length > 0 ? { wipedGrantIds } : {}),
+      ...(refreshedGrantIds.length > 0 ? { refreshedGrantIds } : {}),
     },
   };
 }

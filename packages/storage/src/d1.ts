@@ -6,6 +6,7 @@ import type {
   AutoUnlockLeaseStorage,
   PendingRePairRecord,
   PendingRePairStorage,
+  RecoveryWipePolicy,
   PendingUnlockApprovalRecord,
   PendingUnlockApprovalStorage,
   WebauthnRecoveryRecord,
@@ -105,6 +106,9 @@ interface UsernameRow {
   totp_secret_encrypted?: string | null;
   recovery_codes_hashes_json?: string | null;
   totp_enrolled_at?: number | null;
+  // v2.1 — recovery-wipe policy column (migration 0032). Nullable for
+  // pre-migration safety; the rowTo* helper defaults to 'graceful'.
+  recovery_wipe_policy?: string | null;
 }
 interface AuthCodeRow {
   serial: string;
@@ -150,12 +154,18 @@ function rowToUsername(r: UsernameRow): UsernameRecord {
     r.account_type === "multi" || r.account_type === "demo"
       ? r.account_type
       : "single";
+  // v2.1 — recovery_wipe_policy narrows TEXT to the RecoveryWipePolicy
+  // union. Pre-0032 rows decode as undefined and we COALESCE to
+  // 'graceful', matching the migration column DEFAULT.
+  const recoveryWipePolicy: RecoveryWipePolicy =
+    r.recovery_wipe_policy === "strict" ? "strict" : "graceful";
   return {
     username: r.username,
     irkPubHex: r.irk_pub_hex,
     claimedAt: r.claimed_at,
     isDemo: r.is_demo === 1,
     accountType,
+    recoveryWipePolicy,
     ...(r.totp_secret_encrypted != null
       ? { totpSecretEncrypted: r.totp_secret_encrypted }
       : {}),
@@ -227,8 +237,8 @@ export class D1UsernameStorage implements UsernameStorage {
     await this.db
       .prepare(
         "INSERT INTO usernames " +
-          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+          "(username, irk_pub_hex, claimed_at, is_demo, account_type, totp_secret_encrypted, recovery_codes_hashes_json, totp_enrolled_at, recovery_wipe_policy) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
           "ON CONFLICT(username) DO UPDATE SET claimed_at = excluded.claimed_at",
       )
       .bind(
@@ -240,6 +250,7 @@ export class D1UsernameStorage implements UsernameStorage {
         rec.totpSecretEncrypted ?? null,
         rec.recoveryCodesHashesJson ?? null,
         rec.totpEnrolledAt ?? null,
+        rec.recoveryWipePolicy ?? "graceful",
       )
       .run();
     return { ok: true as const };

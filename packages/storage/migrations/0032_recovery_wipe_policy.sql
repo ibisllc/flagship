@@ -1,0 +1,21 @@
+-- v2.1 — per-cloud recovery-wipe policy. Selected at cloud creation,
+-- read by handleCompleteRePair to decide whether to wipe the cloud's
+-- existing DeviceCapabilityGrants (strict) or auto-re-sign them under
+-- the new cloud root (graceful).
+--
+-- Two policies:
+--   'graceful' (default): the /complete RPC body carries refreshedGrants
+--     signed by the NEW IRK; the handler validates them under the new
+--     IRK pub (just landed via swapIrkPub), confirms each devicePubKey
+--     matches an existing active grant (scopes MUST NOT inflate), and
+--     swaps the old grants for the new in a single transaction. Family
+--     / non-admin devices keep working without re-onboarding.
+--
+--   'strict' (corporate): a successful recovery REVOKES every active
+--     grant on the cloud. The new admin must re-mint grants for every
+--     device that needs continued access. The forced re-onboarding is
+--     the point — IT proves who's still a member after a recovery.
+--
+-- See docs/v1.2-security-cascade.md §"Recovery wipe policy".
+
+ALTER TABLE usernames ADD COLUMN recovery_wipe_policy TEXT NOT NULL DEFAULT 'graceful';

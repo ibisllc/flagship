@@ -1268,3 +1268,408 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
     expect(events.filter((e) => e.eventKind === "totp-failed-rate")).toHaveLength(1);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// v2.1 (W6) — per-cloud recovery-wipe policy on /complete
+// ───────────────────────────────────────────────────────────────────
+
+import { signDeviceCapabilityGrant, type DeviceScope } from "@flagship/protocol";
+
+describe("v2.1 (W6) — recovery-wipe policy", () => {
+  it("defaults a freshly-claimed username to recoveryWipePolicy='graceful'", async () => {
+    const oldIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const row = await storage.usernames.get(USERNAME);
+    expect(row?.recoveryWipePolicy).toBe("graceful");
+  });
+
+  it("'strict' policy revokes every active DeviceCapabilityGrant on complete", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    // Flip the policy to 'strict' (corporate opt-in).
+    const claimedRec = await storage.usernames.get(USERNAME);
+    await storage.usernames.put({ ...claimedRec!, recoveryWipePolicy: "strict" });
+    // Mint two existing grants under the OLD IRK (family devices).
+    const devA = makeKey();
+    const devB = makeKey();
+    const grantA: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000001",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: devA.publicKey,
+      scopes: ["browse"],
+      issuedAt: 1,
+      expiresAt: 1_900_000_000_000,
+    };
+    const grantB: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000002",
+      username: USERNAME,
+      deviceLabel: "laptop",
+      devicePubKey: devB.publicKey,
+      scopes: ["browse", "install-service"],
+      issuedAt: 1,
+      expiresAt: 1_900_000_000_000,
+    };
+    const sigA = signDeviceCapabilityGrant(grantA, oldIrk);
+    const sigB = signDeviceCapabilityGrant(grantB, oldIrk);
+    await storage.deviceCapabilityGrants.put({
+      grantId: grantA.grantId,
+      username: USERNAME,
+      deviceLabel: grantA.deviceLabel,
+      devicePubHex: bytesToHex(devA.publicKey),
+      scopesJson: JSON.stringify(grantA.scopes),
+      issuedAt: grantA.issuedAt,
+      expiresAt: grantA.expiresAt,
+      signatureHex: bytesToHex(sigA),
+      revokedAt: null,
+    });
+    await storage.deviceCapabilityGrants.put({
+      grantId: grantB.grantId,
+      username: USERNAME,
+      deviceLabel: grantB.deviceLabel,
+      devicePubHex: bytesToHex(devB.publicKey),
+      scopesJson: JSON.stringify(grantB.scopes),
+      issuedAt: grantB.issuedAt,
+      expiresAt: grantB.expiresAt,
+      signatureHex: bytesToHex(sigB),
+      revokedAt: null,
+    });
+
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      deviceCapabilityGrants: storage.deviceCapabilityGrants,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    expect(res.status).toBe(200);
+    const body = res.body as { recoveryWipePolicy: string; wipedGrantIds?: string[] };
+    expect(body.recoveryWipePolicy).toBe("strict");
+    expect(body.wipedGrantIds?.sort()).toEqual([grantA.grantId, grantB.grantId].sort());
+    // Both grants are now revoked.
+    const after = await storage.deviceCapabilityGrants.listForUser(USERNAME);
+    for (const g of after) expect(g.revokedAt).not.toBeNull();
+  });
+
+  it("'graceful' policy with refreshedGrants swaps grants under the new IRK", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    // 'graceful' is the default — explicit assertion below confirms.
+    const dev = makeKey();
+    const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000010",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: dev.publicKey,
+      scopes: ["browse", "install-service"],
+      issuedAt: 1,
+      expiresAt: 1_900_000_000_000,
+    };
+    const oldSig = signDeviceCapabilityGrant(oldGrant, oldIrk);
+    await storage.deviceCapabilityGrants.put({
+      grantId: oldGrant.grantId,
+      username: USERNAME,
+      deviceLabel: oldGrant.deviceLabel,
+      devicePubHex: bytesToHex(dev.publicKey),
+      scopesJson: JSON.stringify(oldGrant.scopes),
+      issuedAt: oldGrant.issuedAt,
+      expiresAt: oldGrant.expiresAt,
+      signatureHex: bytesToHex(oldSig),
+      revokedAt: null,
+    });
+
+    // Refreshed grant: same device, same label, same (or subset of)
+    // scopes, signed by the NEW IRK.
+    const refreshed: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000011",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: dev.publicKey,
+      scopes: ["browse", "install-service"],
+      issuedAt: 2,
+      expiresAt: 1_900_000_000_000,
+    };
+    const newSig = signDeviceCapabilityGrant(refreshed, newIrk);
+
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      deviceCapabilityGrants: storage.deviceCapabilityGrants,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair(
+      { ...deps, now: () => finishAt },
+      USERNAME,
+      {
+        refreshedGrants: [
+          {
+            grantId: refreshed.grantId,
+            deviceLabel: refreshed.deviceLabel,
+            devicePubKey: bytesToHex(refreshed.devicePubKey),
+            scopes: refreshed.scopes,
+            issuedAt: refreshed.issuedAt,
+            expiresAt: refreshed.expiresAt,
+            signature: bytesToHex(newSig),
+          },
+        ],
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as { recoveryWipePolicy: string; refreshedGrantIds?: string[] };
+    expect(body.recoveryWipePolicy).toBe("graceful");
+    expect(body.refreshedGrantIds).toEqual([refreshed.grantId]);
+    // Old grant revoked, new grant active.
+    const oldAfter = await storage.deviceCapabilityGrants.get(oldGrant.grantId);
+    expect(oldAfter?.revokedAt).not.toBeNull();
+    const newAfter = await storage.deviceCapabilityGrants.get(refreshed.grantId);
+    expect(newAfter?.revokedAt).toBeNull();
+    // The new row's signature verifies under the NEW IRK pub (the
+    // post-swap cloud root), proving requireDeviceScope's re-verify
+    // path will accept it.
+    expect(newAfter?.signatureHex).toBe(bytesToHex(newSig));
+  });
+
+  it("rejects a refreshedGrant with MORE scopes than the existing grant (no inflation)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const dev = makeKey();
+    const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000020",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: dev.publicKey,
+      scopes: ["browse"],
+      issuedAt: 1,
+      expiresAt: 1_900_000_000_000,
+    };
+    await storage.deviceCapabilityGrants.put({
+      grantId: oldGrant.grantId,
+      username: USERNAME,
+      deviceLabel: oldGrant.deviceLabel,
+      devicePubHex: bytesToHex(dev.publicKey),
+      scopesJson: JSON.stringify(oldGrant.scopes),
+      issuedAt: oldGrant.issuedAt,
+      expiresAt: oldGrant.expiresAt,
+      signatureHex: bytesToHex(signDeviceCapabilityGrant(oldGrant, oldIrk)),
+      revokedAt: null,
+    });
+
+    // Refreshed asks for "browse" + "install-service" — escalation
+    // attempt that must be rejected.
+    const inflated: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000021",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: dev.publicKey,
+      scopes: ["browse", "install-service"] as DeviceScope[],
+      issuedAt: 2,
+      expiresAt: 1_900_000_000_000,
+    };
+    const sig = signDeviceCapabilityGrant(inflated, newIrk);
+
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      deviceCapabilityGrants: storage.deviceCapabilityGrants,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair(
+      { ...deps, now: () => finishAt },
+      USERNAME,
+      {
+        refreshedGrants: [
+          {
+            grantId: inflated.grantId,
+            deviceLabel: inflated.deviceLabel,
+            devicePubKey: bytesToHex(inflated.devicePubKey),
+            scopes: inflated.scopes,
+            issuedAt: inflated.issuedAt,
+            expiresAt: inflated.expiresAt,
+            signature: bytesToHex(sig),
+          },
+        ],
+      },
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toMatch(/inflate|scope/i);
+    // CRITICAL: the IRK swap MUST NOT have happened — the cloud is
+    // still on the old IRK so a partial-failure leaves the system in
+    // a consistent state.
+    const userAfter = await storage.usernames.get(USERNAME);
+    expect(userAfter?.irkPubHex).toBe(bytesToHex(oldIrk.publicKey));
+    // Pending row still there too.
+    expect(await storage.pendingRePairs.get(USERNAME)).toBeDefined();
+  });
+
+  it("rejects a refreshedGrant whose devicePubKey doesn't match any existing active grant", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    // No prior grants seeded — the recovering device tries to mint
+    // one out of thin air through the re-sign path. Must be rejected.
+    const unknownDev = makeKey();
+    const phantom: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000030",
+      username: USERNAME,
+      deviceLabel: "ghost",
+      devicePubKey: unknownDev.publicKey,
+      scopes: ["browse"],
+      issuedAt: 2,
+      expiresAt: 1_900_000_000_000,
+    };
+    const sig = signDeviceCapabilityGrant(phantom, newIrk);
+
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      deviceCapabilityGrants: storage.deviceCapabilityGrants,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair(
+      { ...deps, now: () => finishAt },
+      USERNAME,
+      {
+        refreshedGrants: [
+          {
+            grantId: phantom.grantId,
+            deviceLabel: phantom.deviceLabel,
+            devicePubKey: bytesToHex(phantom.devicePubKey),
+            scopes: phantom.scopes,
+            issuedAt: phantom.issuedAt,
+            expiresAt: phantom.expiresAt,
+            signature: bytesToHex(sig),
+          },
+        ],
+      },
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toMatch(/devicePubKey|existing/i);
+  });
+
+  it("'strict' policy IGNORES refreshedGrants in the body (no graceful fallthrough)", async () => {
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    // Corporate-style opt-in.
+    const claimedRec = await storage.usernames.get(USERNAME);
+    await storage.usernames.put({ ...claimedRec!, recoveryWipePolicy: "strict" });
+    const dev = makeKey();
+    const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000040",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: dev.publicKey,
+      scopes: ["browse"],
+      issuedAt: 1,
+      expiresAt: 1_900_000_000_000,
+    };
+    await storage.deviceCapabilityGrants.put({
+      grantId: oldGrant.grantId,
+      username: USERNAME,
+      deviceLabel: oldGrant.deviceLabel,
+      devicePubHex: bytesToHex(dev.publicKey),
+      scopesJson: JSON.stringify(oldGrant.scopes),
+      issuedAt: oldGrant.issuedAt,
+      expiresAt: oldGrant.expiresAt,
+      signatureHex: bytesToHex(signDeviceCapabilityGrant(oldGrant, oldIrk)),
+      revokedAt: null,
+    });
+
+    const refreshed: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000041",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: dev.publicKey,
+      scopes: ["browse"],
+      issuedAt: 2,
+      expiresAt: 1_900_000_000_000,
+    };
+    const sig = signDeviceCapabilityGrant(refreshed, newIrk);
+
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      deviceCapabilityGrants: storage.deviceCapabilityGrants,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair(
+      { ...deps, now: () => finishAt },
+      USERNAME,
+      {
+        refreshedGrants: [
+          {
+            grantId: refreshed.grantId,
+            deviceLabel: refreshed.deviceLabel,
+            devicePubKey: bytesToHex(refreshed.devicePubKey),
+            scopes: refreshed.scopes,
+            issuedAt: refreshed.issuedAt,
+            expiresAt: refreshed.expiresAt,
+            signature: bytesToHex(sig),
+          },
+        ],
+      },
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as { recoveryWipePolicy: string; refreshedGrantIds?: string[] };
+    expect(body.recoveryWipePolicy).toBe("strict");
+    // The refreshed grant was NOT persisted — strict drops it.
+    expect(body.refreshedGrantIds).toBeUndefined();
+    expect(await storage.deviceCapabilityGrants.get(refreshed.grantId)).toBeUndefined();
+    // The old grant got revoked.
+    const oldAfter = await storage.deviceCapabilityGrants.get(oldGrant.grantId);
+    expect(oldAfter?.revokedAt).not.toBeNull();
+  });
+
+  it("'graceful' policy with no refreshedGrants (body absent) is a no-op on grants — same as legacy", async () => {
+    // Legacy clients (pre-W6) POST /complete with no body. They get a
+    // 200 and the existing grants stay live (under the OLD IRK's sig,
+    // so requireDeviceScope's re-verify will reject them; family
+    // devices will see the rejection and prompt re-onboarding).
+    const oldIrk = makeKey();
+    const newIrk = makeKey();
+    const storage = await setup(oldIrk, { accountType: "single" });
+    const dev = makeKey();
+    const oldGrant: import("@flagship/protocol").DeviceCapabilityGrant = {
+      grantId: "00000000-0000-4000-8000-000000000050",
+      username: USERNAME,
+      deviceLabel: "ipad",
+      devicePubKey: dev.publicKey,
+      scopes: ["browse"],
+      issuedAt: 1,
+      expiresAt: 1_900_000_000_000,
+    };
+    await storage.deviceCapabilityGrants.put({
+      grantId: oldGrant.grantId,
+      username: USERNAME,
+      deviceLabel: oldGrant.deviceLabel,
+      devicePubHex: bytesToHex(dev.publicKey),
+      scopesJson: JSON.stringify(oldGrant.scopes),
+      issuedAt: oldGrant.issuedAt,
+      expiresAt: oldGrant.expiresAt,
+      signatureHex: bytesToHex(signDeviceCapabilityGrant(oldGrant, oldIrk)),
+      revokedAt: null,
+    });
+    const deps = {
+      usernames: storage.usernames,
+      pendingRePairs: storage.pendingRePairs,
+      deviceCapabilityGrants: storage.deviceCapabilityGrants,
+    };
+    await handleInitiateRePair(deps, USERNAME, initBody({ newIrk, oldIrk, totpProof: null }));
+    const finishAt = Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000;
+    const res = await handleCompleteRePair({ ...deps, now: () => finishAt }, USERNAME);
+    expect(res.status).toBe(200);
+    const body = res.body as { recoveryWipePolicy: string };
+    expect(body.recoveryWipePolicy).toBe("graceful");
+    // Grant is untouched.
+    const after = await storage.deviceCapabilityGrants.get(oldGrant.grantId);
+    expect(after?.revokedAt).toBeNull();
+  });
+});

@@ -813,6 +813,17 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.RE_PAIR_COMPLETE))) {
+    // /complete is body-OPTIONAL: legacy clients POST with no body and
+    // still get a 200; W6 clients POST `{ refreshedGrants }` so the
+    // graceful path can re-sign the cloud's grants in one round-trip.
+    // `readJson` returns null/undefined on an empty body — the handler
+    // tolerates both shapes.
+    let parsedBody: unknown = undefined;
+    try {
+      parsedBody = await readJson(request);
+    } catch {
+      parsedBody = undefined;
+    }
     return finishPlain(
       await handleCompleteRePair(
         {
@@ -825,8 +836,16 @@ export async function tryControlPlane(
           // rows on a successful swap so the Activity feed shows the
           // takeover under the right account-type snapshot.
           auditEvents: storage.auditEvents,
+          // v2.1 (W6) — honor the cloud's recovery_wipe_policy:
+          // 'strict' revokes every grant; 'graceful' (default)
+          // accepts the recovering device's re-signed grants in the
+          // /complete body.
+          deviceCapabilityGrants: storage.deviceCapabilityGrants,
         },
         decodeURIComponent(m[1]!),
+        (parsedBody ?? undefined) as
+          | import("@flagship/control-plane").CompleteRePairBody
+          | undefined,
       ),
     );
   }
