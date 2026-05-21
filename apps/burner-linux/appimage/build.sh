@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Build a relocatable AppImage for the Flagship Burner Linux GUI.
+#
+# Output: apps/burner-linux/dist/FlagshipBurner-x86_64.AppImage
+#
+# Requirements on the build host:
+#   - Linux x86_64 (other arches: edit ARCH below)
+#   - python3 (>=3.10)
+#   - wget or curl
+#   - file
+#   - GTK4 + libadwaita installed so the AppImage can verify-link the
+#     bundled Python's gi imports during a smoke run (`--appimage-extract`
+#     + an import test). On Ubuntu 24.04:
+#       sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+#
+# What we ship inside the AppImage:
+#   - flagship-burner.py + wizard.py + cli_runner.py + disk_enumerator.py
+#   - the polkit policy XML (operator installs this themselves on first run)
+#   - a copy of packages/flagship-burner/dist/cli.js (built with `tsc -b`)
+#   - a desktop file pointing to the AppImage entry
+#   - an icon
+#
+# The user must still have:
+#   - node (>=20) installed system-wide (`apt install nodejs` or via nvm)
+#   - pkexec (ships on every modern desktop distro)
+#
+# Both are runtime prereqs — bundling Node ~80MB into the AppImage would
+# triple the binary size for a constant we can find in /usr/bin.
+
+set -euo pipefail
+
+ARCH="${ARCH:-x86_64}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LINUX_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${LINUX_DIR}/../.." && pwd)"
+DIST_DIR="${LINUX_DIR}/dist"
+APPDIR="${DIST_DIR}/FlagshipBurner.AppDir"
+
+echo ">> repo:    ${REPO_ROOT}"
+echo ">> linux:   ${LINUX_DIR}"
+echo ">> appdir:  ${APPDIR}"
+
+rm -rf "${APPDIR}"
+mkdir -p "${APPDIR}/usr/bin"
+mkdir -p "${APPDIR}/usr/share/flagship-burner"
+mkdir -p "${APPDIR}/usr/share/applications"
+mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "${APPDIR}/usr/share/polkit-1/actions"
+
+# ---- python sources ----
+install -Dm755 "${LINUX_DIR}/flagship-burner.py" "${APPDIR}/usr/bin/flagship-burner"
+install -Dm644 "${LINUX_DIR}/wizard.py"          "${APPDIR}/usr/share/flagship-burner/wizard.py"
+install -Dm644 "${LINUX_DIR}/cli_runner.py"      "${APPDIR}/usr/share/flagship-burner/cli_runner.py"
+install -Dm644 "${LINUX_DIR}/disk_enumerator.py" "${APPDIR}/usr/share/flagship-burner/disk_enumerator.py"
+
+# ---- node CLI (built dist, copied into the AppImage) ----
+CLI_SRC="${REPO_ROOT}/packages/flagship-burner/dist"
+if [ -d "${CLI_SRC}" ]; then
+  echo ">> bundling ${CLI_SRC}"
+  cp -r "${CLI_SRC}" "${APPDIR}/usr/share/flagship-burner/cli-dist"
+else
+  echo "!! ${CLI_SRC} does not exist — running tsc -b first"
+  ( cd "${REPO_ROOT}" && npx tsc -b packages/flagship-burner )
+  cp -r "${CLI_SRC}" "${APPDIR}/usr/share/flagship-burner/cli-dist"
+fi
+
+# ---- polkit policy (operator must install separately on first run) ----
+install -Dm644 "${LINUX_DIR}/polkit/com.flagshipserver.burner.policy" \
+  "${APPDIR}/usr/share/polkit-1/actions/com.flagshipserver.burner.policy"
+
+# ---- desktop file ----
+cat > "${APPDIR}/usr/share/applications/com.flagshipserver.Burner.desktop" <<'DESK'
+[Desktop Entry]
+Type=Application
+Name=Flagship Burner
+GenericName=USB Image Writer
+Comment=Flash a Flagship pod onto a USB drive
+Exec=flagship-burner %F
+Terminal=false
+Icon=com.flagshipserver.Burner
+Categories=Utility;System;
+StartupNotify=true
+StartupWMClass=com.flagshipserver.Burner
+DESK
+cp "${APPDIR}/usr/share/applications/com.flagshipserver.Burner.desktop" "${APPDIR}/"
+
+# ---- icon (placeholder — replace with the real flagship icon later) ----
+if [ ! -f "${APPDIR}/com.flagshipserver.Burner.png" ]; then
+  # 1x1 transparent PNG as a placeholder so appimagetool doesn't refuse.
+  printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n\x2d\xb4\x00\x00\x00\x00IEND\xaeB`\x82' \
+    > "${APPDIR}/com.flagshipserver.Burner.png"
+fi
+cp "${APPDIR}/com.flagshipserver.Burner.png" \
+  "${APPDIR}/usr/share/icons/hicolor/256x256/apps/com.flagshipserver.Burner.png"
+
+# ---- AppRun shim ----
+cat > "${APPDIR}/AppRun" <<'RUN'
+#!/usr/bin/env bash
+HERE="$(dirname "$(readlink -f "${0}")")"
+export PATH="${HERE}/usr/bin:${PATH}"
+export FLAGSHIP_BURN_ENTRY="${FLAGSHIP_BURN_ENTRY:-${HERE}/usr/share/flagship-burner/cli-dist/cli.js}"
+export PYTHONPATH="${HERE}/usr/share/flagship-burner:${PYTHONPATH:-}"
+exec python3 "${HERE}/usr/bin/flagship-burner" "$@"
+RUN
+chmod +x "${APPDIR}/AppRun"
+
+# ---- fetch appimagetool (cached in dist/) ----
+APPIMAGETOOL="${DIST_DIR}/appimagetool-${ARCH}.AppImage"
+if [ ! -x "${APPIMAGETOOL}" ]; then
+  URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH}.AppImage"
+  echo ">> downloading ${URL}"
+  if command -v wget >/dev/null 2>&1; then
+    wget -O "${APPIMAGETOOL}" "${URL}"
+  else
+    curl -L -o "${APPIMAGETOOL}" "${URL}"
+  fi
+  chmod +x "${APPIMAGETOOL}"
+fi
+
+# ---- build ----
+OUT="${DIST_DIR}/FlagshipBurner-${ARCH}.AppImage"
+ARCH="${ARCH}" "${APPIMAGETOOL}" "${APPDIR}" "${OUT}"
+echo ">> built ${OUT}"

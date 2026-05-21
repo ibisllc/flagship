@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Flagship Burner
+GenericName=USB Image Writer
+Comment=Flash a Flagship pod onto a USB drive
+Exec=flagship-burner %F
+Terminal=false
+Icon=com.flagshipserver.Burner
+Categories=Utility;System;
+StartupNotify=true
+StartupWMClass=com.flagshipserver.Burner
