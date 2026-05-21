@@ -759,3 +759,100 @@ Replaces the v2 Phase F acceptance in `docs/next-session-prompt.md`:
   device-capability UI; corporate deployments later consume the same
   endpoints. The implementation cost of "ship demos" already buys
   "ship corporate v2".
+
+---
+
+## 12. v2.1 additions landed 2026-05-20 evening
+
+After the original S3.x sub-phases above shipped, four refinements
+landed in the same evening as direct iterations on the design:
+
+### 12.1 W1 — `/re-pair/object` is self-cancel only
+
+The original v2 spec inherited v1.1's "old-IRK-signed objection" as
+the cancel path. **That was a security mistake**: a device-thief
+holding the legitimate owner's device + the OLD IRK could veto every
+recovery attempt the legitimate owner made from a fresh device. Per
+the credentials-are-the-sole-gate principle (see
+`docs/v1.2-security-cascade.md` "Recovery threat model"), recovery
+must be unstoppable once initiated.
+
+Fix in `6ccef63`: `handleObjectRePair` now verifies the signature
+against the **NEW IRK** (i.e., the recoverer's own fresh key). The
+endpoint is preserved purely for the accidental-self-cancel UX
+("oops, wrong device, undo"). The device-thief vector is closed
+because the thief doesn't hold the NEW IRK.
+
+### 12.2 W6 — per-cloud recovery-wipe policy
+
+Migration 0032 adds `usernames.recovery_wipe_policy TEXT NOT NULL
+DEFAULT 'graceful'` (`'strict' | 'graceful'`).
+
+On `handleCompleteRePair`:
+
+- **`'strict'`** (corporate default once opted in): every active
+  DeviceCapabilityGrant on the cloud gets `revoked_at = now` after
+  the IRK swap. Family / team devices are forced to re-onboard; the
+  new admin must mint fresh grants. The "forced re-onboarding"
+  property is the point — corporate IT proves who's still a member
+  after a recovery event.
+- **`'graceful'`** (family default; the migration default): the
+  recovering device signs `refreshedGrants` for every existing
+  device's pubkey (same scopes; new grant under the new cloud root)
+  and POSTs them in the `/re-pair/complete` body. The handler
+  validates each (signed-by-new-IRK, devicePubKey matches an existing
+  active grant, no scope inflation), persists the new grants,
+  revokes the old ones atomically.
+
+Either way the response surfaces `wipedGrantIds` + `refreshedGrantIds`
+so the new admin's UI can render concrete counts ("3 family devices
+need re-onboarding" or "all 4 family devices kept working").
+
+A graceful re-pair where the recoverer omits `refreshedGrants` is a
+no-op on grants — they stay live with their now-dead OLD-IRK
+signatures, and `requireDeviceScope`'s defense-in-depth re-verify
+will reject them, prompting per-device re-onboarding. Safe degrade.
+
+### 12.3 W7 — wipe-restart revokes every grant
+
+`handleWipeRestart` (the v1.1 "nuclear option" — explicit skip of
+the 7-day re-pair grace) now also revokes every active
+DeviceCapabilityGrant on the cloud after the IRK rotation, surfacing
+`revokedGrantIds` in the response. Per the wipe-restart semantics
+this matches strict-mode: the entire cloud is wiped, family devices
+must re-onboard.
+
+### 12.4 Lock-release-on-resolution
+
+`pending_re_pairs.username` is the PK, providing structural
+single-recovery-at-a-time locking (no two concurrent admin
+recoveries can race). Pre-`e94d705`, vetoed or expired-without-
+complete rows persisted forever, permanently blocking every future
+legitimate recovery for that cloud. The fix sweeps dead rows on the
+next INITIATE: lock stays armed during a live dispute, releases
+naturally on resolution.
+
+### 12.5 Hyphenated demo usernames in `/users/check`
+
+`validateUserLabel` rejects hyphens (the no-hyphens-in-usernames
+rule that makes the `<creator>-<slug>` serviceId composite parse
+unambiguously). But DEMO usernames legitimately carry hyphens
+(`demo-alice`). The lookup order in `handleUsersCheck` was wrong
+pre-`4315993` — the hyphen rejection fired BEFORE the demoUsers
+lookup, so `/users/check {"username":"demo-alice"}` returned
+`{available: false, reason: "no hyphens"}` even though the demo
+existed. Mobile demo-mode silently broke for every hyphenated demo
+name.
+
+Fix: demoUsers + testAccounts lookup FIRST; if either matches, return
+the demo-aware response (with the `demoServer` block and optionally
+the `testAccount` block). Only on a miss does validateUserLabel
+fire. Real accounts (which can't have hyphens by design) hit
+validateUserLabel exactly as before.
+
+### 12.6 Cumulative test count
+
+These four refinements added 11 tests (W1 +3, W6 +13, W7 +3, lock +2,
+hyphen +1; deltas overlap with W1's same file). vitest at session end:
+**3104 passing across 257 files** (up from 3087 baseline before this
+evening's work).
