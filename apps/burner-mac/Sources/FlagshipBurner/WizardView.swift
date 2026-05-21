@@ -2,356 +2,273 @@ import SwiftUI
 import UniformTypeIdentifiers
 import FlagshipBurnerCore
 
-/// The single-screen wizard described in the brief. We deliberately keep
-/// it one VStack rather than NavigationStack pages — the user wants to
-/// see all four inputs and the log at once on a desktop window.
+/// Single-screen Burner wizard.
+///
+/// Three drop-rows (Recipe → ISO → USB) stacked vertically, a big
+/// Bake button below, and a collapsed log drawer at the bottom.
+/// Modelled on Raspberry Pi Imager's three-up layout with a Linear-
+/// flavored restraint on chrome.
 struct WizardView: View {
     @StateObject private var model = WizardModel()
+    @State private var showLog = false
+    @State private var showPaste = false
+    @State private var pasted = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FB.Spacing.s6) {
-            header
-            ScrollView {
-                VStack(alignment: .leading, spacing: FB.Spacing.s6) {
-                    Step1RecipeView(model: model)
-                    Step2ISOView(model: model)
-                    Step3DiskView(model: model)
-                    Step4FlashView(model: model)
-                    if model.isFinished {
-                        Step5DoneView(model: model)
-                    }
-                }
-                .padding(.horizontal, FB.Spacing.s8)
-                .padding(.bottom, FB.Spacing.s8)
-            }
-            logPanel
+        VStack(spacing: 0) {
+            content
+                .padding(.horizontal, FB.Spacing.s5)
+                .padding(.top, FB.Spacing.s5)
+            Spacer(minLength: FB.Spacing.s3)
+            logDrawer
         }
+        .frame(minWidth: 520, idealWidth: 540, maxWidth: 720,
+               minHeight: 560, idealHeight: 620)
         .background(FB.Colors.bg)
         .task { await model.refreshDisks() }
     }
 
+    // MARK: - Body
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s4) {
+            header
+            recipeRow
+            isoRow
+            diskRow
+            Spacer(minLength: FB.Spacing.s2)
+            bakeRow
+        }
+    }
+
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Flagship Burner")
-                    .font(FB.Font.h2())
-                Text("Phone-signed recipe → USB. The CLI does the work; this is just the wrapper.")
-                    .font(FB.Font.body())
-                    .foregroundStyle(FB.Colors.textMuted)
-            }
+        HStack(spacing: FB.Spacing.s2) {
+            Image(systemName: "flame.fill")
+                .foregroundStyle(FB.Colors.primary)
+                .imageScale(.medium)
+            Text("Flagship Burner")
+                .font(FB.Font.title())
             Spacer()
         }
-        .padding(.horizontal, FB.Spacing.s8)
-        .padding(.top, FB.Spacing.s6)
+        .padding(.bottom, FB.Spacing.s1)
     }
 
-    private var logPanel: some View {
-        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
-            HStack {
-                Text("Log")
-                    .font(FB.Font.h4())
-                Spacer()
-                if model.isRunning {
-                    ProgressView().controlSize(.small)
-                    Button("Cancel") { model.cancel() }
-                        .keyboardShortcut(.cancelAction)
-                }
-                Button("Clear") { model.clearLog() }
-                    .disabled(model.logLines.isEmpty || model.isRunning)
-            }
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(Array(model.logLines.enumerated()), id: \.offset) { idx, line in
-                            HStack(alignment: .top, spacing: FB.Spacing.s2) {
-                                Text(line.stream == .stderr ? "!" : " ")
-                                    .font(FB.Font.mono())
-                                    .foregroundStyle(line.stream == .stderr ? FB.Colors.danger : FB.Colors.textMuted)
-                                Text(line.text)
-                                    .font(FB.Font.mono())
-                                    .textSelection(.enabled)
-                                    .foregroundStyle(line.stream == .stderr ? FB.Colors.danger : .primary)
-                            }
-                            .id(idx)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(FB.Spacing.s3)
-                }
-                .frame(maxHeight: 200)
-                .background(FB.Colors.surface)
-                .clipShape(RoundedRectangle(cornerRadius: FB.Radius.md))
-                .onChange(of: model.logLines.count) { _, n in
-                    if n > 0 { withAnimation { proxy.scrollTo(n - 1, anchor: .bottom) } }
+    // MARK: - Rows
+
+    private var recipeRow: some View {
+        DropRow(
+            icon: "doc.text.fill",
+            title: "Recipe",
+            state: recipeRowState(),
+            isReady: model.verified != nil,
+            onDrop: { url in model.acceptRecipeFile(url: url) },
+            onChoose: {
+                if let url = pickFile(types: [.json, .data]) {
+                    model.acceptRecipeFile(url: url)
                 }
             }
+        )
+    }
+
+    private func recipeRowState() -> DropRowState {
+        if let err = model.recipeError {
+            return .error(err)
         }
-        .padding(.horizontal, FB.Spacing.s8)
-        .padding(.bottom, FB.Spacing.s6)
+        if let v = model.verified {
+            return .success(primary: v.serverDomain,
+                            secondary: v.expiresAt.map { "Expires \($0)" })
+        }
+        if let r = model.recipe {
+            return .pending(r.lastPathComponent)
+        }
+        return .empty(hint: "Drop a .json file (from the Download Recipe button)")
     }
-}
 
-// MARK: - Step 1: recipe
-
-private struct Step1RecipeView: View {
-    @ObservedObject var model: WizardModel
-    @State private var pasted: String = ""
-
-    var body: some View {
-        WizardCard(stepNumber: 1, title: "Drop the recipe", subtitle: "JSON file from the website after you scanned the QR code.") {
-            VStack(alignment: .leading, spacing: FB.Spacing.s3) {
-                HStack(spacing: FB.Spacing.s3) {
-                    DropZone(label: "Drop .flagship-recipe.json here",
-                             allowedTypes: [.json, .data, .item],
-                             onDrop: { url in model.acceptRecipeFile(url: url) })
-                        .frame(minHeight: 80)
-                    Button("Choose file…") {
-                        if let url = pickFile(types: [.json, .data]) { model.acceptRecipeFile(url: url) }
-                    }
-                }
-                Text("Or paste the JSON:")
-                    .font(FB.Font.body())
-                    .foregroundStyle(FB.Colors.textMuted)
-                TextEditor(text: $pasted)
-                    .font(FB.Font.mono())
-                    .frame(minHeight: 60, maxHeight: 100)
-                    .overlay(RoundedRectangle(cornerRadius: FB.Radius.md).stroke(.separator))
-                HStack {
-                    Button("Use pasted JSON") {
-                        model.acceptRecipeText(pasted)
-                    }
-                    .disabled(pasted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if let r = model.recipe {
-                        Text("Loaded: \(r.lastPathComponent)")
-                            .foregroundStyle(FB.Colors.success)
-                    }
-                }
-                if let v = model.verified {
-                    VerifiedBadge(verify: v)
-                }
-                if let e = model.recipeError {
-                    Text(e).foregroundStyle(FB.Colors.danger).font(FB.Font.body())
+    private var isoRow: some View {
+        DropRow(
+            icon: "opticaldisc.fill",
+            title: "Ubuntu Server ISO",
+            state: isoRowState(),
+            isReady: model.iso != nil,
+            onDrop: { url in model.acceptISOFile(url: url) },
+            onChoose: {
+                if let url = pickFile(types: [.diskImage, .data]) {
+                    model.acceptISOFile(url: url)
                 }
             }
-        }
+        )
     }
-}
 
-private struct VerifiedBadge: View {
-    let verify: VerifyResult
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Recipe verified")
-                .font(FB.Font.h4())
-                .foregroundStyle(FB.Colors.success)
-            Text("server: \(verify.serverDomain)").font(FB.Font.body())
-            if let exp = verify.expiresAt {
-                Text("expires: \(exp)").font(FB.Font.body()).foregroundStyle(FB.Colors.textMuted)
-            }
+    private func isoRowState() -> DropRowState {
+        if let iso = model.iso {
+            return .success(primary: iso.lastPathComponent, secondary: nil)
         }
-        .padding(FB.Spacing.s3)
-        .background(FB.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: FB.Radius.md))
+        return .empty(hint: "Drop ubuntu-22.04.5-live-server-amd64.iso")
     }
-}
 
-// MARK: - Step 2: ISO
-
-private struct Step2ISOView: View {
-    @ObservedObject var model: WizardModel
-
-    var body: some View {
-        WizardCard(stepNumber: 2, title: "Drop the ISO", subtitle: "Ubuntu Server stock image. See `flagship-burn distros` for accepted SHAs.") {
-            HStack(spacing: FB.Spacing.s3) {
-                DropZone(label: "Drop ubuntu-*-live-server.iso here",
-                         allowedTypes: [.diskImage, .data, .item],
-                         onDrop: { url in model.acceptISOFile(url: url) })
-                    .frame(minHeight: 80)
-                Button("Choose file…") {
-                    if let url = pickFile(types: [.diskImage, .data]) { model.acceptISOFile(url: url) }
-                }
-                if let iso = model.iso {
-                    VStack(alignment: .leading) {
-                        Text(iso.lastPathComponent).font(FB.Font.body())
-                            .foregroundStyle(FB.Colors.success)
-                    }
-                }
-            }
-        }
+    private var diskRow: some View {
+        DiskPickerRow(model: model)
     }
-}
 
-// MARK: - Step 3: USB disk
+    // MARK: - Bake
 
-private struct Step3DiskView: View {
-    @ObservedObject var model: WizardModel
-
-    var body: some View {
-        WizardCard(stepNumber: 3, title: "Pick the USB drive", subtitle: "Only removable / external drives are listed. The internal disk is hidden on purpose.") {
-            VStack(alignment: .leading, spacing: FB.Spacing.s2) {
-                HStack {
-                    Button("Refresh") { Task { await model.refreshDisks() } }
-                        .disabled(model.isRunning)
-                    if model.isRefreshingDisks {
+    private var bakeRow: some View {
+        VStack(spacing: FB.Spacing.s2) {
+            if model.isRunning {
+                Button(action: { model.cancel() }) {
+                    HStack(spacing: FB.Spacing.s2) {
                         ProgressView().controlSize(.small)
+                        Text("Working — click to cancel")
+                            .font(FB.Font.rowTitle())
+                    }
+                    .frame(minWidth: 200, minHeight: 28)
+                }
+                .controlSize(.large)
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.cancelAction)
+            } else if model.isFinished {
+                doneCard
+            } else {
+                Button(action: { Task { await model.runPrepare() } }) {
+                    Text("Bake")
+                        .font(FB.Font.rowTitle())
+                        .frame(minWidth: 200, minHeight: 28)
+                }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!model.canFlash)
+            }
+            if !model.isFinished {
+                Text(model.canFlash
+                     ? "Writes to \(model.selectedDisk?.deviceNode ?? "—") · erases what's there"
+                     : model.readinessSummary)
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, FB.Spacing.s2)
+    }
+
+    private var doneCard: some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            HStack(spacing: FB.Spacing.s2) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(FB.Colors.success)
+                Text("Ready to boot")
+                    .font(FB.Font.rowTitle())
+            }
+            if let v = model.verified {
+                Text(v.serverDomain)
+                    .font(FB.Font.mono())
+                    .textSelection(.enabled)
+            }
+            if let out = model.outIsoPath {
+                Text(out.path)
+                    .font(FB.Font.mono())
+                    .foregroundStyle(FB.Colors.textMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(FB.Spacing.s3)
+        .background(
+            RoundedRectangle(cornerRadius: FB.Radius.md)
+                .fill(FB.Colors.success.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FB.Radius.md)
+                .strokeBorder(FB.Colors.success.opacity(0.4), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Log drawer
+
+    private var logDrawer: some View {
+        VStack(spacing: 0) {
+            Divider()
+            DisclosureGroup(isExpanded: $showLog) {
+                LogPane(model: model)
+                    .frame(maxHeight: 180)
+                    .padding(.top, FB.Spacing.s2)
+            } label: {
+                HStack {
+                    Text("Log")
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                    if !model.logLines.isEmpty {
+                        Text("\(model.logLines.count)")
+                            .font(FB.Font.caption().monospacedDigit())
+                            .foregroundStyle(FB.Colors.textMuted)
                     }
                     Spacer()
-                }
-                if model.disks.isEmpty {
-                    Text("No removable disks detected. Plug one in and click Refresh.")
-                        .font(FB.Font.body())
-                        .foregroundStyle(FB.Colors.textMuted)
-                } else {
-                    ForEach(model.disks) { d in
-                        DiskRow(disk: d,
-                                selected: model.selectedDisk?.id == d.id,
-                                onTap: { model.selectedDisk = d })
+                    if !model.logLines.isEmpty && !model.isRunning {
+                        Button("Clear") { model.clearLog() }
+                            .buttonStyle(.link)
+                            .font(FB.Font.caption())
                     }
                 }
+                .contentShape(Rectangle())
             }
+            .padding(.horizontal, FB.Spacing.s5)
+            .padding(.vertical, FB.Spacing.s2)
         }
     }
 }
 
-private struct DiskRow: View {
-    let disk: USBDisk
-    let selected: Bool
-    let onTap: () -> Void
-    var body: some View {
-        HStack {
-            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(selected ? FB.Colors.primary : FB.Colors.textMuted)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(disk.displayName).font(FB.Font.body())
-                Text("\(disk.deviceNode)  ·  whole: \(disk.isWholeDisk ? "yes" : "no")  ·  removable: \(disk.isRemovable ? "yes" : "no")  ·  external: \(disk.isExternal ? "yes" : "no")")
-                    .font(FB.Font.mono())
-                    .foregroundStyle(FB.Colors.textMuted)
-            }
-            Spacer()
-        }
-        .padding(FB.Spacing.s3)
-        .background(selected ? FB.Colors.primary.opacity(0.08) : FB.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: FB.Radius.md))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
-    }
+// MARK: - DropRow
+
+enum DropRowState {
+    case empty(hint: String)
+    case pending(String)
+    case success(primary: String, secondary: String?)
+    case error(String)
 }
 
-// MARK: - Step 4: flash
-
-private struct Step4FlashView: View {
-    @ObservedObject var model: WizardModel
-
-    var body: some View {
-        WizardCard(stepNumber: 4, title: "Bake the ISO", subtitle: "Phase-2 CLI emits a flashable ISO; you'll dd it to the picked disk yourself once everything is wired.") {
-            VStack(alignment: .leading, spacing: FB.Spacing.s3) {
-                Text(model.readinessSummary)
-                    .font(FB.Font.body())
-                    .foregroundStyle(model.canFlash ? FB.Colors.success : FB.Colors.textMuted)
-                HStack(spacing: FB.Spacing.s3) {
-                    Button(action: { Task { await model.runPrepare() } }) {
-                        Text(model.isRunning ? "Working…" : "Bake ISO")
-                            .frame(minWidth: 140)
-                            .padding(.vertical, FB.Spacing.s2)
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .tint(FB.Colors.primary)
-                    .disabled(!model.canFlash || model.isRunning)
-
-                    Button("Verify recipe only") {
-                        Task { await model.runVerify() }
-                    }
-                    .disabled(model.recipe == nil || model.isRunning)
-                }
-                if let outPath = model.outIsoPath {
-                    Text("output: \(outPath.path)")
-                        .font(FB.Font.mono())
-                        .foregroundStyle(FB.Colors.textMuted)
-                        .textSelection(.enabled)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Step 5: done
-
-private struct Step5DoneView: View {
-    @ObservedObject var model: WizardModel
-    var body: some View {
-        WizardCard(stepNumber: 5, title: "Done", subtitle: "Bring this USB to the machine you're installing on.") {
-            VStack(alignment: .leading, spacing: 4) {
-                if let v = model.verified {
-                    Text("server domain: \(v.serverDomain)").font(FB.Font.h4())
-                    if let exp = v.expiresAt { Text("expires: \(exp)").foregroundStyle(FB.Colors.textMuted) }
-                }
-                if let out = model.outIsoPath {
-                    Text("file: \(out.path)").font(FB.Font.mono()).textSelection(.enabled)
-                }
-                if let disk = model.selectedDisk {
-                    Text("hand-off: dd if=\(model.outIsoPath?.path ?? "<iso>") of=\(disk.deviceNode) bs=4M")
-                        .font(FB.Font.mono())
-                        .textSelection(.enabled)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Helpers
-
-private struct WizardCard<Content: View>: View {
-    let stepNumber: Int
+private struct DropRow: View {
+    let icon: String
     let title: String
-    let subtitle: String
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: FB.Spacing.s3) {
-            HStack(spacing: FB.Spacing.s3) {
-                Text("\(stepNumber)")
-                    .font(FB.Font.h3())
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(FB.Colors.primary)
-                    .clipShape(Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(FB.Font.h3())
-                    Text(subtitle).font(FB.Font.body()).foregroundStyle(FB.Colors.textMuted)
-                }
-            }
-            content()
-        }
-        .padding(FB.Spacing.s4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background)
-        .overlay(RoundedRectangle(cornerRadius: FB.Radius.lg).stroke(.separator))
-        .clipShape(RoundedRectangle(cornerRadius: FB.Radius.lg))
-    }
-}
-
-private struct DropZone: View {
-    let label: String
-    let allowedTypes: [UTType]
+    let state: DropRowState
+    let isReady: Bool
     let onDrop: (URL) -> Void
+    let onChoose: () -> Void
+
     @State private var isTargeted = false
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: FB.Radius.md)
-                .stroke(isTargeted ? FB.Colors.primary : Color.secondary.opacity(0.5),
-                        style: StrokeStyle(lineWidth: 1.5, dash: [4]))
-                .background(
-                    RoundedRectangle(cornerRadius: FB.Radius.md)
-                        .fill(isTargeted ? FB.Colors.primary.opacity(0.08) : Color.clear)
-                )
-            Text(label)
-                .font(FB.Font.body())
-                .foregroundStyle(FB.Colors.textMuted)
-                .multilineTextAlignment(.center)
-                .padding(FB.Spacing.s3)
+        HStack(alignment: .top, spacing: FB.Spacing.s3) {
+            iconCircle
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: FB.Spacing.s2) {
+                    Text(title).font(FB.Font.rowTitle())
+                    Spacer()
+                    statusIcon
+                }
+                stateBody
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(FB.Spacing.s3)
+        .background(
+            RoundedRectangle(cornerRadius: FB.Radius.md)
+                .fill(isTargeted
+                      ? FB.Colors.primary.opacity(0.06)
+                      : FB.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FB.Radius.md)
+                .strokeBorder(
+                    isTargeted ? FB.Colors.primary
+                        : (isReady ? FB.Colors.success.opacity(0.4)
+                           : FB.Colors.border),
+                    lineWidth: isTargeted ? 1.5 : 1
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: FB.Radius.md))
+        .onTapGesture(perform: onChoose)
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             guard let p = providers.first else { return false }
             _ = p.loadObject(ofClass: URL.self) { item, _ in
@@ -362,7 +279,190 @@ private struct DropZone: View {
             return true
         }
     }
+
+    private var iconCircle: some View {
+        ZStack {
+            Circle()
+                .fill(isReady ? FB.Colors.success.opacity(0.15)
+                              : FB.Colors.surfaceElevated)
+                .frame(width: 36, height: 36)
+            Image(systemName: icon)
+                .foregroundStyle(isReady ? FB.Colors.success : FB.Colors.textMuted)
+                .imageScale(.medium)
+        }
+    }
+
+    private var statusIcon: some View {
+        Group {
+            switch state {
+            case .success:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(FB.Colors.success)
+            case .pending:
+                ProgressView().controlSize(.small)
+            case .error:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(FB.Colors.danger)
+            case .empty:
+                EmptyView()
+            }
+        }
+        .font(FB.Font.caption())
+    }
+
+    private var stateBody: some View {
+        Group {
+            switch state {
+            case .empty(let hint):
+                Text(hint)
+                    .font(FB.Font.rowHint())
+                    .foregroundStyle(FB.Colors.textMuted)
+            case .pending(let name):
+                Text(name)
+                    .font(FB.Font.rowHint())
+                    .foregroundStyle(FB.Colors.textMuted)
+            case .success(let primary, let secondary):
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(primary)
+                        .font(FB.Font.rowHint())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let s = secondary {
+                        Text(s).font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.textMuted)
+                    }
+                }
+            case .error(let msg):
+                Text(msg)
+                    .font(FB.Font.rowHint())
+                    .foregroundStyle(FB.Colors.danger)
+            }
+        }
+    }
 }
+
+// MARK: - DiskPickerRow
+
+private struct DiskPickerRow: View {
+    @ObservedObject var model: WizardModel
+
+    var body: some View {
+        HStack(alignment: .top, spacing: FB.Spacing.s3) {
+            ZStack {
+                Circle()
+                    .fill(model.selectedDisk != nil
+                          ? FB.Colors.warning.opacity(0.15)
+                          : FB.Colors.surfaceElevated)
+                    .frame(width: 36, height: 36)
+                Image(systemName: "externaldrive.fill")
+                    .foregroundStyle(model.selectedDisk != nil
+                                     ? FB.Colors.warning : FB.Colors.textMuted)
+                    .imageScale(.medium)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: FB.Spacing.s2) {
+                    Text("USB Drive").font(FB.Font.rowTitle())
+                    Spacer()
+                    if model.selectedDisk != nil {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(FB.Colors.success)
+                            .font(FB.Font.caption())
+                    }
+                }
+                pickerMenu
+            }
+        }
+        .padding(FB.Spacing.s3)
+        .background(
+            RoundedRectangle(cornerRadius: FB.Radius.md)
+                .fill(FB.Colors.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: FB.Radius.md)
+                .strokeBorder(
+                    model.selectedDisk != nil
+                        ? FB.Colors.success.opacity(0.4)
+                        : FB.Colors.border,
+                    lineWidth: 1
+                )
+        )
+    }
+
+    private var pickerMenu: some View {
+        HStack(spacing: FB.Spacing.s2) {
+            Menu {
+                if model.disks.isEmpty {
+                    Text("No removable drives detected")
+                }
+                ForEach(model.disks) { disk in
+                    Button {
+                        model.selectedDisk = disk
+                    } label: {
+                        Text("\(disk.displayName) — \(disk.deviceNode)")
+                    }
+                }
+                Divider()
+                Button("Refresh") {
+                    Task { await model.refreshDisks() }
+                }
+            } label: {
+                if let sel = model.selectedDisk {
+                    Text(sel.displayName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text("Choose drive…")
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .font(FB.Font.rowHint())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if model.isRefreshingDisks {
+                ProgressView().controlSize(.small)
+            }
+        }
+    }
+}
+
+// MARK: - Log pane
+
+private struct LogPane: View {
+    @ObservedObject var model: WizardModel
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(model.logLines.enumerated()), id: \.offset) { idx, line in
+                        Text(line.text)
+                            .font(FB.Font.mono())
+                            .foregroundStyle(line.stream == .stderr
+                                             ? FB.Colors.danger
+                                             : Color.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id(idx)
+                    }
+                }
+                .padding(FB.Spacing.s3)
+            }
+            .background(FB.Colors.surfaceElevated)
+            .overlay(
+                RoundedRectangle(cornerRadius: FB.Radius.sm)
+                    .strokeBorder(FB.Colors.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: FB.Radius.sm))
+            .onChange(of: model.logLines.count) { _, n in
+                if n > 0 { withAnimation { proxy.scrollTo(n - 1, anchor: .bottom) } }
+            }
+        }
+        .padding(.horizontal, FB.Spacing.s5)
+        .padding(.bottom, FB.Spacing.s4)
+    }
+}
+
+// MARK: - File picker
 
 private func pickFile(types: [UTType]) -> URL? {
     let panel = NSOpenPanel()
