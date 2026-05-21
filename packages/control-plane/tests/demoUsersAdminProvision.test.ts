@@ -196,6 +196,20 @@ describe("buildCloudInitUserData", () => {
     expect(s).toContain("seek=$SEEK oflag=seek_bytes");
     expect(s).toContain("conv=notrunc,fsync");
   });
+
+  it("works identically with a W12 netboot (Debian) base-ISO URL", () => {
+    // W12: the trailer-at-disk-end mechanism is ISO-agnostic. The
+    // cloud-init script is the same shape for both Alpine + Debian
+    // netinst — only the baseIsoUrl differs.
+    const netbootIsoUrl =
+      "https://flagshipserver.com/build/iso/flagship-netboot-debian-12.7.0-x86_64.iso";
+    const trailerUrl =
+      "https://pub-xyz.r2.dev/demo-isos/demo-alice-deadbeef.trailer";
+    const s = buildCloudInitUserData({ baseIsoUrl: netbootIsoUrl, trailerUrl });
+    expect(s).toContain(`wget -qO- '${netbootIsoUrl}'`);
+    expect(s).toContain(`wget -qO- '${trailerUrl}'`);
+    expect(s).toContain("dd of=/dev/sda");
+  });
 });
 
 describe("handleAdminSnapshotNow (W11)", () => {

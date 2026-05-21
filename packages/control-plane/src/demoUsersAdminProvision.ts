@@ -119,9 +119,20 @@ export interface DemoProvisionDeps {
    *  `https://pub-260717…r2.dev`. Concatenated with the trailer R2 key
    *  by the cloud-init script. */
   isoTempPublicBase: string;
-  /** Public URL of the BASE Alpine ISO. Cloud-init wgets this directly
-   *  (no Worker pass-through), then cats the trailer onto it. Typically
-   *  `https://flagshipserver.com/build/iso/flagship-base-alpine-…iso`. */
+  /** Public URL of the BASE ISO that cloud-init wgets directly (no
+   *  Worker pass-through), then cats the trailer onto it.
+   *
+   *  W12: defaults to the Debian-12-netinst-based ISO (built via
+   *  scripts/build-flagship-netboot-iso.sh). Alpine apkovl-mode boot
+   *  doesn't mount its modloop kernel-modules squashfs on Hetzner cloud
+   *  VMs, so DHCP never comes up — the netboot ISO uses d-i, whose
+   *  installer kernel has every common driver built IN. The wire +
+   *  trailer layout is identical to the Alpine ISO (trailer at
+   *  disk_size - trailer_size).
+   *
+   *  Either an Alpine URL (legacy /build/ flow) or the netboot URL
+   *  (cloud demo flow) works — the trailer-at-end mechanism is
+   *  ISO-agnostic. */
   baseIsoUrl: string;
   hetzner: ProvisioningHetznerClient;
   demoIrkKek: Uint8Array;

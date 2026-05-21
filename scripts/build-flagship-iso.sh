@@ -1,5 +1,25 @@
 #!/usr/bin/env bash
-# Reproducibly build the Flagship base ISO.
+# Reproducibly build the Flagship base ISO (Alpine 3.21 + apkovl).
+#
+# ── LEGACY / NOT FOR CLOUD INSTALLS ──────────────────────────────
+# As of W12 (2026-05-21) this script is kept only for the /build/
+# flow on REAL HARDWARE (USB stick installs to bare-metal boxes). The
+# cloud-demo install path uses scripts/build-flagship-netboot-iso.sh,
+# which builds a Debian-12-netinst-based ISO that's known-working on
+# Hetzner / DigitalOcean / Vultr cloud VMs.
+#
+# Why the split: Alpine 3.21 standard ISO booted in apkovl-mode on a
+# Hetzner cx23 cloud VM doesn't mount its modloop-lts kernel-modules
+# squashfs. /lib/modules stays empty; af_packet can't load; udhcpc
+# fails on AF_PACKET raw sockets; DHCP never sends Discover; the
+# bootstrap has no network. Live-confirmed 2026-05-21. Debian d-i's
+# installer kernel has every common driver built IN, so cloud DHCP
+# works out of the box.
+#
+# The two ISOs (alpine + debian-netinst) will be unified into a single
+# /build/ flow in a follow-up commit after the demo path is verified
+# live end to end. Until then: keep using this script ONLY for bare-
+# metal /build/ ISOs.
 #
 # Inputs:
 #   - The pinned Alpine standard ISO (URL + sha256 below).
