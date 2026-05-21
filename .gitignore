@@ -61,3 +61,4 @@ test-results/
 # transparency is the checkpoints repo, and operators use the CLI.
 /maintainers/
 out/
+apps/burner-mac/.build/
