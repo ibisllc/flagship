@@ -25,6 +25,7 @@
  */
 import { createReadStream } from "node:fs";
 import { open, rm, unlink, stat } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { createHash } from "node:crypto";
@@ -339,7 +340,25 @@ const defaultWriteBytesToDevice: WriteBytesToDevice = async (args) => {
   if (isoStat.size < 1024) {
     throw new Error(`source ISO too small (${isoStat.size}B); refusing to write`);
   }
-  const fh = await open(args.devicePath, "w");
+
+  // Prepare the device. A mounted disk can't be opened for raw write
+  // (EPERM/EBUSY), so unmount its volumes first. On macOS, also target the
+  // raw character device /dev/rdiskN — far faster than the buffered
+  // /dev/diskN, and the conventional `dd` target. The ISO is a multiple of
+  // the 2048-byte ISO sector, so our 1 MiB chunks stay block-aligned.
+  let target = args.devicePath;
+  if (platform() === "darwin") {
+    await runCmd("diskutil", ["unmountDisk", args.devicePath]);
+    target = args.devicePath.replace(/^\/dev\/disk/, "/dev/rdisk");
+  } else if (platform() === "linux") {
+    // Best-effort: unmount any mounted partitions of the target device.
+    await runCmd("sh", [
+      "-c",
+      `for p in ${args.devicePath}*; do umount "$p" 2>/dev/null || true; done`,
+    ]).catch(() => {});
+  }
+
+  const fh = await open(target, "w");
   try {
     let total = 0;
     let lastPct = -1;
@@ -377,4 +396,19 @@ async function defaultPromptForLine(message: string): Promise<string> {
   } finally {
     rl.close();
   }
+}
+
+/** Run a command, rejecting (with captured stderr) on a non-zero exit. */
+function runCmd(cmd: string, argv: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const p = spawn(cmd, argv, { stdio: ["ignore", "pipe", "pipe"] });
+    let err = "";
+    p.stderr?.on("data", (d) => (err += d.toString()));
+    p.on("error", reject);
+    p.on("close", (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`${cmd} ${argv.join(" ")} exited ${code}: ${err.trim()}`)),
+    );
+  });
 }
