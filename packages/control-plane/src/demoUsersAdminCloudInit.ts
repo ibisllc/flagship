@@ -317,6 +317,17 @@ SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts \\
     --in "$LUKS_KEY" | tr -d '\\n' || echo '')"
 shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
 
+# 7b. Daemon environment. server-daemon reads its two REQUIRED inputs
+#     (FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX) from the process
+#     env only; without them it logs "Missing required inputs" and exits
+#     2. systemd loads this file via EnvironmentFile= in the unit below.
+mkdir -p /etc/flagship
+cat > /etc/flagship/daemon.env <<ENVEOF
+FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
+FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX
+ENVEOF
+chmod 600 /etc/flagship/daemon.env
+
 # 8. Write systemd units. Three pieces, in order:
 #      flagship-data-services  — docker-compose'd postgres/minio/redis/adminer
 #      flagship-daemon         — the actual server-daemon
@@ -330,6 +341,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/flagship
+EnvironmentFile=/etc/flagship/daemon.env
 ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon
 Restart=on-failure
 RestartSec=5

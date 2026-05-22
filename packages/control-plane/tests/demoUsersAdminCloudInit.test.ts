@@ -187,6 +187,14 @@ describe("buildCloudConfigUserData", () => {
       "ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon",
     );
     expect(bootstrap).not.toContain("npx --workspace=@flagship/server-daemon run start");
+    // The daemon reads FLAGSHIP_SUBDOMAIN + FLAGSHIP_IDENTITY_PRIV_HEX from
+    // env only; the unit must load them via EnvironmentFile and the
+    // bootstrap must write that file. Regression: without this the daemon
+    // logs "Missing required inputs" and crash-loops (observed live
+    // 2026-05-22, restart counter 154).
+    expect(bootstrap).toContain("EnvironmentFile=/etc/flagship/daemon.env");
+    expect(bootstrap).toContain("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN");
+    expect(bootstrap).toContain("FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX");
     expect(bootstrap).toContain("flagship-first-boot-register.service");
     expect(bootstrap).toContain("/api/server/register");
     expect(bootstrap).toContain("/sealed-luks-key");
