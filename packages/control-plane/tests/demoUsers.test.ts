@@ -221,6 +221,23 @@ describe("handleCreateDemoUser", () => {
     expect(res.status).toBe(409);
   });
 
+  it("does NOT 409 over a prior DEMO claim (names are reusable)", async () => {
+    // A demo run claims the username with is_demo=true. After the demo
+    // row is deleted, the claim lingers — re-creating the same demo
+    // user must succeed, not 409. Regression for the burned-name bug.
+    await h.deps.usernames.put({
+      username: "demoalice",
+      irkPubHex: "ab".repeat(32),
+      claimedAt: 1,
+      isDemo: true,
+    });
+    const res = await handleCreateDemoUser(h.deps, {
+      username: "demoalice",
+      display: "x",
+    });
+    expect(res.status).toBe(200);
+  });
+
   it("is idempotent on second call for the same name", async () => {
     await handleCreateDemoUser(h.deps, {
       username: "demoalice",
@@ -288,6 +305,18 @@ describe("handleDeleteDemoUser", () => {
     const res = await handleDeleteDemoUser(h.deps, { username: "nothere" });
     expect(res.status).toBe(200);
     expect((res.body as Record<string, unknown>).deleted).toBe(false);
+  });
+
+  it("accepts legacy hyphenated names for cleanup (create stays strict)", async () => {
+    // demo-alice predates the hyphen-free rename; delete must still be
+    // able to tear down the orphan even though create now rejects the
+    // hyphen. Regression for the `delete demo-alice → 400` bug.
+    const h = mkHarness();
+    await seedDemoUser(h.deps, { username: "demo-alice", activeServerId: "777", state: "up" });
+    const res = await handleDeleteDemoUser(h.deps, { username: "demo-alice" });
+    expect(res.status).toBe(200);
+    expect((res.body as Record<string, unknown>).deleted).toBe(true);
+    expect(h.hetzner.calls.destroy).toEqual(["777"]);
   });
 
   it("keeps the row on Hetzner-destroy failure so cron can retry", async () => {

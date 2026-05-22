@@ -155,7 +155,17 @@ async function audit(
 // Username validation
 // ──────────────────────────────────────────────────────────────────────
 
-function validateDemoUsername(raw: unknown): {
+// Legacy hyphenated names (e.g. `demo-alice`) predate the hyphen-free
+// rename. CREATE stays strict (USERNAME_RE), but destructive cleanup
+// (delete) must still accept them so pre-rename orphans can be torn
+// down. delete just identifies an existing row, so accepting hyphens
+// is harmless.
+const LEGACY_USERNAME_RE = /^[a-z0-9-]{3,32}$/;
+
+function validateDemoUsername(
+  raw: unknown,
+  opts?: { allowLegacyHyphens?: boolean },
+): {
   ok: true;
   username: string;
 } | {
@@ -164,8 +174,15 @@ function validateDemoUsername(raw: unknown): {
 } {
   if (typeof raw !== "string") return { ok: false, reason: "username must be a string" };
   const u = raw.toLowerCase();
-  if (!USERNAME_RE.test(u)) {
-    return { ok: false, reason: "username must match [a-z0-9]{3,32} (no hyphens)" };
+  const allowHyphens = opts?.allowLegacyHyphens ?? false;
+  const re = allowHyphens ? LEGACY_USERNAME_RE : USERNAME_RE;
+  if (!re.test(u)) {
+    return {
+      ok: false,
+      reason: allowHyphens
+        ? "username must match [a-z0-9-]{3,32}"
+        : "username must match [a-z0-9]{3,32} (no hyphens)",
+    };
   }
   if (RESERVED_USERNAMES.has(u)) {
     return { ok: false, reason: "username is reserved" };
@@ -216,9 +233,13 @@ export async function handleCreateDemoUser(
     });
   }
 
-  // Real-account-username collision.
+  // Real-account-username collision. Demo claims are flagged is_demo
+  // (handleAdminClaimAndIssue sets it), so a prior demo claim must NOT
+  // block re-creating the same demo user — otherwise every demo name is
+  // burned after one run (delete doesn't drop the claim, and shouldn't
+  // need to). Only a genuine real-account claim (is_demo falsy) collides.
   const realClaim = await deps.usernames.get(username);
-  if (realClaim) {
+  if (realClaim && !realClaim.isDemo) {
     return conflict("username already claimed by a real account");
   }
 
@@ -293,7 +314,9 @@ export async function handleDeleteDemoUser(
   body: DeleteDemoUserBody | undefined,
 ): Promise<HandlerResponseWithHeaders> {
   if (!body) return malformed("malformed body");
-  const v = validateDemoUsername(body.username);
+  // Accept legacy hyphenated names here so pre-rename orphans (e.g.
+  // demo-alice) can still be torn down; CREATE remains hyphen-free.
+  const v = validateDemoUsername(body.username, { allowLegacyHyphens: true });
   if (!v.ok) return malformed(v.reason);
   const username = v.username;
   const row = await deps.storage.get(username);
