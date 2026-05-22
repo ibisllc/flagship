@@ -132,6 +132,10 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.4")
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    // Pure-JVM QR ENCODER for the cross-device pairing QR (Phase 3b).
+    // mlkit only DECODES; zxing core has no Android deps so it runs in
+    // unit tests too.
+    implementation("com.google.zxing:core:3.5.3")
 
     // Image loading (marketplace screenshots)
     implementation("io.coil-kt:coil-compose:2.7.0")
