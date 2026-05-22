@@ -72,26 +72,22 @@ public struct WelcomeScreen: View {
         )
     }
 
-    /// Always-on indicator of which backend the app is talking to.
-    /// Shown whenever the mock is active (you should always know you're
-    /// on fake data) or once the developer menu has been unlocked (so a
-    /// dev who's been toggling sees the current state); hidden in a
-    /// clean Release build that has never touched the toggle.
+    /// Shown ONLY in mock mode. Live is the normal mode and needs no
+    /// chrome; the badge is a loud reminder that you're on fake data,
+    /// plus the mock login hint. (Switching modes still fires a toast.)
     @ViewBuilder private var modeBadge: some View {
-        if !dev.useLiveClient || dev.unlocked {
-            let c = FSColors.scheme(scheme)
-            let live = dev.useLiveClient
-            let tint = live ? c.success : c.warning
+        if !dev.useLiveClient {
+            let tint = FSColors.scheme(scheme).warning
             HStack(spacing: 6) {
                 Circle().fill(tint).frame(width: 7, height: 7)
-                Text(live ? "LIVE DATA" : "MOCK · sign in as “demo”")
+                Text("MOCK · sign in as “demo”")
                     .font(FS.font.caption())
                     .foregroundColor(tint)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(Capsule().fill(tint.opacity(0.14)))
-            .accessibilityLabel(live ? "Live data mode" : "Mock data mode")
+            .accessibilityLabel("Mock data mode")
         }
     }
 }
