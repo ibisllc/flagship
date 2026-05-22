@@ -198,6 +198,96 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
     await expect(issuer.issue([])).rejects.toThrow(/at least one name/);
   });
 
+  it("reuses the client across retries so the account survives ('No account URL' regression)", async () => {
+    // The real acme.Client is FRESH per buildClient() and has no account.
+    // makeFakeClient's factory returns a SHARED client, which masks this:
+    // if the issuer rebuilt the client per issue() while caching the
+    // `accountReady` flag, retry #2's fresh client would skip
+    // createAccount and createOrder would throw "No account URL found,
+    // register account first" (observed live, demoent2 attempts 2-5).
+    // Caching the client keeps the registered account aligned with the flag.
+    let factoryCalls = 0;
+    let totalCreateAccount = 0;
+    const fakeCertPem = [
+      "-----BEGIN CERTIFICATE-----",
+      "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA",
+      "-----END CERTIFICATE-----",
+      "",
+    ].join("\n");
+    function freshClient(): MinimalAcmeClient {
+      let registered = false;
+      const order: AcmeOrder = {
+        status: "pending",
+        expires: new Date(Date.now() + 60_000).toISOString(),
+        identifiers: [],
+        authorizations: ["https://acme/authz/1"],
+        finalize: "https://acme/finalize",
+      };
+      const alpn: AcmeChallenge = {
+        type: "tls-alpn-01",
+        url: "https://acme/chall/alpn",
+        status: "pending",
+        token: "tok-alpn",
+      };
+      return {
+        async createAccount() {
+          registered = true;
+          totalCreateAccount++;
+          return {};
+        },
+        async createOrder(opts) {
+          if (!registered) {
+            throw new Error("No account URL found, register account first");
+          }
+          return { ...order, identifiers: opts.identifiers };
+        },
+        async getAuthorizations(o: AcmeOrder): Promise<AcmeAuthorization[]> {
+          return o.identifiers.map((id) => ({
+            identifier: { type: id.type, value: id.value },
+            status: "pending",
+            challenges: [alpn],
+          }));
+        },
+        async getChallengeKeyAuthorization(c) {
+          return `${c.token}.thumb`;
+        },
+        async completeChallenge() {
+          return {};
+        },
+        async waitForValidStatus() {
+          return {};
+        },
+        async finalizeOrder(o) {
+          return { ...o, status: "valid" };
+        },
+        async getCertificate() {
+          return fakeCertPem;
+        },
+      };
+    }
+    const alpnServer: AlpnChallengeServer = {
+      present() {
+        return () => {};
+      },
+    };
+    const issuer = new LetsEncryptIssuer({
+      email: "ops@flagshipserver.com",
+      environment: "staging",
+      accountKeyPem: "FAKEKEY",
+      alpn: alpnServer,
+      clientFactory: () => {
+        factoryCalls++;
+        return freshClient();
+      },
+      dns01PropagationDelayMs: 0,
+    });
+    // Two issuances mirror the in-process retry loop reusing one issuer.
+    await issuer.issue(["home.demoent.flagship.services"]);
+    await issuer.issue(["home.demoent.flagship.services"]);
+    expect(factoryCalls).toBe(1); // client built once, cached across retries
+    expect(totalCreateAccount).toBe(1); // account registered exactly once
+  });
+
   // ---- Regression: the two-pass walk (the actual demo-path bug) ----
   //
   // Build a fake client whose tls-alpn-01 validation throws, with the

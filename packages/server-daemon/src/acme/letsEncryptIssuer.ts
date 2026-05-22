@@ -111,12 +111,15 @@ const DEFAULT_DIRECTORY: Record<LeEnvironment, string> = {
 export class LetsEncryptIssuer implements AcmeIssuer {
   private readonly opts: LetsEncryptIssuerOptions;
   private accountReady = false;
+  /** Built once and reused across in-process retries — see issue(). */
+  private client?: MinimalAcmeClient;
 
   constructor(opts: LetsEncryptIssuerOptions) {
     this.opts = opts;
   }
 
-  /** Lazily build the underlying acme-client (cheap; constructed per issuance). */
+  /** Build the underlying acme-client. Cached on `this.client` after the
+   *  first issue() so the registered account survives in-process retries. */
   private buildClient(): MinimalAcmeClient {
     const directoryUrl = this.opts.directoryUrl ?? DEFAULT_DIRECTORY[this.opts.environment];
     if (this.opts.clientFactory) {
@@ -139,7 +142,14 @@ export class LetsEncryptIssuer implements AcmeIssuer {
         // observability is best-effort; never break issuance
       }
     };
-    const client = this.buildClient();
+    // Reuse ONE client across in-process retries. buildClient() makes a
+    // FRESH acme-client with no registered account; the cached
+    // `accountReady` flag would then skip createAccount, and the order
+    // fails with "No account URL found, register account first" on every
+    // retry after the first. Caching the client keeps the registered
+    // account aligned with the flag.
+    this.client ??= this.buildClient();
+    const client = this.client;
 
     if (!this.accountReady) {
       await client.createAccount({
