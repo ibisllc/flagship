@@ -1,6 +1,11 @@
 // Onboarding flow:
 //   Welcome
-//     ├─ Create your account → ChooseUsername → Biometric → CreateServer
+//     ├─ Create your account → ChooseUsername → Biometric → OpenAccount
+//     │     (Phase 2: open the ACCOUNT — ensure UMK + standalone username
+//     │      claim + name this device → Home with ZERO servers + an
+//     │      "add your first server" CTA. A server is a separate, later,
+//     │      repeatable resource added from Home; the claim no longer
+//     │      rides inside CreateServer's registerControlPlane.)
 //     └─ I already have an account → JoinAccountContainer (username-first
 //          resolveAccount preflight) → demo opens the sandbox directly;
 //          single/multi hand off to the WebAuthn-PRF recovery flow;
@@ -9,31 +14,19 @@
 
 package com.flagshipserver.app.ui.onboarding
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.flagshipserver.app.core.LocalAppState
-import com.flagshipserver.app.core.PodInfo
-import com.flagshipserver.app.core.SlugUtil
-import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.screens.BiometricSetupScreen
-import com.flagshipserver.app.ui.screens.BuildCodeScreen
 import com.flagshipserver.app.ui.screens.ChooseUsernameScreen
+import com.flagshipserver.app.ui.screens.OpenAccountScreen
 import com.flagshipserver.app.ui.screens.WelcomeScreen
-import com.flagshipserver.app.ui.theme.FS
-import java.util.UUID
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 @Composable
 fun OnboardingFlow(onFinished: () -> Unit) {
@@ -41,13 +34,41 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     val app = LocalAppState.current
     NavHost(navController = nav, startDestination = "welcome") {
         composable("welcome") { WelcomeScreen(nav) }
-        composable("username") { ChooseUsernameScreen(nav) }
-        composable("biometric") { BiometricSetupScreen(nav) }
-        composable("create-first") {
-            // BuildCodeScreen is the existing first-server stub on
-            // Android; in production this gets replaced by the QR-relay
-            // CreateServer flow.
-            BuildCodeScreen(nav)
+        composable("username") {
+            // CREATE path. Picking a username opens the ACCOUNT, not a
+            // server — thread the chosen handle forward to the
+            // biometric + open-account steps.
+            ChooseUsernameScreen(
+                onContinue = { username ->
+                    nav.navigate("biometric/" + URLEncoder.encode(username, "UTF-8"))
+                },
+            )
+        }
+        composable(
+            route = "biometric/{username}",
+            arguments = listOf(navArgument("username") { type = NavType.StringType }),
+        ) { entry ->
+            val username = URLDecoder.decode(entry.arguments?.getString("username") ?: "", "UTF-8")
+            BiometricSetupScreen(
+                onContinue = {
+                    nav.navigate("open-account/" + URLEncoder.encode(username, "UTF-8"))
+                },
+            )
+        }
+        composable(
+            route = "open-account/{username}",
+            arguments = listOf(navArgument("username") { type = NavType.StringType }),
+        ) { entry ->
+            val username = URLDecoder.decode(entry.arguments?.getString("username") ?: "", "UTF-8")
+            // Phase 2 — ensure UMK + STANDALONE username claim + name this
+            // device, then completeOnboarding with EMPTY pods. AppState
+            // flips isPaired ⇒ the shell swaps to Home (zero-server empty
+            // state). The server is added later from Home.
+            OpenAccountScreen(
+                username = username,
+                onOpened = onFinished,
+                onBack = { nav.popBackStack() },
+            )
         }
         composable("recover") {
             // Username-first Join. resolveAccount branches:
@@ -82,22 +103,6 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                 },
                 onBack = { nav.popBackStack() },
             )
-        }
-        composable("done") {
-            val user = app.currentUser.value ?: "you"
-            val slug = SlugUtil.slugify(user)
-            app.completeOnboarding(
-                username = user,
-                pods = listOf(
-                    PodInfo(
-                        podId = "pod-" + UUID.randomUUID().toString().take(6),
-                        name = "home",
-                        fqdn = "home.$slug.flagship.services",
-                        status = PodInfo.Status.ONLINE,
-                    ),
-                ),
-            )
-            onFinished()
         }
     }
 }

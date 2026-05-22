@@ -183,17 +183,17 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s6)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "Add your first server",
+                "Your account is ready",
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
             )
             Text(
-                "Order a pre-built box (~$199) or flash any old PC. Either way, about ten minutes.",
+                "Now add your first server. Order a pre-built box (~$199) or flash any old PC — either way, about ten minutes. You can add more servers anytime.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             )
             Spacer(Modifier.height(FS.space.s2))
-            FSPrimaryButton(label = "Add a server", onClick = onAddServer, block = true)
+            FSPrimaryButton(label = "Add your first server", onClick = onAddServer, block = true)
         }
     }
 }

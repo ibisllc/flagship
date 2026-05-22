@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -27,11 +27,18 @@ import com.flagshipserver.app.ui.theme.FS
 /**
  * D.2.3 — BiometricSetupScreen.
  *
- * Generates UMK in StrongBox-backed KeyStore (`Keystore.kt` already exists).
- * Derives IRK / BAK / SWK via HKDF. Toggle for cloud-recovery via Block Store.
+ * Generates the UMK in StrongBox-backed AndroidKeyStore (with a graceful
+ * fallback when StrongBox is absent) plus the cached 32-byte seed that
+ * backs the IRK HKDF. This is where the user-master-key is born during
+ * onboarding; the open-account step that follows derives the IRK from it
+ * and runs the standalone username claim.
+ *
+ * On Continue we hand control to the host (open-account); the toggle
+ * for cloud-recovery via Block Store is surfaced here for parity with
+ * iOS, wired in a later phase.
  */
 @Composable
-fun BiometricSetupScreen(nav: NavController) {
+fun BiometricSetupScreen(onContinue: () -> Unit) {
     var cloudRecovery by remember { mutableStateOf(true) }
 
     Column(
@@ -87,8 +94,15 @@ fun BiometricSetupScreen(nav: NavController) {
         FSPrimaryButton(
             label = "Generate keys & continue",
             onClick = {
-                // TODO: call Keystore.generateUMK() + DeriveKeys + register with .com
-                nav.navigate("home")
+                // Mint the UMK in StrongBox-backed AndroidKeyStore (best
+                // effort — fall back to a software key when StrongBox is
+                // absent) and ensure the cached seed that backs the IRK.
+                // The standalone username claim happens in the next
+                // (open-account) step.
+                runCatching { Keystore.generateUMK(useStrongBox = true) }
+                    .recoverCatching { Keystore.generateUMK(useStrongBox = false) }
+                runCatching { Keystore.loadOrCreateUmkSeed() }
+                onContinue()
             },
             block = true,
             large = true,
