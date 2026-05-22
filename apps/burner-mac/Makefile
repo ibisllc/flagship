@@ -1,4 +1,4 @@
-# Mac release pipeline for Flagship Burner.
+# Mac release pipeline for Flagship Assembler.
 #
 # Two flows:
 #   make build       — debug build to test locally (no cert needed)
@@ -16,11 +16,16 @@
 # (You can use an app-specific password from appleid.apple.com instead
 # of the API key — see the `notarize-with-password` target.)
 
-APP_NAME = FlagshipBurner
+# BIN_SRC = the binary swift-build emits (matches the SwiftPM target).
+# BIN     = the binary name inside the .app (renamed on copy).
+# APP_NAME = the user-facing .app bundle name (Finder + Dock).
+BIN_SRC = FlagshipBurner
+BIN = FlagshipAssembler
+APP_NAME = Flagship Assembler
 BUILD_DIR = .build/release
 APP_BUNDLE = $(BUILD_DIR)/$(APP_NAME).app
-ZIP_FILE = $(BUILD_DIR)/$(APP_NAME).zip
-DMG_FILE = $(BUILD_DIR)/$(APP_NAME).dmg
+ZIP_FILE = $(BUILD_DIR)/$(BIN).zip
+DMG_FILE = $(BUILD_DIR)/$(BIN).dmg
 
 .PHONY: build release sign notarize staple dmg clean check-env
 
@@ -60,12 +65,14 @@ bundle-cli:
 	@echo "✓ Bundled CLI: packages/flagship-burner/dist/flagship-burn.mjs"
 
 package-app: build-release bundle-cli
-	rm -rf $(APP_BUNDLE)
-	mkdir -p $(APP_BUNDLE)/Contents/MacOS
-	mkdir -p $(APP_BUNDLE)/Contents/Resources/flagship-burner
-	cp $(BUILD_DIR)/$(APP_NAME) $(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)
-	cp Info.plist $(APP_BUNDLE)/Contents/Info.plist
-	cp ../../packages/flagship-burner/dist/flagship-burn.mjs $(APP_BUNDLE)/Contents/Resources/flagship-burner/flagship-burn.mjs
+	rm -rf "$(APP_BUNDLE)"
+	mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
+	mkdir -p "$(APP_BUNDLE)/Contents/Resources/flagship-burner"
+	cp "$(BUILD_DIR)/$(BIN_SRC)" "$(APP_BUNDLE)/Contents/MacOS/$(BIN)"
+	cp Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
+	cp AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/AppIcon.icns"
+	cp menubar.png "$(APP_BUNDLE)/Contents/Resources/menubar.png"
+	cp ../../packages/flagship-burner/dist/flagship-burn.mjs "$(APP_BUNDLE)/Contents/Resources/flagship-burner/flagship-burn.mjs"
 	@echo "✓ Packaged: $(APP_BUNDLE)"
 
 # Sign with hardened runtime + entitlements. The hardened runtime is
@@ -75,13 +82,13 @@ sign: package-app
 	    --force --options runtime \
 	    --entitlements entitlements.plist \
 	    --timestamp \
-	    $(APP_BUNDLE)
+	    "$(APP_BUNDLE)"
 	@echo "✓ Signed: $(APP_BUNDLE)"
-	codesign -dvv $(APP_BUNDLE) 2>&1 | head -10
+	codesign -dvv "$(APP_BUNDLE)" 2>&1 | head -10
 
 # Zip the bundle (notarytool needs a zip / dmg / pkg).
 $(ZIP_FILE): $(APP_BUNDLE)
-	cd $(BUILD_DIR) && /usr/bin/ditto -c -k --keepParent $(APP_NAME).app $(APP_NAME).zip
+	cd $(BUILD_DIR) && /usr/bin/ditto -c -k --keepParent "$(APP_NAME).app" "$(BIN).zip"
 
 # Submit to Apple's notary service + wait for the verdict.
 notarize: $(ZIP_FILE)
@@ -105,18 +112,18 @@ notarize-with-password: $(ZIP_FILE)
 # Staple the notarization ticket onto the bundle so Gatekeeper accepts
 # it offline. Must run AFTER notarize succeeds.
 staple: $(APP_BUNDLE)
-	xcrun stapler staple $(APP_BUNDLE)
-	xcrun stapler validate $(APP_BUNDLE)
+	xcrun stapler staple "$(APP_BUNDLE)"
+	xcrun stapler validate "$(APP_BUNDLE)"
 	@echo "✓ Stapled"
 
 # Wrap the signed+notarized+stapled .app in a DMG that users can drag
 # into /Applications. The DMG is what you upload to your website /
 # GitHub release.
 dmg: $(APP_BUNDLE)
-	rm -f $(DMG_FILE)
+	rm -f "$(DMG_FILE)"
 	hdiutil create -volname "$(APP_NAME)" \
-	    -srcfolder $(APP_BUNDLE) \
-	    -ov -format UDZO $(DMG_FILE)
+	    -srcfolder "$(APP_BUNDLE)" \
+	    -ov -format UDZO "$(DMG_FILE)"
 	@echo "✓ DMG: $(DMG_FILE)"
 
 clean:

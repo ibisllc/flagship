@@ -306,6 +306,9 @@ struct WizardView: View {
                     }
                 }
                 .contentShape(Rectangle())
+                // Toggle when the label (the word "Log") is clicked, not
+                // just the disclosure chevron.
+                .onTapGesture { withAnimation { showLog.toggle() } }
             }
             .padding(.horizontal, FB.Spacing.s5)
             .padding(.vertical, FB.Spacing.s2)
@@ -492,12 +495,6 @@ private struct DiskPickerRow: View {
                             .font(FB.Font.caption())
                     }
                 }
-                if model.selectedDisk == nil {
-                    Text("Will be formatted to create one-time boot disk")
-                        .font(FB.Font.rowHint())
-                        .foregroundStyle(FB.Colors.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
                 pickerMenu
             }
         }
@@ -541,8 +538,10 @@ private struct DiskPickerRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else {
-                    Text("Choose drive…")
+                    Text("Choose drive to create boot disk (will be formatted)")
                         .foregroundStyle(FB.Colors.textMuted)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
             .menuStyle(.borderlessButton)

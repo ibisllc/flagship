@@ -93,21 +93,19 @@ struct FlagshipLogo: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        // Light: dark frame, white ring, teal core.
-        // Dark:  teal frame, teal ring, white core.
+        // Light: dark frame, teal core.  Dark: teal frame, white core.
+        // No ring — at small sizes the sub-pixel white band rendered
+        // unevenly (a partial arc in one corner), so the mark is just a
+        // solid frame + core.
         let isDark = scheme == .dark
         let frame = isDark ? FB.Colors.primary : FB.Colors.ink
-        let ring  = isDark ? FB.Colors.primary : Color.white
         let core  = isDark ? Color.white : FB.Colors.primary
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.18, style: .continuous)
+            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
                 .fill(frame)
             Circle()
-                .fill(ring)
-                .frame(width: size * 0.56, height: size * 0.56)
-            Circle()
                 .fill(core)
-                .frame(width: size * 0.50, height: size * 0.50)
+                .frame(width: size * 0.52, height: size * 0.52)
         }
         .frame(width: size, height: size)
     }

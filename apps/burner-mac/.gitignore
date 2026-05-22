@@ -1,0 +1,3 @@
+.build/
+# Intermediate iconset — regenerated from icon-src/appicon.svg into AppIcon.icns
+AppIcon.iconset/
