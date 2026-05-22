@@ -234,6 +234,7 @@ struct WizardView: View {
                     }
                     .buttonStyle(.link)
                     .font(FB.Font.caption())
+                    .pointerCursor()
                 } else {
                     Text(model.readinessSummary)
                         .font(FB.Font.caption())
@@ -303,6 +304,7 @@ struct WizardView: View {
                         Button("Clear") { model.clearLog() }
                             .buttonStyle(.link)
                             .font(FB.Font.caption())
+                            .pointerCursor()
                     }
                 }
                 .contentShape(Rectangle())
@@ -317,6 +319,12 @@ struct WizardView: View {
 }
 
 // MARK: - DropRow
+
+/// Uniform card height for all three input panes, sized for a title + one
+/// body line so they stay symmetric. A long server FQDN may wrap to two
+/// lines (lineLimit(2)); since that's the exception, the card grows for it
+/// rather than padding every pane to fit the rare case.
+private let cardMinHeight: CGFloat = 76
 
 enum DropRowState {
     case empty
@@ -355,6 +363,7 @@ private struct DropRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(FB.Spacing.s3)
+        .frame(maxWidth: .infinity, minHeight: cardMinHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: FB.Radius.md)
                 .fill(isTargeted
@@ -442,19 +451,15 @@ private struct DropRow: View {
                 }
             case .successDynamic(let primary, let secondary):
                 // 1-minute heartbeat for the countdown. TimelineView
-                // re-evaluates the closure each tick, no manual @State
-                // bookkeeping needed.
+                // re-evaluates the closure each tick. Domain + expiry are
+                // one concatenated label — "fqdn (expires in 5h 47m)" —
+                // that wraps to (at most) two lines.
                 TimelineView(.periodic(from: Date(), by: 60)) { context in
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(primary)
-                            .font(FB.Font.rowHint())
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if let s = secondary(context.date) {
-                            Text(s).font(FB.Font.caption())
-                                .foregroundStyle(FB.Colors.textMuted)
-                        }
-                    }
+                    Text(primary + (secondary(context.date).map { " (\($0))" } ?? ""))
+                        .font(FB.Font.rowHint())
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             case .error(let msg):
                 Text(msg)
@@ -499,6 +504,7 @@ private struct DiskPickerRow: View {
             }
         }
         .padding(FB.Spacing.s3)
+        .frame(maxWidth: .infinity, minHeight: cardMinHeight, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: FB.Radius.md)
                 .fill(isHovering ? FB.Colors.surfaceElev : FB.Colors.surface)
@@ -602,10 +608,22 @@ private struct HelpLink: View {
         Button(label) { NSWorkspace.shared.open(url) }
             .buttonStyle(.link)
             .font(FB.Font.caption())
-            .onHover { hovering in
-                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-            }
+            .pointerCursor()
     }
+}
+
+/// Show the pointing-hand cursor while hovered, so anything clickable
+/// (links, link-style buttons) reads as clickable.
+private struct PointerOnHover: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+extension View {
+    func pointerCursor() -> some View { modifier(PointerOnHover()) }
 }
 
 // MARK: - File picker
