@@ -19,15 +19,37 @@ import {
   verifyPushTokenRegister,
   type PushTokenRegister,
 } from "@flagship/protocol";
-import type { PushTokenStorage, UsernameStorage } from "@flagship/storage";
+import type {
+  AuditEventStorage,
+  PushTokenStorage,
+  UsernameStorage,
+} from "@flagship/storage";
+import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes, bytesToHex } from "./hex.js";
 import { forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
+
+/**
+ * Phase 3b — quarantine window for a device admitted via the vouched
+ * cross-device QR pairing path. 14 days, matching the
+ * `paired_sessions.quarantine_until` semantics on the daemon side and
+ * the v1.2 cascade (0028_account_type.sql). During this window the
+ * device is a non-admin peer (no revoke-others, no `ukey.*` admin
+ * reach) and the owner gets the recurring review-alert ladder.
+ */
+export const QUARANTINE_MS = 14 * 86_400_000;
 
 export interface PushDeps {
   pushTokens: PushTokenStorage;
   usernames: UsernameStorage;
   freshnessMs?: number;
   now?: () => number;
+  /**
+   * Phase 3b — optional audit sink. When wired, a vouched-admit
+   * registration (`quarantine: true`) emits a `device-added` audit row
+   * under the owner's account so the Activity feed records the join.
+   * Left unset on the plain push-register path → behavior unchanged.
+   */
+  auditEvents?: AuditEventStorage;
   /**
    * APNs / FCM relay function injected by the Worker. Takes the
    * resolved push-token records and the opaque payload + category;
@@ -59,9 +81,21 @@ interface RegisterBody {
 const MAX_LABEL_LEN = 64;
 const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
 
+/**
+ * Phase 3b — opt-in extras for the vouched cross-device admit path.
+ * Default (omitted) → the legacy plain push-register behavior is
+ * preserved bit-for-bit. When `quarantine` is true the freshly-
+ * registered token gets `quarantine_until = now + QUARANTINE_MS`
+ * stamped and a `device-added` audit row is emitted.
+ */
+export interface PushRegisterOptions {
+  quarantine?: boolean;
+}
+
 export async function handlePushRegister(
   deps: PushDeps,
   body: RegisterBody | undefined,
+  options?: PushRegisterOptions,
 ): Promise<HandlerResponse> {
   const r = body?.request;
   if (
@@ -115,6 +149,13 @@ export async function handlePushRegister(
   if (Math.abs(now - r.issuedAt) > freshness) return forbidden("stale request");
 
   const tokenId = generateTokenId();
+  // Phase 3b — a vouched cross-device admit stamps the 14-day
+  // quarantine on the row at insert time (rather than a follow-up
+  // setQuarantineUntil) so the device is never momentarily un-
+  // quarantined between put + stamp. quarantineAlertsFiredBitmap stays
+  // 0; the cron OR-s in the T+0 rung on its first tick.
+  const quarantine = options?.quarantine === true;
+  const quarantineUntil = quarantine ? now + QUARANTINE_MS : 0;
   await deps.pushTokens.put({
     tokenId,
     username: r.username,
@@ -125,8 +166,25 @@ export async function handlePushRegister(
     label: r.label,
     registeredAt: now,
     lastSeenAt: now,
+    quarantineUntil,
   });
-  return ok({ ok: true, tokenId });
+  if (quarantine && deps.auditEvents) {
+    // Best-effort: the audit insert never fails the admission. The
+    // device-added row carries quarantineUntil so the Activity feed
+    // renders "joined — under review until …".
+    await recordAuditEvent(
+      { auditEvents: deps.auditEvents },
+      {
+        username: r.username.toLowerCase(),
+        eventKind: "device-added",
+        detail: `New device joined via pairing: ${r.label}`,
+        devicePrefix: tokenId.slice(0, 8),
+        postedAt: now,
+        quarantineUntil,
+      },
+    );
+  }
+  return ok({ ok: true, tokenId, ...(quarantine ? { quarantineUntil } : {}) });
 }
 
 interface RelayBody {

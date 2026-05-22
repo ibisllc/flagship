@@ -797,6 +797,24 @@ export interface PushTokenRecord {
    * quarantine_until > now).
    */
   quarantineUntil?: number;
+  /**
+   * Phase 3b (cross-device QR pairing) — bitfield tracking which
+   * scheduled "review your trusted devices" alerts have ALREADY
+   * fired for this freshly-admitted (quarantined) device. Mirrors
+   * `pending_re_pairs.alerts_fired_bitmap`: the scheduler OR-s in a
+   * single power-of-2 bit per ladder rung, so a repeated tick past
+   * the same offset is a no-op. Absent / 0 = nothing fired yet.
+   *
+   *   bit 0 = T+0   (admit)
+   *   bit 1 = T+1d
+   *   bit 2 = T+3d
+   *   bit 3 = T+7d
+   *   bit 4 = T+13d (last nudge before quarantine lifts at T+14d)
+   *
+   * Only meaningful while `quarantineUntil > now`; once the
+   * quarantine lifts the scheduler stops walking the row.
+   */
+  quarantineAlertsFiredBitmap?: number;
 }
 
 export interface PushTokenStorage {
@@ -814,6 +832,23 @@ export interface PushTokenStorage {
    * Idempotent — repeated calls with the same untilMs are no-ops.
    */
   setQuarantineUntil(tokenId: string, untilMs: number): Promise<boolean>;
+  /**
+   * Phase 3b — walk every push-token row still under quarantine
+   * (`quarantine_until > now`), capped at `limit` (default 100).
+   * Backed by `idx_push_tokens_quarantine`. Used by the cron-driven
+   * `scheduleQuarantineAlerts` so it can OR-in the next-due
+   * "review your trusted devices" bit on each device crossing a
+   * T+0/T+1d/T+3d/T+7d/T+13d threshold. Returns rows in
+   * registration-ascending order so the oldest admit fires first.
+   */
+  listQuarantined(now: number, limit?: number): Promise<PushTokenRecord[]>;
+  /**
+   * Phase 3b — OR a single new bit into `quarantine_alerts_fired_bitmap`
+   * for the given push-token row. Returns the post-write bitmap so the
+   * caller can confirm idempotency, or 0 if the row no longer exists.
+   * No-op (returns the existing value) if the bit was already set.
+   */
+  orInQuarantineAlertBit(tokenId: string, bit: number): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
