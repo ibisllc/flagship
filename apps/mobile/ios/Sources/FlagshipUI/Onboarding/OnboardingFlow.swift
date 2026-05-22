@@ -1,5 +1,4 @@
 import SwiftUI
-import CryptoKit
 import FlagshipCore
 import FlagshipAPI
 
@@ -19,10 +18,12 @@ import FlagshipAPI
 ///           → preflight /api/account/resolve (200 always):
 ///             ├─ demo    → DemoFixtures.activate (attach a new device)
 ///             ├─ unknown → inline "no account by that name" state
-///             └─ single/multi → RecoverFromWelcomeContainer
-///                       (WebAuthn-PRF recovery → PostRecoveryChoice).
-///           Phase 3 replaces the single/multi leaf with the
-///           LoginViewModel state machine.
+///             └─ single/multi → RealAccountLoginScreen — the Phase-3
+///                       state machine (RealAccountLoginViewModel):
+///                       no-recovery STATE / single 7-day-grace takeover
+///                       / multi 24h-grace + recovery-TOTP takeover →
+///                       install UMK → re-pair → label this device
+///                       `admin` → completeOnboarding.
 public struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @State private var path: [OnboardingRoute] = []
@@ -68,8 +69,8 @@ public struct OnboardingFlow: View {
                     // Username-first Join. The single preflight branches:
                     // demo attaches a device + opens the sandbox here;
                     // unknown renders inline on the screen; single/multi
-                    // push the existing passkey container (Phase 3
-                    // replaces that with the LoginViewModel state machine).
+                    // push the Phase-3 RealAccountLoginScreen, which runs
+                    // the real takeover state machine.
                     JoinUsernameScreen(
                         onDemo: { username, demoServer in
                             DemoFixtures.activate(
@@ -79,17 +80,20 @@ public struct OnboardingFlow: View {
                             )
                         },
                         onRealAccount: { resolution in
-                            path.append(.recoverWithPasskey(username: resolution.username))
+                            path.append(.realAccountLogin(resolution: resolution))
                         }
                     )
-                case .recoverWithPasskey(let username):
-                    RecoverFromWelcomeContainer(
-                        onComplete: { choice, seed in
-                            completeRecoveryPair(
-                                username: username,
-                                choice: choice,
-                                recoveredSeed: seed
-                            )
+                case .realAccountLogin(let resolution):
+                    // Phase 3 — the real single/multi state machine. The
+                    // VM runs the Mock passkey-PRF unwrap, installs the
+                    // recovered UMK, and initiates the takeover re-pair
+                    // (multi attaches the recovery-TOTP / recovery-code
+                    // as totpProof). On completion the host records this
+                    // device's `admin` label and flips AppState paired.
+                    RealAccountLoginScreen(
+                        resolution: resolution,
+                        onComplete: { username in
+                            completeRealAccountLogin(username: username)
                         },
                         onBack: { path.removeLast() }
                     )
@@ -100,36 +104,31 @@ public struct OnboardingFlow: View {
 
     // MARK: - State writes
 
-    /// Post-recovery completion. The WebAuthn-PRF flow returned a
-    /// recovered UMK seed and the user picked a RecoveryChoice. v1
-    /// behaviour:
-    ///   - .keepBothDevices  → install UMK locally; mark paired;
-    ///                         pods will appear once /api/users/:u/pods
-    ///                         (or a /devices flow) is consulted.
-    ///   - .replaceLostDevice → same install, but B7 layers an IRK
-    ///                         rotation on top. The rotation isn't in
-    ///                         this commit — TODO routes through here
-    ///                         until B7 wires the /re-pair POST.
-    ///   - .wipeAndRestart    → blocked at the screen layer in v1.
-    ///
-    /// **TODO (cross-commit):** `Keystore.installUMK(seed:)` doesn't
-    /// exist yet; B3 lands the recovery navigation but the actual
-    /// Secure Enclave install happens in a follow-up. For now we mark
-    /// the user paired with an empty pod list so the shell renders.
-    fileprivate func completeRecoveryPair(
-        username: String,
-        choice: RecoveryChoice,
-        recoveredSeed: SymmetricKey
-    ) {
-        // Best-effort: stash the seed under a known key in memory so a
-        // follow-up commit can install it. We deliberately do NOT
-        // serialize it here.
-        _ = recoveredSeed
-        _ = choice
-        // The username now comes from the login preflight (resolved on
-        // the username-first Join screen), retiring the old
-        // "recovered-user" placeholder. The real Keystore.installUMK +
-        // /devices pod hydration land in Phase 3.
+    /// Phase 3 — completion of the real single/multi takeover. By the
+    /// time we're here `RealAccountLoginViewModel` has ALREADY:
+    ///   - run the Mock passkey-PRF unwrap of the cloud UMK,
+    ///   - installed the recovered UMK via `Keystore.installUMK` (the
+    ///     stub `completeRecoveryPair` left it on the floor — retired),
+    ///   - initiated the takeover re-pair (multi with `totpProof`).
+    /// So the host's only job is to record this device's **`admin`**
+    /// label (the no-lockout / `ukey.*`-reach primitive) and flip
+    /// AppState to paired with the resolved username (pods hydrate from
+    /// /devices later — Phase 4). The "recovered-user" placeholder is
+    /// gone; the username comes from the preflight throughout.
+    fileprivate func completeRealAccountLogin(username: String) {
         app.completeOnboarding(username: username, pods: [])
+        // Label this device `admin`. A credential-proven takeover makes
+        // the new device the admin (reach = ukey.*); record it locally
+        // so the profile + any device-label surface reflects it.
+        // completeOnboarding upserts the profile by cloudName, so this
+        // refresh sets the label without duplicating the entry.
+        app.addProfile(
+            Profile(
+                cloudName: username,
+                deviceLabel: RealAccountLoginViewModel.adminDeviceLabel,
+                createdAt: app.activeProfile?.createdAt ?? Date()
+            ),
+            setActive: true
+        )
     }
 }

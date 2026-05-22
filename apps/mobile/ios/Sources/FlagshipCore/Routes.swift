@@ -1,4 +1,5 @@
 import Foundation
+import FlagshipAPI
 
 /// Typed navigation destinations per tab. Each NavigationStack inside the
 /// RootShell uses one of these as its path element type so we get
@@ -92,15 +93,21 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// screen is a bare-username input; on submit a single preflight
     /// (`/api/account/resolve`, 200 always) branches: demo attaches a
     /// new device + opens the sandbox; unknown renders an inline state;
-    /// single/multi push `.recoverWithPasskey`. This replaces the old
+    /// single/multi push `.realAccountLogin`. This replaces the old
     /// `assertAny()`-first recovery entry — Join no longer 404s.
     case recoverFromWelcome
-    /// WebAuthn-PRF recovery for a resolved real account. Fetches the
-    /// wrapped UMK from flagshipserver.com using the user's passkey
-    /// (iCloud Keychain on Apple-paired devices, or a hardware
-    /// authenticator). After unwrap, presents PostRecoveryChoice. The
-    /// resolved `username` (from the preflight) replaces the old
-    /// "recovered-user" placeholder. Phase 3 replaces this whole leaf
-    /// with the LoginViewModel single/multi state machine.
-    case recoverWithPasskey(username: String)
+    /// Phase 3 — the real single/multi login state machine for a
+    /// resolved account. Carries the full `AccountResolution` from the
+    /// preflight so the downstream screen branches on `kind` / `recovery`
+    /// / `graceModel` WITHOUT re-resolving. Drives:
+    ///   - `recovery.present == false` → a clean STATE (single vs multi
+    ///     copy), never a 404.
+    ///   - `single` (recovery) → passkey-PRF unwrap → 7-day-grace
+    ///     TAKEOVER → install UMK → initiate re-pair → admin label.
+    ///   - `multi` (recovery + TOTP) → passkey-PRF + recovery-TOTP /
+    ///     recovery-code → 24h-grace TAKEOVER → install UMK → admin.
+    /// Replaces the Phase-1 stopgap that pushed the old passkey
+    /// recovery container. (`AccountResolution` is Hashable so it rides
+    /// the typed nav path directly.)
+    case realAccountLogin(resolution: AccountResolution)
 }
