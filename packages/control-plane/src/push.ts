@@ -16,7 +16,9 @@
  */
 
 import {
+  verifyDeviceAdmit,
   verifyPushTokenRegister,
+  type DeviceAdmit,
   type PushTokenRegister,
 } from "@flagship/protocol";
 import type {
@@ -90,6 +92,18 @@ const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
  */
 export interface PushRegisterOptions {
   quarantine?: boolean;
+  /**
+   * Phase 3b — set ONLY by the vouched cross-device admit path
+   * (`handleVouchedDeviceAdmit`), which has already verified an
+   * IRK-signed `DeviceAdmit` envelope binding this device's pubkey.
+   * That admit IS the IRK's consent, so the redundant
+   * `PushTokenRegister` IRK signature is not required: the incoming
+   * device does not hold the account IRK and cannot produce one.
+   *
+   * Default (omitted / false) → the legacy register path verifies the
+   * IRK signature exactly as before, bit-for-bit.
+   */
+  skipSignatureVerify?: boolean;
 }
 
 export async function handlePushRegister(
@@ -142,7 +156,13 @@ export async function handlePushRegister(
     label: r.label,
     issuedAt: r.issuedAt,
   };
-  if (!verifyPushTokenRegister(claim, sig, irkPub)) return forbidden("invalid signature");
+  // Phase 3b — the vouched-admit path has already verified the IRK's
+  // consent (the DeviceAdmit envelope); the incoming device cannot
+  // produce a PushTokenRegister IRK signature. Every other caller
+  // still enforces it.
+  if (options?.skipSignatureVerify !== true) {
+    if (!verifyPushTokenRegister(claim, sig, irkPub)) return forbidden("invalid signature");
+  }
 
   const freshness = deps.freshnessMs ?? 5 * 60_000;
   const now = (deps.now ?? (() => Date.now()))();
@@ -185,6 +205,112 @@ export async function handlePushRegister(
     );
   }
   return ok({ ok: true, tokenId, ...(quarantine ? { quarantineUntil } : {}) });
+}
+
+/**
+ * Phase 3b — POST /api/users/:u/devices/admit
+ *
+ * The vouched cross-device admit. Body carries:
+ *   - `admit`     : the DeviceAdmit envelope { username, newDevicePubHex, issuedAt }
+ *   - `admitSig`  : Ed25519 over the admit, signed by the account's CURRENT IRK
+ *   - `request`   : the same push-token registration fields handlePushRegister takes
+ *   - `signature` : the PushTokenRegister signature (carried for storage; NOT
+ *                   verified here — the admit is the IRK consent)
+ *
+ * Verify gate (rejects 401/403):
+ *   (a) the DeviceAdmit signature verifies under `users.irk_pub_hex`,
+ *   (b) the admit's issuedAt is fresh (~5 min),
+ *   (c) the admit username matches the :u path AND the register body,
+ *
+ * On success → handlePushRegister(deps, body, { quarantine: true,
+ * skipSignatureVerify: true }) so the device lands quarantined and a
+ * `device-added` audit fires (when `auditEvents` is wired). The admit
+ * binds `newDevicePubHex` so a captured admit can't be re-aimed at a
+ * different device.
+ */
+interface AdmitBody {
+  admit?: {
+    username?: string;
+    newDevicePubHex?: string;
+    issuedAt?: number;
+  };
+  admitSig?: string;
+  request?: RegisterBody["request"];
+  signature?: string;
+}
+
+const DEVICE_PUB_HEX_RE = /^[0-9a-f]{64}$/;
+
+export async function handleVouchedDeviceAdmit(
+  deps: PushDeps,
+  username: string,
+  body: AdmitBody | undefined,
+): Promise<HandlerResponse> {
+  const a = body?.admit;
+  if (
+    !a ||
+    typeof a.username !== "string" ||
+    typeof a.newDevicePubHex !== "string" ||
+    typeof a.issuedAt !== "number" ||
+    typeof body?.admitSig !== "string"
+  ) {
+    return malformed("malformed admit");
+  }
+  // username/url match: the admit MUST be for the account named in the
+  // path, and the register body (if present) MUST agree.
+  if (a.username.toLowerCase() !== username.toLowerCase()) {
+    return forbidden("admit username / url mismatch");
+  }
+  if (
+    body.request &&
+    typeof body.request.username === "string" &&
+    body.request.username.toLowerCase() !== a.username.toLowerCase()
+  ) {
+    return forbidden("register username does not match admit");
+  }
+  const newDevicePubHex = a.newDevicePubHex.toLowerCase();
+  if (!DEVICE_PUB_HEX_RE.test(newDevicePubHex)) {
+    return malformed("newDevicePubHex must be 32 bytes hex");
+  }
+
+  const userRec = await deps.usernames.get(a.username);
+  if (!userRec) return notFound("username not registered");
+
+  let admitSig: Uint8Array;
+  let irkPub: Uint8Array;
+  try {
+    admitSig = hexToBytes(body.admitSig);
+    irkPub = hexToBytes(userRec.irkPubHex);
+  } catch {
+    return malformed("invalid hex");
+  }
+
+  const admit: DeviceAdmit = {
+    username: a.username,
+    newDevicePubHex,
+    issuedAt: a.issuedAt,
+  };
+  // (a) The admit MUST verify under the account's CURRENT registered
+  // IRK — that's the vouch. A bad / wrong-key admit is 401.
+  if (!verifyDeviceAdmit(admit, admitSig, irkPub)) {
+    return { status: 401, body: { error: "invalid admit proof" } };
+  }
+  // (b) Freshness — bound replay of a captured admit. Mirrors the
+  // push-register window.
+  const freshness = deps.freshnessMs ?? 5 * 60_000;
+  const now = (deps.now ?? (() => Date.now()))();
+  if (Math.abs(now - a.issuedAt) > freshness) {
+    return { status: 401, body: { error: "stale admit proof" } };
+  }
+
+  // The admit is valid: admit the incoming device QUARANTINED. We
+  // reuse handlePushRegister for the storage + quarantine + audit
+  // path; skipSignatureVerify is safe here because the IRK already
+  // consented via the admit envelope (the incoming device holds no IRK).
+  return handlePushRegister(deps, { request: body.request, signature: body.signature }, {
+    quarantine: true,
+    skipSignatureVerify: true,
+  });
 }
 
 interface RelayBody {

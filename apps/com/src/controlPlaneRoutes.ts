@@ -86,6 +86,7 @@ import {
   handlePushRegister,
   handlePushRelay,
   handlePushRevoke,
+  handleVouchedDeviceAdmit,
   handleLlmPromoIssue,
   handleLlmPromoStatus,
   handleDeleteWebauthnRecovery,
@@ -342,6 +343,12 @@ const ROUTE_RE = {
   UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
   USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
+  // Phase 3b — vouched cross-device admit. The admin signs a
+  // DeviceAdmit (under the account IRK) binding the incoming device's
+  // fresh pubkey; the incoming device presents it here on register and
+  // is admitted QUARANTINED. The `/admit` literal can't collide with
+  // the disconnect matcher (which requires a trailing `/disconnect`).
+  USER_DEVICE_ADMIT: /^\/api\/users\/([^/]+)\/devices\/admit$/,
   // v1.2 Phase 2 — IRK-signed disconnect-a-sibling. Quarantine-gated
   // on the caller's push_token row.
   USER_DEVICE_DISCONNECT: /^\/api\/users\/([^/]+)\/devices\/([^/]+)\/disconnect$/,
@@ -1419,6 +1426,22 @@ export async function tryControlPlane(
       status: 200,
       body: { key: env.WEBPUSH_VAPID_PUBLIC_KEY_B64URL },
     });
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.USER_DEVICE_ADMIT))) {
+    // Phase 3b — vouched cross-device admit. Verifies the DeviceAdmit
+    // envelope under the account's registered IRK, then admits the
+    // incoming device QUARANTINED + fires a device-added audit row.
+    return finish(
+      await handleVouchedDeviceAdmit(
+        {
+          pushTokens: storage.pushTokens,
+          usernames: storage.usernames,
+          auditEvents: storage.auditEvents,
+        },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
   }
   if (method === "POST" && ROUTE_RE.PUSH_REGISTER.test(path)) {
     return finish(
