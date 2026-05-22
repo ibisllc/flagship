@@ -319,10 +319,30 @@ public struct RePairInitiateRequest: Encodable, Sendable {
             self.oldIrkPub = oldIrkPub; self.issuedAt = issuedAt
         }
     }
+
+    /// v1.2 — the out-of-Apple second factor the Worker REQUIRES when
+    /// `account_type === 'multi'`. Carries a live 6-digit TOTP or a
+    /// 10-char recovery code beside (NOT inside) the signed envelope —
+    /// codes are ephemeral so they don't belong in canonical bytes
+    /// (see RePairInitiate.totpProof in packages/protocol/src/auth.ts).
+    /// Omitted for single-device re-pairs. `method` is one of the two
+    /// allowed literals the Worker validates structurally.
+    public struct TotpProof: Encodable, Equatable, Sendable {
+        public let code: String
+        public let method: String   // "totp" | "recovery"
+        public init(code: String, method: String) {
+            self.code = code; self.method = method
+        }
+    }
+
     public let request: Inner
     public let signature: String      // hex; Ed25519 over canonical-bytes by NEW IRK
-    public init(request: Inner, signature: String) {
+    /// Present only for multi-device takeovers. The Worker rejects a
+    /// multi re-pair that omits it (401) and ignores it on single.
+    public let totpProof: TotpProof?
+    public init(request: Inner, signature: String, totpProof: TotpProof? = nil) {
         self.request = request; self.signature = signature
+        self.totpProof = totpProof
     }
 }
 
@@ -755,7 +775,7 @@ public struct TestAccountMeta: Codable, Equatable, Sendable {
 /// shape produced by `demoServerBlockFromRow` in
 /// packages/control-plane/src/demoUsers.ts. See
 /// docs/sample-users.md §10.9.
-public struct DemoServerBlock: Codable, Equatable, Sendable {
+public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
     /// e.g. `home.demo-alice.flagship.services`. The single device the
     /// new demo-mode renders.
     public let fqdn: String
@@ -787,7 +807,7 @@ public struct DemoServerBlock: Codable, Equatable, Sendable {
         }
     }
 
-    public enum Lifecycle: String, Sendable, Equatable {
+    public enum Lifecycle: String, Sendable, Equatable, Hashable {
         case none, provisioning, up
     }
 }
@@ -905,11 +925,11 @@ public enum DeviceScope: String, Codable, Equatable, Sendable, CaseIterable {
 ///                 sandbox via DemoFixtures.activate(demoServer:).
 ///   - "unknown" → render "No Flagship account by that name" (not a 404).
 ///   - "single" / "multi" → real-account recovery branches (Phase 3).
-public struct AccountResolution: Codable, Equatable, Sendable {
+public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
     /// The recovery sub-block: whether a cloud-stored recovery envelope
     /// exists for the account, whether fetching it is gated behind a
     /// passphrase/fetch-token, and (when present) the credentialId.
-    public struct Recovery: Codable, Equatable, Sendable {
+    public struct Recovery: Codable, Equatable, Hashable, Sendable {
         public let present: Bool
         public let hasFetchGate: Bool
         public let credentialId: String?
@@ -923,7 +943,7 @@ public struct AccountResolution: Codable, Equatable, Sendable {
     /// Forward-compatible decode of the account `kind`. An unknown
     /// future value parses to `.unknown` so an older client renders the
     /// "no account" state instead of crashing on a newer Worker.
-    public enum Kind: String, Codable, Equatable, Sendable {
+    public enum Kind: String, Codable, Equatable, Hashable, Sendable {
         case demo
         case single
         case multi
@@ -938,7 +958,7 @@ public struct AccountResolution: Codable, Equatable, Sendable {
     /// Server-derived recovery-speed hint so every client renders
     /// identical copy without re-deriving the account-type matrix.
     /// Unknown future values parse to `.none`.
-    public enum GraceModel: String, Codable, Equatable, Sendable {
+    public enum GraceModel: String, Codable, Equatable, Hashable, Sendable {
         case instant
         case sevenDay = "7d"
         case twentyFourHourTotp = "24h-totp"
@@ -1323,6 +1343,21 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> RePairInitiateResponse {
         try await tick()
         lastRePairInitiate = (username, body, ifMatch)
+        // v1.2 — mirror the Worker's multi-device gate: a re-pair on a
+        // `multi` account is rejected (401) unless it carries a
+        // structurally-valid totpProof (non-empty code + an allowed
+        // method). Single-device accounts don't require one. Lets the
+        // login state machine + its tests exercise the second-factor
+        // requirement against the Mock.
+        if accountTypeByUser[username.lowercased()] == "multi" {
+            let proof = body.totpProof
+            let methodOk = proof?.method == "totp" || proof?.method == "recovery"
+            let codeOk = !(proof?.code.isEmpty ?? true)
+            guard let proof, methodOk, codeOk else {
+                throw ScreensClientError.http(status: 401, message: "totpProof required for multi-device re-pair")
+            }
+            _ = proof
+        }
         switch rePairBehavior {
         case .staleEtag(let etag):
             throw ScreensClientError.http(status: 412, message: "{\"error\":\"stale\",\"currentEtag\":\"\(etag)\"}")
