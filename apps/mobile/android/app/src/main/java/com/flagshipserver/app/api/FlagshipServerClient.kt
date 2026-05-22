@@ -284,6 +284,13 @@ data class WipeRestartResponse(
 data class RePairInitiateRequest(
     val request: Inner,
     val signature: String,
+    /** v1.2 — second factor for a MULTI-device takeover. NOT in the
+     *  signed canonical bytes (codes are ephemeral); rides beside the
+     *  envelope. The Worker REQUIRES it when `account_type === 'multi'`
+     *  (rePair.ts:311-340) and 401s without it. Absent on single-device
+     *  takeovers. Mirror of the Worker `body.totpProof` shape +
+     *  RePairInitiate.totpProof on iOS. */
+    val totpProof: TotpProof? = null,
 ) {
     @Serializable
     data class Inner(
@@ -291,6 +298,15 @@ data class RePairInitiateRequest(
         val newIrkPub: String,   // hex
         val oldIrkPub: String,   // hex
         val issuedAt: Long,      // ms
+    )
+
+    /** A 6-digit TOTP sample OR a single-use recovery code, tagged with
+     *  which it is so the Worker routes verification. `method` is
+     *  "totp" | "recovery" (rePair.ts:331). */
+    @Serializable
+    data class TotpProof(
+        val code: String,
+        val method: String,
     )
 }
 
