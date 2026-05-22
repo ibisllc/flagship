@@ -62,21 +62,40 @@ struct WizardView: View {
 
     // MARK: - Rows
 
+    /// A clickable card with its help link sitting just *below and
+    /// outside* the card, so the link isn't part of the drop/click target.
+    private func optionGroup<Card: View>(
+        @ViewBuilder card: () -> Card,
+        linkLabel: String,
+        linkURL: URL
+    ) -> some View {
+        VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+            card()
+            HelpLink(label: linkLabel, url: linkURL)
+                .padding(.leading, FB.Spacing.s1)
+        }
+        .padding(.bottom, FB.Spacing.s2)
+    }
+
     private var recipeRow: some View {
-        DropRow(
-            icon: "doc.text.fill",
-            title: "Certificate",
-            description: "The json certificate file generated online",
-            linkLabel: "where to get one?",
-            linkURL: FlagshipLinks.certificate,
-            state: recipeRowState(),
-            isReady: model.verified != nil,
-            onDrop: { url in model.acceptRecipeFile(url: url) },
-            onChoose: {
-                if let url = pickFile(types: [.json, .data]) {
-                    model.acceptRecipeFile(url: url)
-                }
-            }
+        optionGroup(
+            card: {
+                DropRow(
+                    icon: "doc.text.fill",
+                    title: "Certificate",
+                    description: "The json certificate file generated online",
+                    state: recipeRowState(),
+                    isReady: model.verified != nil,
+                    onDrop: { url in model.acceptRecipeFile(url: url) },
+                    onChoose: {
+                        if let url = pickFile(types: [.json, .data]) {
+                            model.acceptRecipeFile(url: url)
+                        }
+                    }
+                )
+            },
+            linkLabel: "Where to get one?",
+            linkURL: FlagshipLinks.certificate
         )
     }
 
@@ -99,20 +118,24 @@ struct WizardView: View {
     }
 
     private var isoRow: some View {
-        DropRow(
-            icon: "opticaldisc.fill",
-            title: "Linux ISO",
-            description: "Please use one of the approved distributions for best results",
-            linkLabel: "List of recommended distros",
-            linkURL: FlagshipLinks.recommendedDistros,
-            state: isoRowState(),
-            isReady: model.iso != nil,
-            onDrop: { url in model.acceptISOFile(url: url) },
-            onChoose: {
-                if let url = pickFile(types: [.diskImage, .data]) {
-                    model.acceptISOFile(url: url)
-                }
-            }
+        optionGroup(
+            card: {
+                DropRow(
+                    icon: "opticaldisc.fill",
+                    title: "Linux ISO",
+                    description: "Please use one of the approved distributions for best results",
+                    state: isoRowState(),
+                    isReady: model.iso != nil,
+                    onDrop: { url in model.acceptISOFile(url: url) },
+                    onChoose: {
+                        if let url = pickFile(types: [.diskImage, .data]) {
+                            model.acceptISOFile(url: url)
+                        }
+                    }
+                )
+            },
+            linkLabel: "List of recommended distros.",
+            linkURL: FlagshipLinks.recommendedDistros
         )
     }
 
@@ -124,7 +147,11 @@ struct WizardView: View {
     }
 
     private var diskRow: some View {
-        DiskPickerRow(model: model)
+        optionGroup(
+            card: { DiskPickerRow(model: model) },
+            linkLabel: "How does it work?",
+            linkURL: FlagshipLinks.bootingProcess
+        )
     }
 
     // MARK: - Bake
@@ -262,14 +289,13 @@ private struct DropRow: View {
     let icon: String
     let title: String
     let description: String
-    let linkLabel: String
-    let linkURL: URL
     let state: DropRowState
     let isReady: Bool
     let onDrop: (URL) -> Void
     let onChoose: () -> Void
 
     @State private var isTargeted = false
+    @State private var isHovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: FB.Spacing.s3) {
@@ -281,7 +307,6 @@ private struct DropRow: View {
                     statusIcon
                 }
                 stateBody
-                HelpLink(label: linkLabel, url: linkURL)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -290,19 +315,23 @@ private struct DropRow: View {
             RoundedRectangle(cornerRadius: FB.Radius.md)
                 .fill(isTargeted
                       ? FB.Colors.primary.opacity(0.06)
-                      : FB.Colors.surface)
+                      : (isHovering ? FB.Colors.surfaceElev : FB.Colors.surface))
         )
         .overlay(
             RoundedRectangle(cornerRadius: FB.Radius.md)
                 .strokeBorder(
                     isTargeted ? FB.Colors.primary
                         : (isReady ? FB.Colors.success.opacity(0.4)
-                           : FB.Colors.border),
+                           : (isHovering ? FB.Colors.borderStrong : FB.Colors.border)),
                     lineWidth: isTargeted ? 1.5 : 1
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: FB.Radius.md))
         .onTapGesture(perform: onChoose)
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             guard let p = providers.first else { return false }
             _ = p.loadObject(ofClass: URL.self) { item, _ in
@@ -397,6 +426,8 @@ private struct DropRow: View {
 private struct DiskPickerRow: View {
     @ObservedObject var model: WizardModel
 
+    @State private var isHovering = false
+
     var body: some View {
         HStack(alignment: .top, spacing: FB.Spacing.s3) {
             ZStack {
@@ -421,29 +452,29 @@ private struct DiskPickerRow: View {
                     }
                 }
                 if model.selectedDisk == nil {
-                    Text("This drive will be formatted to create a one-time boot disk for your server")
+                    Text("Will be formatted to create one-time boot disk")
                         .font(FB.Font.rowHint())
                         .foregroundStyle(FB.Colors.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 pickerMenu
-                HelpLink(label: "how does it work", url: FlagshipLinks.bootingProcess)
             }
         }
         .padding(FB.Spacing.s3)
         .background(
             RoundedRectangle(cornerRadius: FB.Radius.md)
-                .fill(FB.Colors.surface)
+                .fill(isHovering ? FB.Colors.surfaceElev : FB.Colors.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: FB.Radius.md)
                 .strokeBorder(
                     model.selectedDisk != nil
                         ? FB.Colors.success.opacity(0.4)
-                        : FB.Colors.border,
+                        : (isHovering ? FB.Colors.borderStrong : FB.Colors.border),
                     lineWidth: 1
                 )
         )
+        .onHover { isHovering = $0 }
     }
 
     private var pickerMenu: some View {
@@ -523,6 +554,7 @@ private struct LogPane: View {
 // MARK: - Help link
 
 /// A small inline link that opens an explainer page on the website.
+/// Shows the pointing-hand cursor on hover so it reads as a real link.
 private struct HelpLink: View {
     let label: String
     let url: URL
@@ -530,7 +562,9 @@ private struct HelpLink: View {
         Button(label) { NSWorkspace.shared.open(url) }
             .buttonStyle(.link)
             .font(FB.Font.caption())
-            .padding(.top, 1)
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
     }
 }
 
