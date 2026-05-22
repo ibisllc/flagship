@@ -1,4 +1,10 @@
-import { bootstrapNewIdentity, bootstrapFromExistingSeed } from "../keystore.js";
+import {
+  bootstrapNewIdentity,
+  bootstrapFromExistingSeed,
+  deriveIrkFromSeed,
+  deriveIrkVersioned,
+  signWithIrkVersioned,
+} from "../keystore.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { inlineConfirm, inlinePrompt } from "../lib/modal.js";
@@ -8,6 +14,7 @@ import {
   classifyResolution,
   resolveAccount,
 } from "../lib/accountResolve.js";
+import { loginRealAccount } from "../lib/loginTakeover.js";
 import { addProfile } from "../lib/profiles.js";
 import { unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -78,7 +85,7 @@ async function handleRecover() {
     case "unknown":
       return showNoSuchAccount(username);
     default:
-      return recoverRealAccount(username);
+      return recoverRealAccount(resolution);
   }
 }
 
@@ -111,39 +118,47 @@ async function showNoSuchAccount(username) {
   });
 }
 
-/** Phase 1 keeps the EXISTING credentialed recovery flow for real
- *  (single/multi) accounts. Phase 3 replaces this with the full login
- *  state machine (passkey-PRF unwrap → TOTP → backup-vs-takeover). */
-async function recoverRealAccount(username) {
-  // #30 — inline-modal steps replace window.prompts. We keep them as a
-  // sequence so the user can cancel between steps without losing place.
-  const passA = await inlinePrompt({
-    title: "New local passphrase",
-    message: "Encrypts the recovered key on this browser. 8+ characters.",
-    type: "password",
-    placeholder: "passphrase",
-    validate: (v) => {
-      if (!v || v.length < 8) return "passphrase must be 8+ chars";
-      return null;
-    },
-  });
-  if (!passA) return;
-  const passB = await inlinePrompt({
-    title: "Confirm passphrase",
-    type: "password",
-    placeholder: "passphrase",
-    validate: (v) => (v === passA ? null : "passphrases don't match"),
-  });
-  if (!passB) return;
+/** Phase 3 — the real-account (single/multi) login state machine. Drives
+ *  the credentialed JOIN off the resolution:
+ *    - recovery.present == false → a clean inline STATE (not a 404).
+ *    - single → cloud-recovery unwrap → 7-day-grace TAKEOVER → re-pair
+ *               initiated → this device labelled "admin".
+ *    - multi  → unwrap + a recovery TOTP / recovery code (the Worker
+ *               REQUIRES it for account_type=multi) → 24h-grace TAKEOVER
+ *               → "admin".
+ *  (Mock/popup WebAuthn as today: `recoverFromCloud` is the existing
+ *  sub-origin flow. Grace countdown/completion/push/quarantine are
+ *  Phase 4.) */
+async function recoverRealAccount(resolution) {
+  const username = resolution.username;
   try {
-    const seed = await recoverFromCloud(username);
-    await bootstrapFromExistingSeed(passA, seed);
-    localStorage.setItem("flagship.username", username);
-    await unlockSession(seed, username);
-    await dispatchInitialView();
-    toast(`recovered ${username}`, "ok");
+    const result = await loginRealAccount(resolution, {
+      showState: (state) =>
+        inlineConfirm({
+          title: state.title,
+          message: state.message,
+          okLabel: "OK",
+          cancelLabel: "Back",
+        }),
+      confirm: (opts) => inlineConfirm(opts),
+      prompt: (opts) => inlinePrompt(opts),
+      takeoverDeps: {
+        recoverFromCloud,
+        bootstrapFromExistingSeed,
+        unlockSession,
+        deriveIrkFromSeed,
+        deriveIrkVersioned,
+        signWithIrkVersioned,
+        addProfile: (profile) => addProfile(profile),
+        dispatchInitialView,
+        setUsername: (u) => localStorage.setItem("flagship.username", u),
+      },
+    });
+    if (result.outcome === "takeover") {
+      toast(`taking over ${username} — you're now the admin device`, "ok");
+    }
   } catch (e) {
-    toast(`recover failed: ${e.message ?? e}`, "err");
+    toast(`couldn't take over ${username}: ${e.message ?? e}`, "err");
   }
 }
 
