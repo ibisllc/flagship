@@ -45,6 +45,9 @@ import { initActivityView, renderActivity } from "./views/activity.js";
 import { initPendingServerView, enterPendingServer } from "./views/pending-server.js";
 import { initTrustedDevicesView } from "./views/trusted-devices.js";
 import { initAccountSecurityView } from "./views/account-security.js";
+import { initAddDeviceView } from "./views/add-device.js";
+import { initJoinView, enterJoin } from "./views/join.js";
+import { joinLinkFromLocation } from "./lib/crossDevicePairing.js";
 
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
@@ -72,6 +75,7 @@ const SUB_VIEW_TABS = {
   "view-install-progress": "activity",
   "view-settings": "settings",
   "view-account-security": "settings",
+  "view-add-device": "settings",
   "view-recovery": "settings",
   "view-post-recovery": "settings",
   "view-tier-status": "settings",
@@ -212,6 +216,8 @@ async function boot() {
   initPairedSessionsView();
   initTrustedDevicesView();
   initAccountSecurityView();
+  initAddDeviceView();
+  initJoinView();
   initTierStatusView();
   initMarketplaceView();
   initVibeCodeView();
@@ -246,6 +252,18 @@ async function boot() {
   wireSettingsTabEntries();
   wireActivityEntries();
   wireServicesTabEntries();
+
+  // Phase 3b — cross-device QR pairing: a /join?sid=&pk= deep-link routes
+  // straight into the add-profile pairing receiver, BEFORE the normal
+  // unlock/first-run dispatch. It adds a NEW profile (it never clobbers
+  // an existing one), so it runs whether or not this browser already
+  // holds an identity.
+  const joinLink = joinLinkFromLocation();
+  if (joinLink) {
+    setSubtitle("join");
+    enterJoin(joinLink);
+    return;
+  }
 
   if (await hasWrappedUmk()) {
     setSubtitle("locked");

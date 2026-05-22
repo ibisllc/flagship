@@ -356,6 +356,33 @@ export async function signWithIrkVersioned(umkSeed, version, canonicalBytes) {
 }
 
 /**
+ * Verify an Ed25519 signature over `canonicalBytes` under a raw 32-byte
+ * public key. Used by the cross-device pairing incoming side to check a
+ * `DeviceAdmit` vouch under the account's registered IRK pub (the admin
+ * holds the matching private key). Returns false (never throws) on a bad
+ * key / signature so callers can branch cleanly.
+ *
+ * @param {Uint8Array} pub             raw 32-byte Ed25519 public key
+ * @param {Uint8Array} signature       64-byte Ed25519 signature
+ * @param {Uint8Array} canonicalBytes  the signed pre-image
+ * @returns {Promise<boolean>}
+ */
+export async function verifyWithEd25519Pub(pub, signature, canonicalBytes) {
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      pub,
+      { name: "Ed25519" },
+      false,
+      ["verify"],
+    );
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, signature, canonicalBytes);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Generate an ephemeral X25519/ECDH pubkey the same way the dev/phone.html
  * dance does: P-256 ECDH, take the X coordinate as a 32-byte representative
  * pubkey. The control plane treats it as opaque bytes — we only need it for
