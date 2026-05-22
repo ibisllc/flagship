@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Flagship
 import FlagshipCore
 import FlagshipAPI
 import FlagshipUI
