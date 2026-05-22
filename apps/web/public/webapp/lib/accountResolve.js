@@ -159,9 +159,15 @@ function randomLocalPassphrase() {
  *  All side-effecting collaborators are injected so this is unit-
  *  testable without IndexedDB / the DOM.
  *
+ *  Multi-profile keying: when `setActiveKeystoreProfile` is injected the
+ *  keystore is pointed at this demo's cloud BEFORE the fresh device key is
+ *  generated, so joining a second demo in the same browser stores its key
+ *  under its own record (never clobbers an existing profile).
+ *
  *  @param {AccountResolution} resolution   a `kind:"demo"` resolution
  *  @param {{
  *    bootstrapNewIdentity: (passphrase: string) => Promise<Uint8Array>,
+ *    setActiveKeystoreProfile?: (cloudName: string) => unknown,
  *    unlockSession: (seed: Uint8Array, username?: string) => Promise<void>|void,
  *    addProfile?: (profile: object, opts?: object) => unknown,
  *    dispatchInitialView?: () => Promise<void>|void,
@@ -177,6 +183,9 @@ export async function activateDemoAccount(resolution, deps) {
   const username = resolution.username;
   if (!username) throw new Error("activateDemoAccount: missing username");
 
+  if (typeof deps.setActiveKeystoreProfile === "function") {
+    deps.setActiveKeystoreProfile(username);
+  }
   const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
   const seed = await deps.bootstrapNewIdentity(makePassphrase());
 

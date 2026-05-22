@@ -196,9 +196,16 @@ export async function initiateRePair(args) {
  *       enforced server-side later; this is the local label).
  *    6. Open the account (dispatch to Home).
  *
+ *  Multi-profile keying: when `setActiveKeystoreProfile` is injected the
+ *  keystore's active profile is pointed at `username` BEFORE the recovered
+ *  seed is wrapped, so a takeover into a SECOND account in the same browser
+ *  lands the recovered device key under that account's OWN keystore record
+ *  — never clobbering an existing profile's wrapped UMK.
+ *
  *  @param {object} resolution         a single|multi AccountResolution
  *  @param {{
  *    recoverFromCloud: (username: string) => Promise<Uint8Array>,
+ *    setActiveKeystoreProfile?: (cloudName: string) => unknown,
  *    bootstrapFromExistingSeed: (passphrase: string, seed: Uint8Array) => Promise<void>,
  *    unlockSession: (seed: Uint8Array, username?: string) => Promise<void>|void,
  *    deriveIrkFromSeed: (seed: Uint8Array) => Promise<{publicKey: Uint8Array}>,
@@ -240,7 +247,12 @@ export async function runTakeover(resolution, deps) {
     throw new Error("runTakeover: recovered seed is malformed");
   }
 
-  // 2 — persist + unlock under the resolved username.
+  // 2 — persist + unlock under the resolved username. Point the keystore
+  // at this profile FIRST so the recovered seed is wrapped under the new
+  // profile's own record (multi-profile keying — never clobber profile A).
+  if (typeof deps.setActiveKeystoreProfile === "function") {
+    deps.setActiveKeystoreProfile(username);
+  }
   await deps.bootstrapFromExistingSeed(makePassphrase(), seed);
   if (typeof deps.setUsername === "function") deps.setUsername(username);
   await deps.unlockSession(seed, username);
