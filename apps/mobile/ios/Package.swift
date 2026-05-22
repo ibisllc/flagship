@@ -25,7 +25,7 @@ let package = Package(
         ),
         .target(
             name: "FlagshipCore",
-            dependencies: ["FlagshipAPI"],
+            dependencies: ["FlagshipAPI", "Flagship"],
             path: "Sources/FlagshipCore"
         ),
         .target(

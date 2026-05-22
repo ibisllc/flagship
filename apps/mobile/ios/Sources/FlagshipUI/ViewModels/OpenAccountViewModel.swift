@@ -103,6 +103,15 @@ public final class OpenAccountViewModel {
         guard canOpen else { return }
         phase = .opening
         do {
+            // Per-profile keying: land this new account's UMK in ITS OWN
+            // slot (keyed by the username/cloudName) so opening a second
+            // profile never clobbers an existing profile's device key.
+            // The default-profile path (single-profile users) is
+            // byte-identical since the first cloudName maps to the legacy
+            // slot only when it normalizes to the default sentinel — but
+            // here we always point at the named slot before key-gen.
+            Keystore.setActiveProfile(username)
+
             // Create account == generate the UMK. Guard against a
             // double-generate if a prior attempt already minted one
             // (so a retry doesn't orphan the first UMK + its claim).

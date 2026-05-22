@@ -41,11 +41,86 @@ public struct Keystore {
 
     public init() {}
 
+    // MARK: - Multi-profile (per-profile keying)
+
+    /// Sentinel profileId for the legacy / default slot. When the active
+    /// profile is this (or nil / empty), every per-profile Keychain item
+    /// uses the EXACT legacy account string — so on-disk layout and
+    /// behavior are byte-identical to the single-profile era. Non-default
+    /// profiles get a `.<profileId>` account suffix.
+    public static let defaultProfileId = "__default__"
+
+    /// Account string under which the active-profile pointer is persisted.
+    /// This pointer itself is device-global (one per app), so it lives
+    /// under a fixed legacy-style account, never suffixed.
+    private static let activeProfilePointerAccount = "com.flagship.profile.active"
+
+    /// In-process cache of the active profileId. Lazily hydrated from the
+    /// persisted pointer on first access so a fresh launch resumes the
+    /// last-active profile without an explicit `setActiveProfile`.
+    private static var _activeProfileId: String?
+    private static var _activeProfileHydrated = false
+    private static let activeProfileLock = NSLock()
+
+    /// Normalize a caller-supplied profileId to the canonical slot key.
+    /// nil / empty / whitespace-only → the default sentinel. Otherwise
+    /// trimmed + lowercased (the profileId is the profile's `cloudName`,
+    /// lowercased — mirrored on Android/webapp).
+    private static func normalizeProfileId(_ id: String?) -> String {
+        guard let id else { return defaultProfileId }
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.isEmpty ? defaultProfileId : trimmed
+    }
+
+    /// The active profileId, hydrating from the persisted pointer once.
+    public static var activeProfileId: String {
+        activeProfileLock.lock(); defer { activeProfileLock.unlock() }
+        if !_activeProfileHydrated {
+            if let d = keychainRead(account: activeProfilePointerAccount),
+               let s = String(data: d, encoding: .utf8) {
+                _activeProfileId = normalizeProfileId(s)
+            } else {
+                _activeProfileId = defaultProfileId
+            }
+            _activeProfileHydrated = true
+        }
+        return _activeProfileId ?? defaultProfileId
+    }
+
+    /// Point every subsequent per-profile operation at `id`'s slot.
+    /// nil / empty → the legacy default slot. The pointer is persisted so
+    /// the next launch resumes the same profile. Calling with the default
+    /// sentinel restores byte-identical legacy behavior.
+    public static func setActiveProfile(_ id: String?) {
+        let normalized = normalizeProfileId(id)
+        activeProfileLock.lock()
+        _activeProfileId = normalized
+        _activeProfileHydrated = true
+        activeProfileLock.unlock()
+        // Persist the pointer (device-global, never suffixed). The default
+        // sentinel is stored too so an explicit reset survives relaunch.
+        try? keychainWrite(account: activeProfilePointerAccount,
+                           data: Data(normalized.utf8))
+    }
+
+    /// Map a legacy base account string to the active profile's slot.
+    /// The default profile returns the base UNCHANGED (byte-identical to
+    /// the single-profile layout); non-default profiles get a
+    /// `.<profileId>` suffix (e.g. `com.flagship.umk.wrapped.jay-family`).
+    private static func account(_ base: String) -> String {
+        account(base, profile: activeProfileId)
+    }
+
+    private static func account(_ base: String, profile: String) -> String {
+        let normalized = normalizeProfileId(profile)
+        return normalized == defaultProfileId ? base : "\(base).\(normalized)"
+    }
+
     // MARK: - Existence
 
     public static var hasWrappedUMK: Bool {
-        keychainRead(account: KCKey.wrappedUmk) != nil
-            && keychainRead(account: KCKey.ephemeralPub) != nil
+        keychainRead(account: account(KCKey.wrappedUmk)) != nil
+            && keychainRead(account: account(KCKey.ephemeralPub)) != nil
     }
 
     // MARK: - Generation
@@ -76,8 +151,8 @@ public struct Keystore {
             guard let combined = sealed.combined else {
                 throw KeystoreError.wrapFailed("no combined representation")
             }
-            try keychainWrite(account: KCKey.wrappedUmk, data: combined)
-            try keychainWrite(account: KCKey.ephemeralPub, data: ephemeral.publicKey.x963Representation)
+            try keychainWrite(account: account(KCKey.wrappedUmk), data: combined)
+            try keychainWrite(account: account(KCKey.ephemeralPub), data: ephemeral.publicKey.x963Representation)
             // Reset the IRK version state — fresh UMK → fresh v1 IRK.
             try setCurrentIrkVersion(1)
             try setPendingIrkRotationVersion(nil)
@@ -86,6 +161,16 @@ public struct Keystore {
         } catch {
             throw KeystoreError.wrapFailed(String(describing: error))
         }
+    }
+
+    /// Convenience: point at `profile`'s slot, then install. nil → the
+    /// default/legacy slot. Equivalent to `setActiveProfile(profile)`
+    /// followed by `installUMK(_:reason:)` — the active-pointer approach
+    /// is primary, but add-profile flows can use this to land a new
+    /// profile's UMK in its own slot in one call.
+    public static func installUMK(_ umkSeed: SymmetricKey, reason: String, profile: String?) async throws {
+        setActiveProfile(profile)
+        try await installUMK(umkSeed, reason: reason)
     }
 
     /// E2 — read the current UMK as raw bytes. Used by the Wipe
@@ -135,7 +220,7 @@ public struct Keystore {
     /// Current IRK HKDF version. Defaults to 1 if the slot is absent
     /// — covers legacy installs that pre-date the rotation primitive.
     public static func currentIrkVersion() -> Int {
-        guard let d = keychainRead(account: KCKey.irkVersion),
+        guard let d = keychainRead(account: account(KCKey.irkVersion)),
               let s = String(data: d, encoding: .utf8),
               let n = Int(s),
               n >= 1
@@ -151,7 +236,7 @@ public struct Keystore {
     /// version the server doesn't know about.
     public static func setCurrentIrkVersion(_ version: Int) throws {
         precondition(version >= 1, "IRK version must be >= 1")
-        try keychainWrite(account: KCKey.irkVersion, data: Data(String(version).utf8))
+        try keychainWrite(account: account(KCKey.irkVersion), data: Data(String(version).utf8))
     }
 
     // Optional "pending re-pair" marker — lets a future app launch
@@ -161,7 +246,7 @@ public struct Keystore {
     // means no pending rotation.
 
     public static func pendingIrkRotationVersion() -> Int? {
-        guard let d = keychainRead(account: KCKey.irkPendingVersion),
+        guard let d = keychainRead(account: account(KCKey.irkPendingVersion)),
               let s = String(data: d, encoding: .utf8),
               let n = Int(s),
               n >= 1
@@ -170,16 +255,12 @@ public struct Keystore {
     }
 
     public static func setPendingIrkRotationVersion(_ version: Int?) throws {
+        let acct = account(KCKey.irkPendingVersion)
         if let version {
             precondition(version >= 1, "pending IRK version must be >= 1")
-            try keychainWrite(account: KCKey.irkPendingVersion, data: Data(String(version).utf8))
+            try keychainWrite(account: acct, data: Data(String(version).utf8))
         } else {
-            let q: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: KCKey.irkPendingVersion,
-            ]
-            SecItemDelete(q as CFDictionary)
-            InMemoryStore.shared.remove(account: KCKey.irkPendingVersion)
+            keychainDelete(account: acct)
         }
     }
 
@@ -205,12 +286,7 @@ public struct Keystore {
         if let id, let bytes = id.data(using: .utf8) {
             try keychainWrite(account: KCKey.pushTokenId, data: bytes)
         } else {
-            let q: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: KCKey.pushTokenId,
-            ]
-            SecItemDelete(q as CFDictionary)
-            InMemoryStore.shared.remove(account: KCKey.pushTokenId)
+            keychainDelete(account: KCKey.pushTokenId)
         }
     }
 
@@ -221,26 +297,66 @@ public struct Keystore {
 
     // MARK: - Wipe (sign-out / tests)
 
+    /// Wipe ONLY the active profile's key slots — so signing out of one
+    /// profile (or self-revoking the current account) doesn't nuke the
+    /// other profiles' device keys. For the default profile the cleared
+    /// set + on-disk behavior is byte-identical to the historical wipe
+    /// (it also clears the device-global push channel, since the legacy
+    /// single-profile install owned it). Non-default profiles clear only
+    /// their suffixed UMK / ephemeral / sim-wrap / IRK slots + their own
+    /// Secure-Enclave wrapping key; device-global push keys + the active-
+    /// profile pointer survive. Use `wipeAllProfiles()` for a full reset.
     public static func wipe() {
-        for account in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
-                        KCKey.pushX25519Priv, KCKey.pushTokenId,
-                        KCKey.irkVersion, KCKey.irkPendingVersion] {
-            let q: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: account
-            ]
-            SecItemDelete(q as CFDictionary)
-            InMemoryStore.shared.remove(account: account)
+        let id = activeProfileId
+        var accounts = [account(KCKey.wrappedUmk, profile: id),
+                        account(KCKey.ephemeralPub, profile: id),
+                        account(KCKey.simWrapPriv, profile: id),
+                        account(KCKey.irkVersion, profile: id),
+                        account(KCKey.irkPendingVersion, profile: id)]
+        if id == defaultProfileId {
+            // Legacy parity: the default install owned the device push channel.
+            accounts.append(KCKey.pushX25519Priv)
+            accounts.append(KCKey.pushTokenId)
         }
-        WrappingKeypair.deleteSEKeyIfExists()
+        for account in accounts {
+            keychainDelete(account: account)
+        }
+        WrappingKeypair.deleteSEKeyIfExists(profile: id)
+    }
+
+    /// Full reset across EVERY profile + device-global keys. Currently
+    /// only the active-profile + default device-global slots are wiped
+    /// (there's no enumeration of arbitrary profile suffixes in the
+    /// Keychain); callers that need a profile-by-profile sweep should
+    /// `setActiveProfile` + `wipe()` per known profile, then call this.
+    /// Provided so a deliberate "reset this device entirely" path has a
+    /// named home distinct from the per-profile `wipe()`.
+    public static func wipeAllProfiles() {
+        // Clear the active profile's slot, the legacy/default slot, and
+        // the device-global push channel + active pointer.
+        let known = Set([activeProfileId, defaultProfileId])
+        for id in known {
+            for base in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
+                         KCKey.irkVersion, KCKey.irkPendingVersion] {
+                keychainDelete(account: account(base, profile: id))
+            }
+            WrappingKeypair.deleteSEKeyIfExists(profile: id)
+        }
+        keychainDelete(account: KCKey.pushX25519Priv)
+        keychainDelete(account: KCKey.pushTokenId)
+        keychainDelete(account: activeProfilePointerAccount)
+        activeProfileLock.lock()
+        _activeProfileId = defaultProfileId
+        _activeProfileHydrated = true
+        activeProfileLock.unlock()
     }
 
     // MARK: - Internals
 
     private static func unwrappedUMK(reason: String) async throws -> SymmetricKey {
         guard
-            let wrapped = keychainRead(account: KCKey.wrappedUmk),
-            let ephemeralRaw = keychainRead(account: KCKey.ephemeralPub)
+            let wrapped = keychainRead(account: account(KCKey.wrappedUmk)),
+            let ephemeralRaw = keychainRead(account: account(KCKey.ephemeralPub))
         else {
             throw KeystoreError.keyNotFound
         }
@@ -298,6 +414,18 @@ public struct Keystore {
         static let irkPendingVersion   = "com.flagship.irk.pendingVersion"
     }
 
+    /// The active profile's sim-wrap Keychain account (default → legacy).
+    fileprivate static func profileScopedSimWrapAccount() -> String {
+        account(KCKey.simWrapPriv)
+    }
+
+    /// The active profile's Secure-Enclave application tag (default →
+    /// legacy). Non-default profiles suffix the tag so each profile's
+    /// wrapping key is distinct.
+    fileprivate static func profileScopedSEKeyTag(profile: String? = nil) -> String {
+        account(KCKey.seKeyTag, profile: profile ?? activeProfileId)
+    }
+
     fileprivate static func keychainWrite(account: String, data: Data) throws {
         try keychainWrite(account: account, data: data, sync: .cloudRoot)
     }
@@ -350,6 +478,18 @@ public struct Keystore {
             return
         }
         throw KeystoreError.keychainFailed(status)
+    }
+
+    /// Delete a Generic-Password Keychain item + its in-memory mirror.
+    /// Matches the legacy ad-hoc delete query (no Synchronizable filter)
+    /// so the default-profile on-disk behavior is unchanged.
+    fileprivate static func keychainDelete(account: String) {
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(q as CFDictionary)
+        InMemoryStore.shared.remove(account: account)
     }
 
     fileprivate static func keychainRead(account: String) -> Data? {
@@ -462,32 +602,38 @@ fileprivate struct WrappingKeypair {
         let ctx = LAContext()
         ctx.localizedReason = reason
 
+        // Each profile gets its OWN wrapping keypair so a profile's UMK
+        // can only be unwrapped under its own slot. The default profile
+        // resolves to the legacy account / SE tag (byte-identical).
+        let simAccount = Keystore.profileScopedSimWrapAccount()
+        let seTag = Keystore.profileScopedSEKeyTag()
+
         #if targetEnvironment(simulator)
-        return try simulatorKeypair()
+        return try simulatorKeypair(account: simAccount)
         #else
-        return try secureEnclaveKeypair(context: ctx)
+        return try secureEnclaveKeypair(context: ctx, tag: Data(seTag.utf8))
         #endif
     }
 
-    static func deleteSEKeyIfExists() {
+    static func deleteSEKeyIfExists(profile: String) {
         #if !targetEnvironment(simulator)
         let q: [String: Any] = [
             kSecClass as String: kSecClassKey,
-            kSecAttrApplicationTag as String: Data(Keystore.KCKey.seKeyTag.utf8)
+            kSecAttrApplicationTag as String: Data(Keystore.profileScopedSEKeyTag(profile: profile).utf8)
         ]
         SecItemDelete(q as CFDictionary)
         #endif
     }
 
     #if targetEnvironment(simulator)
-    private static func simulatorKeypair() throws -> WrappingKeypair {
+    private static func simulatorKeypair(account: String) throws -> WrappingKeypair {
         // Reuse the simulator wrap key across launches.
         let pk: P256.KeyAgreement.PrivateKey
-        if let raw = Keystore.keychainRead(account: Keystore.KCKey.simWrapPriv) {
+        if let raw = Keystore.keychainRead(account: account) {
             pk = try P256.KeyAgreement.PrivateKey(rawRepresentation: raw)
         } else {
             pk = P256.KeyAgreement.PrivateKey()
-            try? Keystore.keychainWrite(account: Keystore.KCKey.simWrapPriv, data: pk.rawRepresentation)
+            try? Keystore.keychainWrite(account: account, data: pk.rawRepresentation)
         }
         return WrappingKeypair(_ecdh: { peer in
             let secret = try pk.sharedSecretFromKeyAgreement(with: peer)
@@ -495,8 +641,7 @@ fileprivate struct WrappingKeypair {
         })
     }
     #else
-    private static func secureEnclaveKeypair(context: LAContext) throws -> WrappingKeypair {
-        let tag = Data(Keystore.KCKey.seKeyTag.utf8)
+    private static func secureEnclaveKeypair(context: LAContext, tag: Data) throws -> WrappingKeypair {
 
         let lookup: [String: Any] = [
             kSecClass as String: kSecClassKey,
