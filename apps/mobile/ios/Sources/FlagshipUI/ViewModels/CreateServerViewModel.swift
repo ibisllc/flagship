@@ -184,20 +184,15 @@ public final class CreateServerViewModel {
     private var pendingBundle: PendingBundle?
 
     private func mintInstallBlob() async throws -> SignedInstallBlob {
+        // Phase 2 — the username claim moved to OpenAccountViewModel
+        // (the open-account step). By the time we mint a server the
+        // account already exists: the UMK was generated and the
+        // username claimed at open-account time. We just derive the IRK
+        // (UMK is present) for the auth-code + RCK signatures below; we
+        // do NOT re-generate the UMK and do NOT re-claim the username.
         let irk = try await Keystore.deriveIRK(reason: "Mint installer for \(name)")
-        let irkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
         let serverNameSlug = SlugUtil.slugify(name)
         let serverDomain = "\(serverNameSlug).\(username).flagship.services"
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-
-        let claimBytes = UsernameClaim.canonicalBytes(
-            username: username, irkPubHex: irkPubHex, issuedAt: now
-        )
-        let claimSig = try irk.signature(for: claimBytes)
-        try await server.claimUsername(.init(
-            request: .init(username: username, irkPub: irkPubHex, issuedAt: now),
-            signature: HexUtil.encode(claimSig)
-        ))
 
         let delegated = Curve25519.Signing.PrivateKey()
         let acIssuedAt = Int64(Date().timeIntervalSince1970 * 1000)

@@ -5,11 +5,14 @@ import FlagshipAPI
 ///
 /// **Create-only.** As of the login redesign, demo + device-capability
 /// activation moved OUT of this screen and into the username-first Join
-/// flow (JoinUsernameScreen → `/api/account/resolve`). Creating an
-/// account here reserves a fresh username; there is no longer a demo or
-/// dot-form branch on the create path. The live availability check
-/// (debounced 350 ms) against the Worker's `/api/users/check` still
-/// drives the available / taken / invalid states.
+/// flow (JoinUsernameScreen → `/api/account/resolve`). This screen now
+/// only PICKS the account name (identity-first copy — no "server's
+/// domain" framing). Continuing pushes the Phase-2 Open-account step,
+/// which generates the UMK + signs the standalone username claim; there
+/// is no longer a demo or dot-form branch on the create path. The live
+/// availability check (debounced 350 ms) against the Worker's
+/// `/api/users/check` still drives the available / taken / invalid
+/// states.
 public struct ChooseUsernameScreen: View {
     @Environment(\.flagshipServerClient) private var server
     @State private var username: String = ""
@@ -29,9 +32,9 @@ public struct ChooseUsernameScreen: View {
         FSScreen {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 Spacer().frame(height: FS.space.s12)
-                Text("Pick a username.").font(FS.font.h2())
+                Text("Pick your account name.").font(FS.font.h2())
                 FSColorReader { c in
-                    Text("This is permanent. It becomes the middle of your server's domain (e.g. home.<username>.flagship.services).")
+                    Text("This is your identity — how people and your devices find you. It's permanent. You can add servers later, or none at all.")
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                 }
                 FSField(
