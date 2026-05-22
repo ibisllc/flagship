@@ -140,7 +140,52 @@ interface FlagshipServerClient {
      *  packages/control-plane/src/accountResolve.ts.
      *  See docs/login-and-account-redesign.md. */
     suspend fun resolveAccount(username: String): AccountResolution
+
+    /** Phase 3b — vouched cross-device admit. The incoming device
+     *  replays the admin's IRK-signed DeviceAdmit + its push-token
+     *  registration to .com:
+     *    POST /api/users/<account>/devices/admit
+     *  The Worker verifies the admit under the account's CURRENT IRK,
+     *  then admits this device QUARANTINED (14-day non-admin peer
+     *  window) and returns `quarantineUntil`. The register `signature`
+     *  is carried for storage but NOT verified (the admit is the IRK's
+     *  consent). Mirrors handleVouchedDeviceAdmit in
+     *  packages/control-plane/src/push.ts. */
+    suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse
 }
+
+/** Phase 3b — POST /api/users/:u/devices/admit body. Mirrors the Worker
+ *  `AdmitBody` shape (push.ts): the IRK-signed admit + its signature, the
+ *  same push-token register fields handlePushRegister takes, and the
+ *  register signature (carried, not verified). */
+@Serializable
+data class DeviceAdmitRequest(
+    val admit: AdmitEnvelope,
+    /** Ed25519 over the admit, signed by the account's CURRENT IRK,
+     *  lowercased hex (64 bytes). */
+    val admitSig: String,
+    val request: PushTokenRegisterRequest.Inner,
+    /** PushTokenRegister signature, carried for storage. Hex. */
+    val signature: String,
+) {
+    @Serializable
+    data class AdmitEnvelope(
+        val username: String,
+        /** The incoming device's freshly-minted pubkey, lowercased hex
+         *  (32 bytes). */
+        val newDevicePubHex: String,
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class DeviceAdmitResponse(
+    val ok: Boolean,
+    val tokenId: String,
+    /** Wall-clock ms before which the freshly-admitted device cannot
+     *  revoke others / hold admin reach. ~14 days out. */
+    val quarantineUntil: Long? = null,
+)
 
 /** Login/join preflight result — Kotlin mirror of the Worker's
  *  `AccountResolution` (packages/control-plane/src/accountResolve.ts).
@@ -1253,6 +1298,33 @@ class MockFlagshipServerClient(
         )
     }
 
+    /** Phase 3b — last vouched-admit the Mock received, for test
+     *  assertions (the admin's admit + the incoming device's register). */
+    var lastDeviceAdmit: Pair<String, DeviceAdmitRequest>? = null
+        private set
+
+    /** Phase 3b — wall-clock the Mock stamps as `quarantineUntil` on a
+     *  successful admit. 14 days, matching the Worker QUARANTINE_MS. */
+    var admitQuarantineMs: Long = 14L * 86_400_000
+
+    /** When true, [admitDevice] simulates the Worker rejecting a bad /
+     *  stale admit proof (401). Tests flip this to drive the failure
+     *  branch. */
+    var admitShouldRejectProof: Boolean = false
+
+    override suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse {
+        tick()
+        lastDeviceAdmit = account to req
+        if (admitShouldRejectProof) throw HttpException(401, "invalid admit proof")
+        val id = "tok_%06d".format(nextPushTokenId++)
+        _registeredPushTokens[id] = req.request
+        return DeviceAdmitResponse(
+            ok = true,
+            tokenId = id,
+            quarantineUntil = System.currentTimeMillis() + admitQuarantineMs,
+        )
+    }
+
     private fun etagFor(devices: List<TrustedDevice>): String {
         // Identity-significant subset only; lastSeenAt deliberately
         // excluded so test push-delivery doesn't flutter the ETag.
@@ -1548,6 +1620,16 @@ class LiveFlagshipServerClient(
         return transport.getJson(
             url = "$base/api/account/resolve/$encoded",
             responseSerializer = AccountResolution.serializer(),
+        )
+    }
+
+    override suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse {
+        val encoded = java.net.URLEncoder.encode(account, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/devices/admit",
+            body = req,
+            serializer = DeviceAdmitRequest.serializer(),
+            responseSerializer = DeviceAdmitResponse.serializer(),
         )
     }
 }

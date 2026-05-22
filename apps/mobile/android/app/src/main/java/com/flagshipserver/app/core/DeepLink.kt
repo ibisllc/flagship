@@ -27,6 +27,13 @@ sealed interface DeepLink {
      *  env-var or talkToUser response. */
     data class VibeCodeChat(val sessionId: String) : DeepLink
 
+    /** Phase 3b — cross-device pairing. Opened when the collaborator's
+     *  NATIVE camera (or the in-app scanner) follows the admin's pairing
+     *  QR / App-Links URL (https://flagshipserver.com/join?sid=…&pk=…).
+     *  Routes into the incoming add-profile join flow. Carries the raw
+     *  join params; the host re-parses them into a [JoinLink]. */
+    data class JoinDevice(val sid: String, val pk: String) : DeepLink
+
     companion object {
         /// Parse a `flagship://...` URI. Keep in sync with iOS
         /// DeepLink.parse and the webapp's lib/router.js. Returns null
@@ -41,6 +48,14 @@ sealed interface DeepLink {
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "marketplace" -> Marketplace
                 "create-server" -> CreateServer
+                "join" -> {
+                    // flagship://join?sid=<sid>&pk=<pkB64u>. Both params
+                    // required; a malformed link is NOT routed (returns
+                    // null so the OS falls back to the browser).
+                    val sid = params["sid"].orEmpty()
+                    val pk = params["pk"].orEmpty()
+                    if (sid.isEmpty() || pk.isEmpty()) null else JoinDevice(sid, pk)
+                }
                 "vibecode" -> {
                     // Accept either path form `flagship://vibecode/<id>`
                     // or query form `flagship://vibecode?sessionId=<id>`.

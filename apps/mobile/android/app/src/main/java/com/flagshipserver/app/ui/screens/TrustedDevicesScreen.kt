@@ -134,6 +134,16 @@ fun TrustedDevicesScreen(nav: NavController) {
             style = TextStyle(fontSize = 14.sp),
         )
         Spacer(Modifier.height(FS.space.s2))
+        // Phase 3b — admin entry to the cross-device pairing QR. Adds a
+        // collaborator's OWN phone (no shared iCloud); the added device
+        // lands quarantined + non-admin.
+        com.flagshipserver.app.ui.components.FSSecondaryButton(
+            label = "Add device",
+            onClick = { nav.navigate("add-device") },
+            block = true,
+            modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },
+        )
+        Spacer(Modifier.height(FS.space.s2))
         when (state) {
             is TrustedDevicesViewModel.State.Idle,
             is TrustedDevicesViewModel.State.Loading -> LoadingRow()

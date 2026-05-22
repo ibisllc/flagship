@@ -92,6 +92,16 @@ fun WelcomeScreen(nav: NavController) {
                 block = true,
                 large = true,
             )
+            FSGhostButton(
+                // Phase 3b — cross-device pairing (collaborators). Opens
+                // the in-app scanner; scanning the admin's "Add a device"
+                // QR joins their account out-of-band. (The admin's QR is
+                // also an App-Links URL, so the native camera routes here
+                // directly.)
+                label = "Join with a pairing code",
+                onClick = { nav.navigate("join-device") },
+                block = true,
+            )
             Spacer(Modifier.height(FS.space.s4))
         }
     }

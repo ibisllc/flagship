@@ -80,6 +80,27 @@ class AppLinkTest {
         assertNull(AppLink.resolve(uri))
     }
 
+    // ── Phase 3b — cross-device pairing /join deeplink ───────────────
+
+    @Test fun joinDeeplink_flagshipScheme_parses() {
+        val pk = Base64URL.encode(ByteArray(32) { 0x05 })
+        val uri = Uri.parse("flagship://join?sid=sess-1&pk=$pk")
+        assertEquals(DeepLink.JoinDevice("sess-1", pk), AppLink.resolve(uri))
+    }
+
+    @Test fun joinDeeplink_appLinksUniversalUrl_translates() {
+        // The admin's QR is an App-Links URL; the native camera opens it
+        // straight into the app. /join is a TOP-LEVEL path (not /app/<…>).
+        val pk = Base64URL.encode(ByteArray(32) { 0x06 })
+        val uri = Uri.parse("https://flagshipserver.com/join?sid=sess-2&pk=$pk")
+        assertEquals(DeepLink.JoinDevice("sess-2", pk), AppLink.resolve(uri))
+    }
+
+    @Test fun joinDeeplink_missingParams_returnsNull() {
+        assertNull(AppLink.resolve(Uri.parse("https://flagshipserver.com/join?sid=only")))
+        assertNull(AppLink.resolve(Uri.parse("flagship://join?pk=only")))
+    }
+
     @Test fun acceptsHttpAsWellAsHttps_forFutureProofing() {
         // Belt-and-suspenders: if the OS hands us a plaintext http://
         // intent (e.g. via an `android:scheme="http"` in some future

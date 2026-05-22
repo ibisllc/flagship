@@ -34,6 +34,18 @@ object AppLink {
                     .build()
                 return DeepLink.parse(translated)
             }
+            // Phase 3b — the cross-device pairing universal link
+            // (https://flagshipserver.com/join?sid=…&pk=…). It is a
+            // top-level path, so it maps to the `join` host of the
+            // flagship:// scheme directly.
+            if (segments.size == 1 && segments[0] == "join") {
+                val translated = Uri.Builder()
+                    .scheme("flagship")
+                    .authority("join")
+                    .encodedQuery(uri.encodedQuery)
+                    .build()
+                return DeepLink.parse(translated)
+            }
         }
         return null
     }
