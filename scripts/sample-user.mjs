@@ -29,13 +29,16 @@
  *                                                   (mint AuthCode +
  *                                                    InstallBlob +
  *                                                    primary grant)
- *   3. POST /api/dev/sample-user/<u>/admin-snapshot-now
- *                                                   (Worker streams the
- *                                                    personalized ISO,
- *                                                    provisions the
- *                                                    Hetzner VPS with
- *                                                    cloud-init
- *                                                    user_data)
+ *   3. POST /api/dev/sample-user/<u>/admin-cloud-init-now
+ *                                                   (W13: Worker boots a
+ *                                                    stock debian-12 with
+ *                                                    cloud-config that
+ *                                                    bootstraps + the
+ *                                                    first-boot unit
+ *                                                    registers. Replaces
+ *                                                    the broken W11
+ *                                                    admin-snapshot-now
+ *                                                    d-i path.)
  *   4. Poll GET /api/dev/sample-user/<u> until state='none' AND
  *      snapshotId !== null (the cron snapshotted + destroyed the temp
  *      VPS).
@@ -277,17 +280,19 @@ export async function runDelete(deps, username) {
 /* ─────────────────────── subcommand: create (W11) ───────────────────── */
 
 /**
- * W11 `create`. Four-step orchestration where the Worker does all the
+ * `create`. Four-step orchestration where the Worker does all the
  * heavy lifting — the laptop just sequences the admin POSTs and polls
  * for completion.
  *
  *   1. POST /api/dev/sample-user/create               (reserve row)
  *   2. POST /api/dev/sample-user/admin-claim-and-issue
  *                                                      (claim + mint)
- *   3. POST /api/dev/sample-user/<u>/admin-snapshot-now
- *                                                      (Worker
- *                                                       personalize+R2+
- *                                                       Hetzner)
+ *   3. POST /api/dev/sample-user/<u>/admin-cloud-init-now
+ *                                                      (W13 debian-12 +
+ *                                                       cloud-config →
+ *                                                       Hetzner; the W11
+ *                                                       d-i path is
+ *                                                       broken)
  *   4. Poll GET /api/dev/sample-user/<u> until state=='none' AND
  *      snapshotId set (the cron finalized the snapshot + destroyed
  *      the temp VPS).
@@ -347,23 +352,32 @@ export async function runCreate(deps, username, flags) {
     `[create] ticket minted (code=${typeof issued.json?.code === "string" ? issued.json.code : "?"})\n`,
   );
 
-  // 3. Kick off Worker-side provisioning (cloud-init user_data; no
-  //    laptop SSH; no laptop HCLOUD_TOKEN).
+  // 3. Kick off Worker-side provisioning via W13 cloud-init-direct.
+  //    We deliberately use admin-cloud-init-now, NOT the older W11
+  //    admin-snapshot-now (ISO + dd into debian-installer): the d-i
+  //    late-command's register POST does not reach the Worker (broken
+  //    since 2026-05-21), so that path never promotes and the reaper
+  //    tears the VPS down. W13 boots a stock debian-12, runs the
+  //    bootstrap via cloud-config, and the first-boot systemd unit
+  //    registers — with journalctl + an optional SSH-key fallback for
+  //    diagnosis. Needs only HCLOUD_TOKEN + DEMO_IRK_KEK on the Worker
+  //    (no R2). End state is identical (snapshot + destroy via the same
+  //    cron), so the poll condition below is unchanged.
   stderr.write(
-    "[create] kicking off Worker-side provisioning (admin-snapshot-now)…\n",
+    "[create] kicking off Worker-side provisioning (admin-cloud-init-now / W13)…\n",
   );
   const provision = await adminFetch(
     fetchFn,
     adminUrl(
       env.baseUrl,
-      `/api/dev/sample-user/${encodeURIComponent(username)}/admin-snapshot-now`,
+      `/api/dev/sample-user/${encodeURIComponent(username)}/admin-cloud-init-now`,
     ),
     { method: "POST", body: JSON.stringify({ region, size }) },
     env.adminSecret,
   );
   if (provision.status !== 200 && provision.status !== 202) {
     stderr.write(
-      `[create] admin-snapshot-now failed: HTTP ${provision.status} ${JSON.stringify(provision.json)}\n`,
+      `[create] admin-cloud-init-now failed: HTTP ${provision.status} ${JSON.stringify(provision.json)}\n`,
     );
     return exitCodeForHttp(provision.status);
   }

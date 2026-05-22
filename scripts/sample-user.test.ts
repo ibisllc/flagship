@@ -7,10 +7,10 @@
  *   - arg parsing (unchanged from Phase E)
  *   - env resolution: only FLAGSHIP_ADMIN_SECRET is required;
  *     HCLOUD_TOKEN + DEMO_SSH_KEY_PATH are NO LONGER read
- *   - runCreate orchestrates the 4-step W11 flow correctly with
- *     mocked HTTP (reserve → claim → admin-snapshot-now → poll)
+ *   - runCreate orchestrates the 4-step flow correctly with
+ *     mocked HTTP (reserve → claim → admin-cloud-init-now → poll)
  *   - polling completes when the cron stamps snapshot_id
- *   - rollback on the Worker rejecting admin-snapshot-now
+ *   - rollback on the Worker rejecting admin-cloud-init-now
  */
 import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error — .mjs sibling, no types
@@ -334,7 +334,7 @@ describe("runCreate — W11 4-step orchestration", () => {
     const { deps, calls, stderr, stdout } = makeDeps({ journal });
     const code = await runCreate(deps, "demoalice", { display: "Demo Alice" });
     expect(code).toBe(0);
-    // 3 admin POSTs: create, claim, admin-snapshot-now.
+    // 3 admin POSTs: create, claim, admin-cloud-init-now.
     expect(calls).toHaveLength(3);
     expect(calls[0].url).toBe(
       "https://flagshipserver.com/api/dev/sample-user/create",
@@ -354,7 +354,7 @@ describe("runCreate — W11 4-step orchestration", () => {
       serverName: "home",
     });
     expect(calls[2].url).toBe(
-      "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-snapshot-now",
+      "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-cloud-init-now",
     );
     expect(JSON.parse(calls[2].body!)).toEqual({
       region: "fsn1",
@@ -580,7 +580,7 @@ describe("main() — env-gate + exit-code contracts (W11)", () => {
     expect(pollUntilReadyMock).toHaveBeenCalledTimes(1);
     expect(calls[0].url).toContain("/api/dev/sample-user/create");
     expect(calls[1].url).toContain("/admin-claim-and-issue");
-    expect(calls[2].url).toContain("/demoalice/admin-snapshot-now");
+    expect(calls[2].url).toContain("/demoalice/admin-cloud-init-now");
     const final = JSON.parse(stdout.data);
     expect(final).toEqual({
       username: "demoalice",
