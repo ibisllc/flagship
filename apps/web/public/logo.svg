@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Flagship logo">
+  <style>
+    .lg-frame { fill: #0A0A09; }
+    .lg-ring  { fill: #FFFFFF; }
+    .lg-core  { fill: #14B8A6; }
+    @media (prefers-color-scheme: dark) {
+      .lg-frame { fill: #14B8A6; }
+      .lg-ring  { fill: #14B8A6; }
+      .lg-core  { fill: #FFFFFF; }
+    }
+  </style>
+  <rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/>
+  <circle class="lg-ring" cx="32" cy="32" r="18"/>
+  <circle class="lg-core" cx="32" cy="32" r="16"/>
+</svg>

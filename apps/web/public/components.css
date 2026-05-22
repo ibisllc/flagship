@@ -566,7 +566,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
 }
 
 /* Bare <button> default → .btn--primary look */
-button:not(.btn):not(.cta):not(.cta-secondary):not(.qr-btn):not(.nav-menu-btn):not(.qr-overlay-close) {
+button:not(.btn):not(.cta):not(.cta-secondary):not(.qr-btn):not(.nav-menu-btn):not(.qr-overlay-close):not(.theme-btn) {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -585,8 +585,8 @@ button:not(.btn):not(.cta):not(.cta-secondary):not(.qr-btn):not(.nav-menu-btn):n
   -webkit-tap-highlight-color: transparent;
   transition: background var(--motion-state), transform 120ms var(--ease-out);
 }
-button:not(.btn):not(.cta):not(.cta-secondary):not(.qr-btn):not(.nav-menu-btn):not(.qr-overlay-close):hover { background: var(--teal-bright); }
-button:not(.btn):not(.cta):not(.cta-secondary):not(.qr-btn):not(.nav-menu-btn):not(.qr-overlay-close):active { transform: translateY(1px); }
+button:not(.btn):not(.cta):not(.cta-secondary):not(.qr-btn):not(.nav-menu-btn):not(.qr-overlay-close):not(.theme-btn):hover { background: var(--teal-bright); }
+button:not(.btn):not(.cta):not(.cta-secondary):not(.qr-btn):not(.nav-menu-btn):not(.qr-overlay-close):not(.theme-btn):active { transform: translateY(1px); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 button.secondary {
   background: transparent;

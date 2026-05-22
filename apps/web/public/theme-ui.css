@@ -1,0 +1,136 @@
+/*
+ * Shared theme palette + logo + toggle, used by every public page.
+ *
+ * The palette lives under :root[data-theme="…"] (specificity 0,2,0) so it
+ * overrides each page's own :root (0,1,0) regardless of source order — pages
+ * only need to include this file + theme.js, no per-page palette editing.
+ * Both v2 token names and the legacy v1 aliases are covered.
+ */
+
+:root[data-theme="light"] {
+  /* Surfaces — warm off-white canvas, white cards float above it. */
+  --canvas:          #F7F6F2;
+  --canvas-2:        #F0EEE8;
+  --surface:         #FFFFFF;
+  --surface-elev:    #FFFFFF;
+  --surface-sunken:  #EFEDE7;
+
+  --ink:             #000000;
+  --ink-soft:        #1F1E1A;
+  --ink-muted:       #555149;
+  --ink-faint:       #8A8478;
+  --muted:           #555149;
+  --faint:           #8A8478;
+
+  --rule:            #E5E3DC;
+  --rule-strong:     #C8C5BB;
+  --border:          #E5E3DC;
+  --border-soft:     #EFEDE6;
+
+  /* Legacy v1 aliases */
+  --bg:              #F7F6F2;
+  --bg-elev:         #FFFFFF;
+  --bg-elev-2:       #FFFFFF;
+  --fg:              #000000;
+  --fg-mute:         #555149;
+  --line:            #C8C5BB;
+  --text:            #000000;
+  --text-muted:      #555149;
+  --canvas-tinted:   #F0EEE8;
+
+  /* Logo */
+  --lg-frame:        #0A0A09;
+  --lg-ring:         #FFFFFF;
+  --lg-core:         var(--teal, #14B8A6);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --canvas:          #0A0A09;
+  --canvas-2:        #14130F;
+  --surface:         #1A1916;
+  --surface-elev:    #232118;
+  --surface-sunken:  #14130F;
+
+  --ink:             #ECE7D6;
+  --ink-soft:        #C8C2B0;
+  --ink-muted:       #8A8478;
+  --ink-faint:       #565249;
+  --muted:           #8A8478;
+  --faint:           #565249;
+
+  --rule:            #25231C;
+  --rule-strong:     #3A372F;
+  --border:          #25231C;
+  --border-soft:     #1F1D17;
+
+  --bg:              #0A0A09;
+  --bg-elev:         #1A1916;
+  --bg-elev-2:       #232118;
+  --fg:              #ECE7D6;
+  --fg-mute:         #8A8478;
+  --line:            #3A372F;
+  --text:            #ECE7D6;
+  --text-muted:      #8A8478;
+  --canvas-tinted:   #14130F;
+
+  --lg-frame:        var(--teal, #14B8A6);
+  --lg-ring:         var(--teal, #14B8A6);
+  --lg-core:         #FFFFFF;
+
+  color-scheme: dark;
+}
+
+/* ── Logo ──────────────────────────────────────────────────────── */
+.fs-logo {
+  display: inline-block;
+  vertical-align: middle;
+  /* In flex brand containers (some use align-items:baseline) this keeps
+     the mark vertically centred against the wordmark text. */
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+  flex: none;
+}
+.fs-logo .lg-frame { fill: var(--lg-frame); stroke: none; }
+.fs-logo .lg-ring  { fill: var(--lg-ring); }
+.fs-logo .lg-core  { fill: var(--lg-core); }
+
+/* ── Theme toggle ──────────────────────────────────────────────── */
+.theme-btn {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.theme-btn:hover { border-color: var(--teal, #14B8A6); color: var(--teal-bright, #2DD4BF); }
+.theme-btn svg { width: 16px; height: 16px; flex: none; }
+.theme-icon-moon { display: block; }
+.theme-icon-sun  { display: none; }
+:root[data-theme="dark"] .theme-icon-moon { display: none; }
+:root[data-theme="dark"] .theme-icon-sun  { display: block; }
+
+/* Auto-injected floating toggle for pages without a nav control. */
+.theme-btn--floating {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--ink);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.16);
+  z-index: 1000;
+}
+.theme-btn--floating svg { width: 20px; height: 20px; }

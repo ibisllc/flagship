@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Flagship — coming soon</title>
   <meta name="description" content="Flagship — a personal cloud you actually own. Coming soon.">
-  <meta name="theme-color" content="#0A0A09">
+  <meta name="theme-color" content="#FFFFFF">
   <meta name="robots" content="noindex">
   <meta property="og:title" content="Flagship — coming soon">
   <meta property="og:description" content="A personal cloud you actually own. Open source. Coming soon.">
@@ -15,12 +15,12 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.svg">
   <style>
     :root {
-      --canvas: #0A0A09;
-      --ink:    #ECE7D6;
-      --muted:  #8A8478;
-      --rule:   #25231C;
-      --teal:   #2DD4BF;
-      color-scheme: dark;
+      --canvas: #F7F6F2;
+      --ink:    #000000;
+      --muted:  #555149;
+      --rule:   #E5E3DC;
+      --teal:   #0F8B7E;
+      color-scheme: light;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -109,10 +109,12 @@
       color: var(--muted);
     }
   </style>
+  <link rel="stylesheet" href="/theme-ui.css">
+  <script src="/theme.js"></script>
 </head>
 <body>
   <main>
-    <p class="mark"><span class="dot" aria-hidden="true"></span>Flagship</p>
+    <p class="mark"><svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>Flagship</p>
     <h1>Coming <span class="accent">soon</span>.</h1>
     <p class="blurb">A personal cloud you actually own — your stuff, on hardware you control</p>
     <a class="repo" href="https://github.com/ibisllc/flagship" rel="noopener">

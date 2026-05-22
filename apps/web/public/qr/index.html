@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Flagship — get the app</title>
   <meta name="description" content="Open this link from the Flagship mobile app to deliver a server to your browser.">
-  <meta name="theme-color" content="#0A0A09">
+  <meta name="theme-color" content="#FFFFFF">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/components.css">
@@ -52,11 +52,9 @@
       justify-content: center;
       border-bottom: none;
     }
-    .qr-wordmark .glyph {
-      display: inline-block;
-      width: 4px; height: 13px;
-      background: var(--teal);
-      transform: translateY(2px);
+    .qr-wordmark .fs-logo {
+      position: relative;
+      top: -4px;
     }
     .qr-card h1 {
       font-size: clamp(22px, 3vw, 28px);
@@ -134,11 +132,17 @@
     }
     .home-link:hover { color: var(--teal-bright); border-bottom: none; }
   </style>
+  <link rel="stylesheet" href="/theme-ui.css">
+  <script src="/theme.js"></script>
 </head>
 <body>
   <main class="qr-card" role="main">
     <a href="/" class="qr-wordmark" aria-label="Flagship — home">
-      <span class="glyph" aria-hidden="true"></span>
+      <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/>
+        <circle class="lg-ring" cx="32" cy="32" r="18"/>
+        <circle class="lg-core" cx="32" cy="32" r="16"/>
+      </svg>
       <span>Flagship</span>
     </a>
 
