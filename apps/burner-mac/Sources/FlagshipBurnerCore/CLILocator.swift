@@ -60,31 +60,43 @@ public enum CLILocator {
             return override
         }
         var searched: [String] = []
+        // Prefer the self-contained esbuild bundle — it runs under plain
+        // `node` with zero workspace deps (the .ts entry chains to the
+        // protocol's TS source, which plain node can't resolve). Build it
+        // with `npm run bundle` in packages/flagship-burner.
+        let workspaceRoots: [URL]
         if let exe = executableURL {
-            // .build/{debug,release}/FlagshipBurner -> walk up to apps/burner-mac,
-            // then over to packages/flagship-burner/src/cli.ts.
-            let candidate = exe
-                .deletingLastPathComponent()        // .../debug
-                .deletingLastPathComponent()        // .../.build
-                .deletingLastPathComponent()        // .../burner-mac
-                .deletingLastPathComponent()        // .../apps
-                .appendingPathComponent("packages/flagship-burner/src/cli.ts")
-            searched.append(candidate.path)
-            if fileManager.fileExists(atPath: candidate.path) {
-                return candidate.path
+            // .build/{debug,release}/FlagshipBurner → walk up to apps/burner-mac,
+            // then over to packages/flagship-burner/.
+            workspaceRoots = [
+                exe.deletingLastPathComponent()   // .../debug
+                   .deletingLastPathComponent()   // .../.build
+                   .deletingLastPathComponent()   // .../burner-mac
+                   .deletingLastPathComponent(),  // .../apps
+            ]
+        } else {
+            workspaceRoots = []
+        }
+        for root in workspaceRoots {
+            let bundle = root.appendingPathComponent("packages/flagship-burner/dist/flagship-burn.mjs")
+            searched.append(bundle.path)
+            if fileManager.fileExists(atPath: bundle.path) {
+                return bundle.path
+            }
+            // Fall back to the .ts entry (only works if the GUI is run via
+            // an environment that has tsx; kept for dev convenience).
+            let ts = root.appendingPathComponent("packages/flagship-burner/src/cli.ts")
+            searched.append(ts.path)
+            if fileManager.fileExists(atPath: ts.path) {
+                return ts.path
             }
         }
-        // App-bundle resources path (Phase 2 packaging will copy the CLI here).
+        // App-bundle resources path (release packaging copies the bundle here).
         if let resURL = Bundle.main.resourceURL {
-            let r = resURL.appendingPathComponent("flagship-burner/src/cli.ts")
-            searched.append(r.path)
-            if fileManager.fileExists(atPath: r.path) {
-                return r.path
-            }
-            let rJS = resURL.appendingPathComponent("flagship-burner/dist/cli.js")
-            searched.append(rJS.path)
-            if fileManager.fileExists(atPath: rJS.path) {
-                return rJS.path
+            let rBundle = resURL.appendingPathComponent("flagship-burner/flagship-burn.mjs")
+            searched.append(rBundle.path)
+            if fileManager.fileExists(atPath: rBundle.path) {
+                return rBundle.path
             }
         }
         throw LocateError.cliEntryNotFound(searched: searched)

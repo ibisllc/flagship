@@ -50,12 +50,22 @@ check-env:
 # Re-package the swift-build binary as a proper .app bundle so codesign
 # is happy. SwiftPM produces a bare executable in .build/release; the
 # Mac wants Contents/MacOS/<binary> + Contents/Info.plist.
-package-app: build-release
+# Build the self-contained esbuild bundle of the burner CLI. The GUI
+# shells out to `node <this>.mjs` — the bundle has zero workspace deps
+# (the raw .ts entry chains to @flagship/protocol's TS source, which
+# plain node can't resolve). Required before package-app so the .app is
+# self-contained.
+bundle-cli:
+	cd ../../packages/flagship-burner && npm run bundle
+	@echo "✓ Bundled CLI: packages/flagship-burner/dist/flagship-burn.mjs"
+
+package-app: build-release bundle-cli
 	rm -rf $(APP_BUNDLE)
 	mkdir -p $(APP_BUNDLE)/Contents/MacOS
-	mkdir -p $(APP_BUNDLE)/Contents/Resources
+	mkdir -p $(APP_BUNDLE)/Contents/Resources/flagship-burner
 	cp $(BUILD_DIR)/$(APP_NAME) $(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)
 	cp Info.plist $(APP_BUNDLE)/Contents/Info.plist
+	cp ../../packages/flagship-burner/dist/flagship-burn.mjs $(APP_BUNDLE)/Contents/Resources/flagship-burner/flagship-burn.mjs
 	@echo "✓ Packaged: $(APP_BUNDLE)"
 
 # Sign with hardened runtime + entitlements. The hardened runtime is

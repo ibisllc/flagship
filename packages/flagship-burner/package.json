@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "bundle": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/flagship-burn.mjs --banner:js='import{createRequire}from\"module\";const require=createRequire(import.meta.url);'",
     "test": "vitest run --dir tests"
   },
   "dependencies": {
