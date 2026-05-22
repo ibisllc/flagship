@@ -38,7 +38,7 @@ import com.flagshipserver.app.ui.theme.FS
  * iOS, wired in a later phase.
  */
 @Composable
-fun BiometricSetupScreen(onContinue: () -> Unit) {
+fun BiometricSetupScreen(username: String, onContinue: () -> Unit) {
     var cloudRecovery by remember { mutableStateOf(true) }
 
     Column(
@@ -94,6 +94,14 @@ fun BiometricSetupScreen(onContinue: () -> Unit) {
         FSPrimaryButton(
             label = "Generate keys & continue",
             onClick = {
+                // Multi-profile keying (W3) — point the Keystore at THIS
+                // cloud's per-profile device-key slot BEFORE minting the
+                // UMK, so creating a SECOND account never overwrites the
+                // first profile's key. profileId = lowercased username
+                // (Keystore normalizes). Open-account re-asserts the same
+                // selection, so this is belt-and-braces for the create
+                // path's earliest key generation.
+                Keystore.setActiveProfile(username)
                 // Mint the UMK in StrongBox-backed AndroidKeyStore (best
                 // effort — fall back to a software key when StrongBox is
                 // absent) and ensure the cached seed that backs the IRK.

@@ -83,6 +83,17 @@ class OpenAccountViewModel(
         _phase.value = OpenAccountPhase.Working
         val label = deviceName.trim().ifEmpty { defaultDeviceName(null) }
         try {
+            // 0. Multi-profile keying (W3) — point the Keystore at THIS
+            //    cloud's per-profile device-key slot BEFORE any key gen,
+            //    so opening a SECOND account mints a fresh UMK in its own
+            //    slot instead of clobbering the first profile's. The
+            //    profileId is the lowercased username (Keystore
+            //    normalizes). For the first/only profile this resolves to
+            //    the legacy default slot only when no prior profile
+            //    exists; here we always key by the explicit cloud so
+            //    additional accounts never collide.
+            Keystore.setActiveProfile(username)
+
             // 1. Ensure the UMK exists. The StrongBox AES anchor key +
             //    the cached 32-byte seed that backs the IRK HKDF.
             ensureHardwareUmk()
