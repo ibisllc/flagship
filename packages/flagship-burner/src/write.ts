@@ -31,7 +31,6 @@ import { createHash } from "node:crypto";
 import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { loadBlobFromFile } from "./loadBlob.js";
-import { verifyIsoHash, type VerifyIsoResult } from "./verifyIso.js";
 import { buildAutoinstallUserData } from "./userdata.js";
 import { remasterIsoWithAutoinstall } from "./remasterIso.js";
 import {
@@ -59,8 +58,6 @@ export interface WriteCommandOpts {
   isRoot?: () => boolean;
   /** Injected for tests. Defaults to real raw-disk write. */
   writeBytesToDevice?: WriteBytesToDevice;
-  /** Injected for tests. Defaults to real `verifyIsoHash`. */
-  verifyIso?: (isoPath: string) => Promise<VerifyIsoResult>;
   /** Injected for tests. Defaults to a real xorriso remaster. */
   remaster?: (args: {
     srcIsoPath: string;
@@ -102,11 +99,6 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     loaded = await loadBlobFromFile(opts.recipePath);
   } catch (e) {
     return { ok: false, reason: `load recipe failed: ${(e as Error).message}`, exitCode: 1 };
-  }
-  const verifier = opts.verifyIso ?? verifyIsoHash;
-  const isoResult = await verifier(opts.isoPath);
-  if (!isoResult.ok) {
-    return { ok: false, reason: `ISO verify failed: ${isoResult.reason}`, exitCode: 1 };
   }
 
   const target = await resolveTarget(opts);

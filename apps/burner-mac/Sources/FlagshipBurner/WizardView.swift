@@ -596,20 +596,32 @@ private struct DiskPickerRow: View {
 private struct LogPane: View {
     @ObservedObject var model: WizardModel
 
+    /// The whole log as one attributed string. Rendering it as a single
+    /// selectable Text (rather than one Text per line) is what lets the
+    /// user drag- or keyboard-select across multiple lines and copy them —
+    /// selection can't span separate Text views. Per-line color is carried
+    /// by the attributes.
+    private var attributed: AttributedString {
+        var out = AttributedString()
+        let lines = model.logLines
+        for (i, line) in lines.enumerated() {
+            var seg = AttributedString(line.text)
+            seg.foregroundColor = line.stream == .stderr ? FB.Colors.danger : Color.primary
+            out.append(seg)
+            if i < lines.count - 1 { out.append(AttributedString("\n")) }
+        }
+        return out
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(Array(model.logLines.enumerated()), id: \.offset) { idx, line in
-                        Text(line.text)
-                            .font(FB.Font.mono())
-                            .foregroundStyle(line.stream == .stderr
-                                             ? FB.Colors.danger
-                                             : Color.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id(idx)
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(attributed)
+                        .font(FB.Font.mono())
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Color.clear.frame(height: 1).id("log-bottom")
                 }
                 .padding(FB.Spacing.s3)
             }
@@ -620,7 +632,7 @@ private struct LogPane: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: FB.Radius.sm))
             .onChange(of: model.logLines.count) { _, n in
-                if n > 0 { withAnimation { proxy.scrollTo(n - 1, anchor: .bottom) } }
+                if n > 0 { withAnimation { proxy.scrollTo("log-bottom", anchor: .bottom) } }
             }
         }
         .padding(.horizontal, FB.Spacing.s5)

@@ -3,7 +3,6 @@ import { mkdtemp, writeFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runWriteCommand, runWriteImageCommand, type WriteCommandOpts } from "../src/write.js";
-import type { VerifyIsoResult } from "../src/verifyIso.js";
 import {
   deriveIRK,
   ed,
@@ -84,13 +83,6 @@ function bytesToHex(b: Uint8Array): string {
   return Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-/** verifyIso stub that always succeeds — bypasses the pinned-distros gate
- *  so we can exercise the device-selection logic without a real ISO. */
-const stubVerifyOk = async (): Promise<VerifyIsoResult> => ({
-  ok: true,
-  sha256: "deadbeef",
-  sizeBytes: 1024,
-});
 
 /** remaster stub — writes a tiny stand-in ISO at the requested output
  *  path so the orchestration's write + cleanup still works. Avoids
@@ -139,7 +131,6 @@ describe("runWriteCommand — early gates", () => {
       recipePath: bad,
       isoPath: "/nonexistent",
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       writeBytesToDevice: async () => {
         writeCalled = true;
         return { bytesWritten: 0 };
@@ -152,30 +143,6 @@ describe("runWriteCommand — early gates", () => {
     expect(writeCalled).toBe(false);
   });
 
-  it("refuses when ISO verification fails (and never touches the device)", async () => {
-    const recipePath = await makeFakeRecipe();
-    let writeCalled = false;
-    const r = await runWriteCommand({
-      recipePath,
-      isoPath: "/tmp/some.iso",
-      isRoot: () => true,
-      verifyIso: async () => ({
-        ok: false,
-        sha256: "abc",
-        sizeBytes: 0,
-        reason: "SHA-256 does not match any pinned distro",
-      }),
-      writeBytesToDevice: async () => {
-        writeCalled = true;
-        return { bytesWritten: 0 };
-      },
-      enumerateOpts: { os: "linux", runCommand: async () => ({ stdout: "", stderr: "", code: 0 }) },
-    });
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.reason).toMatch(/ISO verify failed/);
-    expect(writeCalled).toBe(false);
-  });
 });
 
 describe("runWriteCommand — happy path + device gates", () => {
@@ -204,7 +171,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "/dev/sdb",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       remaster: stubRemaster,
       writeBytesToDevice: async (a) => {
         expect(a.devicePath).toBe("/dev/sdb");
@@ -239,7 +205,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       yes: true,
       keepRecipe: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       remaster: stubRemaster,
       writeBytesToDevice: async () => ({ bytesWritten: 7 }),
       enumerateOpts: makeLsblkRun([
@@ -267,7 +232,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "/dev/sda",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       writeBytesToDevice: async () => {
         writeCalled = true;
         return { bytesWritten: 0 };
@@ -297,7 +261,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "/dev/sdz",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       writeBytesToDevice: async () => ({ bytesWritten: 0 }),
       enumerateOpts: makeLsblkRun([
         {
@@ -323,7 +286,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "sdb",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       writeBytesToDevice: async () => ({ bytesWritten: 0 }),
       enumerateOpts: makeLsblkRun([]),
     });
@@ -340,7 +302,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "auto",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       writeBytesToDevice: async () => ({ bytesWritten: 0 }),
       enumerateOpts: makeLsblkRun([]),
     });
@@ -357,7 +318,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "auto",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       writeBytesToDevice: async () => ({ bytesWritten: 0 }),
       enumerateOpts: makeLsblkRun([
         {
@@ -392,7 +352,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "/dev/sdb",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       writeBytesToDevice: async () => ({ bytesWritten: 0 }),
       enumerateOpts: makeLsblkRun([
         {
@@ -418,7 +377,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       isoPath: "/tmp/ignored.iso",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       remaster: stubRemaster,
       promptForLine: async (m) => {
         prompts.push(m);
@@ -450,7 +408,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       isoPath: "/tmp/ignored.iso",
       yes: true,
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       promptForLine: async () => "9",
       writeBytesToDevice: async () => ({ bytesWritten: 0 }),
       enumerateOpts: makeLsblkRun([
@@ -478,7 +435,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "/dev/sdb",
       yes: false, // require typed-yes
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       promptForLine: async () => "no thanks",
       writeBytesToDevice: async () => {
         writeCalled = true;
@@ -512,7 +468,6 @@ describe("runWriteCommand — happy path + device gates", () => {
       isoPath: "/tmp/ignored.iso",
       device: "/dev/sdb",
       isRoot: () => true,
-      verifyIso: stubVerifyOk,
       remaster: stubRemaster,
       promptForLine: async () => "  YES  ",
       writeBytesToDevice: async () => {

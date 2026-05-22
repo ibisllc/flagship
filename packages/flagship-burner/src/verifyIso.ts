@@ -45,16 +45,7 @@ export async function verifyIsoHash(isoPath: string): Promise<VerifyIsoResult> {
       ok: false,
       sha256: sha,
       sizeBytes,
-      reason: "SHA-256 does not match any pinned distro",
-    };
-  }
-  if (matched.sizeBytes !== sizeBytes) {
-    return {
-      ok: false,
-      sha256: sha,
-      sizeBytes,
-      matched,
-      reason: `size mismatch: expected ${matched.sizeBytes}, got ${sizeBytes}`,
+      reason: "SHA-256 does not match a recommended distro",
     };
   }
   return { ok: true, sha256: sha, sizeBytes, matched };

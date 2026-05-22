@@ -138,15 +138,10 @@ async function cmdUserData(rest: string[]): Promise<void> {
 }
 
 async function cmdPrepare(rest: string[]): Promise<void> {
-  // `prepare` — take a stock distro ISO + a signed recipe; produce a
-  // ready-to-flash ISO with cloud-init user-data baked into a CIDATA
-  // partition appended at the end. The user can then write the output
-  // ISO to USB with `dd`, balenaEtcher, Rufus, or any tool of choice.
-  //
-  // This is the "burn elsewhere" use case — the desktop GUI omits it
-  // (its Phase 2 `write` subcommand bundles prepare+flash in one
-  // step), but the CLI keeps it because some users need to hand an
-  // ISO to a friend or burn it on a different machine.
+  // `prepare` — take a Linux installer ISO + a signed recipe; produce a
+  // ready-to-flash autoinstall ISO. We do NOT verify the ISO against a
+  // pinned hash: the tool advises (see `distros` + the website) but the
+  // user supplies whatever image they choose.
   const recipePath = rest[0];
   const isoPath = rest[1];
   const outPath = rest[2];
@@ -159,11 +154,6 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     loaded = await loadBlobFromFile(recipePath);
   } catch (e) {
     console.error(`load recipe failed: ${(e as Error).message}`);
-    process.exit(1);
-  }
-  const isoResult = await verifyIsoHash(isoPath);
-  if (!isoResult.ok) {
-    console.error(`ISO verify failed: ${isoResult.reason}`);
     process.exit(1);
   }
   const yaml = buildAutoinstallUserData({
