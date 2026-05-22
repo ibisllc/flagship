@@ -29,19 +29,19 @@ final class DemoServerBlockTests: XCTestCase {
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         mock.testAccounts = [
-            "demo-alice": TestAccountMeta(display: "Demo Alice", ttlHours: 24)
+            "demoalice": TestAccountMeta(display: "Demo Alice", ttlHours: 24)
         ]
         mock.demoServers = [
-            "demo-alice": DemoServerBlock(
-                fqdn: "home.demo-alice.flagship.services",
+            "demoalice": DemoServerBlock(
+                fqdn: "home.demoalice.flagship.services",
                 status: "none",
                 ttlIdleMinutes: 30
             )
         ]
-        let r = try await mock.usernameAvailable("demo-alice")
+        let r = try await mock.usernameAvailable("demoalice")
         XCTAssertEqual(r.available, false)
         XCTAssertNotNil(r.testAccount)
-        XCTAssertEqual(r.demoServer?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(r.demoServer?.fqdn, "home.demoalice.flagship.services")
         XCTAssertEqual(r.demoServer?.status, "none")
         // Compare the `lifecycle` enum case via String(describing:) so
         // we don't run into Swift's Optional<.none> overload-resolution
@@ -55,12 +55,12 @@ final class DemoServerBlockTests: XCTestCase {
         // `demoServerBlockFromRow` — keep these byte-identical.
         let json = #"""
         {
-          "username": "demo-alice",
+          "username": "demoalice",
           "available": false,
           "reason": "test account",
           "testAccount": {"display":"Demo Alice","ttlHours":24},
           "demoServer": {
-            "fqdn": "home.demo-alice.flagship.services",
+            "fqdn": "home.demoalice.flagship.services",
             "status": "provisioning",
             "ttlIdleMinutes": 30
           }
@@ -70,7 +70,7 @@ final class DemoServerBlockTests: XCTestCase {
             UsernameAvailabilityResponse.self,
             from: Data(json.utf8)
         )
-        XCTAssertEqual(resp.demoServer?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(resp.demoServer?.fqdn, "home.demoalice.flagship.services")
         XCTAssertEqual(resp.demoServer?.lifecycle, .provisioning)
     }
 
@@ -91,16 +91,16 @@ final class DemoServerBlockTests: XCTestCase {
     func test_activate_demoServerPresent_rendersOneRealDevice() {
         let app = AppState()
         let block = DemoServerBlock(
-            fqdn: "home.demo-alice.flagship.services",
+            fqdn: "home.demoalice.flagship.services",
             status: "none",
             ttlIdleMinutes: 30
         )
-        DemoFixtures.activate(app, username: "demo-alice", demoServer: block)
+        DemoFixtures.activate(app, username: "demoalice", demoServer: block)
         XCTAssertEqual(app.pods.count, 1, "demoServer-present path must render ONE device")
-        XCTAssertEqual(app.pods.first?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(app.pods.first?.fqdn, "home.demoalice.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .pending, "status='none' maps to .pending until /connect")
         XCTAssertTrue(app.isPaired)
-        XCTAssertEqual(app.currentUser, "demo-alice")
+        XCTAssertEqual(app.currentUser, "demoalice")
     }
 
     func test_activate_demoServerNil_fallsBackToThreeFixtures() {
@@ -124,22 +124,22 @@ final class DemoServerBlockTests: XCTestCase {
 
     func test_samplePodFromDemoServer_upStatusMapsToOnline() {
         let block = DemoServerBlock(
-            fqdn: "home.demo-alice.flagship.services",
+            fqdn: "home.demoalice.flagship.services",
             status: "up",
             ttlIdleMinutes: 30
         )
-        let pod = DemoFixtures.samplePodFromDemoServer(block, username: "demo-alice")
+        let pod = DemoFixtures.samplePodFromDemoServer(block, username: "demoalice")
         XCTAssertEqual(pod.status, .online)
-        XCTAssertEqual(pod.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(pod.fqdn, "home.demoalice.flagship.services")
     }
 
     func test_samplePodFromDemoServer_provisioningMapsToPending() {
         let block = DemoServerBlock(
-            fqdn: "home.demo-alice.flagship.services",
+            fqdn: "home.demoalice.flagship.services",
             status: "provisioning",
             ttlIdleMinutes: 30
         )
-        let pod = DemoFixtures.samplePodFromDemoServer(block, username: "demo-alice")
+        let pod = DemoFixtures.samplePodFromDemoServer(block, username: "demoalice")
         XCTAssertEqual(pod.status, .pending)
     }
 
@@ -149,18 +149,18 @@ final class DemoServerBlockTests: XCTestCase {
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         mock.demoServers = [
-            "demo-alice": DemoServerBlock(
-                fqdn: "home.demo-alice.flagship.services",
+            "demoalice": DemoServerBlock(
+                fqdn: "home.demoalice.flagship.services",
                 status: "none",
                 ttlIdleMinutes: 30
             )
         ]
         let connect = MockDemoConnectClient(server: mock)
         connect.simulatedProvisioningSeconds = 0  // synchronous flip
-        try await connect.connect(username: "demo-alice")
-        XCTAssertEqual(connect.connectCalls, ["demo-alice"])
+        try await connect.connect(username: "demoalice")
+        XCTAssertEqual(connect.connectCalls, ["demoalice"])
         // Now the mock's row should be `up`.
-        let r = try await mock.usernameAvailable("demo-alice")
+        let r = try await mock.usernameAvailable("demoalice")
         XCTAssertEqual(r.demoServer?.lifecycle, .up)
     }
 
@@ -168,15 +168,15 @@ final class DemoServerBlockTests: XCTestCase {
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         mock.demoServers = [
-            "demo-alice": DemoServerBlock(
-                fqdn: "home.demo-alice.flagship.services",
+            "demoalice": DemoServerBlock(
+                fqdn: "home.demoalice.flagship.services",
                 status: "up",
                 ttlIdleMinutes: 30
             )
         ]
         let connect = MockDemoConnectClient(server: mock)
         let block = try await connect.pollUntilUp(
-            username: "demo-alice",
+            username: "demoalice",
             pollIntervalSeconds: 0.01,
             timeoutSeconds: 1.0
         )
@@ -187,8 +187,8 @@ final class DemoServerBlockTests: XCTestCase {
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         mock.demoServers = [
-            "demo-alice": DemoServerBlock(
-                fqdn: "home.demo-alice.flagship.services",
+            "demoalice": DemoServerBlock(
+                fqdn: "home.demoalice.flagship.services",
                 status: "provisioning",
                 ttlIdleMinutes: 30
             )
@@ -196,7 +196,7 @@ final class DemoServerBlockTests: XCTestCase {
         let connect = MockDemoConnectClient(server: mock)
         do {
             _ = try await connect.pollUntilUp(
-                username: "demo-alice",
+                username: "demoalice",
                 pollIntervalSeconds: 0.01,
                 timeoutSeconds: 0.05
             )
@@ -215,7 +215,7 @@ final class DemoServerBlockTests: XCTestCase {
         let connect = MockDemoConnectClient(server: mock)
         do {
             _ = try await connect.pollUntilUp(
-                username: "demo-alice",
+                username: "demoalice",
                 pollIntervalSeconds: 0.01,
                 timeoutSeconds: 0.05
             )
@@ -232,22 +232,22 @@ final class DemoServerBlockTests: XCTestCase {
     func test_coordinator_connect_flipsPodFromPendingToOnline() async {
         let app = AppState()
         let block = DemoServerBlock(
-            fqdn: "home.demo-alice.flagship.services",
+            fqdn: "home.demoalice.flagship.services",
             status: "none",
             ttlIdleMinutes: 30
         )
-        DemoFixtures.activate(app, username: "demo-alice", demoServer: block)
+        DemoFixtures.activate(app, username: "demoalice", demoServer: block)
         XCTAssertEqual(app.pods.first?.status, .pending)
 
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
-        mock.demoServers = ["demo-alice": block]
+        mock.demoServers = ["demoalice": block]
         let connect = MockDemoConnectClient(server: mock)
         connect.simulatedProvisioningSeconds = 0  // synchronous flip
         let coord = DemoConnectCoordinator(server: mock, demoConnect: connect)
 
         await coord.connect(
-            username: "demo-alice",
+            username: "demoalice",
             appState: app,
             pollIntervalSeconds: 0.01,
             timeoutSeconds: 2.0
@@ -255,7 +255,7 @@ final class DemoServerBlockTests: XCTestCase {
         guard case .up(let fqdn) = coord.state else {
             XCTFail("expected .up, got \(coord.state)"); return
         }
-        XCTAssertEqual(fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(fqdn, "home.demoalice.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .online,
                        "coordinator must flip the matching pod to .online")
     }

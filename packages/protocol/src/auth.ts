@@ -2901,7 +2901,7 @@ export function serviceGrantActiveAt(g: ServiceGrant, now: number): boolean {
 // hardening), and a SHA-256 hex of the canonical bytes (grantId
 // helper) is used as the D1 primary key + revocation handle.
 //
-// The single envelope serves BOTH the demo flow ("demo-alice.reviewer"
+// The single envelope serves BOTH the demo flow ("demoalice.reviewer"
 // is a browse-only sub-identity) and the corporate / restricted-device
 // path. See docs/v2-device-addressing-and-real-ticket.md §2 + §11.
 // ──────────────────────────────────────────────────────────────────────

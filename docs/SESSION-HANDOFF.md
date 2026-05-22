@@ -63,7 +63,7 @@ demo is live-verified.
 1. `SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) bash scripts/build-flagship-netboot-iso.sh out/flagship-netboot-debian-12.7.0-x86_64.iso` — produces ~600 MB ISO.
 2. `npx wrangler r2 object put flagship-iso/flagship-netboot-debian-12.7.0-x86_64.iso --file out/flagship-netboot-debian-12.7.0-x86_64.iso` — uploads.
 3. `cd apps/com && npx wrangler deploy` — picks up `FLAGSHIP_NETBOOT_ISO_URL`.
-4. `HCLOUD_TOKEN=... node scripts/sample-user.mjs create demo-alice` — live test. Expect register within ~6-10 min (Debian install is slower than Alpine but reliable).
+4. `HCLOUD_TOKEN=... node scripts/sample-user.mjs create demoalice` — live test. Expect register within ~6-10 min (Debian install is slower than Alpine but reliable).
 
 **Read this FIRST.** This file is the in-repo, machine-portable source of
 truth. The richer agent-memory (`~/.claude/projects/.../memory/
@@ -286,7 +286,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
     resolution.
   - `4315993` **Hyphenated demo usernames work in /users/check**:
     demoUsers + testAccounts lookup moved BEFORE validateUserLabel.
-    Pre-fix, `/users/check {"username":"demo-alice"}` returned
+    Pre-fix, `/users/check {"username":"demoalice"}` returned
     `{available: false, reason: "no hyphens"}` even though the
     demo existed. Mobile demo-mode silently broke for every
     hyphenated demo name. Hidden because no live test completed.
@@ -338,7 +338,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
      visible (`recovery_wipe_policy`).
   3. Repo `ibisllc/flagship` is PUBLIC (verified at session end).
      The bootstrap can now `curl` install.sh from raw.githubusercontent.
-  4. Run live test: `node scripts/sample-user.mjs create demo-alice
+  4. Run live test: `node scripts/sample-user.mjs create demoalice
      --display "Demo Alice"`.
   5. If green, mint reviewer + smoke mobile demo-mode flow.
 
@@ -361,7 +361,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
   attempt #4: three blockers FIXED + verified live, one
   architectural blocker EXPOSED + handed off):** With v2 device-
   addressing + real-ticket all shipped (entry below), drove four
-  successive live `create-sample-user demo-alice` runs against
+  successive live `create-sample-user demoalice` runs against
   Hetzner cx23/fsn1 to validate end-to-end. Each attempt surfaced
   + fixed a real bug; the 4th hit a more substantive limitation
   in `installer/install.sh` that needs its own session.
@@ -476,7 +476,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
     agent context). `HCLOUD_TOKEN`, `DEMO_PUBLIC_SSH_KEY`,
     `FLAGSHIP_ADMIN_SECRET`, `FLAGSHIP_CA_PRIV_HEX` all set.
     `CA_ENDORSEMENT_ENFORCE=true` armed.
-  - demo-alice state in D1: `usernames` row claimed under the
+  - demoalice state in D1: `usernames` row claimed under the
     derived IRK `a7955f17…` (`is_demo=1`). Multiple stale
     auth-codes + build-tickets + device-grants from the four
     attempts (revoked-on-re-issue cycle works correctly).
@@ -643,16 +643,16 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
     3. Once-per-cluster: `wrangler secret put HCLOUD_TOKEN` +
        `DEMO_PUBLIC_SSH_KEY` (per `docs/next-session-prompt.md`
        OPERATOR PREREQS).
-    4. Live run: `node scripts/sample-user.mjs create demo-alice
+    4. Live run: `node scripts/sample-user.mjs create demoalice
        --display "Demo Alice"`. The new flow mints a real
        `.com`-issued ticket BEFORE personalization, so the
        daemon's first-boot `/api/server/register` will be
        accepted — the 2026-05-20 gap is closed.
-    5. `node scripts/sample-user.mjs grant-device demo-alice
+    5. `node scripts/sample-user.mjs grant-device demoalice
        reviewer --scopes browse` to mint the reviewer
        sub-identity.
-    6. iOS/webapp: type `demo-alice` for full demo; type
-       `demo-alice.reviewer` to see the chip + disabled buttons.
+    6. iOS/webapp: type `demoalice` for full demo; type
+       `demoalice.reviewer` to see the chip + disabled buttons.
 
   * **Backward-compatible.** v2 is opt-in. Existing single-IRK
     accounts work unchanged. No migration forced. Legacy clients
@@ -671,7 +671,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
 - **2026-05-20 (v1-launch s9 cont. — Plan A live-run attempt
   EXPOSED two architectural gaps; checkpoint before refactor):**
   Drove the operator CLI (`node scripts/sample-user.mjs create
-  demo-alice --display "Demo Alice"`) against real Hetzner from
+  demoalice --display "Demo Alice"`) against real Hetzner from
   the operator's interactive shell. **14 incremental Hetzner-
   client bug-fixes landed** (`ac0dc27` → `4027246`), making the
   CLI walk all the way from D1 row reserve through ISO build /
@@ -687,7 +687,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
   personalizer in synthesizeBlob mode — so the daemon's
   first-boot `/api/server/register` is rejected by `.com`
   because `.com` never issued the trailer's serial. The install
-  silently never completes; `/api/users/demo-alice/pods` never
+  silently never completes; `/api/users/demoalice/pods` never
   shows the daemon. **The whole `create-sample-user` flow needs
   to switch to mint-real-ticket-via-.com THEN `--blob-json`
   personalize**. Roughly: derive deterministic IRK from username
@@ -696,7 +696,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
   --blob-json.
 
   **Gap 2 — `/api/users/<u>/pods` returns HTTP 500 for ALL
-  users** (probed with both `demo-alice` AND the real
+  users** (probed with both `demoalice` AND the real
   `harry11911a`; both 1101). This is a Worker-wide bug, NOT
   demo-specific. Hypothesis: stale column reference fallout
   from the App→Service rename — `daemon_status.apps_served` →
@@ -739,7 +739,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
      `--blob-json` with the real install-blob envelope.
   4. Live re-run; iterate until the daemon actually registers
      and the green padlock appears.
-  5. Mobile e2e: open iOS / webapp, type `demo-alice`, observe
+  5. Mobile e2e: open iOS / webapp, type `demoalice`, observe
      the demo-mode connect flow against the real VPS.
   6. NEW DESIGN ITEM: corporate / restricted-device addressing
      (`harry` vs `harry.ipad` → `USERKEYHASH.*` vs
@@ -760,11 +760,11 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
     NOT set; only needed when the Worker provisions on
     /connect, which we haven't reached.
   - Personalized ISO cache at
-    `~/.cache/flagship-demo-isos/demo-alice-home-faafc1b9.iso`
+    `~/.cache/flagship-demo-isos/demoalice-home-faafc1b9.iso`
     on the operator's Mac. Auto-rebuilds when needed.
-  - The R2 object `demo-isos/demo-alice-0eaddd0f.iso` is still
+  - The R2 object `demo-isos/demoalice-0eaddd0f.iso` is still
     in the bucket; orphaned but harmless.
-  - `demo-alice` D1 row: `region='fsn1', size='cpx11',
+  - `demoalice` D1 row: `region='fsn1', size='cpx11',
     state='none', snapshot_id=NULL` — i.e. unprovisioned. Safe
     to leave; the next attempt will re-use the row idempotently.
 
@@ -811,9 +811,9 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
        wrangler secret put HCLOUD_TOKEN  # in apps/com
        wrangler secret put DEMO_PUBLIC_SSH_KEY < ~/.ssh/flagship-demo-ssh.pub
        wrangler r2 bucket create flagship-iso-temp
-       node scripts/sample-user.mjs create demo-alice --display "Demo Alice"
+       node scripts/sample-user.mjs create demoalice --display "Demo Alice"
        ```
-       Then verify by typing `demo-alice` on iOS/webapp.
+       Then verify by typing `demoalice` on iOS/webapp.
   3. **Plan B — v1.2 security cascade.** Five phases:
      - `5970012` Phase 1: schema — `usernames.account_type/
        totp_secret_encrypted/recovery_codes_hashes_json/totp_enrolled_at`,
@@ -848,7 +848,7 @@ merge+re-pin. See §0 (session 6 entry) for the full per-commit detail.)
        cron paths.
   4. **Plan A Phase F + Plan B operational steps remain (operator):**
      - Plan A Phase F live test (HCLOUD_TOKEN + Hetzner project +
-       first `create-sample-user demo-alice`).
+       first `create-sample-user demoalice`).
      - Plan B: optionally enable for the operator's account — set
        `wrangler secret put FLAGSHIP_TOTP_KEK` (32-byte hex), then
        walk through the iOS / webapp enrollment flow to mint the

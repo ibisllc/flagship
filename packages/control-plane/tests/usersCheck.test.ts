@@ -84,7 +84,7 @@ describe("handleUsersCheck", () => {
 
   it("hyphenated DEMO username returns demoServer block before validateUserLabel rejection", async () => {
     // Bug fix: previously the validateUserLabel hyphen guard fired
-    // BEFORE the demoUsers lookup, so /users/check for `demo-alice`
+    // BEFORE the demoUsers lookup, so /users/check for `demoalice`
     // would return `{available: false, reason: "no hyphens"}` even
     // though demo_users had a row for that username. Mobile demo-mode
     // never got the demoServer block and broke for every hyphenated
@@ -94,7 +94,7 @@ describe("handleUsersCheck", () => {
     const { InMemoryDemoUsersStorage } = await import("@flagship/storage");
     const demoUsers = new InMemoryDemoUsersStorage();
     await demoUsers.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -109,13 +109,13 @@ describe("handleUsersCheck", () => {
     });
     const r = await handleUsersCheck(
       { storage: fakeStorage(), demoUsers },
-      { username: "demo-alice" },
+      { username: "demoalice" },
     );
     expect(r.status).toBe(200);
     const body = r.body as UsersCheckResponse;
     expect(body.available).toBe(false);
     expect(body.demoServer).toBeDefined();
-    expect(body.demoServer!.fqdn).toBe("home.demo-alice.flagship.services");
+    expect(body.demoServer!.fqdn).toBe("home.demoalice.flagship.services");
     expect(body.reason).not.toMatch(/no hyphens/i);
   });
 
@@ -234,7 +234,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     );
     const demoUsers = new InMemoryDemoUsersStorage();
     await demoUsers.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -250,7 +250,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
     await deviceCapabilityGrants.put({
       grantId: "g-uuid-1",
-      username: "demo-alice",
+      username: "demoalice",
       deviceLabel: "reviewer",
       devicePubHex: "cc".repeat(32),
       scopesJson: JSON.stringify(["browse"]),
@@ -261,7 +261,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     });
     const r = await handleUsersCheck(
       { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
-      { username: "demo-alice.reviewer" },
+      { username: "demoalice.reviewer" },
     );
     expect(r.status).toBe(200);
     const body = r.body as UsersCheckResponse;
@@ -280,7 +280,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     );
     const demoUsers = new InMemoryDemoUsersStorage();
     await demoUsers.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -296,7 +296,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
     const r = await handleUsersCheck(
       { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
-      { username: "demo-alice.nope" },
+      { username: "demoalice.nope" },
     );
     expect(r.status).toBe(404);
     expect((r.body as { error?: string }).error).toBe("unknown demo device label");
@@ -308,7 +308,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     );
     const demoUsers = new InMemoryDemoUsersStorage();
     await demoUsers.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -324,7 +324,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     const deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
     await deviceCapabilityGrants.put({
       grantId: "g-uuid-rev",
-      username: "demo-alice",
+      username: "demoalice",
       deviceLabel: "reviewer",
       devicePubHex: "dd".repeat(32),
       scopesJson: JSON.stringify(["browse"]),
@@ -335,7 +335,7 @@ describe("handleUsersCheck — <u>.<device-label> v2 syntax", () => {
     });
     const r = await handleUsersCheck(
       { storage: fakeStorage(), demoUsers, deviceCapabilityGrants },
-      { username: "demo-alice.reviewer" },
+      { username: "demoalice.reviewer" },
     );
     expect(r.status).toBe(404);
   });

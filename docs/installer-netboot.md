@@ -158,8 +158,8 @@ npx wrangler r2 object put flagship-iso/flagship-netboot-debian-13.5.0-x86_64.is
 cd apps/com && npx wrangler deploy
 
 # 5. Run a real demo-user provisioning to live-test:
-HCLOUD_TOKEN=... node scripts/sample-user.mjs create demo-alice
-# Watch the /api/users/demo-alice/pods endpoint; expect a register
+HCLOUD_TOKEN=... node scripts/sample-user.mjs create demoalice
+# Watch the /api/users/demoalice/pods endpoint; expect a register
 # event within ~6-10 minutes (Debian install is slower than Alpine but
 # more reliable).
 ```
@@ -184,7 +184,7 @@ the netboot ISO is a follow-up.
 
 1. Build the first netboot ISO + upload to R2 + flip
    `FLAGSHIP_NETBOOT_ISO_URL` in `wrangler.toml`.
-2. Live-test via `scripts/sample-user.mjs create demo-alice`.
+2. Live-test via `scripts/sample-user.mjs create demoalice`.
 3. Once live-verified: cut the `/build/` flow over to the netboot ISO
    too (browser-side personalize stays unchanged; only the base ISO
    key changes).

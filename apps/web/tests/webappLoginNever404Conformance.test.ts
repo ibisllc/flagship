@@ -56,7 +56,7 @@ const toHex = (b: Uint8Array) =>
  * These MUST match packages/control-plane/src/accountResolve.ts's projection
  * EXACTLY (graceModel derived from kind; recovery absent → present:false). */
 
-function demoResolution(username = "demo-alice") {
+function demoResolution(username = "demoalice") {
   return {
     username,
     exists: true,
@@ -247,10 +247,10 @@ describe("Phase 5 conformance — demo branch activates with no credentials", ()
       makePassphrase: () => "x".repeat(32),
       fetch: fetchMock as any,
     };
-    const out = await activateDemoAccount(demoResolution("demo-alice"), deps as any);
-    expect(out.username).toBe("demo-alice");
+    const out = await activateDemoAccount(demoResolution("demoalice"), deps as any);
+    expect(out.username).toBe("demoalice");
     expect(deps.bootstrapNewIdentity).toHaveBeenCalledTimes(1);
-    expect(deps.unlockSession).toHaveBeenCalledWith(seed, "demo-alice");
+    expect(deps.unlockSession).toHaveBeenCalledWith(seed, "demoalice");
     expect(deps.dispatchInitialView).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
   });

@@ -28,11 +28,11 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         // `deviceCapability` — keep these byte-identical.
         let json = #"""
         {
-          "username": "demo-alice.reviewer",
+          "username": "demoalice.reviewer",
           "available": false,
           "reason": "device capability",
           "demoServer": {
-            "fqdn": "home.demo-alice.flagship.services",
+            "fqdn": "home.demoalice.flagship.services",
             "status": "up",
             "ttlIdleMinutes": 30
           },
@@ -53,14 +53,14 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         XCTAssertEqual(resp.deviceCapability?.label, "reviewer")
         XCTAssertEqual(resp.deviceCapability?.scopes, [.browse])
         XCTAssertEqual(resp.deviceCapability?.grantId, "00000000-0000-4000-8000-000000000001")
-        XCTAssertEqual(resp.demoServer?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(resp.demoServer?.fqdn, "home.demoalice.flagship.services")
         XCTAssertEqual(resp.deviceCapability?.isFullyScoped, false)
     }
 
     func test_decodesElevatedDeviceCapabilityWithMultipleScopes() throws {
         let json = #"""
         {
-          "username": "demo-alice.work-laptop",
+          "username": "demoalice.work-laptop",
           "available": false,
           "reason": "device capability",
           "deviceCapability": {
@@ -89,7 +89,7 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         // unknown wire string silently disappears.
         let json = #"""
         {
-          "username": "demo-alice.reviewer",
+          "username": "demoalice.reviewer",
           "available": false,
           "reason": "device capability",
           "deviceCapability": {
@@ -115,7 +115,7 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         // produces a response with no `deviceCapability` field at all.
         let json = #"""
         {
-          "username": "demo-alice",
+          "username": "demoalice",
           "available": false,
           "reason": "test account",
           "testAccount": {"display":"Demo Alice","ttlHours":24}
@@ -140,14 +140,14 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         mock.demoServers = [
-            "demo-alice": DemoServerBlock(
-                fqdn: "home.demo-alice.flagship.services",
+            "demoalice": DemoServerBlock(
+                fqdn: "home.demoalice.flagship.services",
                 status: "up",
                 ttlIdleMinutes: 30
             )
         ]
         mock.deviceCapabilities = [
-            "demo-alice.reviewer": DeviceCapabilityBlock(
+            "demoalice.reviewer": DeviceCapabilityBlock(
                 label: "reviewer",
                 devicePubKey: String(repeating: "0", count: 64),
                 scopes: [.browse],
@@ -156,12 +156,12 @@ final class DeviceCapabilityBlockTests: XCTestCase {
                 signature: String(repeating: "0", count: 128)
             )
         ]
-        let r = try await mock.usernameAvailable("demo-alice.reviewer")
+        let r = try await mock.usernameAvailable("demoalice.reviewer")
         XCTAssertEqual(r.available, false)
         XCTAssertEqual(r.deviceCapability?.label, "reviewer")
         XCTAssertEqual(r.deviceCapability?.scopes, [.browse])
         XCTAssertEqual(r.demoServer?.fqdn,
-                       "home.demo-alice.flagship.services",
+                       "home.demoalice.flagship.services",
                        "the same underlying demo server is surfaced for the device's pod")
     }
 
@@ -169,7 +169,7 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         let mock = MockFlagshipServerClient()
         mock.simulatedLatency = 0
         do {
-            _ = try await mock.usernameAvailable("demo-alice.no-such-device")
+            _ = try await mock.usernameAvailable("demoalice.no-such-device")
             XCTFail("expected ScreensClientError.http(404)")
         } catch ScreensClientError.http(let status, _) {
             XCTAssertEqual(status, 404)
@@ -183,7 +183,7 @@ final class DeviceCapabilityBlockTests: XCTestCase {
     func test_activateWithDeviceCapability_installsRestrictedSession() {
         let app = AppState()
         let demo = DemoServerBlock(
-            fqdn: "home.demo-alice.flagship.services",
+            fqdn: "home.demoalice.flagship.services",
             status: "up",
             ttlIdleMinutes: 30
         )
@@ -197,12 +197,12 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         )
         DemoFixtures.activate(
             app,
-            username: "demo-alice.reviewer",
+            username: "demoalice.reviewer",
             demoServer: demo,
             deviceCapability: cap
         )
         XCTAssertEqual(app.pods.count, 1)
-        XCTAssertEqual(app.pods.first?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(app.pods.first?.fqdn, "home.demoalice.flagship.services")
         XCTAssertEqual(app.deviceCapability?.label, "reviewer")
         XCTAssertTrue(app.isRestrictedDevice)
         XCTAssertTrue(app.hasScope(.browse))
@@ -213,11 +213,11 @@ final class DeviceCapabilityBlockTests: XCTestCase {
     func test_activateWithoutDeviceCapability_leavesScopesOpen() {
         let app = AppState()
         let demo = DemoServerBlock(
-            fqdn: "home.demo-alice.flagship.services",
+            fqdn: "home.demoalice.flagship.services",
             status: "up",
             ttlIdleMinutes: 30
         )
-        DemoFixtures.activate(app, username: "demo-alice", demoServer: demo)
+        DemoFixtures.activate(app, username: "demoalice", demoServer: demo)
         XCTAssertNil(app.deviceCapability)
         XCTAssertFalse(app.isRestrictedDevice)
         // Legacy single-IRK path holds every scope implicitly.
@@ -228,7 +228,7 @@ final class DeviceCapabilityBlockTests: XCTestCase {
     func test_signOutClearsDeviceCapability() {
         let app = AppState()
         let demo = DemoServerBlock(
-            fqdn: "home.demo-alice.flagship.services",
+            fqdn: "home.demoalice.flagship.services",
             status: "up",
             ttlIdleMinutes: 30
         )
@@ -242,7 +242,7 @@ final class DeviceCapabilityBlockTests: XCTestCase {
         )
         DemoFixtures.activate(
             app,
-            username: "demo-alice.reviewer",
+            username: "demoalice.reviewer",
             demoServer: demo,
             deviceCapability: cap
         )

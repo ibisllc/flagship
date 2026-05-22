@@ -15,7 +15,7 @@ independent.
 
 ## 1. Overview
 
-The operator runs `node scripts/sample-user.mjs create demo-alice
+The operator runs `node scripts/sample-user.mjs create demoalice
 --display "Demo Alice"` from their laptop. The CLI builds a
 personalized Flagship ISO, uploads it to R2, provisions **one**
 temporary Hetzner CX22, lets the daemon install + register + obtain a
@@ -24,12 +24,12 @@ Hetzner's `create_image` action, destroys the temp server, and stores
 the snapshot id in D1.
 
 From that point on, any iOS / Android / webapp client that types
-`demo-alice` short-circuits into demo mode and sees **one** device.
-Tapping that device fires `POST /api/dev/sample-user/demo-alice/connect`;
+`demoalice` short-circuits into demo mode and sees **one** device.
+Tapping that device fires `POST /api/dev/sample-user/demoalice/connect`;
 the Worker calls Hetzner `POST /servers` with `image: <snapshot_id>`,
 which restores the snapshot in roughly 30 seconds. The client polls
 `/api/users/check` until the response carries
-`demoServer.status: "up"`, then connects to `home.demo-alice.flagship.
+`demoServer.status: "up"`, then connects to `home.demoalice.flagship.
 services` over the real ACME-issued cert. All `/api/screens/*`
 interactions are LIVE — no fixtures.
 
@@ -61,7 +61,7 @@ Implementation-ready bullets:
 ### 2.1 No required prefix
 
 Username is a normal-looking string. Operator picks whatever they want:
-`demo-alice`, `alice-prog`, `reviewer`, `office-tour`. There is **no**
+`demoalice`, `alice-prog`, `reviewer`, `officetour`. There is **no**
 mandatory `demo-` prefix and no namespace separation from real
 usernames at the label-validation layer.
 
@@ -165,7 +165,7 @@ UMK = HKDF(
 
 The `IRK` is derived from this UMK using the same KDF the real
 identity path uses (`HKDF-Expand(UMK, "irk-v1", 32)`). Every device
-that types `demo-alice` derives the same UMK and therefore the same
+that types `demoalice` derives the same UMK and therefore the same
 IRK, so all demo devices share an identity.
 
 This is **non-secret by design**. A demo account is a public, copy-
@@ -186,7 +186,7 @@ the IRK matches the one it was provisioned with.
 
 Multiple paired-sessions per demo username are explicit + welcomed —
 the whole point is that an iPhone + an iPad + a desktop browser can
-all join `demo-alice` and see the same one device.
+all join `demoalice` and see the same one device.
 
 ### 3.3 Concurrent-paired-session cap
 
@@ -611,7 +611,7 @@ CREATE TABLE IF NOT EXISTS demo_users (
   region             TEXT NOT NULL DEFAULT 'fsn1',
   size               TEXT NOT NULL DEFAULT 'cx22',
   active_server_id   TEXT,                    -- Hetzner server id when state in (provisioning, up, idle-pending-teardown)
-  active_server_fqdn TEXT,                    -- e.g. home.demo-alice.flagship.services
+  active_server_fqdn TEXT,                    -- e.g. home.demoalice.flagship.services
   last_activity_at   INTEGER NOT NULL DEFAULT 0,
   state              TEXT NOT NULL DEFAULT 'none',
   created_at         INTEGER NOT NULL,
@@ -774,7 +774,7 @@ All under `/api/dev/sample-user`. Admin endpoints reuse the existing
 **Request:**
 ```json
 {
-  "username": "demo-alice",
+  "username": "demoalice",
   "display": "Demo Alice",
   "region": "fsn1",
   "size": "cx22",
@@ -801,7 +801,7 @@ All under `/api/dev/sample-user`. Admin endpoints reuse the existing
 **Response 200:**
 ```json
 {
-  "username": "demo-alice",
+  "username": "demoalice",
   "display": "Demo Alice",
   "state": "none",
   "createdAt": 1736000000000
@@ -821,7 +821,7 @@ Called by the operator's CLI after step 5-6 of §5.1.
 ```json
 {
   "snapshot_id": "12345678",
-  "iso_r2_key": "demo-isos/demo-alice-a1b2c3d4.iso"
+  "iso_r2_key": "demo-isos/demoalice-a1b2c3d4.iso"
 }
 ```
 
@@ -831,14 +831,14 @@ Called by the operator's CLI after step 5-6 of §5.1.
 
 **Response 200:**
 ```json
-{ "username": "demo-alice", "snapshotId": "12345678", "ready": true }
+{ "username": "demoalice", "snapshotId": "12345678", "ready": true }
 ```
 
 ### 10.4 `POST /api/dev/sample-user/delete`
 
 **Request:**
 ```json
-{ "username": "demo-alice" }
+{ "username": "demoalice" }
 ```
 
 **Effect:**
@@ -852,7 +852,7 @@ Called by the operator's CLI after step 5-6 of §5.1.
 
 **Response 200:**
 ```json
-{ "username": "demo-alice", "deleted": true }
+{ "username": "demoalice", "deleted": true }
 ```
 
 Idempotent: a `delete` on an absent row returns 200 with `deleted:
@@ -897,13 +897,13 @@ Returns the full row plus a live Hetzner state poll (calls
 **Response 200:**
 ```json
 {
-  "username": "demo-alice",
+  "username": "demoalice",
   "display": "Demo Alice",
   "state": "up",
   "snapshotId": "12345678",
-  "isoR2Key": "demo-isos/demo-alice-a1b2c3d4.iso",
+  "isoR2Key": "demo-isos/demoalice-a1b2c3d4.iso",
   "activeServerId": "98765432",
-  "activeServerFqdn": "home.demo-alice.flagship.services",
+  "activeServerFqdn": "home.demoalice.flagship.services",
   "lastActivityAt": 1736000123456,
   "ttlIdleMinutes": 30,
   "region": "fsn1",
@@ -930,7 +930,7 @@ includes:
 ```json
 {
   "demoServer": {
-    "fqdn": "home.demo-alice.flagship.services",
+    "fqdn": "home.demoalice.flagship.services",
     "status": "none" | "provisioning" | "up",
     "ttlIdleMinutes": 30
   }
@@ -1254,8 +1254,8 @@ node scripts/sample-user.mjs grant-device <username> <device-label> \
     --scopes <comma-list>
 
 # Examples:
-node scripts/sample-user.mjs grant-device demo-alice reviewer --scopes browse
-node scripts/sample-user.mjs grant-device demo-alice work-laptop \
+node scripts/sample-user.mjs grant-device demoalice reviewer --scopes browse
+node scripts/sample-user.mjs grant-device demoalice work-laptop \
     --scopes browse,install-service,vibe-code
 
 # (Optional internal helper — used during create-sample-user; not for
@@ -1303,7 +1303,7 @@ Each step prints a single line to stderr (`[create] uploading
 ISO…`). Final result line is on stdout as JSON for piping into other
 tools:
 ```
-{"username":"demo-alice","ready":true,"snapshotId":"12345678"}
+{"username":"demoalice","ready":true,"snapshotId":"12345678"}
 ```
 
 `grant-device` writes a single JSON line to stdout containing the
@@ -1392,14 +1392,14 @@ Assertion: `~/.ssh/flagship-demo-ssh` and `.pub` both exist.
 ### Step 2 — Create demo user
 
 ```sh
-node scripts/sample-user.mjs create demo-alice --display "Demo Alice"
+node scripts/sample-user.mjs create demoalice --display "Demo Alice"
 ```
 
 Assertions (stderr-observed, in order):
 - `[create] inserted row in demo_users (state=none)` within 2 s.
 - `[create] building personalized ISO…` within 5 s.
 - `[create] ISO sha8 = <8-hex>; uploading to r2://flagship-iso-temp/
-  demo-isos/demo-alice-<sha8>.iso` within 60 s.
+  demo-isos/demoalice-<sha8>.iso` within 60 s.
 - `[create] provisioning temp Hetzner CX22 in fsn1…` within 5 s.
 - `[create] rescue mode + dd…` within 90 s.
 - `[create] awaiting daemon registration + ACME…` within 600 s.
@@ -1407,15 +1407,15 @@ Assertions (stderr-observed, in order):
 - `[create] snapshot status=available (id=<n>)` within 180 s.
 - `[create] destroying temp server` within 10 s.
 - `[create] persisting snapshot_id` within 2 s.
-- stdout JSON: `{"username":"demo-alice","ready":true,"snapshotId":
+- stdout JSON: `{"username":"demoalice","ready":true,"snapshotId":
   "<n>"}`.
 
 D1 assertion: `SELECT state, snapshot_id, iso_r2_key FROM demo_users
-WHERE username='demo-alice'` returns `('none', '<n>', 'demo-isos/
-demo-alice-<sha8>.iso')`.
+WHERE username='demoalice'` returns `('none', '<n>', 'demo-isos/
+demoalice-<sha8>.iso')`.
 
 Hetzner assertion: `GET /v1/images?type=snapshot` lists the snapshot
-with `description='flagship-demo-demo-alice'`.
+with `description='flagship-demo-demoalice'`.
 
 Wall-clock budget: ≤ 25 min.
 
@@ -1423,29 +1423,29 @@ Wall-clock budget: ≤ 25 min.
 
 ```sh
 curl https://flagshipserver.com/api/users/check \
-  -d '{"username":"demo-alice"}' -H 'content-type: application/json'
+  -d '{"username":"demoalice"}' -H 'content-type: application/json'
 ```
 
 Assertions:
 - `available: false`.
 - `testAccount: { display: "Demo Alice", ttlHours: <existing> }`.
-- `demoServer: { fqdn: "home.demo-alice.flagship.services", status:
+- `demoServer: { fqdn: "home.demoalice.flagship.services", status:
   "none", ttlIdleMinutes: 30 }`.
 
 ### Step 4 — Type the username on iOS
 
-(Run on simulator or device.) Type `demo-alice` in the username
+(Run on simulator or device.) Type `demoalice` in the username
 field. iOS submits `/api/users/check`, observes `demoServer.status:
-"none"`, renders the single device card for `home.demo-alice.
+"none"`, renders the single device card for `home.demoalice.
 flagship.services` with a "Connect" CTA.
 
 ### Step 5 — Tap connect
 
-iOS POSTs `/api/dev/sample-user/demo-alice/connect`.
+iOS POSTs `/api/dev/sample-user/demoalice/connect`.
 
 Worker assertions:
 - D1: `state` flips to `provisioning`, `active_server_id` populated.
-- Hetzner: `GET /v1/servers?name=demo-demo-alice-<short>` shows one
+- Hetzner: `GET /v1/servers?name=demo-demoalice-<short>` shows one
   server with `image: <snapshot_id>`.
 
 iOS assertions:
@@ -1459,7 +1459,7 @@ observes `demoServer.status: "up"` on the next `/api/users/check`.
 ### Step 6 — Real `/api/screens/*` round-trip
 
 iOS opens the home pod. Network log shows requests to
-`https://home.demo-alice.flagship.services/api/screens/home` etc.,
+`https://home.demoalice.flagship.services/api/screens/home` etc.,
 NOT to the Worker's mock-fixtures path.
 
 Assertions:
@@ -1482,7 +1482,7 @@ Assertions (every 10 min):
 ### Step 8 — Status check
 
 ```sh
-node scripts/sample-user.mjs status demo-alice
+node scripts/sample-user.mjs status demoalice
 ```
 
 Assertion: `state: "none"`, `hetznerLive` block absent (no server
@@ -1498,15 +1498,15 @@ already exists so:
 ### Step 10 — Delete
 
 ```sh
-node scripts/sample-user.mjs delete demo-alice
+node scripts/sample-user.mjs delete demoalice
 ```
 
 Assertions:
 - If a server was up, Hetzner DELETE returns 2xx.
 - Hetzner image `delete` returns 2xx.
-- R2 object `demo-isos/demo-alice-<sha8>.iso` deleted.
+- R2 object `demo-isos/demoalice-<sha8>.iso` deleted.
 - D1 row deleted.
-- `/api/users/check demo-alice` no longer carries `demoServer`.
+- `/api/users/check demoalice` no longer carries `demoServer`.
 
 Wall-clock budget for Step 10: ≤ 60 s.
 

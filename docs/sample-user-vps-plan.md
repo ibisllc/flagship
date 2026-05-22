@@ -1,13 +1,13 @@
 # Sample-user / Hetzner-VPS / on-connect provisioning — execution plan
 
-**Goal.** Operator runs `create-sample-user demo-alice`. Anyone who types
+**Goal.** Operator runs `create-sample-user demoalice`. Anyone who types
 that username on iOS / Android / webapp short-circuits into "demo mode"
-and sees **one device** owned by demo-alice. Tapping that device's
+and sees **one device** owned by demoalice. Tapping that device's
 "connect" causes `.com` to provision a real Hetzner VPS bound to
-demo-alice in the background (re-using a pre-personalized ISO uploaded
+demoalice in the background (re-using a pre-personalized ISO uploaded
 at create time), waits for the install + ACME chain, then the client
 connects normally. Idle for N minutes ⇒ VPS auto-destroyed; next
-connection re-provisions. `delete-sample-user demo-alice` tears down
+connection re-provisions. `delete-sample-user demoalice` tears down
 everything.
 
 This is a **demo-environment** feature — it overlays a deterministic,
@@ -53,7 +53,7 @@ Open questions resolved (with explicit defaults, marked **DECIDED**
 unless tagged **ASK**):
 
 - **Demo username pattern:** no prefix required. Username is whatever
-  the operator names it (`demo-alice`, `alice`, `reviewer`). The
+  the operator names it (`demoalice`, `alice`, `reviewer`). The
   `TEST_ACCOUNTS` map is what makes it demo. **DECIDED**.
 - **Provisioning timing:** **on first connect**, not on create. User's
   exact words: "rapidly provision that one-server-per-dummy-user
@@ -310,14 +310,14 @@ Commit: `feat(mobile): demo-mode renders one real device + provisions on connect
 `scripts/sample-user.mjs` (and `.test.ts`) — wraps the admin endpoints:
 
 ```sh
-node scripts/sample-user.mjs create demo-alice \
+node scripts/sample-user.mjs create demoalice \
     --display "Demo Alice" --region fsn1 --size cx22 \
     --ttl-idle 30
 
-node scripts/sample-user.mjs delete demo-alice
+node scripts/sample-user.mjs delete demoalice
 
 node scripts/sample-user.mjs list
-node scripts/sample-user.mjs status demo-alice
+node scripts/sample-user.mjs status demoalice
 ```
 
 `create` does:
@@ -348,7 +348,7 @@ the laptop. The Worker holds `HCLOUD_TOKEN` (via
 
 1. `FLAGSHIP_ADMIN_SECRET=<bearer>` in this Mac's env. (No
    `HCLOUD_TOKEN` — the Worker owns it.)
-2. `node scripts/sample-user.mjs create demo-alice --display "Demo Alice"`.
+2. `node scripts/sample-user.mjs create demoalice --display "Demo Alice"`.
    - Worker streams personalized ISO into R2 (~5s).
    - Worker POSTs Hetzner `/servers` with cloud-init `user_data`
      that wgets + dd's the ISO onto /dev/sda + reboots (~3 min
@@ -356,22 +356,22 @@ the laptop. The Worker holds `HCLOUD_TOKEN` (via
    - CLI polls `/api/dev/sample-user/<u>` until state=none AND
      snapshotId set (the `*/10 * * * *` cron snapshots once the
      daemon registers + destroys the temp VPS).
-   - Final: `demo-alice` ready; D1 row has `snapshot_id`; no server
+   - Final: `demoalice` ready; D1 row has `snapshot_id`; no server
      running.
 3. Open `https://flagshipserver.com/dev/create-server` (or iOS
-   simulator running locally), type `demo-alice`.
+   simulator running locally), type `demoalice`.
 4. `/api/users/check` returns `testAccount` + `demoServer: { status:
    'none' }`. Mobile renders the single device.
-5. Tap "connect". Client POSTs `/api/dev/sample-user/demo-alice/
+5. Tap "connect". Client POSTs `/api/dev/sample-user/demoalice/
    connect`. Worker calls Hetzner `POST /servers` with `image:
    <snapshot_id>`. Server boots from snapshot (~30s). Client polls
    `/api/users/check` until `demoServer.status == 'up'`.
-6. Client connects to `home.demo-alice.flagship.services`, green
+6. Client connects to `home.demoalice.flagship.services`, green
    padlock, real `/api/screens/*` interactions.
 7. Leave it alone for 30 min. Cron destroys the server.
-8. `node scripts/sample-user.mjs status demo-alice` → state: `none`.
+8. `node scripts/sample-user.mjs status demoalice` → state: `none`.
 9. Tap connect again → re-provisions from snapshot in ~30s.
-10. `node scripts/sample-user.mjs delete demo-alice` → server
+10. `node scripts/sample-user.mjs delete demoalice` → server
     destroyed (if up), snapshot deleted, R2 ISO removed, D1 row
     deleted.
 
@@ -418,8 +418,8 @@ this plan.
 
 What this lets a reviewer demonstrate:
 
-- Type `demo-alice` on iPhone — pod provisions, green padlock.
-- Type `demo-alice` on iPad — same identity; Trusted Devices shows
+- Type `demoalice` on iPhone — pod provisions, green padlock.
+- Type `demoalice` on iPad — same identity; Trusted Devices shows
   two entries.
 - Test Replace / Disconnect / Audit UI surfaces — operations are
   no-ops at the wire level on demo accounts (or scoped to the

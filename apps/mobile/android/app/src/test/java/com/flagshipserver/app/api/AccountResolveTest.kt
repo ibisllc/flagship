@@ -32,14 +32,14 @@ class AccountResolveTest {
     @Test fun resolveAccount_seededDemoUsername_resolvesToDemo() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock(
-                    fqdn = "home.demo-alice.flagship.services",
+                "demoalice" to DemoServerBlock(
+                    fqdn = "home.demoalice.flagship.services",
                     status = "up",
                     ttlIdleMinutes = 30,
                 ),
             )
         }
-        val r = mock.resolveAccount("demo-alice")
+        val r = mock.resolveAccount("demoalice")
         assertTrue(r.exists)
         assertEquals("demo", r.kind)
         assertEquals(AccountResolution.AccountKind.Demo, r.accountKind)
@@ -52,18 +52,18 @@ class AccountResolveTest {
         // The demoServer block rides along so the join can activate the
         // sandbox without a second round-trip.
         assertNotNull(r.demoServer)
-        assertEquals("home.demo-alice.flagship.services", r.demoServer?.fqdn)
+        assertEquals("home.demoalice.flagship.services", r.demoServer?.fqdn)
     }
 
     @Test fun resolveAccount_demoMatch_isCaseInsensitive() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock("home.demo-alice.flagship.services", "none", 30),
+                "demoalice" to DemoServerBlock("home.demoalice.flagship.services", "none", 30),
             )
         }
-        val r = mock.resolveAccount("Demo-Alice")
+        val r = mock.resolveAccount("DemoAlice")
         assertEquals("demo", r.kind)
-        assertEquals("demo-alice", r.username)
+        assertEquals("demoalice", r.username)
     }
 
     // ─── Mock wire: unknown (never a 404) ───────────────────────────
@@ -125,21 +125,21 @@ class AccountResolveTest {
     @Test fun demoBranch_activatesAccount() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock("home.demo-alice.flagship.services", "up", 30),
+                "demoalice" to DemoServerBlock("home.demoalice.flagship.services", "up", 30),
             )
         }
         val app = AppState()
         // Drive the JoinAccountContainer's demo branch logic directly:
         // resolve → kind==demo → DemoFixtures.activate(demoServer).
-        val r = mock.resolveAccount("demo-alice")
+        val r = mock.resolveAccount("demoalice")
         assertEquals(AccountResolution.AccountKind.Demo, r.accountKind)
         DemoFixtures.activate(app, r.username, demoServer = r.demoServer)
 
         assertTrue("demo join must open the account", app.isPaired.first())
-        assertEquals("demo-alice", app.currentUser.first())
+        assertEquals("demoalice", app.currentUser.first())
         val pods = app.pods.first()
         assertEquals("demoServer-present path renders ONE device", 1, pods.size)
-        assertEquals("home.demo-alice.flagship.services", pods.first().fqdn)
+        assertEquals("home.demoalice.flagship.services", pods.first().fqdn)
         assertEquals(PodInfo.Status.ONLINE, pods.first().status)
     }
 
@@ -164,14 +164,14 @@ class AccountResolveTest {
         // these byte-identical (iOS-Mock-matches-Worker invariant).
         val json = """
         {
-          "username": "demo-alice",
+          "username": "demoalice",
           "exists": true,
           "kind": "demo",
           "recovery": { "present": false, "hasFetchGate": false },
           "totpEnrolled": false,
           "trustedDeviceCount": 0,
           "demoServer": {
-            "fqdn": "home.demo-alice.flagship.services",
+            "fqdn": "home.demoalice.flagship.services",
             "status": "provisioning",
             "ttlIdleMinutes": 30
           },
@@ -180,7 +180,7 @@ class AccountResolveTest {
         """.trimIndent()
         val r = Json { ignoreUnknownKeys = true; explicitNulls = false }
             .decodeFromString(AccountResolution.serializer(), json)
-        assertEquals("demo-alice", r.username)
+        assertEquals("demoalice", r.username)
         assertEquals(AccountResolution.AccountKind.Demo, r.accountKind)
         assertEquals(DemoServerBlock.Lifecycle.Provisioning, r.demoServer?.lifecycle)
         assertEquals(AccountResolution.GraceModel.Instant, r.grace)

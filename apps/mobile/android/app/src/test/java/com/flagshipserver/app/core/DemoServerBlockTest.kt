@@ -40,19 +40,19 @@ class DemoServerBlockTest {
 
     @Test fun mockUsersCheck_includesDemoServer_whenConfigured() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
-            testAccounts = mapOf("demo-alice" to TestAccountMeta("Demo Alice", 24))
+            testAccounts = mapOf("demoalice" to TestAccountMeta("Demo Alice", 24))
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock(
-                    fqdn = "home.demo-alice.flagship.services",
+                "demoalice" to DemoServerBlock(
+                    fqdn = "home.demoalice.flagship.services",
                     status = "none",
                     ttlIdleMinutes = 30,
                 )
             )
         }
-        val r = mock.usernameAvailable("demo-alice")
+        val r = mock.usernameAvailable("demoalice")
         assertEquals(false, r.available)
         assertNotNull(r.testAccount)
-        assertEquals("home.demo-alice.flagship.services", r.demoServer?.fqdn)
+        assertEquals("home.demoalice.flagship.services", r.demoServer?.fqdn)
         assertEquals("none", r.demoServer?.status)
         assertEquals(DemoServerBlock.Lifecycle.None, r.demoServer?.lifecycle)
         assertEquals(30, r.demoServer?.ttlIdleMinutes)
@@ -63,12 +63,12 @@ class DemoServerBlockTest {
         // `demoServerBlockFromRow` — keep these byte-identical.
         val json = """
         {
-          "username": "demo-alice",
+          "username": "demoalice",
           "available": false,
           "reason": "test account",
           "testAccount": {"display":"Demo Alice","ttlHours":24},
           "demoServer": {
-            "fqdn": "home.demo-alice.flagship.services",
+            "fqdn": "home.demoalice.flagship.services",
             "status": "provisioning",
             "ttlIdleMinutes": 30
           }
@@ -76,7 +76,7 @@ class DemoServerBlockTest {
         """.trimIndent()
         val resp = Json { ignoreUnknownKeys = true; explicitNulls = false }
             .decodeFromString(UsernameAvailabilityResponse.serializer(), json)
-        assertEquals("home.demo-alice.flagship.services", resp.demoServer?.fqdn)
+        assertEquals("home.demoalice.flagship.services", resp.demoServer?.fqdn)
         assertEquals(DemoServerBlock.Lifecycle.Provisioning, resp.demoServer?.lifecycle)
     }
 
@@ -93,18 +93,18 @@ class DemoServerBlockTest {
     @Test fun activate_demoServerPresent_rendersOneRealDevice() = runTest {
         val app = AppState()
         val block = DemoServerBlock(
-            fqdn = "home.demo-alice.flagship.services",
+            fqdn = "home.demoalice.flagship.services",
             status = "none",
             ttlIdleMinutes = 30,
         )
-        DemoFixtures.activate(app, "demo-alice", demoServer = block)
+        DemoFixtures.activate(app, "demoalice", demoServer = block)
         val pods = app.pods.first()
         assertEquals("demoServer-present path must render ONE device", 1, pods.size)
-        assertEquals("home.demo-alice.flagship.services", pods.first().fqdn)
+        assertEquals("home.demoalice.flagship.services", pods.first().fqdn)
         assertEquals("status='none' maps to PENDING until /connect",
             PodInfo.Status.PENDING, pods.first().status)
         assertTrue(app.isPaired.first())
-        assertEquals("demo-alice", app.currentUser.first())
+        assertEquals("demoalice", app.currentUser.first())
     }
 
     @Test fun activate_demoServerNil_fallsBackToThreeFixtures() = runTest {
@@ -129,15 +129,15 @@ class DemoServerBlockTest {
     }
 
     @Test fun samplePodFromDemoServer_upStatusMapsToOnline() {
-        val block = DemoServerBlock("home.demo-alice.flagship.services", "up", 30)
-        val pod = DemoFixtures.samplePodFromDemoServer(block, "demo-alice")
+        val block = DemoServerBlock("home.demoalice.flagship.services", "up", 30)
+        val pod = DemoFixtures.samplePodFromDemoServer(block, "demoalice")
         assertEquals(PodInfo.Status.ONLINE, pod.status)
-        assertEquals("home.demo-alice.flagship.services", pod.fqdn)
+        assertEquals("home.demoalice.flagship.services", pod.fqdn)
     }
 
     @Test fun samplePodFromDemoServer_provisioningMapsToPending() {
-        val block = DemoServerBlock("home.demo-alice.flagship.services", "provisioning", 30)
-        val pod = DemoFixtures.samplePodFromDemoServer(block, "demo-alice")
+        val block = DemoServerBlock("home.demoalice.flagship.services", "provisioning", 30)
+        val pod = DemoFixtures.samplePodFromDemoServer(block, "demoalice")
         assertEquals(PodInfo.Status.PENDING, pod.status)
     }
 
@@ -146,40 +146,40 @@ class DemoServerBlockTest {
     @Test fun mockDemoConnect_flipsStatusFromNoneToUp_synchronously() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock(
-                    fqdn = "home.demo-alice.flagship.services",
+                "demoalice" to DemoServerBlock(
+                    fqdn = "home.demoalice.flagship.services",
                     status = "none",
                     ttlIdleMinutes = 30,
                 )
             )
         }
         val connect = MockDemoConnectClient(server = mock)  // sync flip default
-        connect.connect("demo-alice")
-        assertEquals(listOf("demo-alice"), connect.connectCalls)
-        val r = mock.usernameAvailable("demo-alice")
+        connect.connect("demoalice")
+        assertEquals(listOf("demoalice"), connect.connectCalls)
+        val r = mock.usernameAvailable("demoalice")
         assertEquals(DemoServerBlock.Lifecycle.Up, r.demoServer?.lifecycle)
     }
 
     @Test fun mockDemoConnect_pollUntilUp_returnsUpBlock() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock(
-                    fqdn = "home.demo-alice.flagship.services",
+                "demoalice" to DemoServerBlock(
+                    fqdn = "home.demoalice.flagship.services",
                     status = "up",
                     ttlIdleMinutes = 30,
                 )
             )
         }
         val connect = MockDemoConnectClient(server = mock)
-        val block = connect.pollUntilUp("demo-alice", pollIntervalMs = 10, timeoutMs = 1000)
+        val block = connect.pollUntilUp("demoalice", pollIntervalMs = 10, timeoutMs = 1000)
         assertEquals(DemoServerBlock.Lifecycle.Up, block.lifecycle)
     }
 
     @Test fun mockDemoConnect_pollUntilUp_timesOutWhenStuckProvisioning() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock(
-                    fqdn = "home.demo-alice.flagship.services",
+                "demoalice" to DemoServerBlock(
+                    fqdn = "home.demoalice.flagship.services",
                     status = "provisioning",
                     ttlIdleMinutes = 30,
                 )
@@ -187,7 +187,7 @@ class DemoServerBlockTest {
         }
         val connect = MockDemoConnectClient(server = mock)
         try {
-            connect.pollUntilUp("demo-alice", pollIntervalMs = 10, timeoutMs = 50)
+            connect.pollUntilUp("demoalice", pollIntervalMs = 10, timeoutMs = 50)
             fail("expected TimedOut")
         } catch (e: DemoConnectException.TimedOut) {
             assertEquals("provisioning", e.lastStatus)
@@ -198,7 +198,7 @@ class DemoServerBlockTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0)
         val connect = MockDemoConnectClient(server = mock)
         try {
-            connect.pollUntilUp("demo-alice", pollIntervalMs = 10, timeoutMs = 50)
+            connect.pollUntilUp("demoalice", pollIntervalMs = 10, timeoutMs = 50)
             fail("expected DemoServerWentAway")
         } catch (_: DemoConnectException.DemoServerWentAway) {
             // expected

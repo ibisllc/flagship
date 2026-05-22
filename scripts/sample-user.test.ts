@@ -43,16 +43,16 @@ describe("parseArgs", () => {
     expect(() => parseArgs(["list", "extra"])).toThrow(/takes no arguments/);
   });
   it("parses `delete <user>` and `status <user>`", () => {
-    expect(parseArgs(["delete", "demo-alice"]).command).toBe("delete");
-    expect(parseArgs(["delete", "demo-alice"]).username).toBe("demo-alice");
-    expect(parseArgs(["status", "demo-alice"]).username).toBe("demo-alice");
+    expect(parseArgs(["delete", "demoalice"]).command).toBe("delete");
+    expect(parseArgs(["delete", "demoalice"]).username).toBe("demoalice");
+    expect(parseArgs(["status", "demoalice"]).username).toBe("demoalice");
     expect(() => parseArgs(["delete"])).toThrow(/requires a <username>/);
     expect(() => parseArgs(["status"])).toThrow(/requires a <username>/);
   });
   it("parses `create <user> --display … --region … --size … --ttl-idle …`", () => {
     const a = parseArgs([
       "create",
-      "demo-alice",
+      "demoalice",
       "--display",
       "Demo Alice",
       "--region",
@@ -63,7 +63,7 @@ describe("parseArgs", () => {
       "30",
     ]);
     expect(a.command).toBe("create");
-    expect(a.username).toBe("demo-alice");
+    expect(a.username).toBe("demoalice");
     expect(a.flags.display).toBe("Demo Alice");
     expect(a.flags.region).toBe("fsn1");
     expect(a.flags.size).toBe("cpx11");
@@ -85,23 +85,23 @@ describe("parseArgs", () => {
   it("parses `grant-device <user> <label> --scopes a,b,c`", () => {
     const a = parseArgs([
       "grant-device",
-      "demo-alice",
+      "demoalice",
       "reviewer",
       "--scopes",
       "browse",
     ]);
     expect(a.command).toBe("grant-device");
-    expect(a.username).toBe("demo-alice");
+    expect(a.username).toBe("demoalice");
     expect(a.deviceLabel).toBe("reviewer");
     expect(a.flags.scopes).toEqual(["browse"]);
   });
   it("`grant-device` trims whitespace and rejects empty / missing --scopes", () => {
     expect(() => parseArgs(["grant-device"])).toThrow(/requires a <username>/);
-    expect(() => parseArgs(["grant-device", "demo-alice"])).toThrow(
+    expect(() => parseArgs(["grant-device", "demoalice"])).toThrow(
       /requires a <device-label>/,
     );
     expect(() =>
-      parseArgs(["grant-device", "demo-alice", "reviewer"]),
+      parseArgs(["grant-device", "demoalice", "reviewer"]),
     ).toThrow(/requires --scopes/);
   });
 });
@@ -242,25 +242,25 @@ describe("runList / runStatus / runDelete", () => {
     const stdout = captureStream();
     const code = await runStatus(
       { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "demo-alice",
+      "demoalice",
     );
     expect(code).toBe(1);
-    expect(calls[0].url).toContain("/api/dev/sample-user/demo-alice");
+    expect(calls[0].url).toContain("/api/dev/sample-user/demoalice");
     expect(stderr.data).toContain("no such demo user");
   });
   it("delete → POST /api/dev/sample-user/delete with the username", async () => {
     const { fn, calls } = stubFetch([
-      { status: 200, body: { deleted: true, username: "demo-alice" } },
+      { status: 200, body: { deleted: true, username: "demoalice" } },
     ]);
     const stderr = captureStream();
     const stdout = captureStream();
     const code = await runDelete(
       { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "demo-alice",
+      "demoalice",
     );
     expect(code).toBe(0);
     expect(calls[0].method).toBe("POST");
-    expect(JSON.parse(calls[0].body!)).toEqual({ username: "demo-alice" });
+    expect(JSON.parse(calls[0].body!)).toEqual({ username: "demoalice" });
   });
 });
 
@@ -286,15 +286,15 @@ describe("runCreate — W11 4-step orchestration", () => {
     const provisionBody = opts.provisionBody ?? {
       state: "provisioning",
       activeServerId: "srv-1",
-      isoR2Key: "demo-isos/demo-alice-aabbccdd.iso",
+      isoR2Key: "demo-isos/demoalice-aabbccdd.iso",
     };
     const scripted = [
-      { status: reserveStatus, body: { username: "demo-alice", state: "none", createdAt: 1 } },
+      { status: reserveStatus, body: { username: "demoalice", state: "none", createdAt: 1 } },
       {
         status: issueStatus,
         body: {
           code: "AAAA-BBBB-CCCC",
-          blob: { version: 1, username: "demo-alice" },
+          blob: { version: 1, username: "demoalice" },
           blobSignature: "ff".repeat(64),
           primaryGrant: { grantId: "g-1" },
         },
@@ -319,7 +319,7 @@ describe("runCreate — W11 4-step orchestration", () => {
           opts.pollResult ?? {
             ready: true,
             snapshotId: "snap-7",
-            isoR2Key: "demo-isos/demo-alice-aabbccdd.iso",
+            isoR2Key: "demo-isos/demoalice-aabbccdd.iso",
           }
         );
       },
@@ -332,7 +332,7 @@ describe("runCreate — W11 4-step orchestration", () => {
   it("happy path: runs 3 admin POSTs in order + polls until snapshot stamped", async () => {
     const journal: string[] = [];
     const { deps, calls, stderr, stdout } = makeDeps({ journal });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    const code = await runCreate(deps, "demoalice", { display: "Demo Alice" });
     expect(code).toBe(0);
     // 3 admin POSTs: create, claim, admin-snapshot-now.
     expect(calls).toHaveLength(3);
@@ -340,7 +340,7 @@ describe("runCreate — W11 4-step orchestration", () => {
       "https://flagshipserver.com/api/dev/sample-user/create",
     );
     expect(JSON.parse(calls[0].body!)).toEqual({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       region: "fsn1",
       size: "cpx11",
@@ -350,22 +350,22 @@ describe("runCreate — W11 4-step orchestration", () => {
       "https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue",
     );
     expect(JSON.parse(calls[1].body!)).toEqual({
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
     });
     expect(calls[2].url).toBe(
-      "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-snapshot-now",
+      "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-snapshot-now",
     );
     expect(JSON.parse(calls[2].body!)).toEqual({
       region: "fsn1",
       size: "cpx11",
     });
-    expect(journal).toEqual(["poll:demo-alice:5000"]);
+    expect(journal).toEqual(["poll:demoalice:5000"]);
     expect(JSON.parse(stdout.data)).toEqual({
-      username: "demo-alice",
+      username: "demoalice",
       ready: true,
       snapshotId: "snap-7",
-      isoR2Key: "demo-isos/demo-alice-aabbccdd.iso",
+      isoR2Key: "demo-isos/demoalice-aabbccdd.iso",
     });
     expect(stderr.data).toContain("Worker-side provisioning");
   });
@@ -377,7 +377,7 @@ describe("runCreate — W11 4-step orchestration", () => {
       provisionStatus: 503,
       provisionBody: { error: "hetzner upstream rejected" },
     });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    const code = await runCreate(deps, "demoalice", { display: "Demo Alice" });
     expect(code).toBe(3);
     expect(journal).toEqual([]); // poll never ran
   });
@@ -385,7 +385,7 @@ describe("runCreate — W11 4-step orchestration", () => {
   it("admin auth failure on reserve → exit 2", async () => {
     const journal: string[] = [];
     const { deps } = makeDeps({ journal, reserveStatus: 403 });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    const code = await runCreate(deps, "demoalice", { display: "Demo Alice" });
     expect(code).toBe(2);
     expect(journal).toEqual([]);
   });
@@ -393,7 +393,7 @@ describe("runCreate — W11 4-step orchestration", () => {
   it("D1 conflict on reserve → exit 4", async () => {
     const journal: string[] = [];
     const { deps } = makeDeps({ journal, reserveStatus: 409 });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    const code = await runCreate(deps, "demoalice", { display: "Demo Alice" });
     expect(code).toBe(4);
     expect(journal).toEqual([]);
   });
@@ -404,7 +404,7 @@ describe("runCreate — W11 4-step orchestration", () => {
       journal,
       pollResult: { ready: false, reason: "timed out after 0.08 min" },
     });
-    const code = await runCreate(deps, "demo-alice", { display: "Demo Alice" });
+    const code = await runCreate(deps, "demoalice", { display: "Demo Alice" });
     expect(code).toBe(1);
     expect(stderr.data).toContain("polling timed out");
   });
@@ -425,7 +425,7 @@ describe("pollUntilReady", () => {
       fetchFn: fn,
       env: ENV_OK,
       stderr,
-      username: "demo-alice",
+      username: "demoalice",
       timeoutMs: 60_000,
       intervalMs: 0,
       now: () => t++,
@@ -443,7 +443,7 @@ describe("pollUntilReady", () => {
       fetchFn: fn,
       env: ENV_OK,
       stderr,
-      username: "demo-alice",
+      username: "demoalice",
       timeoutMs: 60_000,
       intervalMs: 0,
       now: () => 0,
@@ -458,7 +458,7 @@ describe("pollUntilReady", () => {
 describe("runGrantDevice", () => {
   it("POSTs /admin-mint-device-grant with deviceLabel+scopes and prints JSON", async () => {
     const responseBody = {
-      grant: { grantId: "g99", username: "demo-alice", deviceLabel: "reviewer" },
+      grant: { grantId: "g99", username: "demoalice", deviceLabel: "reviewer" },
       signature: "aa".repeat(64),
       devicePubHex: "cc".repeat(32),
     };
@@ -467,7 +467,7 @@ describe("runGrantDevice", () => {
     const stdout = captureStream();
     const code = await runGrantDevice(
       { fetchFn: fn, env: ENV_OK, stderr, stdout },
-      "demo-alice",
+      "demoalice",
       "reviewer",
       ["browse"],
     );
@@ -475,7 +475,7 @@ describe("runGrantDevice", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe(
-      "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+      "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-mint-device-grant",
     );
     expect(JSON.parse(calls[0].body!)).toEqual({
       deviceLabel: "reviewer",
@@ -532,7 +532,7 @@ describe("main() — env-gate + exit-code contracts (W11)", () => {
     const stdout = captureStream();
     let i = 0;
     const scripted = [
-      { status: 200, body: { username: "demo-alice", state: "none" } },
+      { status: 200, body: { username: "demoalice", state: "none" } },
       {
         status: 200,
         body: {
@@ -560,7 +560,7 @@ describe("main() — env-gate + exit-code contracts (W11)", () => {
       isoR2Key: "k",
     }));
     const code = await main(
-      ["create", "demo-alice", "--display", "Demo Alice"],
+      ["create", "demoalice", "--display", "Demo Alice"],
       {
         processEnv: {
           // Acceptance-as-spec: only admin secret in the env. The
@@ -580,10 +580,10 @@ describe("main() — env-gate + exit-code contracts (W11)", () => {
     expect(pollUntilReadyMock).toHaveBeenCalledTimes(1);
     expect(calls[0].url).toContain("/api/dev/sample-user/create");
     expect(calls[1].url).toContain("/admin-claim-and-issue");
-    expect(calls[2].url).toContain("/demo-alice/admin-snapshot-now");
+    expect(calls[2].url).toContain("/demoalice/admin-snapshot-now");
     const final = JSON.parse(stdout.data);
     expect(final).toEqual({
-      username: "demo-alice",
+      username: "demoalice",
       ready: true,
       snapshotId: "snap-7",
       isoR2Key: "k",
@@ -592,7 +592,7 @@ describe("main() — env-gate + exit-code contracts (W11)", () => {
 
   it("`create` with NO env → exit 2 (only admin secret required)", async () => {
     const { stderr, run } = callMain(
-      ["create", "demo-alice", "--display", "Demo Alice"],
+      ["create", "demoalice", "--display", "Demo Alice"],
       {},
     );
     const code = await run();

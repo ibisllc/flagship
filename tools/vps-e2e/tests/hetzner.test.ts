@@ -50,9 +50,9 @@ describe("parseImageStatus", () => {
 
 describe("buildCreateImageBody", () => {
   it("encodes a snapshot-type image with the supplied description", () => {
-    expect(buildCreateImageBody("flagship-demo-alice")).toEqual({
+    expect(buildCreateImageBody("flagship-demoalice")).toEqual({
       type: "snapshot",
-      description: "flagship-demo-alice",
+      description: "flagship-demoalice",
     });
   });
 });
@@ -154,13 +154,13 @@ describe("HetznerProvider.snapshot()", () => {
       bootPollIntervalMs: 1,
       bootPollMaxAttempts: 4,
     });
-    const out = await p.snapshot("srv-1", "flagship-demo-alice");
+    const out = await p.snapshot("srv-1", "flagship-demoalice");
     expect(out).toEqual({ snapshotId: "99" });
     expect(calls).toHaveLength(3);
     expect(calls[0]!.method).toBe("POST");
     expect(calls[0]!.url).toContain("/servers/srv-1/actions/create_image");
     expect(calls[0]!.body).toBe(
-      JSON.stringify({ type: "snapshot", description: "flagship-demo-alice" }),
+      JSON.stringify({ type: "snapshot", description: "flagship-demoalice" }),
     );
     expect(calls[1]!.method).toBe("GET");
     expect(calls[1]!.url).toContain("/images/99");

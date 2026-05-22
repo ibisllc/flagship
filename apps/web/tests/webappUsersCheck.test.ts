@@ -49,18 +49,18 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
 
   it("parses a response WITH a demoServer block (Plan A live demo)", async () => {
     const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {
-      username: "demo-alice",
+      username: "demoalice",
       available: false,
       reason: "test account",
       testAccount: { display: "Demo Alice", ttlHours: 24 },
       demoServer: {
-        fqdn: "home.demo-alice.flagship.services",
+        fqdn: "home.demoalice.flagship.services",
         status: "none",
         ttlIdleMinutes: 30,
       },
     }));
-    const r = await checkUsername("demo-alice", { fetch: fakeFetch as any });
-    expect(r.demoServer?.fqdn).toBe("home.demo-alice.flagship.services");
+    const r = await checkUsername("demoalice", { fetch: fakeFetch as any });
+    expect(r.demoServer?.fqdn).toBe("home.demoalice.flagship.services");
     expect(r.demoServer?.status).toBe("none");
     expect(r.demoServer?.ttlIdleMinutes).toBe(30);
   });
@@ -83,28 +83,28 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
 
   it("samplePodFromDemoServer builds ONE pod with status mapped from lifecycle", () => {
     const block = {
-      fqdn: "home.demo-alice.flagship.services",
+      fqdn: "home.demoalice.flagship.services",
       status: "up" as const,
       ttlIdleMinutes: 30,
     };
-    const pod = samplePodFromDemoServer(block, "demo-alice");
-    expect(pod.podId).toBe("demo-server-demo-alice");
+    const pod = samplePodFromDemoServer(block, "demoalice");
+    expect(pod.podId).toBe("demo-server-demoalice");
     expect(pod.name).toBe("Home");
-    expect(pod.fqdn).toBe("home.demo-alice.flagship.services");
+    expect(pod.fqdn).toBe("home.demoalice.flagship.services");
     expect(pod.status).toBe("online");
 
     const stillProvisioning = samplePodFromDemoServer(
       { ...block, status: "none" },
-      "demo-alice",
+      "demoalice",
     );
     expect(stillProvisioning.status).toBe("pending");
   });
 
   it("connectDemoServer POSTs to /api/dev/sample-user/{u}/connect", async () => {
     const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    await connectDemoServer("demo-alice", { fetch: fakeFetch as any });
+    await connectDemoServer("demoalice", { fetch: fakeFetch as any });
     const [calledUrl, calledInit] = fakeFetch.mock.calls[0]!;
-    expect(calledUrl).toBe("https://flagshipserver.com/api/dev/sample-user/demo-alice/connect");
+    expect(calledUrl).toBe("https://flagshipserver.com/api/dev/sample-user/demoalice/connect");
     expect(calledInit.method).toBe("POST");
     expect(calledInit.body).toBe("{}");
   });
@@ -113,7 +113,7 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
     const fakeFetch = vi.fn().mockResolvedValue(
       new Response("rate limited", { status: 429 }),
     );
-    await expect(connectDemoServer("demo-alice", { fetch: fakeFetch as any }))
+    await expect(connectDemoServer("demoalice", { fetch: fakeFetch as any }))
       .rejects.toThrow(/429/);
   });
 
@@ -121,20 +121,20 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
     let i = 0;
     const responses = [
       jsonResponse(200, {
-        username: "demo-alice",
+        username: "demoalice",
         available: false,
         reason: "test account",
-        demoServer: { fqdn: "home.demo-alice.flagship.services", status: "provisioning", ttlIdleMinutes: 30 },
+        demoServer: { fqdn: "home.demoalice.flagship.services", status: "provisioning", ttlIdleMinutes: 30 },
       }),
       jsonResponse(200, {
-        username: "demo-alice",
+        username: "demoalice",
         available: false,
         reason: "test account",
-        demoServer: { fqdn: "home.demo-alice.flagship.services", status: "up", ttlIdleMinutes: 30 },
+        demoServer: { fqdn: "home.demoalice.flagship.services", status: "up", ttlIdleMinutes: 30 },
       }),
     ];
     const fakeFetch = vi.fn().mockImplementation(() => responses[i++] || responses[responses.length - 1]);
-    const block = await pollUntilDemoServerUp("demo-alice", {
+    const block = await pollUntilDemoServerUp("demoalice", {
       fetch: fakeFetch as any,
       pollIntervalMs: 0,
       timeoutMs: 1000,
@@ -146,10 +146,10 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
 
   it("pollUntilDemoServerUp throws timedOut when stuck provisioning", async () => {
     const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {
-      username: "demo-alice",
+      username: "demoalice",
       available: false,
       reason: "test account",
-      demoServer: { fqdn: "home.demo-alice.flagship.services", status: "provisioning", ttlIdleMinutes: 30 },
+      demoServer: { fqdn: "home.demoalice.flagship.services", status: "provisioning", ttlIdleMinutes: 30 },
     }));
     let timeNow = 0;
     const realNow = Date.now;
@@ -157,7 +157,7 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
     const sleep = (ms: number) => { timeNow += ms; return Promise.resolve(); };
     Date.now = () => timeNow;
     try {
-      await expect(pollUntilDemoServerUp("demo-alice", {
+      await expect(pollUntilDemoServerUp("demoalice", {
         fetch: fakeFetch as any,
         pollIntervalMs: 10,
         timeoutMs: 5,
@@ -170,11 +170,11 @@ describe("webapp usersCheck — Plan A demoServer parsing", () => {
 
   it("pollUntilDemoServerUp throws demoServerWentAway when block disappears", async () => {
     const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {
-      username: "demo-alice",
+      username: "demoalice",
       available: false,
       reason: "test account",
     }));
-    await expect(pollUntilDemoServerUp("demo-alice", {
+    await expect(pollUntilDemoServerUp("demoalice", {
       fetch: fakeFetch as any,
       pollIntervalMs: 0,
       timeoutMs: 1000,
@@ -187,11 +187,11 @@ describe("webapp usersCheck — v2 device-addressing deviceCapability", () => {
   it("parses a response WITH a deviceCapability block (browse-only reviewer)", async () => {
     // Wire shape mirrors packages/control-plane/src/usersCheck.ts.
     const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, {
-      username: "demo-alice.reviewer",
+      username: "demoalice.reviewer",
       available: false,
       reason: "device capability",
       demoServer: {
-        fqdn: "home.demo-alice.flagship.services",
+        fqdn: "home.demoalice.flagship.services",
         status: "up",
         ttlIdleMinutes: 30,
       },
@@ -204,10 +204,10 @@ describe("webapp usersCheck — v2 device-addressing deviceCapability", () => {
         signature: "0".repeat(128),
       },
     }));
-    const r = await checkUsername("demo-alice.reviewer", { fetch: fakeFetch as any });
+    const r = await checkUsername("demoalice.reviewer", { fetch: fakeFetch as any });
     expect(r.deviceCapability?.label).toBe("reviewer");
     expect(r.deviceCapability?.scopes).toEqual(["browse"]);
-    expect(r.demoServer?.fqdn).toBe("home.demo-alice.flagship.services");
+    expect(r.demoServer?.fqdn).toBe("home.demoalice.flagship.services");
   });
 
   it("DEVICE_SCOPES exports the canonical list (mirror of protocol/auth.ts)", () => {

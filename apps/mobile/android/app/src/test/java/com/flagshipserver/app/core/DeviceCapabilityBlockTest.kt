@@ -42,11 +42,11 @@ class DeviceCapabilityBlockTest {
     @Test fun decodesFromWorkerWireShape_withBrowseOnlyScopes() {
         val wire = """
             {
-              "username": "demo-alice.reviewer",
+              "username": "demoalice.reviewer",
               "available": false,
               "reason": "device capability",
               "demoServer": {
-                "fqdn": "home.demo-alice.flagship.services",
+                "fqdn": "home.demoalice.flagship.services",
                 "status": "up",
                 "ttlIdleMinutes": 30
               },
@@ -65,13 +65,13 @@ class DeviceCapabilityBlockTest {
         assertEquals(listOf("browse"), resp.deviceCapability?.scopes)
         assertEquals(setOf(DeviceScope.BROWSE), resp.deviceCapability?.scopeSet)
         assertEquals(false, resp.deviceCapability?.isFullyScoped)
-        assertEquals("home.demo-alice.flagship.services", resp.demoServer?.fqdn)
+        assertEquals("home.demoalice.flagship.services", resp.demoServer?.fqdn)
     }
 
     @Test fun decodesElevatedDeviceCapabilityWithMultipleScopes() {
         val wire = """
             {
-              "username": "demo-alice.work-laptop",
+              "username": "demoalice.work-laptop",
               "available": false,
               "reason": "device capability",
               "deviceCapability": {
@@ -99,7 +99,7 @@ class DeviceCapabilityBlockTest {
         // wire strings to null so they silently disappear.
         val wire = """
             {
-              "username": "demo-alice.reviewer",
+              "username": "demoalice.reviewer",
               "available": false,
               "reason": "device capability",
               "deviceCapability": {
@@ -125,7 +125,7 @@ class DeviceCapabilityBlockTest {
         // produces a response with no `deviceCapability` field at all.
         val wire = """
             {
-              "username": "demo-alice",
+              "username": "demoalice",
               "available": false,
               "reason": "test account",
               "testAccount": {"display":"Demo Alice","ttlHours":24}
@@ -140,14 +140,14 @@ class DeviceCapabilityBlockTest {
     @Test fun mockEmitsDeviceCapabilityForDotForm() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock(
-                    fqdn = "home.demo-alice.flagship.services",
+                "demoalice" to DemoServerBlock(
+                    fqdn = "home.demoalice.flagship.services",
                     status = "up",
                     ttlIdleMinutes = 30,
                 )
             )
             deviceCapabilities = mutableMapOf(
-                "demo-alice.reviewer" to DeviceCapabilityBlock(
+                "demoalice.reviewer" to DeviceCapabilityBlock(
                     label = "reviewer",
                     devicePubKey = "0".repeat(64),
                     scopes = listOf("browse"),
@@ -157,19 +157,19 @@ class DeviceCapabilityBlockTest {
                 )
             )
         }
-        val r = mock.usernameAvailable("demo-alice.reviewer")
+        val r = mock.usernameAvailable("demoalice.reviewer")
         assertEquals(false, r.available)
         assertEquals("reviewer", r.deviceCapability?.label)
         assertEquals(setOf(DeviceScope.BROWSE), r.deviceCapability?.scopeSet)
         // Same underlying demo server is surfaced — the device-restricted
         // pod is the same VPS as the primary device sees.
-        assertEquals("home.demo-alice.flagship.services", r.demoServer?.fqdn)
+        assertEquals("home.demoalice.flagship.services", r.demoServer?.fqdn)
     }
 
     @Test fun mockReturns404ForUnknownDotForm() = runTest {
         val mock = MockFlagshipServerClient(simulatedLatencyMs = 0)
         try {
-            mock.usernameAvailable("demo-alice.no-such-device")
+            mock.usernameAvailable("demoalice.no-such-device")
             fail("expected HttpException(404)")
         } catch (e: HttpException) {
             assertEquals(404, e.status)
@@ -181,7 +181,7 @@ class DeviceCapabilityBlockTest {
     @Test fun activateWithDeviceCapability_installsRestrictedSession() = runTest {
         val app = AppState()
         val demo = DemoServerBlock(
-            fqdn = "home.demo-alice.flagship.services",
+            fqdn = "home.demoalice.flagship.services",
             status = "up",
             ttlIdleMinutes = 30,
         )
@@ -195,12 +195,12 @@ class DeviceCapabilityBlockTest {
         )
         DemoFixtures.activate(
             app,
-            username = "demo-alice.reviewer",
+            username = "demoalice.reviewer",
             demoServer = demo,
             deviceCapability = cap,
         )
         assertEquals(1, app.pods.value.size)
-        assertEquals("home.demo-alice.flagship.services", app.pods.value.first().fqdn)
+        assertEquals("home.demoalice.flagship.services", app.pods.value.first().fqdn)
         assertEquals("reviewer", app.deviceCapability.value?.label)
         assertTrue(app.isRestrictedDevice())
         assertTrue(app.hasScope(DeviceScope.BROWSE))
@@ -211,11 +211,11 @@ class DeviceCapabilityBlockTest {
     @Test fun activateWithoutDeviceCapability_leavesScopesOpen() = runTest {
         val app = AppState()
         val demo = DemoServerBlock(
-            fqdn = "home.demo-alice.flagship.services",
+            fqdn = "home.demoalice.flagship.services",
             status = "up",
             ttlIdleMinutes = 30,
         )
-        DemoFixtures.activate(app, username = "demo-alice", demoServer = demo)
+        DemoFixtures.activate(app, username = "demoalice", demoServer = demo)
         assertNull(app.deviceCapability.value)
         assertFalse(app.isRestrictedDevice())
         // Legacy single-IRK path holds every scope implicitly.
@@ -234,13 +234,13 @@ class DeviceCapabilityBlockTest {
             signature = "0".repeat(128),
         )
         val demo = DemoServerBlock(
-            fqdn = "home.demo-alice.flagship.services",
+            fqdn = "home.demoalice.flagship.services",
             status = "up",
             ttlIdleMinutes = 30,
         )
         DemoFixtures.activate(
             app,
-            username = "demo-alice.reviewer",
+            username = "demoalice.reviewer",
             demoServer = demo,
             deviceCapability = cap,
         )

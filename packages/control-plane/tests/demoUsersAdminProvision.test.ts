@@ -127,7 +127,7 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
   const usernames = new InMemoryUsernameStorage();
   if (opts.seedDemo) {
     await storage.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -142,13 +142,13 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
     });
   }
   if (opts.seedUsername) {
-    const irk = deriveDemoUserIrk(KEK, "demo-alice");
+    const irk = deriveDemoUserIrk(KEK, "demoalice");
     const hex = (b: Uint8Array) =>
       Array.from(b)
         .map((x) => x.toString(16).padStart(2, "0"))
         .join("");
     await usernames.put({
-      username: "demo-alice",
+      username: "demoalice",
       irkPubHex: hex(irk.publicKey),
       claimedAt: 1_000_000,
       isDemo: true,
@@ -177,7 +177,7 @@ describe("buildCloudInitUserData", () => {
     const baseIsoUrl =
       "https://flagshipserver.com/build/iso/flagship-base-alpine.iso";
     const trailerUrl =
-      "https://pub-xyz.r2.dev/demo-isos/demo-alice-deadbeef.trailer";
+      "https://pub-xyz.r2.dev/demo-isos/demoalice-deadbeef.trailer";
     const s = buildCloudInitUserData({ baseIsoUrl, trailerUrl });
     expect(s.startsWith("#!/bin/bash\n")).toBe(true);
     expect(s).toContain("set -euo pipefail");
@@ -202,7 +202,7 @@ describe("buildCloudInitUserData", () => {
     const netbootIsoUrl =
       "https://flagshipserver.com/build/iso/flagship-netboot-debian-13.5.0-x86_64.iso";
     const trailerUrl =
-      "https://pub-xyz.r2.dev/demo-isos/demo-alice-deadbeef.trailer";
+      "https://pub-xyz.r2.dev/demo-isos/demoalice-deadbeef.trailer";
     const s = buildCloudInitUserData({ baseIsoUrl: netbootIsoUrl, trailerUrl });
     expect(s).toContain(`wget -qO- '${netbootIsoUrl}'`);
     expect(s).toContain(`wget -qO- '${trailerUrl}'`);
@@ -219,14 +219,14 @@ describe("handleAdminSnapshotNow (W11)", () => {
 
   it("409s when usernames row missing (must call admin-claim-and-issue first)", async () => {
     const { deps } = await mkDeps({ seedDemo: true });
-    const r = await handleAdminSnapshotNow(deps, "demo-alice");
+    const r = await handleAdminSnapshotNow(deps, "demoalice");
     expect(r.status).toBe(409);
     expect((r.body as { error: string }).error).toMatch(/admin-claim-and-issue/);
   });
 
   it("happy path: 202, stamps activeServerId + isoR2Key, posts cloud-init with the expected R2 URL", async () => {
     const { deps, hetzner, r2 } = await mkDeps({ seedDemo: true, seedUsername: true });
-    const r = await handleAdminSnapshotNow(deps, "demo-alice");
+    const r = await handleAdminSnapshotNow(deps, "demoalice");
     expect(r.status).toBe(202);
     const body = r.body as {
       state: string;
@@ -236,10 +236,10 @@ describe("handleAdminSnapshotNow (W11)", () => {
     };
     expect(body.state).toBe("provisioning");
     expect(body.activeServerId).toBe("srv-abc");
-    expect(body.isoR2Key).toMatch(/^demo-isos\/demo-alice-[0-9a-f]{8}\.trailer$/);
+    expect(body.isoR2Key).toMatch(/^demo-isos\/demoalice-[0-9a-f]{8}\.trailer$/);
 
     // demo_users row is stamped + transitioned to provisioning.
-    const row = await deps.storage.get("demo-alice");
+    const row = await deps.storage.get("demoalice");
     expect(row?.state).toBe("provisioning");
     expect(row?.activeServerId).toBe("srv-abc");
     expect(row?.isoR2Key).toBe(body.isoR2Key);
@@ -248,7 +248,7 @@ describe("handleAdminSnapshotNow (W11)", () => {
     expect(hetzner.calls).toHaveLength(1);
     const call = hetzner.calls[0]!;
     expect(call.image).toBe("ubuntu-22.04");
-    expect(call.username).toBe("demo-alice");
+    expect(call.username).toBe("demoalice");
     expect(call.location).toBe("fsn1");
     expect(call.serverType).toBe("cpx11");
     // cloud-init must wget BOTH the base ISO (public URL) AND the
@@ -272,8 +272,8 @@ describe("handleAdminSnapshotNow (W11)", () => {
 
   it("idempotent — second call with state=provisioning returns 200 + reused", async () => {
     const { deps } = await mkDeps({ seedDemo: true, seedUsername: true });
-    await handleAdminSnapshotNow(deps, "demo-alice");
-    const r2 = await handleAdminSnapshotNow(deps, "demo-alice");
+    await handleAdminSnapshotNow(deps, "demoalice");
+    const r2 = await handleAdminSnapshotNow(deps, "demoalice");
     expect(r2.status).toBe(200);
     expect((r2.body as { reused: boolean }).reused).toBe(true);
   });
@@ -281,12 +281,12 @@ describe("handleAdminSnapshotNow (W11)", () => {
   it("502 when the Hetzner client throws", async () => {
     const { deps, hetzner } = await mkDeps({ seedDemo: true, seedUsername: true });
     hetzner.failNext = new Error("hetzner upstream 503");
-    const r = await handleAdminSnapshotNow(deps, "demo-alice");
+    const r = await handleAdminSnapshotNow(deps, "demoalice");
     expect(r.status).toBe(502);
     expect((r.body as { error: string }).error).toMatch(/hetzner/);
     // Row should NOT have been stamped (Hetzner call happens before
     // the storage transition).
-    const row = await deps.storage.get("demo-alice");
+    const row = await deps.storage.get("demoalice");
     expect(row?.state).toBe("none");
   });
 

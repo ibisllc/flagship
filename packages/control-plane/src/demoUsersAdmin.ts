@@ -11,7 +11,7 @@
  * first-boot register call rejects.
  *
  * `handleAdminMintDeviceGrant` is the parallel demo-mode primitive for
- * minting a child device's grant (e.g. `demo-alice.reviewer`). It
+ * minting a child device's grant (e.g. `demoalice.reviewer`). It
  * derives a deterministic Device IRK from the same KEK, signs a
  * DeviceCapabilityGrant with the User IRK, and persists. Old grants
  * for the same (username, deviceLabel) are revoked-then-replaced (the

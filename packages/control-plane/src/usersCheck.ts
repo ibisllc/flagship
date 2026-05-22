@@ -36,7 +36,10 @@ import { type CaIssuer, type CaGate, evaluateCaGate } from "./pubkeyCert.js";
 import { bytesToHex } from "./hex.js";
 import { demoServerBlockFromRow, type DemoServerBlock } from "./demoUsers.js";
 
-const DEMO_USERNAME_RE = /^[a-z0-9-]{3,32}$/;
+// Hyphen-free, same charset as real usernames, so a demo name can never
+// break the `<creator>-<slug>` app-id split or be rejected by the ~7
+// endpoints that enforce /^[a-z0-9]{1,63}$/. Distinct 3..32 length only.
+const DEMO_USERNAME_RE = /^[a-z0-9]{3,32}$/;
 const DEVICE_LABEL_RE = /^[a-z0-9-]{1,24}$/;
 
 export interface TestAccountMeta {
@@ -182,16 +185,13 @@ export async function handleUsersCheck(
     });
   }
 
-  // 1a. Demo-user / test-account lookups happen BEFORE the
-  //     validateUserLabel hyphen guard. Reason: real-account usernames
-  //     are constrained to hyphen-free (so the serviceId composite
-  //     `<creator>-<slug>` parses unambiguously by splitting at the
-  //     first hyphen), but DEMO usernames legitimately carry hyphens
-  //     ("demo-alice", "office-tour"). Per demoUsers.ts:USERNAME_RE
-  //     `^[a-z0-9-]{3,32}$`. Running validateUserLabel first would
-  //     reject "demo-alice" with "no hyphens" BEFORE the demoUsers
-  //     row gets queried, breaking mobile demo-mode for every demo
-  //     name that contains a hyphen.
+  // 1a. Demo-user / test-account lookups run BEFORE the validateUserLabel
+  //     guard so a registered demo/test account is recognized as such
+  //     regardless of the real-account label rules (e.g. reserved names).
+  //     Demo usernames are now hyphen-free too (demoUsers.ts USERNAME_RE
+  //     `^[a-z0-9]{3,32}$`) — aligned with real usernames so a demo name
+  //     can never break the `<creator>-<slug>` app-id split or be
+  //     rejected by the hyphen-free username validators downstream.
   //
   //     Strict matching here: the demoUsers/testAccounts hit MUST
   //     be a literal-string lookup against the supplied username

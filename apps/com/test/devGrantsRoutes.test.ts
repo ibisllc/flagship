@@ -53,7 +53,7 @@ describe("devGrants routes — admin endpoints", () => {
     const r = await tryControlPlane(
       new Request("https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue", {
         method: "POST",
-        body: JSON.stringify({ username: "demo-alice", serverName: "home" }),
+        body: JSON.stringify({ username: "demoalice", serverName: "home" }),
       }),
       baseEnv(),
     );
@@ -66,7 +66,7 @@ describe("devGrants routes — admin endpoints", () => {
       new Request("https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue", {
         method: "POST",
         headers: { "x-admin-secret": "wrong" },
-        body: JSON.stringify({ username: "demo-alice", serverName: "home" }),
+        body: JSON.stringify({ username: "demoalice", serverName: "home" }),
       }),
       baseEnv(),
     );
@@ -79,7 +79,7 @@ describe("devGrants routes — admin endpoints", () => {
       new Request("https://flagshipserver.com/api/dev/sample-user/admin-claim-and-issue", {
         method: "POST",
         headers: { "x-admin-secret": ADMIN_SECRET },
-        body: JSON.stringify({ username: "demo-alice", serverName: "home" }),
+        body: JSON.stringify({ username: "demoalice", serverName: "home" }),
       }),
       baseEnv(),
     );
@@ -92,7 +92,7 @@ describe("devGrants routes — admin endpoints", () => {
   it("admin-mint-device-grant: 401 without x-admin-secret", async () => {
     const r = await tryControlPlane(
       new Request(
-        "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+        "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-mint-device-grant",
         {
           method: "POST",
           body: JSON.stringify({ deviceLabel: "reviewer", scopes: ["browse"] }),
@@ -107,7 +107,7 @@ describe("devGrants routes — admin endpoints", () => {
   it("admin-mint-device-grant: 503 when DEMO_IRK_KEK is unset", async () => {
     const r = await tryControlPlane(
       new Request(
-        "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+        "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-mint-device-grant",
         {
           method: "POST",
           headers: { "x-admin-secret": ADMIN_SECRET },
@@ -123,7 +123,7 @@ describe("devGrants routes — admin endpoints", () => {
   it("admin-mint-device-grant: 404 for unknown demo user when DEMO_IRK_KEK is set", async () => {
     const r = await tryControlPlane(
       new Request(
-        "https://flagshipserver.com/api/dev/sample-user/demo-alice/admin-mint-device-grant",
+        "https://flagshipserver.com/api/dev/sample-user/demoalice/admin-mint-device-grant",
         {
           method: "POST",
           headers: { "x-admin-secret": ADMIN_SECRET },
@@ -184,7 +184,7 @@ describe("devGrants routes — public endpoints", () => {
       new Request("https://flagshipserver.com/api/users/check", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username: "demo-alice.reviewer" }),
+        body: JSON.stringify({ username: "demoalice.reviewer" }),
       }),
       baseEnv(),
     );

@@ -49,11 +49,11 @@ exactly one device and no DeviceCapabilityGrants — equivalent to a
 single grant with full scopes. Existing accounts pay zero migration
 cost: the new envelope is additive.
 
-For demos the spec re-uses the same envelope. `demo-alice` resolves to
-the user-level demo identity (full scopes). `demo-alice.reviewer`
+For demos the spec re-uses the same envelope. `demoalice` resolves to
+the user-level demo identity (full scopes). `demoalice.reviewer`
 resolves to a device-scoped sub-identity with `['browse']` only,
 visible in the mobile UI as a restricted device sharing one VPS with
-`demo-alice`. The CLI mints the demo user's IRK deterministically from
+`demoalice`. The CLI mints the demo user's IRK deterministically from
 the demo username (Worker-side, never leaves the Worker secret
 boundary), then mints any number of device-scoped sub-identities under
 that user.
@@ -182,9 +182,9 @@ client-side separator the Worker resolves into the
 `device_capability_grants` table.
 
 Specifically:
-- `/api/users/check` with `{username: "demo-alice"}` returns the
+- `/api/users/check` with `{username: "demoalice"}` returns the
   user-level response (legacy shape + the `demoServer` block).
-- `/api/users/check` with `{username: "demo-alice.reviewer"}` returns
+- `/api/users/check` with `{username: "demoalice.reviewer"}` returns
   the user-level response PLUS a `deviceCapability` block describing
   the `reviewer` device's label + scopes + devicePubKey.
 
@@ -289,7 +289,7 @@ Worker is safe because:
 
 ### 4.2 CLI refactor
 
-`scripts/sample-user.mjs create demo-alice --display "Demo Alice"`
+`scripts/sample-user.mjs create demoalice --display "Demo Alice"`
 now executes:
 
 1. Probe `/api/dev/sample-user/<u>` → expects 404. (Demo doesn't exist
@@ -318,17 +318,17 @@ key is on the Worker side.
 For the reviewer sub-identity:
 
 ```
-node scripts/sample-user.mjs grant-device demo-alice reviewer \
+node scripts/sample-user.mjs grant-device demoalice reviewer \
   --scopes browse
 ```
 
-→ POST `/api/dev/sample-user/demo-alice/admin-mint-device-grant`
+→ POST `/api/dev/sample-user/demoalice/admin-mint-device-grant`
 with `{ deviceLabel: 'reviewer', scopes: ['browse'] }`.
 
 For showcasing corporate setups:
 
 ```
-node scripts/sample-user.mjs grant-device demo-alice work-laptop \
+node scripts/sample-user.mjs grant-device demoalice work-laptop \
   --scopes browse,install-service,vibe-code
 ```
 
@@ -697,30 +697,30 @@ Touch sites:
 
 Replaces the v2 Phase F acceptance in `docs/next-session-prompt.md`:
 
-1. `node scripts/sample-user.mjs create demo-alice --display "Demo
-   Alice"` completes with `{"username": "demo-alice", "ready": true,
+1. `node scripts/sample-user.mjs create demoalice --display "Demo
+   Alice"` completes with `{"username": "demoalice", "ready": true,
    "snapshotId": "<numeric>"}`. The personalize-iso step uses
    `--blob-json` and the daemon registers successfully on first
    boot.
-2. `curl /api/users/demo-alice/pods` shows
-   `home.demo-alice.flagship.services` (HTTP 200).
-3. `curl -X POST /api/users/check -d '{"username": "demo-alice"}'`
+2. `curl /api/users/demoalice/pods` shows
+   `home.demoalice.flagship.services` (HTTP 200).
+3. `curl -X POST /api/users/check -d '{"username": "demoalice"}'`
    returns `demoServer` block.
 4. `curl -X POST /api/users/check -d '{"username":
-   "demo-alice.reviewer"}'` returns `demoServer` + `deviceCapability`
+   "demoalice.reviewer"}'` returns `demoServer` + `deviceCapability`
    blocks; the latter has `scopes: ['browse']`.
-5. `/api/dev/sample-user/demo-alice/connect` provisions from snapshot
+5. `/api/dev/sample-user/demoalice/connect` provisions from snapshot
    in <60s.
-6. iOS / webapp typing `demo-alice` → full demo UI, all actions
+6. iOS / webapp typing `demoalice` → full demo UI, all actions
    available.
-7. iOS / webapp typing `demo-alice.reviewer` → reviewer chip visible,
+7. iOS / webapp typing `demoalice.reviewer` → reviewer chip visible,
    install button disabled with tooltip, browsing fully functional.
-8. `node scripts/sample-user.mjs grant-device demo-alice work-laptop
+8. `node scripts/sample-user.mjs grant-device demoalice work-laptop
    --scopes browse,install-service,vibe-code` mints a second device
-   grant; typing `demo-alice.work-laptop` on mobile shows the device
+   grant; typing `demoalice.work-laptop` on mobile shows the device
    chip with the elevated scopes; install button enabled.
 9. Idle teardown destroys VPS; re-connect re-provisions.
-10. `delete-sample-user demo-alice` cleans up snapshot + R2 + D1 row
+10. `delete-sample-user demoalice` cleans up snapshot + R2 + D1 row
     + every DeviceCapabilityGrant for that user.
 
 ---
@@ -743,7 +743,7 @@ Replaces the v2 Phase F acceptance in `docs/next-session-prompt.md`:
 ## 11. Why this design (rationale capture)
 
 - **One envelope, two consumers (demos AND corporate).** The
-  DeviceCapabilityGrant shape is identical for `demo-alice.reviewer`
+  DeviceCapabilityGrant shape is identical for `demoalice.reviewer`
   and `harry.work-laptop`. The Worker + daemon code path is one. We
   pay the design cost ONCE.
 - **No deterministic-IRK leakage off the cluster.** The demo IRK is
@@ -837,9 +837,9 @@ naturally on resolution.
 `validateUserLabel` rejects hyphens (the no-hyphens-in-usernames
 rule that makes the `<creator>-<slug>` serviceId composite parse
 unambiguously). But DEMO usernames legitimately carry hyphens
-(`demo-alice`). The lookup order in `handleUsersCheck` was wrong
+(`demoalice`). The lookup order in `handleUsersCheck` was wrong
 pre-`4315993` — the hyphen rejection fired BEFORE the demoUsers
-lookup, so `/users/check {"username":"demo-alice"}` returned
+lookup, so `/users/check {"username":"demoalice"}` returned
 `{available: false, reason: "no hyphens"}` even though the demo
 existed. Mobile demo-mode silently broke for every hyphenated demo
 name.

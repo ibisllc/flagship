@@ -95,7 +95,7 @@ async function mkHarness(opts: { seed?: boolean } = {}): Promise<Harness> {
   };
   if (opts.seed) {
     await deps.storage.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -138,7 +138,7 @@ describe("handleAdminClaimAndIssue", () => {
   it("rejects malformed serverName", async () => {
     const h = await mkHarness({ seed: true });
     const r = await handleAdminClaimAndIssue(h.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "h",
     });
     expect(r.status).toBe(400);
@@ -147,7 +147,7 @@ describe("handleAdminClaimAndIssue", () => {
   it("happy path: claims username, mints auth-code + blob + primary grant, all signatures verify", async () => {
     const h = await mkHarness({ seed: true });
     const r = await handleAdminClaimAndIssue(h.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
     });
     expect(r.status).toBe(200);
@@ -205,11 +205,11 @@ describe("handleAdminClaimAndIssue", () => {
     expect(body.blob.version).toBe(2);
     expect(body.blob.authCode.version).toBe(1);
 
-    const userIrk = deriveDemoUserIrk(KEK_BYTES, "demo-alice");
+    const userIrk = deriveDemoUserIrk(KEK_BYTES, "demoalice");
     const userPubHex = hex(userIrk.publicKey);
 
     // 1. The usernames row is now stamped.
-    const userRec = await h.deps.usernames.get("demo-alice");
+    const userRec = await h.deps.usernames.get("demoalice");
     expect(userRec).toBeDefined();
     expect(userRec!.irkPubHex).toBe(userPubHex);
     expect(userRec!.isDemo).toBe(true);
@@ -239,13 +239,13 @@ describe("handleAdminClaimAndIssue", () => {
       rckPubKey: hexToBytes(blobJson.rckPubKey),
     };
     expect(verifyInstallBlob(blob, hexToBytes(body.blobSignature), userIrk.publicKey)).toBe(true);
-    expect(blob.serverDomain).toBe("home.demo-alice.flagship.services");
+    expect(blob.serverDomain).toBe("home.demoalice.flagship.services");
     expect(blob.installerGitRef).toBe("main");
 
     // 3. AuthCode row stamped.
     const ac = await h.deps.authCodes.get(blob.authCode.serial);
     expect(ac).toBeDefined();
-    expect(ac!.username).toBe("demo-alice");
+    expect(ac!.username).toBe("demoalice");
     expect(ac!.status).toBe("active");
 
     // BuildTicket flow removed — QR-pipe is the only path; the
@@ -276,11 +276,11 @@ describe("handleAdminClaimAndIssue", () => {
     const h1 = await mkHarness({ seed: true });
     const h2 = await mkHarness({ seed: true });
     const r1 = await handleAdminClaimAndIssue(h1.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
     });
     const r2 = await handleAdminClaimAndIssue(h2.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
     });
     const b1 = (r1.body as { blob: { version: 2; serverDomain: string; serverName: string; username: string; phoneDelegatedPubKey: string; rckPubKey: string; authCode: { userPubKey: string; delegatedPubKey: string } }}).blob;
@@ -301,12 +301,12 @@ describe("handleAdminClaimAndIssue", () => {
     crypto.getRandomValues(stranger);
     const strangerPub = ed.getPublicKey(stranger);
     await h.deps.usernames.put({
-      username: "demo-alice",
+      username: "demoalice",
       irkPubHex: hex(strangerPub),
       claimedAt: 1,
     });
     const r = await handleAdminClaimAndIssue(h.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
     });
     expect(r.status).toBe(409);
@@ -315,7 +315,7 @@ describe("handleAdminClaimAndIssue", () => {
   it("honors a caller-supplied scopes override", async () => {
     const h = await mkHarness({ seed: true });
     const r = await handleAdminClaimAndIssue(h.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
       scopes: ["browse"],
     });
@@ -328,13 +328,13 @@ describe("handleAdminClaimAndIssue", () => {
   it("rejects empty / unknown scopes array", async () => {
     const h = await mkHarness({ seed: true });
     const r1 = await handleAdminClaimAndIssue(h.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
       scopes: [],
     });
     expect(r1.status).toBe(400);
     const r2 = await handleAdminClaimAndIssue(h.deps, {
-      username: "demo-alice",
+      username: "demoalice",
       serverName: "home",
       scopes: ["not-a-scope"],
     });
@@ -358,7 +358,7 @@ describe("handleAdminMintDeviceGrant", () => {
 
   it("rejects malformed deviceLabel", async () => {
     const h = await mkHarness({ seed: true });
-    const r = await handleAdminMintDeviceGrant(h.deps, "demo-alice", {
+    const r = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
       deviceLabel: "INVALID",
       scopes: ["browse"],
     });
@@ -367,7 +367,7 @@ describe("handleAdminMintDeviceGrant", () => {
 
   it("rejects reserved deviceLabel", async () => {
     const h = await mkHarness({ seed: true });
-    const r = await handleAdminMintDeviceGrant(h.deps, "demo-alice", {
+    const r = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
       deviceLabel: "admin",
       scopes: ["browse"],
     });
@@ -376,12 +376,12 @@ describe("handleAdminMintDeviceGrant", () => {
 
   it("rejects empty / non-array scopes", async () => {
     const h = await mkHarness({ seed: true });
-    const r1 = await handleAdminMintDeviceGrant(h.deps, "demo-alice", {
+    const r1 = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
       deviceLabel: "reviewer",
       scopes: [],
     });
     expect(r1.status).toBe(400);
-    const r2 = await handleAdminMintDeviceGrant(h.deps, "demo-alice", {
+    const r2 = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
       deviceLabel: "reviewer",
       scopes: "browse",
     });
@@ -390,7 +390,7 @@ describe("handleAdminMintDeviceGrant", () => {
 
   it("happy path: signature verifies, devicePub matches HKDF derivation", async () => {
     const h = await mkHarness({ seed: true });
-    const r = await handleAdminMintDeviceGrant(h.deps, "demo-alice", {
+    const r = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
       deviceLabel: "reviewer",
       scopes: ["browse"],
     });
@@ -408,8 +408,8 @@ describe("handleAdminMintDeviceGrant", () => {
       signature: string;
       devicePubHex: string;
     };
-    const userIrk = deriveDemoUserIrk(KEK_BYTES, "demo-alice");
-    const deviceIrk = deriveDemoDeviceIrk(KEK_BYTES, "demo-alice", "reviewer");
+    const userIrk = deriveDemoUserIrk(KEK_BYTES, "demoalice");
+    const deviceIrk = deriveDemoDeviceIrk(KEK_BYTES, "demoalice", "reviewer");
     expect(body.devicePubHex).toBe(hex(deviceIrk.publicKey));
 
     const grant: DeviceCapabilityGrant = {
@@ -428,14 +428,14 @@ describe("handleAdminMintDeviceGrant", () => {
 
   it("re-issuance: second call for same (user, label) revokes prior + mints new", async () => {
     const h = await mkHarness({ seed: true });
-    const a = await handleAdminMintDeviceGrant(h.deps, "demo-alice", {
+    const a = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
       deviceLabel: "reviewer",
       scopes: ["browse"],
     });
     const aId = (a.body as { grant: { grantId: string } }).grant.grantId;
 
     h.clock.now += 1_000;
-    const b = await handleAdminMintDeviceGrant(h.deps, "demo-alice", {
+    const b = await handleAdminMintDeviceGrant(h.deps, "demoalice", {
       deviceLabel: "reviewer",
       scopes: ["browse", "install-service"],
     });
@@ -449,7 +449,7 @@ describe("handleAdminMintDeviceGrant", () => {
     expect(newRow!.revokedAt).toBeNull();
 
     const active = await h.deps.deviceCapabilityGrants.getActiveForUserLabel(
-      "demo-alice",
+      "demoalice",
       "reviewer",
     );
     expect(active!.grantId).toBe(bId);

@@ -409,7 +409,7 @@ systemctl enable flagship-daemon.service flagship-first-boot-register.service
 echo "[flagship-bootstrap] systemd units installed + enabled"
 
 # 9. Run registration INLINE here (don't wait for systemd to pick it
-#    up; systemd ordering can lag and we want demo-alice's pod to
+#    up; systemd ordering can lag and we want demoalice's pod to
 #    register as soon as the bootstrap finishes).
 echo "[flagship-bootstrap] running first-boot register inline"
 /usr/local/sbin/flagship-first-boot-register.sh || \\

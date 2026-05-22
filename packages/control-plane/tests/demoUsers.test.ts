@@ -189,6 +189,17 @@ describe("handleCreateDemoUser", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects hyphenated demo usernames (must be hyphen-free)", async () => {
+    // A hyphen would brick the `<creator>-<slug>` app-id split and be
+    // rejected by the hyphen-free username validators downstream — demo
+    // names are now constrained to the same charset as real usernames.
+    const res = await handleCreateDemoUser(h.deps, {
+      username: "demo-alice",
+      display: "x",
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("rejects reserved usernames", async () => {
     const res = await handleCreateDemoUser(h.deps, {
       username: "admin",

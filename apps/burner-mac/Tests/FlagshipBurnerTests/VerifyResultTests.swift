@@ -8,8 +8,8 @@ final class VerifyResultTests: XCTestCase {
         {
           "ok": true,
           "source": { "kind": "file", "path": "/tmp/recipe.json" },
-          "serverDomain": "demo-alice.flagship.services",
-          "username": "demo-alice",
+          "serverDomain": "demoalice.flagship.services",
+          "username": "demoalice",
           "serverName": "studio",
           "expiresAt": "2026-06-21T12:00:00.000Z",
           "installerGitRef": "v1.0.0",
@@ -18,8 +18,8 @@ final class VerifyResultTests: XCTestCase {
         """
         let r = VerifyResult.parse(jsonText: raw)
         XCTAssertNotNil(r)
-        XCTAssertEqual(r?.serverDomain, "demo-alice.flagship.services")
-        XCTAssertEqual(r?.username, "demo-alice")
+        XCTAssertEqual(r?.serverDomain, "demoalice.flagship.services")
+        XCTAssertEqual(r?.username, "demoalice")
         XCTAssertEqual(r?.expiresAt, "2026-06-21T12:00:00.000Z")
         XCTAssertEqual(r?.signatureValid, true)
     }

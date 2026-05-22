@@ -116,10 +116,10 @@ class LoginDecisionMatrixConformanceTest {
     @Test fun matrix_demo_resolvesInstantNoFactors() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock("home.demo-alice.flagship.services", "up", 30),
+                "demoalice" to DemoServerBlock("home.demoalice.flagship.services", "up", 30),
             )
         }
-        val r = server.resolveAccount("demo-alice")
+        val r = server.resolveAccount("demoalice")
         assertEquals(AccountResolution.AccountKind.Demo, r.accountKind)
         assertEquals(AccountResolution.GraceModel.Instant, r.grace)
         assertFalse(r.recovery.present)
@@ -188,15 +188,15 @@ class LoginDecisionMatrixConformanceTest {
     @Test fun branch_demo_activatesAccountWithOneDevice() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0).apply {
             demoServers = mutableMapOf(
-                "demo-alice" to DemoServerBlock("home.demo-alice.flagship.services", "up", 30),
+                "demoalice" to DemoServerBlock("home.demoalice.flagship.services", "up", 30),
             )
         }
         val app = AppState()
-        val r = server.resolveAccount("demo-alice")
+        val r = server.resolveAccount("demoalice")
         // The JoinAccountContainer demo branch: DemoFixtures.activate.
         DemoFixtures.activate(app, r.username, demoServer = r.demoServer)
         assertTrue(app.isPaired.first())
-        assertEquals("demo-alice", app.currentUser.first())
+        assertEquals("demoalice", app.currentUser.first())
         val pods = app.pods.first()
         assertEquals(1, pods.size)
         assertEquals(PodInfo.Status.ONLINE, pods.first().status)

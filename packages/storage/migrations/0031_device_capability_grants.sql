@@ -8,7 +8,7 @@
 -- daemon both verify it on every privileged operation; the user IRK
 -- continues to authorize "anything" (legacy path), but device IRKs are
 -- gated to the scopes their grant declares. The same envelope serves both
--- demo accounts (`demo-alice.reviewer` → browse-only) and corporate
+-- demo accounts (`demoalice.reviewer` → browse-only) and corporate
 -- deployments (`harry.work-laptop` → install-service + vibe-code).
 --
 -- Shape mirrors the existing service-grant / auth-code tables — TEXT

@@ -837,7 +837,7 @@ public struct TestAccountMeta: Codable, Equatable, Sendable {
 /// packages/control-plane/src/demoUsers.ts. See
 /// docs/sample-users.md §10.9.
 public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
-    /// e.g. `home.demo-alice.flagship.services`. The single device the
+    /// e.g. `home.demoalice.flagship.services`. The single device the
     /// new demo-mode renders.
     public let fqdn: String
     /// Server-lifecycle state surfaced to clients. The Worker collapses

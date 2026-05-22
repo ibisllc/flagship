@@ -32,13 +32,13 @@ final class LoginViewModelTests: XCTestCase {
 
     func test_mockResolve_demoUsername_returnsDemoKindWithServerBlock() async throws {
         let server = makeServer()
-        server.demoServers = ["demo-alice": demoBlock("demo-alice")]
-        let r = try await server.resolveAccount(username: "demo-alice")
-        XCTAssertEqual(r.username, "demo-alice")
+        server.demoServers = ["demoalice": demoBlock("demoalice")]
+        let r = try await server.resolveAccount(username: "demoalice")
+        XCTAssertEqual(r.username, "demoalice")
         XCTAssertTrue(r.exists)
         XCTAssertEqual(r.kind, .demo)
         XCTAssertEqual(r.graceModel, .instant)
-        XCTAssertEqual(r.demoServer?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(r.demoServer?.fqdn, "home.demoalice.flagship.services")
         // Demo crypto is a no-op → recovery + factors are zeroed.
         XCTAssertFalse(r.recovery.present)
         XCTAssertFalse(r.totpEnrolled)
@@ -117,13 +117,13 @@ final class LoginViewModelTests: XCTestCase {
         // — keep these in lockstep.
         let json = """
         {
-          "username": "demo-alice",
+          "username": "demoalice",
           "exists": true,
           "kind": "demo",
           "recovery": { "present": false, "hasFetchGate": false },
           "totpEnrolled": false,
           "trustedDeviceCount": 0,
-          "demoServer": { "fqdn": "home.demo-alice.flagship.services", "status": "up", "ttlIdleMinutes": 30 },
+          "demoServer": { "fqdn": "home.demoalice.flagship.services", "status": "up", "ttlIdleMinutes": 30 },
           "graceModel": "instant"
         }
         """.data(using: .utf8)!
@@ -156,14 +156,14 @@ final class LoginViewModelTests: XCTestCase {
 
     func test_login_demoBranch_resolvesDemoOutcome() async {
         let server = makeServer()
-        server.demoServers = ["demo-alice": demoBlock("demo-alice")]
+        server.demoServers = ["demoalice": demoBlock("demoalice")]
         let vm = LoginViewModel(server: server)
-        await vm.submit("demo-alice")
+        await vm.submit("demoalice")
         guard case .resolved(.demo(let u, let block)) = vm.phase else {
             return XCTFail("expected .resolved(.demo), got \(vm.phase)")
         }
-        XCTAssertEqual(u, "demo-alice")
-        XCTAssertEqual(block?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(u, "demoalice")
+        XCTAssertEqual(block?.fqdn, "home.demoalice.flagship.services")
     }
 
     func test_login_unknownBranch_resolvesUnknownOutcome() async {
@@ -192,13 +192,13 @@ final class LoginViewModelTests: XCTestCase {
 
     func test_login_lowercasesAndTrimsBeforeResolve() async {
         let server = makeServer()
-        server.demoServers = ["demo-alice": demoBlock("demo-alice")]
+        server.demoServers = ["demoalice": demoBlock("demoalice")]
         let vm = LoginViewModel(server: server)
-        await vm.submit("  Demo-Alice  ")
+        await vm.submit("  DemoAlice  ")
         guard case .resolved(.demo(let u, _)) = vm.phase else {
             return XCTFail("expected demo for trimmed/lowercased input, got \(vm.phase)")
         }
-        XCTAssertEqual(u, "demo-alice")
+        XCTAssertEqual(u, "demoalice")
     }
 
     func test_login_emptyInput_staysIdle() async {
@@ -238,20 +238,20 @@ final class LoginViewModelTests: XCTestCase {
         // The decision the Join host (OnboardingFlow) makes: a demo
         // outcome calls DemoFixtures.activate, which opens the account.
         let server = makeServer()
-        server.demoServers = ["demo-alice": demoBlock("demo-alice")]
+        server.demoServers = ["demoalice": demoBlock("demoalice")]
         let vm = LoginViewModel(server: server)
-        await vm.submit("demo-alice")
+        await vm.submit("demoalice")
         guard case .resolved(.demo(let u, let block)) = vm.phase else {
             return XCTFail("expected demo outcome")
         }
         let app = AppState()
         DemoFixtures.activate(app, username: u, demoServer: block)
         XCTAssertTrue(app.isPaired)
-        XCTAssertEqual(app.currentUser, "demo-alice")
+        XCTAssertEqual(app.currentUser, "demoalice")
         // Plan A one-live-device path: the demoServer block renders ONE
         // pod, not the 3-fixture legacy set.
         XCTAssertEqual(app.pods.count, 1)
-        XCTAssertEqual(app.pods.first?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(app.pods.first?.fqdn, "home.demoalice.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .online)
     }
 }

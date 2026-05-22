@@ -119,19 +119,19 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
 
     func test_demo_routesToDemoOutcome_andActivatesSandbox() async {
         let server = makeServer()
-        server.demoServers = ["demo-alice": demoBlock("demo-alice")]
+        server.demoServers = ["demoalice": demoBlock("demoalice")]
         let vm = LoginViewModel(server: server)
-        await vm.submit("demo-alice")
+        await vm.submit("demoalice")
         guard case .resolved(.demo(let u, let block)) = vm.phase else {
             return XCTFail("demo must route to .resolved(.demo), got \(vm.phase)")
         }
-        XCTAssertEqual(u, "demo-alice")
-        XCTAssertEqual(block?.fqdn, "home.demo-alice.flagship.services")
+        XCTAssertEqual(u, "demoalice")
+        XCTAssertEqual(block?.fqdn, "home.demoalice.flagship.services")
         // The host's demo action (OnboardingFlow.onDemo) opens the sandbox.
         let app = AppState()
         DemoFixtures.activate(app, username: u, demoServer: block)
         XCTAssertTrue(app.isPaired)
-        XCTAssertEqual(app.currentUser, "demo-alice")
+        XCTAssertEqual(app.currentUser, "demoalice")
     }
 
     // MARK: - 3. unknown → clean STATE (no error card)
@@ -332,13 +332,13 @@ final class LoginDecisionMatrixConformanceTests: XCTestCase {
     /// drift on either side trips here.
     func test_mockWire_matchesWorkerJsonShape_demo() async throws {
         let server = makeServer()
-        server.demoServers = ["demo-alice": demoBlock("demo-alice")]
-        let fromMock = try await server.resolveAccount(username: "demo-alice")
+        server.demoServers = ["demoalice": demoBlock("demoalice")]
+        let fromMock = try await server.resolveAccount(username: "demoalice")
         let workerJson = """
-        {"username":"demo-alice","exists":true,"kind":"demo",
+        {"username":"demoalice","exists":true,"kind":"demo",
          "recovery":{"present":false,"hasFetchGate":false},
          "totpEnrolled":false,"trustedDeviceCount":0,
-         "demoServer":{"fqdn":"home.demo-alice.flagship.services","status":"up","ttlIdleMinutes":30},
+         "demoServer":{"fqdn":"home.demoalice.flagship.services","status":"up","ttlIdleMinutes":30},
          "graceModel":"instant"}
         """.data(using: .utf8)!
         let fromWorker = try JSONDecoder().decode(AccountResolution.self, from: workerJson)

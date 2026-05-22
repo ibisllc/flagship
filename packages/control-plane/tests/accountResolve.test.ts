@@ -102,7 +102,7 @@ describe("handleAccountResolve", () => {
     const { InMemoryDemoUsersStorage } = await import("@flagship/storage");
     const demoUsers = new InMemoryDemoUsersStorage();
     await demoUsers.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -115,14 +115,14 @@ describe("handleAccountResolve", () => {
       state: "none",
       createdAt: 1,
     });
-    const r = await handleAccountResolve(deps({ demoUsers }), "demo-alice");
+    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
     expect(r.status).toBe(200);
     const b = body(r);
     expect(b.kind).toBe("demo");
     expect(b.exists).toBe(true);
     expect(b.graceModel).toBe("instant");
     expect(b.demoServer).toBeDefined();
-    expect(b.demoServer!.fqdn).toBe("home.demo-alice.flagship.services");
+    expect(b.demoServer!.fqdn).toBe("home.demoalice.flagship.services");
     expect(b.recovery.present).toBe(false);
   });
 

@@ -146,7 +146,7 @@ public enum DemoFixtures {
     }
 
     // Internal helper — first label of the FQDN ("home" from
-    // "home.demo-alice.flagship.services").
+    // "home.demoalice.flagship.services").
     private static func labelFromFqdn(_ fqdn: String) -> String? {
         let parts = fqdn.split(separator: ".")
         guard let first = parts.first else { return nil }

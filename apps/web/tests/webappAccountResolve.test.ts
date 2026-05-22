@@ -38,7 +38,7 @@ function jsonResponse(status: number, body: unknown, headers: Record<string, str
   });
 }
 
-function demoResolution(username = "demo-alice") {
+function demoResolution(username = "demoalice") {
   return {
     username,
     exists: true,
@@ -96,13 +96,13 @@ function unknownResolution(username = "nope") {
 describe("webapp resolveAccount — login preflight wire", () => {
   it("GETs /api/account/resolve/<username> and parses a demo resolution", async () => {
     const { resolveAccount } = await loadLib();
-    const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, demoResolution("demo-alice")));
-    const r = await resolveAccount("demo-alice", { fetch: fakeFetch as any });
+    const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, demoResolution("demoalice")));
+    const r = await resolveAccount("demoalice", { fetch: fakeFetch as any });
     const [url, init] = fakeFetch.mock.calls[0]!;
-    expect(url).toBe("https://flagshipserver.com/api/account/resolve/demo-alice");
+    expect(url).toBe("https://flagshipserver.com/api/account/resolve/demoalice");
     expect(init.method).toBe("GET");
     expect(r.kind).toBe("demo");
-    expect(r.demoServer?.fqdn).toBe("home.demo-alice.flagship.services");
+    expect(r.demoServer?.fqdn).toBe("home.demoalice.flagship.services");
     expect(r.graceModel).toBe("instant");
   });
 
@@ -162,9 +162,9 @@ describe("webapp resolveAccount — login preflight wire", () => {
   it("honours a custom baseUrl", async () => {
     const { resolveAccount } = await loadLib();
     const fakeFetch = vi.fn().mockResolvedValue(jsonResponse(200, demoResolution()));
-    await resolveAccount("demo-alice", { fetch: fakeFetch as any, baseUrl: "https://staging.example" });
+    await resolveAccount("demoalice", { fetch: fakeFetch as any, baseUrl: "https://staging.example" });
     expect(fakeFetch.mock.calls[0]![0]).toBe(
-      "https://staging.example/api/account/resolve/demo-alice",
+      "https://staging.example/api/account/resolve/demoalice",
     );
   });
 });
@@ -216,22 +216,22 @@ describe("webapp activateDemoAccount — demo-as-recovery activation", () => {
       setUsername: vi.fn((u: string) => { calls.username = u; }),
       makePassphrase: () => "fixed-demo-passphrase",
     };
-    const res = demoResolution("demo-alice");
+    const res = demoResolution("demoalice");
     const out = await activateDemoAccount(res, deps as any);
 
     // Fresh device minted (NO passkey, NO popup) under a generated pass.
     expect(deps.bootstrapNewIdentity).toHaveBeenCalledTimes(1);
     expect(calls.pass).toBe("fixed-demo-passphrase");
     // Username persisted + session unlocked under the new seed.
-    expect(calls.username).toBe("demo-alice");
-    expect(calls.unlock.u).toBe("demo-alice");
+    expect(calls.username).toBe("demoalice");
+    expect(calls.unlock.u).toBe("demoalice");
     expect(calls.unlock.s).toBe(seed);
     // Demo profile carries the demoServer block.
-    expect(calls.profile.cloudName).toBe("demo-alice");
-    expect(calls.profile.demoServer.fqdn).toBe("home.demo-alice.flagship.services");
+    expect(calls.profile.cloudName).toBe("demoalice");
+    expect(calls.profile.demoServer.fqdn).toBe("home.demoalice.flagship.services");
     // Account opened.
     expect(calls.dispatched).toBe(true);
-    expect(out).toEqual({ username: "demo-alice", seed });
+    expect(out).toEqual({ username: "demoalice", seed });
   });
 
   it("works without optional collaborators (addProfile/dispatch/setUsername)", async () => {

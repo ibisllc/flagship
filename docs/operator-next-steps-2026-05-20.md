@@ -51,7 +51,7 @@ end" above):
 Now run:
 
 ```sh
-node scripts/sample-user.mjs create demo-alice --display "Demo Alice"
+node scripts/sample-user.mjs create demoalice --display "Demo Alice"
 ```
 
 Expected end state:
@@ -66,10 +66,10 @@ Expected end state:
 - install.sh sync+umounts /dev/sda (W2 fix), repartitions, LUKS-init,
   mkfs, grub-install.
 - Daemon registers with `.com`; ACME runs.
-- `/api/users/demo-alice/pods` shows
-  `home.demo-alice.flagship.services`.
+- `/api/users/demoalice/pods` shows
+  `home.demoalice.flagship.services`.
 - The 10-minute cron snapshots the temp VPS + destroys it.
-- CLI exits 0 with `{"username": "demo-alice", "ready": true,
+- CLI exits 0 with `{"username": "demoalice", "ready": true,
   "snapshotId": "<numeric>"}`.
 
 If anything fails: there is no laptop SSH key, so debugging is via
@@ -82,7 +82,7 @@ for the Alpine install phase.
 ### 3. Mint a reviewer sub-identity + smoke v2 device-addressing
 
 ```sh
-node scripts/sample-user.mjs grant-device demo-alice reviewer --scopes browse
+node scripts/sample-user.mjs grant-device demoalice reviewer --scopes browse
 ```
 
 Then probe:
@@ -90,26 +90,26 @@ Then probe:
 ```sh
 curl -X POST https://flagshipserver.com/api/users/check \
   -H 'content-type: application/json' \
-  -d '{"username":"demo-alice.reviewer"}'
+  -d '{"username":"demoalice.reviewer"}'
 ```
 
 Expect HTTP 200 with both `demoServer` and `deviceCapability` blocks; `deviceCapability.scopes` is `["browse"]`.
 
 ### 4. Smoke test the mobile demo-mode rendering
 
-- iOS: open the FlagshipUI scheme in simulator (or a real device). Type `demo-alice` → full demo UI. Type `demo-alice.reviewer` → reviewer chip below the username + Install/Vibe-code actions disabled with tooltip "Use a primary device."
+- iOS: open the FlagshipUI scheme in simulator (or a real device). Type `demoalice` → full demo UI. Type `demoalice.reviewer` → reviewer chip below the username + Install/Vibe-code actions disabled with tooltip "Use a primary device."
 - Webapp: `https://web.flagshipserver.com/` → same flow.
 - Android: when you've got a JDK box (memory `reference_android_toolchain`).
 
 ### 5. Smoke test wipe-restart's v2 grant revocation
 
-(After steps 1-4 work) — mint a couple of device grants for `demo-alice`, then call wipe-restart. Response should carry `revokedGrantIds: [...]` with both grant IDs. Probe `device_capability_grants` and confirm each row has `revoked_at IS NOT NULL`.
+(After steps 1-4 work) — mint a couple of device grants for `demoalice`, then call wipe-restart. Response should carry `revokedGrantIds: [...]` with both grant IDs. Probe `device_capability_grants` and confirm each row has `revoked_at IS NOT NULL`.
 
 ### 6. Iteration loop
 
 If attempt #5 fails:
 - The most likely failure modes have been front-loaded by this session's five bug fixes. Whatever's left is probably specific to the install chain on Hetzner (LUKS Argon2id timing? grub install on a hybrid-booted disk?).
-- The CLI's `awaitDaemonReady` polls `/api/users/<u>/pods` for 15 min. Within that window you can `ssh root@<ip>` to the VPS BEFORE the rescue reboot, OR after the install completes you can hit `https://home.demo-alice.flagship.services/api/health` directly (port 443 once ACME runs).
+- The CLI's `awaitDaemonReady` polls `/api/users/<u>/pods` for 15 min. Within that window you can `ssh root@<ip>` to the VPS BEFORE the rescue reboot, OR after the install completes you can hit `https://home.demoalice.flagship.services/api/health` directly (port 443 once ACME runs).
 
 ## Background sub-agents (status at session end)
 
@@ -160,13 +160,13 @@ cd apps/com && npx wrangler deploy
 
 # 2. Run live test.
 cd /Users/harrywinner/flagship
-node scripts/sample-user.mjs create demo-alice --display "Demo Alice"
+node scripts/sample-user.mjs create demoalice --display "Demo Alice"
 
 # 3. If green: mint a reviewer + probe.
-node scripts/sample-user.mjs grant-device demo-alice reviewer --scopes browse
+node scripts/sample-user.mjs grant-device demoalice reviewer --scopes browse
 curl -X POST https://flagshipserver.com/api/users/check \
   -H 'content-type: application/json' \
-  -d '{"username":"demo-alice.reviewer"}'
+  -d '{"username":"demoalice.reviewer"}'
 
-# 4. Open iOS / webapp; type both demo-alice and demo-alice.reviewer.
+# 4. Open iOS / webapp; type both demoalice and demoalice.reviewer.
 ```

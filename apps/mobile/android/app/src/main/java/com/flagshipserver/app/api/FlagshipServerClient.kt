@@ -615,7 +615,7 @@ data class TestAccountMeta(
  *  iOS). See docs/sample-users.md §10.9. */
 @Serializable
 data class DemoServerBlock(
-    /** e.g. `home.demo-alice.flagship.services`. The single device the
+    /** e.g. `home.demoalice.flagship.services`. The single device the
      *  new demo-mode renders. */
     val fqdn: String,
     /** Server-lifecycle state surfaced to clients. The Worker collapses

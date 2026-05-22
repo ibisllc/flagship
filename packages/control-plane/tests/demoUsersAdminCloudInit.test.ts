@@ -78,7 +78,7 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
   const usernames = new InMemoryUsernameStorage();
   if (opts.seedDemo) {
     await storage.insert({
-      username: "demo-alice",
+      username: "demoalice",
       display: "Demo Alice",
       snapshotId: null,
       isoR2Key: null,
@@ -93,13 +93,13 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
     });
   }
   if (opts.seedUsername) {
-    const irk = deriveDemoUserIrk(KEK, "demo-alice");
+    const irk = deriveDemoUserIrk(KEK, "demoalice");
     const hex = (b: Uint8Array) =>
       Array.from(b)
         .map((x) => x.toString(16).padStart(2, "0"))
         .join("");
     await usernames.put({
-      username: "demo-alice",
+      username: "demoalice",
       irkPubHex: hex(irk.publicKey),
       claimedAt: 1_000_000,
       isDemo: true,
@@ -222,14 +222,14 @@ describe("handleAdminCloudInitNow (W13)", () => {
 
   it("409s when usernames row missing", async () => {
     const { deps } = await mkDeps({ seedDemo: true });
-    const r = await handleAdminCloudInitNow(deps, "demo-alice");
+    const r = await handleAdminCloudInitNow(deps, "demoalice");
     expect(r.status).toBe(409);
     expect((r.body as { error: string }).error).toMatch(/admin-claim-and-issue/);
   });
 
   it("happy path: 202, posts cloud-config with debian-12 + inlined blob", async () => {
     const { deps, hetzner } = await mkDeps({ seedDemo: true, seedUsername: true });
-    const r = await handleAdminCloudInitNow(deps, "demo-alice");
+    const r = await handleAdminCloudInitNow(deps, "demoalice");
     expect(r.status).toBe(202);
     const body = r.body as {
       state: string;
@@ -242,7 +242,7 @@ describe("handleAdminCloudInitNow (W13)", () => {
     expect(body.image).toBe("debian-12");
 
     // The demo_users row transitioned. isoR2Key is null on this path.
-    const row = await deps.storage.get("demo-alice");
+    const row = await deps.storage.get("demoalice");
     expect(row?.state).toBe("provisioning");
     expect(row?.activeServerId).toBe("srv-ci-abc");
     expect(row?.isoR2Key).toBeNull();
@@ -252,7 +252,7 @@ describe("handleAdminCloudInitNow (W13)", () => {
     expect(hetzner.calls).toHaveLength(1);
     const call = hetzner.calls[0]!;
     expect(call.image).toBe("debian-12");
-    expect(call.username).toBe("demo-alice");
+    expect(call.username).toBe("demoalice");
     expect(call.location).toBe("fsn1");
     expect(call.serverType).toBe("cpx11");
     expect(call.userData.startsWith("#cloud-config\n")).toBe(true);
@@ -265,20 +265,20 @@ describe("handleAdminCloudInitNow (W13)", () => {
     );
     expect(m).not.toBeNull();
     const blob = JSON.parse(Buffer.from(m![1]!, "base64").toString("utf8"));
-    expect(blob.serverDomain).toBe("home.demo-alice.flagship.services");
-    expect(blob.username).toBe("demo-alice");
+    expect(blob.serverDomain).toBe("home.demoalice.flagship.services");
+    expect(blob.username).toBe("demoalice");
     expect(blob.serverName).toBe("home");
     expect(blob.registrationUrl).toBe(
       "https://flagshipserver.com/api/server/register",
     );
     expect(blob.installerGitRef).toBe("main");
-    expect(blob.authCode.username).toBe("demo-alice");
+    expect(blob.authCode.username).toBe("demoalice");
   });
 
   it("idempotent — second call with state=provisioning returns 200 + reused", async () => {
     const { deps } = await mkDeps({ seedDemo: true, seedUsername: true });
-    await handleAdminCloudInitNow(deps, "demo-alice");
-    const r2 = await handleAdminCloudInitNow(deps, "demo-alice");
+    await handleAdminCloudInitNow(deps, "demoalice");
+    const r2 = await handleAdminCloudInitNow(deps, "demoalice");
     expect(r2.status).toBe(200);
     expect((r2.body as { reused: boolean }).reused).toBe(true);
   });
@@ -286,10 +286,10 @@ describe("handleAdminCloudInitNow (W13)", () => {
   it("502 when the Hetzner client throws", async () => {
     const { deps, hetzner } = await mkDeps({ seedDemo: true, seedUsername: true });
     hetzner.failNext = new Error("hetzner upstream 503");
-    const r = await handleAdminCloudInitNow(deps, "demo-alice");
+    const r = await handleAdminCloudInitNow(deps, "demoalice");
     expect(r.status).toBe(502);
     expect((r.body as { error: string }).error).toMatch(/hetzner/);
-    const row = await deps.storage.get("demo-alice");
+    const row = await deps.storage.get("demoalice");
     expect(row?.state).toBe("none");
   });
 
@@ -302,7 +302,7 @@ describe("handleAdminCloudInitNow (W13)", () => {
   it("honors a custom installerGitRef from deps", async () => {
     const { deps, hetzner } = await mkDeps({ seedDemo: true, seedUsername: true });
     const customDeps = { ...deps, installerGitRef: "v0.1.0" };
-    await handleAdminCloudInitNow(customDeps, "demo-alice");
+    await handleAdminCloudInitNow(customDeps, "demoalice");
     const userData = hetzner.calls[0]!.userData;
     const m = [...userData.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
     const bootstrap = Buffer.from(m[1]![1]!, "base64").toString("utf8");
@@ -316,7 +316,7 @@ describe("handleAdminCloudInitNow (W13)", () => {
   it("supports overriding the Hetzner image (for future ubuntu-24 / etc)", async () => {
     const { deps, hetzner } = await mkDeps({ seedDemo: true, seedUsername: true });
     const customDeps = { ...deps, hetznerImage: "ubuntu-24.04" };
-    const r = await handleAdminCloudInitNow(customDeps, "demo-alice");
+    const r = await handleAdminCloudInitNow(customDeps, "demoalice");
     expect(r.status).toBe(202);
     expect((r.body as { image: string }).image).toBe("ubuntu-24.04");
     expect(hetzner.calls[0]!.image).toBe("ubuntu-24.04");

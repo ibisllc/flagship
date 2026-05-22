@@ -44,8 +44,11 @@ export const DEFAULT_SIZE = "cx22";
 /** Default idle-timeout for /create when the caller omits ttlIdleMinutes. */
 export const DEFAULT_TTL_IDLE_MINUTES = 30;
 
-/** docs/sample-users.md §2.4 — username naming rules. */
-const USERNAME_RE = /^[a-z0-9-]{3,32}$/;
+/** docs/sample-users.md §2.4 — username naming rules. Hyphen-free
+ *  (aligned with real usernames) so a demo name can never break the
+ *  `<creator>-<slug>` app-id split or be rejected by the hyphen-free
+ *  username validators downstream; 3..32 keeps the demo length range. */
+const USERNAME_RE = /^[a-z0-9]{3,32}$/;
 const RESERVED_USERNAMES = new Set([
   "admin",
   "flagship",
@@ -162,7 +165,7 @@ function validateDemoUsername(raw: unknown): {
   if (typeof raw !== "string") return { ok: false, reason: "username must be a string" };
   const u = raw.toLowerCase();
   if (!USERNAME_RE.test(u)) {
-    return { ok: false, reason: "username must match [a-z0-9-]{3,32}" };
+    return { ok: false, reason: "username must match [a-z0-9]{3,32} (no hyphens)" };
   }
   if (RESERVED_USERNAMES.has(u)) {
     return { ok: false, reason: "username is reserved" };

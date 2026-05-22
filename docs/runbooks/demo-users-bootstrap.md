@@ -1,7 +1,7 @@
 # demo-users bootstrap (one-pager)
 
 One-time setup the operator runs on this Mac so `scripts/sample-user.mjs
-create demo-alice` works end-to-end. Reference for the live Phase F
+create demoalice` works end-to-end. Reference for the live Phase F
 exercise.
 
 ## Prerequisites
@@ -81,13 +81,13 @@ Exit code 0. Prints usage. NO env required for `--help`.
 ### 6. First demo user (Phase F)
 
 ```sh
-node scripts/sample-user.mjs create demo-alice --display "Demo Alice"
+node scripts/sample-user.mjs create demoalice --display "Demo Alice"
 ```
 
 End-of-run line on stdout, JSON for piping:
 
 ```json
-{"username":"demo-alice","ready":true,"snapshotId":"<numeric>","isoR2Key":"demo-isos/demo-alice-<sha8>.iso"}
+{"username":"demoalice","ready":true,"snapshotId":"<numeric>","isoR2Key":"demo-isos/demoalice-<sha8>.iso"}
 ```
 
 D1 row: `state='none'`, `snapshot_id=<numeric>`. Subsequent
@@ -96,7 +96,7 @@ D1 row: `state='none'`, `snapshot_id=<numeric>`. Subsequent
 ## Teardown
 
 ```sh
-node scripts/sample-user.mjs delete demo-alice
+node scripts/sample-user.mjs delete demoalice
 ```
 
 Removes the snapshot, the R2 ISO, and the D1 row. If a temp Hetzner

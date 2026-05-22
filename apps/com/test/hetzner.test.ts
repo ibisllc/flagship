@@ -217,23 +217,23 @@ describe("createHetznerClient.createServerWithUserData (W11)", () => {
     }));
     const client = createHetznerClient({ token: "TKN", fetch: fn });
     const out = await client.createServerWithUserData({
-      name: "flagship-demo-alice-1a2b",
+      name: "flagship-demoalice-1a2b",
       location: "fsn1",
       serverType: "cpx11",
       userData: "#!/bin/bash\necho hi\n",
-      username: "demo-alice",
+      username: "demoalice",
     });
     expect(out).toEqual({ serverId: "1234", ipv4: "10.20.30.40" });
     expect(calls).toHaveLength(1);
     const body = JSON.parse(calls[0]!.body ?? "{}");
     expect(body).toMatchObject({
-      name: "flagship-demo-alice-1a2b",
+      name: "flagship-demoalice-1a2b",
       image: "ubuntu-22.04",
       location: "fsn1",
       server_type: "cpx11",
       user_data: "#!/bin/bash\necho hi\n",
       start_after_create: true,
-      labels: { "flagship-demo": "demo-alice" },
+      labels: { "flagship-demo": "demoalice" },
     });
     expect(body.ssh_keys).toBeUndefined();
   });
@@ -305,7 +305,7 @@ describe("createHetznerClient image lifecycle (W11)", () => {
       body: { image: { id: 55, status: "creating" } },
     }));
     const client = createHetznerClient({ token: "T", fetch: fn });
-    const out = await client.createImageSnapshot("123", "flagship-demo-alice");
+    const out = await client.createImageSnapshot("123", "flagship-demoalice");
     expect(out).toEqual({ imageId: "55" });
     expect(calls[0]!.method).toBe("POST");
     expect(calls[0]!.url).toBe(
@@ -313,7 +313,7 @@ describe("createHetznerClient image lifecycle (W11)", () => {
     );
     expect(JSON.parse(calls[0]!.body ?? "{}")).toEqual({
       type: "snapshot",
-      description: "flagship-demo-alice",
+      description: "flagship-demoalice",
     });
   });
 

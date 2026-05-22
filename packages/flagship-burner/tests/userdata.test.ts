@@ -41,9 +41,9 @@ function signedBlob(): { blob: InstallBlob; blobSignatureHex: string; userPub: U
   const authCode: AuthCode = {
     version: 1,
     serial: "01TESTABCDEF",
-    username: "demo-alice",
+    username: "demoalice",
     serverName: "home",
-    serverDomain: "home.demo-alice.flagship.services",
+    serverDomain: "home.demoalice.flagship.services",
     delegatedPubKey: delegate.publicKey,
     userPubKey: irk.publicKey,
     issuedAt: Date.now(),

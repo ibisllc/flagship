@@ -28,7 +28,7 @@ Style we've kept (and you should keep):
 
 ### Architecture (locked + tested + live)
 
-- **W13 cloud-init-direct demo path** — `home.demo-alice.flagship.services`
+- **W13 cloud-init-direct demo path** — `home.demoalice.flagship.services`
   registers in ~2 minutes from Hetzner debian-12 VPS launch. Cron promotes
   `provisioning → up` once `servers` table has the entry. The custom-ISO
   W12 path is preserved in tree but unused.
