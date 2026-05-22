@@ -26,6 +26,9 @@ import FlagshipAPI
 ///                       `admin` → completeOnboarding.
 public struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
+    @Environment(DeepLinker.self) private var linker
+    @Environment(\.pairingRelayClient) private var pairingRelay
+    @Environment(\.flagshipServerClient) private var server
     @State private var path: [OnboardingRoute] = []
 
     public init() {}
@@ -36,6 +39,8 @@ public struct OnboardingFlow: View {
                 onCreate:   { path.append(.chooseUsername) },
                 onExisting: { path.append(.recoverFromWelcome) }
             )
+            .onChange(of: linker.pending) { _, link in consumePairingLink(link) }
+            .task(id: linker.pending) { consumePairingLink(linker.pending) }
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .chooseUsername:
@@ -97,9 +102,33 @@ public struct OnboardingFlow: View {
                         },
                         onBack: { path.removeLast() }
                     )
+                case .joinByPairing(let joinUrl):
+                    // Phase 3b — brand-new collaborator joining via QR.
+                    // The incoming JoinAccount flow attaches a FRESH
+                    // device key + installs the shared UMK into a new
+                    // per-profile slot, then we complete onboarding
+                    // paired on the joined account.
+                    JoinAccountScreen(
+                        vm: JoinAccountViewModel(relay: pairingRelay, server: server),
+                        initialJoinUrl: joinUrl,
+                        onJoined: { profile in
+                            completePairingJoin(profile: profile)
+                        }
+                    )
                 }
             }
         }
+    }
+
+    /// Observe the linker for a Phase-3b `.joinAccount` deeplink while
+    /// UNPAIRED and push the incoming join flow.
+    private func consumePairingLink(_ link: DeepLink?) {
+        guard case .joinAccount(let sid, let pk) = link else { return }
+        let joinUrl = "https://flagshipserver.com/join?sid=\(sid)&pk=\(pk)"
+        if path.last != .joinByPairing(joinUrl: joinUrl) {
+            path.append(.joinByPairing(joinUrl: joinUrl))
+        }
+        _ = linker.consume()
     }
 
     // MARK: - State writes
@@ -115,6 +144,22 @@ public struct OnboardingFlow: View {
     /// AppState to paired with the resolved username (pods hydrate from
     /// /devices later — Phase 4). The "recovered-user" placeholder is
     /// gone; the username comes from the preflight throughout.
+    /// Phase 3b — completion of a brand-new collaborator pairing-join.
+    /// The JoinAccountViewModel has already minted a fresh device key,
+    /// verified the admin's admit, installed the shared UMK into THIS
+    /// account's per-profile slot, and POSTed `/devices/admit`. The host
+    /// records the new (quarantined, non-admin) profile + flips paired.
+    fileprivate func completePairingJoin(profile: JoinAccountViewModel.AdmittedProfile) {
+        app.completeOnboarding(username: profile.cloudName, pods: [])
+        app.addProfile(
+            Profile(
+                cloudName: profile.cloudName,
+                deviceLabel: profile.deviceLabel
+            ),
+            setActive: true
+        )
+    }
+
     fileprivate func completeRealAccountLogin(username: String) {
         app.completeOnboarding(username: username, pods: [])
         // Label this device `admin`. A credential-proven takeover makes

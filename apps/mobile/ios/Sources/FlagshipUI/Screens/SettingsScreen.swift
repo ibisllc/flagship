@@ -47,6 +47,12 @@ public struct SettingsScreen: View {
     /// the call failed; "single" / "multi" otherwise.
     var accountType: String? = nil
     var onAddControlDevice: () -> Void = {}
+    /// Phase 3b — admin opens the "Add a device" cross-device QR pairing
+    /// (Settings → Trusted devices → Add a device).
+    var onAddDevice: () -> Void = {}
+    /// Phase 3b — open the in-app pairing-code scanner to JOIN another
+    /// account on this device (the incoming/collaborator side).
+    var onScanPairingCode: () -> Void = {}
     var onRevokeDevice: (PairedSessionSummary) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onOpenProviders: () -> Void = {}
@@ -87,6 +93,8 @@ public struct SettingsScreen: View {
         showDeveloper: Bool = false,
         accountType: String? = nil,
         onAddControlDevice: @escaping () -> Void = {},
+        onAddDevice: @escaping () -> Void = {},
+        onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
         onDisconnectTrustedDevice: @escaping (TrustedDevice) async -> Bool = { _ in false },
         onSignOut: @escaping () -> Void = {},
@@ -111,6 +119,8 @@ public struct SettingsScreen: View {
         self.showDeveloper = showDeveloper
         self.accountType = accountType
         self.onAddControlDevice = onAddControlDevice
+        self.onAddDevice = onAddDevice
+        self.onScanPairingCode = onScanPairingCode
         self.onRevokeDevice = onRevokeDevice
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
@@ -318,6 +328,38 @@ public struct SettingsScreen: View {
                         }
                     }
                 }
+                // Phase 3b — cross-device pairing entries.
+                VStack(spacing: FS.space.s2) {
+                    Button(action: onAddDevice) {
+                        HStack(spacing: FS.space.s2) {
+                            Image(systemName: "plus.viewfinder")
+                            Text("Add a device").font(FS.font.bodySm())
+                            Spacer()
+                            Image(systemName: "chevron.right").imageScale(.small).foregroundColor(c.textMuted)
+                        }
+                        .foregroundColor(c.primary)
+                        .padding(FS.space.s3)
+                        .frame(maxWidth: .infinity)
+                        .background(c.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                    }
+                    .accessibilityIdentifier("settings-add-device")
+                    Button(action: onScanPairingCode) {
+                        HStack(spacing: FS.space.s2) {
+                            Image(systemName: "qrcode.viewfinder")
+                            Text("Scan a pairing code").font(FS.font.bodySm())
+                            Spacer()
+                            Image(systemName: "chevron.right").imageScale(.small).foregroundColor(c.textMuted)
+                        }
+                        .foregroundColor(c.text)
+                        .padding(FS.space.s3)
+                        .frame(maxWidth: .infinity)
+                        .background(c.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                    }
+                    .accessibilityIdentifier("settings-scan-pairing-code")
+                }
+                .padding(.top, FS.space.s2)
             }
         }
     }

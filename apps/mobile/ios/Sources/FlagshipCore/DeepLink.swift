@@ -23,10 +23,38 @@ public enum DeepLink: Equatable, Sendable {
     /// awaiting an env-var or talkToUser response.
     case vibeCodeChat(sessionId: String)
 
-    /// Parse a `flagship://...` URL. Mirrors the webapp's `?view=...`
-    /// scheme (apps/web/public/webapp/lib/router.js → parseViewQuery).
-    /// Returns nil for anything we don't recognize.
+    /// Phase 3b — cross-device pairing join. Carries the relay session
+    /// id + the admin's ephemeral X25519 public key (base64url) from a
+    /// scanned/deep-linked pairing QR. Routes into the add-profile
+    /// pairing flow (the incoming/collaborator side). Reachable two
+    /// ways: the in-app scanner, OR the native camera opening the
+    /// UNIVERSAL LINK `https://flagshipserver.com/join?sid=…&pk=…`
+    /// (also the `flagship://join?…` custom-scheme form).
+    case joinAccount(sid: String, pk: String)
+
+    /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
+    /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
+    /// scheme mirrors the webapp's `?view=...` router; universal links
+    /// are limited to the `/join` pairing path (so an arbitrary https
+    /// URL the app receives doesn't become a deep link). Returns nil
+    /// for anything we don't recognize.
     public static func parse(_ url: URL) -> DeepLink? {
+        // Universal link: only the /join pairing path is honored. The
+        // native camera opens this straight into the app via AASA.
+        if url.scheme == "https",
+           (url.host == "flagshipserver.com" || url.host == "www.flagshipserver.com"),
+           url.path == "/join" {
+            let params = (URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems ?? [])
+                .reduce(into: [String: String]()) { acc, item in
+                    if let v = item.value { acc[item.name] = v }
+                }
+            if let sid = params["sid"], !sid.isEmpty,
+               let pk = params["pk"], !pk.isEmpty {
+                return .joinAccount(sid: sid, pk: pk)
+            }
+            return nil
+        }
         guard url.scheme == "flagship" else { return nil }
         let host = url.host ?? ""
         let params = (URLComponents(url: url, resolvingAgainstBaseURL: false)?
@@ -50,6 +78,13 @@ public enum DeepLink: Equatable, Sendable {
             return .marketplace
         case "create-server":
             return .createServer
+        case "join":
+            // Phase 3b — custom-scheme form of the pairing link.
+            if let sid = params["sid"], !sid.isEmpty,
+               let pk = params["pk"], !pk.isEmpty {
+                return .joinAccount(sid: sid, pk: pk)
+            }
+            return nil
         case "vibecode":
             // Two URL shapes accepted:
             //   flagship://vibecode/<sessionId>           (path)

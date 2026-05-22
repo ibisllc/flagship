@@ -44,6 +44,16 @@ public protocol FlagshipServerClient: Sendable {
     /// treated as success by both Mock + Live implementations so a
     /// sign-out path doesn't surface "already cleaned up" as an error.
     func revokePushToken(tokenId: String) async throws
+
+    /// Phase 3b — vouched cross-device admit. The incoming (collaborator)
+    /// device POSTs the admin-signed `DeviceAdmit` envelope + its own
+    /// push-token registration to `/api/users/<account>/devices/admit`.
+    /// .com verifies the admit under the account's CURRENT IRK (the
+    /// admin/vouching device holds it) and admits this device QUARANTINED
+    /// (now + 14 days). The response carries that `quarantineUntil` so
+    /// the UI can render the countdown. Mirrors handleVouchedDeviceAdmit
+    /// in packages/control-plane/src/push.ts.
+    func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse
     /// Poll-based read of install-events the Worker has accumulated
     /// for a given auth-code serial. Use `since: 0` to read from
     /// the beginning; subsequent polls pass the response's
@@ -628,6 +638,57 @@ public struct PushTokenRegisterResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public let tokenId: String
     public init(ok: Bool, tokenId: String) { self.ok = ok; self.tokenId = tokenId }
+}
+
+/// Phase 3b — POST /api/users/<account>/devices/admit body. Carries the
+/// admin-signed `DeviceAdmit` envelope + the incoming device's own
+/// push-token registration. The Worker verifies `admitSig` under the
+/// account's CURRENT IRK; the registration `signature` is carried for
+/// storage but NOT verified (the incoming device holds no account IRK —
+/// the admit is the IRK consent). Field names mirror the Worker's
+/// `AdmitBody` exactly. See handleVouchedDeviceAdmit in
+/// packages/control-plane/src/push.ts.
+public struct DeviceAdmitRequest: Codable, Equatable, Sendable {
+    public struct Admit: Codable, Equatable, Sendable {
+        public let username: String
+        public let newDevicePubHex: String   // lowercased hex, 32 bytes
+        public let issuedAt: Int64
+        public init(username: String, newDevicePubHex: String, issuedAt: Int64) {
+            self.username = username
+            self.newDevicePubHex = newDevicePubHex
+            self.issuedAt = issuedAt
+        }
+    }
+    public let admit: Admit
+    public let admitSig: String                    // hex; Ed25519 by account IRK
+    public let request: PushTokenRegisterRequest.Inner
+    public let signature: String                   // hex; carried, not verified
+    public init(
+        admit: Admit,
+        admitSig: String,
+        request: PushTokenRegisterRequest.Inner,
+        signature: String
+    ) {
+        self.admit = admit
+        self.admitSig = admitSig
+        self.request = request
+        self.signature = signature
+    }
+}
+
+/// Phase 3b — devices/admit success body. `quarantineUntil` is the
+/// wall-clock ms (now + 14d) before which the freshly-admitted device
+/// can't revoke others / reach `ukey.*`; the incoming UI renders the
+/// countdown from it.
+public struct DeviceAdmitResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let tokenId: String
+    public let quarantineUntil: Int64?
+    public init(ok: Bool, tokenId: String, quarantineUntil: Int64?) {
+        self.ok = ok
+        self.tokenId = tokenId
+        self.quarantineUntil = quarantineUntil
+    }
 }
 
 /// POST /api/auth-code/<serial>/revoke — IRK-signed revocation. The
@@ -1282,6 +1343,39 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         registeredPushTokens.removeValue(forKey: tokenId)
     }
 
+    /// Phase 3b — the 14-day quarantine the Worker stamps on a vouched
+    /// admit (matches QUARANTINE_MS in packages/control-plane/src/push.ts).
+    public static let quarantineMs: Int64 = 14 * 24 * 60 * 60 * 1000
+
+    /// Phase 3b — admitted devices, keyed by account → list of admit
+    /// bodies, so tests can assert the incoming device's pubkey + the
+    /// registration landed. The Mock applies the Worker's username-match
+    /// gates; the admit-signature verify is exercised directly against
+    /// the `Flagship.DeviceAdmit` crypto in the test target (FlagshipAPI
+    /// has no dependency on the Flagship crypto module).
+    public private(set) var admittedDevices: [String: [DeviceAdmitRequest]] = [:]
+
+    /// Injectable clock for the quarantine deadline (tests can pin it).
+    public var nowProvider: () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+
+    public func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse {
+        try await tick()
+        let acct = account.lowercased()
+        // Worker gate: admit username must match the path + the register
+        // body's username.
+        if body.admit.username.lowercased() != acct {
+            throw ScreensClientError.http(status: 403, message: "admit username / url mismatch")
+        }
+        if body.request.username.lowercased() != body.admit.username.lowercased() {
+            throw ScreensClientError.http(status: 403, message: "register username does not match admit")
+        }
+        admittedDevices[acct, default: []].append(body)
+        let id = String(format: "tok_%06d", nextPushTokenId); nextPushTokenId += 1
+        registeredPushTokens[id] = body.request
+        let until = nowProvider() + Self.quarantineMs
+        return DeviceAdmitResponse(ok: true, tokenId: id, quarantineUntil: until)
+    }
+
     /// Scripted install-event log per serial. Tests configure
     /// `installEventScripts[serial]` with a sequence of (eventName,
     /// detail, postedAt) tuples; each `getInstallEvents` call serves
@@ -1876,6 +1970,12 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if status == 200 || status == 204 || status == 404 { return }
         let text = String(data: data, encoding: .utf8) ?? ""
         throw ScreensClientError.http(status: status, message: text)
+    }
+
+    public func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse {
+        let encoded = account.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? account
+        let payload = try JSONEncoder().encode(body)
+        return try await postJsonReturning("/api/users/\(encoded)/devices/admit", body: payload)
     }
 
     public func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse {
