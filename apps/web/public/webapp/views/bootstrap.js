@@ -24,8 +24,20 @@ async function handleBootstrap() {
   try {
     const seed = await bootstrapNewIdentity(a);
     await unlockSession(seed);
-    await dispatchInitialView();
     toast("device key generated");
+    // Phase 2 (docs/login-and-account-redesign.md): generating a device
+    // key is NOT opening an account. The account is an identity — the
+    // user must still claim a username (bound to this device key) before
+    // they have an account. Route through the first-run wizard, which
+    // advances from the (now-complete) device-key step straight to the
+    // OPEN-ACCOUNT step. Server provisioning is separate + later. If the
+    // wizard isn't on disk, fall back to the normal app shell.
+    try {
+      const { enterWizard } = await import("./wizard.js");
+      await enterWizard({ step: "username" });
+    } catch {
+      await dispatchInitialView();
+    }
   } catch (e) {
     toast(String(e), "err");
   }
