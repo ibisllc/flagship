@@ -22,6 +22,7 @@ import {
   verifyIsoHash,
   PINNED_DISTROS,
   runWriteCommand,
+  runWriteImageCommand,
   remasterIsoWithAutoinstall,
 } from "./index.js";
 
@@ -40,6 +41,8 @@ async function main(): Promise<void> {
       return cmdPrepare(args.slice(1));
     case "write":
       return cmdWrite(args.slice(1));
+    case "write-image":
+      return cmdWriteImage(args.slice(1));
     case "distros":
       return cmdDistros();
     case undefined:
@@ -187,8 +190,10 @@ async function cmdPrepare(rest: string[]): Promise<void> {
 async function cmdWrite(rest: string[]): Promise<void> {
   // `write` — full burn: verify recipe + ISO, pick a removable USB
   // target (interactive picker by default), get a typed-yes from the
-  // user, then raw-write the ISO bytes + CIDATA FAT trailer straight to
-  // the device. Auto-shreds the recipe on success.
+  // user, remaster the autoinstall ISO, then raw-write it to the device.
+  // Auto-shreds the recipe on success. Needs root + read access to the
+  // recipe/ISO; the GUI instead splits this into `prepare` + `write-image`
+  // so root never reads a protected folder.
   const positional = rest.filter((a) => !a.startsWith("--"));
   const recipePath = positional[0];
   const isoPath = positional[1];
@@ -220,6 +225,32 @@ async function cmdWrite(rest: string[]): Promise<void> {
   if (!keepRecipe) {
     console.log(`shredded recipe: ${recipePath}`);
   }
+}
+
+async function cmdWriteImage(rest: string[]): Promise<void> {
+  // `write-image` — the privileged half of the GUI flow. Writes an
+  // already-prepared image (from `prepare`) verbatim to a USB target. No
+  // recipe/ISO reads happen here, so root never touches a protected folder.
+  const positional = rest.filter((a) => !a.startsWith("--"));
+  const imagePath = positional[0];
+  if (!imagePath) {
+    console.error(
+      "usage: flagship-burn write-image <image.iso> [--device /dev/diskN|auto] [--yes]",
+    );
+    process.exit(2);
+  }
+  const device = extractFlagValue(rest, "--device");
+  const yes = rest.includes("--yes");
+  if (device === "auto" && !yes) {
+    console.error("--device auto requires --yes (CI-friendly only; never prompts).");
+    process.exit(2);
+  }
+  const result = await runWriteImageCommand({ imagePath, device, yes });
+  if (!result.ok) {
+    console.error(`write-image failed: ${result.reason}`);
+    process.exit(result.exitCode);
+  }
+  console.log(`wrote ${result.bytesWritten} bytes to ${result.devicePath}`);
 }
 
 /** Extract `--flag value` or `--flag=value` from argv. */
@@ -255,10 +286,13 @@ usage:
   flagship-burn verify-iso <path>                          check ISO against pinned distros
   flagship-burn user-data <recipe.json> <out>              emit cloud-init user-data
                                                            (auto-shreds recipe; pass --keep-recipe to skip)
-  flagship-burn prepare <recipe.json> <iso> <out.iso>      bake a flashable ISO (burn elsewhere)
-  flagship-burn write <recipe.json> <iso>                  raw-write ISO + CIDATA to a USB device
+  flagship-burn prepare <recipe.json> <iso> <out.iso>      bake a flashable autoinstall ISO
+  flagship-burn write <recipe.json> <iso>                  prepare + raw-write to a USB device
                                                            [--device /dev/diskN | auto] [--yes] [--keep-recipe]
                                                            (needs sudo; interactive picker if no --device)
+  flagship-burn write-image <image.iso>                    raw-write an already-prepared image
+                                                           [--device /dev/diskN | auto] [--yes]
+                                                           (needs sudo; pairs with prepare)
   flagship-burn distros                                    list supported distros
 
 The recipe is the signed JSON the website produces after you scan the

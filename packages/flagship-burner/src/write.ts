@@ -115,28 +115,9 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
   }
   const device = target.device;
 
-  const promptForLine = opts.promptForLine ?? defaultPromptForLine;
-  if (!opts.yes) {
-    console.log("");
-    console.log("About to WRITE to this device — all data on it will be DESTROYED:");
-    console.log(`  ${device.devicePath}  (${fmtSize(device.sizeBytes)})`);
-    console.log(`  model:  ${device.model}`);
-    console.log(`  bus:    ${device.bus}`);
-    console.log(`  mounted: ${device.mounted ? "YES (will be unmounted)" : "no"}`);
-    console.log(`  verdict: ${device.verdict} — ${device.verdictReason}`);
-    console.log("");
-    const answer = await promptForLine('Type "yes" to confirm: ');
-    if (answer.trim().toLowerCase() !== "yes") {
-      return { ok: false, reason: "user declined", exitCode: 130 };
-    }
-  } else if (device.verdict !== "removable-usb") {
-    return {
-      ok: false,
-      reason:
-        `--yes refused: device verdict is "${device.verdict}" (${device.verdictReason}). ` +
-        `--yes only auto-confirms removable-usb targets.`,
-      exitCode: 1,
-    };
+  const confirmed = await confirmTarget(opts, device);
+  if (!confirmed.ok) {
+    return confirmed;
   }
 
   const yaml = buildAutoinstallUserData({
@@ -183,6 +164,60 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
   }
 }
 
+export interface WriteImageCommandOpts {
+  /** A prepared (already-remastered) ISO, written to the device verbatim. */
+  imagePath: string;
+  device?: string;
+  yes?: boolean;
+  enumerateOpts?: EnumerateOpts;
+  promptForLine?: (message: string) => Promise<string>;
+  isRoot?: () => boolean;
+  writeBytesToDevice?: WriteBytesToDevice;
+}
+
+/**
+ * Write an already-prepared image to a USB device — the privileged half of
+ * the GUI flow. The remaster (which reads the recipe + source ISO, often
+ * from a TCC-protected folder like ~/Downloads) runs UNPRIVILEGED via
+ * `prepare`; only this raw-device write needs root, and it reads the
+ * prepared image from a non-protected temp path, so the root process never
+ * touches a protected folder.
+ */
+export async function runWriteImageCommand(
+  opts: WriteImageCommandOpts,
+): Promise<WriteCommandResult> {
+  const isRoot = opts.isRoot ?? defaultIsRoot;
+  const os = opts.enumerateOpts?.os ?? platform();
+  if (os !== "darwin" && os !== "linux") {
+    return { ok: false, reason: `unsupported platform: ${os}`, exitCode: 2 };
+  }
+  if (!isRoot()) {
+    return { ok: false, reason: "raw-disk write requires root. Re-run with sudo.", exitCode: 13 };
+  }
+  let st;
+  try {
+    st = await stat(opts.imagePath);
+  } catch {
+    return { ok: false, reason: `cannot read image: ${opts.imagePath}`, exitCode: 1 };
+  }
+  if (st.size < 1024) {
+    return { ok: false, reason: `image too small (${st.size}B); refusing`, exitCode: 1 };
+  }
+
+  const target = await resolveTarget(opts);
+  if (!target.ok) return target;
+  const device = target.device;
+
+  const confirmed = await confirmTarget(opts, device);
+  if (!confirmed.ok) return confirmed;
+
+  console.log("FLAGSHIP_PHASE:write");
+  const write = opts.writeBytesToDevice ?? defaultWriteBytesToDevice;
+  const written = await write({ devicePath: device.devicePath, isoPath: opts.imagePath });
+  console.log("FLAGSHIP_PROGRESS:1");
+  return { ok: true, devicePath: device.devicePath, bytesWritten: written.bytesWritten };
+}
+
 interface TargetResult {
   ok: true;
   device: DeviceInfo;
@@ -193,8 +228,47 @@ interface TargetFailure {
   exitCode: number;
 }
 
+/** Fields both `write` and `write-image` need to pick + confirm a target. */
+interface TargetOpts {
+  device?: string;
+  yes?: boolean;
+  enumerateOpts?: EnumerateOpts;
+  promptForLine?: (message: string) => Promise<string>;
+}
+
+/** Typed-yes / interactive confirmation, shared by write + write-image. */
+async function confirmTarget(
+  opts: TargetOpts,
+  device: DeviceInfo,
+): Promise<TargetResult | TargetFailure> {
+  const promptForLine = opts.promptForLine ?? defaultPromptForLine;
+  if (!opts.yes) {
+    console.log("");
+    console.log("About to WRITE to this device — all data on it will be DESTROYED:");
+    console.log(`  ${device.devicePath}  (${fmtSize(device.sizeBytes)})`);
+    console.log(`  model:  ${device.model}`);
+    console.log(`  bus:    ${device.bus}`);
+    console.log(`  mounted: ${device.mounted ? "YES (will be unmounted)" : "no"}`);
+    console.log(`  verdict: ${device.verdict} — ${device.verdictReason}`);
+    console.log("");
+    const answer = await promptForLine('Type "yes" to confirm: ');
+    if (answer.trim().toLowerCase() !== "yes") {
+      return { ok: false, reason: "user declined", exitCode: 130 };
+    }
+  } else if (device.verdict !== "removable-usb") {
+    return {
+      ok: false,
+      reason:
+        `--yes refused: device verdict is "${device.verdict}" (${device.verdictReason}). ` +
+        `--yes only auto-confirms removable-usb targets.`,
+      exitCode: 1,
+    };
+  }
+  return { ok: true, device };
+}
+
 async function resolveTarget(
-  opts: WriteCommandOpts,
+  opts: TargetOpts,
 ): Promise<TargetResult | TargetFailure> {
   const devSpec = opts.device;
   const enumerateOpts = opts.enumerateOpts ?? {};

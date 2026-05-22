@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, writeFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWriteCommand, type WriteCommandOpts } from "../src/write.js";
+import { runWriteCommand, runWriteImageCommand, type WriteCommandOpts } from "../src/write.js";
 import type { VerifyIsoResult } from "../src/verifyIso.js";
 import {
   deriveIRK,
@@ -532,5 +532,109 @@ describe("runWriteCommand — happy path + device gates", () => {
     });
     expect(r.ok).toBe(true);
     expect(writeCalls).toBe(1);
+  });
+});
+
+describe("runWriteImageCommand — privileged write of a prepared image", () => {
+  function usbLsblk(): WriteCommandOpts["enumerateOpts"] {
+    return {
+      os: "linux",
+      runCommand: async (cmd) => {
+        if (cmd === "lsblk") {
+          return {
+            stdout: JSON.stringify({
+              blockdevices: [
+                { name: "sdb", size: 16 * 1024 * 1024 * 1024, type: "disk", rm: true, tran: "usb", model: "Cruzer" },
+              ],
+            }),
+            stderr: "",
+            code: 0,
+          };
+        }
+        return { stdout: "", stderr: "", code: 0 };
+      },
+    };
+  }
+
+  async function makeImage(): Promise<string> {
+    const p = join(workDir, "prepared.iso");
+    await writeFile(p, Buffer.alloc(4096, 0xcd));
+    return p;
+  }
+
+  it("refuses when not root (clear sudo message)", async () => {
+    const r = await runWriteImageCommand({
+      imagePath: await makeImage(),
+      device: "/dev/sdb",
+      yes: true,
+      isRoot: () => false,
+      enumerateOpts: usbLsblk(),
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.exitCode).toBe(13);
+  });
+
+  it("refuses a missing image without touching the device", async () => {
+    let wrote = false;
+    const r = await runWriteImageCommand({
+      imagePath: join(workDir, "does-not-exist.iso"),
+      device: "/dev/sdb",
+      yes: true,
+      isRoot: () => true,
+      enumerateOpts: usbLsblk(),
+      writeBytesToDevice: async () => {
+        wrote = true;
+        return { bytesWritten: 0 };
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(wrote).toBe(false);
+  });
+
+  it("happy path: writes the prepared image to a removable USB", async () => {
+    const image = await makeImage();
+    let target = "";
+    const r = await runWriteImageCommand({
+      imagePath: image,
+      device: "/dev/sdb",
+      yes: true,
+      isRoot: () => true,
+      enumerateOpts: usbLsblk(),
+      writeBytesToDevice: async (a) => {
+        target = a.devicePath;
+        expect(a.isoPath).toBe(image);
+        return { bytesWritten: 4096 };
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.bytesWritten).toBe(4096);
+    expect(target).toBe("/dev/sdb");
+  });
+
+  it("refuses --yes on a non-removable target", async () => {
+    const r = await runWriteImageCommand({
+      imagePath: await makeImage(),
+      device: "/dev/sda",
+      yes: true,
+      isRoot: () => true,
+      enumerateOpts: {
+        os: "linux",
+        runCommand: async (cmd) =>
+          cmd === "lsblk"
+            ? {
+                stdout: JSON.stringify({
+                  blockdevices: [
+                    { name: "sda", size: 500 * 1024 * 1024 * 1024, type: "disk", rm: false, tran: "sata", model: "INTERNAL" },
+                  ],
+                }),
+                stderr: "",
+                code: 0,
+              }
+            : { stdout: "", stderr: "", code: 0 },
+      },
+    });
+    expect(r.ok).toBe(false);
   });
 });

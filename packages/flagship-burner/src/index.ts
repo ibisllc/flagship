@@ -40,7 +40,9 @@ export {
 } from "./devices.js";
 export {
   runWriteCommand,
+  runWriteImageCommand,
   type WriteCommandOpts,
+  type WriteImageCommandOpts,
   type WriteCommandResult,
   type WriteBytesToDevice,
 } from "./write.js";

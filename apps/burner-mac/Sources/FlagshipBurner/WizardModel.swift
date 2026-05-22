@@ -184,23 +184,55 @@ final class WizardModel: ObservableObject {
             appendLog(stream: .stderr, text: "CLI locate failed: \(error)")
             return
         }
-        // Compose the command. We single-quote each argument for the
-        // shell. AppleScript single-quote escaping: ' becomes '\''.
-        // The signed envelope already gates everything; sudo is just
-        // for raw-disk write access.
-        let args = CLIArgs.write(entryPath: resolved.entryPath,
-                                 recipePath: recipe.path,
-                                 isoPath: iso.path,
-                                 devicePath: disk.deviceNode,
-                                 keepRecipe: false)
+
+        // Step 1 (UNPRIVILEGED): remaster the autoinstall ISO into a temp
+        // file. This reads the recipe + source ISO in the app's context,
+        // which holds the user's Downloads grant. The root step below can't
+        // read protected folders (different responsible process → TCC
+        // denies it), so the reads must happen here.
+        phase = "remaster"
+        let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
+        let prepareArgs = CLIArgs.prepare(entryPath: resolved.entryPath,
+                                          recipePath: recipe.path,
+                                          isoPath: iso.path,
+                                          outIsoPath: preparedURL.path,
+                                          keepRecipe: true)
+        appendLog(stream: .stdout, text: "+ node \(prepareArgs.joined(separator: " "))")
+        let prep = CLIRunner(nodePath: resolved.nodePath, arguments: prepareArgs)
+        currentRunner = prep
+        do {
+            for await line in try prep.start() {
+                if handleControlLine(line.text) { continue }
+                appendLog(stream: line.stream, text: line.text)
+            }
+        } catch {
+            appendLog(stream: .stderr, text: "prepare spawn failed: \(error)")
+            currentRunner = nil
+            try? FileManager.default.removeItem(at: preparedURL)
+            return
+        }
+        currentRunner = nil
+        if prep.terminationStatus != 0 {
+            appendLog(stream: .stderr, text: "prepare exited \(prep.terminationStatus)")
+            try? FileManager.default.removeItem(at: preparedURL)
+            return
+        }
+        // Clean up the prepared image whenever we leave from here on.
+        defer { try? FileManager.default.removeItem(at: preparedURL) }
+
+        // Step 2 (PRIVILEGED): raw-write the prepared image to the USB. We
+        // wrap the CLI in `osascript do shell script ... with administrator
+        // privileges`, which surfaces the standard macOS Touch-ID/password
+        // prompt. It reads only the temp image, never a protected folder.
+        let args = CLIArgs.writeImage(entryPath: resolved.entryPath,
+                                      imagePath: preparedURL.path,
+                                      devicePath: disk.deviceNode)
         let shellCmd = ([resolved.nodePath] + args)
             .map { Self.shellQuote($0) }
             .joined(separator: " ")
         appendLog(stream: .stdout, text: "+ sudo \(shellCmd)")
 
-        // `do shell script` returns stdout on success; on non-zero it
-        // throws. We capture both via the script's standard pipes by
-        // wrapping in a /tmp logfile that we tail ourselves.
         let logFile = "/tmp/flagship-burner-\(UUID().uuidString).log"
         let wrapped = "(\(shellCmd)) > \(logFile) 2>&1"
         let appleScript = "do shell script \"\(Self.appleScriptQuote(wrapped))\" with administrator privileges"
@@ -243,6 +275,9 @@ final class WizardModel: ObservableObject {
         task.waitUntilExit()
         stopTail.value = true
         if task.terminationStatus == 0 {
+            // Single-use recipe: shred it now that the burn succeeded. The
+            // app context can remove it; the root step never saw it.
+            try? FileManager.default.removeItem(at: recipe)
             isFinished = true
         } else {
             appendLog(stream: .stderr, text: "osascript exited \(task.terminationStatus)")

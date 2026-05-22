@@ -35,6 +35,15 @@ public enum CLIArgs {
         if keepRecipe { a.append("--keep-recipe") }
         return a
     }
+
+    /// `write-image` raw-writes an already-prepared image. Needs root, but
+    /// reads only the (non-protected) prepared image — so the privileged
+    /// process never touches a TCC-protected folder like ~/Downloads.
+    public static func writeImage(entryPath: String,
+                                  imagePath: String,
+                                  devicePath: String) -> [String] {
+        return [entryPath, "write-image", imagePath, "--device", devicePath, "--yes"]
+    }
 }
 
 /// One line of subprocess output, tagged with its stream of origin.
