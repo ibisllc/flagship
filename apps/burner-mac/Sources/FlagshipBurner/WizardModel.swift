@@ -221,35 +221,21 @@ final class WizardModel: ObservableObject {
         // Clean up the prepared image whenever we leave from here on.
         defer { try? FileManager.default.removeItem(at: preparedURL) }
 
-        // Step 2 (PRIVILEGED): raw-write the prepared image to the USB. We
-        // wrap the CLI in `osascript do shell script ... with administrator
-        // privileges`, which surfaces the standard macOS Touch-ID/password
-        // prompt. It reads only the temp image, never a protected folder.
-        let args = CLIArgs.writeImage(entryPath: resolved.entryPath,
-                                      imagePath: preparedURL.path,
-                                      devicePath: disk.deviceNode)
-        let shellCmd = ([resolved.nodePath] + args)
-            .map { Self.shellQuote($0) }
-            .joined(separator: " ")
-        appendLog(stream: .stdout, text: "+ sudo \(shellCmd)")
-
-        let logFile = "/tmp/flagship-burner-\(UUID().uuidString).log"
-        let wrapped = "(\(shellCmd)) > \(logFile) 2>&1"
-        let appleScript = "do shell script \"\(Self.appleScriptQuote(wrapped))\" with administrator privileges"
-
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", appleScript]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
+        // Step 2 (PRIVILEGED): hand the raw write to the signed helper
+        // daemon over XPC. Unlike osascript "administrator privileges"
+        // (whose process runs under the auth trampoline and can't be granted
+        // disk access), a launchd daemon runs in a clean root context that
+        // can open the raw device.
         do {
-            try task.run()
+            try HelperClient.ensureEnabled()
         } catch {
-            appendLog(stream: .stderr, text: "could not spawn osascript: \(error)")
+            appendLog(stream: .stderr,
+                      text: (error as? LocalizedError)?.errorDescription ?? "\(error)")
             return
         }
-        // Tail the log file in parallel so the user sees progress.
+
+        let logFile = "/tmp/flagship-burner-\(UUID().uuidString).log"
+        FileManager.default.createFile(atPath: logFile, contents: nil)
         let stopTail = Box(false)
         Task.detached {
             var lastSize: Int = 0
@@ -272,31 +258,39 @@ final class WizardModel: ObservableObject {
                 }
             }
         }
-        task.waitUntilExit()
+        appendLog(stream: .stdout,
+                  text: "+ helper write-image \(preparedURL.lastPathComponent) → \(disk.deviceNode)")
+
+        let conn = HelperClient.makeConnection()
+        let result: (code: Int, message: String) = await withCheckedContinuation { cont in
+            var resumed = false
+            func finish(_ r: (Int, String)) { if !resumed { resumed = true; cont.resume(returning: r) } }
+            let proxy = conn.remoteObjectProxyWithErrorHandler { err in
+                finish((-1, "helper connection error: \(err.localizedDescription)"))
+            } as? FlagshipHelperProtocol
+            guard let proxy = proxy else { finish((-1, "could not reach the helper")); return }
+            proxy.writeImage(nodePath: resolved.nodePath,
+                             bundlePath: resolved.entryPath,
+                             imagePath: preparedURL.path,
+                             devicePath: disk.deviceNode,
+                             logPath: logFile) { code, msg in finish((code, msg)) }
+        }
         stopTail.value = true
-        if task.terminationStatus == 0 {
+        conn.invalidate()
+        if result.code == 0 {
             // Single-use recipe: shred it now that the burn succeeded. The
             // app context can remove it; the root step never saw it.
             try? FileManager.default.removeItem(at: recipe)
             isFinished = true
         } else {
-            appendLog(stream: .stderr, text: "osascript exited \(task.terminationStatus)")
+            appendLog(stream: .stderr,
+                      text: result.message.isEmpty ? "write failed (code \(result.code))" : result.message)
         }
     }
 
     private final class Box<T> {
         var value: T
         init(_ value: T) { self.value = value }
-    }
-
-    private static func shellQuote(_ s: String) -> String {
-        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-
-    private static func appleScriptQuote(_ s: String) -> String {
-        return s
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     func cancel() {

@@ -68,20 +68,29 @@ package-app: build-release bundle-cli
 	rm -rf "$(APP_BUNDLE)"
 	mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
 	mkdir -p "$(APP_BUNDLE)/Contents/Resources/flagship-burner"
+	mkdir -p "$(APP_BUNDLE)/Contents/Library/LaunchDaemons"
 	cp "$(BUILD_DIR)/$(BIN_SRC)" "$(APP_BUNDLE)/Contents/MacOS/$(BIN)"
+	cp "$(BUILD_DIR)/FlagshipBurnerHelper" "$(APP_BUNDLE)/Contents/MacOS/FlagshipBurnerHelper"
 	cp Info.plist "$(APP_BUNDLE)/Contents/Info.plist"
+	cp HelperDaemon.plist "$(APP_BUNDLE)/Contents/Library/LaunchDaemons/com.flagshipserver.Burner.helper.plist"
 	cp AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/AppIcon.icns"
 	cp menubar.png "$(APP_BUNDLE)/Contents/Resources/menubar.png"
 	cp ../../packages/flagship-burner/dist/flagship-burn.mjs "$(APP_BUNDLE)/Contents/Resources/flagship-burner/flagship-burn.mjs"
 	@echo "✓ Packaged: $(APP_BUNDLE)"
 
-# Sign with hardened runtime + entitlements. The hardened runtime is
-# a notarization prereq.
+# Sign with hardened runtime + entitlements. Sign inside-out: the embedded
+# privileged helper first (its own identifier + entitlements), then the app
+# bundle. The helper's signing identifier must match the LaunchDaemon Label
+# so SMAppService accepts it.
 sign: package-app
-	codesign --deep --sign "$$FLAGSHIP_SIGNING_ID" \
-	    --force --options runtime \
+	codesign --force --options runtime --timestamp \
+	    -i com.flagshipserver.Burner.helper \
+	    --entitlements helper-entitlements.plist \
+	    --sign "$$FLAGSHIP_SIGNING_ID" \
+	    "$(APP_BUNDLE)/Contents/MacOS/FlagshipBurnerHelper"
+	codesign --force --options runtime --timestamp \
 	    --entitlements entitlements.plist \
-	    --timestamp \
+	    --sign "$$FLAGSHIP_SIGNING_ID" \
 	    "$(APP_BUNDLE)"
 	@echo "✓ Signed: $(APP_BUNDLE)"
 	codesign -dvv "$(APP_BUNDLE)" 2>&1 | head -10

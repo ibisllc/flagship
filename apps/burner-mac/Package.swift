@@ -8,6 +8,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "FlagshipBurner", targets: ["FlagshipBurner"]),
+        .executable(name: "FlagshipBurnerHelper", targets: ["FlagshipBurnerHelper"]),
         .library(name: "FlagshipBurnerCore", targets: ["FlagshipBurnerCore"])
     ],
     dependencies: [],
@@ -20,6 +21,11 @@ let package = Package(
             name: "FlagshipBurner",
             dependencies: ["FlagshipBurnerCore"],
             path: "Sources/FlagshipBurner"
+        ),
+        .executableTarget(
+            name: "FlagshipBurnerHelper",
+            dependencies: ["FlagshipBurnerCore"],
+            path: "Sources/FlagshipBurnerHelper"
         ),
         .testTarget(
             name: "FlagshipBurnerTests",
