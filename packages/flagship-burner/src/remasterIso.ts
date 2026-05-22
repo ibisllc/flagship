@@ -20,7 +20,7 @@
  * catalog AND isohybrid MBR/GPT in the output, so the result is a true
  * hybrid image: `dd` it to USB and it boots on both BIOS and UEFI.
  */
-import { mkdir, rm, writeFile, readFile, stat } from "node:fs/promises";
+import { mkdir, rm, writeFile, readFile, stat, chmod } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -151,6 +151,10 @@ export async function remasterIsoWithAutoinstall(args: RemasterArgs): Promise<vo
       "/boot/grub/grub.cfg",
       grubOut,
     ]);
+    // osirrox preserves the file's ISO mode, and grub.cfg ships read-only
+    // (0444) on the Ubuntu image — so make our copy writable before we
+    // rewrite it, or the open-for-write below fails with EACCES.
+    await chmod(grubOut, 0o644);
 
     // 2. Patch it for unattended autoinstall.
     const patched = editGrubCfgForAutoinstall(await readFile(grubOut, "utf-8"));

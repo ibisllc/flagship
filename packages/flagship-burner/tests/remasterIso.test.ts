@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -87,11 +87,16 @@ describe("remasterIsoWithAutoinstall (real xorriso round-trip)", () => {
       const src = join(work, "src");
       await mkdir(join(src, "boot", "grub"), { recursive: true });
       await mkdir(join(src, "casper"), { recursive: true });
-      await writeFile(join(src, "boot", "grub", "grub.cfg"), GRUB);
+      const grubSrc = join(src, "boot", "grub", "grub.cfg");
+      await writeFile(grubSrc, GRUB);
       await writeFile(join(src, "casper", "vmlinuz"), "fake");
+      // Mirror the real Ubuntu ISO: grub.cfg is read-only (0444). With
+      // Rock Ridge (-R) the mode is preserved into the ISO and restored on
+      // extract, so the remaster must chmod it writable before patching.
+      await chmod(grubSrc, 0o444);
       const srcIso = join(work, "src.iso");
       const x = await resolveXorriso();
-      const mk = await sh(x, ["-as", "mkisofs", "-o", srcIso, "-V", "SYNTH", src]);
+      const mk = await sh(x, ["-as", "mkisofs", "-R", "-o", srcIso, "-V", "SYNTH", src]);
       expect(mk).toBe(0);
 
       const outIso = join(work, "out.iso");
