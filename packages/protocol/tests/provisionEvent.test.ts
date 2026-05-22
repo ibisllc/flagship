@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACME_PROVISION_SUBPHASES,
   DAEMON_PROVISION_PHASES,
   PROVISION_PHASES,
   isProvisionPhase,
@@ -87,9 +88,36 @@ describe("provision-phase vocabulary", () => {
       "identity",
       "registered",
       "tunnel-online",
+      "acme-order",
+      "dns01-publish-attempt",
+      "dns01-publish-ok",
+      "dns01-propagation-wait",
+      "tlsalpn-served",
+      "acme-validating",
       "cert-issued",
       "ready",
       "failed",
+    ]);
+  });
+
+  it("exposes the ACME sub-phases as the slice between tunnel-online and cert-issued", () => {
+    expect(ACME_PROVISION_SUBPHASES).toEqual([
+      "acme-order",
+      "dns01-publish-attempt",
+      "dns01-publish-ok",
+      "dns01-propagation-wait",
+      "tlsalpn-served",
+      "acme-validating",
+    ]);
+    // Every sub-phase is a real provision phase the control plane accepts.
+    for (const p of ACME_PROVISION_SUBPHASES) {
+      expect(isProvisionPhase(p)).toBe(true);
+    }
+    // They sit contiguously between tunnel-online and cert-issued.
+    const start = PROVISION_PHASES.indexOf("tunnel-online");
+    const end = PROVISION_PHASES.indexOf("cert-issued");
+    expect(PROVISION_PHASES.slice(start + 1, end)).toEqual([
+      ...ACME_PROVISION_SUBPHASES,
     ]);
   });
 
@@ -101,9 +129,15 @@ describe("provision-phase vocabulary", () => {
     expect(isProvisionPhase("")).toBe(false);
   });
 
-  it("daemon phases are the signed subset", () => {
+  it("daemon phases are the signed subset (including the ACME sub-phases)", () => {
     expect(DAEMON_PROVISION_PHASES).toEqual([
       "tunnel-online",
+      "acme-order",
+      "dns01-publish-attempt",
+      "dns01-publish-ok",
+      "dns01-propagation-wait",
+      "tlsalpn-served",
+      "acme-validating",
       "cert-issued",
       "ready",
       "failed",

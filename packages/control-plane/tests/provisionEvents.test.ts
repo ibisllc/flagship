@@ -214,6 +214,34 @@ describe("POST /api/server/<domain>/provision-event — daemon channel", () => {
     expect(row?.provisionPhase).toBe("ready");
   });
 
+  it("accepts the fine-grained ACME sub-phases over the daemon channel", async () => {
+    const h = await mkHarness({ withPush: true });
+    await h.deps.pushTokens.put(pushToken("demoalice", "t1"));
+    const subphases = [
+      "acme-order",
+      "dns01-publish-attempt",
+      "dns01-publish-ok",
+      "dns01-propagation-wait",
+      "tlsalpn-served",
+      "acme-validating",
+    ] as const;
+    for (const phase of subphases) {
+      const { issuedAt, signature } = sign(h, phase);
+      const r = await handlePostProvisionEvent(h.deps, DOMAIN, {
+        phase,
+        issuedAt,
+        signature,
+      });
+      expect(r.status, `${phase} should be accepted`).toBe(200);
+      const row = await h.deps.demoUsers.get("demoalice");
+      expect(row?.provisionPhase).toBe(phase);
+    }
+    // Every sub-phase fanned out a push with a non-empty title (the
+    // PHASE_TITLES map is exhaustive over the enlarged enum).
+    expect(h.pushed).toHaveLength(subphases.length);
+    expect(h.pushed.every((p) => p.payload.category === "provision-phase")).toBe(true);
+  });
+
   it("rejects a tampered signed event with 403", async () => {
     const h = await mkHarness();
     const { issuedAt, signature } = sign(h, "ready");

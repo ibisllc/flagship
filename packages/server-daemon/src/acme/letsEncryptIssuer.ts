@@ -45,7 +45,30 @@ export interface LetsEncryptIssuerOptions {
    * Tests can override to 0 to keep them fast.
    */
   dns01PropagationDelayMs?: number;
+  /**
+   * Fine-grained issuance observability. The issuer calls this as it
+   * walks the order so the daemon can push a named PHASE checkpoint per
+   * step (`acme-order` → `dns01-publish-*` → `tlsalpn-served` →
+   * `acme-validating`). Best-effort: errors thrown by the hook are
+   * swallowed so observability never breaks issuance.
+   */
+  onPhase?: (phase: AcmeIssuancePhase) => void;
 }
+
+/**
+ * Issuance sub-phases the issuer reports via `onPhase`. Mirrors
+ * `@flagship/protocol` `ACME_PROVISION_SUBPHASES` so the daemon can map
+ * them straight onto signed ProvisionEvent phases. Kept as a local
+ * string-union (not an import) so this package has no protocol dep just
+ * for the names.
+ */
+export type AcmeIssuancePhase =
+  | "acme-order"
+  | "dns01-publish-attempt"
+  | "dns01-publish-ok"
+  | "dns01-propagation-wait"
+  | "tlsalpn-served"
+  | "acme-validating";
 
 /** The subset of acme-client.Client we actually use, for substitutability in tests. */
 export interface MinimalAcmeClient {
@@ -109,6 +132,13 @@ export class LetsEncryptIssuer implements AcmeIssuer {
     names: string[],
   ): Promise<{ certPem: string; privateKeyPem: string; notAfter: number }> {
     if (names.length === 0) throw new Error("issue() requires at least one name");
+    const reportPhase = (p: AcmeIssuancePhase) => {
+      try {
+        this.opts.onPhase?.(p);
+      } catch {
+        // observability is best-effort; never break issuance
+      }
+    };
     const client = this.buildClient();
 
     if (!this.accountReady) {
@@ -124,11 +154,30 @@ export class LetsEncryptIssuer implements AcmeIssuer {
     });
 
     const authorizations = await client.getAuthorizations(order);
+    reportPhase("acme-order");
     const cleanups: Array<() => Promise<void> | void> = [];
 
     const dns01PropagationDelayMs = this.opts.dns01PropagationDelayMs ?? 10_000;
 
     try {
+      // Two-pass walk. PASS 1 sets up ALL challenges (publishes every
+      // DNS-01 TXT, presents every TLS-ALPN-01 cert) BEFORE asking LE to
+      // validate any of them. This is the critical ordering fix: the old
+      // single-pass loop did setup→complete→wait per authz, so when the
+      // FIRST authz (the apex/user-zone name, validated via TLS-ALPN-01)
+      // failed validation, the loop threw and the order aborted BEFORE
+      // the later wildcard authorizations ever published their DNS-01
+      // TXT records. The TXT therefore never landed. Publishing all
+      // challenges up front means the TXT is written regardless of the
+      // TLS-ALPN-01 outcome, and gives the DNS-01 records the maximum
+      // head start to propagate while the other challenges are set up.
+      interface PreparedChallenge {
+        challenge: AcmeChallenge;
+        identifier: string;
+        usedDns01: boolean;
+      }
+      const prepared: PreparedChallenge[] = [];
+      let anyDns01 = false;
       for (const authz of authorizations) {
         const isWildcard = authz.identifier.value.startsWith("*.");
         const challenge = isWildcard
@@ -145,24 +194,38 @@ export class LetsEncryptIssuer implements AcmeIssuer {
           const cert = await buildAlpnChallengeCert(keyAuth, authz.identifier.value);
           const dispose = this.opts.alpn.present(authz.identifier.value, cert);
           cleanups.push(() => dispose());
+          reportPhase("tlsalpn-served");
         } else if (challenge.type === "dns-01") {
           if (!this.opts.dns) throw new Error("dns-01 challenge required but no DNS writer configured");
           const host = authz.identifier.value.replace(/^\*\./, "");
+          reportPhase("dns01-publish-attempt");
           const dispose = await this.opts.dns.publishTxt(`_acme-challenge.${host}`, keyAuth);
           cleanups.push(() => dispose());
+          reportPhase("dns01-publish-ok");
           usedDns01 = true;
+          anyDns01 = true;
         } else {
           throw new Error(`unsupported challenge type ${challenge.type}`);
         }
+        prepared.push({ challenge, identifier: authz.identifier.value, usedDns01 });
+      }
 
-        // DNS-01 only: wait for the TXT to actually propagate before LE
-        // looks. LE caches negative responses, so a too-fast lookup pins
-        // NXDOMAIN until the SOA TTL expires. TLS-ALPN-01 has no
-        // propagation lag (the cert is presented synchronously).
-        if (usedDns01 && dns01PropagationDelayMs > 0) {
-          await new Promise((r) => setTimeout(r, dns01PropagationDelayMs));
-        }
+      // PASS 1.5 — wait once for DNS-01 propagation AFTER all TXT records
+      // are published. LE caches negative (NXDOMAIN) responses, so a
+      // too-fast lookup pins the stale cache until the SOA TTL expires;
+      // we wait so the very first LE lookup hits the live record. One
+      // shared wait covers every DNS-01 challenge in the order.
+      if (anyDns01 && dns01PropagationDelayMs > 0) {
+        reportPhase("dns01-propagation-wait");
+        await new Promise((r) => setTimeout(r, dns01PropagationDelayMs));
+      }
 
+      // PASS 2 — now tell LE to validate every challenge. A failure here
+      // (e.g. TLS-ALPN-01 unreachable) still leaves all the DNS-01 TXT
+      // records published, so the next in-process retry's order finds
+      // them already propagated.
+      reportPhase("acme-validating");
+      for (const { challenge } of prepared) {
         await client.completeChallenge(challenge);
         await client.waitForValidStatus(challenge);
       }

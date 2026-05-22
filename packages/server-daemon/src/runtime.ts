@@ -15,7 +15,11 @@ import {
   RealPostgresAdmin,
   RealRedisAdmin,
 } from "./dataLayer/index.js";
-import { LetsEncryptIssuer, type LeEnvironment } from "./acme/letsEncryptIssuer.js";
+import {
+  LetsEncryptIssuer,
+  type AcmeIssuancePhase,
+  type LeEnvironment,
+} from "./acme/letsEncryptIssuer.js";
 import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
 import {
@@ -84,6 +88,36 @@ export interface DaemonRuntimeOptions {
    * Called when a new cert is issued (or renewed). Fires AFTER persistence.
    */
   onCertIssued?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
+  /**
+   * Fine-grained ACME issuance observability. Fires per-step as the
+   * issuer walks the order (`acme-order` → `dns01-publish-*` →
+   * `tlsalpn-served` → `acme-validating`). The daemon maps these onto
+   * signed ProvisionEvent sub-phases so a stuck cert is locatable from
+   * the phone + a public `dig` with no box access. Best-effort.
+   */
+  onAcmePhase?: (phase: AcmeIssuancePhase) => void;
+  /**
+   * Called when an in-process ACME attempt FAILS (with the attempt
+   * number + error). The runtime does NOT exit — it backs off and
+   * retries in-process so the daemon stays up to serve TLS-ALPN-01 and
+   * let DNS-01 propagate. The daemon uses this to surface the real error
+   * via a `failed` provision phase while keeping the box alive.
+   */
+  onCertAttemptFailed?: (attempt: number, error: string) => void;
+  /**
+   * Backoff schedule for the in-process ACME retry loop, in ms. The
+   * runtime cycles through these (clamping to the last entry) between
+   * failed issuance attempts. Production default is a gentle ramp that
+   * respects LE rate limits while still recovering within minutes once
+   * the transient cause clears. Tests inject a short / single-entry
+   * schedule. An empty array disables retry (one attempt only).
+   */
+  certRetryBackoffMs?: number[];
+  /**
+   * Test seam: replace the real setTimeout used by the ACME retry loop
+   * so tests can advance time deterministically. Default `setTimeout`.
+   */
+  setTimeoutImpl?: (cb: () => void, ms: number) => unknown;
   /**
    * Optional secondary listener for domain-granted events from the
    * hub. The runtime always wires its internal SiblingRouter to
@@ -638,10 +672,22 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     accountKeyPem,
     alpn: certManager,
     dns,
+    ...(opts.onAcmePhase ? { onPhase: opts.onAcmePhase } : {}),
   });
 
-  // Issue or reuse the initial cert.
+  // Initial cert acquisition. CRITICAL: this must NOT block startup nor
+  // kill the process on failure. ACME needs the daemon to STAY UP — the
+  // tunnel + local TLS server have to be live for Let's Encrypt to reach
+  // the box for TLS-ALPN-01, and a single transient ACME hiccup must not
+  // tear everything down (a process exit + systemd restart guarantees the
+  // box is DOWN exactly when LE retries validation, an unwinnable loop).
+  // So: if there's a reusable on-disk cert we install it synchronously
+  // (fast, offline); otherwise we kick the issuance into an in-process
+  // retry loop with backoff and return immediately. The daemon serves
+  // its API + tunnel throughout; the cert installs into CertManager
+  // whenever an attempt finally succeeds.
   const existing = store ? await store.loadCert(opts.serverFqdn) : null;
+  let certRetryLoop: { stop: () => void } | null = null;
   if (existing && shouldReuseCert(existing, sans, renewalWindowMs)) {
     certManager.install(
       { certPem: existing.certPem, privateKeyPem: existing.privateKeyPem },
@@ -651,13 +697,16 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       `[runtime] reusing on-disk cert for ${opts.serverFqdn}; not after ${new Date(existing.notAfter).toISOString()}`,
     );
   } else {
-    await issueAndInstall({
+    certRetryLoop = startCertRetryLoop({
       issuer,
       certManager,
       store,
       serverFqdn: opts.serverFqdn,
       sans,
       onCertIssued: opts.onCertIssued,
+      onCertAttemptFailed: opts.onCertAttemptFailed,
+      backoffMs: opts.certRetryBackoffMs ?? DEFAULT_CERT_RETRY_BACKOFF_MS,
+      setTimeoutImpl: opts.setTimeoutImpl ?? ((cb, ms) => setTimeout(cb, ms)),
     });
   }
 
@@ -852,6 +901,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   return {
     ready: () => Promise.resolve(),
     close: async () => {
+      certRetryLoop?.stop();
       if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
       await tunnel.close();
@@ -935,6 +985,103 @@ interface IssueDeps {
   serverFqdn: string;
   sans: string[];
   onCertIssued?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
+}
+
+/**
+ * Default in-process ACME retry backoff. A gentle ramp: a quick first
+ * retry (the most common cause — DNS-01 not yet propagated, or LE's
+ * negative cache — clears in seconds), then progressively longer waits
+ * that respect Let's Encrypt's failed-validation rate limits (5 failures
+ * per account/hostname/hour on prod) while still recovering within a few
+ * minutes once the transient cause clears. The loop clamps to the last
+ * entry, so it keeps retrying every 10 minutes indefinitely rather than
+ * giving up — a long-lived demo box behind a flaky path eventually wins.
+ */
+export const DEFAULT_CERT_RETRY_BACKOFF_MS: number[] = [
+  15_000, 30_000, 60_000, 120_000, 300_000, 600_000,
+];
+
+/**
+ * Drive ACME issuance in-process with backoff, WITHOUT blocking startup
+ * or exiting the process on failure. Returns immediately with a handle to
+ * stop the loop (wired into runtime.close). The first attempt fires on
+ * the next tick so the caller's TLS server + tunnel are already serving;
+ * each failure backs off per `backoffMs` (clamped to the last entry) and
+ * retries. Once an attempt installs a cert the loop stops.
+ *
+ * This is the antidote to the crash-loop: the old path awaited issuance
+ * during startup and `process.exit(1)`'d on any throw, so systemd kept
+ * restarting the daemon — guaranteeing it was DOWN exactly when LE tried
+ * TLS-ALPN-01 and never giving DNS-01 time to propagate. Keeping the box
+ * up across retries lets both challenge types actually complete.
+ */
+export function startCertRetryLoop(deps: {
+  issuer: IssueDeps["issuer"];
+  certManager: CertManager;
+  store: PersistentAcmeStore | null;
+  serverFqdn: string;
+  sans: string[];
+  onCertIssued?: (cert: CertMaterial, notAfter: number, names: string[]) => void;
+  onCertAttemptFailed?: (attempt: number, error: string) => void;
+  backoffMs: number[];
+  setTimeoutImpl: (cb: () => void, ms: number) => unknown;
+}): { stop: () => void } {
+  let stopped = false;
+  let attempt = 0;
+
+  const run = async (): Promise<void> => {
+    if (stopped) return;
+    attempt += 1;
+    try {
+      await issueAndInstall({
+        issuer: deps.issuer,
+        certManager: deps.certManager,
+        store: deps.store,
+        serverFqdn: deps.serverFqdn,
+        sans: deps.sans,
+        onCertIssued: deps.onCertIssued,
+      });
+      console.log(
+        `[runtime] 🔒 cert installed for ${deps.serverFqdn} on attempt ${attempt}`,
+      );
+      // Success — let the loop fall through (no reschedule).
+    } catch (e) {
+      if (stopped) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      try {
+        deps.onCertAttemptFailed?.(attempt, msg);
+      } catch {
+        // observability is best-effort
+      }
+      // Empty schedule ⇒ single attempt only.
+      if (deps.backoffMs.length === 0) {
+        console.error(
+          `[runtime] cert issuance failed for ${deps.serverFqdn} (attempt ${attempt}); retry disabled: ${msg}`,
+        );
+        return;
+      }
+      const idx = Math.min(attempt - 1, deps.backoffMs.length - 1);
+      const wait = deps.backoffMs[idx]!;
+      console.error(
+        `[runtime] cert issuance failed for ${deps.serverFqdn} (attempt ${attempt}); retrying in ${Math.round(wait / 1000)}s: ${msg}`,
+      );
+      deps.setTimeoutImpl(() => {
+        void run();
+      }, wait);
+    }
+  };
+
+  // Kick the first attempt on the next tick so the caller has finished
+  // wiring + returning the runtime before issuance starts.
+  deps.setTimeoutImpl(() => {
+    void run();
+  }, 0);
+
+  return {
+    stop: () => {
+      stopped = true;
+    },
+  };
 }
 
 /** Run the issuer, install the result in CertManager, and persist. */

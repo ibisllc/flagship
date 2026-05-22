@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   ed,
+  isProvisionPhase,
   signProvisionEvent,
   signServerRevokeBySelf,
   type Keypair,
@@ -402,12 +403,33 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       entitlements: () => entitlementBundle,
-      // Push a `cert-issued` checkpoint the moment ACME completes (and
-      // again on every renewal — harmless, the phone just refreshes the
-      // phase timestamp). Fires DURING startDaemonRuntime, before the
-      // `ready` we emit once it resolves.
+      // Push a `cert-issued` THEN `ready` checkpoint the moment ACME
+      // completes (and again on every renewal — harmless, the phone just
+      // refreshes the phase timestamp). Cert acquisition is now
+      // asynchronous + retried in-process (the daemon stays up across
+      // transient ACME failures rather than process.exit-ing), so `ready`
+      // is gated here on the cert actually landing — not emitted eagerly
+      // when startDaemonRuntime resolves (which now happens BEFORE the
+      // first cert attempt). `tunnel-online` is emitted right after the
+      // runtime resolves since the tunnel IS connected by then.
       onCertIssued: () => {
         void reportPhase("cert-issued");
+        void reportPhase("ready");
+      },
+      // Fine-grained ACME observability — map each issuer sub-phase onto
+      // a signed ProvisionEvent so a stuck cert is locatable from the
+      // phone + a public `dig` with no box access. The sub-phase strings
+      // are a subset of PROVISION_PHASES; guard with isProvisionPhase so
+      // an unexpected value can never throw here.
+      onAcmePhase: (phase) => {
+        if (isProvisionPhase(phase)) void reportPhase(phase);
+      },
+      // An ACME attempt failed — the runtime backs off + retries
+      // IN-PROCESS (the box stays up so LE can reach it for TLS-ALPN-01
+      // and DNS-01 has time to propagate). Surface the real error as a
+      // `failed` phase so the phone shows the cause, but DO NOT exit.
+      onCertAttemptFailed: (attempt, error) => {
+        void reportPhase("failed", `acme attempt ${attempt}: ${error}`.slice(0, 280));
       },
       orders,
       servicePlatform: {
@@ -428,13 +450,16 @@ async function main(): Promise<void> {
     servicePlatformRefForServer.current = runtime.servicePlatform;
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
-    console.log(`[daemon] 🔒 cert installed; serving HTTPS for ${env.serverFqdn}`);
-    // startDaemonRuntime resolves only once the tunnel is connected AND
-    // the cert is installed + serving. Push the remaining provisioning
-    // checkpoints so the phone's install-progress reaches `ready`.
-    // (cert-issued already fired via onCertIssued above.)
+    console.log(
+      `[daemon] tunnel online for ${env.serverFqdn}; ACME issuance running in-process (cert installs asynchronously)`,
+    );
+    // startDaemonRuntime now resolves once the tunnel is connected and
+    // the local API + TLS server are serving — BEFORE the first ACME
+    // attempt (cert acquisition is async + retried so a transient ACME
+    // failure can't take the box down). Emit `tunnel-online` here; the
+    // ACME sub-phases stream in via `onAcmePhase`, and `cert-issued` +
+    // `ready` fire from `onCertIssued` once the cert actually lands.
     void reportPhase("tunnel-online");
-    void reportPhase("ready");
 
     // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
     // surface now that runtime.servicePlatform / appBackup / urlController

@@ -197,4 +197,218 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
     const { issuer } = makeFakeClient();
     await expect(issuer.issue([])).rejects.toThrow(/at least one name/);
   });
+
+  // ---- Regression: the two-pass walk (the actual demo-path bug) ----
+  //
+  // Build a fake client whose tls-alpn-01 validation throws, with the
+  // SAN order that prod uses for `home.<user>.flagship.services`:
+  //   [user-zone (tls-alpn-01), *.user-zone (dns-01), *.server (dns-01)]
+  // The OLD single-pass loop processed the user-zone authz first; its
+  // waitForValidStatus throw aborted the order BEFORE the wildcard
+  // authorizations published their DNS-01 TXT. The new two-pass walk
+  // publishes ALL challenges first, so the TXT lands regardless.
+  function makeMultiAuthzClient(opts?: {
+    failAlpnValidation?: boolean;
+    onPhaseSpy?: (p: string) => void;
+  }): {
+    issuer: LetsEncryptIssuer;
+    publishedTxt: { host: string; value: string }[];
+    calls: string[];
+  } {
+    const calls: string[] = [];
+    const publishedTxt: { host: string; value: string }[] = [];
+
+    const challengesFor = (value: string): AcmeChallenge[] => {
+      const isWildcard = value.startsWith("*.");
+      return isWildcard
+        ? [{ type: "dns-01", url: `https://acme/dns/${value}`, status: "pending", token: `t-${value}` }]
+        : [
+            { type: "tls-alpn-01", url: `https://acme/alpn/${value}`, status: "pending", token: `a-${value}` },
+            { type: "dns-01", url: `https://acme/dns/${value}`, status: "pending", token: `d-${value}` },
+          ];
+    };
+
+    const client: MinimalAcmeClient = {
+      async createAccount() {
+        return {};
+      },
+      async createOrder(o) {
+        return {
+          status: "pending",
+          expires: new Date(Date.now() + 60_000).toISOString(),
+          identifiers: o.identifiers,
+          authorizations: o.identifiers.map((_, i) => `https://acme/authz/${i}`),
+          finalize: "https://acme/finalize",
+        };
+      },
+      async getAuthorizations(o: AcmeOrder): Promise<AcmeAuthorization[]> {
+        return o.identifiers.map((id) => ({
+          identifier: { type: id.type, value: id.value },
+          status: "pending",
+          challenges: challengesFor(id.value),
+        }));
+      },
+      async getChallengeKeyAuthorization(c) {
+        return `${c.token}.thumb`;
+      },
+      async completeChallenge(c) {
+        calls.push(`completeChallenge:${c.type}`);
+        return {};
+      },
+      async waitForValidStatus(c) {
+        calls.push(`waitForValidStatus:${c.type}`);
+        if (opts?.failAlpnValidation && c.type === "tls-alpn-01") {
+          throw new Error("149.248.216.86: Error getting validation data");
+        }
+        return {};
+      },
+      async finalizeOrder(o) {
+        return { ...o, status: "valid" };
+      },
+      async getCertificate() {
+        return [
+          "-----BEGIN CERTIFICATE-----",
+          "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA",
+          "-----END CERTIFICATE-----",
+          "",
+        ].join("\n");
+      },
+    };
+
+    const alpn: AlpnChallengeServer = {
+      present() {
+        return () => {};
+      },
+    };
+    const dns: DnsChallengeWriter = {
+      async publishTxt(host, value) {
+        publishedTxt.push({ host, value });
+        return async () => {};
+      },
+    };
+
+    const issuer = new LetsEncryptIssuer({
+      email: "ops@flagshipserver.com",
+      environment: "staging",
+      accountKeyPem: "FAKEKEY",
+      alpn,
+      dns,
+      clientFactory: () => client,
+      dns01PropagationDelayMs: 0,
+      ...(opts?.onPhaseSpy ? { onPhase: opts.onPhaseSpy } : {}),
+    });
+
+    return { issuer, publishedTxt, calls };
+  }
+
+  const PROD_SANS = [
+    "demoent1.flagship.services",
+    "*.demoent1.flagship.services",
+    "*.home.demoent1.flagship.services",
+  ];
+
+  it("publishes BOTH DNS-01 TXT records even when TLS-ALPN-01 validation fails", async () => {
+    const { issuer, publishedTxt } = makeMultiAuthzClient({ failAlpnValidation: true });
+    await expect(issuer.issue(PROD_SANS)).rejects.toThrow(/Error getting validation data/);
+    // The whole point: the wildcard DNS-01 TXT records are published up
+    // front, BEFORE the tls-alpn-01 validation throws. The old loop never
+    // reached them.
+    const hosts = publishedTxt.map((p) => p.host).sort();
+    expect(hosts).toEqual([
+      "_acme-challenge.demoent1.flagship.services",
+      "_acme-challenge.home.demoent1.flagship.services",
+    ]);
+  });
+
+  it("publishes all challenges BEFORE validating any (two-pass walk)", async () => {
+    const seq: string[] = [];
+    const { issuer, calls } = makeMultiAuthzClient({
+      onPhaseSpy: (p) => seq.push(p),
+    });
+    await issuer.issue(PROD_SANS);
+    // All publishes/presents (and their phases) precede any validation.
+    const firstValidate = calls.indexOf("completeChallenge:tls-alpn-01");
+    const lastPublishOk = seq.lastIndexOf("dns01-publish-ok");
+    const validating = seq.indexOf("acme-validating");
+    expect(validating).toBeGreaterThan(lastPublishOk);
+    expect(firstValidate).toBeGreaterThanOrEqual(0);
+  });
+
+  it("emits fine-grained ACME sub-phases in order via onPhase", async () => {
+    const seq: string[] = [];
+    const { issuer } = makeMultiAuthzClient({ onPhaseSpy: (p) => seq.push(p) });
+    await issuer.issue(PROD_SANS);
+    // acme-order first; dns01 attempt→ok pairs; tlsalpn-served present;
+    // a single shared propagation step is skipped (delay=0) so it may be
+    // absent, but acme-validating must come last among sub-phases.
+    expect(seq[0]).toBe("acme-order");
+    expect(seq).toContain("dns01-publish-attempt");
+    expect(seq).toContain("dns01-publish-ok");
+    expect(seq).toContain("tlsalpn-served");
+    expect(seq[seq.length - 1]).toBe("acme-validating");
+    // dns01-publish-attempt always immediately precedes its publish-ok.
+    const attemptIdx = seq.indexOf("dns01-publish-attempt");
+    expect(seq[attemptIdx + 1]).toBe("dns01-publish-ok");
+  });
+
+  it("waits for DNS-01 propagation exactly once (shared across all DNS challenges)", async () => {
+    const seq: string[] = [];
+    let waited = 0;
+    // Drive a real propagation delay through a custom issuer.
+    const challengesFor = (value: string): AcmeChallenge[] =>
+      value.startsWith("*.")
+        ? [{ type: "dns-01", url: `u/${value}`, status: "pending", token: `t-${value}` }]
+        : [
+            { type: "tls-alpn-01", url: `a/${value}`, status: "pending", token: `a-${value}` },
+            { type: "dns-01", url: `d/${value}`, status: "pending", token: `d-${value}` },
+          ];
+    const client: MinimalAcmeClient = {
+      async createAccount() { return {}; },
+      async createOrder(o) {
+        return {
+          status: "pending",
+          expires: new Date(Date.now() + 60_000).toISOString(),
+          identifiers: o.identifiers,
+          authorizations: o.identifiers.map((_, i) => `authz/${i}`),
+          finalize: "finalize",
+        };
+      },
+      async getAuthorizations(o) {
+        return o.identifiers.map((id) => ({
+          identifier: { type: id.type, value: id.value },
+          status: "pending",
+          challenges: challengesFor(id.value),
+        }));
+      },
+      async getChallengeKeyAuthorization(c) { return `${c.token}.t`; },
+      async completeChallenge() { return {}; },
+      async waitForValidStatus() { return {}; },
+      async finalizeOrder(o) { return { ...o, status: "valid" }; },
+      async getCertificate() {
+        return "-----BEGIN CERTIFICATE-----\nMIIBIjANBg= \n-----END CERTIFICATE-----\n";
+      },
+    };
+    const issuer = new LetsEncryptIssuer({
+      email: "ops@flagshipserver.com",
+      environment: "staging",
+      accountKeyPem: "K",
+      alpn: { present: () => () => {} },
+      dns: { async publishTxt() { return async () => {}; } },
+      clientFactory: () => client,
+      dns01PropagationDelayMs: 5,
+      onPhase: (p) => {
+        seq.push(p);
+        if (p === "dns01-propagation-wait") waited += 1;
+      },
+    });
+    await issuer.issue(PROD_SANS);
+    // Two wildcard DNS-01 challenges, but exactly ONE shared wait.
+    expect(waited).toBe(1);
+    expect(seq.indexOf("dns01-propagation-wait")).toBeGreaterThan(
+      seq.lastIndexOf("dns01-publish-ok"),
+    );
+    expect(seq.indexOf("acme-validating")).toBeGreaterThan(
+      seq.indexOf("dns01-propagation-wait"),
+    );
+  });
 });
