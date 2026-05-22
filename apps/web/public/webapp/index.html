@@ -509,8 +509,27 @@
       <section id="view-trusted-devices" class="hidden">
         <h2>Trusted devices</h2>
         <p class="note">Phones and tablets that hold your account keys.</p>
-        <div id="trusted-devices-list"></div>
+        <button class="full-width mt-2" id="trusted-devices-add">+ Add device (scan a QR)</button>
+        <div id="trusted-devices-list" class="mt-2"></div>
         <button class="secondary full-width mt-2" id="trusted-devices-back">← Back</button>
+      </section>
+
+      <!-- Phase 3b — admin "Add device" (cross-device QR pairing,
+           generator + sender). Shows a pairing QR; on peer connect
+           derives the SAS, the admin confirms, then signs a DeviceAdmit
+           and seals the account keys over the relay. -->
+      <section id="view-add-device" class="hidden">
+        <h2>Add a device</h2>
+        <p class="note">Have the new device scan this code (or open the link). Compare the match code on both screens before you confirm.</p>
+        <div id="add-device-content"></div>
+      </section>
+
+      <!-- Phase 3b — incoming /join (cross-device QR pairing receiver).
+           Reached via the /join?sid=&pk= deep-link or a pasted link. -->
+      <section id="view-join" class="hidden">
+        <h2>Join an account</h2>
+        <p class="note">You're adding this browser to someone else's Flagship account.</p>
+        <div id="join-content"></div>
       </section>
 
       <section id="view-recovery" class="hidden">
