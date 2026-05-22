@@ -22,8 +22,8 @@ import {
   verifyIsoHash,
   PINNED_DISTROS,
   runWriteCommand,
+  remasterIsoWithAutoinstall,
 } from "./index.js";
-import { writeIsoWithCidata } from "./writeIsoWithCidata.js";
 
 const args = process.argv.slice(2);
 const subcommand = args[0];
@@ -167,7 +167,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
   });
-  await writeIsoWithCidata({ srcIsoPath: isoPath, outIsoPath: outPath, userDataYaml: yaml });
+  await remasterIsoWithAutoinstall({ srcIsoPath: isoPath, outIsoPath: outPath, userDataYaml: yaml });
   console.log(`wrote prepared ISO to ${outPath}`);
   console.log(`server-domain: ${loaded.blob.serverDomain}`);
   console.log(

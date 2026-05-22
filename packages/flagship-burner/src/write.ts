@@ -13,9 +13,9 @@
  *      <500MB or >500GB is refused regardless of metadata.
  *   5. Prompt for a typed "yes" (unless `--yes` is passed). The prompt
  *      shows the device path, size, model, mount state.
- *   6. Open the device with `O_WRONLY | O_SYNC`. Stream the ISO bytes in
- *      1 MiB chunks. Append the CIDATA FAT image immediately after.
- *      fsync at the end.
+ *   6. Remaster the source ISO into an unattended autoinstall ISO (seed
+ *      baked in at /nocloud/ + `autoinstall` kernel cmdline). Stream the
+ *      remastered ISO to the device in 1 MiB chunks; fsync at the end.
  *   7. Auto-shred the recipe file (same one-shot semantics as
  *      `prepare` + `user-data`), unless `--keep-recipe` is passed.
  *
@@ -24,7 +24,7 @@
  * anything.
  */
 import { createReadStream } from "node:fs";
-import { open, mkdir, rm, readFile, writeFile, unlink, stat } from "node:fs/promises";
+import { open, rm, unlink, stat } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { createHash } from "node:crypto";
@@ -33,7 +33,7 @@ import { join } from "node:path";
 import { loadBlobFromFile } from "./loadBlob.js";
 import { verifyIsoHash, type VerifyIsoResult } from "./verifyIso.js";
 import { buildAutoinstallUserData } from "./userdata.js";
-import { buildFatImage } from "./writeIsoWithCidata.js";
+import { remasterIsoWithAutoinstall } from "./remasterIso.js";
 import {
   enumerateDevices,
   lookupDevice,
@@ -61,14 +61,17 @@ export interface WriteCommandOpts {
   writeBytesToDevice?: WriteBytesToDevice;
   /** Injected for tests. Defaults to real `verifyIsoHash`. */
   verifyIso?: (isoPath: string) => Promise<VerifyIsoResult>;
-  /** Injected for tests. Defaults to a real FAT12 build via hdiutil/mkfs.vfat. */
-  materializeCidata?: (userDataYaml: string) => Promise<string>;
+  /** Injected for tests. Defaults to a real xorriso remaster. */
+  remaster?: (args: {
+    srcIsoPath: string;
+    outIsoPath: string;
+    userDataYaml: string;
+  }) => Promise<void>;
 }
 
 export type WriteBytesToDevice = (args: {
   devicePath: string;
   isoPath: string;
-  cidataImagePath: string;
 }) => Promise<{ bytesWritten: number }>;
 
 export type WriteCommandResult =
@@ -140,15 +143,25 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
   });
-  const materialize = opts.materializeCidata ?? materializeCidataImage;
-  const cidataPath = await materialize(yaml);
+  const remaster = opts.remaster ?? remasterIsoWithAutoinstall;
+  const remasteredIso = join(
+    tmpdir(),
+    `flagship-remastered-${createHash("sha256")
+      .update(opts.isoPath + yaml)
+      .digest("hex")
+      .slice(0, 12)}.iso`,
+  );
 
   try {
+    await remaster({
+      srcIsoPath: opts.isoPath,
+      outIsoPath: remasteredIso,
+      userDataYaml: yaml,
+    });
     const write = opts.writeBytesToDevice ?? defaultWriteBytesToDevice;
     const written = await write({
       devicePath: device.devicePath,
-      isoPath: opts.isoPath,
-      cidataImagePath: cidataPath,
+      isoPath: remasteredIso,
     });
     if (!opts.keepRecipe) {
       try {
@@ -159,9 +172,7 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     }
     return { ok: true, devicePath: device.devicePath, bytesWritten: written.bytesWritten };
   } finally {
-    await rm(cidataPath, { force: true }).catch(() => {});
-    const work = cidataPath.replace(/\/cidata\.img$/, "");
-    await rm(work, { recursive: true, force: true }).catch(() => {});
+    await rm(remasteredIso, { force: true }).catch(() => {});
   }
 }
 
@@ -244,34 +255,13 @@ async function resolveTarget(
   return { ok: true, device: eligible[idx]! };
 }
 
-async function materializeCidataImage(userDataYaml: string): Promise<string> {
-  const work = join(
-    tmpdir(),
-    `flagship-cidata-${createHash("sha256").update(userDataYaml).digest("hex").slice(0, 8)}`,
-  );
-  await mkdir(work, { recursive: true });
-  await writeFile(join(work, "user-data"), userDataYaml, "utf-8");
-  await writeFile(
-    join(work, "meta-data"),
-    `instance-id: flagship-pod\nlocal-hostname: flagship\n`,
-    "utf-8",
-  );
-  const fatImg = join(work, "cidata.img");
-  await buildFatImage({
-    dir: work,
-    fileNames: ["user-data", "meta-data"],
-    outImg: fatImg,
-    label: "CIDATA",
-  });
-  return fatImg;
-}
-
 const defaultWriteBytesToDevice: WriteBytesToDevice = async (args) => {
-  // Stream the ISO in 1 MiB chunks to the raw device. We open the device
-  // node O_WRONLY (no O_DIRECT — Node doesn't expose it portably and on
-  // macOS the equivalent is F_NOCACHE which isn't reachable from
-  // fs.promises; the per-write fsync at the end gets us the durability
-  // we need).
+  // Stream the (already-remastered) ISO in 1 MiB chunks to the raw device.
+  // We open the device node O_WRONLY (no O_DIRECT — Node doesn't expose it
+  // portably and on macOS the equivalent is F_NOCACHE which isn't reachable
+  // from fs.promises; the per-write fsync at the end gets us the durability
+  // we need). The autoinstall seed is baked inside the ISO, so this is a
+  // plain image write — no trailing partition to append.
   const isoStat = await stat(args.isoPath);
   if (isoStat.size < 1024) {
     throw new Error(`source ISO too small (${isoStat.size}B); refusing to write`);
@@ -285,9 +275,6 @@ const defaultWriteBytesToDevice: WriteBytesToDevice = async (args) => {
       await fh.write(buf, 0, buf.length, total);
       total += buf.length;
     }
-    const cidata = await readFile(args.cidataImagePath);
-    await fh.write(cidata, 0, cidata.length, total);
-    total += cidata.length;
     await fh.sync();
     return { bytesWritten: total };
   } finally {

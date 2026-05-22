@@ -92,13 +92,15 @@ const stubVerifyOk = async (): Promise<VerifyIsoResult> => ({
   sizeBytes: 1024,
 });
 
-/** materializeCidata stub — writes a tiny file and returns the path so
- *  the orchestration's per-test cleanup still works. Avoids calling
- *  hdiutil / mkfs.vfat in unit tests. */
-async function stubMaterializeCidata(): Promise<string> {
-  const p = join(workDir, "stub-cidata.img");
-  await writeFile(p, Buffer.alloc(64, 0xaa));
-  return p;
+/** remaster stub — writes a tiny stand-in ISO at the requested output
+ *  path so the orchestration's write + cleanup still works. Avoids
+ *  invoking xorriso in unit tests. */
+async function stubRemaster(args: {
+  srcIsoPath: string;
+  outIsoPath: string;
+  userDataYaml: string;
+}): Promise<void> {
+  await writeFile(args.outIsoPath, Buffer.alloc(2048, 0xbb));
 }
 
 describe("runWriteCommand — early gates", () => {
@@ -203,7 +205,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       yes: true,
       isRoot: () => true,
       verifyIso: stubVerifyOk,
-      materializeCidata: stubMaterializeCidata,
+      remaster: stubRemaster,
       writeBytesToDevice: async (a) => {
         expect(a.devicePath).toBe("/dev/sdb");
         writeCalls++;
@@ -238,7 +240,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       keepRecipe: true,
       isRoot: () => true,
       verifyIso: stubVerifyOk,
-      materializeCidata: stubMaterializeCidata,
+      remaster: stubRemaster,
       writeBytesToDevice: async () => ({ bytesWritten: 7 }),
       enumerateOpts: makeLsblkRun([
         {
@@ -417,7 +419,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       yes: true,
       isRoot: () => true,
       verifyIso: stubVerifyOk,
-      materializeCidata: stubMaterializeCidata,
+      remaster: stubRemaster,
       promptForLine: async (m) => {
         prompts.push(m);
         return "1";
@@ -511,7 +513,7 @@ describe("runWriteCommand — happy path + device gates", () => {
       device: "/dev/sdb",
       isRoot: () => true,
       verifyIso: stubVerifyOk,
-      materializeCidata: stubMaterializeCidata,
+      remaster: stubRemaster,
       promptForLine: async () => "  YES  ",
       writeBytesToDevice: async () => {
         writeCalls++;

@@ -16,11 +16,12 @@ export {
 } from "./userdata.js";
 export { verifyIsoHash, type VerifyIsoResult } from "./verifyIso.js";
 export {
-  writeIsoWithCidata,
-  buildFatImage,
-  type WriteIsoArgs,
-  type BuildFatArgs,
-} from "./writeIsoWithCidata.js";
+  remasterIsoWithAutoinstall,
+  editGrubCfgForAutoinstall,
+  buildNocloudSeed,
+  resolveXorriso,
+  type RemasterArgs,
+} from "./remasterIso.js";
 export {
   enumerateDevices,
   lookupDevice,
