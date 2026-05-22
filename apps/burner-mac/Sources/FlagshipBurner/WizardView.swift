@@ -34,14 +34,24 @@ struct WizardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            content
+            header
                 .padding(.horizontal, FB.Spacing.s5)
                 .padding(.top, FB.Spacing.s5)
-            Spacer(minLength: FB.Spacing.s3)
-            logDrawer
+                .padding(.bottom, FB.Spacing.s3)
+            ZStack(alignment: .bottom) {
+                panes
+                    .padding(.horizontal, FB.Spacing.s5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                if showLog {
+                    logOverlay
+                        .transition(.move(edge: .bottom))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            logBar
         }
-        .frame(width: 560)
-        .frame(minHeight: 600)
+        .frame(width: 560, height: 640)
         .background(FB.Colors.bg)
         .preferredColorScheme(preferredScheme)
         .task { await model.refreshDisks() }
@@ -49,9 +59,8 @@ struct WizardView: View {
 
     // MARK: - Body
 
-    private var content: some View {
+    private var panes: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
-            header
             recipeRow
             isoRow
             diskRow
@@ -197,20 +206,34 @@ struct WizardView: View {
 
     // MARK: - Bake
 
+    private var progressCaption: String {
+        let label = model.phaseLabel ?? "Working…"
+        if let p = model.progress {
+            return "\(label)  \(Int((p * 100).rounded()))%"
+        }
+        return label
+    }
+
     private var bakeRow: some View {
         VStack(spacing: FB.Spacing.s2) {
             if model.isRunning {
-                Button(action: { model.cancel() }) {
-                    HStack(spacing: FB.Spacing.s2) {
-                        ProgressView().controlSize(.small)
-                        Text("Working — click to cancel")
-                            .font(FB.Font.rowTitle())
+                VStack(spacing: FB.Spacing.s2) {
+                    Group {
+                        if let p = model.progress {
+                            ProgressView(value: p)
+                        } else {
+                            ProgressView()
+                        }
                     }
-                    .frame(minWidth: 200, minHeight: 28)
+                    .progressViewStyle(.linear)
+                    .tint(FB.Colors.primary)
+                    .frame(width: 260)
+                    Text(progressCaption)
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                        .monospacedDigit()
                 }
-                .controlSize(.large)
-                .buttonStyle(.bordered)
-                .keyboardShortcut(.cancelAction)
+                .frame(minHeight: 28)
             } else if model.isFinished {
                 doneCard
             } else {
@@ -282,39 +305,47 @@ struct WizardView: View {
 
     // MARK: - Log drawer
 
-    private var logDrawer: some View {
+    /// The always-visible toggle bar pinned to the bottom of the window.
+    /// Clicking anywhere on it slides the log overlay up or down.
+    private var logBar: some View {
         VStack(spacing: 0) {
             Divider()
-            DisclosureGroup(isExpanded: $showLog) {
-                LogPane(model: model)
-                    .frame(height: 320)
-                    .padding(.top, FB.Spacing.s2)
-            } label: {
-                HStack {
-                    Text("Log")
-                        .font(FB.Font.caption())
+            HStack {
+                Image(systemName: showLog ? "chevron.down" : "chevron.up")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+                Text("Log")
+                    .font(FB.Font.caption())
+                    .foregroundStyle(FB.Colors.textMuted)
+                if !model.logLines.isEmpty {
+                    Text("\(model.logLines.count)")
+                        .font(FB.Font.caption().monospacedDigit())
                         .foregroundStyle(FB.Colors.textMuted)
-                    if !model.logLines.isEmpty {
-                        Text("\(model.logLines.count)")
-                            .font(FB.Font.caption().monospacedDigit())
-                            .foregroundStyle(FB.Colors.textMuted)
-                    }
-                    Spacer()
-                    if !model.logLines.isEmpty && !model.isRunning {
-                        Button("Clear") { model.clearLog() }
-                            .buttonStyle(.link)
-                            .font(FB.Font.caption())
-                            .pointerCursor()
-                    }
                 }
-                .contentShape(Rectangle())
-                // Toggle when the label (the word "Log") is clicked, not
-                // just the disclosure chevron.
-                .onTapGesture { withAnimation { showLog.toggle() } }
+                Spacer()
+                if !model.logLines.isEmpty && !model.isRunning {
+                    Button("Clear") { model.clearLog() }
+                        .buttonStyle(.link)
+                        .font(FB.Font.caption())
+                        .pointerCursor()
+                }
             }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeOut(duration: 0.22)) { showLog.toggle() } }
+            .pointerCursor()
             .padding(.horizontal, FB.Spacing.s5)
             .padding(.vertical, FB.Spacing.s2)
         }
+        .background(FB.Colors.bg)
+    }
+
+    /// The log itself — slides up over the panes (it does not push them)
+    /// and fills the available area so the whole scroll is reachable.
+    private var logOverlay: some View {
+        LogPane(model: model)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, FB.Spacing.s2)
+            .background(FB.Colors.bg)
     }
 }
 

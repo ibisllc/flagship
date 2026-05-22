@@ -153,16 +153,23 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
   );
 
   try {
+    // Progress is reported on stdout as machine-readable control lines the
+    // GUI parses (and filters out of the visible log):
+    //   FLAGSHIP_PHASE:remaster|write   — coarse phase, drives the label
+    //   FLAGSHIP_PROGRESS:<0..1>        — fraction of the byte-write
+    console.log("FLAGSHIP_PHASE:remaster");
     await remaster({
       srcIsoPath: opts.isoPath,
       outIsoPath: remasteredIso,
       userDataYaml: yaml,
     });
+    console.log("FLAGSHIP_PHASE:write");
     const write = opts.writeBytesToDevice ?? defaultWriteBytesToDevice;
     const written = await write({
       devicePath: device.devicePath,
       isoPath: remasteredIso,
     });
+    console.log("FLAGSHIP_PROGRESS:1");
     if (!opts.keepRecipe) {
       try {
         await unlink(opts.recipePath);
@@ -269,11 +276,19 @@ const defaultWriteBytesToDevice: WriteBytesToDevice = async (args) => {
   const fh = await open(args.devicePath, "w");
   try {
     let total = 0;
+    let lastPct = -1;
+    const size = isoStat.size;
     const isoStream = createReadStream(args.isoPath, { highWaterMark: 1024 * 1024 });
     for await (const chunk of isoStream) {
       const buf = chunk as Buffer;
       await fh.write(buf, 0, buf.length, total);
       total += buf.length;
+      // Emit at most once per whole percent to keep the log readable.
+      const pct = Math.floor((total / size) * 100);
+      if (pct !== lastPct) {
+        lastPct = pct;
+        console.log(`FLAGSHIP_PROGRESS:${(total / size).toFixed(4)}`);
+      }
     }
     await fh.sync();
     return { bytesWritten: total };

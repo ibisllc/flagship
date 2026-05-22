@@ -19,8 +19,49 @@ final class WizardModel: ObservableObject {
     @Published var verified: VerifyResult? = nil
     @Published var outIsoPath: URL? = nil
     @Published var isFinished: Bool = false
+    /// 0…1 during the byte-write; nil means indeterminate (or idle).
+    @Published var progress: Double? = nil
+    /// Raw phase token from the CLI: "remaster" | "write".
+    @Published var phase: String? = nil
 
     private var currentRunner: CLIRunner? = nil
+
+    var phaseLabel: String? {
+        switch phase {
+        case "remaster": return "Building image…"
+        case "write": return "Writing to USB…"
+        default: return nil
+        }
+    }
+
+    /// Parse a machine-readable control line emitted by the CLI. Returns
+    /// true if the line was consumed (so it's not shown in the log).
+    func handleControlLine(_ line: String) -> Bool {
+        if line.hasPrefix("FLAGSHIP_PROGRESS:") {
+            progress = Double(line.dropFirst("FLAGSHIP_PROGRESS:".count))
+            DockProgress.set(progress)
+            return true
+        }
+        if line.hasPrefix("FLAGSHIP_PHASE:") {
+            let p = String(line.dropFirst("FLAGSHIP_PHASE:".count))
+            phase = p
+            if p == "remaster" {
+                progress = nil
+                DockProgress.set(nil)
+            } else if p == "write" {
+                progress = 0
+                DockProgress.set(0)
+            }
+            return true
+        }
+        return false
+    }
+
+    private func endProgress() {
+        progress = nil
+        phase = nil
+        DockProgress.set(nil)
+    }
 
     var canFlash: Bool {
         return recipe != nil && iso != nil && selectedDisk != nil
@@ -133,7 +174,9 @@ final class WizardModel: ObservableObject {
         guard let recipe = recipe, let iso = iso, let disk = selectedDisk else { return }
         guard !isRunning else { return }
         isRunning = true
-        defer { isRunning = false }
+        progress = nil
+        phase = nil
+        defer { isRunning = false; endProgress() }
 
         let resolved: CLILocator.Resolved
         do { resolved = try CLILocator.locate() }
@@ -187,8 +230,11 @@ final class WizardModel: ObservableObject {
                 if let s = String(data: new, encoding: .utf8) {
                     for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
                         if line.isEmpty { continue }
+                        let text = String(line)
                         await MainActor.run { [weak self] in
-                            self?.appendLog(stream: .stdout, text: String(line))
+                            guard let self = self else { return }
+                            if self.handleControlLine(text) { return }
+                            self.appendLog(stream: .stdout, text: text)
                         }
                     }
                 }
