@@ -15,19 +15,11 @@ final class HelperService: NSObject, FlagshipHelperProtocol {
         reply(helperVersion)
     }
 
-    func writeImage(nodePath: String,
-                    bundlePath: String,
-                    imagePath: String,
+    func writeImage(imagePath: String,
                     devicePath: String,
                     logPath: String,
                     withReply reply: @escaping (Int, String) -> Void) {
         // Validate inputs defensively — this runs as root.
-        guard FileManager.default.isExecutableFile(atPath: nodePath) else {
-            reply(-1, "node not found at \(nodePath)"); return
-        }
-        guard FileManager.default.fileExists(atPath: bundlePath) else {
-            reply(-1, "burner bundle not found at \(bundlePath)"); return
-        }
         guard FileManager.default.fileExists(atPath: imagePath) else {
             reply(-1, "image not found at \(imagePath)"); return
         }
@@ -36,23 +28,22 @@ final class HelperService: NSObject, FlagshipHelperProtocol {
         }
 
         FileManager.default.createFile(atPath: logPath, contents: nil)
-        guard let log = FileHandle(forWritingAtPath: logPath) else {
-            reply(-1, "cannot open log at \(logPath)"); return
+        let log = FileHandle(forWritingAtPath: logPath)
+        func append(_ s: String) {
+            if let d = (s + "\n").data(using: .utf8) { log?.write(d) }
         }
 
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: nodePath)
-        proc.arguments = [bundlePath, "write-image", imagePath, "--device", devicePath, "--yes"]
-        proc.standardOutput = log
-        proc.standardError = log
+        append("FLAGSHIP_PHASE:write")
         do {
-            try proc.run()
-            proc.waitUntilExit()
-            try? log.close()
-            reply(Int(proc.terminationStatus), proc.terminationStatus == 0 ? "" : "write-image exited \(proc.terminationStatus)")
+            try DiskWrite.write(imagePath: imagePath, devicePath: devicePath) { frac in
+                append(String(format: "FLAGSHIP_PROGRESS:%.4f", frac))
+            }
+            try? log?.close()
+            reply(0, "")
         } catch {
-            try? log.close()
-            reply(-1, "spawn failed: \(error.localizedDescription)")
+            append("write failed: \(error.localizedDescription)")
+            try? log?.close()
+            reply(-1, error.localizedDescription)
         }
     }
 }

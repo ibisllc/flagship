@@ -29,6 +29,17 @@ public struct VerifyResult: Codable, Equatable, Sendable {
         self.signatureValid = signatureValid
     }
 
+    /// Build from a natively-verified recipe (no CLI involved).
+    public init(recipe: Recipe) {
+        self.init(ok: true,
+                  serverDomain: recipe.serverDomain,
+                  username: recipe.username,
+                  serverName: recipe.serverName,
+                  expiresAt: ISO8601DateFormatter().string(from: recipe.expiresAtDate),
+                  installerGitRef: recipe.installerGitRef,
+                  signatureValid: true)
+    }
+
     public static func parse(jsonText: String) -> VerifyResult? {
         // The CLI prints other lines around the JSON (in some modes); scan for
         // the first '{' and try to decode from there. Robust to a trailing

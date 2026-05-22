@@ -24,8 +24,6 @@ final class WizardModel: ObservableObject {
     /// Raw phase token from the CLI: "remaster" | "write".
     @Published var phase: String? = nil
 
-    private var currentRunner: CLIRunner? = nil
-
     var phaseLabel: String? {
         switch phase {
         case "remaster": return "Building image…"
@@ -139,37 +137,46 @@ final class WizardModel: ObservableObject {
 
     func runVerify() async {
         guard let recipe = recipe else { return }
-        await runCLI(arguments: { entry in
-            CLIArgs.verify(entryPath: entry, recipePath: recipe.path)
-        }, onSuccess: { [weak self] stdoutBuf in
-            guard let self = self else { return }
-            if let parsed = VerifyResult.parse(jsonText: stdoutBuf) {
-                self.verified = parsed
-            }
-        })
+        do {
+            let r = try RecipeLoader.load(contentsOf: recipe)
+            verified = VerifyResult(recipe: r)
+            recipeError = nil
+        } catch {
+            verified = nil
+            recipeError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Read + verify the recipe and build the cloud-init user-data for it.
+    private func userDataYAML(forRecipe recipe: URL) throws -> String {
+        let data = try Data(contentsOf: recipe)
+        let parsed = try RecipeLoader.load(data: data)
+        return try UserData.autoinstallYAML(recipeJSON: data, installerGitRef: parsed.installerGitRef)
     }
 
     func runPrepare() async {
         guard let recipe = recipe, let iso = iso else { return }
+        guard !isRunning else { return }
+        isRunning = true
+        phase = "remaster"
+        defer { isRunning = false; endProgress() }
         let outURL = iso.deletingLastPathComponent()
             .appendingPathComponent(iso.deletingPathExtension().lastPathComponent + ".flagship.iso")
-        self.outIsoPath = outURL
-        await runCLI(arguments: { entry in
-            CLIArgs.prepare(entryPath: entry,
-                            recipePath: recipe.path,
-                            isoPath: iso.path,
-                            outIsoPath: outURL.path,
-                            keepRecipe: true)
-        }, onSuccess: { [weak self] _ in
-            guard let self = self else { return }
-            self.isFinished = true
-        })
+        outIsoPath = outURL
+        do {
+            let yaml = try userDataYAML(forRecipe: recipe)
+            appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → \(outURL.lastPathComponent)")
+            try await Task.detached(priority: .userInitiated) {
+                try Remaster.remaster(srcISO: iso, outISO: outURL, userDataYAML: yaml)
+            }.value
+            isFinished = true
+        } catch {
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
     }
 
-    /// One-click "Bake" — write the recipe + ISO directly to the
-    /// selected USB device. Needs root, so we wrap the CLI invocation
-    /// in `osascript do shell script with administrator privileges`,
-    /// which surfaces the standard macOS Touch-ID / password prompt.
+    /// One-click "Bake" — remaster (unprivileged) then hand the raw write to
+    /// the signed root helper over XPC. No node, no osascript.
     func runWrite() async {
         guard let recipe = recipe, let iso = iso, let disk = selectedDisk else { return }
         guard !isRunning else { return }
@@ -178,54 +185,26 @@ final class WizardModel: ObservableObject {
         phase = nil
         defer { isRunning = false; endProgress() }
 
-        let resolved: CLILocator.Resolved
-        do { resolved = try CLILocator.locate() }
-        catch {
-            appendLog(stream: .stderr, text: "CLI locate failed: \(error)")
-            return
-        }
-
-        // Step 1 (UNPRIVILEGED): remaster the autoinstall ISO into a temp
-        // file. This reads the recipe + source ISO in the app's context,
-        // which holds the user's Downloads grant. The root step below can't
-        // read protected folders (different responsible process → TCC
-        // denies it), so the reads must happen here.
+        // Step 1 (UNPRIVILEGED): remaster the autoinstall ISO into /tmp. This
+        // reads the recipe + source ISO in the app's context (holds the
+        // user's Downloads grant); the root step can't read protected folders.
         phase = "remaster"
         let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
-        let prepareArgs = CLIArgs.prepare(entryPath: resolved.entryPath,
-                                          recipePath: recipe.path,
-                                          isoPath: iso.path,
-                                          outIsoPath: preparedURL.path,
-                                          keepRecipe: true)
-        appendLog(stream: .stdout, text: "+ node \(prepareArgs.joined(separator: " "))")
-        let prep = CLIRunner(nodePath: resolved.nodePath, arguments: prepareArgs)
-        currentRunner = prep
         do {
-            for await line in try prep.start() {
-                if handleControlLine(line.text) { continue }
-                appendLog(stream: line.stream, text: line.text)
-            }
+            let yaml = try userDataYAML(forRecipe: recipe)
+            appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → prepared image")
+            try await Task.detached(priority: .userInitiated) {
+                try Remaster.remaster(srcISO: iso, outISO: preparedURL, userDataYAML: yaml)
+            }.value
         } catch {
-            appendLog(stream: .stderr, text: "prepare spawn failed: \(error)")
-            currentRunner = nil
+            appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
             try? FileManager.default.removeItem(at: preparedURL)
             return
         }
-        currentRunner = nil
-        if prep.terminationStatus != 0 {
-            appendLog(stream: .stderr, text: "prepare exited \(prep.terminationStatus)")
-            try? FileManager.default.removeItem(at: preparedURL)
-            return
-        }
-        // Clean up the prepared image whenever we leave from here on.
         defer { try? FileManager.default.removeItem(at: preparedURL) }
 
-        // Step 2 (PRIVILEGED): hand the raw write to the signed helper
-        // daemon over XPC. Unlike osascript "administrator privileges"
-        // (whose process runs under the auth trampoline and can't be granted
-        // disk access), a launchd daemon runs in a clean root context that
-        // can open the raw device.
+        // Step 2 (PRIVILEGED): the signed launchd helper does the raw write.
         do {
             try HelperClient.ensureEnabled()
         } catch {
@@ -258,8 +237,7 @@ final class WizardModel: ObservableObject {
                 }
             }
         }
-        appendLog(stream: .stdout,
-                  text: "+ helper write-image \(preparedURL.lastPathComponent) → \(disk.deviceNode)")
+        appendLog(stream: .stdout, text: "+ helper write-image → \(disk.deviceNode)")
 
         let conn = HelperClient.makeConnection()
         let result: (code: Int, message: String) = await withCheckedContinuation { cont in
@@ -269,17 +247,14 @@ final class WizardModel: ObservableObject {
                 finish((-1, "helper connection error: \(err.localizedDescription)"))
             } as? FlagshipHelperProtocol
             guard let proxy = proxy else { finish((-1, "could not reach the helper")); return }
-            proxy.writeImage(nodePath: resolved.nodePath,
-                             bundlePath: resolved.entryPath,
-                             imagePath: preparedURL.path,
+            proxy.writeImage(imagePath: preparedURL.path,
                              devicePath: disk.deviceNode,
                              logPath: logFile) { code, msg in finish((code, msg)) }
         }
         stopTail.value = true
         conn.invalidate()
         if result.code == 0 {
-            // Single-use recipe: shred it now that the burn succeeded. The
-            // app context can remove it; the root step never saw it.
+            // Single-use recipe: shred it now that the burn succeeded.
             try? FileManager.default.removeItem(at: recipe)
             isFinished = true
         } else {
@@ -293,54 +268,8 @@ final class WizardModel: ObservableObject {
         init(_ value: T) { self.value = value }
     }
 
-    func cancel() {
-        currentRunner?.cancel()
-    }
-
     func clearLog() {
         logLines.removeAll()
-    }
-
-    // MARK: - Internals
-
-    private func runCLI(arguments: (String) -> [String],
-                        onSuccess: @escaping (String) -> Void) async {
-        guard !isRunning else { return }
-        isRunning = true
-        defer { isRunning = false }
-
-        let resolved: CLILocator.Resolved
-        do { resolved = try CLILocator.locate() }
-        catch {
-            appendLog(stream: .stderr, text: "CLI locate failed: \(error)")
-            return
-        }
-        let args = arguments(resolved.entryPath)
-        appendLog(stream: .stdout, text: "+ node \(args.joined(separator: " "))")
-
-        let runner = CLIRunner(nodePath: resolved.nodePath, arguments: args)
-        currentRunner = runner
-        defer { currentRunner = nil }
-
-        var stdoutBuf = ""
-        do {
-            let stream = try runner.start()
-            for await line in stream {
-                appendLog(stream: line.stream, text: line.text)
-                if line.stream == .stdout {
-                    stdoutBuf += line.text + "\n"
-                }
-            }
-        } catch {
-            appendLog(stream: .stderr, text: "spawn failed: \(error)")
-            return
-        }
-        let status = runner.terminationStatus
-        if status == 0 {
-            onSuccess(stdoutBuf)
-        } else {
-            appendLog(stream: .stderr, text: "CLI exited \(status)")
-        }
     }
 
     private func appendLog(stream: CLILogLine.Stream, text: String) {

@@ -18,20 +18,15 @@ public let kFlagshipAppBundleID = "com.flagshipserver.Burner"
     /// Liveness/handshake check. Replies with the helper's version string.
     func ping(withReply reply: @escaping (String) -> Void)
 
-    /// Raw-write a prepared image to `devicePath` as root. The helper runs
-    /// the bundled `flagship-burn write-image` CLI (which unmounts the disk
-    /// and streams to the raw device), appending its output to `logPath` so
-    /// the app can tail progress. Replies with the CLI exit code and an
-    /// optional message.
+    /// Raw-write a prepared image to `devicePath` as root (unmount + stream
+    /// to /dev/rdiskN, natively). Progress is appended to `logPath` as
+    /// `FLAGSHIP_PROGRESS:<0..1>` lines so the app can tail it. Replies with
+    /// 0 on success (or a non-zero code) and an optional message.
     ///
-    /// - nodePath:   absolute path to the `node` binary (resolved by the app)
-    /// - bundlePath: absolute path to flagship-burn.mjs inside the .app
     /// - imagePath:  the prepared image in /tmp (not a protected folder)
     /// - devicePath: e.g. /dev/disk9
-    /// - logPath:    a /tmp file the helper writes CLI output to
-    func writeImage(nodePath: String,
-                    bundlePath: String,
-                    imagePath: String,
+    /// - logPath:    a /tmp file the helper appends progress to
+    func writeImage(imagePath: String,
                     devicePath: String,
                     logPath: String,
                     withReply reply: @escaping (Int, String) -> Void)

@@ -52,22 +52,15 @@ check-env:
 	@test -n "$$FLAGSHIP_NOTARY_ISSUER" || (echo "✗ FLAGSHIP_NOTARY_ISSUER not set"; exit 1)
 	@echo "✓ env complete"
 
-# Re-package the swift-build binary as a proper .app bundle so codesign
-# is happy. SwiftPM produces a bare executable in .build/release; the
-# Mac wants Contents/MacOS/<binary> + Contents/Info.plist.
-# Build the self-contained esbuild bundle of the burner CLI. The GUI
-# shells out to `node <this>.mjs` — the bundle has zero workspace deps
-# (the raw .ts entry chains to @flagship/protocol's TS source, which
-# plain node can't resolve). Required before package-app so the .app is
-# self-contained.
-bundle-cli:
-	cd ../../packages/flagship-burner && npm run bundle
-	@echo "✓ Bundled CLI: packages/flagship-burner/dist/flagship-burn.mjs"
-
-package-app: build-release bundle-cli
+# Re-package the swift-build binary as a proper .app bundle: the main app +
+# the privileged helper (Contents/MacOS), the LaunchDaemon plist
+# (Contents/Library/LaunchDaemons), and a self-contained xorriso
+# (Contents/Helpers). Fully native — no node/npm runtime.
+package-app: build-release
 	rm -rf "$(APP_BUNDLE)"
 	mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
-	mkdir -p "$(APP_BUNDLE)/Contents/Resources/flagship-burner"
+	mkdir -p "$(APP_BUNDLE)/Contents/Resources"
+	mkdir -p "$(APP_BUNDLE)/Contents/Helpers"
 	mkdir -p "$(APP_BUNDLE)/Contents/Library/LaunchDaemons"
 	cp "$(BUILD_DIR)/$(BIN_SRC)" "$(APP_BUNDLE)/Contents/MacOS/$(BIN)"
 	cp "$(BUILD_DIR)/FlagshipBurnerHelper" "$(APP_BUNDLE)/Contents/MacOS/FlagshipBurnerHelper"
@@ -75,7 +68,13 @@ package-app: build-release bundle-cli
 	cp HelperDaemon.plist "$(APP_BUNDLE)/Contents/Library/LaunchDaemons/com.flagshipserver.Burner.helper.plist"
 	cp AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/AppIcon.icns"
 	cp menubar.png "$(APP_BUNDLE)/Contents/Resources/menubar.png"
-	cp ../../packages/flagship-burner/dist/flagship-burn.mjs "$(APP_BUNDLE)/Contents/Resources/flagship-burner/flagship-burn.mjs"
+	cp licenses/xorriso-COPYING.txt "$(APP_BUNDLE)/Contents/Resources/LICENSE-xorriso.txt"
+	@if command -v xorriso >/dev/null; then \
+	    cp -L "$$(command -v xorriso)" "$(APP_BUNDLE)/Contents/Helpers/xorriso"; \
+	    echo "✓ Bundled xorriso (self-contained: depends only on macOS system libs)"; \
+	else \
+	    echo "⚠ xorriso not found — install it (brew install xorriso) for a self-contained app"; \
+	fi
 	@echo "✓ Packaged: $(APP_BUNDLE)"
 
 # Sign with hardened runtime + entitlements. Sign inside-out: the embedded
@@ -83,6 +82,12 @@ package-app: build-release bundle-cli
 # bundle. The helper's signing identifier must match the LaunchDaemon Label
 # so SMAppService accepts it.
 sign: package-app
+	@if [ -f "$(APP_BUNDLE)/Contents/Helpers/xorriso" ]; then \
+	    codesign --force --options runtime --timestamp \
+	        --sign "$$FLAGSHIP_SIGNING_ID" \
+	        "$(APP_BUNDLE)/Contents/Helpers/xorriso"; \
+	    echo "✓ Signed xorriso"; \
+	fi
 	codesign --force --options runtime --timestamp \
 	    -i com.flagshipserver.Burner.helper \
 	    --entitlements helper-entitlements.plist \
