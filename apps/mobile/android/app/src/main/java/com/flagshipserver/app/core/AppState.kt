@@ -9,6 +9,7 @@ package com.flagshipserver.app.core
 import com.flagshipserver.app.api.DemoServerBlock
 import com.flagshipserver.app.api.DeviceCapabilityBlock
 import com.flagshipserver.app.api.DeviceScope
+import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -239,6 +240,11 @@ class AppState(
         _leaderPodId.value = null
         _currentPodId.value = null
         _isPaired.value = true
+        // W3 multi-profile keystore — point the Keystore at THIS
+        // profile's per-profile device-key slot so deriveIRK / installUmk
+        // / etc. operate on the cloud the user just switched to. The
+        // profileId is the lowercased cloudName (Keystore normalizes).
+        Keystore.setActiveProfile(cloudName)
     }
 
     private fun upsertProfile(profile: Profile) {

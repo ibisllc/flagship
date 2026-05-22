@@ -25,6 +25,15 @@ public protocol FlagshipServerClient: Sendable {
     /// success by both Mock + Live impls.
     func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
+    /// Login/join preflight. GET /api/account/resolve/<username>. The
+    /// sign-in space is access-control evaluation, not a fetch: this
+    /// reads what credentials + factors exist for the named account and
+    /// returns them as FIELDS so the client login state machine can
+    /// branch. **Returns 200 ALWAYS** — a missing account resolves to
+    /// `kind:"unknown"`, never a 404. Mirrors the Worker handler in
+    /// packages/control-plane/src/accountResolve.ts. See
+    /// docs/login-and-account-redesign.md.
+    func resolveAccount(username: String) async throws -> AccountResolution
     func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
     /// Register an APNs device token with .com so the Worker can relay
@@ -35,6 +44,16 @@ public protocol FlagshipServerClient: Sendable {
     /// treated as success by both Mock + Live implementations so a
     /// sign-out path doesn't surface "already cleaned up" as an error.
     func revokePushToken(tokenId: String) async throws
+
+    /// Phase 3b — vouched cross-device admit. The incoming (collaborator)
+    /// device POSTs the admin-signed `DeviceAdmit` envelope + its own
+    /// push-token registration to `/api/users/<account>/devices/admit`.
+    /// .com verifies the admit under the account's CURRENT IRK (the
+    /// admin/vouching device holds it) and admits this device QUARANTINED
+    /// (now + 14 days). The response carries that `quarantineUntil` so
+    /// the UI can render the countdown. Mirrors handleVouchedDeviceAdmit
+    /// in packages/control-plane/src/push.ts.
+    func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse
     /// Poll-based read of install-events the Worker has accumulated
     /// for a given auth-code serial. Use `since: 0` to read from
     /// the beginning; subsequent polls pass the response's
@@ -310,10 +329,30 @@ public struct RePairInitiateRequest: Encodable, Sendable {
             self.oldIrkPub = oldIrkPub; self.issuedAt = issuedAt
         }
     }
+
+    /// v1.2 — the out-of-Apple second factor the Worker REQUIRES when
+    /// `account_type === 'multi'`. Carries a live 6-digit TOTP or a
+    /// 10-char recovery code beside (NOT inside) the signed envelope —
+    /// codes are ephemeral so they don't belong in canonical bytes
+    /// (see RePairInitiate.totpProof in packages/protocol/src/auth.ts).
+    /// Omitted for single-device re-pairs. `method` is one of the two
+    /// allowed literals the Worker validates structurally.
+    public struct TotpProof: Encodable, Equatable, Sendable {
+        public let code: String
+        public let method: String   // "totp" | "recovery"
+        public init(code: String, method: String) {
+            self.code = code; self.method = method
+        }
+    }
+
     public let request: Inner
     public let signature: String      // hex; Ed25519 over canonical-bytes by NEW IRK
-    public init(request: Inner, signature: String) {
+    /// Present only for multi-device takeovers. The Worker rejects a
+    /// multi re-pair that omits it (401) and ignores it on single.
+    public let totpProof: TotpProof?
+    public init(request: Inner, signature: String, totpProof: TotpProof? = nil) {
         self.request = request; self.signature = signature
+        self.totpProof = totpProof
     }
 }
 
@@ -601,6 +640,57 @@ public struct PushTokenRegisterResponse: Codable, Equatable, Sendable {
     public init(ok: Bool, tokenId: String) { self.ok = ok; self.tokenId = tokenId }
 }
 
+/// Phase 3b — POST /api/users/<account>/devices/admit body. Carries the
+/// admin-signed `DeviceAdmit` envelope + the incoming device's own
+/// push-token registration. The Worker verifies `admitSig` under the
+/// account's CURRENT IRK; the registration `signature` is carried for
+/// storage but NOT verified (the incoming device holds no account IRK —
+/// the admit is the IRK consent). Field names mirror the Worker's
+/// `AdmitBody` exactly. See handleVouchedDeviceAdmit in
+/// packages/control-plane/src/push.ts.
+public struct DeviceAdmitRequest: Codable, Equatable, Sendable {
+    public struct Admit: Codable, Equatable, Sendable {
+        public let username: String
+        public let newDevicePubHex: String   // lowercased hex, 32 bytes
+        public let issuedAt: Int64
+        public init(username: String, newDevicePubHex: String, issuedAt: Int64) {
+            self.username = username
+            self.newDevicePubHex = newDevicePubHex
+            self.issuedAt = issuedAt
+        }
+    }
+    public let admit: Admit
+    public let admitSig: String                    // hex; Ed25519 by account IRK
+    public let request: PushTokenRegisterRequest.Inner
+    public let signature: String                   // hex; carried, not verified
+    public init(
+        admit: Admit,
+        admitSig: String,
+        request: PushTokenRegisterRequest.Inner,
+        signature: String
+    ) {
+        self.admit = admit
+        self.admitSig = admitSig
+        self.request = request
+        self.signature = signature
+    }
+}
+
+/// Phase 3b — devices/admit success body. `quarantineUntil` is the
+/// wall-clock ms (now + 14d) before which the freshly-admitted device
+/// can't revoke others / reach `ukey.*`; the incoming UI renders the
+/// countdown from it.
+public struct DeviceAdmitResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let tokenId: String
+    public let quarantineUntil: Int64?
+    public init(ok: Bool, tokenId: String, quarantineUntil: Int64?) {
+        self.ok = ok
+        self.tokenId = tokenId
+        self.quarantineUntil = quarantineUntil
+    }
+}
+
 /// POST /api/auth-code/<serial>/revoke — IRK-signed revocation. The
 /// phone fires this when the user taps Cancel order on a pending pod.
 /// Mirrors the canonical-bytes tag `flagship/auth-code-revoke/v1` +
@@ -746,7 +836,7 @@ public struct TestAccountMeta: Codable, Equatable, Sendable {
 /// shape produced by `demoServerBlockFromRow` in
 /// packages/control-plane/src/demoUsers.ts. See
 /// docs/sample-users.md §10.9.
-public struct DemoServerBlock: Codable, Equatable, Sendable {
+public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
     /// e.g. `home.demo-alice.flagship.services`. The single device the
     /// new demo-mode renders.
     public let fqdn: String
@@ -778,7 +868,7 @@ public struct DemoServerBlock: Codable, Equatable, Sendable {
         }
     }
 
-    public enum Lifecycle: String, Sendable, Equatable {
+    public enum Lifecycle: String, Sendable, Equatable, Hashable {
         case none, provisioning, up
     }
 }
@@ -883,6 +973,110 @@ public enum DeviceScope: String, Codable, Equatable, Sendable, CaseIterable {
     /// Used by the array decoder via a wrapper.
     public init?(wire: String) {
         self.init(rawValue: wire)
+    }
+}
+
+/// Login/join preflight result. Mirrors the Worker's `AccountResolution`
+/// in packages/control-plane/src/accountResolve.ts EXACTLY (the
+/// iOS-Mock-matches-Worker-wire invariant). Returned by
+/// `GET /api/account/resolve/<username>`, which is **200 always** —
+/// every "absent" is a field, never an HTTP status. The client login
+/// state machine branches on `kind`:
+///   - "demo"    → skip all credentials; attach a new device + open the
+///                 sandbox via DemoFixtures.activate(demoServer:).
+///   - "unknown" → render "No Flagship account by that name" (not a 404).
+///   - "single" / "multi" → real-account recovery branches (Phase 3).
+public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
+    /// The recovery sub-block: whether a cloud-stored recovery envelope
+    /// exists for the account, whether fetching it is gated behind a
+    /// passphrase/fetch-token, and (when present) the credentialId.
+    public struct Recovery: Codable, Equatable, Hashable, Sendable {
+        public let present: Bool
+        public let hasFetchGate: Bool
+        public let credentialId: String?
+        public init(present: Bool, hasFetchGate: Bool, credentialId: String? = nil) {
+            self.present = present
+            self.hasFetchGate = hasFetchGate
+            self.credentialId = credentialId
+        }
+    }
+
+    /// Forward-compatible decode of the account `kind`. An unknown
+    /// future value parses to `.unknown` so an older client renders the
+    /// "no account" state instead of crashing on a newer Worker.
+    public enum Kind: String, Codable, Equatable, Hashable, Sendable {
+        case demo
+        case single
+        case multi
+        case unknown
+
+        public init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Kind(rawValue: raw) ?? .unknown
+        }
+    }
+
+    /// Server-derived recovery-speed hint so every client renders
+    /// identical copy without re-deriving the account-type matrix.
+    /// Unknown future values parse to `.none`.
+    public enum GraceModel: String, Codable, Equatable, Hashable, Sendable {
+        case instant
+        case sevenDay = "7d"
+        case twentyFourHourTotp = "24h-totp"
+        case none
+
+        public init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = GraceModel(rawValue: raw) ?? .none
+        }
+    }
+
+    /// Normalized handle the lookup ran against.
+    public let username: String
+    public let exists: Bool
+    public let kind: Kind
+    public let recovery: Recovery
+    public let totpEnrolled: Bool
+    public let trustedDeviceCount: Int
+    /// Present only for demo accounts. Same shape /api/users/check
+    /// returns today.
+    public let demoServer: DemoServerBlock?
+    public let graceModel: GraceModel
+
+    public init(
+        username: String,
+        exists: Bool,
+        kind: Kind,
+        recovery: Recovery,
+        totpEnrolled: Bool,
+        trustedDeviceCount: Int,
+        demoServer: DemoServerBlock? = nil,
+        graceModel: GraceModel
+    ) {
+        self.username = username
+        self.exists = exists
+        self.kind = kind
+        self.recovery = recovery
+        self.totpEnrolled = totpEnrolled
+        self.trustedDeviceCount = trustedDeviceCount
+        self.demoServer = demoServer
+        self.graceModel = graceModel
+    }
+
+    /// The zeroed `kind:"unknown"` result the Worker returns for a
+    /// non-existent (or label-invalid) name. Surfaced as a state, never
+    /// an error. Matches the Worker's `unknown(username)` helper.
+    public static func unknown(_ username: String) -> AccountResolution {
+        AccountResolution(
+            username: username,
+            exists: false,
+            kind: .unknown,
+            recovery: Recovery(present: false, hasFetchGate: false),
+            totpEnrolled: false,
+            trustedDeviceCount: 0,
+            demoServer: nil,
+            graceModel: .none
+        )
     }
 }
 
@@ -1066,6 +1260,58 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         )
     }
 
+    /// Login/join preflight. Mirrors the Worker's
+    /// `handleAccountResolve` decision order:
+    ///   1. demo_users (here: `demoServers`) checked FIRST — a hit is
+    ///      `kind:"demo"` + the demoServer block + `graceModel:"instant"`.
+    ///      Demo crypto is a no-op so no other field matters.
+    ///   2. otherwise project the claimed-username row: `kind` is
+    ///      "multi" iff `accountTypeByUser[u] == "multi"`, else "single";
+    ///      recovery presence from `cloudRecoveryByUser`; totpEnrolled
+    ///      from `totpEnrolledAtByUser`; trustedDeviceCount from
+    ///      `devicesByUser`; graceModel derived per the matrix.
+    ///   3. a name with no claim (and no demo row) resolves to
+    ///      `kind:"unknown"` with zeroed factors — NEVER throws / 404s.
+    /// The Live client GETs the endpoint; this keeps the two wire-shapes
+    /// byte-aligned.
+    public func resolveAccount(username: String) async throws -> AccountResolution {
+        try await tick()
+        let u = username.lowercased()
+        // 1. Demo first. The username IS the capability for a demo
+        // account; any seeded demo username opens with crypto skipped.
+        if let demo = demoServers[u] {
+            return AccountResolution(
+                username: u,
+                exists: true,
+                kind: .demo,
+                recovery: .init(present: false, hasFetchGate: false),
+                totpEnrolled: false,
+                trustedDeviceCount: 0,
+                demoServer: demo,
+                graceModel: .instant
+            )
+        }
+        // 2. Real claimed account.
+        guard claimedUsernames[u] != nil else {
+            // 3. No account by that name — a STATE, not an error.
+            return .unknown(u)
+        }
+        let kind: AccountResolution.Kind =
+            (accountTypeByUser[u] == "multi") ? .multi : .single
+        let hasRecovery = cloudRecoveryByUser[u] ?? false
+        let deviceCount = (devicesByUser[u] ?? []).count
+        return AccountResolution(
+            username: u,
+            exists: true,
+            kind: kind,
+            recovery: .init(present: hasRecovery, hasFetchGate: false),
+            totpEnrolled: totpEnrolledAtByUser[u] != nil,
+            trustedDeviceCount: deviceCount,
+            demoServer: nil,
+            graceModel: kind == .multi ? .twentyFourHourTotp : .sevenDay
+        )
+    }
+
     public func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse {
         try await tick()
         recoveryStore[req.credentialId] = RecoveryEnvelope(
@@ -1095,6 +1341,39 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // (or never-registered) token shouldn't fail the caller's
         // sign-out flow.
         registeredPushTokens.removeValue(forKey: tokenId)
+    }
+
+    /// Phase 3b — the 14-day quarantine the Worker stamps on a vouched
+    /// admit (matches QUARANTINE_MS in packages/control-plane/src/push.ts).
+    public static let quarantineMs: Int64 = 14 * 24 * 60 * 60 * 1000
+
+    /// Phase 3b — admitted devices, keyed by account → list of admit
+    /// bodies, so tests can assert the incoming device's pubkey + the
+    /// registration landed. The Mock applies the Worker's username-match
+    /// gates; the admit-signature verify is exercised directly against
+    /// the `Flagship.DeviceAdmit` crypto in the test target (FlagshipAPI
+    /// has no dependency on the Flagship crypto module).
+    public private(set) var admittedDevices: [String: [DeviceAdmitRequest]] = [:]
+
+    /// Injectable clock for the quarantine deadline (tests can pin it).
+    public var nowProvider: () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+
+    public func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse {
+        try await tick()
+        let acct = account.lowercased()
+        // Worker gate: admit username must match the path + the register
+        // body's username.
+        if body.admit.username.lowercased() != acct {
+            throw ScreensClientError.http(status: 403, message: "admit username / url mismatch")
+        }
+        if body.request.username.lowercased() != body.admit.username.lowercased() {
+            throw ScreensClientError.http(status: 403, message: "register username does not match admit")
+        }
+        admittedDevices[acct, default: []].append(body)
+        let id = String(format: "tok_%06d", nextPushTokenId); nextPushTokenId += 1
+        registeredPushTokens[id] = body.request
+        let until = nowProvider() + Self.quarantineMs
+        return DeviceAdmitResponse(ok: true, tokenId: id, quarantineUntil: until)
     }
 
     /// Scripted install-event log per serial. Tests configure
@@ -1158,6 +1437,21 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> RePairInitiateResponse {
         try await tick()
         lastRePairInitiate = (username, body, ifMatch)
+        // v1.2 — mirror the Worker's multi-device gate: a re-pair on a
+        // `multi` account is rejected (401) unless it carries a
+        // structurally-valid totpProof (non-empty code + an allowed
+        // method). Single-device accounts don't require one. Lets the
+        // login state machine + its tests exercise the second-factor
+        // requirement against the Mock.
+        if accountTypeByUser[username.lowercased()] == "multi" {
+            let proof = body.totpProof
+            let methodOk = proof?.method == "totp" || proof?.method == "recovery"
+            let codeOk = !(proof?.code.isEmpty ?? true)
+            guard let proof, methodOk, codeOk else {
+                throw ScreensClientError.http(status: 401, message: "totpProof required for multi-device re-pair")
+            }
+            _ = proof
+        }
         switch rePairBehavior {
         case .staleEtag(let etag):
             throw ScreensClientError.http(status: 412, message: "{\"error\":\"stale\",\"currentEtag\":\"\(etag)\"}")
@@ -1626,6 +1920,23 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return try await postJsonReturning("/api/users/check", body: body)
     }
 
+    public func resolveAccount(username: String) async throws -> AccountResolution {
+        // GET /api/account/resolve/<username> — 200 always. We still
+        // surface a non-2xx as an error (a 5xx is a real outage, not a
+        // login-state node) but the Worker never 404s a missing account:
+        // that comes back as kind:"unknown" in the body.
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/account/resolve/\(encoded)"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(AccountResolution.self, from: data)
+    }
+
     public func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse {
         let body = try JSONEncoder().encode(req)
         return try await postJsonReturning("/api/recovery/register", body: body)
@@ -1659,6 +1970,12 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         if status == 200 || status == 204 || status == 404 { return }
         let text = String(data: data, encoding: .utf8) ?? ""
         throw ScreensClientError.http(status: status, message: text)
+    }
+
+    public func admitDevice(account: String, body: DeviceAdmitRequest) async throws -> DeviceAdmitResponse {
+        let encoded = account.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? account
+        let payload = try JSONEncoder().encode(body)
+        return try await postJsonReturning("/api/users/\(encoded)/devices/admit", body: payload)
     }
 
     public func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse {

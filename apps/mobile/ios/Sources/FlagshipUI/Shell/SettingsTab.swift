@@ -7,6 +7,7 @@ import FlagshipAPI
 public struct SettingsTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.pairingRelayClient) private var pairingRelay
     @Environment(\.pushRegistrar) private var pushRegistrar
     @Environment(AppState.self) private var app
     @Environment(DeveloperSettings.self) private var dev
@@ -33,15 +34,27 @@ public struct SettingsTab: View {
         .task(id: linker.pending) { consume(linker.pending) }
     }
 
-    /// Consume a DeepLink that targets the Settings tab. Today we
-    /// only handle `.recoverySetup` (Home → "Set it up" nudge); the
-    /// other links are handled by the tabs that actually own them.
+    /// Consume a DeepLink that targets the Settings tab. Handles
+    /// `.recoverySetup` (Home → "Set it up" nudge) and Phase 3b
+    /// `.joinAccount` (a scanned/native-camera pairing link arriving
+    /// while the app is already paired — routes into the incoming
+    /// add-profile join flow). Other links are handled by their owning
+    /// tabs.
     private func consume(_ link: DeepLink?) {
         guard let link else { return }
         switch link {
         case .recoverySetup:
             if path.last != .recovery {
                 path.append(.recovery)
+            }
+            _ = linker.consume()
+        case .joinAccount(let sid, let pk):
+            // Reconstruct the canonical /join link the JoinAccountViewModel
+            // parses (a deeplink can arrive as either the universal-link
+            // or custom-scheme form; rebuild the canonical https form).
+            let joinUrl = "https://\(PairingQr.joinHost)\(PairingQr.joinPath)?sid=\(sid)&pk=\(pk)"
+            if path.last != .joinAccount(joinUrl: joinUrl) {
+                path.append(.joinAccount(joinUrl: joinUrl))
             }
             _ = linker.consume()
         default:
@@ -61,6 +74,8 @@ public struct SettingsTab: View {
                     trustedDevices: vm.trustedDevices,
                     showDeveloper: dev.unlocked,
                     onAddControlDevice: { path.append(.addControlDevice) },
+                    onAddDevice: { path.append(.addDevice) },
+                    onScanPairingCode: { path.append(.scanPairingCode) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
                     onDisconnectTrustedDevice: { device in await vm.disconnect(device) },
                     onSignOut: {
@@ -196,6 +211,45 @@ public struct SettingsTab: View {
             AboutStub()
         case .addControlDevice:
             AddControlDeviceScreen()
+        case .addDevice:
+            // Phase 3b — admin side. Construct the VM with the active
+            // account; the relay seam comes from the environment.
+            AddDeviceScreen(
+                vm: AddDeviceViewModel(
+                    account: app.currentUser ?? "",
+                    relay: pairingRelay
+                )
+            )
+        case .scanPairingCode:
+            // Phase 3b — incoming side via the in-app scanner (no
+            // pre-filled URL → the screen shows the camera).
+            JoinAccountScreen(
+                vm: JoinAccountViewModel(relay: pairingRelay, server: server),
+                onJoined: { profile in
+                    app.addProfile(
+                        Profile(
+                            cloudName: profile.cloudName,
+                            deviceLabel: profile.deviceLabel
+                        ),
+                        setActive: true
+                    )
+                }
+            )
+        case .joinAccount(let joinUrl):
+            // Phase 3b — incoming side via a deeplink/universal link.
+            JoinAccountScreen(
+                vm: JoinAccountViewModel(relay: pairingRelay, server: server),
+                initialJoinUrl: joinUrl,
+                onJoined: { profile in
+                    app.addProfile(
+                        Profile(
+                            cloudName: profile.cloudName,
+                            deviceLabel: profile.deviceLabel
+                        ),
+                        setActive: true
+                    )
+                }
+            )
         case .developer:
             DeveloperScreen(dev: dev, onWipeIdentity: {
                 Task { @MainActor in

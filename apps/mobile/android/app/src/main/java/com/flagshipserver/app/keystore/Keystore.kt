@@ -48,8 +48,33 @@ object Keystore {
      *  re-pair grace window; cleared on completion or abort. */
     private const val KEY_IRK_PENDING_VERSION = "irk.pendingVersion"
 
+    // ---- Multi-profile keying (W3) -------------------------------------
+    //
+    // The phone can hold multiple cloud PROFILES (personal / family /
+    // work). Each profile must own its OWN device key — a second
+    // profile's UMK must not clobber the first. We achieve that by
+    // namespacing every per-profile prefs slot by a *profileId* (the
+    // profile's `cloudName`, lowercased).
+    //
+    // Backward-compat is load-bearing: the DEFAULT (sentinel) profileId
+    // reuses the EXISTING un-suffixed key names verbatim, so with no
+    // setActiveProfile() call the on-disk layout + every method's
+    // behavior are byte-identical to the pre-multi-profile build. Only
+    // non-default profileIds get a ".<profileId>" suffix.
+    //
+    // The active-profile pointer is metadata, NOT a per-profile secret
+    // slot — it lives under its own key and is deliberately untouched by
+    // wipe() (which clears only the active profile's secrets). A caller
+    // that wants a full reset uses wipeAllProfiles().
+
+    /** Pointer to the active profileId. Absent ⇒ the default/legacy
+     *  profile. Stored as plain text (it's the lowercased cloudName, not
+     *  a secret). */
+    private const val KEY_ACTIVE_PROFILE = "active.profile"
+
     private val rng = SecureRandom()
     @Volatile private var prefs: SharedPreferences? = null
+    @Volatile private var activeProfileId: String? = null
 
     /** Wire up the encrypted-prefs file. Idempotent. App init calls
      *  this from MainActivity.onCreate. */
@@ -63,15 +88,64 @@ object Keystore {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
+        // Resume the last-active profile across process death.
+        activeProfileId = prefs?.getString(KEY_ACTIVE_PROFILE, null)
     }
 
     /** Test-only: attach to a plain SharedPreferences. */
     fun attachForTest(testPrefs: SharedPreferences) {
         prefs = testPrefs
+        // Hydrate the in-memory active-profile pointer from the test
+        // prefs so a re-attach within the same JVM resumes the same
+        // profile (mirrors attach()).
+        activeProfileId = testPrefs.getString(KEY_ACTIVE_PROFILE, null)
     }
 
     private fun requirePrefs(): SharedPreferences =
         prefs ?: error("Keystore not attached — call Keystore.attach(context) from app init.")
+
+    // ---- Profile selection --------------------------------------------
+
+    /**
+     * Normalize a caller-supplied profile id (a cloudName) into the
+     * canonical profileId. Null/blank ⇒ null (the default/legacy
+     * profile); otherwise lowercased + trimmed.
+     */
+    private fun normalizeProfileId(id: String?): String? =
+        id?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
+    /**
+     * W3 — select which profile the per-profile methods operate on.
+     * Pass the profile's `cloudName`; null or empty selects the
+     * DEFAULT (legacy) profile, whose slots are the historical
+     * un-suffixed keys. Persisted so the selection survives process
+     * death; ALL subsequent installUmk / deriveIRK / wipe / etc. calls
+     * key off the active profile until the next setActiveProfile().
+     */
+    fun setActiveProfile(id: String?) {
+        val normalized = normalizeProfileId(id)
+        activeProfileId = normalized
+        val p = prefs ?: return
+        val editor = p.edit()
+        if (normalized == null) editor.remove(KEY_ACTIVE_PROFILE)
+        else editor.putString(KEY_ACTIVE_PROFILE, normalized)
+        editor.apply()
+    }
+
+    /** The active profileId, or null for the default/legacy profile. */
+    fun activeProfile(): String? = activeProfileId
+
+    /**
+     * Suffix a base prefs key for the active profile. The default
+     * profile (activeProfileId == null) returns the base key UNCHANGED
+     * — this is what preserves byte-identical on-disk layout + behavior
+     * for legacy single-profile installs. Non-default profiles get a
+     * ".<profileId>" suffix so their slots never collide.
+     */
+    private fun pkey(base: String): String {
+        val pid = activeProfileId ?: return base
+        return "$base.$pid"
+    }
 
     /** Generate the UMK in AndroidKeyStore (with StrongBox if available).
      *  This is the symmetric "anchor" key; in production it would wrap
@@ -92,14 +166,16 @@ object Keystore {
         return gen.generateKey()
     }
 
-    /** Return a 32-byte UMK seed, creating it on first call. */
+    /** Return a 32-byte UMK seed for the active profile, creating it on
+     *  first call. */
     fun loadOrCreateUmkSeed(): ByteArray {
         val p = requirePrefs()
-        p.getString(KEY_UMK_SEED, null)?.let { hex ->
+        val umkKey = pkey(KEY_UMK_SEED)
+        p.getString(umkKey, null)?.let { hex ->
             HexUtil.decode(hex)?.let { return it }
         }
         val seed = ByteArray(32).also(rng::nextBytes)
-        p.edit().putString(KEY_UMK_SEED, HexUtil.encode(seed)).apply()
+        p.edit().putString(umkKey, HexUtil.encode(seed)).apply()
         return seed
     }
 
@@ -118,19 +194,20 @@ object Keystore {
         require(seed.size == 32) { "UMK seed must be 32 bytes" }
         val p = requirePrefs()
         val editor = p.edit()
-        editor.putString(KEY_UMK_SEED, HexUtil.encode(seed))
+        editor.putString(pkey(KEY_UMK_SEED), HexUtil.encode(seed))
         // Reset version slots — fresh UMK ⇒ fresh v1 derivation.
-        editor.putString(KEY_IRK_VERSION, "1")
-        editor.remove(KEY_IRK_PENDING_VERSION)
-        // Sweep per-version IRK seed caches; they're derived from
-        // the OLD UMK and would otherwise survive into the new
-        // identity.
+        editor.putString(pkey(KEY_IRK_VERSION), "1")
+        editor.remove(pkey(KEY_IRK_PENDING_VERSION))
+        // Sweep the ACTIVE profile's per-version IRK seed caches; they're
+        // derived from the OLD UMK and would otherwise survive into the
+        // new identity. Other profiles' caches are untouched.
+        val seedCachePrefix = "${pkey(KEY_IRK_SEED)}.v"
         for (key in p.all.keys) {
-            if (key.startsWith("$KEY_IRK_SEED.v")) editor.remove(key)
+            if (key.startsWith(seedCachePrefix)) editor.remove(key)
         }
         // Also drop the legacy single-slot IRK seed if a pre-versioned
         // install left it lying around — same correctness logic.
-        editor.remove(KEY_IRK_SEED)
+        editor.remove(pkey(KEY_IRK_SEED))
         editor.apply()
     }
 
@@ -158,7 +235,7 @@ object Keystore {
             subtitle = reason,
         )
         val p = requirePrefs()
-        val cacheKey = "$KEY_IRK_SEED.v$version"
+        val cacheKey = "${pkey(KEY_IRK_SEED)}.v$version"
         val seedHex = p.getString(cacheKey, null)
         val seed = if (seedHex != null) {
             HexUtil.decode(seedHex) ?: error("corrupt IRK seed (v$version)")
@@ -180,27 +257,27 @@ object Keystore {
      *  .com. Defaults to 1 if the slot is absent (covers legacy
      *  installs). */
     fun currentIrkVersion(): Int =
-        requirePrefs().getString(KEY_IRK_VERSION, null)?.toIntOrNull()?.takeIf { it >= 1 } ?: 1
+        requirePrefs().getString(pkey(KEY_IRK_VERSION), null)?.toIntOrNull()?.takeIf { it >= 1 } ?: 1
 
     /** Persist a new IRK version. Caller is expected to have just
      *  successfully completed a server-side IRK swap via either
      *  `/api/users/:u/re-pair/complete` or `/api/users/:u/wipe-restart`. */
     fun setCurrentIrkVersion(version: Int) {
         require(version >= 1)
-        requirePrefs().edit().putString(KEY_IRK_VERSION, version.toString()).apply()
+        requirePrefs().edit().putString(pkey(KEY_IRK_VERSION), version.toString()).apply()
     }
 
     /** Optional pending-rotation marker. Presence = a re-pair was
      *  initiated; absent = no rotation in flight. */
     fun pendingIrkRotationVersion(): Int? =
-        requirePrefs().getString(KEY_IRK_PENDING_VERSION, null)?.toIntOrNull()?.takeIf { it >= 1 }
+        requirePrefs().getString(pkey(KEY_IRK_PENDING_VERSION), null)?.toIntOrNull()?.takeIf { it >= 1 }
 
     fun setPendingIrkRotationVersion(version: Int?) {
         val p = requirePrefs().edit()
-        if (version == null) p.remove(KEY_IRK_PENDING_VERSION)
+        if (version == null) p.remove(pkey(KEY_IRK_PENDING_VERSION))
         else {
             require(version >= 1)
-            p.putString(KEY_IRK_PENDING_VERSION, version.toString())
+            p.putString(pkey(KEY_IRK_PENDING_VERSION), version.toString())
         }
         p.apply()
     }
@@ -208,8 +285,9 @@ object Keystore {
     /** Public-key half of the IRK, hex-encoded. */
     suspend fun irkPubHex(): String {
         val p = requirePrefs()
-        val seedHex = p.getString(KEY_IRK_SEED, null) ?: run {
-            deriveIRK("init"); p.getString(KEY_IRK_SEED, null)!!
+        val irkKey = pkey(KEY_IRK_SEED)
+        val seedHex = p.getString(irkKey, null) ?: run {
+            deriveIRK("init"); p.getString(irkKey, null)!!
         }
         val seed = HexUtil.decode(seedHex)!!
         val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed)
@@ -222,7 +300,7 @@ object Keystore {
      *  have just called deriveIRK(version) so the cache slot is
      *  populated; throws if the slot is missing. */
     fun requireIrkSeedForVersion(version: Int): ByteArray {
-        val cacheKey = "$KEY_IRK_SEED.v$version"
+        val cacheKey = "${pkey(KEY_IRK_SEED)}.v$version"
         val hex = requirePrefs().getString(cacheKey, null)
             ?: error("no IRK seed cached for v$version — call deriveIRK first")
         return HexUtil.decode(hex) ?: error("corrupt IRK seed (v$version)")
@@ -234,10 +312,11 @@ object Keystore {
      *  receive encrypted push payloads. */
     fun loadOrCreatePushX25519(): X25519KeyPair {
         val p = requirePrefs()
-        val privHex = p.getString(KEY_PUSH_X25519_PRIV, null)
+        val pushKey = pkey(KEY_PUSH_X25519_PRIV)
+        val privHex = p.getString(pushKey, null)
         val priv = if (privHex != null) HexUtil.decode(privHex)!! else {
             val k = X25519.generatePrivateKey()
-            p.edit().putString(KEY_PUSH_X25519_PRIV, HexUtil.encode(k)).apply()
+            p.edit().putString(pushKey, HexUtil.encode(k)).apply()
             k
         }
         val pub = X25519.publicFromPrivate(priv)
@@ -245,11 +324,12 @@ object Keystore {
     }
 
     /** Last-registered push tokenId; null if no current registration. */
-    fun pushTokenId(): String? = requirePrefs().getString(KEY_PUSH_TOKEN_ID, null)
+    fun pushTokenId(): String? = requirePrefs().getString(pkey(KEY_PUSH_TOKEN_ID), null)
 
     fun setPushTokenId(id: String?) {
         val p = requirePrefs().edit()
-        if (id == null) p.remove(KEY_PUSH_TOKEN_ID) else p.putString(KEY_PUSH_TOKEN_ID, id)
+        val key = pkey(KEY_PUSH_TOKEN_ID)
+        if (id == null) p.remove(key) else p.putString(key, id)
         p.apply()
     }
 
@@ -268,18 +348,50 @@ object Keystore {
     fun wipe() {
         val p = requirePrefs()
         val editor = p.edit()
-        editor.remove(KEY_UMK_SEED)
-        editor.remove(KEY_IRK_SEED)
-        editor.remove(KEY_PUSH_X25519_PRIV)
-        editor.remove(KEY_PUSH_TOKEN_ID)
-        editor.remove(KEY_IRK_VERSION)
-        editor.remove(KEY_IRK_PENDING_VERSION)
-        // Per-version IRK caches (C7) — sweep every "irk.seed.vN"
-        // entry the rotation primitive might have written.
+        editor.remove(pkey(KEY_UMK_SEED))
+        editor.remove(pkey(KEY_IRK_SEED))
+        editor.remove(pkey(KEY_PUSH_X25519_PRIV))
+        editor.remove(pkey(KEY_PUSH_TOKEN_ID))
+        editor.remove(pkey(KEY_IRK_VERSION))
+        editor.remove(pkey(KEY_IRK_PENDING_VERSION))
+        // Per-version IRK caches (C7) — sweep every "<irk.seed key>.vN"
+        // entry the rotation primitive might have written FOR THE ACTIVE
+        // PROFILE. Other profiles' caches survive.
+        val seedCachePrefix = "${pkey(KEY_IRK_SEED)}.v"
         for (key in p.all.keys) {
-            if (key.startsWith("$KEY_IRK_SEED.v")) editor.remove(key)
+            if (key.startsWith(seedCachePrefix)) editor.remove(key)
         }
         editor.apply()
+    }
+
+    /**
+     * W3 / E2-E5 — full reset across EVERY profile. Drops every
+     * per-profile secret slot (UMK / IRK / push / version) for every
+     * profileId, plus the legacy un-suffixed slots and the active-
+     * profile pointer. Resets the in-memory active profile to default.
+     *
+     * Used where the intent is "leave the app in a fresh-install crypto
+     * state regardless of how many clouds were on this phone" — e.g.
+     * a full account-removal / factory-reset path. The single-profile
+     * "remove THIS device from THIS account" path uses wipe() instead,
+     * which leaves other profiles intact.
+     */
+    fun wipeAllProfiles() {
+        val p = requirePrefs()
+        val editor = p.edit()
+        // Every per-profile slot is one of these base names, either
+        // un-suffixed (default profile) or ".<profileId>"-suffixed, plus
+        // the ".vN" per-version IRK seed caches. Drop them all.
+        val bases = listOf(
+            KEY_UMK_SEED, KEY_IRK_SEED, KEY_PUSH_X25519_PRIV,
+            KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION,
+        )
+        for (key in p.all.keys) {
+            if (key == KEY_ACTIVE_PROFILE) { editor.remove(key); continue }
+            if (bases.any { key == it || key.startsWith("$it.") }) editor.remove(key)
+        }
+        editor.apply()
+        activeProfileId = null
     }
 
     // ---- HKDF-SHA256 ----------------------------------------------------

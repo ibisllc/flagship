@@ -7,10 +7,29 @@
 //
 // IMPORTANT: this is software-only key storage. The Secure Enclave / StrongBox
 // path is reserved for the native iOS / Android apps.
+//
+// Multi-profile keying (docs/login-and-account-redesign.md — "Multi-profile
+// integration"). One browser profile can hold multiple clouds (personal +
+// family + work — see lib/profiles.js). Each cloud has its OWN device key, so
+// the wrapped UMK is stored under a per-profile IndexedDB record key derived
+// from the profile's `cloudName` (lowercased). A second profile's UMK must
+// never clobber the first.
+//
+// Backward-compat: a sentinel DEFAULT profile reuses the EXISTING `wrappedUmk`
+// record so pre-existing installs (and recovery.js export/import, which reads
+// that exact key) keep working unchanged. Non-default profiles get keyed
+// records (`wrappedUmk.<profileId>`). The active profile is sourced from
+// lib/profiles.js (`activeCloudName`) — see {@link activeProfileId} — with an
+// in-process override ({@link setActiveKeystoreProfile}) for callers that want
+// to scope an op without touching localStorage.
 
 const DB_NAME = "flagship-webapp";
 const DB_STORE = "keystore";
 const RECORD_KEY = "wrappedUmk";
+
+/** Sentinel profileId that maps to the legacy {@link RECORD_KEY} record so
+ *  pre-multi-profile installs read/write the same row they always did. */
+export const DEFAULT_PROFILE_ID = "__default__";
 
 // PBKDF2 parameters. iters is intentionally high — this is a one-off
 // per session and we want to make a brute-force on the IndexedDB blob expensive.
@@ -59,6 +78,83 @@ async function dbDel(key) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+/* ---------- per-profile keying ---------- */
+
+// In-process override for the active profile. When non-null it wins over the
+// localStorage-backed active profile (lib/profiles.js). Lets callers scope a
+// keystore op (e.g. "store this NEW profile's UMK") without first having to
+// mutate the persisted active pointer — and keeps the resolution testable in
+// environments without localStorage.
+let _activeProfileOverride = null;
+
+/** Normalize a cloudName into a profileId. Empty / nullish → the DEFAULT
+ *  sentinel (legacy record). Otherwise lowercased (cloudName is the
+ *  identity handle; case is not significant for the record key).
+ *  @param {string|null|undefined} cloudName
+ *  @returns {string}
+ */
+export function profileIdFromCloudName(cloudName) {
+  if (typeof cloudName !== "string") return DEFAULT_PROFILE_ID;
+  const v = cloudName.trim().toLowerCase();
+  return v ? v : DEFAULT_PROFILE_ID;
+}
+
+/** Set (or clear, with null) the in-process active keystore profile. This is
+ *  the explicit handle the ADD-profile flows use to point subsequent
+ *  wrapped-UMK writes at the NEW profile before it's been made the persisted
+ *  active one — so adding profile B never clobbers profile A's record.
+ *  @param {string|null|undefined} cloudName  pass null to clear the override
+ *  @returns {string}  the resolved profileId now in effect
+ */
+export function setActiveKeystoreProfile(cloudName) {
+  _activeProfileOverride =
+    cloudName == null ? null : profileIdFromCloudName(cloudName);
+  return activeProfileId();
+}
+
+/** Resolve the active profileId: the in-process override if set, else the
+ *  persisted active cloud from lib/profiles.js, else the DEFAULT sentinel.
+ *  Reading profiles.js is best-effort — any failure (no localStorage, parse
+ *  error) degrades to DEFAULT so the legacy single-profile path always works.
+ *  @returns {string}
+ */
+export function activeProfileId() {
+  if (_activeProfileOverride != null) return _activeProfileOverride;
+  try {
+    const active = readActiveCloudName();
+    return active ? profileIdFromCloudName(active) : DEFAULT_PROFILE_ID;
+  } catch {
+    return DEFAULT_PROFILE_ID;
+  }
+}
+
+/** Read the persisted active cloudName straight from lib/profiles.js storage.
+ *  Synchronous + dependency-light (the keystore can't await an import on every
+ *  read) — we parse the same `flagship.profiles.v1` localStorage blob
+ *  profiles.js owns. Returns null when there's no active profile / no storage.
+ *  @returns {string|null}
+ */
+function readActiveCloudName() {
+  const storage = globalThis.localStorage;
+  if (!storage) return null;
+  const raw = storage.getItem("flagship.profiles.v1");
+  if (!raw) return null;
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object") return null;
+  return typeof parsed.activeCloudName === "string" ? parsed.activeCloudName : null;
+}
+
+/** Map a profileId to its IndexedDB record key. DEFAULT reuses the legacy
+ *  `wrappedUmk` row (backward-compat); every other profile gets a keyed row.
+ *  @param {string} [profileId]  defaults to the active profile
+ *  @returns {string}
+ */
+export function wrappedUmkRecordKey(profileId = activeProfileId()) {
+  return profileId === DEFAULT_PROFILE_ID
+    ? RECORD_KEY
+    : `${RECORD_KEY}.${profileId}`;
 }
 
 /* ---------- bytes / hex helpers ---------- */
@@ -152,8 +248,18 @@ function pkcs8FromSeed(seed) {
   return out;
 }
 
-export async function deriveIrkFromSeed(umkSeed) {
-  const seed = await hkdf32(umkSeed, "flagship.irk.v1");
+/** HKDF info for the IRK at a given version. Version 1 is the canonical
+ *  `flagship.irk.v1` the rest of Flagship registers; higher versions are
+ *  the rotation slots a re-pair/takeover moves to (a fresh DEVICE key
+ *  derived from the SAME user key — see ReplaceDeviceViewModel + the
+ *  versioned `flagship/irk/v<N>` keystore on mobile). The webapp keeps
+ *  the dotted `flagship.irk.v<N>` shape it already ships for v1. */
+function irkInfo(version) {
+  return `flagship.irk.v${version}`;
+}
+
+async function irkFromInfoSeed(umkSeed, info) {
+  const seed = await hkdf32(umkSeed, info);
   const pkcs8 = pkcs8FromSeed(seed);
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
@@ -167,6 +273,21 @@ export async function deriveIrkFromSeed(umkSeed) {
   // generate a JWK-exportable form.
   const jwkPub = await jwkPubFromSeed(seed);
   return { privateKey, publicKey: jwkPub };
+}
+
+export async function deriveIrkFromSeed(umkSeed) {
+  return irkFromInfoSeed(umkSeed, irkInfo(1));
+}
+
+/** Derive the IRK at a specific rotation version. v1 == {@link
+ *  deriveIrkFromSeed} (the registered key). A takeover rotates to the
+ *  next version so the NEW device key signs the re-pair while the OLD
+ *  (v1, currently-registered) key is what the swap displaces. */
+export async function deriveIrkVersioned(umkSeed, version) {
+  if (!Number.isInteger(version) || version < 1) {
+    throw new Error("irk version must be a positive integer");
+  }
+  return irkFromInfoSeed(umkSeed, irkInfo(version));
 }
 
 export async function deriveBakFromSeed(umkSeed, serverId) {
@@ -224,6 +345,43 @@ export async function signWithIrk(umkSeed, canonicalBytes) {
   return sig;
 }
 
+/** Sign canonical-bytes with a SPECIFIC IRK rotation version. The
+ *  re-pair-initiate envelope must be signed by the NEW IRK (the one the
+ *  swap installs), so the takeover flow signs with the rotated version. */
+export async function signWithIrkVersioned(umkSeed, version, canonicalBytes) {
+  const irk = await deriveIrkVersioned(umkSeed, version);
+  return new Uint8Array(
+    await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, canonicalBytes),
+  );
+}
+
+/**
+ * Verify an Ed25519 signature over `canonicalBytes` under a raw 32-byte
+ * public key. Used by the cross-device pairing incoming side to check a
+ * `DeviceAdmit` vouch under the account's registered IRK pub (the admin
+ * holds the matching private key). Returns false (never throws) on a bad
+ * key / signature so callers can branch cleanly.
+ *
+ * @param {Uint8Array} pub             raw 32-byte Ed25519 public key
+ * @param {Uint8Array} signature       64-byte Ed25519 signature
+ * @param {Uint8Array} canonicalBytes  the signed pre-image
+ * @returns {Promise<boolean>}
+ */
+export async function verifyWithEd25519Pub(pub, signature, canonicalBytes) {
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      pub,
+      { name: "Ed25519" },
+      false,
+      ["verify"],
+    );
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, signature, canonicalBytes);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Generate an ephemeral X25519/ECDH pubkey the same way the dev/phone.html
  * dance does: P-256 ECDH, take the X coordinate as a 32-byte representative
@@ -239,16 +397,16 @@ export async function generateEphemeralPub() {
 
 /* ---------- public surface ---------- */
 
-export async function hasWrappedUmk() {
-  return !!(await dbGet(RECORD_KEY));
+export async function hasWrappedUmk(profileId = activeProfileId()) {
+  return !!(await dbGet(wrappedUmkRecordKey(profileId)));
 }
 
-export async function bootstrapNewIdentity(passphrase) {
-  if (await hasWrappedUmk()) throw new Error("device already has an identity");
+export async function bootstrapNewIdentity(passphrase, profileId = activeProfileId()) {
+  if (await hasWrappedUmk(profileId)) throw new Error("device already has an identity");
   if (!passphrase || passphrase.length < 8) throw new Error("passphrase must be 8+ chars");
   const seed = randomBytes(32);
   const wrapped = await wrapUmk(passphrase, seed);
-  await dbPut(RECORD_KEY, wrapped);
+  await dbPut(wrappedUmkRecordKey(profileId), wrapped);
   return seed;
 }
 
@@ -259,24 +417,50 @@ export async function bootstrapNewIdentity(passphrase) {
  * locally so subsequent unlocks can use the cheaper passphrase path
  * (avoiding a passkey prompt every time the user opens the webapp).
  */
-export async function bootstrapFromExistingSeed(passphrase, seed) {
-  if (await hasWrappedUmk()) throw new Error("device already has an identity");
+export async function bootstrapFromExistingSeed(passphrase, seed, profileId = activeProfileId()) {
+  if (await hasWrappedUmk(profileId)) throw new Error("device already has an identity");
   if (!passphrase || passphrase.length < 8) throw new Error("passphrase must be 8+ chars");
   if (!(seed instanceof Uint8Array) || seed.length !== 32) {
     throw new Error("seed must be a 32-byte Uint8Array");
   }
   const wrapped = await wrapUmk(passphrase, seed);
-  await dbPut(RECORD_KEY, wrapped);
+  await dbPut(wrappedUmkRecordKey(profileId), wrapped);
 }
 
-export async function unlockUmk(passphrase) {
-  const blob = await dbGet(RECORD_KEY);
+export async function unlockUmk(passphrase, profileId = activeProfileId()) {
+  const blob = await dbGet(wrappedUmkRecordKey(profileId));
   if (!blob) throw new Error("no identity on this device");
   return unwrapUmk(passphrase, blob);
 }
 
-export async function resetDevice() {
-  await dbDel(RECORD_KEY);
+export async function resetDevice(profileId = activeProfileId()) {
+  await dbDel(wrappedUmkRecordKey(profileId));
+}
+
+/** Persist a UMK seed under a SPECIFIC profile's record, scoping the
+ *  keystore's active profile to that cloud as a side effect. Used by the
+ *  ADD-profile flows (open-account, takeover) so a newly-bound profile's
+ *  device key lands under ITS OWN record key — never clobbering another
+ *  profile. Unlike {@link bootstrapFromExistingSeed}, this overwrites the
+ *  named profile's own row if present (idempotent re-bind), but it can
+ *  only ever touch the one profile it's pointed at.
+ *
+ *  @param {Uint8Array} seed       the 32-byte UMK seed
+ *  @param {string} cloudName      the new profile's cloud handle
+ *  @param {string} passphrase     local at-rest wrap passphrase (8+ chars)
+ *  @returns {Promise<string>}     the profileId the seed was stored under
+ */
+export async function persistSeedForProfile(seed, cloudName, passphrase) {
+  if (!(seed instanceof Uint8Array) || seed.length !== 32) {
+    throw new Error("seed must be a 32-byte Uint8Array");
+  }
+  if (!passphrase || passphrase.length < 8) {
+    throw new Error("passphrase must be 8+ chars");
+  }
+  const profileId = setActiveKeystoreProfile(cloudName);
+  const wrapped = await wrapUmk(passphrase, seed);
+  await dbPut(wrappedUmkRecordKey(profileId), wrapped);
+  return profileId;
 }
 
 export const _internal = {
@@ -287,4 +471,12 @@ export const _internal = {
   unwrapUmk,
   bytesToHex,
   hexToBytes,
+  RECORD_KEY,
+  DEFAULT_PROFILE_ID,
+  wrappedUmkRecordKey,
+  profileIdFromCloudName,
+  activeProfileId,
+  setActiveKeystoreProfile,
+  // Test-only: read the in-process override (null when unset).
+  getActiveProfileOverride: () => _activeProfileOverride,
 };

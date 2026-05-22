@@ -66,6 +66,10 @@ fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPAC
             com.flagshipserver.app.core.DeepLink.Marketplace -> RootDestination.APPS
             com.flagshipserver.app.core.DeepLink.CreateServer -> RootDestination.HOME
             com.flagshipserver.app.core.DeepLink.RecoverySetup -> RootDestination.SETTINGS
+            // Phase 3b — a JoinDevice deeplink while ALREADY paired means
+            // adding a SECOND profile to this phone. Route to Settings,
+            // which hosts the join-device-link surface.
+            is com.flagshipserver.app.core.DeepLink.JoinDevice -> RootDestination.SETTINGS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so

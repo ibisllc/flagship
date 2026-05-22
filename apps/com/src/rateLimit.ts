@@ -63,7 +63,14 @@ export type RateLimitEndpoint =
   | "admin-mint-device-grant"
   | "device-grants-list"
   | "device-grants-revoke"
-  | "device-grants-mint";
+  | "device-grants-mint"
+  | "account-resolve"
+  // Phase 3b — vouched cross-device admit. The body carries the admit
+  // (admit.username + newDevicePubHex), not the account IRK pub, so we
+  // throttle per-IP only; the handler does the full DeviceAdmit
+  // signature check under the registered IRK. Mirrors auth-code-issue's
+  // posture (a credential-bearing mutating POST).
+  | "device-admit";
 
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
@@ -124,6 +131,22 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "device-grants-mint": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 50, windowSec: 3600 },
+  ],
+  // Login/join preflight. The per-IP axis caps username enumeration
+  // (the main concern for a 200-always existence oracle); the per-
+  // usernameHash axis blunts hammering a single name. Generous enough
+  // for a real user retrying their own login.
+  "account-resolve": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "usernameHash", limit: 10, windowSec: 900 },
+  ],
+  // Phase 3b — vouched cross-device admit. Per-IP only (the body has no
+  // IRK pub at the edge). A real admin admits a handful of devices; the
+  // tight 10/min cap stops a captured admit from being replay-flooded
+  // before its 5-min freshness window closes, with a 100/h ceiling.
+  "device-admit": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 100, windowSec: 3600 },
   ],
 };
 
@@ -265,6 +288,13 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
     return "device-grants-mint";
   }
+  if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
+    return "account-resolve";
+  }
+  // Phase 3b — vouched cross-device admit.
+  if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {
+    return "device-admit";
+  }
   return null;
 }
 
@@ -309,7 +339,8 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
 export function extractUsernameHash(pathname: string): string | undefined {
   const m =
     pathname.match(/^\/api\/recovery\/by-username\/([^/]+)$/) ??
-    pathname.match(/^\/api\/recovery\/by-username\/([^/]+)\/fetch$/);
+    pathname.match(/^\/api\/recovery\/by-username\/([^/]+)\/fetch$/) ??
+    pathname.match(/^\/api\/account\/resolve\/([^/]+)$/);
   return m ? decodeURIComponent(m[1]!) : undefined;
 }
 

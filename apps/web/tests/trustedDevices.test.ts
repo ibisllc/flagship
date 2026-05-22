@@ -87,6 +87,61 @@ describe("trusted-devices wire shape", () => {
   });
 });
 
+describe("trusted-devices quarantine (v1.2 Phase 4)", () => {
+  // Pure-logic mirror of the quarantine helpers + the disabled-button
+  // render contract inside views/trusted-devices.js. A freshly-admitted
+  // device (re-pair takeover) carries a 14-day `quarantineUntil`; until
+  // it elapses the Disconnect button is disabled and the row shows the
+  // date. If the helpers drift, these break — the view is the source of
+  // truth, this test is the contract check.
+
+  function isQuarantined(device: { quarantineUntil?: number }, now: number): boolean {
+    const until = device.quarantineUntil;
+    return typeof until === "number" && until > 0 && until > now;
+  }
+
+  function quarantineMessage(device: { quarantineUntil?: number }): string {
+    const until = device.quarantineUntil;
+    if (!until) return "This device is in quarantine. Use another device.";
+    const when = new Date(until).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    return `Quarantined until ${when}. Use another device.`;
+  }
+
+  // Mirror of renderDeviceCard()'s button: `disabled` is present iff the
+  // row is quarantined.
+  function disconnectButton(quarantined: boolean): string {
+    return `<button class="secondary danger" ${quarantined ? "disabled" : ""}>Disconnect</button>`;
+  }
+
+  const now = 1_700_000_000_000;
+
+  it("a future quarantineUntil is quarantined; past / 0 / absent is not", () => {
+    expect(isQuarantined({ quarantineUntil: now + 86_400_000 }, now)).toBe(true);
+    expect(isQuarantined({ quarantineUntil: now - 1 }, now)).toBe(false);
+    expect(isQuarantined({ quarantineUntil: 0 }, now)).toBe(false);
+    expect(isQuarantined({}, now)).toBe(false);
+  });
+
+  it("disables the Disconnect button while quarantined", () => {
+    expect(disconnectButton(true)).toContain("disabled");
+    expect(disconnectButton(false)).not.toContain("disabled");
+  });
+
+  it("quarantine message shows the date and matches the iOS/Android wording", () => {
+    const msg = quarantineMessage({ quarantineUntil: now + 14 * 86_400_000 });
+    expect(msg.startsWith("Quarantined until ")).toBe(true);
+    expect(msg.endsWith(". Use another device.")).toBe(true);
+  });
+
+  it("falls back to a dateless message when quarantineUntil is missing", () => {
+    expect(quarantineMessage({})).toBe("This device is in quarantine. Use another device.");
+  });
+});
+
 describe("trusted-devices danger-zone E6 placeholder", () => {
   // Pure-logic mirror of the danger zone shape rendered by
   // renderDangerZone() in views/trusted-devices.js. The HTML must

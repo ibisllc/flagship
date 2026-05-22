@@ -3,55 +3,38 @@ import FlagshipAPI
 
 /// D.2.2 — ChooseUsernameScreen.
 ///
-/// Live availability check (debounced 350 ms) against the Worker's
-/// `/api/users/check`. The response carries an optional `testAccount`
-/// block; when present the typed username unlocks a sandboxed demo
-/// flow without hitting the real claim path. The list of test-account
-/// usernames LIVES OFF THE OPEN SOURCE (Worker env secret); mobile
-/// never bakes them in.
+/// **Create-only.** As of the login redesign, demo + device-capability
+/// activation moved OUT of this screen and into the username-first Join
+/// flow (JoinUsernameScreen → `/api/account/resolve`). This screen now
+/// only PICKS the account name (identity-first copy — no "server's
+/// domain" framing). Continuing pushes the Phase-2 Open-account step,
+/// which generates the UMK + signs the standalone username claim; there
+/// is no longer a demo or dot-form branch on the create path. The live
+/// availability check (debounced 350 ms) against the Worker's
+/// `/api/users/check` still drives the available / taken / invalid
+/// states.
 public struct ChooseUsernameScreen: View {
     @Environment(\.flagshipServerClient) private var server
     @State private var username: String = ""
     @State private var vm: ChooseUsernameViewModel?
 
-    /// Real-flow continuation. Called with the validated username
-    /// when the CTA's tapped and the typed name is NOT a test
-    /// account.
+    /// Continuation. Called with the validated username when the CTA's
+    /// tapped.
     var onContinue: (String) -> Void
-    /// Sandbox continuation. Called with the typed username, the
-    /// test-account metadata the Worker returned, and (Plan A) the
-    /// optional `demoServer` block describing a live Hetzner VPS when
-    /// the matched username has one. The host (OnboardingFlow) then
-    /// runs DemoFixtures.activate(..., demoServer:) — when the block
-    /// is present the demo renders ONE live device; otherwise the
-    /// legacy 3-fixture path runs.
-    var onDemoActivate: (String, TestAccountMeta, DemoServerBlock?) -> Void
-    /// v2 device-addressing continuation. Called when the typed
-    /// string was `<u>.<device-label>` AND the Worker returned a
-    /// matching DeviceCapabilityGrant. Carries the username (already
-    /// in dot-form), the demoServer block from the underlying
-    /// user-part row, and the capability block. The host hands all
-    /// three to DemoFixtures.activate so the session inherits the
-    /// restricted scope set.
-    var onDeviceCapabilityActivate: (String, DemoServerBlock, DeviceCapabilityBlock) -> Void
 
     public init(
-        onContinue: @escaping (String) -> Void = { _ in },
-        onDemoActivate: @escaping (String, TestAccountMeta, DemoServerBlock?) -> Void = { _, _, _ in },
-        onDeviceCapabilityActivate: @escaping (String, DemoServerBlock, DeviceCapabilityBlock) -> Void = { _, _, _ in }
+        onContinue: @escaping (String) -> Void = { _ in }
     ) {
         self.onContinue = onContinue
-        self.onDemoActivate = onDemoActivate
-        self.onDeviceCapabilityActivate = onDeviceCapabilityActivate
     }
 
     public var body: some View {
         FSScreen {
             VStack(alignment: .leading, spacing: FS.space.s6) {
                 Spacer().frame(height: FS.space.s12)
-                Text("Pick a username.").font(FS.font.h2())
+                Text("Pick your account name.").font(FS.font.h2())
                 FSColorReader { c in
-                    Text("This is permanent. It becomes the middle of your server's domain (e.g. home.<username>.flagship.services).")
+                    Text("This is your identity — how people and your devices find you. It's permanent. You can add servers later, or none at all.")
                         .font(FS.font.body()).foregroundColor(c.textMuted)
                 }
                 FSField(
@@ -73,28 +56,13 @@ public struct ChooseUsernameScreen: View {
                 }
                 Spacer()
                 FSPrimaryButton(
-                    ctaLabel,
+                    "Continue",
                     enabled: vm?.status.allowsContinue ?? false,
                     block: true,
                     large: true
                 ) {
-                    guard let vm else { return }
-                    if let cap = vm.status.deviceCapabilityBlock,
-                       let demo = vm.status.demoServerBlock {
-                        // v2 — device-capability branch. Forward the
-                        // capability so DemoFixtures installs it on
-                        // AppState; the home screen will then render
-                        // the chip + disable restricted buttons.
-                        onDeviceCapabilityActivate(username, demo, cap)
-                    } else if let meta = vm.status.testAccountMeta {
-                        // Plan A — when the Worker also returned a
-                        // `demoServer` block, pass it through so
-                        // DemoFixtures renders the one-live-device
-                        // path. Nil ⇒ legacy 3-fixture path.
-                        onDemoActivate(username, meta, vm.status.demoServerBlock)
-                    } else {
-                        onContinue(username)
-                    }
+                    guard vm != nil else { return }
+                    onContinue(username)
                 }
             }
             .padding(.horizontal, FS.space.s6)
@@ -103,14 +71,6 @@ public struct ChooseUsernameScreen: View {
         .task {
             if vm == nil { vm = ChooseUsernameViewModel(server: server) }
         }
-    }
-
-    private var ctaLabel: String {
-        if case .deviceCapability(let label, _, _) = vm?.status {
-            return "Enter as \(label)"
-        }
-        if let meta = vm?.status.testAccountMeta { return "Enter \(meta.display)" }
-        return "Continue"
     }
 
     private var helperText: String? {
@@ -122,31 +82,6 @@ public struct ChooseUsernameScreen: View {
         case .available:                 return "Available."
         case .networkFallbackAvailable:  return "Looks OK — we'll confirm when you continue."
         case .taken:                     return nil
-        case .deviceCapability(let label, _, let cap):
-            // v2 — show the device label + a short scope summary so
-            // a reviewer knows what the "Enter as <label>" CTA will
-            // unlock. `browse-only` is the canonical reviewer state;
-            // anything broader summarises as "N scopes" (the full
-            // breakdown lives in Settings → About this device).
-            if cap.scopes == [.browse] {
-                return "Device \(label) — browse-only."
-            }
-            return "Device \(label) — \(cap.scopes.count) scopes."
-        case .testAccount(let meta, let demoServer):
-            if let demoServer {
-                // Plan A — surface the live state so the user knows
-                // whether tapping connect will provision (none) or
-                // open straight away (up).
-                switch demoServer.lifecycle {
-                case .up:
-                    return "Live demo (\(meta.display)) — server is up. Idle reset every \(demoServer.ttlIdleMinutes) min."
-                case .provisioning:
-                    return "Live demo (\(meta.display)) — server is starting. Idle reset every \(demoServer.ttlIdleMinutes) min."
-                case .none:
-                    return "Live demo (\(meta.display)) — connect spins up a real server. Idle reset every \(demoServer.ttlIdleMinutes) min."
-                }
-            }
-            return "Sandboxed test mode (\(meta.display)). State resets every \(meta.ttlHours) h."
         }
     }
 

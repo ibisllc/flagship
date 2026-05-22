@@ -10,18 +10,30 @@
  *
  * Steps:
  *   1. Generate device key   (delegates to bootstrap.js when no IRK)
- *   2. Pick username          (claim flow — pre-existing in state.js)
+ *   2. Open your account      (claim a username = reserve an identity,
+ *                              bind the device key — NO server yet)
  *   3. Recovery passphrase    (skippable, but pins a warning banner)
  *   4. WebAuthn-PRF cloud rec (skippable, same warning)
- *   5. Create first server    (jumps to create-server.js)
+ *   5. Add your first server  (jumps to create-server.js — optional,
+ *                              repeatable; the account is already open)
  *   6. Peer-backup opt-in     (#95 — yes/no/maybe-later, persisted)
  *   7. Demo app install       (optional marketplace jump)
+ *
+ * Phase 2 (docs/login-and-account-redesign.md) decouples account
+ * creation from server provisioning: step 2 OPENS the account (standalone
+ * idempotent claim + device-key bind) so the user lands in the app with
+ * zero servers; the server (step 5) is separate, later, and repeatable.
  *
  * The wizard module is dynamic-imported from home.js's empty-state
  * CTA so it doesn't bloat first paint.
  */
 
 import { registerView, show } from "../lib/router.js";
+import { getSession } from "../lib/state.js";
+import { signWithIrk, bytesToHex, persistSeedForProfile } from "../keystore.js";
+import { isValidUsername, openAccount } from "../lib/openAccount.js";
+import { addProfile } from "../lib/profiles.js";
+import { toast } from "../lib/toast.js";
 
 registerView("view-wizard");
 
@@ -31,10 +43,10 @@ const PEER_BACKUP_CHOICE_KEY = "flagship.peerBackup.choice.v1";
 
 const STEPS = [
   { id: "device-key", label: "Generate device key" },
-  { id: "username", label: "Pick a username" },
+  { id: "username", label: "Open your account" },
   { id: "passphrase", label: "Set recovery passphrase", skippable: true },
   { id: "webauthn-recovery", label: "Cloud recovery (WebAuthn)", skippable: true },
-  { id: "create-server", label: "Create your first server" },
+  { id: "create-server", label: "Add your first server" },
   { id: "peer-backup", label: "Help others (peer-backup)", skippable: true },
   { id: "demo-app", label: "Try a demo app", skippable: true },
 ];
@@ -71,6 +83,56 @@ export async function enterWizard(opts = {}) {
   }
   saveState(state);
   await renderStep(state);
+}
+
+/**
+ * Step 2 — OPEN THE ACCOUNT (Phase 2). Reads the typed username, runs
+ * the standalone idempotent claim (binding it to this device's IRK), and
+ * persists the identity locally. It does NOT navigate — the wizard owns
+ * the next step (recovery), so we pass no `dispatchInitialView`. Returns
+ * true on success so the caller advances; false (with a toast already
+ * shown) keeps the user on the step to fix the input.
+ */
+async function handleOpenAccount() {
+  const input = document.getElementById("wizard-username-input");
+  const username = (input?.value || "").trim().toLowerCase();
+  if (!isValidUsername(username)) {
+    toast("username must be lowercase letters and digits only", "err");
+    input?.focus();
+    return false;
+  }
+  const session = getSession();
+  if (!session.umk || !session.irk) {
+    toast("generate a device key first", "err");
+    return false;
+  }
+  const btn = document.getElementById("wizard-go-username");
+  if (btn) btn.disabled = true;
+  try {
+    await openAccount(username, {
+      session,
+      signWithIrk,
+      bytesToHex,
+      setUsername: (u) => {
+        try { localStorage.setItem("flagship.username", u); } catch { /* swallow */ }
+        session.username = u;
+      },
+      // Multi-profile keying: store the session UMK under THIS account's
+      // own keystore record so a second account never clobbers the first.
+      persistSeedForProfile,
+      addProfile,
+      // No dispatchInitialView — the wizard advances to the recovery
+      // step itself. The account is open; the app shell comes after the
+      // remaining (skippable) wizard steps.
+    });
+    toast(`account opened — ${username}`, "ok");
+    return true;
+  } catch (e) {
+    toast(String(e.message || e), "err");
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function renderStep(state) {
@@ -121,11 +183,19 @@ async function renderStepBody(state, step) {
       `;
     case "username":
       return `
-        <p class="note">Pick a handle. It's a routing label, not a profile — you can be
-        as pseudonymous as you want. The server never stores any real-world identity
-        attribute (<a href="https://flagshipserver.com/security.html#no-kyc">why</a>).</p>
+        <p class="note">Your account is an identity, not a server. Claiming a handle
+        reserves your name and binds it to this device's key — that <em>is</em> your
+        account. A server comes later (and you can run zero, one, or many). The handle
+        is a routing label, not a profile — be as pseudonymous as you want; the server
+        never stores any real-world identity attribute
+        (<a href="https://flagshipserver.com/security.html#no-kyc">why</a>).</p>
+        <label class="field-label" for="wizard-username-input">Username</label>
+        <input id="wizard-username-input" type="text" inputmode="text" autocapitalize="none"
+               autocomplete="username" spellcheck="false" placeholder="alice"
+               aria-describedby="wizard-username-hint" />
+        <p id="wizard-username-hint" class="note muted-sm">lowercase letters and digits, no dots or hyphens</p>
         <div class="btn-row-sm">
-          <button id="wizard-go-username" class="pill primary">Continue</button>
+          <button id="wizard-go-username" class="pill primary">Open my account</button>
         </div>
       `;
     case "passphrase":
@@ -141,11 +211,13 @@ async function renderStepBody(state, step) {
       `;
     case "create-server":
       return `
-        <p class="note">Compose your first server here. When you tap Continue, the webapp
-        opens <code>flagshipserver.com/build/</code> on this machine — scan the QR there
-        from this browser to deliver the disk image.</p>
+        <p class="note">Your account is open — this step is optional. Compose your first
+        server here (you can add more later). When you tap Continue, the webapp opens
+        <code>flagshipserver.com/build/</code> on this machine — scan the QR there from
+        this browser to deliver the disk image.</p>
         <div class="btn-row-sm">
-          <button id="wizard-go-create-server" class="pill primary">Continue</button>
+          <button id="wizard-go-create-server" class="pill primary">Add a server</button>
+          <button id="wizard-skip-create-server" class="pill">Skip for now</button>
         </div>
       `;
     case "peer-backup":
@@ -194,8 +266,9 @@ function wireStepHandlers(state, step) {
       });
       break;
     case "username":
-      document.getElementById("wizard-go-username")?.addEventListener("click", () => {
-        markCompleteAndAdvance(state, "username");
+      document.getElementById("wizard-go-username")?.addEventListener("click", async () => {
+        const ok = await handleOpenAccount();
+        if (ok) markCompleteAndAdvance(state, "username");
       });
       break;
     case "passphrase":
@@ -217,6 +290,11 @@ function wireStepHandlers(state, step) {
         markCompleteAndAdvance(state, "create-server");
         const { enterCreateServer } = await import("./create-server.js");
         await enterCreateServer();
+      });
+      document.getElementById("wizard-skip-create-server")?.addEventListener("click", () => {
+        // The account is already open — a server is optional. Skipping
+        // lands the user on Home with the empty-server CTA.
+        markCompleteAndAdvance(state, "create-server");
       });
       break;
     case "peer-backup":

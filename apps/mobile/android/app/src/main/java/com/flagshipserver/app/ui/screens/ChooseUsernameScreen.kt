@@ -17,15 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import com.flagshipserver.app.api.DemoServerBlock
-import com.flagshipserver.app.api.DeviceCapabilityBlock
-import com.flagshipserver.app.api.DeviceScope
-import com.flagshipserver.app.api.TestAccountMeta
-import com.flagshipserver.app.core.DemoFixtures
-import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
-import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -39,28 +31,29 @@ private val usernameRegex = Regex("^[a-z0-9]{1,63}$")
 /**
  * D.2.2 — ChooseUsernameScreen.
  *
- * Live availability check (debounced 350ms) against the Worker's
- * /api/users/check. The response carries an optional `testAccount`
- * block; when present the typed username unlocks a sandboxed demo
- * flow without hitting the real claim path. The list of test-account
- * usernames LIVES OFF THE OPEN SOURCE (Worker env secret); mobile
- * never bakes them in.
+ * The CREATE path only — reserve a fresh handle for a new account.
+ * Identity-first: picking a username opens the *account*, not a server.
+ * A server (pod) is a separate, later, repeatable resource added from
+ * Home once the account is open (Phase 2 of the login redesign).
+ *
+ * Demo / test-account / device-capability (dot-form) entry has moved
+ * to the username-first Join flow (JoinAccountContainer); typing a
+ * bare demo username under "I already have an account" is the only
+ * demo entry now. This screen does a live availability check
+ * (debounced 350 ms) against the Worker's /api/users/check and only
+ * branches on real-account availability.
+ *
+ * On Continue the chosen handle is threaded forward through the
+ * navigation arg (NOT yet written to AppState.currentUser — the claim
+ * + completeOnboarding happen in the open-account step that follows).
  */
 @Composable
-fun ChooseUsernameScreen(nav: NavController) {
-    val app = LocalAppState.current
-    val toasts = LocalToastCenter.current
+fun ChooseUsernameScreen(onContinue: (String) -> Unit) {
     val flagshipServer = LocalFlagshipServerClient.current
     var username by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<UsernameCheck>(UsernameCheck.Empty) }
-    var testHit by remember { mutableStateOf<TestAccountMeta?>(null) }
-    var demoServerHit by remember { mutableStateOf<DemoServerBlock?>(null) }
-    var capabilityHit by remember { mutableStateOf<DeviceCapabilityBlock?>(null) }
 
     LaunchedEffect(username) {
-        testHit = null
-        demoServerHit = null
-        capabilityHit = null
         if (username.isEmpty()) {
             status = UsernameCheck.Empty
             return@LaunchedEffect
@@ -75,27 +68,6 @@ fun ChooseUsernameScreen(nav: NavController) {
         } catch (_: Throwable) { null }
         if (resp == null) {
             status = if (usernameRegex.matches(username)) UsernameCheck.Available else UsernameCheck.Invalid
-            return@LaunchedEffect
-        }
-        // v2 device-addressing — `<u>.<label>` with a matching grant
-        // takes priority over every other branch. The Worker returns
-        // `deviceCapability` + `demoServer` together; both are needed
-        // to activate (the demoServer is the underlying pod the
-        // device observes).
-        if (resp.deviceCapability != null && resp.demoServer != null) {
-            capabilityHit = resp.deviceCapability
-            demoServerHit = resp.demoServer
-            status = UsernameCheck.DeviceCapability
-            return@LaunchedEffect
-        }
-        if (resp.testAccount != null) {
-            testHit = resp.testAccount
-            // Plan A — capture the optional `demoServer` block so the
-            // CTA can hand it to DemoFixtures.activate. When present,
-            // the demo renders ONE live device; when null, the legacy
-            // 3-fixture path runs.
-            demoServerHit = resp.demoServer
-            status = UsernameCheck.TestAccount
             return@LaunchedEffect
         }
         status = when {
@@ -117,7 +89,7 @@ fun ChooseUsernameScreen(nav: NavController) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "This is permanent. It becomes the middle of your server's domain (e.g. home.<username>.flagship.services).",
+            text = "This is permanent. It's your account handle — your identity on Flagship. You can add servers later, whenever you're ready.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
         )
@@ -133,34 +105,6 @@ fun ChooseUsernameScreen(nav: NavController) {
                 UsernameCheck.Checking -> "Checking…"
                 UsernameCheck.Available -> "Available."
                 UsernameCheck.Taken -> null
-                UsernameCheck.DeviceCapability -> capabilityHit?.let { cap ->
-                    // v2 — show the device label + a short scope
-                    // summary so a reviewer knows what the "Enter as
-                    // <label>" CTA will unlock. `browse-only` is the
-                    // canonical reviewer state; anything else
-                    // summarises as "N scopes".
-                    val summary = if (cap.scopeSet == setOf(DeviceScope.BROWSE)) {
-                        "browse-only"
-                    } else {
-                        "${cap.scopes.size} scopes"
-                    }
-                    "Device ${cap.label} — $summary."
-                }
-                UsernameCheck.TestAccount -> testHit?.let { meta ->
-                    val demo = demoServerHit
-                    if (demo != null) {
-                        when (demo.lifecycle) {
-                            DemoServerBlock.Lifecycle.Up ->
-                                "Live demo (${meta.display}) — server is up. Idle reset every ${demo.ttlIdleMinutes} min."
-                            DemoServerBlock.Lifecycle.Provisioning ->
-                                "Live demo (${meta.display}) — server is starting. Idle reset every ${demo.ttlIdleMinutes} min."
-                            DemoServerBlock.Lifecycle.None ->
-                                "Live demo (${meta.display}) — connect spins up a real server. Idle reset every ${demo.ttlIdleMinutes} min."
-                        }
-                    } else {
-                        "Sandboxed test mode (${meta.display}). State resets every ${meta.ttlHours} h."
-                    }
-                }
             },
             error = when (status) {
                 UsernameCheck.Invalid -> "Letters and digits only. No spaces or punctuation."
@@ -171,49 +115,14 @@ fun ChooseUsernameScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s8))
 
-        val isTest = status == UsernameCheck.TestAccount
-        val isCap = status == UsernameCheck.DeviceCapability
         FSPrimaryButton(
-            label = when {
-                isCap -> "Enter as ${capabilityHit?.label ?: "device"}"
-                isTest -> "Enter ${testHit?.display ?: "test mode"}"
-                else -> "Continue"
-            },
-            onClick = {
-                when {
-                    isCap -> {
-                        // v2 device-addressing — materialise the
-                        // underlying demo VPS PLUS the device's
-                        // capability so the home screen renders the
-                        // chip + greys out actions absent from scopes.
-                        DemoFixtures.activate(
-                            app,
-                            username,
-                            demoServer = demoServerHit,
-                            deviceCapability = capabilityHit,
-                        )
-                        toasts.info("Device-restricted demo. Sign out to leave.")
-                    }
-                    isTest -> {
-                        // Plan A — pass the optional demoServer block
-                        // so DemoFixtures renders ONE live device when
-                        // the Worker reported one; otherwise the
-                        // legacy 3-fixture sandbox.
-                        DemoFixtures.activate(app, username, demoServer = demoServerHit)
-                        if (demoServerHit != null) {
-                            toasts.info("Live demo mode. Sign out to leave.")
-                        } else {
-                            toasts.info("Sandboxed test mode. Sign out to leave.")
-                        }
-                    }
-                    else -> nav.navigate("biometric")
-                }
-            },
+            label = "Continue",
+            onClick = { onContinue(username) },
             block = true,
             large = true,
-            enabled = status == UsernameCheck.Available || isTest || isCap,
+            enabled = status == UsernameCheck.Available,
         )
     }
 }
 
-private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken, TestAccount, DeviceCapability }
+private enum class UsernameCheck { Empty, Invalid, Checking, Available, Taken }

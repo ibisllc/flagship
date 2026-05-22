@@ -130,6 +130,115 @@ interface FlagshipServerClient {
         username: String,
         body: TotpDisableRequest,
     ): TotpDisableResponse
+
+    /** Login/join preflight — GET /api/account/resolve/<username>.
+     *  The sign-in space is access-control evaluation, not a fetch:
+     *  this reads what credentials + factors exist for a named account
+     *  and returns them as FIELDS so the login state machine branches
+     *  on data, not HTTP errors. Returns 200 ALWAYS — a missing account
+     *  is `kind="unknown"`, never a 404. Mirrors the Worker wire in
+     *  packages/control-plane/src/accountResolve.ts.
+     *  See docs/login-and-account-redesign.md. */
+    suspend fun resolveAccount(username: String): AccountResolution
+
+    /** Phase 3b — vouched cross-device admit. The incoming device
+     *  replays the admin's IRK-signed DeviceAdmit + its push-token
+     *  registration to .com:
+     *    POST /api/users/<account>/devices/admit
+     *  The Worker verifies the admit under the account's CURRENT IRK,
+     *  then admits this device QUARANTINED (14-day non-admin peer
+     *  window) and returns `quarantineUntil`. The register `signature`
+     *  is carried for storage but NOT verified (the admit is the IRK's
+     *  consent). Mirrors handleVouchedDeviceAdmit in
+     *  packages/control-plane/src/push.ts. */
+    suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse
+}
+
+/** Phase 3b — POST /api/users/:u/devices/admit body. Mirrors the Worker
+ *  `AdmitBody` shape (push.ts): the IRK-signed admit + its signature, the
+ *  same push-token register fields handlePushRegister takes, and the
+ *  register signature (carried, not verified). */
+@Serializable
+data class DeviceAdmitRequest(
+    val admit: AdmitEnvelope,
+    /** Ed25519 over the admit, signed by the account's CURRENT IRK,
+     *  lowercased hex (64 bytes). */
+    val admitSig: String,
+    val request: PushTokenRegisterRequest.Inner,
+    /** PushTokenRegister signature, carried for storage. Hex. */
+    val signature: String,
+) {
+    @Serializable
+    data class AdmitEnvelope(
+        val username: String,
+        /** The incoming device's freshly-minted pubkey, lowercased hex
+         *  (32 bytes). */
+        val newDevicePubHex: String,
+        val issuedAt: Long,
+    )
+}
+
+@Serializable
+data class DeviceAdmitResponse(
+    val ok: Boolean,
+    val tokenId: String,
+    /** Wall-clock ms before which the freshly-admitted device cannot
+     *  revoke others / hold admin reach. ~14 days out. */
+    val quarantineUntil: Long? = null,
+)
+
+/** Login/join preflight result — Kotlin mirror of the Worker's
+ *  `AccountResolution` (packages/control-plane/src/accountResolve.ts).
+ *  Returned by [FlagshipServerClient.resolveAccount]. Existence and
+ *  every factor are FIELDS, not status codes — a missing account is
+ *  `kind="unknown"`, never an HTTP error. Wire shape MUST stay
+ *  byte-identical to the Worker + iOS mirrors (iOS-Mock-matches-Worker
+ *  invariant). */
+@Serializable
+data class AccountResolution(
+    /** Normalized handle the lookup ran against (lowercased). */
+    val username: String,
+    val exists: Boolean,
+    /** "demo" | "single" | "multi" | "unknown". Use [accountKind] for
+     *  the typed, forward-compat parse. */
+    val kind: String,
+    val recovery: RecoveryState,
+    val totpEnrolled: Boolean,
+    val trustedDeviceCount: Int,
+    /** Present only for demo accounts — the single sandbox device. */
+    val demoServer: DemoServerBlock? = null,
+    /** Server-derived recovery-speed hint:
+     *  "instant" | "7d" | "24h-totp" | "none". Use [grace] for the
+     *  typed parse. */
+    val graceModel: String,
+) {
+    @Serializable
+    data class RecoveryState(
+        val present: Boolean,
+        val hasFetchGate: Boolean,
+        val credentialId: String? = null,
+    )
+
+    /** Forward-compat typed view over [kind]; an unknown future string
+     *  parses as [AccountKind.Unknown] so an old binary on a new Worker
+     *  renders the clean "no account" state rather than crashing. */
+    val accountKind: AccountKind get() = when (kind) {
+        "demo" -> AccountKind.Demo
+        "single" -> AccountKind.Single
+        "multi" -> AccountKind.Multi
+        else -> AccountKind.Unknown
+    }
+
+    /** Forward-compat typed view over [graceModel]. */
+    val grace: GraceModel get() = when (graceModel) {
+        "instant" -> GraceModel.Instant
+        "7d" -> GraceModel.SevenDay
+        "24h-totp" -> GraceModel.TwentyFourHourTotp
+        else -> GraceModel.None
+    }
+
+    enum class AccountKind { Demo, Single, Multi, Unknown }
+    enum class GraceModel { Instant, SevenDay, TwentyFourHourTotp, None }
 }
 
 @Serializable
@@ -220,6 +329,13 @@ data class WipeRestartResponse(
 data class RePairInitiateRequest(
     val request: Inner,
     val signature: String,
+    /** v1.2 — second factor for a MULTI-device takeover. NOT in the
+     *  signed canonical bytes (codes are ephemeral); rides beside the
+     *  envelope. The Worker REQUIRES it when `account_type === 'multi'`
+     *  (rePair.ts:311-340) and 401s without it. Absent on single-device
+     *  takeovers. Mirror of the Worker `body.totpProof` shape +
+     *  RePairInitiate.totpProof on iOS. */
+    val totpProof: TotpProof? = null,
 ) {
     @Serializable
     data class Inner(
@@ -227,6 +343,15 @@ data class RePairInitiateRequest(
         val newIrkPub: String,   // hex
         val oldIrkPub: String,   // hex
         val issuedAt: Long,      // ms
+    )
+
+    /** A 6-digit TOTP sample OR a single-use recovery code, tagged with
+     *  which it is so the Worker routes verification. `method` is
+     *  "totp" | "recovery" (rePair.ts:331). */
+    @Serializable
+    data class TotpProof(
+        val code: String,
+        val method: String,
     )
 }
 
@@ -1119,6 +1244,87 @@ class MockFlagshipServerClient(
         return TotpDisableResponse(ok = true, accountType = "single")
     }
 
+    override suspend fun resolveAccount(username: String): AccountResolution {
+        tick()
+        val u = username.lowercase()
+        // Demo first (mirror of the Worker's demo_users-before-users
+        // ordering). A seeded demo username = entry; crypto is a no-op,
+        // so we report it with `kind="demo"` + its demoServer and the
+        // client skips every credential gate. The `demoServers` map is
+        // the Mock's mirror of the Worker's `demo_users` table.
+        demoServers[u]?.let { block ->
+            return AccountResolution(
+                username = u,
+                exists = true,
+                kind = "demo",
+                recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
+                totpEnrolled = false,
+                trustedDeviceCount = 0,
+                demoServer = block,
+                graceModel = "instant",
+            )
+        }
+        // A claimed real username projects its account-type / TOTP /
+        // recovery / device-count scripted state (used by later phases).
+        // Everything else is a clean `unknown` STATE with zeroed factors
+        // — never a 404. Non-existent names return the same shape as a
+        // miss so timing/shape don't distinguish them.
+        val irk = _claimedUsernames[u]
+        if (irk == null) {
+            return AccountResolution(
+                username = u,
+                exists = false,
+                kind = "unknown",
+                recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
+                totpEnrolled = false,
+                trustedDeviceCount = 0,
+                graceModel = "none",
+            )
+        }
+        val kind = if ((accountTypeByUser[u] ?: "single") == "multi") "multi" else "single"
+        val hasRecovery = cloudRecoveryByUser[u] ?: false
+        val devices = devicesByUser[u]?.size ?: 0
+        return AccountResolution(
+            username = u,
+            exists = true,
+            kind = kind,
+            recovery = AccountResolution.RecoveryState(
+                present = hasRecovery,
+                hasFetchGate = false,
+            ),
+            totpEnrolled = totpEnrolledAtByUser[u] != null,
+            trustedDeviceCount = devices,
+            graceModel = if (kind == "multi") "24h-totp" else "7d",
+        )
+    }
+
+    /** Phase 3b — last vouched-admit the Mock received, for test
+     *  assertions (the admin's admit + the incoming device's register). */
+    var lastDeviceAdmit: Pair<String, DeviceAdmitRequest>? = null
+        private set
+
+    /** Phase 3b — wall-clock the Mock stamps as `quarantineUntil` on a
+     *  successful admit. 14 days, matching the Worker QUARANTINE_MS. */
+    var admitQuarantineMs: Long = 14L * 86_400_000
+
+    /** When true, [admitDevice] simulates the Worker rejecting a bad /
+     *  stale admit proof (401). Tests flip this to drive the failure
+     *  branch. */
+    var admitShouldRejectProof: Boolean = false
+
+    override suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse {
+        tick()
+        lastDeviceAdmit = account to req
+        if (admitShouldRejectProof) throw HttpException(401, "invalid admit proof")
+        val id = "tok_%06d".format(nextPushTokenId++)
+        _registeredPushTokens[id] = req.request
+        return DeviceAdmitResponse(
+            ok = true,
+            tokenId = id,
+            quarantineUntil = System.currentTimeMillis() + admitQuarantineMs,
+        )
+    }
+
     private fun etagFor(devices: List<TrustedDevice>): String {
         // Identity-significant subset only; lastSeenAt deliberately
         // excluded so test push-delivery doesn't flutter the ETag.
@@ -1403,6 +1609,27 @@ class LiveFlagshipServerClient(
             body = body,
             serializer = TotpDisableRequest.serializer(),
             responseSerializer = TotpDisableResponse.serializer(),
+        )
+    }
+
+    override suspend fun resolveAccount(username: String): AccountResolution {
+        // GET /api/account/resolve/<username> — 200 ALWAYS. A missing
+        // account comes back as kind="unknown", so there is no error
+        // status to special-case here.
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.getJson(
+            url = "$base/api/account/resolve/$encoded",
+            responseSerializer = AccountResolution.serializer(),
+        )
+    }
+
+    override suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse {
+        val encoded = java.net.URLEncoder.encode(account, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/devices/admit",
+            body = req,
+            serializer = DeviceAdmitRequest.serializer(),
+            responseSerializer = DeviceAdmitResponse.serializer(),
         )
     }
 }

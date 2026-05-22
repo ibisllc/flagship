@@ -131,30 +131,57 @@ function formatCertCountdown(validUntilMs) {
   return ""; // omit chip when comfortably valid — reduces visual noise
 }
 
-/** Render the zero-state card when the user has no servers yet. */
-function renderEmptyServersList(root, { reason } = {}) {
-  const hint = reason === "unpaired"
-    ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
-    : "Plug in a USB drive, paste a build code on a target machine, and you're a few taps from your own cloud.";
+/** Render the zero-state card when the user has no servers yet.
+ *
+ *  Phase 2 (docs/login-and-account-redesign.md): an account is an
+ *  IDENTITY, not a server. Once the account is open (a username is
+ *  claimed + bound to this device key), the user lands here with ZERO
+ *  servers — that's the normal, valid state, not an error. The CTA adds
+ *  the FIRST server; the same flow adds the Nth. We distinguish:
+ *    - account-open (username set) → "Your account is ready — add your
+ *      first server." `CreateServer` is reachable as "Add a server".
+ *    - unpaired (no username yet / mid-pair) → guide them to open an
+ *      account / build a fresh server.
+ */
+function renderEmptyServersList(root, { reason, username } = {}) {
+  const accountOpen = !!username;
+  const headline = accountOpen
+    ? "Your account is ready"
+    : "Your first server is one tap away";
+  const hint = accountOpen
+    ? `Signed in as ${username}. Your account has no servers yet — add your first one whenever you're ready. You can run zero, one, or many.`
+    : reason === "unpaired"
+      ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
+      : "Plug in a USB drive, paste a build code on a target machine, and you're a few taps from your own cloud.";
+  const ctaLabel = accountOpen ? "Add your first server" : "Create a server";
   root.innerHTML = `
     <div class="card empty-state">
       ${PENNANT_SVG}
-      <h3 class="empty-headline">Your first server is one tap away</h3>
+      <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
-      <button class="primary full-width" id="empty-create-server">Create a server</button>
+      <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
       <a class="pill mt-2" href="https://flagshipserver.com/build/" target="_blank" rel="noopener">
         Open flagshipserver.com/build/ →
       </a>
     </div>
   `;
   $("empty-create-server")?.addEventListener("click", async () => {
-    // Step 5 of the first-run wizard (#25) — opens build/ in a new tab
-    // and surfaces the draft composer locally. If the wizard module
-    // isn't loaded yet (e.g. user is mid-pair), fall back to the
-    // create-server view directly.
+    // The account is already open, so this is "Add a server" — a
+    // separate, repeatable resource. Jump straight into the reusable
+    // create-server flow (it skips the username claim since the account
+    // is already opened). When the account isn't open yet, fall back to
+    // the wizard's create-server step (which opens the account first).
+    if (accountOpen) {
+      const { enterCreateServer } = await import("./create-server.js");
+      await enterCreateServer();
+      return;
+    }
+    // No account yet — route through the wizard's OPEN-ACCOUNT step
+    // first (claim a username, bind the device key). Server provisioning
+    // happens after the account exists.
     try {
       const { enterWizard } = await import("./wizard.js");
-      await enterWizard({ step: "create-server" });
+      await enterWizard({ step: "username" });
     } catch {
       const { enterCreateServer } = await import("./create-server.js");
       await enterCreateServer();
@@ -270,11 +297,11 @@ export async function renderHome() {
   if (!sid) {
     sessionStatusEl.textContent = "unpaired";
     sessionStatusEl.classList.remove("ok");
-    // #36 — real empty state, not a "no paired session" stub. The user
-    // hasn't paired AND probably doesn't have a server yet — the CTA
-    // sends them straight into the wizard (step 5 creates the first
-    // server), which is the same destination as the empty server list.
-    renderEmptyServersList(list, { reason: "unpaired" });
+    // #36 — real empty state, not a "no paired session" stub. Phase 2:
+    // if the account is already open (username claimed), this is the
+    // valid "account ready, no servers yet" state and the CTA adds the
+    // first server. Otherwise we guide them to open an account / build.
+    renderEmptyServersList(list, { reason: "unpaired", username: session.username });
     return;
   }
   try {
@@ -284,7 +311,7 @@ export async function renderHome() {
     sessionStatusEl.textContent = "paired";
     sessionStatusEl.classList.add("ok");
     if (!body.servers.length) {
-      renderEmptyServersList(list, { reason: "no-servers" });
+      renderEmptyServersList(list, { reason: "no-servers", username: session.username });
       return;
     }
     // #31 — fan-out to /api/users/:u/pods on .com (no auth, public

@@ -1,8 +1,22 @@
-import { bootstrapNewIdentity, bootstrapFromExistingSeed } from "../keystore.js";
+import {
+  bootstrapNewIdentity,
+  bootstrapFromExistingSeed,
+  deriveIrkFromSeed,
+  deriveIrkVersioned,
+  signWithIrkVersioned,
+  setActiveKeystoreProfile,
+} from "../keystore.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
-import { inlinePrompt } from "../lib/modal.js";
+import { inlineConfirm, inlinePrompt } from "../lib/modal.js";
 import { recoverFromCloud } from "../lib/recovery.js";
+import {
+  activateDemoAccount,
+  classifyResolution,
+  resolveAccount,
+} from "../lib/accountResolve.js";
+import { loginRealAccount } from "../lib/loginTakeover.js";
+import { addProfile } from "../lib/profiles.js";
 import { unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 
@@ -18,20 +32,35 @@ async function handleBootstrap() {
   try {
     const seed = await bootstrapNewIdentity(a);
     await unlockSession(seed);
-    await dispatchInitialView();
     toast("device key generated");
+    // Phase 2 (docs/login-and-account-redesign.md): generating a device
+    // key is NOT opening an account. The account is an identity — the
+    // user must still claim a username (bound to this device key) before
+    // they have an account. Route through the first-run wizard, which
+    // advances from the (now-complete) device-key step straight to the
+    // OPEN-ACCOUNT step. Server provisioning is separate + later. If the
+    // wizard isn't on disk, fall back to the normal app shell.
+    try {
+      const { enterWizard } = await import("./wizard.js");
+      await enterWizard({ step: "username" });
+    } catch {
+      await dispatchInitialView();
+    }
   } catch (e) {
     toast(String(e), "err");
   }
 }
 
 async function handleRecover() {
-  // #30 — three inline-modal steps replace three window.prompts. We
-  // keep them as a sequence (rather than one combined form) so the
-  // user can cancel between steps without losing their place.
+  // Account-name-first JOIN (docs/login-and-account-redesign.md). The
+  // login field holds ONLY a bare username — a person/company handle,
+  // letters/digits, no dots. We then run a single preflight
+  // (GET /api/account/resolve) and branch on what the account IS, not on
+  // an HTTP status. Login NEVER surfaces a 404: every "absent" is a node
+  // in the decision tree.
   const username = await inlinePrompt({
-    title: "Recover account",
-    message: "Username on the account you're recovering.",
+    title: "Join an account",
+    message: "The username on the account you're joining.",
     placeholder: "alice",
     validate: (v) => {
       if (!v) return "username required";
@@ -40,33 +69,102 @@ async function handleRecover() {
     },
   });
   if (!username) return;
-  const passA = await inlinePrompt({
-    title: "New local passphrase",
-    message: "Encrypts the recovered key on this browser. 8+ characters.",
-    type: "password",
-    placeholder: "passphrase",
-    validate: (v) => {
-      if (!v || v.length < 8) return "passphrase must be 8+ chars";
-      return null;
-    },
-  });
-  if (!passA) return;
-  const passB = await inlinePrompt({
-    title: "Confirm passphrase",
-    type: "password",
-    placeholder: "passphrase",
-    validate: (v) => (v === passA ? null : "passphrases don't match"),
-  });
-  if (!passB) return;
+
+  let resolution;
   try {
-    const seed = await recoverFromCloud(username);
-    await bootstrapFromExistingSeed(passA, seed);
-    localStorage.setItem("flagship.username", username);
-    await unlockSession(seed, username);
-    await dispatchInitialView();
-    toast(`recovered ${username}`, "ok");
+    resolution = await resolveAccount(username);
   } catch (e) {
-    toast(`recover failed: ${e.message ?? e}`, "err");
+    // A throw here is a genuine transport/server failure (rate-limit,
+    // 5xx) — NOT a missing account. A miss is `kind:"unknown"` in a 200
+    // body, handled below.
+    return toast(`couldn't reach the directory: ${e.message ?? e}`, "err");
+  }
+
+  switch (classifyResolution(resolution)) {
+    case "demo":
+      return joinDemo(resolution);
+    case "unknown":
+      return showNoSuchAccount(username);
+    default:
+      return recoverRealAccount(resolution);
+  }
+}
+
+/** Demo = special-case recovery whose crypto checks are no-ops: knowing
+ *  the username is the entire capability. No passkey, no recovery popup,
+ *  no passphrase prompts — just attach a fresh device and open the
+ *  sandbox. */
+async function joinDemo(resolution) {
+  try {
+    await activateDemoAccount(resolution, {
+      bootstrapNewIdentity,
+      setActiveKeystoreProfile,
+      unlockSession,
+      addProfile,
+      dispatchInitialView,
+      setUsername: (u) => localStorage.setItem("flagship.username", u),
+    });
+    toast(`joined ${resolution.username}`, "ok");
+  } catch (e) {
+    toast(`couldn't open the demo: ${e.message ?? e}`, "err");
+  }
+}
+
+/** A miss is a STATE, not a 404 — render clear guidance, not an error. */
+async function showNoSuchAccount(username) {
+  await inlineConfirm({
+    title: "No Flagship account by that name",
+    message: `We couldn't find an account called "${username}". Check the spelling, or generate a new account instead.`,
+    okLabel: "OK",
+    cancelLabel: "Back",
+  });
+}
+
+/** Phase 3 — the real-account (single/multi) login state machine. Drives
+ *  the credentialed JOIN off the resolution:
+ *    - recovery.present == false → a clean inline STATE (not a 404).
+ *    - single → cloud-recovery unwrap → 7-day-grace TAKEOVER → re-pair
+ *               initiated → this device labelled "admin".
+ *    - multi  → unwrap + a recovery TOTP / recovery code (the Worker
+ *               REQUIRES it for account_type=multi) → 24h-grace TAKEOVER
+ *               → "admin".
+ *  (Mock/popup WebAuthn as today: `recoverFromCloud` is the existing
+ *  sub-origin flow. Grace countdown/completion/push/quarantine are
+ *  Phase 4.) */
+async function recoverRealAccount(resolution) {
+  const username = resolution.username;
+  try {
+    const result = await loginRealAccount(resolution, {
+      showState: (state) =>
+        inlineConfirm({
+          title: state.title,
+          message: state.message,
+          okLabel: "OK",
+          cancelLabel: "Back",
+        }),
+      confirm: (opts) => inlineConfirm(opts),
+      prompt: (opts) => inlinePrompt(opts),
+      takeoverDeps: {
+        recoverFromCloud,
+        // Multi-profile keying: point the keystore at the account being
+        // taken over BEFORE the recovered seed is wrapped, so it lands
+        // under that account's own record (never clobbers another profile).
+        setActiveKeystoreProfile,
+        bootstrapFromExistingSeed,
+        unlockSession,
+        deriveIrkFromSeed,
+        deriveIrkVersioned,
+        signWithIrkVersioned,
+        addProfile: (profile) => addProfile(profile),
+        dispatchInitialView,
+        setUsername: (u) => localStorage.setItem("flagship.username", u),
+      },
+    });
+    if (result.outcome === "takeover") {
+      toast(`taking over ${username} — you're now the admin device`, "ok");
+    }
+  } catch (e) {
+    toast(`couldn't take over ${username}: ${e.message ?? e}`, "err");
   }
 }
 

@@ -25,12 +25,24 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Deep links from push notifications -->
+            <!-- Deep links from push notifications + cross-device
+                 pairing (Phase 3b /join). autoVerify needs the
+                 /.well-known/assetlinks.json on flagshipserver.com to
+                 list this app's package + signing cert (operator
+                 follow-up). The flagship:// scheme is the in-app
+                 fallback that needs no verification. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:pathPrefix="/app/" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/join" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="join" />
             </intent-filter>
         </activity>
 

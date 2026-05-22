@@ -74,6 +74,22 @@ class QrSession private constructor(
 
     data class Sealed(val ciphertextB64u: String, val nonceB64u: String)
 
+    /**
+     * Phase 3b (cross-device pairing, receiver side) — inverse of [seal].
+     * AEAD-opens a base64url (ciphertext, nonce) pair delivered over the
+     * relay under the derived kEnc. MUST be called after [pair]. A bad
+     * tag throws (the GCM open fails) — the caller treats that as a
+     * MitM / wrong-peer and discards.
+     */
+    fun open(ciphertextB64u: String, nonceB64u: String): ByteArray {
+        val key = kEnc ?: error("open() before pair() — derive shared first")
+        val ct = Base64URL.decode(ciphertextB64u) ?: error("ciphertext is not valid base64url")
+        val nonce = Base64URL.decode(nonceB64u) ?: error("nonce is not valid base64url")
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
+        return cipher.doFinal(ct)
+    }
+
     companion object {
         private val rng = SecureRandom()
 

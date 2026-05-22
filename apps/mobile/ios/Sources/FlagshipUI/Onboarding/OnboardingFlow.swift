@@ -1,5 +1,4 @@
 import SwiftUI
-import CryptoKit
 import FlagshipCore
 import FlagshipAPI
 
@@ -7,21 +6,29 @@ import FlagshipAPI
 /// when AppState.isPaired == false.
 ///
 ///   Welcome
-///     ├─ Create your account → ChooseUsername → CreateServer
-///     │     ├─ real flow:  mintInstallBlob + relay deliver
-///     │     │              → pod lands in AppState with status=.pending
-///     │     │              → PendingPodWatcher polls install-events
-///     │     │                until the freshly-booted box phones home,
-///     │     │                then flips status to .online.
-///     │     ├─ demo skip:   "pretend it's already running" — pod
-///     │     │              lands as .online with no real provisioning
-///     │     └─ test-account: DemoFixtures.activate (3 sample pods)
-///     └─ I already have an account → RecoverFromWelcomeScreen
-///           (WebAuthn-PRF recovery via the user's passkey →
-///           PostRecoveryChoice: Keep both / Replace lost / Wipe)
-///           — wired in B3. B1 just lays the path entry.
+///     ├─ Create your account → ChooseUsername → OpenAccount
+///     │     Phase 2 decouples account identity from server
+///     │     provisioning: OpenAccount generates the UMK, derives the
+///     │     IRK, POSTs a standalone `claimUsername`, and names this
+///     │     first device. The user then lands on Home with ZERO
+///     │     servers + an "Add your first server" CTA. Provisioning a
+///     │     box (the old CreateServer mint/relay flow, claim removed)
+///     │     is now a reusable "Add a server" reachable from Home.
+///     └─ I already have an account → JoinUsernameScreen (username-first)
+///           → preflight /api/account/resolve (200 always):
+///             ├─ demo    → DemoFixtures.activate (attach a new device)
+///             ├─ unknown → inline "no account by that name" state
+///             └─ single/multi → RealAccountLoginScreen — the Phase-3
+///                       state machine (RealAccountLoginViewModel):
+///                       no-recovery STATE / single 7-day-grace takeover
+///                       / multi 24h-grace + recovery-TOTP takeover →
+///                       install UMK → re-pair → label this device
+///                       `admin` → completeOnboarding.
 public struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
+    @Environment(DeepLinker.self) private var linker
+    @Environment(\.pairingRelayClient) private var pairingRelay
+    @Environment(\.flagshipServerClient) private var server
     @State private var path: [OnboardingRoute] = []
 
     public init() {}
@@ -32,178 +39,141 @@ public struct OnboardingFlow: View {
                 onCreate:   { path.append(.chooseUsername) },
                 onExisting: { path.append(.recoverFromWelcome) }
             )
+            .onChange(of: linker.pending) { _, link in consumePairingLink(link) }
+            .task(id: linker.pending) { consumePairingLink(linker.pending) }
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .chooseUsername:
+                    // Create is create-only now. Demo + device-capability
+                    // activation moved OUT of the create path and into
+                    // Join (username-first preflight) per the login
+                    // redesign — typing a demo username under "I already
+                    // have an account" is the only demo entry. Continuing
+                    // pushes the Phase-2 Open-account step (NOT
+                    // server-mint): account identity is created on its
+                    // own, server provisioning is a later, optional act.
                     ChooseUsernameScreen(
                         onContinue: { username in
-                            path.append(.createServer(username: username))
-                        },
-                        onDemoActivate: { username, _, demoServer in
-                            // Plan A — when the Worker returned a
-                            // demoServer block, render ONE real device
-                            // backed by the Hetzner VPS. Otherwise
-                            // fall back to the legacy 3-fixture path
-                            // so already-shipped binaries / reviewers
-                            // without a live VPS still work.
+                            path.append(.openAccount(username: username))
+                        }
+                    )
+                case .openAccount(let username):
+                    // Phase 2 — open the account: generate the UMK,
+                    // derive the IRK, POST the standalone username claim,
+                    // and name this first device. Land on Home with ZERO
+                    // servers. Provisioning a box is now "Add a server"
+                    // from Home (CreateServerContainer in HomeTab), with
+                    // the claim removed from mintInstallBlob.
+                    OpenAccountScreen(
+                        username: username,
+                        onOpened: { _ in
+                            app.completeOnboarding(username: username, pods: [])
+                        }
+                    )
+                case .recoverFromWelcome:
+                    // Username-first Join. The single preflight branches:
+                    // demo attaches a device + opens the sandbox here;
+                    // unknown renders inline on the screen; single/multi
+                    // push the Phase-3 RealAccountLoginScreen, which runs
+                    // the real takeover state machine.
+                    JoinUsernameScreen(
+                        onDemo: { username, demoServer in
                             DemoFixtures.activate(
                                 app,
                                 username: username,
                                 demoServer: demoServer
                             )
                         },
-                        onDeviceCapabilityActivate: { username, demoServer, capability in
-                            // v2 device-addressing — the typed string
-                            // was `<u>.<label>`. Materialise the same
-                            // live VPS as the primary device sees,
-                            // then install the capability so the home
-                            // screen renders the chip + the install /
-                            // vibe-code buttons grey out per scope.
-                            DemoFixtures.activate(
-                                app,
-                                username: username,
-                                demoServer: demoServer,
-                                deviceCapability: capability
-                            )
+                        onRealAccount: { resolution in
+                            path.append(.realAccountLogin(resolution: resolution))
                         }
                     )
-                case .createServer(let username):
-                    OnboardingCreateServer(
-                        username: username,
-                        onDelivered: { name, description, serverDomain, serial in
-                            completePendingPair(
-                                username: username,
-                                name: name,
-                                description: description,
-                                serverDomain: serverDomain,
-                                serial: serial
-                            )
-                        },
-                        onSkipDemo: { name, description in
-                            completeOnlinePair(
-                                username: username,
-                                name: name,
-                                description: description
-                            )
-                        }
-                    )
-                case .recoverFromWelcome:
-                    RecoverFromWelcomeContainer(
-                        onComplete: { choice, seed in
-                            completeRecoveryPair(choice: choice, recoveredSeed: seed)
+                case .realAccountLogin(let resolution):
+                    // Phase 3 — the real single/multi state machine. The
+                    // VM runs the Mock passkey-PRF unwrap, installs the
+                    // recovered UMK, and initiates the takeover re-pair
+                    // (multi attaches the recovery-TOTP / recovery-code
+                    // as totpProof). On completion the host records this
+                    // device's `admin` label and flips AppState paired.
+                    RealAccountLoginScreen(
+                        resolution: resolution,
+                        onComplete: { username in
+                            completeRealAccountLogin(username: username)
                         },
                         onBack: { path.removeLast() }
+                    )
+                case .joinByPairing(let joinUrl):
+                    // Phase 3b — brand-new collaborator joining via QR.
+                    // The incoming JoinAccount flow attaches a FRESH
+                    // device key + installs the shared UMK into a new
+                    // per-profile slot, then we complete onboarding
+                    // paired on the joined account.
+                    JoinAccountScreen(
+                        vm: JoinAccountViewModel(relay: pairingRelay, server: server),
+                        initialJoinUrl: joinUrl,
+                        onJoined: { profile in
+                            completePairingJoin(profile: profile)
+                        }
                     )
                 }
             }
         }
     }
 
+    /// Observe the linker for a Phase-3b `.joinAccount` deeplink while
+    /// UNPAIRED and push the incoming join flow.
+    private func consumePairingLink(_ link: DeepLink?) {
+        guard case .joinAccount(let sid, let pk) = link else { return }
+        let joinUrl = "https://flagshipserver.com/join?sid=\(sid)&pk=\(pk)"
+        if path.last != .joinByPairing(joinUrl: joinUrl) {
+            path.append(.joinByPairing(joinUrl: joinUrl))
+        }
+        _ = linker.consume()
+    }
+
     // MARK: - State writes
 
-    /// Real-flow completion. After the QR-relay deliver succeeds, the
-    /// CreateServerViewModel has minted + delivered the InstallBlob;
-    /// the freshly-flashed box hasn't booted yet. Add the pod with
-    /// status=.pending + auth-code serial recorded. PendingPodWatcher
-    /// (spawned by RootShell) polls /api/install-events/<serial>
-    /// until `ready` arrives, then flips status to .online.
-    fileprivate func completePendingPair(
-        username: String, name: String, description: String,
-        serverDomain: String, serial: String
-    ) {
-        let label = name.isEmpty ? "Home" : name
-        let pod = PodInfo(
-            podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
-            name: label,
-            description: description.isEmpty ? nil : description,
-            fqdn: serverDomain,
-            status: .pending,
-            pendingAuthCodeSerial: serial.isEmpty ? nil : serial
+    /// Phase 3 — completion of the real single/multi takeover. By the
+    /// time we're here `RealAccountLoginViewModel` has ALREADY:
+    ///   - run the Mock passkey-PRF unwrap of the cloud UMK,
+    ///   - installed the recovered UMK via `Keystore.installUMK` (the
+    ///     stub `completeRecoveryPair` left it on the floor — retired),
+    ///   - initiated the takeover re-pair (multi with `totpProof`).
+    /// So the host's only job is to record this device's **`admin`**
+    /// label (the no-lockout / `ukey.*`-reach primitive) and flip
+    /// AppState to paired with the resolved username (pods hydrate from
+    /// /devices later — Phase 4). The "recovered-user" placeholder is
+    /// gone; the username comes from the preflight throughout.
+    /// Phase 3b — completion of a brand-new collaborator pairing-join.
+    /// The JoinAccountViewModel has already minted a fresh device key,
+    /// verified the admin's admit, installed the shared UMK into THIS
+    /// account's per-profile slot, and POSTed `/devices/admit`. The host
+    /// records the new (quarantined, non-admin) profile + flips paired.
+    fileprivate func completePairingJoin(profile: JoinAccountViewModel.AdmittedProfile) {
+        app.completeOnboarding(username: profile.cloudName, pods: [])
+        app.addProfile(
+            Profile(
+                cloudName: profile.cloudName,
+                deviceLabel: profile.deviceLabel
+            ),
+            setActive: true
         )
-        app.completeOnboarding(username: username, pods: [pod])
     }
 
-    /// Post-recovery completion. The WebAuthn-PRF flow returned a
-    /// recovered UMK seed and the user picked a RecoveryChoice. v1
-    /// behaviour:
-    ///   - .keepBothDevices  → install UMK locally; mark paired;
-    ///                         pods will appear once /api/users/:u/pods
-    ///                         (or a /devices flow) is consulted.
-    ///   - .replaceLostDevice → same install, but B7 layers an IRK
-    ///                         rotation on top. The rotation isn't in
-    ///                         this commit — TODO routes through here
-    ///                         until B7 wires the /re-pair POST.
-    ///   - .wipeAndRestart    → blocked at the screen layer in v1.
-    ///
-    /// **TODO (cross-commit):** `Keystore.installUMK(seed:)` doesn't
-    /// exist yet; B3 lands the recovery navigation but the actual
-    /// Secure Enclave install happens in a follow-up. For now we mark
-    /// the user paired with an empty pod list so the shell renders.
-    fileprivate func completeRecoveryPair(choice: RecoveryChoice, recoveredSeed: SymmetricKey) {
-        // Best-effort: stash the seed under a known key in memory so a
-        // follow-up commit can install it. We deliberately do NOT
-        // serialize it here.
-        _ = recoveredSeed
-        _ = choice
-        // Username from the recovery envelope's claim — not yet
-        // surfaced in this flow. Use a placeholder until B4 lands the
-        // /devices lookup that resolves the user's actual username.
-        app.completeOnboarding(username: "recovered-user", pods: [])
-    }
-
-    /// Demo-skip completion ("pretend it's already running") and the
-    /// PodPair stub. No real pod; show one as online so the rest of
-    /// the surfaces have something to render.
-    fileprivate func completeOnlinePair(username: String, name: String, description: String) {
-        let label = name.isEmpty ? "Home" : name
-        let slug = SlugUtil.slugify(label)
-        let pod = PodInfo(
-            podId: "home",
-            name: label,
-            description: description.isEmpty ? nil : description,
-            fqdn: "\(slug).\(username).flagship.services",
-            status: .online
+    fileprivate func completeRealAccountLogin(username: String) {
+        app.completeOnboarding(username: username, pods: [])
+        // Label this device `admin`. A credential-proven takeover makes
+        // the new device the admin (reach = ukey.*); record it locally
+        // so the profile + any device-label surface reflects it.
+        // completeOnboarding upserts the profile by cloudName, so this
+        // refresh sets the label without duplicating the entry.
+        app.addProfile(
+            Profile(
+                cloudName: username,
+                deviceLabel: RealAccountLoginViewModel.adminDeviceLabel,
+                createdAt: app.activeProfile?.createdAt ?? Date()
+            ),
+            setActive: true
         )
-        app.completeOnboarding(username: username, pods: [pod])
-    }
-}
-
-private struct OnboardingCreateServer: View {
-    let username: String
-    /// Real flow: the QR-relay delivered. Carries the chosen name +
-    /// description AND the server-side data the VM produced so the
-    /// caller can record the pending pod accurately.
-    let onDelivered: (_ name: String, _ description: String, _ serverDomain: String, _ serial: String) -> Void
-    /// Demo skip — "Skip — pretend it's already running."
-    let onSkipDemo: (_ name: String, _ description: String) -> Void
-
-    @Environment(\.flagshipServerClient) private var serverClient
-    @Environment(\.qrRelayClient) private var qrRelay
-    @State private var vm: CreateServerViewModel?
-
-    var body: some View {
-        ZStack {
-            FSColors.scheme(.light).bg.ignoresSafeArea()
-            if let vm {
-                CreateServerStubScreen(
-                    vm: vm,
-                    onDelivered: { serverDomain, name, description in
-                        let serial = vm.lastDeliveredSerial ?? ""
-                        onDelivered(name, description, serverDomain, serial)
-                    },
-                    onDemoComplete: onSkipDemo,
-                    onCancel: {}
-                )
-            } else { ProgressView() }
-        }
-        .task {
-            if vm == nil {
-                vm = CreateServerViewModel(
-                    username: username,
-                    server: serverClient,
-                    relay: qrRelay
-                )
-            }
-        }
     }
 }
