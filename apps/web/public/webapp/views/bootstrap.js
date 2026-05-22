@@ -1,8 +1,14 @@
 import { bootstrapNewIdentity, bootstrapFromExistingSeed } from "../keystore.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
-import { inlinePrompt } from "../lib/modal.js";
+import { inlineConfirm, inlinePrompt } from "../lib/modal.js";
 import { recoverFromCloud } from "../lib/recovery.js";
+import {
+  activateDemoAccount,
+  classifyResolution,
+  resolveAccount,
+} from "../lib/accountResolve.js";
+import { addProfile } from "../lib/profiles.js";
 import { unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 
@@ -26,12 +32,15 @@ async function handleBootstrap() {
 }
 
 async function handleRecover() {
-  // #30 — three inline-modal steps replace three window.prompts. We
-  // keep them as a sequence (rather than one combined form) so the
-  // user can cancel between steps without losing their place.
+  // Account-name-first JOIN (docs/login-and-account-redesign.md). The
+  // login field holds ONLY a bare username — a person/company handle,
+  // letters/digits, no dots. We then run a single preflight
+  // (GET /api/account/resolve) and branch on what the account IS, not on
+  // an HTTP status. Login NEVER surfaces a 404: every "absent" is a node
+  // in the decision tree.
   const username = await inlinePrompt({
-    title: "Recover account",
-    message: "Username on the account you're recovering.",
+    title: "Join an account",
+    message: "The username on the account you're joining.",
     placeholder: "alice",
     validate: (v) => {
       if (!v) return "username required";
@@ -40,6 +49,62 @@ async function handleRecover() {
     },
   });
   if (!username) return;
+
+  let resolution;
+  try {
+    resolution = await resolveAccount(username);
+  } catch (e) {
+    // A throw here is a genuine transport/server failure (rate-limit,
+    // 5xx) — NOT a missing account. A miss is `kind:"unknown"` in a 200
+    // body, handled below.
+    return toast(`couldn't reach the directory: ${e.message ?? e}`, "err");
+  }
+
+  switch (classifyResolution(resolution)) {
+    case "demo":
+      return joinDemo(resolution);
+    case "unknown":
+      return showNoSuchAccount(username);
+    default:
+      return recoverRealAccount(username);
+  }
+}
+
+/** Demo = special-case recovery whose crypto checks are no-ops: knowing
+ *  the username is the entire capability. No passkey, no recovery popup,
+ *  no passphrase prompts — just attach a fresh device and open the
+ *  sandbox. */
+async function joinDemo(resolution) {
+  try {
+    await activateDemoAccount(resolution, {
+      bootstrapNewIdentity,
+      unlockSession,
+      addProfile,
+      dispatchInitialView,
+      setUsername: (u) => localStorage.setItem("flagship.username", u),
+    });
+    toast(`joined ${resolution.username}`, "ok");
+  } catch (e) {
+    toast(`couldn't open the demo: ${e.message ?? e}`, "err");
+  }
+}
+
+/** A miss is a STATE, not a 404 — render clear guidance, not an error. */
+async function showNoSuchAccount(username) {
+  await inlineConfirm({
+    title: "No Flagship account by that name",
+    message: `We couldn't find an account called "${username}". Check the spelling, or generate a new account instead.`,
+    okLabel: "OK",
+    cancelLabel: "Back",
+  });
+}
+
+/** Phase 1 keeps the EXISTING credentialed recovery flow for real
+ *  (single/multi) accounts. Phase 3 replaces this with the full login
+ *  state machine (passkey-PRF unwrap → TOTP → backup-vs-takeover). */
+async function recoverRealAccount(username) {
+  // #30 — inline-modal steps replace window.prompts. We keep them as a
+  // sequence so the user can cancel between steps without losing place.
   const passA = await inlinePrompt({
     title: "New local passphrase",
     message: "Encrypts the recovered key on this browser. 8+ characters.",
