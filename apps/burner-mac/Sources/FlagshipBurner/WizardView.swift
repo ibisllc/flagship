@@ -247,7 +247,7 @@ struct WizardView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.canFlash)
             }
-            if !model.isFinished {
+            if !model.isFinished && !model.isRunning {
                 if model.canFlash {
                     Text("Writes to \(model.selectedDisk?.deviceNode ?? "—") · erases what's there")
                         .font(FB.Font.caption())
