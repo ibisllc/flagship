@@ -7,15 +7,14 @@ import FlagshipAPI
 /// when AppState.isPaired == false.
 ///
 ///   Welcome
-///     ├─ Create your account → ChooseUsername → CreateServer
-///     │     ├─ real flow:  mintInstallBlob + relay deliver
-///     │     │              → pod lands in AppState with status=.pending
-///     │     │              → PendingPodWatcher polls install-events
-///     │     │                until the freshly-booted box phones home,
-///     │     │                then flips status to .online.
-///     │     └─ demo skip:   "pretend it's already running" — pod
-///     │                    lands as .online with no real provisioning
-///     │       (Create is create-only — demo entry moved to Join.)
+///     ├─ Create your account → ChooseUsername → OpenAccount
+///     │     Phase 2 decouples account identity from server
+///     │     provisioning: OpenAccount generates the UMK, derives the
+///     │     IRK, POSTs a standalone `claimUsername`, and names this
+///     │     first device. The user then lands on Home with ZERO
+///     │     servers + an "Add your first server" CTA. Provisioning a
+///     │     box (the old CreateServer mint/relay flow, claim removed)
+///     │     is now a reusable "Add a server" reachable from Home.
 ///     └─ I already have an account → JoinUsernameScreen (username-first)
 ///           → preflight /api/account/resolve (200 always):
 ///             ├─ demo    → DemoFixtures.activate (attach a new device)
@@ -43,30 +42,26 @@ public struct OnboardingFlow: View {
                     // activation moved OUT of the create path and into
                     // Join (username-first preflight) per the login
                     // redesign — typing a demo username under "I already
-                    // have an account" is the only demo entry.
+                    // have an account" is the only demo entry. Continuing
+                    // pushes the Phase-2 Open-account step (NOT
+                    // server-mint): account identity is created on its
+                    // own, server provisioning is a later, optional act.
                     ChooseUsernameScreen(
                         onContinue: { username in
-                            path.append(.createServer(username: username))
+                            path.append(.openAccount(username: username))
                         }
                     )
-                case .createServer(let username):
-                    OnboardingCreateServer(
+                case .openAccount(let username):
+                    // Phase 2 — open the account: generate the UMK,
+                    // derive the IRK, POST the standalone username claim,
+                    // and name this first device. Land on Home with ZERO
+                    // servers. Provisioning a box is now "Add a server"
+                    // from Home (CreateServerContainer in HomeTab), with
+                    // the claim removed from mintInstallBlob.
+                    OpenAccountScreen(
                         username: username,
-                        onDelivered: { name, description, serverDomain, serial in
-                            completePendingPair(
-                                username: username,
-                                name: name,
-                                description: description,
-                                serverDomain: serverDomain,
-                                serial: serial
-                            )
-                        },
-                        onSkipDemo: { name, description in
-                            completeOnlinePair(
-                                username: username,
-                                name: name,
-                                description: description
-                            )
+                        onOpened: { _ in
+                            app.completeOnboarding(username: username, pods: [])
                         }
                     )
                 case .recoverFromWelcome:
@@ -105,28 +100,6 @@ public struct OnboardingFlow: View {
 
     // MARK: - State writes
 
-    /// Real-flow completion. After the QR-relay deliver succeeds, the
-    /// CreateServerViewModel has minted + delivered the InstallBlob;
-    /// the freshly-flashed box hasn't booted yet. Add the pod with
-    /// status=.pending + auth-code serial recorded. PendingPodWatcher
-    /// (spawned by RootShell) polls /api/install-events/<serial>
-    /// until `ready` arrives, then flips status to .online.
-    fileprivate func completePendingPair(
-        username: String, name: String, description: String,
-        serverDomain: String, serial: String
-    ) {
-        let label = name.isEmpty ? "Home" : name
-        let pod = PodInfo(
-            podId: "pod-\(UUID().uuidString.prefix(6).lowercased())",
-            name: label,
-            description: description.isEmpty ? nil : description,
-            fqdn: serverDomain,
-            status: .pending,
-            pendingAuthCodeSerial: serial.isEmpty ? nil : serial
-        )
-        app.completeOnboarding(username: username, pods: [pod])
-    }
-
     /// Post-recovery completion. The WebAuthn-PRF flow returned a
     /// recovered UMK seed and the user picked a RecoveryChoice. v1
     /// behaviour:
@@ -158,61 +131,5 @@ public struct OnboardingFlow: View {
         // "recovered-user" placeholder. The real Keystore.installUMK +
         // /devices pod hydration land in Phase 3.
         app.completeOnboarding(username: username, pods: [])
-    }
-
-    /// Demo-skip completion ("pretend it's already running") and the
-    /// PodPair stub. No real pod; show one as online so the rest of
-    /// the surfaces have something to render.
-    fileprivate func completeOnlinePair(username: String, name: String, description: String) {
-        let label = name.isEmpty ? "Home" : name
-        let slug = SlugUtil.slugify(label)
-        let pod = PodInfo(
-            podId: "home",
-            name: label,
-            description: description.isEmpty ? nil : description,
-            fqdn: "\(slug).\(username).flagship.services",
-            status: .online
-        )
-        app.completeOnboarding(username: username, pods: [pod])
-    }
-}
-
-private struct OnboardingCreateServer: View {
-    let username: String
-    /// Real flow: the QR-relay delivered. Carries the chosen name +
-    /// description AND the server-side data the VM produced so the
-    /// caller can record the pending pod accurately.
-    let onDelivered: (_ name: String, _ description: String, _ serverDomain: String, _ serial: String) -> Void
-    /// Demo skip — "Skip — pretend it's already running."
-    let onSkipDemo: (_ name: String, _ description: String) -> Void
-
-    @Environment(\.flagshipServerClient) private var serverClient
-    @Environment(\.qrRelayClient) private var qrRelay
-    @State private var vm: CreateServerViewModel?
-
-    var body: some View {
-        ZStack {
-            FSColors.scheme(.light).bg.ignoresSafeArea()
-            if let vm {
-                CreateServerStubScreen(
-                    vm: vm,
-                    onDelivered: { serverDomain, name, description in
-                        let serial = vm.lastDeliveredSerial ?? ""
-                        onDelivered(name, description, serverDomain, serial)
-                    },
-                    onDemoComplete: onSkipDemo,
-                    onCancel: {}
-                )
-            } else { ProgressView() }
-        }
-        .task {
-            if vm == nil {
-                vm = CreateServerViewModel(
-                    username: username,
-                    server: serverClient,
-                    relay: qrRelay
-                )
-            }
-        }
     }
 }

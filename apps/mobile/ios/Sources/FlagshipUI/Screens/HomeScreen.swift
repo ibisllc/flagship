@@ -289,11 +289,26 @@ public struct HomeScreen: View {
             }
             if pods.isEmpty {
                 FSCard {
-                    VStack(alignment: .leading, spacing: FS.space.s2) {
-                        Text("No servers yet.").font(FS.font.body()).foregroundColor(c.text)
-                        Text("Add your first one to start running apps.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    VStack(alignment: .leading, spacing: FS.space.s3) {
+                        HStack(alignment: .top, spacing: FS.space.s3) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .imageScale(.large)
+                                .foregroundColor(c.success)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Your account is ready")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundColor(c.text)
+                                Text("You don't have any servers yet. Add your first server to start running your own apps — or come back to it whenever you like.")
+                                    .font(FS.font.bodySm())
+                                    .foregroundColor(c.textMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        FSPrimaryButton("Add your first server", block: true, action: onAddServer)
+                            .accessibilityIdentifier("home-add-first-server")
                     }
                 }
+                .accessibilityIdentifier("home-empty-state")
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
                     ForEach(pods) { pod in
@@ -318,20 +333,26 @@ public struct HomeScreen: View {
                     }
                 }
             }
-            Button(action: onAddServer) {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
-                    Text("Add server").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
-                    Spacer()
+            // The empty state already carries a primary "Add your first
+            // server" CTA; only show the secondary dashed "Add a server"
+            // affordance once at least one server exists.
+            if !pods.isEmpty {
+                Button(action: onAddServer) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
+                        Text("Add a server").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, FS.space.s4)
+                    .padding(.vertical, FS.space.s3)
+                    .background(c.primary.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: FS.radius.md)
+                            .stroke(c.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
                 }
-                .padding(.horizontal, FS.space.s4)
-                .padding(.vertical, FS.space.s3)
-                .background(c.primary.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md)
-                        .stroke(c.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                )
-                .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+                .accessibilityIdentifier("home-add-server")
             }
         }
     }

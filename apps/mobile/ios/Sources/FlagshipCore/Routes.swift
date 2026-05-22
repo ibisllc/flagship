@@ -73,12 +73,21 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
 }
 
 /// Onboarding sub-routes. Welcome is the root; the leaf flows are
-/// "create a new account" (Welcome → ChooseUsername → CreateServer)
-/// and "I already have an account" (Welcome → Recovery via WebAuthn-PRF
-/// → PostRecoveryChoice). Both leave the user on the paired RootShell.
+/// "create a new account" (Welcome → ChooseUsername → OpenAccount) and
+/// "I already have an account" (Welcome → Recovery via WebAuthn-PRF →
+/// PostRecoveryChoice). Both leave the user on the paired RootShell.
+/// Provisioning a server is no longer part of onboarding — it's the
+/// in-shell "Add a server" flow (HomeRoute.addServer).
 public enum OnboardingRoute: Hashable, Sendable {
     case chooseUsername
-    case createServer(username: String)
+    /// Open account — the Phase-2 step that decouples account identity
+    /// from server provisioning. Generates the UMK, derives the IRK,
+    /// POSTs a standalone `claimUsername`, and names this first device.
+    /// On success the user lands on Home with ZERO servers; the
+    /// create-server flow becomes a reusable "Add a server" from there
+    /// (HomeRoute.addServer), so onboarding no longer carries a
+    /// server-mint route.
+    case openAccount(username: String)
     /// Username-first Join ("I already have an account"). The FIRST
     /// screen is a bare-username input; on submit a single preflight
     /// (`/api/account/resolve`, 200 always) branches: demo attaches a
