@@ -79,9 +79,19 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
 public enum OnboardingRoute: Hashable, Sendable {
     case chooseUsername
     case createServer(username: String)
-    /// WebAuthn-PRF recovery on a fresh install. Fetches the
+    /// Username-first Join ("I already have an account"). The FIRST
+    /// screen is a bare-username input; on submit a single preflight
+    /// (`/api/account/resolve`, 200 always) branches: demo attaches a
+    /// new device + opens the sandbox; unknown renders an inline state;
+    /// single/multi push `.recoverWithPasskey`. This replaces the old
+    /// `assertAny()`-first recovery entry — Join no longer 404s.
+    case recoverFromWelcome
+    /// WebAuthn-PRF recovery for a resolved real account. Fetches the
     /// wrapped UMK from flagshipserver.com using the user's passkey
     /// (iCloud Keychain on Apple-paired devices, or a hardware
-    /// authenticator). After unwrap, presents PostRecoveryChoice.
-    case recoverFromWelcome
+    /// authenticator). After unwrap, presents PostRecoveryChoice. The
+    /// resolved `username` (from the preflight) replaces the old
+    /// "recovered-user" placeholder. Phase 3 replaces this whole leaf
+    /// with the LoginViewModel single/multi state machine.
+    case recoverWithPasskey(username: String)
 }

@@ -25,6 +25,15 @@ public protocol FlagshipServerClient: Sendable {
     /// success by both Mock + Live impls.
     func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
+    /// Login/join preflight. GET /api/account/resolve/<username>. The
+    /// sign-in space is access-control evaluation, not a fetch: this
+    /// reads what credentials + factors exist for the named account and
+    /// returns them as FIELDS so the client login state machine can
+    /// branch. **Returns 200 ALWAYS** — a missing account resolves to
+    /// `kind:"unknown"`, never a 404. Mirrors the Worker handler in
+    /// packages/control-plane/src/accountResolve.ts. See
+    /// docs/login-and-account-redesign.md.
+    func resolveAccount(username: String) async throws -> AccountResolution
     func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
     /// Register an APNs device token with .com so the Worker can relay
@@ -886,6 +895,110 @@ public enum DeviceScope: String, Codable, Equatable, Sendable, CaseIterable {
     }
 }
 
+/// Login/join preflight result. Mirrors the Worker's `AccountResolution`
+/// in packages/control-plane/src/accountResolve.ts EXACTLY (the
+/// iOS-Mock-matches-Worker-wire invariant). Returned by
+/// `GET /api/account/resolve/<username>`, which is **200 always** —
+/// every "absent" is a field, never an HTTP status. The client login
+/// state machine branches on `kind`:
+///   - "demo"    → skip all credentials; attach a new device + open the
+///                 sandbox via DemoFixtures.activate(demoServer:).
+///   - "unknown" → render "No Flagship account by that name" (not a 404).
+///   - "single" / "multi" → real-account recovery branches (Phase 3).
+public struct AccountResolution: Codable, Equatable, Sendable {
+    /// The recovery sub-block: whether a cloud-stored recovery envelope
+    /// exists for the account, whether fetching it is gated behind a
+    /// passphrase/fetch-token, and (when present) the credentialId.
+    public struct Recovery: Codable, Equatable, Sendable {
+        public let present: Bool
+        public let hasFetchGate: Bool
+        public let credentialId: String?
+        public init(present: Bool, hasFetchGate: Bool, credentialId: String? = nil) {
+            self.present = present
+            self.hasFetchGate = hasFetchGate
+            self.credentialId = credentialId
+        }
+    }
+
+    /// Forward-compatible decode of the account `kind`. An unknown
+    /// future value parses to `.unknown` so an older client renders the
+    /// "no account" state instead of crashing on a newer Worker.
+    public enum Kind: String, Codable, Equatable, Sendable {
+        case demo
+        case single
+        case multi
+        case unknown
+
+        public init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Kind(rawValue: raw) ?? .unknown
+        }
+    }
+
+    /// Server-derived recovery-speed hint so every client renders
+    /// identical copy without re-deriving the account-type matrix.
+    /// Unknown future values parse to `.none`.
+    public enum GraceModel: String, Codable, Equatable, Sendable {
+        case instant
+        case sevenDay = "7d"
+        case twentyFourHourTotp = "24h-totp"
+        case none
+
+        public init(from decoder: Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = GraceModel(rawValue: raw) ?? .none
+        }
+    }
+
+    /// Normalized handle the lookup ran against.
+    public let username: String
+    public let exists: Bool
+    public let kind: Kind
+    public let recovery: Recovery
+    public let totpEnrolled: Bool
+    public let trustedDeviceCount: Int
+    /// Present only for demo accounts. Same shape /api/users/check
+    /// returns today.
+    public let demoServer: DemoServerBlock?
+    public let graceModel: GraceModel
+
+    public init(
+        username: String,
+        exists: Bool,
+        kind: Kind,
+        recovery: Recovery,
+        totpEnrolled: Bool,
+        trustedDeviceCount: Int,
+        demoServer: DemoServerBlock? = nil,
+        graceModel: GraceModel
+    ) {
+        self.username = username
+        self.exists = exists
+        self.kind = kind
+        self.recovery = recovery
+        self.totpEnrolled = totpEnrolled
+        self.trustedDeviceCount = trustedDeviceCount
+        self.demoServer = demoServer
+        self.graceModel = graceModel
+    }
+
+    /// The zeroed `kind:"unknown"` result the Worker returns for a
+    /// non-existent (or label-invalid) name. Surfaced as a state, never
+    /// an error. Matches the Worker's `unknown(username)` helper.
+    public static func unknown(_ username: String) -> AccountResolution {
+        AccountResolution(
+            username: username,
+            exists: false,
+            kind: .unknown,
+            recovery: Recovery(present: false, hasFetchGate: false),
+            totpEnrolled: false,
+            trustedDeviceCount: 0,
+            demoServer: nil,
+            graceModel: .none
+        )
+    }
+}
+
 public struct RecoveryEnvelopeRequest: Codable, Equatable, Sendable {
     public let credentialId: String
     public let wrappedUmkBase64: String
@@ -1063,6 +1176,58 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             available: true,
             reason: nil,
             demoServer: demoBlock
+        )
+    }
+
+    /// Login/join preflight. Mirrors the Worker's
+    /// `handleAccountResolve` decision order:
+    ///   1. demo_users (here: `demoServers`) checked FIRST — a hit is
+    ///      `kind:"demo"` + the demoServer block + `graceModel:"instant"`.
+    ///      Demo crypto is a no-op so no other field matters.
+    ///   2. otherwise project the claimed-username row: `kind` is
+    ///      "multi" iff `accountTypeByUser[u] == "multi"`, else "single";
+    ///      recovery presence from `cloudRecoveryByUser`; totpEnrolled
+    ///      from `totpEnrolledAtByUser`; trustedDeviceCount from
+    ///      `devicesByUser`; graceModel derived per the matrix.
+    ///   3. a name with no claim (and no demo row) resolves to
+    ///      `kind:"unknown"` with zeroed factors — NEVER throws / 404s.
+    /// The Live client GETs the endpoint; this keeps the two wire-shapes
+    /// byte-aligned.
+    public func resolveAccount(username: String) async throws -> AccountResolution {
+        try await tick()
+        let u = username.lowercased()
+        // 1. Demo first. The username IS the capability for a demo
+        // account; any seeded demo username opens with crypto skipped.
+        if let demo = demoServers[u] {
+            return AccountResolution(
+                username: u,
+                exists: true,
+                kind: .demo,
+                recovery: .init(present: false, hasFetchGate: false),
+                totpEnrolled: false,
+                trustedDeviceCount: 0,
+                demoServer: demo,
+                graceModel: .instant
+            )
+        }
+        // 2. Real claimed account.
+        guard claimedUsernames[u] != nil else {
+            // 3. No account by that name — a STATE, not an error.
+            return .unknown(u)
+        }
+        let kind: AccountResolution.Kind =
+            (accountTypeByUser[u] == "multi") ? .multi : .single
+        let hasRecovery = cloudRecoveryByUser[u] ?? false
+        let deviceCount = (devicesByUser[u] ?? []).count
+        return AccountResolution(
+            username: u,
+            exists: true,
+            kind: kind,
+            recovery: .init(present: hasRecovery, hasFetchGate: false),
+            totpEnrolled: totpEnrolledAtByUser[u] != nil,
+            trustedDeviceCount: deviceCount,
+            demoServer: nil,
+            graceModel: kind == .multi ? .twentyFourHourTotp : .sevenDay
         )
     }
 
@@ -1624,6 +1789,23 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
         let body = try JSONEncoder().encode(["username": username])
         return try await postJsonReturning("/api/users/check", body: body)
+    }
+
+    public func resolveAccount(username: String) async throws -> AccountResolution {
+        // GET /api/account/resolve/<username> — 200 always. We still
+        // surface a non-2xx as an error (a 5xx is a real outage, not a
+        // login-state node) but the Worker never 404s a missing account:
+        // that comes back as kind:"unknown" in the body.
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/account/resolve/\(encoded)"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(AccountResolution.self, from: data)
     }
 
     public func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse {

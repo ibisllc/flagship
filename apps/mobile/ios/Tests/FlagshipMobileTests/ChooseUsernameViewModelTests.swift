@@ -60,26 +60,10 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         }
     }
 
-    func test_testAccountHit_yieldsTestAccountStatus() async {
-        let server = makeServer()
-        server.testAccounts = [
-            "play-q2": TestAccountMeta(display: "Play Reviewer", ttlHours: 12),
-        ]
-        let vm = makeViewModel(server)
-        await vm.evaluate("play-q2")
-        XCTAssertEqual(vm.status.testAccountMeta?.display, "Play Reviewer")
-        XCTAssertTrue(vm.status.allowsContinue)
-    }
-
-    func test_caseInsensitive_lowercasesBeforeWorker() async {
-        let server = makeServer()
-        server.testAccounts = [
-            "play-q2": TestAccountMeta(display: "Play Reviewer", ttlHours: 12),
-        ]
-        let vm = makeViewModel(server)
-        await vm.evaluate("Play-Q2")
-        XCTAssertNotNil(vm.status.testAccountMeta)
-    }
+    // Demo / test-account entry moved OUT of the create path and into
+    // the username-first Join flow (LoginViewModel → /api/account/
+    // resolve) per the login redesign. Create is create-only now; the
+    // demo branch is exercised in LoginViewModelTests.
 
     func test_networkFailure_fallsBackToOptimisticAvailable() async {
         let server = makeServer()
@@ -120,11 +104,5 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         XCTAssertFalse(ChooseUsernameViewModel.Status.taken.allowsContinue)
         XCTAssertTrue(ChooseUsernameViewModel.Status.available.allowsContinue)
         XCTAssertTrue(ChooseUsernameViewModel.Status.networkFallbackAvailable.allowsContinue)
-        XCTAssertTrue(
-            ChooseUsernameViewModel.Status.testAccount(
-                .init(display: "X", ttlHours: 6),
-                demoServer: nil
-            ).allowsContinue
-        )
     }
 }

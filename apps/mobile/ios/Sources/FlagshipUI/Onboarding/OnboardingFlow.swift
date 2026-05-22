@@ -13,13 +13,17 @@ import FlagshipAPI
 ///     │     │              → PendingPodWatcher polls install-events
 ///     │     │                until the freshly-booted box phones home,
 ///     │     │                then flips status to .online.
-///     │     ├─ demo skip:   "pretend it's already running" — pod
-///     │     │              lands as .online with no real provisioning
-///     │     └─ test-account: DemoFixtures.activate (3 sample pods)
-///     └─ I already have an account → RecoverFromWelcomeScreen
-///           (WebAuthn-PRF recovery via the user's passkey →
-///           PostRecoveryChoice: Keep both / Replace lost / Wipe)
-///           — wired in B3. B1 just lays the path entry.
+///     │     └─ demo skip:   "pretend it's already running" — pod
+///     │                    lands as .online with no real provisioning
+///     │       (Create is create-only — demo entry moved to Join.)
+///     └─ I already have an account → JoinUsernameScreen (username-first)
+///           → preflight /api/account/resolve (200 always):
+///             ├─ demo    → DemoFixtures.activate (attach a new device)
+///             ├─ unknown → inline "no account by that name" state
+///             └─ single/multi → RecoverFromWelcomeContainer
+///                       (WebAuthn-PRF recovery → PostRecoveryChoice).
+///           Phase 3 replaces the single/multi leaf with the
+///           LoginViewModel state machine.
 public struct OnboardingFlow: View {
     @Environment(AppState.self) private var app
     @State private var path: [OnboardingRoute] = []
@@ -35,36 +39,14 @@ public struct OnboardingFlow: View {
             .navigationDestination(for: OnboardingRoute.self) { route in
                 switch route {
                 case .chooseUsername:
+                    // Create is create-only now. Demo + device-capability
+                    // activation moved OUT of the create path and into
+                    // Join (username-first preflight) per the login
+                    // redesign — typing a demo username under "I already
+                    // have an account" is the only demo entry.
                     ChooseUsernameScreen(
                         onContinue: { username in
                             path.append(.createServer(username: username))
-                        },
-                        onDemoActivate: { username, _, demoServer in
-                            // Plan A — when the Worker returned a
-                            // demoServer block, render ONE real device
-                            // backed by the Hetzner VPS. Otherwise
-                            // fall back to the legacy 3-fixture path
-                            // so already-shipped binaries / reviewers
-                            // without a live VPS still work.
-                            DemoFixtures.activate(
-                                app,
-                                username: username,
-                                demoServer: demoServer
-                            )
-                        },
-                        onDeviceCapabilityActivate: { username, demoServer, capability in
-                            // v2 device-addressing — the typed string
-                            // was `<u>.<label>`. Materialise the same
-                            // live VPS as the primary device sees,
-                            // then install the capability so the home
-                            // screen renders the chip + the install /
-                            // vibe-code buttons grey out per scope.
-                            DemoFixtures.activate(
-                                app,
-                                username: username,
-                                demoServer: demoServer,
-                                deviceCapability: capability
-                            )
                         }
                     )
                 case .createServer(let username):
@@ -88,9 +70,31 @@ public struct OnboardingFlow: View {
                         }
                     )
                 case .recoverFromWelcome:
+                    // Username-first Join. The single preflight branches:
+                    // demo attaches a device + opens the sandbox here;
+                    // unknown renders inline on the screen; single/multi
+                    // push the existing passkey container (Phase 3
+                    // replaces that with the LoginViewModel state machine).
+                    JoinUsernameScreen(
+                        onDemo: { username, demoServer in
+                            DemoFixtures.activate(
+                                app,
+                                username: username,
+                                demoServer: demoServer
+                            )
+                        },
+                        onRealAccount: { resolution in
+                            path.append(.recoverWithPasskey(username: resolution.username))
+                        }
+                    )
+                case .recoverWithPasskey(let username):
                     RecoverFromWelcomeContainer(
                         onComplete: { choice, seed in
-                            completeRecoveryPair(choice: choice, recoveredSeed: seed)
+                            completeRecoveryPair(
+                                username: username,
+                                choice: choice,
+                                recoveredSeed: seed
+                            )
                         },
                         onBack: { path.removeLast() }
                     )
@@ -139,16 +143,21 @@ public struct OnboardingFlow: View {
     /// exist yet; B3 lands the recovery navigation but the actual
     /// Secure Enclave install happens in a follow-up. For now we mark
     /// the user paired with an empty pod list so the shell renders.
-    fileprivate func completeRecoveryPair(choice: RecoveryChoice, recoveredSeed: SymmetricKey) {
+    fileprivate func completeRecoveryPair(
+        username: String,
+        choice: RecoveryChoice,
+        recoveredSeed: SymmetricKey
+    ) {
         // Best-effort: stash the seed under a known key in memory so a
         // follow-up commit can install it. We deliberately do NOT
         // serialize it here.
         _ = recoveredSeed
         _ = choice
-        // Username from the recovery envelope's claim — not yet
-        // surfaced in this flow. Use a placeholder until B4 lands the
-        // /devices lookup that resolves the user's actual username.
-        app.completeOnboarding(username: "recovered-user", pods: [])
+        // The username now comes from the login preflight (resolved on
+        // the username-first Join screen), retiring the old
+        // "recovered-user" placeholder. The real Keystore.installUMK +
+        // /devices pod hydration land in Phase 3.
+        app.completeOnboarding(username: username, pods: [])
     }
 
     /// Demo-skip completion ("pretend it's already running") and the

@@ -2,15 +2,15 @@ import Foundation
 import Observation
 import FlagshipAPI
 
-/// Backs ChooseUsernameScreen. Owns the debounced availability check
-/// against /api/users/check on flagshipserver.com (the Worker) and the
-/// resolved state the view renders.
+/// Backs ChooseUsernameScreen (the **create** path). Owns the debounced
+/// availability check against /api/users/check on flagshipserver.com
+/// (the Worker) and the resolved state the view renders.
 ///
-/// Test-account branch: when the Worker returns a non-null
-/// `testAccount` block, the typed username matched the off-git secret
-/// list and the screen flips its CTA to "Enter <display>". Activation
-/// itself lives in DemoFixtures in FlagshipCore — the view-model only
-/// surfaces the metadata.
+/// **Create-only.** As of the login redesign, the demo / test-account /
+/// device-capability branches moved OUT of create and into the
+/// username-first Join flow (LoginViewModel → `/api/account/resolve`).
+/// This view-model only resolves available / taken / invalid for a
+/// fresh username reservation; it no longer surfaces demo metadata.
 @MainActor
 @Observable
 public final class ChooseUsernameViewModel {
@@ -20,59 +20,15 @@ public final class ChooseUsernameViewModel {
         case checking
         case available
         case taken
-        /// Legacy + Plan A demo branch. `demoServer` is non-nil when
-        /// the Worker also returned a live `demoServer` block (Plan A
-        /// — on-connect Hetzner). Nil ⇒ legacy fixtures-only path so
-        /// already-shipped binaries / reviewers without a live VPS
-        /// still get the three-pod sandbox.
-        case testAccount(TestAccountMeta, demoServer: DemoServerBlock?)
-        /// v2 device-addressing — the typed string was `<u>.<label>`
-        /// and the Worker returned a matching DeviceCapabilityGrant.
-        /// Carries the demoServer block from the underlying user-part
-        /// row (so the rendered pod is the SAME live VPS as the
-        /// primary device sees) plus the device's capability block
-        /// (label + scopes). Activation runs the same demoServer code
-        /// path, then installs the capability into AppState so the
-        /// UI greys out actions absent from `scopes`.
-        case deviceCapability(
-            label: String,
-            demoServer: DemoServerBlock,
-            capability: DeviceCapabilityBlock
-        )
         case networkFallbackAvailable  // regex passed but Worker unreachable
 
         public var allowsContinue: Bool {
             switch self {
-            case .available, .testAccount, .deviceCapability, .networkFallbackAvailable:
+            case .available, .networkFallbackAvailable:
                 return true
             default:
                 return false
             }
-        }
-
-        public var testAccountMeta: TestAccountMeta? {
-            if case .testAccount(let m, _) = self { return m }
-            return nil
-        }
-
-        /// Plan A — the server-supplied `demoServer` block, when the
-        /// matched account has one. Nil for the legacy fixtures-only
-        /// path. Callers (OnboardingFlow / ChooseUsernameScreen) pass
-        /// this through to DemoFixtures.activate so the live "one
-        /// real device" path is taken when available.
-        public var demoServerBlock: DemoServerBlock? {
-            if case .testAccount(_, let demo) = self { return demo }
-            if case .deviceCapability(_, let demo, _) = self { return demo }
-            return nil
-        }
-
-        /// v2 device-addressing — non-nil when the typed string was
-        /// `<u>.<label>` and the Worker returned a DeviceCapabilityGrant.
-        /// Onboarding passes this through to DemoFixtures.activate so
-        /// the session inherits the restricted scope set.
-        public var deviceCapabilityBlock: DeviceCapabilityBlock? {
-            if case .deviceCapability(_, _, let cap) = self { return cap }
-            return nil
         }
     }
 
@@ -105,11 +61,10 @@ public final class ChooseUsernameViewModel {
     /// cancels the in-flight check before the network call fires.
     ///
     /// Mirrors Android (ChooseUsernameScreen.kt): the Worker is the
-    /// authoritative source of "valid / reserved / claimed / test
-    /// account." We do NOT pre-validate locally — that lets a typed
-    /// hyphenated label or a Worker-secret test-account string still
-    /// reach the network. The fallback regex only fires when the
-    /// Worker is unreachable.
+    /// authoritative source of "valid / reserved / claimed." We do NOT
+    /// pre-validate locally — that lets a typed hyphenated label still
+    /// reach the network for a proper Worker reason. The fallback regex
+    /// only fires when the Worker is unreachable.
     public func evaluate(_ raw: String) async {
         let lower = raw.lowercased()
         if lower.isEmpty {
@@ -140,25 +95,7 @@ public final class ChooseUsernameViewModel {
             return
         }
         if Task.isCancelled { return }
-        if let cap = resp.deviceCapability, let demo = resp.demoServer {
-            // v2 device-addressing precedes the testAccount branch.
-            // The Worker only emits both blocks together when a
-            // `<u>.<label>` dot-form resolved AND the underlying user
-            // is a demo user. The activation path renders the SAME
-            // live VPS as the primary device, then installs the
-            // restricted scope set into AppState.
-            status = .deviceCapability(
-                label: cap.label,
-                demoServer: demo,
-                capability: cap
-            )
-        } else if let meta = resp.testAccount {
-            // Plan A — propagate the optional demoServer block so the
-            // host screen can hand it to DemoFixtures.activate. When
-            // present, the host renders ONE live device backed by a
-            // Hetzner VPS; when nil, the legacy 3-fixture path runs.
-            status = .testAccount(meta, demoServer: resp.demoServer)
-        } else if resp.available {
+        if resp.available {
             status = .available
         } else if resp.reason == "already claimed" {
             status = .taken
