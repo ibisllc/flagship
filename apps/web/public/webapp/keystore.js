@@ -152,8 +152,18 @@ function pkcs8FromSeed(seed) {
   return out;
 }
 
-export async function deriveIrkFromSeed(umkSeed) {
-  const seed = await hkdf32(umkSeed, "flagship.irk.v1");
+/** HKDF info for the IRK at a given version. Version 1 is the canonical
+ *  `flagship.irk.v1` the rest of Flagship registers; higher versions are
+ *  the rotation slots a re-pair/takeover moves to (a fresh DEVICE key
+ *  derived from the SAME user key — see ReplaceDeviceViewModel + the
+ *  versioned `flagship/irk/v<N>` keystore on mobile). The webapp keeps
+ *  the dotted `flagship.irk.v<N>` shape it already ships for v1. */
+function irkInfo(version) {
+  return `flagship.irk.v${version}`;
+}
+
+async function irkFromInfoSeed(umkSeed, info) {
+  const seed = await hkdf32(umkSeed, info);
   const pkcs8 = pkcs8FromSeed(seed);
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
@@ -167,6 +177,21 @@ export async function deriveIrkFromSeed(umkSeed) {
   // generate a JWK-exportable form.
   const jwkPub = await jwkPubFromSeed(seed);
   return { privateKey, publicKey: jwkPub };
+}
+
+export async function deriveIrkFromSeed(umkSeed) {
+  return irkFromInfoSeed(umkSeed, irkInfo(1));
+}
+
+/** Derive the IRK at a specific rotation version. v1 == {@link
+ *  deriveIrkFromSeed} (the registered key). A takeover rotates to the
+ *  next version so the NEW device key signs the re-pair while the OLD
+ *  (v1, currently-registered) key is what the swap displaces. */
+export async function deriveIrkVersioned(umkSeed, version) {
+  if (!Number.isInteger(version) || version < 1) {
+    throw new Error("irk version must be a positive integer");
+  }
+  return irkFromInfoSeed(umkSeed, irkInfo(version));
 }
 
 export async function deriveBakFromSeed(umkSeed, serverId) {
@@ -222,6 +247,16 @@ export async function signWithIrk(umkSeed, canonicalBytes) {
     await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, canonicalBytes),
   );
   return sig;
+}
+
+/** Sign canonical-bytes with a SPECIFIC IRK rotation version. The
+ *  re-pair-initiate envelope must be signed by the NEW IRK (the one the
+ *  swap installs), so the takeover flow signs with the rotated version. */
+export async function signWithIrkVersioned(umkSeed, version, canonicalBytes) {
+  const irk = await deriveIrkVersioned(umkSeed, version);
+  return new Uint8Array(
+    await crypto.subtle.sign({ name: "Ed25519" }, irk.privateKey, canonicalBytes),
+  );
 }
 
 /**
