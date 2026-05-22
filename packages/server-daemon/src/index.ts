@@ -70,6 +70,11 @@ import {
   defaultEndpointsCachePath,
   resolveServicesEndpoints,
 } from "./servicesEndpoints.js";
+import {
+  defaultEntitlementBundlePath,
+  loadEntitlementBundle,
+} from "./entitlementBundleStore.js";
+import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
  * Production daemon entry point. Brings up:
@@ -339,6 +344,52 @@ async function main(): Promise<void> {
       ...(error !== undefined ? { error } : {}),
     });
 
+  // ---- Entitlement bundle (REQUIRED to start the tunnel client) ----
+  // N12b: the tunnel client presents an IRK-signed RootEntitlement (+
+  // optional ServiceEntitlement) on every HELLO instead of a raw
+  // controlledDomains list. The bundle is minted off-box (the phone, or
+  // the demo cloud-init bootstrap) and persisted to disk; the daemon
+  // loads it here and hands the runtime a getter so a rolling refresh
+  // (re-written file picked up via process restart) takes effect.
+  const entitlementBundlePath =
+    process.env.FLAGSHIP_ENTITLEMENTS_PATH ?? defaultEntitlementBundlePath(dataDir);
+  let entitlementBundle: EntitlementBundle;
+  try {
+    const loaded = await loadEntitlementBundle(entitlementBundlePath);
+    if (!loaded) {
+      throw new Error(
+        `entitlement bundle not found at ${entitlementBundlePath}; ` +
+          `the provisioner (phone / demo cloud-init bootstrap) must mint + write it before the daemon can serve`,
+      );
+    }
+    // Defense-in-depth: the bundle's podCanonical must be this server,
+    // and its podPubKey must equal our identity pubkey — otherwise the
+    // hub will reject the HELLO ("STK pubkey mismatches podPubKey") and
+    // we'd crash-loop with a confusing error. Catch it here instead.
+    if (loaded.rootEntitlement.podCanonical.toLowerCase() !== env.serverFqdn!.toLowerCase()) {
+      throw new Error(
+        `entitlement bundle podCanonical (${loaded.rootEntitlement.podCanonical}) does not match FLAGSHIP_SUBDOMAIN (${env.serverFqdn})`,
+      );
+    }
+    const ourPubHex = bytesToHexLocal(identityKeypair.publicKey);
+    const bundlePubHex = bytesToHexLocal(loaded.rootEntitlement.podPubKey);
+    if (ourPubHex !== bundlePubHex) {
+      throw new Error(
+        `entitlement bundle podPubKey (${bundlePubHex.slice(0, 16)}…) does not match server identity (${ourPubHex.slice(0, 16)}…)`,
+      );
+    }
+    entitlementBundle = loaded;
+    console.log(
+      `[daemon] loaded entitlement bundle for ${entitlementBundle.rootEntitlement.podCanonical} ` +
+        `(${entitlementBundle.serviceEntitlement ? `${entitlementBundle.serviceEntitlement.canonicals.length} service canonicals` : "root-only"})`,
+    );
+  } catch (e) {
+    const msg = (e as Error).message ?? String(e);
+    console.error(`[daemon] entitlement bundle load failed: ${msg}`);
+    await reportPhase("failed", `entitlements: ${msg}`.slice(0, 280));
+    process.exit(1);
+  }
+
   let runtime: DaemonRuntime;
   try {
     runtime = await startDaemonRuntime({
@@ -350,6 +401,7 @@ async function main(): Promise<void> {
       acmeEnvironment: env.acmeEnvironment!,
       wildcard: env.wildcard,
       dataDir,
+      entitlements: () => entitlementBundle,
       // Push a `cert-issued` checkpoint the moment ACME completes (and
       // again on every renewal — harmless, the phone just refreshes the
       // phase timestamp). Fires DURING startDaemonRuntime, before the
@@ -1034,6 +1086,14 @@ export type {
   EnsureLeadCustomCertDeps,
   ReceiveCustomCertDeps,
 } from "./acme/customDomainCert.js";
+export {
+  defaultEntitlementBundlePath,
+  loadEntitlementBundle,
+  parseEntitlementBundle,
+  serializeEntitlementBundle,
+  writeEntitlementBundle,
+} from "./entitlementBundleStore.js";
+export type { EntitlementBundleFile } from "./entitlementBundleStore.js";
 export { startDaemonRuntime, renewIfNeeded, resolveAccountKey } from "./runtime.js";
 export type {
   DaemonRuntime,

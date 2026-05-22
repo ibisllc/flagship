@@ -31,6 +31,10 @@ import {
 } from "../src/index.js";
 
 const KEK = new Uint8Array(32).fill(0x42);
+// A throwaway 32-byte hex used only to satisfy buildCloudConfigUserData's
+// shape validation in the unit tests that exercise the YAML/bootstrap
+// rendering directly (the value is never verified by these tests).
+const DEMO_IRK_PRIV = "11".repeat(32);
 
 interface FakeHetzner extends ProvisioningHetznerClient {
   calls: Array<{
@@ -121,18 +125,42 @@ async function mkDeps(opts: { seedDemo?: boolean; seedUsername?: boolean } = {})
 }
 
 describe("buildCloudConfigUserData", () => {
-  it("renders #cloud-config with both write_files entries + runcmd", () => {
+  it("renders #cloud-config with all write_files entries + runcmd", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: JSON.stringify({ serverDomain: "home.alice.flagship.services" }),
       installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     expect(yaml.startsWith("#cloud-config\n")).toBe(true);
     expect(yaml).toContain("write_files:");
     expect(yaml).toContain("path: /var/flagship/install-blob.json");
     expect(yaml).toContain("path: /usr/local/sbin/flagship-bootstrap.sh");
+    expect(yaml).toContain("path: /run/flagship-demo-irk.hex");
     expect(yaml).toContain("encoding: b64");
     expect(yaml).toContain("runcmd:");
     expect(yaml).toContain("/usr/local/sbin/flagship-bootstrap.sh");
+  });
+
+  it("ships the demo IRK priv (the 3rd content block) for on-box entitlement minting", () => {
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
+    });
+    const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    expect(all.length).toBe(3);
+    const irk = Buffer.from(all[2]![1]!, "base64").toString("utf8").trim();
+    expect(irk).toBe(DEMO_IRK_PRIV);
+  });
+
+  it("rejects a demoUserIrkPrivHex that is not 32-byte hex", () => {
+    expect(() =>
+      buildCloudConfigUserData({
+        installBlobJson: "{}",
+        installerGitRef: "main",
+        demoUserIrkPrivHex: "nothex",
+      }),
+    ).toThrow(/32-byte hex/);
   });
 
   it("inlines the install-blob.json as decodable base64", () => {
@@ -144,6 +172,7 @@ describe("buildCloudConfigUserData", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: blobJson,
       installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     // Extract the first base64 content under the install-blob.json
     // path. The line is `    content: <base64>`.
@@ -161,6 +190,7 @@ describe("buildCloudConfigUserData", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
       installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     // The bootstrap is the SECOND base64 content block.
     const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
@@ -172,6 +202,14 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain("npm install");
     expect(bootstrap).toContain("npx tsc -b");
     expect(bootstrap).toContain("install-helper.ts gen-identity");
+    // N12b — the box mints the IRK-signed entitlement bundle on-box
+    // (after gen-identity) using the shipped demo IRK priv, writes it to
+    // /var/flagship/entitlements.json, then shreds the IRK priv. Without
+    // this the daemon exits 1 ("entitlement bundle not found").
+    expect(bootstrap).toContain("install-helper.ts mint-entitlements");
+    expect(bootstrap).toContain("--out /var/flagship/entitlements.json");
+    expect(bootstrap).toContain("/run/flagship-demo-irk.hex");
+    expect(bootstrap).toContain("shred -u");
     // seal-for-bak is line-broken across a `\` continuation; just
     // assert both pieces are present.
     expect(bootstrap).toContain("install-helper.ts");
@@ -206,6 +244,7 @@ describe("buildCloudConfigUserData", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
       installerGitRef: "main",
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
     const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
@@ -230,12 +269,14 @@ describe("buildCloudConfigUserData", () => {
       buildCloudConfigUserData({
         installBlobJson: "{}",
         installerGitRef: "main; rm -rf /",
+        demoUserIrkPrivHex: DEMO_IRK_PRIV,
       }),
     ).toThrow(/disallowed/);
     expect(() =>
       buildCloudConfigUserData({
         installBlobJson: "{}",
         installerGitRef: "../etc/passwd",
+        demoUserIrkPrivHex: DEMO_IRK_PRIV,
       }),
     ).toThrow();
   });
@@ -245,6 +286,7 @@ describe("buildCloudConfigUserData", () => {
     const yaml = buildCloudConfigUserData({
       installBlobJson: "{}",
       installerGitRef: sha,
+      demoUserIrkPrivHex: DEMO_IRK_PRIV,
     });
     const m = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
     const bootstrap = Buffer.from(m[1]![1]!, "base64").toString("utf8");
@@ -312,6 +354,22 @@ describe("handleAdminCloudInitNow (W13)", () => {
     );
     expect(blob.installerGitRef).toBe("main");
     expect(blob.authCode.username).toBe("demoalice");
+
+    // The cloud-init ships the deterministic demo User IRK priv (3rd
+    // content block) so the box can mint the entitlement bundle on-box.
+    // It must equal deriveDemoUserIrk(KEK, user) — the same key the hub's
+    // irkLookup would return — or the minted RootEntitlement wouldn't
+    // verify if IRK checking is ever enabled on the hub.
+    const allContent = [...call.userData.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    expect(allContent.length).toBe(3);
+    const shippedIrkHex = Buffer.from(allContent[2]![1]!, "base64")
+      .toString("utf8")
+      .trim();
+    const expectedIrk = deriveDemoUserIrk(KEK, "demoalice");
+    const expectedIrkHex = Array.from(expectedIrk.privateKey)
+      .map((x) => x.toString(16).padStart(2, "0"))
+      .join("");
+    expect(shippedIrkHex).toBe(expectedIrkHex);
   });
 
   it("idempotent — second call with state=provisioning returns 200 + reused", async () => {

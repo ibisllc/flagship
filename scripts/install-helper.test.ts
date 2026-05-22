@@ -3,7 +3,12 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ed, verifyConsumeUnlockKey } from "@flagship/protocol";
+import {
+  ed,
+  verifyConsumeUnlockKey,
+  verifyRootEntitlement,
+  verifyServiceEntitlement,
+} from "@flagship/protocol";
 
 const HELPER = join(__dirname, "install-helper.ts");
 
@@ -153,5 +158,92 @@ describe("install-helper", () => {
     expect(env.request.sealedKey).toBe(sealedHex);
     expect(env.request.issuedAt).toBe(parseInt(issuedAt, 10));
     expect(env.signature).toMatch(/^[0-9a-f]{128}$/);
+  });
+
+  it("mint-entitlements: writes a bundle whose RootEntitlement verifies under the IRK + binds the STK", () => {
+    // IRK = the signer; podPubKey = the box's STK (would be the
+    // gen-identity pubkey on a real box).
+    const irkPriv = new Uint8Array(32).fill(0x11);
+    const irkPub = ed.getPublicKey(irkPriv);
+    const stkPriv = new Uint8Array(32).fill(0x22);
+    const stkPub = ed.getPublicKey(stkPriv);
+    const outPath = join(dir, "entitlements.json");
+    run([
+      "mint-entitlements",
+      "--irk-priv", Buffer.from(irkPriv).toString("hex"),
+      "--pod-pub", Buffer.from(stkPub).toString("hex"),
+      "--username", "alice",
+      "--pod-canonical", "home.alice.flagship.services",
+      "--out", outPath,
+    ]);
+    const file = JSON.parse(readFileSync(outPath, "utf8")) as {
+      rootEntitlement: {
+        username: string;
+        podPubKey: string;
+        podCanonical: string;
+        issuedAt: number;
+      };
+      rootEntitlementSig: string;
+      serviceEntitlement: unknown;
+    };
+    expect(file.rootEntitlement.username).toBe("alice");
+    expect(file.rootEntitlement.podCanonical).toBe("home.alice.flagship.services");
+    expect(file.rootEntitlement.podPubKey).toBe(Buffer.from(stkPub).toString("hex"));
+    expect(file.serviceEntitlement).toBeNull();
+    // The signature verifies under the IRK pubkey the hub would resolve.
+    const ok = verifyRootEntitlement(
+      {
+        username: file.rootEntitlement.username,
+        podPubKey: hexToBytes(file.rootEntitlement.podPubKey),
+        podCanonical: file.rootEntitlement.podCanonical,
+        issuedAt: file.rootEntitlement.issuedAt,
+      },
+      hexToBytes(file.rootEntitlementSig),
+      irkPub,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("mint-entitlements: --service-canonicals produces a verifiable ServiceEntitlement", () => {
+    const irkPriv = new Uint8Array(32).fill(0x33);
+    const irkPub = ed.getPublicKey(irkPriv);
+    const stkPub = ed.getPublicKey(new Uint8Array(32).fill(0x44));
+    const outPath = join(dir, "entitlements.json");
+    run([
+      "mint-entitlements",
+      "--irk-priv", Buffer.from(irkPriv).toString("hex"),
+      "--pod-pub", Buffer.from(stkPub).toString("hex"),
+      "--username", "alice",
+      "--pod-canonical", "home.alice.flagship.services",
+      "--service-canonicals", "Photos.home.alice.flagship.services,docs.home.alice.flagship.services",
+      "--out", outPath,
+    ]);
+    const file = JSON.parse(readFileSync(outPath, "utf8")) as {
+      serviceEntitlement: {
+        username: string;
+        podPubKey: string;
+        canonicals: string[];
+        issuedAt: number;
+        expiresAt: number;
+      };
+      serviceEntitlementSig: string;
+    };
+    // Canonicals are lower-cased on the way in.
+    expect(file.serviceEntitlement.canonicals).toEqual([
+      "photos.home.alice.flagship.services",
+      "docs.home.alice.flagship.services",
+    ]);
+    const ok = verifyServiceEntitlement(
+      {
+        username: file.serviceEntitlement.username,
+        podPubKey: hexToBytes(file.serviceEntitlement.podPubKey),
+        canonicals: file.serviceEntitlement.canonicals,
+        issuedAt: file.serviceEntitlement.issuedAt,
+        expiresAt: file.serviceEntitlement.expiresAt,
+      },
+      hexToBytes(file.serviceEntitlementSig),
+      irkPub,
+    );
+    expect(ok).toBe(true);
   });
 });

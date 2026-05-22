@@ -173,8 +173,20 @@ function b64Utf8(s: string): string {
 export function buildCloudConfigUserData(args: {
   installBlobJson: string;
   installerGitRef: string;
+  /**
+   * Demo User IRK private key (hex). Shipped on the demo cloud-init path
+   * so the box can mint the IRK-signed entitlement bundle (N12b) after
+   * generating its STK identity, then shred this file. The IRK is
+   * deterministic-from-KEK for demo accounts; the KEK is the real
+   * secret. Real installs deliver the bundle from the phone instead and
+   * never ship the IRK priv.
+   */
+  demoUserIrkPrivHex: string;
 }): string {
   const blobB64 = b64Utf8(args.installBlobJson);
+  if (!/^[0-9a-f]{64}$/i.test(args.demoUserIrkPrivHex)) {
+    throw new Error("buildCloudConfigUserData: demoUserIrkPrivHex must be 32-byte hex");
+  }
   // Validate git-ref shape inline (defense in depth — the operator
   // could only have set this via the Worker's wrangler.toml or
   // env-coded default, but the ref still gets shell-substituted in the
@@ -329,7 +341,35 @@ npx tsx scripts/install-helper.ts gen-identity \\
     --out-pem  /boot/identity.pem
 chmod 600 /var/flagship/identity/identity.priv.hex /boot/identity.pem
 SERVER_IDENTITY_PRIV_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
+SERVER_IDENTITY_PUB_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex)"
 report_phase identity
+
+# 6b. Mint the IRK-signed entitlement bundle the daemon presents on
+#     every tunnel HELLO (N12b). The RootEntitlement binds this box's
+#     STK (the identity pubkey just generated) to its canonical FQDN,
+#     signed by the demo User IRK. The hub routes both the pod canonical
+#     AND its one-label app children off this single root canonical via
+#     the registry wildcard fallback, so no ServiceEntitlement is needed
+#     for the demo to serve. Without this file the daemon exits 1
+#     (entitlement bundle not found) and never serves. The demo IRK priv
+#     was written by cloud-init write_files at /run/flagship-demo-irk.hex;
+#     we shred it right after.
+DEMO_IRK_PRIV_FILE=/run/flagship-demo-irk.hex
+if [ -s "$DEMO_IRK_PRIV_FILE" ]; then
+    DEMO_IRK_PRIV_HEX="$(tr -d '\\n' < "$DEMO_IRK_PRIV_FILE")"
+    npx tsx scripts/install-helper.ts mint-entitlements \\
+        --irk-priv "$DEMO_IRK_PRIV_HEX" \\
+        --pod-pub "$SERVER_IDENTITY_PUB_HEX" \\
+        --username "$USERNAME" \\
+        --pod-canonical "$SERVER_DOMAIN" \\
+        --out /var/flagship/entitlements.json \\
+        || echo "[flagship-bootstrap] WARNING: mint-entitlements failed; daemon will not serve"
+    chmod 600 /var/flagship/entitlements.json 2>/dev/null || true
+    shred -u "$DEMO_IRK_PRIV_FILE" 2>/dev/null || rm -f "$DEMO_IRK_PRIV_FILE"
+    echo "[flagship-bootstrap] entitlement bundle minted; demo IRK priv shredded"
+else
+    echo "[flagship-bootstrap] WARNING: demo IRK priv missing at $DEMO_IRK_PRIV_FILE; cannot mint entitlements"
+fi
 
 # 7. Seal LUKS key for the phone (sealForRecipient — Ed25519→X25519
 #    birational map, same as the Alpine install.sh path).
@@ -463,8 +503,11 @@ date > /var/flagship/installed.flag
 echo "[flagship-bootstrap] done"
 `;
   const bootstrapB64 = b64Utf8(bootstrap);
-  // cloud-config YAML. We base64-encode both files so newlines + quotes
-  // pass through unmolested.
+  const irkPrivB64 = b64Utf8(args.demoUserIrkPrivHex + "\n");
+  // cloud-config YAML. We base64-encode each file so newlines + quotes
+  // pass through unmolested. The demo IRK priv lands at
+  // /run/flagship-demo-irk.hex (0600, tmpfs) so the bootstrap can mint
+  // the entitlement bundle then shred it; it never persists to disk.
   return `#cloud-config
 write_files:
   - path: /var/flagship/install-blob.json
@@ -477,6 +520,11 @@ write_files:
     owner: root:root
     encoding: b64
     content: ${bootstrapB64}
+  - path: /run/flagship-demo-irk.hex
+    permissions: '0600'
+    owner: root:root
+    encoding: b64
+    content: ${irkPrivB64}
 runcmd:
   - [ /bin/bash, /usr/local/sbin/flagship-bootstrap.sh ]
 `;
@@ -634,6 +682,7 @@ export async function handleAdminCloudInitNow(
   const userData = buildCloudConfigUserData({
     installBlobJson: blobJson,
     installerGitRef,
+    demoUserIrkPrivHex: bytesToHex(userIrk.privateKey),
   });
 
   let prov: { serverId: string; ipv4: string | null };

@@ -26,6 +26,7 @@
 import { writeFileSync, chmodSync, readFileSync } from "node:fs";
 import {
   ed,
+  mintDevEntitlements,
   sealForEd25519Recipient,
   sealForRecipient,
   signPutSealedLuksKey,
@@ -232,6 +233,76 @@ function sealForBak(argv: string[]): void {
   process.stdout.write(bytesToHex(sealed) + "\n");
 }
 
+/**
+ * mint-entitlements --irk-priv <hex> --pod-pub <hex> --username <u>
+ *                   --pod-canonical <fqdn> [--service-canonicals a,b,c]
+ *                   --out <path>
+ *
+ * Mint the IRK-signed entitlement bundle the daemon presents on every
+ * tunnel HELLO (N12b). The RootEntitlement binds the server's identity
+ * pubkey (`--pod-pub`, the STK) to its canonical FQDN, signed by the
+ * user's IRK private key. Writes the bundle JSON (the
+ * `EntitlementBundleFile` shape parsed by
+ * server-daemon/entitlementBundleStore.ts) to `--out`, 0600.
+ *
+ * This runs on-box because the STK is generated on-box; the IRK private
+ * key is supplied by the provisioner. On the demo cloud-init path the
+ * deterministic-from-KEK demo IRK priv is shipped in the cloud-init
+ * write_files and shredded after this step.
+ */
+function mintEntitlements(argv: string[]): void {
+  const irkPrivHex = arg(argv, "--irk-priv");
+  const podPubHex = arg(argv, "--pod-pub");
+  const username = arg(argv, "--username");
+  const podCanonical = arg(argv, "--pod-canonical");
+  const outPath = arg(argv, "--out");
+  const scIdx = argv.indexOf("--service-canonicals");
+  const serviceCanonicals =
+    scIdx >= 0 && argv[scIdx + 1]
+      ? argv[scIdx + 1]!
+          .split(",")
+          .map((s) => s.trim().toLowerCase())
+          .filter((s) => s.length > 0)
+      : [];
+
+  const irkPriv = hexToBytes(irkPrivHex);
+  const irk: Keypair = { privateKey: irkPriv, publicKey: ed.getPublicKey(irkPriv) };
+  const podPubKey = hexToBytes(podPubHex);
+
+  const bundle = mintDevEntitlements({
+    irk,
+    podPubKey,
+    username,
+    podCanonical,
+    ...(serviceCanonicals.length > 0 ? { serviceCanonicals } : {}),
+  });
+
+  const file = {
+    rootEntitlement: {
+      username: bundle.rootEntitlement.username,
+      podPubKey: bytesToHex(bundle.rootEntitlement.podPubKey),
+      podCanonical: bundle.rootEntitlement.podCanonical,
+      issuedAt: bundle.rootEntitlement.issuedAt,
+    },
+    rootEntitlementSig: bytesToHex(bundle.rootEntitlementSig),
+    serviceEntitlement: bundle.serviceEntitlement
+      ? {
+          username: bundle.serviceEntitlement.username,
+          podPubKey: bytesToHex(bundle.serviceEntitlement.podPubKey),
+          canonicals: bundle.serviceEntitlement.canonicals,
+          issuedAt: bundle.serviceEntitlement.issuedAt,
+          expiresAt: bundle.serviceEntitlement.expiresAt,
+        }
+      : null,
+    serviceEntitlementSig: bundle.serviceEntitlementSig
+      ? bytesToHex(bundle.serviceEntitlementSig)
+      : null,
+  };
+  writeFileSync(outPath, JSON.stringify(file, null, 2) + "\n", { mode: 0o600 });
+  chmodSync(outPath, 0o600);
+  console.error(`[install-helper] wrote entitlement bundle to ${outPath}`);
+}
+
 function main(): void {
   const [, , cmd, ...rest] = process.argv;
   switch (cmd) {
@@ -245,9 +316,11 @@ function main(): void {
       return signSealedKey(rest);
     case "seal-for-bak":
       return sealForBak(rest);
+    case "mint-entitlements":
+      return mintEntitlements(rest);
     default:
       console.error(
-        "usage: install-helper <gen-identity|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak> [args]",
+        "usage: install-helper <gen-identity|pkcs8-from-hex|sign-server-register|sign-sealed-key|seal-for-bak|mint-entitlements> [args]",
       );
       process.exit(2);
   }
