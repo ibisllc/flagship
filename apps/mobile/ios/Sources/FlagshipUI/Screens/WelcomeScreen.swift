@@ -1,7 +1,15 @@
 import SwiftUI
+import FlagshipCore
 
 /// D.2.1 — WelcomeScreen.
 public struct WelcomeScreen: View {
+    // Dev-mode escape hatch — see `secretTap`. The live/mock toggle
+    // otherwise lives in Settings, which is unreachable before sign-in;
+    // tapping the box illustration 3× flips it from the cover page.
+    @Environment(DeveloperSettings.self) private var dev
+    @Environment(ToastCenter.self) private var toasts
+    @State private var tapCount: Int = 0
+
     var onCreate: () -> Void = {}
     var onExisting: () -> Void = {}
     public init(onCreate: @escaping () -> Void = {}, onExisting: @escaping () -> Void = {}) {
@@ -13,6 +21,8 @@ public struct WelcomeScreen: View {
             VStack(spacing: 0) {
                 Spacer().frame(height: FS.space.s16)
                 BoxIllustration().frame(height: 220)
+                    .contentShape(Rectangle())
+                    .onTapGesture { secretTap() }
                 Spacer()
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Text("Your stuff,\non your hardware.")
@@ -40,6 +50,22 @@ public struct WelcomeScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
         }
+    }
+
+    /// 3 taps on the box illustration toggles live↔mock and reveals the
+    /// in-Settings developer menu. Reachable WITHOUT signing in, so a
+    /// stranded live build can fall back to the on-device mock.
+    private func secretTap() {
+        tapCount += 1
+        guard tapCount >= 3 else { return }
+        tapCount = 0
+        dev.useLiveClient.toggle()
+        dev.unlocked = true
+        toasts.info(
+            dev.useLiveClient
+                ? "Live data — sign-in now hits flagshipserver.com."
+                : "Mock data — sign-in now uses on-device fixtures."
+        )
     }
 }
 
