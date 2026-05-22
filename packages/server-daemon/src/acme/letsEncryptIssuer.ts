@@ -190,10 +190,27 @@ export class LetsEncryptIssuer implements AcmeIssuer {
       let anyDns01 = false;
       for (const authz of authorizations) {
         const isWildcard = authz.identifier.value.startsWith("*.");
-        const challenge = isWildcard
-          ? authz.challenges.find((c) => c.type === "dns-01")
-          : authz.challenges.find((c) => c.type === "tls-alpn-01") ??
-            authz.challenges.find((c) => c.type === "dns-01");
+        // Prefer DNS-01 for EVERY name (wildcard and non-wildcard alike)
+        // whenever a DNS writer is configured — which it always is on the
+        // production demo path via the control-plane bridge. The
+        // non-wildcard SANs (the user-zone apex `<user>.flagship.services`
+        // and the server FQDN) used to take TLS-ALPN-01, which requires
+        // Let's Encrypt to reach the daemon over the Fly SNI-passthrough
+        // chain. That leg fails on the demo path ("Error getting
+        // validation data"), so the whole order never validated. DNS-01
+        // validates entirely over the Cloudflare zone we control and is
+        // already proven working for the wildcards, so routing the
+        // non-wildcard authorizations through it too makes issuance depend
+        // only on the path that works. Wildcards have no TLS-ALPN-01
+        // option, so they were always DNS-01. TLS-ALPN-01 remains the
+        // fallback for non-wildcards only when no DNS writer is available.
+        const challenge = this.opts.dns
+          ? authz.challenges.find((c) => c.type === "dns-01") ??
+            (isWildcard ? undefined : authz.challenges.find((c) => c.type === "tls-alpn-01"))
+          : isWildcard
+            ? authz.challenges.find((c) => c.type === "dns-01")
+            : authz.challenges.find((c) => c.type === "tls-alpn-01") ??
+              authz.challenges.find((c) => c.type === "dns-01");
         if (!challenge) {
           throw new Error(`no usable challenge for ${authz.identifier.value}`);
         }
