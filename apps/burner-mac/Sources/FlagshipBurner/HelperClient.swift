@@ -13,7 +13,6 @@ enum HelperClient {
     enum HelperError: LocalizedError {
         case needsApproval
         case registrationFailed(String)
-        case unsupported
 
         var errorDescription: String? {
             switch self {
@@ -21,10 +20,10 @@ enum HelperClient {
                 return "Approve “Flagship Assembler” in System Settings → General → Login Items "
                     + "(under “Allow in the Background”), then click Assemble again."
             case .registrationFailed(let m):
-                return "Couldn't register the privileged helper: \(m). The app must be "
-                    + "code-signed for this to work."
-            case .unsupported:
-                return "The privileged helper requires macOS 13 or later."
+                return "Couldn't register the privileged helper: \(m)\n"
+                    + "The app must be signed with a Developer ID Application certificate and run "
+                    + "from /Applications (ad-hoc/Apple-Development signatures and swift-build "
+                    + "binaries are rejected by macOS)."
             }
         }
     }
@@ -33,31 +32,33 @@ enum HelperClient {
         SMAppService.daemon(plistName: plistName)
     }
 
+    private static func statusName(_ s: SMAppService.Status) -> String {
+        switch s {
+        case .notRegistered: return "notRegistered"
+        case .enabled: return "enabled"
+        case .requiresApproval: return "requiresApproval"
+        case .notFound: return "notFound"
+        @unknown default: return "unknown(\(s.rawValue))"
+        }
+    }
+
     /// Ensure the daemon is registered and enabled. Throws `.needsApproval`
-    /// when the user still has to flip it on in System Settings.
+    /// when the user still has to flip it on in System Settings, or
+    /// `.registrationFailed` with the real SMAppService reason + status.
     static func ensureEnabled() throws {
         let s = service()
-        switch s.status {
-        case .enabled:
-            return
-        case .requiresApproval:
-            SMAppService.openSystemSettingsLoginItems()
-            throw HelperError.needsApproval
-        case .notRegistered:
-            do {
-                try s.register()
-            } catch {
-                throw HelperError.registrationFailed(error.localizedDescription)
-            }
-            if s.status != .enabled {
-                SMAppService.openSystemSettingsLoginItems()
-                throw HelperError.needsApproval
-            }
-        case .notFound:
-            throw HelperError.registrationFailed("daemon plist not found in the app bundle")
-        @unknown default:
-            throw HelperError.registrationFailed("unexpected status \(s.status.rawValue)")
+        let before = s.status
+        if before == .enabled { return }
+        do {
+            try s.register()
+        } catch {
+            throw HelperError.registrationFailed(
+                "\(error.localizedDescription) [status \(statusName(before))]")
         }
+        if s.status == .enabled { return }
+        // Registered but not yet allowed — the user must approve it.
+        SMAppService.openSystemSettingsLoginItems()
+        throw HelperError.needsApproval
     }
 
     static func makeConnection() -> NSXPCConnection {
