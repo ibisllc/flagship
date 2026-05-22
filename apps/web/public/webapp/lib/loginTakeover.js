@@ -27,11 +27,15 @@
 // (registered) IRK is the one the swap will displace. "Each install is a
 // new device" — the rotated key is this browser's device key.
 //
-// Grace COUNTDOWN / completion / push / quarantine are Phase 4; this
-// module only INITIATES the re-pair (the anti-abuse brake starts
-// server-side; the swap happens later). Live PRF crypto stays out of
-// scope — `recoverFromCloud` is injected and remains the existing
-// Mock/popup sub-origin flow.
+// Phase 3 INITIATES the re-pair (the anti-abuse brake starts server-
+// side; the swap happens later). Phase 4 adds the grace COUNTDOWN
+// ({@link graceTimeline}) + COMPLETION ({@link completeRePair} /
+// {@link finishTakeover}) — once `now >= completesAt` the user can
+// "Take over now", which POSTs /re-pair/complete (idempotent, no
+// signature gate) to swap the IRK and open the account fully.
+// Web Push integration, cross-device add-device QR, and live PRF crypto
+// stay out of scope — `recoverFromCloud` is injected and remains the
+// existing Mock/popup sub-origin flow.
 //
 // All side-effecting collaborators are injected so the branch logic is
 // unit-testable without IndexedDB / the DOM / the network / a real
@@ -340,6 +344,201 @@ export async function loginRealAccount(resolution, deps) {
     totpProof,
   });
   return { outcome: "takeover", takeover };
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Phase 4 — grace-period takeover COMPLETION + countdown.
+//
+// runTakeover (Phase 3) INITIATES the re-pair: the grace clock starts
+// server-side and returns { completesAt, graceMs, ... }. Phase 4 takes
+// that result and (a) renders a live countdown ("This device takes over
+// in N — your other devices are being alerted") with a "Take over now"
+// action that arms once `now >= completesAt`, and (b) POSTs
+// /api/users/:u/re-pair/complete to finalize the IRK swap.
+//
+// The complete endpoint (packages/control-plane/src/rePair.ts
+// handleCompleteRePair) is a PUBLIC read — idempotent, no signature
+// gate. Its body is optional (W6 `refreshedGrants` only) so the webapp
+// posts an empty body; the server CAS-swaps iff `completesAt <= now`
+// AND the row wasn't objected. Status map:
+//   200 → swapped (carries newIrkPub, swappedAt, quarantineUntil, …)
+//   404 → no pending row (already completed earlier == done, or expired
+//         + swept). We treat 404 as a benign "already-finalized."
+//   409 → objected by the OLD IRK, OR the current IRK already moved
+//         (a concurrent complete won). Surfaced as "objected/expired."
+//   425 → Too Early (grace window hasn't elapsed). The countdown
+//         shouldn't let the user reach this, but we surface it cleanly.
+//   403 → kept in the objected/expired bucket for forward-compat (the
+//         spec calls out 403/409 as the clean-surface cases).
+// ───────────────────────────────────────────────────────────────────
+
+/** Phase 4 — derive the countdown view-model from an initiate result.
+ *  Pure: no DOM, no timers. The host re-calls this on each tick with a
+ *  fresh `now` to repaint the label + flip the "Take over now" button.
+ *
+ *  `graceModel` ("7d" single / "24h-totp" multi) only colours the copy;
+ *  the authoritative deadline is always `completesAt` from the server.
+ *
+ *  @param {{completesAt?: number, graceMs?: number, accountType?: string}} rePair
+ *  @param {number} [now]
+ *  @returns {{
+ *    ready: boolean,             now >= completesAt — "Take over now" armed
+ *    remainingMs: number,        clamped at 0
+ *    completesAt: number,
+ *    graceModel: "7d"|"24h-totp",
+ *    label: string,              human countdown line
+ *    actionEnabled: boolean,     alias of `ready` (button disabled state)
+ *  }}
+ */
+export function graceTimeline(rePair, now = Date.now()) {
+  const completesAt = Number(rePair?.completesAt ?? 0);
+  const accountType = rePair?.accountType === "multi" ? "multi" : "single";
+  const graceModel = accountType === "multi" ? "24h-totp" : "7d";
+  const remainingMs = Math.max(0, completesAt - now);
+  const ready = now >= completesAt;
+  const label = ready
+    ? "The grace period has elapsed — you can take over now."
+    : `This device takes over in ${formatRemaining(remainingMs)} — your other devices are being alerted.`;
+  return {
+    ready,
+    remainingMs,
+    completesAt,
+    graceModel,
+    label,
+    actionEnabled: ready,
+  };
+}
+
+/** Human "Nd Nh" / "Nh Nm" / "Nm Ns" remaining string. Pure; no
+ *  locale dependency so tests pin the exact wording across surfaces. */
+export function formatRemaining(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86_400);
+  const h = Math.floor((s % 86_400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+/** POST /api/users/:u/re-pair/complete to finalize the IRK swap.
+ *
+ *  The endpoint is a public read (idempotent, no signature gate); the
+ *  webapp posts an empty JSON body. On a graceful-wipe cloud the caller
+ *  MAY pass `refreshedGrants` (W6) — out of scope for the webapp's own
+ *  takeover, but threaded through so a future caller can.
+ *
+ *  Returns a tagged outcome instead of throwing on the expected
+ *  not-2xx branches so the UI renders a state, never a raw error:
+ *    { outcome: "completed", body }           200
+ *    { outcome: "already-completed" }          404 (swapped earlier / swept)
+ *    { outcome: "objected", status, message }  403 / 409
+ *    { outcome: "too-early", completesAt, secondsRemaining } 425
+ *  Any OTHER status throws (genuine transport / server fault).
+ *
+ *  @param {{
+ *    username: string,
+ *    refreshedGrants?: object[],
+ *    fetch?: typeof fetch,
+ *    baseUrl?: string,
+ *  }} args
+ *  @returns {Promise<{outcome: string, [k: string]: unknown}>}
+ */
+export async function completeRePair(args) {
+  const f = args.fetch || fetch;
+  const baseUrl = args.baseUrl || APEX;
+  const username = args?.username;
+  if (!username) throw new Error("completeRePair: missing username");
+  const hasGrants = Array.isArray(args.refreshedGrants) && args.refreshedGrants.length > 0;
+  const resp = await f(
+    `${baseUrl}/api/users/${encodeURIComponent(username)}/re-pair/complete`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(hasGrants ? { refreshedGrants: args.refreshedGrants } : {}),
+    },
+  );
+  if (resp.ok) {
+    return { outcome: "completed", body: await resp.json().catch(() => ({})) };
+  }
+  if (resp.status === 404) {
+    // No pending row: either we already swapped on a prior call, or the
+    // window expired + the row was swept. Either way the takeover is
+    // (or can be re-)driven — treat as benign-done for the UI.
+    return { outcome: "already-completed" };
+  }
+  if (resp.status === 403 || resp.status === 409) {
+    const body = await resp.json().catch(() => ({}));
+    return {
+      outcome: "objected",
+      status: resp.status,
+      message:
+        typeof body?.error === "string"
+          ? body.error
+          : "This recovery was stopped or has already been claimed by another device.",
+    };
+  }
+  if (resp.status === 425) {
+    const body = await resp.json().catch(() => ({}));
+    return {
+      outcome: "too-early",
+      completesAt: typeof body?.completesAt === "number" ? body.completesAt : undefined,
+      secondsRemaining:
+        typeof body?.secondsRemaining === "number" ? body.secondsRemaining : undefined,
+    };
+  }
+  const txt = await safeText(resp);
+  throw new Error(`re-pair complete failed (${resp.status}): ${txt}`.trim());
+}
+
+/** Drive a takeover to FINAL: poll/complete once the grace has elapsed,
+ *  then finalize the v2 IRK locally and open the account fully.
+ *
+ *  The countdown UI calls this from the "Take over now" button (enabled
+ *  by {@link graceTimeline}.ready). On `completed` / `already-completed`
+ *  we run the injected `finalizeV2Irk` (activate the rotated device key
+ *  as the live signing key) and `openAccount` (dispatch Home). The
+ *  objected / too-early branches return the tagged outcome WITHOUT
+ *  finalizing so the host can show the right state.
+ *
+ *  @param {object} takeover           the runTakeover return ({username, rePair, …})
+ *  @param {{
+ *    finalizeV2Irk?: () => Promise<void>|void,
+ *    openAccount?: () => Promise<void>|void,
+ *    refreshedGrants?: object[],
+ *    fetch?: typeof fetch,
+ *    baseUrl?: string,
+ *    now?: () => number,
+ *  }} deps
+ *  @returns {Promise<{outcome: string, [k: string]: unknown}>}
+ */
+export async function finishTakeover(takeover, deps = {}) {
+  const username = takeover?.username;
+  if (!username) throw new Error("finishTakeover: missing username");
+  const now = deps.now ?? (() => Date.now());
+  const completesAt = Number(takeover?.rePair?.completesAt ?? 0);
+  if (now() < completesAt) {
+    // Defense-in-depth: the button shouldn't be reachable before the
+    // deadline, but never POST a complete the server will 425 on.
+    return {
+      outcome: "too-early",
+      completesAt,
+      secondsRemaining: Math.ceil((completesAt - now()) / 1000),
+    };
+  }
+  const result = await completeRePair({
+    username,
+    refreshedGrants: deps.refreshedGrants,
+    fetch: deps.fetch,
+    baseUrl: deps.baseUrl,
+  });
+  if (result.outcome === "completed" || result.outcome === "already-completed") {
+    if (typeof deps.finalizeV2Irk === "function") await deps.finalizeV2Irk();
+    if (typeof deps.openAccount === "function") await deps.openAccount();
+  }
+  return result;
 }
 
 /** Random URL-safe local-wrap passphrase. Like the demo path, the
