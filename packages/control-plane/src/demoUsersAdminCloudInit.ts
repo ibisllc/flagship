@@ -710,14 +710,19 @@ export async function handleAdminCloudInitNow(
   // CAS none → provisioning. Row never carries isoR2Key on this path
   // (cloud-init-direct doesn't use R2), so we leave that field
   // explicitly null.
+  const image = deps.hetznerImage ?? "debian-12";
   const transitioned = await deps.storage.transition(u, "none", "provisioning", {
     activeServerId: prov.serverId,
+    activeServerIp: prov.ipv4,
+    image,
     isoR2Key: null,
     lastActivityAt: now,
   });
   if (!transitioned) {
     await deps.storage.update(u, {
       activeServerId: prov.serverId,
+      activeServerIp: prov.ipv4,
+      image,
       isoR2Key: null,
     });
   }

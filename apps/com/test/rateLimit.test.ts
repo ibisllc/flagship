@@ -56,6 +56,14 @@ describe("rateLimit — endpoint detection", () => {
     expect(endpointFor("DELETE", "/api/recovery/by-username/abc123")).toBe("recovery-by-username");
   });
 
+  it("rate-limits the demo cancel endpoint per-IP", () => {
+    expect(endpointFor("POST", "/api/dev/sample-user/demoalice/cancel")).toBe("demo-cancel");
+    // connect / heartbeat are NOT in this table (they're dispatched
+    // unthrottled today); only cancel is added here.
+    expect(endpointFor("POST", "/api/dev/sample-user/demoalice/connect")).toBeNull();
+    expect(LIMITS["demo-cancel"]?.every((a) => a.axis === "ip")).toBe(true);
+  });
+
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
     expect(endpointFor("POST", "/api/marketplace/list")).toBeNull();

@@ -253,6 +253,8 @@ export async function handleCreateDemoUser(
     region,
     size,
     activeServerId: null,
+    activeServerIp: null,
+    image: null,
     activeServerFqdn: null,
     lastActivityAt: 0,
     state: "none",
@@ -429,6 +431,7 @@ export async function handleDemoUserConnect(
 
   await deps.storage.update(u, {
     activeServerId: provision.serverId,
+    activeServerIp: provision.ipv4,
     activeServerFqdn: fqdn,
   });
 
@@ -451,6 +454,75 @@ export async function handleDemoUserHeartbeat(
   }
   await deps.storage.update(u, { lastActivityAt: nowMs(deps) });
   return ok({ ok: true });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// 5b. POST /api/dev/sample-user/{u}/cancel — public (rate-limited)
+//
+// "Cancel this device" from the install-progress detail page. A demo
+// account is a no-auth capability (knowing the name is the capability),
+// so this is deliberately public — but it ONLY touches `demo_users`
+// rows. There is no path here to a REAL user's server (those live in
+// the `servers` table and are owner-IRK-gated; an owner-authorized
+// cancel for real servers is a follow-up). The edge rate-limits this
+// bucket so it can't be used to flap a demo's VPS.
+//
+// Teardown semantics: destroy the active Hetzner server (best-effort,
+// idempotent) and return the row to `none` so the UI drops back to the
+// empty/list state and a later /connect can re-provision. We keep the
+// row (and its snapshot_id/config) rather than deleting it — that's the
+// difference from admin /delete, which also drops the row.
+// ──────────────────────────────────────────────────────────────────────
+
+export async function handleDemoUserCancel(
+  deps: DemoUsersDeps,
+  username: string,
+): Promise<HandlerResponseWithHeaders> {
+  const u = username.toLowerCase();
+  const row = await deps.storage.get(u);
+  if (!row) return notFound("no such demo user");
+
+  // Already torn down — idempotent success so a double-tap is a no-op.
+  if (row.state === "none") {
+    return ok({ username: u, cancelled: true, state: "none" });
+  }
+
+  // Best-effort provider destroy. The hetzner client treats 404 as
+  // success (already gone). On a hard failure we leave the row so a
+  // retry (or the idle reaper) can finish, and surface a clear reason.
+  if (row.activeServerId) {
+    try {
+      await deps.hetzner.destroyServer(row.activeServerId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await deps.storage.update(u, { state: "idle-pending-teardown" });
+      return {
+        status: 502,
+        body: {
+          username: u,
+          cancelled: false,
+          reason: "provider-destroy-failed",
+          detail: msg.slice(0, 200),
+        },
+      };
+    }
+  }
+
+  // Reset to a clean 'none' so the device disappears from the UI and a
+  // future /connect re-provisions. Clear the per-server identity fields
+  // (id/ip/fqdn) AND the provisioning observability fields so the next
+  // run starts from a blank progress bar.
+  await deps.storage.update(u, {
+    state: "none",
+    activeServerId: null,
+    activeServerIp: null,
+    activeServerFqdn: null,
+    provisionPhase: null,
+    provisionPhaseAt: null,
+    provisionLastError: null,
+  });
+  await audit(deps, u, "demo-user-cancelled", `serverId=${row.activeServerId ?? ""}`);
+  return ok({ username: u, cancelled: true, state: "none" });
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -833,6 +905,20 @@ export interface DemoServerBlock {
   phaseAt: number | null;
   /** Failure detail, present only when `phase === "failed"`. */
   lastError?: string;
+  /**
+   * Device-identifying metadata (migration 0036) so the user can confirm
+   * the box they're watching is theirs. These ride the same signaling
+   * channel as `phase`. Each is omitted when unknown (provider hasn't
+   * returned it / pre-0036 row) so the wire stays minimal.
+   *   ip         — public IPv4 the provider handed back.
+   *   region     — provider location (e.g. `fsn1`).
+   *   serverType — provider size (e.g. `cx22`).
+   *   image      — provider OS image (e.g. `debian-12`).
+   */
+  ip?: string;
+  region?: string;
+  serverType?: string;
+  image?: string;
 }
 
 /** Pure mapper from a storage row to the public-facing block. Exposed
@@ -845,5 +931,9 @@ export function demoServerBlockFromRow(row: DemoUserRecord): DemoServerBlock {
     phase: row.provisionPhase ?? null,
     phaseAt: row.provisionPhaseAt ?? null,
     ...(row.provisionLastError ? { lastError: row.provisionLastError } : {}),
+    ...(row.activeServerIp ? { ip: row.activeServerIp } : {}),
+    ...(row.region ? { region: row.region } : {}),
+    ...(row.size ? { serverType: row.size } : {}),
+    ...(row.image ? { image: row.image } : {}),
   };
 }

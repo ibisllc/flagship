@@ -26,6 +26,7 @@ import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
 import com.flagshipserver.app.ui.screens.AddServerMode
+import com.flagshipserver.app.ui.screens.DemoInstallProgressScreen
 import com.flagshipserver.app.ui.screens.HomeScreen
 import com.flagshipserver.app.ui.screens.PendingServerScreen
 import com.flagshipserver.app.ui.screens.ServerDetailScreen
@@ -134,10 +135,20 @@ fun HomeTab() {
                 return@composable
             }
             if (pod.status == com.flagshipserver.app.core.PodInfo.Status.PENDING) {
-                PendingServerScreen(pod = pod, onCancel = {
-                    app.removePod(pod.podId)
-                    nav.popBackStack()
-                })
+                // A demo server still installing gets the install-progress
+                // detail (bar + step list + device info + "Cancel this
+                // device"); a QR-relay order gets the pending placeholder.
+                if (pod.demoServer != null) {
+                    DemoInstallProgressScreen(
+                        podId = podId,
+                        onAfterCancel = { nav.popBackStack() },
+                    )
+                } else {
+                    PendingServerScreen(pod = pod, onCancel = {
+                        app.removePod(pod.podId)
+                        nav.popBackStack()
+                    })
+                }
             } else {
                 ServerDetailScreen(podId = podId, onBack = { nav.popBackStack() })
             }

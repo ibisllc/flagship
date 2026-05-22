@@ -1979,6 +1979,8 @@ interface DemoUserRow {
   region: string;
   size: string;
   active_server_id: string | null;
+  active_server_ip: string | null;
+  image: string | null;
   active_server_fqdn: string | null;
   last_activity_at: number;
   state: string;
@@ -1998,6 +2000,8 @@ function rowToDemoUser(r: DemoUserRow): DemoUserRecord {
     region: r.region,
     size: r.size,
     activeServerId: r.active_server_id,
+    activeServerIp: r.active_server_ip ?? null,
+    image: r.image ?? null,
     activeServerFqdn: r.active_server_fqdn,
     lastActivityAt: r.last_activity_at,
     state: r.state as DemoUserState,
@@ -2020,10 +2024,11 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
         .prepare(
           "INSERT INTO demo_users " +
             "(username, display, snapshot_id, iso_r2_key, ttl_idle_minutes, " +
-            "region, size, active_server_id, active_server_fqdn, " +
+            "region, size, active_server_id, active_server_ip, image, " +
+            "active_server_fqdn, " +
             "last_activity_at, state, created_at, " +
             "provision_phase, provision_phase_at, provision_last_error) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(
           u,
@@ -2034,6 +2039,8 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
           rec.region,
           rec.size,
           rec.activeServerId,
+          rec.activeServerIp ?? null,
+          rec.image ?? null,
           rec.activeServerFqdn,
           rec.lastActivityAt,
           rec.state,
@@ -2075,6 +2082,8 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
       region: "region",
       size: "size",
       activeServerId: "active_server_id",
+      activeServerIp: "active_server_ip",
+      image: "image",
       activeServerFqdn: "active_server_fqdn",
       lastActivityAt: "last_activity_at",
       state: "state",
@@ -2118,6 +2127,8 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
       region: "region",
       size: "size",
       activeServerId: "active_server_id",
+      activeServerIp: "active_server_ip",
+      image: "image",
       activeServerFqdn: "active_server_fqdn",
       lastActivityAt: "last_activity_at",
       provisionPhase: "provision_phase",

@@ -85,6 +85,7 @@ object DemoFixtures {
             description = "Live demo on Hetzner",
             fqdn = block.fqdn,
             status = mapStatus(block.lifecycle),
+            demoServer = block,
         )
     }
 

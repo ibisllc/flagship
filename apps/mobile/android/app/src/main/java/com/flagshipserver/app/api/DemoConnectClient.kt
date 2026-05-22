@@ -37,6 +37,13 @@ interface DemoConnectClient {
         pollIntervalMs: Long = 3000L,
         timeoutMs: Long = 300_000L,
     ): DemoServerBlock
+
+    /** POST `/api/dev/sample-user/{username}/cancel` with an empty body.
+     *  "Cancel this device" — tears down the demo's VPS and resets it to
+     *  the empty state. Public (demo = capability-by-name) + edge
+     *  rate-limited; scoped to demo_users on the Worker. Non-2xx throws
+     *  [HttpException] so the caller can show a precise message. */
+    suspend fun cancel(username: String)
 }
 
 /** Errors specific to the demo-connect flow. Surfaced to the host so
@@ -94,6 +101,17 @@ class LiveDemoConnectClient(
         }
         throw DemoConnectException.TimedOut(lastStatus)
     }
+
+    override suspend fun cancel(username: String) {
+        val encoded = URLEncoder.encode(username, "UTF-8")
+        transport.execute(
+            method = "POST",
+            url = "$base/api/dev/sample-user/$encoded/cancel",
+            body = "{}".toByteArray(Charsets.UTF_8),
+            contentType = "application/json; charset=utf-8",
+            accept = setOf(200, 201),
+        )
+    }
 }
 
 // ── Mock ──────────────────────────────────────────────────────────
@@ -108,6 +126,8 @@ class MockDemoConnectClient(
     /** Tracks the usernames that received a `connect()` call so tests
      *  can assert wire round-trips happened. */
     val connectCalls: MutableList<String> = mutableListOf()
+    /** Tracks the usernames that received a `cancel()` call. */
+    val cancelCalls: MutableList<String> = mutableListOf()
 
     override suspend fun connect(username: String) {
         connectCalls += username
@@ -154,6 +174,15 @@ class MockDemoConnectClient(
             delay(pollIntervalMs)
         }
         throw DemoConnectException.TimedOut(lastStatus)
+    }
+
+    override suspend fun cancel(username: String) {
+        cancelCalls += username
+        val lower = username.lowercase()
+        val cur = server.demoServers[lower] ?: throw HttpException(404, "no such demo user")
+        // Mirror the Worker: reset to the empty state. Keep the FQDN so a
+        // later connect re-provisions under the same name.
+        server.demoServers[lower] = DemoServerBlock(fqdn = cur.fqdn, status = "none")
     }
 }
 

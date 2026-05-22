@@ -34,6 +34,7 @@ import {
   handleCreateDemoUser,
   handleDeleteDemoUser,
   handleDemoUserConnect,
+  handleDemoUserCancel,
   handleDemoUserHeartbeat,
   handleDemoUserInstallComplete,
   handleGetDemoUser,
@@ -786,5 +787,126 @@ describe("demoServerBlockFromRow", () => {
     expect(demoServerBlockFromRow({ ...row, state: "provisioning" }).status).toBe("provisioning");
     expect(demoServerBlockFromRow({ ...row, state: "up" }).status).toBe("up");
     expect(demoServerBlockFromRow({ ...row, state: "idle-pending-teardown" }).status).toBe("provisioning");
+  });
+
+  it("surfaces device-identifying metadata (ip/region/serverType/image)", async () => {
+    const row: DemoUserRecord = {
+      username: "demoalice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: "999",
+      activeServerIp: "1.2.3.4",
+      image: "debian-12",
+      activeServerFqdn: "home.demoalice.flagship.services",
+      lastActivityAt: 0,
+      state: "provisioning",
+      createdAt: 1,
+      provisionPhase: "dns01-propagation-wait",
+      provisionPhaseAt: 5,
+      provisionLastError: null,
+    };
+    const b = demoServerBlockFromRow(row);
+    expect(b.ip).toBe("1.2.3.4");
+    expect(b.region).toBe("fsn1");
+    expect(b.serverType).toBe("cx22");
+    expect(b.image).toBe("debian-12");
+    expect(b.phase).toBe("dns01-propagation-wait");
+  });
+
+  it("omits ip + image when the provider hasn't returned them (pre-0036 / not captured)", async () => {
+    const row: DemoUserRecord = {
+      username: "demoalice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: null,
+      activeServerIp: null,
+      image: null,
+      activeServerFqdn: null,
+      lastActivityAt: 0,
+      state: "none",
+      createdAt: 1,
+      provisionPhase: null,
+      provisionPhaseAt: null,
+      provisionLastError: null,
+    };
+    const b = demoServerBlockFromRow(row);
+    expect(b.ip).toBeUndefined();
+    expect(b.image).toBeUndefined();
+    // region/serverType always present (they're set at create time).
+    expect(b.region).toBe("fsn1");
+    expect(b.serverType).toBe("cx22");
+  });
+});
+
+describe("handleDemoUserCancel", () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = mkHarness();
+  });
+
+  it("404s for an unknown demo user", async () => {
+    const res = await handleDemoUserCancel(h.deps, "nobody");
+    expect(res.status).toBe(404);
+  });
+
+  it("tears down the active server, resets the row to none, clears phase + ip", async () => {
+    await seedDemoUser(h.deps, {
+      state: "provisioning",
+      activeServerId: "555",
+      activeServerIp: "1.2.3.4",
+      activeServerFqdn: "home.demoalice.flagship.services",
+      image: "debian-12",
+      provisionPhase: "acme-validating",
+      provisionPhaseAt: 9,
+    });
+    const res = await handleDemoUserCancel(h.deps, "demoalice");
+    expect(res.status).toBe(200);
+    expect(h.hetzner.calls.destroy).toEqual(["555"]);
+    const row = await h.deps.storage.get("demoalice");
+    expect(row?.state).toBe("none");
+    expect(row?.activeServerId).toBeNull();
+    expect(row?.activeServerIp).toBeNull();
+    expect(row?.activeServerFqdn).toBeNull();
+    expect(row?.provisionPhase).toBeNull();
+    expect(row?.provisionLastError).toBeNull();
+  });
+
+  it("is idempotent — already-none cancels are a clean no-op", async () => {
+    await seedDemoUser(h.deps, { state: "none", activeServerId: null });
+    const res = await handleDemoUserCancel(h.deps, "demoalice");
+    expect(res.status).toBe(200);
+    expect((res.body as { cancelled: boolean }).cancelled).toBe(true);
+    expect(h.hetzner.calls.destroy).toEqual([]);
+  });
+
+  it("502s + parks the row when the provider destroy fails", async () => {
+    await seedDemoUser(h.deps, {
+      state: "up",
+      activeServerId: "777",
+      activeServerFqdn: "home.demoalice.flagship.services",
+    });
+    h.hetzner.failNextDestroy();
+    const res = await handleDemoUserCancel(h.deps, "demoalice");
+    expect(res.status).toBe(502);
+    const row = await h.deps.storage.get("demoalice");
+    // Parked so the idle reaper / a retry can finish the teardown.
+    expect(row?.state).toBe("idle-pending-teardown");
+  });
+
+  it("does not call the provider when there is no active server", async () => {
+    await seedDemoUser(h.deps, { state: "provisioning", activeServerId: null });
+    const res = await handleDemoUserCancel(h.deps, "demoalice");
+    expect(res.status).toBe(200);
+    expect(h.hetzner.calls.destroy).toEqual([]);
+    const row = await h.deps.storage.get("demoalice");
+    expect(row?.state).toBe("none");
   });
 });

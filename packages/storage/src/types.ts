@@ -275,6 +275,7 @@ export type AuditEventKind =
   // surfaces them; never emitted for non-demo accounts.
   | "demo-user-created"
   | "demo-user-deleted"
+  | "demo-user-cancelled"
   | "demo-vps-provisioned"
   | "demo-vps-destroyed"
   | "demo-vps-idle-reaped"
@@ -1087,6 +1088,15 @@ export interface DemoUserRecord {
   size: string;
   /** Hetzner server id while state ∈ (provisioning, up, idle-pending-teardown). */
   activeServerId: string | null;
+  /** Public IPv4 the provider handed back at create time (migration 0036).
+   *  Device-identifying so a demo user can confirm the running box is
+   *  theirs ("my device is at 1.2.3.4"). NULL until the provider returns
+   *  it / pre-0036 rows. */
+  activeServerIp: string | null;
+  /** Provider OS image the box was provisioned from, e.g. `debian-12`
+   *  (migration 0036). Device-identifying; surfaced in the detail page's
+   *  info block. NULL on pre-0036 rows. */
+  image: string | null;
   /** FQDN we publish for the running demo, e.g. home.demoalice.flagship.services. */
   activeServerFqdn: string | null;
   /** Wall-clock ms of the last /connect or /heartbeat. */

@@ -92,7 +92,8 @@ public enum DemoFixtures {
             name: label.capitalized,
             description: "Live demo on Hetzner",
             fqdn: block.fqdn,
-            status: mapStatus(block.lifecycle)
+            status: mapStatus(block.lifecycle),
+            demoServer: block
         )
     }
 

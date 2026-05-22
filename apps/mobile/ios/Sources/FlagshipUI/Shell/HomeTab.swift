@@ -156,10 +156,18 @@ public struct HomeTab: View {
         switch route {
         case .serverDetail(let podId):
             // Pending pods get the placeholder detail page; online pods
-            // get the full ServerDetail with monitoring + access.
+            // get the full ServerDetail with monitoring + access. A demo
+            // server still installing gets the install-progress detail
+            // (bar + step list + device info + "Cancel this device").
             if let pod = app.pods.first(where: { $0.podId == podId }), pod.status == .pending {
-                PendingPodContainer(pod: pod) {
-                    path.removeAll()
+                if pod.demoServer != nil {
+                    DemoInstallProgressContainer(podId: podId) {
+                        path.removeAll()
+                    }
+                } else {
+                    PendingPodContainer(pod: pod) {
+                        path.removeAll()
+                    }
                 }
             } else {
                 ServerDetailContainer(podId: podId)
@@ -308,6 +316,63 @@ struct PendingPodContainer: View {
         }
         app.removePod(pod.podId)
         onAfterCancel()
+    }
+}
+
+/// Install-progress detail for a demo server. Reads the live pod from
+/// AppState (so it re-renders as the connect coordinator advances the
+/// `demoServer.phase` each poll), and wires "Cancel this device" → the
+/// public, demo-scoped cancel endpoint → return to the empty/list state.
+struct DemoInstallProgressContainer: View {
+    let podId: String
+    let onAfterCancel: () -> Void
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
+    @State private var coordinator: DemoConnectCoordinator?
+    @State private var started = false
+    @State private var cancelling = false
+
+    private var pod: PodInfo? { app.pods.first(where: { $0.podId == podId }) }
+
+    var body: some View {
+        Group {
+            if let pod {
+                DemoInstallProgressScreen(pod: pod) {
+                    Task { await runCancel() }
+                }
+            } else {
+                // Pod vanished (cancelled) — bounce home.
+                Color.clear.onAppear { onAfterCancel() }
+            }
+        }
+        .task {
+            if coordinator == nil {
+                coordinator = DemoConnectCoordinator(
+                    server: server,
+                    demoConnect: LiveDemoConnectClient(server: server)
+                )
+            }
+            // Drive connect+poll once so the bar advances live. If the
+            // server is already up this is a fast no-op.
+            if !started, let user = app.currentUser, let c = coordinator {
+                started = true
+                await c.connect(username: user, appState: app)
+            }
+        }
+    }
+
+    private func runCancel() async {
+        guard !cancelling, let user = app.currentUser, let c = coordinator else { return }
+        cancelling = true
+        defer { cancelling = false }
+        let ok = await c.cancel(username: user, appState: app)
+        if ok {
+            toasts.success("Device cancelled.")
+            onAfterCancel()
+        } else {
+            toasts.warning("Couldn't cancel — try again in a moment.")
+        }
     }
 }
 

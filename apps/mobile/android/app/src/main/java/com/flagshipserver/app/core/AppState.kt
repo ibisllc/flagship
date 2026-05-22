@@ -304,6 +304,12 @@ data class PodInfo(
     val fqdn: String,
     val status: Status = Status.UNKNOWN,
     val pendingAuthCodeSerial: String? = null,
+    /** For demo-mode pods (Plan A), the latest demoServer block backing
+     *  this device — carries the provisioning `phase` + device-identifying
+     *  metadata so the Home list can render a thin progress bar and the
+     *  detail page can show the step list + the device info block. Null
+     *  for non-demo pods. Mirror of iOS PodInfo.demoServer. */
+    val demoServer: com.flagshipserver.app.api.DemoServerBlock? = null,
 ) {
     enum class Status { ONLINE, OFFLINE, UNKNOWN, PENDING }
 }

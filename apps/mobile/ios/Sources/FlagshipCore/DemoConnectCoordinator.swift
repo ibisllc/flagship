@@ -74,25 +74,14 @@ public final class DemoConnectCoordinator {
         }
         state = .polling(lastStatus: "provisioning")
         do {
-            let block = try await demoConnect.pollUntilUp(
+            let block = try await pollUntilUpUpdatingPod(
                 username: username,
+                appState: appState,
                 pollIntervalSeconds: pollIntervalSeconds,
                 timeoutSeconds: timeoutSeconds
             )
             state = .up(fqdn: block.fqdn)
-            // Flip the matching pod's status. Pods are matched on
-            // FQDN, not podId, because the demo-mode podId is a
-            // synthetic value built in DemoFixtures.
-            for idx in appState.pods.indices where appState.pods[idx].fqdn == block.fqdn {
-                appState.pods[idx] = PodInfo(
-                    podId: appState.pods[idx].podId,
-                    name: appState.pods[idx].name,
-                    description: appState.pods[idx].description,
-                    fqdn: appState.pods[idx].fqdn,
-                    status: .online,
-                    pendingAuthCodeSerial: appState.pods[idx].pendingAuthCodeSerial
-                )
-            }
+            updatePod(appState, fqdn: block.fqdn, status: .online, demoServer: block)
         } catch DemoConnectError.timedOut(let last) {
             state = .failed(reason: "Still booting (last status: \(last)). Try again in a minute.")
         } catch DemoConnectError.demoServerWentAway {
@@ -100,5 +89,80 @@ public final class DemoConnectCoordinator {
         } catch {
             state = .failed(reason: "poll failed: \(error)")
         }
+    }
+
+    /// Poll `/api/users/check` ourselves (rather than via
+    /// `pollUntilUp`) so we can refresh the matching pod's `demoServer`
+    /// block on EVERY tick — that's what advances the Home progress bar
+    /// + the detail step list while provisioning, instead of jumping
+    /// straight from "pending" to "online".
+    private func pollUntilUpUpdatingPod(
+        username: String,
+        appState: AppState,
+        pollIntervalSeconds: Double,
+        timeoutSeconds: Double
+    ) async throws -> DemoServerBlock {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        var lastStatus = "provisioning"
+        while Date() < deadline {
+            let resp = try await server.usernameAvailable(username)
+            guard let block = resp.demoServer else {
+                throw DemoConnectError.demoServerWentAway
+            }
+            lastStatus = block.status
+            state = .polling(lastStatus: block.status)
+            // Mirror the latest block (phase + metadata) onto the pod so
+            // the UI re-renders the bar + steps. Keep status as the
+            // mapped lifecycle so a still-provisioning pod stays pending.
+            updatePod(
+                appState,
+                fqdn: block.fqdn,
+                status: DemoFixtures.mapStatus(block.lifecycle),
+                demoServer: block
+            )
+            if block.lifecycle == .up { return block }
+            try await Task.sleep(nanoseconds: UInt64(pollIntervalSeconds * 1_000_000_000))
+        }
+        throw DemoConnectError.timedOut(lastStatus: lastStatus)
+    }
+
+    /// Replace the matching pod (matched on FQDN — the demo-mode podId is
+    /// synthetic) with an updated status + demoServer block.
+    private func updatePod(
+        _ appState: AppState,
+        fqdn: String,
+        status: PodInfo.Status,
+        demoServer: DemoServerBlock?
+    ) {
+        for idx in appState.pods.indices where appState.pods[idx].fqdn == fqdn {
+            appState.pods[idx] = PodInfo(
+                podId: appState.pods[idx].podId,
+                name: appState.pods[idx].name,
+                description: appState.pods[idx].description,
+                fqdn: appState.pods[idx].fqdn,
+                status: status,
+                pendingAuthCodeSerial: appState.pods[idx].pendingAuthCodeSerial,
+                demoServer: demoServer ?? appState.pods[idx].demoServer
+            )
+        }
+    }
+
+    /// "Cancel this device" — POST `/api/dev/sample-user/{u}/cancel`,
+    /// then drop the demo pod from AppState so the UI returns to the
+    /// empty/list state. Public demo capability (knowing the name);
+    /// scoped to demo_users on the Worker. Returns true on success.
+    public func cancel(username: String, appState: AppState) async -> Bool {
+        do {
+            try await demoConnect.cancel(username: username)
+        } catch {
+            state = .failed(reason: "cancel failed: \(error)")
+            return false
+        }
+        // Remove the demo pod(s) — matched on the synthetic podId prefix
+        // OR the home FQDN, since cancel tears the box down entirely.
+        let fqdn = "home.\(username.lowercased()).flagship.services"
+        appState.pods.removeAll { $0.fqdn == fqdn || $0.podId == "demo-server-\(username.lowercased())" }
+        state = .idle
+        return true
     }
 }

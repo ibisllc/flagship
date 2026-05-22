@@ -339,6 +339,12 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
     /// CreateServer time. Lets Cancel-order revoke the auth-code on
     /// flagshipserver.com instead of just removing the pod locally.
     public let pendingAuthCodeSerial: String?
+    /// For demo-mode pods (Plan A), the latest demoServer block backing
+    /// this device. Carries the provisioning `phase` + device-identifying
+    /// metadata (ip/region/serverType/image) so the Home list can render
+    /// a thin progress bar and the detail page can show the step list +
+    /// the device info block. Nil for non-demo pods.
+    public let demoServer: DemoServerBlock?
     public var id: String { podId }
 
     public init(
@@ -347,7 +353,8 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         description: String? = nil,
         fqdn: String,
         status: Status = .unknown,
-        pendingAuthCodeSerial: String? = nil
+        pendingAuthCodeSerial: String? = nil,
+        demoServer: DemoServerBlock? = nil
     ) {
         self.podId = podId
         self.name = name
@@ -355,5 +362,6 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         self.fqdn = fqdn
         self.status = status
         self.pendingAuthCodeSerial = pendingAuthCodeSerial
+        self.demoServer = demoServer
     }
 }

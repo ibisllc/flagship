@@ -469,6 +469,16 @@ public struct PodCard: View {
                         if isLeader { LeaderBadge() }
                         Spacer(minLength: 0)
                     }
+                    // "Your server is being installed" — a thin
+                    // determinate bar on a demo server still pre-`ready`.
+                    if let demo = pod.demoServer,
+                       ProvisionProgress.shouldShowProgressBar(phase: demo.phase, status: demo.status) {
+                        DemoProgressBar(
+                            fraction: ProvisionProgress.fraction(demo.phase),
+                            failed: demo.phase == "failed"
+                        )
+                        .accessibilityIdentifier("pod-card-install-progress")
+                    }
                     if let desc = pod.description, !desc.isEmpty {
                         Text(desc)
                             .font(FS.font.bodySm())

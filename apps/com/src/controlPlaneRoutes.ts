@@ -99,6 +99,7 @@ import {
   handleCreateDemoUser,
   handleDeleteDemoUser,
   handleDemoUserConnect,
+  handleDemoUserCancel,
   handleDemoUserHeartbeat,
   handleDemoUserInstallComplete,
   handleGetDemoUser,
@@ -420,6 +421,7 @@ const ROUTE_RE = {
   DEMO_USER_ADMIN_CLOUD_INIT_NOW: /^\/api\/dev\/sample-user\/([^/]+)\/admin-cloud-init-now$/,
   DEMO_USER_INSTALL_COMPLETE: /^\/api\/dev\/sample-user\/([^/]+)\/install-complete$/,
   DEMO_USER_CONNECT: /^\/api\/dev\/sample-user\/([^/]+)\/connect$/,
+  DEMO_USER_CANCEL: /^\/api\/dev\/sample-user\/([^/]+)\/cancel$/,
   DEMO_USER_HEARTBEAT: /^\/api\/dev\/sample-user\/([^/]+)\/heartbeat$/,
   DEMO_USER_GET: /^\/api\/dev\/sample-user\/([^/]+)$/,
   DEMO_USER_LIST: /^\/api\/dev\/sample-user$/,
@@ -1839,6 +1841,9 @@ export async function tryControlPlane(
     }
     if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_CONNECT))) {
       return finishPlain(await handleDemoUserConnect(demoDeps, decodeURIComponent(m[1]!)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_CANCEL))) {
+      return finishPlain(await handleDemoUserCancel(demoDeps, decodeURIComponent(m[1]!)));
     }
     if (method === "POST" && (m = path.match(ROUTE_RE.DEMO_USER_HEARTBEAT))) {
       return finishPlain(await handleDemoUserHeartbeat(demoDeps, decodeURIComponent(m[1]!)));

@@ -30,6 +30,14 @@ public protocol DemoConnectClient: Sendable {
         pollIntervalSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> DemoServerBlock
+
+    /// POST `/api/dev/sample-user/{username}/cancel` with an empty body.
+    /// "Cancel this device" — tears down the demo's VPS and resets it to
+    /// the empty state. Public (demo = capability-by-name) + edge
+    /// rate-limited; scoped to demo_users on the Worker. Non-2xx surfaces
+    /// as `ScreensClientError.http` so the caller can show a precise
+    /// message (e.g. 429 back-off, 502 provider-destroy-failed).
+    func cancel(username: String) async throws
 }
 
 /// Errors specific to the demo-connect flow. Surfaced to the host so
@@ -104,6 +112,20 @@ public final class LiveDemoConnectClient: DemoConnectClient, @unchecked Sendable
         }
         throw DemoConnectError.timedOut(lastStatus: lastStatus)
     }
+
+    public func cancel(username: String) async throws {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/dev/sample-user/\(encoded)/cancel"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = Data("{}".utf8)
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+    }
 }
 
 // MARK: - Mock
@@ -118,6 +140,8 @@ public final class MockDemoConnectClient: DemoConnectClient, @unchecked Sendable
     /// Tracks the usernames that received a `connect()` call so tests
     /// can assert wire round-trips happened.
     public private(set) var connectCalls: [String] = []
+    /// Tracks the usernames that received a `cancel()` call.
+    public private(set) var cancelCalls: [String] = []
 
     public init(server: MockFlagshipServerClient) {
         self.server = server
@@ -185,5 +209,17 @@ public final class MockDemoConnectClient: DemoConnectClient, @unchecked Sendable
             try await Task.sleep(nanoseconds: UInt64(pollIntervalSeconds * 1_000_000_000))
         }
         throw DemoConnectError.timedOut(lastStatus: lastStatus)
+    }
+
+    public func cancel(username: String) async throws {
+        cancelCalls.append(username)
+        let lower = username.lowercased()
+        guard server.demoServers[lower] != nil else {
+            throw ScreensClientError.http(status: 404, message: "no such demo user")
+        }
+        // Mirror the Worker: reset the row to the empty state. We keep
+        // the FQDN so a later connect re-provisions under the same name.
+        let cur = server.demoServers[lower]!
+        server.demoServers[lower] = DemoServerBlock(fqdn: cur.fqdn, status: "none")
     }
 }

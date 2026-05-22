@@ -65,6 +65,11 @@ export type RateLimitEndpoint =
   | "device-grants-revoke"
   | "device-grants-mint"
   | "account-resolve"
+  // "Cancel this device" on the install-progress page. Public (a demo
+  // account is a no-auth capability), so per-IP only at the edge. Tight
+  // so a captured demo name can't be used to flap a VPS in a loop; the
+  // handler is idempotent + scoped to demo_users.
+  | "demo-cancel"
   // Phase 3b — vouched cross-device admit. The body carries the admit
   // (admit.username + newDevicePubHex), not the account IRK pub, so we
   // throttle per-IP only; the handler does the full DeviceAdmit
@@ -139,6 +144,13 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "account-resolve": [
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "usernameHash", limit: 10, windowSec: 900 },
+  ],
+  // Cancel-this-device. Per-IP only (no IRK at the edge; demo is
+  // capability-by-name). 6/min is plenty for a real tap-to-cancel; the
+  // 30/h ceiling stops a flap loop.
+  "demo-cancel": [
+    { axis: "ip", limit: 6, windowSec: 60 },
+    { axis: "ip", limit: 30, windowSec: 3600 },
   ],
   // Phase 3b — vouched cross-device admit. Per-IP only (the body has no
   // IRK pub at the edge). A real admin admits a handful of devices; the
@@ -290,6 +302,12 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
     return "account-resolve";
+  }
+  if (
+    m === "POST" &&
+    /^\/api\/dev\/sample-user\/[^/]+\/cancel$/.test(pathname)
+  ) {
+    return "demo-cancel";
   }
   // Phase 3b — vouched cross-device admit.
   if (m === "POST" && /^\/api\/users\/[^/]+\/devices\/admit$/.test(pathname)) {

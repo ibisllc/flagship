@@ -8,7 +8,9 @@
 package com.flagshipserver.app.core
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.flagshipserver.app.api.DemoConnectClient
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.MockDemoConnectClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.ScreensClient
@@ -16,6 +18,13 @@ import com.flagshipserver.app.api.ScreensClient
 val LocalScreensClient = staticCompositionLocalOf<ScreensClient> { MockScreensClient() }
 
 val LocalFlagshipServerClient = staticCompositionLocalOf<FlagshipServerClient> { MockFlagshipServerClient() }
+
+/** Plan A — the demo connect/cancel client. Production wires the live
+ *  client (transport + server) in MainActivity; previews + tests get a
+ *  Mock over the default MockFlagshipServerClient. */
+val LocalDemoConnectClient = staticCompositionLocalOf<DemoConnectClient> {
+    MockDemoConnectClient(MockFlagshipServerClient())
+}
 
 val LocalQrRelayClient = staticCompositionLocalOf<QrRelayClient> { MockQrRelayClient() }
 

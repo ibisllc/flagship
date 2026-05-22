@@ -23,6 +23,10 @@
  *                                   0035 — lockstep with iOS/Android.
  *  @property {?number} [phaseAt]    wall-clock ms the latest phase landed
  *  @property {string} [lastError]   failure detail, only when phase==="failed"
+ *  @property {string} [ip]          public IPv4 the provider returned (migration 0036)
+ *  @property {string} [region]      provider location, e.g. "fsn1"
+ *  @property {string} [serverType]  provider size, e.g. "cx22"
+ *  @property {string} [image]       provider OS image, e.g. "debian-12"
  */
 
 /** @typedef {Object} TestAccountMeta
@@ -240,6 +244,32 @@ export async function connectDemoServer(username, opts = {}) {
     const text = await resp.text().catch(() => "");
     throw new Error(`connect failed: HTTP ${resp.status} ${text}`);
   }
+}
+
+/** POST `/api/dev/sample-user/{username}/cancel` (no auth, no body) —
+ *  "Cancel this device" from the install-progress detail page. Public
+ *  (a demo account is a no-auth capability) + edge rate-limited; it
+ *  ONLY touches demo_users rows. Tears down the active VPS and resets
+ *  the demo to the empty state so the UI returns to the list. 200 =
+ *  cancelled (or already torn down); non-2xx throws.
+ *  @param {string} username
+ *  @param {{ fetch?: typeof fetch, baseUrl?: string }} [opts]
+ *  @returns {Promise<{ username: string, cancelled: boolean, state: string }>}
+ */
+export async function cancelDemoServer(username, opts = {}) {
+  const f = opts.fetch || fetch;
+  const baseUrl = opts.baseUrl || "https://flagshipserver.com";
+  const url = `${baseUrl}/api/dev/sample-user/${encodeURIComponent(username)}/cancel`;
+  const resp = await f(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`cancel failed: HTTP ${resp.status} ${text}`);
+  }
+  return resp.json();
 }
 
 /** Poll `/api/users/check` every [pollIntervalMs] ms until the

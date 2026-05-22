@@ -500,12 +500,16 @@ export async function handleAdminSnapshotNow(
   // the next cron pass can act on it.
   const transitioned = await deps.storage.transition(u, "none", "provisioning", {
     activeServerId: prov.serverId,
+    activeServerIp: prov.ipv4,
+    image: "ubuntu-22.04",
     isoR2Key,
     lastActivityAt: now,
   });
   if (!transitioned) {
     await deps.storage.update(u, {
       activeServerId: prov.serverId,
+      activeServerIp: prov.ipv4,
+      image: "ubuntu-22.04",
       isoR2Key,
     });
   }

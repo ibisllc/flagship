@@ -34,6 +34,7 @@ import com.flagshipserver.app.api.DeviceCapabilityBlock
 import com.flagshipserver.app.api.DeviceScope
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.core.PodInfo
+import com.flagshipserver.app.core.ProvisionProgress
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
@@ -241,6 +242,19 @@ fun PodCard(
                             PodInfo.Status.OFFLINE -> FSPillKind.Offline
                             PodInfo.Status.UNKNOWN -> FSPillKind.Offline
                         },
+                    )
+                }
+                // "Your server is being installed" — a thin determinate
+                // bar on a demo server still pre-`ready`.
+                val demo = pod.demoServer
+                if (demo != null &&
+                    ProvisionProgress.shouldShowProgressBar(demo.phase, demo.status)
+                ) {
+                    Spacer(Modifier.height(FS.space.s2))
+                    DemoProgressBar(
+                        fraction = ProvisionProgress.fraction(demo.phase),
+                        failed = demo.phase == "failed",
+                        modifier = Modifier.testTag("pod-card-install-progress"),
                     )
                 }
             }

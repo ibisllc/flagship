@@ -862,13 +862,25 @@ public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
     public let phaseAt: Double?
     /// Failure detail, present only when `phase == "failed"`.
     public let lastError: String?
+    /// Device-identifying metadata (migration 0036) so the user can
+    /// confirm the box they're watching is theirs. Each is nil when the
+    /// provider hasn't returned it / pre-0036 row. Mirror of the Worker's
+    /// `DemoServerBlock` ip/region/serverType/image fields.
+    public let ip: String?
+    public let region: String?
+    public let serverType: String?
+    public let image: String?
     public init(
         fqdn: String,
         status: String,
         ttlIdleMinutes: Int = 30,
         phase: String? = nil,
         phaseAt: Double? = nil,
-        lastError: String? = nil
+        lastError: String? = nil,
+        ip: String? = nil,
+        region: String? = nil,
+        serverType: String? = nil,
+        image: String? = nil
     ) {
         self.fqdn = fqdn
         self.status = status
@@ -876,6 +888,10 @@ public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
         self.phase = phase
         self.phaseAt = phaseAt
         self.lastError = lastError
+        self.ip = ip
+        self.region = region
+        self.serverType = serverType
+        self.image = image
     }
 
     /// Typed convenience over the raw string. Forward-compatible: an

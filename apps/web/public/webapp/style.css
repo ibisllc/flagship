@@ -1118,3 +1118,48 @@ body.modal-open { overflow: hidden; }
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* "Your server is being installed" progress UI (mirror of the iOS /
+ * Android install-progress surfaces). */
+.demo-progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-soft);
+  overflow: hidden;
+  margin: 6px 0;
+}
+.demo-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+.demo-progress-bar.failed .demo-progress-fill { background: var(--err); }
+.demo-step-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.demo-step { display: grid; grid-template-columns: 18px 1fr; row-gap: 2px; align-items: start; }
+.demo-step-icon { font-weight: 700; color: var(--ink-muted); }
+.demo-step-done .demo-step-icon { color: var(--ok); }
+.demo-step-active .demo-step-icon { color: var(--accent); }
+.demo-step-failed .demo-step-icon { color: var(--err); }
+.demo-step-label { color: var(--ink-soft); }
+.demo-step-pending .demo-step-label { color: var(--ink-muted); }
+.demo-step-detail, .demo-step-retry { grid-column: 2; font-size: 12px; color: var(--ink-muted); }
+.demo-step-retry { color: var(--err); }
+.demo-device-info {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.demo-device-info code { color: var(--ink-soft); }

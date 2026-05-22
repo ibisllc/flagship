@@ -639,6 +639,14 @@ data class DemoServerBlock(
     val phaseAt: Long? = null,
     /** Failure detail, present only when `phase == "failed"`. */
     val lastError: String? = null,
+    /** Device-identifying metadata (migration 0036) so the user can
+     *  confirm the box they're watching is theirs. Each is null when the
+     *  provider hasn't returned it / pre-0036 row. Mirror of the Worker's
+     *  `DemoServerBlock` ip/region/serverType/image fields. */
+    val ip: String? = null,
+    val region: String? = null,
+    val serverType: String? = null,
+    val image: String? = null,
 ) {
     /** Typed convenience over the raw string. Forward-compatible: an
      *  unknown future value parses as `Provisioning` so a client that
