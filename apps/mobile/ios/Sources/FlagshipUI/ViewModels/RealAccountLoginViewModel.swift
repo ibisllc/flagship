@@ -192,6 +192,13 @@ public final class RealAccountLoginViewModel {
         // derived IRK/BAK/SWK match the recovered identity. Reset to
         // v1 (installUMK does this) — a takeover starts a fresh IRK
         // lineage under the recovered UMK.
+        //
+        // Per-profile keying: point the keystore at THIS account's slot
+        // before installing so a takeover of a second cloud lands in its
+        // own slot and never clobbers an already-present profile. The
+        // injected `installUMK` seam (default = Keystore.installUMK)
+        // writes to whatever slot is active.
+        Keystore.setActiveProfile(username)
         do {
             try await installUMK(seed, "Bring this device into your Flagship account")
         } catch {
