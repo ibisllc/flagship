@@ -130,6 +130,70 @@ interface FlagshipServerClient {
         username: String,
         body: TotpDisableRequest,
     ): TotpDisableResponse
+
+    /** Login/join preflight — GET /api/account/resolve/<username>.
+     *  The sign-in space is access-control evaluation, not a fetch:
+     *  this reads what credentials + factors exist for a named account
+     *  and returns them as FIELDS so the login state machine branches
+     *  on data, not HTTP errors. Returns 200 ALWAYS — a missing account
+     *  is `kind="unknown"`, never a 404. Mirrors the Worker wire in
+     *  packages/control-plane/src/accountResolve.ts.
+     *  See docs/login-and-account-redesign.md. */
+    suspend fun resolveAccount(username: String): AccountResolution
+}
+
+/** Login/join preflight result — Kotlin mirror of the Worker's
+ *  `AccountResolution` (packages/control-plane/src/accountResolve.ts).
+ *  Returned by [FlagshipServerClient.resolveAccount]. Existence and
+ *  every factor are FIELDS, not status codes — a missing account is
+ *  `kind="unknown"`, never an HTTP error. Wire shape MUST stay
+ *  byte-identical to the Worker + iOS mirrors (iOS-Mock-matches-Worker
+ *  invariant). */
+@Serializable
+data class AccountResolution(
+    /** Normalized handle the lookup ran against (lowercased). */
+    val username: String,
+    val exists: Boolean,
+    /** "demo" | "single" | "multi" | "unknown". Use [accountKind] for
+     *  the typed, forward-compat parse. */
+    val kind: String,
+    val recovery: RecoveryState,
+    val totpEnrolled: Boolean,
+    val trustedDeviceCount: Int,
+    /** Present only for demo accounts — the single sandbox device. */
+    val demoServer: DemoServerBlock? = null,
+    /** Server-derived recovery-speed hint:
+     *  "instant" | "7d" | "24h-totp" | "none". Use [grace] for the
+     *  typed parse. */
+    val graceModel: String,
+) {
+    @Serializable
+    data class RecoveryState(
+        val present: Boolean,
+        val hasFetchGate: Boolean,
+        val credentialId: String? = null,
+    )
+
+    /** Forward-compat typed view over [kind]; an unknown future string
+     *  parses as [AccountKind.Unknown] so an old binary on a new Worker
+     *  renders the clean "no account" state rather than crashing. */
+    val accountKind: AccountKind get() = when (kind) {
+        "demo" -> AccountKind.Demo
+        "single" -> AccountKind.Single
+        "multi" -> AccountKind.Multi
+        else -> AccountKind.Unknown
+    }
+
+    /** Forward-compat typed view over [graceModel]. */
+    val grace: GraceModel get() = when (graceModel) {
+        "instant" -> GraceModel.Instant
+        "7d" -> GraceModel.SevenDay
+        "24h-totp" -> GraceModel.TwentyFourHourTotp
+        else -> GraceModel.None
+    }
+
+    enum class AccountKind { Demo, Single, Multi, Unknown }
+    enum class GraceModel { Instant, SevenDay, TwentyFourHourTotp, None }
 }
 
 @Serializable
@@ -1119,6 +1183,60 @@ class MockFlagshipServerClient(
         return TotpDisableResponse(ok = true, accountType = "single")
     }
 
+    override suspend fun resolveAccount(username: String): AccountResolution {
+        tick()
+        val u = username.lowercase()
+        // Demo first (mirror of the Worker's demo_users-before-users
+        // ordering). A seeded demo username = entry; crypto is a no-op,
+        // so we report it with `kind="demo"` + its demoServer and the
+        // client skips every credential gate. The `demoServers` map is
+        // the Mock's mirror of the Worker's `demo_users` table.
+        demoServers[u]?.let { block ->
+            return AccountResolution(
+                username = u,
+                exists = true,
+                kind = "demo",
+                recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
+                totpEnrolled = false,
+                trustedDeviceCount = 0,
+                demoServer = block,
+                graceModel = "instant",
+            )
+        }
+        // A claimed real username projects its account-type / TOTP /
+        // recovery / device-count scripted state (used by later phases).
+        // Everything else is a clean `unknown` STATE with zeroed factors
+        // — never a 404. Non-existent names return the same shape as a
+        // miss so timing/shape don't distinguish them.
+        val irk = _claimedUsernames[u]
+        if (irk == null) {
+            return AccountResolution(
+                username = u,
+                exists = false,
+                kind = "unknown",
+                recovery = AccountResolution.RecoveryState(present = false, hasFetchGate = false),
+                totpEnrolled = false,
+                trustedDeviceCount = 0,
+                graceModel = "none",
+            )
+        }
+        val kind = if ((accountTypeByUser[u] ?: "single") == "multi") "multi" else "single"
+        val hasRecovery = cloudRecoveryByUser[u] ?: false
+        val devices = devicesByUser[u]?.size ?: 0
+        return AccountResolution(
+            username = u,
+            exists = true,
+            kind = kind,
+            recovery = AccountResolution.RecoveryState(
+                present = hasRecovery,
+                hasFetchGate = false,
+            ),
+            totpEnrolled = totpEnrolledAtByUser[u] != null,
+            trustedDeviceCount = devices,
+            graceModel = if (kind == "multi") "24h-totp" else "7d",
+        )
+    }
+
     private fun etagFor(devices: List<TrustedDevice>): String {
         // Identity-significant subset only; lastSeenAt deliberately
         // excluded so test push-delivery doesn't flutter the ETag.
@@ -1403,6 +1521,17 @@ class LiveFlagshipServerClient(
             body = body,
             serializer = TotpDisableRequest.serializer(),
             responseSerializer = TotpDisableResponse.serializer(),
+        )
+    }
+
+    override suspend fun resolveAccount(username: String): AccountResolution {
+        // GET /api/account/resolve/<username> — 200 ALWAYS. A missing
+        // account comes back as kind="unknown", so there is no error
+        // status to special-case here.
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.getJson(
+            url = "$base/api/account/resolve/$encoded",
+            responseSerializer = AccountResolution.serializer(),
         )
     }
 }

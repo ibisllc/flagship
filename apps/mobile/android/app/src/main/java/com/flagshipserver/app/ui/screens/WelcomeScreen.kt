@@ -82,11 +82,11 @@ fun WelcomeScreen(nav: NavController) {
                 large = true,
             )
             FSGhostButton(
-                // Drives the WebAuthn-PRF recovery flow (wired in C3).
-                // Replaces the old "I already have a server" copy that
-                // misleadingly implied you could claim another user's
-                // pod by scanning a QR — you can't; you can only
-                // recover your own account.
+                // Username-first Join (JoinAccountContainer): type your
+                // account handle → resolveAccount branches to demo /
+                // single / multi / unknown. Replaces the old
+                // assert-passkey-first entry that 404'd on a missing
+                // local recovery passkey.
                 label = "I already have an account",
                 onClick = { nav.navigate("recover") },
                 block = true,
