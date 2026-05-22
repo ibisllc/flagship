@@ -6,9 +6,9 @@ import FlagshipBurnerCore
 /// Where the help links point. The website hosts the explainer pages.
 enum FlagshipLinks {
     static let base = "https://flagshipserver.com"
-    static let certificate = URL(string: "\(base)/")!
-    static let recommendedDistros = URL(string: "\(base)/recommended-linux")!
-    static let bootingProcess = URL(string: "\(base)/booting-process")!
+    static let certificate = URL(string: "\(base)/how-to#certificate")!
+    static let recommendedDistros = URL(string: "\(base)/how-to#recommended-linux")!
+    static let bootingProcess = URL(string: "\(base)/how-to#booting-process")!
 }
 
 /// Single-screen Assembler wizard.
