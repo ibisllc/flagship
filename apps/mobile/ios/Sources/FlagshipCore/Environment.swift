@@ -1,5 +1,6 @@
 import SwiftUI
 import FlagshipAPI
+import Flagship
 
 /// EnvironmentValues extension so any view can read the live ScreensClient
 /// via `@Environment(\.screensClient)`. The App-level shell injects either
@@ -38,5 +39,19 @@ public extension EnvironmentValues {
     var qrRelayClient: any QrRelayClient {
         get { self[QrRelayClientKey.self] }
         set { self[QrRelayClientKey.self] = newValue }
+    }
+}
+
+/// Phase 3b — bidirectional cross-device pairing relay seam (collaborator
+/// admit). Distinct from `qrRelayClient` (one-shot phone→browser create-
+/// server delivery). Defaults to the in-process Mock.
+private struct PairingRelayClientKey: EnvironmentKey {
+    static let defaultValue: any PairingRelayClient = MockPairingRelayClient()
+}
+
+public extension EnvironmentValues {
+    var pairingRelayClient: any PairingRelayClient {
+        get { self[PairingRelayClientKey.self] }
+        set { self[PairingRelayClientKey.self] = newValue }
     }
 }

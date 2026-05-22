@@ -92,6 +92,10 @@ struct FlagshipApp: App {
     private let liveServerClient: any FlagshipServerClient = LiveFlagshipServerClient()
     private let mockRelay = MockQrRelayClient()
     private let liveRelay: any QrRelayClient = LiveQrRelayClient()
+    // Phase 3b — cross-device pairing relay seam. The live bidirectional
+    // transport over /qr-pipe is a follow-up; the Mock seam is wired so
+    // the admin/incoming flows + safeguards are exercisable today.
+    private let pairingRelay = MockPairingRelayClient()
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
     }
@@ -113,6 +117,7 @@ struct FlagshipApp: App {
                 .environment(\.screensClient, activeClient)
                 .environment(\.flagshipServerClient, activeServerClient)
                 .environment(\.qrRelayClient, activeRelay)
+                .environment(\.pairingRelayClient, pairingRelay)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker)

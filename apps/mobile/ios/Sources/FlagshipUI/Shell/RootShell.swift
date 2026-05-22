@@ -75,7 +75,7 @@ public struct RootShell: View {
         case .unlockApprove, .unlockApprovalsList:   return .activity
         case .serverDetail, .createServer:            return .home
         case .appDetail, .marketplace, .vibeCodeChat: return .apps
-        case .recoverySetup:                          return .settings
+        case .recoverySetup, .joinAccount:            return .settings
         }
     }
 }

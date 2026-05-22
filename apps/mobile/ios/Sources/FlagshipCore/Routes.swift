@@ -40,6 +40,19 @@ public enum SettingsRoute: Hashable, Sendable {
     case postRecoveryProgress
     case about
     case addControlDevice
+    /// Phase 3b — ADMIN side of cross-device QR pairing. Settings →
+    /// Devices → Add device. Shows a pairing QR (a `/join` universal
+    /// link) and runs the admin relay role: derive SAS → confirm match
+    /// → sign a DeviceAdmit → seal + send the UMK bundle.
+    case addDevice
+    /// Phase 3b — INCOMING side of cross-device QR pairing, when the app
+    /// is ALREADY paired and a `/join` deeplink (or in-app scan) arrives.
+    /// Carries the scanned pairing-link string; routes into the
+    /// JoinAccountViewModel add-profile flow.
+    case joinAccount(joinUrl: String)
+    /// Phase 3b — the in-app scanner entry for the incoming side
+    /// ("Scan a pairing code"), reached from Settings → Devices.
+    case scanPairingCode
     case developer
     case privacy
     /// W3 — multi-profile picker; lists the clouds this phone is a
@@ -110,4 +123,11 @@ public enum OnboardingRoute: Hashable, Sendable {
     /// recovery container. (`AccountResolution` is Hashable so it rides
     /// the typed nav path directly.)
     case realAccountLogin(resolution: AccountResolution)
+    /// Phase 3b — cross-device QR pairing as a brand-new collaborator
+    /// (the app is UNPAIRED and a `/join` deeplink/scan arrives, or the
+    /// user picks "Scan a pairing code" from Welcome). Carries the
+    /// scanned/deeplinked `/join` link; runs the incoming JoinAccount
+    /// flow which attaches a FRESH device key + installs the shared UMK
+    /// into a new per-profile slot, then completes onboarding paired.
+    case joinByPairing(joinUrl: String?)
 }
