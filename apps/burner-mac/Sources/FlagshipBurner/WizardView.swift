@@ -20,6 +20,17 @@ enum FlagshipLinks {
 struct WizardView: View {
     @StateObject private var model = WizardModel()
     @State private var showLog = false
+    // "" = follow the system appearance until the user picks a side.
+    @AppStorage("assembler.theme") private var theme = ""
+    @Environment(\.colorScheme) private var effectiveScheme
+
+    private var preferredScheme: ColorScheme? {
+        switch theme {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +43,7 @@ struct WizardView: View {
         .frame(width: 560)
         .frame(minHeight: 600)
         .background(FB.Colors.bg)
+        .preferredColorScheme(preferredScheme)
         .task { await model.refreshDisks() }
     }
 
@@ -56,8 +68,37 @@ struct WizardView: View {
                 .font(FB.Font.title())
                 .foregroundStyle(FB.Colors.ink)
             Spacer()
+            themeToggle
         }
         .padding(.bottom, FB.Spacing.s1)
+    }
+
+    /// Day/night toggle. Shows the side you'd switch *to*: a sun when
+    /// you're in the dark, a moon when you're in the light. Until first
+    /// tapped the app follows the system appearance.
+    private var themeToggle: some View {
+        let isDark = effectiveScheme == .dark
+        return Button {
+            theme = isDark ? "light" : "dark"
+        } label: {
+            Image(systemName: isDark ? "sun.max.fill" : "moon.fill")
+                .imageScale(.medium)
+                .foregroundStyle(FB.Colors.textMuted)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: FB.Radius.sm)
+                        .fill(FB.Colors.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: FB.Radius.sm)
+                        .strokeBorder(FB.Colors.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(isDark ? "Switch to day" : "Switch to night")
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 
     // MARK: - Rows
