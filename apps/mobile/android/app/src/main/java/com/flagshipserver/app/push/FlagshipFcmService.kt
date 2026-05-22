@@ -29,6 +29,16 @@ class FlagshipFcmService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+
+        // Provisioning observability — a `provision-phase` push carries
+        // the discrete phase fields in `data` (username/fqdn/phase[/error]
+        // + title/body/deepLink). Route it into the shared phase model so
+        // the install-progress surface advances, then fall through to the
+        // standard notification (title/body already in `data`).
+        ProvisionPhasePush.parse(data)?.let { event ->
+            ProvisionPhaseBridge.onPhase?.invoke(event)
+        }
+
         val title = data["title"] ?: message.notification?.title ?: "Flagship"
         val body = data["body"] ?: message.notification?.body ?: ""
         val deepLink = data["deepLink"]

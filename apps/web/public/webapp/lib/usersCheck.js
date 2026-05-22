@@ -16,6 +16,13 @@
  *  @property {string} fqdn
  *  @property {"none"|"provisioning"|"up"} status
  *  @property {number} ttlIdleMinutes
+ *  @property {?string} [phase]      latest provisioning PHASE checkpoint
+ *                                   (one of @flagship/protocol
+ *                                   PROVISION_PHASES), null until the
+ *                                   first checkpoint arrives. Migration
+ *                                   0035 — lockstep with iOS/Android.
+ *  @property {?number} [phaseAt]    wall-clock ms the latest phase landed
+ *  @property {string} [lastError]   failure detail, only when phase==="failed"
  */
 
 /** @typedef {Object} TestAccountMeta

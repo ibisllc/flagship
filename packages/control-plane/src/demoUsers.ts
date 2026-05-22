@@ -257,6 +257,9 @@ export async function handleCreateDemoUser(
     lastActivityAt: 0,
     state: "none",
     createdAt,
+    provisionPhase: null,
+    provisionPhaseAt: null,
+    provisionLastError: null,
   };
   const inserted = await deps.storage.insert(row);
   if (!inserted.ok) {
@@ -816,14 +819,31 @@ export interface DemoServerBlock {
   fqdn: string;
   status: "none" | "provisioning" | "up";
   ttlIdleMinutes: number;
+  /**
+   * Fine-grained provisioning observability (migration 0035). The
+   * latest named PHASE checkpoint the box pushed — one of
+   * `@flagship/protocol` `PROVISION_PHASES`, or `null` when no
+   * checkpoint has arrived yet. The coarse `status` above is the
+   * three-state lifecycle; `phase` is the step WITHIN provisioning
+   * (clone/npm/build/identity/register/tunnel/cert/ready) so the
+   * phone can render a real progress list instead of a spinner.
+   */
+  phase: string | null;
+  /** Wall-clock ms the latest phase landed; null when `phase` is null. */
+  phaseAt: number | null;
+  /** Failure detail, present only when `phase === "failed"`. */
+  lastError?: string;
 }
 
 /** Pure mapper from a storage row to the public-facing block. Exposed
- *  so usersCheck.ts can fold it into the existing response. */
+ *  so usersCheck.ts + accountResolve.ts fold it into their responses. */
 export function demoServerBlockFromRow(row: DemoUserRecord): DemoServerBlock {
   return {
     fqdn: row.activeServerFqdn ?? demoServerFqdn(row.username),
     status: publicStatus(row.state),
     ttlIdleMinutes: row.ttlIdleMinutes,
+    phase: row.provisionPhase ?? null,
+    phaseAt: row.provisionPhaseAt ?? null,
+    ...(row.provisionLastError ? { lastError: row.provisionLastError } : {}),
   };
 }

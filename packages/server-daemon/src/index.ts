@@ -2,8 +2,11 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   ed,
+  signProvisionEvent,
   signServerRevokeBySelf,
   type Keypair,
+  type ProvisionEvent,
+  type ProvisionPhase,
   type ServerRevokeBySelf,
 } from "@flagship/protocol";
 import { InMemoryAlertInbox } from "./alertInbox.js";
@@ -324,6 +327,18 @@ async function main(): Promise<void> {
   additionalHandlers.push(adminProxyHandle);
   additionalHandlers.push(identityRotateHandle);
 
+  // Provisioning-observability reporter, bound to this daemon's identity
+  // + control plane. Used to push daemon-side phase checkpoints
+  // (tunnel-online → cert-issued → ready) and a terminal failed{}.
+  const reportPhase = (phase: ProvisionPhase, error?: string) =>
+    reportProvisionPhase({
+      serverFqdn: env.serverFqdn!,
+      identity: identityKeypair,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+      phase,
+      ...(error !== undefined ? { error } : {}),
+    });
+
   let runtime: DaemonRuntime;
   try {
     runtime = await startDaemonRuntime({
@@ -335,6 +350,13 @@ async function main(): Promise<void> {
       acmeEnvironment: env.acmeEnvironment!,
       wildcard: env.wildcard,
       dataDir,
+      // Push a `cert-issued` checkpoint the moment ACME completes (and
+      // again on every renewal — harmless, the phone just refreshes the
+      // phase timestamp). Fires DURING startDaemonRuntime, before the
+      // `ready` we emit once it resolves.
+      onCertIssued: () => {
+        void reportPhase("cert-issued");
+      },
       orders,
       servicePlatform: {
         // The data-services compose stack writes its admin creds here on
@@ -355,6 +377,12 @@ async function main(): Promise<void> {
     if (orders) console.log(`[daemon] orders-from-user endpoint enabled`);
     else console.log(`[daemon] FLAGSHIP_PSK_PUB_HEX not set; orders endpoint disabled`);
     console.log(`[daemon] 🔒 cert installed; serving HTTPS for ${env.serverFqdn}`);
+    // startDaemonRuntime resolves only once the tunnel is connected AND
+    // the cert is installed + serving. Push the remaining provisioning
+    // checkpoints so the phone's install-progress reaches `ready`.
+    // (cert-issued already fired via onCertIssued above.)
+    void reportPhase("tunnel-online");
+    void reportPhase("ready");
 
     // Wire vibe-code (legacy /api/llm/sessions) + the BFF /api/screens/*
     // surface now that runtime.servicePlatform / appBackup / urlController
@@ -554,7 +582,13 @@ async function main(): Promise<void> {
       console.log(`[daemon] re-pair watcher started (poll every 5 min)`);
     }
   } catch (e) {
+    const msg = (e as Error).message ?? String(e);
     console.error(`[daemon] runtime startup failed: ${(e as Error).stack ?? e}`);
+    // Surface the terminal failure to the phone before exiting. The
+    // phase is "ready" because that's the step we were trying to reach
+    // (tunnel + cert + serving); the error carries the real cause.
+    // Await briefly so the POST has a chance to land before exit.
+    await reportPhase("failed", `startup: ${msg}`.slice(0, 280));
     process.exit(1);
   }
 
@@ -834,6 +868,49 @@ function bytesEqualLocal(a: Uint8Array, b: Uint8Array): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
   return diff === 0;
+}
+
+/**
+ * Provisioning observability — push a named daemon-side PHASE checkpoint
+ * to .com so the phone's install-progress can track the box past
+ * `registered` (tunnel-online → cert-issued → ready) and surface a
+ * terminal `failed{phase,error}`.
+ *
+ * Ed25519-signed by the server identity (same key + posture as
+ * daemon-status). ALWAYS fail-open: a dropped checkpoint just leaves the
+ * phone on the prior phase until the next one lands — it MUST NEVER
+ * abort the daemon. So every failure is swallowed.
+ */
+async function reportProvisionPhase(args: {
+  serverFqdn: string;
+  identity: Keypair;
+  controlPlaneBaseUrl: string;
+  phase: ProvisionPhase;
+  error?: string;
+}): Promise<void> {
+  try {
+    const issuedAt = Date.now();
+    const event: ProvisionEvent = {
+      serverDomain: args.serverFqdn,
+      phase: args.phase,
+      error: args.error ?? "",
+      issuedAt,
+    };
+    const sig = signProvisionEvent(event, args.identity);
+    const url = `${args.controlPlaneBaseUrl.replace(/\/+$/, "")}/api/server/${encodeURIComponent(args.serverFqdn)}/provision-event`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        phase: args.phase,
+        error: args.error ?? "",
+        issuedAt,
+        signature: bytesToHexLocal(sig),
+      }),
+    });
+  } catch {
+    // Observability is best-effort; never let it break the daemon.
+  }
 }
 
 async function postSelfRevoke(deps: ExecutorDeps, reason: string): Promise<void> {

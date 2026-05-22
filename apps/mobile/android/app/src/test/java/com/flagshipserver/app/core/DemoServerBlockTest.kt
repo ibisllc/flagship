@@ -88,6 +88,56 @@ class DemoServerBlockTest {
         assertEquals(DemoServerBlock.Lifecycle.Provisioning, block.lifecycle)
     }
 
+    @Test fun demoServerBlock_decodesEnrichedPhaseFields_fromWorkerWire() {
+        // Migration 0035 — provisioning observability. Keep byte-identical
+        // with packages/control-plane/src/demoUsers.ts `DemoServerBlock`.
+        val json = """
+        {
+          "fqdn": "home.demoalice.flagship.services",
+          "status": "provisioning",
+          "ttlIdleMinutes": 30,
+          "phase": "cert-issued",
+          "phaseAt": 1700000000000,
+          "lastError": null
+        }
+        """.trimIndent()
+        val block = Json { ignoreUnknownKeys = true; explicitNulls = false }
+            .decodeFromString(DemoServerBlock.serializer(), json)
+        assertEquals("cert-issued", block.phase)
+        assertEquals(1_700_000_000_000L, block.phaseAt)
+        assertNull(block.lastError)
+    }
+
+    @Test fun demoServerBlock_decodesFailedPhaseWithError() {
+        val json = """
+        {
+          "fqdn": "home.demoalice.flagship.services",
+          "status": "provisioning",
+          "ttlIdleMinutes": 30,
+          "phase": "failed",
+          "phaseAt": 1700000000000,
+          "lastError": "acme dns-01 timeout"
+        }
+        """.trimIndent()
+        val block = Json { ignoreUnknownKeys = true; explicitNulls = false }
+            .decodeFromString(DemoServerBlock.serializer(), json)
+        assertEquals("failed", block.phase)
+        assertEquals("acme dns-01 timeout", block.lastError)
+    }
+
+    @Test fun demoServerBlock_oldWireWithoutPhase_decodesToNull() {
+        // Backward-compat: a pre-0035 Worker omits the phase fields; the
+        // optional defaults must keep decoding from working.
+        val json = """
+        {"fqdn":"home.demoalice.flagship.services","status":"up","ttlIdleMinutes":30}
+        """.trimIndent()
+        val block = Json { ignoreUnknownKeys = true; explicitNulls = false }
+            .decodeFromString(DemoServerBlock.serializer(), json)
+        assertNull(block.phase)
+        assertNull(block.phaseAt)
+        assertNull(block.lastError)
+    }
+
     // ─── DemoFixtures fork ──────────────────────────────────────────
 
     @Test fun activate_demoServerPresent_rendersOneRealDevice() = runTest {

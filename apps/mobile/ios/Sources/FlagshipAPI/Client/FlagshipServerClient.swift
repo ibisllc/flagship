@@ -850,10 +850,32 @@ public struct DemoServerBlock: Codable, Equatable, Hashable, Sendable {
     /// Operator-set idle-teardown horizon in minutes. UIs can surface
     /// this in a tooltip; the cron lives on the Worker.
     public let ttlIdleMinutes: Int
-    public init(fqdn: String, status: String, ttlIdleMinutes: Int = 30) {
+    /// Fine-grained provisioning observability — the latest named PHASE
+    /// checkpoint the box pushed (one of `@flagship/protocol`
+    /// PROVISION_PHASES), or nil when no checkpoint has arrived yet.
+    /// The coarse `status` is the three-state lifecycle; `phase` is the
+    /// step WITHIN provisioning so the install-progress UI can render a
+    /// real list instead of a spinner. Mirror of
+    /// packages/control-plane/src/demoUsers.ts `DemoServerBlock.phase`.
+    public let phase: String?
+    /// Wall-clock ms the latest phase landed; nil when `phase` is nil.
+    public let phaseAt: Double?
+    /// Failure detail, present only when `phase == "failed"`.
+    public let lastError: String?
+    public init(
+        fqdn: String,
+        status: String,
+        ttlIdleMinutes: Int = 30,
+        phase: String? = nil,
+        phaseAt: Double? = nil,
+        lastError: String? = nil
+    ) {
         self.fqdn = fqdn
         self.status = status
         self.ttlIdleMinutes = ttlIdleMinutes
+        self.phase = phase
+        self.phaseAt = phaseAt
+        self.lastError = lastError
     }
 
     /// Typed convenience over the raw string. Forward-compatible: an

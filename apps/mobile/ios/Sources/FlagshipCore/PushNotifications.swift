@@ -67,6 +67,16 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        // A provision-phase push that arrives while the app is foregrounded
+        // should still drive the install-progress surface (the user is
+        // very likely watching the provisioning screen). Route it without
+        // also enqueuing a deep link — they're already in-app.
+        let info = notification.request.content.userInfo
+        Task { @MainActor in
+            if let event = ProvisionPhaseBridge.parse(info) {
+                ProvisionPhaseBridge.shared.onPhase?(event)
+            }
+        }
         completionHandler([.banner, .sound, .list])
     }
 
@@ -84,6 +94,16 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
 
     @MainActor
     private func handleNotificationPayload(_ info: [AnyHashable: Any]) {
+        // Provisioning observability — route the phase into the
+        // install-progress Live Activity AND deep-link to the progress
+        // screen so a tap on the notification opens it.
+        if let event = ProvisionPhaseBridge.parse(info) {
+            ProvisionPhaseBridge.shared.onPhase?(event)
+            if let url = URL(string: "flagship://create-server") {
+                if let link = DeepLink.parse(url) { linker.enqueue(link) }
+            }
+            return
+        }
         if let urlString = info["flagship_url"] as? String, let url = URL(string: urlString),
            let link = DeepLink.parse(url) {
             linker.enqueue(link)

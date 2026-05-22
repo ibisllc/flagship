@@ -1983,6 +1983,9 @@ interface DemoUserRow {
   last_activity_at: number;
   state: string;
   created_at: number;
+  provision_phase: string | null;
+  provision_phase_at: number | null;
+  provision_last_error: string | null;
 }
 
 function rowToDemoUser(r: DemoUserRow): DemoUserRecord {
@@ -1999,6 +2002,12 @@ function rowToDemoUser(r: DemoUserRow): DemoUserRecord {
     lastActivityAt: r.last_activity_at,
     state: r.state as DemoUserState,
     createdAt: r.created_at,
+    // Pre-0035 rows (or rows queried before the migration applied) read
+    // these columns as undefined; coalesce to null so the record shape
+    // is stable regardless of when the migration landed.
+    provisionPhase: r.provision_phase ?? null,
+    provisionPhaseAt: r.provision_phase_at ?? null,
+    provisionLastError: r.provision_last_error ?? null,
   };
 }
 
@@ -2012,8 +2021,9 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
           "INSERT INTO demo_users " +
             "(username, display, snapshot_id, iso_r2_key, ttl_idle_minutes, " +
             "region, size, active_server_id, active_server_fqdn, " +
-            "last_activity_at, state, created_at) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "last_activity_at, state, created_at, " +
+            "provision_phase, provision_phase_at, provision_last_error) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(
           u,
@@ -2028,6 +2038,9 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
           rec.lastActivityAt,
           rec.state,
           rec.createdAt,
+          rec.provisionPhase ?? null,
+          rec.provisionPhaseAt ?? null,
+          rec.provisionLastError ?? null,
         )
         .run();
       return { ok: true as const };
@@ -2065,6 +2078,9 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
       activeServerFqdn: "active_server_fqdn",
       lastActivityAt: "last_activity_at",
       state: "state",
+      provisionPhase: "provision_phase",
+      provisionPhaseAt: "provision_phase_at",
+      provisionLastError: "provision_last_error",
     };
     for (const [k, v] of Object.entries(patch)) {
       if (k === "username" || k === "createdAt") continue;
@@ -2104,6 +2120,9 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
       activeServerId: "active_server_id",
       activeServerFqdn: "active_server_fqdn",
       lastActivityAt: "last_activity_at",
+      provisionPhase: "provision_phase",
+      provisionPhaseAt: "provision_phase_at",
+      provisionLastError: "provision_last_error",
     };
     const setClauses: string[] = ["state = ?"];
     const binds: unknown[] = [to];
@@ -2151,6 +2170,25 @@ export class D1DemoUsersStorage implements DemoUsersStorage {
       )
       .first<{ n: number }>();
     return r?.n ?? 0;
+  }
+  async setProvisionPhase(
+    username: string,
+    phase: string,
+    error: string | null,
+    at: number,
+  ) {
+    const u = username.toLowerCase();
+    const res = await this.db
+      .prepare(
+        "UPDATE demo_users SET provision_phase = ?, provision_phase_at = ?, " +
+          "provision_last_error = ? WHERE username = ?",
+      )
+      .bind(phase, at, error, u)
+      .run();
+    const meta = (res as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return null;
+    const after = await this.get(u);
+    return after ?? null;
   }
 }
 

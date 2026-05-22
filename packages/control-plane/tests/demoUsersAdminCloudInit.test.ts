@@ -202,6 +202,29 @@ describe("buildCloudConfigUserData", () => {
     expect(bootstrap).toContain('GIT_REF="main"');
   });
 
+  it("bootstrap emits provisioning PHASE checkpoints (fail-open)", () => {
+    const yaml = buildCloudConfigUserData({
+      installBlobJson: "{}",
+      installerGitRef: "main",
+    });
+    const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+    const bootstrap = Buffer.from(all[1]![1]!, "base64").toString("utf8");
+    // A report_phase helper that POSTs to the provision-event endpoint
+    // authenticated by the auth-code serial the box already holds.
+    expect(bootstrap).toContain("report_phase()");
+    expect(bootstrap).toContain("/provision-event");
+    expect(bootstrap).toContain("authCodeSerial");
+    // Every cloud-init checkpoint in the sequence is emitted.
+    expect(bootstrap).toContain("report_phase boot");
+    expect(bootstrap).toContain("report_phase cloned");
+    expect(bootstrap).toContain("report_phase deps");
+    expect(bootstrap).toContain("report_phase built");
+    expect(bootstrap).toContain("report_phase identity");
+    expect(bootstrap).toContain("report_phase registered");
+    // Fail-open: the POST must never abort the install.
+    expect(bootstrap).toContain("|| true");
+  });
+
   it("rejects disallowed characters in installerGitRef", () => {
     expect(() =>
       buildCloudConfigUserData({

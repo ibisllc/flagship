@@ -23,6 +23,7 @@ struct FlagshipApp: App {
         // in Keychain with WhenUnlockedThisDeviceOnly access.
         self.liveClient = LiveScreensClient(store: KeychainSessionStore())
         Self.wireInstallProgressBridge()
+        Self.wireProvisionPhaseBridge()
         Self.wirePendingApprovalsBroadcast()
     }
 
@@ -73,6 +74,50 @@ struct FlagshipApp: App {
         }
         b.onFailed = { reason in
             Task { await InstallProgressLiveActivityCenter.shared.fail(reason: reason) }
+        }
+    }
+
+    /// Wire FlagshipCore's ProvisionPhaseBridge (fed by `provision-phase`
+    /// pushes from .com) into the SAME InstallProgressBridge the
+    /// onboarding flow uses. This turns a phase push into a Live Activity
+    /// step transition — provisioning becomes a glass box even when the
+    /// app is backgrounded and the user never opened the progress screen.
+    @MainActor
+    private static func wireProvisionPhaseBridge() {
+        ProvisionPhaseBridge.shared.onPhase = { event in
+            let progress = InstallProgressBridge.shared
+            // The first checkpoint also kicks off the Live Activity (the
+            // onboarding path normally calls onStart; a push-only path —
+            // e.g. demo-connect from another device — needs it here).
+            switch event.phase {
+            case "failed":
+                progress.onFailed?(event.error ?? "Provisioning failed")
+            case "ready":
+                progress.onComplete?(event.fqdn)
+            default:
+                if let step = phaseToStep(event.phase) {
+                    progress.onStep?(step)
+                }
+            }
+        }
+    }
+
+    /// Map a wire phase string (`@flagship/protocol` PROVISION_PHASES)
+    /// to the FlagshipUI install-progress Step. The four intermediate
+    /// cloud-init phases (cloned/deps/built/identity) all collapse onto
+    /// `.boot` — the Step enum's coarsest "still setting up" rung — so
+    /// the Live Activity advances monotonically without needing a new
+    /// step per shell command. Returns nil for phases handled elsewhere
+    /// (ready/failed) or unknown future strings.
+    @MainActor
+    private static func phaseToStep(_ phase: String) -> InstallProgressViewModel.Step? {
+        switch phase {
+        case "boot", "cloned", "deps", "built", "identity": return .boot
+        case "registered":     return .registered
+        case "tunnel-online":  return .tunnelOnline
+        case "cert-issued":    return .certIssued
+        case "ready":          return .ready
+        default:               return nil
         }
     }
 

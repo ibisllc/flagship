@@ -27,6 +27,9 @@ function seed(overrides: Partial<DemoUserRecord> = {}): DemoUserRecord {
     lastActivityAt: 0,
     state: "none",
     createdAt: 1_700_000_000_000,
+    provisionPhase: null,
+    provisionPhaseAt: null,
+    provisionLastError: null,
     ...overrides,
   };
 }
@@ -128,5 +131,60 @@ describe("InMemoryDemoUsersStorage", () => {
     const rows = await s.list();
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.username).sort()).toEqual(["a", "b"]);
+  });
+
+  describe("setProvisionPhase (migration 0035)", () => {
+    it("stamps phase + phaseAt and returns the updated row", async () => {
+      const s = new InMemoryDemoUsersStorage();
+      await s.insert(seed({ username: "demoalice", state: "provisioning" }));
+      const updated = await s.setProvisionPhase("demoalice", "cloned", null, 42);
+      expect(updated?.provisionPhase).toBe("cloned");
+      expect(updated?.provisionPhaseAt).toBe(42);
+      expect(updated?.provisionLastError).toBeNull();
+      const fresh = await s.get("demoalice");
+      expect(fresh?.provisionPhase).toBe("cloned");
+    });
+
+    it("records the error alongside a failed phase", async () => {
+      const s = new InMemoryDemoUsersStorage();
+      await s.insert(seed({ username: "demoalice", state: "provisioning" }));
+      const updated = await s.setProvisionPhase("demoalice", "failed", "acme timeout", 99);
+      expect(updated?.provisionPhase).toBe("failed");
+      expect(updated?.provisionLastError).toBe("acme timeout");
+    });
+
+    it("is idempotent — re-posting the same phase just refreshes the timestamp", async () => {
+      const s = new InMemoryDemoUsersStorage();
+      await s.insert(seed({ username: "demoalice", state: "provisioning" }));
+      await s.setProvisionPhase("demoalice", "deps", null, 10);
+      const again = await s.setProvisionPhase("demoalice", "deps", null, 20);
+      expect(again?.provisionPhase).toBe("deps");
+      expect(again?.provisionPhaseAt).toBe(20);
+    });
+
+    it("clears a prior error when moving off failed", async () => {
+      const s = new InMemoryDemoUsersStorage();
+      await s.insert(seed({ username: "demoalice", state: "provisioning" }));
+      await s.setProvisionPhase("demoalice", "failed", "boom", 1);
+      const recovered = await s.setProvisionPhase("demoalice", "tunnel-online", null, 2);
+      expect(recovered?.provisionPhase).toBe("tunnel-online");
+      expect(recovered?.provisionLastError).toBeNull();
+    });
+
+    it("returns null for an unknown username", async () => {
+      const s = new InMemoryDemoUsersStorage();
+      expect(await s.setProvisionPhase("ghost", "boot", null, 1)).toBeNull();
+    });
+
+    it("a row inserted without provision fields reads them as null", async () => {
+      const s = new InMemoryDemoUsersStorage();
+      // Construct a record missing the phase columns — the adapter must
+      // tolerate it (the D1 schema treats them as nullable).
+      await s.insert(seed({ username: "legacy" }) as DemoUserRecord);
+      const row = await s.get("legacy");
+      expect(row?.provisionPhase).toBeNull();
+      expect(row?.provisionPhaseAt).toBeNull();
+      expect(row?.provisionLastError).toBeNull();
+    });
   });
 });

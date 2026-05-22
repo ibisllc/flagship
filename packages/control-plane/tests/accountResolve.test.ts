@@ -179,4 +179,85 @@ describe("handleAccountResolve", () => {
     expect(body(r).username).toBe("harry");
     expect(body(r).kind).toBe("single");
   });
+
+  it("enriches demoServer with the latest provisioning phase + phaseAt", async () => {
+    const { InMemoryDemoUsersStorage } = await import("@flagship/storage");
+    const demoUsers = new InMemoryDemoUsersStorage();
+    await demoUsers.insert({
+      username: "demoalice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: "srv-1",
+      activeServerFqdn: "home.demoalice.flagship.services",
+      lastActivityAt: 0,
+      state: "provisioning",
+      createdAt: 1,
+      provisionPhase: null,
+      provisionPhaseAt: null,
+      provisionLastError: null,
+    });
+    await demoUsers.setProvisionPhase("demoalice", "cert-issued", null, 555);
+    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
+    const b = body(r);
+    expect(b.demoServer!.phase).toBe("cert-issued");
+    expect(b.demoServer!.phaseAt).toBe(555);
+    expect(b.demoServer!.lastError).toBeUndefined();
+  });
+
+  it("surfaces the failure detail in demoServer.lastError on a failed phase", async () => {
+    const { InMemoryDemoUsersStorage } = await import("@flagship/storage");
+    const demoUsers = new InMemoryDemoUsersStorage();
+    await demoUsers.insert({
+      username: "demoalice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: "srv-1",
+      activeServerFqdn: "home.demoalice.flagship.services",
+      lastActivityAt: 0,
+      state: "provisioning",
+      createdAt: 1,
+      provisionPhase: null,
+      provisionPhaseAt: null,
+      provisionLastError: null,
+    });
+    await demoUsers.setProvisionPhase("demoalice", "failed", "acme dns-01 timeout", 777);
+    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
+    const b = body(r);
+    expect(b.demoServer!.phase).toBe("failed");
+    expect(b.demoServer!.lastError).toBe("acme dns-01 timeout");
+  });
+
+  it("demoServer.phase is null before any checkpoint arrives", async () => {
+    const { InMemoryDemoUsersStorage } = await import("@flagship/storage");
+    const demoUsers = new InMemoryDemoUsersStorage();
+    await demoUsers.insert({
+      username: "demoalice",
+      display: "Demo Alice",
+      snapshotId: null,
+      isoR2Key: null,
+      ttlIdleMinutes: 30,
+      region: "fsn1",
+      size: "cx22",
+      activeServerId: null,
+      activeServerFqdn: null,
+      lastActivityAt: 0,
+      state: "none",
+      createdAt: 1,
+      provisionPhase: null,
+      provisionPhaseAt: null,
+      provisionLastError: null,
+    });
+    const r = await handleAccountResolve(deps({ demoUsers }), "demoalice");
+    const b = body(r);
+    expect(b.demoServer!.phase).toBeNull();
+    expect(b.demoServer!.phaseAt).toBeNull();
+  });
 });

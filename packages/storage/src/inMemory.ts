@@ -915,6 +915,25 @@ export class InMemoryDemoUsersStorage implements DemoUsersStorage {
     }
     return n;
   }
+  async setProvisionPhase(
+    username: string,
+    phase: string,
+    error: string | null,
+    at: number,
+  ) {
+    const k = this.key(username);
+    const r = this.byUsername.get(k);
+    if (!r) return null;
+    const next: DemoUserRecord = {
+      ...r,
+      provisionPhase: phase,
+      provisionPhaseAt: at,
+      provisionLastError: error,
+      username: k,
+    };
+    this.byUsername.set(k, next);
+    return { ...next };
+  }
 }
 
 export class InMemoryDeviceCapabilityGrantStorage

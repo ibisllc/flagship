@@ -1982,6 +1982,91 @@ export function verifyServerRevokeBySelf(r: ServerRevokeBySelf, sig: Bytes, iden
 }
 
 /**
+ * Demo-server provisioning observability — a named PHASE checkpoint the
+ * box pushes to .com so the phone (and debug tooling) can see exactly
+ * which step provisioning is on rather than a black box.
+ *
+ * The phase sequence is two segments:
+ *   - cloud-init bootstrap:  boot → cloned → deps → built → identity
+ *     (the existing /api/server/register stamps `registered`).
+ *   - daemon:                tunnel-online → cert-issued → ready.
+ *   - any step may end at:    failed { phase, error }.
+ *
+ * Two emission channels share this phase vocabulary:
+ *   - Pre-daemon (bootstrap) events authenticate with the auth-code
+ *     serial the box already holds — a low-stakes DISPLAY signal, not a
+ *     security boundary, validated only against a `provisioning` row.
+ *   - Daemon events are Ed25519-signed by the server identity (same key
+ *     as daemon-status), so the canonical bytes + sign/verify below are
+ *     the daemon's channel.
+ */
+export const PROVISION_PHASES = [
+  "boot",
+  "cloned",
+  "deps",
+  "built",
+  "identity",
+  "registered",
+  "tunnel-online",
+  "cert-issued",
+  "ready",
+  "failed",
+] as const;
+
+export type ProvisionPhase = (typeof PROVISION_PHASES)[number];
+
+/** Daemon-emitted phases — the ones signed by the server identity. The
+ *  bootstrap emits the earlier (auth-code-serial-authenticated) phases. */
+export const DAEMON_PROVISION_PHASES = [
+  "tunnel-online",
+  "cert-issued",
+  "ready",
+  "failed",
+] as const;
+
+export function isProvisionPhase(s: string): s is ProvisionPhase {
+  return (PROVISION_PHASES as readonly string[]).includes(s);
+}
+
+export interface ProvisionEvent {
+  serverDomain: ServerId;
+  phase: ProvisionPhase;
+  /** Free-text failure detail; only meaningful when `phase === "failed"`. */
+  error: string;
+  issuedAt: number;
+}
+
+const TAG_PROVISION_EVENT = "flagship/provision-event/v1";
+
+function canonicalProvisionEvent(e: ProvisionEvent): Bytes {
+  return new TextEncoder().encode(
+    [
+      TAG_PROVISION_EVENT,
+      e.serverDomain,
+      e.phase,
+      e.error,
+      e.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function signProvisionEvent(e: ProvisionEvent, identity: Keypair): Bytes {
+  return ed.sign(canonicalProvisionEvent(e), identity.privateKey);
+}
+
+export function verifyProvisionEvent(
+  e: ProvisionEvent,
+  sig: Bytes,
+  identityPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalProvisionEvent(e), identityPub);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Phone request to install an app on this server.
  *
  * Signed by the **host's** IRK — the user whose box will run the

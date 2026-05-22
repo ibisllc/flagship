@@ -1093,6 +1093,19 @@ export interface DemoUserRecord {
   lastActivityAt: number;
   state: DemoUserState;
   createdAt: number;
+  /**
+   * Provisioning observability (migration 0035). The latest named PHASE
+   * checkpoint the box pushed to .com — see `@flagship/protocol`
+   * `PROVISION_PHASES`. NULL until the first checkpoint arrives. The
+   * `state` machine above ('none'/'provisioning'/'up') is coarse; this
+   * field is the fine-grained "which step within provisioning" signal
+   * the phone + debug tooling read via /api/account/resolve.
+   */
+  provisionPhase: string | null;
+  /** Wall-clock ms the latest phase landed. NULL until first checkpoint. */
+  provisionPhaseAt: number | null;
+  /** Failure detail; set alongside `provisionPhase === "failed"`. */
+  provisionLastError: string | null;
 }
 
 export interface DemoUsersStorage {
@@ -1120,6 +1133,17 @@ export interface DemoUsersStorage {
   /** Count rows whose state is in (provisioning, up, idle-pending-teardown)
    *  — drives the MAX_CONCURRENT_DEMO_VPS soft cap. */
   countActive(): Promise<number>;
+  /** Record the latest provisioning PHASE checkpoint for a row. Stamps
+   *  `provision_phase` + `provision_phase_at`; `error` populates
+   *  `provision_last_error` (passing `null` clears it). Returns the
+   *  updated row, or `null` when no such username exists. Idempotent —
+   *  re-posting the same phase just refreshes the timestamp. */
+  setProvisionPhase(
+    username: string,
+    phase: string,
+    error: string | null,
+    at: number,
+  ): Promise<DemoUserRecord | null>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

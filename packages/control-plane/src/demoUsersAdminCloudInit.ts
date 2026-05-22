@@ -240,6 +240,24 @@ PHONE_DELEGATED_PUBKEY="$(jq -r .phoneDelegatedPubKey "$BLOB_JSON")"
 AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
 echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
 
+# Provisioning observability — POST a named PHASE checkpoint to .com so
+# the phone's install-progress can track each step instead of staring at
+# a black box. Authenticated by the auth-code serial we already hold
+# (a DISPLAY signal, validated server-side against the provisioning row).
+# ALWAYS fail-open: a progress POST that errors MUST NOT abort the
+# install (|| true on every call). CTRL_BASE is derived from the
+# registration URL, which always points at the same .com origin.
+CTRL_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+report_phase() {
+    # $1 = phase, $2 = optional error string (only with phase=failed)
+    local _phase="$1"; local _err="\${2:-}"
+    echo "[flagship-bootstrap] phase=$_phase"
+    curl -fsS -m 10 -X POST -H "content-type: application/json" \\
+        --data "{\\"phase\\":\\"$_phase\\",\\"error\\":\\"$_err\\",\\"authCodeSerial\\":\\"$AUTH_CODE_SERIAL\\"}" \\
+        "$CTRL_BASE/api/server/$SERVER_DOMAIN/provision-event" >/dev/null 2>&1 || true
+}
+report_phase boot
+
 # 3. Persist install-time facts the daemon reads on every boot.
 mkdir -p /var/flagship /boot/flagship
 echo "$SERVER_DOMAIN"          > /var/flagship/server-domain
@@ -272,6 +290,7 @@ if ! git clone --depth 50 --branch "$GIT_REF" "$REPO_URL" /opt/flagship; then
     git -C /opt/flagship checkout "$GIT_REF" || true
 fi
 cd /opt/flagship
+report_phase cloned
 # Use npm-install instead of npm-ci. Debian's nodejs-18 + npm-9.2
 # combo handles our workspace-heavy package-lock unreliably with ci
 # (silently no-ops on workspaces). install is more forgiving and
@@ -282,6 +301,7 @@ npm install --no-audit --no-fund --workspaces --include-workspace-root 2>&1 \\
     | tee /var/log/flagship-npm.log
 NPM_RC=\${PIPESTATUS[0]}
 echo "[flagship-bootstrap] npm install exit=$NPM_RC"
+report_phase deps
 # Verify the critical workspace symlink ended up in place.
 if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
     echo "[flagship-bootstrap] WARN: workspace @flagship/protocol not symlinked — retrying with explicit symlinks"
@@ -298,6 +318,7 @@ fi
 echo "[flagship-bootstrap] tsc -b"
 npx tsc -b 2>&1 | tee /var/log/flagship-tsc.log || \\
     echo "[flagship-bootstrap] warning: tsc -b reported errors"
+report_phase built
 
 # 6. Generate server identity.
 mkdir -p /var/flagship/identity
@@ -308,6 +329,7 @@ npx tsx scripts/install-helper.ts gen-identity \\
     --out-pem  /boot/identity.pem
 chmod 600 /var/flagship/identity/identity.priv.hex /boot/identity.pem
 SERVER_IDENTITY_PRIV_HEX="$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
+report_phase identity
 
 # 7. Seal LUKS key for the phone (sealForRecipient — Ed25519→X25519
 #    birational map, same as the Alpine install.sh path).
@@ -426,6 +448,14 @@ echo "[flagship-bootstrap] systemd units installed + enabled"
 echo "[flagship-bootstrap] running first-boot register inline"
 /usr/local/sbin/flagship-first-boot-register.sh || \\
     echo "[flagship-bootstrap] warning: first-boot register exited non-zero (continuing)"
+# The wrapper writes registered.flag only on a successful POST; mirror
+# that as the 'registered' phase checkpoint. The daemon takes over the
+# phase channel from here (tunnel-online → cert-issued → ready).
+if [ -e /var/flagship/registered.flag ]; then
+    report_phase registered
+else
+    report_phase failed "first-boot register did not complete"
+fi
 systemctl start flagship-daemon.service || \\
     echo "[flagship-bootstrap] warning: daemon start non-zero (continuing)"
 

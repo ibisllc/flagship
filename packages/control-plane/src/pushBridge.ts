@@ -95,6 +95,17 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
      * (encrypted by the daemon under the device's pushX25519Pub).
      */
     webpushPayloadBytes?: Uint8Array;
+    /**
+     * Optional NON-SECRET discrete fields echoed verbatim into the APNs
+     * `userInfo` and the FCM `data` map. Use ONLY for display signals
+     * that carry no user content — e.g. the demo-provisioning phase
+     * (username + public demo FQDN + phase string). Most categories
+     * leave this unset and ride the category-only wake pattern (the
+     * device opens the app + fetches specifics). The phone's push
+     * handler reads these keys directly so the install-progress Live
+     * Activity / notification can advance without a round-trip.
+     */
+    displayData?: Record<string, string>;
   }): Promise<PushFanoutResult> {
     let sent = 0;
     let failed = 0;
@@ -110,6 +121,7 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
               fetchImpl,
               now,
               state: apnsState,
+              ...(args.displayData ? { displayData: args.displayData } : {}),
             });
             sent++;
             return;
@@ -123,6 +135,7 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
               fetchImpl,
               now,
               state: fcmState,
+              ...(args.displayData ? { displayData: args.displayData } : {}),
             });
             sent++;
             return;
@@ -182,11 +195,29 @@ export function wrapForwarderAsV12Fanout(
       deepLink: args.payload.deepLink,
       ...(args.payload.meta ? { meta: args.payload.meta } : {}),
     });
+    // String-coerce meta into displayData so APNs/FCM also carry the
+    // discrete fields (the device's notification handler reads them
+    // directly). meta is constrained to string|number, and the fields
+    // used this way (provision-phase) are non-secret display signals.
+    // title/body/deepLink ride along too so the FCM service can build a
+    // notification without re-deriving copy.
+    let displayData: Record<string, string> | undefined;
+    if (args.payload.meta) {
+      displayData = {
+        title: args.payload.title,
+        body: args.payload.body,
+        deepLink: args.payload.deepLink,
+      };
+      for (const [k, v] of Object.entries(args.payload.meta)) {
+        displayData[k] = String(v);
+      }
+    }
     await forwarder({
       targets: args.targets,
       category: args.payload.category,
       sealedPayloadHex: "",
       webpushPayloadBytes: new TextEncoder().encode(payloadJson),
+      ...(displayData ? { displayData } : {}),
     });
   };
 }
@@ -205,6 +236,7 @@ async function sendApns(args: {
   fetchImpl: FetchLike;
   now: () => number;
   state: { token?: string; mintedAt?: number };
+  displayData?: Record<string, string>;
 }): Promise<void> {
   const { cfg, state, now } = args;
   if (!state.token || (state.mintedAt && now() - state.mintedAt > APNS_TOKEN_TTL_MS)) {
@@ -230,10 +262,17 @@ async function sendApns(args: {
     apsBody.sound = { critical: 1, name: "default", volume: 1.0 };
     apsBody["interruption-level"] = "critical";
   }
-  const body = JSON.stringify({
+  // Non-secret display fields (e.g. provision-phase) ride at the top
+  // level of the APNs payload so they land in `userInfo` for the
+  // device's notification handler. iOS reads `info["phase"]` etc.
+  const bodyObj: Record<string, unknown> = {
     aps: apsBody,
     "flagship-sealed": args.sealedPayloadHex,
-  });
+  };
+  if (args.displayData) {
+    for (const [k, v] of Object.entries(args.displayData)) bodyObj[k] = v;
+  }
+  const body = JSON.stringify(bodyObj);
   const r = await args.fetchImpl(url, {
     method: "POST",
     headers: {
@@ -272,6 +311,7 @@ async function sendFcm(args: {
   fetchImpl: FetchLike;
   now: () => number;
   state: { token?: string; expiresAt?: number };
+  displayData?: Record<string, string>;
 }): Promise<void> {
   const { cfg, state, now } = args;
   if (!state.token || !state.expiresAt || now() > state.expiresAt) {
@@ -281,13 +321,18 @@ async function sendFcm(args: {
     state.expiresAt = now() + (minted.expiresInSec - 300) * 1000;
   }
   const url = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/messages:send`;
+  // FCM `data` values MUST be strings. Merge the non-secret display
+  // fields (e.g. provision-phase) so the Android FCM service can build a
+  // phase-aware notification + advance its progress model directly.
+  const data: Record<string, string> = {
+    category: args.category,
+    sealed: args.sealedPayloadHex,
+    ...(args.displayData ?? {}),
+  };
   const body = JSON.stringify({
     message: {
       token: args.providerToken,
-      data: {
-        category: args.category,
-        sealed: args.sealedPayloadHex,
-      },
+      data,
       android: { priority: "HIGH" },
       apns: { headers: { "apns-priority": "10" } },
     },

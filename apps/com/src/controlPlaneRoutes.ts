@@ -70,6 +70,7 @@ import {
   handleAccountResolve,
   handleGetAuditEvents,
   handlePostDaemonStatus,
+  handlePostProvisionEvent,
   handleUserPubKeyCert,
   handleMarketplaceList,
   handleMarketplaceGet,
@@ -334,6 +335,7 @@ const ROUTE_RE = {
   INSTALL_EVENTS: /^\/api\/install-events\/([^/]+)$/,
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
+  PROVISION_EVENT: /^\/api\/server\/([^/]+)\/provision-event$/,
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
   LUKS_UNLOCK_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key$/,
   LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
@@ -1030,6 +1032,26 @@ export async function tryControlPlane(
           servers: storage.servers,
           routing: storage.routing,
         },
+        await readJson(request),
+      ),
+    );
+  }
+  // Provisioning observability — the box pushes a named PHASE checkpoint
+  // here at each step (bootstrap auth-code-serial channel + daemon
+  // signed channel). .com stores the latest phase + fans out a native
+  // push so the phone's install-progress Live Activity tracks it live.
+  if (method === "POST" && (m = path.match(ROUTE_RE.PROVISION_EVENT))) {
+    const peFanout = buildOptionalV12PushFanout(env);
+    return finish(
+      await handlePostProvisionEvent(
+        {
+          demoUsers: storage.demoUsers,
+          servers: storage.servers,
+          authCodes: storage.authCodes,
+          pushTokens: storage.pushTokens,
+          ...(peFanout ? { pushFanout: peFanout } : {}),
+        },
+        decodeURIComponent(m[1]!),
         await readJson(request),
       ),
     );

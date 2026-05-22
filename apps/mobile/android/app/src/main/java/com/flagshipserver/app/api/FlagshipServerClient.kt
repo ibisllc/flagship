@@ -627,6 +627,18 @@ data class DemoServerBlock(
     /** Operator-set idle-teardown horizon in minutes. UIs can surface
      *  this in a tooltip; the cron lives on the Worker. */
     val ttlIdleMinutes: Int = 30,
+    /** Fine-grained provisioning observability — the latest named PHASE
+     *  checkpoint the box pushed (one of the @flagship/protocol
+     *  PROVISION_PHASES), or null when no checkpoint has arrived yet.
+     *  The coarse [status] is the three-state lifecycle; [phase] is the
+     *  step WITHIN provisioning so the install-progress UI can render a
+     *  real list instead of a spinner. Mirror of
+     *  packages/control-plane/src/demoUsers.ts `DemoServerBlock.phase`. */
+    val phase: String? = null,
+    /** Wall-clock ms the latest phase landed; null when [phase] is null. */
+    val phaseAt: Long? = null,
+    /** Failure detail, present only when `phase == "failed"`. */
+    val lastError: String? = null,
 ) {
     /** Typed convenience over the raw string. Forward-compatible: an
      *  unknown future value parses as `Provisioning` so a client that
