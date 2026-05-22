@@ -41,11 +41,10 @@ struct WizardView: View {
 
     private var header: some View {
         HStack(spacing: FB.Spacing.s2) {
-            Image(systemName: "flame.fill")
-                .foregroundStyle(FB.Colors.primary)
-                .imageScale(.medium)
+            FlagshipLogo(size: 22)
             Text("Flagship Burner")
                 .font(FB.Font.title())
+                .foregroundStyle(FB.Colors.ink)
             Spacer()
         }
         .padding(.bottom, FB.Spacing.s1)
@@ -299,7 +298,7 @@ private struct DropRow: View {
         ZStack {
             Circle()
                 .fill(isReady ? FB.Colors.success.opacity(0.15)
-                              : FB.Colors.surfaceElevated)
+                              : FB.Colors.surfaceElev)
                 .frame(width: 36, height: 36)
             Image(systemName: icon)
                 .foregroundStyle(isReady ? FB.Colors.success : FB.Colors.textMuted)
@@ -383,7 +382,7 @@ private struct DiskPickerRow: View {
                 Circle()
                     .fill(model.selectedDisk != nil
                           ? FB.Colors.warning.opacity(0.15)
-                          : FB.Colors.surfaceElevated)
+                          : FB.Colors.surfaceElev)
                     .frame(width: 36, height: 36)
                 Image(systemName: "externaldrive.fill")
                     .foregroundStyle(model.selectedDisk != nil
@@ -478,7 +477,7 @@ private struct LogPane: View {
                 }
                 .padding(FB.Spacing.s3)
             }
-            .background(FB.Colors.surfaceElevated)
+            .background(FB.Colors.surfaceElev)
             .overlay(
                 RoundedRectangle(cornerRadius: FB.Radius.sm)
                     .strokeBorder(FB.Colors.border, lineWidth: 1)
