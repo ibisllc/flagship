@@ -358,7 +358,22 @@ const defaultWriteBytesToDevice: WriteBytesToDevice = async (args) => {
     ]).catch(() => {});
   }
 
-  const fh = await open(target, "w");
+  let fh;
+  try {
+    fh = await open(target, "w");
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "EPERM" || code === "EACCES") {
+      throw new Error(
+        `macOS blocked raw disk access to ${target} (${code}). The process needs Full Disk ` +
+          `Access — grant it to the terminal/app you're running from (System Settings → Privacy ` +
+          `& Security → Full Disk Access), then retry. Note: an app that escalates via ` +
+          `osascript "administrator privileges" runs under the system auth trampoline, which ` +
+          `cannot be granted Full Disk Access — run the burn from a Full-Disk-Access terminal.`,
+      );
+    }
+    throw e;
+  }
   try {
     let total = 0;
     let lastPct = -1;
