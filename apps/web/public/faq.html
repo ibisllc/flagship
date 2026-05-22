@@ -90,26 +90,25 @@
 </head>
 <body>
 
-<header class="nav">
-  <div class="nav-inner">
-    <a href="/" class="nav-brand" aria-label="Flagship home"><svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>Flagship</a>
-    <nav class="nav-links" aria-label="Primary">
-      <a href="/how-it-works">How it works</a>
-      <a href="/marketplace">Services</a>
-      <a href="/docs">Docs</a>
-      <a href="/status/">Status</a>
-    </nav>
-    <div class="nav-cta"><button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
-      <a href="/" class="btn btn--primary">Install</a>
-    </div>
-  </div>
+<header class="topbar">
+  <a href="/" class="brand" aria-label="Flagship — home">
+    <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+    <span class="name">Flagship</span>
+  </a>
+  <nav aria-label="Primary">
+    <a href="/">Home</a>
+    <a href="/docs">Docs</a>
+    <a href="/help">Help</a>
+    <a href="/security.html">Security</a>
+  </nav>
+  <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
 </header>
 
 <main class="container">
 
   <section class="page-hero">
     <h1>Questions, in plain English.</h1>
-    <p>The ones people actually ask before they hand us their hardware and their phone. If yours isn't here, mail <a href="mailto:harry@flagship.services">harry@flagship.services</a>.</p>
+    <p>The ones people actually ask before they hand us their hardware and their phone. If yours isn't here, mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a>.</p>
     <nav class="toc" aria-label="Sections">
       <a href="#setup">Setup &amp; install</a>
       <a href="#privacy">Privacy &amp; security</a>
@@ -297,7 +296,7 @@
       <details class="q">
         <summary>Do you take crypto?</summary>
         <div class="answer">
-          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:harry@flagship.services">harry@flagship.services</a> and tell us — that's how features get prioritized.</p>
+          <p>Not yet. Stripe takes cards (USD, EUR, GBP). We're exploring monero / lightning for the privacy-conscious, but it's not on the immediate roadmap. If this matters to you, mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> and tell us — that's how features get prioritized.</p>
         </div>
       </details>
       <details class="q">
@@ -342,7 +341,7 @@
 
   <div class="help-out">
     <h3>Didn't find it?</h3>
-    <p>Mail <a href="mailto:harry@flagship.services">harry@flagship.services</a> — a real person reads everything. For broken installs, try <a href="/help">/help</a> first; for security questions, <a href="/security">/security</a> goes deeper than this page does.</p>
+    <p>Mail <a href="mailto:support@flagshipserver.com">support@flagshipserver.com</a> — a real person reads everything. For broken installs, try <a href="/help">/help</a> first; for security questions, <a href="/security">/security</a> goes deeper than this page does.</p>
     <a href="/help" class="btn btn--secondary">Open the help center</a>
   </div>
 
@@ -352,20 +351,20 @@
   <div class="footer-inner">
     <div class="footer-col">
       <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
-      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you, your hardware, and your phone.</p>
+      <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
     </div>
     <div class="footer-col">
       <h4>Product</h4>
       <ul>
-        <li><a href="/how-it-works">How it works</a></li>
-        <li><a href="/marketplace">Services</a></li>
-        <li></li>
+        <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
+        <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>
     <div class="footer-col">
       <h4>Trust</h4>
       <ul>
-        <li><a href="/security">Architecture</a></li>
+        <li><a href="/security.html">Architecture</a></li>
         <li><a href="/privacy">Privacy</a></li>
         <li><a href="/terms">Terms</a></li>
         <li><a href="/abuse">Abuse</a></li>
@@ -374,16 +373,16 @@
     <div class="footer-col">
       <h4>Open</h4>
       <ul>
-        <li><a href="https://github.com/ibisllc/flagship">Source on GitHub</a></li>
+        <li><a href="/open-source.html">Open source</a></li>
         <li><a href="/status/">Status</a></li>
-        <li><a href="/docs">Docs</a></li>
+        <li><a href="/docs/">Docs</a></li>
         <li><a href="/help">Help</a></li>
       </ul>
     </div>
   </div>
   <div class="footer-bottom">
     <span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span>
-    <span>harry@flagship.services</span>
+    <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · flagshipserver.com</span>
   </div>
 </footer>
 

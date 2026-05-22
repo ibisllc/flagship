@@ -446,6 +446,65 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
 }
 .colophon-bottom a { color: var(--ink-muted); margin: 0 8px; }
 
+/* ── Footer (shared 4-column site footer) ─────────────────────────
+   The canonical site footer used by every page except the home page,
+   whose footer is folded into its snap-scroll .finale section. Mirrors
+   the home footer's structure (brand + three link columns + a bottom
+   bar) so the chrome reads identically across the site. */
+.footer {
+  border-top: 1px solid var(--rule);
+  padding: var(--space-12) 0 var(--space-6);
+  background: var(--canvas);
+  margin-top: var(--space-16);
+}
+.footer-inner {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  display: grid;
+  grid-template-columns: 2fr repeat(3, 1fr);
+  gap: var(--space-7);
+}
+@media (max-width: 880px) {
+  .footer-inner { grid-template-columns: 1fr 1fr; }
+}
+.footer-col h4 {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  font-weight: 500;
+  margin: 0 0 var(--space-3);
+}
+.footer-col ul { list-style: none; padding: 0; margin: 0; }
+.footer-col li + li { margin-top: var(--space-2); }
+.footer-col li:empty { display: none; }
+.footer-col a {
+  color: var(--ink-muted);
+  font-size: 13px;
+  border-bottom: none;
+}
+.footer-col a:hover { color: var(--teal-bright); border-bottom: none; }
+.footer-col p { color: var(--ink-muted); font-size: 13px; max-width: 32ch; margin: var(--space-3) 0 0; }
+.footer-bottom {
+  max-width: var(--content-width);
+  margin: var(--space-7) auto 0;
+  padding: var(--space-4) var(--gutter) 0;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+}
+.footer-bottom a { color: var(--ink-muted); margin: 0 8px; border-bottom: none; }
+.footer-bottom a:hover { color: var(--teal-bright); border-bottom: none; }
+
 /* ── 404 / blank state ───────────────────────────────────────── */
 .empty {
   text-align: center;
@@ -477,15 +536,16 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
 }
 .topbar .brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--ink);
+  border-bottom: none;
 }
-.topbar .brand:hover { color: var(--teal-bright); }
+.topbar .brand:hover { color: var(--teal-bright); border-bottom: none; }
 .topbar .brand .logo {
   display: inline-block;
   width: 4px; height: 13px;
@@ -496,7 +556,7 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
 }
 .topbar .brand .logo::before { display: none; }
 .topbar .brand .name { font-size: 12px; }
-.topbar nav { margin-left: auto; display: flex; gap: var(--space-6); align-items: center; }
+.topbar nav { margin-left: auto; display: flex; gap: var(--space-6); align-items: center; flex-wrap: wrap; }
 .topbar nav a {
   color: var(--ink-muted);
   font-family: var(--font-mono);
@@ -505,7 +565,14 @@ textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height:
   text-transform: uppercase;
   border-bottom: none;
 }
-.topbar nav a:hover { color: var(--teal-bright); border-bottom: none; }
+.topbar nav a:hover, .topbar nav a[aria-current="page"] { color: var(--teal-bright); border-bottom: none; }
+/* The theme toggle is the last child; keep it spaced from the nav links
+   and pinned to the far right on every page that uses the topbar. */
+.topbar nav + .theme-btn { margin-left: var(--space-4); }
+@media (max-width: 560px) {
+  .topbar { flex-wrap: wrap; gap: var(--space-3); }
+  .topbar nav { gap: var(--space-4); }
+}
 
 /* .lede paragraph */
 .lede {

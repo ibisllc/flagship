@@ -69,19 +69,17 @@
 </head>
 <body>
 
-<header class="nav">
-  <div class="nav-inner">
-    <a href="/" class="nav-brand" aria-label="Flagship home"><svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>Flagship</a>
-    <nav class="nav-links" aria-label="Primary">
-      <a href="/how-it-works">How it works</a>
-      <a href="/marketplace">Services</a>
-      <a href="/docs">Docs</a>
-      <a href="/status/">Status</a>
-    </nav>
-    <div class="nav-cta"><button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
-      <a href="/" class="btn btn--primary">Install</a>
-    </div>
-  </div>
+<header class="topbar">
+  <a href="/" class="brand" aria-label="Flagship — home">
+    <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+    <span class="name">Flagship</span>
+  </a>
+  <nav aria-label="Primary">
+    <a href="/">Home</a>
+    <a href="/terms">Terms</a>
+    <a href="/security.html">Security</a>
+  </nav>
+  <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
 </header>
 
 <main class="container">
@@ -125,7 +123,7 @@
 
     <section id="who">
       <h2>1. Who this policy covers</h2>
-      <p>This policy applies to Flagship (operated by Harry Winner Kamdem, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients, and the marketplace at <code>/marketplace</code>.</p>
+      <p>This policy applies to Flagship (operated by the Flagship team, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients, and the marketplace at <code>/marketplace</code>.</p>
       <p>It does not cover apps you install on your own Flagship server. Those apps run on hardware you own, under your control, and their privacy practices are theirs. We provide a sandbox; we don't supervise its inhabitants.</p>
       <p>It does not cover services you connect through the BYOK / browser features (Anthropic, OpenAI, Amazon, your bank, etc.). When you log into a third-party service from your Flagship browser, that service's privacy policy governs.</p>
     </section>
@@ -276,7 +274,7 @@
       <p>Privacy questions: <a href="mailto:privacy@flagship.services">privacy@flagship.services</a>.<br>
       Abuse on a <code>*.flagship.services</code> subdomain: <a href="/abuse">/abuse</a>.<br>
       Security disclosures: <a href="/security/report.html">/security/report</a>.<br>
-      Postal: Harry Winner Kamdem, address available on request to the address above.</p>
+      Postal: Flagship, address available on request to the address above.</p>
       <p>If you're in the EU and you're not satisfied with our response, you have the right to complain to your local supervisory authority.</p>
     </section>
 
@@ -288,20 +286,20 @@
   <div class="footer-inner">
     <div class="footer-col">
       <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
-      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you, your hardware, and your phone.</p>
+      <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
     </div>
     <div class="footer-col">
       <h4>Product</h4>
       <ul>
-        <li><a href="/how-it-works">How it works</a></li>
-        <li><a href="/marketplace">Services</a></li>
-        <li></li>
+        <li><a href="/docs#how-it-works">How it works</a></li>
+        <li><a href="/marketplace/">Services</a></li>
+        <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>
     <div class="footer-col">
       <h4>Trust</h4>
       <ul>
-        <li><a href="/security">Architecture</a></li>
+        <li><a href="/security.html">Architecture</a></li>
         <li><a href="/privacy" aria-current="page">Privacy</a></li>
         <li><a href="/terms">Terms</a></li>
         <li><a href="/abuse">Abuse</a></li>
@@ -310,16 +308,16 @@
     <div class="footer-col">
       <h4>Open</h4>
       <ul>
-        <li><a href="https://github.com/ibisllc/flagship">Source on GitHub</a></li>
+        <li><a href="/open-source.html">Open source</a></li>
         <li><a href="/status/">Status</a></li>
-        <li><a href="/docs">Docs</a></li>
+        <li><a href="/docs/">Docs</a></li>
         <li><a href="/help">Help</a></li>
       </ul>
     </div>
   </div>
   <div class="footer-bottom">
     <span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span>
-    <span>privacy@flagship.services</span>
+    <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · flagshipserver.com</span>
   </div>
 </footer>
 

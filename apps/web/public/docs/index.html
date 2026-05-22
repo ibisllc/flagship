@@ -31,19 +31,19 @@
 </head>
 <body>
 
-<header class="nav">
-  <div class="nav-inner">
-    <a href="/" class="nav-brand"><svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>Flagship</a>
-    <nav class="nav-links">
-      <a href="/how-it-works">How it works</a>
-      <a href="/marketplace">Services</a>
-      <a href="/docs" aria-current="page">Docs</a>
-      <a href="/status/">Status</a>
-    </nav>
-    <div class="nav-cta"><button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
-      <a href="/" class="btn btn--primary">Install</a>
-    </div>
-  </div>
+<header class="topbar">
+  <a href="/" class="brand" aria-label="Flagship — home">
+    <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+    <span class="name">Flagship</span>
+  </a>
+  <nav aria-label="Primary">
+    <a href="/">Home</a>
+    <a href="#quick-start">Quick start</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#how-it-works">How it works</a>
+    <a href="/marketplace">Services</a>
+  </nav>
+  <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
 </header>
 
 <main class="container">
@@ -54,6 +54,7 @@
     <div class="toc">
       <a href="#quick-start">Quick start</a>
       <a href="#architecture">Architecture</a>
+      <a href="#how-it-works">How it works</a>
       <a href="#install">Install</a>
       <a href="#pair">Phone pairing</a>
       <a href="#apps">Apps &amp; manifest</a>
@@ -68,13 +69,25 @@
       <p><strong>1.</strong> Install the phone app. Pick a username. Approve biometrics. Your master key never leaves the phone.</p>
       <p><strong>2.</strong> Generate a QR scan. Either order a pre-built box or paste the code at the QR on the <a href="/">homepage</a> to download a personalized installer ISO. Flash, plug in, boot.</p>
       <p><strong>3.</strong> Vibe-code your first app from the phone. Or <a href="/marketplace">install someone else's</a>. Done.</p>
-      <a class="next" href="/how-it-works">Walk through the full flow →</a>
+      <a class="next" href="#how-it-works">Walk through the full flow →</a>
     </section>
 
     <section class="doc-section" id="architecture">
       <h2>Architecture</h2>
       <p>Three planes. flagshipserver.com handles identity. flagship.services is a stateless pipe (SNI passthrough + tunnel hub). Your box terminates TLS itself with a real Let's Encrypt cert. We literally cannot read your data.</p>
       <p>The phone holds your keys. The .com Worker is the registrar; it never sees plaintext content. The .services Fly app is a dumb router that sees encrypted bytes only.</p>
+      <a class="next" href="/security">Read the trust model →</a>
+    </section>
+
+    <section class="doc-section" id="how-it-works">
+      <h2>How Flagship works</h2>
+      <p>Five stages, start to finish. Your phone signs every step — we never see your data, even when you're registering for the first time.</p>
+      <p><strong>1 · Pair your phone.</strong> You install the Flagship app. It generates a master key inside your phone's secure enclave (Face ID / Touch ID / Android StrongBox). That key never leaves the phone. From it we derive three more: one for identity (your username), one for backup-authorization (LUKS unlock), one for working keys (per-server secrets). You pick a username; the phone signs a registration request; <code>flagshipserver.com</code> records the username and the public half. No email, no password, no SMS.</p>
+      <p><strong>2 · Shows a QR scan.</strong> Your phone shows a one-time QR — a small signed JSON with the server domain you picked, your phone's delegated pubkey (so the box can verify orders later), and a 24-hour, single-use expiry. Paste it at the QR on the <a href="/">homepage</a> in your browser to download a personalized installer ISO, or let a pre-built box fetch it automatically when you plug it in.</p>
+      <p><strong>3 · Boot &amp; install.</strong> The ISO boots Alpine Linux on your hardware. A first-boot script validates the trailer signature locally, then fetches the public installer from our GitHub repo at the exact pinned ref — a few hundred auditable lines of shell. It formats the disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert (DNS-01 wildcard), registers with <code>flagshipserver.com</code>, and boots into steady state. Your phone lights up: <em>"Your Flagship is online."</em></p>
+      <p><strong>4 · Every-boot unlock.</strong> When the box reboots, the LUKS-encrypted root won't open. The boot stage polls <code>flagshipserver.com</code> for an unsealed unlock key. Your phone, woken by a push, asks for biometrics, decrypts the sealed blob locally, and deposits the unsealed key with a 10-minute TTL. The box consumes it; the row is deleted on read; the disk opens. A stolen box without your phone is a brick — even we can't help, because we never had the unsealed key.</p>
+      <p><strong>5 · Live. Vibe-code. Share.</strong> From the phone you describe a service in plain language. An LLM writes it (your provider key, or our daily promo). The daemon builds the container, provisions Postgres / object store / KV scoped to the service, deploys it, and registers a subdomain — live within a minute at <code>app.you.flagship.services</code>. Sharing is one tap: a signed invite or a username search. Services never see cookies; the daemon injects identity headers after a membership check.</p>
+      <p><strong>If you lose the phone.</strong> Your master key is wrapped with a key that lives in iCloud Keychain (iOS) or Google Block Store (Android). On a fresh phone you can re-derive it with biometrics. If you didn't enroll cloud recovery, the data is gone — like a hardware wallet. We tell you this during setup, in plain words.</p>
       <a class="next" href="/security">Read the trust model →</a>
     </section>
 
@@ -122,13 +135,13 @@
   <div class="footer-inner">
     <div class="footer-col">
       <strong style="font-family: var(--font-heading); font-size: 18px; color: var(--text);">Flagship</strong>
-      <p style="margin-top: var(--space-3); color: var(--text-muted); max-width: 32ch;">A personal cloud that respects you.</p>
+      <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
     </div>
-    <div class="footer-col"><h4>Product</h4><ul><li><a href="/how-it-works">How it works</a></li><li><a href="/marketplace">Services</a></li><li></li></ul></div>
-    <div class="footer-col"><h4>Trust</h4><ul><li><a href="/security">Architecture</a></li><li><a href="/privacy">Privacy</a></li><li><a href="/terms">Terms</a></li><li><a href="/abuse">Abuse</a></li></ul></div>
-    <div class="footer-col"><h4>Open</h4><ul><li><a href="https://github.com/ibisllc/flagship">Source</a></li><li><a href="/status/">Status</a></li><li><a href="/faq">FAQ</a></li><li><a href="/help">Help</a></li></ul></div>
+    <div class="footer-col"><h4>Product</h4><ul><li><a href="/docs#how-it-works">How it works</a></li><li><a href="/marketplace/">Services</a></li><li><a href="https://web.flagshipserver.com/">Webapp</a></li></ul></div>
+    <div class="footer-col"><h4>Trust</h4><ul><li><a href="/security.html">Architecture</a></li><li><a href="/privacy">Privacy</a></li><li><a href="/terms">Terms</a></li><li><a href="/abuse">Abuse</a></li></ul></div>
+    <div class="footer-col"><h4>Open</h4><ul><li><a href="/open-source.html">Open source</a></li><li><a href="/status/">Status</a></li><li><a href="/faq">FAQ</a></li><li><a href="/help">Help</a></li></ul></div>
   </div>
-  <div class="footer-bottom"><span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span><span>harry@flagship.services</span></div>
+  <div class="footer-bottom"><span>© Flagship — BUSL-1.1, becomes Apache 2.0 in 2030.</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · flagshipserver.com</span></div>
 </footer>
 <script src="/motion.js" defer></script>
 </body>

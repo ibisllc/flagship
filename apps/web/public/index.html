@@ -29,6 +29,9 @@
   <link rel="canonical" href="https://flagshipserver.com/">
   <link rel="preload" href="/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/GeistMono-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- Shared theme palette (same values the home page defines below; loaded
+       first so the page's own inline rules win on any genuine conflict). -->
+  <link rel="stylesheet" href="/theme-ui.css">
   <style>
     /*
      * Landing — dark canvas, teal accent, technical-document layout.
@@ -1073,7 +1076,7 @@
       <a href="/docs/" target="_blank" rel="noopener">Docs<svg class="ext-arrow" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 7 L7 3 M3.5 3 H7 V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
     </nav>
     <div class="nav-cta">
-      <button type="button" id="themeToggle" class="theme-btn" aria-label="Switch theme">
+      <button type="button" id="themeToggle" class="theme-btn" data-theme-toggle aria-label="Switch theme">
         <svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
           <circle cx="8" cy="8" r="3.4"/>
           <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/>
@@ -1439,7 +1442,7 @@
         <div>
           <h4>Product</h4>
           <ul>
-            <li><a href="/how-it-works">How it works</a></li>
+            <li><a href="/docs#how-it-works">How it works</a></li>
             <li><a href="/marketplace/">Services</a></li>
             <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
           </ul>
@@ -1471,7 +1474,7 @@
         <span>
           <a href="/privacy">Privacy</a> ·
           <a href="/terms">Terms</a> ·
-          <a href="mailto:hello@flagshipserver.com">hello@flagshipserver.com</a>
+          <a href="https://flagshipserver.com">flagshipserver.com</a>
         </span>
       </div>
 
@@ -1501,28 +1504,9 @@
 </dialog>
 
 <script src="/heroQr.js" defer></script>
-<script>
-  /* Theme toggle — flips data-theme on <html>, persists the choice,
-     and keeps the address-bar theme-color in sync. */
-  (function () {
-    "use strict";
-    const root = document.documentElement;
-    const btn = document.getElementById("themeToggle");
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (!btn) return;
-    function apply(theme) {
-      root.setAttribute("data-theme", theme);
-      btn.setAttribute("aria-label", theme === "dark" ? "Switch to light theme" : "Switch to dark theme");
-      if (meta) meta.setAttribute("content", theme === "dark" ? "#0A0A09" : "#FFFFFF");
-    }
-    apply(root.getAttribute("data-theme") === "dark" ? "dark" : "light");
-    btn.addEventListener("click", function () {
-      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      try { localStorage.setItem("fs-theme", next); } catch (e) {}
-      apply(next);
-    });
-  })();
-</script>
+<!-- Shared theme controller — toggles + persists "fs-theme" so the choice
+     carries across every page. The home toggle uses [data-theme-toggle]. -->
+<script src="/theme.js"></script>
 <script>
   /* QR overlay controller — moves the live QR node between hero and
      overlay so the relay writes to a single source of truth.
