@@ -1,0 +1,28 @@
+-- Phase 3b (cross-device QR pairing for collaborators) — quarantine
+-- review-alert bitmap. See docs/login-and-account-redesign.md
+-- §"Safeguards (required for Phase 3b)" item 3.
+--
+-- A collaborator's device that joins by scanning the admin's pairing QR
+-- receives the UMK out-of-band over the sealed relay and registers as a
+-- non-admin peer, quarantined for 14 days (push_tokens.quarantine_until
+-- = admit + 14d, stamped via handlePushRegister's `quarantine` flag).
+-- While that device is in quarantine the owner gets repeated "review your
+-- trusted devices — a new device joined" pushes on their OTHER devices.
+--
+-- Single new column on push_tokens tracks which rungs already fired so a
+-- 10-minute cron tick is idempotent (same shape as 0029_re_pair_alerts):
+--
+--   quarantine_alerts_fired_bitmap  INTEGER NOT NULL DEFAULT 0
+--
+--   bit 0 (1 ) = T+0   — fired on admit
+--   bit 1 (2 ) = T+1d
+--   bit 2 (4 ) = T+3d
+--   bit 3 (8 ) = T+7d
+--   bit 4 (16) = T+13d — last nudge before quarantine lifts at T+14d
+--
+-- The scheduler MUST treat a power-of-2 increment as the only legal
+-- mutation (OR-in a single bit); repeated/out-of-order fires are no-ops.
+-- The walk is bounded by idx_push_tokens_quarantine (added in 0028) so
+-- only rows still under quarantine are scanned.
+
+ALTER TABLE push_tokens ADD COLUMN quarantine_alerts_fired_bitmap INTEGER NOT NULL DEFAULT 0;

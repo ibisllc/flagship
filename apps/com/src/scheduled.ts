@@ -47,6 +47,7 @@ import {
   runDemoProvisioningPoller,
   runDemoW11SnapshotPoller,
   schedulePendingRePairAlerts,
+  scheduleQuarantineAlerts,
 } from "@flagship/control-plane";
 import { createHetznerClient } from "./hetzner.js";
 
@@ -338,6 +339,11 @@ export async function scheduled(
     // crossed a threshold since the last tick. Inline alongside the
     // demo cron so a single 10-minute tick handles both.
     ctx.waitUntil(runRePairAlertsCron(env, now));
+    // Phase 3b — quarantine review-alert ladder for cross-device
+    // (vouched-QR) admits. Fires the T+0/+1d/+3d/+7d/+13d "review your
+    // trusted devices" pings to the owner's other devices while a
+    // newly-joined collaborator device is in its 14-day quarantine.
+    ctx.waitUntil(runQuarantineAlertsCron(env, now));
     return;
   }
   // Unknown cron string — be defensive: do nothing rather than mis-
@@ -459,6 +465,32 @@ export async function runRePairAlertsCron(
   const fanout = buildOptionalV12PushFanoutFromEnv(env);
   const result = await schedulePendingRePairAlerts({
     pendingRePairs: storage.pendingRePairs,
+    pushTokens: storage.pushTokens,
+    auditEvents: storage.auditEvents,
+    ...(fanout ? { pushFanout: fanout } : {}),
+    now: () => now.getTime(),
+  });
+  return { scanned: result.scanned, fired: result.fired.length };
+}
+
+/**
+ * Phase 3b (cross-device QR pairing) — quarantine review-alert
+ * scheduler. Fires "review your trusted devices — a new device joined"
+ * pushes to the owner's OTHER devices whenever a freshly-admitted
+ * (vouched) device crosses a T+0/+1d/+3d/+7d/+13d offset within its
+ * 14-day quarantine window. Same idempotency + fan-out plumbing as the
+ * re-pair alert cron: a per-row bitmask gates the rungs, and the real
+ * push fan-out is wired from env (audit-only fallback when no push
+ * provider secret is configured). No-op without the DB binding.
+ */
+export async function runQuarantineAlertsCron(
+  env: ScheduledEnv,
+  now: Date,
+): Promise<{ scanned: number; fired: number } | null> {
+  if (!env.DB) return null;
+  const storage = new D1Storage(env.DB);
+  const fanout = buildOptionalV12PushFanoutFromEnv(env);
+  const result = await scheduleQuarantineAlerts({
     pushTokens: storage.pushTokens,
     auditEvents: storage.auditEvents,
     ...(fanout ? { pushFanout: fanout } : {}),

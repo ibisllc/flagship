@@ -1435,8 +1435,8 @@ export class D1PushTokenStorage implements PushTokenStorage {
     // device-admit handler bumps quarantine_until via a dedicated
     // UPDATE.
     await this.db.prepare(
-      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, label, registered_at, last_seen_at, quarantine_until)
-       VALUES (?,?,?,?,?,?,?,?,?,?)
+      `INSERT INTO push_tokens (token_id, username, platform, provider_token, push_x25519_pub_hex, registration_signature_hex, label, registered_at, last_seen_at, quarantine_until, quarantine_alerts_fired_bitmap)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(token_id) DO UPDATE SET
          provider_token=excluded.provider_token,
          push_x25519_pub_hex=excluded.push_x25519_pub_hex,
@@ -1449,6 +1449,7 @@ export class D1PushTokenStorage implements PushTokenStorage {
       rec.label,
       rec.registeredAt, rec.lastSeenAt,
       rec.quarantineUntil ?? 0,
+      rec.quarantineAlertsFiredBitmap ?? 0,
     ).run();
   }
   async get(tokenId: string): Promise<PushTokenRecord | undefined> {
@@ -1479,6 +1480,30 @@ export class D1PushTokenStorage implements PushTokenStorage {
     const meta = (r as { meta?: { changes?: number } }).meta;
     return meta?.changes === undefined ? true : meta.changes > 0;
   }
+  async listQuarantined(now: number, limit = 100): Promise<PushTokenRecord[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM push_tokens WHERE quarantine_until > ? ORDER BY registered_at ASC LIMIT ?`,
+      )
+      .bind(now, Math.max(0, limit))
+      .all<RawPushRow>();
+    return (r.results ?? []).map(pushRowToRecord);
+  }
+  async orInQuarantineAlertBit(tokenId: string, bit: number): Promise<number> {
+    // SQLite bitwise-OR in a single UPDATE keeps the OR atomic at the
+    // database — concurrent cron ticks can't lose a bit. RETURNING
+    // gives the post-write value without a second SELECT.
+    const row = await this.db
+      .prepare(
+        `UPDATE push_tokens
+         SET quarantine_alerts_fired_bitmap = quarantine_alerts_fired_bitmap | ?
+         WHERE token_id = ?
+         RETURNING quarantine_alerts_fired_bitmap AS bm`,
+      )
+      .bind(bit, tokenId)
+      .first<{ bm: number }>();
+    return row?.bm ?? 0;
+  }
 }
 
 interface RawPushRow {
@@ -1489,6 +1514,8 @@ interface RawPushRow {
   // v1.2 — nullable so a SELECT against a pre-migration database
   // decodes safely; rowToRecord defaults absence to 0.
   quarantine_until?: number | null;
+  // Phase 3b — nullable for the same pre-migration safety.
+  quarantine_alerts_fired_bitmap?: number | null;
 }
 function pushRowToRecord(r: RawPushRow): PushTokenRecord {
   return {
@@ -1502,6 +1529,7 @@ function pushRowToRecord(r: RawPushRow): PushTokenRecord {
     registeredAt: r.registered_at,
     lastSeenAt: r.last_seen_at,
     quarantineUntil: r.quarantine_until ?? 0,
+    quarantineAlertsFiredBitmap: r.quarantine_alerts_fired_bitmap ?? 0,
   };
 }
 

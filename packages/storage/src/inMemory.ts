@@ -470,7 +470,11 @@ export class InMemoryPushTokenStorage implements PushTokenStorage {
     // caller doesn't set it, matching the SQL column default. Lets
     // pre-cascade callers (Phase 2 hasn't shipped yet) keep working
     // without touching every put-site.
-    this.byId.set(rec.tokenId, { ...rec, quarantineUntil: rec.quarantineUntil ?? 0 });
+    this.byId.set(rec.tokenId, {
+      ...rec,
+      quarantineUntil: rec.quarantineUntil ?? 0,
+      quarantineAlertsFiredBitmap: rec.quarantineAlertsFiredBitmap ?? 0,
+    });
   }
   async get(tokenId: string): Promise<PushTokenRecord | undefined> {
     const r = this.byId.get(tokenId);
@@ -489,6 +493,19 @@ export class InMemoryPushTokenStorage implements PushTokenStorage {
     if (!r) return false;
     r.quarantineUntil = untilMs;
     return true;
+  }
+  async listQuarantined(now: number, limit = 100): Promise<PushTokenRecord[]> {
+    return [...this.byId.values()]
+      .filter((r) => (r.quarantineUntil ?? 0) > now)
+      .sort((a, b) => a.registeredAt - b.registeredAt)
+      .slice(0, Math.max(0, limit))
+      .map((r) => ({ ...r }));
+  }
+  async orInQuarantineAlertBit(tokenId: string, bit: number): Promise<number> {
+    const r = this.byId.get(tokenId);
+    if (!r) return 0;
+    r.quarantineAlertsFiredBitmap = (r.quarantineAlertsFiredBitmap ?? 0) | bit;
+    return r.quarantineAlertsFiredBitmap;
   }
 }
 

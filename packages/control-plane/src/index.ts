@@ -37,6 +37,7 @@ export * from "./podInventory.js";
 export * from "./demoUsers.js";
 export * from "./deviceDisconnect.js";
 export * from "./rePairAlerts.js";
+export * from "./quarantineAlerts.js";
 export * from "./totp.js";
 export * from "./deviceCapabilityGrants.js";
 export * from "./demoUsersAdmin.js";

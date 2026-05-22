@@ -4,8 +4,12 @@
 
 import { describe, expect, it } from "vitest";
 import { ed, signPushTokenRegister, type Keypair } from "@flagship/protocol";
-import { InMemoryPushTokenStorage, InMemoryUsernameStorage } from "@flagship/storage";
-import { handlePushRegister, handlePushRelay, handlePushRevoke } from "../src/push.js";
+import {
+  InMemoryAuditEventStorage,
+  InMemoryPushTokenStorage,
+  InMemoryUsernameStorage,
+} from "@flagship/storage";
+import { handlePushRegister, handlePushRelay, handlePushRevoke, QUARANTINE_MS } from "../src/push.js";
 
 function makeIrk(): Keypair {
   const priv = new Uint8Array(32);
@@ -298,6 +302,90 @@ describe("/api/push/register", () => {
       },
     );
     expect(r.status).toBe(403);
+  });
+});
+
+describe("/api/push/register — Phase 3b vouched-admit quarantine", () => {
+  const FIXED_NOW = 1_700_000_000_000;
+
+  async function admit(opts: {
+    quarantine?: boolean;
+    auditEvents?: InMemoryAuditEventStorage;
+  }) {
+    const usernames = new InMemoryUsernameStorage();
+    const pushTokens = new InMemoryPushTokenStorage();
+    const irk = makeIrk();
+    await seed(usernames, "alice", irk);
+    const claim = {
+      username: "alice",
+      platform: "apns" as const,
+      providerToken: "apns-collab",
+      pushX25519Pub: samplePushPub,
+      label: "Collaborator's Pixel",
+      issuedAt: FIXED_NOW,
+    };
+    const sig = signPushTokenRegister(claim, irk);
+    const r = await handlePushRegister(
+      {
+        pushTokens,
+        usernames,
+        now: () => FIXED_NOW,
+        ...(opts.auditEvents ? { auditEvents: opts.auditEvents } : {}),
+      },
+      {
+        request: {
+          username: claim.username,
+          platform: claim.platform,
+          providerToken: claim.providerToken,
+          pushX25519Pub: bytesToHex(claim.pushX25519Pub),
+          label: claim.label,
+          issuedAt: claim.issuedAt,
+        },
+        signature: bytesToHex(sig),
+      },
+      opts.quarantine === undefined ? undefined : { quarantine: opts.quarantine },
+    );
+    return { r, pushTokens };
+  }
+
+  it("stamps quarantineUntil = now + 14d when quarantine:true", async () => {
+    const { r, pushTokens } = await admit({ quarantine: true });
+    expect(r.status).toBe(200);
+    expect((r.body as { quarantineUntil: number }).quarantineUntil).toBe(
+      FIXED_NOW + QUARANTINE_MS,
+    );
+    const all = await pushTokens.listByUser("alice");
+    expect(all[0]?.quarantineUntil).toBe(FIXED_NOW + QUARANTINE_MS);
+    // The alert bitmap starts clear; the cron OR-s in T+0 later.
+    expect(all[0]?.quarantineAlertsFiredBitmap).toBe(0);
+  });
+
+  it("emits a device-added audit event on a vouched admit", async () => {
+    const auditEvents = new InMemoryAuditEventStorage();
+    await admit({ quarantine: true, auditEvents });
+    const events = await auditEvents.list("alice", 0, 10);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.eventKind).toBe("device-added");
+    expect(events[0]?.quarantineUntil).toBe(FIXED_NOW + QUARANTINE_MS);
+    expect(events[0]?.detail).toMatch(/joined/i);
+  });
+
+  it("default path (no options) is unchanged — no quarantine, no audit", async () => {
+    const auditEvents = new InMemoryAuditEventStorage();
+    const { r, pushTokens } = await admit({ auditEvents });
+    expect(r.status).toBe(200);
+    expect((r.body as { quarantineUntil?: number }).quarantineUntil).toBeUndefined();
+    const all = await pushTokens.listByUser("alice");
+    expect(all[0]?.quarantineUntil).toBe(0);
+    expect(await auditEvents.list("alice", 0, 10)).toHaveLength(0);
+  });
+
+  it("quarantine:false is also a no-op (explicit default-off)", async () => {
+    const auditEvents = new InMemoryAuditEventStorage();
+    const { pushTokens } = await admit({ quarantine: false, auditEvents });
+    const all = await pushTokens.listByUser("alice");
+    expect(all[0]?.quarantineUntil).toBe(0);
+    expect(await auditEvents.list("alice", 0, 10)).toHaveLength(0);
   });
 });
 
