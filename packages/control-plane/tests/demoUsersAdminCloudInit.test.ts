@@ -179,6 +179,14 @@ describe("buildCloudConfigUserData", () => {
     // flagship-data-services removed — daemon registration on the demo
     // path doesn't depend on docker/postgres.
     expect(bootstrap).toContain("flagship-daemon.service");
+    // The daemon must launch via the npm "start" script (tsx src/index.ts).
+    // Regression guard: `npx … run start` makes npx execute the unrelated
+    // `run` package, which dies with MODULE_NOT_FOUND and the daemon never
+    // boots (observed live 2026-05-22). Must be `npm run start`.
+    expect(bootstrap).toContain(
+      "ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon",
+    );
+    expect(bootstrap).not.toContain("npx --workspace=@flagship/server-daemon run start");
     expect(bootstrap).toContain("flagship-first-boot-register.service");
     expect(bootstrap).toContain("/api/server/register");
     expect(bootstrap).toContain("/sealed-luks-key");

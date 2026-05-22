@@ -330,7 +330,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/flagship
-ExecStart=/usr/bin/npx --workspace=@flagship/server-daemon run start
+ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
