@@ -96,6 +96,65 @@ incoming device may join *without typing* — scanning is an alternate
 doorway to the typed-username entry, resolving to the same "attach this
 device to that user key."
 
+#### Safeguards (required for Phase 3b)
+
+Because the QR is the doorway to the **UMK** (the account master key),
+the pairing flow MUST ship these guardrails:
+
+1. **No screenshots of the pairing screens.** The admin's QR screen and
+   the incoming scan screen block capture: Android `FLAG_SECURE` on the
+   window; iOS blanks the QR under screen-capture + invalidates the
+   pairing session on `userDidTakeScreenshotNotification`; webapp shows a
+   "don't screenshot this" warning (can't hard-block). Pair with a short
+   single-use QR-session TTL so a leaked still is useless fast.
+2. **A scanned-in device is NOT admin — and not for a while.** Cross-
+   device-added (vouched) devices join as **non-admin peers**, and they
+   do NOT get admin reach (`ukey.*` override) during the 14-day
+   quarantine. Admin status comes only from a credential-proven takeover
+   (or an explicit promotion after quarantine), never automatically from
+   a scan-in. The quarantine already blocks revoke-others; this extends
+   it to admin reach.
+3. **Recurring quarantine alerts to review the device list.** While a
+   newly-admitted device is in quarantine, the owner gets repeated push +
+   in-app nudges ("A new device joined N days ago — review your trusted
+   devices") on a cadence (e.g. T+0/+1d/+3d/+7d/+13d) so an unauthorized
+   scan-in gets noticed and revoked. Reuses the v1.2 alert-cron shape.
+4. **Explicit risk warning.** Both the admin "Add device" screen and the
+   incoming scan screen carry a prominent warning: this shares your
+   account keys with the new device; anyone who scans this code can join
+   your account; only do it for a device/person you intend to add.
+
+#### Multi-profile integration (must work with multiple clouds per device)
+
+A phone can host **multiple cloud profiles** (personal + family + work),
+each a separate account. The QR pairing must ADD a profile, never clobber
+the active one:
+
+- **Each profile has its own device key.** Joining a new account mints a
+  *fresh* device key for THAT profile (consistent with "every install is
+  a new device"), independent of the other profiles' keys.
+- **PREREQUISITE — per-profile keystore keying (currently a GAP).** The
+  app's `profiles` list is multi today, but the Keystore is a SINGLETON
+  (`KCKey.wrappedUmk` one slot; `installUMK` overwrites). True multi-
+  profile needs UMK + IRK-version state keyed **per profile** (by
+  `cloudName`/a profile id), so adding/joining a profile doesn't destroy
+  another's keys. This also retro-affects the Phase 1–4 flows
+  (open-account, takeover) which currently install a single UMK — they
+  must install into the *active/new profile's* slot. Tracked as its own
+  foundational task; Phase 3b depends on it.
+- **Camera-scannable → deep-link → add-profile.** The QR encodes a
+  **universal/app link** (`https://flagshipserver.com/join?…`, not just
+  `flagship://`) so the phone's *native camera* opens it into the app. A
+  new DeepLink route (`join`/`add-profile`) routes into the add-profile
+  pairing flow (reuse `DeepLink`/`DeepLinker` + Android App Links +
+  webapp router). An in-app scanner is the alternative entry. After the
+  sealed transfer completes, `addProfile(setActive: true)` adds the new
+  profile alongside the existing ones.
+- **Security note:** scanning the link alone is NOT sufficient to join —
+  the link carries the relay session + admin pubkey; the admin must
+  still confirm the SAS match on their device before sealing + sending
+  the UMK. Combined with no-screenshots + short TTL + the risk warning.
+
 ## What's wrong today (the five gaps)
 
 | # | Gap | Evidence |
