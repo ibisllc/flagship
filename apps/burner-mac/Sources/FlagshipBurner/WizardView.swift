@@ -1,13 +1,22 @@
 import SwiftUI
+import AppKit
 import UniformTypeIdentifiers
 import FlagshipBurnerCore
 
-/// Single-screen Burner wizard.
+/// Where the help links point. The website hosts the explainer pages.
+enum FlagshipLinks {
+    static let base = "https://flagshipserver.com"
+    static let certificate = URL(string: "\(base)/")!
+    static let recommendedDistros = URL(string: "\(base)/recommended-linux")!
+    static let bootingProcess = URL(string: "\(base)/booting-process")!
+}
+
+/// Single-screen Assembler wizard.
 ///
-/// Three drop-rows (Recipe → ISO → USB) stacked vertically, a big
-/// Bake button below, and a collapsed log drawer at the bottom.
-/// Modelled on Raspberry Pi Imager's three-up layout with a Linear-
-/// flavored restraint on chrome.
+/// Three full-width option cards (Certificate → Linux ISO → USB Boot
+/// Drive) stacked vertically, a big Assemble button below, and a
+/// collapsed log drawer at the bottom. Each card carries a one-line
+/// description and a help link to the website.
 struct WizardView: View {
     @StateObject private var model = WizardModel()
     @State private var showLog = false
@@ -20,8 +29,8 @@ struct WizardView: View {
             Spacer(minLength: FB.Spacing.s3)
             logDrawer
         }
-        .frame(minWidth: 520, idealWidth: 540, maxWidth: 720,
-               minHeight: 560, idealHeight: 620)
+        .frame(width: 560)
+        .frame(minHeight: 600)
         .background(FB.Colors.bg)
         .task { await model.refreshDisks() }
     }
@@ -37,12 +46,13 @@ struct WizardView: View {
             Spacer(minLength: FB.Spacing.s2)
             bakeRow
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
         HStack(spacing: FB.Spacing.s2) {
             FlagshipLogo(size: 22)
-            Text("Flagship Burner")
+            Text("Flagship Assembler")
                 .font(FB.Font.title())
                 .foregroundStyle(FB.Colors.ink)
             Spacer()
@@ -55,7 +65,10 @@ struct WizardView: View {
     private var recipeRow: some View {
         DropRow(
             icon: "doc.text.fill",
-            title: "Recipe",
+            title: "Certificate",
+            description: "The json certificate file generated online",
+            linkLabel: "where to get one?",
+            linkURL: FlagshipLinks.certificate,
             state: recipeRowState(),
             isReady: model.verified != nil,
             onDrop: { url in model.acceptRecipeFile(url: url) },
@@ -82,13 +95,16 @@ struct WizardView: View {
         if let r = model.recipe {
             return .pending(r.lastPathComponent)
         }
-        return .empty(hint: "Drop a .json file (from the Download Recipe button)")
+        return .empty
     }
 
     private var isoRow: some View {
         DropRow(
             icon: "opticaldisc.fill",
-            title: "Ubuntu Server ISO",
+            title: "Linux ISO",
+            description: "Please use one of the approved distributions for best results",
+            linkLabel: "List of recommended distros",
+            linkURL: FlagshipLinks.recommendedDistros,
             state: isoRowState(),
             isReady: model.iso != nil,
             onDrop: { url in model.acceptISOFile(url: url) },
@@ -104,7 +120,7 @@ struct WizardView: View {
         if let iso = model.iso {
             return .success(primary: iso.lastPathComponent, secondary: nil)
         }
-        return .empty(hint: "Drop ubuntu-22.04.5-live-server-amd64.iso")
+        return .empty
     }
 
     private var diskRow: some View {
@@ -131,7 +147,7 @@ struct WizardView: View {
                 doneCard
             } else {
                 Button(action: { Task { await model.runWrite() } }) {
-                    Text("Bake")
+                    Text("Assemble")
                         .font(FB.Font.rowTitle())
                         .frame(minWidth: 200, minHeight: 28)
                 }
@@ -202,7 +218,7 @@ struct WizardView: View {
             Divider()
             DisclosureGroup(isExpanded: $showLog) {
                 LogPane(model: model)
-                    .frame(maxHeight: 180)
+                    .frame(height: 320)
                     .padding(.top, FB.Spacing.s2)
             } label: {
                 HStack {
@@ -232,7 +248,7 @@ struct WizardView: View {
 // MARK: - DropRow
 
 enum DropRowState {
-    case empty(hint: String)
+    case empty
     case pending(String)
     case success(primary: String, secondary: String?)
     /// Same as `.success` but the secondary string is computed live
@@ -245,6 +261,9 @@ enum DropRowState {
 private struct DropRow: View {
     let icon: String
     let title: String
+    let description: String
+    let linkLabel: String
+    let linkURL: URL
     let state: DropRowState
     let isReady: Bool
     let onDrop: (URL) -> Void
@@ -262,6 +281,7 @@ private struct DropRow: View {
                     statusIcon
                 }
                 stateBody
+                HelpLink(label: linkLabel, url: linkURL)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -327,10 +347,11 @@ private struct DropRow: View {
     private var stateBody: some View {
         Group {
             switch state {
-            case .empty(let hint):
-                Text(hint)
+            case .empty:
+                Text(description)
                     .font(FB.Font.rowHint())
                     .foregroundStyle(FB.Colors.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             case .pending(let name):
                 Text(name)
                     .font(FB.Font.rowHint())
@@ -391,7 +412,7 @@ private struct DiskPickerRow: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: FB.Spacing.s2) {
-                    Text("USB Drive").font(FB.Font.rowTitle())
+                    Text("USB Boot Drive").font(FB.Font.rowTitle())
                     Spacer()
                     if model.selectedDisk != nil {
                         Image(systemName: "checkmark.circle.fill")
@@ -399,7 +420,14 @@ private struct DiskPickerRow: View {
                             .font(FB.Font.caption())
                     }
                 }
+                if model.selectedDisk == nil {
+                    Text("This drive will be formatted to create a one-time boot disk for your server")
+                        .font(FB.Font.rowHint())
+                        .foregroundStyle(FB.Colors.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 pickerMenu
+                HelpLink(label: "how does it work", url: FlagshipLinks.bootingProcess)
             }
         }
         .padding(FB.Spacing.s3)
@@ -489,6 +517,20 @@ private struct LogPane: View {
         }
         .padding(.horizontal, FB.Spacing.s5)
         .padding(.bottom, FB.Spacing.s4)
+    }
+}
+
+// MARK: - Help link
+
+/// A small inline link that opens an explainer page on the website.
+private struct HelpLink: View {
+    let label: String
+    let url: URL
+    var body: some View {
+        Button(label) { NSWorkspace.shared.open(url) }
+            .buttonStyle(.link)
+            .font(FB.Font.caption())
+            .padding(.top, 1)
     }
 }
 

@@ -28,7 +28,7 @@ final class WizardModel: ObservableObject {
 
     var readinessSummary: String {
         var missing: [String] = []
-        if recipe == nil { missing.append("recipe") }
+        if recipe == nil { missing.append("certificate") }
         if iso == nil { missing.append("ISO") }
         if selectedDisk == nil { missing.append("USB drive") }
         if missing.isEmpty {
