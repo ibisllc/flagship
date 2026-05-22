@@ -242,6 +242,14 @@ class LoginViewModel(
         }
         _phase.value = LoginPhase.TakingOver
         try {
+            // 0. Multi-profile keying (W3) — point the Keystore at the
+            //    recovered cloud's per-profile device-key slot BEFORE
+            //    installing the recovered UMK, so a takeover of a SECOND
+            //    cloud on a phone that already holds another profile
+            //    lands its UMK in its own slot instead of clobbering the
+            //    existing one. profileId = lowercased resolved username.
+            Keystore.setActiveProfile(username)
+
             // 1. Install the recovered UMK. After this deriveIRK derives
             //    the recovered identity's keys. installUmk resets the IRK
             //    version to v1 and sweeps stale per-version caches.

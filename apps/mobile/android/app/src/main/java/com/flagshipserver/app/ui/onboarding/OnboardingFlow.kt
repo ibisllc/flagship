@@ -51,6 +51,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
         ) { entry ->
             val username = URLDecoder.decode(entry.arguments?.getString("username") ?: "", "UTF-8")
             BiometricSetupScreen(
+                username = username,
                 onContinue = {
                     nav.navigate("open-account/" + URLEncoder.encode(username, "UTF-8"))
                 },
