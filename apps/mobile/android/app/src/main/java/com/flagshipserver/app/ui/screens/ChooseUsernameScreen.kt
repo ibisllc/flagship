@@ -17,8 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -34,16 +32,23 @@ private val usernameRegex = Regex("^[a-z0-9]{1,63}$")
  * D.2.2 — ChooseUsernameScreen.
  *
  * The CREATE path only — reserve a fresh handle for a new account.
+ * Identity-first: picking a username opens the *account*, not a server.
+ * A server (pod) is a separate, later, repeatable resource added from
+ * Home once the account is open (Phase 2 of the login redesign).
+ *
  * Demo / test-account / device-capability (dot-form) entry has moved
  * to the username-first Join flow (JoinAccountContainer); typing a
  * bare demo username under "I already have an account" is the only
  * demo entry now. This screen does a live availability check
  * (debounced 350 ms) against the Worker's /api/users/check and only
  * branches on real-account availability.
+ *
+ * On Continue the chosen handle is threaded forward through the
+ * navigation arg (NOT yet written to AppState.currentUser — the claim
+ * + completeOnboarding happen in the open-account step that follows).
  */
 @Composable
-fun ChooseUsernameScreen(nav: NavController) {
-    val app = LocalAppState.current
+fun ChooseUsernameScreen(onContinue: (String) -> Unit) {
     val flagshipServer = LocalFlagshipServerClient.current
     var username by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<UsernameCheck>(UsernameCheck.Empty) }
@@ -84,7 +89,7 @@ fun ChooseUsernameScreen(nav: NavController) {
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            text = "This is permanent. It's your account handle, and the middle of any server's domain (e.g. home.<username>.flagship.services).",
+            text = "This is permanent. It's your account handle — your identity on Flagship. You can add servers later, whenever you're ready.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
         )
@@ -112,7 +117,7 @@ fun ChooseUsernameScreen(nav: NavController) {
 
         FSPrimaryButton(
             label = "Continue",
-            onClick = { nav.navigate("biometric") },
+            onClick = { onContinue(username) },
             block = true,
             large = true,
             enabled = status == UsernameCheck.Available,

@@ -45,7 +45,6 @@ import com.flagshipserver.app.api.AuthCodeIssueRequest
 import com.flagshipserver.app.api.AuthCodeWire
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RckRegisterRequest
-import com.flagshipserver.app.api.UsernameClaimRequest
 import com.flagshipserver.app.core.AuthCode as AuthCodeBytes
 import com.flagshipserver.app.core.Base64URL
 import com.flagshipserver.app.core.HexUtil
@@ -61,7 +60,6 @@ import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
 import com.flagshipserver.app.core.SerialGen
 import com.flagshipserver.app.core.SlugUtil
-import com.flagshipserver.app.core.UsernameClaim
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
 import com.flagshipserver.app.keystore.Keystore
@@ -184,7 +182,6 @@ fun CreateServerScreen(
                             registerControlPlane(
                                 flagshipServer = flagshipServer,
                                 bundle = delivery.bundle,
-                                irkPubHex = delivery.irkPubHex,
                                 authCodeUserSig = delivery.bundle.blob.authCodeUserSignature,
                             )
                             toasts.success("Delivered. Watch Home for the new server.")
@@ -459,36 +456,28 @@ private suspend fun prepareDelivery(
 }
 
 /**
- * Pre-publish the auth-code + RCK + username claim on .com so the
- * freshly-booted box can register itself on first phone-home. All
- * three are IRK-signed canonical-bytes envelopes the Worker verifies.
+ * Pre-publish the auth-code + RCK on .com so the freshly-booted box can
+ * register itself on first phone-home. Both are IRK-signed canonical-
+ * bytes envelopes the Worker verifies.
+ *
+ * Phase 2 (login redesign): the USERNAME CLAIM no longer happens here.
+ * Account creation is decoupled from server provisioning — the account
+ * (and its username claim) is opened up-front in the open-account step,
+ * so the username is already claimed before any server is added. Adding
+ * a server (1st or Nth) from Home must NOT re-claim — the claim is
+ * idempotent server-side, but issuing it again from a different device
+ * key would be wrong, and there's simply no need.
+ *
+ * `internal` so the "add-server does NOT re-claim" contract is pinned
+ * by a unit test.
  */
-private suspend fun registerControlPlane(
+internal suspend fun registerControlPlane(
     flagshipServer: FlagshipServerClient,
     bundle: InstallBlobBundle,
-    irkPubHex: String,
     authCodeUserSig: String,
 ) {
     val now = System.currentTimeMillis()
     val irk = Keystore.deriveIRK("Register on flagshipserver.com")
-
-    val claimSig = HexUtil.encode(irk.sign(
-        UsernameClaim.canonicalBytes(
-            username = bundle.blob.username,
-            irkPubHex = irkPubHex,
-            issuedAt = now,
-        ),
-    ))
-    flagshipServer.claimUsername(
-        UsernameClaimRequest(
-            request = UsernameClaimRequest.Inner(
-                username = bundle.blob.username,
-                irkPub = irkPubHex,
-                issuedAt = now,
-            ),
-            signature = claimSig,
-        ),
-    )
 
     val rckSig = HexUtil.encode(irk.sign(
         RckRegister.canonicalBytes(
