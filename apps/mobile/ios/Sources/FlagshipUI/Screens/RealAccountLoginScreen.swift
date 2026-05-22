@@ -59,13 +59,13 @@ public struct RealAccountLoginScreen: View {
                 vm = RealAccountLoginViewModel(resolution: resolution, server: server)
             }
         }
-        .onChange(of: completedUsername) { _, username in
+        .onChange(of: finalizedUsername) { _, username in
             if let username { onComplete(username) }
         }
     }
 
-    private var completedUsername: String? {
-        if case .completed(let username, _) = vm?.phase { return username }
+    private var finalizedUsername: String? {
+        if case .finalized(let username) = vm?.phase { return username }
         return nil
     }
 
@@ -117,6 +117,10 @@ public struct RealAccountLoginScreen: View {
 
         if case .working = vm.phase {
             workingView(c: c)
+        } else if case .finalized = vm.phase {
+            workingView(c: c)
+        } else if case .completed(_, let completesAt) = vm.phase {
+            graceCountdownView(completesAt: completesAt, vm: vm, c: c)
         } else {
             Text("Take over this account")
                 .font(FS.font.h2()).foregroundColor(c.text)
@@ -177,6 +181,46 @@ public struct RealAccountLoginScreen: View {
             }
         }
         .accessibilityIdentifier(multi ? "login-grace-24h" : "login-grace-7d")
+    }
+
+    // MARK: - Phase 4 — grace countdown + "Take over now"
+
+    @ViewBuilder
+    private func graceCountdownView(completesAt: Int64, vm: RealAccountLoginViewModel, c: FSColors) -> some View {
+        Text("Takeover started").font(FS.font.h2()).foregroundColor(c.text)
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let nowMs = Int64(ctx.date.timeIntervalSince1970 * 1000)
+            let remaining = max(0, completesAt - nowMs)
+            let elapsed = remaining == 0
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                FSCard {
+                    HStack(alignment: .top, spacing: FS.space.s2) {
+                        Image(systemName: "clock.badge.exclamationmark")
+                            .foregroundColor(c.primary)
+                        Text(elapsed
+                             ? "The grace period has elapsed — you can take over now."
+                             : "This device takes over in \(Self.formatRemaining(remaining)). Your other devices are being alerted and can object until then.")
+                            .font(FS.font.bodySm()).foregroundColor(c.text)
+                    }
+                }
+                FSPrimaryButton("Take over now", enabled: elapsed, block: true, large: true) {
+                    Task { await vm.completeTakeover() }
+                }
+                .accessibilityIdentifier("login-take-over-now")
+            }
+        }
+        .accessibilityIdentifier("login-grace-countdown")
+        FSGhostButton("Back", block: true, action: onBack)
+    }
+
+    /// `Nd Nh` / `Nh Nm` / `Nm Ns` / `Ns` — coarse, stable countdown copy.
+    static func formatRemaining(_ ms: Int64) -> String {
+        let s = ms / 1000
+        let d = s / 86400, h = (s % 86400) / 3600, m = (s % 3600) / 60, sec = s % 60
+        if d > 0 { return "\(d)d \(h)h" }
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m \(sec)s" }
+        return "\(sec)s"
     }
 
     private func workingView(c: FSColors) -> some View {

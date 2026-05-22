@@ -65,10 +65,14 @@ public final class RealAccountLoginViewModel {
         /// The takeover ceremony is running (PRF unwrap → install →
         /// re-pair). Drives a spinner; the user can't re-tap.
         case working
-        /// Terminal success — the device has taken over. Carries the
-        /// resolved username + the grace deadline so a Phase-4 countdown
-        /// can pick it up. The host flips AppState to paired.
+        /// Re-pair INITIATED — the grace clock is running server-side.
+        /// Carries the deadline so the Phase-4 screen renders a countdown
+        /// + "Take over now". (Phase 3 paired here; Phase 4 pairs on
+        /// `.finalized`, after the COMPLETE lands.)
         case completed(username: String, completesAt: Int64)
+        /// Phase 4 — the re-pair COMPLETE landed (grace elapsed); the
+        /// takeover is final. The host flips AppState to paired on this.
+        case finalized(username: String)
         /// A recoverable failure (PRF cancelled, transport, bad TOTP).
         /// The view re-shows the explainer + the message.
         case failed(String)
@@ -212,6 +216,28 @@ public final class RealAccountLoginViewModel {
             phase = .failed("That recovery code or authenticator code wasn't accepted. Check it and try again.")
         } catch {
             phase = .failed("Couldn't start the takeover: \(error.localizedDescription)")
+        }
+    }
+
+    /// Phase 4 — finalize the takeover once its grace has elapsed. The
+    /// re-pair COMPLETE endpoint is a public, idempotent CAS-swap with no
+    /// signature gate, so we POST an empty body via `completeRePair`. 404
+    /// == already swapped/swept (treat as success); 425 == too early
+    /// (stay in grace); 403/409 == objected (cancelled).
+    public func completeTakeover() async {
+        guard case .completed(let username, let completesAt) = phase else { return }
+        phase = .working
+        do {
+            _ = try await server.completeRePair(username: username)
+            phase = .finalized(username: username)
+        } catch ScreensClientError.http(let status, _) where status == 404 {
+            phase = .finalized(username: username)
+        } catch ScreensClientError.http(let status, _) where status == 425 {
+            phase = .completed(username: username, completesAt: completesAt)
+        } catch ScreensClientError.http(let status, _) where status == 403 || status == 409 {
+            phase = .failed("This takeover was cancelled. If it's still you, start again.")
+        } catch {
+            phase = .failed("Couldn't finalize the takeover: \(error.localizedDescription)")
         }
     }
 

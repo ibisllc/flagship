@@ -164,6 +164,30 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         XCTAssertNil(last.body.totpProof, "single re-pair must not carry a totpProof")
     }
 
+    // MARK: - Phase 4 — completeTakeover finalizes after grace
+
+    func test_grace_completeTakeover_finalizes() async throws {
+        let server = makeServer()
+        try await server.claimUsername(.init(
+            request: .init(username: "harry", irkPub: "ab", issuedAt: 1), signature: "s"
+        ))
+        _ = try await seedRecovery(server)
+        let spy = InstallSpy()
+        let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
+        let vm = makeVM(resolution: r, server: server, installSpy: spy)
+
+        await vm.startTakeover()
+        guard case .completed = vm.phase else {
+            return XCTFail("expected .completed (initiated, in grace), got \(vm.phase)")
+        }
+
+        await vm.completeTakeover()
+        guard case .finalized(let user) = vm.phase else {
+            return XCTFail("expected .finalized, got \(vm.phase)")
+        }
+        XCTAssertEqual(user, "harry")
+    }
+
     // MARK: - Multi requires a second factor BEFORE re-pair
 
     func test_multiTakeover_emptySecondFactor_failsBeforeRePair() async throws {
