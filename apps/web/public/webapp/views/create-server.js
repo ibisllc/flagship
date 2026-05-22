@@ -308,6 +308,13 @@ async function handleDeliverNow() {
   try { inputs = readInputs(); }
   catch (e) { return toast(String(e.message || e), "err"); }
 
+  // Phase 2: the account is now opened FIRST (standalone username claim
+  // + device bind), so by the time the user reaches "Add a server" the
+  // username is already bound to this device's IRK. If the session
+  // already carries a username, the claim has happened — skip it. Only a
+  // legacy direct-to-create-server entry (no open-account step) still
+  // claims here, and even that stays 409-tolerant (idempotent).
+  const alreadyOpened = !!session.username;
   const username = await ensureUsername();
 
   let qrUrl;
@@ -317,7 +324,7 @@ async function handleDeliverNow() {
   setStatus("active", "minting install blob…");
   let blobBundle;
   try {
-    blobBundle = await mintInstallBlobBundle(session, username, inputs);
+    blobBundle = await mintInstallBlobBundle(session, username, inputs, { skipClaim: alreadyOpened });
   } catch (e) {
     setStatus("error", String(e.message || e));
     return;
@@ -357,25 +364,32 @@ function setStatus(kind, text) {
   el.textContent = text;
 }
 
-async function mintInstallBlobBundle(session, username, inputs) {
+async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   const { serverName, recipeTtlMs } = inputs;
   const ttlMs = clampRecipeTtlMs(recipeTtlMs);
   const irkPubHex = bytesToHex(session.irk.publicKey);
 
-  // 1. Claim username (idempotent).
-  const claimIssuedAt = Date.now();
-  const claimMsg = canonical([TAG_CLAIM, username, irkPubHex, claimIssuedAt]);
-  const claimSig = await signWithIrk(session.umk, claimMsg);
-  const claimResp = await fetch("/api/username/claim", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      request: { username, irkPub: irkPubHex, issuedAt: claimIssuedAt },
-      signature: bytesToHex(claimSig),
-    }),
-  });
-  if (!claimResp.ok && claimResp.status !== 409) {
-    throw new Error(`claim failed (${claimResp.status}): ${await claimResp.text()}`);
+  // 1. Claim username (idempotent) — Phase 2: SKIPPED when the account
+  // was already opened (the standalone claim ran at open-account time).
+  // Account identity is decoupled from server provisioning: a server is
+  // a separate, later, repeatable resource that re-uses the
+  // already-claimed username. The fallback claim (legacy direct entry)
+  // stays 409-tolerant.
+  if (!opts.skipClaim) {
+    const claimIssuedAt = Date.now();
+    const claimMsg = canonical([TAG_CLAIM, username, irkPubHex, claimIssuedAt]);
+    const claimSig = await signWithIrk(session.umk, claimMsg);
+    const claimResp = await fetch("/api/username/claim", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        request: { username, irkPub: irkPubHex, issuedAt: claimIssuedAt },
+        signature: bytesToHex(claimSig),
+      }),
+    });
+    if (!claimResp.ok && claimResp.status !== 409) {
+      throw new Error(`claim failed (${claimResp.status}): ${await claimResp.text()}`);
+    }
   }
 
   const delegated = await genEd25519();
