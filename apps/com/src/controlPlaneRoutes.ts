@@ -67,6 +67,7 @@ import {
   handleGetUsernameAlias,
   handleGetUserPods,
   handleGetUsersDevices,
+  handleAccountResolve,
   handleGetAuditEvents,
   handlePostDaemonStatus,
   handleUserPubKeyCert,
@@ -314,6 +315,7 @@ interface ProvisioningTempBucket {
 const ROUTE_RE = {
   USERNAME_CLAIM: /^\/api\/username\/claim$/,
   USERS_CHECK: /^\/api\/users\/check$/,
+  ACCOUNT_RESOLVE: /^\/api\/account\/resolve\/([^/]+)$/,
   USERNAME_RENAME: /^\/api\/username\/rename$/,
   USERNAME_ALIAS: /^\/api\/username\/alias\/([^/]+)$/,
   USERNAME_LOOKUP: /^\/api\/username\/([^/]+)$/,
@@ -925,6 +927,22 @@ export async function tryControlPlane(
     return finish(
       await handleGetUsersDevices(
         { pushTokens: storage.pushTokens },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // Login/join preflight — 200 always; a missing account is
+  // kind:"unknown", never a 404. Drives the username-first login
+  // state machine. See docs/login-and-account-redesign.md.
+  if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_RESOLVE))) {
+    return finish(
+      await handleAccountResolve(
+        {
+          usernames: storage.usernames,
+          webauthnRecovery: storage.webauthnRecovery,
+          demoUsers: storage.demoUsers,
+          pushTokens: storage.pushTokens,
+        },
         decodeURIComponent(m[1]!),
       ),
     );
