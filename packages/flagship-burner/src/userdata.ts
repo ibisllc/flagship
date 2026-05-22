@@ -175,8 +175,12 @@ function installBlobToJson(
     phoneDelegatedPubKey: bytesToHex(b.phoneDelegatedPubKey),
     registrationUrl: b.registrationUrl,
     authCode: {
+      version: b.authCode.version,
       serial: b.authCode.serial,
       username: b.authCode.username,
+      serverName: b.authCode.serverName,
+      serverDomain: b.authCode.serverDomain,
+      delegatedPubKey: bytesToHex(b.authCode.delegatedPubKey),
       userPubKey: bytesToHex(b.authCode.userPubKey),
       issuedAt: b.authCode.issuedAt,
       expiresAt: b.authCode.expiresAt,
