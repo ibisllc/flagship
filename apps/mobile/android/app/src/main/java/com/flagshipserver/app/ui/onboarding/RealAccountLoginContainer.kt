@@ -98,6 +98,11 @@ fun RealAccountLoginContainer(
             onConfirm = { scope.launch { vm.confirmTakeover() } },
             onBack = onBack,
         )
+        is LoginPhase.Grace -> GraceCountdownView(
+            completesAt = p.completesAt,
+            onTakeOver = { scope.launch { vm.completeTakeover() } },
+            onBack = onBack,
+        )
         LoginPhase.TakingOver -> TakingOverView()
         LoginPhase.Opened -> TakingOverView()  // brief; LaunchedEffect navigates away
         is LoginPhase.Failed -> FailureView(message = p.message, onBack = onBack)
@@ -263,6 +268,67 @@ private fun TakeoverExplainerView(
             modifier = Modifier.semantics { contentDescription = "login-takeover-confirm" },
         )
         FSGhostButton(label = "Back", onClick = onBack, block = true)
+    }
+}
+
+@Composable
+private fun GraceCountdownView(
+    completesAt: Long,
+    onTakeOver: () -> Unit,
+    onBack: () -> Unit,
+) {
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(completesAt) {
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+    val remaining = (completesAt - nowMs).coerceAtLeast(0L)
+    val elapsed = remaining == 0L
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = FS.space.s6, vertical = FS.space.s12)
+            .semantics { contentDescription = "login-grace-countdown" },
+        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    ) {
+        Text(
+            "Takeover started",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+        )
+        FSCard(padding = PaddingValues(FS.space.s4)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Icon(Icons.Outlined.Info, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+                Text(
+                    if (elapsed) "The grace period has elapsed — you can take over now."
+                    else "This device takes over in ${formatRemaining(remaining)}. Your other devices are alerted and can object until then.",
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                )
+            }
+        }
+        Box(Modifier.height(FS.space.s4))
+        FSPrimaryButton(
+            label = "Take over now",
+            onClick = onTakeOver,
+            enabled = elapsed,
+            block = true,
+            large = true,
+            modifier = Modifier.semantics { contentDescription = "login-take-over-now" },
+        )
+        FSGhostButton(label = "Back", onClick = onBack, block = true)
+    }
+}
+
+private fun formatRemaining(ms: Long): String {
+    val s = ms / 1000
+    val d = s / 86400; val h = (s % 86400) / 3600; val m = (s % 3600) / 60; val sec = s % 60
+    return when {
+        d > 0 -> "${d}d ${h}h"
+        h > 0 -> "${h}h ${m}m"
+        m > 0 -> "${m}m ${sec}s"
+        else -> "${sec}s"
     }
 }
 

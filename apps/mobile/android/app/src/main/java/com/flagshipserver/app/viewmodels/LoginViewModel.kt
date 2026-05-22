@@ -84,8 +84,15 @@ sealed interface LoginPhase {
      *  grace explainer; on confirm it calls [confirmTakeover]. */
     data class TakeoverReady(val graceModel: AccountResolution.GraceModel) : LoginPhase
 
-    /** confirmTakeover() is running: installUmk → re-pair initiate →
-     *  admin label → completeOnboarding. */
+    /** Phase 4 — re-pair INITIATED; the grace clock is running server-
+     *  side. Carries the deadline so the host renders a countdown +
+     *  "Take over now". Pairing happens on completion, not here. */
+    data class Grace(
+        val completesAt: Long,
+        val graceModel: AccountResolution.GraceModel,
+    ) : LoginPhase
+
+    /** confirmTakeover() / completeTakeover() is running. */
     data object TakingOver : LoginPhase
 
     /** Done — the account is open as a fresh `admin` device. */
@@ -260,7 +267,7 @@ class LoginViewModel(
             )
             val signature = HexUtil.encode(newSign.sign(canonical))
 
-            server.initiateRePair(
+            val resp = server.initiateRePair(
                 username = username,
                 body = RePairInitiateRequest(
                     request = RePairInitiateRequest.Inner(
@@ -278,15 +285,41 @@ class LoginViewModel(
             )
             Keystore.setPendingIrkRotationVersion(newVersion)
 
-            // 3. Open the account as the RESOLVED user with ZERO pods,
-            //    then stamp this device "admin" on the active profile.
-            //    Phase 4 hydrates the real pod set from /devices.
+            // Phase 4: the grace clock is now running server-side. We do
+            // NOT open the account yet — pairing + the admin label happen
+            // in completeTakeover() once the grace elapses.
+            _phase.value = LoginPhase.Grace(
+                completesAt = resp.completesAt,
+                graceModel = resolution.grace,
+            )
+        } catch (t: Throwable) {
+            _phase.value = LoginPhase.Failed(humanizedError(t))
+        }
+    }
+
+    /**
+     * Phase 4 — finalize the takeover once its grace has elapsed. The
+     * re-pair COMPLETE endpoint is a public, idempotent CAS-swap with NO
+     * signature (we POST an empty body via [FlagshipServerClient.
+     * completeRePair]). On success we activate the staged IRK rotation
+     * locally (pending → current), open the account as the resolved user,
+     * and stamp this device "admin".
+     */
+    suspend fun completeTakeover() {
+        if (_phase.value !is LoginPhase.Grace) return
+        _phase.value = LoginPhase.TakingOver
+        try {
+            server.completeRePair(username)
+            // Activate the staged rotation: the new IRK becomes current.
+            Keystore.pendingIrkRotationVersion()?.let { pending ->
+                Keystore.setCurrentIrkVersion(pending)
+                Keystore.setPendingIrkRotationVersion(null)
+            }
+            // Open as the RESOLVED user with ZERO pods, then stamp admin.
             app.completeOnboarding(username = username, pods = emptyList())
-            val active = app.activeProfile
-            if (active != null) {
+            app.activeProfile?.let { active ->
                 app.addProfile(active.copy(deviceLabel = ADMIN_DEVICE_LABEL), setActive = true)
             }
-
             _phase.value = LoginPhase.Opened
         } catch (t: Throwable) {
             _phase.value = LoginPhase.Failed(humanizedError(t))

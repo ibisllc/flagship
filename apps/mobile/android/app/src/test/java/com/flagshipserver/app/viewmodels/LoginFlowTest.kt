@@ -156,7 +156,7 @@ class LoginFlowTest {
         assertFalse(app.isPaired.first())
     }
 
-    @Test fun single_confirmTakeover_installsUmk_initiatesRePair_labelsAdmin() = runTest {
+    @Test fun single_confirm_initiates_thenComplete_pairsAndLabelsAdmin() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         seedRecoveryEnvelope(server)
         val app = AppState()
@@ -165,30 +165,27 @@ class LoginFlowTest {
         m.begin()
         m.confirmTakeover()
 
-        assertEquals(LoginPhase.Opened, m.phase.first())
-
-        // installUmk: the recovered seed is now this device's UMK.
+        // Phase 4: confirm INITIATES + installs UMK + stages the rotation,
+        // but does NOT pair — the grace clock is running server-side.
+        assertTrue("confirm lands on Grace", m.phase.first() is LoginPhase.Grace)
         assertArrayEquals(recoveredSeed, Keystore.currentUmkSeed())
-
-        // Onboarding completed with the RESOLVED username + ZERO pods —
-        // NOT the legacy "recovered-user" placeholder.
-        assertTrue(app.isPaired.first())
-        assertEquals("harry", app.currentUser.first())
-        assertTrue(app.pods.first().isEmpty())
-
-        // This device is labelled "admin".
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
-
-        // Re-pair initiated for the resolved user, signed by the NEW IRK,
-        // with NO totpProof (single is single-factor).
+        assertFalse("not paired during grace", app.isPaired.first())
         val (user, body, _) = server.lastRePairInitiate!!
         assertEquals("harry", user)
         assertEquals("harry", body.request.username)
         assertNull("single takeover carries no totpProof", body.totpProof)
-        // Signature verifies under the body's newIrkPub.
         assertTrue(verifyRePair(body))
-        // A pending rotation is staged for the Phase-4 completion step.
-        assertNotNull(Keystore.pendingIrkRotationVersion())
+        assertNotNull("pending rotation staged for completion", Keystore.pendingIrkRotationVersion())
+
+        // Phase 4: completeTakeover finalizes — pairs, labels admin,
+        // activates the staged IRK rotation (pending → current).
+        m.completeTakeover()
+        assertEquals(LoginPhase.Opened, m.phase.first())
+        assertTrue(app.isPaired.first())
+        assertEquals("harry", app.currentUser.first())
+        assertTrue(app.pods.first().isEmpty())
+        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
+        assertNull("pending rotation cleared after completion", Keystore.pendingIrkRotationVersion())
     }
 
     // ─── 3. multi takeover requires the second factor ─────────────────
@@ -237,16 +234,20 @@ class LoginFlowTest {
         )
         m.confirmTakeover()
 
-        assertEquals(LoginPhase.Opened, m.phase.first())
+        // confirm INITIATES (with totpProof) and lands on Grace.
+        assertTrue(m.phase.first() is LoginPhase.Grace)
         assertArrayEquals(recoveredSeed, Keystore.currentUmkSeed())
-        assertEquals("hilton", app.currentUser.first())
-        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
-
         val (_, body, _) = server.lastRePairInitiate!!
         assertNotNull("multi takeover MUST carry totpProof", body.totpProof)
         assertEquals("123456", body.totpProof?.code)
         assertEquals("totp", body.totpProof?.method)
         assertTrue(verifyRePair(body))
+
+        // completeTakeover finalizes — pairs + admin label.
+        m.completeTakeover()
+        assertEquals(LoginPhase.Opened, m.phase.first())
+        assertEquals("hilton", app.currentUser.first())
+        assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
     }
 
     @Test fun multi_recoveryCode_tagsRecoveryMethod() = runTest {
