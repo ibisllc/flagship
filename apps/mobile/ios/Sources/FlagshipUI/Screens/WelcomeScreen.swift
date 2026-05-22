@@ -8,6 +8,7 @@ public struct WelcomeScreen: View {
     // tapping the box illustration 3× flips it from the cover page.
     @Environment(DeveloperSettings.self) private var dev
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.colorScheme) private var scheme
     @State private var tapCount: Int = 0
 
     var onCreate: () -> Void = {}
@@ -19,7 +20,10 @@ public struct WelcomeScreen: View {
     public var body: some View {
         FSScreen {
             VStack(spacing: 0) {
-                Spacer().frame(height: FS.space.s16)
+                modeBadge
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.top, FS.space.s2)
+                Spacer().frame(height: FS.space.s8)
                 BoxIllustration().frame(height: 220)
                     .contentShape(Rectangle())
                     .onTapGesture { secretTap() }
@@ -63,9 +67,32 @@ public struct WelcomeScreen: View {
         dev.unlocked = true
         toasts.info(
             dev.useLiveClient
-                ? "Live data — sign-in now hits flagshipserver.com."
-                : "Mock data — sign-in now uses on-device fixtures."
+                ? "You're now in LIVE mode — data comes from flagshipserver.com."
+                : "You're now in MOCK mode — sign in as “demo” (nothing is created)."
         )
+    }
+
+    /// Always-on indicator of which backend the app is talking to.
+    /// Shown whenever the mock is active (you should always know you're
+    /// on fake data) or once the developer menu has been unlocked (so a
+    /// dev who's been toggling sees the current state); hidden in a
+    /// clean Release build that has never touched the toggle.
+    @ViewBuilder private var modeBadge: some View {
+        if !dev.useLiveClient || dev.unlocked {
+            let c = FSColors.scheme(scheme)
+            let live = dev.useLiveClient
+            let tint = live ? c.success : c.warning
+            HStack(spacing: 6) {
+                Circle().fill(tint).frame(width: 7, height: 7)
+                Text(live ? "LIVE DATA" : "MOCK · sign in as “demo”")
+                    .font(FS.font.caption())
+                    .foregroundColor(tint)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(tint.opacity(0.14)))
+            .accessibilityLabel(live ? "Live data mode" : "Mock data mode")
+        }
     }
 }
 

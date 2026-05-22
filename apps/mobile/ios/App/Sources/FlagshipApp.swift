@@ -89,7 +89,22 @@ struct FlagshipApp: App {
         case .ready:        return .ready
         }
     }
-    private let mockServerClient: any FlagshipServerClient = MockFlagshipServerClient()
+    // Seed the mock with one demo user so "I already have an account" →
+    // type "demo" opens a populated sandbox in mock mode WITHOUT minting
+    // an identity or hitting the network (DemoFixtures is purely local;
+    // the screens are served by MockScreensClient). Nothing is created
+    // anywhere — sign-out clears it.
+    private let mockServerClient: any FlagshipServerClient = {
+        let m = MockFlagshipServerClient()
+        m.demoServers = [
+            "demo": DemoServerBlock(
+                fqdn: "home.demo.flagship.services",
+                status: "up",
+                ttlIdleMinutes: 30
+            )
+        ]
+        return m
+    }()
     private let liveServerClient: any FlagshipServerClient = LiveFlagshipServerClient()
     private let mockRelay = MockQrRelayClient()
     private let liveRelay: any QrRelayClient = LiveQrRelayClient()
