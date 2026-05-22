@@ -1,9 +1,10 @@
 // Onboarding flow:
 //   Welcome
 //     ├─ Create your account → ChooseUsername → Biometric → CreateServer
-//     └─ I already have an account → RecoverFromWelcome (C3 wires the
-//                                    real WebAuthn-PRF flow; C1 ships
-//                                    a placeholder)
+//     └─ I already have an account → JoinAccountContainer (username-first
+//          resolveAccount preflight) → demo opens the sandbox directly;
+//          single/multi hand off to the WebAuthn-PRF recovery flow;
+//          unknown renders a clean "no account" state.
 // Mirrors FlagshipUI/Onboarding/OnboardingFlow.swift.
 
 package com.flagshipserver.app.ui.onboarding
@@ -49,6 +50,22 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             BuildCodeScreen(nav)
         }
         composable("recover") {
+            // Username-first Join. resolveAccount branches:
+            //   demo            → device attached + sandbox open → done
+            //   single | multi  → push the existing WebAuthn-PRF flow
+            //   unknown         → handled inside the container (state)
+            JoinAccountContainer(
+                onDemoOpened = onFinished,
+                onRecover = { _resolution ->
+                    // Phase 1 hands single/multi to the existing
+                    // recovery flow; Phase 3 replaces it with the real
+                    // state machine driven by `_resolution`.
+                    nav.navigate("recover-webauthn")
+                },
+                onBack = { nav.popBackStack() },
+            )
+        }
+        composable("recover-webauthn") {
             RecoverFromWelcomeContainer(
                 onComplete = { choice, _seed ->
                     // v1: mark paired with an empty pod list — a
