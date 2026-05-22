@@ -83,6 +83,13 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
  *  bootstrap) — `session.umk` + `session.irk` are present. The caller
  *  validates the username via {@link isValidUsername} first.
  *
+ *  Multi-profile keying: when `persistSeedForProfile` is injected the
+ *  session UMK is re-persisted under the NEW profile's keystore record
+ *  (keyed by `username`) BEFORE the local profile is added — so a second
+ *  account opened in the same browser gets its OWN device-key record and
+ *  never clobbers the first profile's wrapped UMK. The first account
+ *  opened simply re-keys the bootstrap (DEFAULT) record onto its handle.
+ *
  *  @param {string} username
  *  @param {{
  *    session: { umk: Uint8Array, irk: { publicKey: Uint8Array } },
@@ -91,6 +98,8 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
  *    fetch?: typeof fetch,
  *    setUsername?: (username: string) => void,
  *    addProfile?: (profile: object, opts?: object) => unknown,
+ *    persistSeedForProfile?: (seed: Uint8Array, cloudName: string, passphrase: string) => Promise<unknown>,
+ *    makePassphrase?: () => string,
  *    dispatchInitialView?: () => Promise<void>|void,
  *  }} deps
  *  @returns {Promise<{ username: string, alreadyClaimed: boolean }>}
@@ -117,6 +126,16 @@ export async function openAccount(username, deps) {
   // username to session.irk).
   if (typeof deps.setUsername === "function") deps.setUsername(username);
 
+  // Multi-profile keying: re-persist the session UMK under THIS profile's
+  // keystore record (set active to the new cloudName first) so adding a
+  // second account never clobbers the first profile's device key. Done
+  // BEFORE addProfile so the keystore record exists before the profile is
+  // listed/made active.
+  if (typeof deps.persistSeedForProfile === "function") {
+    const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
+    await deps.persistSeedForProfile(session.umk, username, makePassphrase());
+  }
+
   if (typeof deps.addProfile === "function") {
     const toHex = deps.bytesToHex || defaultBytesToHex;
     deps.addProfile({
@@ -139,6 +158,17 @@ export async function openAccount(username, deps) {
 
 function defaultBytesToHex(b) {
   return Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+/** Random URL-safe local at-rest wrap passphrase for the per-profile
+ *  keystore record. The username claim (Ed25519-signed by the device key)
+ *  is the real identity gate; a typed local passphrase here would just be
+ *  friction on the open-account path. Mirrors loginTakeover.js. */
+function randomLocalPassphrase() {
+  const bytes = (globalThis.crypto || crypto).getRandomValues(new Uint8Array(24));
+  let s = "";
+  for (const b of bytes) s += b.toString(16).padStart(2, "0");
+  return s;
 }
 
 async function safeText(resp) {

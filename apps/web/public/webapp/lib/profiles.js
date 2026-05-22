@@ -16,6 +16,16 @@
 // backed) and never get serialized here. The webapp has no analog of
 // iOS's iCloud Keychain auto-sync; cross-device profile portability is
 // the user's choice via cloud recovery.
+//
+// Multi-profile keying: this module is the SOURCE OF TRUTH for which
+// cloud is active (`activeCloudName`). The keystore (../keystore.js)
+// keys each profile's wrapped UMK by that cloudName, so switching the
+// active profile here MUST re-point keystore reads at that profile —
+// {@link setActiveProfile} / {@link addProfile} do this by calling
+// `setActiveKeystoreProfile`. Importing keystore.js is load-safe: it
+// has no top-level IndexedDB/crypto side effects.
+
+import { setActiveKeystoreProfile } from "../keystore.js";
 
 /** @typedef {Object} Profile
  *  @property {string} cloudName
@@ -93,7 +103,10 @@ export function addProfile(profile, opts = {}) {
   } else {
     state.profiles.push(next);
   }
-  if (setActive) state.activeCloudName = profile.cloudName;
+  if (setActive) {
+    state.activeCloudName = profile.cloudName;
+    setActiveKeystoreProfile(profile.cloudName);
+  }
   saveProfiles(state, storage);
   return state;
 }
@@ -109,6 +122,7 @@ export function setActiveProfile(cloudName, storage = globalThis.localStorage) {
     return state;
   }
   state.activeCloudName = cloudName;
+  setActiveKeystoreProfile(cloudName);
   saveProfiles(state, storage);
   return state;
 }

@@ -4,6 +4,7 @@ import {
   deriveIrkFromSeed,
   deriveIrkVersioned,
   signWithIrkVersioned,
+  setActiveKeystoreProfile,
 } from "../keystore.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
@@ -97,6 +98,7 @@ async function joinDemo(resolution) {
   try {
     await activateDemoAccount(resolution, {
       bootstrapNewIdentity,
+      setActiveKeystoreProfile,
       unlockSession,
       addProfile,
       dispatchInitialView,
@@ -144,6 +146,10 @@ async function recoverRealAccount(resolution) {
       prompt: (opts) => inlinePrompt(opts),
       takeoverDeps: {
         recoverFromCloud,
+        // Multi-profile keying: point the keystore at the account being
+        // taken over BEFORE the recovered seed is wrapped, so it lands
+        // under that account's own record (never clobbers another profile).
+        setActiveKeystoreProfile,
         bootstrapFromExistingSeed,
         unlockSession,
         deriveIrkFromSeed,

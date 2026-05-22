@@ -30,7 +30,7 @@
 
 import { registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { signWithIrk, bytesToHex } from "../keystore.js";
+import { signWithIrk, bytesToHex, persistSeedForProfile } from "../keystore.js";
 import { isValidUsername, openAccount } from "../lib/openAccount.js";
 import { addProfile } from "../lib/profiles.js";
 import { toast } from "../lib/toast.js";
@@ -117,6 +117,9 @@ async function handleOpenAccount() {
         try { localStorage.setItem("flagship.username", u); } catch { /* swallow */ }
         session.username = u;
       },
+      // Multi-profile keying: store the session UMK under THIS account's
+      // own keystore record so a second account never clobbers the first.
+      persistSeedForProfile,
       addProfile,
       // No dispatchInitialView — the wizard advances to the recovery
       // step itself. The account is open; the app shell comes after the
