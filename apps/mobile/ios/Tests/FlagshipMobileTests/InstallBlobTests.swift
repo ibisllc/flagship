@@ -35,6 +35,37 @@ final class InstallBlobTests: XCTestCase {
         XCTAssertTrue(s.contains("|\(String(repeating: "55", count: 32))"))   // rckPubKey trailing
     }
 
+    func test_installBlobCanonicalBytes_bootUnlockModeAppendedOnlyWhenPresent() {
+        let auth = AuthCode(
+            serial: "01ABCD",
+            username: "harry",
+            serverName: "home",
+            serverDomain: "home.harry.flagship.services",
+            delegatedPubKey: Data(repeating: 0x11, count: 32),
+            userPubKey: Data(repeating: 0x22, count: 32),
+            issuedAt: 1,
+            expiresAt: 2
+        )
+        func blob(_ mode: String?) -> InstallBlob {
+            InstallBlob(
+                serverDomain: "home.harry.flagship.services",
+                username: "harry",
+                serverName: "home",
+                phoneDelegatedPubKey: Data(repeating: 0x33, count: 32),
+                authCode: auth,
+                authCodeUserSignature: Data(repeating: 0x44, count: 64),
+                rckPubKey: Data(repeating: 0x55, count: 32),
+                bootUnlockMode: mode
+            )
+        }
+        let rck = String(repeating: "55", count: 32)
+        // Absent ⇒ exact legacy bytes (canonical ends at rckPubKey).
+        XCTAssertTrue(String(data: blob(nil).canonicalBytes(), encoding: .utf8)!.hasSuffix("|\(rck)"))
+        // Present ⇒ appended as the final field.
+        XCTAssertTrue(String(data: blob("approve").canonicalBytes(), encoding: .utf8)!.hasSuffix("|\(rck)|approve"))
+        XCTAssertTrue(String(data: blob("auto").canonicalBytes(), encoding: .utf8)!.hasSuffix("|auto"))
+    }
+
     func test_authCodeCanonicalBytes_followsV1Format() {
         let auth = AuthCode(
             serial: "01XYZ",

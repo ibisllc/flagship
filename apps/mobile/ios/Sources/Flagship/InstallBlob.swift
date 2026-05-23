@@ -29,6 +29,11 @@ public struct InstallBlob: Equatable, Sendable {
     // the sole TTL on the recipe.
     public var installerGitRef: String
     public var rckPubKey: Data               // 32 bytes Ed25519
+    /// Boot-unlock policy chosen at server creation: "auto" (self-unlock via
+    /// a box-sealed lease, the default) or "approve" (phone-gated every boot).
+    /// Optional + conditionally appended to canonicalBytes for backward
+    /// compatibility — nil ⇒ legacy bytes (consumers treat absence as "auto").
+    public var bootUnlockMode: String?
 
     public init(
         version: Int = 2,
@@ -40,7 +45,8 @@ public struct InstallBlob: Equatable, Sendable {
         authCode: AuthCode,
         authCodeUserSignature: Data,
         installerGitRef: String = "main",
-        rckPubKey: Data
+        rckPubKey: Data,
+        bootUnlockMode: String? = nil
     ) {
         self.version = version
         self.serverDomain = serverDomain
@@ -52,6 +58,7 @@ public struct InstallBlob: Equatable, Sendable {
         self.authCodeUserSignature = authCodeUserSignature
         self.installerGitRef = installerGitRef
         self.rckPubKey = rckPubKey
+        self.bootUnlockMode = bootUnlockMode
     }
 
     /// Canonical bytes — pipe-separated, tag prefix kept at v1 for the
@@ -59,7 +66,7 @@ public struct InstallBlob: Equatable, Sendable {
     /// vs v2 inputs by byte difference). MUST match the TS
     /// `canonicalInstallBlob` byte-for-byte.
     public func canonicalBytes() -> Data {
-        let parts: [String] = [
+        var parts: [String] = [
             InstallBlob.canonicalTag,
             String(version),
             serverDomain,
@@ -73,6 +80,9 @@ public struct InstallBlob: Equatable, Sendable {
             installerGitRef,
             HexUtil.encode(rckPubKey),
         ]
+        // Backward-compatible: absent ⇒ exact legacy bytes; present ⇒ appended
+        // last so the signer commits to it. MUST match TS canonicalInstallBlob.
+        if let mode = bootUnlockMode { parts.append(mode) }
         return Data(parts.joined(separator: "|").utf8)
     }
 }

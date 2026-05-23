@@ -56,6 +56,33 @@ class InstallBlobTest {
         assertTrue(s.endsWith("|" + "55".repeat(32)))
     }
 
+    @Test fun installBlobCanonicalBytes_bootUnlockModeAppendedOnlyWhenPresent() {
+        val auth = AuthCode(
+            serial = "01ABCD",
+            username = "harry",
+            serverName = "home",
+            serverDomain = "home.harry.flagship.services",
+            delegatedPubKey = ByteArray(32) { 0x11 },
+            userPubKey = ByteArray(32) { 0x22 },
+            issuedAt = 1L, expiresAt = 2L,
+        )
+        fun blob(mode: String?) = InstallBlob(
+            serverDomain = "home.harry.flagship.services",
+            username = "harry",
+            serverName = "home",
+            phoneDelegatedPubKey = ByteArray(32) { 0x33 },
+            authCode = auth,
+            authCodeUserSignature = ByteArray(64) { 0x44 },
+            rckPubKey = ByteArray(32) { 0x55 },
+            bootUnlockMode = mode,
+        )
+        // Absent ⇒ exact legacy bytes (canonical ends at rckPubKey).
+        assertTrue(String(blob(null).canonicalBytes()).endsWith("|" + "55".repeat(32)))
+        // Present ⇒ appended as the final field.
+        assertTrue(String(blob("approve").canonicalBytes()).endsWith("|" + "55".repeat(32) + "|approve"))
+        assertTrue(String(blob("auto").canonicalBytes()).endsWith("|auto"))
+    }
+
     @Test fun usernameClaim_canonicalBytes() {
         val s = String(UsernameClaim.canonicalBytes("harry", "abcd", 42))
         assertEquals("flagship/claim-username/v1|harry|abcd|42", s)

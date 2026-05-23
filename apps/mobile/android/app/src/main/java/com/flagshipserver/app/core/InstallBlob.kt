@@ -21,6 +21,10 @@ data class InstallBlob(
     var authCodeUserSignature: ByteArray,
     var installerGitRef: String = "main",
     var rckPubKey: ByteArray,
+    // Boot-unlock policy from server creation: "auto" (box-sealed lease
+    // self-unlock, default) or "approve" (phone-gated every boot). Optional +
+    // conditionally appended below — null ⇒ legacy bytes (absence == "auto").
+    var bootUnlockMode: String? = null,
 ) {
     companion object {
         // Tag stays v1 — the inner `version` field discriminates the
@@ -30,7 +34,7 @@ data class InstallBlob(
     }
 
     fun canonicalBytes(): ByteArray {
-        val parts = listOf(
+        val parts = mutableListOf(
             CANONICAL_TAG,
             version.toString(),
             serverDomain,
@@ -44,6 +48,9 @@ data class InstallBlob(
             installerGitRef,
             HexUtil.encode(rckPubKey),
         )
+        // Backward-compatible: absent ⇒ exact legacy bytes; present ⇒ appended
+        // last so the signer commits to it. MUST match TS canonicalInstallBlob.
+        bootUnlockMode?.let { parts.add(it) }
         return parts.joinToString("|").toByteArray()
     }
 }
