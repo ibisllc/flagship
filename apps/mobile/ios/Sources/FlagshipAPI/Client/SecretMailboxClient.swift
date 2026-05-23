@@ -16,28 +16,33 @@ public protocol SecretMailboxClient: Sendable {
     /// account's un-answered pending requests, newest first.
     func fetchPendingRequests(auth: MailboxAuthEnvelope) async throws -> SecretRequestsResponse
 
-    /// POST /api/secret-response — phone, IRK mailbox-auth. Write-once.
-    func postResponse(auth: MailboxAuthEnvelope, response: SecretResponseBody) async throws
+    /// POST {boot}/api/boot/response — owner-IRK (the `bootAuth` header).
+    /// Posts the sealed reply to the dedicated boot worker, where the box
+    /// polls for it. Write-once.
+    func postResponse(response: SecretResponseBody, bootAuth: String) async throws
 
     /// GET /api/server/:domain/sealed-luks-key — returns the LUKS key
     /// sealed FOR the phone (the phone unseals it with its delegated /
-    /// BAK / IRK Ed25519 key). 404 → no sealed key on file.
+    /// BAK / IRK Ed25519 key). 404 → no sealed key on file. Stays on the
+    /// identity plane (owner identity-state, set at install).
     func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse
 
     /// GET /api/users/:u/pods — the directory. The phone resolves the
     /// box's STK INDEPENDENTLY of the mailbox echo from here, so a lying
-    /// relay can't get the phone to seal for a box it controls.
+    /// relay can't get the phone to seal for a box it controls. Identity
+    /// plane (canonical id-cert source).
     func fetchPods(username: String) async throws -> PodsDirectoryResponse
 
-    /// POST /api/server/:domain/unlock-key/lease-v2 — deposit a box-sealed
-    /// auto-unlock lease (IRK-signed). Enables "auto"-mode self-unlock on
-    /// future reboots. `.com` stores ciphertext only (I1).
-    func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws
+    /// PUT {boot}/api/boot/lease — deposit a box-sealed auto-unlock lease on
+    /// the boot worker (owner-IRK via the `bootAuth` header). The `lease`
+    /// body keeps its own IRK signature so the box re-verifies it. Enables
+    /// "auto"-mode self-unlock; the worker stores ciphertext only (I1).
+    func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws
 
-    /// DELETE /api/server/:domain/unlock-key/lease-v2/:id — the kill switch
-    /// (IRK-signed). Drops the lease so the box can no longer self-unlock —
-    /// it falls back to phone-gated approval (downgrade, not brick).
-    func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws
+    /// DELETE {boot}/api/boot/lease/:domain/:id — the kill switch (owner-IRK
+    /// via `bootAuth`). Drops the lease so the box can no longer self-unlock
+    /// — it falls back to phone-gated approval (downgrade, not brick).
+    func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws
 }
 
 // MARK: - Wire types
@@ -206,13 +211,23 @@ public struct LeaseRevokeWire: Codable, Equatable, Sendable {
 
 public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Sendable {
     public static let defaultBaseUrl = URL(string: "https://flagshipserver.com")!
+    /// The dedicated boot worker — lease deposit/revoke + sealed-response
+    /// post land here (identity-gated by the `bootAuth` header). Separate
+    /// host so an enterprise clone can self-host boot operations.
+    public static let defaultBootBaseUrl = URL(string: "https://boot.flagshipserver.com")!
 
     private let urlSession: URLSession
     private let baseUrl: URL
+    private let bootBaseUrl: URL
 
-    public init(urlSession: URLSession = .shared, baseUrl: URL = defaultBaseUrl) {
+    public init(
+        urlSession: URLSession = .shared,
+        baseUrl: URL = defaultBaseUrl,
+        bootBaseUrl: URL = defaultBootBaseUrl
+    ) {
         self.urlSession = urlSession
         self.baseUrl = baseUrl
+        self.bootBaseUrl = bootBaseUrl
     }
 
     public func fetchPendingRequests(auth: MailboxAuthEnvelope) async throws -> SecretRequestsResponse {
@@ -222,12 +237,11 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return try await postReturning("/api/secret-requests", body: body)
     }
 
-    public func postResponse(auth: MailboxAuthEnvelope, response: SecretResponseBody) async throws {
-        // Merge the auth fields + the response into one body matching the
-        // Worker's `{ auth, authSignature, response }` shape.
-        let payload = SecretResponsePost(auth: auth.auth, authSignature: auth.authSignature, response: response)
-        let body = try JSONEncoder().encode(payload)
-        try await post("/api/secret-response", body: body, acceptStatuses: [200, 201, 204])
+    public func postResponse(response: SecretResponseBody, bootAuth: String) async throws {
+        // The boot worker expects `{ response: {...} }` + the owner-IRK
+        // Flagship-Boot-v1 Authorization header (the gate authenticates it).
+        let body = try JSONEncoder().encode(BootResponsePost(response: response))
+        try await sendBoot("POST", "/api/boot/response", body: body, bootAuth: bootAuth, acceptStatuses: [200, 201, 204])
     }
 
     public func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
@@ -240,27 +254,39 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return try await getReturning("/api/users/\(encoded)/pods")
     }
 
-    public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws {
+    public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
         let body = try JSONEncoder().encode(LeaseDepositPost(lease: lease, signature: signatureHex))
-        let enc = lease.serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? lease.serverDomain
-        try await send("POST", "/api/server/\(enc)/unlock-key/lease-v2", body: body, acceptStatuses: [200, 201])
+        try await sendBoot("PUT", "/api/boot/lease", body: body, bootAuth: bootAuth, acceptStatuses: [200, 201])
     }
 
-    public func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws {
-        let body = try JSONEncoder().encode(LeaseRevokePost(request: request, signature: signatureHex))
-        let encD = request.serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? request.serverDomain
-        let encL = request.leaseId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? request.leaseId
-        try await send("DELETE", "/api/server/\(encD)/unlock-key/lease-v2/\(encL)", body: body, acceptStatuses: [200, 204])
+    public func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws {
+        // FQDN + hex leaseId are URL-safe, so the literal path matches the
+        // path the `bootAuth` signature commits to (the gate binds it exactly).
+        let path = "/api/boot/lease/\(request.serverDomain)/\(request.leaseId)"
+        try await sendBoot("DELETE", path, body: Data(), bootAuth: bootAuth, acceptStatuses: [200, 204])
     }
 
-    // The on-wire POST shape for /api/secret-response.
-    private struct SecretResponsePost: Encodable {
-        let auth: MailboxAuthEnvelope.Auth
-        let authSignature: String
-        let response: SecretResponseBody
-    }
+    private struct BootResponsePost: Encodable { let response: SecretResponseBody }
     private struct LeaseDepositPost: Encodable { let lease: BoxSealedLeaseWire; let signature: String }
-    private struct LeaseRevokePost: Encodable { let request: LeaseRevokeWire; let signature: String }
+
+    /// A boot-worker request (POST/PUT/DELETE) with the owner-IRK
+    /// `Authorization: Flagship-Boot-v1 …` header. The URL is built by
+    /// string concat (not appendingPathComponent) so the path matches the
+    /// one the header signature commits to, byte-for-byte.
+    private func sendBoot(_ method: String, _ path: String, body: Data, bootAuth: String, acceptStatuses: Set<Int>) async throws {
+        guard let url = URL(string: bootBaseUrl.absoluteString + path) else {
+            throw ScreensClientError.http(status: 0, message: "bad boot URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.setValue(bootAuth, forHTTPHeaderField: "Authorization")
+        if !body.isEmpty { req.httpBody = body }
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if acceptStatuses.contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+    }
 
     /// A POST/DELETE with a JSON body, accepting a set of success statuses.
     private func send(_ method: String, _ path: String, body: Data, acceptStatuses: Set<Int>) async throws {
@@ -319,14 +345,17 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public var pending: [PendingSecretRequest] = []
     public var directory: [PodDirectoryEntry] = []
     public var sealedLuksKeyHex: String?
-    public private(set) var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String)] = []
-    public private(set) var revoked: [(request: LeaseRevokeWire, signatureHex: String)] = []
+    public private(set) var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String)] = []
+    public private(set) var revoked: [(request: LeaseRevokeWire, bootAuth: String)] = []
+    public private(set) var postedResponses: [(response: SecretResponseBody, bootAuth: String)] = []
     public init() {}
 
     public func fetchPendingRequests(auth: MailboxAuthEnvelope) async throws -> SecretRequestsResponse {
         SecretRequestsResponse(username: auth.auth.username, requests: pending)
     }
-    public func postResponse(auth: MailboxAuthEnvelope, response: SecretResponseBody) async throws {}
+    public func postResponse(response: SecretResponseBody, bootAuth: String) async throws {
+        postedResponses.append((response, bootAuth))
+    }
     public func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
         guard let hex = sealedLuksKeyHex else {
             throw ScreensClientError.http(status: 404, message: "no sealed key on file")
@@ -336,10 +365,10 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         PodsDirectoryResponse(username: username, pods: directory)
     }
-    public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws {
-        deposited.append((lease, signatureHex))
+    public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
+        deposited.append((lease, signatureHex, bootAuth))
     }
-    public func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws {
-        revoked.append((request, signatureHex))
+    public func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws {
+        revoked.append((request, bootAuth))
     }
 }

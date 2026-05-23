@@ -167,7 +167,6 @@ public final class SecretRequestCoordinator {
             issuedAt: verified.pending.issuedAt
         )
         let irk = try await irkProvider()
-        let auth = try buildMailboxAuth(irk: irk)
 
         let sealedHex: String
         var unlockKey: Data?
@@ -187,7 +186,17 @@ public final class SecretRequestCoordinator {
             sealed: sealedHex,
             issuedAt: now()
         )
-        try await mailbox.postResponse(auth: auth, response: body)
+        // The sealed reply goes to the dedicated boot worker (where the box
+        // polls), owner-IRK-authed via the Flagship-Boot-v1 header.
+        let respAuth = try BootAuth.ownerHeader(
+            serverDomain: request.serverDomain,
+            method: "POST",
+            path: "/api/boot/response",
+            irk: irk,
+            now: now(),
+            nonce: nonceGen()
+        )
+        try await mailbox.postResponse(response: body, bootAuth: respAuth)
 
         // "auto" mode: deposit a box-sealed lease so the box self-unlocks on
         // future reboots (the user's IRK authorizes it here — I2). Only for
@@ -205,11 +214,20 @@ public final class SecretRequestCoordinator {
     public func revokeAutoUnlockLease(serverDomain: String, leaseId: String) async throws {
         let irk = try await irkProvider()
         let issuedAt = now()
-        let rev = LeaseRevocation(serverDomain: serverDomain, leaseId: leaseId, issuedAt: issuedAt)
-        let sig = try rev.sign(with: irk)
+        // The boot worker's DELETE is authorized by the owner-IRK
+        // Flagship-Boot-v1 gate (no separate body signature). The signed
+        // path includes the domain + leaseId, so it can't replay elsewhere.
+        let auth = try BootAuth.ownerHeader(
+            serverDomain: serverDomain,
+            method: "DELETE",
+            path: "/api/boot/lease/\(serverDomain)/\(leaseId)",
+            irk: irk,
+            now: issuedAt,
+            nonce: nonceGen()
+        )
         try await mailbox.revokeBoxSealedLease(
             request: LeaseRevokeWire(serverDomain: serverDomain, leaseId: leaseId, issuedAt: issuedAt),
-            signatureHex: HexUtil.encode(sig)
+            bootAuth: auth
         )
     }
 
@@ -233,6 +251,14 @@ public final class SecretRequestCoordinator {
             expiresAt: expiresAt
         )
         let sig = try lease.sign(with: irk)
+        let depositAuth = try BootAuth.ownerHeader(
+            serverDomain: lease.serverDomain,
+            method: "PUT",
+            path: "/api/boot/lease",
+            irk: irk,
+            now: now(),
+            nonce: nonceGen()
+        )
         try await mailbox.depositBoxSealedLease(
             lease: BoxSealedLeaseWire(
                 serverDomain: lease.serverDomain,
@@ -243,7 +269,8 @@ public final class SecretRequestCoordinator {
                 expiresAt: lease.expiresAt,
                 maxUses: lease.maxUses
             ),
-            signatureHex: HexUtil.encode(sig)
+            signatureHex: HexUtil.encode(sig),
+            bootAuth: depositAuth
         )
         return leaseId
     }

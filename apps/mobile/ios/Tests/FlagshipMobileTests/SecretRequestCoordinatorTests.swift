@@ -17,8 +17,9 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         var sealedLuksKeyHex: String?
         var lastPostedAuth: MailboxAuthEnvelope?
         var lastPostedResponse: SecretResponseBody?
-        var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String)] = []
-        var revoked: [(request: LeaseRevokeWire, signatureHex: String)] = []
+        var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String)] = []
+        var revoked: [(request: LeaseRevokeWire, bootAuth: String)] = []
+        var postedResponses: [(response: SecretResponseBody, bootAuth: String)] = []
         let username: String
         init(username: String) { self.username = username }
 
@@ -26,9 +27,9 @@ final class SecretRequestCoordinatorTests: XCTestCase {
             lastPostedAuth = auth
             return SecretRequestsResponse(username: username, requests: pending)
         }
-        func postResponse(auth: MailboxAuthEnvelope, response: SecretResponseBody) async throws {
-            lastPostedAuth = auth
+        func postResponse(response: SecretResponseBody, bootAuth: String) async throws {
             lastPostedResponse = response
+            postedResponses.append((response, bootAuth))
         }
         func fetchSealedLuksKey(serverDomain: String) async throws -> SealedLuksKeyResponse {
             guard let hex = sealedLuksKeyHex else {
@@ -39,11 +40,11 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         func fetchPods(username: String) async throws -> PodsDirectoryResponse {
             PodsDirectoryResponse(username: username, pods: directory)
         }
-        func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws {
-            deposited.append((lease, signatureHex))
+        func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) async throws {
+            deposited.append((lease, signatureHex, bootAuth))
         }
-        func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws {
-            revoked.append((request, signatureHex))
+        func revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) async throws {
+            revoked.append((request, bootAuth))
         }
     }
 
@@ -290,6 +291,15 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         )
         let sig = try XCTUnwrap(HexUtil.decode(dep.signatureHex))
         XCTAssertTrue(phoneIrk().publicKey.isValidSignature(sig, for: try lease.canonicalBytes()))
+
+        // The deposit PUT is owner-IRK-authed via the Flagship-Boot-v1 header.
+        try assertOwnerBootAuth(
+            dep.bootAuth,
+            serverDomain: "home.alice.flagship.services",
+            method: "PUT",
+            path: "/api/boot/lease",
+            irkPub: phoneIrk().publicKey
+        )
     }
 
     @MainActor
@@ -312,7 +322,7 @@ final class SecretRequestCoordinatorTests: XCTestCase {
     }
 
     @MainActor
-    func testRevokeAutoUnlockLeaseSignsTheRevocation() async throws {
+    func testRevokeAutoUnlockLeaseBuildsOwnerBootAuth() async throws {
         let mailbox = MockMailbox(username: username)
         let coord = makeCoordinator(mailbox)
         try await coord.revokeAutoUnlockLease(serverDomain: "home.alice.flagship.services", leaseId: "deadbeefdeadbeef")
@@ -320,9 +330,49 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         let rev = try XCTUnwrap(mailbox.revoked.first)
         XCTAssertEqual(rev.request.serverDomain, "home.alice.flagship.services")
         XCTAssertEqual(rev.request.leaseId, "deadbeefdeadbeef")
-        let model = LeaseRevocation(serverDomain: rev.request.serverDomain, leaseId: rev.request.leaseId, issuedAt: rev.request.issuedAt)
-        let sig = try XCTUnwrap(HexUtil.decode(rev.signatureHex))
-        XCTAssertTrue(phoneIrk().publicKey.isValidSignature(sig, for: try model.canonicalBytes()))
+        // The DELETE carries no body signature now — it's authorized by an
+        // owner-IRK Flagship-Boot-v1 header bound to the exact path.
+        try assertOwnerBootAuth(
+            rev.bootAuth,
+            serverDomain: "home.alice.flagship.services",
+            method: "DELETE",
+            path: "/api/boot/lease/home.alice.flagship.services/deadbeefdeadbeef",
+            irkPub: phoneIrk().publicKey
+        )
+    }
+
+    /// Decode a `Flagship-Boot-v1 <b64url(json)>` header and assert it's an
+    /// owner-role envelope bound to (serverDomain, method, path) whose
+    /// signature verifies under the IRK — mirrors apps/boot/src/gate.ts.
+    private func assertOwnerBootAuth(
+        _ header: String,
+        serverDomain: String,
+        method: String,
+        path: String,
+        irkPub: Curve25519.Signing.PublicKey
+    ) throws {
+        let parts = header.split(separator: " ", maxSplits: 1).map(String.init)
+        XCTAssertEqual(parts.first, "Flagship-Boot-v1")
+        var b64 = try XCTUnwrap(parts.count == 2 ? parts[1] : nil)
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        let json = try XCTUnwrap(Data(base64Encoded: b64))
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: json) as? [String: Any])
+        XCTAssertEqual(obj["role"] as? String, "owner")
+        XCTAssertEqual(obj["method"] as? String, method)
+        XCTAssertEqual(obj["path"] as? String, path)
+        XCTAssertEqual(obj["serverDomain"] as? String, serverDomain)
+        let pubHex = try XCTUnwrap(obj["pubKeyHex"] as? String)
+        XCTAssertEqual(pubHex.lowercased(), HexUtil.encode(irkPub.rawRepresentation))
+        let nonceHex = try XCTUnwrap(obj["nonceHex"] as? String)
+        let issuedAt = try XCTUnwrap((obj["issuedAt"] as? NSNumber)?.int64Value)
+        let sigHex = try XCTUnwrap(obj["signatureHex"] as? String)
+        let canon = BootAuth.canonicalBytes(
+            role: "owner", serverDomain: serverDomain, method: method, path: path,
+            pubKeyHex: pubHex, nonceHex: nonceHex, issuedAt: issuedAt
+        )
+        XCTAssertTrue(irkPub.isValidSignature(try XCTUnwrap(HexUtil.decode(sigHex)), for: canon))
     }
 
     // MARK: - mailbox auth shape
