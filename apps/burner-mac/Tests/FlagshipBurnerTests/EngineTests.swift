@@ -79,4 +79,35 @@ final class EngineTests: XCTestCase {
         // Bash line-continuations survive as literal backslashes.
         XCTAssertTrue(s.contains("/opt/flagship || \\\n"))
     }
+
+    /// The bootstrap must set up AND enable the daemon (parity with the fixed
+    /// demo cloud-init), not just register and stop. These mirror the TS
+    /// assertions in packages/flagship-burner/tests/userdata.test.ts.
+    func testBootstrapSetsUpAndEnablesDaemon() {
+        let s = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL)
+        // daemon.env with the two REQUIRED daemon inputs (0600).
+        XCTAssertTrue(s.contains("cat > /etc/flagship/daemon.env"))
+        XCTAssertTrue(s.contains("FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN"))
+        XCTAssertTrue(s.contains("FLAGSHIP_IDENTITY_PRIV_HEX=$SERVER_IDENTITY_PRIV_HEX"))
+        XCTAssertTrue(s.contains("chmod 600 /etc/flagship/daemon.env"))
+        // Self-signed entitlement bundle (box identity key signs; no user IRK).
+        XCTAssertTrue(s.contains("install-helper.ts mint-entitlements"))
+        XCTAssertTrue(s.contains("--irk-priv \"$SERVER_IDENTITY_PRIV_HEX\""))
+        XCTAssertTrue(s.contains("--pod-pub \"$SERVER_IDENTITY_PUB_HEX\""))
+        XCTAssertTrue(s.contains("--out /var/flagship/entitlements.json"))
+        XCTAssertTrue(s.contains("INTERIM SELF-SIGN"))
+        XCTAssertTrue(s.contains("FOLLOW-UP REQUIRED"))
+        // flagship-daemon unit with the FIXED ExecStart (npm run, not npx).
+        XCTAssertTrue(s.contains("cat > /etc/systemd/system/flagship-daemon.service"))
+        XCTAssertTrue(s.contains("ExecStart=/usr/bin/npm run start --workspace=@flagship/server-daemon"))
+        XCTAssertTrue(s.contains("EnvironmentFile=/etc/flagship/daemon.env"))
+        XCTAssertFalse(s.contains("npx npm run start"))
+        // Register + daemon deferred to first-boot units; enable, never start.
+        XCTAssertTrue(s.contains("cat > /etc/systemd/system/flagship-first-boot-register.service"))
+        XCTAssertTrue(s.contains("Type=oneshot"))
+        XCTAssertTrue(s.contains("ConditionPathExists=!/var/flagship/registered.flag"))
+        XCTAssertTrue(s.contains("systemctl enable flagship-daemon.service flagship-first-boot-register.service"))
+        XCTAssertFalse(s.contains("systemctl start flagship-daemon.service"))
+        XCTAssertFalse(s.contains("systemctl start flagship-first-boot-register.service"))
+    }
 }
