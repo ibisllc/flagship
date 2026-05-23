@@ -2,6 +2,7 @@ export * from "./types.js";
 export * from "./serviceId.js";
 export * from "./keys.js";
 export * from "./auth.js";
+export * from "./phoneEndpoint.js";
 export * from "./provisionProgress.js";
 export * from "./maintainerCa.js";
 export * from "./encryption.js";
