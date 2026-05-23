@@ -1,84 +1,32 @@
 // Post-order landing. The homepage QR flow (heroQr.js) decrypts the recipe
 // the phone delivered through the relay, stashes it in sessionStorage, and
-// sends the browser here. This page downloads that recipe and points the
-// user at the Assembler. flagshipserver.com never sees the plaintext — the
-// recipe lived only in this browser tab's memory until now.
+// sends the browser here. This page hands the recipe to the user — copy it
+// (preferred; nothing touches the disk) or download the .json — and points
+// at the Flagship Assembler for their OS. flagshipserver.com never saw the
+// plaintext: the recipe lived only in this tab's memory.
 
 // MUST match heroQr.js's RECIPE_HANDOFF_KEY.
 const RECIPE_HANDOFF_KEY = "flagship:qr:recipe";
 
-// Where the Flagship Assembler installer is hosted. Empty → the page links
-// to /how-to.html (which explains how to get it) instead of a direct
-// download. Set this to the DMG/installer URL once it's hosted to turn the
-// section into a one-click download.
-const INSTALLER_URL = "";
+// Installer links are on-brand: /download/<os> 302s to wherever the binary
+// lives, so the storage URL never shows in the UI and the backend is
+// swappable (see INSTALLER_DOWNLOADS in apps/com/src/route.ts).
+const OS_INFO = {
+  mac: { label: "macOS", note: "Apple Silicon & Intel · .dmg", href: "/download/mac" },
+  windows: { label: "Windows", note: "Windows 10/11 · .exe", href: "/download/windows" },
+  linux: { label: "Linux", note: "x86-64 · .AppImage", href: "/download/linux" },
+};
+const OS_ORDER = ["mac", "windows", "linux"];
+
+function $(id) { return document.getElementById(id); }
+function show(id) { $(id)?.classList.remove("hidden"); }
 
 function b64urlDecode(s) {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
-  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
-  const bin = atob(b64);
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
-}
-
-function show(id) { document.getElementById(id)?.classList.remove("hidden"); }
-function hide(id) { document.getElementById(id)?.classList.add("hidden"); }
-
-function recipeFilename(recipe) {
-  const domain = (recipe && recipe.serverDomain) ? String(recipe.serverDomain) : "server";
-  let stamp = "";
-  try {
-    const exp = recipe?.authCode?.expiresAt;
-    if (typeof exp === "number") {
-      stamp = "-" + new Date(exp).toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    }
-  } catch { /* no stamp */ }
-  return `flagship-recipe-${domain}${stamp}.json`;
-}
-
-function triggerDownload(bytes, filename) {
-  const blob = new Blob([bytes], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke after a tick so the download has started.
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-}
-
-function renderInstaller() {
-  const host = document.getElementById("installerActions");
-  if (!host) return;
-  if (INSTALLER_URL) {
-    const a = document.createElement("a");
-    a.className = "btn-link";
-    a.href = INSTALLER_URL;
-    a.textContent = "Download the Assembler";
-    a.setAttribute("download", "");
-    host.appendChild(a);
-  } else {
-    const a = document.createElement("a");
-    a.className = "btn-link";
-    a.href = "/how-to.html";
-    a.textContent = "Get the Assembler →";
-    host.appendChild(a);
-  }
-}
-
-function renderMeta(recipe) {
-  const el = document.getElementById("recipeMeta");
-  if (!el) return;
-  const lines = [];
-  if (recipe?.serverDomain) lines.push(`server:  <strong>${escapeHtml(recipe.serverDomain)}</strong>`);
-  const exp = recipe?.authCode?.expiresAt;
-  if (typeof exp === "number") {
-    lines.push(`expires: <strong>${escapeHtml(new Date(exp).toISOString())}</strong>`);
-  }
-  el.innerHTML = lines.join("<br>");
 }
 
 function escapeHtml(s) {
@@ -87,8 +35,102 @@ function escapeHtml(s) {
   ));
 }
 
+function detectOS() {
+  const ua = (navigator.userAgent || "").toLowerCase();
+  const plat = ((navigator.userAgentData && navigator.userAgentData.platform) ||
+    navigator.platform || "").toLowerCase();
+  const s = `${plat} ${ua}`;
+  // Mobile can't run the desktop Assembler — fall through to "pick a platform".
+  if (/android|iphone|ipad|ipod/.test(s)) return null;
+  if (/mac/.test(s)) return "mac";
+  if (/win/.test(s)) return "windows";
+  if (/linux|x11|cros/.test(s)) return "linux";
+  return null;
+}
+
+function banner(text, ok = true) {
+  const b = $("statusBanner");
+  const t = $("statusBannerText");
+  if (!b || !t) return;
+  t.textContent = text;
+  b.classList.remove("hidden");
+  b.querySelector(".tick").textContent = ok ? "✓" : "!";
+}
+
+function recipeFilename(recipe) {
+  const domain = recipe && recipe.serverDomain ? String(recipe.serverDomain) : "server";
+  let stamp = "";
+  try {
+    const exp = recipe?.authCode?.expiresAt;
+    if (typeof exp === "number") stamp = "-" + new Date(exp).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  } catch { /* no stamp */ }
+  return `flagship-recipe-${domain}${stamp}.json`;
+}
+
+function downloadRecipe(text, filename) {
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+async function copyRecipe(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    banner("Recipe copied — paste it into the Assembler.");
+  } catch {
+    // Fallback for browsers that block the async clipboard API.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      if (ok) banner("Recipe copied — paste it into the Assembler.");
+      else banner("Couldn't copy automatically — use Download .json instead.", false);
+    } catch {
+      banner("Couldn't copy automatically — use Download .json instead.", false);
+    }
+  }
+}
+
+function renderInstaller(detected) {
+  const primary = $("installerPrimary");
+  const others = $("installerOthers");
+  if (!primary || !others) return;
+
+  if (detected && OS_INFO[detected]) {
+    const info = OS_INFO[detected];
+    primary.innerHTML =
+      `<a class="dl-primary" href="${info.href}">Download for ${escapeHtml(info.label)}</a>`;
+    const note = document.createElement("div");
+    note.className = "dl-note";
+    note.textContent = info.note;
+    primary.appendChild(note);
+
+    const rest = OS_ORDER.filter((o) => o !== detected);
+    others.innerHTML = "Also for: " + rest.map((o) =>
+      `<a href="${OS_INFO[o].href}">${escapeHtml(OS_INFO[o].label)}</a>`
+    ).join('<span class="sep">·</span>');
+  } else {
+    // Unknown / mobile — offer all three equally.
+    primary.innerHTML = OS_ORDER.map((o) =>
+      `<a class="btn-link" href="${OS_INFO[o].href}">${escapeHtml(OS_INFO[o].label)}</a>`
+    ).join(" ");
+    others.textContent = "The Assembler is a desktop app — pick your platform.";
+  }
+}
+
 function main() {
-  renderInstaller();
+  renderInstaller(detectOS());
 
   const stashed = sessionStorage.getItem(RECIPE_HANDOFF_KEY);
   if (!stashed) {
@@ -96,45 +138,39 @@ function main() {
     return;
   }
 
-  let bytes, recipe;
+  let recipeText, recipe;
   try {
-    bytes = b64urlDecode(stashed);
-    recipe = JSON.parse(new TextDecoder().decode(bytes));
+    recipeText = new TextDecoder().decode(b64urlDecode(stashed));
+    recipe = JSON.parse(recipeText);
   } catch (e) {
-    // A corrupt handoff → treat as "no recipe" rather than show a broken UI.
     console.warn("ready: could not decode the stashed recipe", e);
     show("noRecipe");
     return;
   }
 
   show("hasRecipe");
-  const filename = recipeFilename(recipe);
   if (recipe?.serverDomain) {
-    const dom = document.getElementById("serverDomain");
+    const dom = $("serverDomain");
     if (dom) dom.textContent = recipe.serverDomain;
   }
-  renderMeta(recipe);
-
-  // Auto-download once on arrival (the user came straight from approving on
-  // their phone). Some browsers block programmatic downloads without a
-  // gesture — the "Download recipe again" button is always available.
-  let autoOk = true;
-  try {
-    triggerDownload(bytes, filename);
-  } catch (e) {
-    autoOk = false;
-    console.warn("ready: auto-download blocked", e);
-  }
-  const bannerText = document.getElementById("dlBannerText");
-  if (bannerText && !autoOk) {
-    bannerText.innerHTML = "Tap <strong>Download recipe again</strong> below to save your recipe.";
+  const meta = $("recipeMeta");
+  if (meta) {
+    const lines = [];
+    if (recipe?.serverDomain) lines.push(`server:  <strong>${escapeHtml(recipe.serverDomain)}</strong>`);
+    const exp = recipe?.authCode?.expiresAt;
+    if (typeof exp === "number") lines.push(`expires: <strong>${escapeHtml(new Date(exp).toISOString())}</strong>`);
+    meta.innerHTML = lines.join("<br>");
   }
 
-  const btn = document.getElementById("downloadRecipe");
-  if (btn) btn.onclick = () => triggerDownload(bytes, filename);
+  const filename = recipeFilename(recipe);
+  $("copyRecipe")?.addEventListener("click", () => copyRecipe(recipeText));
+  $("downloadRecipe")?.addEventListener("click", () => {
+    downloadRecipe(recipeText, filename);
+    banner("Recipe downloaded — open it in the Assembler.");
+  });
 
-  // Clear the handoff so a back/forward or refresh doesn't silently re-download
-  // on a stale tab. The bytes stay in this closure for the manual button.
+  // Clear the handoff so a refresh / back-forward doesn't resurface a stale
+  // recipe; the text stays in this closure for the buttons.
   sessionStorage.removeItem(RECIPE_HANDOFF_KEY);
 }
 

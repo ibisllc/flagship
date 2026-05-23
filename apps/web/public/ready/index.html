@@ -12,73 +12,66 @@
     <style>
       .wrap { max-width: 680px; margin: var(--space-12) auto; padding: 0 var(--gutter); }
       .banner {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3);
+        display: flex; align-items: center; gap: var(--space-3);
         border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
         background: color-mix(in srgb, var(--ok) 8%, var(--surface));
         border-radius: var(--radius-lg);
         padding: var(--space-4) var(--space-5);
         margin-bottom: var(--space-6);
-        color: var(--ink);
-        font-size: var(--body-sm-size);
+        color: var(--ink); font-size: var(--body-sm-size);
       }
       .banner .tick { color: var(--ok); font-family: var(--font-mono); font-size: 1.2em; }
       .banner.hidden { display: none; }
       .step {
-        border: 1px solid var(--border-soft);
-        border-radius: var(--radius-lg);
-        padding: var(--space-5) var(--space-6);
-        margin-bottom: var(--space-3);
-        background: var(--surface);
-        box-shadow: var(--shadow-flat);
+        border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
+        padding: var(--space-5) var(--space-6); margin-bottom: var(--space-3);
+        background: var(--surface); box-shadow: var(--shadow-flat);
       }
       .step h3 {
-        margin: 0 0 var(--space-2);
-        font-size: 17px;
-        font-weight: 600;
-        color: var(--ink);
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
+        margin: 0 0 var(--space-2); font-size: 17px; font-weight: 600; color: var(--ink);
+        display: flex; align-items: center; gap: var(--space-2);
       }
-      .step h3 .num {
-        font-family: var(--font-mono);
-        color: var(--accent);
-        font-weight: 500;
-      }
+      .step h3 .num { font-family: var(--font-mono); color: var(--accent); font-weight: 500; }
       .step p { margin: var(--space-1) 0; color: var(--ink-muted); font-size: var(--body-sm-size); }
       .actions { margin-top: var(--space-4); display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+      .status-line { margin-top: var(--space-3); font-size: var(--body-sm-size); color: var(--ink-muted); min-height: 1.2em; }
+      .status-line.ok { color: var(--ok); }
       .meta {
-        color: var(--ink-muted);
-        font-size: var(--body-sm-size);
-        margin-top: var(--space-3);
-        font-family: var(--font-mono);
+        color: var(--ink-muted); font-size: var(--body-sm-size);
+        margin-top: var(--space-3); font-family: var(--font-mono);
       }
       .meta strong { color: var(--ink); }
       .reuse-note {
-        margin-top: var(--space-3);
-        color: var(--ink-muted);
-        font-size: var(--body-sm-size);
-        border-left: 2px solid var(--border);
-        padding-left: var(--space-3);
+        margin-top: var(--space-3); color: var(--ink-muted); font-size: var(--body-sm-size);
+        border-left: 2px solid var(--border); padding-left: var(--space-3);
       }
       .secondary-link { color: var(--ink); font-weight: 500; }
+      /* On-brand download link, rendered big for the detected OS. */
+      a.dl-primary {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 12px 22px; border-radius: var(--radius-md);
+        background: var(--accent); color: var(--accent-on, #fff);
+        text-decoration: none; font-weight: 600; font-size: 15px;
+        border: 1px solid var(--accent);
+        transition: background var(--motion-state), border-color var(--motion-state);
+      }
+      a.dl-primary:hover { background: var(--accent-press); border-color: var(--accent-press); }
+      .dl-note { color: var(--ink-muted); font-size: 12px; margin-top: var(--space-2); font-family: var(--font-mono); }
+      .dl-others { margin-top: var(--space-3); font-size: var(--body-sm-size); color: var(--ink-muted); }
+      .dl-others a { color: var(--ink); font-weight: 500; }
+      .dl-others .sep { color: var(--border); margin: 0 0.4rem; }
       a.btn-link {
-        display: inline-block;
-        padding: 10px 18px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        color: var(--ink);
-        text-decoration: none;
-        font-weight: 500;
-        font-size: var(--body-sm-size);
+        display: inline-block; padding: 10px 18px;
+        border: 1px solid var(--border); border-radius: var(--radius-md);
+        color: var(--ink); text-decoration: none; font-weight: 500; font-size: var(--body-sm-size);
         background: var(--canvas-tinted);
         transition: border-color var(--motion-state), background var(--motion-state);
       }
       a.btn-link:hover { border-color: var(--accent); }
-      .no-recipe.hidden { display: none; }
-      .has-recipe.hidden { display: none; }
+      button.secondary {
+        background: var(--canvas-tinted); color: var(--ink); border: 1px solid var(--border);
+      }
+      .no-recipe.hidden, .has-recipe.hidden { display: none; }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -102,28 +95,34 @@
       <div class="has-recipe hidden" id="hasRecipe">
         <h1>Your server recipe is ready</h1>
 
-        <div class="banner" id="dlBanner">
-          <span class="tick">↓</span>
-          <span id="dlBannerText">Your recipe is downloading — check your <strong>Downloads</strong> folder.</span>
+        <div class="banner hidden" id="statusBanner">
+          <span class="tick">✓</span>
+          <span id="statusBannerText"></span>
         </div>
 
         <p class="lede">
-          A recipe is a tiny signed file — your phone authorized it, and only your phone can. Two steps from here: get the Assembler (once), then assemble your boot USB.
+          A recipe is a tiny signed file — your phone authorized it, and only your phone can. Get it into the Assembler, then build your boot USB.
         </p>
 
         <section class="step">
-          <h3><span class="num">1</span> Your recipe (.json)</h3>
-          <p>The signed install ticket for <strong id="serverDomain">your server</strong>. Keep it private; it's single-use and expires.</p>
+          <h3><span class="num">1</span> Your recipe for <strong id="serverDomain">your server</strong></h3>
+          <p>Two ways to hand it to the Assembler — pick whichever fits:</p>
           <div class="actions">
-            <button id="downloadRecipe" type="button">Download recipe again</button>
+            <button id="copyRecipe" type="button">Copy recipe</button>
+            <button id="downloadRecipe" type="button" class="secondary">Download .json</button>
           </div>
+          <p class="status-line" id="recipeStatus">
+            <strong>Copy</strong> if the Assembler is on this computer — nothing touches the disk.
+            <strong>Download</strong> if you'll carry it to another machine.
+          </p>
           <div class="meta" id="recipeMeta"></div>
         </section>
 
         <section class="step">
           <h3><span class="num">2</span> The Flagship Assembler</h3>
           <p>The desktop app that writes your boot USB. It bakes the recipe inside a stock Linux installer image — no balenaEtcher, Rufus, or dd needed.</p>
-          <div class="actions" id="installerActions"><!-- filled by ready.js --></div>
+          <div class="actions" id="installerPrimary"><!-- big download for the detected OS, filled by ready.js --></div>
+          <div class="dl-others" id="installerOthers"><!-- other OSes, filled by ready.js --></div>
           <p class="reuse-note">
             <strong>You only install the Assembler once.</strong> Reuse it for every server you ever set up — just feed it a fresh recipe each time.
           </p>
@@ -131,7 +130,7 @@
 
         <section class="step">
           <h3><span class="num">3</span> Assemble &amp; boot</h3>
-          <p>Open the Assembler, drop in this recipe + a <a class="secondary-link" href="/how-to.html">recommended Linux image</a> + a USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
+          <p>Open the Assembler, give it this recipe (paste it, or open the downloaded file) + a <a class="secondary-link" href="/how-to.html">recommended Linux image</a> + a USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
         </section>
       </div>
 

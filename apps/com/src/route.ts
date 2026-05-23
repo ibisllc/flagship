@@ -176,6 +176,19 @@ export interface R2ObjectLike {
 }
 
 const PROXY_PREFIX = "/api/";
+
+// Flagship Assembler installer targets, keyed by the OS slug used in
+// /download/<os>. The /ready/ page links to /download/<os> (on-brand, so the
+// storage URL never shows in the UI); we 302 to wherever the binary actually
+// lives (GitHub Releases asset, R2 object, …) — swappable here without
+// touching the page. Empty → the /how-to.html explainer ("get the Assembler",
+// i.e. coming soon). Set each once that platform's build is published.
+const INSTALLER_DOWNLOADS: Record<string, string> = {
+  mac: "",
+  windows: "",
+  linux: "",
+};
+
 const STATUS_PROBE_PATH = "/api/_status/probe";
 const STATUS_RELAY_PATH = "/api/_status/relay";
 const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
@@ -522,6 +535,18 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
 
   if (url.pathname.startsWith(PROXY_PREFIX)) {
     return proxyToServices(buffered, env, url);
+  }
+
+  // /download/<os> → the Flagship Assembler installer for that OS. The
+  // /ready/ page links here so the storage URL never shows in the UI; we
+  // 302 to wherever the binary lives. Placed BEFORE the coming-soon gate
+  // so the download link works regardless of the preview cookie / launch
+  // state. Unset or unknown OS → the /how-to.html "get the Assembler"
+  // explainer (coming soon) rather than a dead 404.
+  if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
+    const os = url.pathname.slice("/download/".length).replace(/\/+$/, "");
+    const target = INSTALLER_DOWNLOADS[os] || "/how-to.html";
+    return new Response(null, { status: 302, headers: { location: target } });
   }
 
   // Pre-launch stealth gate. By this point every explicit Worker handler

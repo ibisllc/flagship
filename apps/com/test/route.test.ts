@@ -1567,3 +1567,38 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
     expect(await r.text()).toBe("asset:/recovery/");
   });
 });
+
+describe("/download/<os> — on-brand installer redirect", () => {
+  it("302s to the /how-to.html explainer while a platform's target is unset", async () => {
+    // No INSTALLER_DOWNLOADS target wired yet → coming-soon explainer,
+    // never a dead 404. (The /ready/ page links to /download/<os> so the
+    // storage URL never shows in the UI.)
+    for (const os of ["mac", "windows", "linux"]) {
+      const r = await route(
+        new Request(`https://flagshipserver.com/download/${os}`),
+        makeEnv(),
+      );
+      expect(r.status).toBe(302);
+      expect(r.headers.get("location")).toBe("/how-to.html");
+    }
+  });
+
+  it("works WITHOUT the preview cookie (download link survives the launch gate)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/download/mac"),
+      makeEnv(),
+    );
+    // Not the coming-soon page — a real redirect.
+    expect(r.status).toBe(302);
+    expect(await r.text()).toBe("");
+  });
+
+  it("an unknown OS slug also falls back to the explainer (no 404)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/download/atari"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(302);
+    expect(r.headers.get("location")).toBe("/how-to.html");
+  });
+});
