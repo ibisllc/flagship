@@ -337,6 +337,23 @@ export interface InstallBlob {
    * routing record (defense-in-depth against a compromised .com).
    */
   rckPubKey: Bytes;
+  /**
+   * Boot-unlock policy chosen at server creation (see
+   * docs/security-phone-as-unlock-endpoint.md §7a). The phone signs over
+   * it so a compromised network/.com cannot DOWNGRADE an "approve" server
+   * to "auto".
+   *
+   *   - "auto"    — the box self-unlocks via a box-sealed lease (.com holds
+   *                 ciphertext only; revocable from the phone). Default.
+   *   - "approve" — the box cannot self-unlock; every boot waits for a
+   *                 phone-gated, biometric approval (the relay). For
+   *                 critical servers.
+   *
+   * OPTIONAL for backward compatibility: a blob WITHOUT this field
+   * canonicalizes exactly as before (so existing signatures still verify);
+   * absence is treated as "auto" by consumers.
+   */
+  bootUnlockMode?: "auto" | "approve";
 }
 
 /**
@@ -891,22 +908,26 @@ function canonicalAuthCode(c: AuthCode): Bytes {
 }
 
 function canonicalInstallBlob(b: InstallBlob): Bytes {
-  return new TextEncoder().encode(
-    [
-      TAG_INSTALL_BLOB,
-      b.version,
-      b.serverDomain,
-      b.username,
-      b.serverName,
-      hex(b.phoneDelegatedPubKey),
-      b.registrationUrl,
-      b.authCode.serial,
-      hex(b.authCode.userPubKey),
-      hex(b.authCodeUserSignature),
-      b.installerGitRef,
-      hex(b.rckPubKey),
-    ].join("|"),
-  );
+  const parts: (string | number)[] = [
+    TAG_INSTALL_BLOB,
+    b.version,
+    b.serverDomain,
+    b.username,
+    b.serverName,
+    hex(b.phoneDelegatedPubKey),
+    b.registrationUrl,
+    b.authCode.serial,
+    hex(b.authCode.userPubKey),
+    hex(b.authCodeUserSignature),
+    b.installerGitRef,
+    hex(b.rckPubKey),
+  ];
+  // Backward-compatible extension: a blob WITHOUT bootUnlockMode produces
+  // the exact pre-existing canonical bytes (old signatures keep verifying).
+  // When present it is appended, so the signer commits to it — a relay
+  // cannot strip the field (signature would fail) nor downgrade the value.
+  if (b.bootUnlockMode !== undefined) parts.push(b.bootUnlockMode);
+  return new TextEncoder().encode(parts.join("|"));
 }
 
 function canonicalServerRegister(r: ServerRegisterRequest): Bytes {

@@ -131,4 +131,28 @@ describe("canonicalInstallBlob — v2 golden bytes", () => {
     const sig = signInstallBlob(blob, irk);
     expect(sig.length).toBe(64);
   });
+
+  it("bootUnlockMode: an absent blob is the legacy format (backward-compatible)", () => {
+    // `blob` carries no bootUnlockMode → the same 12-field canonical bytes
+    // as before this field existed; old signatures keep verifying.
+    const sig = signInstallBlob(blob, irk);
+    expect(verifyInstallBlob(blob, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("bootUnlockMode: a present value verifies and is COMMITTED (no downgrade)", () => {
+    const approve: InstallBlob = { ...blob, bootUnlockMode: "approve" };
+    const sig = signInstallBlob(approve, irk);
+    expect(verifyInstallBlob(approve, sig, irk.publicKey)).toBe(true);
+    // Stripping the field (downgrade "approve" → legacy/auto) must fail.
+    expect(verifyInstallBlob(blob, sig, irk.publicKey)).toBe(false);
+    // Flipping "approve" → "auto" must fail.
+    expect(
+      verifyInstallBlob({ ...blob, bootUnlockMode: "auto" }, sig, irk.publicKey),
+    ).toBe(false);
+    // A legacy (no-field) signature must NOT verify a field-added blob.
+    const legacySig = signInstallBlob(blob, irk);
+    expect(
+      verifyInstallBlob({ ...blob, bootUnlockMode: "auto" }, legacySig, irk.publicKey),
+    ).toBe(false);
+  });
 });
