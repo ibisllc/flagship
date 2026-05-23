@@ -39,8 +39,28 @@ class FlagshipFcmService : FirebaseMessagingService() {
             ProvisionPhaseBridge.onPhase?.invoke(event)
         }
 
-        val title = data["title"] ?: message.notification?.title ?: "Flagship"
-        val body = data["body"] ?: message.notification?.body ?: ""
+        // Boot-secret RELAY — a `secret-request` push means the user's box
+        // posted a SecretRequest to its `.com` mailbox and `.com` woke us
+        // to come finish the handshake. Surface it + route the tap into the
+        // approvals surface (the phone fetches + re-verifies on open; the
+        // push carries NO secret). Synthesize the deep link if the Worker
+        // didn't include one.
+        val secretEvent = SecretRequestPush.parse(data)
+        secretEvent?.let { event ->
+            SecretRequestBridge.onSecretRequest?.invoke(event)
+            if (data["deepLink"].isNullOrEmpty()) {
+                // (domain, nonce) is the stable request id the approvals
+                // surface keys off — mirror PendingSecretRequest.id.
+                val requestId = "${event.serverFqdn}#${event.requestNonceHex}"
+                data["deepLink"] = "flagship://unlock-approve?requestId=" +
+                    java.net.URLEncoder.encode(requestId, "UTF-8")
+            }
+        }
+
+        val title = data["title"] ?: message.notification?.title
+            ?: (secretEvent?.let { "Finish setting up ${it.serverFqdn}" }) ?: "Flagship"
+        val body = data["body"] ?: message.notification?.body
+            ?: (secretEvent?.let { "Open Flagship to confirm it's your box and release its boot secret." }) ?: ""
         val deepLink = data["deepLink"]
 
         ensureChannel(this)
