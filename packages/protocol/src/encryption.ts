@@ -158,3 +158,28 @@ export function openSealed(
   );
   return gcm(key, nonce).decrypt(ct);
 }
+
+/**
+ * Box-side companion to `sealForEd25519Recipient`: open a blob that was
+ * sealed against an Ed25519 pubkey (e.g. a server's STK), using that
+ * key's Ed25519 *private* seed. The seed is converted to its X25519
+ * (Curve25519) scalar via the standard birational map — libsodium's
+ * `crypto_sign_ed25519_sk_to_curve25519` — before opening.
+ *
+ * This is the move the booting box makes to recover a phone-sealed
+ * boot secret or a box-sealed auto-unlock-lease key: the STK never
+ * needs a separate encryption keypair; the same identity seed both
+ * signs `SecretRequest` and opens `SealedSecretResponse` /
+ * `AutoUnlockLeaseV2.sealedKey`. `recipientEd25519Priv` is the 32-byte
+ * Ed25519 seed (the `privateKey` half of a `Keypair`).
+ */
+export function openSealedFromEd25519Recipient(
+  blob: Bytes,
+  recipientEd25519Priv: Bytes,
+): Bytes {
+  if (recipientEd25519Priv.length !== 32) {
+    throw new Error("recipient Ed25519 priv (seed) must be 32 bytes");
+  }
+  const x25519Priv = ed25519.utils.toMontgomerySecret(recipientEd25519Priv);
+  return openSealed(blob, x25519Priv);
+}
