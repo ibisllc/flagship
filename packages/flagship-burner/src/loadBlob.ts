@@ -56,6 +56,23 @@ export async function loadBlobFromFile(path: string): Promise<LoadedBlob> {
   return loadBlobFromString(raw, { kind: "file", path });
 }
 
+/**
+ * Load from stdin (copy-paste flow: `pbpaste | flagship-burn verify -`).
+ * The website's /ready/ page offers a "Copy recipe" button; this is the CLI
+ * counterpart to the Mac app's "Paste certificate".
+ */
+export async function loadBlobFromStdin(): Promise<LoadedBlob> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const raw = Buffer.concat(chunks).toString("utf-8");
+  if (!raw.trim()) {
+    throw new BurnerLoadError("no recipe on stdin", "io");
+  }
+  return loadBlobFromString(raw, { kind: "stdin" });
+}
+
 /** Load from a JSON string (copy-paste flow). */
 export function loadBlobFromString(
   raw: string,

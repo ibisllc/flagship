@@ -130,19 +130,32 @@ struct WizardView: View {
     private var recipeRow: some View {
         optionGroup(
             card: {
-                DropRow(
-                    icon: "doc.text.fill",
-                    title: "Certificate",
-                    description: "The json certificate file generated online",
-                    state: recipeRowState(),
-                    isReady: model.verified != nil,
-                    onDrop: { url in model.acceptRecipeFile(url: url) },
-                    onChoose: {
-                        if let url = pickFile(types: [.json, .data]) {
-                            model.acceptRecipeFile(url: url)
+                VStack(alignment: .leading, spacing: FB.Spacing.s2) {
+                    DropRow(
+                        icon: "doc.text.fill",
+                        title: "Certificate",
+                        description: "Drop or choose the JSON certificate — or paste it",
+                        state: recipeRowState(),
+                        isReady: model.verified != nil,
+                        onDrop: { url in model.acceptRecipeFile(url: url) },
+                        onChoose: {
+                            if let url = pickFile(types: [.json, .data]) {
+                                model.acceptRecipeFile(url: url)
+                            }
                         }
+                    )
+                    // Copy-paste path (preferred on the same machine — nothing
+                    // is written to disk except a 0600 temp the CLI reads). The
+                    // website's /ready/ page offers a "Copy recipe" button.
+                    Button {
+                        let s = NSPasteboard.general.string(forType: .string) ?? ""
+                        model.acceptRecipeText(s)
+                    } label: {
+                        Label("Paste certificate from clipboard", systemImage: "doc.on.clipboard")
+                            .font(FB.Font.caption())
                     }
-                )
+                    .buttonStyle(.link)
+                }
             },
             linkLabel: "Where to get one?",
             linkURL: FlagshipLinks.certificate

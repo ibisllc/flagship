@@ -6,6 +6,7 @@ export {
 } from "./distros.js";
 export {
   loadBlobFromFile,
+  loadBlobFromStdin,
   loadBlobFromString,
   BurnerLoadError,
   type LoadedBlob,

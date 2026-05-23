@@ -17,6 +17,7 @@
 import { writeFile, unlink } from "node:fs/promises";
 import {
   loadBlobFromFile,
+  loadBlobFromStdin,
   BurnerLoadError,
   buildAutoinstallUserData,
   verifyIsoHash,
@@ -28,6 +29,11 @@ import {
 
 const args = process.argv.slice(2);
 const subcommand = args[0];
+
+// A recipe path of "-" means "read the JSON from stdin" (copy-paste flow:
+// `pbpaste | flagship-burn verify -`). Otherwise it's a file path.
+const loadRecipe = (path: string) =>
+  path === "-" ? loadBlobFromStdin() : loadBlobFromFile(path);
 
 async function main(): Promise<void> {
   switch (subcommand) {
@@ -63,7 +69,7 @@ async function cmdVerify(rest: string[]): Promise<void> {
     process.exit(2);
   }
   try {
-    const loaded = await loadBlobFromFile(path);
+    const loaded = await loadRecipe(path);
     const { blob } = loaded;
     console.log(
       JSON.stringify(
@@ -111,7 +117,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
   }
   let loaded;
   try {
-    loaded = await loadBlobFromFile(recipePath);
+    loaded = await loadRecipe(recipePath);
   } catch (e) {
     console.error(`load recipe failed: ${(e as Error).message}`);
     process.exit(1);
@@ -154,7 +160,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
   }
   let loaded;
   try {
-    loaded = await loadBlobFromFile(recipePath);
+    loaded = await loadRecipe(recipePath);
   } catch (e) {
     console.error(`load recipe failed: ${(e as Error).message}`);
     process.exit(1);
@@ -281,11 +287,12 @@ function cmdHelp(): void {
   console.log(`flagship-burn — flash a Flagship install onto a USB drive
 
 usage:
-  flagship-burn verify <recipe.json>                       verify the signed blob
+  (a recipe arg of "-" reads the JSON from stdin: pbpaste | flagship-burn verify -)
+  flagship-burn verify <recipe.json|->                     verify the signed blob
   flagship-burn verify-iso <path>                          check ISO against pinned distros
-  flagship-burn user-data <recipe.json> <out>              emit cloud-init user-data
+  flagship-burn user-data <recipe.json|-> <out>            emit cloud-init user-data
                                                            (auto-shreds recipe; pass --keep-recipe to skip)
-  flagship-burn prepare <recipe.json> <iso> <out.iso>      bake a flashable autoinstall ISO
+  flagship-burn prepare <recipe.json|-> <iso> <out.iso>    bake a flashable autoinstall ISO
   flagship-burn write <recipe.json> <iso>                  prepare + raw-write to a USB device
                                                            [--device /dev/diskN | auto] [--yes] [--keep-recipe]
                                                            (needs sudo; interactive picker if no --device)
