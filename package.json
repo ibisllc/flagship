@@ -9,6 +9,7 @@
     "apps/web",
     "apps/web/e2e",
     "apps/com",
+    "apps/boot",
     "apps/dns-broker"
   ],
   "scripts": {

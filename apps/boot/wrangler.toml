@@ -1,0 +1,49 @@
+name = "flagship-boot"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# boot.flagshipserver.com — the dedicated, cloneable boot worker.
+#
+# Owns the BOOT operations (auto-unlock lease release + the phone-gated
+# approval relay). Holds ONLY ciphertext leases/responses + a single-use
+# nonce store. Reaches the owner's phone via the NOTIFY PIPE: an
+# authenticated server-to-server call to the identity plane, which is the
+# only place push secrets (APNs/FCM/VAPID) live. This is what keeps the
+# boot worker cloneable — an enterprise can stand it up against its own
+# identity plane with no push credentials of its own.
+#
+# To clone for your own infra:
+#   1. Set IDENTITY_PLANE_URL (below) to your identity plane base URL.
+#   2. Set FLAGSHIP_APEX (below) to the apex your boxes live under.
+#   3. wrangler secret put NOTIFY_SHARED_SECRET   (matching value set on
+#      your identity plane's BOOT_NOTIFY_SECRET).
+#   4. Create a D1 database + bind it as DB (below), then apply
+#      migrations/0001_boot_tables.sql.
+#   5. wrangler deploy, and point boxes/phones at this worker.
+#
+# Secrets (wrangler secret put — NEVER in this file):
+#   NOTIFY_SHARED_SECRET   shared bearer for /api/internal/notify-owner
+#
+# Public env (this file):
+#   IDENTITY_PLANE_URL     base URL of the identity plane (id-cert reads
+#                          + notify pipe target)
+#   FLAGSHIP_APEX          apex used to derive <user> from a box FQDN
+
+# Routes are wrangler-managed; the reference deployment serves the
+# boot subdomain. Uncomment + set zone_name for production.
+# routes = [
+#   { pattern = "boot.flagshipserver.com/*", zone_name = "flagshipserver.com" },
+# ]
+
+[vars]
+IDENTITY_PLANE_URL = "https://flagshipserver.com"
+FLAGSHIP_APEX = "flagship.services"
+
+# Own D1 instance for the box-sealed leases + secret mailbox + nonce
+# store. Run `wrangler d1 create flagship-boot` and paste the id here.
+[[d1_databases]]
+binding = "DB"
+database_name = "flagship-boot"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"

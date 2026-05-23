@@ -35,6 +35,7 @@ import {
   handleReleaseBoxSealedLease,
   handleRevokeBoxSealedLease,
   handleListBoxSealedLeases,
+  handleNotifyOwner,
   handleObjectRePair,
   handleTotpDisable,
   handleTotpEnrollBegin,
@@ -171,6 +172,18 @@ export interface ControlPlaneEnv {
   MARKETPLACE_SCANNER_PUBKEY_HEX?: string;
   /** Shared secret gating /api/admin/* operational endpoints. */
   FLAGSHIP_ADMIN_SECRET?: string;
+
+  /**
+   * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
+   * (apps/boot → POST /api/internal/notify-owner). The boot worker holds
+   * no push secrets; it calls this endpoint server-to-server so the
+   * identity plane (which holds APNs/FCM/VAPID) fans out the push. Set
+   * the SAME value as the boot worker's NOTIFY_SHARED_SECRET. When unset,
+   * /api/internal/notify-owner returns 503 (the legacy direct
+   * /api/server/:host/secret-request path is unaffected). NOT in git —
+   * set via `wrangler secret put BOOT_NOTIFY_SECRET`.
+   */
+  BOOT_NOTIFY_SECRET?: string;
 
   /** APNs HTTP/2 token-auth credentials. Set together to enable APNs. */
   APNS_KEY_ID?: string;
@@ -360,6 +373,9 @@ const ROUTE_RE = {
   SECRET_RESPONSE_GET: /^\/api\/server\/([^/]+)\/secret-response$/,
   SECRET_REQUESTS_LIST: /^\/api\/secret-requests$/,
   SECRET_RESPONSE_POST: /^\/api\/secret-response$/,
+  // Identity-plane half of the dedicated boot worker's NOTIFY PIPE
+  // (apps/boot calls this server-to-server; shared-secret auth).
+  INTERNAL_NOTIFY_OWNER: /^\/api\/internal\/notify-owner$/,
   LEASE_V2_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2$/,
   LEASE_V2_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2\/([^/]+)$/,
   LEASE_V2_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases-v2$/,
@@ -859,6 +875,29 @@ export async function tryControlPlane(
           buildSecretMailboxDeps(),
           decodeURIComponent(m[1]!),
           decodeURIComponent(m[2]!),
+          await readJson(request),
+        ),
+      );
+    }
+    // Identity-plane half of the boot worker's NOTIFY PIPE. The boot
+    // worker (apps/boot) calls this server-to-server with a shared
+    // secret; we re-verify the box's SecretRequest against THIS
+    // directory and fan out the push (the boot worker holds no push
+    // secrets, so it cannot do this itself).
+    if (method === "POST" && ROUTE_RE.INTERNAL_NOTIFY_OWNER.test(path)) {
+      const forwarder = buildOptionalPushForwarder(env);
+      return finishPlain(
+        await handleNotifyOwner(
+          {
+            servers: storage.servers,
+            usernames: storage.usernames,
+            secretMailbox: storage.secretMailbox,
+            ...(env.BOOT_NOTIFY_SECRET ? { notifySharedSecret: env.BOOT_NOTIFY_SECRET } : {}),
+            ...(forwarder
+              ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
+              : {}),
+          },
+          request.headers.get("x-boot-notify-secret"),
           await readJson(request),
         ),
       );
