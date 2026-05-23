@@ -134,8 +134,10 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(plain.contains("encryptRoot ON"))
         XCTAssertFalse(plain.contains("/boot/flagship-unseal"))
         XCTAssertFalse(plain.contains("unlock_via_relay"))
+        XCTAssertFalse(plain.contains("unlock_via_box_lease"))
         XCTAssertFalse(plain.contains("update-initramfs"))
         XCTAssertFalse(plain.contains("luksAddKey"))
+        XCTAssertFalse(plain.contains("/boot/flagship-boot-unlock-mode"))
         XCTAssertTrue(plain.hasSuffix("echo \"[flagship-bootstrap] done\"\n"))
     }
 
@@ -184,14 +186,15 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains("install-helper.ts sign-sealed-key"))
         XCTAssertTrue(b.contains("/sealed-luks-key"))
         XCTAssertTrue(b.contains("shred -u \"$LUKS_KEY\""))
-        // Initramfs hook lifting unlock_via_relay() verbatim + fallback.
+        // Initramfs hook lifting the relay + box-lease verbatim (plaintext RETIRED).
         XCTAssertTrue(b.contains("/etc/initramfs-tools/hooks/flagship-unlock"))
         XCTAssertTrue(b.contains("/etc/initramfs-tools/scripts/local-top/flagship-unlock"))
         XCTAssertTrue(b.contains("unlock_via_relay()"))
-        XCTAssertTrue(b.contains("unlock_via_plaintext_consume()"))
+        XCTAssertTrue(b.contains("unlock_via_box_lease()"))
         XCTAssertTrue(b.contains("flagship/secret-request/v1|"))
-        XCTAssertTrue(b.contains("flagship/consume-unlock-key/v1|"))
-        XCTAssertTrue(b.contains("if ! unlock_via_relay; then"))
+        XCTAssertFalse(b.contains("flagship/consume-unlock-key/v1|"))
+        XCTAssertFalse(b.contains("unlock_via_plaintext_consume"))
+        XCTAssertTrue(b.contains("if ! unlock_via_box_lease; then"))
         XCTAssertTrue(b.contains("copy_exec /usr/bin/openssl"))
         XCTAssertTrue(b.contains("copy_exec /usr/bin/curl"))
         XCTAssertTrue(b.contains("copy_exec /usr/bin/xxd"))
@@ -202,4 +205,68 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains("cryptsetup luksOpen --key-file - \"$ROOT_PART\" flagship_root"))
         XCTAssertTrue(b.contains("update-initramfs -u"))
     }
+
+    // MARK: - Two-tier boot-unlock policy (docs §7a.1) — mirrors the TS tests
+
+    /// Default (bootUnlockMode omitted) bakes "auto", emits unlock_via_box_lease
+    /// + the auto dispatch, and the retired plaintext-consume path is GONE.
+    func testBootUnlockModeAutoDefault() {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL)
+        XCTAssertTrue(b.contains("echo \"auto\" > /boot/flagship-boot-unlock-mode"))
+        XCTAssertFalse(b.contains("echo \"approve\" > /boot/flagship-boot-unlock-mode"))
+        XCTAssertTrue(b.contains("unlock_via_box_lease()"))
+        XCTAssertTrue(b.contains("/unlock-key/lease-v2"))
+        XCTAssertTrue(b.contains("\"sealedKey\":\""))
+        XCTAssertTrue(b.contains("--identity-priv-hex \"$SEED_HEX\" --sealed-hex \"$SEALED_KEY\""))
+        XCTAssertTrue(b.contains("if [ \"$BOOT_UNLOCK_MODE\" = \"approve\" ]; then"))
+        XCTAssertTrue(b.contains("if ! unlock_via_box_lease; then"))
+        XCTAssertTrue(b.contains("BOOT_UNLOCK_MODE=\"$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)\""))
+        XCTAssertFalse(b.contains("unlock_via_plaintext_consume"))
+        XCTAssertFalse(b.contains("flagship/consume-unlock-key/v1|"))
+    }
+
+    /// Explicit "auto" === the absent default, byte-for-byte.
+    func testBootUnlockModeAutoEqualsDefault() {
+        let dflt = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL)
+        let explicit = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, bootUnlockMode: "auto")
+        XCTAssertEqual(explicit, dflt)
+    }
+
+    /// bootUnlockMode:"approve" bakes "approve", keeps the relay-first dispatch,
+    /// and never reintroduces the plaintext-consume fallback.
+    func testBootUnlockModeApprove() throws {
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, bootUnlockMode: "approve")
+        XCTAssertTrue(b.contains("echo \"approve\" > /boot/flagship-boot-unlock-mode"))
+        XCTAssertFalse(b.contains("echo \"auto\" > /boot/flagship-boot-unlock-mode"))
+        XCTAssertTrue(b.contains("if [ \"$BOOT_UNLOCK_MODE\" = \"approve\" ]; then"))
+        XCTAssertTrue(b.contains("unlock_via_relay"))
+        XCTAssertFalse(b.contains("unlock_via_plaintext_consume"))
+        XCTAssertFalse(b.contains("flagship/consume-unlock-key/v1|"))
+
+        // The whole YAML differs from auto ONLY in the baked mode literal.
+        let recipe = Data(#"{"version":2}"#.utf8)
+        let autoYaml = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main")
+        let approveYaml = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main", bootUnlockMode: "approve")
+        XCTAssertNotEqual(approveYaml, autoYaml)
+    }
+
+    /// A recipe with bootUnlockMode:"approve" parses, verifies (the mode is in
+    /// the canonical bytes), and surfaces the effective mode the box bakes.
+    func testRecipeBootUnlockModeRoundTrips() throws {
+        // Absent ⇒ effective "auto".
+        let r0 = #"{"version":2,"serverDomain":"d","username":"u","serverName":"s","phoneDelegatedPubKey":"00","registrationUrl":"https://x","authCode":{"serial":"01","userPubKey":"00","issuedAt":0,"expiresAt":1},"authCodeUserSignature":"00","installerGitRef":"main","rckPubKey":"00","blobSignatureHex":"00"}"#
+        let dto0 = try JSONDecoder().decode(ParseableRecipe.self, from: Data(r0.utf8))
+        XCTAssertNil(dto0.bootUnlockMode)
+
+        // Present "approve" decodes.
+        let r1 = #"{"version":2,"serverDomain":"d","username":"u","serverName":"s","phoneDelegatedPubKey":"00","registrationUrl":"https://x","authCode":{"serial":"01","userPubKey":"00","issuedAt":0,"expiresAt":1},"authCodeUserSignature":"00","installerGitRef":"main","rckPubKey":"00","blobSignatureHex":"00","bootUnlockMode":"approve"}"#
+        let dto1 = try JSONDecoder().decode(ParseableRecipe.self, from: Data(r1.utf8))
+        XCTAssertEqual(dto1.bootUnlockMode, "approve")
+    }
+}
+
+/// Minimal mirror of RecipeLoader's private DTO, used only to assert that
+/// bootUnlockMode is parsed (presence-preserving) from the recipe JSON.
+private struct ParseableRecipe: Decodable {
+    let bootUnlockMode: String?
 }

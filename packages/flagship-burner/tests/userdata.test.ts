@@ -231,10 +231,91 @@ describe("LUKS is the locked DEFAULT — proven unencrypted path is the debug es
     expect(b).not.toContain("encryptRoot ON");
     expect(b).not.toContain("/boot/flagship-unseal");
     expect(b).not.toContain("unlock_via_relay");
+    expect(b).not.toContain("unlock_via_box_lease");
     expect(b).not.toContain("update-initramfs");
     expect(b).not.toContain("luksAddKey");
+    expect(b).not.toContain("/boot/flagship-boot-unlock-mode");
     // …and it still ends exactly where the proven path ends.
     expect(b.trimEnd().endsWith('echo "[flagship-bootstrap] done"')).toBe(true);
+  });
+});
+
+describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve", () => {
+  function userData(opts: { bootUnlockMode?: "auto" | "approve" }): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    const merged = opts.bootUnlockMode
+      ? { ...blob, bootUnlockMode: opts.bootUnlockMode }
+      : blob;
+    return buildAutoinstallUserData({ blob: merged, blobSignatureHex });
+  }
+
+  it("default (no bootUnlockMode) bakes \"auto\" to /boot + emits box-lease + the auto dispatch", () => {
+    const b = extractBootstrap(userData({}));
+    // The mode file is baked exactly "auto".
+    expect(b).toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
+    expect(b).not.toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
+    // box-lease helper present + GETs the box-sealed lease quartet.
+    expect(b).toContain("unlock_via_box_lease()");
+    expect(b).toContain("/unlock-key/lease-v2");
+    // Parses the hex sealedKey + unseals with --sealed-hex.
+    expect(b).toContain('"sealedKey":"');
+    expect(b).toContain('--identity-priv-hex "$SEED_HEX" --sealed-hex "$SEALED_KEY"');
+    // auto dispatch: box-lease first, relay fallback.
+    expect(b).toContain('if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then');
+    expect(b).toContain("if ! unlock_via_box_lease; then");
+    expect(b).toContain("unlock_via_relay");
+    // The premount script reads the mode (default auto if the file is absent).
+    expect(b).toContain('BOOT_UNLOCK_MODE="$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)"');
+    // The retired plaintext-consume path is GONE from the dispatch.
+    expect(b).not.toContain("unlock_via_plaintext_consume");
+    expect(b).not.toContain("flagship/consume-unlock-key/v1|");
+  });
+
+  it("explicit auto === default, byte-for-byte (auto is the absent semantics)", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const dflt = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const explicit = buildAutoinstallUserData({
+      blob: { ...blob, bootUnlockMode: "auto" },
+      blobSignatureHex,
+    });
+    expect(explicit).toBe(dflt);
+  });
+
+  it("bootUnlockMode:\"approve\" bakes \"approve\" + relay-only + NO box-lease call + NO plaintext fallback", () => {
+    const b = extractBootstrap(userData({ bootUnlockMode: "approve" }));
+    // The mode file is baked exactly "approve".
+    expect(b).toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
+    expect(b).not.toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
+    // The relay is the ONLY dispatch in approve mode — no box-lease, no fallback.
+    expect(b).toContain('if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then');
+    expect(b).toContain("unlock_via_relay");
+    // Defense in depth: the dispatch never CALLS the box-lease in approve mode
+    // (the function may be defined, but `if ! unlock_via_box_lease; then` —
+    // the auto branch — is only reached when mode != approve at runtime).
+    // No plaintext-consume anywhere.
+    expect(b).not.toContain("unlock_via_plaintext_consume");
+    expect(b).not.toContain("flagship/consume-unlock-key/v1|");
+  });
+
+  it("approve and auto YAML differ ONLY in the baked mode + nothing else structural", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const autoYaml = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const approveYaml = buildAutoinstallUserData({
+      blob: { ...blob, bootUnlockMode: "approve" },
+      blobSignatureHex,
+    });
+    expect(approveYaml).not.toBe(autoYaml);
+    const autoB = extractBootstrap(autoYaml);
+    const approveB = extractBootstrap(approveYaml);
+    // Both define the same helpers + dispatch shell (the branch is runtime).
+    for (const b of [autoB, approveB]) {
+      expect(b).toContain("unlock_via_box_lease()");
+      expect(b).toContain("unlock_via_relay()");
+      expect(b).toContain('if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then');
+    }
+    // The only bake difference is the mode literal written to /boot.
+    expect(autoB).toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
+    expect(approveB).toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
   });
 });
 
@@ -286,12 +367,13 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     const b = extractBootstrap(luksYaml());
     expect(b).toContain("/etc/initramfs-tools/hooks/flagship-unlock");
     expect(b).toContain("/etc/initramfs-tools/scripts/local-top/flagship-unlock");
-    // The lifted function + its fallback, with the exact canonical-bytes layout.
+    // The lifted functions + the two-tier dispatch (plaintext-consume RETIRED).
     expect(b).toContain("unlock_via_relay()");
-    expect(b).toContain("unlock_via_plaintext_consume()");
+    expect(b).toContain("unlock_via_box_lease()");
     expect(b).toContain("flagship/secret-request/v1|");
-    expect(b).toContain("flagship/consume-unlock-key/v1|");
-    expect(b).toContain("if ! unlock_via_relay; then");
+    expect(b).not.toContain("flagship/consume-unlock-key/v1|");
+    expect(b).not.toContain("unlock_via_plaintext_consume");
+    expect(b).toContain("if ! unlock_via_box_lease; then");
     // The pre-unlock tools the hook must stage into the initramfs.
     expect(b).toContain("copy_exec /usr/bin/openssl");
     expect(b).toContain("copy_exec /usr/bin/curl");
