@@ -17,24 +17,23 @@ import UIKit
 // MARK: - Approve unlock
 
 /// Siri: "Approve unlock with Flagship" / Shortcut: Approve Unlock.
-/// Opens the Unlock Approvals queue; the user authorizes the latest
-/// pending request with Face ID. (Doing the actual approval headless
-/// from Siri would need a passcode prompt every time, which is worse
-/// UX than just opening the app.)
+/// Opens the relay approval list; the user confirms the box's boot with
+/// Face ID. (Doing the crypto headless from Siri would need a passcode
+/// prompt every time, which is worse UX than just opening the app.)
 struct ApproveUnlockIntent: AppIntent {
     static var title: LocalizedStringResource = "Approve unlock"
     static var description = IntentDescription(
-        "Open Flagship at the pending unlock-approval queue for your server."
+        "Open Flagship at the list of boxes waiting for you to release their disk key."
     )
 
-    /// Opening the app keeps Secure-Enclave-backed BAK signing in
-    /// the foreground process — Apple won't let extensions trigger
+    /// Opening the app keeps Secure-Enclave-backed unsealing in the
+    /// foreground process — Apple won't let extensions trigger
     /// LocalAuthentication-gated keys without UI.
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
         await MainActor.run {
-            let url = URL(string: "flagship://unlock-approve?requestId=latest")!
+            let url = URL(string: "flagship://secret-requests")!
             UIApplication.shared.open(url)
         }
         return .result()

@@ -59,7 +59,7 @@ final class KeystoreTests: XCTestCase {
         try await Keystore.generateUMK(reason: "test")
         let irk = try await Keystore.deriveIRK(reason: "test")
         // Sign + verify a known message — that's the operational
-        // contract the BootApproval flow needs.
+        // contract the boot-secret relay (IRK sign/unseal) needs.
         let msg = Data("flagship/test/v1|hello".utf8)
         let sig = try irk.signature(for: msg)
         XCTAssertTrue(irk.publicKey.isValidSignature(sig, for: msg))

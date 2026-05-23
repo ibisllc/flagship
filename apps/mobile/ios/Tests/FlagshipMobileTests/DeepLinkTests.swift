@@ -5,31 +5,13 @@ final class DeepLinkTests: XCTestCase {
 
     // MARK: - flagship:// scheme
 
-    func test_unlockApprove_withConcreteRequestId_routesToId() {
-        let url = URL(string: "flagship://unlock-approve?requestId=req-42")!
-        XCTAssertEqual(DeepLink.parse(url), .unlockApprove(requestId: "req-42"))
-    }
-
-    func test_unlockApprove_withSentinelLatest_routesToList() {
-        // Siri / App-Intents sends "latest" when there's no specific
-        // request to target. Should fall through to the queue view.
-        let url = URL(string: "flagship://unlock-approve?requestId=latest")!
-        XCTAssertEqual(DeepLink.parse(url), .unlockApprovalsList)
-    }
-
-    func test_unlockApprove_withSentinelAny_routesToList() {
-        let url = URL(string: "flagship://unlock-approve?requestId=any")!
-        XCTAssertEqual(DeepLink.parse(url), .unlockApprovalsList)
-    }
-
-    func test_unlockApprove_missingRequestId_routesToList() {
-        let url = URL(string: "flagship://unlock-approve")!
-        XCTAssertEqual(DeepLink.parse(url), .unlockApprovalsList)
-    }
-
-    func test_unlockApprovalsHost_routesToList() {
-        let url = URL(string: "flagship://unlock-approvals")!
-        XCTAssertEqual(DeepLink.parse(url), .unlockApprovalsList)
+    // Back-compat: the legacy `unlock-approve(s)` hosts (old pushes /
+    // cached Siri shortcuts) now land on the relay approval list — the
+    // legacy plaintext flow is gone.
+    func test_legacyUnlockApproveHosts_routeToSecretRequests() {
+        XCTAssertEqual(DeepLink.parse(URL(string: "flagship://unlock-approve?requestId=req-42")!), .secretRequests)
+        XCTAssertEqual(DeepLink.parse(URL(string: "flagship://unlock-approve")!), .secretRequests)
+        XCTAssertEqual(DeepLink.parse(URL(string: "flagship://unlock-approvals")!), .secretRequests)
     }
 
     func test_secretRequests_host_routesToSecretRequests() {

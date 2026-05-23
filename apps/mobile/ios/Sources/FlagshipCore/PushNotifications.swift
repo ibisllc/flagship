@@ -109,12 +109,7 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             linker.enqueue(link)
             return
         }
-        if let requestId = info["requestId"] as? String,
-           let kind = info["kind"] as? String, kind == "unlock-approve" {
-            linker.enqueue(.unlockApprove(requestId: requestId))
-            return
-        }
-        // Phone-as-unlock-endpoint RELAY (v2 sealed-key flow): a box is
+        // Phone-as-unlock-endpoint RELAY (sealed-key flow): a box is
         // finishing setup / rebooting in "approve" mode and needs the phone
         // to release its boot secret. Routes to the SecretRequests approval
         // list. (`category` mirrors the Android FCM payload's alternate key.)

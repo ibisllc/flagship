@@ -65,17 +65,6 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func vibeCodeStatus(sessionId: String) async throws -> VibeCodeStatusResponse {
         try await request("/api/screens/vibe-code/\(sessionId)")
     }
-    public func unlockApprovalsPending() async throws -> UnlockApprovalsPendingResponse {
-        try await request("/api/screens/unlock-approvals/pending")
-    }
-    public func approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) async throws {
-        let payload = try JSONEncoder().encode(body)
-        let _: EmptyResponse = try await request(
-            "/api/screens/unlock-approvals/\(requestId)/approve",
-            method: "POST",
-            body: payload
-        )
-    }
     public func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse {
         try await request("/api/screens/browser-tabs/list/\(serviceId)")
     }

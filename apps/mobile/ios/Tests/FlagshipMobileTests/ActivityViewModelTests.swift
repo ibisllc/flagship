@@ -89,12 +89,6 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func vibeCodeStatus(sessionId: String) async throws -> VibeCodeStatusResponse {
         try await real.vibeCodeStatus(sessionId: sessionId)
     }
-    func unlockApprovalsPending() async throws -> UnlockApprovalsPendingResponse {
-        try await real.unlockApprovalsPending()
-    }
-    func approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) async throws {
-        try await real.approveUnlock(requestId: requestId, body: body)
-    }
     func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse {
         try await real.browserTabsList(serviceId: serviceId)
     }

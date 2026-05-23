@@ -27,12 +27,6 @@ public protocol ScreensClient: Sendable {
     // P1.7 vibe-code/:id
     func vibeCodeStatus(sessionId: String) async throws -> VibeCodeStatusResponse
 
-    // P1.8 unlock-approvals/pending
-    func unlockApprovalsPending() async throws -> UnlockApprovalsPendingResponse
-
-    // P1.9 unlock-approvals/:requestId/approve
-    func approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) async throws
-
     // P1.10 browser-tabs/list/:serviceId
     func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse
 

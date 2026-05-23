@@ -24,7 +24,6 @@ struct FlagshipApp: App {
         self.liveClient = LiveScreensClient(store: KeychainSessionStore())
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
-        Self.wirePendingApprovalsBroadcast()
     }
 
     /// Smoke-test entry point: when launched with `-smoke-mode YES`
@@ -39,16 +38,6 @@ struct FlagshipApp: App {
         guard args.contains("-smoke-mode") else { return }
         if !app.isPaired {
             DemoFixtures.activate(app, username: "smoketest")
-        }
-    }
-
-    /// Wire FlagshipUI's PendingApprovalsBroadcast to the WatchBridge
-    /// — every refresh of the unlock-approval list mirrors to the
-    /// paired Apple Watch via WCSession applicationContext.
-    @MainActor
-    private static func wirePendingApprovalsBroadcast() {
-        PendingApprovalsBroadcast.send = { approvals in
-            WatchBridge.shared.publishPending(approvals)
         }
     }
 

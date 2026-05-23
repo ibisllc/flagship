@@ -190,16 +190,6 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         )
     }
 
-    // MARK: - P1.8 / P1.9 unlock-approvals
-
-    public func unlockApprovalsPending() async throws -> UnlockApprovalsPendingResponse {
-        try await tick()
-        return UnlockApprovalsPendingResponse(pending: [])
-    }
-
-    public func approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) async throws {
-        try await tick()
-    }
 
     // MARK: - P1.10 browser-tabs
 

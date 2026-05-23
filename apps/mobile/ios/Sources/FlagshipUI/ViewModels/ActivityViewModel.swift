@@ -4,7 +4,6 @@ import FlagshipAPI
 
 public struct ActivityFeed: Sendable {
     public let recentInstalls: [RecentInstallEvent]
-    public let pendingUnlocks: [PendingUnlockApproval]
     public let pairedSessions: [PairedSessionSummary]
     /// Non-nil when the daemon reports a J.3/J.4 reissuance snapshot
     /// (post-recovery walk). Surfaces as a card on Activity that
@@ -44,7 +43,6 @@ public final class ActivityViewModel {
         state = .loading
         do {
             async let detail = client.serverDetail()
-            async let unlocks = client.unlockApprovalsPending()
             async let sessions = client.pairedSessionsList()
             // Post-recovery is tolerated as missing — a daemon that
             // hasn't shipped P1.23 returns a non-2xx, and we render
@@ -69,13 +67,11 @@ public final class ActivityViewModel {
             )
             let feed = try await ActivityFeed(
                 recentInstalls: detail.recentInstallEvents,
-                pendingUnlocks: unlocks.pending,
                 pairedSessions: sessions.sessions,
                 postRecovery: recovery,
                 auditEvents: audit
             )
             state = .loaded(feed)
-            PendingApprovalsBroadcast.broadcast(feed.pendingUnlocks)
         } catch {
             state = .failed(error.localizedDescription)
         }

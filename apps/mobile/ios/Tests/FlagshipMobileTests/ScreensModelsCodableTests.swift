@@ -80,11 +80,4 @@ final class ScreensModelsCodableTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
-    func test_unlockApprovalApproveRequest_wireFormat() throws {
-        let req = UnlockApprovalApproveRequest(signature: "deadbeef", envelope: "Zm9v")
-        let data = try JSONEncoder().encode(req)
-        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
-        XCTAssertTrue(json.contains("\"signature\":\"deadbeef\""))
-        XCTAssertTrue(json.contains("\"envelope\":\"Zm9v\""))
-    }
 }

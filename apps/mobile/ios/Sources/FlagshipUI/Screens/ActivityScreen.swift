@@ -11,7 +11,7 @@ public struct ActivityScreen: View {
     let currentPodId: String?
     let leaderPodId: String?
     var onPickPod: (PodInfo) -> Void = { _ in }
-    var onApproveUnlock: (String) -> Void = { _ in }
+    var onOpenApprovals: () -> Void = {}
     var onOpenPostRecovery: () -> Void = {}
     var onRefresh: () async -> Void = {}
 
@@ -21,7 +21,7 @@ public struct ActivityScreen: View {
         currentPodId: String? = nil,
         leaderPodId: String? = nil,
         onPickPod: @escaping (PodInfo) -> Void = { _ in },
-        onApproveUnlock: @escaping (String) -> Void = { _ in },
+        onOpenApprovals: @escaping () -> Void = {},
         onOpenPostRecovery: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {}
     ) {
@@ -30,7 +30,7 @@ public struct ActivityScreen: View {
         self.currentPodId = currentPodId
         self.leaderPodId = leaderPodId
         self.onPickPod = onPickPod
-        self.onApproveUnlock = onApproveUnlock
+        self.onOpenApprovals = onOpenApprovals
         self.onOpenPostRecovery = onOpenPostRecovery
         self.onRefresh = onRefresh
     }
@@ -60,14 +60,8 @@ public struct ActivityScreen: View {
                 case .failed(let msg):
                     ErrorCard(message: msg)
                 case .loaded(let feed):
-                    if !feed.pendingUnlocks.isEmpty {
-                        section("PENDING APPROVAL", c: c) {
-                            VStack(spacing: FS.space.s3) {
-                                ForEach(feed.pendingUnlocks, id: \.requestId) { req in
-                                    pendingUnlockCard(req, c: c)
-                                }
-                            }
-                        }
+                    section("BOX APPROVALS", c: c) {
+                        approvalsEntryCard(c: c)
                     }
                     if let snap = feed.postRecovery {
                         section("POST-RECOVERY", c: c) {
@@ -117,18 +111,16 @@ public struct ActivityScreen: View {
         .refreshable { await onRefresh() }
     }
 
-    private func pendingUnlockCard(_ req: PendingUnlockApproval, c: FSColors) -> some View {
+    /// Entry into the relay approval list. A box set to "authorize each
+    /// boot" posts a sealed-key request and pushes the phone; this is the
+    /// always-available in-app way to reach the same screen.
+    private func approvalsEntryCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                HStack {
-                    FSPill("Awaiting you", kind: .renewing)
-                    Spacer()
-                    Text(relative(ms: req.requestedAt))
-                        .font(FS.font.caption()).foregroundColor(c.textMuted)
-                }
-                Text(req.serverFqdn).font(FS.font.mono()).foregroundColor(c.text)
-                if let ip = req.ip { Text(ip).font(FS.font.bodySm()).foregroundColor(c.textMuted) }
-                FSPrimaryButton("Approve unlock", block: true) { onApproveUnlock(req.requestId) }
+                Text("Approve a box's boot").foregroundColor(c.text)
+                Text("Servers set to ask on every boot wait here for you to release their disk key.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                FSPrimaryButton("Open approvals", block: true, action: onOpenApprovals)
             }
         }
     }

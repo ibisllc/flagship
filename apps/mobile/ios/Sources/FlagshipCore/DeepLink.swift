@@ -5,16 +5,10 @@ import Foundation
 /// Link, share-extension, etc. The shell observes `DeepLinker.pending`
 /// and pushes the right destination on the right tab.
 public enum DeepLink: Equatable, Sendable {
-    case unlockApprove(requestId: String)
-    /// Show the activity tab's pending-approvals list (no specific
-    /// requestId). Used by the Siri/Shortcuts ApproveUnlockIntent
-    /// when the user asks generically rather than from a push.
-    case unlockApprovalsList
-    /// Phone-as-unlock-endpoint RELAY approval list (the v2 sealed-key
-    /// flow). Fired by the `secret-request` push when a box is finishing
-    /// setup / rebooting in "approve" mode and needs the phone to release
-    /// its boot secret. Distinct from `unlockApprovalsList` (the legacy
-    /// plaintext BootApproval flow, kept for old servers).
+    /// Phone-as-unlock-endpoint RELAY approval list (the sealed-key flow).
+    /// Fired by the `secret-request` push when a box is finishing setup /
+    /// rebooting in "approve" mode and needs the phone to release its boot
+    /// secret. Also the target of the Siri/Shortcuts "Approve unlock" intent.
     case secretRequests
     case serverDetail(podId: String)
     case appDetail(serviceId: String)
@@ -69,14 +63,10 @@ public enum DeepLink: Equatable, Sendable {
                 if let v = item.value { acc[item.name] = v }
             }
         switch host {
-        case "unlock-approve":
-            if let id = params["requestId"], id != "latest", id != "any" {
-                return .unlockApprove(requestId: id)
-            }
-            return .unlockApprovalsList
-        case "unlock-approvals":
-            return .unlockApprovalsList
-        case "secret-requests", "secret-request":
+        case "secret-requests", "secret-request",
+             // Back-compat: old `unlock-approve(s)` links now land on the
+             // relay approval list (the legacy plaintext flow is gone).
+             "unlock-approve", "unlock-approvals":
             return .secretRequests
         case "server":
             if let id = params["podId"] { return .serverDetail(podId: id) }

@@ -174,29 +174,6 @@ public struct VibeCodeStatusResponse: Codable {
     }
 }
 
-// MARK: - P1.8 / P1.9 unlock-approvals
-
-public struct PendingUnlockApproval: Codable, Equatable, Sendable {
-    public let serverFqdn: String
-    public let requestId: String
-    public let requestedAt: Int64
-    public let ip: String?
-    public let userAgent: String?
-}
-
-public struct UnlockApprovalsPendingResponse: Codable, Equatable, Sendable {
-    public let pending: [PendingUnlockApproval]
-}
-
-public struct UnlockApprovalApproveRequest: Codable, Equatable, Sendable {
-    public let signature: String  // hex
-    public let envelope: String   // base64
-    public init(signature: String, envelope: String) {
-        self.signature = signature
-        self.envelope = envelope
-    }
-}
-
 // MARK: - P1.10 / P1.11 browser-tabs
 
 public struct BrowserTab: Codable, Equatable, Sendable {

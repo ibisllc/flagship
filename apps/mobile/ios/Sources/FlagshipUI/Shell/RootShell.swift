@@ -72,8 +72,7 @@ public struct RootShell: View {
     /// reads the same `linker.pending` value.
     private func tab(for link: DeepLink) -> RootDestination {
         switch link {
-        case .unlockApprove, .unlockApprovalsList,
-             .secretRequests:                         return .activity
+        case .secretRequests:                         return .activity
         case .serverDetail, .createServer:            return .home
         case .appDetail, .marketplace, .vibeCodeChat: return .apps
         case .recoverySetup, .joinAccount:            return .settings
