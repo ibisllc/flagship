@@ -32,7 +32,8 @@ public enum UserData {
     public static func autoinstallYAML(recipeJSON: Data,
                                        installerGitRef: String,
                                        repoURL: String = defaultRepoURL,
-                                       encryptRoot: Bool = true) throws -> String {
+                                       encryptRoot: Bool = true,
+                                       bootUnlockMode: String = "auto") throws -> String {
         let trimmed = installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines)
         let ref = trimmed.isEmpty ? "main" : trimmed
         guard ref.range(of: "^[A-Za-z0-9._/-]+$", options: .regularExpression) != nil else {
@@ -40,8 +41,11 @@ public enum UserData {
         }
         guard repoURL.hasPrefix("https://") else { throw UserDataError.badRepo(repoURL) }
 
+        // Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
+        // Only "approve" is the critical-server path; anything else ⇒ "auto".
+        let mode = bootUnlockMode == "approve" ? "approve" : "auto"
         let blobB64 = recipeJSON.base64EncodedString()
-        let bootstrapB64 = Data(bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot).utf8)
+        let bootstrapB64 = Data(bootstrapScript(ref: ref, repoURL: repoURL, encryptRoot: encryptRoot, bootUnlockMode: mode).utf8)
             .base64EncodedString()
         // Emitted only when encryptRoot is on; "" keeps the default path
         // byte-identical (subiquity falls back to its whole-disk layout).
@@ -108,9 +112,12 @@ public enum UserData {
     /// Bash line-continuations are written as `\\` (literal backslash); bash
     /// `$VAR` / `$(...)` / `${...}` pass through unchanged. `encryptRoot` opt-in
     /// (default OFF) splices the LUKS unlock-hook block before `installed.flag`.
-    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true) -> String {
+    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true, bootUnlockMode: String = "auto") -> String {
         let plain = bootstrapScriptPlain(ref: ref, repoURL: repoURL)
         guard encryptRoot else { return plain }
+        // Boot-unlock policy is baked into the LUKS block; only "approve" is the
+        // critical-server path; anything else ⇒ "auto" (mirror userdata.ts).
+        let mode = bootUnlockMode == "approve" ? "approve" : "auto"
         // Splice the LUKS block in just before the plain script's final two
         // lines (installed.flag + "done") so the shared body stays verbatim.
         let tail = """
@@ -119,7 +126,7 @@ public enum UserData {
 
         """
         precondition(plain.hasSuffix(tail), "plain bootstrap tail drifted; encrypted splice would be wrong")
-        return String(plain.dropLast(tail.count)) + luksBootstrapBlock() + tail
+        return String(plain.dropLast(tail.count)) + luksBootstrapBlock(mode: mode) + tail
     }
 
     static func bootstrapScriptPlain(ref: String, repoURL: String) -> String {
@@ -320,7 +327,12 @@ public enum UserData {
         """
     }
 
-    static func luksBootstrapBlock() -> String {
+    /// `mode` is the phone-signed boot-unlock policy
+    /// (docs/security-phone-as-unlock-endpoint.md §7a.1). Baked to
+    /// /boot/flagship-boot-unlock-mode; the premount script branches on it
+    /// ("auto" = box-lease then relay; "approve" = relay every boot, no lease).
+    /// Byte-identical to userdata.ts buildLuksBootstrapBlock(mode).
+    static func luksBootstrapBlock(mode: String = "auto") -> String {
         return """
 
         # ── EXPERIMENTAL: LUKS-on-root, phone-gated unlock (encryptRoot) ─────────
@@ -377,6 +389,14 @@ public enum UserData {
         echo "$CONTROL_PLANE_BASE" > /boot/control-plane-url
         # The identity PKCS8 PEM is already at /boot/identity.pem (gen-identity --out-pem).
 
+        # Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1). Baked
+        # from the phone-signed InstallBlob.bootUnlockMode (absent ⇒ "auto"). The
+        # initramfs premount script reads this on every boot (defaults to "auto" if the
+        # file is absent) and branches: "auto" self-unlocks via a box-sealed lease then
+        # falls back to the phone-gated relay; "approve" uses the relay EVERY boot and
+        # never touches a lease. The box NEVER deposits a lease itself.
+        echo "\(mode)" > /boot/flagship-boot-unlock-mode
+
         # C1. BAKE the unseal helper to /boot/flagship-unseal. Build-at-install from
         #     the cloned source (auditable; no committed binary). golang-go from the
         #     Ubuntu archive can build the CGO-free static helper (one dep, pinned).
@@ -413,6 +433,7 @@ public enum UserData {
         cp /boot/identity.pem "${DESTDIR}/boot/identity.pem"
         cp /boot/server-domain "${DESTDIR}/boot/server-domain"
         cp /boot/control-plane-url "${DESTDIR}/boot/control-plane-url" 2>/dev/null || true
+        cp /boot/flagship-boot-unlock-mode "${DESTDIR}/boot/flagship-boot-unlock-mode" 2>/dev/null || true
         HOOK
         chmod +x /etc/initramfs-tools/hooks/flagship-unlock
 
@@ -433,6 +454,9 @@ public enum UserData {
         UNSEAL_HELPER=/bin/flagship-unseal
         RELAY_WINDOW_SECS="${FLAGSHIP_RELAY_WINDOW_SECS:-180}"
         OUT_UNLOCK=/run/unlock-key
+        # Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
+        # Baked by the bootstrap; default "auto" if the file is absent.
+        BOOT_UNLOCK_MODE="$(cat /boot/flagship-boot-unlock-mode 2>/dev/null || echo auto)"
 
         [ -f "$IDENTITY_KEY" ] || { echo "flagship: missing $IDENTITY_KEY"; exit 0; }
 
@@ -451,6 +475,57 @@ public enum UserData {
         identity_pub_hex() {
             openssl pkey -in "$IDENTITY_KEY" -pubout -outform DER 2>/dev/null \\
                 | xxd -p -c 256 | tr -d '\\n' | tail -c 64
+        }
+
+        # ── unlock_via_box_lease() — LIFTED VERBATIM from installer/boot-stage.sh ──
+        # Self-unlock on the "auto" path: GET the box-sealed lease and unseal it
+        # LOCALLY with the STK key on /boot. .com holds ciphertext only (I1). No
+        # phone, no human. Returns 0 only if it actually unsealed; 404/empty (first
+        # boot, or a revoked lease) ⇒ non-zero so the caller falls back to the relay.
+        unlock_via_box_lease() {
+            if [ ! -x "$UNSEAL_HELPER" ]; then
+                echo "flagship: box-lease unavailable — $UNSEAL_HELPER missing/not executable"
+                return 1
+            fi
+            SEED_HEX="$(identity_seed_hex)"
+            if [ "${#SEED_HEX}" != 64 ]; then
+                echo "flagship: box-lease aborted — could not derive 32-byte seed from $IDENTITY_KEY"
+                return 1
+            fi
+
+            LEASE_URL="${CONTROL_PLANE}/api/server/${SERVER_DOMAIN}/unlock-key/lease-v2"
+            LEASE_RESP=/run/flagship-lease-v2.json
+            LEASE_CODE=$(curl -sS -o "$LEASE_RESP" -w "%{http_code}" \\
+                --max-time 30 "$LEASE_URL" || echo "000")
+            if [ "$LEASE_CODE" = "404" ]; then
+                echo "flagship: no box-sealed lease (HTTP 404) — falling back"
+                return 1
+            fi
+            if [ "$LEASE_CODE" != "200" ]; then
+                echo "flagship: box-lease HTTP $LEASE_CODE; body: $(head -c 200 "$LEASE_RESP" 2>/dev/null)"
+                return 1
+            fi
+
+            # .com returns {serverDomain,leaseId,stkPub,sealedKey,...}; sealedKey is the
+            # box-sealed LUKS key (hex). Extract it the same way unlock_via_relay()
+            # extracts "sealed".
+            SEALED_KEY=$(sed -n 's/.*"sealedKey":"\\([0-9a-fA-F]*\\)".*/\\1/p' "$LEASE_RESP")
+            if [ -z "$SEALED_KEY" ]; then
+                echo "flagship: box-lease 200 but no sealedKey: $(head -c 200 "$LEASE_RESP")"
+                return 1
+            fi
+
+            if "$UNSEAL_HELPER" --identity-priv-hex "$SEED_HEX" --sealed-hex "$SEALED_KEY" \\
+                > "$OUT_UNLOCK.hex" 2>/run/flagship-unseal.err; then
+                tr -d '\\n' < "$OUT_UNLOCK.hex" > "$OUT_UNLOCK"
+                chmod 600 "$OUT_UNLOCK"
+                rm -f "$OUT_UNLOCK.hex"
+                echo "flagship: self-unlocked from the box-sealed lease"
+                return 0
+            fi
+            echo "flagship: $UNSEAL_HELPER failed on box-lease: $(head -c 200 /run/flagship-unseal.err 2>/dev/null)"
+            rm -f "$OUT_UNLOCK.hex"
+            return 1
         }
 
         # ── unlock_via_relay() — LIFTED VERBATIM from installer/boot-stage.sh ──────
@@ -532,44 +607,17 @@ public enum UserData {
             return 1
         }
 
-        # ── Path 2: legacy plaintext consume (fallback) — from boot-stage.sh ───────
-        unlock_via_plaintext_consume() {
-            CONSUME_URL="${CONTROL_PLANE}/api/server/${SERVER_DOMAIN}/unlock-key/consume"
-            echo "flagship: falling back to plaintext consume at ${CONSUME_URL}"
-            ATTEMPT=0
-            while :; do
-                ATTEMPT=$((ATTEMPT + 1))
-                NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
-                NOW_MS=$(date +%s%3N)
-                CANONICAL="flagship/consume-unlock-key/v1|${SERVER_DOMAIN}|${NONCE}|${NOW_MS}"
-                SIG="$(sign_canonical "$CANONICAL")"
-                BODY=$(printf '{"request":{"serverId":"%s","nonce":"%s","issuedAt":%s},"signature":"%s"}' \\
-                    "$SERVER_DOMAIN" "$NONCE" "$NOW_MS" "$SIG")
-                HTTP_BODY=/run/flagship-consume-resp.json
-                HTTP_CODE=$(curl -sS -o "$HTTP_BODY" -w "%{http_code}" \\
-                    -X POST -H 'content-type: application/json' \\
-                    --max-time 30 -d "$BODY" "$CONSUME_URL" || echo "000")
-                if [ "$HTTP_CODE" = "200" ]; then
-                    UNLOCK_HEX=$(sed -n 's/.*"unlockKey":"\\([0-9a-f]*\\)".*/\\1/p' "$HTTP_BODY")
-                    if [ -n "$UNLOCK_HEX" ]; then
-                        echo "flagship: got unlock key via consume (attempt $ATTEMPT)"
-                        printf '%s' "$UNLOCK_HEX" > "$OUT_UNLOCK"
-                        chmod 600 "$OUT_UNLOCK"
-                        return 0
-                    fi
-                elif [ "$HTTP_CODE" = "404" ]; then
-                    :
-                else
-                    echo "flagship: HTTP $HTTP_CODE on consume; body: $(head -c 200 "$HTTP_BODY")"
-                fi
-                BACKOFF=$((ATTEMPT < 6 ? ATTEMPT * 5 : 30))
-                echo "flagship: no unlock key yet (attempt $ATTEMPT); sleeping $BACKOFF"
-                sleep "$BACKOFF"
-            done
-        }
-
-        if ! unlock_via_relay; then
-            unlock_via_plaintext_consume
+        # ── Two-tier dispatch (docs/security-phone-as-unlock-endpoint.md §7a.1) ────
+        # The legacy plaintext-consume path is RETIRED — never a fallback here.
+        #   auto:    box-sealed lease (self-unlock); fall back to the phone relay.
+        #   approve: phone relay EVERY boot; the box NEVER reads a box-sealed lease.
+        echo "flagship: boot-unlock mode = $BOOT_UNLOCK_MODE"
+        if [ "$BOOT_UNLOCK_MODE" = "approve" ]; then
+            unlock_via_relay
+        else
+            if ! unlock_via_box_lease; then
+                unlock_via_relay
+            fi
         fi
 
         ROOT_PART=/dev/disk/by-label/FLAGSHIP_ROOT

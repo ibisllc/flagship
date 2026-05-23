@@ -30,6 +30,16 @@ public struct Recipe: Sendable, Equatable {
     public let installerGitRef: String
     public let rckPubKeyHex: String
     public let blobSignatureHex: String
+    /// Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
+    /// Phone-signed in the blob; nil (absent) ⇒ treat as "auto" (the default).
+    /// Mirrors @flagship/protocol InstallBlob.bootUnlockMode — OPTIONAL so the
+    /// canonical-bytes match the TS (absent omits the field, present appends it).
+    public let bootUnlockMode: String?
+
+    /// The effective mode the box bakes/dispatches on (absence ⇒ "auto").
+    public var effectiveBootUnlockMode: String {
+        bootUnlockMode == "approve" ? "approve" : "auto"
+    }
 
     public var expiresAtDate: Date {
         Date(timeIntervalSince1970: Double(authCode.expiresAt) / 1000.0)
@@ -77,7 +87,7 @@ public enum RecipeLoader {
     /// canonicalInstallBlob — must match @flagship/protocol byte-for-byte.
     /// Hex fields are lowercased to mirror the TS `hex(bytes)` output.
     static func canonicalBytes(_ r: Recipe) -> Data {
-        let parts = [
+        var parts = [
             "flagship/install-blob/v1",
             String(r.version),
             r.serverDomain,
@@ -91,6 +101,11 @@ public enum RecipeLoader {
             r.installerGitRef,
             r.rckPubKeyHex.lowercased(),
         ]
+        // Backward-compatible extension (matches @flagship/protocol exactly): a
+        // blob WITHOUT bootUnlockMode produces the pre-existing canonical bytes
+        // (old signatures keep verifying); present ⇒ appended, so the signer
+        // commits to it and a relay can neither strip nor downgrade it.
+        if let mode = r.bootUnlockMode { parts.append(mode) }
         return Data(parts.joined(separator: "|").utf8)
     }
 
@@ -127,6 +142,7 @@ public enum RecipeLoader {
         let installerGitRef: String
         let rckPubKey: String
         let blobSignatureHex: String
+        let bootUnlockMode: String?
     }
 
     private static func parse(_ data: Data) throws -> Recipe {
@@ -154,7 +170,8 @@ public enum RecipeLoader {
             authCodeUserSignatureHex: dto.authCodeUserSignature,
             installerGitRef: dto.installerGitRef,
             rckPubKeyHex: dto.rckPubKey,
-            blobSignatureHex: dto.blobSignatureHex)
+            blobSignatureHex: dto.blobSignatureHex,
+            bootUnlockMode: dto.bootUnlockMode)
     }
 }
 

@@ -154,7 +154,8 @@ final class WizardModel: ObservableObject {
         let data = try Data(contentsOf: recipe)
         let parsed = try RecipeLoader.load(data: data)
         return try UserData.autoinstallYAML(recipeJSON: data,
-                                            installerGitRef: parsed.installerGitRef)
+                                            installerGitRef: parsed.installerGitRef,
+                                            bootUnlockMode: parsed.effectiveBootUnlockMode)
     }
 
     func runPrepare() async {
