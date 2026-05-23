@@ -126,22 +126,29 @@ export async function deleteDraft(id) {
 export function canonicalInstallBlob(b) {
   // v2: blob.issuedAt + blob.expiresAt dropped. Tag stays v1; the
   // inner `version` field (2) discriminates v1-vs-v2 inputs.
-  return new TextEncoder().encode(
-    [
-      TAG_INSTALL_BLOB,
-      b.version,
-      b.serverDomain,
-      b.username,
-      b.serverName,
-      bytesToHex(b.phoneDelegatedPubKey),
-      b.registrationUrl,
-      b.authCode.serial,
-      bytesToHex(b.authCode.userPubKey),
-      bytesToHex(b.authCodeUserSignature),
-      b.installerGitRef,
-      bytesToHex(b.rckPubKey),
-    ].join("|"),
-  );
+  const parts = [
+    TAG_INSTALL_BLOB,
+    b.version,
+    b.serverDomain,
+    b.username,
+    b.serverName,
+    bytesToHex(b.phoneDelegatedPubKey),
+    b.registrationUrl,
+    b.authCode.serial,
+    bytesToHex(b.authCode.userPubKey),
+    bytesToHex(b.authCodeUserSignature),
+    b.installerGitRef,
+    bytesToHex(b.rckPubKey),
+  ];
+  // Backward-compatible extension (mirror of `canonicalInstallBlob` in
+  // packages/protocol/src/auth.ts): a blob WITHOUT bootUnlockMode produces
+  // the exact pre-existing canonical bytes (old signatures keep verifying).
+  // When present it is appended as the LAST field, so the signer commits to
+  // it — a relay cannot strip the field (signature would fail) nor downgrade
+  // the value. MUST stay byte-identical to the TS or the QR→burner→register
+  // signature chain breaks.
+  if (b.bootUnlockMode !== undefined) parts.push(b.bootUnlockMode);
+  return new TextEncoder().encode(parts.join("|"));
 }
 
 function bytesToHex(b) {

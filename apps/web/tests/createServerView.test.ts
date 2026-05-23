@@ -20,6 +20,13 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  signInstallBlob,
+  deriveIRK,
+  ed,
+  type InstallBlob,
+} from "@flagship/protocol";
+import { canonicalInstallBlob as jsCanonicalInstallBlob } from "../public/webapp/lib/buildDraft.js";
 
 const VIEW_SRC = readFileSync(
   join(__dirname, "..", "public", "webapp", "views", "create-server.js"),
@@ -91,6 +98,60 @@ describe("create-server view — static structure (#24)", () => {
   });
 });
 
+describe("create-server view — boot-unlock-mode chooser (§7a.1)", () => {
+  it("renders the question prompt", () => {
+    expect(INDEX_HTML).toContain(
+      "How should this server unlock when it restarts?",
+    );
+  });
+
+  it("offers both modes with the exact user-facing copy", () => {
+    // Reboots-on-its-own (DEFAULT)
+    expect(INDEX_HTML).toContain("🔄 Reboots on its own");
+    expect(INDEX_HTML).toContain(
+      "Restarts by itself, no phone needed — good for flaky power or connections. flagshipserver.com still can't read your disk key, and you can revoke a stolen server from your phone. Not theft-proof: someone who powers it on first could boot it.",
+    );
+    // Authorize-each-boot
+    expect(INDEX_HTML).toContain("🔐 Authorize each boot");
+    expect(INDEX_HTML).toContain(
+      "Every restart waits for your Face ID / fingerprint. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.",
+    );
+  });
+
+  it("wires both radio values under a single group", () => {
+    expect(INDEX_HTML).toMatch(
+      /<input type="radio" name="cs-boot-unlock" value="auto" checked/,
+    );
+    expect(INDEX_HTML).toMatch(
+      /<input type="radio" name="cs-boot-unlock" value="approve"/,
+    );
+  });
+
+  it("defaults to auto: only the auto radio is pre-checked", () => {
+    // exactly one `checked` attribute in the boot-unlock group, on `auto`.
+    const group = INDEX_HTML.slice(
+      INDEX_HTML.indexOf('id="cs-boot-unlock"'),
+      INDEX_HTML.indexOf('id="cs-boot-unlock"') + 1200,
+    );
+    const checks = group.match(/checked/g) || [];
+    expect(checks.length).toBe(1);
+    expect(group).toMatch(/value="auto" checked/);
+    expect(group).not.toMatch(/value="approve"[^>]*checked/);
+  });
+
+  it("reads the mode (default auto) and threads it into the signed blob", () => {
+    // The reader defaults to auto and only "approve" survives.
+    expect(VIEW_SRC).toContain('name="cs-boot-unlock"');
+    expect(VIEW_SRC).toMatch(/bootUnlockMode/);
+    // Only "approve" is set on the blob (auto = absent field = legacy bytes).
+    expect(VIEW_SRC).toMatch(
+      /if \(bootUnlockMode === "approve"\) blob\.bootUnlockMode = "approve"/,
+    );
+    // The downloaded recipe carries whatever the blob carried.
+    expect(VIEW_SRC).toMatch(/onWireBlob\.bootUnlockMode = blob\.bootUnlockMode/);
+  });
+});
+
 describe("buildDraft helpers — pure functions (#24)", () => {
   it("canonicalInstallBlob produces deterministic '|'-joined bytes (v2)", async () => {
     const { canonicalInstallBlob } = await import("../public/webapp/lib/buildDraft.js");
@@ -117,6 +178,96 @@ describe("buildDraft helpers — pure functions (#24)", () => {
     // v2 invariant: NO blob.issuedAt or blob.expiresAt field in canonical-bytes.
     expect(text.split("|").length).toBe(12);
     expect(new TextDecoder().decode(canonicalInstallBlob(blob))).toBe(text);
+  });
+
+  it("appends bootUnlockMode only when present, as the LAST '|'-joined field", async () => {
+    const { canonicalInstallBlob } = await import("../public/webapp/lib/buildDraft.js");
+    const base = {
+      version: 2,
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      serverName: "home",
+      phoneDelegatedPubKey: new Uint8Array(32).fill(0xaa),
+      registrationUrl: "https://flagship.services/api/server/register",
+      authCode: {
+        serial: "01ABCDEF0123456789ABCDEF01",
+        userPubKey: new Uint8Array(32).fill(0xbb),
+      },
+      authCodeUserSignature: new Uint8Array(64).fill(0xcc),
+      installerGitRef: "main",
+      rckPubKey: new Uint8Array(32).fill(0xdd),
+    };
+    const legacy = new TextDecoder().decode(canonicalInstallBlob(base));
+    // Absent field === legacy bytes (old signatures keep verifying).
+    expect(legacy.split("|").length).toBe(12);
+    // Present field is appended after rckPubKey, '|'-joined, as the LAST part.
+    expect(
+      new TextDecoder().decode(canonicalInstallBlob({ ...base, bootUnlockMode: "approve" })),
+    ).toBe(legacy + "|approve");
+    expect(
+      new TextDecoder().decode(canonicalInstallBlob({ ...base, bootUnlockMode: "auto" })),
+    ).toBe(legacy + "|auto");
+  });
+});
+
+describe("canonicalInstallBlob — byte-parity with @flagship/protocol", () => {
+  // Ed25519 is deterministic: identical message bytes under the same key
+  // produce identical signatures. We sign the JS-mirror's canonical bytes
+  // directly with `ed`, and compare to the TS `signInstallBlob` (which uses
+  // the TS-internal canonicalInstallBlob). Equal sigs ⟺ identical bytes —
+  // proving the webapp mirror is byte-for-byte the TS canonical form, with
+  // AND without bootUnlockMode.
+  const irk = deriveIRK({ seed: new Uint8Array(32).fill(7) });
+
+  function makeBlob(bootUnlockMode?: "auto" | "approve"): InstallBlob {
+    const blob: InstallBlob = {
+      version: 2,
+      serverDomain: "home.alice.flagship.services",
+      username: "alice",
+      serverName: "home",
+      phoneDelegatedPubKey: new Uint8Array(32).fill(0xaa),
+      registrationUrl: "https://flagship.services/api/server/register",
+      authCode: {
+        version: 1,
+        serial: "01ABCDEF0123456789ABCDEF01",
+        username: "alice",
+        serverName: "home",
+        serverDomain: "home.alice.flagship.services",
+        delegatedPubKey: new Uint8Array(32).fill(0xee),
+        userPubKey: new Uint8Array(32).fill(0xbb),
+        issuedAt: 1_700_000_000_000,
+        expiresAt: 1_700_000_360_000,
+      },
+      authCodeUserSignature: new Uint8Array(64).fill(0xcc),
+      installerGitRef: "main",
+      rckPubKey: new Uint8Array(32).fill(0xdd),
+    };
+    if (bootUnlockMode !== undefined) blob.bootUnlockMode = bootUnlockMode;
+    return blob;
+  }
+
+  for (const mode of [undefined, "auto", "approve"] as const) {
+    it(`matches the TS canonical bytes (bootUnlockMode=${mode ?? "absent"})`, () => {
+      const blob = makeBlob(mode);
+      const tsSig = signInstallBlob(blob, irk);
+      const jsBytes = jsCanonicalInstallBlob(blob);
+      const jsSig = ed.sign(jsBytes, irk.privateKey);
+      // Identical signatures prove identical signed bytes across the two
+      // implementations (deterministic Ed25519).
+      expect(Array.from(jsSig)).toEqual(Array.from(tsSig));
+    });
+  }
+
+  it("absence is byte-identical to legacy (pre-bootUnlockMode) blobs", () => {
+    const legacy = jsCanonicalInstallBlob(makeBlob());
+    const withAuto = jsCanonicalInstallBlob(makeBlob("auto"));
+    // The legacy bytes are a strict prefix of the auto bytes (+'|auto').
+    const legacyText = new TextDecoder().decode(legacy);
+    const autoText = new TextDecoder().decode(withAuto);
+    expect(autoText).toBe(legacyText + "|auto");
+    // And the legacy blob still verifies under TS (no field appended).
+    const sig = signInstallBlob(makeBlob(), irk);
+    expect(ed.verify(sig, legacy, irk.publicKey)).toBe(true);
   });
 });
 

@@ -1163,3 +1163,29 @@ body.modal-open { overflow: hidden; }
   gap: 4px;
 }
 .demo-device-info code { color: var(--ink-soft); }
+
+/* Boot-unlock-mode chooser (create-server, §7a.1). Two stacked radio
+   cards; the checked one gets a stronger border. */
+.boot-unlock-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.boot-unlock-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "radio title" "radio desc";
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.boot-unlock-option:hover { border-color: var(--border); }
+.boot-unlock-option:has(input:checked) { border-color: var(--ink); }
+.boot-unlock-option input[type="radio"] { grid-area: radio; margin-top: 3px; }
+.boot-unlock-title { grid-area: title; font-weight: 600; }
+.boot-unlock-desc { grid-area: desc; }

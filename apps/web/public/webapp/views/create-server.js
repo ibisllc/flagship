@@ -228,7 +228,18 @@ function readInputs() {
   const ttlEl = $("cs-ttl-hours");
   const ttlHours = ttlEl ? parseFloat(ttlEl.value) : 6;
   const recipeTtlMs = clampRecipeTtlMs(Math.round(ttlHours * 60 * 60_000));
-  return { serverName, backupPolicy, llmPreferences, recipeTtlMs };
+  // Boot-unlock mode (docs/security-phone-as-unlock-endpoint.md §7a.1).
+  // A two-option choice carried in the SIGNED InstallBlob so a relay can't
+  // downgrade an `approve` server to `auto`. Default `auto`.
+  const bootUnlockMode = readBootUnlockMode();
+  return { serverName, backupPolicy, llmPreferences, recipeTtlMs, bootUnlockMode };
+}
+
+// Read the selected boot-unlock mode from the radio group. Defaults to
+// `auto` when the control is absent or none is checked.
+function readBootUnlockMode() {
+  const checked = document.querySelector('input[name="cs-boot-unlock"]:checked');
+  return checked && checked.value === "approve" ? "approve" : "auto";
 }
 
 // Recipe TTL bounds — single user-facing knob. 5 min floor, 24 hour
@@ -366,6 +377,9 @@ function setStatus(kind, text) {
 
 async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   const { serverName, recipeTtlMs } = inputs;
+  // §7a.1: only "approve" is carried on the wire; "auto" is the absent-field
+  // default so legacy recipes stay byte-identical (see canonicalInstallBlob).
+  const bootUnlockMode = inputs.bootUnlockMode === "approve" ? "approve" : "auto";
   const ttlMs = clampRecipeTtlMs(recipeTtlMs);
   const irkPubHex = bytesToHex(session.irk.publicKey);
 
@@ -459,6 +473,10 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     installerGitRef: "main",
     rckPubKey: rck.publicKey,
   };
+  // §7a.1: carry the field ONLY for "approve". "auto" is the absent-field
+  // default, so an auto recipe signs/serialises byte-identically to a legacy
+  // pre-bootUnlockMode recipe (and old verifiers keep accepting it).
+  if (bootUnlockMode === "approve") blob.bootUnlockMode = "approve";
   const blobBytes = canonicalInstallBlob(blob);
   const blobSig = await signWithIrk(session.umk, blobBytes);
 
@@ -480,6 +498,9 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     installerGitRef: blob.installerGitRef,
     rckPubKey: bytesToHex(blob.rckPubKey),
   };
+  // Mirror the conditional from the canonical blob: present iff "approve",
+  // so the downloaded recipe JSON carries exactly what was signed.
+  if (blob.bootUnlockMode !== undefined) onWireBlob.bootUnlockMode = blob.bootUnlockMode;
   return { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
 }
 
