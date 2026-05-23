@@ -339,7 +339,7 @@ async function handleDeliverNow() {
   setStatus("active", "connecting to relay…");
   try {
     await deliverThroughRelay(qrUrl, blobBundle);
-    setStatus("done", "delivered. The browser is finishing the ISO.");
+    setStatus("done", "delivered. The browser is downloading the recipe — open it in the Flagship Assembler.");
     const saved = await saveDraft({
       id: activeDraftId,
       ...inputs,
