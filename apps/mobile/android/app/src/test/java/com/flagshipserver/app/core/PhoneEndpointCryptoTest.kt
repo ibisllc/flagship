@@ -7,6 +7,7 @@
 package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
+import com.google.crypto.tink.subtle.Ed25519Verify
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -87,5 +88,48 @@ class PhoneEndpointCryptoTest {
         assertFalse(
             SecretRequest.verify(sig, foreign, serverDomain, stkPubHex, SecretPurpose.UNLOCK_KEY, nonceHex, issuedAt),
         )
+    }
+
+    private fun verifies(pub: ByteArray, sig: ByteArray, msg: ByteArray): Boolean =
+        try { Ed25519Verify(pub).verify(sig, msg); true } catch (_: Throwable) { false }
+
+    // A box-sealed lease: the LUKS key sealed for the box STK opens with the
+    // box's seed-derived X25519 priv (validates the field math via build), and
+    // the canonical bytes + IRK signature match the spec.
+    @Test fun autoUnlockLeaseV2_buildRoundTripsAndCanonicalMatches() {
+        val box = Ed25519Sign.KeyPair.newKeyPair()
+        val irk = Ed25519Sign.KeyPair.newKeyPair()
+        val luksKey = ByteArray(64) { ((it * 5 + 2) and 0xff).toByte() }
+
+        val lease = AutoUnlockLeaseV2.build(
+            serverDomain = "home.alice.flagship.services",
+            stkPub = box.publicKey,
+            leaseId = "deadbeefdeadbeef",
+            luksKey = luksKey,
+            issuedAt = 1L,
+            expiresAt = 2L,
+        )
+        // sealedKey opens with the box STK's seed-mapped X25519 priv → the key.
+        val x25519Priv = Curve25519Map.edwardsSeedToMontgomery(box.privateKey)
+        assertArrayEquals(luksKey, SecretSeal.openWithX25519(lease.sealedKey, x25519Priv))
+
+        // Canonical layout (maxUses absent ⇒ -1) + IRK signature verifies.
+        assertEquals(
+            "flagship/auto-unlock-lease/v2|home.alice.flagship.services|${hex(box.publicKey)}|deadbeefdeadbeef|${hex(lease.sealedKey)}|1|2|-1",
+            String(lease.canonicalBytes()),
+        )
+        val sig = lease.sign(Ed25519Sign(irk.privateKey))
+        assertTrue(verifies(irk.publicKey, sig, lease.canonicalBytes()))
+    }
+
+    @Test fun leaseRevocation_canonicalAndSign() {
+        val irk = Ed25519Sign.KeyPair.newKeyPair()
+        val rev = LeaseRevocation("home.alice.flagship.services", "abcd1234abcd1234", 7L)
+        assertEquals(
+            "flagship/auto-unlock-lease-revoke/v1|home.alice.flagship.services|abcd1234abcd1234|7",
+            String(rev.canonicalBytes()),
+        )
+        val sig = rev.sign(Ed25519Sign(irk.privateKey))
+        assertTrue(verifies(irk.publicKey, sig, rev.canonicalBytes()))
     }
 }

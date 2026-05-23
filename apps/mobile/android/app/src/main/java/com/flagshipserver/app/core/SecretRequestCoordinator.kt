@@ -25,6 +25,8 @@
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.api.BoxSealedLeaseWire
+import com.flagshipserver.app.api.LeaseRevokeWire
 import com.flagshipserver.app.api.MailboxAuthEnvelope
 import com.flagshipserver.app.api.PendingSecretRequest
 import com.flagshipserver.app.api.SecretMailboxClient
@@ -135,7 +137,14 @@ class SecretRequestCoordinator(
     /** The user has confirmed "yes, this is my box". Perform the crypto +
      *  post the reply. Returns when `.com` has accepted the write-once
      *  reply (the box then picks it up on its poll). */
-    suspend fun confirmAndRespond(verified: VerifiedRequest) {
+    /** Confirm + post the reply. When [depositAutoLease] is true (the
+     *  server's chosen mode is "auto"), ALSO deposit a box-sealed lease so
+     *  future boots self-unlock without the phone — returns the lease id
+     *  (store it per-server for the kill switch). Otherwise returns null. */
+    suspend fun confirmAndRespond(
+        verified: VerifiedRequest,
+        depositAutoLease: Boolean = false,
+    ): String? {
         val purpose = verified.purpose
             ?: throw CoordinatorException.PurposeUnsupported(verified.pending.purpose)
         val stkPub = HexUtil.decode(verified.directoryStkPubHex)
@@ -145,8 +154,13 @@ class SecretRequestCoordinator(
         val material = irk.resolve("Approve your box's boot secret")
         val auth = buildMailboxAuth(material)
 
+        var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
-            SecretPurpose.UNLOCK_KEY -> buildUnlockReply(verified, stkPub, material)
+            SecretPurpose.UNLOCK_KEY -> {
+                val (hex, key) = buildUnlockReply(verified, stkPub, material)
+                unlockKey = key
+                hex
+            }
             SecretPurpose.ENTITLEMENT -> buildEntitlementReply(verified, stkPub, material)
         }
 
@@ -158,6 +172,61 @@ class SecretRequestCoordinator(
             issuedAt = now(),
         )
         mailbox.postResponse(auth, body)
+
+        // "auto" mode: deposit a box-sealed lease (the user's IRK authorizes
+        // it here — I2) using the key we just recovered (never .com-visible).
+        val key = unlockKey
+        if (depositAutoLease && purpose == SecretPurpose.UNLOCK_KEY && key != null) {
+            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material.signer)
+        }
+        return null
+    }
+
+    /** Kill switch — revoke a server's auto-unlock lease. The box can no
+     *  longer self-unlock and falls back to phone-gated approval (downgrade,
+     *  not brick). [leaseId] is the one returned by confirmAndRespond. */
+    suspend fun revokeAutoUnlockLease(serverDomain: String, leaseId: String) {
+        val material = irk.resolve("Require approval to boot this server")
+        val issuedAt = now()
+        val rev = LeaseRevocation(serverDomain, leaseId, issuedAt)
+        mailbox.revokeBoxSealedLease(
+            LeaseRevokeWire(serverDomain, leaseId, issuedAt),
+            HexUtil.encode(rev.sign(material.signer)),
+        )
+    }
+
+    /** Deposit a long-lived box-sealed lease (LUKS key sealed for the box
+     *  STK). Returns the lease id. */
+    private suspend fun depositAutoUnlockLease(
+        serverDomain: String,
+        stkPub: ByteArray,
+        luksKey: ByteArray,
+        signer: Ed25519Sign,
+    ): String {
+        val issuedAt = now()
+        val leaseId = AutoUnlockLeaseV2.randomLeaseId()
+        val expiresAt = issuedAt + 365L * 24 * 60 * 60 * 1000  // ~1 year; renewed each approve
+        val lease = AutoUnlockLeaseV2.build(
+            serverDomain = serverDomain,
+            stkPub = stkPub,
+            leaseId = leaseId,
+            luksKey = luksKey,
+            issuedAt = issuedAt,
+            expiresAt = expiresAt,
+        )
+        mailbox.depositBoxSealedLease(
+            BoxSealedLeaseWire(
+                serverDomain = lease.serverDomain,
+                stkPub = HexUtil.encode(lease.stkPub),
+                leaseId = lease.leaseId,
+                sealedKey = HexUtil.encode(lease.sealedKey),
+                issuedAt = lease.issuedAt,
+                expiresAt = lease.expiresAt,
+                maxUses = lease.maxUses,
+            ),
+            HexUtil.encode(lease.sign(signer)),
+        )
+        return leaseId
     }
 
     // ---- unlock-key ----------------------------------------------------
@@ -169,7 +238,7 @@ class SecretRequestCoordinator(
         verified: VerifiedRequest,
         stkPub: ByteArray,
         material: IrkMaterial,
-    ): String {
+    ): Pair<String, ByteArray> {
         val sealedLuks = try {
             mailbox.fetchSealedLuksKey(verified.serverDomain)
         } catch (e: HttpException) {
@@ -186,8 +255,9 @@ class SecretRequestCoordinator(
             throw CoordinatorException.LuksUnsealFailed
         }
 
-        // Re-seal FOR the box's STK, nonce/purpose-bound.
-        return HexUtil.encode(
+        // Re-seal FOR the box's STK, nonce/purpose-bound. Hand back the
+        // recovered key so an "auto" approval can deposit a box-sealed lease.
+        val sealedHex = HexUtil.encode(
             SealedSecretResponse.build(
                 secret = luksKey,
                 stkPub = stkPub,
@@ -195,6 +265,7 @@ class SecretRequestCoordinator(
                 purpose = SecretPurpose.UNLOCK_KEY,
             )
         )
+        return sealedHex to luksKey
     }
 
     // ---- entitlement ---------------------------------------------------

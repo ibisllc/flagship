@@ -29,6 +29,16 @@ interface SecretMailboxClient {
     /** GET /api/users/:u/pods — the directory. The phone resolves the
      *  box's STK INDEPENDENTLY of the mailbox echo from here. */
     suspend fun fetchPods(username: String): PodsDirectoryResponse
+
+    /** POST /api/server/:domain/unlock-key/lease-v2 — deposit a box-sealed
+     *  auto-unlock lease (IRK-signed). Enables "auto" self-unlock; .com
+     *  stores ciphertext only (I1). */
+    suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String)
+
+    /** DELETE /api/server/:domain/unlock-key/lease-v2/:id — the kill switch
+     *  (IRK-signed). Drops the lease so the box falls back to phone-gated
+     *  approval (downgrade, not brick). */
+    suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String)
 }
 
 // MARK: - Wire types
@@ -106,6 +116,33 @@ data class SealedLuksKeyResponse(
     val sealedAt: Long,
 )
 
+/** The `lease` object inside a box-sealed-lease deposit body (matches
+ *  handlePostBoxSealedLease). */
+@Serializable
+data class BoxSealedLeaseWire(
+    val serverDomain: String,
+    val stkPub: String,           // hex
+    val leaseId: String,
+    val sealedKey: String,        // hex
+    val issuedAt: Long,
+    val expiresAt: Long,
+    val maxUses: Int? = null,
+)
+
+/** The `request` object inside a lease-revoke body. */
+@Serializable
+data class LeaseRevokeWire(
+    val serverDomain: String,
+    val leaseId: String,
+    val issuedAt: Long,
+)
+
+@Serializable
+data class LeaseDepositPost(val lease: BoxSealedLeaseWire, val signature: String)
+
+@Serializable
+data class LeaseRevokePost(val request: LeaseRevokeWire, val signature: String)
+
 @Serializable
 data class PodDirectoryEntry(
     val serverDomain: String,
@@ -172,6 +209,32 @@ class LiveSecretMailboxClient(
             responseSerializer = PodsDirectoryResponse.serializer(),
         )
     }
+
+    override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) {
+        val enc = java.net.URLEncoder.encode(lease.serverDomain, "UTF-8")
+        transport.postJson(
+            "$base/api/server/$enc/unlock-key/lease-v2",
+            LeaseDepositPost(lease, signatureHex),
+            serializer = LeaseDepositPost.serializer(),
+            accept = setOf(200, 201),
+        )
+    }
+
+    override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) {
+        val encD = java.net.URLEncoder.encode(request.serverDomain, "UTF-8")
+        val encL = java.net.URLEncoder.encode(request.leaseId, "UTF-8")
+        val bytes = transport.json
+            .encodeToString(LeaseRevokePost.serializer(), LeaseRevokePost(request, signatureHex))
+            .toByteArray(Charsets.UTF_8)
+        // DELETE with a JSON body (the Worker reads { request, signature }).
+        transport.execute(
+            method = "DELETE",
+            url = "$base/api/server/$encD/unlock-key/lease-v2/$encL",
+            body = bytes,
+            contentType = "application/json",
+            accept = setOf(200, 204),
+        )
+    }
 }
 
 // MARK: - Mock
@@ -184,6 +247,8 @@ class MockSecretMailboxClient : SecretMailboxClient {
     var lastPostedAuth: MailboxAuthEnvelope? = null
     var lastPostedResponse: SecretResponseBody? = null
     var usernameForResponses: String = "demo"
+    val deposited: MutableList<Pair<BoxSealedLeaseWire, String>> = mutableListOf()
+    val revoked: MutableList<Pair<LeaseRevokeWire, String>> = mutableListOf()
 
     override suspend fun fetchPendingRequests(auth: MailboxAuthEnvelope): SecretRequestsResponse {
         lastPostedAuth = auth
@@ -202,4 +267,12 @@ class MockSecretMailboxClient : SecretMailboxClient {
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse =
         PodsDirectoryResponse(username, directory)
+
+    override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) {
+        deposited.add(lease to signatureHex)
+    }
+
+    override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) {
+        revoked.add(request to signatureHex)
+    }
 }

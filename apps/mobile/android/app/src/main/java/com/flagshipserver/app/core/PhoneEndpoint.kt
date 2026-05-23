@@ -236,6 +236,72 @@ object EntitlementBundleCarrier {
     }
 }
 
+// MARK: - 5. AutoUnlockLeaseV2 (box-sealed lease — "auto" self-unlock)
+
+/** Phone-deposited (IRK-signed) box-sealed lease so an "auto"-mode server can
+ *  self-unlock on future reboots with no phone present. sealedKey is the LUKS
+ *  key sealed FOR the box STK (I1 — no plaintext at .com), pinned by the IRK
+ *  signature (I2). Canonical bytes MUST match canonicalAutoUnlockLeaseV2 in
+ *  phoneEndpoint.ts. */
+data class AutoUnlockLeaseV2(
+    val serverDomain: String,
+    val stkPub: ByteArray,
+    val leaseId: String,
+    val sealedKey: ByteArray,
+    val issuedAt: Long,
+    val expiresAt: Long,
+    val maxUses: Int? = null,
+) {
+    companion object {
+        const val CANONICAL_TAG = "flagship/auto-unlock-lease/v2"
+
+        /** Seal [luksKey] for the box STK so the lease never holds plaintext. */
+        fun build(
+            serverDomain: String, stkPub: ByteArray, leaseId: String, luksKey: ByteArray,
+            issuedAt: Long, expiresAt: Long, maxUses: Int? = null,
+        ): AutoUnlockLeaseV2 = AutoUnlockLeaseV2(
+            serverDomain, stkPub, leaseId,
+            SecretSeal.sealForEd25519Recipient(luksKey, stkPub),
+            issuedAt, expiresAt, maxUses,
+        )
+
+        fun randomLeaseId(): String {
+            val b = ByteArray(16); SecureRandom().nextBytes(b); return HexUtil.encode(b)
+        }
+    }
+
+    fun canonicalBytes(): ByteArray {
+        PhoneEndpointFieldGuard.check("serverDomain", serverDomain)
+        PhoneEndpointFieldGuard.check("leaseId", leaseId)
+        return listOf(
+            CANONICAL_TAG, serverDomain, HexUtil.encode(stkPub), leaseId,
+            HexUtil.encode(sealedKey), issuedAt.toString(), expiresAt.toString(),
+            (maxUses ?: -1).toString(),
+        ).joinToString("|").toByteArray()
+    }
+
+    fun sign(irk: Ed25519Sign): ByteArray = irk.sign(canonicalBytes())
+}
+
+/** IRK-signed kill switch — revoking a lease downgrades an "auto" server back
+ *  to phone-gated. Matches canonicalLeaseRevocation in phoneEndpoint.ts. */
+data class LeaseRevocation(
+    val serverDomain: String,
+    val leaseId: String,
+    val issuedAt: Long,
+) {
+    companion object { const val CANONICAL_TAG = "flagship/auto-unlock-lease-revoke/v1" }
+
+    fun canonicalBytes(): ByteArray {
+        PhoneEndpointFieldGuard.check("serverDomain", serverDomain)
+        PhoneEndpointFieldGuard.check("leaseId", leaseId)
+        return listOf(CANONICAL_TAG, serverDomain, leaseId, issuedAt.toString())
+            .joinToString("|").toByteArray()
+    }
+
+    fun sign(irk: Ed25519Sign): ByteArray = irk.sign(canonicalBytes())
+}
+
 // MARK: - Sealing crypto (Ed25519 recipient → crypto_box_seal)
 
 /** `crypto_box_seal`-equivalent matching sealForEd25519Recipient /
