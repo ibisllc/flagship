@@ -111,9 +111,28 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 `-trimpath` + `-buildvcs=false` + `-s -w` make two clean builds on the same Go
 toolchain byte-identical. The prebuilt binary is **not** committed
-(`dist/` is gitignored); wave 4 decides build-at-install vs commit-prebuilt. The
-helper has only one external dependency, `golang.org/x/crypto`, pinned in
-`go.mod` / `go.sum`.
+(`dist/` is gitignored). The helper has only one external dependency,
+`golang.org/x/crypto`, pinned in `go.mod` / `go.sum`.
+
+### Wave 4 decision: build-at-install (no committed binary)
+
+The Burner's opt-in LUKS path (`UserDataOptions.encryptRoot`) **builds the helper
+at install time from the cloned source** — auditable, no committed binary. The
+first-boot bootstrap (`packages/flagship-burner/src/userdata.ts` /
+`apps/burner-mac/.../UserData.swift`, the `encryptRoot` branch) runs, in curtin's
+in-target chroot:
+
+```
+apt-get install -y --no-install-recommends golang-go
+( cd /opt/flagship/installer/unseal-helper && \
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -buildvcs=false -ldflags '-s -w' -o /boot/flagship-unseal . )
+```
+
+so the helper lands at **`/boot/flagship-unseal`** (mode 755, on the unencrypted
+`/boot`) before the root is sealed — exactly where `boot-stage.sh` and the Ubuntu
+initramfs premount hook expect it. The default (unencrypted) Burner path does not
+build or ship the helper at all.
 
 ## The gate (wire-compat is the requirement)
 
