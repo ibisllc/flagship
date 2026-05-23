@@ -88,16 +88,7 @@
 
       <!-- View 3b: Activity tab — unlock approvals + install progress + audit log -->
       <section id="view-activity" class="hidden" data-tab="activity">
-        <h2>Pending unlock requests</h2>
-        <div class="card">
-          <p class="note">
-            Tap to approve a server that's asking to boot. Approvals are
-            one-shot by default; enable long-lived auto-unlock per server.
-          </p>
-          <button class="secondary full-width" id="activity-open-unlock-approvals">Review unlock requests</button>
-        </div>
-
-        <h2 class="mt-5">Install progress</h2>
+        <h2>Install progress</h2>
         <div class="card">
           <p class="note">
             Watch a fresh build come online. Enter a serial to start streaming
@@ -319,16 +310,6 @@
         <div id="vibecode-chat-pending" class="hidden mt-2"></div>
         <div class="row-2 mt-2">
           <button class="secondary" id="vibecode-chat-back">← Back</button>
-        </div>
-      </section>
-
-      <!-- View 14: Unlock approvals (P2.6) -->
-      <section id="view-unlock-approvals" class="hidden">
-        <h2>Pending unlock requests</h2>
-        <div id="unlock-approvals-content"></div>
-        <div class="row-2">
-          <button class="secondary" id="unlock-approvals-refresh">Refresh</button>
-          <button class="secondary" id="unlock-approvals-back">← Back</button>
         </div>
       </section>
 

@@ -21,7 +21,6 @@ import {
   deriveSWK,
   ed,
   signAccountRecovery,
-  signBootApproval,
   signInvite,
   signInviteAcceptance,
   signDeviceCapabilityGrant,
@@ -36,7 +35,6 @@ import {
   signRevokeDeviceCapabilityGrant,
   signTunnelHello,
   type AccountRecovery,
-  type BootChallenge,
   type DeviceCapabilityGrant,
   type ImageRebuildRequest,
   type InviteAcceptance,
@@ -91,10 +89,6 @@ async function main() {
   const ISSUED_AT = 1735689600000;
 
   const vectors: Vector[] = [];
-
-  // BootChallenge / signBootApproval (BAK)
-  const boot: BootChallenge = { serverId: "srv-test", nonce: FIXED_NONCE, issuedAt: ISSUED_AT };
-  vectors.push(makeVector("boot", "bak", { ...boot, nonce: hex(boot.nonce) }, signBootApproval(boot, bak)));
 
   // ImageRebuildRequest (IRK)
   const rebuild: ImageRebuildRequest = {

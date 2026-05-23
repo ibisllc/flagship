@@ -12,7 +12,6 @@ import {
   type LLMProvider,
 } from "@flagship/llm-providers";
 import { LlmHarness, type SealedRequest } from "../src/llmHarness.js";
-import { BootCoordinator } from "../src/bootCoordinator.js";
 import { AppMembership } from "../src/membership.js";
 import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext } from "../src/httpApi.js";
@@ -124,7 +123,6 @@ describe("daemon HTTP /llm/chat", () => {
     return {
       serverId: "srv-llm",
       userId: "harry",
-      bootCoordinator: new BootCoordinator("srv-llm", phoneIrk.publicKey),
       apps,
       resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
       injectors,

@@ -118,7 +118,6 @@ describe("/webapp PWA static surface", () => {
       "/webapp/views/pod-pair.js",
       "/webapp/views/marketplace.js",
       "/webapp/views/vibe-code.js",
-      "/webapp/views/unlock-approvals.js",
       "/webapp/views/recovery.js",
       "/webapp/views/install-progress.js",
       "/webapp/views/orders-debug.js",
@@ -143,7 +142,6 @@ describe("/webapp PWA static surface", () => {
       ["/api/screens/tier-status", "/webapp/views/tier-status.js"],
       ["/api/screens/marketplace-browse", "/webapp/views/marketplace.js"],
       ["/api/screens/vibe-code/start", "/webapp/views/vibe-code.js"],
-      ["/api/screens/unlock-approvals/pending", "/webapp/views/unlock-approvals.js"],
       ["/api/screens/install-events/", "/webapp/views/install-progress.js"],
       ["/api/screens/orders/send", "/webapp/views/orders-debug.js"],
       ["/api/screens/browser-tabs/list/", "/webapp/views/browser-viewer.js"],
@@ -213,15 +211,6 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain("https://flagshipserver.com");
     // Must do the Ed25519 → X25519 conversion locally (no @flagship/protocol bundle on the webapp).
     expect(r.body).toContain("X25519");
-  });
-
-  it("/webapp/views/unlock-approvals.js wires Approve to the lease helper (no more 'pending backend' stub)", async () => {
-    const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/webapp/views/unlock-approvals.js" });
-    expect(r.statusCode).toBe(200);
-    expect(r.body).toContain("approveOneShot");
-    // Confirm the old placeholder string is gone.
-    expect(r.body).not.toContain("pending backend wiring");
   });
 
   it("/webapp/views/server-detail.js exposes the auto-unlock toggle + revoke + list", async () => {
@@ -338,16 +327,16 @@ describe("/webapp PWA static surface", () => {
     expect(r.body).toContain('addEventListener("notificationclick"');
     expect(r.body).toContain("showNotification");
     expect(r.body).toContain('"/lib/push.js"');
-    // v10 reads event.data.json() (RFC 8291 plaintext from .com) and
-    // personalises the body with the requesting server FQDN.
+    // v10 reads event.data.json() (RFC 8291 plaintext from .com).
     // v11 added an e2e simulate-push message shim; harmless in prod.
     // v12 dropped skipWaiting/clients.claim + adopted per-URL precache.
     // v13 renames the apps-list/app-detail views to services-list/service-detail.
-    expect(r.body).toContain('SHELL_VERSION = "v13"');
+    // v14 dropped the legacy unlock-approval push branch (relay + lease
+    //     replace it); a generic fallback notification covers the rest.
+    expect(r.body).toContain('SHELL_VERSION = "v14"');
     expect(r.body).toContain("event.data?.json");
-    expect(r.body).toContain("serverFqdn");
     // Must keep the empty-payload fallback (some pushes have no body).
-    expect(r.body).toContain("A server is asking to boot");
+    expect(r.body).toContain("Flagship has an update for you");
   });
 
   it("/webapp/views/settings.js wires the browser-notifications toggle", async () => {

@@ -35,7 +35,6 @@ import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
 import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
-import { initUnlockApprovalsView, enterUnlockApprovals } from "./views/unlock-approvals.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
@@ -71,7 +70,6 @@ const SUB_VIEW_TABS = {
   "view-vibecode-chat": "apps",
   "view-service-env": "apps",
   "view-browser-viewer": "apps",
-  "view-unlock-approvals": "activity",
   "view-install-progress": "activity",
   "view-settings": "settings",
   "view-account-security": "settings",
@@ -183,7 +181,6 @@ function wireSettingsTabEntries() {
 function wireActivityEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
-  wire("activity-open-unlock-approvals", enterUnlockApprovals);
   wire("activity-open-install-progress", enterInstallProgress);
 }
 
@@ -223,7 +220,6 @@ async function boot() {
   initVibeCodeView();
   initServiceEnvView();
   initVibeCodeChatView();
-  initUnlockApprovalsView();
   initRecoveryView();
   // post-recovery is owned by another worker; init it best-effort so
   // the shell loads cleanly whether or not it's on disk yet.

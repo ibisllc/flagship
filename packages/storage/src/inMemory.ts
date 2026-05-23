@@ -9,8 +9,6 @@ import type {
   BoxSealedLeaseStorage,
   PendingRePairRecord,
   PendingRePairStorage,
-  PendingUnlockApprovalRecord,
-  PendingUnlockApprovalStorage,
   WebauthnRecoveryRecord,
   WebauthnRecoveryStorage,
   EntitlementRevocationListRecord,
@@ -36,7 +34,6 @@ import type {
   Storage,
   TierStorage,
   TierSubscriptionRecord,
-  UnlockKeyDeposit,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameAliasRecord,
@@ -364,23 +361,12 @@ export class InMemoryInstallEventStorage implements InstallEventStorage {
 
 export class InMemoryLuksKeyStorage implements LuksKeyStorage {
   private sealed = new Map<string, SealedLuksKeyRecord>();
-  private unlock = new Map<string, UnlockKeyDeposit>();
   async putSealed(rec: SealedLuksKeyRecord): Promise<void> {
     this.sealed.set(rec.serverDomain, { ...rec });
   }
   async getSealed(serverDomain: string): Promise<SealedLuksKeyRecord | undefined> {
     const r = this.sealed.get(serverDomain);
     return r ? { ...r } : undefined;
-  }
-  async putUnlock(rec: UnlockKeyDeposit): Promise<void> {
-    this.unlock.set(rec.serverDomain, { ...rec });
-  }
-  async consumeUnlock(serverDomain: string, now: number): Promise<UnlockKeyDeposit | undefined> {
-    const r = this.unlock.get(serverDomain);
-    if (!r) return undefined;
-    this.unlock.delete(serverDomain);
-    if (r.expiresAt <= now) return undefined;
-    return { ...r };
   }
 }
 
@@ -766,39 +752,6 @@ export class InMemoryWebauthnRecoveryStorage implements WebauthnRecoveryStorage 
   }
 }
 
-export class InMemoryPendingUnlockApprovalStorage implements PendingUnlockApprovalStorage {
-  private rows = new Map<string, PendingUnlockApprovalRecord>();
-
-  async upsertWithDedup(
-    serverDomain: string,
-    requestId: string,
-    now: number,
-    pushDedupMs: number,
-  ): Promise<{ requestId: string; shouldPush: boolean }> {
-    const existing = this.rows.get(serverDomain);
-    if (!existing) {
-      this.rows.set(serverDomain, { serverDomain, requestId, requestedAt: now, lastPushAt: 0 });
-      return { requestId, shouldPush: true };
-    }
-    const shouldPush = now - existing.lastPushAt > pushDedupMs;
-    return { requestId: existing.requestId, shouldPush };
-  }
-
-  async touchLastPushAt(serverDomain: string, at: number): Promise<void> {
-    const r = this.rows.get(serverDomain);
-    if (r) r.lastPushAt = at;
-  }
-
-  async get(serverDomain: string): Promise<PendingUnlockApprovalRecord | undefined> {
-    const r = this.rows.get(serverDomain);
-    return r ? { ...r } : undefined;
-  }
-
-  async delete(serverDomain: string): Promise<boolean> {
-    return this.rows.delete(serverDomain);
-  }
-}
-
 export class InMemoryUserIdentityRecordStorage implements UserIdentityRecordStorage {
   private byHash = new Map<string, UserIdentityRecord>();
   private clone(r: UserIdentityRecord): UserIdentityRecord {
@@ -1169,7 +1122,6 @@ export class InMemoryStorage implements Storage {
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
   secretMailbox = new InMemorySecretMailboxStorage();
   boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
-  pendingUnlockApprovals = new InMemoryPendingUnlockApprovalStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();
   marketplace = new InMemoryMarketplaceStorage();

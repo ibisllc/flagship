@@ -1,8 +1,9 @@
 /**
  * End-to-end smoke for the AutoUnlockLease flow against the live Worker.
  *
- * Companion to smoke-luks-unlock.ts (which exercises the legacy
- * DepositUnlockKey envelope). This one walks the new lease-based path:
+ * Walks the lease-based unlock path (the legacy plaintext DepositUnlockKey
+ * envelope + its smoke have been removed; .com now only ever holds
+ * ciphertext it can't read):
  *
  *   1. Mint a fresh user + server (same registration shape as the
  *      legacy smoke).

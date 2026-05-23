@@ -3,8 +3,7 @@
 //
 // Two modes share the same envelope (see auto_unlock_lease_design.md):
 //   approveOneShot(serverFqdn)   — multiUse=false, ~10 min expiry.
-//                                   Used by the unlock-approvals view's
-//                                   "Approve" button.
+//                                   One-shot "approve this boot" helper.
 //   enableLongLived(serverFqdn)  — multiUse=true, ~7d expiry. Used by
 //                                   the per-server toggle. Renew before
 //                                   expiry by calling again.

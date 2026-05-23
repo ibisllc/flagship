@@ -968,63 +968,6 @@ describe("screens HTTP — P1.15 install-events JSON poll proxy", () => {
   });
 });
 
-describe("screens HTTP — P1.8 / P1.9 unlock approvals (proxy)", () => {
-  it("pending: forwards to .com with serverFqdn query", async () => {
-    const calls: string[] = [];
-    const fakeFetch: FetchLike = async (url: string) => {
-      calls.push(url);
-      return jsonOk({ pending: [{ serverFqdn: SERVER_FQDN, requestId: "r1", requestedAt: 1, ip: "1.2.3.4" }] }) as never;
-    };
-    const handle = buildScreensHttp({
-      ...COMMON,
-      gate: fakeGate(),
-      controlPlaneBaseUrl: "https://flagshipserver.com",
-      fetchImpl: fakeFetch,
-    });
-    const r = await handle(req({
-      path: "/api/screens/unlock-approvals/pending",
-      headers: { "x-flagship-session": "tok-good" },
-    }));
-    expect(r?.status).toBe(200);
-    expect(calls[0]).toContain(`serverFqdn=${encodeURIComponent(SERVER_FQDN)}`);
-    const body = JSON.parse(r!.body as string);
-    expect(body.pending).toHaveLength(1);
-    expect(body.pending[0].requestId).toBe("r1");
-  });
-
-  it("approve: requires signature + envelope, then proxies", async () => {
-    const calls: Array<{ url: string; body: unknown }> = [];
-    const fakeFetch: FetchLike = async (url: string, init: { body?: string } = {}) => {
-      calls.push({ url, body: init.body ? JSON.parse(init.body) : null });
-      return jsonOk({}) as never;
-    };
-    const handle = buildScreensHttp({
-      ...COMMON,
-      gate: fakeGate(),
-      controlPlaneBaseUrl: "https://flagshipserver.com",
-      fetchImpl: fakeFetch,
-    });
-    // Missing signature
-    const r1 = await handle(req({
-      method: "POST",
-      path: "/api/screens/unlock-approvals/req1/approve",
-      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ envelope: "abcd" })),
-    }));
-    expect(r1?.status).toBe(400);
-    // Happy path
-    const r2 = await handle(req({
-      method: "POST",
-      path: "/api/screens/unlock-approvals/req1/approve",
-      headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
-      body: Buffer.from(JSON.stringify({ signature: "deadbeef", envelope: "abcd" })),
-    }));
-    expect(r2?.status).toBe(200);
-    expect(calls[0]!.url).toContain("/api/unlock/approvals/req1/approve");
-    expect((calls[0]!.body as { signature: string }).signature).toBe("deadbeef");
-  });
-});
-
 describe("screens HTTP — /api/screens/lineage-resolve", () => {
   function fakeResolver(initial: Array<{
     serviceId: string;

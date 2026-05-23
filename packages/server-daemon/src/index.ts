@@ -16,7 +16,6 @@ import {
 } from "./alertInboxHttp.js";
 import { buildAdminProxyHandler } from "./adminProxy.js";
 import { BackupLoop } from "./backupLoop.js";
-import { BootCoordinator } from "./bootCoordinator.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
@@ -713,14 +712,12 @@ async function main(): Promise<void> {
 
   // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
   if (cfg) {
-    const coordinator = new BootCoordinator(cfg.serverId, cfg.bakPublicKey);
     const apps = new Map<string, AppMembership>();
     const injectors = new Map<string, IdentityInjector>();
     const sessions = new Map<string, Uint8Array>();
     const ctx: DaemonContext = {
       serverId: cfg.serverId,
       userId: cfg.userId,
-      bootCoordinator: coordinator,
       apps,
       resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
       injectors,
@@ -1092,7 +1089,6 @@ if (invokedDirectly) {
   });
 }
 
-export { BootCoordinator } from "./bootCoordinator.js";
 export { BackupLoop } from "./backupLoop.js";
 export { AppRunner } from "./serviceRunner.js";
 export { loadConfig, parseConfig } from "./config.js";

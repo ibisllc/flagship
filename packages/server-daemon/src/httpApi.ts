@@ -9,7 +9,6 @@ import {
   type InviteToken,
   type MembershipMutation,
 } from "@flagship/protocol";
-import { BootCoordinator } from "./bootCoordinator.js";
 import { AppMembership } from "./membership.js";
 import { IdentityInjector } from "./identityInjector.js";
 import { LlmHarness } from "./llmHarness.js";
@@ -41,7 +40,6 @@ export interface DeployedApp {
 export interface DaemonContext {
   serverId: string;
   userId: string;
-  bootCoordinator: BootCoordinator;
   apps: Map<string, AppMembership>;
   /** Resolves an authenticated paired-session token to the requester's IRK pubkey. */
   resolveSession: (token: string | undefined) => Bytes | null;
@@ -109,41 +107,7 @@ export function buildDaemonHttp(ctx: DaemonContext): FastifyInstance {
     serverId: ctx.serverId,
     userId: ctx.userId,
     apps: Array.from(ctx.apps.keys()),
-    pendingBootChallenges: ctx.bootCoordinator.pendingCount(),
   }));
-
-  // ---- Boot challenge ----------------------------------------------------
-
-  app.post("/boot/challenge", async () => {
-    const { challenge, nonceId } = ctx.bootCoordinator.createChallenge();
-    return {
-      nonceId,
-      challenge: {
-        serverId: challenge.serverId,
-        nonce: bytesToHex(challenge.nonce),
-        issuedAt: challenge.issuedAt,
-      },
-    };
-  });
-
-  app.post<{ Body: { nonceId?: string; signature?: string } }>(
-    "/boot/approve",
-    async (req, reply) => {
-      const body = req.body ?? {};
-      if (typeof body.nonceId !== "string" || typeof body.signature !== "string") {
-        return reply.status(400).send({ error: "nonceId and signature required" });
-      }
-      let sig: Uint8Array;
-      try {
-        sig = hexToBytes(body.signature);
-      } catch {
-        return reply.status(400).send({ error: "signature not hex" });
-      }
-      const result = ctx.bootCoordinator.submitApproval(body.nonceId, sig);
-      if (!result.ok) return reply.status(403).send(result);
-      return { ok: true };
-    },
-  );
 
   // ---- Per-app invite redemption ----------------------------------------
 

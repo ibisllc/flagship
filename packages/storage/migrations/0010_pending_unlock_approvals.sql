@@ -1,3 +1,10 @@
+-- RETIRED: this table backed the legacy plaintext unlock-approval boot
+-- flow, which has been removed in favor of the RELAY (sealed secret
+-- mailbox) + box-sealed auto-unlock lease model. The application code
+-- that read/wrote this table is gone. The table is intentionally LEFT
+-- IN PLACE in prod D1 (dropping a prod table is irreversible and there
+-- are no rows of value); no new migration drops it.
+--
 -- Pending unlock approvals — when a server polls /unlock-key/consume
 -- and there's no lease present, .com records a pending row here and
 -- fans a push to the user's devices. The row is the canonical "this

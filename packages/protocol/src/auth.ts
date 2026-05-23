@@ -1,12 +1,6 @@
 import { ed } from "./edSync.js";
 import type { Bytes, Keypair, ServerId, UserId } from "./types.js";
 
-export interface BootChallenge {
-  serverId: ServerId;
-  nonce: Bytes;
-  issuedAt: number;
-}
-
 export interface ImageRebuildRequest {
   userId: UserId;
   newServerId: ServerId;
@@ -25,7 +19,6 @@ export interface ServerRevocation {
   issuedAt: number;
 }
 
-const TAG_BOOT = "flagship/boot/v1";
 const TAG_REBUILD = "flagship/rebuild/v1";
 const TAG_REVOKE = "flagship/revoke/v1";
 const TAG_MEMBERSHIP = "flagship/membership/v1";
@@ -431,12 +424,6 @@ function hex(b: Bytes): string {
   return s;
 }
 
-function canonicalBoot(c: BootChallenge): Bytes {
-  return new TextEncoder().encode(
-    `${TAG_BOOT}|${c.serverId}|${hex(c.nonce)}|${c.issuedAt}`,
-  );
-}
-
 function canonicalRebuild(r: ImageRebuildRequest): Bytes {
   return new TextEncoder().encode(
     `${TAG_REBUILD}|${r.userId}|${r.newServerId}|${r.wifiSsid}|${hex(r.wifiPskHash)}|${r.shareRatio}|${r.issuedAt}`,
@@ -612,18 +599,6 @@ function canonicalClaimUsername(c: ClaimUsername): Bytes {
   return new TextEncoder().encode(
     [TAG_CLAIM_USERNAME, c.username, hex(c.irkPub), c.issuedAt].join("|"),
   );
-}
-
-export function signBootApproval(c: BootChallenge, bak: Keypair): Bytes {
-  return ed.sign(canonicalBoot(c), bak.privateKey);
-}
-
-export function verifyBootApproval(c: BootChallenge, sig: Bytes, bakPub: Bytes): boolean {
-  try {
-    return ed.verify(sig, canonicalBoot(c), bakPub);
-  } catch {
-    return false;
-  }
 }
 
 export function signRebuildRequest(r: ImageRebuildRequest, irk: Keypair): Bytes {
@@ -1302,30 +1277,27 @@ export function verifyPhoneOrder(o: PhoneOrder, sig: Bytes, pskPub: Bytes): bool
 }
 
 /**
- * LUKS-unlock-on-boot endpoints.
+ * LUKS-unlock-on-boot endpoints (RELAY + box-sealed-lease model).
  *
  * Flow:
  *   1. At install time, the daemon seals the LUKS root key with the
  *      user's BAK pubkey and POSTs `PutSealedLuksKey` to .com (signed
  *      by the server identity key).
- *   2. At boot, the unencrypted boot stage GETs the sealed blob (anyone
- *      can — sealed against BAK is useless without the phone).
- *   3. Phone, when present + biometric-authenticated, unseals locally
- *      and POSTs `DepositUnlockKey` to .com (signed by IRK).
- *   4. Boot stage POSTs `ConsumeUnlockKey` (signed by server identity)
- *      to fetch the unsealed key and atomically clear the entry.
+ *   2. At boot, the box self-unlocks from a box-sealed lease, or falls
+ *      back to the relay (an STK-signed `SecretRequest` the phone
+ *      answers with a sealed reply). The unlock key is released to the
+ *      box via an IRK-signed `AutoUnlockLease` deposited at .com.
+ *   3. Boot stage POSTs `ConsumeUnlockKey` (signed by server identity)
+ *      to fetch the lease-released key and atomically clear a one-shot
+ *      lease.
+ *
+ * NOTE: the legacy plaintext `DepositUnlockKey` path (where .com held
+ * the unsealed key in a form it could read) has been removed. .com now
+ * only ever stores ciphertext it cannot read.
  */
 export interface PutSealedLuksKey {
   serverId: ServerId;
   sealedKey: Bytes;
-  issuedAt: number;
-}
-
-export interface DepositUnlockKey {
-  serverId: ServerId;
-  unlockKey: Bytes;
-  /** Wall-clock ms after which the deposit is considered expired. */
-  expiresAt: number;
   issuedAt: number;
 }
 
@@ -1341,9 +1313,9 @@ export interface ConsumeUnlockKey {
  * "one-shot reactive deposit" (default per-boot) and "out-and-about
  * long-lived lease" (opt-in toggle).
  *
- * `multiUse=false`: behaves like a `DepositUnlockKey` — the boot
- *   stage's first `/consume` returns the key and `.com` deletes the
- *   row. `expiresAt` typically a few minutes after `issuedAt`.
+ * `multiUse=false`: one-shot — the boot stage's first `/consume`
+ *   returns the key and `.com` deletes the row. `expiresAt` typically
+ *   a few minutes after `issuedAt`.
  *
  * `multiUse=true`: persists across multiple `/consume` calls until
  *   `expiresAt`. Lets a server reboot freely while the lease is
@@ -1386,7 +1358,6 @@ export interface RevokeAutoUnlockLease {
 }
 
 const TAG_PUT_SEALED_LUKS_KEY = "flagship/put-sealed-luks-key/v1";
-const TAG_DEPOSIT_UNLOCK_KEY = "flagship/deposit-unlock-key/v1";
 const TAG_CONSUME_UNLOCK_KEY = "flagship/consume-unlock-key/v1";
 const TAG_AUTO_UNLOCK_LEASE = "flagship/auto-unlock-lease/v1";
 const TAG_REVOKE_AUTO_UNLOCK_LEASE = "flagship/revoke-auto-unlock-lease/v1";
@@ -1813,12 +1784,6 @@ function canonicalPutSealedLuksKey(r: PutSealedLuksKey): Bytes {
   );
 }
 
-function canonicalDepositUnlockKey(r: DepositUnlockKey): Bytes {
-  return new TextEncoder().encode(
-    [TAG_DEPOSIT_UNLOCK_KEY, r.serverId, hex(r.unlockKey), r.expiresAt, r.issuedAt].join("|"),
-  );
-}
-
 function canonicalConsumeUnlockKey(r: ConsumeUnlockKey): Bytes {
   return new TextEncoder().encode(
     [TAG_CONSUME_UNLOCK_KEY, r.serverId, hex(r.nonce), r.issuedAt].join("|"),
@@ -1831,17 +1796,6 @@ export function signPutSealedLuksKey(r: PutSealedLuksKey, identity: Keypair): By
 export function verifyPutSealedLuksKey(r: PutSealedLuksKey, sig: Bytes, identityPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalPutSealedLuksKey(r), identityPub);
-  } catch {
-    return false;
-  }
-}
-
-export function signDepositUnlockKey(r: DepositUnlockKey, irk: Keypair): Bytes {
-  return ed.sign(canonicalDepositUnlockKey(r), irk.privateKey);
-}
-export function verifyDepositUnlockKey(r: DepositUnlockKey, sig: Bytes, irkPub: Bytes): boolean {
-  try {
-    return ed.verify(sig, canonicalDepositUnlockKey(r), irkPub);
   } catch {
     return false;
   }

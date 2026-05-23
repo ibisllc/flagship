@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { deriveIRK, deriveSWK, type AppManifest } from "@flagship/protocol";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 import { AppMembership } from "../src/membership.js";
-import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext, type DeployedApp } from "../src/httpApi.js";
 import {
@@ -44,7 +43,6 @@ function makeCtx() {
   const ctx: DaemonContext = {
     serverId: "srv-1",
     userId: "harry",
-    bootCoordinator: new BootCoordinator("srv-1", ownerIrk.publicKey),
     apps,
     resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
     injectors: new Map<string, IdentityInjector>(),

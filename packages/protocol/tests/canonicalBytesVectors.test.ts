@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import {
   ed,
   verifyAccountRecovery,
-  verifyBootApproval,
   verifyDeviceCapabilityGrant,
   verifyInvite,
   verifyInviteAcceptance,
@@ -67,12 +66,6 @@ describe("cross-language canonical-bytes vectors", () => {
     const fromHex = (k: string) =>
       typeof i[k] === "string" ? hexToBytes(i[k] as string) : new Uint8Array(0);
     switch (v.name) {
-      case "boot":
-        return verifyBootApproval(
-          { serverId: i.serverId as string, nonce: fromHex("nonce"), issuedAt: i.issuedAt as number },
-          sig,
-          bakPub,
-        );
       case "rebuild":
         return verifyRebuildRequest(
           {

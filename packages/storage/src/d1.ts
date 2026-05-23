@@ -12,8 +12,6 @@ import type {
   PendingRePairRecord,
   PendingRePairStorage,
   RecoveryWipePolicy,
-  PendingUnlockApprovalRecord,
-  PendingUnlockApprovalStorage,
   WebauthnRecoveryRecord,
   WebauthnRecoveryStorage,
   EntitlementRevocationListRecord,
@@ -39,7 +37,6 @@ import type {
   Storage,
   TierStorage,
   TierSubscriptionRecord,
-  UnlockKeyDeposit,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -870,41 +867,6 @@ export class D1LuksKeyStorage implements LuksKeyStorage {
       .first<{ server_domain: string; sealed_key_hex: string; sealed_at: number }>();
     return r ? { serverDomain: r.server_domain, sealedKeyHex: r.sealed_key_hex, sealedAt: r.sealed_at } : undefined;
   }
-  async putUnlock(rec: UnlockKeyDeposit): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO unlock_key_deposits (server_domain, unlock_key_hex, deposited_at, expires_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(server_domain) DO UPDATE SET
-           unlock_key_hex = excluded.unlock_key_hex,
-           deposited_at = excluded.deposited_at,
-           expires_at = excluded.expires_at`,
-      )
-      .bind(rec.serverDomain, rec.unlockKeyHex, rec.depositedAt, rec.expiresAt)
-      .run();
-  }
-  async consumeUnlock(serverDomain: string, now: number): Promise<UnlockKeyDeposit | undefined> {
-    // SELECT, then DELETE — D1 doesn't support RETURNING in all contexts;
-    // since the consume is one-shot per boot we accept the small race in
-    // the (single-server) production case. Two simultaneous boot stages
-    // would each try to consume and only one would win.
-    const r = await this.db
-      .prepare("SELECT * FROM unlock_key_deposits WHERE server_domain = ?")
-      .bind(serverDomain)
-      .first<{ server_domain: string; unlock_key_hex: string; deposited_at: number; expires_at: number }>();
-    if (!r) return undefined;
-    await this.db
-      .prepare("DELETE FROM unlock_key_deposits WHERE server_domain = ?")
-      .bind(serverDomain)
-      .run();
-    if (r.expires_at <= now) return undefined;
-    return {
-      serverDomain: r.server_domain,
-      unlockKeyHex: r.unlock_key_hex,
-      depositedAt: r.deposited_at,
-      expiresAt: r.expires_at,
-    };
-  }
 }
 
 export class D1AutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
@@ -937,11 +899,10 @@ export class D1AutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
     serverDomain: string,
     now: number,
   ): Promise<AutoUnlockLeaseRecord | undefined> {
-    // Pick the freshest non-expired row. Like the legacy consumeUnlock,
-    // there's a small race when two boot stages call simultaneously —
-    // single-server production case where this can't happen, so we
-    // accept it. GC of expired rows happens here too so the table
-    // doesn't grow unbounded.
+    // Pick the freshest non-expired row. There's a small race when two
+    // boot stages call simultaneously — single-server production case
+    // where this can't happen, so we accept it. GC of expired rows
+    // happens here too so the table doesn't grow unbounded.
     await this.db
       .prepare("DELETE FROM auto_unlock_leases WHERE server_domain = ? AND expires_at <= ?")
       .bind(serverDomain, now)
@@ -1318,65 +1279,6 @@ export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
       .bind(serverDomain, now)
       .all<BoxSealedLeaseRow>();
     return (r.results ?? []).map(rowToBoxSealedLease);
-  }
-}
-
-export class D1PendingUnlockApprovalStorage implements PendingUnlockApprovalStorage {
-  constructor(private readonly db: D1Database) {}
-
-  async upsertWithDedup(
-    serverDomain: string,
-    requestId: string,
-    now: number,
-    pushDedupMs: number,
-  ): Promise<{ requestId: string; shouldPush: boolean }> {
-    const existing = await this.db
-      .prepare("SELECT * FROM pending_unlock_approvals WHERE server_domain = ?")
-      .bind(serverDomain)
-      .first<{ server_domain: string; request_id: string; requested_at: number; last_push_at: number }>();
-    if (!existing) {
-      await this.db
-        .prepare(
-          `INSERT INTO pending_unlock_approvals
-             (server_domain, request_id, requested_at, last_push_at)
-           VALUES (?, ?, ?, 0)`,
-        )
-        .bind(serverDomain, requestId, now)
-        .run();
-      return { requestId, shouldPush: true };
-    }
-    const shouldPush = now - existing.last_push_at > pushDedupMs;
-    return { requestId: existing.request_id, shouldPush };
-  }
-
-  async touchLastPushAt(serverDomain: string, at: number): Promise<void> {
-    await this.db
-      .prepare("UPDATE pending_unlock_approvals SET last_push_at = ? WHERE server_domain = ?")
-      .bind(at, serverDomain)
-      .run();
-  }
-
-  async get(serverDomain: string): Promise<PendingUnlockApprovalRecord | undefined> {
-    const r = await this.db
-      .prepare("SELECT * FROM pending_unlock_approvals WHERE server_domain = ?")
-      .bind(serverDomain)
-      .first<{ server_domain: string; request_id: string; requested_at: number; last_push_at: number }>();
-    if (!r) return undefined;
-    return {
-      serverDomain: r.server_domain,
-      requestId: r.request_id,
-      requestedAt: r.requested_at,
-      lastPushAt: r.last_push_at,
-    };
-  }
-
-  async delete(serverDomain: string): Promise<boolean> {
-    const r = await this.db
-      .prepare("DELETE FROM pending_unlock_approvals WHERE server_domain = ?")
-      .bind(serverDomain)
-      .run();
-    const meta = (r as { meta?: { changes?: number } }).meta;
-    return meta?.changes === undefined ? true : meta.changes > 0;
   }
 }
 
@@ -2667,7 +2569,6 @@ export class D1Storage implements Storage {
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
-  pendingUnlockApprovals: PendingUnlockApprovalStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;
@@ -2696,7 +2597,6 @@ export class D1Storage implements Storage {
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
     this.secretMailbox = new D1SecretMailboxStorage(db);
     this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
-    this.pendingUnlockApprovals = new D1PendingUnlockApprovalStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);
     this.marketplace = new D1MarketplaceStorage(db);

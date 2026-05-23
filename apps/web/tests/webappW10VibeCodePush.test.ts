@@ -134,7 +134,11 @@ describe("W10 — service worker routes vibecode-needs-you push", () => {
     expect(data.deepLink).toContain("sessionId=sess-no-link");
   });
 
-  it("leaves the unlock-approval push path intact for the existing payload", async () => {
+  it("falls back to a generic notification for non-vibecode payloads", async () => {
+    // The legacy plaintext unlock-approval push branch was removed
+    // (relay + box-sealed lease replace it). Any other payload now
+    // produces the generic notification, never an unlock-approvals
+    // deep-link.
     const { listeners, shown } = buildSandbox();
     const pushCbs = listeners.get("push") ?? [];
     const event = makePushEvent({
@@ -145,8 +149,8 @@ describe("W10 — service worker routes vibecode-needs-you push", () => {
     await event._drain();
     expect(shown.length).toBe(1);
     const n = shown[0]!;
-    expect(n.opts.tag).toBe("flagship-unlock-request");
-    const data = n.opts.data as { deepLink: string };
-    expect(data.deepLink).toContain("view=unlock-approvals");
+    expect(n.opts.tag).toBe("flagship-notification");
+    const data = n.opts.data as { deepLink: string | null };
+    expect(data.deepLink).toBeNull();
   });
 });

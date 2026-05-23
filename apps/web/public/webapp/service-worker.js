@@ -26,7 +26,10 @@
 //         app.js, style.css, manifest + icon, router/state/api libs)
 //         rejects install. A single missing view module no longer
 //         bricks every webapp install on the planet.
-const SHELL_VERSION = "v13";
+//  v14: removed views/unlock-approvals.js — the legacy plaintext
+//       unlock-approval boot flow is gone (relay + box-sealed lease
+//       replace it). Push handler's unlock-request branch dropped.
+const SHELL_VERSION = "v14";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -77,7 +80,6 @@ const OPTIONAL_SHELL = [
   "/views/vibe-code.js",
   "/views/vibecode-chat.js",
   "/views/service-env.js",
-  "/views/unlock-approvals.js",
   "/views/recovery.js",
   "/views/install-progress.js",
   "/views/orders-debug.js",
@@ -238,17 +240,15 @@ self.addEventListener("online", () => {
   void replayQueue();
 });
 
-// ---------- Web Push: unlock-approval notifications -------------------
+// ---------- Web Push notifications -----------------------------------
 //
-// .com sends an RFC 8291-encrypted payload with the JSON shape
-// { kind: "unlock-request", serverFqdn, requestId }. The browser
+// .com / the daemon send RFC 8291-encrypted payloads. The browser
 // decrypts before the push event fires; we get the plaintext via
 // event.data.json(). Empty-payload pushes (no event.data) still work
 // — they fall back to a generic notification body.
 //
 // `notificationclick` focuses an existing webapp tab if one is open,
-// otherwise opens the root (the SPA routes the user to the
-// unlock-approvals view from there).
+// otherwise opens the root (or a deep-link the payload provides).
 self.addEventListener("push", (event) => {
   let data = null;
   try {
@@ -285,35 +285,26 @@ self.addEventListener("push", (event) => {
     return;
   }
 
-  let serverFqdn = null;
-  if (data && typeof data.serverFqdn === "string") {
-    serverFqdn = data.serverFqdn;
-  }
-  const body = serverFqdn
-    ? `${serverFqdn} is asking to boot — tap to review.`
-    : "A server is asking to boot — tap to review.";
-  // #29 — pre-compute the deep-link so the click handler can navigate
-  // straight to the unlock-approvals view (or whichever surface the
-  // push targets) without bouncing through the home screen.
-  const deepLink = serverFqdn
-    ? `/?view=unlock-approvals&serverFqdn=${encodeURIComponent(serverFqdn)}`
-    : "/?view=unlock-approvals";
+  // Generic fallback for any other (or empty) payload.
+  const body = (data && typeof data.body === "string")
+    ? data.body
+    : "Flagship has an update for you.";
+  const deepLink = data && typeof data.deepLink === "string" ? data.deepLink : null;
   event.waitUntil(
     self.registration.showNotification("Flagship", {
       body,
-      tag: "flagship-unlock-request",
+      tag: "flagship-notification",
       renotify: true,
       requireInteraction: false,
       icon: "/icon.svg",
-      data: { kind: "unlock-request", serverFqdn, deepLink },
+      data: { kind: (data && data.kind) || "generic", deepLink },
     }),
   );
 });
 
 // #29 — deep-link push notifications. The push handler attaches a
 // `deepLink` field to notification.data when the payload knows where
-// the click should land (e.g. unlock-approvals view + a specific
-// serverId). On notificationclick we:
+// the click should land. On notificationclick we:
 //   - Focus an existing webapp tab if one is open AND navigate it to
 //     the deep-link via a postMessage the page listens for.
 //   - Otherwise open `/?view=<view>&...` directly so the SPA router

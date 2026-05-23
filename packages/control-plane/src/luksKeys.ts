@@ -1,19 +1,16 @@
 import {
   verifyAutoUnlockLease,
   verifyConsumeUnlockKey,
-  verifyDepositUnlockKey,
   verifyPutSealedLuksKey,
   verifyRevokeAutoUnlockLease,
   type AutoUnlockLease,
   type ConsumeUnlockKey,
-  type DepositUnlockKey,
   type PutSealedLuksKey,
   type RevokeAutoUnlockLease,
 } from "@flagship/protocol";
 import type {
   AutoUnlockLeaseStorage,
   LuksKeyStorage,
-  PendingUnlockApprovalStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
@@ -21,11 +18,10 @@ import { hexToBytes } from "./hex.js";
 import type { HandlerResponse } from "./types.js";
 
 /**
- * LUKS unlock-on-boot endpoints.
+ * LUKS unlock-on-boot endpoints (RELAY + box-sealed-lease model).
  *
  * `POST   /api/server/:host/sealed-luks-key`             server identity-signed
  * `GET    /api/server/:host/sealed-luks-key`             public (sealed against BAK)
- * `POST   /api/server/:host/unlock-key`                  IRK-signed (legacy deposit; one-shot)
  * `POST   /api/server/:host/unlock-key/lease`            IRK-signed AutoUnlockLease (one-shot OR multi-use)
  * `DELETE /api/server/:host/unlock-key/lease/:leaseId`   IRK-signed kill switch
  * `POST   /api/server/:host/unlock-key/consume`          server identity-signed (boot stage)
@@ -33,56 +29,25 @@ import type { HandlerResponse } from "./types.js";
  * The :host parameter must equal the `serverId` field inside the signed
  * request — defense in depth against a bug that mis-routes between hosts.
  *
- * `consume` checks the lease store first (new code path) before falling
- * back to the legacy unlock-key deposit row, so old clients keep working
- * during rollout without any boot-stage change.
+ * `consume` serves the unlock key from the lease store; when no lease is
+ * present it returns 404 and the boot stage falls back to the relay (the
+ * STK-signed secret-request mailbox). The legacy plaintext-deposit path,
+ * where `.com` held the unsealed key, has been removed.
  */
 export interface LuksKeyDeps {
   servers: ServerStorage;
   usernames: UsernameStorage;
   luksKeys: LuksKeyStorage;
   /**
-   * Optional: when wired, /unlock-key/lease and /unlock-key/lease/:id
-   * become available, and /consume checks the lease store first. When
-   * absent, only the legacy deposit path is in play.
+   * When wired, /unlock-key/lease and /unlock-key/lease/:id become
+   * available, and /consume serves from the lease store.
    */
   autoUnlockLeases?: AutoUnlockLeaseStorage;
-  /**
-   * When wired alongside `pushUserDevices`, /consume returning 404
-   * records a pending row + fans a push to the user's devices (rate-
-   * limited per pushDedupMs). The lease deposit handler clears the
-   * pending row on success. When absent, /consume just returns 404.
-   */
-  pendingUnlockApprovals?: PendingUnlockApprovalStorage;
-  /**
-   * Push fan-out for unlock-request notifications. Built by the
-   * apex Worker from `forwardToProviders` + `pushTokens.listByUser`.
-   * Returns silently on no-tokens / no-config — the consume path
-   * doesn't care if the push actually went out. `payload` is the
-   * plaintext to encrypt via RFC 8291 for Web Push (APNs/FCM use
-   * the existing sealed-payload pattern unrelated to this).
-   */
-  pushUserDevices?: (
-    username: string,
-    category: string,
-    payload?: Uint8Array,
-  ) => Promise<void>;
   maxAgeMs?: number;
-  /** Skip pushing if a push for this server fired within this window. Default 60s. */
-  pushDedupMs?: number;
   now?: () => number;
 }
 
 const DEFAULT_MAX_AGE = 5 * 60_000;
-const DEFAULT_PUSH_DEDUP_MS = 60_000;
-
-function randomRequestId(): string {
-  const b = new Uint8Array(16);
-  crypto.getRandomValues(b);
-  let s = "";
-  for (const x of b) s += x.toString(16).padStart(2, "0");
-  return s;
-}
 
 export async function handlePutSealedLuksKey(
   deps: LuksKeyDeps,
@@ -182,69 +147,6 @@ export async function handleGetSealedLuksKey(
   };
 }
 
-export async function handleDepositUnlockKey(
-  deps: LuksKeyDeps,
-  host: string,
-  body: unknown,
-): Promise<HandlerResponse> {
-  const now = deps.now ?? (() => Date.now());
-  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE;
-
-  const b = body as { request?: Record<string, unknown>; signature?: unknown };
-  const r = b?.request ?? {};
-  if (
-    typeof r.serverId !== "string" ||
-    typeof r.unlockKey !== "string" ||
-    typeof r.expiresAt !== "number" ||
-    typeof r.issuedAt !== "number" ||
-    typeof b?.signature !== "string"
-  ) {
-    return { status: 400, body: { error: "malformed body" } };
-  }
-  if (r.serverId !== host) {
-    return { status: 403, body: { error: "serverId / host mismatch" } };
-  }
-  const reg = await deps.servers.get(host);
-  if (!reg) return { status: 404, body: { error: "unknown server" } };
-  if (reg.revokedAt) return { status: 403, body: { error: "server is revoked" } };
-  if (Math.abs(now() - r.issuedAt) > maxAgeMs) {
-    return { status: 403, body: { error: "stale request" } };
-  }
-  if (r.expiresAt <= now()) {
-    return { status: 400, body: { error: "expiresAt already past" } };
-  }
-
-  // Look up the user's IRK pubkey via the server's username.
-  const userRec = await deps.usernames.get(reg.username);
-  if (!userRec) return { status: 404, body: { error: "unknown user" } };
-
-  let unlockKey: Uint8Array;
-  let sig: Uint8Array;
-  try {
-    unlockKey = hexToBytes(r.unlockKey);
-    sig = hexToBytes(b.signature);
-  } catch {
-    return { status: 400, body: { error: "invalid hex" } };
-  }
-  const claim: DepositUnlockKey = {
-    serverId: host,
-    unlockKey,
-    expiresAt: r.expiresAt,
-    issuedAt: r.issuedAt,
-  };
-  if (!verifyDepositUnlockKey(claim, sig, hexToBytes(userRec.irkPubHex))) {
-    return { status: 403, body: { error: "invalid signature" } };
-  }
-
-  await deps.luksKeys.putUnlock({
-    serverDomain: host,
-    unlockKeyHex: r.unlockKey,
-    depositedAt: now(),
-    expiresAt: r.expiresAt,
-  });
-  return { status: 200, body: { ok: true } };
-}
-
 export async function handleConsumeUnlockKey(
   deps: LuksKeyDeps,
   host: string,
@@ -293,9 +195,11 @@ export async function handleConsumeUnlockKey(
     return { status: 403, body: { error: "invalid signature" } };
   }
 
-  // Lease store first (new path) — covers both the one-shot reactive
+  // Serve from the lease store — covers both the one-shot reactive
   // lease (default per-boot Approve flow) and the long-lived
-  // out-and-about lease (toggle).
+  // out-and-about lease (toggle). When no lease is present the boot
+  // stage falls back to the relay (the STK-signed secret-request
+  // mailbox), so a 404 here is a normal "no lease yet" signal.
   if (deps.autoUnlockLeases) {
     const lease = await deps.autoUnlockLeases.consume(host, now());
     if (lease) {
@@ -312,48 +216,7 @@ export async function handleConsumeUnlockKey(
     }
   }
 
-  // Legacy deposit fallback. Anything written via the old
-  // /api/server/:host/unlock-key endpoint still works.
-  const dep = await deps.luksKeys.consumeUnlock(host, now());
-  if (!dep) {
-    // No lease, no legacy deposit — record this server as a pending
-    // unlock approval and fan a push to the owner's devices (rate-
-    // limited). The pending row is the canonical "this server is
-    // asking to boot" entity that the webapp's unlock-approvals
-    // view shows + the lease deposit handler clears on success.
-    if (deps.pendingUnlockApprovals) {
-      const dedupMs = deps.pushDedupMs ?? DEFAULT_PUSH_DEDUP_MS;
-      const result = await deps.pendingUnlockApprovals.upsertWithDedup(
-        host,
-        randomRequestId(),
-        now(),
-        dedupMs,
-      );
-      if (result.shouldPush && deps.pushUserDevices) {
-        // Fire-and-forget push so the boot poll's response time
-        // isn't held back by APNs/FCM/Web Push round-trips. Errors
-        // are silently swallowed by the pushUserDevices wrapper.
-        await deps.pendingUnlockApprovals.touchLastPushAt(host, now());
-        // RFC 8291 plaintext for the SW to personalise the notification
-        // ("test.alice.flagship.services is asking to boot"). APNs/FCM
-        // ignore this; they get the sealed-payload-by-pushX25519Pub
-        // story instead.
-        const payload = new TextEncoder().encode(
-          JSON.stringify({ kind: "unlock-request", serverFqdn: host, requestId: result.requestId }),
-        );
-        void deps.pushUserDevices(reg.username, "unlock-request", payload).catch(() => {});
-      }
-    }
-    return { status: 404, body: { error: "no pending unlock-key deposit" } };
-  }
-  return {
-    status: 200,
-    body: {
-      unlockKey: dep.unlockKeyHex,
-      depositedAt: dep.depositedAt,
-      expiresAt: dep.expiresAt,
-    },
-  };
+  return { status: 404, body: { error: "no unlock-key lease available" } };
 }
 
 /**
@@ -437,11 +300,6 @@ export async function handleDepositAutoUnlockLease(
     depositedAt: now(),
     expiresAt: r.expiresAt,
   });
-  // Clear the pending row — the user has acted, no more pushes needed
-  // for this boot wait.
-  if (deps.pendingUnlockApprovals) {
-    await deps.pendingUnlockApprovals.delete(host).catch(() => {});
-  }
   return { status: 200, body: { ok: true, leaseId: r.leaseId } };
 }
 
@@ -504,37 +362,6 @@ export async function handleRevokeAutoUnlockLease(
 
   const removed = await deps.autoUnlockLeases.revoke(host, leaseId);
   return { status: 200, body: { ok: true, removed } };
-}
-
-/**
- * Read the pending unlock-approval row for a server (proxied by the
- * daemon's /api/screens/unlock-approvals/pending). Public read —
- * the row only contains opaque metadata (requestId + requestedAt),
- * never the unlock key itself, so disclosure is safe. Returns
- * `{ pending: [] }` shape so the daemon-side response parser doesn't
- * need conditional branching.
- */
-export async function handleGetPendingUnlockApproval(
-  deps: LuksKeyDeps,
-  serverFqdn: string,
-): Promise<HandlerResponse> {
-  if (!deps.pendingUnlockApprovals) {
-    return { status: 200, body: { pending: [] } };
-  }
-  const row = await deps.pendingUnlockApprovals.get(serverFqdn);
-  if (!row) return { status: 200, body: { pending: [] } };
-  return {
-    status: 200,
-    body: {
-      pending: [
-        {
-          requestId: row.requestId,
-          serverFqdn: row.serverDomain,
-          requestedAt: row.requestedAt,
-        },
-      ],
-    },
-  };
 }
 
 /**

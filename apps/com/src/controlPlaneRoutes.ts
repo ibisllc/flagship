@@ -24,8 +24,6 @@ import {
   handleDeviceDisconnect,
   handleConsumeUnlockKey,
   handleDepositAutoUnlockLease,
-  handleDepositUnlockKey,
-  handleGetPendingUnlockApproval,
   handleGetRePair,
   handleInitiateRePair,
   handleListAutoUnlockLeases,
@@ -346,7 +344,6 @@ const ROUTE_RE = {
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
   PROVISION_EVENT: /^\/api\/server\/([^/]+)\/provision-event$/,
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
-  LUKS_UNLOCK_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key$/,
   LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
   LUKS_LEASE_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease$/,
   LUKS_LEASE_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease\/([^/]+)$/,
@@ -366,7 +363,6 @@ const ROUTE_RE = {
   LEASE_V2_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2$/,
   LEASE_V2_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2\/([^/]+)$/,
   LEASE_V2_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases-v2$/,
-  UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
   USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
   // Phase 3b — vouched cross-device admit. The admin signs a
@@ -727,7 +723,6 @@ export async function tryControlPlane(
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_UNLOCK_CONSUME))) {
     const host = decodeURIComponent(m[1]!);
-    const forwarder = buildOptionalPushForwarder(env);
     return finishPlain(
       await handleConsumeUnlockKey(
         {
@@ -735,10 +730,6 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
-          pendingUnlockApprovals: storage.pendingUnlockApprovals,
-          pushUserDevices: forwarder
-            ? buildPushUserDevices(storage.pushTokens, forwarder)
-            : undefined,
         },
         host,
         await readJson(request),
@@ -754,30 +745,9 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           luksKeys: storage.luksKeys,
           autoUnlockLeases: storage.autoUnlockLeases,
-          pendingUnlockApprovals: storage.pendingUnlockApprovals,
         },
         host,
         await readJson(request),
-      ),
-    );
-  }
-  if (method === "GET" && ROUTE_RE.UNLOCK_APPROVALS_PENDING.test(path)) {
-    const serverFqdn = url.searchParams.get("serverFqdn");
-    if (!serverFqdn) {
-      return finishPlain({
-        status: 400,
-        body: { error: "serverFqdn query param required" },
-      });
-    }
-    return finishPlain(
-      await handleGetPendingUnlockApproval(
-        {
-          servers: storage.servers,
-          usernames: storage.usernames,
-          luksKeys: storage.luksKeys,
-          pendingUnlockApprovals: storage.pendingUnlockApprovals,
-        },
-        serverFqdn,
       ),
     );
   }
@@ -893,20 +863,6 @@ export async function tryControlPlane(
         ),
       );
     }
-  }
-  if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_UNLOCK_DEPOSIT))) {
-    const host = decodeURIComponent(m[1]!);
-    return finishPlain(
-      await handleDepositUnlockKey(
-        {
-          servers: storage.servers,
-          usernames: storage.usernames,
-          luksKeys: storage.luksKeys,
-        },
-        host,
-        await readJson(request),
-      ),
-    );
   }
 
   // ---- Webapp cloud-shard recovery (WebAuthn PRF) ----

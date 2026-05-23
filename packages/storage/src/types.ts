@@ -362,25 +362,11 @@ export interface SealedLuksKeyRecord {
   sealedAt: number;
 }
 
-export interface UnlockKeyDeposit {
-  serverDomain: string;
-  unlockKeyHex: string;
-  depositedAt: number;
-  expiresAt: number;
-}
-
 export interface LuksKeyStorage {
   /** Server stores its sealed LUKS root key (sealed-with-BAK). Idempotent overwrite. */
   putSealed(rec: SealedLuksKeyRecord): Promise<void>;
   /** Public read of the sealed blob (useless without the phone). */
   getSealed(serverDomain: string): Promise<SealedLuksKeyRecord | undefined>;
-  /** Phone deposits the unsealed key. Replaces any prior pending deposit. */
-  putUnlock(rec: UnlockKeyDeposit): Promise<void>;
-  /**
-   * Boot stage fetches and atomically clears the deposit. Returns
-   * undefined if no deposit is pending or the deposit has expired.
-   */
-  consumeUnlock(serverDomain: string, now: number): Promise<UnlockKeyDeposit | undefined>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -501,41 +487,6 @@ export interface PendingRePairStorage {
    * value) if the bit was already set.
    */
   orInAlertsFiredBit(username: string, bit: number): Promise<number>;
-}
-
-// ──────────────────────────────────────────────────────────────────────
-// Pending unlock approvals (push trigger from /consume)
-// ──────────────────────────────────────────────────────────────────────
-
-export interface PendingUnlockApprovalRecord {
-  serverDomain: string;
-  requestId: string;
-  requestedAt: number;
-  /** Wall-clock ms of the last push fan-out for this row, or 0 if never. */
-  lastPushAt: number;
-}
-
-export interface PendingUnlockApprovalStorage {
-  /**
-   * Insert (or refresh) a pending row keyed by serverDomain. Returns
-   * `{ requestId, shouldPush }` — `shouldPush` is true iff the row
-   * was newly inserted OR `now - lastPushAt > pushDedupMs`. Either
-   * way, callers should `touchLastPushAt(serverDomain, now)` after a
-   * successful fan-out so subsequent polls within the dedup window
-   * skip the push.
-   */
-  upsertWithDedup(
-    serverDomain: string,
-    requestId: string,
-    now: number,
-    pushDedupMs: number,
-  ): Promise<{ requestId: string; shouldPush: boolean }>;
-  /** Confirm push fired (writes lastPushAt). */
-  touchLastPushAt(serverDomain: string, at: number): Promise<void>;
-  /** Read for /api/unlock/approvals/pending (the daemon proxies this). */
-  get(serverDomain: string): Promise<PendingUnlockApprovalRecord | undefined>;
-  /** Called from handleDepositAutoUnlockLease on success. */
-  delete(serverDomain: string): Promise<boolean>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -815,7 +766,6 @@ export interface Storage {
   autoUnlockLeases: AutoUnlockLeaseStorage;
   secretMailbox: SecretMailboxStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
-  pendingUnlockApprovals: PendingUnlockApprovalStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
   marketplace: MarketplaceStorage;

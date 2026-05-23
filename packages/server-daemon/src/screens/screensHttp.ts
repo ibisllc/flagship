@@ -42,7 +42,6 @@ import type {
   OrdersSendResponse,
   OwnedUrl,
   PairedSessionsListResponse,
-  PendingUnlockApproval,
   RecentInstallEvent,
   ReleaseStatusResponse,
   ServerDetailResponse,
@@ -51,8 +50,6 @@ import type {
   ServiceEnvSetRequest,
   ServiceEnvUnsetRequest,
   TierStatusResponse,
-  UnlockApprovalApproveRequest,
-  UnlockApprovalsPendingResponse,
   UrlControllerClaimRequest,
   UrlControllerOwnedResponse,
   VerifyCustomDomainRequest,
@@ -133,7 +130,7 @@ export interface ScreensHttpDeps {
   vibeCode?: VibeCodeRuntime | null;
   /** Phone-orders dispatcher. Required by P1.14. */
   ordersDispatch?: OrdersDispatchLike | null;
-  /** .com control plane URL for proxy endpoints (marketplace, tier, unlock-approvals, install-events). */
+  /** .com control plane URL for proxy endpoints (marketplace, tier, install-events). */
   controlPlaneBaseUrl?: string | null;
   /** Override fetch for .com proxies (tests inject; production uses globalThis.fetch). */
   fetchImpl?: FetchLike;
@@ -666,57 +663,6 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       );
       const out: BrowserTabsListResponse = { tabs };
       return jok(out);
-    }
-
-    // ---- P1.8 GET /api/screens/unlock-approvals/pending (proxied to .com)
-    if (path === "/api/screens/unlock-approvals/pending" && method === "GET") {
-      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
-      if (!deps.controlPlaneBaseUrl) {
-        const out: UnlockApprovalsPendingResponse = { pending: [] };
-        return jok(out);
-      }
-      const r = await f(
-        `${trimSlash(deps.controlPlaneBaseUrl)}/api/unlock/approvals/pending?serverFqdn=${encodeURIComponent(deps.serverFqdn)}`,
-        { method: "GET" },
-      );
-      if (!r.ok) return jerr(502, `unlock-approvals fetch failed: ${r.status}`);
-      const upstream = (await r.json()) as { pending?: PendingUnlockApproval[] };
-      const out: UnlockApprovalsPendingResponse = {
-        pending: Array.isArray(upstream.pending) ? upstream.pending : [],
-      };
-      return jok(out);
-    }
-
-    // ---- P1.9 POST /api/screens/unlock-approvals/:requestId/approve
-    if (
-      path.startsWith("/api/screens/unlock-approvals/") &&
-      path.endsWith("/approve") &&
-      method === "POST"
-    ) {
-      if (!deps.controlPlaneBaseUrl) return jerr(503, "control plane not configured");
-      const f = deps.fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
-      const requestId = decodeURIComponent(
-        path.slice("/api/screens/unlock-approvals/".length, -"/approve".length),
-      );
-      if (requestId.length === 0) return jerr(400, "requestId required");
-      const body = parseJson(req.body) as UnlockApprovalApproveRequest | null;
-      if (!body || typeof body.signature !== "string" || typeof body.envelope !== "string") {
-        return jerr(400, "signature + envelope required");
-      }
-      const r = await f(
-        `${trimSlash(deps.controlPlaneBaseUrl)}/api/unlock/approvals/${encodeURIComponent(requestId)}/approve`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            serverFqdn: deps.serverFqdn,
-            signature: body.signature,
-            envelope: body.envelope,
-          }),
-        },
-      );
-      if (!r.ok) return jerr(502, `approve failed: ${r.status}`);
-      return jok({ ok: true });
     }
 
     // ---- J.4 GET /api/screens/post-recovery/status

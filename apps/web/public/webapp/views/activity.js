@@ -1,10 +1,9 @@
-// Activity tab: live feed of pending unlock-approvals + recent install
-// events + post-recovery status. Mirrors apps/mobile/{ios,android}
+// Activity tab: live feed of recent install events + post-recovery
+// status + account audit. Mirrors apps/mobile/{ios,android}
 // ActivityScreen + ActivityViewModel.
 //
-// Fan-out fetch the three sources in parallel, then render approvals
-// as a header card, recovery as its own card, and the rest as a
-// merged time-sorted "Recent" list.
+// Fan-out fetch the sources in parallel, then render recovery as its
+// own card and the rest as a merged time-sorted "Recent" list.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
@@ -31,10 +30,7 @@ async function fanOut() {
       return raw ? JSON.parse(raw).username ?? "" : "";
     } catch { return ""; }
   })();
-  const [approvals, detail, recovery, audit] = await Promise.all([
-    screensFetch("/api/screens/unlock-approvals/pending")
-      .then((b) => b.pending ?? [])
-      .catch((e) => { if (e instanceof ScreensError) return []; throw e; }),
+  const [detail, recovery, audit] = await Promise.all([
     screensFetch("/api/screens/server-detail")
       .then((b) => b.recentInstallEvents ?? [])
       .catch((e) => { if (e instanceof ScreensError) return []; throw e; }),
@@ -48,7 +44,7 @@ async function fanOut() {
           .catch(() => [])
       : Promise.resolve([]),
   ]);
-  return { approvals, detail, recovery, audit };
+  return { detail, recovery, audit };
 }
 
 function eventKindIcon(kind) {
@@ -80,18 +76,7 @@ export async function renderActivity() {
   if (!root) return;  // shell renders the static section without the feed slot
   root.innerHTML = skeletonCards(2);
   try {
-    const { approvals, detail, recovery, audit } = await fanOut();
-
-    const approvalsCard = approvals.length === 0
-      ? ""
-      : `
-        <div class="card" style="border-left:3px solid var(--accent);">
-          <div class="row">
-            <span class="value">Unlock requests</span>
-            <span class="pill warn">${approvals.length} waiting</span>
-          </div>
-          <button class="secondary full-width mt-2" id="activity-feed-open-unlock">Open queue</button>
-        </div>`;
+    const { detail, recovery, audit } = await fanOut();
 
     const recoveryCard = recovery == null
       ? ""
@@ -138,13 +123,11 @@ export async function renderActivity() {
       `;
 
     root.innerHTML = `
-      ${approvalsCard}
       ${recoveryCard}
       ${auditCard}
       <h2 class="mt-4">Recent</h2>
       ${recentRows}
     `;
-    $("activity-feed-open-unlock")?.addEventListener("click", () => show("view-unlock-approvals"));
     $("activity-feed-open-recovery")?.addEventListener("click", () => show("view-post-recovery"));
   } catch (e) {
     if (e instanceof ScreensError) {

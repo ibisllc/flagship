@@ -149,27 +149,6 @@ export interface VibeCodeStatusResponse {
   errorReason?: string;
 }
 
-// ---------- P1.8 / P1.9 — /api/screens/unlock-approvals --------------
-
-export interface PendingUnlockApproval {
-  serverFqdn: string;
-  requestId: string;
-  requestedAt: number;
-  ip?: string;
-  userAgent?: string;
-}
-
-export interface UnlockApprovalsPendingResponse {
-  pending: PendingUnlockApproval[];
-}
-
-export interface UnlockApprovalApproveRequest {
-  /** Hex-encoded IRK signature over the unlock-key envelope. */
-  signature: string;
-  /** The unlock-key envelope bytes (base64). */
-  envelope: string;
-}
-
 // ---------- P1.10 / P1.11 — /api/screens/browser-tabs ------------------
 
 export interface BrowserTab {

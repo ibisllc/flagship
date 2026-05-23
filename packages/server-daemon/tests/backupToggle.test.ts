@@ -7,7 +7,6 @@ import {
 } from "@flagship/protocol";
 import { BackupLoop } from "../src/backupLoop.js";
 import { AppMembership } from "../src/membership.js";
-import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext } from "../src/httpApi.js";
 
@@ -26,7 +25,6 @@ function makeCtx(extra: { backupLoop?: BackupLoop; serverId?: string } = {}): Da
   return {
     serverId: extra.serverId ?? "home-box",
     userId: "harry",
-    bootCoordinator: new BootCoordinator(extra.serverId ?? "home-box", irk.publicKey),
     apps,
     resolveSession: () => null,
     injectors: new Map<string, IdentityInjector>(),

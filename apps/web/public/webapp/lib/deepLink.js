@@ -28,10 +28,6 @@ export async function dispatchInitialView() {
       const { enterServicesList } = await import("../views/services-list.js");
       return enterServicesList();
     }
-    if (q.view === "view-unlock-approvals") {
-      const { enterUnlockApprovals } = await import("../views/unlock-approvals.js");
-      return enterUnlockApprovals();
-    }
     if (q.view === "view-install-progress") {
       const { enterInstallProgress } = await import("../views/install-progress.js");
       return enterInstallProgress();

@@ -5,7 +5,6 @@ import {
   sealLlmPayload,
 } from "@flagship/protocol";
 import { AppMembership } from "../src/membership.js";
-import { BootCoordinator } from "../src/bootCoordinator.js";
 import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext } from "../src/httpApi.js";
 import { InMemoryPhoneStateStore } from "../src/phoneStateStore.js";
@@ -27,7 +26,6 @@ function makeCtx(extra: { store?: InMemoryPhoneStateStore } = {}) {
   const ctx: DaemonContext = {
     serverId: "srv-1",
     userId: "harry",
-    bootCoordinator: new BootCoordinator("srv-1", irk.publicKey),
     apps,
     resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
     injectors: new Map<string, IdentityInjector>(),

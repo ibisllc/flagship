@@ -78,7 +78,6 @@ export const HOME_BUTTON_ICONS = {
   "open-apps-list":         packageIcon,
   "open-marketplace":       shoppingBagIcon,
   "open-vibe-code":         sparklesIcon,
-  "open-unlock-approvals":  unlockIcon,
   "open-paired-sessions":   usersIcon,
   "open-tier-status":       activityIcon,
   "open-install-progress":  downloadIcon,

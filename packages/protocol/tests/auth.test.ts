@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  signBootApproval,
   signDemoDirective,
   verifyDemoDirective,
   signSetCustomDomain,
@@ -12,7 +11,6 @@ import {
   signRebuildRequest,
   signRegisterServer,
   signRevocation,
-  verifyBootApproval,
   verifyInvite,
   verifyInviteAcceptance,
   verifyMembershipMutation,
@@ -20,7 +18,6 @@ import {
   verifyRebuildRequest,
   verifyRegisterServer,
   verifyRevocation,
-  type BootChallenge,
   type DemoDirective,
   type SetCustomDomain,
   type ImageRebuildRequest,
@@ -32,55 +29,6 @@ import {
 import { deriveBAK, deriveIRK, deriveSWK, deriveSTK } from "../src/keys.js";
 
 const umk = { seed: new Uint8Array(32).fill(42) };
-
-describe("BAK boot authorization", () => {
-  it("phone-signed approval verifies on the server", () => {
-    const bak = deriveBAK(umk, "srv-1");
-    const challenge: BootChallenge = {
-      serverId: "srv-1",
-      nonce: new Uint8Array(32).fill(1),
-      issuedAt: 1_700_000_000_000,
-    };
-    const sig = signBootApproval(challenge, bak);
-    expect(verifyBootApproval(challenge, sig, bak.publicKey)).toBe(true);
-  });
-
-  it("rejects approval signed by a different server's BAK", () => {
-    const bakA = deriveBAK(umk, "srv-A");
-    const bakB = deriveBAK(umk, "srv-B");
-    const challenge: BootChallenge = {
-      serverId: "srv-A",
-      nonce: new Uint8Array(32).fill(1),
-      issuedAt: 1000,
-    };
-    const sig = signBootApproval(challenge, bakA);
-    expect(verifyBootApproval(challenge, sig, bakB.publicKey)).toBe(false);
-  });
-
-  it("rejects tampered challenge (nonce changed)", () => {
-    const bak = deriveBAK(umk, "srv-1");
-    const challenge: BootChallenge = {
-      serverId: "srv-1",
-      nonce: new Uint8Array(32).fill(1),
-      issuedAt: 1000,
-    };
-    const sig = signBootApproval(challenge, bak);
-    const tampered: BootChallenge = { ...challenge, nonce: new Uint8Array(32).fill(2) };
-    expect(verifyBootApproval(tampered, sig, bak.publicKey)).toBe(false);
-  });
-
-  it("rejects tampered challenge (issuedAt changed)", () => {
-    const bak = deriveBAK(umk, "srv-1");
-    const challenge: BootChallenge = {
-      serverId: "srv-1",
-      nonce: new Uint8Array(32).fill(1),
-      issuedAt: 1000,
-    };
-    const sig = signBootApproval(challenge, bak);
-    const tampered: BootChallenge = { ...challenge, issuedAt: 9999 };
-    expect(verifyBootApproval(tampered, sig, bak.publicKey)).toBe(false);
-  });
-});
 
 describe("IRK image rebuild", () => {
   const req: ImageRebuildRequest = {

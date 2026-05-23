@@ -114,7 +114,6 @@ function resolveViewAlias(alias) {
     "apps-list": "view-apps-list",
     activity: "view-activity",
     settings: "view-settings",
-    "unlock-approvals": "view-unlock-approvals",
     recovery: "view-recovery",
     "install-progress": "view-install-progress",
     marketplace: "view-marketplace",

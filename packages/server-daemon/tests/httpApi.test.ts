@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  deriveBAK,
   deriveIRK,
   deriveSWK,
   newInviteNonce,
-  signBootApproval,
   signInvite,
   signInviteAcceptance,
   signMembershipMutation,
@@ -12,7 +10,6 @@ import {
   type InviteToken,
   type MembershipMutation,
 } from "@flagship/protocol";
-import { BootCoordinator } from "../src/bootCoordinator.js";
 import { AppMembership } from "../src/membership.js";
 import { IdentityInjector } from "../src/identityInjector.js";
 import { buildDaemonHttp, type DaemonContext } from "../src/httpApi.js";
@@ -21,7 +18,6 @@ const ownerUmk = { seed: new Uint8Array(32).fill(11) };
 const sarahUmk = { seed: new Uint8Array(32).fill(33) };
 const ownerIrk = deriveIRK(ownerUmk);
 const sarahIrk = deriveIRK(sarahUmk);
-const ownerBak = deriveBAK(ownerUmk, "srv-1");
 const swk = deriveSWK(ownerUmk, "srv-1");
 
 function bytesToHex(b: Uint8Array): string {
@@ -48,56 +44,12 @@ function makeContext(): { ctx: DaemonContext; runtimeKey: ReturnType<typeof deri
   const ctx: DaemonContext = {
     serverId: "srv-1",
     userId: "harry",
-    bootCoordinator: new BootCoordinator("srv-1", ownerBak.publicKey),
     apps,
     resolveSession: (t) => (t ? sessions.get(t) ?? null : null),
     injectors,
   };
   return { ctx, runtimeKey };
 }
-
-describe("daemon HTTP — boot challenge/approve", () => {
-  it("creates a challenge and accepts a valid BAK-signed approval", async () => {
-    const { ctx } = makeContext();
-    const app = buildDaemonHttp(ctx);
-    const start = await app.inject({ method: "POST", url: "/boot/challenge" });
-    expect(start.statusCode).toBe(200);
-    const body = JSON.parse(start.body);
-    expect(body.nonceId).toMatch(/^[0-9a-f]{16}$/);
-    const challenge = {
-      serverId: body.challenge.serverId,
-      nonce: hexToBytes(body.challenge.nonce),
-      issuedAt: body.challenge.issuedAt,
-    };
-    const sig = signBootApproval(challenge, ownerBak);
-    const approve = await app.inject({
-      method: "POST",
-      url: "/boot/approve",
-      payload: { nonceId: body.nonceId, signature: bytesToHex(sig) },
-    });
-    expect(approve.statusCode).toBe(200);
-    expect(JSON.parse(approve.body).ok).toBe(true);
-  });
-
-  it("rejects approval with the wrong BAK", async () => {
-    const { ctx } = makeContext();
-    const app = buildDaemonHttp(ctx);
-    const start = JSON.parse((await app.inject({ method: "POST", url: "/boot/challenge" })).body);
-    const wrong = deriveBAK({ seed: new Uint8Array(32).fill(99) }, "srv-1");
-    const challenge = {
-      serverId: start.challenge.serverId,
-      nonce: hexToBytes(start.challenge.nonce),
-      issuedAt: start.challenge.issuedAt,
-    };
-    const sig = signBootApproval(challenge, wrong);
-    const res = await app.inject({
-      method: "POST",
-      url: "/boot/approve",
-      payload: { nonceId: start.nonceId, signature: bytesToHex(sig) },
-    });
-    expect(res.statusCode).toBe(403);
-  });
-});
 
 describe("daemon HTTP — invite redemption", () => {
   it("end-to-end: owner signs invite, accepter signs acceptance, redeem creates membership", async () => {
@@ -273,9 +225,3 @@ describe("daemon HTTP — health", () => {
     expect(body.apps).toContain("habit-tracker");
   });
 });
-
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
