@@ -156,6 +156,16 @@
   --text-muted:      var(--ink-muted);
   --radius:          var(--radius-md);
   --canvas-tinted:   var(--canvas-2);
+
+  /* Text-tone aliases (consumed by index/coming-soon + legacy chrome) */
+  --muted:           var(--ink-muted);
+  --faint:           var(--ink-faint);
+
+  /* ── Brand logo ──────────────────────────────────────────────── */
+  /* Square / ring / core. Only the outer square swaps between themes. */
+  --lg-frame:        #0A0A09;
+  --lg-ring:         #FFFFFF;
+  --lg-core:         var(--teal);
 }
 
 :root[data-theme="dark"] {
@@ -186,6 +196,11 @@
   --shadow-inset:    inset 0 1px 0 rgba(255,255,255,0.04);
 
   color-scheme: dark;
+
+  /* Brand logo — outer square flips to white on the dark canvas */
+  --lg-frame:        #FFFFFF;
+  --lg-ring:         #FFFFFF;
+  --lg-core:         var(--teal);
 }
 
 @media (prefers-reduced-motion: reduce) {

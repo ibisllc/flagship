@@ -29,8 +29,9 @@
   <link rel="canonical" href="https://flagshipserver.com/">
   <link rel="preload" href="/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/GeistMono-Variable.woff2" as="font" type="font/woff2" crossorigin>
-  <!-- Shared theme palette (same values the home page defines below; loaded
-       first so the page's own inline rules win on any genuine conflict). -->
+  <!-- Canonical design tokens (palette + logo colours) — single source of
+       truth. theme-ui.css adds the shared logo + toggle chrome on top. -->
+  <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/theme-ui.css">
   <style>
     /*
@@ -43,56 +44,16 @@
     @font-face { font-family:"Geist Mono"; font-style:normal; font-weight:100 900; font-display:swap;
       src:url("/fonts/GeistMono-Variable.woff2") format("woff2-variations"); }
 
+    /* Palette, logo colours, type scale and the rest of the design tokens
+       come from /tokens.css. Only the handful of page-local layout aliases
+       the landing markup references live here. */
     :root {
-      --canvas:        #F7F6F2;
-      --canvas-2:      #F0EEE8;
-      --surface:       #FFFFFF;
-      --ink:           #000000;
-      --ink-soft:      #1F1E1A;
-      --muted:         #555149;
-      --faint:         #8A8478;
-      --rule:          #E5E3DC;
-      --rule-strong:   #C8C5BB;
-
-      --teal:          #14B8A6;
-      --teal-bright:   #2DD4BF;
-      --teal-soft:     rgba(20,184,166,0.10);
-      --teal-glow:     rgba(45,212,191,0.18);
-
-      --ok:            #4ADE80;
-      --warn:          #FBBF24;
-      --err:           #F87171;
-
       --type-sans:     "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
       --type-mono:     "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
       --content:       1180px;
       --gutter:        clamp(20px, 4vw, 56px);
       --nav-h:         56px;
-
-      --lg-frame:      #0A0A09;
-      --lg-ring:       #FFFFFF;
-      --lg-core:       var(--teal);
-
-      color-scheme: light;
-    }
-
-    :root[data-theme="dark"] {
-      --canvas:        #0A0A09;
-      --canvas-2:      #14130F;
-      --surface:       #1A1916;
-      --ink:           #ECE7D6;
-      --ink-soft:      #C8C2B0;
-      --muted:         #8A8478;
-      --faint:         #565249;
-      --rule:          #25231C;
-      --rule-strong:   #3A372F;
-
-      --lg-frame:      var(--teal);
-      --lg-ring:       var(--teal);
-      --lg-core:       #FFFFFF;
-
-      color-scheme: dark;
     }
 
     * { box-sizing: border-box; }
@@ -250,9 +211,9 @@
     /* Logo. Teal rectangle, no border, both themes. Ring and core swap
        per theme: dark = teal ring (blends) + white core; light = white
        ring + teal core. */
-    .wordmark .glyph .lg-frame { fill: var(--lg-frame); stroke: none; }
-    .wordmark .glyph .lg-ring  { fill: var(--lg-ring); }
-    .wordmark .glyph .lg-core  { fill: var(--lg-core); }
+    .wordmark .glyph .lg-frame { fill: var(--lg-frame, #0A0A09); stroke: none; }
+    .wordmark .glyph .lg-ring  { fill: var(--lg-ring, #FFFFFF); }
+    .wordmark .glyph .lg-core  { fill: var(--lg-core, #14B8A6); }
     .nav-links {
       display: flex;
       gap: 24px;
@@ -947,21 +908,12 @@
       margin: 0 auto 24px;
     }
     .finale-cta .actions { justify-content: center; }
-    .finale-foot {
-      padding-top: clamp(28px, 3vw, 40px);
-      border-top: 1px solid var(--rule);
-      display: grid;
-      grid-template-columns: 2fr repeat(3, 1fr);
-      gap: 28px;
-    }
-    @media (max-width: 880px) { .finale-foot { grid-template-columns: 1fr 1fr; } }
-    .finale-foot-brand p {
-      color: var(--muted);
-      font-size: 13px;
-      max-width: 32ch;
-      margin: 10px 0 0;
-    }
-    .finale-foot h4 {
+    /* Shared footer component — same markup + classes as every other page
+       (canonical styling in /components.css). The homepage is self-styled
+       and doesn't load components.css, so the column typography is mirrored
+       here; the .finale .footer* rules adapt the component to sit inside the
+       snap-scroll finale's existing width + flow. */
+    .footer-col h4 {
       font-family: var(--type-mono);
       font-size: 10.5px;
       letter-spacing: 0.18em;
@@ -970,11 +922,22 @@
       font-weight: 500;
       margin: 0 0 10px;
     }
-    .finale-foot ul { list-style: none; padding: 0; margin: 0; }
-    .finale-foot li + li { margin-top: 6px; }
-    .finale-foot a { color: var(--muted); font-size: 13px; border-bottom: none; }
-    .finale-foot a:hover { color: var(--teal-bright); border-bottom: none; }
-    .finale-outro {
+    .footer-col ul { list-style: none; padding: 0; margin: 0; }
+    .footer-col li + li { margin-top: 6px; }
+    .footer-col li:empty { display: none; }
+    .footer-col a { color: var(--muted); font-size: 13px; border-bottom: none; }
+    .footer-col a:hover { color: var(--teal-bright); border-bottom: none; }
+    .footer-col p { color: var(--muted); font-size: 13px; max-width: 32ch; margin: 10px 0 0; }
+
+    .finale .footer-inner {
+      padding-top: clamp(28px, 3vw, 40px);
+      border-top: 1px solid var(--rule);
+      display: grid;
+      grid-template-columns: 2fr repeat(3, 1fr);
+      gap: 28px;
+    }
+    @media (max-width: 880px) { .finale .footer-inner { grid-template-columns: 1fr 1fr; } }
+    .finale .footer-bottom {
       margin-top: 24px;
       padding: 16px 0 24px;
       border-top: 1px solid var(--rule);
@@ -988,7 +951,7 @@
       color: var(--muted);
       text-transform: uppercase;
     }
-    .finale-outro a { color: var(--muted); margin: 0 8px; }
+    .finale .footer-bottom a { color: var(--muted); margin: 0 8px; border-bottom: none; }
 
     .actions { display: flex; flex-wrap: wrap; gap: 10px; }
     .actions.center { justify-content: center; }
@@ -1431,52 +1394,46 @@
         </div>
       </div>
 
-      <div class="finale-foot">
-        <div class="finale-foot-brand">
-          <a href="/" class="wordmark">
-            <span class="glyph" aria-hidden="true"></span>
-            <span>Flagship</span>
-          </a>
-          <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
+      <footer class="footer">
+        <div class="footer-inner">
+          <div class="footer-col">
+            <a href="/" class="wordmark"><span class="glyph" aria-hidden="true"></span><span>Flagship</span></a>
+            <p>A personal cloud that respects you, your hardware, and your mobile device.</p>
+          </div>
+          <div class="footer-col">
+            <h4>Product</h4>
+            <ul>
+              <li><a href="/docs#how-it-works">How it works</a></li>
+              <li><a href="/marketplace/">Services</a></li>
+              <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h4>Trust</h4>
+            <ul>
+              <li><a href="/security.html">Architecture</a></li>
+              <li><a href="/security/disclosure.html">Disclosure</a></li>
+              <li><a href="/security/report.html">Report a vuln</a></li>
+              <li><a href="/abuse">Abuse</a></li>
+              <li><a href="/.well-known/security.txt">security.txt</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h4>Open</h4>
+            <ul>
+              <li><a href="/open-source.html">Open source</a></li>
+              <li><a href="/status/">Status</a></li>
+              <li><a href="/docs/">Docs</a></li>
+              <li><a href="/blog/">Blog</a></li>
+              <li><a href="/help">Help</a></li>
+            </ul>
+          </div>
         </div>
-        <div>
-          <h4>Product</h4>
-          <ul>
-            <li><a href="/docs#how-it-works">How it works</a></li>
-            <li><a href="/marketplace/">Services</a></li>
-            <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
-          </ul>
+        <div class="footer-bottom">
+          <span>© 2026 Flagship · BUSL-1.1 → Apache 2.0 on 2030-05-03</span>
+          <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="https://flagshipserver.com">flagshipserver.com</a></span>
         </div>
-        <div>
-          <h4>Trust</h4>
-          <ul>
-            <li><a href="/security.html">Architecture</a></li>
-            <li><a href="/security/disclosure.html">Disclosure</a></li>
-            <li><a href="/security/report.html">Report a vuln</a></li>
-            <li><a href="/abuse">Abuse</a></li>
-            <li><a href="/.well-known/security.txt">security.txt</a></li>
-          </ul>
-        </div>
-        <div>
-          <h4>Open</h4>
-          <ul>
-            <li><a href="/open-source.html">Open source</a></li>
-            <li><a href="/status/">Status</a></li>
-            <li><a href="/docs/">Docs</a></li>
-            <li><a href="/blog/">Blog</a></li>
-            <li><a href="/help">Help</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="finale-outro">
-        <span>© 2026 Flagship · BUSL-1.1 → Apache 2.0 on 2030-05-03</span>
-        <span>
-          <a href="/privacy">Privacy</a> ·
-          <a href="/terms">Terms</a> ·
-          <a href="https://flagshipserver.com">flagshipserver.com</a>
-        </span>
-      </div>
+      </footer>
 
     </div>
   </section>

@@ -2,8 +2,8 @@
  * Shared light/dark theme controller for every public page.
  *
  * Loaded blocking in <head> (just before </head>) so the theme is applied
- * before first paint — no flash. Pairs with theme-ui.css, which carries the
- * palette + logo + toggle styles. A floating toggle is auto-injected on any
+ * before first paint — no flash. Palette + logo colours live in tokens.css;
+ * theme-ui.css adds the logo + toggle styles. A floating toggle is auto-injected on any
  * page that doesn't already ship its own [data-theme-toggle] control.
  */
 (function () {

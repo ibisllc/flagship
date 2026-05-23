@@ -1,86 +1,12 @@
 /*
- * Shared theme palette + logo + toggle, used by every public page.
+ * Shared logo + theme-toggle chrome for every public page.
  *
- * The palette lives under :root[data-theme="…"] (specificity 0,2,0) so it
- * overrides each page's own :root (0,1,0) regardless of source order — pages
- * only need to include this file + theme.js, no per-page palette editing.
- * Both v2 token names and the legacy v1 aliases are covered.
+ * The palette AND the logo colours (--lg-frame / --lg-ring / --lg-core)
+ * are the single source of truth in /tokens.css. Every page pairs this
+ * file with the tokens — directly, via /site.css, or via a page
+ * stylesheet (e.g. /deck/style.css) — so this file only carries the
+ * shared logo sizing + toggle-button styling, no palette of its own.
  */
-
-:root[data-theme="light"] {
-  /* Surfaces — warm off-white canvas, white cards float above it. */
-  --canvas:          #F7F6F2;
-  --canvas-2:        #F0EEE8;
-  --surface:         #FFFFFF;
-  --surface-elev:    #FFFFFF;
-  --surface-sunken:  #EFEDE7;
-
-  --ink:             #000000;
-  --ink-soft:        #1F1E1A;
-  --ink-muted:       #555149;
-  --ink-faint:       #8A8478;
-  --muted:           #555149;
-  --faint:           #8A8478;
-
-  --rule:            #E5E3DC;
-  --rule-strong:     #C8C5BB;
-  --border:          #E5E3DC;
-  --border-soft:     #EFEDE6;
-
-  /* Legacy v1 aliases */
-  --bg:              #F7F6F2;
-  --bg-elev:         #FFFFFF;
-  --bg-elev-2:       #FFFFFF;
-  --fg:              #000000;
-  --fg-mute:         #555149;
-  --line:            #C8C5BB;
-  --text:            #000000;
-  --text-muted:      #555149;
-  --canvas-tinted:   #F0EEE8;
-
-  /* Logo */
-  --lg-frame:        #0A0A09;
-  --lg-ring:         #FFFFFF;
-  --lg-core:         var(--teal, #14B8A6);
-
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
-  --canvas:          #0A0A09;
-  --canvas-2:        #14130F;
-  --surface:         #1A1916;
-  --surface-elev:    #232118;
-  --surface-sunken:  #14130F;
-
-  --ink:             #ECE7D6;
-  --ink-soft:        #C8C2B0;
-  --ink-muted:       #8A8478;
-  --ink-faint:       #565249;
-  --muted:           #8A8478;
-  --faint:           #565249;
-
-  --rule:            #25231C;
-  --rule-strong:     #3A372F;
-  --border:          #25231C;
-  --border-soft:     #1F1D17;
-
-  --bg:              #0A0A09;
-  --bg-elev:         #1A1916;
-  --bg-elev-2:       #232118;
-  --fg:              #ECE7D6;
-  --fg-mute:         #8A8478;
-  --line:            #3A372F;
-  --text:            #ECE7D6;
-  --text-muted:      #8A8478;
-  --canvas-tinted:   #14130F;
-
-  --lg-frame:        var(--teal, #14B8A6);
-  --lg-ring:         var(--teal, #14B8A6);
-  --lg-core:         #FFFFFF;
-
-  color-scheme: dark;
-}
 
 /* ── Logo ──────────────────────────────────────────────────────── */
 .fs-logo {
@@ -94,9 +20,11 @@
   margin-right: 8px;
   flex: none;
 }
-.fs-logo .lg-frame { fill: var(--lg-frame); stroke: none; }
-.fs-logo .lg-ring  { fill: var(--lg-ring); }
-.fs-logo .lg-core  { fill: var(--lg-core); }
+/* Fallbacks (light-theme values) so a stale/missing tokens.css can never
+   black out the logo — SVG fill defaults to black when a var is undefined. */
+.fs-logo .lg-frame { fill: var(--lg-frame, #0A0A09); stroke: none; }
+.fs-logo .lg-ring  { fill: var(--lg-ring, #FFFFFF); }
+.fs-logo .lg-core  { fill: var(--lg-core, #14B8A6); }
 
 /* ── Theme toggle ──────────────────────────────────────────────── */
 .theme-btn {
