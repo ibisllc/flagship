@@ -1,0 +1,4 @@
+# Build output is reproducible from source via `make build` — do not commit it.
+# Wave 4 decides build-at-install vs commit-prebuilt; until then this stays a
+# source + proven-build artifact only.
+/dist/
