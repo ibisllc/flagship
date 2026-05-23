@@ -413,8 +413,14 @@ async function main(): Promise<void> {
       // first cert attempt). `tunnel-online` is emitted right after the
       // runtime resolves since the tunnel IS connected by then.
       onCertIssued: () => {
-        void reportPhase("cert-issued");
-        void reportPhase("ready");
+        // Sequence the two reports. As fire-and-forget `void` calls they
+        // race, and `cert-issued` frequently lands at .com AFTER `ready`
+        // and overwrites it — so the phase stalls at `cert-issued` even
+        // though the cert is live and serving (observed: demoent4). Chain
+        // them so `ready` is always the last phase stored.
+        void reportPhase("cert-issued")
+          .catch(() => {})
+          .then(() => reportPhase("ready"));
       },
       // Fine-grained ACME observability — map each issuer sub-phase onto
       // a signed ProvisionEvent so a stuck cert is locatable from the
