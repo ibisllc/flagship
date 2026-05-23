@@ -249,6 +249,13 @@ struct WizardView: View {
             }
             if !model.isFinished && !model.isRunning {
                 if model.canFlash {
+                    Toggle(isOn: $model.encryptRoot) {
+                        Text("Encrypt the disk, unlocked by your phone (experimental)")
+                            .font(FB.Font.caption())
+                    }
+                    .toggleStyle(.checkbox)
+                    .foregroundStyle(FB.Colors.textMuted)
+                    .help("Opt-in LUKS-encrypted root. The disk key is sealed for your phone and never readable by flagship.services. Experimental — needs validation; default off keeps the proven unencrypted path.")
                     Text("Writes to \(model.selectedDisk?.deviceNode ?? "—") · erases what's there")
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)

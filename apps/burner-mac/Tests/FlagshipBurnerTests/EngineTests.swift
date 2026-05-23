@@ -110,4 +110,88 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(s.contains("systemctl start flagship-daemon.service"))
         XCTAssertFalse(s.contains("systemctl start flagship-first-boot-register.service"))
     }
+
+    // MARK: - encryptRoot flag (OPT-IN; default OFF)
+
+    /// Default (encryptRoot omitted) MUST be byte-identical to the explicit
+    /// `false` path, and must carry no LUKS storage block or unlock hook.
+    func testEncryptRootDefaultsOffByteIdentical() throws {
+        let recipe = Data(#"{"version":2,"serverDomain":"home.x.flagship.services"}"#.utf8)
+        let a = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main")
+        let c = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main", encryptRoot: false)
+        XCTAssertEqual(a, c, "default must equal explicit encryptRoot:false byte-for-byte")
+        XCTAssertFalse(a.contains("storage:"))
+        XCTAssertFalse(a.contains("dm_crypt"))
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL)
+        XCTAssertFalse(b.contains("encryptRoot ON"))
+        XCTAssertFalse(b.contains("/boot/flagship-unseal"))
+        XCTAssertFalse(b.contains("unlock_via_relay"))
+        XCTAssertFalse(b.contains("update-initramfs"))
+        XCTAssertFalse(b.contains("luksAddKey"))
+        XCTAssertTrue(b.hasSuffix("echo \"[flagship-bootstrap] done\"\n"))
+    }
+
+    /// The encrypted bootstrap is EXACTLY the plain bootstrap with the LUKS
+    /// block spliced before the final installed.flag — proves the shared body
+    /// is reused verbatim (the cross-language byte-identity guarantee).
+    func testEncryptedBootstrapIsPlainPlusLuks() {
+        let plain = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: false)
+        let enc = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
+        let tail = "date > /var/flagship/installed.flag\necho \"[flagship-bootstrap] done\"\n"
+        XCTAssertTrue(plain.hasSuffix(tail))
+        XCTAssertTrue(enc.hasSuffix(tail))
+        // Stripping the LUKS block from enc must reproduce the plain script.
+        let withoutTail = String(enc.dropLast(tail.count))
+        XCTAssertTrue(withoutTail.contains(UserData.luksBootstrapBlock()))
+        let recombined = withoutTail.replacingOccurrences(of: UserData.luksBootstrapBlock(), with: "") + tail
+        XCTAssertEqual(recombined, plain)
+    }
+
+    /// EXPERIMENTAL LUKS path: storage layout + helper bake + initramfs hook.
+    /// Mirrors the TS encryptRoot:true assertions in userdata.test.ts.
+    func testEncryptRootEmitsLuksStorageAndHook() throws {
+        let recipe = Data(#"{"version":2}"#.utf8)
+        let yaml = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main", encryptRoot: true)
+        // curtin custom storage with a LUKS-encrypted root + unencrypted /boot.
+        XCTAssertTrue(yaml.contains("storage:"))
+        XCTAssertTrue(yaml.contains("type: dm_crypt"))
+        XCTAssertTrue(yaml.contains("dm_name: flagship_root"))
+        XCTAssertTrue(yaml.contains("label: FLAGSHIP_BOOT"))
+        XCTAssertTrue(yaml.contains("label: FLAGSHIP_ROOT"))
+        XCTAssertTrue(yaml.contains("path: /boot"))
+        XCTAssertTrue(yaml.contains("EXPERIMENTAL"))
+
+        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: true)
+        // Helper baked to /boot — build-at-install from cloned source.
+        XCTAssertTrue(b.contains("apt-get install -y --no-install-recommends golang-go"))
+        XCTAssertTrue(b.contains("/opt/flagship/installer/unseal-helper"))
+        XCTAssertTrue(b.contains("-o /boot/flagship-unseal"))
+        XCTAssertTrue(b.contains("chmod 755 /boot/flagship-unseal"))
+        XCTAssertTrue(b.contains("CGO_ENABLED=0 GOOS=linux GOARCH=amd64"))
+        // Re-key to a random key + seal for phone + upload (install.sh pattern).
+        XCTAssertTrue(b.contains("head -c 64 /dev/urandom > \"$LUKS_KEY\""))
+        XCTAssertTrue(b.contains("cryptsetup luksAddKey"))
+        XCTAssertTrue(b.contains("cryptsetup luksRemoveKey"))
+        XCTAssertTrue(b.contains("install-helper.ts seal-for-bak"))
+        XCTAssertTrue(b.contains("install-helper.ts sign-sealed-key"))
+        XCTAssertTrue(b.contains("/sealed-luks-key"))
+        XCTAssertTrue(b.contains("shred -u \"$LUKS_KEY\""))
+        // Initramfs hook lifting unlock_via_relay() verbatim + fallback.
+        XCTAssertTrue(b.contains("/etc/initramfs-tools/hooks/flagship-unlock"))
+        XCTAssertTrue(b.contains("/etc/initramfs-tools/scripts/local-top/flagship-unlock"))
+        XCTAssertTrue(b.contains("unlock_via_relay()"))
+        XCTAssertTrue(b.contains("unlock_via_plaintext_consume()"))
+        XCTAssertTrue(b.contains("flagship/secret-request/v1|"))
+        XCTAssertTrue(b.contains("flagship/consume-unlock-key/v1|"))
+        XCTAssertTrue(b.contains("if ! unlock_via_relay; then"))
+        XCTAssertTrue(b.contains("copy_exec /usr/bin/openssl"))
+        XCTAssertTrue(b.contains("copy_exec /usr/bin/curl"))
+        XCTAssertTrue(b.contains("copy_exec /usr/bin/xxd"))
+        XCTAssertTrue(b.contains("copy_exec /bin/sed"))
+        XCTAssertTrue(b.contains("copy_exec /sbin/cryptsetup"))
+        XCTAssertTrue(b.contains("copy_exec /boot/flagship-unseal /bin/flagship-unseal"))
+        XCTAssertTrue(b.contains("/dev/disk/by-label/FLAGSHIP_ROOT"))
+        XCTAssertTrue(b.contains("cryptsetup luksOpen --key-file - \"$ROOT_PART\" flagship_root"))
+        XCTAssertTrue(b.contains("update-initramfs -u"))
+    }
 }
