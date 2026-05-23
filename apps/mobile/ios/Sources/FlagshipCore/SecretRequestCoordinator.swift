@@ -142,9 +142,15 @@ public final class SecretRequestCoordinator {
     // MARK: - 2. Confirm (one tap = the human backstop)
 
     /// The user has confirmed "yes, this is my box". Perform the crypto +
-    /// post the reply. Returns when `.com` has accepted the write-once
-    /// reply (the box then picks it up on its poll).
-    public func confirmAndRespond(_ verified: VerifiedRequest) async throws {
+    /// post the reply. When `depositAutoLease` is true (the server's chosen
+    /// boot-unlock mode is "auto"), ALSO deposit a box-sealed lease so future
+    /// boots self-unlock without the phone — returns the lease id (store it
+    /// per-server for the kill switch). Otherwise returns nil.
+    @discardableResult
+    public func confirmAndRespond(
+        _ verified: VerifiedRequest,
+        depositAutoLease: Bool = false
+    ) async throws -> String? {
         guard let purpose = verified.purpose else {
             throw CoordinatorError.purposeUnsupported(verified.pending.purpose)
         }
@@ -164,9 +170,12 @@ public final class SecretRequestCoordinator {
         let auth = try buildMailboxAuth(irk: irk)
 
         let sealedHex: String
+        var unlockKey: Data?
         switch purpose {
         case .unlockKey:
-            sealedHex = try await buildUnlockReply(request: request)
+            let reply = try await buildUnlockReply(request: request)
+            sealedHex = reply.sealedHex
+            unlockKey = reply.luksKey
         case .entitlement:
             sealedHex = try buildEntitlementReply(request: request, irk: irk)
         }
@@ -179,6 +188,64 @@ public final class SecretRequestCoordinator {
             issuedAt: now()
         )
         try await mailbox.postResponse(auth: auth, response: body)
+
+        // "auto" mode: deposit a box-sealed lease so the box self-unlocks on
+        // future reboots (the user's IRK authorizes it here — I2). Only for
+        // unlock-key; the key is the one we just recovered, never `.com`-visible.
+        if depositAutoLease, purpose == .unlockKey, let key = unlockKey {
+            return try await depositAutoUnlockLease(request: request, luksKey: key, irk: irk)
+        }
+        return nil
+    }
+
+    /// Kill switch — revoke a server's auto-unlock lease. The box can no
+    /// longer self-unlock and falls back to phone-gated approval (a downgrade,
+    /// not a brick). `leaseId` is the one returned by confirmAndRespond at
+    /// deposit (stored per-server by the caller).
+    public func revokeAutoUnlockLease(serverDomain: String, leaseId: String) async throws {
+        let irk = try await irkProvider()
+        let issuedAt = now()
+        let rev = LeaseRevocation(serverDomain: serverDomain, leaseId: leaseId, issuedAt: issuedAt)
+        let sig = try rev.sign(with: irk)
+        try await mailbox.revokeBoxSealedLease(
+            request: LeaseRevokeWire(serverDomain: serverDomain, leaseId: leaseId, issuedAt: issuedAt),
+            signatureHex: HexUtil.encode(sig)
+        )
+    }
+
+    /// Deposit a long-lived box-sealed lease (the LUKS key sealed for the box
+    /// STK). Returns the lease id. Private — only reachable right after a
+    /// user-confirmed unlock approval, when we hold the recovered key.
+    private func depositAutoUnlockLease(
+        request: SecretRequest,
+        luksKey: Data,
+        irk: Curve25519.Signing.PrivateKey
+    ) async throws -> String {
+        let issuedAt = now()
+        let leaseId = AutoUnlockLeaseV2.randomLeaseId()
+        let expiresAt = issuedAt + 365 * 24 * 60 * 60 * 1000  // ~1 year; renewed on each approve
+        let lease = try AutoUnlockLeaseV2.build(
+            serverDomain: request.serverDomain,
+            stkPub: request.stkPub,
+            leaseId: leaseId,
+            luksKey: luksKey,
+            issuedAt: issuedAt,
+            expiresAt: expiresAt
+        )
+        let sig = try lease.sign(with: irk)
+        try await mailbox.depositBoxSealedLease(
+            lease: BoxSealedLeaseWire(
+                serverDomain: lease.serverDomain,
+                stkPub: HexUtil.encode(lease.stkPub),
+                leaseId: lease.leaseId,
+                sealedKey: HexUtil.encode(lease.sealedKey),
+                issuedAt: lease.issuedAt,
+                expiresAt: lease.expiresAt,
+                maxUses: lease.maxUses
+            ),
+            signatureHex: HexUtil.encode(sig)
+        )
+        return leaseId
     }
 
     // MARK: - unlock-key
@@ -186,7 +253,7 @@ public final class SecretRequestCoordinator {
     /// Fetch the phone-sealed LUKS key, unseal it with the phone's existing
     /// Ed25519 key material (the installer sealed it against one of these),
     /// then re-seal it FOR the box's STK bound to (nonce, purpose).
-    private func buildUnlockReply(request: SecretRequest) async throws -> String {
+    private func buildUnlockReply(request: SecretRequest) async throws -> (sealedHex: String, luksKey: Data) {
         let sealedLuks: SealedLuksKeyResponse
         do {
             sealedLuks = try await mailbox.fetchSealedLuksKey(serverDomain: request.serverDomain)
@@ -209,9 +276,10 @@ public final class SecretRequestCoordinator {
         }
         guard let key = luksKey else { throw CoordinatorError.luksUnsealFailed }
 
-        // Re-seal FOR the box's STK, nonce/purpose-bound.
+        // Re-seal FOR the box's STK, nonce/purpose-bound. Also hand back the
+        // recovered key so an "auto" approval can deposit a box-sealed lease.
         let resp = try SealedSecretResponse.build(secret: key, request: request, now: now)
-        return HexUtil.encode(resp.sealed)
+        return (HexUtil.encode(resp.sealed), key)
     }
 
     // MARK: - entitlement

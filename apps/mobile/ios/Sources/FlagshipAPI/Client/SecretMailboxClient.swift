@@ -28,6 +28,16 @@ public protocol SecretMailboxClient: Sendable {
     /// box's STK INDEPENDENTLY of the mailbox echo from here, so a lying
     /// relay can't get the phone to seal for a box it controls.
     func fetchPods(username: String) async throws -> PodsDirectoryResponse
+
+    /// POST /api/server/:domain/unlock-key/lease-v2 — deposit a box-sealed
+    /// auto-unlock lease (IRK-signed). Enables "auto"-mode self-unlock on
+    /// future reboots. `.com` stores ciphertext only (I1).
+    func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws
+
+    /// DELETE /api/server/:domain/unlock-key/lease-v2/:id — the kill switch
+    /// (IRK-signed). Drops the lease so the box can no longer self-unlock —
+    /// it falls back to phone-gated approval (downgrade, not brick).
+    func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws
 }
 
 // MARK: - Wire types
@@ -162,6 +172,36 @@ public struct PodsDirectoryResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// The wire shape of a box-sealed lease deposit body's `lease` object.
+/// Field names match the Worker handler (handlePostBoxSealedLease).
+public struct BoxSealedLeaseWire: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    public let stkPub: String       // hex
+    public let leaseId: String
+    public let sealedKey: String    // hex
+    public let issuedAt: Int64
+    public let expiresAt: Int64
+    public let maxUses: Int?
+    public init(
+        serverDomain: String, stkPub: String, leaseId: String, sealedKey: String,
+        issuedAt: Int64, expiresAt: Int64, maxUses: Int? = nil
+    ) {
+        self.serverDomain = serverDomain; self.stkPub = stkPub; self.leaseId = leaseId
+        self.sealedKey = sealedKey; self.issuedAt = issuedAt; self.expiresAt = expiresAt
+        self.maxUses = maxUses
+    }
+}
+
+/// The wire shape of a lease-revoke body's `request` object.
+public struct LeaseRevokeWire: Codable, Equatable, Sendable {
+    public let serverDomain: String
+    public let leaseId: String
+    public let issuedAt: Int64
+    public init(serverDomain: String, leaseId: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain; self.leaseId = leaseId; self.issuedAt = issuedAt
+    }
+}
+
 // MARK: - Live
 
 public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Sendable {
@@ -200,11 +240,38 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return try await getReturning("/api/users/\(encoded)/pods")
     }
 
+    public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws {
+        let body = try JSONEncoder().encode(LeaseDepositPost(lease: lease, signature: signatureHex))
+        let enc = lease.serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? lease.serverDomain
+        try await send("POST", "/api/server/\(enc)/unlock-key/lease-v2", body: body, acceptStatuses: [200, 201])
+    }
+
+    public func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws {
+        let body = try JSONEncoder().encode(LeaseRevokePost(request: request, signature: signatureHex))
+        let encD = request.serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? request.serverDomain
+        let encL = request.leaseId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? request.leaseId
+        try await send("DELETE", "/api/server/\(encD)/unlock-key/lease-v2/\(encL)", body: body, acceptStatuses: [200, 204])
+    }
+
     // The on-wire POST shape for /api/secret-response.
     private struct SecretResponsePost: Encodable {
         let auth: MailboxAuthEnvelope.Auth
         let authSignature: String
         let response: SecretResponseBody
+    }
+    private struct LeaseDepositPost: Encodable { let lease: BoxSealedLeaseWire; let signature: String }
+    private struct LeaseRevokePost: Encodable { let request: LeaseRevokeWire; let signature: String }
+
+    /// A POST/DELETE with a JSON body, accepting a set of success statuses.
+    private func send(_ method: String, _ path: String, body: Data, acceptStatuses: Set<Int>) async throws {
+        var req = URLRequest(url: baseUrl.appendingPathComponent(path))
+        req.httpMethod = method
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = body
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if acceptStatuses.contains(status) { return }
+        throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
     private func post(_ path: String, body: Data, acceptStatuses: Set<Int>) async throws {
@@ -252,6 +319,8 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public var pending: [PendingSecretRequest] = []
     public var directory: [PodDirectoryEntry] = []
     public var sealedLuksKeyHex: String?
+    public private(set) var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String)] = []
+    public private(set) var revoked: [(request: LeaseRevokeWire, signatureHex: String)] = []
     public init() {}
 
     public func fetchPendingRequests(auth: MailboxAuthEnvelope) async throws -> SecretRequestsResponse {
@@ -266,5 +335,11 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     }
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         PodsDirectoryResponse(username: username, pods: directory)
+    }
+    public func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws {
+        deposited.append((lease, signatureHex))
+    }
+    public func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws {
+        revoked.append((request, signatureHex))
     }
 }

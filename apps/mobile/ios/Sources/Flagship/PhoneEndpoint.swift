@@ -300,6 +300,107 @@ public enum EntitlementBundleCarrier {
     }
 }
 
+// MARK: - 5. AutoUnlockLeaseV2 (box-sealed lease — "auto" self-unlock)
+
+/// The phone deposits this (IRK-signed) so an `auto`-mode server can
+/// self-unlock on future reboots with no phone present: the LUKS key is
+/// sealed FOR the box's STK (I1 — no plaintext at `.com`), pinned by the IRK
+/// signature (I2). Canonical bytes MUST match `canonicalAutoUnlockLeaseV2`
+/// in phoneEndpoint.ts.
+public struct AutoUnlockLeaseV2: Equatable, Sendable {
+    public static let canonicalTag = "flagship/auto-unlock-lease/v2"
+
+    public var serverDomain: String
+    public var stkPub: Data        // 32 bytes — the pinned box STK
+    public var leaseId: String     // 16+ hex chars (the revoke handle)
+    public var sealedKey: Data     // the LUKS key sealed for stkPub
+    public var issuedAt: Int64
+    public var expiresAt: Int64
+    /// nil ⇒ unbounded until expiresAt (encoded as -1 in canonical bytes).
+    public var maxUses: Int?
+
+    public init(
+        serverDomain: String, stkPub: Data, leaseId: String, sealedKey: Data,
+        issuedAt: Int64, expiresAt: Int64, maxUses: Int? = nil
+    ) {
+        self.serverDomain = serverDomain
+        self.stkPub = stkPub
+        self.leaseId = leaseId
+        self.sealedKey = sealedKey
+        self.issuedAt = issuedAt
+        self.expiresAt = expiresAt
+        self.maxUses = maxUses
+    }
+
+    public func canonicalBytes() throws -> Data {
+        try PhoneEndpointFieldGuard.check("serverDomain", serverDomain)
+        try PhoneEndpointFieldGuard.check("leaseId", leaseId)
+        let parts: [String] = [
+            AutoUnlockLeaseV2.canonicalTag,
+            serverDomain,
+            HexUtil.encode(stkPub),
+            leaseId,
+            HexUtil.encode(sealedKey),
+            String(issuedAt),
+            String(expiresAt),
+            String(maxUses ?? -1),
+        ]
+        return Data(parts.joined(separator: "|").utf8)
+    }
+
+    public func sign(with irk: Curve25519.Signing.PrivateKey) throws -> Data {
+        try irk.signature(for: canonicalBytes())
+    }
+
+    /// Build a lease by sealing `luksKey` for the box STK pubkey (so the type
+    /// never holds a plaintext key — I1). The caller signs it with the IRK.
+    public static func build(
+        serverDomain: String, stkPub: Data, leaseId: String, luksKey: Data,
+        issuedAt: Int64, expiresAt: Int64, maxUses: Int? = nil
+    ) throws -> AutoUnlockLeaseV2 {
+        let sealed = try SecretSeal.sealForEd25519Recipient(plaintext: luksKey, recipientEd25519Pub: stkPub)
+        return AutoUnlockLeaseV2(
+            serverDomain: serverDomain, stkPub: stkPub, leaseId: leaseId,
+            sealedKey: sealed, issuedAt: issuedAt, expiresAt: expiresAt, maxUses: maxUses
+        )
+    }
+
+    /// A random 32-hex-char lease id.
+    public static func randomLeaseId() -> String {
+        var b = Data(count: 16)
+        _ = b.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 16, $0.baseAddress!) }
+        return HexUtil.encode(b)
+    }
+}
+
+/// IRK-signed kill switch — revoking a lease before a reboot downgrades an
+/// `auto` server back to phone-gated. Matches `canonicalLeaseRevocation`.
+public struct LeaseRevocation: Equatable, Sendable {
+    public static let canonicalTag = "flagship/auto-unlock-lease-revoke/v1"
+
+    public var serverDomain: String
+    public var leaseId: String
+    public var issuedAt: Int64
+
+    public init(serverDomain: String, leaseId: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain
+        self.leaseId = leaseId
+        self.issuedAt = issuedAt
+    }
+
+    public func canonicalBytes() throws -> Data {
+        try PhoneEndpointFieldGuard.check("serverDomain", serverDomain)
+        try PhoneEndpointFieldGuard.check("leaseId", leaseId)
+        return Data([
+            LeaseRevocation.canonicalTag, serverDomain, leaseId, String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+
+    public func sign(with irk: Curve25519.Signing.PrivateKey) throws -> Data {
+        try irk.signature(for: canonicalBytes())
+    }
+}
+
 // MARK: - Sealing crypto (Ed25519 recipient → crypto_box_seal)
 
 /// `crypto_box_seal`-equivalent for an Ed25519 recipient pubkey, matching

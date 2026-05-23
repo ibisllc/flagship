@@ -17,6 +17,8 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         var sealedLuksKeyHex: String?
         var lastPostedAuth: MailboxAuthEnvelope?
         var lastPostedResponse: SecretResponseBody?
+        var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String)] = []
+        var revoked: [(request: LeaseRevokeWire, signatureHex: String)] = []
         let username: String
         init(username: String) { self.username = username }
 
@@ -36,6 +38,12 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         }
         func fetchPods(username: String) async throws -> PodsDirectoryResponse {
             PodsDirectoryResponse(username: username, pods: directory)
+        }
+        func depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) async throws {
+            deposited.append((lease, signatureHex))
+        }
+        func revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) async throws {
+            revoked.append((request, signatureHex))
         }
     }
 
@@ -233,6 +241,88 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         )
         let sig = try XCTUnwrap(HexUtil.decode(obj["rootEntitlementSig"] as! String))
         XCTAssertTrue(RootEntitlement.verify(cert, signature: sig, irkPub: phoneIrk().publicKey))
+    }
+
+    // MARK: - auto-mode box-sealed lease deposit + revoke
+
+    @MainActor
+    func testAutoModeDepositsBoxSealedLeaseThatRoundTrips() async throws {
+        let mailbox = MockMailbox(username: username)
+        let nonce = Data(repeating: 0x33, count: 32)
+        let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: nonce, domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let luksKey = Data("real-luks-disk-key-0123456789abc".utf8)
+        let unsealPub = try Curve25519.Signing.PrivateKey(rawRepresentation: unsealSeed).publicKey.rawRepresentation
+        mailbox.sealedLuksKeyHex = HexUtil.encode(try SecretSeal.sealForEd25519Recipient(plaintext: luksKey, recipientEd25519Pub: unsealPub))
+
+        let coord = makeCoordinator(mailbox)
+        let verified = try await coord.fetchVerifiedRequests()
+        let leaseId = try await coord.confirmAndRespond(verified[0], depositAutoLease: true)
+
+        // A lease was deposited and its id returned for the kill switch.
+        XCTAssertNotNil(leaseId)
+        XCTAssertEqual(mailbox.deposited.count, 1)
+        let dep = try XCTUnwrap(mailbox.deposited.first)
+        XCTAssertEqual(dep.lease.leaseId, leaseId)
+        XCTAssertEqual(dep.lease.serverDomain, "home.alice.flagship.services")
+        XCTAssertEqual(dep.lease.stkPub, HexUtil.encode(boxStk().publicKey.rawRepresentation))
+
+        // The box opens the lease's sealedKey with its STK X25519 priv → key.
+        let recovered = try SecretSeal.openWithX25519(
+            blob: try XCTUnwrap(HexUtil.decode(dep.lease.sealedKey)),
+            recipientX25519Priv: stkX25519Priv
+        )
+        XCTAssertEqual(recovered, luksKey)
+
+        // The lease signature verifies under the user's IRK (I2 pinning).
+        let lease = AutoUnlockLeaseV2(
+            serverDomain: dep.lease.serverDomain,
+            stkPub: try XCTUnwrap(HexUtil.decode(dep.lease.stkPub)),
+            leaseId: dep.lease.leaseId,
+            sealedKey: try XCTUnwrap(HexUtil.decode(dep.lease.sealedKey)),
+            issuedAt: dep.lease.issuedAt,
+            expiresAt: dep.lease.expiresAt,
+            maxUses: dep.lease.maxUses
+        )
+        let sig = try XCTUnwrap(HexUtil.decode(dep.signatureHex))
+        XCTAssertTrue(phoneIrk().publicKey.isValidSignature(sig, for: try lease.canonicalBytes()))
+    }
+
+    @MainActor
+    func testApproveModeDoesNotDepositALease() async throws {
+        let mailbox = MockMailbox(username: username)
+        let nonce = Data(repeating: 0x33, count: 32)
+        let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: nonce, domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let unsealPub = try Curve25519.Signing.PrivateKey(rawRepresentation: unsealSeed).publicKey.rawRepresentation
+        mailbox.sealedLuksKeyHex = HexUtil.encode(try SecretSeal.sealForEd25519Recipient(plaintext: Data("k".utf8), recipientEd25519Pub: unsealPub))
+        let coord = makeCoordinator(mailbox)
+        let verified = try await coord.fetchVerifiedRequests()
+        let leaseId = try await coord.confirmAndRespond(verified[0], depositAutoLease: false)
+        XCTAssertNil(leaseId)
+        XCTAssertTrue(mailbox.deposited.isEmpty, "approve mode must never deposit a self-unlock lease")
+    }
+
+    @MainActor
+    func testRevokeAutoUnlockLeaseSignsTheRevocation() async throws {
+        let mailbox = MockMailbox(username: username)
+        let coord = makeCoordinator(mailbox)
+        try await coord.revokeAutoUnlockLease(serverDomain: "home.alice.flagship.services", leaseId: "deadbeefdeadbeef")
+        XCTAssertEqual(mailbox.revoked.count, 1)
+        let rev = try XCTUnwrap(mailbox.revoked.first)
+        XCTAssertEqual(rev.request.serverDomain, "home.alice.flagship.services")
+        XCTAssertEqual(rev.request.leaseId, "deadbeefdeadbeef")
+        let model = LeaseRevocation(serverDomain: rev.request.serverDomain, leaseId: rev.request.leaseId, issuedAt: rev.request.issuedAt)
+        let sig = try XCTUnwrap(HexUtil.decode(rev.signatureHex))
+        XCTAssertTrue(phoneIrk().publicKey.isValidSignature(sig, for: try model.canonicalBytes()))
     }
 
     // MARK: - mailbox auth shape
