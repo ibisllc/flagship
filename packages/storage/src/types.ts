@@ -569,6 +569,162 @@ export interface AutoUnlockLeaseStorage {
   list(serverDomain: string, now: number): Promise<AutoUnlockLeaseRecord[]>;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Secret mailbox (phone-as-unlock-endpoint RELAY model)
+//
+// docs/security-phone-as-unlock-endpoint.md §4 + §9. A per-user blind
+// store-and-forward mailbox: the box POSTs an STK-signed SecretRequest;
+// `.com` parks the pending row (keyed by the request's 32-byte nonce),
+// fires a push, and serves it back to the phone; the phone POSTs a
+// SealedSecretResponse (or signed RootEntitlement) which `.com` stores
+// against the nonce and releases ONCE to the polling box. `.com` only
+// ever holds ciphertext (the sealed response) and public-signed blobs
+// (the request) — invariant I1. The request's `stkPubHex` was verified
+// against the directory's bound STK at the handler boundary, so the
+// phone seals only for the user-confirmed box (I2/I3).
+// ──────────────────────────────────────────────────────────────────────
+
+export type SecretMailboxPurpose = "unlock-key" | "entitlement";
+
+export interface SecretMailboxRecord {
+  /** Box FQDN the request is for. */
+  serverDomain: string;
+  /** Account that owns the mailbox (the box's registered username). */
+  username: string;
+  /** 32-byte request nonce, hex — the row key. The phone binds its
+   *  reply to this; the box re-derives the same nonce to fetch it. */
+  requestNonceHex: string;
+  /** Box STK pubkey, hex — the request was verified against this. */
+  stkPubHex: string;
+  purpose: SecretMailboxPurpose;
+  /** issuedAt from the signed SecretRequest (ms). */
+  requestIssuedAt: number;
+  /** Box's STK signature over the canonical SecretRequest, hex. Stored
+   *  so the phone can re-verify the request against the directory STK
+   *  it independently looks up — `.com` is not the trust anchor. */
+  requestSignatureHex: string;
+  /**
+   * Box-supplied display hint (ip/region/os) the app shows for the
+   * "is this my box?" confirm. NOT signed and NOT the security
+   * boundary — the user's visual confirm + the STK→directory binding
+   * are. JSON object stringified; opaque to this layer. NULL when the
+   * box sent none.
+   */
+  deviceInfoJson: string | null;
+  /** When the box posted the request (ms). */
+  postedAt: number;
+  /** Row TTL — `.com` GCs / refuses to serve past this (ms). */
+  expiresAt: number;
+  /** Wall-clock ms of the last push fan-out for this row, or 0. */
+  lastPushAt: number;
+  /**
+   * The phone's reply, sealed for `stkPubHex` (SealedSecretResponse.sealed)
+   * OR — for the entitlement purpose — the phone-signed RootEntitlement
+   * carrier JSON. Hex of the wire bytes. NULL until the phone replies.
+   * NEVER plaintext (I1).
+   */
+  responseSealedHex: string | null;
+  /** issuedAt from the phone's SealedSecretResponse (ms), or null. */
+  responseIssuedAt: number | null;
+  /** When the phone posted the reply (ms), or null. */
+  respondedAt: number | null;
+  /** Set when the box consumes the reply — single-use release. */
+  consumedAt: number | null;
+}
+
+export interface SecretMailboxStorage {
+  /**
+   * Box posts a fresh request. Keyed by (serverDomain, requestNonceHex).
+   * Returns `ok:false` with reason `'duplicate nonce'` when a row with
+   * the same nonce already exists for the server (single-use nonce —
+   * the box must mint a fresh nonce per request).
+   */
+  putRequest(rec: SecretMailboxRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Box-side fetch of one request by its nonce (for the response poll
+   *  + freshness/expiry checks). */
+  getRequest(serverDomain: string, requestNonceHex: string): Promise<SecretMailboxRecord | undefined>;
+  /**
+   * Phone-side mailbox listing: every pending (un-consumed, un-expired,
+   * un-answered) request for the user's account. Sorted postedAt DESC.
+   * Capped at `limit` (default 50).
+   */
+  listPendingForUser(username: string, now: number, limit?: number): Promise<SecretMailboxRecord[]>;
+  /** Confirm a push fired for a row (writes lastPushAt). */
+  touchLastPushAt(serverDomain: string, requestNonceHex: string, at: number): Promise<void>;
+  /**
+   * Phone stores its sealed reply against an existing request. Returns
+   * `ok:false` with `'unknown request'` when no matching un-expired row
+   * exists, or `'already answered'` when a reply is already on file
+   * (replies are write-once — a second device can't overwrite). The
+   * caller has already verified the phone owns the mailbox.
+   */
+  putResponse(
+    serverDomain: string,
+    requestNonceHex: string,
+    responseSealedHex: string,
+    responseIssuedAt: number,
+    now: number,
+  ): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Box polls for + atomically consumes the reply. Returns the row iff a
+   * reply is present, un-expired, and not yet consumed; marks it consumed
+   * (single-use release — I1/I3). Returns undefined when no reply is
+   * ready yet OR it was already consumed. Expired rows are GC'd when seen.
+   */
+  consumeResponse(serverDomain: string, requestNonceHex: string, now: number): Promise<SecretMailboxRecord | undefined>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Box-sealed auto-unlock leases (AutoUnlockLeaseV2 — relay model §7a)
+//
+// The unattended-reboot fallback under the rogue-operator invariants:
+// the LUKS key is stored SEALED for the box's STK (never plaintext —
+// I1), with the recipient `stkPub` PINNED by the user's IRK signature
+// (I2). On reboot the box pulls the sealed blob + unseals it itself.
+// `.com` holds ciphertext only and can withhold but never read/retarget
+// (I3). Distinct from `AutoUnlockLeaseStorage` (the legacy PLAINTEXT
+// path, kept as a deprecated fallback this wave).
+// ──────────────────────────────────────────────────────────────────────
+
+/** Persisted shape mirrors the IRK-signed AutoUnlockLeaseV2 envelope. */
+export interface BoxSealedLeaseRecord {
+  serverDomain: string;
+  leaseId: string;
+  /** The PINNED seal recipient — box STK pubkey, hex. */
+  stkPubHex: string;
+  /** The LUKS key sealed for `stkPubHex`, hex. NEVER plaintext (I1). */
+  sealedKeyHex: string;
+  /** issuedAt from the signed lease (ms). */
+  issuedAt: number;
+  expiresAt: number;
+  /** Optional release cap; null ⇒ unbounded until expiresAt. */
+  maxUses: number | null;
+  /** Releases so far — incremented on each box consume. */
+  usesConsumed: number;
+  /** The IRK signature over the canonical AutoUnlockLeaseV2, hex.
+   *  Released to the box so it can re-verify the lease against the
+   *  user IRK independently of `.com`. */
+  signatureHex: string;
+  depositedAt: number;
+}
+
+export interface BoxSealedLeaseStorage {
+  /** Insert or replace a lease (keyed by serverDomain + leaseId). */
+  put(rec: BoxSealedLeaseRecord): Promise<void>;
+  /**
+   * Box reboot path: return the freshest non-expired, non-exhausted
+   * lease for the server and increment its `usesConsumed`. Deletes the
+   * row when the increment reaches `maxUses` (one-shot leases with
+   * maxUses=1 are gone after the first release). The returned record
+   * carries only the SEALED key (I1). Expired rows GC'd when seen.
+   */
+  release(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord | undefined>;
+  /** Per-device kill switch. Returns true iff a row was actually deleted. */
+  revoke(serverDomain: string, leaseId: string): Promise<boolean>;
+  /** Snapshot of active (non-expired) leases for a server (UI listing). */
+  list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]>;
+}
+
 export interface DaemonStatusRecord {
   serverDomain: string;
   certSha256: string | null;
@@ -657,6 +813,8 @@ export interface Storage {
   auditEvents: AuditEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
+  secretMailbox: SecretMailboxStorage;
+  boxSealedLeases: BoxSealedLeaseStorage;
   pendingUnlockApprovals: PendingUnlockApprovalStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;

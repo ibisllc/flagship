@@ -4,6 +4,11 @@ import type {
   AuditEventStorage,
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  SecretMailboxRecord,
+  SecretMailboxStorage,
+  SecretMailboxPurpose,
+  BoxSealedLeaseRecord,
+  BoxSealedLeaseStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   RecoveryWipePolicy,
@@ -1007,6 +1012,312 @@ export class D1AutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
       depositedAt: row.deposited_at,
       expiresAt: row.expires_at,
     }));
+  }
+}
+
+interface SecretMailboxRow {
+  server_domain: string;
+  username: string;
+  request_nonce_hex: string;
+  stk_pub_hex: string;
+  purpose: string;
+  request_issued_at: number;
+  request_signature_hex: string;
+  device_info_json: string | null;
+  posted_at: number;
+  expires_at: number;
+  last_push_at: number;
+  response_sealed_hex: string | null;
+  response_issued_at: number | null;
+  responded_at: number | null;
+  consumed_at: number | null;
+}
+
+function rowToSecretMailbox(r: SecretMailboxRow): SecretMailboxRecord {
+  return {
+    serverDomain: r.server_domain,
+    username: r.username,
+    requestNonceHex: r.request_nonce_hex,
+    stkPubHex: r.stk_pub_hex,
+    purpose: r.purpose as SecretMailboxPurpose,
+    requestIssuedAt: r.request_issued_at,
+    requestSignatureHex: r.request_signature_hex,
+    deviceInfoJson: r.device_info_json,
+    postedAt: r.posted_at,
+    expiresAt: r.expires_at,
+    lastPushAt: r.last_push_at,
+    responseSealedHex: r.response_sealed_hex,
+    responseIssuedAt: r.response_issued_at,
+    respondedAt: r.responded_at,
+    consumedAt: r.consumed_at,
+  };
+}
+
+export class D1SecretMailboxStorage implements SecretMailboxStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async putRequest(rec: SecretMailboxRecord) {
+    // The PRIMARY KEY (server_domain, request_nonce_hex) enforces the
+    // single-use nonce at the DB level. We catch the surfaced
+    // UNIQUE/PRIMARY-KEY message rather than read-then-write so the
+    // reason string is byte-identical to the InMemory adapter.
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO secret_mailbox
+             (server_domain, username, request_nonce_hex, stk_pub_hex,
+              purpose, request_issued_at, request_signature_hex,
+              device_info_json, posted_at, expires_at, last_push_at,
+              response_sealed_hex, response_issued_at, responded_at,
+              consumed_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                   NULL, NULL, NULL, NULL)`,
+        )
+        .bind(
+          rec.serverDomain,
+          rec.username.toLowerCase(),
+          rec.requestNonceHex,
+          rec.stkPubHex.toLowerCase(),
+          rec.purpose,
+          rec.requestIssuedAt,
+          rec.requestSignatureHex,
+          rec.deviceInfoJson,
+          rec.postedAt,
+          rec.expiresAt,
+          rec.lastPushAt,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate nonce" };
+      }
+      throw e;
+    }
+  }
+
+  async getRequest(serverDomain: string, requestNonceHex: string) {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM secret_mailbox WHERE server_domain = ?1 AND request_nonce_hex = ?2",
+      )
+      .bind(serverDomain, requestNonceHex)
+      .first<SecretMailboxRow>();
+    return r ? rowToSecretMailbox(r) : undefined;
+  }
+
+  async listPendingForUser(username: string, now: number, limit = 50) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE username = ?1
+           AND expires_at > ?2
+           AND response_sealed_hex IS NULL
+           AND consumed_at IS NULL
+         ORDER BY posted_at DESC
+         LIMIT ?3`,
+      )
+      .bind(username.toLowerCase(), now, Math.max(0, limit))
+      .all<SecretMailboxRow>();
+    return (r.results ?? []).map(rowToSecretMailbox);
+  }
+
+  async touchLastPushAt(serverDomain: string, requestNonceHex: string, at: number) {
+    await this.db
+      .prepare(
+        "UPDATE secret_mailbox SET last_push_at = ?1 WHERE server_domain = ?2 AND request_nonce_hex = ?3",
+      )
+      .bind(at, serverDomain, requestNonceHex)
+      .run();
+  }
+
+  async putResponse(
+    serverDomain: string,
+    requestNonceHex: string,
+    responseSealedHex: string,
+    responseIssuedAt: number,
+    now: number,
+  ) {
+    const existing = await this.db
+      .prepare(
+        "SELECT response_sealed_hex, expires_at FROM secret_mailbox WHERE server_domain = ?1 AND request_nonce_hex = ?2",
+      )
+      .bind(serverDomain, requestNonceHex)
+      .first<{ response_sealed_hex: string | null; expires_at: number }>();
+    if (!existing || existing.expires_at <= now) {
+      return { ok: false as const, reason: "unknown request" };
+    }
+    if (existing.response_sealed_hex !== null) {
+      return { ok: false as const, reason: "already answered" };
+    }
+    // Conditional UPDATE — write-once even under a concurrent second
+    // device: the WHERE response_sealed_hex IS NULL loses the race.
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox
+         SET response_sealed_hex = ?1, response_issued_at = ?2, responded_at = ?3
+         WHERE server_domain = ?4 AND request_nonce_hex = ?5
+           AND response_sealed_hex IS NULL`,
+      )
+      .bind(responseSealedHex, responseIssuedAt, now, serverDomain, requestNonceHex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) {
+      return { ok: false as const, reason: "already answered" };
+    }
+    return { ok: true as const };
+  }
+
+  async consumeResponse(serverDomain: string, requestNonceHex: string, now: number) {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM secret_mailbox WHERE server_domain = ?1 AND request_nonce_hex = ?2",
+      )
+      .bind(serverDomain, requestNonceHex)
+      .first<SecretMailboxRow>();
+    if (!r) return undefined;
+    if (r.expires_at <= now) {
+      await this.db
+        .prepare("DELETE FROM secret_mailbox WHERE server_domain = ?1 AND request_nonce_hex = ?2")
+        .bind(serverDomain, requestNonceHex)
+        .run();
+      return undefined;
+    }
+    if (r.response_sealed_hex === null || r.consumed_at !== null) return undefined;
+    // Single-use release — the conditional WHERE consumed_at IS NULL
+    // makes a concurrent double-consume return at-most-once.
+    const w = await this.db
+      .prepare(
+        `UPDATE secret_mailbox SET consumed_at = ?1
+         WHERE server_domain = ?2 AND request_nonce_hex = ?3 AND consumed_at IS NULL`,
+      )
+      .bind(now, serverDomain, requestNonceHex)
+      .run();
+    const meta = (w as { meta?: { changes?: number } }).meta;
+    if (meta?.changes !== undefined && meta.changes === 0) return undefined;
+    return rowToSecretMailbox({ ...r, consumed_at: now });
+  }
+}
+
+interface BoxSealedLeaseRow {
+  server_domain: string;
+  lease_id: string;
+  stk_pub_hex: string;
+  sealed_key_hex: string;
+  issued_at: number;
+  expires_at: number;
+  max_uses: number | null;
+  uses_consumed: number;
+  signature_hex: string;
+  deposited_at: number;
+}
+
+function rowToBoxSealedLease(r: BoxSealedLeaseRow): BoxSealedLeaseRecord {
+  return {
+    serverDomain: r.server_domain,
+    leaseId: r.lease_id,
+    stkPubHex: r.stk_pub_hex,
+    sealedKeyHex: r.sealed_key_hex,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    maxUses: r.max_uses,
+    usesConsumed: r.uses_consumed,
+    signatureHex: r.signature_hex,
+    depositedAt: r.deposited_at,
+  };
+}
+
+export class D1BoxSealedLeaseStorage implements BoxSealedLeaseStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async put(rec: BoxSealedLeaseRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO box_sealed_leases
+           (server_domain, lease_id, stk_pub_hex, sealed_key_hex,
+            issued_at, expires_at, max_uses, uses_consumed,
+            signature_hex, deposited_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(server_domain, lease_id) DO UPDATE SET
+           stk_pub_hex = excluded.stk_pub_hex,
+           sealed_key_hex = excluded.sealed_key_hex,
+           issued_at = excluded.issued_at,
+           expires_at = excluded.expires_at,
+           max_uses = excluded.max_uses,
+           uses_consumed = excluded.uses_consumed,
+           signature_hex = excluded.signature_hex,
+           deposited_at = excluded.deposited_at`,
+      )
+      .bind(
+        rec.serverDomain,
+        rec.leaseId,
+        rec.stkPubHex.toLowerCase(),
+        rec.sealedKeyHex,
+        rec.issuedAt,
+        rec.expiresAt,
+        rec.maxUses,
+        rec.usesConsumed,
+        rec.signatureHex,
+        rec.depositedAt,
+      )
+      .run();
+  }
+
+  async release(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord | undefined> {
+    // GC expired + exhausted rows first so they never win the pick.
+    await this.db
+      .prepare(
+        `DELETE FROM box_sealed_leases
+         WHERE server_domain = ?1
+           AND (expires_at <= ?2 OR (max_uses IS NOT NULL AND uses_consumed >= max_uses))`,
+      )
+      .bind(serverDomain, now)
+      .run();
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM box_sealed_leases WHERE server_domain = ?1 ORDER BY deposited_at DESC LIMIT 1",
+      )
+      .bind(serverDomain)
+      .first<BoxSealedLeaseRow>();
+    if (!r) return undefined;
+    const nextUses = r.uses_consumed + 1;
+    if (r.max_uses !== null && nextUses >= r.max_uses) {
+      await this.db
+        .prepare("DELETE FROM box_sealed_leases WHERE server_domain = ?1 AND lease_id = ?2")
+        .bind(serverDomain, r.lease_id)
+        .run();
+    } else {
+      await this.db
+        .prepare(
+          "UPDATE box_sealed_leases SET uses_consumed = ?1 WHERE server_domain = ?2 AND lease_id = ?3",
+        )
+        .bind(nextUses, serverDomain, r.lease_id)
+        .run();
+    }
+    return rowToBoxSealedLease({ ...r, uses_consumed: nextUses });
+  }
+
+  async revoke(serverDomain: string, leaseId: string): Promise<boolean> {
+    const r = await this.db
+      .prepare("DELETE FROM box_sealed_leases WHERE server_domain = ?1 AND lease_id = ?2")
+      .bind(serverDomain, leaseId)
+      .run();
+    const meta = (r as { meta?: { changes?: number } }).meta;
+    return meta?.changes === undefined ? true : meta.changes > 0;
+  }
+
+  async list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]> {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM box_sealed_leases
+         WHERE server_domain = ?1 AND expires_at > ?2
+           AND (max_uses IS NULL OR uses_consumed < max_uses)
+         ORDER BY deposited_at DESC`,
+      )
+      .bind(serverDomain, now)
+      .all<BoxSealedLeaseRow>();
+    return (r.results ?? []).map(rowToBoxSealedLease);
   }
 }
 
@@ -2354,6 +2665,8 @@ export class D1Storage implements Storage {
   auditEvents: AuditEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
+  secretMailbox: SecretMailboxStorage;
+  boxSealedLeases: BoxSealedLeaseStorage;
   pendingUnlockApprovals: PendingUnlockApprovalStorage;
   pendingRePairs: PendingRePairStorage;
   webauthnRecovery: WebauthnRecoveryStorage;
@@ -2381,6 +2694,8 @@ export class D1Storage implements Storage {
     this.auditEvents = new D1AuditEventStorage(db);
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);
+    this.secretMailbox = new D1SecretMailboxStorage(db);
+    this.boxSealedLeases = new D1BoxSealedLeaseStorage(db);
     this.pendingUnlockApprovals = new D1PendingUnlockApprovalStorage(db);
     this.pendingRePairs = new D1PendingRePairStorage(db);
     this.webauthnRecovery = new D1WebauthnRecoveryStorage(db);

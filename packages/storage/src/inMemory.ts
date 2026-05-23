@@ -3,6 +3,10 @@ import type {
   AuditEventStorage,
   AutoUnlockLeaseRecord,
   AutoUnlockLeaseStorage,
+  SecretMailboxRecord,
+  SecretMailboxStorage,
+  BoxSealedLeaseRecord,
+  BoxSealedLeaseStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   PendingUnlockApprovalRecord,
@@ -619,6 +623,134 @@ export class InMemoryAutoUnlockLeaseStorage implements AutoUnlockLeaseStorage {
   }
 }
 
+export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
+  // Composite key: `${serverDomain} ${requestNonceHex}`.
+  private rows = new Map<string, SecretMailboxRecord>();
+  private k(server: string, nonce: string): string {
+    return `${server} ${nonce}`;
+  }
+
+  async putRequest(rec: SecretMailboxRecord) {
+    const key = this.k(rec.serverDomain, rec.requestNonceHex);
+    if (this.rows.has(key)) {
+      return { ok: false as const, reason: "duplicate nonce" };
+    }
+    this.rows.set(key, { ...rec });
+    return { ok: true as const };
+  }
+
+  async getRequest(serverDomain: string, requestNonceHex: string) {
+    const r = this.rows.get(this.k(serverDomain, requestNonceHex));
+    return r ? { ...r } : undefined;
+  }
+
+  async listPendingForUser(username: string, now: number, limit = 50) {
+    const u = username.toLowerCase();
+    const out: SecretMailboxRecord[] = [];
+    for (const r of this.rows.values()) {
+      if (r.username.toLowerCase() !== u) continue;
+      if (r.expiresAt <= now) continue;
+      if (r.responseSealedHex !== null) continue;
+      if (r.consumedAt !== null) continue;
+      out.push({ ...r });
+    }
+    out.sort((a, b) => b.postedAt - a.postedAt);
+    return out.slice(0, Math.max(0, limit));
+  }
+
+  async touchLastPushAt(serverDomain: string, requestNonceHex: string, at: number) {
+    const r = this.rows.get(this.k(serverDomain, requestNonceHex));
+    if (r) r.lastPushAt = at;
+  }
+
+  async putResponse(
+    serverDomain: string,
+    requestNonceHex: string,
+    responseSealedHex: string,
+    responseIssuedAt: number,
+    now: number,
+  ) {
+    const r = this.rows.get(this.k(serverDomain, requestNonceHex));
+    if (!r || r.expiresAt <= now) {
+      return { ok: false as const, reason: "unknown request" };
+    }
+    if (r.responseSealedHex !== null) {
+      return { ok: false as const, reason: "already answered" };
+    }
+    r.responseSealedHex = responseSealedHex;
+    r.responseIssuedAt = responseIssuedAt;
+    r.respondedAt = now;
+    return { ok: true as const };
+  }
+
+  async consumeResponse(serverDomain: string, requestNonceHex: string, now: number) {
+    const key = this.k(serverDomain, requestNonceHex);
+    const r = this.rows.get(key);
+    if (!r) return undefined;
+    if (r.expiresAt <= now) {
+      this.rows.delete(key);
+      return undefined;
+    }
+    if (r.responseSealedHex === null) return undefined;
+    if (r.consumedAt !== null) return undefined;
+    r.consumedAt = now;
+    return { ...r };
+  }
+}
+
+export class InMemoryBoxSealedLeaseStorage implements BoxSealedLeaseStorage {
+  // Composite key: `${serverDomain} ${leaseId}`.
+  private rows = new Map<string, BoxSealedLeaseRecord>();
+  private k(server: string, lease: string): string {
+    return `${server} ${lease}`;
+  }
+
+  async put(rec: BoxSealedLeaseRecord): Promise<void> {
+    this.rows.set(this.k(rec.serverDomain, rec.leaseId), { ...rec });
+  }
+
+  async release(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord | undefined> {
+    let best: BoxSealedLeaseRecord | undefined;
+    const expired: string[] = [];
+    for (const [k, r] of this.rows) {
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.expiresAt <= now) {
+        expired.push(k);
+        continue;
+      }
+      // Skip exhausted leases — they're as good as gone.
+      if (r.maxUses !== null && r.usesConsumed >= r.maxUses) {
+        expired.push(k);
+        continue;
+      }
+      if (!best || r.depositedAt > best.depositedAt) best = r;
+    }
+    for (const k of expired) this.rows.delete(k);
+    if (!best) return undefined;
+    best.usesConsumed += 1;
+    const snapshot = { ...best };
+    if (best.maxUses !== null && best.usesConsumed >= best.maxUses) {
+      this.rows.delete(this.k(best.serverDomain, best.leaseId));
+    }
+    return snapshot;
+  }
+
+  async revoke(serverDomain: string, leaseId: string): Promise<boolean> {
+    return this.rows.delete(this.k(serverDomain, leaseId));
+  }
+
+  async list(serverDomain: string, now: number): Promise<BoxSealedLeaseRecord[]> {
+    const out: BoxSealedLeaseRecord[] = [];
+    for (const r of this.rows.values()) {
+      if (r.serverDomain !== serverDomain) continue;
+      if (r.expiresAt <= now) continue;
+      if (r.maxUses !== null && r.usesConsumed >= r.maxUses) continue;
+      out.push({ ...r });
+    }
+    return out.sort((a, b) => b.depositedAt - a.depositedAt);
+  }
+}
+
 export class InMemoryWebauthnRecoveryStorage implements WebauthnRecoveryStorage {
   private rows = new Map<string, WebauthnRecoveryRecord>();
   private k(u: string): string { return u.toLowerCase(); }
@@ -1035,6 +1167,8 @@ export class InMemoryStorage implements Storage {
   auditEvents = new InMemoryAuditEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();
+  secretMailbox = new InMemorySecretMailboxStorage();
+  boxSealedLeases = new InMemoryBoxSealedLeaseStorage();
   pendingUnlockApprovals = new InMemoryPendingUnlockApprovalStorage();
   pendingRePairs = new InMemoryPendingRePairStorage();
   webauthnRecovery = new InMemoryWebauthnRecoveryStorage();

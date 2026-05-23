@@ -173,6 +173,125 @@ describe("InMemoryStorage", () => {
     });
   });
 
+  describe("secretMailbox", () => {
+    const SRV = "home.alice.flagship.services";
+    function req(nonce: string, over: Partial<{ postedAt: number; expiresAt: number }> = {}) {
+      return {
+        serverDomain: SRV,
+        username: "alice",
+        requestNonceHex: nonce,
+        stkPubHex: "aa".repeat(32),
+        purpose: "unlock-key" as const,
+        requestIssuedAt: 1_000,
+        requestSignatureHex: "bb".repeat(64),
+        deviceInfoJson: null,
+        postedAt: over.postedAt ?? 1_000,
+        expiresAt: over.expiresAt ?? 9_000,
+        lastPushAt: 0,
+        responseSealedHex: null,
+        responseIssuedAt: null,
+        respondedAt: null,
+        consumedAt: null,
+      };
+    }
+
+    it("putRequest enforces a single-use nonce", async () => {
+      const s = new InMemoryStorage();
+      expect((await s.secretMailbox.putRequest(req("11".repeat(32)))).ok).toBe(true);
+      const dup = await s.secretMailbox.putRequest(req("11".repeat(32)));
+      expect(dup.ok).toBe(false);
+      if (!dup.ok) expect(dup.reason).toBe("duplicate nonce");
+    });
+
+    it("listPendingForUser excludes answered, consumed, and expired rows", async () => {
+      const s = new InMemoryStorage();
+      await s.secretMailbox.putRequest(req("a1".repeat(32), { postedAt: 100 }));
+      await s.secretMailbox.putRequest(req("a2".repeat(32), { postedAt: 200 }));
+      await s.secretMailbox.putRequest(req("a3".repeat(32), { postedAt: 300, expiresAt: 150 }));
+      // Answer a2 → no longer pending.
+      await s.secretMailbox.putResponse(SRV, "a2".repeat(32), "cc".repeat(8), 50, 50);
+      const pending = await s.secretMailbox.listPendingForUser("alice", 200);
+      // a1 only: a2 answered, a3 expired-at-150 < 200.
+      expect(pending.map((r) => r.requestNonceHex)).toEqual(["a1".repeat(32)]);
+    });
+
+    it("putResponse is write-once + consumeResponse is single-use", async () => {
+      const s = new InMemoryStorage();
+      await s.secretMailbox.putRequest(req("b1".repeat(32)));
+      expect((await s.secretMailbox.putResponse(SRV, "b1".repeat(32), "dd".repeat(8), 10, 10)).ok).toBe(true);
+      const second = await s.secretMailbox.putResponse(SRV, "b1".repeat(32), "ee".repeat(8), 11, 11);
+      expect(second.ok).toBe(false);
+      if (!second.ok) expect(second.reason).toBe("already answered");
+      const c1 = await s.secretMailbox.consumeResponse(SRV, "b1".repeat(32), 20);
+      expect(c1?.responseSealedHex).toBe("dd".repeat(8));
+      expect(c1?.consumedAt).toBe(20);
+      expect(await s.secretMailbox.consumeResponse(SRV, "b1".repeat(32), 21)).toBeUndefined();
+    });
+
+    it("consumeResponse GCs an expired row and returns undefined", async () => {
+      const s = new InMemoryStorage();
+      await s.secretMailbox.putRequest(req("c1".repeat(32), { expiresAt: 100 }));
+      await s.secretMailbox.putResponse(SRV, "c1".repeat(32), "ff".repeat(8), 50, 50);
+      expect(await s.secretMailbox.consumeResponse(SRV, "c1".repeat(32), 200)).toBeUndefined();
+      // Row is gone.
+      expect(await s.secretMailbox.getRequest(SRV, "c1".repeat(32))).toBeUndefined();
+    });
+  });
+
+  describe("boxSealedLeases", () => {
+    const SRV = "home.alice.flagship.services";
+    function lease(id: string, over: Partial<{ maxUses: number | null; expiresAt: number; depositedAt: number }> = {}) {
+      return {
+        serverDomain: SRV,
+        leaseId: id,
+        stkPubHex: "aa".repeat(32),
+        sealedKeyHex: "bb".repeat(48),
+        issuedAt: 1_000,
+        expiresAt: over.expiresAt ?? 9_000,
+        maxUses: over.maxUses === undefined ? null : over.maxUses,
+        usesConsumed: 0,
+        signatureHex: "cc".repeat(64),
+        depositedAt: over.depositedAt ?? 1_000,
+      };
+    }
+
+    it("release returns the sealed key + increments use count; exhausts at maxUses", async () => {
+      const s = new InMemoryStorage();
+      await s.boxSealedLeases.put(lease("L1", { maxUses: 2 }));
+      const r1 = await s.boxSealedLeases.release(SRV, 2_000);
+      expect(r1?.sealedKeyHex).toBe("bb".repeat(48));
+      expect(r1?.usesConsumed).toBe(1);
+      const r2 = await s.boxSealedLeases.release(SRV, 2_001);
+      expect(r2?.usesConsumed).toBe(2);
+      expect(await s.boxSealedLeases.release(SRV, 2_002)).toBeUndefined();
+    });
+
+    it("unbounded lease (maxUses=null) survives many releases until expiry", async () => {
+      const s = new InMemoryStorage();
+      await s.boxSealedLeases.put(lease("L2"));
+      for (let i = 0; i < 4; i++) expect(await s.boxSealedLeases.release(SRV, 2_000)).toBeDefined();
+      expect(await s.boxSealedLeases.release(SRV, 10_001)).toBeUndefined();
+    });
+
+    it("release picks the freshest non-expired lease + GCs expired/exhausted", async () => {
+      const s = new InMemoryStorage();
+      await s.boxSealedLeases.put(lease("old", { depositedAt: 100 }));
+      await s.boxSealedLeases.put(lease("new", { depositedAt: 500 }));
+      await s.boxSealedLeases.put(lease("expired", { expiresAt: 50, depositedAt: 900 }));
+      const r = await s.boxSealedLeases.release(SRV, 200);
+      expect(r?.leaseId).toBe("new");
+      expect((await s.boxSealedLeases.list(SRV, 200)).map((l) => l.leaseId).sort()).toEqual(["new", "old"]);
+    });
+
+    it("revoke drops the lease + list is metadata only", async () => {
+      const s = new InMemoryStorage();
+      await s.boxSealedLeases.put(lease("L1"));
+      expect(await s.boxSealedLeases.revoke(SRV, "missing")).toBe(false);
+      expect(await s.boxSealedLeases.revoke(SRV, "L1")).toBe(true);
+      expect(await s.boxSealedLeases.release(SRV, 1_000)).toBeUndefined();
+    });
+  });
+
   describe("webauthnRecovery", () => {
     function rec(over: Partial<{ username: string; credentialIdHex: string; wrappedUmkB64: string; irkPubHex: string; createdAt: number; updatedAt: number }> = {}) {
       return {
