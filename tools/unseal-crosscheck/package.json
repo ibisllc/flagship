@@ -1,0 +1,14 @@
+{
+  "name": "@flagship/unseal-crosscheck",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TS->Go wire-compat gate for the flagship-unseal static boot helper (installer/unseal-helper). Seals known secrets with @flagship/protocol and asserts the built Go binary recovers them byte-for-byte.",
+  "type": "module",
+  "license": "BUSL-1.1",
+  "scripts": {
+    "gen-vector": "tsx scripts/gen-vector.ts"
+  },
+  "dependencies": {
+    "@flagship/protocol": "*"
+  }
+}
