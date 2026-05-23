@@ -395,13 +395,15 @@
         { name: "AES-GCM", iv: nonce }, aesKey, ciphertext,
       );
       const recipeBytes = new Uint8Array(plain);
-      // The recipe is opaque to this surface — we stash it for /build/
-      // to read and run the personalize-and-write-ISO step.
+      // The recipe is opaque to this surface — we stash it for /ready/ to
+      // download for the user (the Burner consumes the JSON; the old
+      // personalize-and-write-ISO /build/ flow is retired).
       sessionStorage.setItem(RECIPE_HANDOFF_KEY, b64urlEncode(recipeBytes));
       session.delivered = true;
       card.dataset.state = "delivered";
-      // Hand off to the build flow.
-      setTimeout(() => { location.href = "/build/?via=qr"; }, 200);
+      // Hand off to the "your recipe is ready" page, which downloads the
+      // recipe JSON and points the user at the Assembler.
+      setTimeout(() => { location.href = "/ready/"; }, 200);
     } catch (e) {
       // AEAD tag failure means either a MitM, key mismatch, or a
       // tampered relay. Silently discard; user will retry by reloading.

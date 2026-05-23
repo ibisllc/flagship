@@ -125,6 +125,19 @@ describe("hero-QR — v2 relay surface", () => {
     });
   });
 
+  describe("post-deliver hand-off (recipe download, not the retired /build/)", () => {
+    it("redirects a delivered recipe to /ready/, never /build/", async () => {
+      const app = buildServer();
+      const js = await app.inject({ method: "GET", url: "/heroQr.js" });
+      // On peer-deliver the recipe is stashed and the browser is sent to
+      // /ready/ (which downloads the JSON). The old /build/ ISO flow is
+      // retired — a regression back to it must fail this test.
+      expect(js.body).toContain('location.href = "/ready/"');
+      expect(js.body).not.toContain("/build/?via=qr");
+      expect(js.body).toContain("RECIPE_HANDOFF_KEY");
+    });
+  });
+
   it("v1 wire shape is gone (no POST endpoint, no /build-relay path)", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/heroQr.js" });

@@ -160,8 +160,8 @@ function renderEmptyServersList(root, { reason, username } = {}) {
       <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
       <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
-      <a class="pill mt-2" href="https://flagshipserver.com/build/" target="_blank" rel="noopener">
-        Open flagshipserver.com/build/ →
+      <a class="pill mt-2" href="https://flagshipserver.com/" target="_blank" rel="noopener">
+        Open flagshipserver.com →
       </a>
     </div>
   `;

@@ -46,7 +46,6 @@ const MARKETING_PAGES = [
   { path: "/docs/", label: "docs" },
   { path: "/open-source.html", label: "open source" },
   { path: "/security.html", label: "security" },
-  { path: "/build/", label: "build flow" },
   { path: "/status/", label: "status" },
   { path: "/blog/", label: "blog" },
   { path: "/abuse.html", label: "abuse" },
@@ -314,7 +313,7 @@ test.describe("S14 — unified design system on the marketing surface", () => {
       .evaluateAll((nodes) =>
         nodes.map((n) => (n as HTMLAnchorElement).getAttribute("href")),
       );
-    expect(suggestionHrefs).toContain("/build/");
+    expect(suggestionHrefs).toContain("/security.html");
     expect(suggestionHrefs).toContain("/marketplace/");
     expect(suggestionHrefs).toContain("/status/");
   });

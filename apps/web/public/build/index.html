@@ -5,105 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
-    <title>Build a Flagship server — flagshipserver.com</title>
+    <title>This page has moved — flagshipserver.com</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
     <link rel="stylesheet" href="/site.css" />
     <style>
-      .wrap { max-width: 680px; margin: var(--space-12) auto; padding: 0 var(--gutter); }
-      .code-input {
-        width: 100%;
-        background: var(--canvas-tinted);
-        color: var(--accent-press);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        padding: 18px 22px;
-        font-family: var(--font-mono);
-        font-size: 28px;
-        font-weight: 500;
-        letter-spacing: 0.14em;
-        text-align: center;
-        text-transform: uppercase;
-        font-feature-settings: "tnum", "zero";
-        transition: border-color var(--motion-state), box-shadow var(--motion-state), background var(--motion-state);
-      }
-      .code-input:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 4px var(--accent-soft);
-      }
-      .step {
-        border: 1px solid var(--border-soft);
-        border-radius: var(--radius-lg);
-        padding: var(--space-5) var(--space-6);
-        margin-bottom: var(--space-3);
-        background: var(--surface);
-        box-shadow: var(--shadow-flat);
-        transition: border-color var(--motion-state), opacity var(--motion-state), box-shadow var(--motion-state);
-      }
-      .step h3 {
-        margin: 0 0 var(--space-2);
-        font-size: 17px;
-        font-weight: 600;
-        color: var(--ink);
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-      }
-      .step p {
-        margin: var(--space-1) 0;
-        color: var(--ink-muted);
-        font-size: var(--body-sm-size);
-      }
-      .step.pending { opacity: 0.55; }
-      .step.done    { border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
-      .step.error   { border-color: color-mix(in srgb, var(--err) 45%, transparent); }
-      .step.active  { border-color: var(--accent); box-shadow: var(--shadow-resting); }
-      .step.done  h3::before  { content: "✓"; color: var(--ok);  font-family: var(--font-mono); }
-      .step.error h3::before  { content: "✗"; color: var(--err); font-family: var(--font-mono); }
-      .step.active h3::before { content: "▸"; color: var(--accent); font-family: var(--font-mono); }
-      .progress-bar {
-        height: 4px;
-        background: var(--surface-sunken);
-        border-radius: 2px;
-        overflow: hidden;
-        margin-top: var(--space-3);
-      }
-      .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, var(--accent), var(--accent-press));
-        transition: width 220ms var(--ease-out);
-      }
-      .raw {
-        background: var(--canvas-tinted);
-        border: 1px solid var(--border-soft);
-        border-radius: var(--radius-sm);
-        padding: var(--space-3) var(--space-4);
-        margin-top: var(--space-3);
-        font-family: var(--font-mono);
-        font-size: 12px;
-        color: var(--ink-muted);
-        white-space: pre-wrap;
-        overflow-x: auto;
-        line-height: 1.55;
-      }
-      .meta {
-        color: var(--ink-muted);
-        font-size: var(--body-sm-size);
-        margin-top: var(--space-2);
-        font-family: var(--font-mono);
-      }
-      .meta strong { color: var(--ink); }
-      .help-tip {
-        margin-top: var(--space-3);
-        color: var(--ink-muted);
-        font-size: var(--body-sm-size);
-      }
-      .help-tip a { color: var(--ink); font-weight: 500; }
+      .wrap { max-width: 560px; margin: var(--space-12) auto; padding: 0 var(--gutter); text-align: center; }
+      .wrap p { color: var(--ink-muted); }
+      .wrap a { color: var(--ink); font-weight: 500; }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
-</head>
+    <script>
+      // The /build/ personalize-and-write-ISO flow is retired. The Flagship
+      // Assembler now builds the boot USB from a recipe + a stock Linux image.
+      // Forward anyone who arrived mid-flow (a pending recipe, or the old
+      // ?via=qr hand-off) to /ready/; send everyone else to the homepage.
+      (function () {
+        var hasRecipe = false;
+        try { hasRecipe = !!sessionStorage.getItem("flagship:qr:recipe"); } catch (e) {}
+        var viaQr = location.search.indexOf("via=qr") !== -1;
+        location.replace(hasRecipe || viaQr ? "/ready/" : "/");
+      })();
+    </script>
+  </head>
   <body>
     <header class="topbar">
       <div class="brand">
@@ -112,74 +36,15 @@
       </div>
       <nav>
         <a href="/">home</a>
-        <a href="/security.html">security</a>
-        <a href="/status/">status</a>
+        <a href="/how-to.html">how it works</a>
       </nav>
-        <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
     </header>
-
     <main class="wrap">
-      <h1>Build a Flagship server</h1>
-      <p class="lede">
-        Open this page on the machine you want to install Flagship on, then deliver the install blob from your phone or webapp. flagshipserver.com just relays opaque bytes — it cannot read your keys.
+      <h1>This page has moved</h1>
+      <p>
+        Building a Flagship server now happens in the <strong>Flagship Assembler</strong> desktop app, from a recipe your phone signs. Start at the
+        <a href="/">homepage</a>, or read <a href="/how-to.html">how it works</a>.
       </p>
-
-      <section class="step active" id="step-session">
-        <h3>1. Open a build session</h3>
-        <p id="step-session-detail">Generates a one-time ephemeral keypair in this browser. The private half never leaves this tab.</p>
-        <div style="margin-top: 1rem; display: flex; gap: 0.6rem; align-items: center;">
-          <button id="startBtn" type="button">Start build session</button>
-          <span class="meta" id="formStatus"></span>
-        </div>
-        <div class="help-tip">
-          Don't have the app yet? Use the <a href="/dev/create-server">phone simulator</a> to mint and deliver a blob.
-        </div>
-      </section>
-
-      <section class="step pending" id="step-pair">
-        <h3>2. Pair with your phone</h3>
-        <p id="step-pair-detail">Scan the QR or copy the join URL into your phone or webapp.</p>
-        <div id="pairUi" hidden>
-          <div id="qrHolder" style="display:flex; justify-content:center; padding: 1rem 0;"></div>
-          <div class="meta" style="text-align:center; margin-top: 0.5rem;">
-            <div>
-              Match code:
-              <strong id="matchDigits" style="letter-spacing: 0.3em; font-size: 1.4em; color: var(--accent-press);">— — —  — — —</strong>
-            </div>
-            <div style="margin-top: 0.4rem; font-size: 0.85em;">
-              Verify these digits also show on your phone before approving.
-            </div>
-          </div>
-          <details style="margin-top: 0.75rem;">
-            <summary style="color: var(--ink-muted); cursor: pointer; font-size: 0.85rem;">manual join URL</summary>
-            <code id="joinUrl" class="raw" style="display:block;"></code>
-          </details>
-        </div>
-      </section>
-
-      <section class="step pending" id="step-deliver">
-        <h3>3. Receive the sealed install blob</h3>
-        <p id="step-deliver-detail">Waiting for your phone to send the signed InstallBlob. flagshipserver.com sees only opaque ciphertext.</p>
-      </section>
-
-      <section class="step pending" id="step-iso">
-        <h3>4. Download &amp; personalize the ISO</h3>
-        <p id="step-iso-detail">Streams the base ISO from the CDN, appends the trailer, saves to disk.</p>
-        <div class="progress-bar"><div class="progress-fill" id="isoProgress" style="width: 0;"></div></div>
-      </section>
-
-      <section class="step pending" id="step-done">
-        <h3>5. Done</h3>
-        <p id="step-done-detail">Flash the .iso to a USB stick (Balena Etcher, Rufus, dd), boot the target machine, the rest is automatic.</p>
-      </section>
-
-      <details style="margin-top: 1.5rem;">
-        <summary style="color: var(--ink-muted); cursor: pointer; font-size: 0.85rem;">debug log</summary>
-        <pre class="raw" id="log">—</pre>
-      </details>
     </main>
-
-    <script type="module" src="/build/build.js"></script>
-  <script src="/motion.js" defer></script>
-</body>
+  </body>
 </html>

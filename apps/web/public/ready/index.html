@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#F4F1E8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14120D" media="(prefers-color-scheme: dark)" />
+    <title>Your server recipe is ready — flagshipserver.com</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
+    <link rel="stylesheet" href="/site.css" />
+    <style>
+      .wrap { max-width: 680px; margin: var(--space-12) auto; padding: 0 var(--gutter); }
+      .banner {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+        background: color-mix(in srgb, var(--ok) 8%, var(--surface));
+        border-radius: var(--radius-lg);
+        padding: var(--space-4) var(--space-5);
+        margin-bottom: var(--space-6);
+        color: var(--ink);
+        font-size: var(--body-sm-size);
+      }
+      .banner .tick { color: var(--ok); font-family: var(--font-mono); font-size: 1.2em; }
+      .banner.hidden { display: none; }
+      .step {
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5) var(--space-6);
+        margin-bottom: var(--space-3);
+        background: var(--surface);
+        box-shadow: var(--shadow-flat);
+      }
+      .step h3 {
+        margin: 0 0 var(--space-2);
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--ink);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .step h3 .num {
+        font-family: var(--font-mono);
+        color: var(--accent);
+        font-weight: 500;
+      }
+      .step p { margin: var(--space-1) 0; color: var(--ink-muted); font-size: var(--body-sm-size); }
+      .actions { margin-top: var(--space-4); display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+      .meta {
+        color: var(--ink-muted);
+        font-size: var(--body-sm-size);
+        margin-top: var(--space-3);
+        font-family: var(--font-mono);
+      }
+      .meta strong { color: var(--ink); }
+      .reuse-note {
+        margin-top: var(--space-3);
+        color: var(--ink-muted);
+        font-size: var(--body-sm-size);
+        border-left: 2px solid var(--border);
+        padding-left: var(--space-3);
+      }
+      .secondary-link { color: var(--ink); font-weight: 500; }
+      a.btn-link {
+        display: inline-block;
+        padding: 10px 18px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--ink);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: var(--body-sm-size);
+        background: var(--canvas-tinted);
+        transition: border-color var(--motion-state), background var(--motion-state);
+      }
+      a.btn-link:hover { border-color: var(--accent); }
+      .no-recipe.hidden { display: none; }
+      .has-recipe.hidden { display: none; }
+    </style>
+    <link rel="stylesheet" href="/theme-ui.css">
+  <script src="/theme.js"></script>
+</head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/><circle class="lg-ring" cx="32" cy="32" r="18"/><circle class="lg-core" cx="32" cy="32" r="16"/></svg>
+        <span class="name">Flagship</span>
+      </div>
+      <nav>
+        <a href="/">home</a>
+        <a href="/how-to.html">how it works</a>
+        <a href="/status/">status</a>
+      </nav>
+        <button type="button" class="theme-btn" data-theme-toggle aria-label="Switch theme"><svg class="theme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg><svg class="theme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>
+    </header>
+
+    <main class="wrap">
+      <!-- Shown when a recipe was delivered to this browser session. -->
+      <div class="has-recipe hidden" id="hasRecipe">
+        <h1>Your server recipe is ready</h1>
+
+        <div class="banner" id="dlBanner">
+          <span class="tick">↓</span>
+          <span id="dlBannerText">Your recipe is downloading — check your <strong>Downloads</strong> folder.</span>
+        </div>
+
+        <p class="lede">
+          A recipe is a tiny signed file — your phone authorized it, and only your phone can. Two steps from here: get the Assembler (once), then assemble your boot USB.
+        </p>
+
+        <section class="step">
+          <h3><span class="num">1</span> Your recipe (.json)</h3>
+          <p>The signed install ticket for <strong id="serverDomain">your server</strong>. Keep it private; it's single-use and expires.</p>
+          <div class="actions">
+            <button id="downloadRecipe" type="button">Download recipe again</button>
+          </div>
+          <div class="meta" id="recipeMeta"></div>
+        </section>
+
+        <section class="step">
+          <h3><span class="num">2</span> The Flagship Assembler</h3>
+          <p>The desktop app that writes your boot USB. It bakes the recipe inside a stock Linux installer image — no balenaEtcher, Rufus, or dd needed.</p>
+          <div class="actions" id="installerActions"><!-- filled by ready.js --></div>
+          <p class="reuse-note">
+            <strong>You only install the Assembler once.</strong> Reuse it for every server you ever set up — just feed it a fresh recipe each time.
+          </p>
+        </section>
+
+        <section class="step">
+          <h3><span class="num">3</span> Assemble &amp; boot</h3>
+          <p>Open the Assembler, drop in this recipe + a <a class="secondary-link" href="/how-to.html">recommended Linux image</a> + a USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
+        </section>
+      </div>
+
+      <!-- Shown when someone lands here without a pending recipe. -->
+      <div class="no-recipe hidden" id="noRecipe">
+        <h1>No recipe here yet</h1>
+        <p class="lede">
+          A recipe is created when your phone delivers it to a browser tab. Start from the homepage: open it on the computer you'll use, and scan the QR with the Flagship app on your phone.
+        </p>
+        <div class="actions">
+          <a class="btn-link" href="/">Go to the homepage →</a>
+          <a class="secondary-link" href="/how-to.html">How it works</a>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="/ready/ready.js"></script>
+  <script src="/motion.js" defer></script>
+</body>
+</html>
