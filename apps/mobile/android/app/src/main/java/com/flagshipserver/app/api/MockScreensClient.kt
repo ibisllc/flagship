@@ -131,12 +131,6 @@ class MockScreensClient(
         )
     }
 
-    override suspend fun unlockApprovalsPending(): UnlockApprovalsPendingResponse {
-        tick(); return UnlockApprovalsPendingResponse(pending = emptyList())
-    }
-
-    override suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) { tick() }
-
     override suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse {
         tick(); return BrowserTabsListResponse(tabs = emptyList())
     }

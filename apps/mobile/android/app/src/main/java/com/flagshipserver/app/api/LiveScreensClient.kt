@@ -114,14 +114,6 @@ class LiveScreensClient(
     override suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse =
         request("/api/screens/vibe-code/$sessionId", VibeCodeStatusResponse.serializer())
 
-    override suspend fun unlockApprovalsPending(): UnlockApprovalsPendingResponse =
-        request("/api/screens/unlock-approvals/pending", UnlockApprovalsPendingResponse.serializer())
-
-    override suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) {
-        val bytes = json.encodeToString(UnlockApprovalApproveRequest.serializer(), body).toByteArray()
-        request<Unit>("/api/screens/unlock-approvals/$requestId/approve", null, "POST", bytes)
-    }
-
     override suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse =
         request("/api/screens/browser-tabs/list/$serviceId", BrowserTabsListResponse.serializer())
 

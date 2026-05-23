@@ -27,8 +27,7 @@ sealed interface AppsRoute {
 }
 
 sealed interface ActivityRoute {
-    data object UnlockApprovals : ActivityRoute
-    /** The v2 sealed-key RELAY approval surface (SecretRequestsScreen). */
+    /** The sealed-key RELAY approval surface (SecretRequestsScreen). */
     data object SecretRequests : ActivityRoute
     data class InstallProgress(val serial: String) : ActivityRoute
 }

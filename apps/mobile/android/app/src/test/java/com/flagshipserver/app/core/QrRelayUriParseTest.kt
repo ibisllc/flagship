@@ -53,10 +53,12 @@ class QrRelayUriParseTest {
 @Config(sdk = [33])
 class DeepLinkParseTest {
 
-    @Test fun parsesUnlockApprove() {
+    // Back-compat: the legacy unlock-approve host now resolves to the relay
+    // approval list (the plaintext flow is gone).
+    @Test fun parsesLegacyUnlockApproveAsSecretRequests() {
         val uri = Uri.parse("flagship://unlock-approve?requestId=req-1")
         val link = DeepLink.parse(uri)
-        assertEquals(DeepLink.UnlockApprove("req-1"), link)
+        assertEquals(DeepLink.SecretRequests, link)
     }
 
     @Test fun parsesServerDetail() {

@@ -13,11 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 sealed interface DeepLink {
-    data class UnlockApprove(val requestId: String) : DeepLink
-    /** Phone-as-unlock-endpoint RELAY approval list (the v2 sealed-key flow).
+    /** Phone-as-unlock-endpoint RELAY approval list (the sealed-key flow).
      *  Fired by the `secret-request` push when a box is finishing setup /
-     *  rebooting in "approve" mode. Distinct from [UnlockApprove] (the legacy
-     *  plaintext BootApproval flow, kept for old servers). */
+     *  rebooting in "approve" mode and needs the phone to release its boot
+     *  secret. (The legacy plaintext unlock-approval flow has been removed.) */
     data object SecretRequests : DeepLink
     data class ServerDetail(val podId: String) : DeepLink
     data class AppDetail(val appId: String) : DeepLink
@@ -48,8 +47,9 @@ sealed interface DeepLink {
             val host = uri.host ?: return null
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
             return when (host) {
-                "unlock-approve" -> params["requestId"]?.let { UnlockApprove(it) }
-                "secret-requests", "secret-request" -> SecretRequests
+                // Back-compat: legacy `unlock-approve(s)` links (old pushes /
+                // cached shortcuts) now land on the relay approval list.
+                "secret-requests", "secret-request", "unlock-approve", "unlock-approvals" -> SecretRequests
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "marketplace" -> Marketplace

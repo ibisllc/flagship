@@ -59,7 +59,6 @@ fun RootShell(widthSizeClass: WindowWidthSizeClass = WindowWidthSizeClass.COMPAC
     androidx.compose.runtime.LaunchedEffect(pending) {
         val link = pending ?: return@LaunchedEffect
         selected = when (link) {
-            is com.flagshipserver.app.core.DeepLink.UnlockApprove -> RootDestination.ACTIVITY
             com.flagshipserver.app.core.DeepLink.SecretRequests -> RootDestination.ACTIVITY
             is com.flagshipserver.app.core.DeepLink.ServerDetail -> RootDestination.HOME
             is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS

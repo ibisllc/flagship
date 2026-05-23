@@ -59,21 +59,6 @@ class LiveScreensClientTest {
         assertTrue(client.appsList().apps.isEmpty())
     }
 
-    @Test fun approveUnlock_postsJsonBodyAndIgnoresEmptyResponse() = runTest {
-        server.enqueue(MockResponse().setResponseCode(204))
-        client.approveUnlock(
-            requestId = "req-123",
-            body = UnlockApprovalApproveRequest(signature = "00", envelope = "ZW52"),
-        )
-        val rec = server.takeRequest()
-        assertEquals("POST", rec.method)
-        assertEquals("/api/screens/unlock-approvals/req-123/approve", rec.path)
-        assertTrue(rec.getHeader("content-type")!!.startsWith("application/json"))
-        val body = rec.body.readUtf8()
-        assertTrue(body.contains("\"signature\":\"00\""))
-        assertTrue(body.contains("\"envelope\":\"ZW52\""))
-    }
-
     @Test fun revokePairedSession_sendsDelete() = runTest {
         server.enqueue(MockResponse().setResponseCode(204))
         client.revokePairedSession("abcdef")

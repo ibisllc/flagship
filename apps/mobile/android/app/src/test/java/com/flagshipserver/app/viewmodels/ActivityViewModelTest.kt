@@ -1,6 +1,6 @@
 // Exercise the fan-out + merge-by-time + tolerant-failure branches in
-// ActivityViewModel.load(). Uses MockScreensClient with a custom
-// fixture override so each test pins a deterministic outcome.
+// ActivityViewModel.load(). Uses a hand-written fake so each test pins a
+// deterministic outcome.
 
 package com.flagshipserver.app.viewmodels
 
@@ -14,7 +14,6 @@ import com.flagshipserver.app.api.MarketplaceBrowseResponse
 import com.flagshipserver.app.api.OrdersSendRequest
 import com.flagshipserver.app.api.OrdersSendResponse
 import com.flagshipserver.app.api.PairedSessionsListResponse
-import com.flagshipserver.app.api.PendingUnlockApproval
 import com.flagshipserver.app.api.PostRecoverySnapshot
 import com.flagshipserver.app.api.PostRecoveryStatusResponse
 import com.flagshipserver.app.api.RecentInstallEvent
@@ -24,8 +23,6 @@ import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.api.ServerMetricsResponse
 import com.flagshipserver.app.api.TierStatusResponse
-import com.flagshipserver.app.api.UnlockApprovalApproveRequest
-import com.flagshipserver.app.api.UnlockApprovalsPendingResponse
 import com.flagshipserver.app.api.UrlControllerClaimRequest
 import com.flagshipserver.app.api.UrlControllerClaimResponse
 import com.flagshipserver.app.api.UrlControllerOwnedResponse
@@ -58,12 +55,10 @@ import org.junit.Test
  * can exercise the merge/sort/empty branches deterministically.
  */
 private class StubScreensClient(
-    var approvals: List<PendingUnlockApproval> = emptyList(),
     var recentEvents: List<RecentInstallEvent> = emptyList(),
     var recoverySnapshot: PostRecoverySnapshot? = null,
     var detailFails: Boolean = false,
     var recoveryFails: Boolean = false,
-    var approvalsThrows: Boolean = false,
 ) : ScreensClient {
     override suspend fun serverDetail(): ServerDetailResponse {
         if (detailFails) throw ScreensError.Http(500, "detail down")
@@ -73,10 +68,6 @@ private class StubScreensClient(
             certSans = emptyList(), serviceCount = 0, pairedSessionCount = 0,
             recentInstallEvents = recentEvents,
         )
-    }
-    override suspend fun unlockApprovalsPending(): UnlockApprovalsPendingResponse {
-        if (approvalsThrows) throw ScreensError.Http(503, "approvals down")
-        return UnlockApprovalsPendingResponse(pending = approvals)
     }
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse {
         if (recoveryFails) throw ScreensError.Http(404, "no recovery")
@@ -88,7 +79,6 @@ private class StubScreensClient(
     override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse = error("unused")
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse = error("unused")
     override suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse = error("unused")
-    override suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest) = error("unused")
     override suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse = error("unused")
     override suspend fun pairedSessionsList(): PairedSessionsListResponse = error("unused")
     override suspend fun revokePairedSession(tokenPrefix: String) = error("unused")
@@ -115,16 +105,11 @@ class ActivityViewModelTest {
         val vm = ActivityViewModel(StubScreensClient(), backgroundScope)
         vm.load().join()
         val feed = (vm.state.first() as LoadingState.Loaded).value
-        assertTrue(feed.pendingApprovals.isEmpty())
         assertTrue(feed.items.isEmpty())
     }
 
     @Test fun itemsMergeAndSortByTimeDescending() = runTest {
         val client = StubScreensClient(
-            approvals = listOf(
-                PendingUnlockApproval(serverFqdn = "home.t.flagship.services",
-                    requestId = "r1", requestedAt = 100, ip = "10.0.0.1"),
-            ),
             recentEvents = listOf(
                 RecentInstallEvent(at = 300, kind = "deploy", serviceId = "wiki", detail = "v1"),
                 RecentInstallEvent(at = 200, kind = "installed", serviceId = "plants", detail = null),
@@ -142,44 +127,24 @@ class ActivityViewModelTest {
         val vm = ActivityViewModel(client, backgroundScope)
         vm.load().join()
         val feed = (vm.state.first() as LoadingState.Loaded).value
-        assertEquals(listOf<Long>(300L, 200L, 100L, 50L), feed.items.map { it.at })
-        // First two items are install events (highest at)
+        assertEquals(listOf<Long>(300L, 200L, 50L), feed.items.map { it.at })
         assertTrue(feed.items[0] is ActivityItem.InstallEvent)
         assertTrue(feed.items[1] is ActivityItem.InstallEvent)
-        assertTrue(feed.items[2] is ActivityItem.UnlockApprove)
-        assertTrue(feed.items[3] is ActivityItem.RecoverySnapshot)
+        assertTrue(feed.items[2] is ActivityItem.RecoverySnapshot)
     }
 
-    @Test fun toleratesDetailFailure_stillStitchesApprovals() = runTest {
-        
-        val client = StubScreensClient(
-            approvals = listOf(
-                PendingUnlockApproval(serverFqdn = "home.t.flagship.services",
-                    requestId = "r1", requestedAt = 100, ip = null),
-            ),
-            detailFails = true,    // serverDetail() throws
-            recoveryFails = true,  // postRecoveryStatus() throws
-        )
+    @Test fun toleratesDetailAndRecoveryFailure_yieldsEmptyLoadedFeed() = runTest {
+        // Both the daemon detail fetch and the recovery fetch throw; they're
+        // each wrapped in runCatching, so the feed still loads (empty) rather
+        // than flipping to Failed.
+        val client = StubScreensClient(detailFails = true, recoveryFails = true)
         val vm = ActivityViewModel(client, backgroundScope)
         vm.load().join()
         val feed = (vm.state.first() as LoadingState.Loaded).value
-        assertEquals(1, feed.items.size)
-        assertTrue(feed.items.single() is ActivityItem.UnlockApprove)
-    }
-
-    @Test fun bubbleUpFailureWhenApprovalsThrow() = runTest {
-        // approvalsThrows is the one branch that isn't wrapped in
-        // runCatching — the catch in load() converts to Failed state.
-        
-        val vm = ActivityViewModel(StubScreensClient(approvalsThrows = true), backgroundScope)
-        vm.load().join()
-        val state = vm.state.first()
-        assertTrue(state is LoadingState.Failed)
-        assertTrue((state as LoadingState.Failed).message.contains("approvals down"))
+        assertTrue(feed.items.isEmpty())
     }
 
     @Test fun activityItem_recoverySnapshot_atFallsBackToStartedAtWhenNoCompleted() = runTest {
-        
         val client = StubScreensClient(
             recoverySnapshot = PostRecoverySnapshot(
                 currentIrkPubHex = "ab", state = WatcherState(lastPolledAt = 0),
@@ -199,7 +164,6 @@ class ActivityViewModelTest {
     }
 
     @Test fun activityItem_recoverySnapshot_atIsZeroWhenNoReissueAtAll() = runTest {
-        
         val client = StubScreensClient(
             recoverySnapshot = PostRecoverySnapshot(
                 currentIrkPubHex = "ab", state = WatcherState(lastPolledAt = 0),
@@ -211,7 +175,6 @@ class ActivityViewModelTest {
         val feed = (vm.state.first() as LoadingState.Loaded).value
         val snap = feed.items.single() as ActivityItem.RecoverySnapshot
         assertEquals(0L, snap.at)
-        // subtitle is null when there's no reissue report
         assertNull(snap.subtitle)
     }
 }

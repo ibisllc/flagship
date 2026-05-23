@@ -33,12 +33,6 @@ interface ScreensClient {
     // P1.7 vibe-code/:id
     suspend fun vibeCodeStatus(sessionId: String): VibeCodeStatusResponse
 
-    // P1.8 unlock-approvals/pending
-    suspend fun unlockApprovalsPending(): UnlockApprovalsPendingResponse
-
-    // P1.9 unlock-approvals/:requestId/approve
-    suspend fun approveUnlock(requestId: String, body: UnlockApprovalApproveRequest)
-
     // P1.10 browser-tabs/list/:serviceId
     suspend fun browserTabsList(serviceId: String): BrowserTabsListResponse
 

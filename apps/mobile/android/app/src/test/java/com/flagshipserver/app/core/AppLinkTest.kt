@@ -18,9 +18,11 @@ import org.robolectric.annotation.Config
 @Config(sdk = [33])
 class AppLinkTest {
 
-    @Test fun primarySchemeForm_resolvesViaDeepLinkParse() {
+    // Back-compat: the legacy unlock-approve link now lands on the relay
+    // approval list (the plaintext flow is gone).
+    @Test fun primarySchemeForm_legacyUnlockApprove_resolvesToSecretRequests() {
         val uri = Uri.parse("flagship://unlock-approve?requestId=req-9")
-        assertEquals(DeepLink.UnlockApprove("req-9"), AppLink.resolve(uri))
+        assertEquals(DeepLink.SecretRequests, AppLink.resolve(uri))
     }
 
     @Test fun primarySchemeForm_serverDetail() {
@@ -43,7 +45,7 @@ class AppLinkTest {
         // equivalent flagship:// URI and reparse so both surfaces share
         // a single DeepLink contract.
         val uri = Uri.parse("https://flagshipserver.com/app/unlock-approve?requestId=req-9")
-        assertEquals(DeepLink.UnlockApprove("req-9"), AppLink.resolve(uri))
+        assertEquals(DeepLink.SecretRequests, AppLink.resolve(uri))
     }
 
     @Test fun appLinkForm_marketplace() {

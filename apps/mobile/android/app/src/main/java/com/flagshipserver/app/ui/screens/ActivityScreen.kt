@@ -94,23 +94,25 @@ fun ActivityScreen(nav: NavController) {
 
 @Composable
 private fun FeedBody(feed: ActivityFeed, nav: NavController) {
-    if (feed.pendingApprovals.isNotEmpty()) {
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Unlock requests",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                        modifier = Modifier.weight(1f),
-                    )
-                    FSPill("${feed.pendingApprovals.size} waiting", kind = FSPillKind.Provisioning)
-                }
-                FSGhostButton(label = "Open queue", onClick = { nav.navigate("unlock-approvals") })
-            }
+    // Always-available entry into the relay approval list. A box set to
+    // "authorize each boot" posts a sealed-key request and pushes the phone;
+    // this is the in-app way to reach the same screen.
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Approve a box's boot",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                "Servers set to ask on every boot wait here for you to release their disk key.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            FSGhostButton(label = "Open approvals", onClick = { nav.navigate("secret-requests") })
         }
-        Spacer(Modifier.height(FS.space.s3))
     }
+    Spacer(Modifier.height(FS.space.s3))
 
     if (feed.items.any { it is ActivityItem.RecoverySnapshot }) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
@@ -139,7 +141,7 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
     Spacer(Modifier.height(FS.space.s2))
 
     val recentRows = feed.items
-        .filter { it !is ActivityItem.UnlockApprove && it !is ActivityItem.RecoverySnapshot }
+        .filter { it !is ActivityItem.RecoverySnapshot }
     if (recentRows.isEmpty()) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Text("No recent activity.", color = FS.colors.textMuted)

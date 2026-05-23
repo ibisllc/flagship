@@ -6,7 +6,6 @@ package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.AuditEvent
 import com.flagshipserver.app.api.FlagshipServerClient
-import com.flagshipserver.app.api.PendingUnlockApproval
 import com.flagshipserver.app.api.RecentInstallEvent
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.PostRecoverySnapshot
@@ -25,13 +24,6 @@ sealed interface ActivityItem {
     val at: Long
     val title: String
     val subtitle: String?
-
-    data class UnlockApprove(
-        val request: PendingUnlockApproval,
-        override val at: Long = request.requestedAt,
-        override val title: String = "Unlock requested for ${request.serverFqdn}",
-        override val subtitle: String? = request.ip?.let { "from $it" },
-    ) : ActivityItem
 
     data class InstallEvent(
         val event: RecentInstallEvent,
@@ -75,7 +67,6 @@ private fun auditLabel(kind: String): String = when (kind) {
 }
 
 data class ActivityFeed(
-    val pendingApprovals: List<PendingUnlockApproval>,
     val items: List<ActivityItem>,
 )
 
@@ -103,7 +94,6 @@ class ActivityViewModel(
         // dangling uncaught exceptions in the parent scope.
         val outcome = runCatching {
             coroutineScope {
-                val approvalsJob = async { client.unlockApprovalsPending().pending }
                 val detailJob = async { runCatching { client.serverDetail().recentInstallEvents }.getOrDefault(emptyList()) }
                 val recoveryJob = async { runCatching { client.postRecoveryStatus().report }.getOrNull() }
                 // Account-level audit feed. Lives on .com (not the
@@ -116,8 +106,7 @@ class ActivityViewModel(
                     if (s == null || u.isNullOrEmpty()) emptyList()
                     else runCatching { s.listAuditEvents(u, sinceSeq = 0, limit = 20).events }.getOrDefault(emptyList())
                 }
-                Quadruple(
-                    approvalsJob.await(),
+                Triple(
                     detailJob.await(),
                     recoveryJob.await(),
                     auditJob.await(),
@@ -125,16 +114,13 @@ class ActivityViewModel(
             }
         }
         outcome.fold(
-            onSuccess = { (approvals, recents, snapshot, audit) ->
+            onSuccess = { (recents, snapshot, audit) ->
                 val items = buildList {
-                    approvals.forEach { add(ActivityItem.UnlockApprove(it)) }
                     recents.forEach { add(ActivityItem.InstallEvent(it)) }
                     snapshot?.let { add(ActivityItem.RecoverySnapshot(it)) }
                     audit.forEach { add(ActivityItem.AuditEntry(it)) }
                 }.sortedByDescending { it.at }
-                _state.value = LoadingState.Loaded(
-                    ActivityFeed(pendingApprovals = approvals, items = items),
-                )
+                _state.value = LoadingState.Loaded(ActivityFeed(items = items))
             },
             onFailure = { t ->
                 _state.value = LoadingState.Failed(t.message ?: "couldn't load activity")
@@ -142,9 +128,3 @@ class ActivityViewModel(
         )
     }
 }
-
-/** Internal because Kotlin's stdlib only ships Pair/Triple. Used
- *  for the four-way fan-out destructure above. */
-private data class Quadruple<A, B, C, D>(
-    val first: A, val second: B, val third: C, val fourth: D,
-)

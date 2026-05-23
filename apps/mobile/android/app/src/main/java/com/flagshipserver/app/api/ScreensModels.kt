@@ -142,26 +142,6 @@ data class VibeCodeStatusResponse(
     data class TranscriptEntry(val role: String, val content: String)
 }
 
-// ---------- P1.8 / P1.9 unlock-approvals -------------------------------
-
-@Serializable
-data class PendingUnlockApproval(
-    val serverFqdn: String,
-    val requestId: String,
-    val requestedAt: Long,
-    val ip: String? = null,
-    val userAgent: String? = null,
-)
-
-@Serializable
-data class UnlockApprovalsPendingResponse(val pending: List<PendingUnlockApproval>)
-
-@Serializable
-data class UnlockApprovalApproveRequest(
-    val signature: String,    // hex
-    val envelope: String,     // base64
-)
-
 // ---------- P1.10 / P1.11 browser-tabs ---------------------------------
 
 @Serializable

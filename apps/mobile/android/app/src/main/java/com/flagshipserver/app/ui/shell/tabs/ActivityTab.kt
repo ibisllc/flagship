@@ -12,7 +12,6 @@ import androidx.navigation.compose.rememberNavController
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ActivityScreen
-import com.flagshipserver.app.ui.screens.ApproveUnlockScreen
 import com.flagshipserver.app.ui.screens.PostRecoveryScreen
 import com.flagshipserver.app.ui.screens.SecretRequestsScreen
 
@@ -23,10 +22,6 @@ fun ActivityTab() {
     val pending by deepLinker.pending.collectAsState()
     LaunchedEffect(pending) {
         when (val link = pending) {
-            is DeepLink.UnlockApprove -> {
-                deepLinker.consume()
-                nav.navigate("unlock-approvals")
-            }
             DeepLink.SecretRequests -> {
                 deepLinker.consume()
                 nav.navigate("secret-requests")
@@ -36,7 +31,6 @@ fun ActivityTab() {
     }
     NavHost(navController = nav, startDestination = "activity") {
         composable("activity") { ActivityScreen(nav) }
-        composable("unlock-approvals") { ApproveUnlockScreen(nav) }
         composable("secret-requests") { SecretRequestsScreen(nav) }
         composable("post-recovery") { PostRecoveryScreen(nav) }
     }
