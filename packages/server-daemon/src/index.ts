@@ -75,6 +75,7 @@ import {
   defaultEntitlementBundlePath,
   loadEntitlementBundle,
 } from "./entitlementBundleStore.js";
+import { fetchEntitlementViaRelay } from "./entitlementRelay.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -356,11 +357,46 @@ async function main(): Promise<void> {
     process.env.FLAGSHIP_ENTITLEMENTS_PATH ?? defaultEntitlementBundlePath(dataDir);
   let entitlementBundle: EntitlementBundle;
   try {
-    const loaded = await loadEntitlementBundle(entitlementBundlePath);
+    let loaded = await loadEntitlementBundle(entitlementBundlePath);
+
+    // Entitlement-via-relay (docs/security-phone-as-unlock-endpoint.md §4).
+    // If no bundle is on disk, ask the user's phone — through `.com`'s blind
+    // mailbox — to IRK-sign a RootEntitlement for this freshly-burned box,
+    // instead of relying on a self-signed credential. We can only do this
+    // when we know the owner IRK (baked into FLAGSHIP_CONFIG); without it we
+    // can't verify the relay reply, so we skip straight to the fallback.
+    // ANY relay failure (timeout, no reply, forged/mismatched carrier) falls
+    // through to whatever already exists on disk — never a brick.
+    if (!loaded && cfg) {
+      console.log(
+        `[daemon] no entitlement bundle on disk; requesting one from the phone via ${env.controlPlaneBaseUrl} (awaiting-entitlement)`,
+      );
+      // Best-effort observability: report `awaiting-entitlement` only if the
+      // protocol recognizes it as a phase (it is not abused as `failed`).
+      if (isProvisionPhase("awaiting-entitlement")) {
+        void reportPhase("awaiting-entitlement" as ProvisionPhase);
+      }
+      const relayed = await fetchEntitlementViaRelay({
+        serverDomain: env.serverFqdn!,
+        identity: identityKeypair,
+        ownerIrkPub: cfg.irkPublicKey,
+        controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+        entitlementBundlePath,
+        onLog: (m) => console.log(m),
+      });
+      if (relayed) {
+        loaded = relayed;
+      } else {
+        // Re-read in case a concurrent provisioner (the burner's self-signed
+        // bundle, a phone PhoneOrders delivery) wrote one while we waited.
+        loaded = await loadEntitlementBundle(entitlementBundlePath);
+      }
+    }
+
     if (!loaded) {
       throw new Error(
         `entitlement bundle not found at ${entitlementBundlePath}; ` +
-          `the provisioner (phone / demo cloud-init bootstrap) must mint + write it before the daemon can serve`,
+          `the provisioner (phone relay / demo cloud-init bootstrap) must mint + write it before the daemon can serve`,
       );
     }
     // Defense-in-depth: the bundle's podCanonical must be this server,
