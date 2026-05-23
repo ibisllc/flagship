@@ -12,6 +12,7 @@ export * from "./cloudflareDns.js";
 export * from "./brokerDnsClient.js";
 export * from "./dns01.js";
 export * from "./luksKeys.js";
+export * from "./secretMailbox.js";
 export * from "./rePair.js";
 export * from "./wipeRestart.js";
 export * from "./webauthnRecovery.js";
