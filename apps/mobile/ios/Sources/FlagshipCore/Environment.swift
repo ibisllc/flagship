@@ -55,3 +55,18 @@ public extension EnvironmentValues {
         set { self[PairingRelayClientKey.self] = newValue }
     }
 }
+
+/// Phone-as-unlock-endpoint RELAY mailbox on flagshipserver.com. The
+/// SecretRequestsContainer reads this to fetch + answer pending boot-secret
+/// requests. Defaults to the in-process Mock (empty inbox) so previews + the
+/// unconfigured shell render the empty state with no network call.
+private struct SecretMailboxClientKey: EnvironmentKey {
+    static let defaultValue: any SecretMailboxClient = MockSecretMailboxClient()
+}
+
+public extension EnvironmentValues {
+    var secretMailboxClient: any SecretMailboxClient {
+        get { self[SecretMailboxClientKey.self] }
+        set { self[SecretMailboxClientKey.self] = newValue }
+    }
+}
