@@ -14,10 +14,13 @@
  *   - We DO install Node 20 from NodeSource (Ubuntu 22.04 default is
  *     nodejs 12 — too old for our protocol; same root cause as the
  *     debian-12 path).
- *   - No subiquity-managed LUKS yet — Phase 2 will add proper
- *     LUKS-encrypt-root in the subiquity storage section. Phase 1
- *     installs the daemon on top of an unencrypted root for the
- *     happy-path proof.
+ *   - LUKS-encrypt-root is now available as an OPT-IN flag
+ *     (UserDataOptions.encryptRoot), DEFAULT OFF. When off, the daemon
+ *     installs on an unencrypted root — the proven happy path, unchanged.
+ *     When on (EXPERIMENTAL — needs live validation), the autoinstall gets
+ *     a curtin LUKS-on-root storage layout + a phone-gated initramfs unlock
+ *     hook (the .com-blind relay path from
+ *     docs/security-phone-as-unlock-endpoint.md).
  *
  * EXECUTION CONTEXT — the critical difference vs the demo. The demo's
  * bootstrap runs at REAL boot (cloud-init runcmd on multi-user.target),
@@ -48,6 +51,25 @@ export interface UserDataOptions {
   flagshipRepoUrl?: string;
   /** Pinned git ref. Falls back to InstallBlob.installerGitRef or "main". */
   installerGitRef?: string;
+  /**
+   * Encrypt the installed root with LUKS, gated on the phone (the
+   * `.com`-blind unlock-relay path from
+   * docs/security-phone-as-unlock-endpoint.md).
+   *
+   * DEFAULT OFF. When false (the default), the generated user-data + bootstrap
+   * are byte-identical to the working unencrypted path — the box self-signs its
+   * entitlement, ACME works, and the box serves a real cert with no phone
+   * round-trip at boot. Do NOT regress that path.
+   *
+   * EXPERIMENTAL when true — needs live validation (brick risk). The autoinstall
+   * gets a curtin custom-storage layout with a LUKS-encrypted root keyed by a
+   * random key-file (install.sh's pattern), the bootstrap seals that key for the
+   * phone + uploads it to `.com`, builds the `/boot/flagship-unseal` helper, and
+   * installs an initramfs hook that lifts boot-stage.sh's unlock_via_relay()
+   * (POST SecretRequest → poll → unseal → cryptsetup luksOpen), falling back to
+   * the legacy plaintext consume path on timeout. See §2/§3 of the wave brief.
+   */
+  encryptRoot?: boolean;
 }
 
 export function buildAutoinstallUserData(opts: UserDataOptions): string {
@@ -62,8 +84,22 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
   if (!repo.startsWith("https://")) {
     throw new Error("flagshipRepoUrl must be https://");
   }
-  const bootstrap = buildBootstrapScript({ ref, repoUrl: repo });
+  const encryptRoot = opts.encryptRoot === true;
+  const bootstrap = buildBootstrapScript({ ref, repoUrl: repo, encryptRoot });
   const bootstrapB64 = utf8ToBase64(bootstrap);
+  // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
+  // this is the empty string and the YAML is byte-identical to the working
+  // unencrypted path (subiquity falls back to its default direct/whole-disk
+  // layout). EXPERIMENTAL — needs live validation.
+  //
+  // The burn-time passphrase is a fixed constant (BURN_PASSPHRASE below): curtin
+  // formats the LUKS volume with it, then the bootstrap (root already open in
+  // the in-target chroot) generates a fresh random key — install.sh's
+  // `head -c 64 /dev/urandom` pattern — adds it as a new key slot, removes the
+  // burn-time passphrase, and seals the random key for the phone. So the only
+  // recoverable key is the phone-sealed random one; the burn-time constant is
+  // destroyed before first boot.
+  const storageBlock = encryptRoot ? luksStorageBlock() : "";
   return `#cloud-config
 # Flagship Burner — autoinstall user-data
 # Generated at burn time. Don't edit by hand.
@@ -85,19 +121,67 @@ autoinstall:
     - cryptsetup
     - lvm2
     - gnupg
-  late-commands:
+${storageBlock}  late-commands:
     - curtin in-target --target=/target -- bash -c 'mkdir -p /var/flagship && echo "${blobB64}" | base64 -d > /var/flagship/install-blob.json && chmod 600 /var/flagship/install-blob.json'
     - curtin in-target --target=/target -- bash -c 'echo "${bootstrapB64}" | base64 -d > /usr/local/sbin/flagship-bootstrap.sh && chmod +x /usr/local/sbin/flagship-bootstrap.sh'
     - curtin in-target --target=/target -- /usr/local/sbin/flagship-bootstrap.sh
 `;
 }
 
+/**
+ * curtin custom-storage layout for the OPT-IN LUKS path (encryptRoot=true).
+ *
+ * EXPERIMENTAL — needs live validation on real hardware (brick risk).
+ *
+ * Ports install.sh's partitioning into subiquity/curtin: a small unencrypted
+ * /boot (kernel + initramfs + identity + /boot/flagship-unseal + the unlock
+ * hook) plus a LUKS2-encrypted root. curtin formats the LUKS volume with the
+ * fixed burn-time passphrase BURN_PASSPHRASE; the bootstrap then re-keys it to a
+ * fresh `head -c 64 /dev/urandom` random key (install.sh's pattern), removing
+ * the burn-time passphrase, so the only recoverable key is the one sealed for
+ * the phone.
+ *
+ * Emitted with a leading two-space indent so it nests under `autoinstall:` and
+ * a trailing newline so `late-commands:` follows cleanly. Returns "" when off.
+ */
+function luksStorageBlock(): string {
+  return `  # EXPERIMENTAL LUKS-on-root (opt-in; default OFF). Needs live validation.
+  storage:
+    config:
+      - {id: disk0, type: disk, ptable: gpt, match: {size: largest}, wipe: superblock-recursive, grub_device: true, preserve: false}
+      - {id: bios_grub, type: partition, device: disk0, size: 1M, flag: bios_grub, preserve: false}
+      - {id: boot_part, type: partition, device: disk0, size: 512M, preserve: false}
+      - {id: root_part, type: partition, device: disk0, size: -1, preserve: false}
+      - {id: boot_fs, type: format, fstype: ext4, volume: boot_part, label: FLAGSHIP_BOOT, preserve: false}
+      - {id: root_crypt, type: dm_crypt, volume: root_part, dm_name: flagship_root, key: "${BURN_PASSPHRASE}", preserve: false}
+      - {id: root_fs, type: format, fstype: ext4, volume: root_crypt, label: FLAGSHIP_ROOT, preserve: false}
+      - {id: root_mount, type: mount, device: root_fs, path: /}
+      - {id: boot_mount, type: mount, device: boot_fs, path: /boot}
+`;
+}
+
+/**
+ * Fixed burn-time LUKS passphrase used ONLY between curtin's luksFormat and the
+ * bootstrap's re-key step. It never reaches first boot: the bootstrap adds a
+ * random key slot and `luksRemoveKey`s this constant before sealing. A constant
+ * is safe because the window it's live in is the install itself (the same trust
+ * boundary as the rest of the autoinstall), and it's destroyed before the box
+ * is ever exposed. Kept identical in TS + Swift.
+ */
+const BURN_PASSPHRASE = "flagship-burn-time-luks-rekey-me-immediately";
+
 interface BootstrapTemplateArgs {
   ref: string;
   repoUrl: string;
+  encryptRoot: boolean;
 }
 
 function buildBootstrapScript(args: BootstrapTemplateArgs): string {
+  if (args.encryptRoot) return buildBootstrapScriptEncrypted(args);
+  return buildBootstrapScriptPlain(args);
+}
+
+function buildBootstrapScriptPlain(args: BootstrapTemplateArgs): string {
   return `#!/bin/bash
 # Flagship first-boot bootstrap.
 # Runs once at first boot under curtin's in-target chroot. Idempotent.
@@ -290,6 +374,309 @@ echo "[flagship-bootstrap] systemd units installed + enabled (start deferred to 
 
 date > /var/flagship/installed.flag
 echo "[flagship-bootstrap] done"
+`;
+}
+
+/**
+ * EXPERIMENTAL encrypted-root bootstrap (encryptRoot=true) — needs live
+ * validation (brick risk). It is the plain bootstrap with three LUKS additions
+ * spliced in just before the final `installed.flag`:
+ *
+ *   A. RE-KEY: generate a fresh `head -c 64 /dev/urandom` LUKS key (install.sh's
+ *      pattern), add it as a new key slot, remove the burn-time passphrase.
+ *   B. SEAL + UPLOAD: seal the random key for the phone (seal-for-bak, exactly
+ *      as install.sh) and POST it to `.com`'s sealed-luks-key endpoint, so the
+ *      phone can authorize future boots and `.com` only ever holds ciphertext.
+ *   C. BAKE HELPER + INITRAMFS HOOK: build /opt/flagship/installer/unseal-helper
+ *      with the cloned source's golang toolchain, install it to
+ *      /boot/flagship-unseal, and drop an initramfs hook + premount script that
+ *      lifts boot-stage.sh's unlock_via_relay() verbatim (with the legacy
+ *      plaintext-consume fallback) so the root is unlocked pre-pivot on every
+ *      boot. The initramfs needs openssl/curl/xxd/sed/cryptsetup pre-unlock.
+ *
+ * The non-LUKS body MUST stay byte-identical to buildBootstrapScriptPlain; the
+ * userdata tests assert the shared lines appear in both.
+ */
+function buildBootstrapScriptEncrypted(args: BootstrapTemplateArgs): string {
+  const plain = buildBootstrapScriptPlain(args);
+  // Splice the LUKS block in just before the plain script's final two lines
+  // (installed.flag + "done"), so the shared body is reused verbatim.
+  const tail = `date > /var/flagship/installed.flag
+echo "[flagship-bootstrap] done"
+`;
+  const luks = buildLuksBootstrapBlock();
+  if (!plain.endsWith(tail)) {
+    throw new Error("plain bootstrap tail drifted; encrypted splice would be wrong");
+  }
+  return plain.slice(0, plain.length - tail.length) + luks + tail;
+}
+
+/**
+ * The LUKS additions spliced into the encrypted bootstrap. EXPERIMENTAL —
+ * needs live validation (brick risk). Kept byte-identical to the Swift port.
+ */
+function buildLuksBootstrapBlock(): string {
+  return `
+# ── EXPERIMENTAL: LUKS-on-root, phone-gated unlock (encryptRoot) ─────────
+# Needs live validation; brick risk. This whole block is absent on the
+# default unencrypted path. docs/security-phone-as-unlock-endpoint.md.
+echo "[flagship-bootstrap] encryptRoot ON — configuring phone-gated LUKS unlock"
+
+# A. RE-KEY the LUKS root: curtin formatted it with the fixed burn-time
+#    passphrase; replace that with a fresh random key (install.sh's
+#    head -c 64 /dev/urandom pattern), then remove the burn-time slot so the
+#    only key that survives to first boot is the one we seal for the phone.
+LUKS_BURN_PASSPHRASE='${BURN_PASSPHRASE}'
+LUKS_KEY=/run/flagship-luks.key
+head -c 64 /dev/urandom > "$LUKS_KEY"
+chmod 600 "$LUKS_KEY"
+# The encrypted root partition (curtin labelled the filesystem FLAGSHIP_ROOT;
+# the underlying LUKS container is its parent block device).
+ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
+if [ -z "$ROOT_LUKS_PART" ]; then
+    echo "[flagship-bootstrap] FATAL: no crypto_LUKS partition found; cannot re-key"
+    exit 1
+fi
+echo "[flagship-bootstrap] re-keying LUKS root on $ROOT_LUKS_PART"
+printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
+    cryptsetup luksAddKey "$ROOT_LUKS_PART" "$LUKS_KEY" --key-file=-
+printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
+    cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file=-
+echo "[flagship-bootstrap] LUKS re-keyed; burn-time passphrase removed"
+
+# B. SEAL the random key for the phone + upload the sealed blob to .com. The
+#    phone (and only the phone) can unseal it; .com stores ciphertext only.
+#    Same seal-for-bak construction install.sh uses.
+SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts seal-for-bak \\
+    --bak-ed25519-pub "$PHONE_DELEGATED_PUBKEY" \\
+    --in "$LUKS_KEY" | tr -d '\\n')"
+NOW_MS=$(date +%s%3N)
+npx tsx scripts/install-helper.ts sign-sealed-key \\
+    --priv "$SERVER_IDENTITY_PRIV_HEX" \\
+    --server-id "$SERVER_DOMAIN" \\
+    --sealed-hex "$SEALED_LUKS_KEY_HEX" \\
+    --issued-at "$NOW_MS" \\
+    > /run/sealed-key-payload.json
+CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+curl -fsS -X POST -H 'content-type: application/json' \\
+    --data @/run/sealed-key-payload.json \\
+    "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key" \\
+    || echo "[flagship-bootstrap] WARNING: sealed-key upload failed; phone will need OOB"
+# Shred the plaintext key — it now exists only sealed-for-phone at .com.
+shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
+
+# /boot facts the initramfs unlock hook reads on every boot (mirrors the
+# files boot-stage.sh expects: server-domain, identity.pem, control plane).
+echo "$SERVER_DOMAIN" > /boot/server-domain
+echo "$CONTROL_PLANE_BASE" > /boot/control-plane-url
+# The identity PKCS8 PEM is already at /boot/identity.pem (gen-identity --out-pem).
+
+# C1. BAKE the unseal helper to /boot/flagship-unseal. Build-at-install from
+#     the cloned source (auditable; no committed binary). golang-go from the
+#     Ubuntu archive can build the CGO-free static helper (one dep, pinned).
+echo "[flagship-bootstrap] building flagship-unseal from source"
+apt-get install -y --no-install-recommends golang-go
+( cd /opt/flagship/installer/unseal-helper && \\
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \\
+    go build -trimpath -buildvcs=false -ldflags '-s -w' -o /boot/flagship-unseal . )
+chmod 755 /boot/flagship-unseal
+echo "[flagship-bootstrap] /boot/flagship-unseal baked ($(ls -l /boot/flagship-unseal))"
+
+# C2. INITRAMFS HOOK. The hook copies the tools + helper into the initramfs;
+#     the premount script runs unlock_via_relay() (lifted verbatim from
+#     boot-stage.sh) before the root is mounted, then luksOpen's it.
+mkdir -p /etc/initramfs-tools/hooks /etc/initramfs-tools/scripts/local-top
+cat > /etc/initramfs-tools/hooks/flagship-unlock <<'HOOK'
+#!/bin/sh
+# Flagship initramfs hook: stage the unseal helper + identity + the crypto
+# tools unlock_via_relay() needs (openssl curl xxd sed cryptsetup) into the
+# initramfs, so the root can be unlocked pre-pivot with no encrypted-root deps.
+set -e
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0;; esac
+. /usr/share/initramfs-tools/hook-functions
+copy_exec /boot/flagship-unseal /bin/flagship-unseal
+copy_exec /usr/bin/openssl /bin/openssl
+copy_exec /usr/bin/curl /bin/curl
+copy_exec /usr/bin/xxd /bin/xxd
+copy_exec /bin/sed /bin/sed 2>/dev/null || copy_exec /usr/bin/sed /bin/sed
+copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup
+# Identity + boot facts the premount script signs/reads with.
+mkdir -p "\${DESTDIR}/boot"
+cp /boot/identity.pem "\${DESTDIR}/boot/identity.pem"
+cp /boot/server-domain "\${DESTDIR}/boot/server-domain"
+cp /boot/control-plane-url "\${DESTDIR}/boot/control-plane-url" 2>/dev/null || true
+HOOK
+chmod +x /etc/initramfs-tools/hooks/flagship-unlock
+
+# The premount script. unlock_via_relay() below is LIFTED VERBATIM from
+# installer/boot-stage.sh (wave 3b owns its logic); only the surrounding
+# scaffolding (paths, the luksOpen target, the fallback poll) is adapted to
+# the initramfs. Keep the function body in sync with boot-stage.sh.
+cat > /etc/initramfs-tools/scripts/local-top/flagship-unlock <<'PREMOUNT'
+#!/bin/sh
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "$1" in prereqs) prereqs; exit 0;; esac
+
+set -eu
+SERVER_DOMAIN="$(cat /boot/server-domain)"
+CONTROL_PLANE="$(cat /boot/control-plane-url 2>/dev/null || echo https://flagshipserver.com)"
+IDENTITY_KEY=/boot/identity.pem
+UNSEAL_HELPER=/bin/flagship-unseal
+RELAY_WINDOW_SECS="\${FLAGSHIP_RELAY_WINDOW_SECS:-180}"
+OUT_UNLOCK=/run/unlock-key
+
+[ -f "$IDENTITY_KEY" ] || { echo "flagship: missing $IDENTITY_KEY"; exit 0; }
+
+sign_canonical() {
+    canonical="$1"
+    msgfile="/run/flagship-sign-msg.bin"
+    printf '%s' "$canonical" > "$msgfile"
+    openssl pkeyutl -sign -rawin -inkey "$IDENTITY_KEY" -in "$msgfile" 2>/dev/null \\
+        | xxd -p -c 256 | tr -d '\\n'
+    rm -f "$msgfile"
+}
+identity_seed_hex() {
+    openssl pkey -in "$IDENTITY_KEY" -outform DER 2>/dev/null \\
+        | xxd -p -c 256 | tr -d '\\n' | tail -c 64
+}
+identity_pub_hex() {
+    openssl pkey -in "$IDENTITY_KEY" -pubout -outform DER 2>/dev/null \\
+        | xxd -p -c 256 | tr -d '\\n' | tail -c 64
+}
+
+# ── unlock_via_relay() — LIFTED VERBATIM from installer/boot-stage.sh ──────
+unlock_via_relay() {
+    if [ ! -x "$UNSEAL_HELPER" ]; then
+        echo "flagship: relay unavailable — $UNSEAL_HELPER missing/not executable"
+        return 1
+    fi
+
+    SEED_HEX="$(identity_seed_hex)"
+    PUB_HEX="$(identity_pub_hex)"
+    if [ "\${#SEED_HEX}" != 64 ] || [ "\${#PUB_HEX}" != 64 ]; then
+        echo "flagship: relay aborted — could not derive 32-byte seed/pub from $IDENTITY_KEY"
+        return 1
+    fi
+
+    NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
+    NOW_MS=$(date +%s%3N)
+    CANONICAL="flagship/secret-request/v1|\${SERVER_DOMAIN}|\${PUB_HEX}|unlock-key|\${NONCE}|\${NOW_MS}"
+    SIG="$(sign_canonical "$CANONICAL")"
+
+    REQ_URL="\${CONTROL_PLANE}/api/server/\${SERVER_DOMAIN}/secret-request"
+    REQ_BODY=$(printf '{"request":{"serverDomain":"%s","stkPub":"%s","purpose":"unlock-key","nonce":"%s","issuedAt":%s},"signature":"%s"}' \\
+        "$SERVER_DOMAIN" "$PUB_HEX" "$NONCE" "$NOW_MS" "$SIG")
+
+    POST_RESP=/run/flagship-secret-request-resp.json
+    POST_CODE=$(curl -sS -o "$POST_RESP" -w "%{http_code}" \\
+        -X POST -H 'content-type: application/json' \\
+        --max-time 30 -d "$REQ_BODY" "$REQ_URL" || echo "000")
+    if [ "$POST_CODE" != "200" ]; then
+        echo "flagship: relay secret-request HTTP $POST_CODE; body: $(head -c 200 "$POST_RESP" 2>/dev/null)"
+        return 1
+    fi
+    echo "flagship: posted unlock-key secret-request; waiting up to \${RELAY_WINDOW_SECS}s for the phone"
+
+    POLL_URL="\${CONTROL_PLANE}/api/server/\${SERVER_DOMAIN}/secret-response?nonce=\${NONCE}"
+    DEADLINE=$(( $(date +%s) + RELAY_WINDOW_SECS ))
+    ATTEMPT=0
+    while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+        ATTEMPT=$((ATTEMPT + 1))
+        RESP=/run/flagship-secret-response.json
+        CODE=$(curl -sS -o "$RESP" -w "%{http_code}" \\
+            --max-time 30 "$POLL_URL" || echo "000")
+
+        if [ "$CODE" = "200" ]; then
+            SEALED=$(sed -n 's/.*"sealed":"\\([0-9a-fA-F]*\\)".*/\\1/p' "$RESP")
+            if [ -z "$SEALED" ]; then
+                echo "flagship: relay 200 but no sealed payload: $(head -c 200 "$RESP")"
+                return 1
+            fi
+            HELPER_JSON=/run/flagship-unseal-input.json
+            printf '{"serverDomain":"%s","requestNonceHex":"%s","purpose":"unlock-key","sealedHex":"%s","issuedAt":0}' \\
+                "$SERVER_DOMAIN" "$NONCE" "$SEALED" > "$HELPER_JSON"
+
+            if "$UNSEAL_HELPER" --identity-priv-hex "$SEED_HEX" --response-json "$HELPER_JSON" \\
+                > "$OUT_UNLOCK.hex" 2>/run/flagship-unseal.err; then
+                tr -d '\\n' < "$OUT_UNLOCK.hex" > "$OUT_UNLOCK"
+                chmod 600 "$OUT_UNLOCK"
+                rm -f "$OUT_UNLOCK.hex" "$HELPER_JSON"
+                echo "flagship: relay unsealed the unlock key (attempt $ATTEMPT)"
+                return 0
+            fi
+            echo "flagship: $UNSEAL_HELPER failed: $(head -c 200 /run/flagship-unseal.err 2>/dev/null)"
+            rm -f "$OUT_UNLOCK.hex" "$HELPER_JSON"
+            return 1
+        elif [ "$CODE" = "404" ]; then
+            : # no reply yet — expected; keep polling
+        else
+            echo "flagship: relay secret-response HTTP $CODE; body: $(head -c 200 "$RESP" 2>/dev/null)"
+            return 1
+        fi
+
+        BACKOFF=$((ATTEMPT < 6 ? ATTEMPT * 3 : 15))
+        echo "flagship: no phone reply yet (attempt $ATTEMPT); sleeping $BACKOFF"
+        sleep "$BACKOFF"
+    done
+
+    echo "flagship: relay window (\${RELAY_WINDOW_SECS}s) elapsed with no phone reply"
+    return 1
+}
+
+# ── Path 2: legacy plaintext consume (fallback) — from boot-stage.sh ───────
+unlock_via_plaintext_consume() {
+    CONSUME_URL="\${CONTROL_PLANE}/api/server/\${SERVER_DOMAIN}/unlock-key/consume"
+    echo "flagship: falling back to plaintext consume at \${CONSUME_URL}"
+    ATTEMPT=0
+    while :; do
+        ATTEMPT=$((ATTEMPT + 1))
+        NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\\n')
+        NOW_MS=$(date +%s%3N)
+        CANONICAL="flagship/consume-unlock-key/v1|\${SERVER_DOMAIN}|\${NONCE}|\${NOW_MS}"
+        SIG="$(sign_canonical "$CANONICAL")"
+        BODY=$(printf '{"request":{"serverId":"%s","nonce":"%s","issuedAt":%s},"signature":"%s"}' \\
+            "$SERVER_DOMAIN" "$NONCE" "$NOW_MS" "$SIG")
+        HTTP_BODY=/run/flagship-consume-resp.json
+        HTTP_CODE=$(curl -sS -o "$HTTP_BODY" -w "%{http_code}" \\
+            -X POST -H 'content-type: application/json' \\
+            --max-time 30 -d "$BODY" "$CONSUME_URL" || echo "000")
+        if [ "$HTTP_CODE" = "200" ]; then
+            UNLOCK_HEX=$(sed -n 's/.*"unlockKey":"\\([0-9a-f]*\\)".*/\\1/p' "$HTTP_BODY")
+            if [ -n "$UNLOCK_HEX" ]; then
+                echo "flagship: got unlock key via consume (attempt $ATTEMPT)"
+                printf '%s' "$UNLOCK_HEX" > "$OUT_UNLOCK"
+                chmod 600 "$OUT_UNLOCK"
+                return 0
+            fi
+        elif [ "$HTTP_CODE" = "404" ]; then
+            :
+        else
+            echo "flagship: HTTP $HTTP_CODE on consume; body: $(head -c 200 "$HTTP_BODY")"
+        fi
+        BACKOFF=$((ATTEMPT < 6 ? ATTEMPT * 5 : 30))
+        echo "flagship: no unlock key yet (attempt $ATTEMPT); sleeping $BACKOFF"
+        sleep "$BACKOFF"
+    done
+}
+
+if ! unlock_via_relay; then
+    unlock_via_plaintext_consume
+fi
+
+ROOT_PART=/dev/disk/by-label/FLAGSHIP_ROOT
+xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_PART" flagship_root
+shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"
+PREMOUNT
+chmod +x /etc/initramfs-tools/scripts/local-top/flagship-unlock
+
+# Rebuild the initramfs so the hook + premount script land in /boot's initrd.
+update-initramfs -u 2>&1 | tee /var/log/flagship-initramfs.log || \\
+    echo "[flagship-bootstrap] WARNING: update-initramfs failed; unlock hook not embedded"
+echo "[flagship-bootstrap] LUKS unlock hook installed; initramfs rebuilt"
+
 `;
 }
 

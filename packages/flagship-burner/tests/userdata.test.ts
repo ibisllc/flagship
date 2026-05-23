@@ -195,3 +195,106 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
     expect(b).not.toMatch(/systemctl start flagship-first-boot-register\.service/);
   });
 });
+
+describe("encryptRoot flag — default OFF must be byte-identical to today", () => {
+  function userData(opts: { encryptRoot?: boolean }): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return buildAutoinstallUserData({ blob, blobSignatureHex, ...opts });
+  }
+
+  it("default (no flag) === explicit encryptRoot:false, byte-for-byte", () => {
+    // Same blob → identical YAML; the flag default must not perturb anything.
+    // We can't compare against a different blob (auth-code carries timestamps),
+    // so generate both from ONE signedBlob() and assert equality.
+    const { blob, blobSignatureHex } = signedBlob();
+    const a = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const c = buildAutoinstallUserData({ blob, blobSignatureHex, encryptRoot: false });
+    expect(c).toBe(a);
+  });
+
+  it("default path has NO LUKS storage block + NO unlock-hook bootstrap", () => {
+    const yaml = userData({});
+    // No subiquity custom storage → subiquity's default whole-disk layout.
+    expect(yaml).not.toContain("storage:");
+    expect(yaml).not.toContain("dm_crypt");
+    const b = extractBootstrap(yaml);
+    expect(b).not.toContain("encryptRoot ON");
+    expect(b).not.toContain("/boot/flagship-unseal");
+    expect(b).not.toContain("unlock_via_relay");
+    expect(b).not.toContain("update-initramfs");
+    expect(b).not.toContain("luksAddKey");
+  });
+
+  it("default path still ends exactly with installed.flag + done", () => {
+    const b = extractBootstrap(userData({}));
+    expect(b.trimEnd().endsWith('echo "[flagship-bootstrap] done"')).toBe(true);
+  });
+});
+
+describe("encryptRoot:true — EXPERIMENTAL LUKS path (opt-in)", () => {
+  function luksYaml(): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return buildAutoinstallUserData({ blob, blobSignatureHex, encryptRoot: true });
+  }
+
+  it("emits a curtin custom-storage block with a LUKS-encrypted root", () => {
+    const yaml = luksYaml();
+    expect(yaml).toContain("storage:");
+    expect(yaml).toContain("type: dm_crypt");
+    expect(yaml).toContain("dm_name: flagship_root");
+    // Unencrypted /boot + encrypted root, both labelled like boot-stage expects.
+    expect(yaml).toContain("label: FLAGSHIP_BOOT");
+    expect(yaml).toContain("label: FLAGSHIP_ROOT");
+    expect(yaml).toContain("path: /boot");
+    expect(yaml).toMatch(/EXPERIMENTAL/);
+  });
+
+  it("bakes flagship-unseal to /boot — build-at-install from cloned source", () => {
+    const b = extractBootstrap(luksYaml());
+    expect(b).toContain("apt-get install -y --no-install-recommends golang-go");
+    expect(b).toContain("/opt/flagship/installer/unseal-helper");
+    expect(b).toContain("-o /boot/flagship-unseal");
+    expect(b).toContain("chmod 755 /boot/flagship-unseal");
+    // CGO-free static linux/amd64, matching the helper Makefile.
+    expect(b).toContain("CGO_ENABLED=0 GOOS=linux GOARCH=amd64");
+  });
+
+  it("re-keys LUKS to a random key + seals it for the phone + uploads to .com", () => {
+    const b = extractBootstrap(luksYaml());
+    // install.sh's random-key pattern.
+    expect(b).toContain("head -c 64 /dev/urandom > \"$LUKS_KEY\"");
+    expect(b).toContain("cryptsetup luksAddKey");
+    expect(b).toContain("cryptsetup luksRemoveKey");
+    // seal-for-bak + sign-sealed-key + POST to sealed-luks-key, like install.sh.
+    expect(b).toContain("install-helper.ts seal-for-bak");
+    expect(b).toContain("--bak-ed25519-pub \"$PHONE_DELEGATED_PUBKEY\"");
+    expect(b).toContain("install-helper.ts sign-sealed-key");
+    expect(b).toContain("/sealed-luks-key");
+    // Plaintext key shredded after sealing — never persisted.
+    expect(b).toContain('shred -u "$LUKS_KEY"');
+  });
+
+  it("installs an initramfs hook lifting unlock_via_relay() verbatim", () => {
+    const b = extractBootstrap(luksYaml());
+    expect(b).toContain("/etc/initramfs-tools/hooks/flagship-unlock");
+    expect(b).toContain("/etc/initramfs-tools/scripts/local-top/flagship-unlock");
+    // The lifted function + its fallback, with the exact canonical-bytes layout.
+    expect(b).toContain("unlock_via_relay()");
+    expect(b).toContain("unlock_via_plaintext_consume()");
+    expect(b).toContain("flagship/secret-request/v1|");
+    expect(b).toContain("flagship/consume-unlock-key/v1|");
+    expect(b).toContain("if ! unlock_via_relay; then");
+    // The pre-unlock tools the hook must stage into the initramfs.
+    expect(b).toContain("copy_exec /usr/bin/openssl");
+    expect(b).toContain("copy_exec /usr/bin/curl");
+    expect(b).toContain("copy_exec /usr/bin/xxd");
+    expect(b).toContain("copy_exec /bin/sed");
+    expect(b).toContain("copy_exec /sbin/cryptsetup");
+    expect(b).toContain("copy_exec /boot/flagship-unseal /bin/flagship-unseal");
+    // luksOpen the labelled root, then pivot (the relay path's terminal step).
+    expect(b).toContain("/dev/disk/by-label/FLAGSHIP_ROOT");
+    expect(b).toContain("cryptsetup luksOpen --key-file - \"$ROOT_PART\" flagship_root");
+    // Rebuild the initrd so the hook lands in /boot.
+    expect(b).toContain("update-initramfs -u");
+  });
+});

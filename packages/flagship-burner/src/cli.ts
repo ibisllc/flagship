@@ -119,6 +119,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
   const yaml = buildAutoinstallUserData({
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
+    encryptRoot: rest.includes("--encrypt-root"),
   });
   await writeFile(outPath, yaml, { mode: 0o600 });
   console.log(`wrote ${yaml.length} bytes to ${outPath}`);
@@ -159,6 +160,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
   const yaml = buildAutoinstallUserData({
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
+    encryptRoot: rest.includes("--encrypt-root"),
   });
   await remasterIsoWithAutoinstall({ srcIsoPath: isoPath, outIsoPath: outPath, userDataYaml: yaml });
   console.log(`wrote prepared ISO to ${outPath}`);
@@ -206,6 +208,7 @@ async function cmdWrite(rest: string[]): Promise<void> {
     device,
     yes,
     keepRecipe,
+    encryptRoot: rest.includes("--encrypt-root"),
   });
   if (!result.ok) {
     console.error(`write failed: ${result.reason}`);
@@ -276,9 +279,12 @@ usage:
   flagship-burn verify-iso <path>                          check ISO against pinned distros
   flagship-burn user-data <recipe.json> <out>              emit cloud-init user-data
                                                            (auto-shreds recipe; pass --keep-recipe to skip)
+                                                           [--encrypt-root] opt-in phone-gated LUKS (EXPERIMENTAL)
   flagship-burn prepare <recipe.json> <iso> <out.iso>      bake a flashable autoinstall ISO
+                                                           [--encrypt-root] opt-in phone-gated LUKS (EXPERIMENTAL)
   flagship-burn write <recipe.json> <iso>                  prepare + raw-write to a USB device
                                                            [--device /dev/diskN | auto] [--yes] [--keep-recipe]
+                                                           [--encrypt-root] opt-in phone-gated LUKS (EXPERIMENTAL)
                                                            (needs sudo; interactive picker if no --device)
   flagship-burn write-image <image.iso>                    raw-write an already-prepared image
                                                            [--device /dev/diskN | auto] [--yes]
