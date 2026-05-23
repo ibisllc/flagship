@@ -49,11 +49,10 @@ class FlagshipFcmService : FirebaseMessagingService() {
         secretEvent?.let { event ->
             SecretRequestBridge.onSecretRequest?.invoke(event)
             if (data["deepLink"].isNullOrEmpty()) {
-                // (domain, nonce) is the stable request id the approvals
-                // surface keys off — mirror PendingSecretRequest.id.
-                val requestId = "${event.serverFqdn}#${event.requestNonceHex}"
-                data["deepLink"] = "flagship://unlock-approve?requestId=" +
-                    java.net.URLEncoder.encode(requestId, "UTF-8")
+                // Route into the v2 sealed-key RELAY approval list (the phone
+                // fetches + re-verifies the pending request(s) on open; the
+                // push carries no secret, so no per-id link is needed).
+                data["deepLink"] = "flagship://secret-requests"
             }
         }
 

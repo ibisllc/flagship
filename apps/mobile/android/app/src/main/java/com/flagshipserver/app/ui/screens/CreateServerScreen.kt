@@ -19,15 +19,21 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,8 +44,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.AuthCodeIssueRequest
 import com.flagshipserver.app.api.AuthCodeWire
@@ -59,6 +67,7 @@ import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.QrSession
 import com.flagshipserver.app.core.RckRegister
 import com.flagshipserver.app.core.SerialGen
+import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.core.SlugUtil
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
@@ -84,6 +93,7 @@ fun CreateServerScreen(
     val qrRelay = LocalQrRelayClient.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var phase by remember { mutableStateOf(Phase.Design) }
     var name by remember { mutableStateOf("") }
@@ -96,6 +106,9 @@ fun CreateServerScreen(
     // Recipe TTL in MILLIS — default 6h, clamped 5min..24h. Single
     // user-facing TTL on the recipe; drives authCode.expiresAt.
     var recipeTtlMs by remember { mutableStateOf(DEFAULT_RECIPE_TTL_MS) }
+    // Boot-unlock policy — "auto" default (self-unlock via box-sealed lease) vs
+    // "approve" (phone-gated every boot). Only "approve" rides the wire.
+    var bootUnlockMode by remember { mutableStateOf(ServerSettingsStore.Mode.AUTO) }
 
     val scroll = rememberScrollState()
     Column(
@@ -123,6 +136,8 @@ fun CreateServerScreen(
                 onRecipeTtlMs = {
                     recipeTtlMs = it.coerceIn(MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS)
                 },
+                bootUnlockMode = bootUnlockMode,
+                onBootUnlockMode = { bootUnlockMode = it },
                 error = error,
                 onContinue = {
                     if (name.isBlank()) { error = "Name required."; return@DesignPhase }
@@ -148,6 +163,10 @@ fun CreateServerScreen(
                                 username = username,
                                 serverName = name,
                                 recipeTtlMs = recipeTtlMs,
+                                // Only "approve" rides the wire; "auto" stays
+                                // absent (legacy bytes + webapp parity).
+                                bootUnlockMode = bootUnlockMode
+                                    .takeIf { it == ServerSettingsStore.Mode.APPROVE }?.wire,
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -183,6 +202,12 @@ fun CreateServerScreen(
                                 flagshipServer = flagshipServer,
                                 bundle = delivery.bundle,
                                 authCodeUserSig = delivery.bundle.blob.authCodeUserSignature,
+                            )
+                            // Remember the boot-unlock choice so the approval
+                            // screen (deposit-or-not) + server detail (kill
+                            // switch) can act on it.
+                            ServerSettingsStore.from(context).setMode(
+                                delivery.bundle.blob.serverDomain, bootUnlockMode,
                             )
                             toasts.success("Delivered. Watch Home for the new server.")
                             onDelivered(
@@ -226,6 +251,8 @@ private fun DesignPhase(
     username: String,
     recipeTtlMs: Long,
     onRecipeTtlMs: (Long) -> Unit,
+    bootUnlockMode: ServerSettingsStore.Mode,
+    onBootUnlockMode: (ServerSettingsStore.Mode) -> Unit,
     error: String?,
     onContinue: () -> Unit,
     onCancel: () -> Unit,
@@ -249,6 +276,8 @@ private fun DesignPhase(
             )
             Spacer(Modifier.height(FS.space.s4))
             RecipeTtlPicker(recipeTtlMs = recipeTtlMs, onRecipeTtlMs = onRecipeTtlMs)
+            Spacer(Modifier.height(FS.space.s4))
+            BootUnlockPicker(mode = bootUnlockMode, onMode = onBootUnlockMode)
         }
     }
     if (error != null) {
@@ -296,6 +325,72 @@ private fun ttlLabel(hours: Double): String = when {
     hours < 1.0 -> "${(hours * 60).toInt()} min"
     hours == hours.toInt().toDouble() -> "${hours.toInt()} hour${if (hours == 1.0) "" else "s"}"
     else -> String.format("%.1f hours", hours)
+}
+
+// Two tiers, no middle ground (docs/security-phone-as-unlock-endpoint.md
+// §7a.1). "auto" is the default — a box that reboots without the phone, with
+// a remote kill switch. "approve" gates every boot behind the phone.
+@Composable
+private fun BootUnlockPicker(
+    mode: ServerSettingsStore.Mode,
+    onMode: (ServerSettingsStore.Mode) -> Unit,
+) {
+    Text(
+        "Boot unlock",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = mode == ServerSettingsStore.Mode.AUTO,
+        title = "Reboots on its own",
+        subtitle = "Best for flaky power or connections. After you approve its first boot, the box self-unlocks on every reboot — no phone needed. Revocable any time.",
+        onClick = { onMode(ServerSettingsStore.Mode.AUTO) },
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = mode == ServerSettingsStore.Mode.APPROVE,
+        title = "Authorize each boot",
+        subtitle = "Most theft-resistant. The box asks your phone on every reboot. Best for critical servers on stable infrastructure.",
+        onClick = { onMode(ServerSettingsStore.Mode.APPROVE) },
+    )
+}
+
+@Composable
+private fun BootUnlockOption(
+    selected: Boolean,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    val border = if (selected) FS.colors.primary else FS.colors.border
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = border,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(FS.radius.md),
+            )
+            .clickable(onClick = onClick)
+            .padding(FS.space.s3),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected, onClick = onClick)
+            Spacer(Modifier.width(FS.space.s2))
+            Text(
+                title,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            )
+        }
+        Text(
+            subtitle,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
+            modifier = Modifier.padding(start = FS.space.s2),
+        )
+    }
 }
 
 @Composable
@@ -377,6 +472,7 @@ private suspend fun prepareDelivery(
     username: String,
     serverName: String,
     recipeTtlMs: Long = DEFAULT_RECIPE_TTL_MS,
+    bootUnlockMode: String? = null,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -420,6 +516,7 @@ private suspend fun prepareDelivery(
         authCode = authCodeBytesObj,
         authCodeUserSignature = authCodeUserSig,
         rckPubKey = rck.publicKey,
+        bootUnlockMode = bootUnlockMode,
     )
     val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
 
@@ -441,6 +538,7 @@ private suspend fun prepareDelivery(
             ),
             authCodeUserSignature = authCodeUserSigHex,
             rckPubKey = rckPubHex,
+            bootUnlockMode = bootUnlockMode,
         ),
         blobSignature = blobSigHex,
     )

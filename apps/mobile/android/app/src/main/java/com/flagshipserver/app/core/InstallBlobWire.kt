@@ -27,6 +27,10 @@ data class WireBlob(
     val authCodeUserSignature: String,   // hex
     val installerGitRef: String = "main",
     val rckPubKey: String,               // hex
+    // Only present for "approve" servers — null (omitted, since the default
+    // Json has encodeDefaults=false) for the "auto" default, mirroring the
+    // webapp's onWireBlob. The box reads blob.bootUnlockMode; absent ⇒ "auto".
+    val bootUnlockMode: String? = null,
 )
 
 @Serializable

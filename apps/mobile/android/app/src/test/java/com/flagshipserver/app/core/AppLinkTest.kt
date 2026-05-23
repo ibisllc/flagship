@@ -28,6 +28,15 @@ class AppLinkTest {
         assertEquals(DeepLink.ServerDetail("pod-abc"), AppLink.resolve(uri))
     }
 
+    @Test fun secretRequests_host_resolves() {
+        assertEquals(DeepLink.SecretRequests, AppLink.resolve(Uri.parse("flagship://secret-requests")))
+    }
+
+    // The `secret-request` push synthesizes the singular host form too.
+    @Test fun secretRequest_singularHost_resolves() {
+        assertEquals(DeepLink.SecretRequests, AppLink.resolve(Uri.parse("flagship://secret-request")))
+    }
+
     @Test fun appLinkForm_translatesToFlagshipScheme() {
         // https://flagshipserver.com/app/<host>?<params> is the
         // auto-verified Android App Link surface. We rewrite it to the

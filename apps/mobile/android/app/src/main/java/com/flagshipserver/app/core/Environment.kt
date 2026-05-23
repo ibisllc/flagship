@@ -13,7 +13,9 @@ import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.MockDemoConnectClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
+import com.flagshipserver.app.api.MockSecretMailboxClient
 import com.flagshipserver.app.api.ScreensClient
+import com.flagshipserver.app.api.SecretMailboxClient
 
 val LocalScreensClient = staticCompositionLocalOf<ScreensClient> { MockScreensClient() }
 
@@ -27,6 +29,11 @@ val LocalDemoConnectClient = staticCompositionLocalOf<DemoConnectClient> {
 }
 
 val LocalQrRelayClient = staticCompositionLocalOf<QrRelayClient> { MockQrRelayClient() }
+
+/** Boot-secret RELAY mailbox client. Production wires the live client
+ *  (OkHttp transport) in MainActivity; previews + tests get the in-memory
+ *  Mock. The SecretRequestsScreen builds a SecretRequestCoordinator over this. */
+val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { MockSecretMailboxClient() }
 
 val LocalAppState = staticCompositionLocalOf<AppState> { AppState() }
 

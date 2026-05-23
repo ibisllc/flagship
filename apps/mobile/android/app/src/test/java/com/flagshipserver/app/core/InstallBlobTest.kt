@@ -83,6 +83,39 @@ class InstallBlobTest {
         assertTrue(String(blob("auto").canonicalBytes()).endsWith("|auto"))
     }
 
+    // The on-wire blob the box reads. Mirrors the webapp's onWireBlob: with
+    // the DEFAULT Json (encodeDefaults=false, as used at CreateServerScreen's
+    // deliver step), bootUnlockMode is OMITTED for the "auto" default and
+    // emitted only for "approve".
+    @Test fun wireBlob_bootUnlockMode_onlyEmittedWhenApprove() {
+        fun bundle(mode: String?) = InstallBlobBundle(
+            blob = WireBlob(
+                serverDomain = "home.harry.flagship.services",
+                username = "harry",
+                serverName = "home",
+                phoneDelegatedPubKey = "33".repeat(32),
+                authCode = WireAuthCode(
+                    serial = "01ABCD",
+                    username = "harry",
+                    serverName = "home",
+                    serverDomain = "home.harry.flagship.services",
+                    delegatedPubKey = "33".repeat(32),
+                    userPubKey = "22".repeat(32),
+                    issuedAt = 1L,
+                    expiresAt = 2L,
+                ),
+                authCodeUserSignature = "44".repeat(64),
+                rckPubKey = "55".repeat(32),
+                bootUnlockMode = mode,
+            ),
+            blobSignature = "ab",
+        )
+        val auto = kotlinx.serialization.json.Json.encodeToString(InstallBlobBundle.serializer(), bundle(null))
+        assertFalse(auto.contains("bootUnlockMode"))
+        val approve = kotlinx.serialization.json.Json.encodeToString(InstallBlobBundle.serializer(), bundle("approve"))
+        assertTrue(approve.contains("\"bootUnlockMode\":\"approve\""))
+    }
+
     @Test fun usernameClaim_canonicalBytes() {
         val s = String(UsernameClaim.canonicalBytes("harry", "abcd", 42))
         assertEquals("flagship/claim-username/v1|harry|abcd|42", s)

@@ -24,18 +24,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.ServerMetricsResponse
+import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.SecretRequestCoordinator
+import com.flagshipserver.app.core.ServerSettingsStore
+import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
+import kotlinx.coroutines.launch
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
@@ -93,7 +105,103 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
             else -> ServerCardSkeleton()
         }
 
+        (detail as? LoadingState.Loaded)?.let { d ->
+            Spacer(Modifier.height(FS.space.s6))
+            BootUnlockCard(serverDomain = d.value.serverFqdn)
+        }
+
         Spacer(Modifier.height(FS.space.s12))
+    }
+}
+
+// Boot-unlock status + kill switch for one server. Reads the per-server choice
+// + lease from ServerSettingsStore and, for an "auto" server with a deposited
+// lease, offers the revoke (downgrade to phone-gated, not a brick). Mirror of
+// iOS ServerDetailScreen.BootUnlockCard.
+@Composable
+private fun BootUnlockCard(serverDomain: String) {
+    val mailbox = LocalSecretMailboxClient.current
+    val app = LocalAppState.current
+    val toasts = LocalToastCenter.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val username by app.currentUser.collectAsState()
+    val store = remember { ServerSettingsStore.from(context) }
+
+    val mode = remember(serverDomain) { store.effectiveMode(serverDomain) }
+    var leaseId by remember(serverDomain) { mutableStateOf(store.leaseId(serverDomain)) }
+    var revoking by remember { mutableStateOf(false) }
+
+    Text(
+        "Boot unlock",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            when (mode) {
+                ServerSettingsStore.Mode.AUTO -> {
+                    Text(
+                        "Reboots on its own",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    )
+                    if (leaseId != null) {
+                        Text(
+                            "This box self-unlocks its encrypted disk after a reboot — no phone needed. flagshipserver.com only ever holds a key it can't read.",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        )
+                        FSDangerButton(
+                            label = if (revoking) "Disabling…" else "Require my phone each boot",
+                            onClick = onClick@{
+                                val id = leaseId ?: return@onClick
+                                val user = username ?: return@onClick
+                                revoking = true
+                                scope.launch {
+                                    try {
+                                        val coord = SecretRequestCoordinator(
+                                            mailbox = mailbox,
+                                            username = user,
+                                            irk = KeystoreIrkAccess(),
+                                        )
+                                        coord.revokeAutoUnlockLease(serverDomain, id)
+                                        store.setLeaseId(serverDomain, null)
+                                        leaseId = null
+                                        toasts.success("Auto-unlock disabled. This box will ask your phone on its next reboot.")
+                                    } catch (t: Throwable) {
+                                        toasts.error("Couldn't disable auto-unlock: ${t.message}")
+                                    } finally {
+                                        revoking = false
+                                    }
+                                }
+                            },
+                            enabled = !revoking,
+                            block = true,
+                        )
+                    } else {
+                        Text(
+                            "After you approve its first boot, this box will self-unlock on future reboots. Nothing to do until then.",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        )
+                    }
+                }
+                ServerSettingsStore.Mode.APPROVE -> {
+                    Text(
+                        "Authorize each boot",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    )
+                    Text(
+                        "This box asks your phone for approval on every reboot — the most theft-resistant mode.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -22,11 +22,15 @@ import androidx.compose.ui.Modifier
 import com.flagshipserver.app.api.EncryptedSessionStore
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.LiveScreensClient
+import com.flagshipserver.app.api.LiveSecretMailboxClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
+import com.flagshipserver.app.api.MockSecretMailboxClient
 import com.flagshipserver.app.api.ScreensClient
+import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SessionStoring
 import com.flagshipserver.app.core.AppState
+import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.DeepLinker
 import com.flagshipserver.app.core.DeveloperSettings
 import com.flagshipserver.app.core.LiveQrRelayClient
@@ -37,7 +41,9 @@ import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalPrivacySettings
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.OkHttpJsonTransport
 import com.flagshipserver.app.core.MockQrRelayClient
 import com.flagshipserver.app.core.PrivacySettings
 import com.flagshipserver.app.core.QrRelayClient
@@ -47,6 +53,7 @@ import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.push.FlagshipFcmService
 import com.flagshipserver.app.push.PushHolder
 import com.flagshipserver.app.push.PushRegistrar
+import com.flagshipserver.app.push.SecretRequestBridge
 import com.flagshipserver.app.ui.components.Toaster
 import com.flagshipserver.app.ui.onboarding.OnboardingFlow
 import com.flagshipserver.app.ui.shell.RootShell
@@ -85,9 +92,16 @@ class MainActivity : FragmentActivity() {
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
+        val mockMailbox = MockSecretMailboxClient()
+        val liveMailbox = LiveSecretMailboxClient(OkHttpJsonTransport(okHttp))
 
         val registrar = PushRegistrar(appState, flagshipServer)
         PushHolder.registrar = registrar
+
+        // Boot-secret RELAY: a `secret-request` push routes into the approval
+        // list. The FCM service also synthesizes the deep link for the tap;
+        // this bridge covers the foreground-receipt path.
+        SecretRequestBridge.onSecretRequest = { deepLinker.enqueue(DeepLink.SecretRequests) }
 
         // Handle the intent that launched the activity (push tap, custom
         // URL scheme, app-link). The shell consumes the queue once the
@@ -105,6 +119,8 @@ class MainActivity : FragmentActivity() {
                 if (useLive && sessionToken != null) liveScreens else mockScreens
             val effectiveRelay: QrRelayClient =
                 if (useLive) liveRelay else mockRelay
+            val effectiveMailbox: SecretMailboxClient =
+                if (useLive) liveMailbox else mockMailbox
 
             val sizeClass = calculateWindowSizeClass(this)
 
@@ -114,6 +130,7 @@ class MainActivity : FragmentActivity() {
                     LocalScreensClient provides effectiveScreens,
                     LocalFlagshipServerClient provides flagshipServer,
                     LocalQrRelayClient provides effectiveRelay,
+                    LocalSecretMailboxClient provides effectiveMailbox,
                     LocalToastCenter provides toasts,
                     LocalDeepLinker provides deepLinker,
                     LocalDeveloperSettings provides devSettings,
@@ -135,6 +152,7 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         PushHolder.registrar = null
+        SecretRequestBridge.onSecretRequest = null
         BiometricAuthority.set(null)
     }
 
