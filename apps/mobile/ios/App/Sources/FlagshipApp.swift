@@ -157,6 +157,11 @@ struct FlagshipApp: App {
     // transport over /qr-pipe is a follow-up; the Mock seam is wired so
     // the admin/incoming flows + safeguards are exercisable today.
     private let pairingRelay = MockPairingRelayClient()
+    // Phone-as-unlock-endpoint relay mailbox. Live in production so the
+    // SecretRequestsContainer can fetch + answer the box's boot-secret
+    // requests; Mock (empty inbox) in dev/preview.
+    private let mockMailbox = MockSecretMailboxClient()
+    private let liveMailbox: any SecretMailboxClient = LiveSecretMailboxClient()
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
     }
@@ -165,6 +170,9 @@ struct FlagshipApp: App {
     }
     private var activeRelay: any QrRelayClient {
         dev.useLiveClient ? liveRelay : mockRelay
+    }
+    private var activeMailbox: any SecretMailboxClient {
+        dev.useLiveClient ? liveMailbox : mockMailbox
     }
 
     var body: some Scene {
@@ -179,6 +187,7 @@ struct FlagshipApp: App {
                 .environment(\.flagshipServerClient, activeServerClient)
                 .environment(\.qrRelayClient, activeRelay)
                 .environment(\.pairingRelayClient, pairingRelay)
+                .environment(\.secretMailboxClient, activeMailbox)
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker)
