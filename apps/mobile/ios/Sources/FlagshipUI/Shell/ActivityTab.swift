@@ -19,6 +19,7 @@ public struct ActivityTab: View {
                 .navigationDestination(for: ActivityRoute.self) { route in
                     switch route {
                     case .unlockApprovals: UnlockApprovalsContainer()
+                    case .secretRequests: SecretRequestsContainer()
                     case .installProgress(let serial): InstallProgressStub(serial: serial)
                     case .postRecovery: PostRecoveryContainer()
                     }
@@ -38,6 +39,9 @@ public struct ActivityTab: View {
         switch link {
         case .unlockApprove, .unlockApprovalsList:
             if !path.contains(.unlockApprovals) { path.append(.unlockApprovals) }
+            _ = linker.consume()
+        case .secretRequests:
+            if !path.contains(.secretRequests) { path.append(.secretRequests) }
             _ = linker.consume()
         default:
             break

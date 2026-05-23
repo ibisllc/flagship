@@ -1,5 +1,7 @@
 import SwiftUI
 import FlagshipAPI
+import FlagshipCore
+import Flagship
 
 /// Drill-down view of a single server: TLS cert, uptime, version, SANs,
 /// live monitoring (CPU / memory / disk / I/O), paired sessions count,
@@ -40,6 +42,7 @@ public struct ServerDetailScreen: View {
                     MetricsSection(state: metrics)
                     cert(d: d, c: c)
                     deviceRow(d: d, c: c)
+                    BootUnlockCard(serverDomain: d.serverFqdn)
                     timeline(d: d, c: c)
                 }
                 Spacer().frame(height: FS.space.s12)
@@ -203,6 +206,95 @@ public struct ServerDetailScreen: View {
         case "deploy":        return "Redeployed"
         case "update-pulled": return "Updated"
         default:              return kind
+        }
+    }
+}
+
+/// Boot-unlock status + kill switch for one server. Self-contained: reads the
+/// per-server choice + lease from `BootUnlockStore` and, for an "auto" server
+/// with a deposited lease, offers the revoke (downgrade to phone-gated, not a
+/// brick). Reads its dependencies from the environment so the parent
+/// `ServerDetailScreen` stays a dumb state+callbacks view.
+struct BootUnlockCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
+
+    let serverDomain: String
+
+    private let store = BootUnlockStore()
+    @State private var mode: BootUnlockStore.Mode = .auto
+    @State private var leaseId: String?
+    @State private var revoking = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("BOOT UNLOCK")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    switch mode {
+                    case .auto:
+                        Label("Reboots on its own", systemImage: "bolt.fill")
+                            .font(FS.font.body())
+                            .foregroundColor(c.text)
+                        if leaseId != nil {
+                            Text("This box self-unlocks its encrypted disk after a reboot — no phone needed. flagshipserver.com only ever holds a key it can't read.")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                            FSDangerButton(
+                                revoking ? "Disabling…" : "Require my phone each boot",
+                                block: true
+                            ) {
+                                Task { await revoke() }
+                            }
+                            .accessibilityIdentifier("sd-revoke-autounlock")
+                        } else {
+                            Text("After you approve its first boot, this box will self-unlock on future reboots. Nothing to do until then.")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
+                    case .approve:
+                        Label("Authorize each boot", systemImage: "faceid")
+                            .font(FS.font.body())
+                            .foregroundColor(c.text)
+                        Text("This box asks your phone for approval on every reboot — the most theft-resistant mode.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                    }
+                }
+            }
+        }
+        .onAppear { reload() }
+    }
+
+    private func reload() {
+        mode = store.effectiveMode(for: serverDomain)
+        leaseId = store.leaseId(for: serverDomain)
+    }
+
+    private func revoke() async {
+        guard !revoking, let leaseId, let username = app.currentUser else { return }
+        revoking = true
+        defer { revoking = false }
+        let coord = SecretRequestCoordinator(
+            mailbox: mailbox,
+            username: username,
+            irkProvider: { try await Keystore.deriveIRK(reason: "Disable auto-unlock for \(serverDomain)") },
+            // revoke never unseals — no candidate seeds needed.
+            unsealSeedProvider: { _ in [] }
+        )
+        do {
+            try await coord.revokeAutoUnlockLease(serverDomain: serverDomain, leaseId: leaseId)
+            store.setLeaseId(nil, for: serverDomain)
+            self.leaseId = nil
+            toasts.success("Auto-unlock disabled. This box will ask your phone on its next reboot.")
+        } catch {
+            toasts.error("Couldn't disable auto-unlock: \(error.localizedDescription)")
         }
     }
 }

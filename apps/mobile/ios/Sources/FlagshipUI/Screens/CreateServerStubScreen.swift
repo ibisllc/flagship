@@ -1,5 +1,6 @@
 import SwiftUI
 import Flagship
+import FlagshipCore
 
 /// Phone-side v2 create-server flow.
 ///
@@ -76,6 +77,7 @@ public struct CreateServerStubScreen: View {
                     )
                     .accessibilityIdentifier("cs-description-field")
                     recipeTtlPicker(c: c)
+                    bootUnlockPicker(c: c)
                 }
             }
 
@@ -138,6 +140,63 @@ public struct CreateServerStubScreen: View {
             return "\(Int(hours)) hour\(hours == 1 ? "" : "s")"
         }
         return String(format: "%.1f hours", hours)
+    }
+
+    // MARK: - Boot-unlock policy picker
+    //
+    // Two tiers, no middle ground (the design decision in
+    // docs/security-phone-as-unlock-endpoint.md §7a.1). "auto" is the
+    // default — a box that reboots without the phone, with a remote kill
+    // switch. "approve" gates every boot behind the phone (theft-resistant,
+    // assumes stable infrastructure).
+    private func bootUnlockPicker(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text("Boot unlock")
+                .font(.subheadline)
+                .foregroundStyle(c.text)
+            bootUnlockOption(
+                mode: .auto,
+                title: "Reboots on its own",
+                subtitle: "Best for flaky power or connections. After you approve its first boot, the box self-unlocks on every reboot — no phone needed. Revocable any time.",
+                c: c
+            )
+            bootUnlockOption(
+                mode: .approve,
+                title: "Authorize each boot",
+                subtitle: "Most theft-resistant. The box asks your phone (Face ID) on every reboot. Best for critical servers on stable infrastructure.",
+                c: c
+            )
+        }
+    }
+
+    private func bootUnlockOption(
+        mode: BootUnlockStore.Mode,
+        title: String,
+        subtitle: String,
+        c: FSColors
+    ) -> some View {
+        let selected = vm.bootUnlockMode == mode
+        return Button {
+            vm.bootUnlockMode = mode
+        } label: {
+            HStack(alignment: .top, spacing: FS.space.s3) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundColor(selected ? c.primary : c.textMuted)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.medium)).foregroundColor(c.text)
+                    Text(subtitle).font(.caption).foregroundColor(c.textMuted)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(FS.space.s3)
+            .background(
+                RoundedRectangle(cornerRadius: FS.radius.md)
+                    .stroke(selected ? c.primary : c.border, lineWidth: selected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("cs-bootunlock-\(mode.rawValue)")
     }
 
     // MARK: - Phase 2: Scan

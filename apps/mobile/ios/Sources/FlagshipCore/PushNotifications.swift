@@ -114,6 +114,15 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             linker.enqueue(.unlockApprove(requestId: requestId))
             return
         }
+        // Phone-as-unlock-endpoint RELAY (v2 sealed-key flow): a box is
+        // finishing setup / rebooting in "approve" mode and needs the phone
+        // to release its boot secret. Routes to the SecretRequests approval
+        // list. (`category` mirrors the Android FCM payload's alternate key.)
+        if let kind = (info["kind"] as? String) ?? (info["category"] as? String),
+           kind == "secret-request" {
+            linker.enqueue(.secretRequests)
+            return
+        }
         // W10 — vibecode-needs-you push.
         //
         // The .com Web Push fan-out (RFC 8291 encrypted) carries

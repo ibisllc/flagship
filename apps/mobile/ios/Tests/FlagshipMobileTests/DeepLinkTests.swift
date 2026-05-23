@@ -32,6 +32,17 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(DeepLink.parse(url), .unlockApprovalsList)
     }
 
+    func test_secretRequests_host_routesToSecretRequests() {
+        let url = URL(string: "flagship://secret-requests")!
+        XCTAssertEqual(DeepLink.parse(url), .secretRequests)
+    }
+
+    // The `secret-request` push synthesizes the singular host form too.
+    func test_secretRequest_singularHost_routesToSecretRequests() {
+        let url = URL(string: "flagship://secret-request")!
+        XCTAssertEqual(DeepLink.parse(url), .secretRequests)
+    }
+
     func test_serverDetail_withPodId_routesToDetail() {
         let url = URL(string: "flagship://server?podId=home-abc123")!
         XCTAssertEqual(DeepLink.parse(url), .serverDetail(podId: "home-abc123"))

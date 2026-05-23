@@ -23,6 +23,7 @@ struct SecretRequestsContainer: View {
 
     @State private var state: LoadingState<[SecretRequestCoordinator.VerifiedRequest]> = .idle
     @State private var inFlightId: String?
+    private let bootUnlock = BootUnlockStore()
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -106,7 +107,13 @@ struct SecretRequestsContainer: View {
         inFlightId = req.id
         defer { inFlightId = nil }
         do {
-            try await coord.confirmAndRespond(req)
+            // "auto" servers (the default) also get a box-sealed lease so future
+            // boots self-unlock without the phone. The returned lease id is the
+            // kill-switch handle — persist it per-server. ("approve" servers
+            // deposit nothing; the box asks again every boot.)
+            let depositLease = bootUnlock.effectiveMode(for: req.serverDomain) == .auto
+            let leaseId = try await coord.confirmAndRespond(req, depositAutoLease: depositLease)
+            if let leaseId { bootUnlock.setLeaseId(leaseId, for: req.serverDomain) }
             toasts.success("Approved \(req.serverDomain). Your box will pick it up.")
             await reload()
         } catch {

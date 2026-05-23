@@ -10,6 +10,12 @@ public enum DeepLink: Equatable, Sendable {
     /// requestId). Used by the Siri/Shortcuts ApproveUnlockIntent
     /// when the user asks generically rather than from a push.
     case unlockApprovalsList
+    /// Phone-as-unlock-endpoint RELAY approval list (the v2 sealed-key
+    /// flow). Fired by the `secret-request` push when a box is finishing
+    /// setup / rebooting in "approve" mode and needs the phone to release
+    /// its boot secret. Distinct from `unlockApprovalsList` (the legacy
+    /// plaintext BootApproval flow, kept for old servers).
+    case secretRequests
     case serverDetail(podId: String)
     case appDetail(serviceId: String)
     case marketplace
@@ -70,6 +76,8 @@ public enum DeepLink: Equatable, Sendable {
             return .unlockApprovalsList
         case "unlock-approvals":
             return .unlockApprovalsList
+        case "secret-requests", "secret-request":
+            return .secretRequests
         case "server":
             if let id = params["podId"] { return .serverDetail(podId: id) }
         case "app":

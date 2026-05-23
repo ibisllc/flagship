@@ -72,6 +72,13 @@ public final class CreateServerViewModel {
         let clamped = max(min(h, 24.0), 5.0 / 60.0)
         recipeTtlMs = Int64(clamped * 60 * 60_000)
     }
+    /// Boot-unlock policy for this server. "auto" (default) self-unlocks via a
+    /// box-sealed lease after the first approved boot; "approve" gates every
+    /// boot behind the phone. Persisted to `BootUnlockStore` on delivery so the
+    /// approval + kill-switch surfaces know the choice. Only "approve" is
+    /// carried on the wire — "auto" is the absent/legacy default (mirrors the
+    /// webapp's create-server.js and keeps the recipe bytes identical).
+    public var bootUnlockMode: BootUnlockStore.Mode = .auto
     /// Set after the .delivered transition. Container reads this so
     /// the new pending pod records the auth-code serial that Cancel-
     /// order will revoke.
@@ -80,15 +87,18 @@ public final class CreateServerViewModel {
     private let username: String
     private let server: any FlagshipServerClient
     private let relay: any QrRelayClient
+    private let bootUnlock: BootUnlockStore
 
     public init(
         username: String,
         server: any FlagshipServerClient,
-        relay: any QrRelayClient
+        relay: any QrRelayClient,
+        bootUnlock: BootUnlockStore = BootUnlockStore()
     ) {
         self.username = username
         self.server = server
         self.relay = relay
+        self.bootUnlock = bootUnlock
     }
 
     public var canAdvanceFromDesign: Bool {
@@ -156,6 +166,9 @@ public final class CreateServerViewModel {
                 nonceBase64Url: sealed.nonceBase64Url
             )
             lastDeliveredSerial = blob.blob.authCode.serial
+            // Remember the boot-unlock choice locally so the approval screen
+            // (deposit-or-not) and server detail (kill switch) can act on it.
+            bootUnlock.setMode(bootUnlockMode, for: blob.blob.serverDomain)
             phase = .delivered(
                 serial: blob.blob.authCode.serial,
                 serverDomain: blob.blob.serverDomain
@@ -251,7 +264,11 @@ public final class CreateServerViewModel {
             phoneDelegatedPubKey: delegated.publicKey.rawRepresentation,
             authCode: authCode,
             authCodeUserSignature: acSig,
-            rckPubKey: rck.publicKey.rawRepresentation
+            rckPubKey: rck.publicKey.rawRepresentation,
+            // Only "approve" rides the wire; "auto" stays absent so the
+            // recipe bytes match the webapp + a pre-bootUnlockMode verifier
+            // still accepts it. The box treats absence as "auto".
+            bootUnlockMode: bootUnlockMode == .approve ? "approve" : nil
         )
         let blobSig = try irk.signature(for: blob.canonicalBytes())
         return SignedInstallBlob(blob: blob, signatureHex: HexUtil.encode(blobSig))
@@ -277,6 +294,10 @@ public struct SignedInstallBlob: Sendable {
         public let authCodeUserSignature: String
         public let installerGitRef: String
         public let rckPubKey: String
+        /// Only present for "approve" servers — nil (omitted from JSON) for the
+        /// "auto" default, mirroring the webapp's onWireBlob. The box reads
+        /// `blob.bootUnlockMode` from this JSON; absent ⇒ "auto".
+        public let bootUnlockMode: String?
     }
     public struct OnWireAuthCode: Codable, Sendable {
         public let version: Int
@@ -312,7 +333,8 @@ public struct SignedInstallBlob: Sendable {
                 ),
                 authCodeUserSignature: HexUtil.encode(blob.authCodeUserSignature),
                 installerGitRef: blob.installerGitRef,
-                rckPubKey: HexUtil.encode(blob.rckPubKey)
+                rckPubKey: HexUtil.encode(blob.rckPubKey),
+                bootUnlockMode: blob.bootUnlockMode
             ),
             blobSignature: signatureHex
         )
