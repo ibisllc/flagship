@@ -29,6 +29,14 @@ import {
   handleGetRePair,
   handleInitiateRePair,
   handleListAutoUnlockLeases,
+  handlePostSecretRequest,
+  handleGetSecretRequests,
+  handlePostSecretResponse,
+  handleGetSecretResponse,
+  handlePostBoxSealedLease,
+  handleReleaseBoxSealedLease,
+  handleRevokeBoxSealedLease,
+  handleListBoxSealedLeases,
   handleObjectRePair,
   handleTotpDisable,
   handleTotpEnrollBegin,
@@ -343,6 +351,21 @@ const ROUTE_RE = {
   LUKS_LEASE_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease$/,
   LUKS_LEASE_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease\/([^/]+)$/,
   LUKS_LEASE_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases$/,
+  // Phone-as-unlock-endpoint RELAY (docs/security-phone-as-unlock-
+  // endpoint.md). The box POSTs an STK-signed SecretRequest to its
+  // mailbox; the phone GETs pending + POSTs the sealed reply; the box
+  // polls for it. The lease-v2 quartet is the box-sealed lease (the
+  // `-v2` literals keep them clear of the legacy `/lease` matchers
+  // above; the `/leases-v2` list literal can't collide with
+  // `/lease-v2/:id` since it has no trailing path segment). Box-sealed
+  // lease list must be tested BEFORE the bare lease-v2 GET in dispatch.
+  SECRET_REQUEST_POST: /^\/api\/server\/([^/]+)\/secret-request$/,
+  SECRET_RESPONSE_GET: /^\/api\/server\/([^/]+)\/secret-response$/,
+  SECRET_REQUESTS_LIST: /^\/api\/secret-requests$/,
+  SECRET_RESPONSE_POST: /^\/api\/secret-response$/,
+  LEASE_V2_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2$/,
+  LEASE_V2_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2\/([^/]+)$/,
+  LEASE_V2_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases-v2$/,
   UNLOCK_APPROVALS_PENDING: /^\/api\/unlock\/approvals\/pending$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
   USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
@@ -788,6 +811,88 @@ export async function tryControlPlane(
         host,
       ),
     );
+  }
+  // ── Phone-as-unlock-endpoint RELAY (sealed mailbox + box-sealed lease) ──
+  {
+    const buildSecretMailboxDeps = () => {
+      const forwarder = buildOptionalPushForwarder(env);
+      return {
+        servers: storage.servers,
+        usernames: storage.usernames,
+        secretMailbox: storage.secretMailbox,
+        boxSealedLeases: storage.boxSealedLeases,
+        ...(forwarder
+          ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
+          : {}),
+      };
+    };
+    if (method === "POST" && (m = path.match(ROUTE_RE.SECRET_REQUEST_POST))) {
+      return finishPlain(
+        await handlePostSecretRequest(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.SECRET_RESPONSE_GET))) {
+      return finishPlain(
+        await handleGetSecretResponse(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          url.searchParams.get("nonce"),
+        ),
+      );
+    }
+    if (method === "GET" && ROUTE_RE.SECRET_REQUESTS_LIST.test(path)) {
+      return finishPlain(
+        await handleGetSecretRequests(buildSecretMailboxDeps(), await readJson(request)),
+      );
+    }
+    if (method === "POST" && ROUTE_RE.SECRET_REQUESTS_LIST.test(path)) {
+      // Phone mailbox-auth is IRK-signed in the body, so the listing is
+      // exposed as POST as well as GET (a GET with a body is awkward for
+      // some HTTP clients). Both share the handler.
+      return finishPlain(
+        await handleGetSecretRequests(buildSecretMailboxDeps(), await readJson(request)),
+      );
+    }
+    if (method === "POST" && ROUTE_RE.SECRET_RESPONSE_POST.test(path)) {
+      return finishPlain(
+        await handlePostSecretResponse(buildSecretMailboxDeps(), await readJson(request)),
+      );
+    }
+    // Box-sealed lease (v2). List must precede the bare lease-v2 GET; the
+    // distinct `/leases-v2` literal makes the order-independence explicit.
+    if (method === "GET" && (m = path.match(ROUTE_RE.LEASE_V2_LIST))) {
+      return finishPlain(
+        await handleListBoxSealedLeases(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.LEASE_V2_DEPOSIT))) {
+      return finishPlain(
+        await handlePostBoxSealedLease(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          await readJson(request),
+        ),
+      );
+    }
+    if (method === "GET" && (m = path.match(ROUTE_RE.LEASE_V2_DEPOSIT))) {
+      return finishPlain(
+        await handleReleaseBoxSealedLease(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+      );
+    }
+    if (method === "DELETE" && (m = path.match(ROUTE_RE.LEASE_V2_REVOKE))) {
+      return finishPlain(
+        await handleRevokeBoxSealedLease(
+          buildSecretMailboxDeps(),
+          decodeURIComponent(m[1]!),
+          decodeURIComponent(m[2]!),
+          await readJson(request),
+        ),
+      );
+    }
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_UNLOCK_DEPOSIT))) {
     const host = decodeURIComponent(m[1]!);
