@@ -3,52 +3,72 @@
 # every boot, before the LUKS-encrypted root is mounted. Fetches the LUKS
 # unlock key and unlocks the root.
 #
+# This talks to the DEDICATED BOOT WORKER at boot.flagshipserver.com (the
+# host is configurable — see BOOT_HOST below). Every call is identity-gated:
+# the box is the "box" principal and signs with its STK (server identity)
+# key. The contract (apps/boot/src/routes.ts):
+#   GET  /api/boot/lease/:serverDomain            box-STK → the box-sealed lease (auto)
+#   POST /api/boot/request                        box-STK → announce "I need approval"
+#   GET  /api/boot/response/:serverDomain/:nonce  box-STK → poll for the phone's sealed reply
+#
 # A two-tier boot-unlock policy (docs/security-phone-as-unlock-endpoint.md
 # §7a + §7a.1), chosen at server creation and baked to
 # /boot/flagship-boot-unlock-mode ("auto" or "approve"; absent ⇒ "auto"):
 #
 #   auto (default) — try a BOX-SEALED LEASE first: GET the box-sealed lease
-#      from `.com` and unseal it LOCALLY with /boot/flagship-unseal + the STK
-#      key on /boot. No phone, no human. `.com` holds ciphertext only (I1).
-#      If there is no lease (first boot, or a revoked lease) fall back to the
-#      RELAY. The box NEVER deposits a lease itself (the phone does that,
-#      IRK-signed). A stolen box is revocable from the phone (DELETE the lease
-#      ⇒ bricked on next reboot).
+#      from the boot worker and unseal it LOCALLY with /boot/flagship-unseal +
+#      the STK key on /boot. No phone, no human. The worker holds ciphertext
+#      only (I1). If there is no lease (first boot, or a revoked lease) fall
+#      back to the RELAY. The box NEVER deposits a lease itself (the phone does
+#      that, IRK-signed). A stolen box is revocable from the phone (the owner
+#      DELETEs the lease ⇒ bricked on next reboot).
 #
 #   approve — phone-gated RELAY on EVERY boot. The box must NOT read a
 #      box-sealed lease at all (defense in depth — a critical server cannot
 #      self-unlock; a whole-box/disk thief cannot boot it).
 #
-# RELAY — the box posts an STK-signed SecretRequest to `.com`'s blind mailbox;
-#      the user's phone (woken by push) re-seals the LUKS key FOR this box's
-#      STK and posts it back; the box polls it, then unseals it LOCALLY with
-#      /boot/flagship-unseal. `.com` only ever holds ciphertext — it can
-#      withhold (a DoS) but never read the disk key. This is the same
-#      POST/poll/unseal/luksOpen flow wired into the Ubuntu/subiquity initramfs.
+# RELAY — the box POSTs an STK-signed SecretRequest to the boot worker's blind
+#      mailbox (/api/boot/request); the user's phone (woken by push) re-seals
+#      the LUKS key FOR this box's STK and posts it back; the box polls
+#      /api/boot/response, then unseals it LOCALLY with /boot/flagship-unseal.
+#      The worker only ever holds ciphertext — it can withhold (a DoS) but never
+#      read the disk key. This is the same POST/poll/unseal/luksOpen flow wired
+#      into the Ubuntu/subiquity initramfs.
 #
 # The legacy PLAINTEXT CONSUME path is RETIRED from the dispatch (strictly
-# weaker — `.com` would see the key). It is not a fallback in either mode.
+# weaker — the worker would see the key). It is not a fallback in either mode.
 #
 # Cryptography here is pure shell + openssl + curl + xxd:
 #   - Ed25519 signing via `openssl pkeyutl -sign -rawin -inkey identity.pem`
 #     (the install stage writes the server identity priv key to
-#     /boot/identity.pem in PKCS8 PEM form).
-#   - canonical-bytes layouts match @flagship/protocol:
-#       consume:        flagship/consume-unlock-key/v1|<serverId>|<hex-nonce>|<issuedAt>
+#     /boot/identity.pem in PKCS8 PEM form). @flagship/protocol uses
+#     @noble/ed25519 (RFC 8032), so the boot worker's `ed.verify` accepts an
+#     openssl raw Ed25519 signature over the identical canonical bytes.
+#   - canonical-bytes layouts match @flagship/protocol / apps/boot/src/gate.ts:
 #       secret-request: flagship/secret-request/v1|<serverDomain>|<hex-stkpub>|<purpose>|<hex-nonce>|<issuedAt>
+#       box-auth:       flagship/boot-auth/v1|box|<serverDomain>|<METHOD>|<path>|<hex-pub>|<hex-nonce>|<issuedAt>
+#     The box-auth signature travels in the `Authorization` header as
+#       Authorization: Flagship-Boot-v1 <base64url(JSON envelope)>
+#     where the JSON envelope is
+#       {role,serverDomain,method,path,pubKeyHex,nonceHex,issuedAt,signatureHex}.
+#     The gate re-extracts the fields by NAME and rebuilds the canonical string,
+#     so JSON key order is irrelevant — only the canonical string is signed.
+#     base64url = base64 with +→-, /→_, and trailing '=' stripped.
 #
 # Files expected on /boot:
 #   /boot/server-domain               e.g. "home.harry.flagship.services"
 #   /boot/identity.pem                Ed25519 priv key (PKCS8 PEM, 0600)
-#   /boot/control-plane-url           optional, defaults to flagshipserver.com
+#   /boot/flagship-boot-host          optional, default https://boot.flagshipserver.com
+#                                     (enterprise clones override the boot worker)
+#   /boot/control-plane-url           optional, legacy; default flagshipserver.com
 #   /boot/flagship-unseal             static unseal helper (relay/lease; optional)
 #   /boot/flagship-boot-unlock-mode   "auto" | "approve"; optional, default "auto"
 #
 # /boot is unencrypted by design: an attacker who pulls the disk gets the
 # identity key, but on the relay path the key is only ever sealed FOR that
-# identity in-flight (so .com never sees it), and on either path the
-# identity key alone can't fetch a key — the control plane only releases
-# what the phone has actively provided.
+# identity in-flight (so the worker never sees it), and on either path the
+# identity key alone can't fetch a key — the boot worker only releases what
+# the phone has actively provided.
 
 set -eu
 
@@ -58,7 +78,11 @@ exec >>"$LOG" 2>&1
 date
 
 SERVER_DOMAIN="$(cat /boot/server-domain)"
-CONTROL_PLANE="$(cat /boot/control-plane-url 2>/dev/null || echo https://flagshipserver.com)"
+# The dedicated boot worker (boot.flagshipserver.com). Configurable so a
+# burned recipe / enterprise clone can repoint it without touching code —
+# mirrors how /boot/flagship-boot-unlock-mode is read. Default if absent.
+BOOT_HOST="$(cat /boot/flagship-boot-host 2>/dev/null || echo https://boot.flagshipserver.com)"
+BOOT_HOST="${BOOT_HOST%/}"
 IDENTITY_KEY=/boot/identity.pem
 UNSEAL_HELPER=/boot/flagship-unseal
 # Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
@@ -106,9 +130,43 @@ identity_pub_hex() {
         | xxd -p -c 256 | tr -d '\n' | tail -c 64
 }
 
+# base64url-encode stdin (base64 then +→-, /→_, strip trailing '=') — the
+# encoding apps/boot/src/gate.ts parses the Authorization payload as.
+b64url() {
+    openssl base64 -A | tr '+/' '-_' | tr -d '='
+}
+
+# Build the box-STK `Authorization: Flagship-Boot-v1 <b64url(json)>` header
+# value for a boot-worker request. Bound to the exact (method, path,
+# serverDomain) so a captured header cannot be retargeted to another route
+# (apps/boot/src/gate.ts rule 4). The signature is Ed25519 over the canonical
+# bytes
+#   flagship/boot-auth/v1|box|<serverDomain>|<METHOD>|<path>|<pub>|<nonce>|<issuedAt>
+# signed with the box's STK PRIVATE key (the same /boot/identity.pem used for
+# the SecretRequest body sig). Echoes the full header value to stdout.
+#
+# Args: $1 = HTTP method (uppercase), $2 = request path (no query).
+# Uses PUB_HEX (the box STK pub) from the calling scope.
+sign_box_auth_header() {
+    _bm="$1"
+    _bp="$2"
+    _bnonce=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\n')
+    _bnow=$(date +%s%3N)
+    # Canonical bytes — MUST match canonicalBootAuth() in apps/boot/src/gate.ts
+    # byte-for-byte (tag|role|serverDomain|METHOD|path|pubHexLower|nonceHexLower|issuedAt).
+    _bcanon="flagship/boot-auth/v1|box|${SERVER_DOMAIN}|${_bm}|${_bp}|${PUB_HEX}|${_bnonce}|${_bnow}"
+    _bsig="$(sign_canonical "$_bcanon")"
+    # The JSON envelope. The gate re-extracts fields by name, so key order is
+    # irrelevant; all values are hex / a method token / an int / a host-safe
+    # domain+path, so none need JSON escaping.
+    _bjson="$(printf '{"role":"box","serverDomain":"%s","method":"%s","path":"%s","pubKeyHex":"%s","nonceHex":"%s","issuedAt":%s,"signatureHex":"%s"}' \
+        "$SERVER_DOMAIN" "$_bm" "$_bp" "$PUB_HEX" "$_bnonce" "$_bnow" "$_bsig")"
+    printf 'Flagship-Boot-v1 %s' "$(printf '%s' "$_bjson" | b64url)"
+}
+
 # ── unlock_via_box_lease() — "auto" self-unlock, no phone ──────────────────
 # GET the box-sealed lease and unseal it LOCALLY with the STK key on /boot.
-# `.com` holds ciphertext only (I1). No phone, no human. Returns 0 only if it
+# The boot worker holds ciphertext only (I1). No phone, no human. Returns 0 only if it
 # actually unsealed; 404/empty (first boot, or a revoked lease) ⇒ non-zero so
 # the caller falls back to the relay. Self-contained so the wave-4a initramfs
 # hook can lift it verbatim (it mirrors unlock_via_relay()'s "sealed" parse).
@@ -118,14 +176,20 @@ unlock_via_box_lease() {
         return 1
     fi
     SEED_HEX="$(identity_seed_hex)"
-    if [ "${#SEED_HEX}" != 64 ]; then
-        echo "flagship: box-lease aborted — could not derive 32-byte seed from $IDENTITY_KEY"
+    PUB_HEX="$(identity_pub_hex)"
+    if [ "${#SEED_HEX}" != 64 ] || [ "${#PUB_HEX}" != 64 ]; then
+        echo "flagship: box-lease aborted — could not derive 32-byte seed/pub from $IDENTITY_KEY"
         return 1
     fi
 
-    LEASE_URL="${CONTROL_PLANE}/api/server/${SERVER_DOMAIN}/unlock-key/lease-v2"
+    # GET /api/boot/lease/:serverDomain — box-STK gated. The path is bound
+    # into the signed Authorization envelope (no query string).
+    LEASE_PATH="/api/boot/lease/${SERVER_DOMAIN}"
+    LEASE_URL="${BOOT_HOST}${LEASE_PATH}"
+    LEASE_AUTH="$(sign_box_auth_header GET "$LEASE_PATH")"
     LEASE_RESP=/run/flagship-lease-v2.json
     LEASE_CODE=$(curl -sS -o "$LEASE_RESP" -w "%{http_code}" \
+        -H "Authorization: $LEASE_AUTH" \
         --max-time 30 "$LEASE_URL" || echo "000")
     if [ "$LEASE_CODE" = "404" ]; then
         echo "flagship: no box-sealed lease (HTTP 404) — falling back"
@@ -136,9 +200,9 @@ unlock_via_box_lease() {
         return 1
     fi
 
-    # .com returns {serverDomain,leaseId,stkPub,sealedKey,...}; sealedKey is the
-    # box-sealed LUKS key (hex). Extract it the same way unlock_via_relay()
-    # extracts "sealed".
+    # The boot worker returns {serverDomain,leaseId,stkPub,sealedKey,...};
+    # sealedKey is the box-sealed LUKS key (hex). Extract it the same way
+    # unlock_via_relay() extracts "sealed". The box unseals it locally.
     SEALED_KEY=$(sed -n 's/.*"sealedKey":"\([0-9a-fA-F]*\)".*/\1/p' "$LEASE_RESP")
     if [ -z "$SEALED_KEY" ]; then
         echo "flagship: box-lease 200 but no sealedKey: $(head -c 200 "$LEASE_RESP")"
@@ -182,35 +246,49 @@ unlock_via_relay() {
 
     NONCE=$(head -c 32 /dev/urandom | xxd -p -c 256 | tr -d '\n')
     NOW_MS=$(date +%s%3N)
+    # The SecretRequest body keeps its OWN STK signature (unchanged):
     # canonicalSecretRequest join order: tag|serverDomain|hex(stkPub)|purpose|hex(nonce)|issuedAt
     CANONICAL="flagship/secret-request/v1|${SERVER_DOMAIN}|${PUB_HEX}|unlock-key|${NONCE}|${NOW_MS}"
     SIG="$(sign_canonical "$CANONICAL")"
 
-    REQ_URL="${CONTROL_PLANE}/api/server/${SERVER_DOMAIN}/secret-request"
+    # POST /api/boot/request — box-STK gated. The body is the box's STK-signed
+    # SecretRequest envelope (its own signature, separate from the box-auth
+    # header). The boot worker re-verifies both before parking the request +
+    # firing the owner push.
+    REQ_PATH="/api/boot/request"
+    REQ_URL="${BOOT_HOST}${REQ_PATH}"
+    REQ_AUTH="$(sign_box_auth_header POST "$REQ_PATH")"
     REQ_BODY=$(printf '{"request":{"serverDomain":"%s","stkPub":"%s","purpose":"unlock-key","nonce":"%s","issuedAt":%s},"signature":"%s"}' \
         "$SERVER_DOMAIN" "$PUB_HEX" "$NONCE" "$NOW_MS" "$SIG")
 
     POST_RESP=/run/flagship-secret-request-resp.json
     POST_CODE=$(curl -sS -o "$POST_RESP" -w "%{http_code}" \
         -X POST -H 'content-type: application/json' \
+        -H "Authorization: $REQ_AUTH" \
         --max-time 30 -d "$REQ_BODY" "$REQ_URL" || echo "000")
     if [ "$POST_CODE" != "200" ]; then
-        echo "flagship: relay secret-request HTTP $POST_CODE; body: $(head -c 200 "$POST_RESP" 2>/dev/null)"
+        echo "flagship: relay boot-request HTTP $POST_CODE; body: $(head -c 200 "$POST_RESP" 2>/dev/null)"
         return 1
     fi
-    echo "flagship: posted unlock-key secret-request; waiting up to ${RELAY_WINDOW_SECS}s for the phone"
+    echo "flagship: posted unlock-key boot-request; waiting up to ${RELAY_WINDOW_SECS}s for the phone"
 
-    POLL_URL="${CONTROL_PLANE}/api/server/${SERVER_DOMAIN}/secret-response?nonce=${NONCE}"
+    # GET /api/boot/response/:serverDomain/:nonce — box-STK gated, polled. The
+    # nonce is a PATH segment now (not a query), and is bound into the signed
+    # Authorization envelope, so a fresh header is signed for each poll.
+    POLL_PATH="/api/boot/response/${SERVER_DOMAIN}/${NONCE}"
+    POLL_URL="${BOOT_HOST}${POLL_PATH}"
     DEADLINE=$(( $(date +%s) + RELAY_WINDOW_SECS ))
     ATTEMPT=0
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
         ATTEMPT=$((ATTEMPT + 1))
         RESP=/run/flagship-secret-response.json
+        POLL_AUTH="$(sign_box_auth_header GET "$POLL_PATH")"
         CODE=$(curl -sS -o "$RESP" -w "%{http_code}" \
+            -H "Authorization: $POLL_AUTH" \
             --max-time 30 "$POLL_URL" || echo "000")
 
         if [ "$CODE" = "200" ]; then
-            # .com returns {serverDomain,requestNonceHex,purpose,sealed,issuedAt}.
+            # The boot worker returns {serverDomain,requestNonceHex,purpose,sealed,issuedAt}.
             # The unseal helper's --response-json wants the same shape but with
             # `sealedHex` instead of `sealed`; transform it. The helper verifies
             # the bound (nonce, purpose) against what we sent, so a replayed /
@@ -238,7 +316,7 @@ unlock_via_relay() {
         elif [ "$CODE" = "404" ]; then
             : # no reply yet — expected; keep polling
         else
-            echo "flagship: relay secret-response HTTP $CODE; body: $(head -c 200 "$RESP" 2>/dev/null)"
+            echo "flagship: relay boot-response HTTP $CODE; body: $(head -c 200 "$RESP" 2>/dev/null)"
             return 1
         fi
 

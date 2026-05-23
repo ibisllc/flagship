@@ -19,7 +19,7 @@ import {
   type AuthCode,
   type InstallBlob,
 } from "@flagship/protocol";
-import { buildAutoinstallUserData } from "../src/userdata.js";
+import { buildAutoinstallUserData, DEFAULT_BOOT_HOST } from "../src/userdata.js";
 
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
@@ -235,6 +235,9 @@ describe("LUKS is the locked DEFAULT — proven unencrypted path is the debug es
     expect(b).not.toContain("update-initramfs");
     expect(b).not.toContain("luksAddKey");
     expect(b).not.toContain("/boot/flagship-boot-unlock-mode");
+    expect(b).not.toContain("/boot/flagship-boot-host");
+    expect(b).not.toContain("boot.flagshipserver.com");
+    expect(b).not.toContain("/api/boot/");
     // …and it still ends exactly where the proven path ends.
     expect(b.trimEnd().endsWith('echo "[flagship-bootstrap] done"')).toBe(true);
   });
@@ -254,9 +257,13 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
     // The mode file is baked exactly "auto".
     expect(b).toContain('echo "auto" > /boot/flagship-boot-unlock-mode');
     expect(b).not.toContain('echo "approve" > /boot/flagship-boot-unlock-mode');
-    // box-lease helper present + GETs the box-sealed lease quartet.
+    // box-lease helper present + GETs the box-sealed lease from the boot worker.
     expect(b).toContain("unlock_via_box_lease()");
-    expect(b).toContain("/unlock-key/lease-v2");
+    expect(b).toContain('LEASE_PATH="/api/boot/lease/${SERVER_DOMAIN}"');
+    // The legacy .com lease-v2 + secret-request/-response paths are GONE.
+    expect(b).not.toContain("/unlock-key/lease-v2");
+    expect(b).not.toContain("/api/server/${SERVER_DOMAIN}/secret-request");
+    expect(b).not.toContain("/api/server/${SERVER_DOMAIN}/secret-response");
     // Parses the hex sealedKey + unseals with --sealed-hex.
     expect(b).toContain('"sealedKey":"');
     expect(b).toContain('--identity-priv-hex "$SEED_HEX" --sealed-hex "$SEALED_KEY"');
@@ -319,6 +326,79 @@ describe("two-tier boot-unlock policy (docs §7a.1) — auto default + approve",
   });
 });
 
+describe("boot worker repoint — boot.flagshipserver.com + box-STK Flagship-Boot-v1 auth", () => {
+  function bootstrap(opts: { bootHost?: string } = {}): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return extractBootstrap(buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }));
+  }
+
+  it("bakes the DEFAULT boot host (boot.flagshipserver.com) to /boot/flagship-boot-host", () => {
+    const b = bootstrap();
+    expect(b).toContain('echo "https://boot.flagshipserver.com" > /boot/flagship-boot-host');
+    // Default constant is exported + matches the bake.
+    expect(DEFAULT_BOOT_HOST).toBe("https://boot.flagshipserver.com");
+  });
+
+  it("an enterprise clone can override the boot host (bootHost option)", () => {
+    const b = bootstrap({ bootHost: "https://boot.acme-enterprise.example" });
+    expect(b).toContain('echo "https://boot.acme-enterprise.example" > /boot/flagship-boot-host');
+    expect(b).not.toContain('echo "https://boot.flagshipserver.com" > /boot/flagship-boot-host');
+  });
+
+  it("rejects a non-https boot host", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    expect(() =>
+      buildAutoinstallUserData({ blob, blobSignatureHex, bootHost: "http://insecure.example" }),
+    ).toThrow(/bootHost must be https/);
+  });
+
+  it("the premount unlock hook reads the boot host (override-capable; default if absent)", () => {
+    const b = bootstrap();
+    expect(b).toContain(
+      'BOOT_HOST="$(cat /boot/flagship-boot-host 2>/dev/null || echo https://boot.flagshipserver.com)"',
+    );
+    // The hook stages the boot-host fact into the initramfs so it's readable pre-pivot.
+    expect(b).toContain('cp /boot/flagship-boot-host "${DESTDIR}/boot/flagship-boot-host"');
+  });
+
+  it("hits the FIXED /api/boot/* contract with the box-STK Authorization header", () => {
+    const b = bootstrap();
+    // Lease (auto), request + response (relay) all hit the boot worker paths.
+    expect(b).toContain('LEASE_PATH="/api/boot/lease/${SERVER_DOMAIN}"');
+    expect(b).toContain('REQ_PATH="/api/boot/request"');
+    expect(b).toContain('POLL_PATH="/api/boot/response/${SERVER_DOMAIN}/${NONCE}"');
+    // Each call carries a fresh box-STK Authorization header.
+    expect(b).toContain('LEASE_AUTH="$(sign_box_auth_header GET "$LEASE_PATH")"');
+    expect(b).toContain('REQ_AUTH="$(sign_box_auth_header POST "$REQ_PATH")"');
+    expect(b).toContain('POLL_AUTH="$(sign_box_auth_header GET "$POLL_PATH")"');
+    expect(b).toContain('Authorization: $LEASE_AUTH');
+    expect(b).toContain('Authorization: $REQ_AUTH');
+    expect(b).toContain('Authorization: $POLL_AUTH');
+    // The legacy .com unlock endpoints are gone (the SecretRequest BODY canonical
+    // `flagship/secret-request/v1|` legitimately stays — only the URL moved).
+    expect(b).not.toContain("/unlock-key/lease-v2");
+    expect(b).not.toContain("/api/server/${SERVER_DOMAIN}/secret-request");
+    expect(b).not.toContain("/api/server/${SERVER_DOMAIN}/secret-response");
+  });
+
+  it("the box-auth header signing matches apps/boot/src/gate.ts canonical bytes", () => {
+    const b = bootstrap();
+    // The canonical string the box signs MUST equal canonicalBootAuth() in
+    // gate.ts: tag|role|serverDomain|METHOD|path|pubHex|nonceHex|issuedAt.
+    expect(b).toContain(
+      '_bcanon="flagship/boot-auth/v1|box|${SERVER_DOMAIN}|${_bm}|${_bp}|${PUB_HEX}|${_bnonce}|${_bnow}"',
+    );
+    // base64url(JSON envelope) of {role,serverDomain,method,path,pubKeyHex,
+    // nonceHex,issuedAt,signatureHex}, signed with the box STK priv via openssl.
+    expect(b).toContain('"role":"box","serverDomain":"%s","method":"%s","path":"%s"');
+    expect(b).toContain('"pubKeyHex":"%s","nonceHex":"%s","issuedAt":%s,"signatureHex":"%s"');
+    // base64url = base64 with +→-, /→_, trailing '=' stripped.
+    expect(b).toContain("openssl base64 -A | tr '+/' '-_' | tr -d '='");
+    // The Ed25519 signature is over the canonical bytes via the box STK priv.
+    expect(b).toContain("printf 'Flagship-Boot-v1 %s'");
+  });
+});
+
 describe("the locked default — LUKS path details (EXPERIMENTAL, needs live validation)", () => {
   function luksYaml(): string {
     // No flag → the default, which is now the encrypted path.
@@ -374,6 +454,15 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).not.toContain("flagship/consume-unlock-key/v1|");
     expect(b).not.toContain("unlock_via_plaintext_consume");
     expect(b).toContain("if ! unlock_via_box_lease; then");
+    // Repointed to the dedicated boot worker via the box-STK auth header.
+    expect(b).toContain('REQ_PATH="/api/boot/request"');
+    expect(b).toContain('POLL_PATH="/api/boot/response/${SERVER_DOMAIN}/${NONCE}"');
+    expect(b).toContain('sign_box_auth_header POST "$REQ_PATH"');
+    expect(b).toContain('sign_box_auth_header GET "$POLL_PATH"');
+    expect(b).toContain('Authorization: $REQ_AUTH');
+    expect(b).toContain("flagship/boot-auth/v1|box|");
+    // The hook stages the boot-host fact into the initramfs.
+    expect(b).toContain("/boot/flagship-boot-host");
     // The pre-unlock tools the hook must stage into the initramfs.
     expect(b).toContain("copy_exec /usr/bin/openssl");
     expect(b).toContain("copy_exec /usr/bin/curl");
