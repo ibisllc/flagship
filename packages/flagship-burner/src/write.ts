@@ -51,7 +51,7 @@ export interface WriteCommandOpts {
   yes?: boolean;
   /** Don't auto-shred the recipe after a successful write. */
   keepRecipe?: boolean;
-  /** OPT-IN LUKS-encrypted root (default OFF). EXPERIMENTAL — see userdata.ts. */
+  /** LUKS-encrypted root, the locked DEFAULT. false = internal debug escape only. See userdata.ts. */
   encryptRoot?: boolean;
   /** Injected for tests. Defaults to real spawn. */
   enumerateOpts?: EnumerateOpts;
@@ -118,7 +118,7 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
   const yaml = buildAutoinstallUserData({
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
-    encryptRoot: opts.encryptRoot === true,
+    encryptRoot: opts.encryptRoot !== false,
   });
   const remaster = opts.remaster ?? remasterIsoWithAutoinstall;
   const remasteredIso = join(

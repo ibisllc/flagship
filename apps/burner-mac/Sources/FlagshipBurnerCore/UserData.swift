@@ -23,15 +23,16 @@ public enum UserData {
     /// Build the autoinstall user-data. `recipeJSON` is the raw, already-
     /// verified recipe bytes (embedded as the install-blob the daemon reads).
     ///
-    /// `encryptRoot` is OPT-IN and defaults OFF. When false, the YAML +
-    /// bootstrap are byte-identical to the working unencrypted path. When true
-    /// (EXPERIMENTAL — needs live validation; brick risk), a curtin LUKS-on-root
-    /// storage layout + a phone-gated initramfs unlock hook are added. Mirrors
-    /// packages/flagship-burner userdata.ts buildAutoinstallUserData.
+    /// `encryptRoot` is the locked DEFAULT (true). Every burn produces a
+    /// LUKS-encrypted, phone-gated box — EXPERIMENTAL, needs live validation
+    /// (brick risk on first boot). encryptRoot:false is an INTERNAL debug
+    /// escape only (not exposed in the GUI): it reproduces the proven
+    /// unencrypted path byte-for-byte. Mirrors packages/flagship-burner
+    /// userdata.ts buildAutoinstallUserData.
     public static func autoinstallYAML(recipeJSON: Data,
                                        installerGitRef: String,
                                        repoURL: String = defaultRepoURL,
-                                       encryptRoot: Bool = false) throws -> String {
+                                       encryptRoot: Bool = true) throws -> String {
         let trimmed = installerGitRef.trimmingCharacters(in: .whitespacesAndNewlines)
         let ref = trimmed.isEmpty ? "main" : trimmed
         guard ref.range(of: "^[A-Za-z0-9._/-]+$", options: .regularExpression) != nil else {
@@ -107,7 +108,7 @@ public enum UserData {
     /// Bash line-continuations are written as `\\` (literal backslash); bash
     /// `$VAR` / `$(...)` / `${...}` pass through unchanged. `encryptRoot` opt-in
     /// (default OFF) splices the LUKS unlock-hook block before `installed.flag`.
-    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = false) -> String {
+    static func bootstrapScript(ref: String, repoURL: String, encryptRoot: Bool = true) -> String {
         let plain = bootstrapScriptPlain(ref: ref, repoURL: repoURL)
         guard encryptRoot else { return plain }
         // Splice the LUKS block in just before the plain script's final two

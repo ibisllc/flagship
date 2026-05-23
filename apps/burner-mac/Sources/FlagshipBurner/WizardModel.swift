@@ -10,9 +10,8 @@ final class WizardModel: ObservableObject {
     @Published var recipe: URL? = nil
     @Published var pastedRecipeStaging: URL? = nil
     @Published var iso: URL? = nil
-    /// OPT-IN phone-gated LUKS-encrypted root. Default OFF — the working
-    /// unencrypted path. EXPERIMENTAL when on (needs live validation).
-    @Published var encryptRoot: Bool = false
+    // LUKS-encrypted, phone-gated root is the locked DEFAULT (UserData.swift) —
+    // not a user choice, so no model state / no toggle here.
     @Published var disks: [USBDisk] = []
     @Published var selectedDisk: USBDisk? = nil
     @Published var isRefreshingDisks = false
@@ -155,8 +154,7 @@ final class WizardModel: ObservableObject {
         let data = try Data(contentsOf: recipe)
         let parsed = try RecipeLoader.load(data: data)
         return try UserData.autoinstallYAML(recipeJSON: data,
-                                            installerGitRef: parsed.installerGitRef,
-                                            encryptRoot: encryptRoot)
+                                            installerGitRef: parsed.installerGitRef)
     }
 
     func runPrepare() async {

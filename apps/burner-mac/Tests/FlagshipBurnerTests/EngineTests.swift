@@ -111,24 +111,32 @@ final class EngineTests: XCTestCase {
         XCTAssertFalse(s.contains("systemctl start flagship-first-boot-register.service"))
     }
 
-    // MARK: - encryptRoot flag (OPT-IN; default OFF)
+    // MARK: - encryptRoot is the locked DEFAULT; false is the debug escape
 
-    /// Default (encryptRoot omitted) MUST be byte-identical to the explicit
-    /// `false` path, and must carry no LUKS storage block or unlock hook.
-    func testEncryptRootDefaultsOffByteIdentical() throws {
+    /// Default (encryptRoot omitted) MUST equal the explicit `true` path and
+    /// carry the LUKS storage block + unlock hook. encryptRoot:false is the
+    /// internal debug escape that reproduces the proven unencrypted path.
+    func testEncryptRootDefaultsLocked() throws {
         let recipe = Data(#"{"version":2,"serverDomain":"home.x.flagship.services"}"#.utf8)
-        let a = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main")
-        let c = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main", encryptRoot: false)
-        XCTAssertEqual(a, c, "default must equal explicit encryptRoot:false byte-for-byte")
-        XCTAssertFalse(a.contains("storage:"))
-        XCTAssertFalse(a.contains("dm_crypt"))
-        let b = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL)
-        XCTAssertFalse(b.contains("encryptRoot ON"))
-        XCTAssertFalse(b.contains("/boot/flagship-unseal"))
-        XCTAssertFalse(b.contains("unlock_via_relay"))
-        XCTAssertFalse(b.contains("update-initramfs"))
-        XCTAssertFalse(b.contains("luksAddKey"))
-        XCTAssertTrue(b.hasSuffix("echo \"[flagship-bootstrap] done\"\n"))
+        let dflt = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main")
+        let explicit = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main", encryptRoot: true)
+        XCTAssertEqual(dflt, explicit, "default must equal explicit encryptRoot:true byte-for-byte")
+        XCTAssertTrue(dflt.contains("storage:"))
+        XCTAssertTrue(dflt.contains("dm_crypt"))
+        let enc = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL)
+        XCTAssertTrue(enc.contains("encryptRoot ON"))
+        XCTAssertTrue(enc.contains("/boot/flagship-unseal"))
+        // The debug escape (encryptRoot:false) reproduces the plaintext path.
+        let plainYaml = try UserData.autoinstallYAML(recipeJSON: recipe, installerGitRef: "main", encryptRoot: false)
+        XCTAssertFalse(plainYaml.contains("storage:"))
+        XCTAssertFalse(plainYaml.contains("dm_crypt"))
+        let plain = UserData.bootstrapScript(ref: "main", repoURL: UserData.defaultRepoURL, encryptRoot: false)
+        XCTAssertFalse(plain.contains("encryptRoot ON"))
+        XCTAssertFalse(plain.contains("/boot/flagship-unseal"))
+        XCTAssertFalse(plain.contains("unlock_via_relay"))
+        XCTAssertFalse(plain.contains("update-initramfs"))
+        XCTAssertFalse(plain.contains("luksAddKey"))
+        XCTAssertTrue(plain.hasSuffix("echo \"[flagship-bootstrap] done\"\n"))
     }
 
     /// The encrypted bootstrap is EXACTLY the plain bootstrap with the LUKS

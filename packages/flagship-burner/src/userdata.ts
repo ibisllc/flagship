@@ -14,13 +14,12 @@
  *   - We DO install Node 20 from NodeSource (Ubuntu 22.04 default is
  *     nodejs 12 — too old for our protocol; same root cause as the
  *     debian-12 path).
- *   - LUKS-encrypt-root is now available as an OPT-IN flag
- *     (UserDataOptions.encryptRoot), DEFAULT OFF. When off, the daemon
- *     installs on an unencrypted root — the proven happy path, unchanged.
- *     When on (EXPERIMENTAL — needs live validation), the autoinstall gets
- *     a curtin LUKS-on-root storage layout + a phone-gated initramfs unlock
- *     hook (the .com-blind relay path from
- *     docs/security-phone-as-unlock-endpoint.md).
+ *   - LUKS-encrypt-root is the DEFAULT (locked). Every burn produces an
+ *     encrypted box keyed by the phone (the .com-blind relay path from
+ *     docs/security-phone-as-unlock-endpoint.md) — it is NOT a user choice.
+ *     EXPERIMENTAL — needs live validation (brick risk on first boot). An
+ *     internal escape hatch (encryptRoot:false, NOT exposed in CLI/GUI)
+ *     reproduces the proven unencrypted path for debugging only.
  *
  * EXECUTION CONTEXT — the critical difference vs the demo. The demo's
  * bootstrap runs at REAL boot (cloud-init runcmd on multi-user.target),
@@ -56,18 +55,20 @@ export interface UserDataOptions {
    * `.com`-blind unlock-relay path from
    * docs/security-phone-as-unlock-endpoint.md).
    *
-   * DEFAULT OFF. When false (the default), the generated user-data + bootstrap
-   * are byte-identical to the working unencrypted path — the box self-signs its
-   * entitlement, ACME works, and the box serves a real cert with no phone
-   * round-trip at boot. Do NOT regress that path.
+   * DEFAULT (locked): undefined or true → encrypted. LUKS is a day-1 promise,
+   * not a user choice — neither the CLI nor the GUI exposes a toggle. The
+   * autoinstall gets a curtin custom-storage layout with a LUKS-encrypted root
+   * keyed by a random key-file (install.sh's pattern), the bootstrap seals that
+   * key for the phone + uploads it to `.com`, builds the `/boot/flagship-unseal`
+   * helper, and installs an initramfs hook that lifts boot-stage.sh's
+   * unlock_via_relay() (POST SecretRequest → poll → unseal → cryptsetup
+   * luksOpen), falling back to the legacy plaintext consume path on timeout.
    *
-   * EXPERIMENTAL when true — needs live validation (brick risk). The autoinstall
-   * gets a curtin custom-storage layout with a LUKS-encrypted root keyed by a
-   * random key-file (install.sh's pattern), the bootstrap seals that key for the
-   * phone + uploads it to `.com`, builds the `/boot/flagship-unseal` helper, and
-   * installs an initramfs hook that lifts boot-stage.sh's unlock_via_relay()
-   * (POST SecretRequest → poll → unseal → cryptsetup luksOpen), falling back to
-   * the legacy plaintext consume path on timeout. See §2/§3 of the wave brief.
+   * EXPERIMENTAL — needs live validation (brick risk on first boot).
+   *
+   * encryptRoot:false is an INTERNAL debug escape hatch only (not exposed in
+   * CLI/GUI): it reproduces the proven unencrypted path byte-for-byte so a boot
+   * failure can be bisected against the known-good baseline. Do NOT surface it.
    */
   encryptRoot?: boolean;
 }
@@ -84,7 +85,11 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
   if (!repo.startsWith("https://")) {
     throw new Error("flagshipRepoUrl must be https://");
   }
-  const encryptRoot = opts.encryptRoot === true;
+  // LUKS is the DEFAULT (locked) — every burn produces an encrypted box. The
+  // ONLY way to opt out is encryptRoot:false, an internal debug escape hatch
+  // (NOT exposed in the CLI/GUI) for bisecting a boot failure against the
+  // known-good plaintext path. See docs/security-phone-as-unlock-endpoint.md.
+  const encryptRoot = opts.encryptRoot !== false;
   const bootstrap = buildBootstrapScript({ ref, repoUrl: repo, encryptRoot });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,

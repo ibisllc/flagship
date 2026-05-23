@@ -196,25 +196,35 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
   });
 });
 
-describe("encryptRoot flag — default OFF must be byte-identical to today", () => {
+describe("LUKS is the locked DEFAULT — proven unencrypted path is the debug escape", () => {
   function userData(opts: { encryptRoot?: boolean }): string {
     const { blob, blobSignatureHex } = signedBlob();
     return buildAutoinstallUserData({ blob, blobSignatureHex, ...opts });
   }
 
-  it("default (no flag) === explicit encryptRoot:false, byte-for-byte", () => {
-    // Same blob → identical YAML; the flag default must not perturb anything.
-    // We can't compare against a different blob (auth-code carries timestamps),
-    // so generate both from ONE signedBlob() and assert equality.
+  it("default (no flag) === explicit encryptRoot:true, byte-for-byte", () => {
+    // LUKS is now the default. Omitting the flag must produce the SAME locked
+    // box as asking for it explicitly. (Auth-codes carry timestamps, so both
+    // are generated from ONE signedBlob().)
     const { blob, blobSignatureHex } = signedBlob();
-    const a = buildAutoinstallUserData({ blob, blobSignatureHex });
-    const c = buildAutoinstallUserData({ blob, blobSignatureHex, encryptRoot: false });
-    expect(c).toBe(a);
+    const dflt = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const explicit = buildAutoinstallUserData({ blob, blobSignatureHex, encryptRoot: true });
+    expect(dflt).toBe(explicit);
   });
 
-  it("default path has NO LUKS storage block + NO unlock-hook bootstrap", () => {
+  it("default path encrypts — curtin LUKS storage block + unlock hook present", () => {
     const yaml = userData({});
-    // No subiquity custom storage → subiquity's default whole-disk layout.
+    expect(yaml).toContain("storage:");
+    expect(yaml).toContain("type: dm_crypt");
+    const b = extractBootstrap(yaml);
+    expect(b).toContain("encryptRoot ON");
+    expect(b).toContain("/boot/flagship-unseal");
+  });
+
+  it("encryptRoot:false reproduces the proven unencrypted path (debug escape only)", () => {
+    // The escape is intentionally NOT exposed in the CLI/GUI — it exists so a
+    // boot failure can be bisected against the known-good plaintext baseline.
+    const yaml = userData({ encryptRoot: false });
     expect(yaml).not.toContain("storage:");
     expect(yaml).not.toContain("dm_crypt");
     const b = extractBootstrap(yaml);
@@ -223,18 +233,16 @@ describe("encryptRoot flag — default OFF must be byte-identical to today", () 
     expect(b).not.toContain("unlock_via_relay");
     expect(b).not.toContain("update-initramfs");
     expect(b).not.toContain("luksAddKey");
-  });
-
-  it("default path still ends exactly with installed.flag + done", () => {
-    const b = extractBootstrap(userData({}));
+    // …and it still ends exactly where the proven path ends.
     expect(b.trimEnd().endsWith('echo "[flagship-bootstrap] done"')).toBe(true);
   });
 });
 
-describe("encryptRoot:true — EXPERIMENTAL LUKS path (opt-in)", () => {
+describe("the locked default — LUKS path details (EXPERIMENTAL, needs live validation)", () => {
   function luksYaml(): string {
+    // No flag → the default, which is now the encrypted path.
     const { blob, blobSignatureHex } = signedBlob();
-    return buildAutoinstallUserData({ blob, blobSignatureHex, encryptRoot: true });
+    return buildAutoinstallUserData({ blob, blobSignatureHex });
   }
 
   it("emits a curtin custom-storage block with a LUKS-encrypted root", () => {
