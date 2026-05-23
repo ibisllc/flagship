@@ -8,6 +8,10 @@ package com.flagshipserver.app.core
 
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -131,5 +135,38 @@ class PhoneEndpointCryptoTest {
         )
         val sig = rev.sign(Ed25519Sign(irk.privateKey))
         assertTrue(verifies(irk.publicKey, sig, rev.canonicalBytes()))
+    }
+
+    // Owner-role boot-auth header: build → base64url-decode → the bound
+    // fields match and the signature verifies under the IRK over
+    // BootAuth.canonicalBytes (the format apps/boot/src/gate.ts checks).
+    @Test fun bootAuth_ownerHeader_decodesAndVerifies() {
+        val irk = Ed25519Sign.KeyPair.newKeyPair()
+        val pubHex = hex(irk.publicKey)
+        val nonce = ByteArray(32) { 0x5a }
+        val header = BootAuth.ownerHeader(
+            serverDomain = "home.alice.flagship.services",
+            method = "PUT",
+            path = "/api/boot/lease",
+            signer = Ed25519Sign(irk.privateKey),
+            pubHex = pubHex,
+            issuedAt = 1_700_000_000_000L,
+            nonce = nonce,
+        )
+        assertTrue(header.startsWith("Flagship-Boot-v1 "))
+        val jsonBytes = java.util.Base64.getUrlDecoder().decode(header.removePrefix("Flagship-Boot-v1 "))
+        val obj = Json.parseToJsonElement(String(jsonBytes)).jsonObject
+        assertEquals("owner", obj["role"]!!.jsonPrimitive.content)
+        assertEquals("PUT", obj["method"]!!.jsonPrimitive.content)
+        assertEquals("/api/boot/lease", obj["path"]!!.jsonPrimitive.content)
+        assertEquals("home.alice.flagship.services", obj["serverDomain"]!!.jsonPrimitive.content)
+        assertEquals(pubHex, obj["pubKeyHex"]!!.jsonPrimitive.content)
+        val nonceHex = obj["nonceHex"]!!.jsonPrimitive.content
+        val issuedAt = obj["issuedAt"]!!.jsonPrimitive.long
+        val sigHex = obj["signatureHex"]!!.jsonPrimitive.content
+        val canon = BootAuth.canonicalBytes(
+            "owner", "home.alice.flagship.services", "PUT", "/api/boot/lease", pubHex, nonceHex, issuedAt,
+        )
+        assertTrue(verifies(irk.publicKey, HexUtil.decode(sigHex)!!, canon))
     }
 }

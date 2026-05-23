@@ -152,7 +152,6 @@ class SecretRequestCoordinator(
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
 
         val material = irk.resolve("Approve your box's boot secret")
-        val auth = buildMailboxAuth(material)
 
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
@@ -171,13 +170,24 @@ class SecretRequestCoordinator(
             sealed = sealedHex,
             issuedAt = now(),
         )
-        mailbox.postResponse(auth, body)
+        // The sealed reply goes to the dedicated boot worker (where the box
+        // polls), owner-IRK-authed via the Flagship-Boot-v1 header.
+        val respAuth = BootAuth.ownerHeader(
+            serverDomain = verified.serverDomain,
+            method = "POST",
+            path = "/api/boot/response",
+            signer = material.signer,
+            pubHex = material.pubHex,
+            issuedAt = now(),
+            nonce = nonceGen(),
+        )
+        mailbox.postResponse(body, respAuth)
 
         // "auto" mode: deposit a box-sealed lease (the user's IRK authorizes
         // it here — I2) using the key we just recovered (never .com-visible).
         val key = unlockKey
         if (depositAutoLease && purpose == SecretPurpose.UNLOCK_KEY && key != null) {
-            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material.signer)
+            return depositAutoUnlockLease(verified.serverDomain, stkPub, key, material)
         }
         return null
     }
@@ -188,11 +198,19 @@ class SecretRequestCoordinator(
     suspend fun revokeAutoUnlockLease(serverDomain: String, leaseId: String) {
         val material = irk.resolve("Require approval to boot this server")
         val issuedAt = now()
-        val rev = LeaseRevocation(serverDomain, leaseId, issuedAt)
-        mailbox.revokeBoxSealedLease(
-            LeaseRevokeWire(serverDomain, leaseId, issuedAt),
-            HexUtil.encode(rev.sign(material.signer)),
+        // The boot worker's DELETE carries no body signature — it's
+        // authorized by the owner-IRK Flagship-Boot-v1 header bound to the
+        // exact path (so it can't replay against another route).
+        val auth = BootAuth.ownerHeader(
+            serverDomain = serverDomain,
+            method = "DELETE",
+            path = "/api/boot/lease/$serverDomain/$leaseId",
+            signer = material.signer,
+            pubHex = material.pubHex,
+            issuedAt = issuedAt,
+            nonce = nonceGen(),
         )
+        mailbox.revokeBoxSealedLease(LeaseRevokeWire(serverDomain, leaseId, issuedAt), auth)
     }
 
     /** Deposit a long-lived box-sealed lease (LUKS key sealed for the box
@@ -201,7 +219,7 @@ class SecretRequestCoordinator(
         serverDomain: String,
         stkPub: ByteArray,
         luksKey: ByteArray,
-        signer: Ed25519Sign,
+        material: IrkMaterial,
     ): String {
         val issuedAt = now()
         val leaseId = AutoUnlockLeaseV2.randomLeaseId()
@@ -214,6 +232,15 @@ class SecretRequestCoordinator(
             issuedAt = issuedAt,
             expiresAt = expiresAt,
         )
+        val depositAuth = BootAuth.ownerHeader(
+            serverDomain = serverDomain,
+            method = "PUT",
+            path = "/api/boot/lease",
+            signer = material.signer,
+            pubHex = material.pubHex,
+            issuedAt = now(),
+            nonce = nonceGen(),
+        )
         mailbox.depositBoxSealedLease(
             BoxSealedLeaseWire(
                 serverDomain = lease.serverDomain,
@@ -224,7 +251,8 @@ class SecretRequestCoordinator(
                 expiresAt = lease.expiresAt,
                 maxUses = lease.maxUses,
             ),
-            HexUtil.encode(lease.sign(signer)),
+            HexUtil.encode(lease.sign(material.signer)),
+            depositAuth,
         )
         return leaseId
     }

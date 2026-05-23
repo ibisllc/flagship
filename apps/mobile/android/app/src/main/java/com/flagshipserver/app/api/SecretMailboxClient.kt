@@ -19,26 +19,29 @@ interface SecretMailboxClient {
      *  account's un-answered pending requests, newest first. */
     suspend fun fetchPendingRequests(auth: MailboxAuthEnvelope): SecretRequestsResponse
 
-    /** POST /api/secret-response — phone, IRK mailbox-auth. Write-once. */
-    suspend fun postResponse(auth: MailboxAuthEnvelope, response: SecretResponseBody)
+    /** POST {boot}/api/boot/response — owner-IRK (the `bootAuth` header).
+     *  Posts the sealed reply to the dedicated boot worker, where the box
+     *  polls for it. Write-once. */
+    suspend fun postResponse(response: SecretResponseBody, bootAuth: String)
 
     /** GET /api/server/:domain/sealed-luks-key — the LUKS key sealed FOR
-     *  the phone. 404 → no sealed key on file. */
+     *  the phone. 404 → no sealed key on file. Stays on the identity plane. */
     suspend fun fetchSealedLuksKey(serverDomain: String): SealedLuksKeyResponse
 
     /** GET /api/users/:u/pods — the directory. The phone resolves the
-     *  box's STK INDEPENDENTLY of the mailbox echo from here. */
+     *  box's STK INDEPENDENTLY of the mailbox echo from here. Identity plane. */
     suspend fun fetchPods(username: String): PodsDirectoryResponse
 
-    /** POST /api/server/:domain/unlock-key/lease-v2 — deposit a box-sealed
-     *  auto-unlock lease (IRK-signed). Enables "auto" self-unlock; .com
-     *  stores ciphertext only (I1). */
-    suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String)
+    /** PUT {boot}/api/boot/lease — deposit a box-sealed auto-unlock lease on
+     *  the boot worker (owner-IRK via `bootAuth`). The `lease` body keeps its
+     *  own IRK signature so the box re-verifies it; the worker stores
+     *  ciphertext only (I1). */
+    suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String)
 
-    /** DELETE /api/server/:domain/unlock-key/lease-v2/:id — the kill switch
-     *  (IRK-signed). Drops the lease so the box falls back to phone-gated
+    /** DELETE {boot}/api/boot/lease/:domain/:id — the kill switch (owner-IRK
+     *  via `bootAuth`). Drops the lease so the box falls back to phone-gated
      *  approval (downgrade, not brick). */
-    suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String)
+    suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String)
 }
 
 // MARK: - Wire types
@@ -100,15 +103,6 @@ data class SecretResponseBody(
     val issuedAt: Long,
 )
 
-/** On-wire body for POST /api/secret-response: { auth, authSignature,
- *  response }. */
-@Serializable
-data class SecretResponsePost(
-    val auth: MailboxAuthEnvelope.Auth,
-    val authSignature: String,
-    val response: SecretResponseBody,
-)
-
 @Serializable
 data class SealedLuksKeyResponse(
     val serverDomain: String,
@@ -140,8 +134,9 @@ data class LeaseRevokeWire(
 @Serializable
 data class LeaseDepositPost(val lease: BoxSealedLeaseWire, val signature: String)
 
+/** The `{ response }` body for POST {boot}/api/boot/response. */
 @Serializable
-data class LeaseRevokePost(val request: LeaseRevokeWire, val signature: String)
+data class BootResponsePost(val response: SecretResponseBody)
 
 @Serializable
 data class PodDirectoryEntry(
@@ -170,11 +165,16 @@ data class PodsDirectoryResponse(
 class LiveSecretMailboxClient(
     private val transport: JsonHttpTransport,
     baseUrl: String = DEFAULT_BASE_URL,
+    bootBaseUrl: String = DEFAULT_BOOT_BASE_URL,
 ) : SecretMailboxClient {
     private val base = baseUrl.trimEnd('/')
+    private val bootBase = bootBaseUrl.trimEnd('/')
 
     companion object {
         const val DEFAULT_BASE_URL = "https://flagshipserver.com"
+        // The dedicated boot worker — lease deposit/revoke + sealed-response
+        // post land here (separate host so an enterprise clone can self-host).
+        const val DEFAULT_BOOT_BASE_URL = "https://boot.flagshipserver.com"
     }
 
     override suspend fun fetchPendingRequests(auth: MailboxAuthEnvelope): SecretRequestsResponse =
@@ -186,11 +186,17 @@ class LiveSecretMailboxClient(
             responseSerializer = SecretRequestsResponse.serializer(),
         )
 
-    override suspend fun postResponse(auth: MailboxAuthEnvelope, response: SecretResponseBody) {
-        val payload = SecretResponsePost(auth.auth, auth.authSignature, response)
-        transport.postJson(
-            "$base/api/secret-response", payload,
-            serializer = SecretResponsePost.serializer(),
+    override suspend fun postResponse(response: SecretResponseBody, bootAuth: String) {
+        val bytes = transport.json
+            .encodeToString(BootResponsePost.serializer(), BootResponsePost(response))
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "POST",
+            url = "$bootBase/api/boot/response",
+            body = bytes,
+            contentType = "application/json",
+            extraHeaders = mapOf("Authorization" to bootAuth),
+            accept = setOf(200, 201, 204),
         )
     }
 
@@ -210,28 +216,29 @@ class LiveSecretMailboxClient(
         )
     }
 
-    override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) {
-        val enc = java.net.URLEncoder.encode(lease.serverDomain, "UTF-8")
-        transport.postJson(
-            "$base/api/server/$enc/unlock-key/lease-v2",
-            LeaseDepositPost(lease, signatureHex),
-            serializer = LeaseDepositPost.serializer(),
+    override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) {
+        val bytes = transport.json
+            .encodeToString(LeaseDepositPost.serializer(), LeaseDepositPost(lease, signatureHex))
+            .toByteArray(Charsets.UTF_8)
+        transport.execute(
+            method = "PUT",
+            url = "$bootBase/api/boot/lease",
+            body = bytes,
+            contentType = "application/json",
+            extraHeaders = mapOf("Authorization" to bootAuth),
             accept = setOf(200, 201),
         )
     }
 
-    override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) {
-        val encD = java.net.URLEncoder.encode(request.serverDomain, "UTF-8")
-        val encL = java.net.URLEncoder.encode(request.leaseId, "UTF-8")
-        val bytes = transport.json
-            .encodeToString(LeaseRevokePost.serializer(), LeaseRevokePost(request, signatureHex))
-            .toByteArray(Charsets.UTF_8)
-        // DELETE with a JSON body (the Worker reads { request, signature }).
+    override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) {
+        // FQDN + hex leaseId are URL-safe, so the literal path matches the
+        // one the bootAuth signature commits to (the gate binds it exactly).
         transport.execute(
             method = "DELETE",
-            url = "$base/api/server/$encD/unlock-key/lease-v2/$encL",
-            body = bytes,
-            contentType = "application/json",
+            url = "$bootBase/api/boot/lease/${request.serverDomain}/${request.leaseId}",
+            body = null,
+            contentType = null,
+            extraHeaders = mapOf("Authorization" to bootAuth),
             accept = setOf(200, 204),
         )
     }
@@ -247,17 +254,18 @@ class MockSecretMailboxClient : SecretMailboxClient {
     var lastPostedAuth: MailboxAuthEnvelope? = null
     var lastPostedResponse: SecretResponseBody? = null
     var usernameForResponses: String = "demo"
-    val deposited: MutableList<Pair<BoxSealedLeaseWire, String>> = mutableListOf()
+    val deposited: MutableList<Triple<BoxSealedLeaseWire, String, String>> = mutableListOf()
     val revoked: MutableList<Pair<LeaseRevokeWire, String>> = mutableListOf()
+    val postedResponses: MutableList<Pair<SecretResponseBody, String>> = mutableListOf()
 
     override suspend fun fetchPendingRequests(auth: MailboxAuthEnvelope): SecretRequestsResponse {
         lastPostedAuth = auth
         return SecretRequestsResponse(auth.auth.username, pending)
     }
 
-    override suspend fun postResponse(auth: MailboxAuthEnvelope, response: SecretResponseBody) {
-        lastPostedAuth = auth
+    override suspend fun postResponse(response: SecretResponseBody, bootAuth: String) {
         lastPostedResponse = response
+        postedResponses.add(response to bootAuth)
     }
 
     override suspend fun fetchSealedLuksKey(serverDomain: String): SealedLuksKeyResponse {
@@ -268,11 +276,11 @@ class MockSecretMailboxClient : SecretMailboxClient {
     override suspend fun fetchPods(username: String): PodsDirectoryResponse =
         PodsDirectoryResponse(username, directory)
 
-    override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String) {
-        deposited.add(lease to signatureHex)
+    override suspend fun depositBoxSealedLease(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String) {
+        deposited.add(Triple(lease, signatureHex, bootAuth))
     }
 
-    override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, signatureHex: String) {
-        revoked.add(request to signatureHex)
+    override suspend fun revokeBoxSealedLease(request: LeaseRevokeWire, bootAuth: String) {
+        revoked.add(request to bootAuth)
     }
 }
