@@ -87,7 +87,15 @@ export function loadBlobFromString(
   if (!parsed || typeof parsed !== "object") {
     throw new BurnerLoadError("top-level value is not an object", "malformed-json");
   }
-  const obj = parsed as Record<string, unknown>;
+  // Accept both the flattened recipe and the issued envelope that .com / the
+  // website hand out: { blob: {...}, blobSignature: "..." }.
+  let obj = parsed as Record<string, unknown>;
+  if (
+    obj.blob && typeof obj.blob === "object" &&
+    typeof obj.blobSignature === "string"
+  ) {
+    obj = { ...(obj.blob as Record<string, unknown>), blobSignatureHex: obj.blobSignature };
+  }
   const sigHex = obj.blobSignatureHex as string | undefined;
   if (typeof sigHex !== "string") {
     throw new BurnerLoadError("missing blobSignatureHex", "missing-field");

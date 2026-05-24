@@ -95,6 +95,18 @@ describe("loadBlobFromString", () => {
     expect(loaded.blob.authCode.expiresAt).toBe(future);
   });
 
+  it("accepts the issued envelope { blob, blobSignature } (what .com/website hand out)", () => {
+    const future = Date.now() + 6 * 60 * 60_000;
+    const { json } = buildSignedRecipe({ authExpiresAt: future });
+    const flat = JSON.parse(json) as Record<string, unknown>;
+    const blobSignature = flat.blobSignatureHex as string;
+    delete flat.blobSignatureHex;
+    const envelope = JSON.stringify({ blob: flat, blobSignature });
+    const loaded = loadBlobFromString(envelope);
+    expect(loaded.blob.serverDomain).toBe("home.harry.flagship.services");
+    expect(loaded.blobSignatureHex).toBe(blobSignature);
+  });
+
   it("refuses a blob whose authCode is expired", () => {
     const past = Date.now() - 60 * 60_000; // 1h ago
     const { json } = buildSignedRecipe({ authExpiresAt: past });

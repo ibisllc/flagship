@@ -215,7 +215,7 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(b.contains("echo \"auto\" > /boot/flagship-boot-unlock-mode"))
         XCTAssertFalse(b.contains("echo \"approve\" > /boot/flagship-boot-unlock-mode"))
         XCTAssertTrue(b.contains("unlock_via_box_lease()"))
-        XCTAssertTrue(b.contains("/unlock-key/lease-v2"))
+        XCTAssertTrue(b.contains("/api/boot/lease/"))
         XCTAssertTrue(b.contains("\"sealedKey\":\""))
         XCTAssertTrue(b.contains("--identity-priv-hex \"$SEED_HEX\" --sealed-hex \"$SEALED_KEY\""))
         XCTAssertTrue(b.contains("if [ \"$BOOT_UNLOCK_MODE\" = \"approve\" ]; then"))

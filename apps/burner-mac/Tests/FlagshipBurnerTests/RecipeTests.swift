@@ -35,6 +35,17 @@ final class RecipeTests: XCTestCase {
 
     private func data(_ s: String) -> Data { Data(s.utf8) }
 
+    /// .com and the website hand out the issued envelope { blob, blobSignature };
+    /// the burner must accept it, not only the flattened form.
+    func testAcceptsIssuedEnvelopeForm() throws {
+        var blob = try JSONSerialization.jsonObject(with: data(Self.goldenJSON)) as! [String: Any]
+        let sig = blob.removeValue(forKey: "blobSignatureHex") as! String
+        let envelope: [String: Any] = ["blob": blob, "blobSignature": sig]
+        let r = try RecipeLoader.load(data: try JSONSerialization.data(withJSONObject: envelope))
+        XCTAssertEqual(r.serverDomain, "home.golden.flagship.services")
+        XCTAssertEqual(r.authCode.serial, "01GOLDENTEST")
+    }
+
     func testAcceptsGoldenRecipe() throws {
         let r = try RecipeLoader.load(data: data(Self.goldenJSON))
         XCTAssertEqual(r.serverDomain, "home.golden.flagship.services")

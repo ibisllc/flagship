@@ -270,16 +270,21 @@ struct WizardView: View {
                     Text("Writes to \(model.selectedDisk?.deviceNode ?? "—") · erases what's there")
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)
+                } else {
+                    Text(model.readinessSummary)
+                        .font(FB.Font.caption())
+                        .foregroundStyle(FB.Colors.textMuted)
+                }
+                // Saving a prepared ISO is the "burn elsewhere" path — it needs
+                // a recipe + an ISO, but no USB. Offer it whenever those two are
+                // present, even if no drive is selected.
+                if model.recipe != nil && model.iso != nil {
                     Button("Or save an ISO file to flash later…") {
                         Task { await model.runPrepare() }
                     }
                     .buttonStyle(.link)
                     .font(FB.Font.caption())
                     .pointerCursor()
-                } else {
-                    Text(model.readinessSummary)
-                        .font(FB.Font.caption())
-                        .foregroundStyle(FB.Colors.textMuted)
                 }
             }
         }
