@@ -2,7 +2,7 @@ name = "flagship-boot"
 main = "src/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
-workers_dev = true
+workers_dev = false
 
 # boot.flagshipserver.com — the dedicated, cloneable boot worker.
 #
