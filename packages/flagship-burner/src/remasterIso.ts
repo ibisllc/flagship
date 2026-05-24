@@ -164,6 +164,9 @@ export async function remasterIsoWithAutoinstall(args: RemasterArgs): Promise<vo
     const seed = await buildNocloudSeed(work, args.userDataYaml);
 
     // 4. Repack: replay the boot equipment, then overlay our seed + grub.
+    //    Clear a stale output first — xorriso refuses to write when -indev
+    //    differs from -outdev and the outdev already holds data.
+    await rm(args.outIsoPath, { force: true }).catch(() => {});
     await sh(xorriso, [
       "-indev",
       args.srcIsoPath,

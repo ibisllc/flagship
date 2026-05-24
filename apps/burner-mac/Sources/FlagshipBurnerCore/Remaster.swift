@@ -84,7 +84,11 @@ public enum Remaster {
             .write(to: seed.appendingPathComponent("meta-data"), atomically: true, encoding: .utf8)
         try "".write(to: seed.appendingPathComponent("vendor-data"), atomically: true, encoding: .utf8)
 
-        // 5. Repack: replay boot equipment, overlay seed + grub.
+        // 5. Repack: replay boot equipment, overlay seed + grub. xorriso
+        //    refuses to write when -indev differs from -outdev and the outdev
+        //    already holds data, so clear a stale output first (e.g. re-running
+        //    "save an ISO" over a previous <name>.flagship.iso).
+        try? FileManager.default.removeItem(at: outISO)
         try run(xorriso, ["-indev", srcISO.path, "-outdev", outISO.path,
                           "-boot_image", "any", "replay",
                           "-map", seed.path, "/nocloud",
