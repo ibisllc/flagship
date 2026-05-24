@@ -46,4 +46,4 @@ FLAGSHIP_APEX = "flagship.services"
 [[d1_databases]]
 binding = "DB"
 database_name = "flagship-boot"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "fbb6ad08-3d6d-4638-b3a7-ede55807fe3c"
