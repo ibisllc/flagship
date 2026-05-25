@@ -55,7 +55,6 @@ echo "================================================================"
 report_phase() { echo "[report_phase] -> POST /api/order/<serial>/status {phase:$1}"; }
 
 echo "[flagship-installer] phase: booting"
-report_phase booting
 echo "[flagship-installer]   uname: $(uname -srm)"
 echo "[flagship-installer]   busybox applets available: $(busybox --list | wc -l)"
 echo "[flagship-installer]   tool gate (live installer needs these; node is NOT here):"
@@ -63,11 +62,17 @@ echo "[flagship-installer]   present-in-base now: busybox apk + busybox {ip,udhc
 for t in busybox apk ip udhcpc wget mount dd mkdir; do
     if command -v "$t" >/dev/null 2>&1; then echo "    ok      $t -> $(command -v $t)"; else echo "    via-apk $t (added at downloading phase)"; fi
 done
-echo "[flagship-installer]   tools added at 'downloading' via apk: cryptsetup lvm2 sgdisk curl + curated firmware"
+echo "[flagship-installer]   tools added at 'downloading' via apk: cryptsetup lvm2 sgdisk curl efibootmgr + curated firmware"
+echo "[flagship-installer]   recipe signature verify: SEAM (a) — port parse-trailer.sh openssl Ed25519, fail-closed"
+
+echo "[flagship-installer] phase: network (bring link up, then EARLIEST ping)"
+echo "[flagship-installer]   would: setup-interfaces -a; udhcpc -i eth0; [bake_wifi]; wait-for-default-route"
+echo "[flagship-installer]   EARLIEST PING — phone lights up the moment the link is up:"
+report_phase booting
 
 echo "[flagship-installer] phase: downloading (DRY_RUN)"
 report_phase downloading
-echo "[flagship-installer]   would: apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl + firmware subset (~50-150MB)"
+echo "[flagship-installer]   would: apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl efibootmgr + firmware subset (~50-150MB)"
 
 echo "[flagship-installer] phase: partitioning (DRY_RUN)"
 report_phase partitioning
@@ -82,10 +87,17 @@ echo "[flagship-installer]   would lay down: bios_grub + ESP + /boot(FLAGSHIP_BO
 echo "[flagship-installer] phase: installing (DRY_RUN)"
 report_phase installing
 echo "[flagship-installer]   would: luksFormat luks2 -> vgcreate flagship -> lvcreate root -> apk --root /mnt base OS"
+echo "[flagship-installer]   would configure headless: fstab + hostname + crypttab + network + LUKS-aware mkinitfs + locked root + serial getty"
 
-echo "[flagship-installer]   drop first-boot unit (heavy proven sequence runs on the INSTALLED OS):"
+echo "[flagship-installer]   drop first-boot unit (SEAM b — heavy proven sequence runs on the INSTALLED OS):"
 echo "[flagship-installer]     git clone -> npm install -> tsc -b -> gen-identity -> mint-entitlements"
 echo "[flagship-installer]     -> register -> seal-for-bak -> sealed-luks-key"
+
+echo "[flagship-installer] bootloader (DRY_RUN): GRUB BIOS (i386-pc) + UEFI (x86_64-efi --removable + named entry)"
+
+echo "[flagship-installer] finalizing: SUCCESS GATE first (verify grub.cfg+kernel+initramfs+BOOTX64.EFI on target)"
+echo "[flagship-installer]   gate PASS -> efibootmgr internal-first -> umount /mnt -> wipe USB boot sig -> reboot into encrypted disk"
+echo "[flagship-installer]   (gate FAIL would: report_phase error, leave USB intact for retry, NO wipe)"
 report_phase registering
 report_phase sealing
 report_phase pairing

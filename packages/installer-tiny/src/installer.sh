@@ -10,15 +10,24 @@
 # ourselves from a real shell and report granular progress to the order's
 # status channel.
 #
+# It is a ONE-SHOT, RAM-based INITIATOR (owner-locked design decision):
+# it installs Alpine -lts onto encrypted LVM, lights up the phone EARLY,
+# verifies the installed disk is genuinely bootable, then SELF-WIPES the USB
+# boot signature and points the firmware at the internal disk so there is no
+# reboot-into-installer loop. Apps run as Docker containers after install
+# (first-boot provisioning unit — out of scope here).
+#
 # DIVISION OF LABOUR (the key architectural insight)
 # --------------------------------------------------
 # The LIVE installer does ONLY the light, deterministic work that needs no
 # package manager and no monorepo build:
-#   1. network (baked Wi-Fi via wpa_supplicant, else DHCP)
+#   1. network (baked Wi-Fi via wpa_supplicant, else DHCP) -> EARLIEST PING
 #   2. partition: bios_grub + ESP + /boot + LUKS -> LVM (vg "flagship", lv "root")
-#   3. lay down a base OS onto the encrypted root (apk --root, OR dd a base img)
+#   3. lay down + CONFIGURE a base OS onto the encrypted root (apk --root):
+#      fstab, hostname, crypttab, network/OpenRC, root setup, LUKS-aware initramfs
 #   4. drop the first-boot provisioning unit + the recipe + status creds
-#   5. install a bootloader, reboot
+#   5. install GRUB (BIOS + UEFI), VERIFY the disk is bootable, then SELF-WIPE
+#      the USB + efibootmgr the internal disk first, reboot
 #
 # The HEAVY work (node, `npm install`, `tsc -b`, gen-identity, mint-entitlements,
 # register, seal LUKS key) runs FIRST-BOOT on the INSTALLED OS, which has its
@@ -27,10 +36,11 @@
 # packages/flagship-burner/src/userdata.ts (the d-i bootstrap), which we ran
 # live over SSH on a real box.
 #
-# This file is a QEMU-validated SKELETON. The partition / luks / base-lay-down
-# steps are stubbed with `report_phase` + the exact commands they will run,
-# guarded by FLAGSHIP_DRY_RUN so the PoC can boot end-to-end in QEMU without a
-# target disk. Remove the dry-run guards (and supply a real recipe) to arm it.
+# This file is QEMU-validated: the partition / luks / base-lay-down / GRUB /
+# boot-into-installed-Alpine path is proven in a VM (see docs/installer-tiny.md
+# §3). Disk-mutating phases are guarded by FLAGSHIP_DRY_RUN so the dry-run PoC
+# can walk the whole flow without a target disk; the self-wipe + efibootmgr
+# decision logic is success-gated and unit-tested.
 set -eu
 
 # ---------------------------------------------------------------------------
@@ -44,9 +54,14 @@ ENV_FILE="$FLAGSHIP_DIR/installer.env"
 
 BLOB_JSON="${BLOB_JSON:-$FLAGSHIP_DIR/install-blob.json}"
 BLOB_SIG="${BLOB_SIG:-$FLAGSHIP_DIR/install-blob.sig}"
+# Baked genesis pubkey the recipe signature is verified against. Empty in the
+# skeleton; the burner writes the real one into installer.env. See the
+# verify_recipe_signature() seam below.
+GENESIS_PUBKEY_HEX="${GENESIS_PUBKEY_HEX:-}"
 GIT_REF="${GIT_REF:-main}"
 REPO_URL="${REPO_URL:-https://github.com/ibisllc/flagship.git}"
 CONTROL_PLANE_BASE="${CONTROL_PLANE_BASE:-https://flagshipserver.com}"
+HOSTNAME_DEFAULT="${HOSTNAME_DEFAULT:-flagship}"
 # Curated firmware subset for commodity hardware (see docs eval). Each is an
 # Alpine subpackage so the total stays ~50-150MB, not the ~1GB full set.
 FW_PACKAGES="${FW_PACKAGES:-linux-firmware-intel linux-firmware-rtw88 linux-firmware-rtw89 linux-firmware-iwlwifi linux-firmware-rtl_nic linux-firmware-ath10k linux-firmware-ath11k linux-firmware-amdgpu linux-firmware-i915 linux-firmware-other}"
@@ -55,9 +70,11 @@ WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PSK="${WIFI_PSK:-}"
 # Dry-run lets the QEMU PoC walk the whole flow without a real install target.
 FLAGSHIP_DRY_RUN="${FLAGSHIP_DRY_RUN:-0}"
+# Reproducible mtimes for anything we generate on the installed FS.
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
 
-LOG=/var/log/flagship-install.log
-mkdir -p /var/log "$FLAGSHIP_DIR"
+LOG="${FLAGSHIP_LOG:-/var/log/flagship-install.log}"
+mkdir -p "$(dirname "$LOG")" "$FLAGSHIP_DIR" 2>/dev/null || true
 # Tee everything to console + log so a hung install is debuggable live. POSIX
 # (busybox ash) has no process substitution, so we use a FIFO + a background
 # tee. The console fd is captured first so tee can still reach the screen after
@@ -93,15 +110,44 @@ report_phase() {
 fail() { log "FATAL: $*"; report_phase error "$*"; exit 1; }
 
 # ===========================================================================
+# SEAM (a): recipe-signature verification. Do NOT fully wire this here — the
+# recipe-delivery decision (trailer-on-disk vs. /flagship/install-blob.sig vs.
+# kernel-cmdline pin) is still pending. The PROVEN implementation to port is
+# packages/installer-netboot/parse-trailer.sh: openssl Ed25519 verify of the
+# 64-byte sig over canonicalInstallBlob() (flagship/install-blob/v1|...) under
+# the baked GENESIS_PUBKEY_HEX, with a pure-python RFC-8032 fallback. Fail
+# CLOSED: a recipe whose signature does not verify must abort the install
+# before any field is trusted or any disk is touched.
+# ===========================================================================
+verify_recipe_signature() {
+    if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
+        log "  recipe signature verify: SKIPPED (dry-run)"
+        return 0
+    fi
+    # TODO(seam-a / pending recipe-delivery decision): port parse-trailer.sh's
+    # Ed25519 verify here and fail closed. Until the delivery format is locked,
+    # this seam is intentionally a no-op that LOUDLY refuses to silently trust.
+    if [ -z "$GENESIS_PUBKEY_HEX" ]; then
+        log "  recipe signature verify: SEAM NOT ARMED (no GENESIS_PUBKEY_HEX baked)"
+        log "  recipe signature verify: TODO port parse-trailer.sh openssl Ed25519 (fail-closed)"
+        return 0
+    fi
+    log "  recipe signature verify: would openssl-Ed25519 verify $BLOB_SIG over canonical($BLOB_JSON) under baked genesis pubkey"
+    # Placeholder until armed; do not pretend to have verified.
+    log "  recipe signature verify: TODO port parse-trailer.sh (fail-closed)"
+}
+
+# ===========================================================================
 # PHASE: booting — the live OS is up; verify our tools + the recipe.
 # ===========================================================================
 phase_boot() {
     log "phase: booting"
     read_serial
-    report_phase booting
     log "recipe serial=${SERIAL:-<none>}"
     # Tool gate: everything the LIVE installer needs. node is deliberately NOT
-    # here — it runs first-boot on the installed OS.
+    # here — it runs first-boot on the installed OS. efibootmgr is needed for
+    # the success self-wipe (point firmware at the internal disk); grub-* are
+    # installed into the target via apk --root, not required in the live shell.
     for t in cryptsetup pvcreate vgcreate lvcreate sgdisk mkfs.ext4 mkfs.vfat curl; do
         if command -v "$t" >/dev/null 2>&1; then
             log "  tool ok: $t"
@@ -110,37 +156,37 @@ phase_boot() {
             [ "$FLAGSHIP_DRY_RUN" = "1" ] || fail "required tool missing: $t"
         fi
     done
-    # TODO(security): verify $BLOB_SIG over canonical($BLOB_JSON) with the
-    # baked genesis pubkey BEFORE trusting any field. The d-i path uses
-    # packages/installer-netboot/parse-trailer.sh (openssl Ed25519); port it
-    # here. Refuse to install on signature failure.
-    log "  recipe signature verify: TODO (parse-trailer.sh port)"
+    verify_recipe_signature
 }
 
 # ===========================================================================
-# PHASE: downloading — pull the install tools + curated firmware via apk.
-# The netboot initramfs ships only busybox + apk; cryptsetup/lvm/parted/curl
-# and the firmware subset come from here. This is the ONLY network-heavy step
-# in the live installer and it is bounded (~50-150MB, not node's hundreds).
+# PHASE: network — bring the box online, then IMMEDIATELY light up the phone.
+# This is the EARLIEST possible signal: the very first thing we do after the
+# link is up is report the `booting` phase, so the owner's phone reacts the
+# moment the box has connectivity — before the (slower) apk download, before
+# any disk work. Per the agreed UX, nothing else happens before this ping.
 # ===========================================================================
-phase_download() {
-    log "phase: downloading (apk add install tools + curated firmware)"
-    report_phase downloading
+network_up=0
+phase_network() {
+    log "phase: network (bring link up, then earliest ping)"
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
-        log "  DRY_RUN: would 'apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl ca-certificates $FW_PACKAGES'"
+        log "  DRY_RUN: would 'setup-interfaces -a; udhcpc -i eth0; [bake_wifi]'"
+        log "  DRY_RUN: EARLIEST PING -> report_phase booting (the moment network is up)"
+        report_phase booting
         return 0
     fi
     setup-interfaces -a 2>/dev/null || true   # bring NICs up (Alpine helper)
     udhcpc -i eth0 2>/dev/null || true
     bake_wifi
-    # Pick the fastest mirror (QEMU-validated: 'apk add' fails if the repo list
-    # only has the cdrom; setup-apkrepos -1 writes a working network mirror) and
-    # enable community (sgdisk lives there). Both confirmed live in the PoC.
-    setup-apkrepos -1 2>/dev/null || true
-    sed -i 's|^#\(.*/community\)|\1|' /etc/apk/repositories 2>/dev/null || true
-    apk update
-    apk add cryptsetup lvm2 sgdisk partx dosfstools e2fsprogs curl ca-certificates \
-        $FW_PACKAGES || fail "apk add of install tools failed"
+    # Wait briefly for a default route (DHCP can lag the link). Bounded so an
+    # offline install still proceeds (the phone simply lights up later).
+    i=0; while [ "$i" -lt 15 ]; do
+        if ip route 2>/dev/null | grep -q '^default'; then network_up=1; break; fi
+        sleep 1; i=$((i+1))
+    done
+    [ "$network_up" = "1" ] && log "  network up (default route present)" || log "  no default route yet; continuing offline"
+    # EARLIEST PING: the first thing after the link — phone lights up now.
+    report_phase booting
 }
 
 bake_wifi() {
@@ -153,6 +199,29 @@ bake_wifi() {
 }
 
 # ===========================================================================
+# PHASE: downloading — pull the install tools + curated firmware via apk.
+# The netboot initramfs ships only busybox + apk; cryptsetup/lvm/parted/curl
+# and the firmware subset come from here. This is the ONLY network-heavy step
+# in the live installer and it is bounded (~50-150MB, not node's hundreds).
+# ===========================================================================
+phase_download() {
+    log "phase: downloading (apk add install tools + curated firmware)"
+    report_phase downloading
+    if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
+        log "  DRY_RUN: would 'apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl ca-certificates efibootmgr $FW_PACKAGES'"
+        return 0
+    fi
+    # Pick the fastest mirror (QEMU-validated: 'apk add' fails if the repo list
+    # only has the cdrom; setup-apkrepos -1 writes a working network mirror) and
+    # enable community (sgdisk lives there). Both confirmed live in the PoC.
+    setup-apkrepos -1 2>/dev/null || true
+    sed -i 's|^#\(.*/community\)|\1|' /etc/apk/repositories 2>/dev/null || true
+    apk update
+    apk add cryptsetup lvm2 sgdisk partx dosfstools e2fsprogs curl ca-certificates efibootmgr \
+        $FW_PACKAGES || fail "apk add of install tools failed"
+}
+
+# ===========================================================================
 # PHASE: partitioning — the proven layout from installer/install.sh, extended
 # to LVM (vg "flagship") so root can grow / add lvs later:
 #   p1 bios_grub (1MiB, BIOS GRUB stage-1.5)   -> no fs
@@ -162,14 +231,32 @@ bake_wifi() {
 #                                                 -> label FLAGSHIP_ROOT
 # ===========================================================================
 TARGET=""
+USB_DEV=""
 select_target() {
     # First fixed disk >= 8GiB that isn't the live USB. Mirrors install.sh.
+    # Also note the USB we booted from so the success self-wipe can target it.
+    detect_usb_dev
     for d in /dev/nvme0n1 /dev/sda /dev/vda /dev/mmcblk0; do
         [ -b "$d" ] || continue
+        [ "$d" = "$USB_DEV" ] && continue
         sz=$(blockdev --getsize64 "$d" 2>/dev/null || echo 0)
         [ "$sz" -ge $((8 * 1024 * 1024 * 1024)) ] || continue
         TARGET="$d"; break
     done
+}
+detect_usb_dev() {
+    # The live media is whatever block device backs the mounted boot media
+    # (Alpine mounts it at /media/<dev> or /.modloop's parent). Best-effort:
+    # resolve the source of the modloop/cdrom mount to its parent disk.
+    # Guarded so a missing /proc/mounts (non-Linux dev box) can't trip set -e.
+    src=""
+    if [ -r /proc/mounts ]; then
+        src="$(awk '$2 ~ /^\/media\// {print $1; exit}' /proc/mounts 2>/dev/null || true)"
+    fi
+    case "$src" in
+        /dev/*) USB_DEV="$(echo "$src" | sed 's/[0-9]*$//; s/p$//')";;
+    esac
+    [ -n "$USB_DEV" ] && log "  live USB detected: $USB_DEV (will self-wipe on success)" || log "  live USB not auto-detected"
 }
 part_suffix() { case "$1" in *nvme*|*mmc*) echo "p";; *) echo "";; esac; }
 
@@ -203,17 +290,19 @@ phase_partition() {
 }
 
 # ===========================================================================
-# PHASE: installing — LUKS-format p4, build LVM, lay down the base OS.
+# PHASE: installing — LUKS-format p4, build LVM, lay down + CONFIGURE base OS.
 # LUKS key is a random 64-byte file; first-boot seals it for the phone and
 # uploads to .com (the .com-blind relay). Same construction as install.sh.
 # ===========================================================================
+LUKS_UUID=""
 phase_install() {
-    log "phase: installing (LUKS + LVM + base OS)"
+    log "phase: installing (LUKS + LVM + base OS + configure)"
     report_phase installing
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
         log "  DRY_RUN: head -c64 /dev/urandom > key; cryptsetup luksFormat --type luks2 p4"
-        log "  DRY_RUN: cryptsetup open p4 flagship; pvcreate; vgcreate flagship; lvcreate -l100%FREE -n root flagship"
+        log "  DRY_RUN: cryptsetup open p4 flagship_luks; pvcreate; vgcreate flagship; lvcreate -l100%FREE -n root flagship"
         log "  DRY_RUN: mkfs.ext4 -L FLAGSHIP_ROOT /dev/flagship/root; mount; apk --root /mnt add alpine-base ... (base OS)"
+        log "  DRY_RUN: configure: fstab + hostname + crypttab + network/OpenRC + LUKS-aware initramfs + root setup"
         return 0
     fi
     s="$(part_suffix "$TARGET")"; LUKS_PART="${TARGET}${s}4"
@@ -221,6 +310,7 @@ phase_install() {
     head -c 64 /dev/urandom > "$KEY"; chmod 600 "$KEY"
     cryptsetup luksFormat --type luks2 --batch-mode --key-file "$KEY" "$LUKS_PART"
     cryptsetup open --key-file "$KEY" "$LUKS_PART" flagship_luks
+    LUKS_UUID="$(cryptsetup luksUUID "$LUKS_PART" 2>/dev/null || blkid -s UUID -o value "$LUKS_PART")"
     pvcreate /dev/mapper/flagship_luks
     vgcreate flagship /dev/mapper/flagship_luks
     lvcreate -l 100%FREE -n root flagship
@@ -233,24 +323,133 @@ phase_install() {
     # Lay down the base OS. Option A (chosen): apk --root installs a minimal
     # Alpine system that HAS a package manager for the first-boot heavy work.
     # Option B would be `dd` a prebuilt base image (faster, fixed size) — see
-    # docs/installer-tiny.md trade-off.
-    apk --root /mnt --initdb add alpine-base linux-lts openrc \
-        nodejs npm git curl jq cryptsetup lvm2 openssl ca-certificates \
+    # docs/installer-tiny.md trade-off. The package set mirrors install.sh's
+    # apt set plus what the installed initramfs needs to unlock LUKS+LVM.
+    apk --root /mnt --initdb add alpine-base alpine-conf linux-lts linux-firmware-none \
+        openrc busybox busybox-suid mkinitfs \
+        cryptsetup lvm2 e2fsprogs dosfstools \
+        grub grub-bios grub-efi efibootmgr \
+        nodejs npm git curl jq openssl ca-certificates \
+        chrony openssh util-linux \
         $FW_PACKAGES || fail "base OS lay-down failed"
     # Persist the recipe + the LUKS key handoff material for first-boot.
     cp "$BLOB_JSON" /mnt/flagship/install-blob.json
     install -m 600 "$KEY" /mnt/flagship/luks.key
+    configure_base_os "$KEY"
+}
+
+# ---------------------------------------------------------------------------
+# Configure the freshly-laid-down base so it comes up HEADLESS on the encrypted
+# disk: fstab, hostname, crypttab, network/OpenRC services, root setup, and a
+# LUKS+LVM-aware initramfs. This is what install.sh did inline; pulled into its
+# own function so the install/wipe sequencing reads cleanly and is testable.
+# ---------------------------------------------------------------------------
+configure_base_os() {
+    _key="$1"
+    log "  configuring base OS (fstab/hostname/crypttab/network/OpenRC/initramfs)"
+    BOOT_UUID="$(blkid -s UUID -o value "${TARGET}$(part_suffix "$TARGET")3" 2>/dev/null || echo)"
+    ESP_UUID="$(blkid -s UUID -o value "${TARGET}$(part_suffix "$TARGET")2" 2>/dev/null || echo)"
+
+    # --- hostname ---
+    echo "$HOSTNAME_DEFAULT" > /mnt/etc/hostname
+    cat > /mnt/etc/hosts <<EOF
+127.0.0.1   localhost localhost.localdomain $HOSTNAME_DEFAULT
+::1         localhost localhost.localdomain $HOSTNAME_DEFAULT
+EOF
+
+    # --- fstab: root over LVM-over-LUKS, /boot + ESP by UUID ---
+    cat > /mnt/etc/fstab <<EOF
+/dev/flagship/root  /         ext4  rw,relatime  0 1
+UUID=$BOOT_UUID     /boot     ext4  rw,relatime  0 2
+UUID=$ESP_UUID      /boot/efi vfat  rw,relatime  0 2
+tmpfs               /tmp      tmpfs rw,nosuid,nodev  0 0
+EOF
+
+    # --- crypttab: how the installed initramfs unlocks the root container ---
+    # SEAM: on real hardware the per-boot key is fetched/relayed by
+    # boot-stage.sh / the boot.flagshipserver.com relay (the box NEVER keeps a
+    # plaintext key at rest in the production threat model). For a deterministic
+    # bring-up — and for the QEMU "installed Alpine boots from disk" proof — we
+    # stage the LUKS keyfile on the UNENCRYPTED /boot and reference it from
+    # crypttab. The relay path replaces "keyfile on /boot" with "key fetched at
+    # premount"; the crypttab/initramfs wiring is otherwise identical, which is
+    # exactly why we wire it here.
+    install -d -m 700 /mnt/boot/flagship
+    install -m 600 "$_key" /mnt/boot/flagship/luks.key
+    cat > /mnt/etc/crypttab <<EOF
+# <name>        <device>            <key>                       <options>
+flagship_luks   UUID=$LUKS_UUID     /boot/flagship/luks.key     luks
+EOF
+
+    # --- LUKS+LVM-aware initramfs: Alpine's mkinitfs needs the cryptsetup +
+    #     lvm features and the keyfile listed so it can unlock at premount. ---
+    if [ -f /mnt/etc/mkinitfs/mkinitfs.conf ]; then
+        if grep -q '^features=' /mnt/etc/mkinitfs/mkinitfs.conf; then
+            sed -i 's/^features="\(.*\)"/features="\1 cryptsetup cryptkey lvm keymap"/' /mnt/etc/mkinitfs/mkinitfs.conf
+        else
+            echo 'features="base ext4 cryptsetup cryptkey lvm keymap"' >> /mnt/etc/mkinitfs/mkinitfs.conf
+        fi
+    else
+        mkdir -p /mnt/etc/mkinitfs
+        echo 'features="base ext4 cryptsetup cryptkey lvm keymap"' > /mnt/etc/mkinitfs/mkinitfs.conf
+    fi
+    # Make the keyfile part of the initramfs so premount can read it before
+    # /boot is mounted (Alpine's cryptkey feature copies listed files in).
+    echo "/boot/flagship/luks.key" >> /mnt/etc/mkinitfs/features.d/flagship.files 2>/dev/null || \
+        { mkdir -p /mnt/etc/mkinitfs/features.d; echo "/boot/flagship/luks.key" > /mnt/etc/mkinitfs/features.d/flagship.files; }
+    # Build the installed kernel's initramfs (inside the target so it links
+    # against the target's modules + cryptsetup, not the live shell's).
+    KVER="$(ls /mnt/lib/modules 2>/dev/null | head -1)"
+    [ -n "$KVER" ] && chroot /mnt mkinitfs "$KVER" || log "  warn: could not determine installed kernel version for mkinitfs"
+
+    # --- network: headless DHCP on the primary wired NIC + loopback ---
+    cat > /mnt/etc/network/interfaces <<'EOF'
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+EOF
+
+    # --- OpenRC services for a headless box (no display manager, no getty wars):
+    #     networking + sshd + chronyd + the local.d hook that runs first-boot.
+    for svc in devfs dmesg mdev hwdrivers modules sysctl hostname bootmisc syslog; do
+        chroot /mnt rc-update add "$svc" boot 2>/dev/null || true
+    done
+    for svc in networking sshd chronyd local crond; do
+        chroot /mnt rc-update add "$svc" default 2>/dev/null || true
+    done
+    for svc in mount-ro killprocs savecache; do
+        chroot /mnt rc-update add "$svc" shutdown 2>/dev/null || true
+    done
+
+    # --- root setup: locked password (headless; access is via the daemon /
+    #     phone-mediated SSH key the first-boot unit installs). A locked root
+    #     still boots to a login prompt; it just can't be password-logged-in. ---
+    chroot /mnt sh -c "passwd -l root" 2>/dev/null || true
+    # Serial + tty consoles so a headless box (and QEMU) reaches a login.
+    if [ -f /mnt/etc/inittab ]; then
+        grep -q 'ttyS0' /mnt/etc/inittab || \
+            echo 'ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100' >> /mnt/etc/inittab
+    fi
+    log "  base OS configured (headless: networking+sshd+chronyd, LUKS-aware initramfs, root locked)"
 }
 
 # ===========================================================================
-# Drop the first-boot provisioning unit. The HEAVY proven sequence (clone,
-# npm install, tsc -b, gen-identity, mint-entitlements, register, seal) runs
-# HERE, on the installed OS, on its first real boot — NOT in this live shell.
-# The body is lifted from userdata.ts; it reports registering/sealing/pairing/
-# live itself once it has network on the installed system.
+# Drop the first-boot provisioning unit. (SEAM b) — the HEAVY proven sequence
+# (clone, npm install, tsc -b, gen-identity, mint-entitlements, register, seal)
+# runs HERE, on the installed OS, on its first real boot — NOT in this live
+# shell. The body is lifted from userdata.ts; it reports
+# registering/sealing/pairing/live itself once it has network on the installed
+# system.
+#
+# This is left as a CLEARLY-BOUNDED STUB on purpose: the exact recipe-delivery +
+# .com wiring is pending, so we drop the unit + the proven command sequence but
+# do NOT wire it to a live .com here. Arming = fill the real install-helper args
+# (source the proven block from userdata.ts / a shared installer/provision.sh).
 # ===========================================================================
 drop_first_boot_unit() {
-    log "dropping first-boot provisioning unit"
+    log "dropping first-boot provisioning unit (seam b — stub, not wired to live .com)"
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
         log "  DRY_RUN: would write /mnt/etc/local.d/10-flagship-provision.start (OpenRC)"
         log "  DRY_RUN: provision runs: git clone -> npm install -> tsc -b -> gen-identity ->"
@@ -261,6 +460,7 @@ drop_first_boot_unit() {
     cat > /mnt/etc/local.d/10-flagship-provision.start <<PROV
 #!/bin/sh
 # First-boot provisioning — runs the proven heavy sequence on the installed OS.
+# SEAM (b): the exact install-helper args + recipe-delivery wiring are pending.
 # Source of truth for these exact commands: packages/flagship-burner/src/userdata.ts
 set -eu
 FLAG=/var/flagship/provisioned.flag
@@ -275,11 +475,11 @@ npm install --no-audit --no-fund --workspaces --include-workspace-root
 npx tsc -b || true
 npx tsx scripts/install-helper.ts gen-identity --out-priv /var/flagship/identity/identity.priv.hex \\
     --out-pub /var/flagship/identity/identity.pub.hex --out-pem /boot/identity.pem
-npx tsx scripts/install-helper.ts mint-entitlements ...   # see userdata.ts for full args
+npx tsx scripts/install-helper.ts mint-entitlements ...   # TODO(seam-b): see userdata.ts for full args
 report_phase registering
-npx tsx scripts/install-helper.ts sign-server-register ...  # POST /api/server/register
+npx tsx scripts/install-helper.ts sign-server-register ...  # TODO(seam-b): POST /api/server/register
 report_phase sealing
-npx tsx scripts/install-helper.ts seal-for-bak ...          # seal LUKS key for phone
+npx tsx scripts/install-helper.ts seal-for-bak ...          # TODO(seam-b): seal LUKS key for phone
 # POST sealed key to /api/server/<domain>/sealed-luks-key (the .com-blind relay)
 report_phase pairing
 # (phone approves first unlock; boot-stage.sh takes over on subsequent boots)
@@ -287,46 +487,190 @@ report_phase live
 mkdir -p /var/flagship; date > "\$FLAG"
 PROV
     chmod +x /mnt/etc/local.d/10-flagship-provision.start
-    ln -sf /etc/init.d/local /mnt/etc/runlevels/default/local 2>/dev/null || true
+    chroot /mnt rc-update add local default 2>/dev/null || \
+        ln -sf /etc/init.d/local /mnt/etc/runlevels/default/local 2>/dev/null || true
 }
 
 # ===========================================================================
-# Bootloader. GRUB on the bios_grub + ESP partitions (BIOS + UEFI both).
+# Bootloader. GRUB on the bios_grub + ESP partitions (BIOS + UEFI both) so the
+# installed Alpine boots on either firmware.
 # ===========================================================================
 install_bootloader() {
     log "installing bootloader (GRUB BIOS+UEFI)"
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
-        log "  DRY_RUN: apk --root /mnt add grub grub-bios grub-efi; grub-install --target=i386-pc \$TARGET;"
-        log "  DRY_RUN: grub-install --target=x86_64-efi --efi-directory=/boot/efi; grub-mkconfig (root=/dev/flagship/root, cryptdevice)"
+        log "  DRY_RUN: grub-install --target=i386-pc \$TARGET (BIOS, into bios_grub)"
+        log "  DRY_RUN: grub-install --target=x86_64-efi --efi-directory=/boot/efi --removable (UEFI, into ESP)"
+        log "  DRY_RUN: grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=flagship (named NVRAM entry)"
+        log "  DRY_RUN: grub-mkconfig (root=/dev/flagship/root via crypttab/initramfs chain)"
         return 0
     fi
-    apk --root /mnt add grub grub-bios grub-efi
-    # cmdline must carry the LUKS+LVM unlock chain so the installed initramfs
-    # can prompt/relay for the key. boot-stage.sh / the relay hook handle the
-    # actual unlock; here we just wire the rootfs path.
-    chroot /mnt grub-install --target=i386-pc "$TARGET"
-    chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi --removable
-    chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+    # Default GRUB cmdline. The root device is the LVM lv; the LUKS unlock is
+    # handled by the installed initramfs via crypttab (keyfile on /boot today;
+    # boot.flagshipserver.com relay on real hardware — see configure_base_os).
+    mkdir -p /mnt/etc/default
+    cat > /mnt/etc/default/grub <<EOF
+GRUB_DISTRIBUTOR="Flagship"
+GRUB_TIMEOUT=1
+GRUB_CMDLINE_LINUX_DEFAULT="quiet rootfstype=ext4"
+GRUB_CMDLINE_LINUX="cryptdm=flagship_luks rd.lvm.lv=flagship/root root=/dev/flagship/root"
+GRUB_ENABLE_CRYPTODISK=y
+EOF
+    # BIOS: stage-1.5 into the bios_grub partition + MBR boot code on $TARGET.
+    chroot /mnt grub-install --target=i386-pc --boot-directory=/boot "$TARGET" \
+        || fail "grub-install (BIOS/i386-pc) failed"
+    # UEFI removable path (\EFI\BOOT\BOOTX64.EFI) — boots even with empty NVRAM
+    # (USB-style firmware, and what QEMU/OVMF needs without a persisted entry).
+    chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+        --boot-directory=/boot --removable \
+        || fail "grub-install (UEFI removable) failed"
+    # UEFI named entry — adds a "flagship" boot option to NVRAM where supported.
+    chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+        --boot-directory=/boot --bootloader-id=flagship 2>/dev/null || \
+        log "  note: named NVRAM entry not added (firmware/NVRAM unavailable); removable path covers boot"
+    chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg || fail "grub-mkconfig failed"
 }
 
-finish() {
-    log "phase: live handoff queued; finalizing"
+# ===========================================================================
+# SUCCESS GATE — only AFTER this returns 0 do we self-wipe the USB + repoint
+# the firmware. Verifies the installed disk is genuinely bootable (not just
+# that commands exited 0): the GRUB core, a kernel + the freshly-built
+# initramfs, the grub.cfg, and the UEFI removable loader must all be present on
+# the target. Anything missing -> NOT bootable -> leave the USB, report error.
+# This is the explicit, testable success-gating the self-wipe hangs off of.
+# ===========================================================================
+verify_installed_bootable() {
+    log "verifying the installed disk is genuinely bootable (success gate)"
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
-        log "  DRY_RUN: would umount, cryptsetup close, reboot"
+        log "  DRY_RUN: would assert grub core + kernel + initramfs + grub.cfg + BOOTX64.EFI exist on target"
+        return 0
+    fi
+    _ok=1
+    # GRUB BIOS core + modules.
+    [ -d /mnt/boot/grub ] || { log "  MISSING /boot/grub"; _ok=0; }
+    [ -s /mnt/boot/grub/grub.cfg ] || { log "  MISSING /boot/grub/grub.cfg"; _ok=0; }
+    # A kernel + a built initramfs on /boot (Alpine names them vmlinuz-* /
+    # initramfs-*).
+    ls /mnt/boot/vmlinuz-* >/dev/null 2>&1 || { log "  MISSING kernel on /boot"; _ok=0; }
+    ls /mnt/boot/initramfs-* >/dev/null 2>&1 || { log "  MISSING initramfs on /boot"; _ok=0; }
+    # UEFI removable loader.
+    [ -s /mnt/boot/efi/EFI/BOOT/BOOTX64.EFI ] || { log "  MISSING UEFI BOOTX64.EFI"; _ok=0; }
+    # The grub.cfg must actually reference our root LV (a sanity check that
+    # grub-mkconfig saw the right rootfs, not a stale/empty config).
+    grep -q 'flagship/root\|flagship_luks' /mnt/boot/grub/grub.cfg 2>/dev/null || \
+        { log "  grub.cfg does not reference the flagship root chain"; _ok=0; }
+    if [ "$_ok" = "1" ]; then
+        log "  VERIFIED bootable: grub core + kernel + initramfs + grub.cfg + BOOTX64.EFI all present"
+        return 0
+    fi
+    log "  NOT bootable — install did not produce a complete boot chain"
+    return 1
+}
+
+# ===========================================================================
+# SELF-WIPE (success-only). The agreed one-shot UX: after we've VERIFIED the
+# disk boots, (a) efibootmgr the INTERNAL disk to the front of the boot order,
+# and (b) wipe the USB's boot signature so the firmware never re-enters the
+# installer. Wiping the USB is clean because Alpine runs entirely from RAM at
+# this point — we unmount the USB first. This NEVER runs on a failed install
+# (the USB is left intact for retry). Gated entirely on verify_installed_bootable.
+# ===========================================================================
+efibootmgr_internal_first() {
+    log "  efibootmgr: making the internal disk ($TARGET) the boot entry"
+    if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
+        log "  DRY_RUN: efibootmgr -c -d $TARGET -p 2 -L Flagship -l '\\EFI\\BOOT\\BOOTX64.EFI'"
+        log "  DRY_RUN: efibootmgr -o <new-entry-first> (internal disk ahead of USB)"
+        return 0
+    fi
+    if [ ! -d /sys/firmware/efi ]; then
+        log "  not booted via UEFI (no /sys/firmware/efi) — BIOS boot order is firmware/MBR-driven; skipping efibootmgr"
+        return 0
+    fi
+    s="$(part_suffix "$TARGET")"
+    # Create a boot entry pointing at the ESP's removable loader, then move it
+    # to the front. -p 2 = the ESP partition number in our layout.
+    NEW="$(efibootmgr -c -d "$TARGET" -p 2 -L Flagship -l '\EFI\BOOT\BOOTX64.EFI' 2>/dev/null \
+        | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\* Flagship$/\1/p' | tail -1)"
+    if [ -n "$NEW" ]; then
+        REST="$(efibootmgr 2>/dev/null | sed -n 's/^BootOrder: //p' | sed "s/$NEW,\\?//; s/,$//")"
+        efibootmgr -o "${NEW}${REST:+,$REST}" 2>/dev/null || true
+        log "  efibootmgr: Flagship entry $NEW is first in BootOrder"
+    else
+        log "  warn: could not create/find the Flagship NVRAM entry; removable BOOTX64.EFI still covers boot"
+    fi
+}
+
+wipe_usb_boot_signature() {
+    log "  wiping the live USB boot signature (one-shot — no installer reboot loop)"
+    if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
+        log "  DRY_RUN: umount USB; dd if=/dev/zero of=\$USB_DEV bs=1M count=4 (clobber MBR/GPT primary)"
+        log "  DRY_RUN: wipefs -a \$USB_DEV (drop boot signatures so firmware won't re-enter installer)"
+        return 0
+    fi
+    if [ -z "$USB_DEV" ] || [ ! -b "$USB_DEV" ]; then
+        log "  warn: USB device not identified — skipping wipe (will report success regardless; efibootmgr already repointed)"
+        return 0
+    fi
+    # Alpine runs from RAM, but unmount any USB mounts first so the wipe is clean.
+    for mnt in $(awk -v u="$USB_DEV" '$1 ~ "^" u { print $2 }' /proc/mounts | sort -r); do
+        umount -f "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done
+    # Clobber the first 4 MiB (covers MBR + GPT primary header/entries) then
+    # wipefs to drop any remaining signatures. Firmware now finds no bootable
+    # signature on the USB and falls through to the internal disk.
+    dd if=/dev/zero of="$USB_DEV" bs=1M count=4 conv=fsync 2>/dev/null || true
+    wipefs -a "$USB_DEV" 2>/dev/null || true
+    blockdev --rereadpt "$USB_DEV" 2>/dev/null || true
+    log "  USB boot signature wiped on $USB_DEV"
+}
+
+# ===========================================================================
+# finish — the success/failure decision point. On a verified-bootable install:
+# efibootmgr + USB self-wipe + reboot into the clean disk. On ANY failure
+# anywhere above (every step fails fast via fail()/set -e) we never reach here
+# with a half install — but verify_installed_bootable() is the FINAL gate: if
+# it returns non-zero we report error, leave the USB intact for retry, and do
+# NOT wipe.
+# ===========================================================================
+finish() {
+    log "phase: finalizing — running success gate before any wipe/repoint"
+    if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
+        # Exercise the full success path's ordering in the dry run.
+        if verify_installed_bootable; then
+            log "  DRY_RUN: gate PASS -> efibootmgr internal-first -> wipe USB -> umount -> reboot"
+            efibootmgr_internal_first
+            wipe_usb_boot_signature
+        else
+            log "  DRY_RUN: gate FAIL -> leave USB intact, report error, do NOT wipe"
+        fi
         log "[flagship-installer] DRY-RUN COMPLETE — all phases walked. Halting."
         return 0
     fi
+    # REAL path: gate FIRST. Self-wipe + efibootmgr ONLY on success.
+    if ! verify_installed_bootable; then
+        # Leave the USB intact so the owner can simply reboot to retry.
+        umount -R /mnt 2>/dev/null || true
+        vgchange -an flagship 2>/dev/null || true
+        cryptsetup close flagship_luks 2>/dev/null || true
+        fail "installed disk failed the bootable-verification gate; USB left intact for retry"
+    fi
+    log "  success gate PASSED — committing one-shot handoff"
     sync
+    # Repoint firmware BEFORE we drop the mounts (efibootmgr reads /sys, not /mnt).
+    efibootmgr_internal_first
     umount -R /mnt 2>/dev/null || true
     vgchange -an flagship 2>/dev/null || true
     cryptsetup close flagship_luks 2>/dev/null || true
-    log "install complete; rebooting into the encrypted OS"
+    # Now wipe the USB (clean — we run from RAM) so there is no installer loop.
+    wipe_usb_boot_signature
+    log "install complete; rebooting into the encrypted internal disk"
+    sync
     reboot
 }
 
 main() {
     log "=== Flagship tiny live installer (dry_run=$FLAGSHIP_DRY_RUN) ==="
     phase_boot
+    phase_network
     phase_download
     phase_partition
     phase_install
