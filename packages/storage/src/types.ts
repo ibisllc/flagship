@@ -228,6 +228,14 @@ export interface AuthCodeStorage {
   /** Atomic active+now<=expiresAt → used. Returns the post-state. */
   markUsed(serial: string, now: number): Promise<{ ok: true } | { ok: false; reason: string }>;
   markRevoked(serial: string, now: number): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Every still-`active` auth-code that reserves `serverDomain`. Used by
+   * the "cancel the server / free the name" release path to revoke each
+   * outstanding ticket pinning a name (a name can accumulate >1 active
+   * code across retries, since auth-codes are keyed by serial, not
+   * domain). Returns an empty array when none are active.
+   */
+  listActiveByServerDomain(serverDomain: string): Promise<AuthCodeRecord[]>;
 }
 
 export interface ServerStorage {
@@ -255,6 +263,54 @@ export interface InstallEventStorage {
    *  `maxPerSerial` (default 100); older events get dropped. */
   put(rec: Omit<InstallEvent, "seq">): Promise<{ ok: true; seq: number } | { ok: false; reason: string }>;
   list(serial: string, sinceSeq?: number): Promise<InstallEvent[]>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Provisioning-status channel (per-order install progress — migration 0038)
+//
+// Keyed by the auth-code SERIAL (the order id). The phone knows it from
+// the order it created; the installer has it in the recipe. The box POSTs
+// named PHASE checkpoints; the phone polls the latest phase + the
+// append-only history so it can render a live install timeline. Distinct
+// from `install_events` (a generic seq'd event log) and from
+// `demo_users.provision_phase` (the demo-row latest-phase mirror): this is
+// the canonical per-order channel for the real install path.
+// ──────────────────────────────────────────────────────────────────────
+
+/** One entry in a provision-status row's append-only history. */
+export interface ProvisionStatusHistoryEntry {
+  phase: string;
+  detail?: string;
+  ts: number;
+}
+
+export interface ProvisionStatusRecord {
+  serial: string;
+  serverDomain?: string;
+  /** The latest reported phase. */
+  phase: string;
+  /** Free-form latest detail (error text, percentage, etc.). */
+  detail?: string;
+  /** Wall-clock ms of the latest report. */
+  updatedAt: number;
+  /** Append-only history of every phase report, oldest first. */
+  history: ProvisionStatusHistoryEntry[];
+}
+
+export interface ProvisionStatusStorage {
+  /**
+   * Upsert the row keyed by `serial`: set the latest phase/detail/
+   * updated_at AND append `{phase, detail, ts}` to the history. A first
+   * report for an unseen serial inserts the row with a one-element
+   * history; subsequent reports update the latest fields and grow the
+   * history.
+   */
+  putProvisionStatus(
+    serial: string,
+    entry: { serverDomain?: string; phase: string; detail?: string; ts: number },
+  ): Promise<void>;
+  /** Read the full record (latest fields + history), or null when absent. */
+  getProvisionStatus(serial: string): Promise<ProvisionStatusRecord | null>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -354,6 +410,16 @@ export interface RoutingStorage {
     nonce: string,
     at: number,
   ): Promise<{ ok: true } | { ok: false; reason: string }>;
+  /**
+   * Release the routing record for `subdomain` so the leftmost `<server>`
+   * label is free to be claimed again (a fresh RCK can `register()` it).
+   * This is what actually un-loses a name after a failed install — the
+   * RCK record is the thing `register()` refuses to overwrite with a
+   * different key. Idempotent: deleting an absent record is success
+   * (`{ ok: true }`). Returns `{ ok: true }` when the record was removed
+   * or already gone.
+   */
+  release(subdomain: string): Promise<{ ok: true } | { ok: false; reason: string }>;
 }
 
 export interface SealedLuksKeyRecord {
@@ -761,6 +827,7 @@ export interface Storage {
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
+  provisionStatus: ProvisionStatusStorage;
   auditEvents: AuditEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;

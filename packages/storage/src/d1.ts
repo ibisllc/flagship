@@ -20,6 +20,9 @@ import type {
   AuthCodeStorage,
   InstallEvent,
   InstallEventStorage,
+  ProvisionStatusRecord,
+  ProvisionStatusHistoryEntry,
+  ProvisionStatusStorage,
   LlmPromoLifetimeRecord,
   LlmPromoStorage,
   LlmPromoUsageRecord,
@@ -449,6 +452,15 @@ export class D1AuthCodeStorage implements AuthCodeStorage {
     if (!cur) return { ok: false as const, reason: "unknown serial" };
     return { ok: true as const };
   }
+  async listActiveByServerDomain(serverDomain: string) {
+    const r = await this.db
+      .prepare(
+        "SELECT * FROM auth_codes WHERE server_domain = ? AND status = 'active'",
+      )
+      .bind(serverDomain)
+      .all<AuthCodeRow>();
+    return r.results.map(rowToAuthCode);
+  }
 }
 
 export class D1ServerStorage implements ServerStorage {
@@ -576,6 +588,13 @@ export class D1RoutingStorage implements RoutingStorage {
     if (!cur) return { ok: false as const, reason: "unknown subdomain" };
     return { ok: false as const, reason: "stale nonce (replay)" };
   }
+  async release(subdomain: string) {
+    await this.db
+      .prepare("DELETE FROM routing WHERE subdomain = ?")
+      .bind(subdomain)
+      .run();
+    return { ok: true as const };
+  }
 }
 
 interface InstallEventRow {
@@ -627,6 +646,86 @@ export class D1InstallEventStorage implements InstallEventStorage {
       detail: row.detail,
       postedAt: row.posted_at,
     }));
+  }
+}
+
+interface ProvisionStatusRow {
+  serial: string;
+  server_domain: string | null;
+  phase: string;
+  detail: string | null;
+  updated_at: number;
+  history: string;
+}
+
+export class D1ProvisionStatusStorage implements ProvisionStatusStorage {
+  constructor(private db: D1Database) {}
+  async putProvisionStatus(
+    serial: string,
+    entry: { serverDomain?: string; phase: string; detail?: string; ts: number },
+  ): Promise<void> {
+    const existing = await this.db
+      .prepare("SELECT history, server_domain FROM provision_status WHERE serial = ?")
+      .bind(serial)
+      .first<{ history: string; server_domain: string | null }>();
+    let history: ProvisionStatusHistoryEntry[] = [];
+    if (existing?.history) {
+      try {
+        const parsed = JSON.parse(existing.history);
+        if (Array.isArray(parsed)) history = parsed as ProvisionStatusHistoryEntry[];
+      } catch {
+        history = [];
+      }
+    }
+    history.push({
+      phase: entry.phase,
+      ts: entry.ts,
+      ...(entry.detail !== undefined ? { detail: entry.detail } : {}),
+    });
+    // Preserve a previously-recorded server_domain when this report omits it.
+    const serverDomain = entry.serverDomain ?? existing?.server_domain ?? null;
+    await this.db
+      .prepare(
+        `INSERT INTO provision_status (serial, server_domain, phase, detail, updated_at, history)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(serial) DO UPDATE SET
+           server_domain = excluded.server_domain,
+           phase = excluded.phase,
+           detail = excluded.detail,
+           updated_at = excluded.updated_at,
+           history = excluded.history`,
+      )
+      .bind(
+        serial,
+        serverDomain,
+        entry.phase,
+        entry.detail ?? null,
+        entry.ts,
+        JSON.stringify(history),
+      )
+      .run();
+  }
+  async getProvisionStatus(serial: string): Promise<ProvisionStatusRecord | null> {
+    const r = await this.db
+      .prepare("SELECT * FROM provision_status WHERE serial = ?")
+      .bind(serial)
+      .first<ProvisionStatusRow>();
+    if (!r) return null;
+    let history: ProvisionStatusHistoryEntry[] = [];
+    try {
+      const parsed = JSON.parse(r.history);
+      if (Array.isArray(parsed)) history = parsed as ProvisionStatusHistoryEntry[];
+    } catch {
+      history = [];
+    }
+    return {
+      serial: r.serial,
+      serverDomain: r.server_domain ?? undefined,
+      phase: r.phase,
+      detail: r.detail ?? undefined,
+      updatedAt: r.updated_at,
+      history,
+    };
   }
 }
 
@@ -2564,6 +2663,7 @@ export class D1Storage implements Storage {
   servers: ServerStorage;
   routing: RoutingStorage;
   installEvents: InstallEventStorage;
+  provisionStatus: ProvisionStatusStorage;
   auditEvents: AuditEventStorage;
   luksKeys: LuksKeyStorage;
   autoUnlockLeases: AutoUnlockLeaseStorage;
@@ -2592,6 +2692,7 @@ export class D1Storage implements Storage {
     this.servers = new D1ServerStorage(db);
     this.routing = new D1RoutingStorage(db);
     this.installEvents = new D1InstallEventStorage(db);
+    this.provisionStatus = new D1ProvisionStatusStorage(db);
     this.auditEvents = new D1AuditEventStorage(db);
     this.luksKeys = new D1LuksKeyStorage(db);
     this.autoUnlockLeases = new D1AutoUnlockLeaseStorage(db);

@@ -17,6 +17,9 @@ import type {
   AuthCodeStorage,
   InstallEvent,
   InstallEventStorage,
+  ProvisionStatusRecord,
+  ProvisionStatusHistoryEntry,
+  ProvisionStatusStorage,
   LlmPromoLifetimeRecord,
   LlmPromoStorage,
   LlmPromoUsageRecord,
@@ -287,6 +290,11 @@ export class InMemoryAuthCodeStorage implements AuthCodeStorage {
     r.revokedAt = now;
     return { ok: true as const };
   }
+  async listActiveByServerDomain(serverDomain: string) {
+    return [...this.bySerial.values()]
+      .filter((r) => r.serverDomain === serverDomain && r.status === "active")
+      .map((r) => ({ ...r }));
+  }
 }
 
 export class InMemoryServerStorage implements ServerStorage {
@@ -340,6 +348,10 @@ export class InMemoryRoutingStorage implements RoutingStorage {
     r.lastTargetNonce = nonce;
     return { ok: true as const };
   }
+  async release(subdomain: string) {
+    this.bySubdomain.delete(subdomain);
+    return { ok: true as const };
+  }
 }
 
 export class InMemoryInstallEventStorage implements InstallEventStorage {
@@ -356,6 +368,34 @@ export class InMemoryInstallEventStorage implements InstallEventStorage {
   async list(serial: string, sinceSeq = 0) {
     const arr = this.bySerial.get(serial) ?? [];
     return arr.filter((e) => e.seq > sinceSeq).map((e) => ({ ...e }));
+  }
+}
+
+export class InMemoryProvisionStatusStorage implements ProvisionStatusStorage {
+  private bySerial = new Map<string, ProvisionStatusRecord>();
+  async putProvisionStatus(
+    serial: string,
+    entry: { serverDomain?: string; phase: string; detail?: string; ts: number },
+  ): Promise<void> {
+    const existing = this.bySerial.get(serial);
+    const historyEntry: ProvisionStatusHistoryEntry = {
+      phase: entry.phase,
+      ts: entry.ts,
+      ...(entry.detail !== undefined ? { detail: entry.detail } : {}),
+    };
+    const next: ProvisionStatusRecord = {
+      serial,
+      serverDomain: entry.serverDomain ?? existing?.serverDomain,
+      phase: entry.phase,
+      detail: entry.detail,
+      updatedAt: entry.ts,
+      history: [...(existing?.history ?? []), historyEntry],
+    };
+    this.bySerial.set(serial, next);
+  }
+  async getProvisionStatus(serial: string): Promise<ProvisionStatusRecord | null> {
+    const r = this.bySerial.get(serial);
+    return r ? { ...r, history: r.history.map((h) => ({ ...h })) } : null;
   }
 }
 
@@ -1117,6 +1157,7 @@ export class InMemoryStorage implements Storage {
   servers = new InMemoryServerStorage();
   routing = new InMemoryRoutingStorage();
   installEvents = new InMemoryInstallEventStorage();
+  provisionStatus = new InMemoryProvisionStatusStorage();
   auditEvents = new InMemoryAuditEventStorage();
   luksKeys = new InMemoryLuksKeyStorage();
   autoUnlockLeases = new InMemoryAutoUnlockLeaseStorage();

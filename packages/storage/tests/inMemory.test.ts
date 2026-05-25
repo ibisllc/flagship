@@ -479,3 +479,46 @@ describe("InMemoryInstallPolicyFanoutStorage (N0d-2)", () => {
     expect(await s.installPolicyFanout.get("nope.flagship.services")).toBeUndefined();
   });
 });
+
+describe("InMemoryProvisionStatusStorage (#order-progress)", () => {
+  const SERIAL = "01HXAFORDER0001";
+
+  it("upserts latest fields and appends to history across reports", async () => {
+    const s = new InMemoryStorage();
+    await s.provisionStatus.putProvisionStatus(SERIAL, {
+      serverDomain: "home.alice.flagship.services",
+      phase: "booting",
+      ts: 100,
+    });
+    await s.provisionStatus.putProvisionStatus(SERIAL, {
+      phase: "installing",
+      detail: "kernel",
+      ts: 200,
+    });
+    const rec = await s.provisionStatus.getProvisionStatus(SERIAL);
+    expect(rec).not.toBeNull();
+    expect(rec!.phase).toBe("installing");
+    expect(rec!.detail).toBe("kernel");
+    expect(rec!.updatedAt).toBe(200);
+    // serverDomain from the first report is preserved when omitted later.
+    expect(rec!.serverDomain).toBe("home.alice.flagship.services");
+    expect(rec!.history).toEqual([
+      { phase: "booting", ts: 100 },
+      { phase: "installing", detail: "kernel", ts: 200 },
+    ]);
+  });
+
+  it("returns null for an unknown serial", async () => {
+    const s = new InMemoryStorage();
+    expect(await s.provisionStatus.getProvisionStatus("01HXAFABSENT001")).toBeNull();
+  });
+
+  it("getProvisionStatus returns a defensive copy of history", async () => {
+    const s = new InMemoryStorage();
+    await s.provisionStatus.putProvisionStatus(SERIAL, { phase: "booting", ts: 1 });
+    const a = await s.provisionStatus.getProvisionStatus(SERIAL);
+    a!.history.push({ phase: "live", ts: 999 });
+    const b = await s.provisionStatus.getProvisionStatus(SERIAL);
+    expect(b!.history).toHaveLength(1);
+  });
+});

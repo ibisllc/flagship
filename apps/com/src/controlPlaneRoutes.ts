@@ -59,11 +59,14 @@ import {
   handleGetSealedLuksKey,
   handlePutSealedLuksKey,
   handlePostInstallEvent,
+  handlePostProvisionStatus,
+  handleGetProvisionStatus,
   handleRegisterRck,
   handleRepublishServerDns,
   handleRoutingLookup,
   handleServerLookup,
   handleServerRegister,
+  handleServerReleaseName,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
   handleUsernameClaim,
@@ -345,6 +348,7 @@ const ROUTE_RE = {
   AUTH_CODE_REVOKE: /^\/api\/auth-code\/([^/]+)\/revoke$/,
   AUTH_CODE_LOOKUP: /^\/api\/auth-code\/([^/]+)$/,
   SERVER_REGISTER: /^\/api\/server\/register$/,
+  SERVER_RELEASE: /^\/api\/server\/release$/,
   SERVER_LOOKUP: /^\/api\/server\/by-domain\/([^/]+)$/,
   SERVER_REVOKE_BY_SELF: /^\/api\/server\/by-domain\/([^/]+)\/revoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
@@ -353,6 +357,9 @@ const ROUTE_RE = {
   RCK_SET_TARGET: /^\/api\/routing\/set-target$/,
   ROUTING_LOOKUP: /^\/api\/routing\/lookup$/,
   INSTALL_EVENTS: /^\/api\/install-events\/([^/]+)$/,
+  // Provisioning-status channel — per-order install progress keyed by the
+  // auth-code serial. The box POSTs a named phase; the phone polls it.
+  PROVISION_STATUS: /^\/api\/order\/([^/]+)\/status$/,
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
   PROVISION_EVENT: /^\/api\/server\/([^/]+)\/provision-event$/,
@@ -621,6 +628,23 @@ export async function tryControlPlane(
           pushTokens: storage.pushTokens,
           installPolicyFanout: storage.installPolicyFanout,
           ...(srForwarder ? { forwardToProviders: srForwarder } : {}),
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.SERVER_RELEASE.test(path)) {
+    // Owner-signed "cancel the server / free the name". Releases the RCK
+    // routing record + any active auth-codes + the server record so a
+    // failed install's name can be re-claimed. Auth = the IRK signature
+    // verified against the username's registered key.
+    return finish(
+      await handleServerReleaseName(
+        {
+          usernames: storage.usernames,
+          routing: storage.routing,
+          authCodes: storage.authCodes,
+          servers: storage.servers,
         },
         await readJson(request),
       ),
@@ -1450,6 +1474,25 @@ export async function tryControlPlane(
         { storage: storage.installEvents },
         decodeURIComponent(m[1]!),
         sinceSeq,
+      ),
+    );
+  }
+
+  // ── Provisioning-status channel (per-order install progress) ──
+  if (method === "POST" && (m = path.match(ROUTE_RE.PROVISION_STATUS))) {
+    return finish(
+      await handlePostProvisionStatus(
+        { storage: storage.provisionStatus },
+        decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.PROVISION_STATUS))) {
+    return finish(
+      await handleGetProvisionStatus(
+        { storage: storage.provisionStatus },
+        decodeURIComponent(m[1]!),
       ),
     );
   }
