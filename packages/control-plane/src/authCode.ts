@@ -6,7 +6,7 @@ import {
 } from "@flagship/protocol";
 import type { AuthCodeStorage, UsernameStorage } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
-import { validateAppLabel, validateUserLabel } from "./labels.js";
+import { validateServerLabel, validateUserLabel } from "./labels.js";
 import {
   conflict, forbidden, malformed, notFound, ok,
   type HandlerResponseWithHeaders,
@@ -68,7 +68,7 @@ export async function handleAuthCodeIssue(
 
   const userV = validateUserLabel(c.username);
   if (!userV.ok) return malformed(userV.reason);
-  const serverV = validateAppLabel(c.serverName);
+  const serverV = validateServerLabel(c.serverName);
   if (!serverV.ok) return malformed(serverV.reason);
   const expectedDomain = `${serverV.label}.${userV.label}.flagship.services`;
   if (c.serverDomain !== expectedDomain) {

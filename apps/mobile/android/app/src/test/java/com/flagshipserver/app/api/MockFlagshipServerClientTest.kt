@@ -93,6 +93,16 @@ class MockFlagshipServerClientTest {
         assertTrue(c.usernameAvailable("kamdemharry").available)
     }
 
+    @Test fun usernameAvailable_enforces3to30Length() = runTest {
+        // Mirror of validateUserLabel: 3–30 chars, no hyphens.
+        val c = make()
+        assertTrue(c.usernameAvailable("ab").available.not())            // too short
+        assertTrue(c.usernameAvailable("abc").available)                 // min
+        assertTrue(c.usernameAvailable("a".repeat(30)).available)        // max
+        assertTrue(c.usernameAvailable("a".repeat(31)).available.not())  // too long
+        assertTrue(c.usernameAvailable("media-server").available.not())  // hyphen
+    }
+
     @Test fun recoveryEnvelope_registerThenFetch() = runTest {
         val c = make()
         c.registerRecoveryEnvelope(RecoveryEnvelopeRequest("cid", "WRAPPED", "NONCE"))

@@ -22,7 +22,7 @@ import { toast } from "../lib/toast.js";
 
 registerView("view-bootstrap");
 
-const USERNAME_RE = /^[a-z0-9]{1,63}$/; // no hyphens — see packages/control-plane/src/labels.ts
+const USERNAME_RE = /^[a-z0-9]{3,30}$/; // 3–30, no hyphens — see packages/control-plane/src/labels.ts
 
 async function handleBootstrap() {
   const a = $("bootstrap-passphrase").value;
@@ -64,7 +64,7 @@ async function handleRecover() {
     placeholder: "alice",
     validate: (v) => {
       if (!v) return "username required";
-      if (!USERNAME_RE.test(v)) return "lowercase letters and digits only";
+      if (!USERNAME_RE.test(v)) return "3–30 lowercase letters and digits, no hyphens";
       return null;
     },
   });

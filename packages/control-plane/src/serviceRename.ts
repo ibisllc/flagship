@@ -66,7 +66,7 @@ export interface ServiceRenameDeps {
   shortHost?: string;
 }
 
-const USERNAME_RE = /^[a-z0-9]{1,63}$/; // no hyphens — see labels.ts
+const USERNAME_RE = /^[a-z0-9]{3,30}$/; // no hyphens — see labels.ts
 const DNS_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
 const RESERVED_LABELS = new Set([
   "www", "api", "admin", "root", "mail", "smtp", "imap", "pop", "ftp",

@@ -152,6 +152,116 @@ describe("create-server view — boot-unlock-mode chooser (§7a.1)", () => {
   });
 });
 
+describe("create-server view — server-name obeys the username rules (Change B)", () => {
+  it("validates the server name with the RFC-1123 DNS-label regex (interior hyphens allowed)", () => {
+    // Server names are LOOSER than usernames: a standalone DNS label with
+    // interior hyphens. Mirror of validateServerLabel in labels.ts.
+    expect(VIEW_SRC).toContain("SERVER_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/");
+    expect(VIEW_SRC).not.toContain("SERVER_NAME_RE = /^[a-z0-9]{1,63}$/");
+  });
+
+  it("rejects reserved server labels client-side", () => {
+    expect(VIEW_SRC).toContain("RESERVED_SERVER_LABELS");
+    expect(VIEW_SRC).toMatch(/RESERVED_SERVER_LABELS\.has\(serverName\)/);
+  });
+
+  it("shows an inline hint + error for the server-name field", () => {
+    expect(INDEX_HTML).toContain("cs-server-name-hint");
+    expect(INDEX_HTML).toContain("cs-server-name-error");
+    expect(VIEW_SRC).toContain("wireServerNameValidation");
+  });
+
+  it("the error copy explains hyphens are allowed but not at the start or end", () => {
+    expect(VIEW_SRC).toMatch(/not at the start or end/);
+  });
+});
+
+describe("create-server view — cancel-the-server frees the name (Change A)", () => {
+  it("offers a 'Cancel server (free the name)' action on delivered drafts", () => {
+    expect(VIEW_SRC).toContain("Cancel server (free the name)");
+    expect(VIEW_SRC).toMatch(/data-action="cancel-server"/);
+  });
+
+  it("wires the cancel-server action to the release helper", () => {
+    expect(VIEW_SRC).toMatch(/import \{ releaseServerName, serverDomainOf \}/);
+    expect(VIEW_SRC).toMatch(/await releaseServerName\(/);
+    expect(VIEW_SRC).toMatch(/async function cancelServer\(/);
+  });
+
+  it("also best-effort revokes the install auth-code", () => {
+    expect(VIEW_SRC).toContain("flagship/auth-code-revoke/v1");
+    expect(VIEW_SRC).toMatch(/revokeAuthCodeBestEffort/);
+  });
+});
+
+describe("releaseServer helper — IRK-signed release of the name (Change A)", () => {
+  it("posts the signed release to /api/server/release with the canonical tag", async () => {
+    const { releaseServerName, serverDomainOf, TAG_RELEASE_SERVER_NAME } = await import(
+      "../public/webapp/lib/releaseServer.js"
+    );
+    expect(TAG_RELEASE_SERVER_NAME).toBe("flagship/release-server-name/v1");
+    expect(serverDomainOf("home", "harry")).toBe("home.harry.flagship.services");
+
+    let captured: { url: string; body: unknown } | null = null;
+    const fakeFetch = async (url: string, init: { body: string }) => {
+      captured = { url, body: JSON.parse(init.body) };
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, routingReleased: true }),
+      };
+    };
+    const signWithIrk = async () => new Uint8Array(64).fill(7);
+    const out = await releaseServerName(
+      {
+        username: "harry",
+        serverDomain: "home.harry.flagship.services",
+        umk: new Uint8Array(32).fill(1),
+        signWithIrk,
+      },
+      { fetch: fakeFetch, origin: "https://flagshipserver.com", now: () => 1700000000000 },
+    );
+    expect(out.ok).toBe(true);
+    expect(captured!.url).toBe("https://flagshipserver.com/api/server/release");
+    const body = captured!.body as {
+      request: { username: string; serverDomain: string; issuedAt: number };
+      signature: string;
+    };
+    expect(body.request.username).toBe("harry");
+    expect(body.request.serverDomain).toBe("home.harry.flagship.services");
+    expect(body.request.issuedAt).toBe(1700000000000);
+    expect(body.signature).toBe("07".repeat(64));
+  });
+
+  it("throws (so the caller surfaces it) on a non-2xx response", async () => {
+    const { releaseServerName } = await import("../public/webapp/lib/releaseServer.js");
+    const fakeFetch = async () => ({ ok: false, status: 403, text: async () => "nope" });
+    await expect(
+      releaseServerName(
+        {
+          username: "harry",
+          serverDomain: "home.harry.flagship.services",
+          umk: new Uint8Array(32).fill(1),
+          signWithIrk: async () => new Uint8Array(64),
+        },
+        { fetch: fakeFetch },
+      ),
+    ).rejects.toThrow(/release failed \(403\)/);
+  });
+
+  it("refuses to sign without an unlocked session (no umk)", async () => {
+    const { releaseServerName } = await import("../public/webapp/lib/releaseServer.js");
+    await expect(
+      releaseServerName({
+        username: "harry",
+        serverDomain: "home.harry.flagship.services",
+        umk: null,
+        signWithIrk: async () => new Uint8Array(64),
+      }),
+    ).rejects.toThrow(/unlock the webapp first/);
+  });
+});
+
 describe("buildDraft helpers — pure functions (#24)", () => {
   it("canonicalInstallBlob produces deterministic '|'-joined bytes (v2)", async () => {
     const { canonicalInstallBlob } = await import("../public/webapp/lib/buildDraft.js");

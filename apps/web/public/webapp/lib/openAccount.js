@@ -21,10 +21,10 @@
 // All side-effecting collaborators are injected so this is unit-testable
 // without IndexedDB / the DOM / the network.
 
-/** Login/identity handle is a bare label: lowercase letters/digits, no
- *  dots, no hyphens. Mirror of state.js / bootstrap.js / control-plane
- *  labels. */
-const USERNAME_RE = /^[a-z0-9]{1,63}$/;
+/** Login/identity handle is a bare label: 3–30 lowercase letters/digits,
+ *  no dots, no hyphens. Mirror of state.js / bootstrap.js / control-plane
+ *  labels.ts. */
+const USERNAME_RE = /^[a-z0-9]{3,30}$/;
 
 /** Canonical-bytes tag for the standalone username claim. MUST match
  *  `views/create-server.js` (TAG_CLAIM) and the Worker. */

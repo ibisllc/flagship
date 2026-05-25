@@ -65,7 +65,7 @@ export interface UsersDevicesResponse {
   devices: DeviceSummary[];
 }
 
-const USERNAME_RE = /^[a-z0-9]{1,63}$/; // no hyphens — see labels.ts
+const USERNAME_RE = /^[a-z0-9]{3,30}$/; // no hyphens — see labels.ts
 
 export async function handleGetUsersDevices(
   deps: UsersDevicesDeps,

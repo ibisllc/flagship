@@ -11,10 +11,10 @@ import {
 } from "../src/validation.js";
 
 describe("validateUserLabel", () => {
-  it("accepts plain dashless labels", () => {
+  it("accepts plain dashless labels in the 3–30 range", () => {
     expect(validateUserLabel("harry").ok).toBe(true);
     expect(validateUserLabel("user42").ok).toBe(true);
-    expect(validateUserLabel("a").ok).toBe(true);
+    expect(validateUserLabel("abc").ok).toBe(true); // min length 3
   });
 
   it("normalizes case", () => {
@@ -36,9 +36,11 @@ describe("validateUserLabel", () => {
     expect(validateUserLabel("HARRY!").ok).toBe(false);
   });
 
-  it("rejects names longer than 63 chars (DNS label cap)", () => {
-    expect(validateUserLabel("a".repeat(64)).ok).toBe(false);
-    expect(validateUserLabel("a".repeat(63)).ok).toBe(true);
+  it("enforces the 3–30 length range", () => {
+    expect(validateUserLabel("ab").ok).toBe(false); // too short (< 3)
+    expect(validateUserLabel("abc").ok).toBe(true); // min
+    expect(validateUserLabel("a".repeat(30)).ok).toBe(true); // max
+    expect(validateUserLabel("a".repeat(31)).ok).toBe(false); // too long (> 30)
   });
 
   it("rejects reserved usernames so users can't shadow control-plane endpoints", () => {

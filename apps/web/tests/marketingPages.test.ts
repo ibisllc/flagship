@@ -36,7 +36,7 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     });
   }
 
-  for (const path of ["/", "/how-it-works.html", "/marketplace/"]) {
+  for (const path of ["/", "/marketplace/"]) {
     it(`${path} carries the Flagship brand in the chrome`, async () => {
       const app = buildServer();
       const r = await app.inject({ method: "GET", url: path });
@@ -93,14 +93,48 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).not.toMatch(/href="\/pricing"/);
   });
 
-  it("how-it-works page describes the four-step flow (mobile-app keychain, USB boot, vibe-code, share)", async () => {
+  it("/how-it-works.html is now a redirect stub pointing at /docs#how-it-works", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/how-it-works.html" });
+    // The standalone page was folded into /docs; the static file is a thin
+    // client-side redirect (meta-refresh + location.replace).
+    expect(r.body).toContain("/docs#how-it-works");
+    expect(r.body).toMatch(/location\.replace|http-equiv="refresh"/);
+  });
+
+  it("the four-step flow now lives in /docs (folded from how-it-works)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/docs/index.html" });
+    expect(r.statusCode).toBe(200);
     expect(r.body).toContain("Pair");
-    // "Mint a build code" is now scrubbed; the equivalent prose ("Scan the QR
-    // code on the homepage" / similar) is what we expect post-v2.
     expect(r.body).toMatch(/scan|QR|deliver/i);
     expect(r.body).toMatch(/boot|unlock/i);
+  });
+
+  it("the standalone /how-to.html explainer is deleted (no longer a served page)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/how-to.html" });
+    // Fastify static returns 404 for the removed file. (In production the
+    // Worker 302s /how-to + /how-to.html → /docs before the asset binding;
+    // that redirect is covered in apps/com route tests.)
+    expect(r.statusCode).toBe(404);
+  });
+
+  it("/docs folds in the 'assemble your server' section with centralized ISO recs", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/docs/index.html" });
+    expect(r.statusCode).toBe(200);
+    // Deep-link anchors preserved from the old how-to.html page.
+    expect(r.body).toContain('id="certificate"');
+    expect(r.body).toContain('id="recommended-linux"');
+    expect(r.body).toContain('id="booting-process"');
+    // The top-level folded section + its TOC entry.
+    expect(r.body).toContain('id="burn"');
+    // Debian 13 netinst is the recommended image, centralized here.
+    expect(r.body).toContain(
+      "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso",
+    );
+    expect(r.body).toMatch(/Debian 13/);
   });
 
   it("/pricing.html is retired (Worker SPA-fallback returns the homepage)", async () => {

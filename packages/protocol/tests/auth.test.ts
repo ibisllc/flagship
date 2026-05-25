@@ -10,6 +10,7 @@ import {
   signMigrationRequest,
   signRebuildRequest,
   signRegisterServer,
+  signReleaseServerName,
   signRevocation,
   verifyInvite,
   verifyInviteAcceptance,
@@ -17,6 +18,7 @@ import {
   verifyMigrationRequest,
   verifyRebuildRequest,
   verifyRegisterServer,
+  verifyReleaseServerName,
   verifyRevocation,
   type DemoDirective,
   type SetCustomDomain,
@@ -24,6 +26,7 @@ import {
   type MembershipMutation,
   type MigrationRequest,
   type RegisterServer,
+  type ReleaseServerName,
   type ServerRevocation,
 } from "../src/auth.js";
 import { deriveBAK, deriveIRK, deriveSWK, deriveSTK } from "../src/keys.js";
@@ -85,6 +88,48 @@ describe("IRK server revocation", () => {
     };
     const sig = signRevocation(rev, stolenBak);
     expect(verifyRevocation(rev, sig, irk.publicKey)).toBe(false);
+  });
+});
+
+describe("ReleaseServerName (cancel the server / free the name)", () => {
+  const rel: ReleaseServerName = {
+    username: "harry",
+    serverDomain: "home.harry.flagship.services",
+    issuedAt: 1_700_000_000_000,
+  };
+
+  it("IRK-signed release verifies under the same IRK", () => {
+    const irk = deriveIRK(umk);
+    const sig = signReleaseServerName(rel, irk);
+    expect(verifyReleaseServerName(rel, sig, irk.publicKey)).toBe(true);
+  });
+
+  it("a different IRK cannot release the name", () => {
+    const irk = deriveIRK(umk);
+    const attacker = deriveIRK({ seed: new Uint8Array(32).fill(0xff) });
+    const sig = signReleaseServerName(rel, attacker);
+    expect(verifyReleaseServerName(rel, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects when the serverDomain is tampered (bound to the name)", () => {
+    const irk = deriveIRK(umk);
+    const sig = signReleaseServerName(rel, irk);
+    const tampered = { ...rel, serverDomain: "media.harry.flagship.services" };
+    expect(verifyReleaseServerName(tampered, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("rejects when the username is tampered", () => {
+    const irk = deriveIRK(umk);
+    const sig = signReleaseServerName(rel, irk);
+    const tampered = { ...rel, username: "mallory" };
+    expect(verifyReleaseServerName(tampered, sig, irk.publicKey)).toBe(false);
+  });
+
+  it("compartmentalization: a BAK signature does NOT validate as a release", () => {
+    const irk = deriveIRK(umk);
+    const bak = deriveBAK(umk, "home.harry.flagship.services");
+    const sig = signReleaseServerName(rel, bak);
+    expect(verifyReleaseServerName(rel, sig, irk.publicKey)).toBe(false);
   });
 });
 

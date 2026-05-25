@@ -84,6 +84,23 @@ final class ChooseUsernameViewModelTests: XCTestCase {
         }
     }
 
+    func test_tooShortUsername_rejected() async {
+        // Usernames are 3–30 chars now. "ab" is too short.
+        let vm = makeViewModel(makeServer())
+        await vm.evaluate("ab")
+        if case .invalid = vm.status {} else {
+            XCTFail("expected invalid status, got \(vm.status)")
+        }
+    }
+
+    func test_tooLongUsername_rejected() async {
+        let vm = makeViewModel(makeServer())
+        await vm.evaluate(String(repeating: "a", count: 31))
+        if case .invalid = vm.status {} else {
+            XCTFail("expected invalid status, got \(vm.status)")
+        }
+    }
+
     func test_workerInvalidReason_surfaced_asIs() async {
         // Surface the reason string Worker returns rather than
         // overwriting with a local copy — gives ops freedom to

@@ -11,6 +11,7 @@
  * .com-side check.
  */
 import { describe, it, expect } from "vitest";
+import { createHash } from "node:crypto";
 import {
   signAuthCode,
   signInstallBlob,
@@ -19,7 +20,12 @@ import {
   type AuthCode,
   type InstallBlob,
 } from "@flagship/protocol";
-import { buildAutoinstallUserData, DEFAULT_BOOT_HOST } from "../src/userdata.js";
+import {
+  buildAutoinstallUserData,
+  buildWifiSafetyNetBlock,
+  wifiSetupScript,
+  DEFAULT_BOOT_HOST,
+} from "../src/userdata.js";
 
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
@@ -418,6 +424,41 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(yaml).toMatch(/EXPERIMENTAL/);
   });
 
+  it("UEFI Secure Boot: ESP carries grub_device (signed chain), disk does NOT (avoids unsigned BIOS grub)", () => {
+    const yaml = luksYaml();
+    // The UEFI ESP (flag boot, fat32, grub device, mounted /boot/efi).
+    expect(yaml).toContain("flag: boot, grub_device: true");
+    expect(yaml).toContain("fstype: fat32");
+    expect(yaml).toContain("path: /boot/efi");
+    // The DISK must NOT be a grub_device — that triggers a BIOS grub-pc install
+    // whose unsigned EFI grub fails Secure Boot ("invalid signature").
+    expect(yaml).toContain("wipe: superblock-recursive, grub_device: false");
+    expect(yaml).not.toContain("grub_device: true, preserve: false}\n      - {id: bios_grub");
+    // reserved bios_grub partition kept for a future BIOS variant.
+    expect(yaml).toContain("flag: bios_grub");
+    // ESP partition precedes its format precedes its mount.
+    expect(yaml.indexOf("esp_part")).toBeLessThan(yaml.indexOf("esp_fs"));
+    expect(yaml.indexOf("esp_fs")).toBeLessThan(yaml.indexOf("esp_mount"));
+  });
+
+  it("broken-NVRAM firmware: skips the EFI NVRAM write + installs grub to the removable fallback path", () => {
+    const yaml = luksYaml();
+    // curtin must NOT try to write the EFI NVRAM entry (that aborts the install
+    // on firmware that rejects efivarfs writes — "failed to register the EFI
+    // boot entry: Invalid argument").
+    expect(yaml).toContain("grub:\n      update_nvram: false");
+    // … and a late-command copies the SIGNED shim+grub to /EFI/BOOT/BOOTX64.EFI
+    // (the removable fallback firmware boots with no NVRAM entry).
+    expect(yaml).toContain('cp "$D/ubuntu/shimx64.efi" "$D/BOOT/BOOTX64.EFI"');
+    expect(yaml).toContain('cp "$D/ubuntu/grubx64.efi" "$D/BOOT/grubx64.efi"');
+    // the fallback copy runs before our install-blob/bootstrap late-commands.
+    expect(yaml.indexOf("BOOTX64.EFI")).toBeLessThan(yaml.indexOf("install-blob.json"));
+    // SECOND mechanism (in case subiquity ignores storage.grub.update_nvram):
+    // the debconf preseed MAAS uses so grub-install passes --no-nvram.
+    expect(yaml).toContain("debconf-selections: |");
+    expect(yaml).toContain("grub2/update_nvram boolean false");
+  });
+
   it("bakes flagship-unseal to /boot — build-at-install from cloned source", () => {
     const b = extractBootstrap(luksYaml());
     expect(b).toContain("apt-get install -y --no-install-recommends golang-go");
@@ -475,5 +516,247 @@ describe("the locked default — LUKS path details (EXPERIMENTAL, needs live val
     expect(b).toContain("cryptsetup luksOpen --key-file - \"$ROOT_PART\" flagship_root");
     // Rebuild the initrd so the hook lands in /boot.
     expect(b).toContain("update-initramfs -u");
+  });
+});
+
+describe("optional Wi-Fi — for a box with no Ethernet (burn-time local input)", () => {
+  function userData(opts: { wifiSSID?: string; wifiPassword?: string }): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return buildAutoinstallUserData({ blob, blobSignatureHex, ...opts });
+  }
+
+  it("absent Wi-Fi === byte-identical to before (no network: block, no wpasupplicant)", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const none = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const empty = buildAutoinstallUserData({ blob, blobSignatureHex, wifiSSID: "" });
+    const wsOnly = buildAutoinstallUserData({ blob, blobSignatureHex, wifiSSID: "   " });
+    expect(empty).toBe(none);
+    expect(wsOnly).toBe(none); // whitespace-only SSID is treated as absent
+    expect(none).not.toContain("network:");
+    expect(none).not.toContain("wpasupplicant");
+  });
+
+  /** Decode the base64 Wi-Fi setup script out of the early-command line. */
+  function extractWifiScript(yaml: string): string {
+    const m = yaml.match(/echo ([A-Za-z0-9+/=]+) \| base64 -d > \/tmp\/flagship-wifi\.sh/);
+    if (!m) throw new Error("wifi setup command not found in user-data");
+    return Buffer.from(m[1]!, "base64").toString("utf8");
+  }
+
+  it("with an SSID: wired-only network: fallback + early/late commands + wpasupplicant, NO wifi match in YAML", () => {
+    const yaml = userData({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    // networkd allows ethernet match (the optional wired fallback) …
+    expect(yaml).toContain("  network:\n    version: 2");
+    expect(yaml).toContain('match: {name: "en*"}');
+    // … but NOT a wifi match — so the YAML must carry no wifis:/wl* glob.
+    expect(yaml).not.toContain("wifis:");
+    expect(yaml).not.toContain("wl*");
+    // Wi-Fi is configured at runtime: early-command (live) + /target late-command.
+    expect(yaml).toContain("  early-commands:");
+    expect(yaml).toContain('bash /tmp/flagship-wifi.sh"'); // live (no arg)
+    expect(yaml).toContain('bash /tmp/flagship-wifi.sh /target"'); // target
+    expect(yaml).toContain("    - wpasupplicant\n");
+    // SSID + password never appear in plaintext — only inside the base64 script.
+    expect(yaml).not.toContain("HomeNet");
+    expect(yaml).not.toContain("s3cret");
+    // network: → early-commands: → identity: (sibling keys under autoinstall:).
+    expect(yaml.indexOf("network:")).toBeLessThan(yaml.indexOf("early-commands:"));
+    expect(yaml.indexOf("early-commands:")).toBeLessThan(yaml.indexOf("identity:"));
+  });
+
+  it("the runtime script detects the interface, writes a name-keyed netplan, escapes SSID/pw", () => {
+    const yaml = userData({ wifiSSID: 'My "Net" \\x', wifiPassword: 'p"a\\ss' });
+    const s = extractWifiScript(yaml);
+    expect(s).toContain("for d in /sys/class/net/*/wireless; do");
+    expect(s).toContain("<<'FLAGSHIP_WIFI_EOF'");
+    expect(s).toContain("    __IFACE__:");
+    expect(s).toContain('sed -i "s/__IFACE__/${IF}/"');
+    // escaped for the YAML scalar inside the quoted heredoc.
+    expect(s).toContain('"My \\"Net\\" \\\\x":');
+    expect(s).toContain('password: "p\\"a\\\\ss"');
+  });
+
+  it("the Wi-Fi script is BYTE-IDENTICAL to the Swift twin (cross-language lockstep)", () => {
+    // The Swift burner (EngineTests.testWifiSetupScriptIsByteIdenticalToTs)
+    // pins this SAME sha256. The base64 embedded in the autoinstall only matches
+    // across the two burners if the script does — so both suites assert it.
+    const yaml = userData({ wifiSSID: "Flagship Test AP", wifiPassword: "test-only-not-real" });
+    const s = extractWifiScript(yaml);
+    expect(createHash("sha256").update(s).digest("hex")).toBe(
+      "f215b57a79ae7f12cd6b372dd7631842a8f6dafbdc1beca7b6f3588535c770b9",
+    );
+  });
+
+  it("a password with no SSID is ignored (SSID is what gates the block)", () => {
+    const { blob, blobSignatureHex } = signedBlob();
+    const none = buildAutoinstallUserData({ blob, blobSignatureHex });
+    const pwOnly = buildAutoinstallUserData({ blob, blobSignatureHex, wifiPassword: "orphan" });
+    expect(pwOnly).toBe(none);
+    expect(pwOnly).not.toContain("orphan");
+  });
+
+  it("Wi-Fi composes with the locked LUKS default (network: + storage: both present)", () => {
+    const yaml = userData({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(yaml).toContain("network:");
+    expect(yaml).toContain("storage:");
+    expect(yaml).toContain("type: dm_crypt");
+    // ordering under autoinstall: network → early-commands → packages(+wpasupplicant) → storage → late-commands
+    expect(yaml.indexOf("network:")).toBeLessThan(yaml.indexOf("early-commands:"));
+    expect(yaml.indexOf("early-commands:")).toBeLessThan(yaml.indexOf("wpasupplicant"));
+    expect(yaml.indexOf("wpasupplicant")).toBeLessThan(yaml.indexOf("storage:"));
+    expect(yaml.indexOf("storage:")).toBeLessThan(yaml.indexOf("late-commands:"));
+  });
+});
+
+describe("wifiSetupScript — distro-correct installed-system config (Ubuntu netplan vs Debian networkd)", () => {
+  it("is one script that branches at RUNTIME on whether netplan is present", () => {
+    const s = wifiSetupScript("HomeNet", "s3cret");
+    // The discriminator: netplan dir present in the target ⇒ Ubuntu, else Debian.
+    expect(s).toContain('if [ -d "${ROOT}/etc/netplan" ]; then');
+    expect(s).toContain("else");
+  });
+
+  it("Ubuntu branch keeps the netplan file UNCHANGED (name-keyed, 0600, dhcp4+optional)", () => {
+    const s = wifiSetupScript('My "Net" \\x', 'p"a\\ss');
+    expect(s).toContain('cat > "${ROOT}/etc/netplan/99-flagship-wifi.yaml"');
+    expect(s).toContain("  wifis:");
+    expect(s).toContain("      dhcp4: true");
+    expect(s).toContain("      optional: true");
+    expect(s).toContain('sed -i "s/__IFACE__/${IF}/" "${ROOT}/etc/netplan/99-flagship-wifi.yaml"');
+    expect(s).toContain('chmod 600 "${ROOT}/etc/netplan/99-flagship-wifi.yaml"');
+    // SSID/pw escaped for the YAML scalar.
+    expect(s).toContain('"My \\"Net\\" \\\\x":');
+    expect(s).toContain('password: "p\\"a\\\\ss"');
+  });
+
+  it("Debian branch writes a networkd .network (DHCP) keyed by the detected iface", () => {
+    const s = wifiSetupScript("HomeNet", "s3cret");
+    expect(s).toContain('cat > "${ROOT}/etc/systemd/network/10-flagship-wifi.network"');
+    expect(s).toContain("Name=__IFACE__");
+    expect(s).toContain("DHCP=yes");
+    expect(s).toContain('sed -i "s/__IFACE__/${IF}/" "${ROOT}/etc/systemd/network/10-flagship-wifi.network"');
+  });
+
+  it("Debian branch writes the per-iface wpa_supplicant conf the @.service template reads (0600)", () => {
+    const s = wifiSetupScript("HomeNet", "s3cret");
+    // The exact path wpa_supplicant@<iface>.service consumes.
+    expect(s).toContain('cat > "${ROOT}/etc/wpa_supplicant/wpa_supplicant-${IF}.conf"');
+    expect(s).toContain("ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev");
+    expect(s).toContain('ssid="HomeNet"');
+    expect(s).toContain('psk="s3cret"');
+    expect(s).toContain('chmod 600 "${ROOT}/etc/wpa_supplicant/wpa_supplicant-${IF}.conf"');
+  });
+
+  it("Debian branch NEUTRALIZES d-i's ifupdown wpa stanza (so two managers don't fight the radio)", () => {
+    const s = wifiSetupScript("HomeNet", "s3cret");
+    // It must touch /etc/network/interfaces and comment out the iface + wpa- lines.
+    expect(s).toContain('IFACES_FILE="${ROOT}/etc/network/interfaces"');
+    expect(s).toContain("allow-hotplug|auto|iface");
+    expect(s).toContain("/^[[:space:]]*wpa-/");
+    expect(s).toContain("neutralized ifupdown wireless stanza");
+  });
+
+  it("Debian branch enables networkd + wpa_supplicant@<iface> via .wants symlinks (chroot-safe)", () => {
+    const s = wifiSetupScript("HomeNet", "s3cret");
+    expect(s).toContain('multi-user.target.wants/systemd-networkd.service"');
+    expect(s).toContain('sockets.target.wants/systemd-networkd.socket"');
+    expect(s).toContain('multi-user.target.wants/wpa_supplicant@${IF}.service"');
+    // Symlinks point at the shipped unit templates.
+    expect(s).toContain("ln -sf /lib/systemd/system/systemd-networkd.service");
+    expect(s).toContain('ln -sf "/lib/systemd/system/wpa_supplicant@.service"');
+  });
+});
+
+describe("first-boot Wi-Fi safety-net — the headless-box backstop", () => {
+  function bootstrapWith(opts: { wifiSSID?: string; wifiPassword?: string }): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return extractBootstrap(buildAutoinstallUserData({ blob, blobSignatureHex, ...opts }));
+  }
+
+  it("is ABSENT on a wired burn (no SSID) — keeps the bootstrap byte-identical", () => {
+    const b = bootstrapWith({});
+    expect(b).not.toContain("flagship-wifi-safetynet");
+    expect(b).not.toContain("/etc/flagship/wifi.env");
+    // wpasupplicant NOT added to the bootstrap apt line on the wired path.
+    expect(b).not.toMatch(/apt-get install .*wpasupplicant/);
+    // returns "" for an empty SSID.
+    expect(buildWifiSafetyNetBlock("", "x")).toBe("");
+    expect(buildWifiSafetyNetBlock("   ", "x")).toBe("");
+  });
+
+  it("is PRESENT on a Wi-Fi burn: a oneshot unit + script + base64 creds + wpasupplicant", () => {
+    const b = bootstrapWith({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    expect(b).toContain("/usr/local/sbin/flagship-wifi-safetynet.sh");
+    expect(b).toContain("cat > /etc/systemd/system/flagship-wifi-safetynet.service");
+    expect(b).toContain("systemctl enable flagship-wifi-safetynet.service");
+    // Creds embedded base64 (never plaintext in the bootstrap) at 0600.
+    expect(b).toContain("FLAGSHIP_WIFI_SSID_B64=");
+    expect(b).toContain("chmod 600 /etc/flagship/wifi.env");
+    expect(b).not.toContain("HomeNet");
+    expect(b).not.toContain("s3cret");
+    // The bootstrap apt line now includes wpasupplicant (safety-net needs it).
+    expect(b).toMatch(/apt-get install .*wpasupplicant/);
+  });
+
+  it("only acts when OFFLINE (route-gated) + is idempotent + retries — never fights a working config", () => {
+    const b = bootstrapWith({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    // Route check + grace loop that EXITS if a default route already exists.
+    expect(b).toContain("has_route() { ip route show default 2>/dev/null | grep -q .; }");
+    expect(b).toContain("default route present — primary config OK");
+    // Retries DHCP (networkd-first, with explicit-client fallbacks).
+    expect(b).toContain("systemctl restart systemd-networkd");
+    expect(b).toContain("dhclient -1");
+    expect(b).toContain("dhcpcd -t 20");
+    expect(b).toContain("udhcpc -i");
+    // wpa_supplicant brought up directly on the detected iface.
+    expect(b).toContain('wpa_supplicant -B -i "$IF" -c "$CONF"');
+  });
+
+  it("the unit is NOT ordered on network-online.target (that would defeat the offline backstop)", () => {
+    const b = bootstrapWith({ wifiSSID: "HomeNet", wifiPassword: "s3cret" });
+    // It orders After=network.target (loose) and Before the register/daemon units.
+    expect(b).toContain("After=network.target");
+    expect(b).toContain("Before=flagship-first-boot-register.service flagship-daemon.service");
+    // The safety-net unit body must not wait for network-online.
+    const unitStart = b.indexOf("flagship-wifi-safetynet.service <<");
+    const unitEnd = b.indexOf("WIFIUNIT", unitStart + 1);
+    const unit = b.slice(unitStart, unitEnd);
+    expect(unit).not.toContain("network-online.target");
+  });
+
+  it("the safety-net block is BYTE-IDENTICAL to the Swift twin (cross-language sha pin)", () => {
+    // EngineTests.testWifiSafetyNetBlockIsByteIdenticalToTs pins this SAME sha256.
+    const s = buildWifiSafetyNetBlock("Flagship Test AP", "test-only-not-real");
+    expect(createHash("sha256").update(s).digest("hex")).toBe(
+      "a269d668fe30c30226b7c9825247d6e63b3020e0a0e524d939e248d83b739656",
+    );
+  });
+});
+
+// The remaining piece between this burner and the "final" one: the encrypted
+// root is unlocked in the INITRAMFS via the phone-relay, but the premount curls
+// the relay assuming the network is already up — and nothing in the initramfs
+// configures it. A headless box (esp. Wi-Fi-only) installs + bootstraps fine,
+// then HANGS at the LUKS prompt on reboot. These tests encode the acceptance
+// criteria for that work; un-skip them when the initramfs network-unlock lands.
+describe.skip("FINAL BURNER (not built yet) — initramfs network-unlock", () => {
+  function encBootstrap(): string {
+    const { blob, blobSignatureHex } = signedBlob();
+    return extractBootstrap(buildAutoinstallUserData({ blob, blobSignatureHex }));
+  }
+
+  it("initramfs hook stages a Wi-Fi-capable stack (wpa_supplicant + the wl driver/firmware)", () => {
+    const b = encBootstrap();
+    expect(b).toMatch(/copy_exec\s+\S*wpa_supplicant/);
+    expect(b).toMatch(/manual_add_modules\s+(cfg80211|iwlwifi|ath\w*|rtw\w*|mt76\w*|brcmfmac)/);
+  });
+
+  it("initramfs premount brings the network UP before the unlock-relay curl", () => {
+    const b = encBootstrap();
+    const premount = b.slice(b.indexOf("local-top/flagship-unlock"));
+    const relayAt = premount.search(/\/api\/boot\/(request|lease)/);
+    const netAt = premount.search(/configure_networking|ip=dhcp|wpa_supplicant -B|udhcpc|dhclient/);
+    expect(netAt).toBeGreaterThanOrEqual(0);
+    expect(netAt).toBeLessThan(relayAt); // network must come up before the relay
   });
 });

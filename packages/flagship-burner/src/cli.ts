@@ -20,11 +20,14 @@ import {
   loadBlobFromStdin,
   BurnerLoadError,
   buildAutoinstallUserData,
+  buildDebianPreseed,
   verifyIsoHash,
   PINNED_DISTROS,
   runWriteCommand,
   runWriteImageCommand,
-  remasterIsoWithAutoinstall,
+  remasterIsoWithInstaller,
+  detectIsoFamily,
+  type IsoFamily,
 } from "./index.js";
 
 const args = process.argv.slice(2);
@@ -122,15 +125,25 @@ async function cmdUserData(rest: string[]): Promise<void> {
     console.error(`load recipe failed: ${(e as Error).message}`);
     process.exit(1);
   }
-  const yaml = buildAutoinstallUserData({
+  const genOpts = {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
-  });
-  await writeFile(outPath, yaml, { mode: 0o600 });
-  console.log(`wrote ${yaml.length} bytes to ${outPath}`);
+    wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
+    wifiPassword: extractFlagValue(rest, "--wifi-password"),
+  };
+  // Emit a Debian d-i preseed.cfg with --debian (or --family debian); default
+  // stays the Ubuntu autoinstall user-data (this command is for inspection;
+  // `prepare`/`write` auto-detect the family from the ISO).
+  const family: IsoFamily =
+    rest.includes("--debian") || extractFlagValue(rest, "--family") === "debian"
+      ? "debian"
+      : "ubuntu";
+  const out = family === "debian" ? buildDebianPreseed(genOpts) : buildAutoinstallUserData(genOpts);
+  await writeFile(outPath, out, { mode: 0o600 });
+  console.log(`wrote ${out.length} bytes to ${outPath} (${family})`);
   console.log(`server-domain: ${loaded.blob.serverDomain}`);
   console.log(`expires:       ${new Date(loaded.blob.authCode.expiresAt).toISOString()}`);
   // Auto-shred the recipe file after we've consumed it. The signed
@@ -165,15 +178,28 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     console.error(`load recipe failed: ${(e as Error).message}`);
     process.exit(1);
   }
-  const yaml = buildAutoinstallUserData({
+  const genOpts = {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
+    wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
+    wifiPassword: extractFlagValue(rest, "--wifi-password"),
+  };
+  // Detect Ubuntu vs Debian from the ISO and bake the matching unattended
+  // mechanism (NoCloud autoinstall vs d-i preseed). --family overrides.
+  const forced = extractFlagValue(rest, "--family");
+  const family: IsoFamily | undefined =
+    forced === "debian" || forced === "ubuntu" ? forced : undefined;
+  const used = await remasterIsoWithInstaller({
+    srcIsoPath: isoPath,
+    outIsoPath: outPath,
+    userDataYaml: buildAutoinstallUserData(genOpts),
+    preseedCfg: buildDebianPreseed(genOpts),
+    family,
   });
-  await remasterIsoWithAutoinstall({ srcIsoPath: isoPath, outIsoPath: outPath, userDataYaml: yaml });
-  console.log(`wrote prepared ISO to ${outPath}`);
+  console.log(`wrote prepared ISO to ${outPath} (${used})`);
   console.log(`server-domain: ${loaded.blob.serverDomain}`);
   console.log(
     `expires:       ${new Date(loaded.blob.authCode.expiresAt).toISOString()}`,
@@ -221,6 +247,8 @@ async function cmdWrite(rest: string[]): Promise<void> {
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
+    wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
+    wifiPassword: extractFlagValue(rest, "--wifi-password"),
   });
   if (!result.ok) {
     console.error(`write failed: ${result.reason}`);
@@ -275,11 +303,13 @@ function extractFlagValue(argv: string[], flag: string): string | undefined {
 
 function cmdDistros(): void {
   for (const d of PINNED_DISTROS) {
-    console.log(`${d.id}  ${d.displayName}`);
-    console.log(`  url:   ${d.upstreamUrl}`);
-    console.log(`  sha:   ${d.sha256}`);
-    console.log(`  size:  ${d.sizeBytes} bytes`);
-    console.log(`  boot:  ${d.boot}`);
+    const tag = d.recommended ? "  [recommended]" : "";
+    console.log(`${d.id}  ${d.displayName}${tag}`);
+    console.log(`  url:    ${d.upstreamUrl}`);
+    console.log(`  sha:    ${d.sha256}`);
+    console.log(`  size:   ${d.sizeBytes} bytes`);
+    console.log(`  family: ${d.family}`);
+    console.log(`  boot:   ${d.boot}`);
   }
 }
 
@@ -290,9 +320,11 @@ usage:
   (a recipe arg of "-" reads the JSON from stdin: pbpaste | flagship-burn verify -)
   flagship-burn verify <recipe.json|->                     verify the signed blob
   flagship-burn verify-iso <path>                          check ISO against pinned distros
-  flagship-burn user-data <recipe.json|-> <out>            emit cloud-init user-data
+  flagship-burn user-data <recipe.json|-> <out>            emit the unattended install config
+                                                           (Ubuntu autoinstall by default; --debian for a d-i preseed)
                                                            (auto-shreds recipe; pass --keep-recipe to skip)
-  flagship-burn prepare <recipe.json|-> <iso> <out.iso>    bake a flashable autoinstall ISO
+  flagship-burn prepare <recipe.json|-> <iso> <out.iso>    bake a flashable unattended ISO
+                                                           (auto-detects Ubuntu vs Debian; --family to force)
   flagship-burn write <recipe.json> <iso>                  prepare + raw-write to a USB device
                                                            [--device /dev/diskN | auto] [--yes] [--keep-recipe]
                                                            (needs sudo; interactive picker if no --device)
@@ -300,6 +332,10 @@ usage:
                                                            [--device /dev/diskN | auto] [--yes]
                                                            (needs sudo; pairs with prepare)
   flagship-burn distros                                    list supported distros
+
+Wi-Fi (for a target box with no Ethernet) — pass to user-data/prepare/write:
+  --wifi-ssid <name> --wifi-password <pass>   bake netplan Wi-Fi into the image
+  (a burn-time local input; NEVER part of the signed recipe)
 
 The recipe is the signed JSON the website produces after you scan the
 QR code with your phone. Bring it here — the Burner verifies the

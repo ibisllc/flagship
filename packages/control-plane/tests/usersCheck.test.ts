@@ -119,10 +119,17 @@ describe("handleUsersCheck", () => {
     expect(body.reason).not.toMatch(/no hyphens/i);
   });
 
-  it("accepts a long all-alphanumeric username up to 63 chars", async () => {
-    const u = "a".repeat(63);
+  it("accepts an all-alphanumeric username at the 30-char max", async () => {
+    const u = "a".repeat(30);
     const r = await handleUsersCheck({ storage: fakeStorage() }, { username: u });
     expect((r.body as UsersCheckResponse).available).toBe(true);
+  });
+
+  it("rejects a username over 30 chars and one under 3 chars", async () => {
+    const tooLong = await handleUsersCheck({ storage: fakeStorage() }, { username: "a".repeat(31) });
+    expect((tooLong.body as UsersCheckResponse).available).toBe(false);
+    const tooShort = await handleUsersCheck({ storage: fakeStorage() }, { username: "ab" });
+    expect((tooShort.body as UsersCheckResponse).available).toBe(false);
   });
 
   it("returns taken=false + reason for a real existing claim", async () => {

@@ -4,7 +4,7 @@
  *
  * Two distinct label classes:
  *
- *   - **Username (creator + host):** `[a-z0-9]{1,32}` — dashless. The
+ *   - **Username (creator + host):** `[a-z0-9]{3,30}` — dashless. The
  *     dash that separates `<slug>-<creator>` in app URLs is unambiguous
  *     only if usernames cannot contain dashes; the URL parser splits on
  *     the last dash to pull out `<creator>`. Usernames are short
@@ -24,9 +24,9 @@
  * list of names commonly mistaken for system endpoints.
  */
 // Canonical username rule (mirror of control-plane labels.ts): lower
-// alphanumerics only, no hyphens, up to the 63-octet DNS label cap.
-// Hyphen-free usernames keep `<creator>-<slug>` app ids unambiguous.
-const USERNAME_RE = /^[a-z0-9]{1,63}$/;
+// alphanumerics only, no hyphens, 3–30 chars. Hyphen-free usernames
+// keep `<creator>-<slug>` app ids unambiguous.
+const USERNAME_RE = /^[a-z0-9]{3,30}$/;
 const SLUG_RE = /^[a-z0-9](-?[a-z0-9])*$/;
 const SLUG_MAX = 32;
 /** Legacy DNS label regex retained for callers that do raw subdomain validation. */
@@ -83,7 +83,7 @@ export function validateUserLabel(input: string): LabelValidation {
   if (!USERNAME_RE.test(norm)) {
     return {
       ok: false,
-      reason: "username must match [a-z0-9]{1,32} (no dashes — the dash is reserved as the slug-creator separator in app URLs)",
+      reason: "username must match [a-z0-9]{3,30} (no dashes — the dash is reserved as the slug-creator separator in app URLs)",
     };
   }
   if (RESERVED_USER_LABELS.has(norm)) {

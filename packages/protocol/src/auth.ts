@@ -44,6 +44,7 @@ const TAG_AUTH_CODE = "flagship/auth-code/v1";
 const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 const TAG_SERVER_REGISTER = "flagship/server-register/v1";
 const TAG_AUTH_CODE_REVOKE = "flagship/auth-code-revoke/v1";
+const TAG_RELEASE_SERVER_NAME = "flagship/release-server-name/v1";
 const TAG_USER_PUBKEY_BINDING = "flagship-ca-binding/v1";
 // CA-signed (same key as the pubkey binding). Tells a client that
 // `username` is a demo account and the recovery ceremony must run
@@ -295,6 +296,25 @@ export interface AuthCode {
 export interface AuthCodeRevocation {
   serial: string;
   username: string;
+  issuedAt: number;
+}
+
+/**
+ * IRK-signed "cancel the server / free the name" request. Releases a
+ * reserved-but-unactivated (or active, with owner auth) server name so
+ * the leftmost `<server>` label under the user can be claimed again.
+ *
+ * Unlike {@link AuthCodeRevocation} (keyed by a single auth-code serial),
+ * this is keyed by the full `serverDomain` so .com can release every
+ * piece of the reservation that pins the name — the RCK routing record
+ * (the thing that actually makes a failed name un-reusable), any active
+ * auth-codes for that domain, and the registered server record if the
+ * box ever phoned home. The signature is verified against the username's
+ * registered IRK, so only the account owner can release their own name.
+ */
+export interface ReleaseServerName {
+  username: string;
+  serverDomain: string;
   issuedAt: number;
 }
 
@@ -924,6 +944,12 @@ function canonicalAuthCodeRevoke(r: AuthCodeRevocation): Bytes {
   );
 }
 
+function canonicalReleaseServerName(r: ReleaseServerName): Bytes {
+  return new TextEncoder().encode(
+    [TAG_RELEASE_SERVER_NAME, r.username, r.serverDomain, r.issuedAt].join("|"),
+  );
+}
+
 export function signAuthCode(c: AuthCode, irk: Keypair): Bytes {
   return ed.sign(canonicalAuthCode(c), irk.privateKey);
 }
@@ -975,6 +1001,22 @@ export function verifyAuthCodeRevocation(
 ): boolean {
   try {
     return ed.verify(sig, canonicalAuthCodeRevoke(r), irkPub);
+  } catch {
+    return false;
+  }
+}
+
+export function signReleaseServerName(r: ReleaseServerName, irk: Keypair): Bytes {
+  return ed.sign(canonicalReleaseServerName(r), irk.privateKey);
+}
+
+export function verifyReleaseServerName(
+  r: ReleaseServerName,
+  sig: Bytes,
+  irkPub: Bytes,
+): boolean {
+  try {
+    return ed.verify(sig, canonicalReleaseServerName(r), irkPub);
   } catch {
     return false;
   }

@@ -25,6 +25,46 @@
       font-size: var(--body-sm-size); font-weight: 500;
     }
     .toc a:hover { color: var(--text); border-color: var(--text-muted); }
+    /* Folded-in "assemble your server" content. Sub-targets clear the hash jump. */
+    .doc-section h3 { scroll-margin-top: 80px; }
+    .doc-sub { scroll-margin-top: 80px; padding-top: var(--space-6); }
+    .doc-sub h3 {
+      font-family: var(--font-heading); font-size: var(--h4-size);
+      margin: 0 0 var(--space-2); display: flex; align-items: center; gap: var(--space-3);
+      color: var(--text);
+    }
+    .kv {
+      display: grid; grid-template-columns: 120px 1fr;
+      gap: var(--space-2) var(--space-4); margin: var(--space-4) 0;
+    }
+    @media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 2px var(--space-4); } }
+    .kv dt { color: var(--text-muted); font-size: var(--small-size); }
+    .kv dd { margin: 0; font-family: var(--font-mono); font-size: var(--mono-size); line-height: var(--mono-line); word-break: break-all; }
+    .kv dd a { color: var(--primary); }
+    .pill {
+      font-family: var(--font-mono); font-size: var(--caption-size);
+      color: var(--primary); border: 1px solid var(--primary);
+      border-radius: 999px; padding: 2px 10px; font-weight: 500;
+    }
+    .steps { counter-reset: step; margin-top: var(--space-4); }
+    .step {
+      display: grid; grid-template-columns: 40px 1fr;
+      gap: var(--space-4); padding: var(--space-4) 0;
+    }
+    .step::before {
+      counter-increment: step; content: counter(step);
+      font-family: var(--font-mono); color: var(--primary);
+      border: 1px solid var(--primary); border-radius: 50%;
+      width: 32px; height: 32px; display: grid; place-items: center;
+      font-size: var(--small-size);
+    }
+    .step h3 { font-family: var(--font-heading); font-size: var(--h4-size); margin-bottom: var(--space-1); }
+    .step p { margin-bottom: var(--space-2); }
+    .callout {
+      margin-top: var(--space-4); padding: var(--space-4) var(--space-5);
+      border: 1px solid var(--border); border-left: 3px solid var(--primary);
+      border-radius: var(--radius-md);
+    }
   </style>
   <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -56,6 +96,7 @@
       <a href="#architecture">Architecture</a>
       <a href="#how-it-works">How it works</a>
       <a href="#install">Install</a>
+      <a href="#burn">Assemble your server</a>
       <a href="#pair">Phone pairing</a>
       <a href="#apps">Apps &amp; manifest</a>
       <a href="#multiplexing">URL multiplexing</a>
@@ -96,6 +137,84 @@
       <p>The installer is a public shell script in our open-source repo. It's pinned by hash inside the QR scan blob. The installer formats the disk with LUKS, generates a server identity, requests a Let's Encrypt cert via DNS-01, and registers with .com.</p>
       <p>Every subsequent boot, the phone has to approve the LUKS unlock. A stolen box without your phone is a brick.</p>
       <a class="next" href="/help">Stuck on install? →</a>
+    </section>
+
+    <section class="doc-section" id="burn">
+      <h2>Assemble your server</h2>
+      <p>Flagship Assembler turns a spare computer into your personal server. It needs three things — your certificate, a Linux image, and a USB drive. Here's what each one is and how it works.</p>
+
+      <div class="doc-sub" id="certificate">
+        <h3>A certificate</h3>
+        <p>The certificate is a small JSON file your <strong>phone</strong> signs. It names the server you're creating and proves the request came from you — the phone is the only thing that can authorize a new Flagship server, and it never leaves your pocket.</p>
+        <p>To get one, open <a href="/">flagshipserver.com</a> on your computer and scan the QR code with the Flagship app on your phone. The app signs a certificate for the server and hands it back to the page, which downloads the JSON. Bring that file to the Assembler.</p>
+        <div class="callout">
+          <p style="margin:0;"><strong>It's single-use and short-lived.</strong> A certificate is good for a few hours and authorizes exactly one server, so a leftover file on disk can't be replayed. Generate a fresh one whenever you need it.</p>
+        </div>
+        <p style="margin-top: var(--space-5);"><a href="/" class="btn btn--primary">Get a certificate</a></p>
+      </div>
+
+      <div class="doc-sub" id="recommended-linux">
+        <h3>A Linux image</h3>
+        <p>The Assembler builds your boot drive on top of a stock Linux installer. We test against a small, pinned list — use one of these for a clean, verified install. <strong>Debian is the recommended choice</strong> — it works on the widest range of machines.</p>
+
+        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-6) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Debian 13 (trixie) <span class="pill">amd64 · recommended</span></h4>
+        <p>The most compatible choice. Its installer can place the bootloader where even stubborn UEFI firmware will find it — so Debian installs and boots on machines where other installers give up. It's also a smaller download (a network installer), and boots on both BIOS and UEFI. <strong>If you're not sure which to pick, pick Debian.</strong></p>
+        <dl class="kv">
+          <dt>Download</dt>
+          <dd><a href="https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso">debian-13.5.0-amd64-netinst.iso</a></dd>
+          <dt>Size</dt>
+          <dd>~750 MB</dd>
+          <dt>SHA-256</dt>
+          <dd>95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a</dd>
+        </dl>
+
+        <h4 style="font-family: var(--font-heading); font-size: var(--h5-size, var(--body-size)); font-weight: 600; margin: var(--space-8) 0 var(--space-2); display:flex; align-items:center; gap: var(--space-3);">Ubuntu Server 22.04.5 LTS <span class="pill">amd64</span></h4>
+        <p>The long-term-support server image. Boots on both BIOS and UEFI. A solid alternative — though on some machines whose firmware refuses to register a new boot entry, Ubuntu's installer can't complete; if that happens to you, use Debian instead.</p>
+        <dl class="kv">
+          <dt>Download</dt>
+          <dd><a href="https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso">ubuntu-22.04.5-live-server-amd64.iso</a></dd>
+          <dt>Size</dt>
+          <dd>~2.0 GB</dd>
+          <dt>SHA-256</dt>
+          <dd>9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0</dd>
+        </dl>
+        <div class="callout">
+          <p style="margin:0;"><strong>Why a pinned list?</strong> The Assembler verifies the image's SHA-256 against this list before it writes anything. A corrupted download, a tampered mirror, or an untested version is refused — you never have to check a checksum by hand. We add images here only after a real end-to-end install on real hardware.</p>
+        </div>
+      </div>
+
+      <div class="doc-sub" id="booting-process">
+        <h3>A boot drive</h3>
+        <p>The USB drive is a one-time installer, not the server itself. It carries your certificate, turns a spare machine into your Flagship server, and then it's done — you can wipe and reuse it.</p>
+        <div class="steps">
+          <div class="step">
+            <div>
+              <h3>Assemble the drive</h3>
+              <p>Drop your certificate, a recommended Linux image, and a USB drive into the Assembler and hit Assemble. Your certificate is baked <em>inside</em> the installer image, so the drive needs nothing from the network to know which server it's setting up.</p>
+              <p style="color: var(--text-muted);"><strong>The drive is erased</strong> — everything on it is overwritten. Use a spare one.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Boot the target machine</h3>
+              <p>Plug the drive into the computer you want to become your server and turn it on, choosing the USB drive as the boot device. The installer runs unattended — partitions the disk, installs the base system, sets up the Flagship daemon. No keyboard babysitting.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Register, unattended</h3>
+              <p>On first boot the new server generates its own identity, presents your signed certificate, and registers its subdomain. From this moment TLS terminates on your box — flagship.services becomes a dumb pipe that literally cannot read your content.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div>
+              <h3>Reclaim the drive</h3>
+              <p>Once the server is live, the boot drive has done its job. The certificate it carried is single-use and time-limited, so an old drive can't be replayed. Reformat the stick and use it for anything you like.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <a class="next" href="/help">Stuck assembling? →</a>
     </section>
 
     <section class="doc-section" id="pair">

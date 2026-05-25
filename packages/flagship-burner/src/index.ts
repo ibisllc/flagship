@@ -13,15 +13,30 @@ export {
 } from "./loadBlob.js";
 export {
   buildAutoinstallUserData,
+  buildBootstrapScript,
   type UserDataOptions,
+  type BootstrapTemplateArgs,
+  type InstallerFamily,
+  type BootUnlockMode,
 } from "./userdata.js";
+export { buildDebianPreseed } from "./preseed.js";
 export { verifyIsoHash, type VerifyIsoResult } from "./verifyIso.js";
 export {
   remasterIsoWithAutoinstall,
+  remasterIsoWithPreseed,
+  remasterIsoWithInstaller,
+  detectIsoFamily,
+  classifyIsoText,
   editGrubCfgForAutoinstall,
+  editGrubCfgForPreseed,
+  editIsolinuxCfgForPreseed,
   buildNocloudSeed,
   resolveXorriso,
+  DEBIAN_PRESEED_CMDLINE,
   type RemasterArgs,
+  type RemasterPreseedArgs,
+  type RemasterInstallerArgs,
+  type IsoFamily,
 } from "./remasterIso.js";
 export {
   enumerateDevices,

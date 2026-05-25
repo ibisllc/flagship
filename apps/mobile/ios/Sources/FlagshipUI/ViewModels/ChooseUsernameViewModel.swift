@@ -32,14 +32,13 @@ public final class ChooseUsernameViewModel {
         }
     }
 
-    /// RFC 1035 label — mirrors packages/control-plane/src/labels.ts
-    /// Mirrors the Worker's USERNAME_RE (packages/control-plane/src/labels.ts).
-    /// Used ONLY as a network-down fallback to keep the continue
-    /// button useful when the Worker is unreachable; the
-    /// authoritative check is the Worker's response. NO hyphens —
-    /// usernames are alphanumerics only so `<creator>-<slug>` app ids
-    /// parse unambiguously.
-    public nonisolated static let usernameFallbackRegex = #"^[a-z0-9]{1,63}$"#
+    /// Mirrors the Worker's USERNAME_RE (packages/control-plane/src/labels.ts):
+    /// 3–30 lowercase alphanumerics, NO hyphens. Used ONLY as a
+    /// network-down fallback to keep the continue button useful when the
+    /// Worker is unreachable; the authoritative check is the Worker's
+    /// response. Usernames are alphanumerics only so `<creator>-<slug>`
+    /// app ids parse unambiguously.
+    public nonisolated static let usernameFallbackRegex = #"^[a-z0-9]{3,30}$"#
 
     /// 350ms matches Android (ChooseUsernameScreen.kt) so both clients
     /// rate-limit the Worker identically.
@@ -89,7 +88,7 @@ public final class ChooseUsernameViewModel {
             if lower.range(of: Self.usernameFallbackRegex, options: .regularExpression) != nil {
                 status = .networkFallbackAvailable
             } else {
-                status = .invalid("Letters, digits, and hyphens only (not at the start or end).")
+                status = .invalid("3–30 lowercase letters and digits, no hyphens.")
             }
             lastChecked = lower
             return

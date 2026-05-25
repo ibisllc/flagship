@@ -1,13 +1,23 @@
 // Pending-server placeholder view. Shown while an in-flight order
 // (signed install blob delivered, box not yet phoned home) is sitting
-// in localStorage. Lets the user inspect the order + cancel it, which
-// IRK-signs an AuthCodeRevoke and POSTs to flagshipserver.com.
+// in localStorage. Lets the user inspect the order + cancel it.
+//
+// Cancelling does TWO things so the chosen name is genuinely freed:
+//   1. revokes the install auth-code (IRK-signed AuthCodeRevoke), and
+//   2. releases the server name (IRK-signed ReleaseServerName →
+//      /api/server/release) — which drops the RCK routing record that
+//      otherwise keeps the name reserved after a failed install.
+// Revoking the auth-code alone left the name "lost"; the release is the
+// piece that lets the user re-use it.
 //
 // MIRRORS: apps/mobile/{ios,android} PendingServerScreen.
 
 import { $, registerView, show } from "../lib/router.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import { getSession } from "../lib/state.js";
+import { signWithIrk } from "../keystore.js";
+import { releaseServerName } from "../lib/releaseServer.js";
 
 registerView("view-pending-server", { tab: "home" });
 
@@ -43,6 +53,24 @@ async function runCancel() {
     );
     if (!resp.ok && resp.status !== 404 && resp.status !== 403) {
       throw new Error(`HTTP ${resp.status}`);
+    }
+    // Release the name so it can be re-used. The auth-code revoke above
+    // kills the install ticket; this drops the RCK routing record (and
+    // any active codes / server record server-side) that otherwise keeps
+    // the name reserved. Best-effort: an unlocked session is required to
+    // sign, and the order must carry the username + fqdn (serverDomain).
+    const session = getSession();
+    const username = currentOrder.username || session.username;
+    const serverDomain = currentOrder.fqdn || currentOrder.serverDomain;
+    if (session.umk && session.irk && username && serverDomain) {
+      try {
+        await releaseServerName({ username, serverDomain, umk: session.umk, signWithIrk });
+      } catch (e) {
+        // Don't fail the whole cancel — the auth-code is already revoked,
+        // which voids the install. Surface a soft warning so the user
+        // knows the name may still be reserved until a retry/release.
+        toast(`name release deferred: ${e.message ?? e}`, "warn");
+      }
     }
     // Drop from local order list so home / activity stop showing it.
     const list = JSON.parse(localStorage.getItem("flagship.pendingOrders") || "[]");

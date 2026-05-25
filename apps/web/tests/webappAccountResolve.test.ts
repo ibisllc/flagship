@@ -180,6 +180,14 @@ describe("webapp isBareLoginHandle — login input rule", () => {
     expect(isBareLoginHandle("")).toBe(false);
     expect(isBareLoginHandle(undefined as any)).toBe(false);
   });
+
+  it("enforces the 3–30 length range (mirror of validateUserLabel)", async () => {
+    const { isBareLoginHandle } = await loadLib();
+    expect(isBareLoginHandle("ab")).toBe(false);          // too short
+    expect(isBareLoginHandle("abc")).toBe(true);          // min
+    expect(isBareLoginHandle("a".repeat(30))).toBe(true); // max
+    expect(isBareLoginHandle("a".repeat(31))).toBe(false); // too long
+  });
 });
 
 describe("webapp classifyResolution — login decision tree branch", () => {

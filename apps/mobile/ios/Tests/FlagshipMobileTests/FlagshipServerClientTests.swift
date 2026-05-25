@@ -99,7 +99,7 @@ final class FlagshipServerClientTests: XCTestCase {
     func test_usernameAvailable_rejectsHyphen() async throws {
         // Usernames are hyphen-free so serviceId `<creator>-<slug>` parses
         // unambiguously. Worker's labels.ts USERNAME_RE is
-        // /^[a-z0-9]{1,63}$/ — the iOS Mock must agree.
+        // /^[a-z0-9]{3,30}$/ — the iOS Mock must agree.
         let c = makeClient()
         let r = try await c.usernameAvailable("play-q2")
         XCTAssertFalse(r.available)
@@ -112,6 +112,20 @@ final class FlagshipServerClientTests: XCTestCase {
         XCTAssertFalse(lead.available)
         let trail = try await c.usernameAvailable("harry-")
         XCTAssertFalse(trail.available)
+    }
+
+    func test_usernameAvailable_enforces3to30Length() async throws {
+        // Mirror of validateUserLabel: 3–30 chars. Reason string must
+        // match the Worker byte-for-byte (Mock ↔ Worker wire parity).
+        let c = makeClient()
+        let short = try await c.usernameAvailable("ab")
+        XCTAssertFalse(short.available)
+        XCTAssertEqual(short.reason, "username must be 3–30 lowercase letters or digits (no hyphens)")
+        let long = try await c.usernameAvailable(String(repeating: "a", count: 31))
+        XCTAssertFalse(long.available)
+        XCTAssertEqual(long.reason, "username must be 3–30 lowercase letters or digits (no hyphens)")
+        let okMin = try await c.usernameAvailable("abc")
+        XCTAssertTrue(okMin.available)
     }
 
     // MARK: - Recovery envelope

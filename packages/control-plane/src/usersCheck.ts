@@ -36,10 +36,10 @@ import { type CaIssuer, type CaGate, evaluateCaGate } from "./pubkeyCert.js";
 import { bytesToHex } from "./hex.js";
 import { demoServerBlockFromRow, type DemoServerBlock } from "./demoUsers.js";
 
-// Hyphen-free, same charset as real usernames, so a demo name can never
-// break the `<creator>-<slug>` app-id split or be rejected by the ~7
-// endpoints that enforce /^[a-z0-9]{1,63}$/. Distinct 3..32 length only.
-const DEMO_USERNAME_RE = /^[a-z0-9]{3,32}$/;
+// Hyphen-free, same charset AND length as real usernames (validateUserLabel =
+// [a-z0-9]{3,30}), so a demo name can never break the `<creator>-<slug>` app-id
+// split or be rejected by the endpoints that enforce that rule.
+const DEMO_USERNAME_RE = /^[a-z0-9]{3,30}$/;
 const DEVICE_LABEL_RE = /^[a-z0-9-]{1,24}$/;
 
 export interface TestAccountMeta {

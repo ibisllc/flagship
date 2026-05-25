@@ -3,12 +3,13 @@ import AppKit
 import UniformTypeIdentifiers
 import FlagshipBurnerCore
 
-/// Where the help links point. The website hosts the explainer pages.
+/// Where the help links point. The explainer lives in the docs page (the
+/// standalone how-to was folded into /docs); these open it in the browser.
 enum FlagshipLinks {
     static let base = "https://flagshipserver.com"
-    static let certificate = URL(string: "\(base)/how-to#certificate")!
-    static let recommendedDistros = URL(string: "\(base)/how-to#recommended-linux")!
-    static let bootingProcess = URL(string: "\(base)/how-to#booting-process")!
+    static let certificate = URL(string: "\(base)/docs#certificate")!
+    static let recommendedDistros = URL(string: "\(base)/docs#recommended-linux")!
+    static let bootingProcess = URL(string: "\(base)/docs#booting-process")!
 }
 
 /// Single-screen Assembler wizard.
@@ -64,6 +65,7 @@ struct WizardView: View {
             recipeRow
             isoRow
             diskRow
+            wifiRow
             Spacer(minLength: FB.Spacing.s2)
             bakeRow
         }
@@ -215,6 +217,36 @@ struct WizardView: View {
             linkLabel: "How does it work?",
             linkURL: FlagshipLinks.bootingProcess
         )
+    }
+
+    private var wifiActive: Bool {
+        !model.wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Optional Wi-Fi credentials for a box with no Ethernet. Kept compact —
+    /// it's a fallback, not one of the three primary inputs. Baked into the
+    /// USB's cloud-init at burn time; never part of the signed recipe.
+    private var wifiRow: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: FB.Spacing.s2) {
+                Image(systemName: "wifi")
+                    .foregroundStyle(wifiActive ? FB.Colors.success : FB.Colors.textMuted)
+                    .imageScale(.small)
+                    .frame(width: 16)
+                TextField("Wi-Fi network (optional)", text: $model.wifiSSID)
+                    .textFieldStyle(.roundedBorder)
+                SecureField("Password", text: $model.wifiPassword)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 150)
+                    .disabled(!wifiActive)
+                    .opacity(wifiActive ? 1 : 0.5)
+            }
+            Text("Only needed if this machine has no Ethernet cable. Baked into the single-use USB.")
+                .font(FB.Font.caption())
+                .foregroundStyle(FB.Colors.textMuted)
+                .padding(.leading, 16 + FB.Spacing.s2)
+        }
+        .padding(.horizontal, FB.Spacing.s1)
     }
 
     // MARK: - Bake

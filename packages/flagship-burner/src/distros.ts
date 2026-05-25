@@ -22,13 +22,42 @@ export interface PinnedDistro {
   sha256: string;
   /** Size in bytes (we sanity-check before reading the whole file). */
   sizeBytes: number;
+  /**
+   * Which installer family the ISO carries. "debian" → debian-installer (d-i)
+   * preseed; "ubuntu" → subiquity autoinstall. Selects the unattended-install
+   * mechanism the remaster bakes in (preseed vs NoCloud) and the generator
+   * (preseed.cfg vs cloud-init user-data). This is the discriminator, not
+   * cloudInitDatasource (kept for back-compat).
+   */
+  family: "debian" | "ubuntu";
   /** Cloud-init NoCloud datasource layout the bootstrap relies on. */
   cloudInitDatasource: "subiquity" | "debian-cloud";
   /** Whether boot is BIOS-legacy, UEFI, or both. */
   boot: "bios" | "uefi" | "hybrid";
+  /**
+   * The most-compatible / recommended choice shown first on the website + in
+   * the picker. Exactly one entry is the recommended default.
+   */
+  recommended?: boolean;
 }
 
 export const PINNED_DISTROS: readonly PinnedDistro[] = [
+  {
+    // Debian is the recommended default: its installer (debian-installer) can be
+    // preseeded to force GRUB to the EFI removable-media path, so it installs
+    // and boots on firmware that REJECTS NVRAM boot-entry writes — the exact
+    // class of box Ubuntu's subiquity fatally aborts on.
+    id: "debian-13-netinst-amd64",
+    displayName: "Debian 13 (trixie) netinst (amd64)",
+    upstreamUrl:
+      "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso",
+    sha256: "95838884f5ea6c82421dfe6baaa5a639dbbe6756c1e380f9fe7a7cb0c1949d2a",
+    sizeBytes: 791_674_880,
+    family: "debian",
+    cloudInitDatasource: "debian-cloud",
+    boot: "hybrid",
+    recommended: true,
+  },
   {
     id: "ubuntu-22.04-server-amd64",
     displayName: "Ubuntu Server 22.04.5 LTS (amd64)",
@@ -36,6 +65,7 @@ export const PINNED_DISTROS: readonly PinnedDistro[] = [
       "https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso",
     sha256: "9bc6028870aef3f74f4e16b900008179e78b130e6b0b9a140635434a46aa98b0",
     sizeBytes: 2_136_926_208,
+    family: "ubuntu",
     cloudInitDatasource: "subiquity",
     boot: "hybrid",
   },

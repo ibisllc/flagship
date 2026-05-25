@@ -1569,7 +1569,7 @@ describe("Pre-launch stealth gate (/wip_ + /alpha + coming-soon)", () => {
 });
 
 describe("/download/<os> — on-brand installer redirect", () => {
-  it("302s to the /how-to.html explainer while a platform's target is unset", async () => {
+  it("302s to the /docs#burn explainer while a platform's target is unset", async () => {
     // No INSTALLER_DOWNLOADS target wired yet → coming-soon explainer,
     // never a dead 404. (The /ready/ page links to /download/<os> so the
     // storage URL never shows in the UI.)
@@ -1579,7 +1579,7 @@ describe("/download/<os> — on-brand installer redirect", () => {
         makeEnv(),
       );
       expect(r.status).toBe(302);
-      expect(r.headers.get("location")).toBe("/how-to.html");
+      expect(r.headers.get("location")).toBe("/docs#burn");
     }
   });
 
@@ -1599,6 +1599,31 @@ describe("/download/<os> — on-brand installer redirect", () => {
       makeEnv(),
     );
     expect(r.status).toBe(302);
-    expect(r.headers.get("location")).toBe("/how-to.html");
+    expect(r.headers.get("location")).toBe("/docs#burn");
+  });
+});
+
+describe("/how-to + /how-to.html — folded into /docs", () => {
+  // The standalone explainer was folded into /docs; both the pretty path
+  // and the .html form 302 to /docs with NO fragment (the browser keeps the
+  // request's own #fragment, so /how-to#recommended-linux → /docs#…).
+  for (const path of ["/how-to", "/how-to.html"]) {
+    it(`302s ${path} → /docs (no fragment in Location)`, async () => {
+      const r = await route(
+        new Request(`https://flagshipserver.com${path}`),
+        makeEnv(),
+      );
+      expect(r.status).toBe(302);
+      expect(r.headers.get("location")).toBe("/docs");
+    });
+  }
+
+  it("redirects WITHOUT the preview cookie (runs before the coming-soon gate)", async () => {
+    const r = await route(
+      new Request("https://flagshipserver.com/how-to"),
+      makeEnv(),
+    );
+    expect(r.status).toBe(302);
+    expect(r.headers.get("location")).toBe("/docs");
   });
 });

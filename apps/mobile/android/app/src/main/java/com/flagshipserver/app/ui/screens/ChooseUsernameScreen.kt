@@ -24,9 +24,9 @@ import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.delay
 
 // Mirrors the Worker's USERNAME_RE (packages/control-plane/src/labels.ts):
-// lowercase alphanumerics only, no hyphens, 1–63 chars. Hyphen-free
+// lowercase alphanumerics only, no hyphens, 3–30 chars. Hyphen-free
 // usernames keep the composite app id `<creator>-<slug>` unambiguous.
-private val usernameRegex = Regex("^[a-z0-9]{1,63}$")
+private val usernameRegex = Regex("^[a-z0-9]{3,30}$")
 
 /**
  * D.2.2 — ChooseUsernameScreen.
@@ -100,14 +100,14 @@ fun ChooseUsernameScreen(onContinue: (String) -> Unit) {
             label = "Username",
             placeholder = "harry",
             helper = when (status) {
-                UsernameCheck.Empty -> "Letters and digits only. 1–32 characters."
+                UsernameCheck.Empty -> "Letters and digits only. 3–30 characters."
                 UsernameCheck.Invalid -> null
                 UsernameCheck.Checking -> "Checking…"
                 UsernameCheck.Available -> "Available."
                 UsernameCheck.Taken -> null
             },
             error = when (status) {
-                UsernameCheck.Invalid -> "Letters and digits only. No spaces or punctuation."
+                UsernameCheck.Invalid -> "3–30 letters and digits. No spaces, hyphens, or punctuation."
                 UsernameCheck.Taken -> "Already taken."
                 else -> null
             },

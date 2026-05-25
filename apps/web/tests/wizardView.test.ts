@@ -58,6 +58,66 @@ describe("first-run wizard (#25)", () => {
   });
 });
 
+describe("account-creation taken-name state + trademark claim (Change C)", () => {
+  it("pre-flights availability via checkUsername before opening the account", () => {
+    expect(VIEW_JS).toMatch(/import \{ checkUsername \}/);
+    expect(VIEW_JS).toMatch(/await checkUsername\(username\)/);
+    expect(VIEW_JS).toMatch(/avail\.available === false/);
+  });
+
+  it("renders a dedicated taken-name panel (not just a toast)", () => {
+    // The wizard renders its step bodies dynamically into the
+    // #view-wizard slot, so the taken-name panel markup lives in the JS,
+    // not index.html.
+    expect(VIEW_JS).toMatch(/wizard-username-taken/);
+    expect(VIEW_JS).toMatch(/function renderTakenState\(/);
+    expect(VIEW_JS).toMatch(/id="wizard-username-taken"/);
+  });
+
+  it("offers the trademark-claim affordance in the taken state", () => {
+    expect(VIEW_JS).toMatch(/import \{ trademarkClaimMailto \}/);
+    expect(VIEW_JS).toMatch(/trademarkClaimMailto\(username\)/);
+    expect(VIEW_JS).toContain("I hold a trademark to this name");
+  });
+
+  it("also shows the taken state when the claim itself comes back conflicted", () => {
+    expect(VIEW_JS).toMatch(/already claimed\|409\|conflict/);
+  });
+});
+
+describe("trademark-claim mailto helper (Change C)", () => {
+  it("targets trademarks@flagshipserver.com with the requested name pre-filled", async () => {
+    const {
+      trademarkClaimMailto,
+      trademarkClaimSubject,
+      trademarkClaimBody,
+      TRADEMARK_CLAIM_EMAIL,
+    } = await import("../public/webapp/lib/trademarkClaim.js");
+
+    expect(TRADEMARK_CLAIM_EMAIL).toBe("trademarks@flagshipserver.com");
+    expect(trademarkClaimSubject("acme")).toBe('Trademark claim for the name "acme"');
+
+    const body = trademarkClaimBody("acme");
+    expect(body).toContain("acme");
+    expect(body).toContain("Trademark registration number:");
+    expect(body).toContain("Requested name: acme");
+
+    const mailto = trademarkClaimMailto("acme");
+    expect(mailto.startsWith("mailto:trademarks@flagshipserver.com?")).toBe(true);
+    expect(mailto).toContain(`subject=${encodeURIComponent(trademarkClaimSubject("acme"))}`);
+    expect(mailto).toContain(`body=${encodeURIComponent(body)}`);
+  });
+
+  it("URL-encodes the requested name into both subject and body", async () => {
+    const { trademarkClaimMailto } = await import("../public/webapp/lib/trademarkClaim.js");
+    // A bare handle never has spaces, but the encoder must still run so
+    // the body's newlines/spaces are escaped.
+    const mailto = trademarkClaimMailto("widgets");
+    expect(mailto).not.toContain("\n");
+    expect(mailto).toContain("widgets");
+  });
+});
+
 describe("peer-backup opt-in step (#95)", () => {
   it("renders three buttons: enable / decline / maybe-later", () => {
     expect(VIEW_JS).toMatch(/wizard-pb-enable/);

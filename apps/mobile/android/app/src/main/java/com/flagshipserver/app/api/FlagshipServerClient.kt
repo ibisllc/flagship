@@ -887,8 +887,10 @@ class MockFlagshipServerClient(
                 demoServer = demoBlock,
             )
         }
-        if (lower.length < 2 || lower.length > 32) {
-            return UsernameAvailabilityResponse(lower, false, "Must be 2–32 chars.", demoServer = demoBlock)
+        // Mirrors the Worker's USERNAME_RE in labels.ts: 3–30 lowercase
+        // alphanumerics, no hyphens. Keep in sync.
+        if (lower.length < 3 || lower.length > 30) {
+            return UsernameAvailabilityResponse(lower, false, "Must be 3–30 chars.", demoServer = demoBlock)
         }
         if (lower in reservedUsernames) {
             return UsernameAvailabilityResponse(lower, false, "Reserved.", demoServer = demoBlock)

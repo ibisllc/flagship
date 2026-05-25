@@ -33,7 +33,12 @@ import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { loadBlobFromFile } from "./loadBlob.js";
 import { buildAutoinstallUserData } from "./userdata.js";
-import { remasterIsoWithAutoinstall } from "./remasterIso.js";
+import { buildDebianPreseed } from "./preseed.js";
+import {
+  remasterIsoWithInstaller,
+  detectIsoFamily,
+  type IsoFamily,
+} from "./remasterIso.js";
 import {
   enumerateDevices,
   lookupDevice,
@@ -53,6 +58,9 @@ export interface WriteCommandOpts {
   keepRecipe?: boolean;
   /** LUKS-encrypted root, the locked DEFAULT. false = internal debug escape only. See userdata.ts. */
   encryptRoot?: boolean;
+  /** Optional Wi-Fi for a box with no Ethernet (burn-time local input). See userdata.ts. */
+  wifiSSID?: string;
+  wifiPassword?: string;
   /** Injected for tests. Defaults to real spawn. */
   enumerateOpts?: EnumerateOpts;
   /** Injected for tests. Defaults to real stdin/stdout readline. */
@@ -61,11 +69,21 @@ export interface WriteCommandOpts {
   isRoot?: () => boolean;
   /** Injected for tests. Defaults to real raw-disk write. */
   writeBytesToDevice?: WriteBytesToDevice;
-  /** Injected for tests. Defaults to a real xorriso remaster. */
+  /** Force a family instead of detecting from the ISO (tests / overrides). */
+  family?: IsoFamily;
+  /** Injected for tests. Defaults to detectIsoFamily (reads the ISO). */
+  detectFamily?: (srcIsoPath: string) => Promise<IsoFamily>;
+  /**
+   * Injected for tests. Defaults to the family-aware xorriso remaster. Receives
+   * both configs + the resolved family; the real impl bakes the preseed (Debian)
+   * or the NoCloud seed (Ubuntu) accordingly.
+   */
   remaster?: (args: {
     srcIsoPath: string;
     outIsoPath: string;
     userDataYaml: string;
+    preseedCfg: string;
+    family: IsoFamily;
   }) => Promise<void>;
 }
 
@@ -115,16 +133,41 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     return confirmed;
   }
 
-  const yaml = buildAutoinstallUserData({
+  // Detect Ubuntu (subiquity autoinstall) vs Debian (d-i preseed) so we bake
+  // the right unattended mechanism. Both configs embed the SAME signed recipe +
+  // run the SAME first-boot bootstrap; only the installer wrapper differs.
+  const detectFamily = opts.detectFamily ?? ((p: string) => detectIsoFamily(p));
+  const family = opts.family ?? (await detectFamily(opts.isoPath));
+  const genOpts = {
     blob: loaded.blob,
     blobSignatureHex: loaded.blobSignatureHex,
     encryptRoot: opts.encryptRoot !== false,
-  });
-  const remaster = opts.remaster ?? remasterIsoWithAutoinstall;
+    wifiSSID: opts.wifiSSID,
+    wifiPassword: opts.wifiPassword,
+  };
+  const yaml = buildAutoinstallUserData(genOpts);
+  const preseedCfg = buildDebianPreseed(genOpts);
+  const activeConfig = family === "debian" ? preseedCfg : yaml;
+  const remaster =
+    opts.remaster ??
+    ((a: {
+      srcIsoPath: string;
+      outIsoPath: string;
+      userDataYaml: string;
+      preseedCfg: string;
+      family: IsoFamily;
+    }) =>
+      remasterIsoWithInstaller({
+        srcIsoPath: a.srcIsoPath,
+        outIsoPath: a.outIsoPath,
+        userDataYaml: a.userDataYaml,
+        preseedCfg: a.preseedCfg,
+        family: a.family,
+      }).then(() => undefined));
   const remasteredIso = join(
     tmpdir(),
     `flagship-remastered-${createHash("sha256")
-      .update(opts.isoPath + yaml)
+      .update(opts.isoPath + activeConfig)
       .digest("hex")
       .slice(0, 12)}.iso`,
   );
@@ -139,6 +182,8 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
       srcIsoPath: opts.isoPath,
       outIsoPath: remasteredIso,
       userDataYaml: yaml,
+      preseedCfg,
+      family,
     });
     console.log("FLAGSHIP_PHASE:write");
     const write = opts.writeBytesToDevice ?? defaultWriteBytesToDevice;

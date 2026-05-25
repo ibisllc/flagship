@@ -6,7 +6,7 @@ import {
 } from "@flagship/protocol";
 import type { RoutingStorage, UsernameStorage } from "@flagship/storage";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
-import { validateAppLabel } from "./labels.js";
+import { validateServerLabel } from "./labels.js";
 import {
   conflict, forbidden, malformed, notFound, ok,
   type HandlerResponseWithHeaders,
@@ -120,11 +120,13 @@ export async function handleRegisterRck(
     return malformed(`subdomain must end with ${expectedSuffix}`);
   }
 
-  // M5 (Thread G): validate the leftmost <server> label's shape — RFC-1035
-  // appish constraint, same as auth-code serverName. Catches trailing-dot,
-  // empty-leftmost, or unicode-in-label attempts before they reach storage.
+  // M5 (Thread G): validate the leftmost <server> label's shape. Same
+  // rule as auth-code serverName (validateServerLabel — an RFC-1123 DNS
+  // label: interior hyphens allowed, no leading/trailing hyphen).
+  // Catches trailing-dot, empty-leftmost, leading/trailing-hyphen, or
+  // unicode-in-label attempts before they reach storage.
   const serverLabel = r.subdomain.slice(0, r.subdomain.length - expectedSuffix.length);
-  const labelV = validateAppLabel(serverLabel);
+  const labelV = validateServerLabel(serverLabel);
   if (!labelV.ok) {
     return malformed(`invalid server label: ${labelV.reason}`);
   }

@@ -45,9 +45,9 @@
  *  @property {GraceModel} graceModel
  */
 
-/** Login field is a bare handle: lowercase letters/digits, no dots, no
- *  hyphens. Mirror of bootstrap.js / state.js / control-plane labels. */
-const USERNAME_RE = /^[a-z0-9]{1,63}$/;
+/** Login field is a bare handle: 3–30 lowercase letters/digits, no dots,
+ *  no hyphens. Mirror of bootstrap.js / state.js / control-plane labels.ts. */
+const USERNAME_RE = /^[a-z0-9]{3,30}$/;
 
 /** A locally-synthesized `unknown` resolution. We never have to call the
  *  network for an obviously-invalid handle, and we still render a STATE

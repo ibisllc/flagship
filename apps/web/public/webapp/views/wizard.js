@@ -32,7 +32,10 @@ import { registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk, bytesToHex, persistSeedForProfile } from "../keystore.js";
 import { isValidUsername, openAccount } from "../lib/openAccount.js";
+import { checkUsername } from "../lib/usersCheck.js";
+import { trademarkClaimMailto } from "../lib/trademarkClaim.js";
 import { addProfile } from "../lib/profiles.js";
+import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 
 registerView("view-wizard");
@@ -93,11 +96,31 @@ export async function enterWizard(opts = {}) {
  * true on success so the caller advances; false (with a toast already
  * shown) keeps the user on the step to fix the input.
  */
+/** Show / hide the "name taken" panel, which carries the trademark
+ *  claim affordance. Hidden when `username` is null. */
+function renderTakenState(username) {
+  const panel = document.getElementById("wizard-username-taken");
+  if (!panel) return;
+  if (!username) {
+    panel.classList.add("hidden");
+    panel.innerHTML = "";
+    return;
+  }
+  const mailto = trademarkClaimMailto(username);
+  panel.innerHTML = `
+    <p>The name <strong>${escapeHtml(username)}</strong> is already taken. Try another.</p>
+    <p class="muted-sm">Hold a registered trademark to this name?
+      <a id="wizard-trademark-claim" href="${mailto}">I hold a trademark to this name</a>.</p>
+  `;
+  panel.classList.remove("hidden");
+}
+
 async function handleOpenAccount() {
   const input = document.getElementById("wizard-username-input");
   const username = (input?.value || "").trim().toLowerCase();
+  renderTakenState(null); // clear any prior taken-state on a fresh attempt
   if (!isValidUsername(username)) {
-    toast("username must be lowercase letters and digits only", "err");
+    toast("username must be 3–30 lowercase letters and digits, no hyphens", "err");
     input?.focus();
     return false;
   }
@@ -108,6 +131,21 @@ async function handleOpenAccount() {
   }
   const btn = document.getElementById("wizard-go-username");
   if (btn) btn.disabled = true;
+  // Pre-flight availability so a taken name renders the dedicated
+  // taken-state (with the trademark-claim link) instead of a generic
+  // toast. A network hiccup here is non-fatal — the claim below is the
+  // authoritative gate and is idempotent.
+  try {
+    const avail = await checkUsername(username);
+    if (avail && avail.available === false) {
+      renderTakenState(username);
+      if (btn) btn.disabled = false;
+      input?.focus();
+      return false;
+    }
+  } catch {
+    // ignore — fall through to the claim, which is authoritative.
+  }
   try {
     await openAccount(username, {
       session,
@@ -128,7 +166,15 @@ async function handleOpenAccount() {
     toast(`account opened — ${username}`, "ok");
     return true;
   } catch (e) {
-    toast(String(e.message || e), "err");
+    const msg = String(e.message || e);
+    // A claim that comes back "already claimed" (409 from a DIFFERENT
+    // IRK) is the taken-name case — render the dedicated state with the
+    // trademark-claim link rather than a bare toast.
+    if (/already claimed|409|conflict/i.test(msg)) {
+      renderTakenState(username);
+    } else {
+      toast(msg, "err");
+    }
     return false;
   } finally {
     if (btn) btn.disabled = false;
@@ -193,7 +239,8 @@ async function renderStepBody(state, step) {
         <input id="wizard-username-input" type="text" inputmode="text" autocapitalize="none"
                autocomplete="username" spellcheck="false" placeholder="alice"
                aria-describedby="wizard-username-hint" />
-        <p id="wizard-username-hint" class="note muted-sm">lowercase letters and digits, no dots or hyphens</p>
+        <p id="wizard-username-hint" class="note muted-sm">3–30 lowercase letters and digits, no dots or hyphens</p>
+        <div id="wizard-username-taken" class="note err hidden" role="alert"></div>
         <div class="btn-row-sm">
           <button id="wizard-go-username" class="pill primary">Open my account</button>
         </div>

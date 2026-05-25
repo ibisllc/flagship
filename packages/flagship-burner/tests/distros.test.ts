@@ -65,9 +65,27 @@ describe("PINNED_DISTROS allowlist", () => {
     expect(findDistroBySha("00".repeat(32))).toBeUndefined();
   });
 
-  it("v1 includes Ubuntu Server 22.04 — the launch distro", () => {
+  it("v1 includes Ubuntu Server 22.04 — kept working alongside Debian", () => {
     const d = findDistroById("ubuntu-22.04-server-amd64");
     expect(d).toBeDefined();
     expect(d!.cloudInitDatasource).toBe("subiquity");
+    expect(d!.family).toBe("ubuntu");
+  });
+
+  it("Debian is FIRST and the single recommended choice (NVRAM-compat default)", () => {
+    // Debian's d-i can be preseeded to the EFI removable-media path, so it
+    // installs on firmware that subiquity fatally aborts on — it's the
+    // recommended default and must lead the list (website + picker order).
+    expect(PINNED_DISTROS[0]!.id).toBe("debian-13-netinst-amd64");
+    expect(PINNED_DISTROS[0]!.family).toBe("debian");
+    const recommended = PINNED_DISTROS.filter((d) => d.recommended);
+    expect(recommended.length).toBe(1);
+    expect(recommended[0]!.id).toBe("debian-13-netinst-amd64");
+  });
+
+  it("every entry has a known installer family", () => {
+    for (const d of PINNED_DISTROS) {
+      expect(["debian", "ubuntu"]).toContain(d.family);
+    }
   });
 });

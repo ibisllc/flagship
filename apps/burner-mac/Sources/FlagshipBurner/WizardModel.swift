@@ -25,6 +25,10 @@ final class WizardModel: ObservableObject {
     @Published var progress: Double? = nil
     /// Raw phase token from the CLI: "remaster" | "write".
     @Published var phase: String? = nil
+    /// Optional Wi-Fi for a box with no Ethernet — a burn-time local input,
+    /// never part of the signed recipe.
+    @Published var wifiSSID = ""
+    @Published var wifiPassword = ""
 
     var phaseLabel: String? {
         switch phase {
@@ -149,13 +153,24 @@ final class WizardModel: ObservableObject {
         }
     }
 
-    /// Read + verify the recipe and build the cloud-init user-data for it.
-    private func userDataYAML(forRecipe recipe: URL) throws -> String {
+    /// Read + verify the recipe and build BOTH unattended configs for it — the
+    /// Ubuntu cloud-init user-data and the Debian d-i preseed. The remaster
+    /// picks the right one for the detected ISO family; building both is cheap
+    /// (pure string work) and keeps the privilege-split flow simple.
+    private func installerConfigs(forRecipe recipe: URL) throws -> (yaml: String, preseed: String) {
         let data = try Data(contentsOf: recipe)
         let parsed = try RecipeLoader.load(data: data)
-        return try UserData.autoinstallYAML(recipeJSON: data,
-                                            installerGitRef: parsed.installerGitRef,
-                                            bootUnlockMode: parsed.effectiveBootUnlockMode)
+        let yaml = try UserData.autoinstallYAML(recipeJSON: data,
+                                                installerGitRef: parsed.installerGitRef,
+                                                bootUnlockMode: parsed.effectiveBootUnlockMode,
+                                                wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
+                                                wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
+        let preseed = try UserData.debianPreseed(recipeJSON: data,
+                                                 installerGitRef: parsed.installerGitRef,
+                                                 bootUnlockMode: parsed.effectiveBootUnlockMode,
+                                                 wifiSSID: wifiSSID.isEmpty ? nil : wifiSSID,
+                                                 wifiPassword: wifiPassword.isEmpty ? nil : wifiPassword)
+        return (yaml, preseed)
     }
 
     func runPrepare() async {
@@ -168,11 +183,13 @@ final class WizardModel: ObservableObject {
             .appendingPathComponent(iso.deletingPathExtension().lastPathComponent + ".flagship.iso")
         outIsoPath = outURL
         do {
-            let yaml = try userDataYAML(forRecipe: recipe)
+            let cfgs = try installerConfigs(forRecipe: recipe)
             appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → \(outURL.lastPathComponent)")
-            try await Task.detached(priority: .userInitiated) {
-                try Remaster.remaster(srcISO: iso, outISO: outURL, userDataYAML: yaml)
+            let used = try await Task.detached(priority: .userInitiated) { () -> String in
+                try Remaster.remasterInstaller(srcISO: iso, outISO: outURL,
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
             }.value
+            appendLog(stream: .stdout, text: "+ installer family: \(used)")
             isFinished = true
         } catch {
             appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
@@ -196,11 +213,13 @@ final class WizardModel: ObservableObject {
         let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
         do {
-            let yaml = try userDataYAML(forRecipe: recipe)
+            let cfgs = try installerConfigs(forRecipe: recipe)
             appendLog(stream: .stdout, text: "+ remaster \(iso.lastPathComponent) → prepared image")
-            try await Task.detached(priority: .userInitiated) {
-                try Remaster.remaster(srcISO: iso, outISO: preparedURL, userDataYAML: yaml)
+            let used = try await Task.detached(priority: .userInitiated) { () -> String in
+                try Remaster.remasterInstaller(srcISO: iso, outISO: preparedURL,
+                                               userDataYAML: cfgs.yaml, preseedCfg: cfgs.preseed)
             }.value
+            appendLog(stream: .stdout, text: "+ installer family: \(used)")
         } catch {
             appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
             try? FileManager.default.removeItem(at: preparedURL)

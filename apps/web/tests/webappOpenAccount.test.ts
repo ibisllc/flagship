@@ -61,6 +61,14 @@ describe("webapp isValidUsername — bare account handle rule", () => {
     expect(isValidUsername("")).toBe(false);
     expect(isValidUsername(undefined as any)).toBe(false);
   });
+
+  it("enforces the 3–30 length range (mirror of validateUserLabel)", async () => {
+    const { isValidUsername } = await loadLib();
+    expect(isValidUsername("ab")).toBe(false);          // too short
+    expect(isValidUsername("abc")).toBe(true);          // min
+    expect(isValidUsername("a".repeat(30))).toBe(true); // max
+    expect(isValidUsername("a".repeat(31))).toBe(false); // too long
+  });
 });
 
 describe("webapp claimUsername — standalone idempotent claim", () => {

@@ -181,7 +181,7 @@ const PROXY_PREFIX = "/api/";
 // /download/<os>. The /ready/ page links to /download/<os> (on-brand, so the
 // storage URL never shows in the UI); we 302 to wherever the binary actually
 // lives (GitHub Releases asset, R2 object, …) — swappable here without
-// touching the page. Empty → the /how-to.html explainer ("get the Assembler",
+// touching the page. Empty → the /docs#burn explainer ("get the Assembler",
 // i.e. coming soon). Set each once that platform's build is published.
 const INSTALLER_DOWNLOADS: Record<string, string> = {
   mac: "",
@@ -468,6 +468,16 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
     });
   }
 
+  // The standalone "how to assemble your server" explainer was folded into
+  // /docs (the #certificate / #recommended-linux / #booting-process anchors
+  // live there now). Both `/how-to` and `/how-to.html` 302 to /docs. We
+  // deliberately do NOT append a fragment to the Location: the browser
+  // preserves the request's own `#fragment`, so an old deep link like
+  // `/how-to#recommended-linux` lands at `/docs#recommended-linux`.
+  if (url.pathname === "/how-to" || url.pathname === "/how-to.html") {
+    return new Response(null, { status: 302, headers: { location: "/docs" } });
+  }
+
   // Pre-launch stealth gate: the public marketing surface is replaced by
   // a "coming soon" page so operational detail (build flow, dev tools,
   // status, docs, etc.) isn't exposed before the mobile apps ship.
@@ -541,11 +551,11 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
   // /ready/ page links here so the storage URL never shows in the UI; we
   // 302 to wherever the binary lives. Placed BEFORE the coming-soon gate
   // so the download link works regardless of the preview cookie / launch
-  // state. Unset or unknown OS → the /how-to.html "get the Assembler"
+  // state. Unset or unknown OS → the /docs#burn "get the Assembler"
   // explainer (coming soon) rather than a dead 404.
   if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
     const os = url.pathname.slice("/download/".length).replace(/\/+$/, "");
-    const target = INSTALLER_DOWNLOADS[os] || "/how-to.html";
+    const target = INSTALLER_DOWNLOADS[os] || "/docs#burn";
     return new Response(null, { status: 302, headers: { location: target } });
   }
 
