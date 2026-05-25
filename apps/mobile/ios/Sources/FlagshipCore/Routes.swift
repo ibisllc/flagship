@@ -39,6 +39,9 @@ public enum SettingsRoute: Hashable, Sendable {
     case providers
     case recovery
     case postRecoveryProgress
+    /// "Back up your account key" — passphrase-encrypted `.flagshipkey`
+    /// export of the whole UMK. Reached from Settings → Recovery.
+    case keyfileBackup
     case about
     case addControlDevice
     /// Phase 3b — ADMIN side of cross-device QR pairing. Settings →

@@ -95,6 +95,9 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "Recovery", description = "Cloud recovery + offline recovery codes.") {
             nav.navigate("recovery")
         }
+        SettingsRow(label = "Back up your account key", description = "Save an encrypted key file you can use to recover or move your account.") {
+            nav.navigate("keyfile-export")
+        }
         SettingsRow(label = "Profiles", description = "Switch between your clouds.") {
             nav.navigate("profiles")
         }

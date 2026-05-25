@@ -28,6 +28,8 @@ public struct RealAccountLoginScreen: View {
     public var onBack: () -> Void
 
     @State private var vm: RealAccountLoginViewModel?
+    @State private var importVm: KeyfileImportViewModel?
+    @State private var showImport = false
 
     public init(
         resolution: AccountResolution,
@@ -58,10 +60,50 @@ public struct RealAccountLoginScreen: View {
             if vm == nil {
                 vm = RealAccountLoginViewModel(resolution: resolution, server: server)
             }
+            if importVm == nil {
+                importVm = KeyfileImportViewModel(server: server)
+            }
         }
         .onChange(of: finalizedUsername) { _, username in
             if let username { onComplete(username) }
         }
+        .sheet(isPresented: $showImport) {
+            if let importVm {
+                KeyfileImportSheet(
+                    vm: importVm,
+                    onComplete: { username in
+                        showImport = false
+                        onComplete(username)
+                    }
+                )
+            }
+        }
+    }
+
+    /// "Import backup file" entry — offered below the iCloud option on
+    /// the recovery screen. Opens the keyfile-import sheet.
+    @ViewBuilder
+    private func importBackupOption(c: FSColors) -> some View {
+        Button(action: { showImport = true }) {
+            FSCard {
+                HStack(alignment: .top, spacing: FS.space.s2) {
+                    Image(systemName: "doc.badge.arrow.up")
+                        .foregroundColor(c.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Import backup file")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.text)
+                        Text("Bring this device into your account using its backup key file. You'll need the file and its passphrase.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("login-import-backup")
     }
 
     private var finalizedUsername: String? {
@@ -106,6 +148,7 @@ public struct RealAccountLoginScreen: View {
             }
         }
         .accessibilityIdentifier("login-no-recovery")
+        importBackupOption(c: c)
         FSGhostButton("Back", block: true, action: onBack)
     }
 
@@ -159,6 +202,8 @@ public struct RealAccountLoginScreen: View {
                 Task { await vm.startTakeover() }
             }
             .accessibilityIdentifier("login-takeover-continue")
+
+            importBackupOption(c: c)
 
             FSGhostButton("Back", block: true, action: onBack)
         }

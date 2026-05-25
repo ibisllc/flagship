@@ -29,7 +29,7 @@
 //  v14: removed views/unlock-approvals.js — the legacy plaintext
 //       unlock-approval boot flow is gone (relay + box-sealed lease
 //       replace it). Push handler's unlock-request branch dropped.
-const SHELL_VERSION = "v14";
+const SHELL_VERSION = "v15";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -63,6 +63,15 @@ const OPTIONAL_SHELL = [
   "/lib/installService.js",
   "/lib/leases.js",
   "/lib/recovery.js",
+  "/lib/keyfile.js",
+  "/lib/keyfileBackup.js",
+  "/vendor/noble-hashes/argon2.js",
+  "/vendor/noble-hashes/blake2.js",
+  "/vendor/noble-hashes/_blake.js",
+  "/vendor/noble-hashes/_md.js",
+  "/vendor/noble-hashes/_u64.js",
+  "/vendor/noble-hashes/utils.js",
+  "/vendor/noble-hashes/crypto.js",
   "/lib/push.js",
   "/lib/icons.js",
   "/views/bootstrap.js",

@@ -1084,6 +1084,18 @@ body.no-tabs .tab-bar { display: none; }
   margin: 8px 0 0;
   font-size: 12px;
 }
+.modal-card { max-height: calc(100vh - 32px); overflow-y: auto; }
+.modal-acks { display: flex; flex-direction: column; gap: 10px; }
+.modal-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.45;
+  cursor: pointer;
+}
+.modal-ack input[type="checkbox"] { margin-top: 2px; flex: 0 0 auto; }
 body.modal-open { overflow: hidden; }
 @keyframes modal-fade-in {
   from { opacity: 0; transform: scale(0.98); }

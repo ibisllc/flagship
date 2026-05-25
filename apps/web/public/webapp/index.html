@@ -386,8 +386,12 @@
           <p class="note">
             Compose a build-and-deliver draft. Save it for later, or deliver the signed recipe to a browser tab open at the QR on <a href="https://flagshipserver.com/" target="_blank" rel="noopener">flagshipserver.com</a> — it downloads the recipe for the Flagship Assembler. The webapp signs with your IRK; the relay sees only opaque ciphertext.
           </p>
-          <label>Server name (DNS label)</label>
-          <input id="cs-server-name" type="text" placeholder="home" autocomplete="off" />
+          <label>Server name</label>
+          <input id="cs-server-name" type="text" placeholder="home" autocomplete="off"
+                 inputmode="text" autocapitalize="none" spellcheck="false"
+                 aria-describedby="cs-server-name-hint" />
+          <p id="cs-server-name-hint" class="faint-sm">lowercase letters, digits, and hyphens (not at the start or end) — e.g. media-server</p>
+          <p id="cs-server-name-error" class="note err hidden" role="alert"></p>
           <label>Backup policy</label>
           <select id="cs-backup-policy">
             <option value="phone-only">Phone-only (default)</option>
@@ -538,14 +542,36 @@
           <button id="recovery-cloud-setup" class="full-width mt-2">Set up cloud recovery</button>
           <button class="secondary full-width mt-2" id="recovery-cloud-remove" style="display:none;">Remove cloud recovery</button>
         </div>
+
+        <!-- Import a `.flagshipkey` backup file. On web there is no
+             iCloud/Keychain, so this is the PRIMARY recovery + add-this-
+             account-to-another-device path. Mirrors the iOS layout:
+             file-import sits below the cloud option. -->
         <div class="card mt-2">
           <p class="note">
-            <strong>Manual export (no cloud):</strong> download a JSON copy of the wrapped UMK and unlock it on another browser with the same passphrase.
+            <strong>Import backup file:</strong> restore your account from a <code>.flagshipkey</code> file you saved earlier. You'll need the file and its passphrase.
           </p>
-          <button id="recovery-export" class="full-width mt-2">Export wrapped UMK</button>
+          <label class="mt-2" for="recovery-keyfile-input">Choose your <code>.flagshipkey</code> file</label>
+          <input type="file" id="recovery-keyfile-input" accept=".flagshipkey,application/json" />
+        </div>
+
+        <!-- Export the whole UMK as a `.flagshipkey` file. -->
+        <div class="card mt-2">
+          <h3>Back up your account key</h3>
+          <p class="note">This saves your whole Flagship identity into one encrypted file. It's how you recover if you lose all your devices, and how you add this account to another device.</p>
+          <p class="note err-text"><strong>Anyone with both this file and its passphrase can take over your account and lock you out.</strong></p>
+          <button id="recovery-keyfile-export" class="full-width mt-2">Back up account key</button>
+        </div>
+
+        <details class="card mt-2">
+          <summary>Advanced: legacy wrapped-UMK export</summary>
+          <p class="note mt-2">
+            Older device-to-device transfer of the raw wrapped key (same passphrase on both browsers). Prefer the <code>.flagshipkey</code> backup above.
+          </p>
+          <button id="recovery-export" class="secondary full-width mt-2">Export wrapped UMK</button>
           <label class="mt-3">Import wrapped UMK</label>
           <input type="file" id="recovery-import-input" accept="application/json" />
-        </div>
+        </details>
         <div class="card mt-2">
           <p class="note">
             <strong>After recovery (J.4):</strong> if you've recently rebooted your identity, the daemon walks every installed service and rewrites memberships from the OLD IRK to the NEW one. Watch progress + see the 7-day undo window.

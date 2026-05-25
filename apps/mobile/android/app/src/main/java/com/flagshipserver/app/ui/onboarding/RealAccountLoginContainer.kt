@@ -60,7 +60,10 @@ import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.screens.KeyfileImportScreen
 import com.flagshipserver.app.ui.theme.FS
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.outlined.Lock
 import com.flagshipserver.app.viewmodels.LoginPhase
 import com.flagshipserver.app.viewmodels.LoginViewModel
 import kotlinx.coroutines.launch
@@ -82,12 +85,28 @@ fun RealAccountLoginContainer(
     }
     val phase by vm.phase.collectAsState()
 
+    // "Import backup file" — offered below the cloud option on the
+    // recovery screen (mirrors iOS RealAccountLoginScreen.importBackupOption).
+    var showImport by remember { mutableStateOf(false) }
+
     LaunchedEffect(vm) { vm.begin() }
     LaunchedEffect(phase) { if (phase == LoginPhase.Opened) onOpened() }
 
+    if (showImport) {
+        KeyfileImportScreen(
+            onOpened = onOpened,
+            onBack = { showImport = false },
+        )
+        return
+    }
+
     when (val p = phase) {
         LoginPhase.Idle, LoginPhase.Recovering -> RecoveringView(onCancel = onBack)
-        is LoginPhase.NoCloudBackup -> NoCloudBackupView(single = p.single, onBack = onBack)
+        is LoginPhase.NoCloudBackup -> NoCloudBackupView(
+            single = p.single,
+            onImport = { showImport = true },
+            onBack = onBack,
+        )
         LoginPhase.AwaitingSecondFactor -> SecondFactorView(
             onSubmit = { code, isRecovery -> vm.submitSecondFactor(code, isRecovery) },
             onBack = onBack,
@@ -96,6 +115,7 @@ fun RealAccountLoginContainer(
             graceModel = p.graceModel,
             username = vm.username,
             onConfirm = { scope.launch { vm.confirmTakeover() } },
+            onImport = { showImport = true },
             onBack = onBack,
         )
         is LoginPhase.Grace -> GraceCountdownView(
@@ -137,7 +157,7 @@ private fun RecoveringView(onCancel: () -> Unit) {
 }
 
 @Composable
-private fun NoCloudBackupView(single: Boolean, onBack: () -> Unit) {
+private fun NoCloudBackupView(single: Boolean, onImport: () -> Unit, onBack: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize()
             .padding(horizontal = FS.space.s6, vertical = FS.space.s12)
@@ -158,8 +178,35 @@ private fun NoCloudBackupView(single: Boolean, onBack: () -> Unit) {
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
         )
+        ImportBackupOption(onImport = onImport)
         Box(Modifier.height(FS.space.s4))
         FSPrimaryButton(label = "Back", onClick = onBack, block = true, large = true)
+    }
+}
+
+/** "Import backup file" — the keyfile-import entry, offered below the
+ *  cloud option on the recovery screen. Mirror of the iOS
+ *  RealAccountLoginScreen.importBackupOption. */
+@Composable
+private fun ImportBackupOption(onImport: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            modifier = Modifier
+                .clickable { onImport() }
+                .semantics { contentDescription = "login-import-backup" },
+        ) {
+            Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Import backup file", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
+                Text(
+                    "Bring this device into your account using its backup key file. You'll need the file and its passphrase.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp),
+                )
+            }
+        }
     }
 }
 
@@ -217,6 +264,7 @@ private fun TakeoverExplainerView(
     graceModel: AccountResolution.GraceModel,
     username: String,
     onConfirm: () -> Unit,
+    onImport: () -> Unit,
     onBack: () -> Unit,
 ) {
     val (graceLine, detail) = when (graceModel) {
@@ -267,6 +315,7 @@ private fun TakeoverExplainerView(
             large = true,
             modifier = Modifier.semantics { contentDescription = "login-takeover-confirm" },
         )
+        ImportBackupOption(onImport = onImport)
         FSGhostButton(label = "Back", onClick = onBack, block = true)
     }
 }

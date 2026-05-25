@@ -86,6 +86,7 @@ public struct SettingsTab: View {
                     },
                     onOpenProviders: { path.append(.providers) },
                     onOpenRecovery: { path.append(.recovery) },
+                    onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenAbout: { path.append(.about) },
                     onOpenDeveloper: { path.append(.developer) },
@@ -205,6 +206,10 @@ public struct SettingsTab: View {
             ProvidersStub()
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
+        case .keyfileBackup:
+            KeyfileExportScreen(
+                vm: KeyfileExportViewModel(username: app.currentUser ?? "")
+            )
         case .postRecoveryProgress:
             PostRecoveryContainer()
         case .about:

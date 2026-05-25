@@ -118,6 +118,9 @@ dependencies {
 
     // Cryptography
     implementation("com.google.crypto.tink:tink-android:1.13.0")
+    // argon2id KDF for the `.flagshipkey` account backup (Argon2BytesGenerator).
+    // Byte-compatible with the TS @noble/hashes argon2id + iOS Argon2Kit.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 
     // Networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

@@ -57,6 +57,8 @@ public struct SettingsScreen: View {
     var onSignOut: () -> Void = {}
     var onOpenProviders: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
+    /// Open "Back up your account key" — the `.flagshipkey` export.
+    var onOpenKeyfileBackup: () -> Void = {}
     /// v1.2 Phase 4 — open the Account-security drill-down. The
     /// container hosts AccountSecurityScreen + drives the enable /
     /// disable flows.
@@ -100,6 +102,7 @@ public struct SettingsScreen: View {
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
+        onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenProfiles: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
@@ -125,6 +128,7 @@ public struct SettingsScreen: View {
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
         self.onOpenRecovery = onOpenRecovery
+        self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenProfiles = onOpenProfiles
         self.onOpenAbout = onOpenAbout
@@ -552,6 +556,7 @@ public struct SettingsScreen: View {
         section("RECOVERY", c: c) {
             VStack(spacing: FS.space.s3) {
                 linkRow("Recovery setup", subtitle: "If you lose this phone", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
+                linkRow("Back up your account key", subtitle: "Save an encrypted key file", icon: "doc.badge.arrow.up.fill", c: c, action: onOpenKeyfileBackup)
                 linkRow("Profiles", subtitle: "Switch between your clouds", icon: "person.2.circle.fill", c: c, action: onOpenProfiles)
                 linkRow("Privacy", subtitle: "Face ID lock, app-level gating", icon: "lock.shield.fill", c: c, action: onOpenPrivacy)
                 linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)
