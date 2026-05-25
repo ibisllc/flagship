@@ -1480,9 +1480,19 @@ export async function tryControlPlane(
 
   // ── Provisioning-status channel (per-order install progress) ──
   if (method === "POST" && (m = path.match(ROUTE_RE.PROVISION_STATUS))) {
+    const psFanout = buildOptionalV12PushFanout(env);
     return finish(
       await handlePostProvisionStatus(
-        { storage: storage.provisionStatus },
+        {
+          storage: storage.provisionStatus,
+          // Resolve SERIAL → owner (the auth-code records the username
+          // that created the order) → push subscriptions, so each status
+          // change wakes the owner's devices. All best-effort inside the
+          // handler — a push failure never fails the status write.
+          authCodes: storage.authCodes,
+          pushTokens: storage.pushTokens,
+          ...(psFanout ? { pushFanout: psFanout } : {}),
+        },
         decodeURIComponent(m[1]!),
         await readJson(request),
       ),

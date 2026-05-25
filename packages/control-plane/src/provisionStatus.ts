@@ -1,5 +1,10 @@
-import type { ProvisionStatusStorage } from "@flagship/storage";
+import type {
+  AuthCodeStorage,
+  ProvisionStatusStorage,
+  PushTokenStorage,
+} from "@flagship/storage";
 import { malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
+import type { V12PushFanout } from "./totp.js";
 
 /**
  * Provisioning-status channel — per-order install progress.
@@ -11,9 +16,23 @@ import { malformed, notFound, ok, type HandlerResponseWithHeaders } from "./type
  *
  *   POST /api/order/:serial/status   body { phase, detail? }
  *   GET  /api/order/:serial/status   → the record, or 404 when none yet
+ *
+ * On a successful POST we ALSO fan out a native push to the order owner's
+ * registered devices so the phone updates in real time without polling.
+ * The owner is resolved SERIAL → auth-code record → username, then
+ * username → push tokens. Push is best-effort: a missing subscription or
+ * a provider failure never fails the status write.
  */
 export interface ProvisionStatusDeps {
   storage: ProvisionStatusStorage;
+  /** Resolves SERIAL → owner (the auth-code records who created the order).
+   *  Absent ⇒ no owner lookup, so no push (dev / partial wiring). */
+  authCodes?: AuthCodeStorage;
+  /** Resolves owner username → registered push subscriptions. */
+  pushTokens?: PushTokenStorage;
+  /** Native push fan-out (APNs / FCM / Web Push RFC 8291). Absent ⇒ the
+   *  phase is stored but no push fires (no provider secrets configured). */
+  pushFanout?: V12PushFanout;
   now?: () => number;
 }
 
@@ -76,9 +95,85 @@ export async function handlePostProvisionStatus(
     ts: now,
   });
 
-  // TODO: push status change to the order owner's subscription.
+  // Push the change to the order owner's devices so the phone's
+  // install-progress view updates in real time. Best-effort: any failure
+  // (no owner record, no subscription, provider error) is swallowed — the
+  // status write has already succeeded and the phone also polls GET.
+  await fanOutStatusPush(deps, serial, body.phase, body.detail);
 
   return ok({ ok: true });
+}
+
+/** Human-facing copy for each phase, used in the push notification. */
+const PHASE_TITLES: Record<ProvisionStatusPhase, string> = {
+  booting: "Booting up",
+  downloading: "Downloading",
+  partitioning: "Partitioning disk",
+  installing: "Installing",
+  registering: "Registering with Flagship",
+  sealing: "Sealing your disk key",
+  pairing: "Pairing with your phone",
+  live: "Your server is live",
+  error: "Setup hit a problem",
+};
+
+const PHASE_BODIES: Record<ProvisionStatusPhase, string> = {
+  booting: "Your server has booted and started setting itself up.",
+  downloading: "Downloading the server software.",
+  partitioning: "Preparing the disk.",
+  installing: "Installing the server software.",
+  registering: "Your server is checking in with Flagship.",
+  sealing: "Sealing your encrypted disk key.",
+  pairing: "Your server is pairing with your phone.",
+  live: "Your server is live and ready to use.",
+  error: "Setup ran into a problem.",
+};
+
+/**
+ * Resolve the order owner (SERIAL → auth-code → username), then fan out a
+ * native push to every device they have registered. Never throws.
+ */
+async function fanOutStatusPush(
+  deps: ProvisionStatusDeps,
+  serial: string,
+  phase: string,
+  detail: string | undefined,
+): Promise<void> {
+  if (!deps.authCodes || !deps.pushTokens || !deps.pushFanout) return;
+  try {
+    const order = await deps.authCodes.get(serial);
+    if (!order) return;
+    const username = order.username;
+    const tokens = await deps.pushTokens.listByUser(username);
+    if (tokens.length === 0) return;
+    const p = phase as ProvisionStatusPhase;
+    const title = PHASE_TITLES[p] ?? phase;
+    const baseBody = PHASE_BODIES[p] ?? "";
+    const body =
+      phase === "error" && detail ? `Setup failed: ${detail}` : baseBody;
+    await deps.pushFanout({
+      username,
+      targets: tokens.map((t) => ({
+        tokenId: t.tokenId,
+        platform: t.platform,
+        providerToken: t.providerToken,
+      })),
+      payload: {
+        category: "provision-status",
+        title,
+        body,
+        deepLink: "flagship://install-progress",
+        meta: {
+          kind: "provision-status",
+          serial,
+          phase,
+          ...(detail ? { detail } : {}),
+        },
+      },
+    });
+  } catch {
+    // Push is a convenience; the phone also polls GET .../status.
+  }
 }
 
 export async function handleGetProvisionStatus(

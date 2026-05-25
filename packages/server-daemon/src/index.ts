@@ -167,6 +167,23 @@ async function main(): Promise<void> {
     ? new BackupLoop({ swk: hexToBytes(swkHex.trim()), k: 3, n: 5 })
     : null;
 
+  // ---- Order serial (provisioning-status channel) ----
+  // The InstallBlob's authCode.serial is the order id keying the
+  // per-order install-progress timeline the phone polls
+  // (POST /api/order/<serial>/status). The bootstrap (installer/install.sh
+  // + the burner's userdata.ts) writes it to /var/flagship/auth-code-serial
+  // on first boot and POSTs the install-time phases. The daemon picks it
+  // up here to report the two phases only IT can know:
+  //   `pairing` — entitlement bundle loaded (paired with the phone)
+  //   `live`    — ACME cert landed + HTTPS is genuinely serving
+  // Dev runs supply FLAGSHIP_ORDER_SERIAL directly. Trimmed + validated;
+  // an absent/malformed serial just disables the daemon-side status
+  // reporter (never fatal).
+  const orderSerial = normalizeOrderSerial(
+    process.env.FLAGSHIP_ORDER_SERIAL ??
+      (await tryReadFile("/var/flagship/auth-code-serial")),
+  );
+
   // ---- Phone-issued orders endpoint ----
   // PSK pubkey is baked into the install trailer; install.sh writes it
   // to /var/flagship/psk.pub.hex on first boot. For dev runs we accept
@@ -345,6 +362,27 @@ async function main(): Promise<void> {
       ...(error !== undefined ? { error } : {}),
     });
 
+  // Provisioning-STATUS reporter — the per-order channel the phone polls
+  // (POST /api/order/<serial>/status). Distinct from the signed
+  // provision-event channel above: keyed by the order serial, it carries
+  // the two phases the bootstrap can't (the daemon's pairing handoff +
+  // the genuine first-serve). Best-effort + idempotent (one POST per
+  // phase transition — repeated calls for an already-reported phase are
+  // dropped so renewals / retries don't spam .com). Disabled (a no-op)
+  // when no serial was baked through.
+  const reportedStatusPhases = new Set<string>();
+  const reportStatus = (phase: ProvisionStatusPhase, detail?: string) => {
+    if (!orderSerial) return;
+    if (reportedStatusPhases.has(phase)) return;
+    reportedStatusPhases.add(phase);
+    return reportProvisionStatus({
+      serial: orderSerial,
+      controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+      phase,
+      ...(detail !== undefined ? { detail } : {}),
+    });
+  };
+
   // ---- Entitlement bundle (REQUIRED to start the tunnel client) ----
   // N12b: the tunnel client presents an IRK-signed RootEntitlement (+
   // optional ServiceEntitlement) on every HELLO instead of a raw
@@ -419,6 +457,10 @@ async function main(): Promise<void> {
       `[daemon] loaded entitlement bundle for ${entitlementBundle.rootEntitlement.podCanonical} ` +
         `(${entitlementBundle.serviceEntitlement ? `${entitlementBundle.serviceEntitlement.canonicals.length} service canonicals` : "root-only"})`,
     );
+    // Pairing handoff complete — the box now holds the phone's IRK-signed
+    // entitlement, so it's paired. Tell the per-order status channel so the
+    // phone's timeline advances past `sealing`. Best-effort.
+    void reportStatus("pairing");
   } catch (e) {
     const msg = (e as Error).message ?? String(e);
     console.error(`[daemon] entitlement bundle load failed: ${msg}`);
@@ -455,7 +497,13 @@ async function main(): Promise<void> {
         // them so `ready` is always the last phase stored.
         void reportPhase("cert-issued")
           .catch(() => {})
-          .then(() => reportPhase("ready"));
+          .then(() => reportPhase("ready"))
+          .catch(() => {})
+          // The cert has landed and HTTPS is genuinely serving — this is
+          // the real "your server is live" moment. Tell the per-order
+          // status channel (idempotent: only the first cert/renewal POSTs
+          // `live`).
+          .then(() => reportStatus("live"));
       },
       // Fine-grained ACME observability — map each issuer sub-phase onto
       // a signed ProvisionEvent so a stuck cert is locatable from the
@@ -1026,6 +1074,71 @@ async function reportProvisionPhase(args: {
     });
   } catch {
     // Observability is best-effort; never let it break the daemon.
+  }
+}
+
+/**
+ * The provisioning-status phases the daemon emits on the per-order
+ * channel (POST /api/order/<serial>/status). Mirrors the control-plane
+ * allowlist (`PROVISION_STATUS_PHASES`) but kept as a local literal here
+ * so the daemon doesn't depend on the control-plane package — the box
+ * bootstrap reports the earlier phases (installing/registering/sealing),
+ * the daemon reports `pairing` + `live`.
+ */
+export type ProvisionStatusPhase =
+  | "booting"
+  | "downloading"
+  | "partitioning"
+  | "installing"
+  | "registering"
+  | "sealing"
+  | "pairing"
+  | "live"
+  | "error";
+
+/**
+ * Trim + validate a baked order serial. Returns null for an absent or
+ * malformed value (which disables the daemon-side status reporter — a
+ * missing serial is never fatal). Matches the control-plane SERIAL_RE.
+ */
+export function normalizeOrderSerial(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(s)) return null;
+  return s;
+}
+
+/**
+ * Provisioning-status reporter — POST /api/order/<serial>/status. The
+ * phone polls this per-order channel to render the install timeline; the
+ * box bootstrap already reports the install-time phases, and the daemon
+ * adds the two phases only it can know (`pairing`, `live`). Unsigned —
+ * keyed by the order serial (a capability the phone + installer share).
+ *
+ * ALWAYS fail-open: a failed POST is swallowed so a status report can
+ * never crash or block the daemon. The phone falls back to polling +
+ * the prior phase until the next report lands.
+ */
+export async function reportProvisionStatus(args: {
+  serial: string;
+  controlPlaneBaseUrl: string;
+  phase: ProvisionStatusPhase;
+  detail?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  try {
+    const doFetch = args.fetchImpl ?? fetch;
+    const url = `${args.controlPlaneBaseUrl.replace(/\/+$/, "")}/api/order/${encodeURIComponent(args.serial)}/status`;
+    await doFetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        phase: args.phase,
+        ...(args.detail !== undefined ? { detail: args.detail } : {}),
+      }),
+    });
+  } catch {
+    // Status reporting is best-effort; never let it break the daemon.
   }
 }
 
