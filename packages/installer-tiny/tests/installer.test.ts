@@ -20,7 +20,64 @@ import {
 } from "../src/index.js";
 import { PROVISION_STATUS_PHASES } from "@flagship/control-plane";
 import { generateUMK, deriveIRK, signAuthCode, signInstallBlob } from "@flagship/protocol";
-import { installBlobToJson } from "@flagship/iso-personalizer";
+import { installBlobToJson, streamPersonalize } from "@flagship/iso-personalizer";
+
+// A fully-signed v2 install recipe (IRK == authCode.userPubKey), shared by the
+// verify + trailer-extraction tests.
+function signedV2Recipe() {
+  const irk = deriveIRK(generateUMK());
+  const now = Date.now();
+  const authCode = {
+    version: 1 as const,
+    serial: "TESTSERIAL0001",
+    username: "testuser",
+    serverName: "home",
+    serverDomain: "home.testuser.flagship.services",
+    delegatedPubKey: irk.publicKey,
+    userPubKey: irk.publicKey,
+    issuedAt: now,
+    expiresAt: now + 3_600_000,
+  };
+  const blob = {
+    version: 2 as const,
+    serverDomain: authCode.serverDomain,
+    username: authCode.username,
+    serverName: authCode.serverName,
+    phoneDelegatedPubKey: irk.publicKey,
+    registrationUrl: "https://flagshipserver.com",
+    authCode,
+    authCodeUserSignature: signAuthCode(authCode, irk),
+    installerGitRef: "main",
+    rckPubKey: irk.publicKey,
+  };
+  return { blob, sig: signInstallBlob(blob, irk), json: installBlobToJson(blob) };
+}
+
+// A minimal but VALID ISO9660 image: a PVD at sector 16 whose
+// volumeSpaceSize * logicalBlockSize == the file size, so the appended trailer
+// (streamPersonalize) starts exactly at the volume size — the box-side find.
+function fakeBaseIso(blocks = 40): Uint8Array {
+  const size = blocks * 2048;
+  const buf = new Uint8Array(size);
+  const dv = new DataView(buf.buffer);
+  const pvd = 16 * 2048;
+  buf[pvd] = 1; // PVD type
+  buf.set(new TextEncoder().encode("CD001"), pvd + 1);
+  dv.setUint32(pvd + 80, blocks, true); // volumeSpaceSize (LE half of both-endian)
+  dv.setUint16(pvd + 128, 2048, true); // logicalBlockSize (LE half)
+  return buf;
+}
+
+async function drain(stream: ReadableStream<Uint8Array>): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const INSTALLER = join(HERE, "..", "src", "installer.sh");
@@ -350,6 +407,82 @@ describe("recipe-signature verify (seam a — ARMED, fail-closed)", () => {
 
     // No signature at all (no .sig file, no blobSignatureHex) -> fail closed.
     expect(run(jsonPath, join(dir, "missing.sig")).status).not.toBe(0);
+  });
+});
+
+describe("box-side recipe trailer-find (dumb-flash / personalize-stream)", () => {
+  it("reads the ISO9660 volume size to find an APPENDED trailer (not device-end)", async () => {
+    // Build a real personalized "ISO": fake base (valid PVD) + a real recipe
+    // trailer appended by streamPersonalize — exactly what the server produces
+    // and the burner dumb-flashes. Then drive `installer.sh extract-trailer`.
+    const { blob, sig, json } = signedV2Recipe();
+    const base = fakeBaseIso(40); // 40 * 2048 = 81920 bytes; trailer starts there
+    const baseStream = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(base);
+        c.close();
+      },
+    });
+    const out = streamPersonalize({
+      baseIsoStream: baseStream,
+      baseIsoSize: base.length,
+      blob,
+      blobSignature: sig,
+    });
+    const personalized = await drain(out.stream);
+    expect(personalized.length).toBe(base.length + out.trailerSize);
+
+    const dir = mkdtempSync(join(tmpdir(), "flagship-iso-"));
+    const isoPath = join(dir, "personalized.iso");
+    // Pad past the image end with junk to simulate a LARGER dumb-flashed USB —
+    // the find must use the volume size, NOT the device tail.
+    writeFileSync(isoPath, Buffer.concat([personalized, Buffer.alloc(4096, 0xab)]));
+    const jsonOut = join(dir, "install-blob.json");
+    const sigOut = join(dir, "install-blob.sig");
+
+    const r = spawnSync("sh", [INSTALLER, "extract-trailer", isoPath, jsonOut, sigOut], {
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(0);
+    // Recovered json byte-matches what installBlobToJson produced.
+    expect(JSON.parse(readFileSync(jsonOut, "utf8"))).toEqual(json);
+    // Recovered sig is the exact 64 raw bytes.
+    expect(readFileSync(sigOut).equals(Buffer.from(sig))).toBe(true);
+
+    // End-to-end: the extracted recipe must then PASS the armed verify (needs a
+    // real OpenSSL; skip the crypto leg otherwise — extraction is already proven).
+    const opensslReal = (
+      spawnSync("openssl", ["version"], { encoding: "utf8" }).stdout || ""
+    ).startsWith("OpenSSL");
+    const have = (t: string) => spawnSync("sh", ["-c", `command -v ${t}`]).status === 0;
+    if (opensslReal && have("jq") && have("xxd")) {
+      const v = spawnSync("sh", [INSTALLER, "verify-recipe", jsonOut, sigOut], { encoding: "utf8" });
+      expect(v.status).toBe(0);
+    }
+  });
+
+  it("rejects an image with no trailer (fail-closed)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "flagship-iso-"));
+    const isoPath = join(dir, "bare.iso");
+    writeFileSync(isoPath, Buffer.from(fakeBaseIso(40))); // PVD but no appended trailer
+    const r = spawnSync(
+      "sh",
+      [INSTALLER, "extract-trailer", isoPath, join(dir, "j"), join(dir, "s")],
+      { encoding: "utf8" },
+    );
+    expect(r.status).not.toBe(0);
+  });
+
+  it("materialize_recipe runs before phase_boot and prefers a baked file", () => {
+    const main = installerSrc.split("\nmain() {")[1]?.split("\n}")[0] ?? "";
+    expect(main.indexOf("materialize_recipe")).toBeGreaterThanOrEqual(0);
+    expect(main.indexOf("materialize_recipe")).toBeLessThan(main.indexOf("phase_boot"));
+    // The find is ISO9660-volume-size based, NOT device-tail (the old apkovl probe).
+    expect(installerSrc).toMatch(/iso_trailer_offset/);
+    expect(installerSrc).toMatch(/volume space size/i);
+    // Baked file short-circuits the scan.
+    const fn = installerSrc.split("materialize_recipe()")[1] ?? "";
+    expect(fn).toMatch(/-r "\$BLOB_JSON".*using baked file/s);
   });
 });
 

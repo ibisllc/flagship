@@ -78,10 +78,11 @@ FLAGSHIP_DRY_RUN="${FLAGSHIP_DRY_RUN:-0}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
 
 LOG="${FLAGSHIP_LOG:-/var/log/flagship-install.log}"
-# Skip the live-install logging plumbing when invoked as the standalone
-# `verify-recipe` subcommand (unit test / pre-flight check) — that path must
-# leave stdout untouched and not write to /var/log.
-if [ "${1:-}" != "verify-recipe" ]; then
+# Skip the live-install logging plumbing for the standalone test/pre-flight
+# subcommands (verify-recipe / extract-trailer) — they must leave stdout
+# untouched and not write to /var/log.
+case "${1:-}" in verify-recipe|extract-trailer) _skip_logging=1;; *) _skip_logging=0;; esac
+if [ "$_skip_logging" != "1" ]; then
     mkdir -p "$(dirname "$LOG")" "$FLAGSHIP_DIR" 2>/dev/null || true
     # Tee everything to console + log so a hung install is debuggable live. POSIX
     # (busybox ash) has no process substitution, so we use a FIFO + a background
@@ -117,6 +118,105 @@ report_phase() {
         "$CONTROL_PLANE_BASE/api/order/$SERIAL/status" >/dev/null 2>&1 || true
 }
 fail() { log "FATAL: $*"; report_phase error "$*"; exit 1; }
+
+# ===========================================================================
+# Recipe delivery — TWO mechanisms, both land the recipe at $BLOB_JSON (+ .sig):
+#
+#  (1) BAKED FILES: the burner wrote /flagship/install-blob.json (+ .sig) into
+#      the apkovl. Used as-is.
+#  (2) APPENDED TRAILER (server personalize-stream, the dumb-flash default):
+#      a pre-built base Alpine ISO with the signed recipe appended as a trailer
+#      (packages/iso-personalizer/streamPersonalize) and dumb-flashed to USB.
+#      The trailer is at the END OF THE ISO IMAGE — NOT the end of the (larger)
+#      USB device — so we cannot read it from the device tail like the old
+#      installer-apkovl probe does. Instead we read the ISO9660 Primary Volume
+#      Descriptor (sector 16) to get the image size (volumeSpaceSize *
+#      logicalBlockSize == base ISO size, verified), and the trailer starts
+#      EXACTLY there. This is the ISO9660-volume-size find.
+#
+# Trailer wire format (packages/iso-personalizer/src/trailer.ts):
+#   MAGIC_HEADER(16) | version(1) | jsonLen(u32le,4) | json(jsonLen) |
+#   sig(64) | MAGIC_FOOTER(16) | totalSize(u32le,4)
+# ===========================================================================
+TRAILER_HDR_HEX="464c4147534849502d424f4f54000000"   # "FLAGSHIP-BOOT\0\0\0"
+TRAILER_FTR_HEX="000000464c4147534849502d454e4400"   # "\0\0\0FLAGSHIP-END\0"
+
+# Little-endian uN at byte offset $2 of the (small, seekable) file $1.
+read_u32le_at() {
+    set -- $(dd if="$1" bs=1 skip="$2" count=4 2>/dev/null | od -An -tu1)
+    echo $(( ${1:-0} + ${2:-0} * 256 + ${3:-0} * 65536 + ${4:-0} * 16777216 ))
+}
+read_u16le_at() {
+    set -- $(dd if="$1" bs=1 skip="$2" count=2 2>/dev/null | od -An -tu1)
+    echo $(( ${1:-0} + ${2:-0} * 256 ))
+}
+hex16_at() { dd if="$1" bs=1 skip="$2" count=16 2>/dev/null | od -An -tx1 | tr -d ' \n'; }
+
+# Compute the trailer start (bytes) for an ISO9660 image/device, or empty if it
+# is not an ISO9660 (no "CD001" PVD at sector 16). Block-aligned reads only.
+iso_trailer_offset() {
+    _img="$1"; _pvd="$(mktemp 2>/dev/null)" || return 1
+    dd if="$_img" bs=2048 skip=16 count=1 2>/dev/null > "$_pvd"
+    _id="$(dd if="$_pvd" bs=1 skip=1 count=5 2>/dev/null)"
+    if [ "$_id" != "CD001" ]; then rm -f "$_pvd"; return 1; fi
+    _vss="$(read_u32le_at "$_pvd" 80)"     # volume space size (blocks)
+    _lbs="$(read_u16le_at "$_pvd" 128)"    # logical block size
+    rm -f "$_pvd"
+    { [ "${_vss:-0}" -gt 0 ]; } 2>/dev/null || return 1
+    { [ "${_lbs:-0}" -gt 0 ]; } 2>/dev/null || _lbs=2048
+    echo $(( _vss * _lbs ))
+}
+
+# Extract the trailer at (block-aligned) offset $2 of image/device $1 into the
+# json file $3 and the raw-64-byte sig file $4. Returns non-zero if the magic /
+# footer / lengths don't validate. Slurps a bounded window so all the byte-level
+# parsing is on a tiny temp file (never bs=1 over the whole device).
+extract_trailer_from() {
+    _d="$1"; _t="$2"; _jo="$3"; _so="$4"
+    [ "$(( _t % 2048 ))" -eq 0 ] || return 1   # personalize-stream offset is block-aligned
+    _w="$(mktemp 2>/dev/null)" || return 1
+    dd if="$_d" bs=2048 skip=$(( _t / 2048 )) count=33 2>/dev/null > "$_w"  # 66KiB >= MAX_TRAILER
+    if [ "$(hex16_at "$_w" 0)" != "$TRAILER_HDR_HEX" ]; then rm -f "$_w"; return 1; fi
+    _jlen="$(read_u32le_at "$_w" 17)"
+    { [ "${_jlen:-0}" -gt 0 ] && [ "$_jlen" -lt 60000 ]; } 2>/dev/null || { rm -f "$_w"; return 1; }
+    if [ "$(hex16_at "$_w" $(( 21 + _jlen + 64 )))" != "$TRAILER_FTR_HEX" ]; then rm -f "$_w"; return 1; fi
+    dd if="$_w" bs=1 skip=21 count="$_jlen" 2>/dev/null > "$_jo"
+    dd if="$_w" bs=1 skip=$(( 21 + _jlen )) count=64 2>/dev/null > "$_so"
+    rm -f "$_w"
+    [ -s "$_jo" ] && [ "$(wc -c < "$_so" | tr -d ' ')" = "64" ]
+}
+
+# Scan candidate whole-disk devices for the one carrying the FLAGSHIP trailer at
+# its ISO9660 image end. Echoes "<device> <offset>" on success.
+find_recipe_trailer_device() {
+    for d in /dev/sr0 /dev/sda /dev/sdb /dev/sdc /dev/sdd /dev/vda /dev/vdb \
+             /dev/nvme0n1 /dev/mmcblk0 $(ls /dev/sd? /dev/vd? 2>/dev/null); do
+        [ -b "$d" ] || [ -f "$d" ] || continue
+        _off="$(iso_trailer_offset "$d" 2>/dev/null)" || continue
+        [ -n "$_off" ] || continue
+        if [ "$(hex16_at "$d" "$_off")" = "$TRAILER_HDR_HEX" ]; then echo "$d $_off"; return 0; fi
+    done
+    return 1
+}
+
+# Ensure $BLOB_JSON exists: prefer baked files, else extract the appended trailer
+# from the boot media (the dumb-flash / personalize-stream path). Fail-closed:
+# an install with no recoverable recipe must not proceed.
+materialize_recipe() {
+    if [ -r "$BLOB_JSON" ]; then log "recipe: using baked file $BLOB_JSON"; return 0; fi
+    log "recipe: no baked file — extracting the appended trailer from the boot media"
+    if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
+        log "  DRY_RUN: would scan boot media for the ISO9660-appended FLAGSHIP trailer"
+        return 0
+    fi
+    set -- $(find_recipe_trailer_device)
+    _dev="${1:-}"; _off="${2:-}"
+    { [ -n "$_dev" ] && [ -n "$_off" ]; } || fail "no recipe: not baked and no trailer on any boot medium"
+    mkdir -p "$(dirname "$BLOB_JSON")"
+    extract_trailer_from "$_dev" "$_off" "$BLOB_JSON" "$BLOB_SIG" \
+        || fail "malformed recipe trailer on $_dev @ $_off"
+    log "  recipe extracted from $_dev @ offset $_off -> $BLOB_JSON (+ .sig)"
+}
 
 # ===========================================================================
 # Recipe-signature verification (ARMED, fail-closed).
@@ -974,6 +1074,9 @@ finish() {
 
 main() {
     log "=== Flagship tiny live installer (dry_run=$FLAGSHIP_DRY_RUN) ==="
+    # Land the recipe at $BLOB_JSON first: baked file, else the ISO9660-appended
+    # trailer on the dumb-flashed boot media. Everything downstream reads it.
+    materialize_recipe
     phase_boot
     phase_network
     phase_download
@@ -997,5 +1100,20 @@ if [ "${1:-}" = "verify-recipe" ]; then
     SERIAL=""   # report_phase is a no-op without a serial
     verify_recipe_signature
     exit $?
+fi
+
+# Standalone hook (unit test / pre-flight): `installer.sh extract-trailer <image>
+# <jsonOut> <sigOut>` finds the ISO9660-appended FLAGSHIP trailer in <image> (a
+# file or device) and writes the recipe json + raw 64-byte sig. Exits 0 on
+# success. This is the box-side dumb-flash recipe-find, runnable against a file.
+if [ "${1:-}" = "extract-trailer" ]; then
+    _img="${2:?usage: extract-trailer <image> <jsonOut> <sigOut>}"
+    _jo="${3:?}"; _so="${4:?}"
+    _off="$(iso_trailer_offset "$_img")" || { echo "extract-trailer: not an ISO9660 image" >&2; exit 1; }
+    [ -n "$_off" ] || { echo "extract-trailer: could not read ISO9660 volume size" >&2; exit 1; }
+    [ "$(hex16_at "$_img" "$_off")" = "$TRAILER_HDR_HEX" ] || { echo "extract-trailer: no trailer magic at offset $_off" >&2; exit 1; }
+    extract_trailer_from "$_img" "$_off" "$_jo" "$_so" || { echo "extract-trailer: malformed trailer" >&2; exit 1; }
+    echo "extract-trailer: ok @ $_off"
+    exit 0
 fi
 main "$@"
