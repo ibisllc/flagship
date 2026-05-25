@@ -53,11 +53,13 @@ ENV_FILE="$FLAGSHIP_DIR/installer.env"
 [ -r "$ENV_FILE" ] && . "$ENV_FILE"
 
 BLOB_JSON="${BLOB_JSON:-$FLAGSHIP_DIR/install-blob.json}"
+# The 64-byte Ed25519 recipe signature. Either a raw 64-byte file here, or the
+# `blobSignatureHex` field inside the recipe JSON (the burner may write either).
+# The signature is verified against the IRK pubkey EMBEDDED in the recipe as
+# authCode.userPubKey — install blobs are signed by the owner's phone-held IRK,
+# NOT by any global key (so there is no "genesis pubkey" to bake). See
+# verify_recipe_signature().
 BLOB_SIG="${BLOB_SIG:-$FLAGSHIP_DIR/install-blob.sig}"
-# Baked genesis pubkey the recipe signature is verified against. Empty in the
-# skeleton; the burner writes the real one into installer.env. See the
-# verify_recipe_signature() seam below.
-GENESIS_PUBKEY_HEX="${GENESIS_PUBKEY_HEX:-}"
 GIT_REF="${GIT_REF:-main}"
 REPO_URL="${REPO_URL:-https://github.com/ibisllc/flagship.git}"
 CONTROL_PLANE_BASE="${CONTROL_PLANE_BASE:-https://flagshipserver.com}"
@@ -74,17 +76,22 @@ FLAGSHIP_DRY_RUN="${FLAGSHIP_DRY_RUN:-0}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
 
 LOG="${FLAGSHIP_LOG:-/var/log/flagship-install.log}"
-mkdir -p "$(dirname "$LOG")" "$FLAGSHIP_DIR" 2>/dev/null || true
-# Tee everything to console + log so a hung install is debuggable live. POSIX
-# (busybox ash) has no process substitution, so we use a FIFO + a background
-# tee. The console fd is captured first so tee can still reach the screen after
-# we redirect our own stdout into the pipe.
-_logpipe=/run/flagship-install.pipe
-if command -v mkfifo >/dev/null 2>&1 && (mkfifo "$_logpipe" 2>/dev/null || [ -p "$_logpipe" ]); then
-    tee -a "$LOG" < "$_logpipe" > /dev/console 2>&1 &
-    exec > "$_logpipe" 2>&1
-else
-    exec >>"$LOG" 2>&1
+# Skip the live-install logging plumbing when invoked as the standalone
+# `verify-recipe` subcommand (unit test / pre-flight check) — that path must
+# leave stdout untouched and not write to /var/log.
+if [ "${1:-}" != "verify-recipe" ]; then
+    mkdir -p "$(dirname "$LOG")" "$FLAGSHIP_DIR" 2>/dev/null || true
+    # Tee everything to console + log so a hung install is debuggable live. POSIX
+    # (busybox ash) has no process substitution, so we use a FIFO + a background
+    # tee. The console fd is captured first so tee can still reach the screen after
+    # we redirect our own stdout into the pipe.
+    _logpipe=/run/flagship-install.pipe
+    if command -v mkfifo >/dev/null 2>&1 && (mkfifo "$_logpipe" 2>/dev/null || [ -p "$_logpipe" ]); then
+        tee -a "$LOG" < "$_logpipe" > /dev/console 2>&1 &
+        exec > "$_logpipe" 2>&1
+    else
+        exec >>"$LOG" 2>&1
+    fi
 fi
 
 log() { echo "[flagship-installer] $*"; }
@@ -110,31 +117,94 @@ report_phase() {
 fail() { log "FATAL: $*"; report_phase error "$*"; exit 1; }
 
 # ===========================================================================
-# SEAM (a): recipe-signature verification. Do NOT fully wire this here — the
-# recipe-delivery decision (trailer-on-disk vs. /flagship/install-blob.sig vs.
-# kernel-cmdline pin) is still pending. The PROVEN implementation to port is
-# packages/installer-netboot/parse-trailer.sh: openssl Ed25519 verify of the
-# 64-byte sig over canonicalInstallBlob() (flagship/install-blob/v1|...) under
-# the baked GENESIS_PUBKEY_HEX, with a pure-python RFC-8032 fallback. Fail
-# CLOSED: a recipe whose signature does not verify must abort the install
-# before any field is trusted or any disk is touched.
+# Recipe-signature verification (ARMED, fail-closed).
+#
+# The InstallBlob is signed by the owner's phone-held IRK; the 64-byte Ed25519
+# signature is over canonicalInstallBlob() (packages/protocol/src/auth.ts) and
+# is verified here against the IRK pubkey EMBEDDED in the recipe as
+# authCode.userPubKey — exactly what packages/iso-personalizer/src/trailer.ts
+# (parseTrailer) does. There is NO global "genesis" key for install blobs.
+#
+# This reconstructs the CURRENT v2 canonical string. Note
+# packages/installer-netboot/parse-trailer.sh is the lineage of the openssl
+# trick below but carries a STALE v1 string (…|issuedAt|expiresAt) — do NOT copy
+# it. v2 is: TAG|2|serverDomain|username|serverName|phoneDelegatedPubKey|
+# registrationUrl|authCode.serial|userPubKey|authCodeUserSignature|
+# installerGitRef|rckPubKey (bootUnlockMode is not serialized by
+# installBlobToJson, so it is absent here too).
+#
+# The real trust gate is .com registration matching the user's recorded IRK;
+# this check is defense-in-depth so a compromised network/control-plane cannot
+# tamper recipe fields (gitRef, serverDomain, rckPubKey, …) between phone and
+# box. Fail CLOSED: abort before any disk is touched if the signature is absent
+# or does not verify.
+#
+# Tooling: openssl (Ed25519 via the SPKI-wrap trick), jq (field extraction),
+# xxd (hex→DER). All are apk-added in phase_download, so this MUST run after
+# download and before phase_partition (no signed field trusted / no disk written
+# before it). Callable standalone for testing: `installer.sh verify-recipe
+# <blob.json> [sig-file]`.
 # ===========================================================================
 verify_recipe_signature() {
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
-        log "  recipe signature verify: SKIPPED (dry-run)"
+        log "  recipe signature verify: SKIPPED (dry-run PoC — no real recipe)"
         return 0
     fi
-    # TODO(seam-a / pending recipe-delivery decision): port parse-trailer.sh's
-    # Ed25519 verify here and fail closed. Until the delivery format is locked,
-    # this seam is intentionally a no-op that LOUDLY refuses to silently trust.
-    if [ -z "$GENESIS_PUBKEY_HEX" ]; then
-        log "  recipe signature verify: SEAM NOT ARMED (no GENESIS_PUBKEY_HEX baked)"
-        log "  recipe signature verify: TODO port parse-trailer.sh openssl Ed25519 (fail-closed)"
+    [ -r "$BLOB_JSON" ] || fail "recipe not found at $BLOB_JSON"
+    for t in openssl jq xxd; do
+        command -v "$t" >/dev/null 2>&1 || fail "recipe verify needs '$t' (apk add it in phase_download)"
+    done
+
+    _vdir="$(mktemp -d 2>/dev/null)" || fail "mktemp -d failed for recipe verify"
+
+    _ver="$(jq -r '.version' "$BLOB_JSON" 2>/dev/null)"
+    [ "$_ver" = "2" ] || { rm -rf "$_vdir"; fail "unsupported InstallBlob version: ${_ver:-<none>} (expected 2)"; }
+    _sd="$(jq -r '.serverDomain' "$BLOB_JSON")"
+    _un="$(jq -r '.username' "$BLOB_JSON")"
+    _sn="$(jq -r '.serverName' "$BLOB_JSON")"
+    _pd="$(jq -r '.phoneDelegatedPubKey' "$BLOB_JSON")"
+    _ru="$(jq -r '.registrationUrl' "$BLOB_JSON")"
+    _ser="$(jq -r '.authCode.serial' "$BLOB_JSON")"
+    _upk="$(jq -r '.authCode.userPubKey' "$BLOB_JSON")"
+    _acs="$(jq -r '.authCodeUserSignature' "$BLOB_JSON")"
+    _gr="$(jq -r '.installerGitRef' "$BLOB_JSON")"
+    _rck="$(jq -r '.rckPubKey' "$BLOB_JSON")"
+    # The signer's pubkey must be 32-byte hex; the rest is integrity-checked by
+    # the signature itself (a tampered/empty field simply fails verification).
+    [ "${#_upk}" = "64" ] || { rm -rf "$_vdir"; fail "authCode.userPubKey is not 32-byte hex"; }
+
+    # Reconstruct canonicalInstallBlob bytes — MUST byte-match auth.ts. No
+    # trailing newline (printf %s); parts joined by '|'.
+    _canon="flagship/install-blob/v1|2|$_sd|$_un|$_sn|$_pd|$_ru|$_ser|$_upk|$_acs|$_gr|$_rck"
+    printf '%s' "$_canon" > "$_vdir/canonical.bin"
+
+    # Signature bytes: prefer a raw 64-byte $BLOB_SIG file; else blobSignatureHex.
+    if [ -r "$BLOB_SIG" ] && [ "$(wc -c < "$BLOB_SIG" | tr -d ' ')" = "64" ]; then
+        cp "$BLOB_SIG" "$_vdir/sig.bin"
+    else
+        _sighex="$(jq -r '.blobSignatureHex // .blobSignature // empty' "$BLOB_JSON")"
+        { [ -n "$_sighex" ] && [ "${#_sighex}" = "128" ]; } || { rm -rf "$_vdir"; fail "recipe has no 64-byte signature ($BLOB_SIG file or blobSignatureHex field)"; }
+        printf '%s' "$_sighex" | xxd -r -p > "$_vdir/sig.bin"
+    fi
+    [ "$(wc -c < "$_vdir/sig.bin" | tr -d ' ')" = "64" ] || { rm -rf "$_vdir"; fail "recipe signature is not 64 bytes"; }
+
+    # SPKI-wrap the raw Ed25519 pubkey (constant 12-byte prefix) → DER → PEM,
+    # then openssl rawin verify (openssl wants an SPKI key, not the raw 32 bytes).
+    printf '%s%s' "302a300506032b6570032100" "$_upk" | xxd -r -p > "$_vdir/pub.der"
+    {
+        echo "-----BEGIN PUBLIC KEY-----"
+        base64 < "$_vdir/pub.der" | tr -d '\n'; echo
+        echo "-----END PUBLIC KEY-----"
+    } > "$_vdir/pub.pem"
+
+    if openssl pkeyutl -verify -rawin -pubin -inkey "$_vdir/pub.pem" \
+            -sigfile "$_vdir/sig.bin" -in "$_vdir/canonical.bin" >/dev/null 2>&1; then
+        rm -rf "$_vdir"
+        log "  recipe signature verify: OK (Ed25519 over canonical v2 blob, under authCode.userPubKey)"
         return 0
     fi
-    log "  recipe signature verify: would openssl-Ed25519 verify $BLOB_SIG over canonical($BLOB_JSON) under baked genesis pubkey"
-    # Placeholder until armed; do not pretend to have verified.
-    log "  recipe signature verify: TODO port parse-trailer.sh (fail-closed)"
+    rm -rf "$_vdir"
+    fail "recipe Ed25519 signature does NOT verify under authCode.userPubKey — refusing to install"
 }
 
 # ===========================================================================
@@ -156,7 +226,9 @@ phase_boot() {
             [ "$FLAGSHIP_DRY_RUN" = "1" ] || fail "required tool missing: $t"
         fi
     done
-    verify_recipe_signature
+    [ -r "$BLOB_JSON" ] || { [ "$FLAGSHIP_DRY_RUN" = "1" ] || fail "no recipe at $BLOB_JSON"; }
+    # NB: the cryptographic recipe-signature check runs AFTER phase_download
+    # (which apk-adds openssl/jq/xxd) and BEFORE phase_partition — see main().
 }
 
 # ===========================================================================
@@ -208,7 +280,7 @@ phase_download() {
     log "phase: downloading (apk add install tools + curated firmware)"
     report_phase downloading
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
-        log "  DRY_RUN: would 'apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl ca-certificates efibootmgr $FW_PACKAGES'"
+        log "  DRY_RUN: would 'apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl ca-certificates efibootmgr openssl jq xxd $FW_PACKAGES'"
         return 0
     fi
     # Pick the fastest mirror (QEMU-validated: 'apk add' fails if the repo list
@@ -217,7 +289,10 @@ phase_download() {
     setup-apkrepos -1 2>/dev/null || true
     sed -i 's|^#\(.*/community\)|\1|' /etc/apk/repositories 2>/dev/null || true
     apk update
+    # openssl/jq/xxd are needed by verify_recipe_signature, which runs right
+    # after this phase (before any disk write).
     apk add cryptsetup lvm2 sgdisk partx dosfstools e2fsprogs curl ca-certificates efibootmgr \
+        openssl jq xxd \
         $FW_PACKAGES || fail "apk add of install tools failed"
 }
 
@@ -672,6 +747,9 @@ main() {
     phase_boot
     phase_network
     phase_download
+    # Cryptographic recipe-signature gate: the install tools are present now and
+    # NO disk has been written yet. Fail-closed here, before any partitioning.
+    verify_recipe_signature
     phase_partition
     phase_install
     drop_first_boot_unit
@@ -679,4 +757,15 @@ main() {
     finish
     log "=== installer done ==="
 }
+
+# Standalone hook (unit test / pre-flight): `installer.sh verify-recipe
+# <blob.json> [sig-file]` runs ONLY the recipe-signature verifier and exits with
+# its status. The logging FIFO is skipped (guarded above) so stdout stays clean.
+if [ "${1:-}" = "verify-recipe" ]; then
+    [ -n "${2:-}" ] && BLOB_JSON="$2"
+    [ -n "${3:-}" ] && BLOB_SIG="$3"
+    SERIAL=""   # report_phase is a no-op without a serial
+    verify_recipe_signature
+    exit $?
+fi
 main "$@"

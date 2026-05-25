@@ -7,8 +7,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   INSTALLER_PHASES,
@@ -18,6 +19,8 @@ import {
   SUCCESS_FINALIZE_ORDER,
 } from "../src/index.js";
 import { PROVISION_STATUS_PHASES } from "@flagship/control-plane";
+import { generateUMK, deriveIRK, signAuthCode, signInstallBlob } from "@flagship/protocol";
+import { installBlobToJson } from "@flagship/iso-personalizer";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const INSTALLER = join(HERE, "..", "src", "installer.sh");
@@ -26,6 +29,13 @@ const installerSrc = readFileSync(INSTALLER, "utf8");
 describe("installer.sh shell validity", () => {
   it("passes POSIX sh -n syntax check", () => {
     const r = spawnSync("sh", ["-n", INSTALLER], { encoding: "utf8" });
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+  });
+
+  it("the QEMU e2e runner passes POSIX sh -n syntax check", () => {
+    const runner = join(HERE, "..", "scripts", "qemu-install-e2e.sh");
+    const r = spawnSync("sh", ["-n", runner], { encoding: "utf8" });
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
   });
@@ -235,16 +245,111 @@ describe("self-wipe + efibootmgr are gated on a verified-bootable install", () =
   });
 });
 
-describe("clean seams (deliberately NOT wired to live .com)", () => {
-  it("(a) recipe-signature verify is a clearly-bounded, fail-closed seam", () => {
+describe("recipe-signature verify (seam a — ARMED, fail-closed)", () => {
+  it("is armed: verifies against the embedded authCode.userPubKey, not a genesis key", () => {
     expect(installerSrc).toMatch(/verify_recipe_signature\(\)/);
-    expect(installerSrc).toMatch(/parse-trailer\.sh/); // the proven impl to port
-    expect(installerSrc).toMatch(/GENESIS_PUBKEY_HEX/);
-    // phase_boot must call the seam.
-    const bootFn = installerSrc.split("phase_boot()")[1]?.split("\nphase_network()")[0] ?? "";
-    expect(bootFn).toMatch(/verify_recipe_signature/);
+    // The IRK-signed-blob trust model: verify under authCode.userPubKey.
+    expect(installerSrc).toMatch(/authCode\.userPubKey/);
+    expect(installerSrc).toMatch(/openssl pkeyutl -verify -rawin/);
+    // The wrong "genesis pubkey" framing must be gone.
+    expect(installerSrc).not.toMatch(/GENESIS_PUBKEY_HEX/);
+    // Current v2 canonical string (not the stale v1 issuedAt/expiresAt one).
+    expect(installerSrc).toMatch(/flagship\/install-blob\/v1\|2\|/);
   });
 
+  it("runs AFTER phase_download (tools present) and BEFORE phase_partition (no disk written)", () => {
+    const main = installerSrc.split("\nmain() {")[1]?.split("\n}")[0] ?? "";
+    const dl = main.indexOf("phase_download");
+    const verify = main.indexOf("verify_recipe_signature");
+    const part = main.indexOf("phase_partition");
+    expect(dl).toBeGreaterThanOrEqual(0);
+    expect(dl).toBeLessThan(verify);
+    expect(verify).toBeLessThan(part);
+    // The deps it needs are apk-added in phase_download.
+    const dlFn = installerSrc.split("phase_download()")[1]?.split("\n# ===")[0] ?? "";
+    expect(dlFn).toMatch(/openssl jq xxd/);
+  });
+
+  it("fails closed on a tampered/missing signature (live openssl verify)", () => {
+    // Build a real signed v2 recipe with @flagship/protocol, then drive the
+    // standalone `installer.sh verify-recipe` subcommand. Needs jq/xxd and a
+    // real OpenSSL (LibreSSL's pkeyutl lacks the Ed25519 -rawin path); skip the
+    // live portion otherwise — the shell logic is asserted statically above.
+    const have = (t: string) => spawnSync("sh", ["-c", `command -v ${t}`]).status === 0;
+    const opensslReal =
+      (spawnSync("openssl", ["version"], { encoding: "utf8" }).stdout || "").startsWith("OpenSSL");
+    if (!have("jq") || !have("xxd") || !opensslReal) {
+      return;
+    }
+    const umk = generateUMK();
+    const irk = deriveIRK(umk);
+    const now = Date.now();
+    const authCode = {
+      version: 1 as const,
+      serial: "TESTSERIAL0001",
+      username: "testuser",
+      serverName: "home",
+      serverDomain: "home.testuser.flagship.services",
+      delegatedPubKey: irk.publicKey,
+      userPubKey: irk.publicKey,
+      issuedAt: now,
+      expiresAt: now + 3_600_000,
+    };
+    const blob = {
+      version: 2 as const,
+      serverDomain: authCode.serverDomain,
+      username: authCode.username,
+      serverName: authCode.serverName,
+      phoneDelegatedPubKey: irk.publicKey,
+      registrationUrl: "https://flagshipserver.com",
+      authCode,
+      authCodeUserSignature: signAuthCode(authCode, irk),
+      installerGitRef: "main",
+      rckPubKey: irk.publicKey,
+    };
+    const sig = signInstallBlob(blob, irk);
+    const json = installBlobToJson(blob);
+
+    const dir = mkdtempSync(join(tmpdir(), "flagship-recipe-"));
+    const jsonPath = join(dir, "install-blob.json");
+    const sigPath = join(dir, "install-blob.sig");
+    writeFileSync(jsonPath, JSON.stringify(json));
+    writeFileSync(sigPath, Buffer.from(sig));
+
+    const run = (jp: string, sp?: string) =>
+      spawnSync("sh", sp ? [INSTALLER, "verify-recipe", jp, sp] : [INSTALLER, "verify-recipe", jp], {
+        encoding: "utf8",
+      });
+
+    // Valid signature (raw .sig file) -> exit 0.
+    expect(run(jsonPath, sigPath).status).toBe(0);
+
+    // Valid signature carried as blobSignatureHex inside the JSON, no .sig file.
+    const jsonWithHex = join(dir, "with-hex.json");
+    writeFileSync(
+      jsonWithHex,
+      JSON.stringify({ ...json, blobSignatureHex: Buffer.from(sig).toString("hex") }),
+    );
+    expect(run(jsonWithHex, join(dir, "does-not-exist.sig")).status).toBe(0);
+
+    // Tampered field (installerGitRef) -> signature no longer matches -> non-zero.
+    const tamperedJson = join(dir, "tampered.json");
+    writeFileSync(tamperedJson, JSON.stringify({ ...json, installerGitRef: "evil-branch" }));
+    expect(run(tamperedJson, sigPath).status).not.toBe(0);
+
+    // Tampered signature bytes -> non-zero.
+    const badSig = Buffer.from(sig);
+    badSig[0] ^= 0xff;
+    const badSigPath = join(dir, "bad.sig");
+    writeFileSync(badSigPath, badSig);
+    expect(run(jsonPath, badSigPath).status).not.toBe(0);
+
+    // No signature at all (no .sig file, no blobSignatureHex) -> fail closed.
+    expect(run(jsonPath, join(dir, "missing.sig")).status).not.toBe(0);
+  });
+});
+
+describe("clean seams (deliberately NOT wired to live .com)", () => {
   it("(b) first-boot provision unit is dropped but TODO'd, not wired live", () => {
     const unit = installerSrc.split("drop_first_boot_unit()")[1] ?? "";
     expect(unit).toMatch(/10-flagship-provision\.start/);
