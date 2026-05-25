@@ -173,6 +173,15 @@ public protocol FlagshipServerClient: Sendable {
         username: String,
         body: TotpDisableRequest
     ) async throws -> TotpDisableResponse
+
+    /// Live provisioning-status timeline. GET /api/order/<serial>/status —
+    /// keyed by the auth-code SERIAL (the order id the app already holds).
+    /// Returns the latest reported phase + the append-only history so a
+    /// pending pod can render a real install timeline instead of a bare
+    /// spinner. **404 maps to nil** (no checkpoint has arrived yet — a
+    /// state, not an error). Mirrors handleGetProvisionStatus in
+    /// packages/control-plane/src/provisionStatus.ts.
+    func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus?
 }
 
 public struct AppRenameRequest: Encodable, Sendable {
@@ -596,6 +605,121 @@ public struct InstallEventsPollResponse: Codable, Equatable, Sendable {
 
     public init(serial: String, events: [InstallEventRecord], cursor: Int) {
         self.serial = serial; self.events = events; self.cursor = cursor
+    }
+}
+
+// MARK: - Provisioning status (per-order install timeline)
+
+/// One ordered step of the provisioning timeline. Mirrors
+/// `PROVISION_STATUS_PHASES` in
+/// packages/control-plane/src/provisionStatus.ts. The string raw value
+/// IS the wire phase the box reports; `.unknown` is the forward-compat
+/// fallback for a phase a newer Worker introduces that this binary
+/// doesn't yet know about (it is decoded but never appears in the
+/// canonical `ordered` ladder so the timeline still renders cleanly).
+public enum ProvisionStatusPhase: String, Codable, Equatable, Sendable, CaseIterable {
+    case booting
+    case downloading
+    case partitioning
+    case installing
+    case registering
+    case sealing
+    case pairing
+    case live
+    case error
+    /// Forward-compat sentinel for an unrecognised wire phase. Never
+    /// part of `ordered`.
+    case unknown
+
+    /// The happy-path ladder, in order, EXCLUDING the terminal `error`
+    /// (and the `unknown` sentinel). The timeline renders one row per
+    /// entry here; `live` is the terminal success state.
+    public static let ordered: [ProvisionStatusPhase] = [
+        .booting, .downloading, .partitioning, .installing,
+        .registering, .sealing, .pairing, .live,
+    ]
+
+    /// Human, on-brand title for each step.
+    public var title: String {
+        switch self {
+        case .booting:      return "Booting"
+        case .downloading:  return "Downloading system"
+        case .partitioning: return "Preparing disk"
+        case .installing:   return "Installing"
+        case .registering:  return "Registering with Flagship"
+        case .sealing:      return "Sealing your disk"
+        case .pairing:      return "Pairing"
+        case .live:         return "Server is live"
+        case .error:        return "Provisioning failed"
+        case .unknown:      return "Working…"
+        }
+    }
+
+    /// Forward-compatible decode: an unrecognised wire string decodes to
+    /// `.unknown` rather than throwing so an older client doesn't crash
+    /// on a newer Worker.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ProvisionStatusPhase(rawValue: raw) ?? .unknown
+    }
+
+    /// Terminal phases stop the poller (success or failure).
+    public var isTerminal: Bool { self == .live || self == .error }
+}
+
+/// One entry in a provision-status row's append-only history. Mirrors
+/// `ProvisionStatusHistoryEntry` in packages/storage/src/types.ts
+/// EXACTLY: `{ phase, detail?, ts }`.
+public struct ProvisionStatusEntry: Codable, Equatable, Sendable, Identifiable {
+    public let phase: ProvisionStatusPhase
+    public let detail: String?
+    /// Wall-clock ms of the report.
+    public let ts: Int64
+
+    /// Stable id for SwiftUI lists — phase + timestamp uniquely
+    /// identifies a checkpoint (the box never posts two of the same
+    /// phase at the same ms).
+    public var id: String { "\(phase.rawValue)-\(ts)" }
+
+    public init(phase: ProvisionStatusPhase, detail: String? = nil, ts: Int64) {
+        self.phase = phase
+        self.detail = detail
+        self.ts = ts
+    }
+}
+
+/// GET /api/order/<serial>/status response. Mirrors
+/// `ProvisionStatusRecord` in packages/storage/src/types.ts EXACTLY:
+/// `{ serial, serverDomain?, phase, detail?, updatedAt, history[] }`.
+/// A 404 ("no status") is surfaced as `nil` by the client, not this
+/// type — there is no separate "absent" sentinel.
+public struct ProvisionStatus: Codable, Equatable, Sendable {
+    public let serial: String
+    /// The server FQDN once the box has registered it; nil before then.
+    public let serverDomain: String?
+    /// The latest reported phase.
+    public let phase: ProvisionStatusPhase
+    /// Free-form latest detail (error text, percentage, etc.).
+    public let detail: String?
+    /// Wall-clock ms of the latest report.
+    public let updatedAt: Int64
+    /// Append-only history of every phase report, oldest first.
+    public let history: [ProvisionStatusEntry]
+
+    public init(
+        serial: String,
+        serverDomain: String? = nil,
+        phase: ProvisionStatusPhase,
+        detail: String? = nil,
+        updatedAt: Int64,
+        history: [ProvisionStatusEntry]
+    ) {
+        self.serial = serial
+        self.serverDomain = serverDomain
+        self.phase = phase
+        self.detail = detail
+        self.updatedAt = updatedAt
+        self.history = history
     }
 }
 
@@ -1264,13 +1388,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // Username rules. Mirrors the Worker's USERNAME_RE in
         // labels.ts so the Mock's wire shape (reason strings +
         // ordering) matches what a real Worker would return — keep
-        // these in sync. NO hyphens (alphanumerics only).
-        let usernameRe = "^[a-z0-9]{1,63}$"
+        // these in sync. 3–30 chars, NO hyphens (alphanumerics only).
+        let usernameRe = "^[a-z0-9]{3,30}$"
         if lower.range(of: usernameRe, options: .regularExpression) == nil {
             return .init(
                 username: lower,
                 available: false,
-                reason: "username must be 1–63 lowercase letters or digits (no hyphens)",
+                reason: "username must be 3–30 lowercase letters or digits (no hyphens)",
                 demoServer: demoBlock
             )
         }
@@ -1880,6 +2004,58 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         recoveryCodesByUser.removeValue(forKey: u)
         return TotpDisableResponse(ok: true, accountType: "single")
     }
+
+    // MARK: - Provisioning status (Mock)
+
+    /// Fixed provision-status records keyed by serial. When a serial is
+    /// present here, `fetchProvisionStatus` returns this record verbatim
+    /// (so tests can pin an exact wire shape). A serial that is neither
+    /// here nor in `provisionStatusScripts` returns nil (the Worker's
+    /// 404 → "no status").
+    public var provisionStatusFixtures: [String: ProvisionStatus] = [:]
+
+    /// Scripted phase PROGRESSION per serial. Each `fetchProvisionStatus`
+    /// call advances one step along the script and returns a record whose
+    /// `phase` is the current step + a `history` built from every step
+    /// served so far (oldest first), matching the Worker's append-only
+    /// history. The poller drives the timeline pending → … → live this
+    /// way without real time. `provisionStatusFixtures` takes precedence.
+    public var provisionStatusScripts: [String: [(phase: ProvisionStatusPhase, detail: String?)]] = [:]
+
+    /// serverDomain echoed by the scripted progression (the box usually
+    /// learns it at `registering`). Keyed by serial; optional.
+    public var provisionStatusServerDomains: [String: String] = [:]
+
+    /// Per-serial cursor into `provisionStatusScripts`, advanced one step
+    /// per call.
+    private var provisionStatusCursors: [String: Int] = [:]
+
+    public func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus? {
+        try await tick()
+        if let fixed = provisionStatusFixtures[serial] { return fixed }
+        guard let script = provisionStatusScripts[serial], !script.isEmpty else {
+            // No checkpoint yet — the Worker would 404; we map that to nil.
+            return nil
+        }
+        // Advance one step per call; clamp at the final step so a poller
+        // that keeps polling after the terminal phase keeps seeing it.
+        let prev = provisionStatusCursors[serial] ?? -1
+        let idx = min(prev + 1, script.count - 1)
+        provisionStatusCursors[serial] = idx
+        let baseTs: Int64 = 1_000
+        let history = script[0...idx].enumerated().map { (i, step) in
+            ProvisionStatusEntry(phase: step.phase, detail: step.detail, ts: baseTs + Int64(i))
+        }
+        let current = script[idx]
+        return ProvisionStatus(
+            serial: serial,
+            serverDomain: provisionStatusServerDomains[serial],
+            phase: current.phase,
+            detail: current.detail,
+            updatedAt: baseTs + Int64(idx),
+            history: Array(history)
+        )
+    }
 }
 
 // MARK: - Live
@@ -2269,5 +2445,22 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(TotpDisableResponse.self, from: data)
+    }
+
+    public func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus? {
+        let encoded = serial.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serial
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/order/\(encoded)/status"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        // 404 = no checkpoint has arrived yet ("no status"). A STATE, not
+        // an error — map it to nil so the caller renders "waiting for the
+        // box to phone home" rather than surfacing a failure.
+        if status == 404 { return nil }
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(ProvisionStatus.self, from: data)
     }
 }
