@@ -186,10 +186,53 @@ Bug the test suite caught: `exec > >(tee ...)` (process substitution) is a
 bash-ism and fails `sh -n` under busybox ash; replaced with a POSIX FIFO + bg
 `tee`.
 
-NOT yet exercised in QEMU (build-plan items): the `apk --root /mnt` base
-lay-down, the GRUB BIOS+UEFI install, a full reboot into the encrypted root, the
-first-boot provisioning unit (needs node + live `.com`), and the recipe
-signature verification.
+### 3a. Full-install QEMU e2e (`scripts/qemu-install-e2e.sh`, 2026-05-25)
+
+A second harness boots the stock Alpine standard ISO with the e2e apkovl (the
+REAL installer.sh, non-dry-run, + a properly signed v2 recipe) against a blank
+virtio target disk, then boots the installed disk standalone. Building it
+surfaced — and we fixed — a chain of **real bare-metal install bugs** that the
+dry-run PoC could never have caught:
+
+1. **phase_boot tool gate** fail-closed on `cryptsetup` *before* `phase_download`
+   apk-adds it. Moved the hard gate to `require_tools()` after download.
+2. **community repo** enablement via `setup-apkrepos -c -1` is flaky (mirror
+   timing) → `lvm2/sgdisk/firmware` "no such package". Now writes a deterministic
+   main+community repo list for the running branch.
+3. **`apk --root --initdb`** had no repositories/keys on the target. Seed
+   `/mnt/etc/apk/{repositories,keys}` from the live system.
+4. **`xxd`** is not a standalone Alpine package — it is a busybox applet (1.37
+   supports `xxd -r -p`); dropped from the apk-add.
+5. **`FW_PACKAGES=""`** didn't disable firmware (`${VAR:-}` empty==unset); use
+   `${VAR-}` so an explicit empty means no firmware.
+6. **phase_network** hardcoded `eth0` + a fragile one-shot udhcpc; now brings
+   every wired NIC up and backgrounds udhcpc (`-b`) with a 60s route poll.
+7. The harness itself needed a **serial-console autoboot** (`console=ttyS0`) or
+   nothing reached `-nographic`'s serial.
+
+**Known blocker (base-ISO, not installer.sh):** with an apkovl present, the stock
+Alpine standard ISO boots in apkovl/diskless mode and **does not mount its
+modloop squashfs** — so `af_packet` (a kernel module) is absent, `udhcpc` fails
+`socket(AF_PACKET): Address family not supported`, and `apk` has no network. This
+is the **same root cause** as the Hetzner failure in `docs/SESSION-HANDOFF.md §0`
+(which motivated the cloud→Debian switch). It blocks the network-dependent phases
+(apk download, `apk --root` lay-down) under QEMU. The runner detects this and
+exits **2 = BLOCKED-KNOWN** (distinct from 1 = real failure). It is a
+**base-ISO-assembly** problem: the fix is to bake `af_packet` (+ any pre-modloop
+modules) into the initramfs, or assemble the base so modloop mounts in
+apkovl-mode — a build-plan item (below) — and the full lay-down → GRUB →
+standalone-boot is then validated on real hardware (#7).
+
+Proven by the e2e before the modloop wall: boot → serial → recipe present →
+tool-gate → network bring-up (link up) → deterministic repos written → reached
+`apk update`. The recipe-signature verify is independently proven by a unit test
+that signs a real v2 blob with `@flagship/protocol` and drives
+`installer.sh verify-recipe` (valid / tampered-field / tampered-sig / missing-sig).
+
+NOT yet exercised end-to-end in QEMU (gated by the modloop blocker above): the
+`apk --root /mnt` base lay-down, the GRUB BIOS+UEFI install, the success gate +
+self-wipe, a full reboot into the encrypted root, and the first-boot provisioning
+unit (also needs node + live `.com`).
 
 ## 4. Build plan (remaining work)
 
@@ -223,9 +266,19 @@ signature verification.
 7. **Reproducible ISO.** Fold into `scripts/build-flagship-iso.sh`
    (`SOURCE_DATE_EPOCH` + pinned Alpine ISO/sha256 + the deterministic
    `buildApkovl` mtime). Pin the Alpine release + sha256 in `fetch-base.sh`.
+7a. **modloop-in-apkovl-mode fix (base-ISO; blocker found by §3a).** With an
+   apkovl present the stock standard ISO skips mounting modloop, so `af_packet`
+   is missing and DHCP can't run (same root cause as `SESSION-HANDOFF.md §0`).
+   Fix at the base-ISO layer: bake `af_packet` (and any pre-modloop modules) into
+   the initramfs, OR assemble the base so modloop mounts in apkovl/diskless mode
+   (e.g. set the boot-media kopt explicitly). Until then `qemu-install-e2e.sh`
+   exits 2 (BLOCKED-KNOWN) at the network phase and the lay-down→GRUB→boot is
+   validated on hardware (#8).
 8. **Real-hardware E2E.** Burn → boot a commodity box (BIOS + UEFI) → observe
    the full phase timeline on the phone → encrypted root → first unlock via
-   `boot.flagshipserver.com`. This is the only step the agent cannot do.
+   `boot.flagshipserver.com`. This is the only step the agent cannot do. NB: the
+   §3a modloop finding means the hardware run should confirm modloop mounts from
+   real USB media (or apply 7a) BEFORE expecting the network phases to work.
 
 ## 5. Files
 

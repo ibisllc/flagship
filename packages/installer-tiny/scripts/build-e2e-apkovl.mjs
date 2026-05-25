@@ -94,6 +94,17 @@ const launcher = [
   // Bring up the wired NIC for apk (user-mode NAT gives us 10.0.2.x + DNS).
   "setup-interfaces -a 2>/dev/null || true",
   "rc-service networking start 2>/dev/null || udhcpc -i eth0 2>/dev/null || true",
+  // Net diagnostics (harness only): if the install fails on network, this shows
+  // the interface names + whether DHCP landed an address/route, plus whether
+  // af_packet/modloop are present (the Hetzner failure mode) vs a slirp quirk.
+  'echo "--- net diag: interfaces = $(ls /sys/class/net | tr "\\n" " ") ---"',
+  "ip addr 2>/dev/null | grep -E '^[0-9]+:|inet ' || true",
+  'echo "modloop mounted: $(mount | grep -c modloop) ; af_packet: $(grep -c af_packet /proc/modules 2>/dev/null) ; /proc/net/packet: $( [ -e /proc/net/packet ] && echo yes || echo NO)"',
+  "modprobe af_packet 2>/dev/null || true",
+  'echo "--- foreground udhcpc (1 attempt, visible) ---"',
+  "udhcpc -i eth0 -n -q -t 5 -T 3 2>&1 | head -20 || true",
+  "ip addr show eth0 2>/dev/null | grep -E 'inet ' || echo 'eth0 still has no IP'",
+  "ip route 2>/dev/null || true",
   // Shadow `reboot` with a sentinel shim earlier in PATH so a successful
   // install does not actually loop the VM. The installer runs in its own `sh`
   // subprocess, so a shell function would not carry over — a PATH shim does.

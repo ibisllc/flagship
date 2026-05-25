@@ -261,20 +261,21 @@ phase_network() {
     # error. Enumerate /sys/class/net, link-up each, then DHCP on each until a
     # default route appears. Robust for commodity hardware (multiple NICs) too.
     setup-interfaces -a 2>/dev/null || true   # write /etc/network/interfaces (Alpine helper)
+    # Bring every wired NIC up and start a BACKGROUNDED udhcpc on each (-b keeps
+    # retrying internally + runs the default script that sets the IP/route on a
+    # lease). A one-shot `udhcpc -n -t 3 -T 2` was too aggressive under TCG and
+    # never landed a lease (the e2e regressed to "no default route"); the plain
+    # backgrounded client is what reliably gets a lease on slow/commodity links.
     for nic in $(ls /sys/class/net 2>/dev/null); do
         case "$nic" in lo|wlan*) continue;; esac
         ip link set "$nic" up 2>/dev/null || true
+        udhcpc -i "$nic" -b 2>/dev/null || true
     done
     bake_wifi
-    # Wait up to 45s for a default route, re-kicking a one-shot DHCP on each
-    # wired NIC every loop. Bounded so an offline install still proceeds (the
-    # phone simply lights up later) rather than hanging forever.
-    i=0; while [ "$i" -lt 45 ]; do
+    # Poll up to 60s for a default route. Bounded so an offline install still
+    # proceeds (the phone simply lights up later) rather than hanging forever.
+    i=0; while [ "$i" -lt 60 ]; do
         if ip route 2>/dev/null | grep -q '^default'; then network_up=1; break; fi
-        for nic in $(ls /sys/class/net 2>/dev/null); do
-            case "$nic" in lo|wlan*) continue;; esac
-            udhcpc -i "$nic" -n -q -t 3 -T 2 2>/dev/null && break
-        done
         sleep 1; i=$((i+1))
     done
     [ "$network_up" = "1" ] && log "  network up (default route present)" || log "  no default route yet; continuing offline"
