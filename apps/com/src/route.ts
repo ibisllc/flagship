@@ -131,6 +131,12 @@ export interface RouteEnv {
   BASE_ISO_SHA256?: string;
   /** R2 bucket holding the base ISO(s). Streams via /build/iso/:filename. */
   ISO_BUCKET?: R2BucketLike;
+  /**
+   * R2 key of the pre-built reproducible Alpine base ISO that
+   * POST /api/personalize-iso streams + appends the recipe trailer to (#12).
+   * Defaults to "flagship-alpine-base.iso"; the build CI uploads it.
+   */
+  ALPINE_BASE_ISO_KEY?: string;
   /** D1 binding for the .com control-plane state. */
   DB?: import("@flagship/storage").D1Database;
   /** CA private key for /api/users/:username/pubkey-cert (Worker secret). */
@@ -195,6 +201,7 @@ const BUILD_ISO_INFO_PATH = "/api/build/iso-info";
 const HEALTH_PATH = "/api/health";
 const SERVICES_ENDPOINTS_PATH = "/api/services/endpoints";
 const BUILD_ISO_STREAM_PREFIX = "/build/iso/";
+const PERSONALIZE_ISO_PATH = "/api/personalize-iso";
 /**
  * Legacy POST endpoint for v1 of the build-relay protocol. v2 is
  * WebSocket-only and uses client-derived session IDs; this endpoint
@@ -399,6 +406,10 @@ async function routeImpl(request: Request, env: RouteEnv, url: URL): Promise<Res
 
   if (url.pathname.startsWith(BUILD_ISO_STREAM_PREFIX)) {
     return streamIsoFromR2(url.pathname.slice(BUILD_ISO_STREAM_PREFIX.length), env);
+  }
+
+  if (url.pathname === PERSONALIZE_ISO_PATH) {
+    return personalizeIsoRoute(request, env);
   }
 
   // v1 mint endpoint — kept as a 410 for graceful failure of any old
@@ -722,6 +733,51 @@ async function streamIsoFromR2(filename: string, env: RouteEnv): Promise<Respons
   if (obj.httpEtag) headers.set("etag", obj.httpEtag);
   if (obj.writeHttpMetadata) obj.writeHttpMetadata(headers);
   return new Response(obj.body, { status: 200, headers });
+}
+
+/**
+ * POST /api/personalize-iso (#12, dumb-flash default). Body = the signed recipe
+ * envelope the /ready/ page holds. We stream the pre-built Alpine base ISO from
+ * R2 with the recipe appended as a trailer (control-plane buildPersonalizedIso →
+ * iso-personalizer streamPersonalize). The burner then just flashes the result;
+ * the box reads the trailer back via the ISO9660-volume-size find.
+ */
+async function personalizeIsoRoute(request: Request, env: RouteEnv): Promise<Response> {
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "POST a signed recipe envelope" }, 405);
+  }
+  if (!env.ISO_BUCKET) {
+    return jsonResponse({ error: "ISO_BUCKET not bound" }, 500);
+  }
+  const key = env.ALPINE_BASE_ISO_KEY || "flagship-alpine-base.iso";
+  const base = await env.ISO_BUCKET.get(key);
+  if (!base || !base.body) {
+    // The reproducible base ISO hasn't been built+uploaded yet (ops/CI step).
+    return jsonResponse({ error: `base ISO "${key}" not provisioned` }, 503);
+  }
+  // Accept the recipe as a raw JSON body (fetch) OR a `recipe` form field — the
+  // latter lets /ready/ use a plain form POST so the browser streams the ~250 MB
+  // ISO straight to disk (no multi-hundred-MB in-memory blob).
+  let recipeText: string;
+  const ct = request.headers.get("content-type") || "";
+  if (ct.includes("application/x-www-form-urlencoded")) {
+    recipeText = new URLSearchParams(await request.text()).get("recipe") || "";
+  } else {
+    recipeText = await request.text();
+  }
+  const { buildPersonalizedIso } = await import("@flagship/control-plane");
+  const res = buildPersonalizedIso(recipeText, { stream: base.body, size: base.size });
+  if (!res.ok) {
+    return jsonResponse({ error: res.error }, res.status);
+  }
+  const headers = new Headers({
+    "content-type": "application/octet-stream",
+    "content-length": String(res.totalBytes),
+    "content-disposition": `attachment; filename="${res.filename}"`,
+    // Per-user, single-use; never cache.
+    "cache-control": "no-store",
+  });
+  return new Response(res.stream, { status: 200, headers });
 }
 
 /**

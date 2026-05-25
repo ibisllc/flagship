@@ -16,6 +16,10 @@ describe("/ready/ — post-order recipe landing", () => {
     // The no-recipe fallback exists for direct navigation.
     expect(r.body).toContain('id="noRecipe"');
     expect(r.body).toContain('src="/ready/ready.js"');
+    // #12: the recommended default — download a ready-to-flash custom ISO.
+    expect(r.body).toContain('id="alpineCta"');
+    expect(r.body).toContain('id="downloadIso"');
+    expect(r.body).toContain("ready-to-flash");
   });
 
   it("serves /ready/ready.js wired to the QR hand-off key + on-brand installer links", async () => {
@@ -32,5 +36,9 @@ describe("/ready/ — post-order recipe landing", () => {
     expect(r.body).toContain("/download/mac");
     expect(r.body).toContain("/download/windows");
     expect(r.body).toContain("/download/linux");
+    // #12: the custom-ISO download POSTs the recipe to the personalize endpoint
+    // via a streamed form submit (not an in-memory blob).
+    expect(r.body).toContain("/api/personalize-iso");
+    expect(r.body).toContain("downloadAlpineIso");
   });
 });

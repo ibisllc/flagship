@@ -79,6 +79,26 @@ function downloadRecipe(text, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+// Download the custom Alpine boot image: POST the recipe to /api/personalize-iso
+// via a real form submit so the browser streams the ~250 MB ISO straight to disk
+// (a fetch().blob() would buffer the whole thing in memory). The server appends
+// the signed recipe as a trailer to a pre-built base ISO and returns it with a
+// Content-Disposition attachment, so the page stays put and the download starts.
+function downloadAlpineIso(text) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/api/personalize-iso";
+  form.style.display = "none";
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "recipe";
+  input.value = text;
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+  setTimeout(() => form.remove(), 5000);
+}
+
 async function copyRecipe(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -163,6 +183,11 @@ function main() {
   }
 
   const filename = recipeFilename(recipe);
+  $("downloadIso")?.addEventListener("click", () => {
+    downloadAlpineIso(recipeText);
+    const s = $("isoStatus");
+    if (s) s.textContent = "Building your image — the download will start in a moment.";
+  });
   $("copyRecipe")?.addEventListener("click", () => copyRecipe(recipeText));
   $("downloadRecipe")?.addEventListener("click", () => {
     downloadRecipe(recipeText, filename);

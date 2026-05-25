@@ -72,6 +72,23 @@
         background: var(--canvas-tinted); color: var(--ink); border: 1px solid var(--border);
       }
       .no-recipe.hidden, .has-recipe.hidden { display: none; }
+      .alpine-cta {
+        margin: var(--space-4) 0; padding: var(--space-4);
+        border: 1px solid var(--accent); border-radius: var(--radius-lg);
+        background: var(--canvas-tinted);
+      }
+      .alpine-cta h3 { margin: 0 0 var(--space-2); }
+      .alpine-cta p { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: var(--body-sm-size); }
+      .alpine-cta .dl-primary, .alpine-cta button.dl-primary {
+        display: inline-block; padding: 12px 22px; border: 0; cursor: pointer;
+        border-radius: var(--radius-md); background: var(--accent); color: var(--accent-ink, #fff);
+        font-weight: 600; font-size: var(--body-size); text-decoration: none;
+      }
+      .alpine-cta .recommended { display: inline-block; margin-bottom: var(--space-2); padding: 2px 10px;
+        border-radius: 999px; background: var(--accent); color: var(--accent-ink, #fff);
+        font-size: var(--body-xs-size, 0.72rem); font-weight: 600; letter-spacing: 0.02em; }
+      .alpine-cta .advanced-note { margin-top: var(--space-3); margin-bottom: 0; }
+      .alpine-cta.hidden { display: none; }
     </style>
     <link rel="stylesheet" href="/theme-ui.css">
   <script src="/theme.js"></script>
@@ -101,8 +118,25 @@
         </div>
 
         <p class="lede">
-          A recipe is a tiny signed file — your phone authorized it, and only your phone can. Get it into the Assembler, then build your boot USB.
+          A recipe is a tiny signed file — your phone authorized it, and only your phone can.
         </p>
+
+        <!-- Default (Alpine) path: a ready-to-flash custom ISO, recipe baked in. -->
+        <div class="alpine-cta" id="alpineCta">
+          <span class="recommended">Recommended</span>
+          <h3>Download your ready-to-flash boot image</h3>
+          <p>
+            A custom Flagship image with your recipe already inside. Flash it to any USB
+            stick (with the Flagship burner, or any USB writer), boot the target machine,
+            and watch it come up on your phone. Nothing else to configure.
+          </p>
+          <button type="button" class="dl-primary" id="downloadIso">Download boot image (.iso)</button>
+          <p class="advanced-note status-line" id="isoStatus"></p>
+          <p class="advanced-note">
+            Bringing your own Linux image instead? Use the recipe + Assembler steps below
+            (advanced).
+          </p>
+        </div>
 
         <section class="step">
           <h3><span class="num">1</span> Your recipe for <strong id="serverDomain">your server</strong></h3>
