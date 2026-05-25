@@ -66,7 +66,9 @@ CONTROL_PLANE_BASE="${CONTROL_PLANE_BASE:-https://flagshipserver.com}"
 HOSTNAME_DEFAULT="${HOSTNAME_DEFAULT:-flagship}"
 # Curated firmware subset for commodity hardware (see docs eval). Each is an
 # Alpine subpackage so the total stays ~50-150MB, not the ~1GB full set.
-FW_PACKAGES="${FW_PACKAGES:-linux-firmware-intel linux-firmware-rtw88 linux-firmware-rtw89 linux-firmware-iwlwifi linux-firmware-rtl_nic linux-firmware-ath10k linux-firmware-ath11k linux-firmware-amdgpu linux-firmware-i915 linux-firmware-other}"
+# NOTE: `-` (not `:-`) so an EXPLICIT empty FW_PACKAGES="" (the e2e/VM, no real
+# NICs) disables firmware; only an UNSET var falls back to the curated default.
+FW_PACKAGES="${FW_PACKAGES-linux-firmware-intel linux-firmware-rtw88 linux-firmware-rtw89 linux-firmware-iwlwifi linux-firmware-rtl_nic linux-firmware-ath10k linux-firmware-ath11k linux-firmware-amdgpu linux-firmware-i915 linux-firmware-other}"
 # Wi-Fi (burn-time only; never part of the signed blob). Empty => wired DHCP only.
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PSK="${WIFI_PSK:-}"
@@ -253,13 +255,26 @@ phase_network() {
         report_phase booting
         return 0
     fi
-    setup-interfaces -a 2>/dev/null || true   # bring NICs up (Alpine helper)
-    udhcpc -i eth0 2>/dev/null || true
+    # Bring EVERY wired NIC up explicitly — hardcoding eth0 + a bare `udhcpc`
+    # is fragile (predictable names like enp0s*, link not yet up, slow DHCP under
+    # load). The e2e caught this: "no default route" → apk update temporary
+    # error. Enumerate /sys/class/net, link-up each, then DHCP on each until a
+    # default route appears. Robust for commodity hardware (multiple NICs) too.
+    setup-interfaces -a 2>/dev/null || true   # write /etc/network/interfaces (Alpine helper)
+    for nic in $(ls /sys/class/net 2>/dev/null); do
+        case "$nic" in lo|wlan*) continue;; esac
+        ip link set "$nic" up 2>/dev/null || true
+    done
     bake_wifi
-    # Wait briefly for a default route (DHCP can lag the link). Bounded so an
-    # offline install still proceeds (the phone simply lights up later).
-    i=0; while [ "$i" -lt 15 ]; do
+    # Wait up to 45s for a default route, re-kicking a one-shot DHCP on each
+    # wired NIC every loop. Bounded so an offline install still proceeds (the
+    # phone simply lights up later) rather than hanging forever.
+    i=0; while [ "$i" -lt 45 ]; do
         if ip route 2>/dev/null | grep -q '^default'; then network_up=1; break; fi
+        for nic in $(ls /sys/class/net 2>/dev/null); do
+            case "$nic" in lo|wlan*) continue;; esac
+            udhcpc -i "$nic" -n -q -t 3 -T 2 2>/dev/null && break
+        done
         sleep 1; i=$((i+1))
     done
     [ "$network_up" = "1" ] && log "  network up (default route present)" || log "  no default route yet; continuing offline"
@@ -286,19 +301,27 @@ phase_download() {
     log "phase: downloading (apk add install tools + curated firmware)"
     report_phase downloading
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
-        log "  DRY_RUN: would 'apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl ca-certificates efibootmgr openssl jq xxd $FW_PACKAGES'"
+        log "  DRY_RUN: would 'apk add cryptsetup lvm2 sgdisk dosfstools e2fsprogs curl ca-certificates efibootmgr openssl jq $FW_PACKAGES' (xxd = busybox applet)"
         return 0
     fi
-    # Pick the fastest mirror (QEMU-validated: 'apk add' fails if the repo list
-    # only has the cdrom; setup-apkrepos -1 writes a working network mirror) and
-    # enable community (sgdisk lives there). Both confirmed live in the PoC.
-    setup-apkrepos -1 2>/dev/null || true
-    sed -i 's|^#\(.*/community\)|\1|' /etc/apk/repositories 2>/dev/null || true
+    # Write a DETERMINISTIC main+community repo list for the running Alpine
+    # branch. `setup-apkrepos -c -1` proved FLAKY under the e2e (it times mirrors
+    # and sometimes omits community → lvm2/sgdisk "no such package"); pinning the
+    # mirror + branch removes the flake (and the timing dependency) entirely.
+    # cryptsetup/lvm2/sgdisk and the firmware subpackages live in community.
+    ALPINE_BRANCH="v$(cut -d. -f1,2 /etc/alpine-release 2>/dev/null || echo 3.21)"
+    APK_MIRROR="${APK_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}"
+    printf '%s/%s/main\n%s/%s/community\n' \
+        "$APK_MIRROR" "$ALPINE_BRANCH" "$APK_MIRROR" "$ALPINE_BRANCH" > /etc/apk/repositories
+    log "  apk repos: $APK_MIRROR/$ALPINE_BRANCH {main,community}"
     apk update
-    # openssl/jq/xxd are needed by verify_recipe_signature, which runs right
-    # after this phase (before any disk write).
+    # openssl/jq are needed by verify_recipe_signature, which runs right after
+    # this phase. xxd is NOT a standalone Alpine package (the e2e proved it: even
+    # with community enabled, "xxd → no such package") — it is a busybox applet
+    # (busybox 1.37 supports `xxd -r -p`), so we do NOT apk-add it; require_tools
+    # still verifies `command -v xxd` resolves to the applet.
     apk add cryptsetup lvm2 sgdisk partx dosfstools e2fsprogs curl ca-certificates efibootmgr \
-        openssl jq xxd \
+        openssl jq \
         $FW_PACKAGES || fail "apk add of install tools failed"
     # Fail-closed: every required tool must now resolve before we touch a disk.
     require_tools
@@ -403,6 +426,13 @@ phase_install() {
     mkdir -p /mnt/boot /mnt/boot/efi /mnt/flagship
     mount "${TARGET}${s}3" /mnt/boot
     mount "${TARGET}${s}2" /mnt/boot/efi
+    # apk --root --initdb needs the TARGET to carry its own repositories + apk
+    # signing keys, else it fails (no repositories / untrusted signature). Seed
+    # them from the live system (now main+community) so the lay-down resolves AND
+    # the installed box can run apk on its own afterwards.
+    mkdir -p /mnt/etc/apk/keys
+    cp /etc/apk/repositories /mnt/etc/apk/repositories 2>/dev/null || true
+    cp -r /etc/apk/keys/. /mnt/etc/apk/keys/ 2>/dev/null || true
     # Lay down the base OS. Option A (chosen): apk --root installs a minimal
     # Alpine system that HAS a package manager for the first-boot heavy work.
     # Option B would be `dd` a prebuilt base image (faster, fixed size) — see

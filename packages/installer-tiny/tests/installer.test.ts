@@ -265,9 +265,13 @@ describe("recipe-signature verify (seam a — ARMED, fail-closed)", () => {
     expect(dl).toBeGreaterThanOrEqual(0);
     expect(dl).toBeLessThan(verify);
     expect(verify).toBeLessThan(part);
-    // The deps it needs are apk-added in phase_download.
+    // The deps it needs are apk-added in phase_download (xxd is a busybox
+    // applet, not an Alpine package, so it is NOT apk-added — see require_tools).
     const dlFn = installerSrc.split("phase_download()")[1]?.split("\n# ===")[0] ?? "";
-    expect(dlFn).toMatch(/openssl jq xxd/);
+    expect(dlFn).toMatch(/openssl jq/);
+    // The fail-closed gate verifies all of them (incl. the xxd applet) resolved.
+    expect(installerSrc).toMatch(/require_tools\(\)/);
+    expect(installerSrc).toMatch(/REQUIRED_LIVE_TOOLS=.*\bxxd\b/);
   });
 
   it("fails closed on a tampered/missing signature (live openssl verify)", () => {
