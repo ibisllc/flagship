@@ -72,6 +72,13 @@ export interface UserDataOptions {
    */
   encryptRoot?: boolean;
   /**
+   * DEBUG-ONLY (never set by the CLI/GUI): when present, the bootstrap is
+   * replaced by a minimal remote-access stub (sshd + this authorized key + the
+   * Wi-Fi safety-net; NO provisioning, NO LUKS re-key) so provisioning can be
+   * iterated over SSH instead of blind in-target. The burn passphrase is kept.
+   */
+  debugSshAuthorizedKey?: string;
+  /**
    * The dedicated boot worker the box's boot-stage talks to for its LUKS
    * unlock (lease GET / approval request POST / response poll), baked to
    * /boot/flagship-boot-host so the initramfs unlock hook reads it on every
@@ -83,6 +90,16 @@ export interface UserDataOptions {
    * default constant (or an explicit caller override).
    */
   bootHost?: string;
+  /**
+   * Optional Wi-Fi for a box with no Ethernet. A burn-time local input — NEVER
+   * part of the signed InstallBlob. When an SSID is given, the autoinstall gets
+   * a netplan that DHCPs any wired NIC AND joins this Wi-Fi (both `optional`, so
+   * a missing NIC never blocks boot), and `wpasupplicant` is added so the
+   * installed system can drive the radio on the first real boot. Empty ⇒ the
+   * default subiquity wired-DHCP behaviour, byte-identical to before.
+   */
+  wifiSSID?: string;
+  wifiPassword?: string;
 }
 
 /**
@@ -96,13 +113,43 @@ export const DEFAULT_BOOT_HOST = "https://boot.flagshipserver.com";
  * The two boot-unlock modes (docs/security-phone-as-unlock-endpoint.md §7a.1).
  * Read from InstallBlob.bootUnlockMode (phone-signed); absent ⇒ "auto".
  */
-type BootUnlockMode = "auto" | "approve";
+export type BootUnlockMode = "auto" | "approve";
 
-export function buildAutoinstallUserData(opts: UserDataOptions): string {
-  const blobJsonStr = JSON.stringify(installBlobToJson(opts.blob, opts.blobSignatureHex));
-  const blobB64 = utf8ToBase64(blobJsonStr);
-  const ref =
-    opts.installerGitRef ?? (opts.blob.installerGitRef.trim() || "main");
+/**
+ * Which installer the bootstrap is being baked for. Ubuntu (subiquity/curtin)
+ * is the original path; "debian" (debian-installer / d-i) is the added path.
+ *
+ * The non-LUKS bootstrap body is BYTE-IDENTICAL across both families (the
+ * daemon clone/build/register logic doesn't care which installer ran). Only
+ * two things differ, and ONLY on the encrypted path:
+ *   - Node 20 install comment (cosmetic — same NodeSource one-liner).
+ *   - The LUKS layout. Ubuntu/curtin gives a PLAIN LUKS root; Debian's
+ *     partman-crypto preseed only reliably supports LVM-on-LUKS, so the
+ *     Debian initramfs unlock hook must `vgchange -ay` after luksOpen and
+ *     discover the raw LUKS partition by type (not by the fs label, which
+ *     lives on the LV inside the container). See buildLuksBootstrapBlock.
+ */
+export type InstallerFamily = "ubuntu" | "debian";
+
+/**
+ * The validated, defaulted inputs both generators derive from UserDataOptions.
+ * Centralised so the Ubuntu autoinstall + the Debian preseed can never drift on
+ * the git-ref/repo/bootHost validation or the encryptRoot/bootUnlockMode
+ * defaults. The bootHost default (boot.flagshipserver.com) is overridable by an
+ * enterprise clone; encryptRoot is the locked default (false = internal debug
+ * escape only); bootUnlockMode is phone-signed in the blob (absent ⇒ "auto").
+ */
+export interface ResolvedBootstrapInputs {
+  blobB64: string;
+  ref: string;
+  repo: string;
+  bootHost: string;
+  encryptRoot: boolean;
+  bootUnlockMode: BootUnlockMode;
+}
+
+export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrapInputs {
+  const ref = opts.installerGitRef ?? (opts.blob.installerGitRef.trim() || "main");
   if (!/^[A-Za-z0-9._/-]+$/.test(ref)) {
     throw new Error(`refusing to embed unsafe git ref: ${ref}`);
   }
@@ -110,28 +157,32 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
   if (!repo.startsWith("https://")) {
     throw new Error("flagshipRepoUrl must be https://");
   }
-  // The dedicated boot worker. Default is boot.flagshipserver.com; an enterprise
-  // clone overrides it via opts.bootHost (a follow-up can thread an InstallBlob
-  // field here). Baked to /boot/flagship-boot-host so the initramfs unlock hook
-  // reads it on every boot — mirrors how /boot/flagship-boot-unlock-mode is baked.
   const bootHost = (opts.bootHost ?? DEFAULT_BOOT_HOST).replace(/\/+$/, "");
   if (!bootHost.startsWith("https://")) {
     throw new Error("bootHost must be https://");
   }
-  // LUKS is the DEFAULT (locked) — every burn produces an encrypted box. The
-  // ONLY way to opt out is encryptRoot:false, an internal debug escape hatch
-  // (NOT exposed in the CLI/GUI) for bisecting a boot failure against the
-  // known-good plaintext path. See docs/security-phone-as-unlock-endpoint.md.
-  const encryptRoot = opts.encryptRoot !== false;
-  // Boot-unlock policy (docs/security-phone-as-unlock-endpoint.md §7a.1).
-  // Phone-signed in the blob; absent ⇒ "auto" (the default). The box bakes
-  // this to /boot and the initramfs hook branches on it: "auto" tries a
-  // box-sealed lease first (self-unlock, no phone) then falls back to the
-  // phone-gated relay; "approve" ALWAYS uses the relay and never touches a
-  // lease (defense in depth — a critical server cannot self-unlock).
-  const bootUnlockMode: BootUnlockMode =
-    opts.blob.bootUnlockMode === "approve" ? "approve" : "auto";
-  const bootstrap = buildBootstrapScript({ ref, repoUrl: repo, encryptRoot, bootUnlockMode, bootHost });
+  return {
+    blobB64: utf8ToBase64(JSON.stringify(installBlobToJson(opts.blob, opts.blobSignatureHex))),
+    ref,
+    repo,
+    bootHost,
+    encryptRoot: opts.encryptRoot !== false,
+    bootUnlockMode: opts.blob.bootUnlockMode === "approve" ? "approve" : "auto",
+  };
+}
+
+export function buildAutoinstallUserData(opts: UserDataOptions): string {
+  const { blobB64, ref, repo, bootHost, encryptRoot, bootUnlockMode } =
+    resolveBootstrapInputs(opts);
+  const bootstrap = buildBootstrapScript({
+    ref,
+    repoUrl: repo,
+    encryptRoot,
+    bootUnlockMode,
+    bootHost,
+    wifiSSID: opts.wifiSSID,
+    wifiPassword: opts.wifiPassword,
+  });
   const bootstrapB64 = utf8ToBase64(bootstrap);
   // The LUKS storage block is emitted ONLY when encryptRoot is on. When off,
   // this is the empty string and the YAML is byte-identical to the working
@@ -146,12 +197,42 @@ export function buildAutoinstallUserData(opts: UserDataOptions): string {
   // recoverable key is the phone-sealed random one; the burn-time constant is
   // destroyed before first boot.
   const storageBlock = encryptRoot ? luksStorageBlock() : "";
+  // Pairs with storage.grub.update_nvram:false (luksStorageBlock): since we skip
+  // the EFI NVRAM entry, copy curtin's SIGNED shim+grub to the removable
+  // /EFI/BOOT/BOOTX64.EFI fallback path, which firmware boots with no NVRAM
+  // entry (and stays Secure-Boot-valid — same signed bytes).
+  const efiFallbackBlock = encryptRoot
+    ? `    - curtin in-target --target=/target -- bash -c 'D=/boot/efi/EFI; mkdir -p "$D/BOOT"; cp "$D/ubuntu/shimx64.efi" "$D/BOOT/BOOTX64.EFI"; cp "$D/ubuntu/grubx64.efi" "$D/BOOT/grubx64.efi"; cp "$D/ubuntu/mmx64.efi" "$D/BOOT/" 2>/dev/null; true'\n`
+    : "";
+  // Wi-Fi is a burn-time local input (NOT in the signed blob). networkd REJECTS
+  // `match:` for wifis (only ethernet), so we can't bake a Wi-Fi glob — the
+  // interface name isn't known at burn time. Instead: (1) the `network:` key
+  // carries only the optional wired fallback (ethernet match IS allowed), and
+  // (2) an early-command (live installer, so the install can download) plus a
+  // late-command (writes /target, so first boot is online) detect the real wifi
+  // interface NAME at runtime. Empty SSID ⇒ all "" → byte-identical wired burn.
+  const ssid = (opts.wifiSSID ?? "").trim();
+  const hasWifi = ssid.length > 0;
+  const wifiScript64 = hasWifi
+    ? utf8ToBase64(wifiSetupScript(ssid, opts.wifiPassword ?? ""))
+    : "";
+  const networkBlock = hasWifi ? wifiEthernetBlock() : "";
+  const earlyCommandsBlock = hasWifi
+    ? `  early-commands:\n    - "echo ${wifiScript64} | base64 -d > /tmp/flagship-wifi.sh && bash /tmp/flagship-wifi.sh"\n`
+    : "";
+  const wifiLateCommandBlock = hasWifi
+    ? `    - "echo ${wifiScript64} | base64 -d > /tmp/flagship-wifi.sh && bash /tmp/flagship-wifi.sh /target"\n`
+    : "";
+  const wifiPackagesBlock = hasWifi ? "    - wpasupplicant\n" : "";
   return `#cloud-config
 # Flagship Burner — autoinstall user-data
 # Generated at burn time. Don't edit by hand.
 autoinstall:
   version: 1
-  identity:
+  debconf-selections: |
+    grub-pc grub2/update_nvram boolean false
+    grub-efi-amd64 grub2/update_nvram boolean false
+${networkBlock}${earlyCommandsBlock}  identity:
     hostname: flagship-pod
     username: flagship
     password: "$6$saltsaltsaltsaltsalt$Fz2j0/yjeyqQsRGfQ2DGRrXyMz9.6CljgPwQ3UlqOPLqo4kVZk.zhztOQS9rdshOMu7w5WL9.bjvKR7vCs71y0"
@@ -167,8 +248,8 @@ autoinstall:
     - cryptsetup
     - lvm2
     - gnupg
-${storageBlock}  late-commands:
-    - curtin in-target --target=/target -- bash -c 'mkdir -p /var/flagship && echo "${blobB64}" | base64 -d > /var/flagship/install-blob.json && chmod 600 /var/flagship/install-blob.json'
+${wifiPackagesBlock}${storageBlock}  late-commands:
+${efiFallbackBlock}${wifiLateCommandBlock}    - curtin in-target --target=/target -- bash -c 'mkdir -p /var/flagship && echo "${blobB64}" | base64 -d > /var/flagship/install-blob.json && chmod 600 /var/flagship/install-blob.json'
     - curtin in-target --target=/target -- bash -c 'echo "${bootstrapB64}" | base64 -d > /usr/local/sbin/flagship-bootstrap.sh && chmod +x /usr/local/sbin/flagship-bootstrap.sh'
     - curtin in-target --target=/target -- /usr/local/sbin/flagship-bootstrap.sh
 `;
@@ -192,10 +273,28 @@ ${storageBlock}  late-commands:
  */
 function luksStorageBlock(): string {
   return `  # EXPERIMENTAL LUKS-on-root (opt-in; default OFF). Needs live validation.
+  # UEFI GPT layout (the common case): a FAT32 ESP flagged \`boot\` carries
+  # grub_device so curtin does a UEFI install — the SIGNED shim + grub chain
+  # Secure Boot trusts. grub_device is OFF on the disk on purpose: setting it
+  # makes curtin install BIOS grub-pc, leaving an UNSIGNED EFI grub that Secure
+  # Boot rejects ("Secure Boot Violation: invalid signature"). A reserved 1M
+  # bios_grub partition is kept for a future BIOS variant. subiquity also
+  # rejects a UEFI layout with no ESP ("did not create needed bootloader
+  # partition").
+  # grub.update_nvram:false — many boxes' firmware reject EFI NVRAM writes
+  # ("failed to register the EFI boot entry: Invalid argument"), which ABORTS
+  # the install; skip the NVRAM write (a late-command then copies the signed
+  # shim+grub to the removable /EFI/BOOT path, which firmware boots with no
+  # NVRAM entry). Unencrypted /boot + LUKS root. Byte-identical to the Swift
+  # port (UserData.luksStorageBlock).
   storage:
+    grub:
+      update_nvram: false
     config:
-      - {id: disk0, type: disk, ptable: gpt, match: {size: largest}, wipe: superblock-recursive, grub_device: true, preserve: false}
+      - {id: disk0, type: disk, ptable: gpt, match: {size: largest}, wipe: superblock-recursive, grub_device: false, preserve: false}
       - {id: bios_grub, type: partition, device: disk0, size: 1M, flag: bios_grub, preserve: false}
+      - {id: esp_part, type: partition, device: disk0, size: 512M, flag: boot, grub_device: true, preserve: false}
+      - {id: esp_fs, type: format, fstype: fat32, volume: esp_part, preserve: false}
       - {id: boot_part, type: partition, device: disk0, size: 512M, preserve: false}
       - {id: root_part, type: partition, device: disk0, size: -1, preserve: false}
       - {id: boot_fs, type: format, fstype: ext4, volume: boot_part, label: FLAGSHIP_BOOT, preserve: false}
@@ -203,7 +302,139 @@ function luksStorageBlock(): string {
       - {id: root_fs, type: format, fstype: ext4, volume: root_crypt, label: FLAGSHIP_ROOT, preserve: false}
       - {id: root_mount, type: mount, device: root_fs, path: /}
       - {id: boot_mount, type: mount, device: boot_fs, path: /boot}
+      - {id: esp_mount, type: mount, device: esp_fs, path: /boot/efi}
 `;
+}
+
+/**
+ * The optional wired-DHCP fallback emitted on the Wi-Fi path. networkd DOES
+ * support `match:` for ethernet, and `optional: true` means a box with no cable
+ * never blocks the install. Wi-Fi itself is added at runtime by wifiSetupScript
+ * (networkd won't take a wifi `match:`). Two-space indent so it nests under
+ * `autoinstall:`. Byte-identical to the Swift port (UserData.wifiEthernetBlock).
+ */
+function wifiEthernetBlock(): string {
+  return `  network:
+    version: 2
+    ethernets:
+      flagship-eth:
+        match: {name: "en*"}
+        dhcp4: true
+        optional: true
+`;
+}
+
+/**
+ * Runtime Wi-Fi setup, run IN-TARGET (chroot for the installed system; the live
+ * env too on Ubuntu). networkd rejects `match:` for wifis ("only by interface
+ * name") and the name (wlan0 / wlp2s0 / wlo1 …) isn't known at burn time, so we
+ * detect it at runtime. `$1` = root prefix: "" when run inside the target (the
+ * live installer, and the Debian d-i in-target chroot), "/target" for Ubuntu's
+ * curtin late-command (which runs in the installer host, not chrooted).
+ *
+ * DISTRO BRANCH (the whole point of this rewrite). The config is written for the
+ * network stack actually present in the target:
+ *   - netplan present (Ubuntu) — write the netplan file (unchanged; works).
+ *   - else (Debian) — netplan isn't installed, so the netplan file is a no-op.
+ *     Configure the lowest common denominator present on BOTH distros instead:
+ *     systemd-networkd (DHCP .network) + wpa_supplicant (per-iface conf), and
+ *     NEUTRALIZE d-i's ifupdown `wpa-ssid/wpa-psk` stanza so ifupdown's
+ *     wpa_supplicant and ours don't fight over the same radio. We enable units
+ *     by dropping the `.wants` symlinks directly (what `systemctl enable` does)
+ *     so it works whether we're chrooted or writing through a $ROOT prefix, and
+ *     whether or not systemd is the running init.
+ *
+ * base64-embedded into the early/late commands, so this body needs no
+ * autoinstall-YAML/shell escaping; the SSID/password sit in quoted heredocs, so
+ * only double-quoted-scalar escaping (yamlEscape — same rules for netplan YAML
+ * and wpa_supplicant's quoted strings) applies. Byte-identical to the Swift port
+ * (UserData.wifiSetupScript) — keep the two in lockstep (cross-language sha pin).
+ */
+export function wifiSetupScript(ssid: string, password: string): string {
+  return `#!/bin/bash
+set -u
+ROOT="\${1:-}"
+IF=""
+for d in /sys/class/net/*/wireless; do
+  [ -e "\$d" ] || continue
+  IF="\$(basename "\$(dirname "\$d")")"
+  break
+done
+if [ -z "\$IF" ]; then
+  echo "[flagship-wifi] no wireless interface found; skipping" >&2
+  exit 0
+fi
+echo "[flagship-wifi] interface=\$IF root=\${ROOT:-/}"
+if [ -d "\${ROOT}/etc/netplan" ]; then
+  # Ubuntu: netplan drives networkd (which spawns wpa_supplicant@<iface>).
+  echo "[flagship-wifi] netplan present — writing 99-flagship-wifi.yaml"
+  cat > "\${ROOT}/etc/netplan/99-flagship-wifi.yaml" <<'FLAGSHIP_WIFI_EOF'
+network:
+  version: 2
+  wifis:
+    __IFACE__:
+      dhcp4: true
+      optional: true
+      access-points:
+        "${yamlEscape(ssid)}":
+          password: "${yamlEscape(password)}"
+FLAGSHIP_WIFI_EOF
+  sed -i "s/__IFACE__/\${IF}/" "\${ROOT}/etc/netplan/99-flagship-wifi.yaml"
+  chmod 600 "\${ROOT}/etc/netplan/99-flagship-wifi.yaml"
+else
+  # Debian (no netplan): systemd-networkd + wpa_supplicant, the common stack.
+  echo "[flagship-wifi] no netplan — configuring systemd-networkd + wpa_supplicant for \$IF"
+  mkdir -p "\${ROOT}/etc/systemd/network" "\${ROOT}/etc/wpa_supplicant"
+  cat > "\${ROOT}/etc/systemd/network/10-flagship-wifi.network" <<'FLAGSHIP_NETWORKD_EOF'
+[Match]
+Name=__IFACE__
+[Network]
+DHCP=yes
+IgnoreCarrierLoss=3s
+FLAGSHIP_NETWORKD_EOF
+  sed -i "s/__IFACE__/\${IF}/" "\${ROOT}/etc/systemd/network/10-flagship-wifi.network"
+  chmod 644 "\${ROOT}/etc/systemd/network/10-flagship-wifi.network"
+  # The wpa_supplicant@<iface>.service template (shipped by wpasupplicant) reads
+  # exactly this path. Quoted-plaintext PSK is valid; 0600 (it holds the secret).
+  cat > "\${ROOT}/etc/wpa_supplicant/wpa_supplicant-\${IF}.conf" <<'FLAGSHIP_WPA_EOF'
+ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=00
+network={
+  ssid="${yamlEscape(ssid)}"
+  psk="${yamlEscape(password)}"
+  scan_ssid=1
+}
+FLAGSHIP_WPA_EOF
+  chmod 600 "\${ROOT}/etc/wpa_supplicant/wpa_supplicant-\${IF}.conf"
+  # Neutralize d-i's ifupdown wireless stanza: netcfg writes an
+  #   allow-hotplug <if> / iface <if> inet dhcp / wpa-ssid / wpa-psk / wpa-conf
+  # block to /etc/network/interfaces; ifupdown would start its OWN wpa_supplicant
+  # on that iface and fight ours. Comment out every wireless/wpa line for our
+  # iface (leave lo + any wired stanza untouched).
+  IFACES_FILE="\${ROOT}/etc/network/interfaces"
+  if [ -f "\$IFACES_FILE" ]; then
+    sed -i -E "/(allow-hotplug|auto|iface)[[:space:]]+\${IF}([[:space:]]|\\.|\$)/ s/^([^#])/# \\1/" "\$IFACES_FILE"
+    sed -i -E "/^[[:space:]]*wpa-/ s/^([[:space:]]*)([^#[:space:]])/\\1# \\2/" "\$IFACES_FILE"
+    echo "[flagship-wifi] neutralized ifupdown wireless stanza for \$IF in \$IFACES_FILE"
+  fi
+  # Enable systemd-networkd + wpa_supplicant@<iface> by dropping the .wants
+  # symlinks directly (what \`systemctl enable\` does) — works chrooted or via a
+  # \$ROOT prefix, and with systemd not running.
+  mkdir -p "\${ROOT}/etc/systemd/system/multi-user.target.wants" \\
+           "\${ROOT}/etc/systemd/system/sockets.target.wants"
+  ln -sf /lib/systemd/system/systemd-networkd.service \\
+    "\${ROOT}/etc/systemd/system/multi-user.target.wants/systemd-networkd.service"
+  ln -sf /lib/systemd/system/systemd-networkd.socket \\
+    "\${ROOT}/etc/systemd/system/sockets.target.wants/systemd-networkd.socket"
+  ln -sf "/lib/systemd/system/wpa_supplicant@.service" \\
+    "\${ROOT}/etc/systemd/system/multi-user.target.wants/wpa_supplicant@\${IF}.service"
+fi`;
+}
+
+/** Escape a string for a YAML double-quoted scalar. */
+export function yamlEscape(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 /**
@@ -214,23 +445,100 @@ function luksStorageBlock(): string {
  * boundary as the rest of the autoinstall), and it's destroyed before the box
  * is ever exposed. Kept identical in TS + Swift.
  */
-const BURN_PASSPHRASE = "flagship-burn-time-luks-rekey-me-immediately";
+export const BURN_PASSPHRASE = "flagship-burn-time-luks-rekey-me-immediately";
 
-interface BootstrapTemplateArgs {
+export interface BootstrapTemplateArgs {
   ref: string;
   repoUrl: string;
   encryptRoot: boolean;
   bootUnlockMode: BootUnlockMode;
   /** Boot worker host baked to /boot/flagship-boot-host (default boot.flagshipserver.com). */
   bootHost: string;
+  /**
+   * The installer family the bootstrap runs under. Defaults to "ubuntu" so the
+   * existing Ubuntu output (and its cross-language sha256 pins) stay
+   * byte-identical. "debian" only changes the encrypted-path LUKS block (the
+   * LVM-on-LUKS unlock); the plain bootstrap body is identical either way.
+   */
+  family?: InstallerFamily;
+  /**
+   * Burn-time Wi-Fi (never in the signed blob). When an SSID is given, the
+   * bootstrap bakes a first-boot Wi-Fi SAFETY-NET unit + adds wpasupplicant to
+   * its apt line. Absent (the wired case) ⇒ no safety-net, no apt change, so the
+   * bootstrap is byte-identical to before (the cross-language pins + the
+   * wired-burn equality tests depend on this). The creds are embedded base64 so
+   * an SSID/PSK with shell metacharacters can never inject into the script.
+   */
+  wifiSSID?: string;
+  wifiPassword?: string;
+  /** DEBUG-ONLY: replace the bootstrap with a minimal sshd+key remote-access stub. */
+  debugSshAuthorizedKey?: string;
 }
 
-function buildBootstrapScript(args: BootstrapTemplateArgs): string {
+/**
+ * Build the first-boot bootstrap. Shared verbatim between the Ubuntu autoinstall
+ * (curtin in-target) and the Debian preseed (d-i late_command) — both run it in
+ * an in-target chroot at install time. Exported so preseed.ts reuses the exact
+ * same script (no drift between the two installers' downstream setup).
+ */
+export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
+  if (args.debugSshAuthorizedKey) return buildBootstrapScriptDebug(args);
   if (args.encryptRoot) return buildBootstrapScriptEncrypted(args);
   return buildBootstrapScriptPlain(args);
 }
 
+/**
+ * DEBUG-ONLY bootstrap (emitted only when debugSshAuthorizedKey is supplied —
+ * never by the CLI/GUI). The opposite of provisioning-blind-in-target: it makes
+ * the box REACHABLE so the real provisioning (clone/build/identity/register/
+ * re-key) can be run + iterated over SSH and then baked back into the production
+ * bootstrap. It installs sshd + the dev's authorized key + the Wi-Fi safety-net,
+ * drops the install-blob, and does NOTHING else — crucially NO LUKS re-key, so
+ * the burn passphrase still unlocks the disk and the box actually boots.
+ */
+function buildBootstrapScriptDebug(args: BootstrapTemplateArgs): string {
+  const wpaPkg = (args.wifiSSID ?? "").trim().length ? " wpasupplicant" : "";
+  const wifiSafetyNet = buildWifiSafetyNetBlock(
+    args.wifiSSID ?? "",
+    args.wifiPassword ?? "",
+  );
+  const key = (args.debugSshAuthorizedKey ?? "").trim();
+  return `#!/bin/bash
+# Flagship DEBUG bootstrap — remote access only. NO provisioning, NO LUKS re-key.
+set -uo pipefail
+exec >>/var/log/flagship-debug-bootstrap.log 2>&1
+date
+echo "[flagship-debug] sshd + key + wifi; burn passphrase kept (no re-key)"
+export DEBIAN_FRONTEND=noninteractive
+apt-get install -y --no-install-recommends openssh-server ca-certificates curl jq xxd cryptsetup lvm2${wpaPkg}
+
+# Dev SSH key for the flagship user (key auth; the baked password is unknown).
+install -d -m 700 /home/flagship/.ssh
+cat > /home/flagship/.ssh/authorized_keys <<'PUBKEY'
+${key}
+PUBKEY
+chmod 600 /home/flagship/.ssh/authorized_keys
+chown -R flagship:flagship /home/flagship/.ssh
+systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || true
+
+# Persist a couple of install facts for the manual provisioning over SSH.
+mkdir -p /var/flagship
+if [ -f /var/flagship/install-blob.json ]; then
+    jq -r .serverDomain /var/flagship/install-blob.json > /var/flagship/server-domain 2>/dev/null || true
+    jq -r .username     /var/flagship/install-blob.json > /var/flagship/username      2>/dev/null || true
+fi
+${wifiSafetyNet}
+date > /var/flagship/debug-ready.flag
+echo "[flagship-debug] done — ssh flagship@<box-ip>"
+`;
+}
+
 function buildBootstrapScriptPlain(args: BootstrapTemplateArgs): string {
+  // wpasupplicant only on the Wi-Fi path — the safety-net needs the binary, and
+  // we don't assume the installer's package list ran. Wired ⇒ "" so the plain
+  // bootstrap stays byte-identical (the wired-equality + cross-language tests).
+  const wpaPkg = (args.wifiSSID ?? "").trim().length > 0 ? " wpasupplicant" : "";
+  const wifiSafetyNet = buildWifiSafetyNetBlock(args.wifiSSID ?? "", args.wifiPassword ?? "");
   return `#!/bin/bash
 # Flagship first-boot bootstrap.
 # Runs once at first boot under curtin's in-target chroot. Idempotent.
@@ -242,10 +550,21 @@ echo "[flagship-bootstrap] starting"
 REPO_URL="\${FLAGSHIP_REPO_URL:-${args.repoUrl}}"
 GIT_REF="${args.ref}"
 
-# Install Node 20 (Ubuntu 22.04 default nodejs is 12; protocol needs 20+).
+# Install Node 20 + every tool the bootstrap and initramfs hook need. Do NOT
+# assume the installer's packages: list ran — a missing jq once parsed the
+# recipe into empty values and mis-sealed the LUKS key. NodeSource refreshes apt.
 export DEBIAN_FRONTEND=noninteractive
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y --no-install-recommends nodejs
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - || echo "[flagship-bootstrap] WARN: NodeSource setup failed; falling back to distro nodejs+npm"
+apt-get install -y --no-install-recommends nodejs jq git curl ca-certificates cryptsetup lvm2 xxd openssl gnupg${wpaPkg}
+# Debian's 'nodejs' package does NOT bundle npm (separate package); NodeSource's does.
+# On Debian 13 the NodeSource setup_20.x repo may not apply, leaving npm/npx absent —
+# which fails the entire build below (npm install, tsc, gen-identity, seal-for-bak).
+# Install npm explicitly if it is still missing (no-op when NodeSource provided it).
+if ! command -v npm >/dev/null 2>&1; then
+    echo "[flagship-bootstrap] npm missing after node install — installing distro npm"
+    apt-get install -y --no-install-recommends npm
+fi
+command -v npm >/dev/null 2>&1 || { echo "[flagship-bootstrap] FATAL: npm unavailable; cannot build daemon"; exit 1; }
 
 # Read the install-blob fields the daemon needs.
 BLOB_JSON=/var/flagship/install-blob.json
@@ -256,6 +575,18 @@ REGISTRATION_URL="$(jq -r .registrationUrl "$BLOB_JSON")"
 PHONE_DELEGATED_PUBKEY="$(jq -r .phoneDelegatedPubKey "$BLOB_JSON")"
 AUTH_CODE_SERIAL="$(jq -r .authCode.serial "$BLOB_JSON")"
 echo "[flagship-bootstrap] domain=$SERVER_DOMAIN user=$USERNAME ref=$GIT_REF"
+
+# Provisioning-status → .com so the phone renders a live install timeline.
+# Best-effort: a failed report NEVER fails the install. (The Alpine live
+# installer can also report the earlier downloading/partitioning phases; the
+# d-i late_command can only report from here on — clone/build onward.)
+CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
+report_phase() {
+    curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+        --data '{"phase":"'"$1"'"}' \\
+        "$CONTROL_PLANE_BASE/api/order/$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+}
+report_phase installing
 
 # Persist install-time facts the daemon reads on every boot.
 mkdir -p /var/flagship /boot/flagship
@@ -420,9 +751,125 @@ systemctl daemon-reload 2>/dev/null || true
 systemctl enable flagship-daemon.service flagship-first-boot-register.service || \\
     echo "[flagship-bootstrap] WARNING: systemctl enable failed (will retry would be needed on real boot)"
 echo "[flagship-bootstrap] systemd units installed + enabled (start deferred to first real boot)"
-
+${wifiSafetyNet}
 date > /var/flagship/installed.flag
 echo "[flagship-bootstrap] done"
+`;
+}
+
+/**
+ * First-boot Wi-Fi SAFETY-NET (the strongest reliability win). A headless
+ * appliance has no console user to fix networking, so even if the primary config
+ * (netplan on Ubuntu / networkd+wpa_supplicant on Debian) is imperfect, this
+ * backstop guarantees the baked SSID comes up. A oneshot unit runs at every
+ * boot: it waits a grace period for a default route and EXITS if one appears
+ * (so it never fights a working config), otherwise it brings the radio up
+ * directly (wpa_supplicant + DHCP via networkd, with dhclient/dhcpcd/udhcpc
+ * fallbacks) and retries. Works on both distros (only systemd + wpa_supplicant
+ * are assumed). Returns "" when there's no Wi-Fi, so wired burns are unchanged.
+ *
+ * The SSID/PSK are embedded base64 (decoded into /etc/flagship/wifi.env at 0600)
+ * so a value with shell metacharacters can never inject into the generated
+ * bootstrap. Byte-identical to the Swift port (UserData.wifiSafetyNetBlock) —
+ * exported so the cross-language sha256 pin can assert the two stay in lockstep.
+ */
+export function buildWifiSafetyNetBlock(ssid: string, password: string): string {
+  if (ssid.trim().length === 0) return "";
+  const ssidB64 = utf8ToBase64(ssid);
+  const pskB64 = utf8ToBase64(password);
+  return `
+# ── First-boot Wi-Fi safety-net (headless box has no console to fix net) ──
+# Brings up the baked SSID directly IF the box is offline after boot — a backstop
+# behind the primary netplan/networkd config. Only acts when there's no default
+# route, so it never fights a working primary. Credentials embedded base64
+# (injection-safe), decoded to /etc/flagship/wifi.env at 0600.
+mkdir -p /etc/flagship
+cat > /etc/flagship/wifi.env <<'WIFIENV'
+FLAGSHIP_WIFI_SSID_B64=${ssidB64}
+FLAGSHIP_WIFI_PSK_B64=${pskB64}
+WIFIENV
+chmod 600 /etc/flagship/wifi.env
+
+cat > /usr/local/sbin/flagship-wifi-safetynet.sh <<'SAFETYNET'
+#!/bin/bash
+set -u
+exec >>/var/log/flagship-wifi-safetynet.log 2>&1
+date
+. /etc/flagship/wifi.env 2>/dev/null || exit 0
+SSID="\$(printf '%s' "\${FLAGSHIP_WIFI_SSID_B64:-}" | base64 -d 2>/dev/null)"
+PSK="\$(printf '%s' "\${FLAGSHIP_WIFI_PSK_B64:-}" | base64 -d 2>/dev/null)"
+[ -n "\$SSID" ] || { echo "[safety-net] no baked SSID; nothing to do"; exit 0; }
+has_route() { ip route show default 2>/dev/null | grep -q .; }
+# Grace: let the primary config bring up a route (~45s). If it does, do nothing.
+for _ in \$(seq 1 15); do
+  has_route && { echo "[safety-net] default route present — primary config OK"; exit 0; }
+  sleep 3
+done
+echo "[safety-net] still offline after grace — bringing up baked Wi-Fi directly"
+IF=""
+for d in /sys/class/net/*/wireless; do
+  [ -e "\$d" ] || continue
+  IF="\$(basename "\$(dirname "\$d")")"
+  break
+done
+[ -n "\$IF" ] || { echo "[safety-net] no wireless interface; giving up"; exit 0; }
+echo "[safety-net] interface=\$IF ssid=\$SSID"
+CONF=/run/flagship-wifi-safetynet.conf
+{
+  echo "ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev"
+  echo "country=00"
+  echo "network={"
+  printf '  ssid="%s"\\n' "\$SSID"
+  printf '  psk="%s"\\n' "\$PSK"
+  echo "  scan_ssid=1"
+  echo "}"
+} > "\$CONF"
+chmod 600 "\$CONF"
+ip link set "\$IF" up 2>/dev/null || true
+# Replace any stale supplicant on this iface with ours (idempotent).
+pkill -f "wpa_supplicant.*-i *\$IF" 2>/dev/null || true
+sleep 1
+wpa_supplicant -B -i "\$IF" -c "\$CONF" -Dnl80211,wext 2>/dev/null \\
+  || wpa_supplicant -B -i "\$IF" -c "\$CONF" 2>/dev/null || true
+# DHCP: prefer systemd-networkd (present on both distros); leave any existing
+# flagship .network/netplan in place, only add one if neither primary wrote it.
+mkdir -p /etc/systemd/network
+if [ ! -e /etc/systemd/network/10-flagship-wifi.network ] && [ ! -e /etc/netplan/99-flagship-wifi.yaml ]; then
+  printf '[Match]\\nName=%s\\n[Network]\\nDHCP=yes\\n' "\$IF" > /etc/systemd/network/10-flagship-wifi.network
+fi
+systemctl restart systemd-networkd 2>/dev/null || true
+# Retry up to ~60s; fall back to explicit DHCP clients if networkd isn't running.
+for _ in \$(seq 1 20); do
+  has_route && { echo "[safety-net] default route up"; exit 0; }
+  for c in "dhclient -1 \$IF" "dhcpcd -t 20 \$IF" "udhcpc -i \$IF -n -q"; do
+    command -v "\${c%% *}" >/dev/null 2>&1 && \$c >/dev/null 2>&1 && break
+  done
+  sleep 3
+done
+echo "[safety-net] finished (route up: \$(has_route && echo yes || echo no))"
+SAFETYNET
+chmod +x /usr/local/sbin/flagship-wifi-safetynet.sh
+
+cat > /etc/systemd/system/flagship-wifi-safetynet.service <<'WIFIUNIT'
+[Unit]
+Description=Flagship Wi-Fi safety-net (bring up the baked SSID if the box is offline)
+# Deliberately NOT network-online.target (that waits for online, defeating the
+# point). Order loosely after network.target so the radio device exists; the
+# script does its own offline detection + grace wait.
+After=network.target
+Wants=network.target
+Before=flagship-first-boot-register.service flagship-daemon.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/flagship-wifi-safetynet.sh
+
+[Install]
+WantedBy=multi-user.target
+WIFIUNIT
+systemctl enable flagship-wifi-safetynet.service 2>/dev/null || \\
+    echo "[flagship-bootstrap] WARNING: could not enable flagship-wifi-safetynet.service"
+echo "[flagship-bootstrap] Wi-Fi safety-net installed + enabled"
 `;
 }
 
@@ -453,7 +900,7 @@ function buildBootstrapScriptEncrypted(args: BootstrapTemplateArgs): string {
   const tail = `date > /var/flagship/installed.flag
 echo "[flagship-bootstrap] done"
 `;
-  const luks = buildLuksBootstrapBlock(args.bootUnlockMode, args.bootHost);
+  const luks = buildLuksBootstrapBlock(args.bootUnlockMode, args.bootHost, args.family ?? "ubuntu");
   if (!plain.endsWith(tail)) {
     throw new Error("plain bootstrap tail drifted; encrypted splice would be wrong");
   }
@@ -473,17 +920,78 @@ echo "[flagship-bootstrap] done"
  *   - "approve" — unlock_via_relay() EVERY boot; never read a box-sealed lease.
  * The legacy plaintext-consume path is RETIRED from this dispatch.
  */
-function buildLuksBootstrapBlock(mode: BootUnlockMode, bootHost: string): string {
+function buildLuksBootstrapBlock(
+  mode: BootUnlockMode,
+  bootHost: string,
+  family: InstallerFamily,
+): string {
+  // The ONLY family-specific lines in this block (everything else — the
+  // re-key, the seal+upload, the relay/box-lease functions lifted from
+  // boot-stage.sh, the dispatch — is byte-identical). Ubuntu/curtin gives a
+  // PLAIN LUKS root; Debian's partman-crypto preseed only reliably supports
+  // LVM-on-LUKS, so on Debian the initramfs must stage `lvm` and, after
+  // luksOpen, activate the VG before the LV (FLAGSHIP_ROOT) appears. The
+  // Ubuntu values below are byte-for-byte the original literals (so the
+  // cross-language sha256 pins are unchanged).
+  const lvmCopyExec =
+    family === "debian"
+      ? `copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup
+copy_exec /sbin/lvm /sbin/lvm 2>/dev/null || copy_exec /usr/sbin/lvm /sbin/lvm`
+      : `copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup`;
+  // Terminal unlock step. Ubuntu opens the labelled root directly. Debian
+  // opens the raw LUKS container discovered by type (the LV's FLAGSHIP_ROOT
+  // label is INSIDE the container, invisible pre-open), then `vgchange -ay`
+  // surfaces /dev/disk/by-label/FLAGSHIP_ROOT for the normal mount that follows.
+  const terminalUnlock =
+    family === "debian"
+      ? `ROOT_LUKS_PART="$(blkid -t TYPE=crypto_LUKS -o device | head -n1)"
+xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_LUKS_PART" flagship_root
+lvm vgchange -ay 2>/dev/null || vgchange -ay 2>/dev/null || true
+shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"`
+      : `ROOT_PART=/dev/disk/by-label/FLAGSHIP_ROOT
+xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_PART" flagship_root
+shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"`;
   return `
 # ── EXPERIMENTAL: LUKS-on-root, phone-gated unlock (encryptRoot) ─────────
 # Needs live validation; brick risk. This whole block is absent on the
 # default unencrypted path. docs/security-phone-as-unlock-endpoint.md.
 echo "[flagship-bootstrap] encryptRoot ON — configuring phone-gated LUKS unlock"
 
-# A. RE-KEY the LUKS root: curtin formatted it with the fixed burn-time
-#    passphrase; replace that with a fresh random key (install.sh's
-#    head -c 64 /dev/urandom pattern), then remove the burn-time slot so the
-#    only key that survives to first boot is the one we seal for the phone.
+# Fail-closed: the re-key below is DESTRUCTIVE (it removes the burn passphrase
+# and shreds the only plaintext key). Refuse unless the recipe actually parsed —
+# empty values once sealed a disk to nothing and bricked a box (jq was missing).
+if [ -z "$SERVER_DOMAIN" ] || [ "$SERVER_DOMAIN" = "null" ] || [ -z "$PHONE_DELEGATED_PUBKEY" ] || [ "$PHONE_DELEGATED_PUBKEY" = "null" ]; then
+    echo "[flagship-bootstrap] FATAL: empty SERVER_DOMAIN/PHONE_DELEGATED_PUBKEY — refusing LUKS re-key (would brick the box)"
+    exit 1
+fi
+
+# REGISTER FIRST. The sealed-key upload (step B) requires the server to ALREADY be
+# registered with .com — luksKeys.ts returns 404 "unknown server" otherwise (it
+# verifies the upload against the registered server identity). The auth-code is
+# single-use, so we write registered.flag and the deferred first-boot register
+# service (guarded by !registered.flag) skips. Network is up here (apt + git +
+# npm already used it). Fail-closed: a failure aborts BEFORE the destructive
+# re-key, so the burn passphrase still opens the disk (recoverable).
+# NOTE (design): docs/security-phone-as-unlock-endpoint.md describes first-boot
+# registration, but the seal/upload runs in-target — so registration must run
+# in-target too, before it. Keeping register+seal together is the invariant.
+report_phase registering
+echo "[flagship-bootstrap] registering server with .com (prereq for sealed-key upload)"
+npx tsx scripts/install-helper.ts sign-server-register \\
+    --priv-hex "$SERVER_IDENTITY_PRIV_HEX" \\
+    --auth-code-blob /var/flagship/install-blob.json \\
+    > /run/register-payload.json
+if ! curl -fsS -X POST -H 'content-type: application/json' \\
+    --data @/run/register-payload.json "$REGISTRATION_URL"; then
+    echo "[flagship-bootstrap] FATAL: registration failed — keeping burn passphrase (recoverable), aborting"
+    exit 1
+fi
+date > /var/flagship/registered.flag
+echo "[flagship-bootstrap] registered with .com"
+
+# A. ADD a fresh random key (install.sh's head -c 64 /dev/urandom pattern),
+#    authorized by the burn-time passphrase. NON-destructive: the burn passphrase
+#    still opens the disk until step C, so any failure below stays recoverable.
 LUKS_BURN_PASSPHRASE='${BURN_PASSPHRASE}'
 LUKS_KEY=/run/flagship-luks.key
 head -c 64 /dev/urandom > "$LUKS_KEY"
@@ -495,19 +1003,21 @@ if [ -z "$ROOT_LUKS_PART" ]; then
     echo "[flagship-bootstrap] FATAL: no crypto_LUKS partition found; cannot re-key"
     exit 1
 fi
-echo "[flagship-bootstrap] re-keying LUKS root on $ROOT_LUKS_PART"
+echo "[flagship-bootstrap] adding random LUKS key on $ROOT_LUKS_PART"
 printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
     cryptsetup luksAddKey "$ROOT_LUKS_PART" "$LUKS_KEY" --key-file=-
-printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
-    cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file=-
-echo "[flagship-bootstrap] LUKS re-keyed; burn-time passphrase removed"
 
-# B. SEAL the random key for the phone + upload the sealed blob to .com. The
-#    phone (and only the phone) can unseal it; .com stores ciphertext only.
-#    Same seal-for-bak construction install.sh uses.
+# B. SEAL the random key for the phone + upload to .com — BEFORE removing the
+#    burn passphrase, so a seal/upload failure leaves the box still openable
+#    (recoverable) instead of bricked. .com stores ciphertext only.
+report_phase sealing
 SEALED_LUKS_KEY_HEX="$(npx tsx scripts/install-helper.ts seal-for-bak \\
     --bak-ed25519-pub "$PHONE_DELEGATED_PUBKEY" \\
     --in "$LUKS_KEY" | tr -d '\\n')"
+if [ -z "$SEALED_LUKS_KEY_HEX" ]; then
+    echo "[flagship-bootstrap] FATAL: seal-for-bak produced nothing — keeping burn passphrase + plaintext key (recoverable), aborting"
+    exit 1
+fi
 NOW_MS=$(date +%s%3N)
 npx tsx scripts/install-helper.ts sign-sealed-key \\
     --priv "$SERVER_IDENTITY_PRIV_HEX" \\
@@ -516,11 +1026,18 @@ npx tsx scripts/install-helper.ts sign-sealed-key \\
     --issued-at "$NOW_MS" \\
     > /run/sealed-key-payload.json
 CONTROL_PLANE_BASE="$(echo "$REGISTRATION_URL" | sed 's|/api/server/register$||')"
-curl -fsS -X POST -H 'content-type: application/json' \\
+if ! curl -fsS -X POST -H 'content-type: application/json' \\
     --data @/run/sealed-key-payload.json \\
-    "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key" \\
-    || echo "[flagship-bootstrap] WARNING: sealed-key upload failed; phone will need OOB"
-# Shred the plaintext key — it now exists only sealed-for-phone at .com.
+    "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key"; then
+    echo "[flagship-bootstrap] FATAL: sealed-key upload failed — keeping burn passphrase (recoverable), aborting"
+    exit 1
+fi
+
+# C. The phone-sealed key is safely stored — NOW it's safe to remove the burn
+#    passphrase + shred the plaintext. After this, the phone is the only unlock.
+printf '%s' "$LUKS_BURN_PASSPHRASE" | \\
+    cryptsetup luksRemoveKey "$ROOT_LUKS_PART" --key-file=-
+echo "[flagship-bootstrap] LUKS re-keyed; burn-time passphrase removed"
 shred -u "$LUKS_KEY" 2>/dev/null || rm -f "$LUKS_KEY"
 
 # /boot facts the initramfs unlock hook reads on every boot (mirrors the
@@ -572,7 +1089,7 @@ copy_exec /usr/bin/openssl /bin/openssl
 copy_exec /usr/bin/curl /bin/curl
 copy_exec /usr/bin/xxd /bin/xxd
 copy_exec /bin/sed /bin/sed 2>/dev/null || copy_exec /usr/bin/sed /bin/sed
-copy_exec /sbin/cryptsetup /sbin/cryptsetup 2>/dev/null || copy_exec /usr/sbin/cryptsetup /sbin/cryptsetup
+${lvmCopyExec}
 # Identity + boot facts the premount script signs/reads with.
 mkdir -p "\${DESTDIR}/boot"
 cp /boot/identity.pem "\${DESTDIR}/boot/identity.pem"
@@ -810,9 +1327,7 @@ else
     fi
 fi
 
-ROOT_PART=/dev/disk/by-label/FLAGSHIP_ROOT
-xxd -r -p "$OUT_UNLOCK" | cryptsetup luksOpen --key-file - "$ROOT_PART" flagship_root
-shred -u "$OUT_UNLOCK" 2>/dev/null || rm -f "$OUT_UNLOCK"
+${terminalUnlock}
 PREMOUNT
 chmod +x /etc/initramfs-tools/scripts/local-top/flagship-unlock
 
@@ -824,7 +1339,7 @@ echo "[flagship-bootstrap] LUKS unlock hook installed; initramfs rebuilt"
 `;
 }
 
-function installBlobToJson(
+export function installBlobToJson(
   b: InstallBlob,
   blobSignatureHex: string,
 ): Record<string, unknown> {

@@ -131,7 +131,7 @@ export function loadBlobFromString(
   return { blob, blobSignatureHex: sigHex, source };
 }
 
-function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {
+export function parseInstallBlob(o: Record<string, unknown>): InstallBlob | null {
   const authCode = o.authCode as Record<string, unknown> | undefined;
   if (!authCode) return null;
   const phonePub = hexToBytes(o.phoneDelegatedPubKey as string);
