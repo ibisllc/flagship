@@ -59,7 +59,13 @@ import com.flagshipserver.app.viewmodels.KeyfileExportPhase
 import com.flagshipserver.app.viewmodels.KeyfileExportViewModel
 
 @Composable
-fun KeyfileExportScreen(nav: NavController) {
+fun KeyfileExportScreen(
+    nav: NavController,
+    // Onboarding seam — when set, a "Continue into the app" CTA appears
+    // after the file is saved so the create-flow can proceed. Default is
+    // a no-op so the Settings call site is unchanged.
+    onSaved: (() -> Unit)? = null,
+) {
     val app = LocalAppState.current
     val username = app.currentUser.collectAsState().value ?: ""
     val vm = remember(username) { KeyfileExportViewModel(username = username) }
@@ -223,6 +229,16 @@ fun KeyfileExportScreen(nav: NavController) {
                         modifier = Modifier.semantics { contentDescription = "keyfile-export-saved" },
                     )
                 }
+            }
+            if (onSaved != null) {
+                Spacer(Modifier.height(FS.space.s3))
+                FSPrimaryButton(
+                    label = "Continue into the app",
+                    onClick = onSaved,
+                    block = true,
+                    large = true,
+                    modifier = Modifier.semantics { contentDescription = "keyfile-export-continue" },
+                )
             }
         }
         Spacer(Modifier.height(FS.space.s8))

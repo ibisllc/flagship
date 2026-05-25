@@ -47,12 +47,29 @@ const PEER_BACKUP_CHOICE_KEY = "flagship.peerBackup.choice.v1";
 const STEPS = [
   { id: "device-key", label: "Generate device key" },
   { id: "username", label: "Open your account" },
+  { id: "secure-account", label: "Secure your account", skippable: true },
   { id: "passphrase", label: "Set recovery passphrase", skippable: true },
   { id: "webauthn-recovery", label: "Cloud recovery (WebAuthn)", skippable: true },
   { id: "create-server", label: "Add your first server" },
   { id: "peer-backup", label: "Help others (peer-backup)", skippable: true },
   { id: "demo-app", label: "Try a demo app", skippable: true },
 ];
+
+/**
+ * Passkey availability gate for the "Secure your account" step. Cloud
+ * backup (lib/recovery.js setupCloudRecovery) wraps the UMK under a
+ * WebAuthn passkey's PRF output, so it's only offerable when the browser
+ * exposes the WebAuthn credential API at all. We detect gracefully — a
+ * missing API means we DON'T pre-select cloud and disable its option,
+ * but the file path + skip still work, so the step never blocks.
+ */
+export function passkeysAvailable() {
+  try {
+    return typeof window !== "undefined" && typeof window.PublicKeyCredential === "function";
+  } catch {
+    return false;
+  }
+}
 
 function loadState() {
   try {
@@ -181,6 +198,46 @@ async function handleOpenAccount() {
   }
 }
 
+/**
+ * Act on the "Secure your account" step's selected option, reusing the
+ * existing recovery primitives (we never rebuild backup crypto here):
+ *   - cloud → lib/recovery.js setupCloudRecovery (WebAuthn-PRF passkey)
+ *   - file  → the lib/keyfileBackup.js export ceremony
+ * Returns true once the chosen backup actually completed, false if it
+ * failed or the user cancelled (so the caller keeps them on the step).
+ */
+async function handleSecureAccount() {
+  const session = getSession();
+  if (!session.umk || !session.irk) {
+    toast("open your account first", "err");
+    return false;
+  }
+  const username =
+    session.username || localStorage.getItem("flagship.username") || "";
+  const cloud = document.getElementById("wizard-secure-cloud");
+  const useCloud = !!(cloud && cloud.checked && !cloud.disabled);
+  const btn = document.getElementById("wizard-secure-continue");
+  if (btn) btn.disabled = true;
+  try {
+    if (useCloud) {
+      const { setupCloudRecovery } = await import("../lib/recovery.js");
+      await setupCloudRecovery(username);
+      toast(`cloud backup on for ${username}`, "ok");
+      return true;
+    }
+    // File path: run the same `.flagshipkey` export ceremony the
+    // Recovery view uses (heavy warnings + strong passphrase + acks).
+    const { runKeyfileExportCeremony } = await import("./recovery.js");
+    const saved = await runKeyfileExportCeremony();
+    return saved === true;
+  } catch (e) {
+    toast(`backup failed: ${e?.message ?? e}`, "err");
+    return false;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function renderStep(state) {
   const step = STEPS[state.stepIdx];
   if (!step) {
@@ -245,6 +302,8 @@ async function renderStepBody(state, step) {
           <button id="wizard-go-username" class="pill primary">Open my account</button>
         </div>
       `;
+    case "secure-account":
+      return renderSecureAccountStep();
     case "passphrase":
     case "webauthn-recovery":
       return `
@@ -303,6 +362,55 @@ function renderPeerBackupStep() {
   `;
 }
 
+/**
+ * "Secure your account" step (runs immediately after the account is
+ * opened, before the user reaches the app). Nudges a backup with the
+ * cloud (passkey) option pre-selected when WebAuthn is available, the
+ * downloadable `.flagshipkey` file as the self-custody alternative, and
+ * a clearly de-emphasized "Skip for now" text link guarded by a warning.
+ *
+ * Both methods are reachable later from Settings → Recovery (the cloud
+ * passkey via #recovery-cloud-setup, the file via #recovery-keyfile-export),
+ * which is what the skip-warning's "set this up anytime in Settings" line
+ * promises.
+ */
+export function renderSecureAccountStep() {
+  const havePasskeys = passkeysAvailable();
+  const cloudHint = havePasskeys
+    ? "Recover with your device passkey or password manager."
+    : "Passkeys aren't available in this browser — use a backup file.";
+  return `
+    <p class="note">Back up your account now so you can get back in if you lose this
+    device. No one — not even us — can recover it for you.</p>
+    <fieldset id="wizard-secure-options" class="secure-options stack-md">
+      <legend class="visually-hidden">Backup method</legend>
+      <label class="secure-option${havePasskeys ? "" : " disabled"}">
+        <input type="radio" name="wizard-secure-method" value="cloud"
+               id="wizard-secure-cloud"
+               ${havePasskeys ? "checked" : "disabled"} />
+        <span class="secure-option-text">
+          <span class="secure-option-label">Save to a passkey</span>
+          <span class="secure-option-sub muted-sm" id="wizard-secure-cloud-hint">${escapeHtml(cloudHint)}</span>
+        </span>
+      </label>
+      <label class="secure-option">
+        <input type="radio" name="wizard-secure-method" value="file"
+               id="wizard-secure-file" ${havePasskeys ? "" : "checked"} />
+        <span class="secure-option-text">
+          <span class="secure-option-label">Save a backup file</span>
+          <span class="secure-option-sub muted-sm">An encrypted .flagshipkey you keep yourself.</span>
+        </span>
+      </label>
+    </fieldset>
+    <div class="btn-row-sm">
+      <button id="wizard-secure-continue" class="pill primary">Continue</button>
+    </div>
+    <p class="note muted-sm">
+      <a id="wizard-secure-skip" href="#" role="button">Skip for now</a>
+    </p>
+  `;
+}
+
 function wireStepHandlers(state, step) {
   switch (step.id) {
     case "device-key":
@@ -316,6 +424,33 @@ function wireStepHandlers(state, step) {
       document.getElementById("wizard-go-username")?.addEventListener("click", async () => {
         const ok = await handleOpenAccount();
         if (ok) markCompleteAndAdvance(state, "username");
+      });
+      break;
+    case "secure-account":
+      document.getElementById("wizard-secure-continue")?.addEventListener("click", async () => {
+        const ok = await handleSecureAccount();
+        // Backing up clears any prior skip warning — the account is now
+        // recoverable. Only advance once the chosen action succeeds; a
+        // failure (or cancelled ceremony) keeps the user on the step.
+        if (ok) {
+          try { localStorage.removeItem(RECOVERY_WARN_KEY); } catch { /* swallow */ }
+          markCompleteAndAdvance(state, "secure-account");
+        }
+      });
+      document.getElementById("wizard-secure-skip")?.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        const { inlineConfirm } = await import("../lib/modal.js");
+        const skip = await inlineConfirm({
+          title: "Skip backup?",
+          message:
+            "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",
+          okLabel: "Skip anyway",
+          cancelLabel: "Back",
+          danger: true,
+        });
+        if (!skip) return;
+        try { localStorage.setItem(RECOVERY_WARN_KEY, "true"); } catch { /* swallow */ }
+        markCompleteAndAdvance(state, "secure-account");
       });
       break;
     case "passphrase":

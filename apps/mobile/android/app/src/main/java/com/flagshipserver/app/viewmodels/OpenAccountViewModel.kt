@@ -130,6 +130,10 @@ class OpenAccountViewModel(
             )
 
             // 3. Open the account with ZERO servers → Home empty-state.
+            //    Arm the SKIPPABLE "Secure your account" backup nudge
+            //    BEFORE flipping isPaired so the shell never renders
+            //    without the overlay above it. Create path only.
+            app.armSecureAccountNudge()
             app.completeOnboarding(username = username, pods = emptyList())
             // 4. Name this device. completeOnboarding upserts the profile
             //    with the (absent) device-capability label; re-upsert with

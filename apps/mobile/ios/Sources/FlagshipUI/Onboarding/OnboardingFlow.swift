@@ -6,13 +6,15 @@ import FlagshipAPI
 /// when AppState.isPaired == false.
 ///
 ///   Welcome
-///     ├─ Create your account → ChooseUsername → OpenAccount
+///     ├─ Create your account → ChooseUsername → OpenAccount →
+///     │     SecureAccount
 ///     │     Phase 2 decouples account identity from server
 ///     │     provisioning: OpenAccount generates the UMK, derives the
 ///     │     IRK, POSTs a standalone `claimUsername`, and names this
-///     │     first device. The user then lands on Home with ZERO
-///     │     servers + an "Add your first server" CTA. Provisioning a
-///     │     box (the old CreateServer mint/relay flow, claim removed)
+///     │     first device. SecureAccount then nudges a skippable backup
+///     │     (cloud pre-selected) before the user lands on Home with
+///     │     ZERO servers + an "Add your first server" CTA. Provisioning
+///     │     a box (the old CreateServer mint/relay flow, claim removed)
 ///     │     is now a reusable "Add a server" reachable from Home.
 ///     └─ I already have an account → JoinUsernameScreen (username-first)
 ///           → preflight /api/account/resolve (200 always):
@@ -67,6 +69,25 @@ public struct OnboardingFlow: View {
                     OpenAccountScreen(
                         username: username,
                         onOpened: { _ in
+                            // The account/identity now exists. Before
+                            // landing in the app, nudge a backup via the
+                            // skippable "Secure your account" step. This
+                            // is the NEW-account path only.
+                            path.append(.secureAccount(username: username))
+                        }
+                    )
+                case .secureAccount(let username):
+                    // Skippable backup nudge. Cloud is pre-selected (when
+                    // iCloud is available); "Save a backup file" routes to
+                    // the existing KeyfileExportScreen; "Skip for now"
+                    // confirms then proceeds. Either way we finish
+                    // onboarding into the app from here.
+                    SecureAccountScreen(
+                        username: username,
+                        onSecured: {
+                            app.completeOnboarding(username: username, pods: [])
+                        },
+                        onSkip: {
                             app.completeOnboarding(username: username, pods: [])
                         }
                     )

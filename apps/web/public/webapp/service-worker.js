@@ -29,7 +29,10 @@
 //  v14: removed views/unlock-approvals.js — the legacy plaintext
 //       unlock-approval boot flow is gone (relay + box-sealed lease
 //       replace it). Push handler's unlock-request branch dropped.
-const SHELL_VERSION = "v15";
+//  v16: first-run wizard gained a skippable "Secure your account" step
+//       (cloud passkey pre-selected when available, else `.flagshipkey`
+//       file); added views/wizard.js to the precache.
+const SHELL_VERSION = "v16";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -75,6 +78,7 @@ const OPTIONAL_SHELL = [
   "/lib/push.js",
   "/lib/icons.js",
   "/views/bootstrap.js",
+  "/views/wizard.js",
   "/views/unlock.js",
   "/views/home.js",
   "/views/pair.js",

@@ -5,7 +5,7 @@
  * e2e); these tests cover the static structure + module surface so
  * future refactors don't accidentally drop the load-bearing parts.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -115,6 +115,120 @@ describe("trademark-claim mailto helper (Change C)", () => {
     const mailto = trademarkClaimMailto("widgets");
     expect(mailto).not.toContain("\n");
     expect(mailto).toContain("widgets");
+  });
+});
+
+describe('"Secure your account" backup nudge step', () => {
+  it("declares the secure-account step right after the username step", () => {
+    // It must run immediately after the account is opened (username),
+    // before any other step or the app shell.
+    const usernameIdx = VIEW_JS.indexOf('{ id: "username"');
+    const secureIdx = VIEW_JS.indexOf('{ id: "secure-account"');
+    const passphraseIdx = VIEW_JS.indexOf('{ id: "passphrase"');
+    expect(usernameIdx).toBeGreaterThan(-1);
+    expect(secureIdx).toBeGreaterThan(usernameIdx);
+    expect(passphraseIdx).toBeGreaterThan(secureIdx);
+  });
+
+  it("uses the approved verbatim title + body copy", () => {
+    expect(VIEW_JS).toContain('label: "Secure your account"');
+    expect(VIEW_JS).toMatch(
+      /Back up your account now so you can get back in if you lose this\s+device\. No one — not even us — can recover it for you\./,
+    );
+  });
+
+  it("offers both backup methods with the approved labels + sublabels", () => {
+    expect(VIEW_JS).toContain("Save to a passkey");
+    expect(VIEW_JS).toContain("Recover with your device passkey or password manager.");
+    expect(VIEW_JS).toContain("Save a backup file");
+    expect(VIEW_JS).toContain("An encrypted .flagshipkey you keep yourself.");
+  });
+
+  it("detects passkey availability via window.PublicKeyCredential", () => {
+    expect(VIEW_JS).toMatch(/window\.PublicKeyCredential/);
+    expect(VIEW_JS).toMatch(/export function passkeysAvailable\(/);
+  });
+
+  it("reuses the existing backup primitives (no rebuilt crypto)", () => {
+    // Cloud = lib/recovery.js setupCloudRecovery; file = the recovery
+    // view's keyfile export ceremony.
+    expect(VIEW_JS).toMatch(/setupCloudRecovery/);
+    expect(VIEW_JS).toMatch(/runKeyfileExportCeremony/);
+  });
+
+  it("guards skip with the approved warning + Skip-anyway / Back buttons", () => {
+    expect(VIEW_JS).toContain(
+      "Without a backup, losing this device means losing your account for good. You can set this up anytime in Settings.",
+    );
+    expect(VIEW_JS).toContain('okLabel: "Skip anyway"');
+    expect(VIEW_JS).toContain('cancelLabel: "Back"');
+    // Skipping pins the persistent home-screen recovery warning.
+    expect(VIEW_JS).toMatch(/localStorage\.setItem\(RECOVERY_WARN_KEY, "true"\)/);
+  });
+
+  it("the recovery view exports the reusable keyfile export ceremony", () => {
+    const RECOVERY_JS = readFileSync(
+      join(__dirname, "..", "public", "webapp", "views", "recovery.js"),
+      "utf8",
+    );
+    expect(RECOVERY_JS).toMatch(/export async function runKeyfileExportCeremony\(/);
+    // Both backup methods stay reachable from Settings → Recovery so the
+    // "set this up anytime in Settings" promise holds: the cloud passkey
+    // (#recovery-cloud-setup) and the file export (#recovery-keyfile-export).
+    expect(RECOVERY_JS).toMatch(/recovery-cloud-setup/);
+    expect(RECOVERY_JS).toMatch(/recovery-keyfile-export/);
+  });
+});
+
+describe('"Secure your account" pre-selection behaviour', () => {
+  // passkeysAvailable() reads globalThis.window at CALL time, and
+  // renderSecureAccountStep() calls it fresh on each invocation — so one
+  // static import suffices and we just swap window between cases.
+  const originalWindow = (globalThis as { window?: unknown }).window;
+
+  afterEach(() => {
+    if (originalWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      (globalThis as { window?: unknown }).window = originalWindow;
+    }
+  });
+
+  it("pre-selects the cloud (passkey) option when WebAuthn is available", async () => {
+    (globalThis as { window?: unknown }).window = { PublicKeyCredential: function () {} };
+    const { passkeysAvailable, renderSecureAccountStep } = await import(
+      "../public/webapp/views/wizard.js"
+    );
+    expect(passkeysAvailable()).toBe(true);
+    const html = renderSecureAccountStep();
+    // The cloud radio is checked + enabled; the file radio is not checked.
+    expect(html).toMatch(/id="wizard-secure-cloud"[^>]*checked/);
+    expect(html).not.toMatch(/id="wizard-secure-cloud"[^>]*disabled/);
+    expect(html).toContain("Recover with your device passkey or password manager.");
+    expect(html).not.toMatch(/id="wizard-secure-file"[^>]*checked/);
+  });
+
+  it("does NOT pre-select cloud when passkeys are unavailable; file + skip still work", async () => {
+    (globalThis as { window?: unknown }).window = {}; // no PublicKeyCredential
+    const { passkeysAvailable, renderSecureAccountStep } = await import(
+      "../public/webapp/views/wizard.js"
+    );
+    expect(passkeysAvailable()).toBe(false);
+    const html = renderSecureAccountStep();
+    // Cloud is disabled + NOT checked; the disabled hint shows.
+    expect(html).toMatch(/id="wizard-secure-cloud"[^>]*disabled/);
+    expect(html).not.toMatch(/id="wizard-secure-cloud"[^>]*checked/);
+    expect(html).toContain("Passkeys aren't available in this browser — use a backup file.");
+    // File is pre-selected instead so the step still works without passkeys.
+    expect(html).toMatch(/id="wizard-secure-file"[^>]*checked/);
+    // The skip link is always present (skip is the no-backup escape hatch).
+    expect(html).toContain('id="wizard-secure-skip"');
+  });
+
+  it("passkeysAvailable() fails closed when window is absent", async () => {
+    delete (globalThis as { window?: unknown }).window;
+    const { passkeysAvailable } = await import("../public/webapp/views/wizard.js");
+    expect(passkeysAvailable()).toBe(false);
   });
 });
 

@@ -284,13 +284,24 @@ function openExportCeremony() {
   });
 }
 
-async function runKeyfileExport() {
+/**
+ * Run the `.flagshipkey` export ceremony (heavy warning + strong
+ * passphrase + the three acknowledgments) and download the file.
+ * Returns true when a backup file was actually written, false when the
+ * user cancelled the ceremony or the export errored. Exported so the
+ * first-run wizard's "Secure your account" step can reuse this exact
+ * flow instead of rebuilding the backup crypto.
+ */
+export async function runKeyfileExportCeremony() {
   const session = getSession();
-  if (!session.umk) return toast("unlock first", "err");
+  if (!session.umk) {
+    toast("unlock first", "err");
+    return false;
+  }
   const username =
     session.username || localStorage.getItem("flagship.username") || "";
   const ceremony = await openExportCeremony();
-  if (!ceremony) return;
+  if (!ceremony) return false;
   try {
     const accountId = localStorage.getItem("flagship.accountId") || undefined;
     await createBackupFile({
@@ -300,9 +311,15 @@ async function runKeyfileExport() {
       passphrase: ceremony.passphrase,
     });
     toast(KEYFILE_COPY.afterSave, "ok");
+    return true;
   } catch (e) {
     toast(`backup failed: ${e?.message ?? e}`, "err");
+    return false;
   }
+}
+
+function runKeyfileExport() {
+  void runKeyfileExportCeremony();
 }
 
 async function runKeyfileImport(file) {

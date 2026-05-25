@@ -199,11 +199,21 @@ private fun AppRoot(widthSizeClass: WindowWidthSizeClass) {
     val toasts = LocalToastCenter.current
     val toastQueue by toasts.queue.collectAsState()
 
+    val showSecureAccount by app.pendingSecureAccountNudge.collectAsState()
+
     Box(Modifier.fillMaxSize()) {
         if (isPaired) {
             RootShell(widthSizeClass = widthSizeClass)
         } else {
             OnboardingFlow(onFinished = { /* AppState.completeOnboarding flips isPaired */ })
+        }
+        // SKIPPABLE "Secure your account" backup nudge — layered ABOVE
+        // the freshly-mounted shell on the CREATE path only, until the
+        // user backs up or skips. Armed by OpenAccountViewModel.
+        if (showSecureAccount) {
+            com.flagshipserver.app.ui.screens.SecureAccountOverlay(
+                onDismiss = { app.clearSecureAccountNudge() },
+            )
         }
         // C12 — lock overlay above EVERYTHING when armed + locked.
         // Conditional on isPaired so the Welcome flow isn't gated

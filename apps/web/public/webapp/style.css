@@ -568,6 +568,38 @@ section:not(.hidden) {
 }
 .note:last-child { margin-bottom: 0; }
 
+/* "Secure your account" backup-method chooser (first-run wizard). Each
+ * option is a tappable card with a leading radio; the disabled option
+ * (e.g. passkeys unavailable) is dimmed and not interactive. */
+.secure-options { border: 0; margin: 0; padding: 0; }
+.secure-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  border-radius: var(--radius-2, 10px);
+  cursor: pointer;
+}
+.secure-option input[type="radio"] { margin-top: 2px; flex: 0 0 auto; }
+.secure-option-text { display: flex; flex-direction: column; gap: 2px; }
+.secure-option-label { font-weight: 600; }
+.secure-option.disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Off-screen but screen-reader-available (e.g. a <legend> we don't
+ * want to paint but must keep for accessibility). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Vertical stacks with a fixed gap (children flow top-to-bottom). */
 .stack-sm { display: flex; flex-direction: column; gap: var(--space-2); }
 .stack-md { display: flex; flex-direction: column; gap: var(--space-3); }

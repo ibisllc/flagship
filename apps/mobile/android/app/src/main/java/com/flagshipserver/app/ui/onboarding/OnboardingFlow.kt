@@ -89,6 +89,12 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             // device, then completeOnboarding with EMPTY pods. AppState
             // flips isPaired ⇒ the shell swaps to Home (zero-server empty
             // state). The server is added later from Home.
+            //
+            // CREATE path only: openAccount() ALSO arms the SKIPPABLE
+            // "Secure your account" backup nudge, which AppRoot renders as
+            // a full-screen overlay ABOVE the freshly-mounted shell until
+            // the user backs up or skips. (The recovery / "I already have
+            // an account" path never arms it, so it never sees the step.)
             OpenAccountScreen(
                 username = username,
                 onOpened = onFinished,

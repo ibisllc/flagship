@@ -94,6 +94,28 @@ class OpenAccountFlowTest {
         assertTrue(server.issuedAuthCodes.isEmpty())
     }
 
+    @Test fun openAccount_armsSecureAccountNudge() = runTest {
+        // The CREATE path arms the SKIPPABLE "Secure your account" backup
+        // step (rendered by AppRoot as an overlay above the shell).
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val app = AppState()
+        assertFalse(app.pendingSecureAccountNudge.first())
+
+        newVm(server, app, "harry").openAccount("Harry's Pixel")
+
+        assertTrue("opening a new account must arm the backup nudge", app.pendingSecureAccountNudge.first())
+    }
+
+    @Test fun openAccount_doesNotArmNudge_whenClaimFails() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0, shouldFail = true)
+        val app = AppState()
+        newVm(server, app, "harry").openAccount("Harry's Pixel")
+        // A failed open doesn't pair, so it must not strand a nudge over
+        // a non-existent shell.
+        assertFalse(app.isPaired.first())
+        assertFalse(app.pendingSecureAccountNudge.first())
+    }
+
     @Test fun openAccount_recordsDeviceName_onActiveProfile() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
         val app = AppState()

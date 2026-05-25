@@ -335,7 +335,9 @@ describe("/webapp PWA static surface", () => {
     //     replace it); a generic fallback notification covers the rest.
     // v15 added the `.flagshipkey` backup path (lib/keyfile.js +
     //     lib/keyfileBackup.js + the vendored noble-hashes argon2id).
-    expect(r.body).toContain('SHELL_VERSION = "v15"');
+    // v16 added the wizard "Secure your account" step + precached
+    //     views/wizard.js.
+    expect(r.body).toContain('SHELL_VERSION = "v16"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");
