@@ -16,7 +16,7 @@ data class InstallBlob(
     var username: String,
     var serverName: String,
     var phoneDelegatedPubKey: ByteArray,
-    var registrationUrl: String = "https://flagship.services/api/server/register",
+    var registrationUrl: String = "https://flagshipserver.com/api/server/register",
     var authCode: AuthCode,
     var authCodeUserSignature: ByteArray,
     var installerGitRef: String = "main",

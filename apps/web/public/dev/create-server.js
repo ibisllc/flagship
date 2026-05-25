@@ -185,7 +185,7 @@ async function runFlow() {
     username,
     serverName,
     phoneDelegatedPubKey: delegated.publicKey,
-    registrationUrl: "https://flagship.services/api/server/register",
+    registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode: code,
     authCodeUserSignature: acSig,
     issuedAt: acIssuedAt,

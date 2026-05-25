@@ -41,7 +41,7 @@ public struct InstallBlob: Equatable, Sendable {
         username: String,
         serverName: String,
         phoneDelegatedPubKey: Data,
-        registrationUrl: String = "https://flagship.services/api/server/register",
+        registrationUrl: String = "https://flagshipserver.com/api/server/register",
         authCode: AuthCode,
         authCodeUserSignature: Data,
         installerGitRef: String = "main",

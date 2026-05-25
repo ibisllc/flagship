@@ -106,7 +106,7 @@ final class InstallBlobV2CanonicalTests: XCTestCase {
         XCTAssertEqual(parts[4], "home")
         // Field 5 is hex of phoneDelegatedPubKey (64 chars).
         XCTAssertEqual(parts[5].count, 64)
-        XCTAssertEqual(parts[6], "https://flagship.services/api/server/register")
+        XCTAssertEqual(parts[6], "https://flagshipserver.com/api/server/register")
         XCTAssertEqual(parts[7], "01ABCD")
         // authCode.userPubKey hex
         XCTAssertEqual(parts[8].count, 64)

@@ -181,7 +181,7 @@ export function synthesizeBlob(args: {
     username: args.username,
     serverName: args.serverName,
     phoneDelegatedPubKey: delegatedPub,
-    registrationUrl: "https://flagship.services/api/server/register",
+    registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode: code,
     authCodeUserSignature: userSig,
     installerGitRef: "main",

@@ -31,10 +31,29 @@ import {
   listDrafts,
   saveDraft,
 } from "../lib/buildDraft.js";
+import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
 
 registerView("view-create-server");
 
-const LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+// Server (pod) names are a standard RFC-1123 DNS label — lowercase
+// letters/digits with interior hyphens allowed (no leading/trailing
+// hyphen), 1–63 chars. LOOSER than the username field on purpose: a
+// server name is never composed with an app-name the way a username is,
+// so `media-server` is fine here. Mirror of
+// packages/control-plane/src/labels.ts validateServerLabel (the
+// authoritative server-side check). A small server-specific reserved
+// list mirrors RESERVED_SERVER_LABELS there.
+const SERVER_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const RESERVED_SERVER_LABELS = new Set([
+  "www", "api", "admin", "flagship", "flagshipserver", "services",
+  "ns1", "ns2", "mail", "tunnel", "control", "status",
+]);
+/** True iff `name` is a syntactically valid, non-reserved server name. */
+function isValidServerName(name) {
+  return typeof name === "string"
+    && SERVER_NAME_RE.test(name)
+    && !RESERVED_SERVER_LABELS.has(name);
+}
 const TAG_CLAIM = "flagship/claim-username/v1";
 const TAG_AUTH_CODE = "flagship/auth-code/v1";
 const TAG_RCK_REGISTER = "flagship/rck-register/v1";
@@ -148,11 +167,20 @@ function renderDraftList(drafts) {
     list.innerHTML = '<p class="note">no saved drafts yet</p>';
     return;
   }
-  list.innerHTML = drafts.map((d) => `
+  list.innerHTML = drafts.map((d) => {
+    // A "delivered" draft is a server whose recipe is out but which may
+    // never have phoned home (a failed/abandoned install). Offer "Cancel
+    // server", which frees the name so it can be re-used — see
+    // cancelServer().
+    const delivered = d.status === "delivered";
+    const cancelBtn = delivered
+      ? `<button class="secondary danger" data-action="cancel-server" data-id="${escapeHtml(d.id)}">Cancel server (free the name)</button>`
+      : "";
+    return `
     <div class="card">
       <div class="row">
         <span class="value"><strong>${escapeHtml(d.serverName || "(unnamed)")}</strong></span>
-        <span class="pill ${d.status === "delivered" ? "ok" : ""}">${escapeHtml(d.status)}</span>
+        <span class="pill ${delivered ? "ok" : ""}">${escapeHtml(d.status)}</span>
       </div>
       <div class="row">
         <span class="label">backup</span>
@@ -166,14 +194,18 @@ function renderDraftList(drafts) {
         <button class="secondary" data-action="resume" data-id="${escapeHtml(d.id)}">Resume</button>
         <button class="secondary" data-action="delete" data-id="${escapeHtml(d.id)}">Delete</button>
       </div>
+      ${cancelBtn ? `<div class="mt-2">${cancelBtn}</div>` : ""}
     </div>
-  `).join("");
+  `;
+  }).join("");
   list.querySelectorAll("button[data-action]").forEach((b) => {
     b.addEventListener("click", (e) => {
       const action = e.currentTarget.getAttribute("data-action");
       const id = e.currentTarget.getAttribute("data-id");
       if (action === "resume") resumeDraft(id).catch((err) => toast(String(err), "err"));
-      else if (action === "delete") {
+      else if (action === "cancel-server") {
+        cancelServer(id).catch((err) => toast(String(err), "err"));
+      } else if (action === "delete") {
         (async () => {
           const { inlineConfirm } = await import("../lib/modal.js");
           const ok = await inlineConfirm({
@@ -187,6 +219,82 @@ function renderDraftList(drafts) {
       }
     });
   });
+}
+
+/**
+ * "Cancel the server" — release the name so it can be claimed again.
+ *
+ * Today an abandoned/failed install leaves the server name reserved: the
+ * RCK routing record pins it and a retry hits "subdomain already
+ * controlled by a different RCK". This IRK-signs a release envelope and
+ * POSTs `/api/server/release`, which the Worker uses to drop the routing
+ * record + revoke any active auth-codes + revoke the server record. Then
+ * we revoke the install auth-code (belt-and-braces, in case the box is
+ * mid-boot) and delete the local draft. Auth = the IRK signature (only
+ * the owner can produce it).
+ */
+async function cancelServer(id) {
+  const d = await getDraft(id);
+  if (!d) return toast("draft not found", "err");
+  const session = getSession();
+  if (!session.umk || !session.irk) {
+    return toast("unlock the webapp first", "err");
+  }
+  const username = session.username
+    || (await ensureUsername().catch(() => null));
+  if (!username) return toast("no account on this device", "err");
+
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const confirmed = await inlineConfirm({
+    title: `Cancel server "${d.serverName}"?`,
+    message:
+      "Frees the name so you can use it again. Any pending install recipe is voided; a box that boots later is rejected. If this server is already running, it will be released — do this only if you mean to give the name up.",
+    okLabel: "Cancel server",
+    danger: true,
+  });
+  if (!confirmed) return;
+
+  const serverDomain = serverDomainOf(d.serverName, username);
+  try {
+    await releaseServerName(
+      { username, serverDomain, umk: session.umk, signWithIrk },
+    );
+    // Best-effort auth-code revoke too (the release already revokes
+    // active codes server-side, but an in-flight serial we hold locally
+    // is cheap to revoke explicitly). 404/403 == already gone.
+    if (d.code) {
+      await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
+    }
+    await deleteDraft(id);
+    toast(`server "${d.serverName}" cancelled — the name is free again`, "ok");
+    await refreshDrafts();
+  } catch (e) {
+    toast(`cancel failed: ${e.message ?? e}`, "err");
+  }
+}
+
+/** IRK-sign + POST an auth-code revoke. Tolerates 404/403 (already gone)
+ *  so a double-cancel is safe. */
+async function revokeAuthCodeBestEffort(serial, username) {
+  const issuedAt = Date.now();
+  const sig = await signWithIrk(
+    getSession().umk,
+    canonical(["flagship/auth-code-revoke/v1", serial, username, issuedAt]),
+  );
+  const resp = await fetch(
+    `https://flagshipserver.com/api/auth-code/${encodeURIComponent(serial)}/revoke`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        request: { serial, username, issuedAt },
+        signature: bytesToHex(sig),
+      }),
+    },
+  );
+  if (!resp.ok && resp.status !== 404 && resp.status !== 403) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
 }
 
 async function refreshDrafts() {
@@ -212,8 +320,11 @@ async function resumeDraft(id) {
 
 function readInputs() {
   const serverName = $("cs-server-name").value.trim().toLowerCase();
-  if (!LABEL_RE.test(serverName)) {
-    throw new Error("serverName must be a DNS label (a-z, 0-9, -, ≤63 chars)");
+  if (!SERVER_NAME_RE.test(serverName)) {
+    throw new Error("server name must be a DNS label: 1–63 lowercase letters or digits, hyphens allowed between characters (not at the start or end)");
+  }
+  if (RESERVED_SERVER_LABELS.has(serverName)) {
+    throw new Error(`server name "${serverName}" is reserved`);
   }
   const backupPolicy = $("cs-backup-policy").value;
   const llmRaw = $("cs-llm-pref").value.trim();
@@ -467,7 +578,7 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
     username,
     serverName,
     phoneDelegatedPubKey: delegated.publicKey,
-    registrationUrl: "https://flagship.services/api/server/register",
+    registrationUrl: "https://flagshipserver.com/api/server/register",
     authCode: code,
     authCodeUserSignature: acSig,
     installerGitRef: "main",
@@ -604,7 +715,34 @@ function waitForConfirm() {
   });
 }
 
+/** Live inline validation for the server-name field — mirrors the
+ *  authoritative server-side rule (validateServerLabel). Shows the same
+ *  message the throw in readInputs() would, so the user fixes it before
+ *  delivering. */
+function wireServerNameValidation() {
+  const input = $("cs-server-name");
+  const err = $("cs-server-name-error");
+  if (!input || !err) return;
+  const update = () => {
+    const v = input.value.trim().toLowerCase();
+    let msg = "";
+    if (v.length > 0) {
+      if (!SERVER_NAME_RE.test(v)) {
+        msg = "lowercase letters, digits, and hyphens (not at the start or end)";
+      } else if (RESERVED_SERVER_LABELS.has(v)) {
+        msg = `"${v}" is reserved — pick another name`;
+      }
+    }
+    err.textContent = msg;
+    err.classList.toggle("hidden", msg === "");
+    input.setAttribute("aria-invalid", msg ? "true" : "false");
+  };
+  input.addEventListener("input", update);
+  input.addEventListener("blur", update);
+}
+
 export function initCreateServerView() {
+  wireServerNameValidation();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
   $("cs-deliver")?.addEventListener("click", () => handleDeliverNow().catch((e) => toast(String(e), "err")));
   $("cs-open-build")?.addEventListener("click", () => {
