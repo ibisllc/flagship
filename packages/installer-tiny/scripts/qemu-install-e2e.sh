@@ -60,16 +60,32 @@ echo "[e2e] base ISO sha256 verified"
 echo "[e2e] building e2e apkovl"
 ( cd "$HERE" && npx tsx scripts/build-e2e-apkovl.mjs "$APKOVL" )
 
-# ── 3. remaster the base ISO to embed the apkovl at the ISO root ──────────────
-# Alpine's init scans every block device root for *.apkovl.tar.gz on boot
-# (same mechanism scripts/build-flagship-iso.sh ships). `-boot_image any replay`
-# preserves the existing El Torito boot records so the remastered ISO still
-# boots BIOS+UEFI.
-echo "[e2e] remastering ISO with the apkovl at root"
+# ── 3. remaster the base ISO: embed the apkovl + force a SERIAL console boot ───
+# Alpine's init scans every block device root for *.apkovl.tar.gz on boot (same
+# mechanism scripts/build-flagship-iso.sh ships). We also rewrite the BIOS
+# syslinux config so the ISO autoboots to ttyS0 — without `console=ttyS0` the
+# kernel (and our launcher's /dev/console) go to the invisible VGA console and
+# nothing reaches -nographic's serial. `-boot_image any replay` preserves the
+# El Torito boot records so the remastered ISO still boots.
+echo "[e2e] remastering ISO (apkovl at root + serial-console autoboot)"
+SYSCFG_SRC="$ASSETS/syslinux.orig.cfg"
+SYSCFG_NEW="$ASSETS/syslinux.serial.cfg"
+rm -f "$SYSCFG_SRC" "$SYSCFG_NEW"
+xorriso -osirrox on -indev "$BASE_ISO" -extract /boot/syslinux/syslinux.cfg "$SYSCFG_SRC" >/dev/null 2>&1
+# SERIAL directive (isolinux -> serial), PROMPT 0 (autoboot, no input), and
+# console=ttyS0 appended to the kernel cmdline.
+{
+    echo "SERIAL 0 115200"
+    sed -e 's/^PROMPT .*/PROMPT 0/' \
+        -e 's/^TIMEOUT .*/TIMEOUT 10/' \
+        -e '/^APPEND /{/console=ttyS0/!s/$/ console=ttyS0,115200/;}' \
+        "$SYSCFG_SRC"
+} > "$SYSCFG_NEW"
 rm -f "$E2E_ISO"
 xorriso -indev "$BASE_ISO" -outdev "$E2E_ISO" \
     -boot_image any replay \
-    -map "$APKOVL" /flagship.apkovl.tar.gz >/dev/null 2>&1
+    -map "$APKOVL" /flagship.apkovl.tar.gz \
+    -map "$SYSCFG_NEW" /boot/syslinux/syslinux.cfg >/dev/null 2>&1
 
 # ── 4. blank target disk ──────────────────────────────────────────────────────
 rm -f "$TARGET"
@@ -77,7 +93,7 @@ qemu-img create -f qcow2 "$TARGET" 12G >/dev/null
 
 # ── 5. STAGE 1: boot the live ISO, run the real installer ─────────────────────
 echo "[e2e] STAGE 1: install (serial -> $INSTALL_LOG) — TCG, be patient"
-timeout "${E2E_INSTALL_TIMEOUT:-1200}" qemu-system-x86_64 \
+timeout "${E2E_INSTALL_TIMEOUT:-2400}" qemu-system-x86_64 \
     -M q35 -m 3072 -accel tcg -smp 2 \
     -cdrom "$E2E_ISO" \
     -drive file="$TARGET",if=virtio,format=qcow2 \

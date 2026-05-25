@@ -210,25 +210,31 @@ verify_recipe_signature() {
 # ===========================================================================
 # PHASE: booting — the live OS is up; verify our tools + the recipe.
 # ===========================================================================
+# The install tools the LIVE installer needs. They are NOT in the stock Alpine
+# base — phase_download apk-adds them — so phase_boot only REPORTS their absence;
+# require_tools() is the fail-closed gate, called at the END of phase_download.
+# node is deliberately absent (it runs first-boot on the installed OS).
+REQUIRED_LIVE_TOOLS="cryptsetup pvcreate vgcreate lvcreate sgdisk mkfs.ext4 mkfs.vfat curl openssl jq xxd"
 phase_boot() {
     log "phase: booting"
     read_serial
     log "recipe serial=${SERIAL:-<none>}"
-    # Tool gate: everything the LIVE installer needs. node is deliberately NOT
-    # here — it runs first-boot on the installed OS. efibootmgr is needed for
-    # the success self-wipe (point firmware at the internal disk); grub-* are
-    # installed into the target via apk --root, not required in the live shell.
-    for t in cryptsetup pvcreate vgcreate lvcreate sgdisk mkfs.ext4 mkfs.vfat curl; do
-        if command -v "$t" >/dev/null 2>&1; then
-            log "  tool ok: $t"
-        else
-            log "  tool MISSING: $t"
-            [ "$FLAGSHIP_DRY_RUN" = "1" ] || fail "required tool missing: $t"
-        fi
+    # Informational only — these arrive in phase_download (see require_tools()).
+    for t in $REQUIRED_LIVE_TOOLS; do
+        command -v "$t" >/dev/null 2>&1 && log "  tool present: $t" || log "  tool (added at download): $t"
     done
     [ -r "$BLOB_JSON" ] || { [ "$FLAGSHIP_DRY_RUN" = "1" ] || fail "no recipe at $BLOB_JSON"; }
     # NB: the cryptographic recipe-signature check runs AFTER phase_download
     # (which apk-adds openssl/jq/xxd) and BEFORE phase_partition — see main().
+}
+
+# Fail-closed tool gate, run after phase_download has installed the set.
+require_tools() {
+    [ "$FLAGSHIP_DRY_RUN" = "1" ] && return 0
+    for t in $REQUIRED_LIVE_TOOLS; do
+        command -v "$t" >/dev/null 2>&1 || fail "required tool missing after download: $t"
+    done
+    log "  all required live-installer tools present"
 }
 
 # ===========================================================================
@@ -294,6 +300,8 @@ phase_download() {
     apk add cryptsetup lvm2 sgdisk partx dosfstools e2fsprogs curl ca-certificates efibootmgr \
         openssl jq xxd \
         $FW_PACKAGES || fail "apk add of install tools failed"
+    # Fail-closed: every required tool must now resolve before we touch a disk.
+    require_tools
 }
 
 # ===========================================================================
@@ -514,52 +522,243 @@ EOF
 # Drop the first-boot provisioning unit. (SEAM b) — the HEAVY proven sequence
 # (clone, npm install, tsc -b, gen-identity, mint-entitlements, register, seal)
 # runs HERE, on the installed OS, on its first real boot — NOT in this live
-# shell. The body is lifted from userdata.ts; it reports
+# shell. The body is lifted VERBATIM (adapted to OpenRC/busybox) from the proven
+# d-i bootstrap in packages/flagship-burner/src/userdata.ts; it reports
 # registering/sealing/pairing/live itself once it has network on the installed
 # system.
 #
-# This is left as a CLEARLY-BOUNDED STUB on purpose: the exact recipe-delivery +
-# .com wiring is pending, so we drop the unit + the proven command sequence but
-# do NOT wire it to a live .com here. Arming = fill the real install-helper args
-# (source the proven block from userdata.ts / a shared installer/provision.sh).
+# WIRED (seam b armed). The unit runs the real install-helper invocations with
+# the real recipe fields (extracted via jq from /flagship/install-blob.json —
+# the blob is laid down by phase_install at /mnt/flagship/, which is /flagship/
+# on the booted root) and POSTs to the live .com derived from the recipe's
+# registrationUrl. It is idempotent (provisioned.flag) and fail-closed.
+#
+# CRITICAL ORDERING INVARIANT (from a real-hardware Debian e2e): registration
+# MUST happen BEFORE the sealed LUKS key is uploaded —
+# control-plane/src/luksKeys.ts handlePutSealedLuksKey returns 404 "unknown
+# server" until the server is registered. So: register -> registered.flag ->
+# seal -> upload. A failed register aborts BEFORE any seal/upload so the box is
+# never left half-provisioned.
+#
+# Alpine vs the Debian/systemd path (userdata.ts): OpenRC, not systemd. The
+# whole sequence runs from this single /etc/local.d unit (the `local` service is
+# enabled in the default runlevel below). node/npm/git/jq/openssl are already on
+# the target (INSTALLED_OS_PACKAGES). Clone target is /opt/flagship (same as
+# userdata.ts). The LUKS key sealed for the phone is the same random key the live
+# installer generated (staged at /flagship/luks.key by phase_install).
 # ===========================================================================
 drop_first_boot_unit() {
-    log "dropping first-boot provisioning unit (seam b — stub, not wired to live .com)"
+    log "dropping first-boot provisioning unit (seam b — WIRED to live .com)"
     if [ "$FLAGSHIP_DRY_RUN" = "1" ]; then
         log "  DRY_RUN: would write /mnt/etc/local.d/10-flagship-provision.start (OpenRC)"
-        log "  DRY_RUN: provision runs: git clone -> npm install -> tsc -b -> gen-identity ->"
-        log "  DRY_RUN:   mint-entitlements -> register -> seal-for-bak -> sealed-luks-key -> report_phase live"
+        log "  DRY_RUN: provision runs (on installed OS, NOT here): git clone -> npm install ->"
+        log "  DRY_RUN:   tsc -b -> gen-identity -> mint-entitlements -> [registering] register ->"
+        log "  DRY_RUN:   [sealing] seal-for-bak + sign-sealed-key -> sealed-luks-key -> [pairing] -> [live]"
+        log "  DRY_RUN: not wired to a live .com (the QEMU PoC has no node/.com)"
         return 0
     fi
     mkdir -p /mnt/etc/local.d /mnt/etc/runlevels/default
+    # The heredoc is UNQUOTED ('PROV') so the few burn-time constants below
+    # ($REPO_URL) are expanded now; everything that must be evaluated on the
+    # installed OS at first boot is escaped (\$VAR, \\) so it survives into the
+    # dropped script verbatim. The recipe-derived values (domain/user/url/ref)
+    # are read with jq AT FIRST BOOT from the laid-down blob, never baked here.
     cat > /mnt/etc/local.d/10-flagship-provision.start <<PROV
 #!/bin/sh
-# First-boot provisioning — runs the proven heavy sequence on the installed OS.
-# SEAM (b): the exact install-helper args + recipe-delivery wiring are pending.
-# Source of truth for these exact commands: packages/flagship-burner/src/userdata.ts
+# First-boot provisioning — runs the proven heavy sequence on the INSTALLED OS.
+# Adapted (OpenRC/busybox) from packages/flagship-burner/src/userdata.ts, the
+# d-i bootstrap we ran live on real hardware. Idempotent + fail-closed.
 set -eu
+exec >>/var/log/flagship-provision.log 2>&1
+date
+echo "[flagship-provision] starting"
+
 FLAG=/var/flagship/provisioned.flag
-[ -e "\$FLAG" ] && exit 0
-CONTROL_PLANE_BASE="$CONTROL_PLANE_BASE"
-SERIAL="$SERIAL"
-report_phase() { curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
-    --data '{"phase":"'"\$1"'"}' "\$CONTROL_PLANE_BASE/api/order/\$SERIAL/status" >/dev/null 2>&1 || true; }
-git clone --depth 50 --branch "$GIT_REF" "$REPO_URL" /opt/flagship
+[ -e "\$FLAG" ] && { echo "[flagship-provision] already provisioned; exiting"; exit 0; }
+mkdir -p /var/flagship
+
+REPO_URL="\${FLAGSHIP_REPO_URL:-$REPO_URL}"
+BLOB_JSON=/flagship/install-blob.json
+LUKS_KEY=/flagship/luks.key
+
+# Read the recipe fields the daemon + provisioning need (jq is installed on the
+# target — INSTALLED_OS_PACKAGES). The blob is the signed InstallBlob laid down
+# by the live installer; all byte fields are hex (see iso-personalizer/trailer.ts).
+SERVER_DOMAIN="\$(jq -r .serverDomain "\$BLOB_JSON")"
+USERNAME="\$(jq -r .username "\$BLOB_JSON")"
+SERVER_NAME="\$(jq -r .serverName "\$BLOB_JSON")"
+REGISTRATION_URL="\$(jq -r .registrationUrl "\$BLOB_JSON")"
+PHONE_DELEGATED_PUBKEY="\$(jq -r .phoneDelegatedPubKey "\$BLOB_JSON")"
+AUTH_CODE_SERIAL="\$(jq -r .authCode.serial "\$BLOB_JSON")"
+GIT_REF="\$(jq -r '.installerGitRef // "main"' "\$BLOB_JSON")"
+[ -n "\$GIT_REF" ] && [ "\$GIT_REF" != "null" ] || GIT_REF=main
+echo "[flagship-provision] domain=\$SERVER_DOMAIN user=\$USERNAME ref=\$GIT_REF"
+
+# Status channel: derive CONTROL_PLANE_BASE from registrationUrl exactly like
+# userdata.ts (strip the trailing /api/server/register). Best-effort; a failed
+# report NEVER fails provisioning.
+CONTROL_PLANE_BASE="\$(echo "\$REGISTRATION_URL" | sed 's|/api/server/register\$||')"
+report_phase() {
+    curl -fsS -m 8 -X POST -H 'content-type: application/json' \\
+        --data '{"phase":"'"\$1"'"}' \\
+        "\$CONTROL_PLANE_BASE/api/order/\$AUTH_CODE_SERIAL/status" >/dev/null 2>&1 || true
+}
+
+# Fail-closed: the seal step below is bound to these fields; empty values once
+# mis-sealed a disk on a real box (jq was missing). Refuse to proceed if the
+# recipe did not parse.
+if [ -z "\$SERVER_DOMAIN" ] || [ "\$SERVER_DOMAIN" = "null" ] || \\
+   [ -z "\$PHONE_DELEGATED_PUBKEY" ] || [ "\$PHONE_DELEGATED_PUBKEY" = "null" ]; then
+    echo "[flagship-provision] FATAL: empty SERVER_DOMAIN/PHONE_DELEGATED_PUBKEY — refusing"
+    report_phase error
+    exit 1
+fi
+
+# Persist install-time facts the daemon reads on every boot.
+echo "\$SERVER_DOMAIN"          > /var/flagship/server-domain
+echo "\$USERNAME"               > /var/flagship/username
+echo "\$SERVER_NAME"            > /var/flagship/server-name
+echo "\$PHONE_DELEGATED_PUBKEY" > /var/flagship/phone-delegated.pub
+echo "\$AUTH_CODE_SERIAL"       > /var/flagship/auth-code-serial
+
+# --- Clone + build the daemon (heavy work; node/npm/git are on the target). ---
+rm -rf /opt/flagship
+git clone --depth 50 --branch "\$GIT_REF" "\$REPO_URL" /opt/flagship || \\
+    (git clone --depth 50 "\$REPO_URL" /opt/flagship && \\
+     git -C /opt/flagship fetch --depth 50 origin "\$GIT_REF" && \\
+     git -C /opt/flagship checkout "\$GIT_REF")
 cd /opt/flagship
 npm install --no-audit --no-fund --workspaces --include-workspace-root
-npx tsc -b || true
-npx tsx scripts/install-helper.ts gen-identity --out-priv /var/flagship/identity/identity.priv.hex \\
-    --out-pub /var/flagship/identity/identity.pub.hex --out-pem /boot/identity.pem
-npx tsx scripts/install-helper.ts mint-entitlements ...   # TODO(seam-b): see userdata.ts for full args
+if [ ! -e /opt/flagship/node_modules/@flagship/protocol/package.json ]; then
+    echo "[flagship-provision] WARN: workspace not symlinked; manual linking"
+    mkdir -p /opt/flagship/node_modules/@flagship
+    for pkg in /opt/flagship/packages/*/; do
+        name=\$(jq -r .name "\$pkg/package.json" 2>/dev/null || echo "")
+        [ -n "\$name" ] && ln -sfn "\$pkg" "/opt/flagship/node_modules/\$name"
+    done
+fi
+npx tsc -b 2>&1 | tee /var/log/flagship-tsc.log || true
+
+# --- Generate the server identity (STK). ---
+mkdir -p /var/flagship/identity
+chmod 700 /var/flagship/identity
+npx tsx scripts/install-helper.ts gen-identity \\
+    --out-priv /var/flagship/identity/identity.priv.hex \\
+    --out-pub  /var/flagship/identity/identity.pub.hex \\
+    --out-pem  /boot/identity.pem
+chmod 600 /var/flagship/identity/identity.priv.hex /boot/identity.pem
+SERVER_IDENTITY_PRIV_HEX="\$(tr -d '\\n' < /var/flagship/identity/identity.priv.hex)"
+SERVER_IDENTITY_PUB_HEX="\$(tr -d '\\n' < /var/flagship/identity/identity.pub.hex)"
+
+# --- Mint the entitlement bundle the daemon presents on every tunnel HELLO.
+#     INTERIM self-sign (no user IRK on the box; the phone holds it) — safe today
+#     because the production tunnel hub does not yet verify the RootEntitlement's
+#     IRK signature. Same caveat as userdata.ts (cut over to a phone-signed bundle
+#     before irkLookup is enabled in production). ---
+npx tsx scripts/install-helper.ts mint-entitlements \\
+    --irk-priv "\$SERVER_IDENTITY_PRIV_HEX" \\
+    --pod-pub "\$SERVER_IDENTITY_PUB_HEX" \\
+    --username "\$USERNAME" \\
+    --pod-canonical "\$SERVER_DOMAIN" \\
+    --out /var/flagship/entitlements.json \\
+    || echo "[flagship-provision] WARNING: mint-entitlements failed; daemon will not serve"
+chmod 600 /var/flagship/entitlements.json 2>/dev/null || true
+
+# --- Daemon environment (server-daemon reads these two from its process env). ---
+mkdir -p /etc/flagship
+cat > /etc/flagship/daemon.env <<ENVEOF
+FLAGSHIP_SUBDOMAIN=\$SERVER_DOMAIN
+FLAGSHIP_IDENTITY_PRIV_HEX=\$SERVER_IDENTITY_PRIV_HEX
+ENVEOF
+chmod 600 /etc/flagship/daemon.env
+
+# === REGISTER FIRST (the invariant). luksKeys.ts handlePutSealedLuksKey 404s
+# "unknown server" until the server is registered, so registration MUST precede
+# the sealed-key upload. The auth-code is single-use; we write registered.flag on
+# success. Fail-closed: a failed register aborts BEFORE the seal/upload, leaving
+# the box NOT half-provisioned. ===
 report_phase registering
-npx tsx scripts/install-helper.ts sign-server-register ...  # TODO(seam-b): POST /api/server/register
+echo "[flagship-provision] registering server with .com (prereq for sealed-key upload)"
+npx tsx scripts/install-helper.ts sign-server-register \\
+    --priv-hex "\$SERVER_IDENTITY_PRIV_HEX" \\
+    --auth-code-blob "\$BLOB_JSON" \\
+    > /run/register-payload.json
+if ! curl -fsS -X POST -H 'content-type: application/json' \\
+    --data @/run/register-payload.json "\$REGISTRATION_URL"; then
+    echo "[flagship-provision] FATAL: registration failed — aborting before seal/upload"
+    report_phase error
+    exit 1
+fi
+date > /var/flagship/registered.flag
+echo "[flagship-provision] registered with .com"
+
+# === SEAL + UPLOAD the LUKS key for the phone (.com-blind relay). Only AFTER a
+# successful register (the 404 invariant). seal-for-bak encrypts the random LUKS
+# key against the phone's delegated pubkey; .com stores ciphertext only. ===
 report_phase sealing
-npx tsx scripts/install-helper.ts seal-for-bak ...          # TODO(seam-b): seal LUKS key for phone
-# POST sealed key to /api/server/<domain>/sealed-luks-key (the .com-blind relay)
+echo "[flagship-provision] sealing LUKS key for the phone + uploading to .com"
+SEALED_LUKS_KEY_HEX="\$(npx tsx scripts/install-helper.ts seal-for-bak \\
+    --bak-ed25519-pub "\$PHONE_DELEGATED_PUBKEY" \\
+    --in "\$LUKS_KEY" | tr -d '\\n')"
+if [ -z "\$SEALED_LUKS_KEY_HEX" ]; then
+    echo "[flagship-provision] FATAL: seal-for-bak produced nothing — aborting"
+    report_phase error
+    exit 1
+fi
+NOW_MS=\$(date +%s%3N)
+npx tsx scripts/install-helper.ts sign-sealed-key \\
+    --priv "\$SERVER_IDENTITY_PRIV_HEX" \\
+    --server-id "\$SERVER_DOMAIN" \\
+    --sealed-hex "\$SEALED_LUKS_KEY_HEX" \\
+    --issued-at "\$NOW_MS" \\
+    > /run/sealed-key-payload.json
+if ! curl -fsS -X POST -H 'content-type: application/json' \\
+    --data @/run/sealed-key-payload.json \\
+    "\${CONTROL_PLANE_BASE}/api/server/\${SERVER_DOMAIN}/sealed-luks-key"; then
+    echo "[flagship-provision] FATAL: sealed-key upload failed — aborting"
+    report_phase error
+    exit 1
+fi
+echo "[flagship-provision] sealed LUKS key uploaded"
+
+# --- Start the long-running daemon. We are on the booted OS under OpenRC, so we
+#     drop an init script + enable it in the default runlevel + start it now. ---
+cat > /etc/init.d/flagship-daemon <<'RCEOF'
+#!/sbin/openrc-run
+name="flagship-daemon"
+description="Flagship server daemon"
+directory="/opt/flagship"
+command="/usr/bin/npm"
+command_args="run start --workspace=@flagship/server-daemon"
+command_background="yes"
+pidfile="/run/flagship-daemon.pid"
+output_log="/var/log/flagship-daemon.log"
+error_log="/var/log/flagship-daemon.log"
+
+start_pre() {
+    set -a
+    . /etc/flagship/daemon.env
+    set +a
+}
+
+depend() {
+    need net
+    after firewall
+}
+RCEOF
+chmod +x /etc/init.d/flagship-daemon
+rc-update add flagship-daemon default 2>/dev/null || true
+rc-service flagship-daemon start 2>/dev/null || true
+
+# === PAIRING — the phone approves the first unlock; on subsequent boots the
+# installed initramfs unlocks via the staged keyfile / boot relay. ===
 report_phase pairing
-# (phone approves first unlock; boot-stage.sh takes over on subsequent boots)
+echo "[flagship-provision] provisioned; awaiting phone pairing"
+
+# === LIVE — the box is up and serving. ===
 report_phase live
-mkdir -p /var/flagship; date > "\$FLAG"
+date > "\$FLAG"
+echo "[flagship-provision] done"
 PROV
     chmod +x /mnt/etc/local.d/10-flagship-provision.start
     chroot /mnt rc-update add local default 2>/dev/null || \

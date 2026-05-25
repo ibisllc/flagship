@@ -349,12 +349,91 @@ describe("recipe-signature verify (seam a — ARMED, fail-closed)", () => {
   });
 });
 
-describe("clean seams (deliberately NOT wired to live .com)", () => {
-  it("(b) first-boot provision unit is dropped but TODO'd, not wired live", () => {
-    const unit = installerSrc.split("drop_first_boot_unit()")[1] ?? "";
+describe("seam (b) — first-boot provision unit WIRED to live .com", () => {
+  // The dropped unit is the function body between drop_first_boot_unit() and the
+  // next top-level function (install_bootloader).
+  const unit =
+    (installerSrc.split("drop_first_boot_unit()")[1] ?? "").split(
+      "\ninstall_bootloader()",
+    )[0] ?? "";
+
+  it("drops the OpenRC first-boot unit + enables the `local` service in default", () => {
     expect(unit).toMatch(/10-flagship-provision\.start/);
-    expect(unit).toMatch(/TODO\(seam-b\)/);
-    // The heavy sequence lives ONLY inside the dropped unit heredoc.
+    expect(unit).toMatch(/rc-update add local default/);
+    // The old stub framing must be gone — this seam is armed, not TODO'd.
+    expect(unit).not.toMatch(/TODO\(seam-b\)/);
+  });
+
+  it("runs the real install-helper subcommands with real flags (not '...' placeholders)", () => {
+    expect(unit).toMatch(/install-helper\.ts gen-identity/);
+    // mint-entitlements with the real flags userdata.ts passes.
+    expect(unit).toMatch(/install-helper\.ts mint-entitlements/);
+    expect(unit).toMatch(/--irk-priv/);
+    expect(unit).toMatch(/--pod-pub/);
+    expect(unit).toMatch(/--pod-canonical/);
+    // sign-server-register over the laid-down blob.
+    expect(unit).toMatch(/install-helper\.ts sign-server-register/);
+    expect(unit).toMatch(/--auth-code-blob/);
+    // seal-for-bak against the phone's delegated pubkey + sign the sealed key.
+    expect(unit).toMatch(/install-helper\.ts seal-for-bak/);
+    expect(unit).toMatch(/--bak-ed25519-pub/);
+    expect(unit).toMatch(/install-helper\.ts sign-sealed-key/);
+    // No leftover '...' placeholder args.
+    expect(unit).not.toMatch(/install-helper\.ts \w[\w-]* \.\.\./);
+  });
+
+  it("extracts the recipe fields via jq from the laid-down install-blob", () => {
+    expect(unit).toMatch(/jq -r \.serverDomain/);
+    expect(unit).toMatch(/jq -r \.username/);
+    expect(unit).toMatch(/jq -r \.registrationUrl/);
+    expect(unit).toMatch(/jq -r \.phoneDelegatedPubKey/);
+    expect(unit).toMatch(/jq -r \.authCode\.serial/);
+    expect(unit).toMatch(/installerGitRef/);
+  });
+
+  it("REGISTERS BEFORE it seals/uploads the LUKS key (the 404 invariant)", () => {
+    // luksKeys.ts handlePutSealedLuksKey 404s "unknown server" until registered,
+    // so sign-server-register + the register POST must appear strictly before the
+    // seal step and the sealed-luks-key upload. Anchor on the ACTUAL command
+    // invocations (the DRY_RUN log line mentions the steps in summary form, which
+    // is fine for a human but must not be confused with the wired sequence) —
+    // scope to the dropped heredoc body so the log preamble can't shadow them.
+    const body = unit.split("<<PROV")[1] ?? unit;
+    const registerAt = body.indexOf("install-helper.ts sign-server-register");
+    const registeredFlagAt = body.indexOf("registered.flag");
+    const sealAt = body.indexOf("install-helper.ts seal-for-bak");
+    const uploadAt = body.indexOf("/sealed-luks-key");
+    expect(registerAt).toBeGreaterThanOrEqual(0);
+    expect(registeredFlagAt).toBeGreaterThanOrEqual(0);
+    expect(sealAt).toBeGreaterThanOrEqual(0);
+    expect(uploadAt).toBeGreaterThanOrEqual(0);
+    expect(registerAt).toBeLessThan(sealAt);
+    expect(registerAt).toBeLessThan(uploadAt);
+    // registered.flag is written between register and the seal step.
+    expect(registeredFlagAt).toBeLessThan(sealAt);
+    // Fail-closed: a failed register aborts before the seal/upload.
+    const beforeSeal = body.slice(0, sealAt);
+    expect(beforeSeal).toMatch(/registration failed/);
+  });
+
+  it("is idempotent (provisioned.flag guard) and posts the heavy-phase timeline", () => {
+    expect(unit).toMatch(/provisioned\.flag/);
+    // The flag is checked at the top (early exit) and written at the very end.
+    // The unit is dropped via an escaped heredoc, so $FLAG survives as \$FLAG.
+    expect(unit).toMatch(/\[ -e "\\\$FLAG" \] &&/);
+    // report_phase registering -> sealing -> pairing -> live, in order.
+    const reg = unit.indexOf("report_phase registering");
+    const seal = unit.indexOf("report_phase sealing");
+    const pair = unit.indexOf("report_phase pairing");
+    const live = unit.indexOf("report_phase live");
+    expect(reg).toBeGreaterThanOrEqual(0);
+    expect(reg).toBeLessThan(seal);
+    expect(seal).toBeLessThan(pair);
+    expect(pair).toBeLessThan(live);
+  });
+
+  it("the heavy sequence (npm install / tsc / gen-identity) lives ONLY in the unit heredoc", () => {
+    expect(unit).toMatch(/git clone/);
     expect(unit).toMatch(/npm install/);
     expect(unit).toMatch(/gen-identity/);
   });
