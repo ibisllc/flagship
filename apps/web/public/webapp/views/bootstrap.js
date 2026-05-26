@@ -19,6 +19,7 @@ import { loginRealAccount } from "../lib/loginTakeover.js";
 import { addProfile } from "../lib/profiles.js";
 import { unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
+import { set as profileSet } from "../lib/profilesStore.js";
 
 registerView("view-bootstrap");
 
@@ -102,7 +103,7 @@ async function joinDemo(resolution) {
       unlockSession,
       addProfile,
       dispatchInitialView,
-      setUsername: (u) => localStorage.setItem("flagship.username", u),
+      setUsername: (u) => profileSet("username", u),
     });
     toast(`joined ${resolution.username}`, "ok");
   } catch (e) {
@@ -157,7 +158,7 @@ async function recoverRealAccount(resolution) {
         signWithIrkVersioned,
         addProfile: (profile) => addProfile(profile),
         dispatchInitialView,
-        setUsername: (u) => localStorage.setItem("flagship.username", u),
+        setUsername: (u) => profileSet("username", u),
       },
     });
     if (result.outcome === "takeover") {

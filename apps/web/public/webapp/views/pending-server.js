@@ -18,6 +18,7 @@ import { toast } from "../lib/toast.js";
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { releaseServerName } from "../lib/releaseServer.js";
+import { get as profileGet, set as profileSet } from "../lib/profilesStore.js";
 
 registerView("view-pending-server", { tab: "home" });
 
@@ -86,9 +87,9 @@ async function runCancel() {
       }
     }
     // Drop from local order list so home / activity stop showing it.
-    const list = JSON.parse(localStorage.getItem("flagship.pendingOrders") || "[]");
-    localStorage.setItem(
-      "flagship.pendingOrders",
+    const list = JSON.parse(profileGet("pendingOrders") || "[]");
+    profileSet(
+      "pendingOrders",
       JSON.stringify(list.filter((o) => o.serial !== currentOrder.serial)),
     );
     toast(`order cancelled (${escapeHtml(currentOrder.name)})`);

@@ -43,6 +43,7 @@ import {
   NO_SCREENSHOT_WARNING,
 } from "../lib/crossDevicePairing.js";
 import { makeIncomingRelay } from "../lib/pairingRelay.js";
+import { set as profileSet } from "../lib/profilesStore.js";
 
 registerView("view-join");
 
@@ -160,7 +161,7 @@ async function startJoin() {
       verifyEd25519: verifyWithEd25519Pub,
       registerPush: makeRegisterPush(device.seed),
       addProfile: (p) => addProfile(p, { setActive: true }),
-      setUsername: (u) => localStorage.setItem("flagship.username", u),
+      setUsername: (u) => profileSet("username", u),
       bytesToHex,
       hexToBytes,
     });

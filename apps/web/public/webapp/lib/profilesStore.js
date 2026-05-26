@@ -1,4 +1,4 @@
-// P12 — per-profile localStorage namespace.
+// P12 — per-profile localStorage namespace (POST-CUT-OVER).
 //
 // The webapp owns multiple clouds per browser (personal + family + work — see
 // lib/profiles.js). Until now every per-user piece of state was stored under a
@@ -31,25 +31,53 @@
 // the same source-of-truth pointer. Switching the active profile here flips
 // BOTH records so legacy callsites and the new store stay in lockstep.
 //
-// Backward-compat migration runs once on boot — see {@link migrateLegacy}.
-// Legacy top-level keys are NEVER deleted by the migration; we copy values
-// into the new store and leave the originals in place so any not-yet-
-// migrated callsite (or external recovery flow) keeps working. A
-// `flagship.profiles.migrated.v2` sentinel guards re-runs.
+// HARD CUT-OVER (P12 follow-up):
+//   - `set(...)` NO LONGER writes the legacy flat key by default. All
+//     unmigrated webapp read-sites have been refactored to go through
+//     this store, so the mirror is no longer needed for correctness.
+//     The `mirror` option is retained for completeness but now defaults
+//     to `false`.
+//   - A slot can opt into legacy-mirror-by-default by marking
+//     `deviceWideOrPreProfile: true` in {@link SLOT_FIELDS}. That's the
+//     escape hatch for call-sites that run BEFORE any profile is active
+//     (e.g. the first-run wizard's persisted progress) and so legitimately
+//     can't be addressed through the per-profile namespace. Marked slots
+//     still write the flat key on `set(...)` calls (under the active
+//     profile AND when there's no active profile yet).
+//   - {@link cleanupLegacyKeys} runs once per boot after a successful
+//     {@link migrateLegacy} to delete every legacy flat key for which the
+//     new store already holds a value. Idempotent: never deletes a slot
+//     that's only in the legacy key (you'd lose data).
 
 export const STORE_KEY = "flagship.profiles.v2";
 export const MIGRATED_KEY = "flagship.profiles.migrated.v2";
 export const LEGACY_ACTIVE_KEY = "flagship.profiles.v1";
+/** Sentinel set by {@link cleanupLegacyKeys} once a sweep completes for the
+ *  active cloud. Stored per active cloud so a profile switch + later sweep
+ *  can re-evaluate. */
+export const LEGACY_CLEANUP_KEY = "flagship.profiles.legacy.cleaned.v2";
 
 /** Every per-profile slot field, paired with its legacy flat localStorage
  *  key. The migration walks this list to copy legacy values into the new
- *  store; the per-key read/write helpers ({@link get}, {@link set}) optionally
- *  mirror back to the legacy key so callsites we haven't refactored yet keep
- *  working. Order is stable; do not reorder without testing migration. */
+ *  store. Order is stable; do not reorder without testing migration.
+ *
+ *  `deviceWideOrPreProfile`: this slot is legitimately accessed BEFORE any
+ *  profile is active (e.g. the wizard's persisted step state, which runs
+ *  pre-username). Marked slots STILL write the legacy flat key on `set(...)`
+ *  by default, and are excluded from the legacy-key cleanup sweep. */
 export const SLOT_FIELDS = Object.freeze([
-  { slot: "username",                legacy: "flagship.username" },
+  // Username is read pre-profile by keyfileBackup (file import landing) and
+  // by state.js's `ensureUsername` flow — both can fire before the active
+  // cloud is established. We keep the legacy flat key mirrored for those.
+  { slot: "username",                legacy: "flagship.username",                       deviceWideOrPreProfile: true },
   { slot: "accountId",               legacy: "flagship.accountId" },
-  { slot: "currentIrkVersion",       legacy: "flagship.irk.version" },
+  // `currentIrkVersion` is owned by keystore.js which uses its OWN
+  // per-profile suffix scheme (`flagship.irk.version` for the default
+  // profile, `flagship.irk.version.<profileId>` for others). The legacy
+  // flat key IS the default-profile key for keystore — sweeping it would
+  // make keystore.currentIrkVersion() return 1 (the default) on next boot.
+  // Mark as device-wide so the cleanup sweep leaves it alone.
+  { slot: "currentIrkVersion",       legacy: "flagship.irk.version",                    deviceWideOrPreProfile: true },
   { slot: "recoveryWarn",            legacy: "flagship.recovery.warn.v1" },
   { slot: "recoveryBannerDismissed", legacy: "flagship.recovery.banner.dismissed.v1" },
   { slot: "peerBackupChoice",        legacy: "flagship.peerBackup.choice.v1" },
@@ -59,10 +87,22 @@ export const SLOT_FIELDS = Object.freeze([
   { slot: "sessionV1",               legacy: "flagship.session.v1" },
   { slot: "podBaseUrl",              legacy: "flagship.podBaseUrl" },
   { slot: "pendingOrders",           legacy: "flagship.pendingOrders" },
-  { slot: "wizardState",             legacy: "flagship.wizard.state.v1" },
+  // Wizard progress can persist BEFORE a username exists (step 1 is
+  // device-key generation, step 2 is open-account). Keep the legacy flat
+  // key live so the wizard's pre-profile state never drops.
+  { slot: "wizardState",             legacy: "flagship.wizard.state.v1",               deviceWideOrPreProfile: true },
 ]);
 
 const SLOT_TO_LEGACY = new Map(SLOT_FIELDS.map((f) => [f.slot, f.legacy]));
+const DEVICE_WIDE_SLOTS = new Set(
+  SLOT_FIELDS.filter((f) => f.deviceWideOrPreProfile).map((f) => f.slot),
+);
+
+/** True iff this slot is legitimately accessed before a profile is active
+ *  (and so should still mirror to / read from the legacy flat key). */
+export function isDeviceWideOrPreProfile(slot) {
+  return DEVICE_WIDE_SLOTS.has(slot);
+}
 
 function isStorage(s) {
   return s && typeof s.getItem === "function" && typeof s.setItem === "function";
@@ -175,17 +215,26 @@ export function setActiveCloudName(cloudName, storage = defaultStorage()) {
 }
 
 /** Read a single per-profile slot value. Resolves to the active profile's
- *  slot when `cloudName` is omitted. When NO profile is active anywhere yet
- *  (first-run pre-username) we fall through to the legacy flat key so the
- *  bootstrap flow can keep reading what it just wrote — but once a cloud is
- *  active the store is authoritative (an absent slot is "not set", never a
- *  silent fallthrough to another profile's mirrored legacy value). */
+ *  slot when `cloudName` is omitted.
+ *
+ *  Read priority:
+ *    1. The per-profile slot under the active (or specified) cloud.
+ *    2. When NO profile is active anywhere yet (first-run pre-username) the
+ *       legacy flat key (so the bootstrap flow can keep reading what it
+ *       just wrote — primarily `username` + `wizardState`).
+ *    3. For slots marked {@link DEVICE_WIDE_SLOTS} we fall through to the
+ *       legacy flat key even when a cloud IS active, since those slots
+ *       are legitimately accessed device-wide (e.g. the wizard state).
+ *
+ *  Once a cloud is active and the slot is non-device-wide, an absent slot
+ *  is "not set" — never a silent fallthrough to another profile's mirrored
+ *  legacy value. */
 export function get(slot, opts = {}) {
   const storage = opts.storage ?? defaultStorage();
   if (!isStorage(storage)) return null;
   const cloudName = opts.cloudName ?? getActiveCloudName(storage);
+  const legacyKey = SLOT_TO_LEGACY.get(slot);
   if (!cloudName) {
-    const legacyKey = SLOT_TO_LEGACY.get(slot);
     return legacyKey ? storage.getItem(legacyKey) : null;
   }
   const state = readState(storage);
@@ -194,22 +243,41 @@ export function get(slot, opts = {}) {
     const v = profile[slot];
     return v == null ? null : String(v);
   }
+  // Device-wide-or-pre-profile slots can legitimately come from the legacy
+  // flat key (e.g. wizardState written before any profile was active).
+  if (DEVICE_WIDE_SLOTS.has(slot) && legacyKey) {
+    return storage.getItem(legacyKey);
+  }
   return null;
 }
 
 /** Persist a per-profile slot value under the active (or specified) profile.
- *  By default also mirrors the value back to the legacy flat localStorage
- *  key so unmigrated read-sites keep working. Set `opts.mirror = false` to
- *  skip the mirror (used by tests that want to assert pure store writes). */
+ *
+ *  Post-cut-over: by DEFAULT this does NOT mirror to the legacy flat key.
+ *  All webapp read-sites have been refactored to go through {@link get}.
+ *
+ *  Two exceptions still write the legacy flat key:
+ *    - The slot is marked `deviceWideOrPreProfile` (see {@link SLOT_FIELDS}).
+ *      These are written to the legacy key as well as the per-profile slot.
+ *    - The caller passes `opts.mirror === true` explicitly (e.g. a test).
+ *
+ *  When there's no active profile, only the legacy flat key is written, and
+ *  only when the slot is device-wide-or-pre-profile (otherwise the write is
+ *  a no-op — there's no profile to hold it). */
 export function set(slot, value, opts = {}) {
   const storage = opts.storage ?? defaultStorage();
   if (!isStorage(storage)) return;
   const cloudName = opts.cloudName ?? getActiveCloudName(storage);
+  const legacyKey = SLOT_TO_LEGACY.get(slot);
+  const isDeviceWide = DEVICE_WIDE_SLOTS.has(slot);
+  const shouldMirror = opts.mirror === true || isDeviceWide;
+
   if (!cloudName) {
-    // No active profile — fall back to mirroring to the legacy key alone so
-    // first-run flows (bootstrap pre-username) don't silently drop the write.
-    const legacyKey = SLOT_TO_LEGACY.get(slot);
-    if (legacyKey && opts.mirror !== false) {
+    // No active profile. Non-device-wide writes silently drop here — by
+    // design, the caller shouldn't be writing per-profile state without an
+    // active profile. Device-wide slots get the legacy mirror so the
+    // bootstrap flow (e.g. wizardState) can keep working pre-username.
+    if (legacyKey && shouldMirror) {
       if (value == null) storage.removeItem(legacyKey);
       else storage.setItem(legacyKey, String(value));
     }
@@ -223,8 +291,7 @@ export function set(slot, value, opts = {}) {
     state.profiles[cloudName][slot] = String(value);
   }
   writeState(state, storage);
-  const legacyKey = SLOT_TO_LEGACY.get(slot);
-  if (legacyKey && opts.mirror !== false) {
+  if (legacyKey && shouldMirror) {
     if (value == null) storage.removeItem(legacyKey);
     else storage.setItem(legacyKey, String(value));
   }
@@ -311,8 +378,55 @@ export function migrateLegacy(storage = defaultStorage()) {
   };
 }
 
+/** Sweep legacy flat keys that have been fully superseded by the per-profile
+ *  store. Idempotent + DEFENSIVE: we only remove a legacy key when BOTH
+ *
+ *    1. the migration sentinel is set (so we know the values were copied
+ *       forward), AND
+ *    2. the active profile actually holds the slot in the new store
+ *       (so we never blow away a value that only exists in the legacy key).
+ *
+ *  Slots marked `deviceWideOrPreProfile` are NEVER swept — their legacy flat
+ *  key is the source of truth for pre-profile reads (e.g. wizardState).
+ *
+ *  Stamps {@link LEGACY_CLEANUP_KEY} on completion so the sweep doesn't run
+ *  redundantly on every boot. A profile switch clears the stamp via the
+ *  store re-read path (we re-stamp on each sweep). */
+export function cleanupLegacyKeys(opts = {}) {
+  const storage = opts.storage ?? defaultStorage();
+  if (!isStorage(storage)) return { ran: false, reason: "no-storage", removed: [] };
+  if (storage.getItem(MIGRATED_KEY) !== "1") {
+    return { ran: false, reason: "not-migrated", removed: [] };
+  }
+  const cloudName = opts.cloudName ?? getActiveCloudName(storage);
+  if (!cloudName) {
+    return { ran: false, reason: "no-active-profile", removed: [] };
+  }
+  const stamp = storage.getItem(LEGACY_CLEANUP_KEY);
+  if (stamp === cloudName) {
+    return { ran: false, reason: "already-cleaned", removed: [] };
+  }
+  const state = readState(storage);
+  const profile = state.profiles[cloudName] ?? {};
+  const removed = [];
+  for (const { slot, legacy, deviceWideOrPreProfile } of SLOT_FIELDS) {
+    if (deviceWideOrPreProfile) continue; // legacy key stays — legitimate device-wide.
+    // Only sweep when the slot is genuinely populated in the new store.
+    // Idempotency: never delete a slot we don't already hold.
+    if (!Object.prototype.hasOwnProperty.call(profile, slot)) continue;
+    if (profile[slot] == null) continue;
+    if (storage.getItem(legacy) != null) {
+      storage.removeItem(legacy);
+      removed.push(slot);
+    }
+  }
+  storage.setItem(LEGACY_CLEANUP_KEY, cloudName);
+  return { ran: true, removed, cloudName };
+}
+
 /** Test-only helper: re-arm the migration (clears the sentinel). */
 export function _resetMigrationSentinelForTests(storage = defaultStorage()) {
   if (!isStorage(storage)) return;
   storage.removeItem(MIGRATED_KEY);
+  storage.removeItem(LEGACY_CLEANUP_KEY);
 }

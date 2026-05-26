@@ -55,7 +55,10 @@ import { initAddDeviceView } from "./views/add-device.js";
 import { initJoinView, enterJoin } from "./views/join.js";
 import { initProfilesView, enterProfiles, renderProfiles, setProfileSwitchHandler } from "./views/profiles.js";
 import { joinLinkFromLocation } from "./lib/crossDevicePairing.js";
-import { migrateLegacy as migrateProfilesStore } from "./lib/profilesStore.js";
+import {
+  migrateLegacy as migrateProfilesStore,
+  cleanupLegacyKeys as cleanupProfilesLegacyKeys,
+} from "./lib/profilesStore.js";
 import {
   companionPayloadFromLocation,
   redeemCompanionAndPersist,
@@ -220,6 +223,11 @@ async function boot() {
   // P12 — auto-migrate legacy single-profile localStorage into the new
   // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
   try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }
+  // P12 hard cut-over — sweep legacy flat keys that the per-profile store
+  // has fully superseded. Safe to run every boot; idempotent (gated by
+  // `flagship.profiles.legacy.cleaned.v2`). Excludes device-wide-or-pre-
+  // profile slots (wizardState, username) which keep their legacy mirror.
+  try { cleanupProfilesLegacyKeys(); } catch { /* swallow — best-effort */ }
   initBootstrapView();
   initUnlockView();
   initHomeView({

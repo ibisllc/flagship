@@ -4,6 +4,7 @@ import { dispatchInitialView } from "../lib/deepLink.js";
 import { unlockSession, lockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { stopRenewals } from "./home.js";
+import { remove as profileRemove } from "../lib/profilesStore.js";
 
 registerView("view-unlock");
 
@@ -29,10 +30,12 @@ export async function handleReset() {
   });
   if (!ok) return;
   await resetDevice();
-  localStorage.removeItem("flagship.sessionId");
-  localStorage.removeItem("flagship.username");
-  localStorage.removeItem("flagship.sessionToken");
-  localStorage.removeItem("flagship.podBaseUrl");
+  profileRemove("sessionId");
+  // `username` is device-wide-or-pre-profile, so profileRemove also drops
+  // the legacy flat key (which keystore.js still reads at boot).
+  profileRemove("username");
+  profileRemove("sessionToken");
+  profileRemove("podBaseUrl");
   lockSession();
   stopRenewals();
   setSubtitle("device reset");

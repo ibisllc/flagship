@@ -130,7 +130,9 @@ async function runMint() {
     const { getPodBaseUrl } = await import("../lib/api.js");
     const { get: profileGet } = await import("../lib/profilesStore.js");
     const podBaseUrl = getPodBaseUrl();
-    const username = profileGet("username") ?? localStorage.getItem("flagship.username") ?? "";
+    // `username` is device-wide-or-pre-profile, so the store's `get(...)`
+    // already falls through to the legacy flat key when no profile is active.
+    const username = profileGet("username") ?? "";
     if (!podBaseUrl) throw new Error("missing podBaseUrl — re-pair your device first");
     if (!username) throw new Error("missing username — finish first-run wizard first");
 

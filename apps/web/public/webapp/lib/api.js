@@ -8,29 +8,25 @@
 //   2. The user's own pod (`<server>.<user>.flagship.services`) —
 //      after pairing, the webapp talks to its own daemon for /api/screens/*.
 //
-// `screensFetch` infers the target from `localStorage.flagship.podBaseUrl`
-// (set by the pairing flow). Falls back to same-origin for dev/desk
-// pairings where the webapp itself runs on the pod.
+// `screensFetch` reads the target through the per-profile profilesStore
+// `podBaseUrl` slot. Falls back to same-origin for dev/desk pairings.
 
-const POD_BASE_KEY = "flagship.podBaseUrl";
-const SESSION_TOKEN_KEY = "flagship.sessionToken";
+import { get as profileGet, set as profileSet } from "./profilesStore.js";
 
 export function setPodBaseUrl(url) {
-  if (url) localStorage.setItem(POD_BASE_KEY, url);
-  else localStorage.removeItem(POD_BASE_KEY);
+  profileSet("podBaseUrl", url || null);
 }
 
 export function getPodBaseUrl() {
-  return localStorage.getItem(POD_BASE_KEY) || "";
+  return profileGet("podBaseUrl") || "";
 }
 
 export function setSessionToken(tok) {
-  if (tok) localStorage.setItem(SESSION_TOKEN_KEY, tok);
-  else localStorage.removeItem(SESSION_TOKEN_KEY);
+  profileSet("sessionToken", tok || null);
 }
 
 export function getSessionToken() {
-  return localStorage.getItem(SESSION_TOKEN_KEY) || "";
+  return profileGet("sessionToken") || "";
 }
 
 export class ScreensError extends Error {

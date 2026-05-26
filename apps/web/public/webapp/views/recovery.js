@@ -29,6 +29,7 @@ import {
   importErrorMessage,
 } from "../lib/keyfileBackup.js";
 import { escapeHtml } from "../lib/util.js";
+import { get as profileGet } from "../lib/profilesStore.js";
 
 registerView("view-recovery");
 
@@ -299,11 +300,11 @@ export async function runKeyfileExportCeremony() {
     return false;
   }
   const username =
-    session.username || localStorage.getItem("flagship.username") || "";
+    session.username || profileGet("username") || "";
   const ceremony = await openExportCeremony();
   if (!ceremony) return false;
   try {
-    const accountId = localStorage.getItem("flagship.accountId") || undefined;
+    const accountId = profileGet("accountId") || undefined;
     await createBackupFile({
       seed: session.umk,
       username: username || "account",

@@ -7,6 +7,7 @@ import { hasBarcodeDetector, parseQrPayload, scanWithCamera } from "../qrScanner
 import { $, registerView, show } from "../lib/router.js";
 import { getSession, ensureUsername } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
+import { set as profileSet } from "../lib/profilesStore.js";
 
 registerView("view-pair");
 
@@ -90,7 +91,7 @@ async function confirmPairing(qrText) {
       const body = await r.text();
       throw new Error(`status ${r.status}: ${body}`);
     }
-    localStorage.setItem("flagship.sessionId", parsed.sessionId);
+    profileSet("sessionId", parsed.sessionId);
     toast("paired");
     const { renderHome } = await import("./home.js");
     await renderHome();

@@ -27,12 +27,10 @@ export async function unlockSession(seed, username) {
   _session.umk = seed;
   _session.irk = await deriveIrkFromSeed(seed);
   // Per-profile resolution: prefer the explicit arg, then the active
-  // profile's `username` slot, then the legacy flat key (defensive
-  // fallback for first-runs that haven't migrated yet).
-  _session.username = username
-    ?? storeGet("username")
-    ?? localStorage.getItem("flagship.username")
-    ?? "";
+  // profile's `username` slot. `username` is marked
+  // deviceWideOrPreProfile in profilesStore.js, so this read also picks
+  // up the legacy flat key for pre-profile first-runs.
+  _session.username = username ?? storeGet("username") ?? "";
 }
 
 export function lockSession() {
@@ -68,14 +66,14 @@ export async function ensureUsername() {
   });
   if (!handle) throw new Error("username required");
   // Persist under the active profile (auto-creating it when this is a
-  // first-run with no profile yet) AND mirror to the legacy flat key
-  // for any unmigrated read-site.
+  // first-run with no profile yet). `username` is device-wide-or-pre-profile,
+  // so the store also writes the legacy flat key — keystore.js and any
+  // remaining boot-only reads stay aligned.
   try {
     ensureProfile(handle);
     setActiveCloudName(handle);
     storeSet("username", handle);
-  } catch { /* fall through to legacy write */ }
-  localStorage.setItem("flagship.username", handle);
+  } catch { /* swallow — storage disabled */ }
   _session.username = handle;
   return handle;
 }

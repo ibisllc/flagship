@@ -13,6 +13,7 @@
 // unit-testable in a DOM-less environment.
 
 import { wrapUmkToKeyfile, unwrapUmkFromKeyfile, KeyfileError } from "./keyfile.js";
+import { set as profileSet } from "./profilesStore.js";
 
 /** Approved verbatim copy — keep in sync with the iOS strings. */
 export const KEYFILE_COPY = {
@@ -139,8 +140,13 @@ export async function restoreFromBackupFile({
     await keystore.resetDevice();
   }
   await keystore.bootstrapFromExistingSeed(localPassphrase, seed);
-  if (typeof globalThis.localStorage !== "undefined" && meta.username) {
-    globalThis.localStorage.setItem("flagship.username", meta.username);
+  if (meta.username) {
+    // `username` is marked device-wide-or-pre-profile, so profileSet will
+    // also write the legacy flat key for any boot-only consumer (keystore).
+    // This runs before the caller activates a profile, so the write lands
+    // on the legacy key only — the eventual unlockSession + ensureUsername
+    // chain promotes it to a per-profile slot once a cloud is active.
+    try { profileSet("username", meta.username); } catch { /* swallow */ }
   }
   await unlockSession(seed, meta.username);
   return { username: meta.username, ...(meta.accountId ? { accountId: meta.accountId } : {}) };

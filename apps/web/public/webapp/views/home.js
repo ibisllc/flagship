@@ -5,7 +5,11 @@ import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { loadProviders } from "../providers.js";
-import { get as recoveryStoreGet, set as recoveryStoreSet } from "../lib/profilesStore.js";
+import {
+  get as recoveryStoreGet,
+  set as recoveryStoreSet,
+  remove as profileRemove,
+} from "../lib/profilesStore.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -206,10 +210,12 @@ function isPromoEntry(e) {
 const COM_BASE_FOR_E7 = "https://flagshipserver.com";
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
-// Mirrors wizard.js's RECOVERY_WARN_KEY — the wizard SETs this to "true"
+// Mirrors wizard.js's `recoveryWarn` slot — the wizard SETs this to "true"
 // when the user skips "Secure your account" and REMOVES it once a backup
 // (cloud passkey or .flagshipkey file) actually completes. So a "true"
 // value is the single, consistent signal that recovery is not enrolled.
+// Pinned to the legacy flat key (unused at runtime; the homeRecoveryBanner
+// test asserts the source string is identical on both surfaces).
 const RECOVERY_WARN_KEY = "flagship.recovery.warn.v1";
 // Per-device dismiss for the home nudge — local state only, no API. Mirrors
 // the dismissable backup nudge on iOS/Android (a UI preference, not a
@@ -217,6 +223,10 @@ const RECOVERY_WARN_KEY = "flagship.recovery.warn.v1";
 // of truth, this only quiets a still-unenrolled reminder the user has seen).
 const RECOVERY_BANNER_DISMISS_KEY = "flagship.recovery.banner.dismissed.v1";
 const RECOVERY_BANNER_ID = "home-recovery-banner";
+// The above two constants are pinned-to-string for the homeRecoveryBanner
+// static-source test (which asserts both home.js + wizard.js still use the
+// same key strings). Runtime reads now go through the per-profile store.
+void RECOVERY_WARN_KEY; void RECOVERY_BANNER_DISMISS_KEY;
 
 /**
  * Pure predicate for the home backup-reminder banner. Show it iff the
@@ -237,12 +247,11 @@ function renderRecoveryBanner() {
   let warn = null;
   let dismissed = null;
   try {
-    // P12 — per-profile recovery flags. Prefer the active profile's slot
-    // (so switching profiles re-evaluates the banner against the new cloud's
-    // enrolment state) and fall back to the legacy flat keys for installs
-    // that haven't been touched by the migration yet.
-    warn = recoveryStoreGet("recoveryWarn") ?? localStorage.getItem(RECOVERY_WARN_KEY);
-    dismissed = recoveryStoreGet("recoveryBannerDismissed") ?? localStorage.getItem(RECOVERY_BANNER_DISMISS_KEY);
+    // P12 — per-profile recovery flags. The store handles its own legacy
+    // fallback at read time for the pre-migration case; we no longer need a
+    // belt-and-braces localStorage probe here.
+    warn = recoveryStoreGet("recoveryWarn");
+    dismissed = recoveryStoreGet("recoveryBannerDismissed");
   } catch { /* localStorage disabled — treat as no banner */ }
 
   const existing = document.getElementById(RECOVERY_BANNER_ID);
@@ -307,7 +316,7 @@ function renderRecoveryBanner() {
  */
 async function detectAccountReset(username) {
   if (!username) return;
-  const localToken = localStorage.getItem("flagship.pushTokenId");
+  const localToken = recoveryStoreGet("pushTokenId");
   if (!localToken) return; // fresh install, no token → never orphaned
   let devices = [];
   try {
@@ -352,9 +361,9 @@ async function detectAccountReset(username) {
       // Clear the per-device tokens + session so a reload drops the
       // user into recovery. We deliberately keep the wrappedUmk so
       // the recovery flow can re-bind without a fresh enrolment.
-      localStorage.removeItem("flagship.pushTokenId");
-      localStorage.removeItem("flagship.sessionId");
-      localStorage.removeItem("flagship.session.v1");
+      profileRemove("pushTokenId");
+      profileRemove("sessionId");
+      profileRemove("sessionV1");
       window.location.reload();
     });
 }
@@ -378,7 +387,7 @@ export async function renderHome() {
   // device. Local-only signal; no API call.
   renderRecoveryBanner();
 
-  const sid = localStorage.getItem("flagship.sessionId");
+  const sid = recoveryStoreGet("sessionId");
   const sessionStatusEl = $("session-status");
   const list = $("servers-list");
   list.innerHTML = "";

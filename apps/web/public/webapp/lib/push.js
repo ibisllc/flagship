@@ -12,6 +12,7 @@
 
 import { bytesToHex, hexToBytes, signWithIrk } from "../keystore.js";
 import { getSession } from "./state.js";
+import { get as profileGet, set as profileSet, remove as profileRemove } from "./profilesStore.js";
 
 const APEX = "https://flagshipserver.com";
 
@@ -101,7 +102,7 @@ export async function unsubscribeFromWebPush() {
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   if (sub) await sub.unsubscribe();
-  const tokenId = localStorage.getItem("flagship.pushTokenId");
+  const tokenId = profileGet("pushTokenId");
   if (tokenId) {
     const session = getSession();
     if (session.umk) {
@@ -117,7 +118,7 @@ export async function unsubscribeFromWebPush() {
         }),
       }).catch(() => { /* best-effort */ });
     }
-    localStorage.removeItem("flagship.pushTokenId");
+    profileRemove("pushTokenId");
   }
 }
 
@@ -160,7 +161,7 @@ async function registerWithCom({ session, providerToken }) {
   }
   const body = await r.json();
   if (typeof body.tokenId === "string") {
-    localStorage.setItem("flagship.pushTokenId", body.tokenId);
+    profileSet("pushTokenId", body.tokenId);
   }
   return { tokenId: body.tokenId };
 }

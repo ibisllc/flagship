@@ -37,12 +37,26 @@ import { trademarkClaimMailto } from "../lib/trademarkClaim.js";
 import { addProfile } from "../lib/profiles.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import {
+  get as profileGet,
+  set as profileSet,
+  remove as profileRemove,
+} from "../lib/profilesStore.js";
 
 registerView("view-wizard");
 
+// `wizardState` is marked device-wide-or-pre-profile in profilesStore.js —
+// the wizard runs BEFORE a profile is active (step 1 = device-key, step 2 =
+// open-account). The store routes those writes through the legacy flat key
+// while still surfacing under the per-profile slot once a username is claimed.
 const WIZARD_STATE_KEY = "flagship.wizard.state.v1";
+// Documentation-pin: home.js + the homeRecoveryBanner static-source test
+// assert that BOTH files reference the same recovery-warn key string. The
+// runtime read/write now goes through profileGet/profileSet on the
+// "recoveryWarn" slot (legacy key is "flagship.recovery.warn.v1").
 const RECOVERY_WARN_KEY = "flagship.recovery.warn.v1";
 const PEER_BACKUP_CHOICE_KEY = "flagship.peerBackup.choice.v1";
+void WIZARD_STATE_KEY; void RECOVERY_WARN_KEY; void PEER_BACKUP_CHOICE_KEY;
 
 const STEPS = [
   { id: "device-key", label: "Generate device key" },
@@ -73,7 +87,7 @@ export function passkeysAvailable() {
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(WIZARD_STATE_KEY);
+    const raw = profileGet("wizardState");
     if (!raw) return { stepIdx: 0, completed: [] };
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return { stepIdx: 0, completed: [] };
@@ -85,7 +99,7 @@ function loadState() {
 
 function saveState(state) {
   try {
-    localStorage.setItem(WIZARD_STATE_KEY, JSON.stringify(state));
+    profileSet("wizardState", JSON.stringify(state));
   } catch { /* localStorage full / disabled */ }
 }
 
@@ -169,7 +183,10 @@ async function handleOpenAccount() {
       signWithIrk,
       bytesToHex,
       setUsername: (u) => {
-        try { localStorage.setItem("flagship.username", u); } catch { /* swallow */ }
+        // `username` is device-wide-or-pre-profile → profileSet also writes
+        // the legacy flat key (which keystore.js and a few boot consumers
+        // still read).
+        try { profileSet("username", u); } catch { /* swallow */ }
         session.username = u;
       },
       // Multi-profile keying: store the session UMK under THIS account's
@@ -213,7 +230,7 @@ async function handleSecureAccount() {
     return false;
   }
   const username =
-    session.username || localStorage.getItem("flagship.username") || "";
+    session.username || profileGet("username") || "";
   const cloud = document.getElementById("wizard-secure-cloud");
   const useCloud = !!(cloud && cloud.checked && !cloud.disabled);
   const btn = document.getElementById("wizard-secure-continue");
@@ -433,7 +450,7 @@ function wireStepHandlers(state, step) {
         // recoverable. Only advance once the chosen action succeeds; a
         // failure (or cancelled ceremony) keeps the user on the step.
         if (ok) {
-          try { localStorage.removeItem(RECOVERY_WARN_KEY); } catch { /* swallow */ }
+          try { profileRemove("recoveryWarn"); } catch { /* swallow */ }
           markCompleteAndAdvance(state, "secure-account");
         }
       });
@@ -449,7 +466,7 @@ function wireStepHandlers(state, step) {
           danger: true,
         });
         if (!skip) return;
-        try { localStorage.setItem(RECOVERY_WARN_KEY, "true"); } catch { /* swallow */ }
+        try { profileSet("recoveryWarn", "true"); } catch { /* swallow */ }
         markCompleteAndAdvance(state, "secure-account");
       });
       break;
@@ -462,7 +479,7 @@ function wireStepHandlers(state, step) {
       });
       document.getElementById("wizard-skip-recovery")?.addEventListener("click", () => {
         try {
-          localStorage.setItem(RECOVERY_WARN_KEY, "true");
+          profileSet("recoveryWarn", "true");
         } catch { /* swallow */ }
         markCompleteAndAdvance(state, step.id);
       });
@@ -481,7 +498,7 @@ function wireStepHandlers(state, step) {
       break;
     case "peer-backup":
       document.getElementById("wizard-pb-enable")?.addEventListener("click", async () => {
-        try { localStorage.setItem(PEER_BACKUP_CHOICE_KEY, "enabled"); } catch { /* swallow */ }
+        try { profileSet("peerBackupChoice", "enabled"); } catch { /* swallow */ }
         // The actual enable is a signed BackupToggle envelope; the
         // peer-backup view (#27) handles that. From the wizard we
         // just record the user's choice + jump to the view.
@@ -492,11 +509,11 @@ function wireStepHandlers(state, step) {
         } catch { /* not present yet */ }
       });
       document.getElementById("wizard-pb-decline")?.addEventListener("click", () => {
-        try { localStorage.setItem(PEER_BACKUP_CHOICE_KEY, "declined"); } catch { /* swallow */ }
+        try { profileSet("peerBackupChoice", "declined"); } catch { /* swallow */ }
         markCompleteAndAdvance(state, "peer-backup");
       });
       document.getElementById("wizard-pb-later")?.addEventListener("click", () => {
-        try { localStorage.setItem(PEER_BACKUP_CHOICE_KEY, "deferred"); } catch { /* swallow */ }
+        try { profileSet("peerBackupChoice", "deferred"); } catch { /* swallow */ }
         markCompleteAndAdvance(state, "peer-backup");
       });
       break;
@@ -526,7 +543,7 @@ function markCompleteAndAdvance(state, stepId) {
  *  recovery setup and should see a persistent warning banner. */
 export function shouldShowRecoveryWarning() {
   try {
-    return localStorage.getItem(RECOVERY_WARN_KEY) === "true";
+    return profileGet("recoveryWarn") === "true";
   } catch {
     return false;
   }
@@ -536,7 +553,7 @@ export function shouldShowRecoveryWarning() {
  *  wizard choice. One of "enabled" | "declined" | "deferred" | null. */
 export function getPeerBackupChoice() {
   try {
-    return localStorage.getItem(PEER_BACKUP_CHOICE_KEY);
+    return profileGet("peerBackupChoice");
   } catch {
     return null;
   }

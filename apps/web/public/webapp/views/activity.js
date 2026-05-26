@@ -8,6 +8,7 @@
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { get as profileGet } from "../lib/profilesStore.js";
 
 registerView("view-activity", { tab: "activity" });
 
@@ -26,7 +27,7 @@ async function fanOut() {
   // by the user's username.
   const username = (() => {
     try {
-      const raw = localStorage.getItem("flagship.session.v1");
+      const raw = profileGet("sessionV1");
       return raw ? JSON.parse(raw).username ?? "" : "";
     } catch { return ""; }
   })();

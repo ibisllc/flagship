@@ -162,8 +162,10 @@ describe('"Secure your account" backup nudge step', () => {
     );
     expect(VIEW_JS).toContain('okLabel: "Skip anyway"');
     expect(VIEW_JS).toContain('cancelLabel: "Back"');
-    // Skipping pins the persistent home-screen recovery warning.
-    expect(VIEW_JS).toMatch(/localStorage\.setItem\(RECOVERY_WARN_KEY, "true"\)/);
+    // Skipping pins the persistent home-screen recovery warning. Post P12
+    // hard cut-over the write goes through the per-profile profilesStore;
+    // the home-screen banner reads from the same slot.
+    expect(VIEW_JS).toMatch(/profileSet\(["']recoveryWarn["'],\s*["']true["']\)/);
   });
 
   it("the recovery view exports the reusable keyfile export ceremony", () => {
@@ -239,8 +241,12 @@ describe("peer-backup opt-in step (#95)", () => {
     expect(VIEW_JS).toMatch(/wizard-pb-later/);
   });
 
-  it("persists the user's choice to localStorage", () => {
-    expect(VIEW_JS).toMatch(/localStorage\.setItem\(PEER_BACKUP_CHOICE_KEY/);
+  it("persists the user's choice to the per-profile profilesStore (post P12 cut-over)", () => {
+    // Pre-cut-over this was a flat-key localStorage write. The store still
+    // owns the value; the slot is `peerBackupChoice`.
+    expect(VIEW_JS).toMatch(/profileSet\(["']peerBackupChoice["'],\s*["']enabled["']\)/);
+    expect(VIEW_JS).toMatch(/profileSet\(["']peerBackupChoice["'],\s*["']declined["']\)/);
+    expect(VIEW_JS).toMatch(/profileSet\(["']peerBackupChoice["'],\s*["']deferred["']\)/);
   });
 
   it("links to the no-KYC framing (sealed against keys only you hold)", () => {
