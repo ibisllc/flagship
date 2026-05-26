@@ -187,6 +187,15 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 (A1, A2, P1, P2, P3) ─▶ D1
 ```
 
+## Next session opens here
+
+See **`docs/next-session-handoff.md`** — focused pick-up-here list for the
+human path (deploys / Apple / Play / hardware / live exercises) plus the
+remaining agent-doable items (image-size follow-ups, v1 polish,
+NFC tier first wave). Updated 2026-05-26 end-of-day.
+
+---
+
 ## Agent-doable backlog: **EXHAUSTED** (2026-05-26)
 
 Every P-task and every smaller follow-up I could land without
