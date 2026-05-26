@@ -83,6 +83,12 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func appsList() async throws -> AppsListResponse { try await real.appsList() }
     func appDetail(serviceId: String) async throws -> AppDetailResponse { try await real.appDetail(serviceId: serviceId) }
     func marketplaceBrowse() async throws -> MarketplaceBrowseResponse { try await real.marketplaceBrowse() }
+    func marketplaceFetchListing(creator: String, slug: String) async throws -> MarketplaceListingDetail {
+        try await real.marketplaceFetchListing(creator: creator, slug: slug)
+    }
+    func installFromMarketplace(_ envelope: InstallServiceEnvelope) async throws -> InstallServiceResponse {
+        try await real.installFromMarketplace(envelope)
+    }
     func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse {
         try await real.vibeCodeStart(req)
     }

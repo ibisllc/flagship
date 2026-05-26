@@ -76,6 +76,8 @@ public struct CreateServerStubScreen: View {
                     .accessibilityIdentifier("cs-description-field")
                     recipeTtlPicker(c: c)
                     bootUnlockPicker(c: c)
+                    backupPolicyPicker(c: c)
+                    llmPreferencesField(c: c)
                 }
             }
 
@@ -185,6 +187,94 @@ public struct CreateServerStubScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("cs-bootunlock-\(mode.rawValue)")
+    }
+
+    // MARK: - Backup policy picker (draft-only metadata)
+    //
+    // Mirrors the webapp's `#cs-backup-policy` dropdown
+    // (apps/web/public/webapp/views/create-server.js). NOT carried in the
+    // signed InstallBlob — applied later via an owner-signed
+    // `set-backup-policy` order. Three tiers, default "phone-only" matching
+    // the webapp's `?? "phone-only"` default in buildDraft.js.
+    private func backupPolicyPicker(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text("Backup policy")
+                .font(.subheadline)
+                .foregroundStyle(c.text)
+            backupPolicyOption(
+                policy: .phoneOnly,
+                title: "Phone-side backups",
+                subtitle: "The default. Your phone pulls an encrypted backup of each app on a schedule. Restores need this device.",
+                c: c
+            )
+            backupPolicyOption(
+                policy: .peer,
+                title: "Peer-distributed backups",
+                subtitle: "Your encrypted shards are stored across other Flagship users (and theirs on you). Recoverable from any device with your account.",
+                c: c
+            )
+            backupPolicyOption(
+                policy: .none,
+                title: "No backups",
+                subtitle: "Power-user opt-out. If the box dies before you back up manually, the data is gone.",
+                c: c
+            )
+        }
+    }
+
+    private func backupPolicyOption(
+        policy: CreateServerDraftStore.BackupPolicy,
+        title: String,
+        subtitle: String,
+        c: FSColors
+    ) -> some View {
+        let selected = vm.backupPolicy == policy
+        return Button {
+            vm.backupPolicy = policy
+        } label: {
+            HStack(alignment: .top, spacing: FS.space.s3) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundColor(selected ? c.primary : c.textMuted)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.medium)).foregroundColor(c.text)
+                    Text(subtitle).font(.caption).foregroundColor(c.textMuted)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(FS.space.s3)
+            .background(
+                RoundedRectangle(cornerRadius: FS.radius.md)
+                    .stroke(selected ? c.primary : c.border, lineWidth: selected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("cs-backup-policy-\(policy.rawValue)")
+    }
+
+    // MARK: - LLM preferences (draft-only metadata)
+    //
+    // Free-text user note about LLM provider preference. Mirrors the webapp's
+    // `#cs-llm-pref` textarea. NOT signed into the InstallBlob; surfaces
+    // later as a hint when apps request a provider key.
+    private func llmPreferencesField(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text("LLM preferences")
+                .font(.subheadline)
+                .foregroundStyle(c.text)
+            TextEditor(text: $vm.llmPreferences)
+                .frame(minHeight: 88)
+                .padding(FS.space.s2)
+                .background(c.bg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: FS.radius.md)
+                        .stroke(c.border, lineWidth: 1)
+                )
+                .accessibilityIdentifier("cs-llm-pref-field")
+            Text("Optional. e.g. \"OpenAI gpt-4o for chat, local llama3 for code\". Apps that ask for an LLM provider can use this as a hint.")
+                .font(.caption)
+                .foregroundColor(c.textMuted)
+        }
     }
 
     // MARK: - Phase 2: Scan

@@ -1,4 +1,5 @@
 import SwiftUI
+import Flagship
 import FlagshipCore
 import FlagshipAPI
 
@@ -518,7 +519,16 @@ struct MarketplaceDetailContainer: View {
     let slug: String
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
     @State private var listing: MarketplaceListing?
+    @State private var installState: InstallState = .idle
+
+    enum InstallState: Equatable {
+        case idle
+        case installing
+        case succeeded(serviceId: String)
+        case failed(message: String)
+    }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -532,7 +542,7 @@ struct MarketplaceDetailContainer: View {
                         FSPill("\(l.installCount) deploys", kind: .online)
                         if l.requiresLlmKey { FSPill("Needs LLM key", kind: .provisioning) }
                     }
-                    FSPrimaryButton("Deploy", block: true, large: true) {}
+                    installControls(listing: l, c: c)
                     FSGhostButton("View source", block: true) {}
                 } else {
                     ServerCardSkeleton()
@@ -546,6 +556,78 @@ struct MarketplaceDetailContainer: View {
         .task {
             let resp = (try? await client.marketplaceBrowse())?.listings ?? []
             listing = resp.first(where: { $0.creator == creator && $0.slug == slug })
+        }
+    }
+
+    @ViewBuilder
+    private func installControls(listing l: MarketplaceListing, c: FSColors) -> some View {
+        switch installState {
+        case .idle:
+            FSPrimaryButton(
+                l.alreadyInstalled ? "Already installed" : "Deploy",
+                enabled: !l.alreadyInstalled,
+                block: true,
+                large: true
+            ) {
+                Task { await runInstall(creator: l.creator, slug: l.slug) }
+            }
+            .accessibilityIdentifier("marketplace-deploy-button")
+        case .installing:
+            FSPrimaryButton("Installing…", enabled: false, block: true, large: true) {}
+                .accessibilityIdentifier("marketplace-deploy-installing")
+            ProgressView().padding(.top, FS.space.s2)
+        case .succeeded(let serviceId):
+            FSCard {
+                HStack(spacing: FS.space.s2) {
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
+                    Text("Installed as \(serviceId).")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.text)
+                }
+            }
+            .accessibilityIdentifier("marketplace-deploy-success")
+        case .failed(let message):
+            ErrorCard(message: "Install failed: \(message)")
+                .accessibilityIdentifier("marketplace-deploy-error")
+            FSGhostButton("Try again", block: true) {
+                installState = .idle
+            }
+        }
+    }
+
+    private func runInstall(creator: String, slug: String) async {
+        installState = .installing
+        do {
+            // Fetch the full listing (manifestJson lives only on the
+            // single-listing endpoint; marketplaceBrowse returns metadata
+            // only). Mirrors the webapp's two-step fetch in
+            // `installFromMarketplace`.
+            let detail = try await client.marketplaceFetchListing(creator: creator, slug: slug)
+            guard let serverFqdn = app.currentPod?.fqdn else {
+                installState = .failed(message: "no pod paired yet")
+                return
+            }
+            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+            let request = InstallServiceRequest(
+                serverId: serverFqdn,
+                creator: creator,
+                slug: slug,
+                manifestJson: detail.manifestJson,
+                addOwnerToMembership: true,
+                issuedAt: issuedAt
+            )
+            let irk = try await Keystore.deriveIRK(reason: "Install \(creator)/\(slug)")
+            let sig = try irk.signature(for: installServiceCanonicalBytes(request))
+            let envelope = InstallServiceEnvelope(
+                request: request,
+                signature: HexUtil.encode(sig)
+            )
+            let resp = try await client.installFromMarketplace(envelope)
+            installState = .succeeded(serviceId: resp.serviceId)
+        } catch let e as ScreensClientError {
+            installState = .failed(message: e.errorDescription ?? "unknown error")
+        } catch {
+            installState = .failed(message: error.localizedDescription)
         }
     }
 }

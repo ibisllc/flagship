@@ -79,6 +79,22 @@ public final class CreateServerViewModel {
     /// carried on the wire — "auto" is the absent/legacy default (mirrors the
     /// webapp's create-server.js and keeps the recipe bytes identical).
     public var bootUnlockMode: BootUnlockStore.Mode = .auto
+    /// Draft-only metadata — backup policy the user wants applied to this
+    /// server once it's up. NOT signed into the InstallBlob (the audit
+    /// against InstallBlob.swift confirmed `backupPolicy` does not appear
+    /// in canonical bytes); the box reads this later via an owner-signed
+    /// `set-backup-policy` order. Defaults to "phone-only" to match the
+    /// webapp's draft schema.
+    public var backupPolicy: CreateServerDraftStore.BackupPolicy = .phoneOnly {
+        didSet { draftStore.setBackupPolicy(backupPolicy) }
+    }
+    /// Draft-only metadata — free-text user note about LLM provider
+    /// preferences (e.g. "OpenAI gpt-4o for chat, local llama3 for code").
+    /// Surfaces later as a hint when the box's apps ask the user to pick a
+    /// provider; never reaches the signed blob.
+    public var llmPreferences: String = "" {
+        didSet { draftStore.setLlmPreferences(llmPreferences) }
+    }
     /// Set after the .delivered transition. Container reads this so
     /// the new pending pod records the auth-code serial that Cancel-
     /// order will revoke.
@@ -88,17 +104,26 @@ public final class CreateServerViewModel {
     private let server: any FlagshipServerClient
     private let relay: any QrRelayClient
     private let bootUnlock: BootUnlockStore
+    private let draftStore: CreateServerDraftStore
 
     public init(
         username: String,
         server: any FlagshipServerClient,
         relay: any QrRelayClient,
-        bootUnlock: BootUnlockStore = BootUnlockStore()
+        bootUnlock: BootUnlockStore = BootUnlockStore(),
+        draftStore: CreateServerDraftStore = CreateServerDraftStore()
     ) {
         self.username = username
         self.server = server
         self.relay = relay
         self.bootUnlock = bootUnlock
+        self.draftStore = draftStore
+        // Restore the user's last-typed draft so flipping away from the
+        // screen mid-fill doesn't wipe their inputs. Hydrate AFTER the
+        // stored properties are assigned so the didSet observers don't
+        // double-write the same value back.
+        self.backupPolicy = draftStore.backupPolicy()
+        self.llmPreferences = draftStore.llmPreferences()
     }
 
     public var canAdvanceFromDesign: Bool {
@@ -169,6 +194,9 @@ public final class CreateServerViewModel {
             // Remember the boot-unlock choice locally so the approval screen
             // (deposit-or-not) and server detail (kill switch) can act on it.
             bootUnlock.setMode(bootUnlockMode, for: blob.blob.serverDomain)
+            // Clear the draft-only metadata so a fresh "Add a server" starts
+            // empty rather than ghost-restoring yesterday's text.
+            draftStore.reset()
             phase = .delivered(
                 serial: blob.blob.authCode.serial,
                 serverDomain: blob.blob.serverDomain
