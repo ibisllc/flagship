@@ -101,6 +101,22 @@ export interface AppInviteStore {
   revokeAccess(args: { serviceId: string; irkPubHex: string; revokedAt: number }): Promise<boolean>;
   /** For #84's access-gate. */
   listActiveAccess(serviceId: string): Promise<AppAccessRow[]>;
+  /**
+   * P6 BFF — list every invite for `serviceId` whose status is "pending"
+   * (i.e. not consumed, not revoked). Expired rows are kept in storage
+   * (the consume + accept paths reject them on TTL anyway), but the BFF
+   * filters them out before responding so the webapp's "Pending invites"
+   * pane never shows a stale row. Order is implementation-defined; the
+   * BFF projector sorts on `issuedAt DESC` before returning.
+   */
+  listPendingInvites(serviceId: string): Promise<AppInviteRow[]>;
+  /**
+   * P6 BFF — soft-revoke a single pending invite by id. Returns true if
+   * the row transitioned from `pending` → `revoked`; false when the row
+   * was already consumed, already revoked, or doesn't exist. Idempotent
+   * by contract (callers may retry safely).
+   */
+  revokeInvite(args: { serviceId: string; inviteId: string; revokedAt: number }): Promise<boolean>;
 }
 
 export class InMemoryAppInviteStore implements AppInviteStore {
@@ -168,6 +184,26 @@ export class InMemoryAppInviteStore implements AppInviteStore {
       if (r.serviceId === serviceId && r.revokedAt === null) out.push({ ...r });
     }
     return out;
+  }
+  async listPendingInvites(serviceId: string): Promise<AppInviteRow[]> {
+    const out: AppInviteRow[] = [];
+    for (const r of this.invites.values()) {
+      if (r.serviceId === serviceId && r.status === "pending") out.push({ ...r });
+    }
+    return out;
+  }
+  async revokeInvite(args: {
+    serviceId: string;
+    inviteId: string;
+    revokedAt: number;
+  }): Promise<boolean> {
+    for (const [key, r] of this.invites) {
+      if (r.serviceId !== args.serviceId || r.inviteId !== args.inviteId) continue;
+      if (r.status !== "pending") return false;
+      this.invites.set(key, { ...r, status: "revoked" });
+      return true;
+    }
+    return false;
   }
 }
 

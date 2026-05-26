@@ -648,3 +648,74 @@ export interface PeerBackupStatusResponse {
 export interface PeerBackupToggleRequest {
   participate: boolean;
 }
+
+// ---------- P6 — /api/screens/app-invite/* ----------------------------------
+//
+// Collaborator-invite BFF surface. The phone / webapp drives:
+//   POST   /api/screens/app-invite/issue                → AppInviteIssueResponse
+//   GET    /api/screens/app-invite/list/:serviceId      → AppInviteListResponse
+//   GET    /api/screens/app-invite/access/:serviceId    → AppInviteAccessResponse
+//   POST   /api/screens/app-invite/revoke               → { ok: true }
+//
+// Shape matches `apps/web/public/webapp/views/invite-issue.js` +
+// `invite-manage.js` byte-for-byte. The daemon never sees the local
+// label-book (displayName / channel / sentTo / notes) — those stay on
+// the webapp + mobile client side. The wire intentionally carries only
+// the `opaqueTag` (16-byte client-issued handle) and the IRK pubkey hex.
+
+export interface AppInviteIssueRequest {
+  /** `<creator>-<slug>` composite id. */
+  serviceId: string;
+  /** Role to grant on redeem. Free-form; see Role in inviteHandler. */
+  role: string;
+  /** 16-byte hex tag the client minted — the daemon's only routing key. */
+  opaqueTag: string;
+  /** Optional issuer note rendered to the consumer before they redeem. */
+  contextNote: string | null;
+}
+
+export interface AppInviteIssueResponse {
+  /** 32-byte hex — the bearer secret the issuer shares with the recipient. */
+  secret: string;
+  /** Unix-ms; invite TTL hard cap. */
+  expiresAt: number;
+}
+
+export interface AppInvitePendingSummary {
+  /** 16-byte hex — the client's opaque tag for label-book lookup. */
+  opaqueTag: string;
+  inviteId: string;
+  role: string;
+  expiresAt: number;
+}
+
+export interface AppInviteListResponse {
+  pending: AppInvitePendingSummary[];
+}
+
+export interface AppInviteAccessSummary {
+  opaqueTag: string;
+  /** Hex Ed25519 IRK pubkey of the redeeming peer. */
+  irkPubHex: string;
+  role: string;
+  grantedAt: number;
+}
+
+export interface AppInviteAccessResponse {
+  access: AppInviteAccessSummary[];
+}
+
+/**
+ * Discriminated revoke request. `scope: "invite"` soft-deletes a single
+ * pending invite by id; `scope: "access"` soft-deletes a single redeemed
+ * access row by IRK pubkey hex.
+ */
+export type AppInviteRevokeRequest =
+  | { serviceId: string; inviteId: string; scope: "invite" }
+  | { serviceId: string; irkPubKey: string; scope: "access" };
+
+export interface AppInviteRevokeResponse {
+  ok: boolean;
+  /** True when the row was already in a terminal state — idempotent. */
+  alreadyRevoked?: boolean;
+}

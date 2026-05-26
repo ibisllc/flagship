@@ -29,6 +29,12 @@ import type {
   AppBackupStartRequest,
   AppBackupStartResponse,
   AppDetailResponse,
+  AppInviteAccessResponse,
+  AppInviteIssueRequest,
+  AppInviteIssueResponse,
+  AppInviteListResponse,
+  AppInviteRevokeRequest,
+  AppInviteRevokeResponse,
   AppsListResponse,
   AppSummary,
   BrowserTab,
@@ -68,6 +74,13 @@ import {
   buildPeerBackupStatus,
   type PeerBackupSnapshotDeps,
 } from "./peerBackupStatus.js";
+import {
+  issueAppInvite,
+  projectAccessRows,
+  projectPendingInvites,
+  type AppInviteBffDeps,
+} from "./appInvite.js";
+import type { AppInviteStore } from "../inviteHandler.js";
 import type { BackupLoop } from "../backupLoop.js";
 import { collectServerMetrics, type ServerMetricsProvider } from "./serverMetrics.js";
 import { verifyCustomDomain, type DnsResolver } from "./verifyCustomDomain.js";
@@ -203,6 +216,16 @@ export interface ScreensHttpDeps {
    * payload when no peer-backup state is wired.
    */
   peerBackup?: PeerBackupSnapshotDeps | null;
+  /**
+   * P6 — Collaborator-invite endpoints (`/api/screens/app-invite/*`).
+   * The webapp's `invite-issue.js` + `invite-manage.js` drive these.
+   * When unset, the four endpoints respond 503 — the webapp degrades
+   * gracefully ("BFF wrapper not yet wired; access list not available
+   * in this build"). Production should pass the same
+   * `AppInviteStore` that `buildInviteHandler` uses so the bearer +
+   * signed surfaces share state.
+   */
+  appInvite?: AppInviteBffDeps | null;
 }
 
 export interface VibeCodeRuntime {
@@ -871,6 +894,157 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         deps.peerBackup ?? {},
       );
       return jok(out);
+    }
+
+    // ---- P6 POST /api/screens/app-invite/issue ----
+    //
+    // Mints a fresh bearer invite for `serviceId` with the supplied role +
+    // opaqueTag + contextNote. Returns `{ secret, expiresAt }`. The
+    // webapp's `invite-issue.js` builds the shareable URL from the
+    // returned secret entirely client-side — the secret never persists
+    // in any log here. See `appInvite.ts` for the projection rules.
+    if (path === "/api/screens/app-invite/issue" && method === "POST") {
+      const store: AppInviteStore | null | undefined = deps.appInvite?.store;
+      if (!deps.appInvite || !store) return jerr(503, "app-invite store not configured");
+      const body = parseJson(req.body) as AppInviteIssueRequest | null;
+      if (!body) return jerr(400, "body required");
+      if (typeof body.serviceId !== "string" || body.serviceId.length === 0) {
+        return jerr(400, "serviceId required");
+      }
+      if (typeof body.role !== "string" || body.role.length === 0 || body.role.length > 64) {
+        return jerr(400, "role required (1-64 chars)");
+      }
+      if (typeof body.opaqueTag !== "string") return jerr(400, "opaqueTag required");
+      let opaqueTag: Uint8Array;
+      try {
+        opaqueTag = hexToBytesLocal(body.opaqueTag);
+      } catch {
+        return jerr(400, "opaqueTag must be hex");
+      }
+      if (opaqueTag.length !== 16) return jerr(400, "opaqueTag must be 16 bytes");
+
+      let contextNote: string | null;
+      if (body.contextNote === undefined || body.contextNote === null) {
+        contextNote = null;
+      } else if (typeof body.contextNote === "string") {
+        if (body.contextNote.length > 280) return jerr(400, "contextNote too long (max 280 chars)");
+        contextNote = body.contextNote;
+      } else {
+        return jerr(400, "contextNote must be a string or null");
+      }
+
+      try {
+        const r = await issueAppInvite(
+          { ...deps.appInvite, store },
+          {
+            serviceId: body.serviceId,
+            role: body.role,
+            opaqueTag,
+            contextNote,
+          },
+        );
+        const out: AppInviteIssueResponse = {
+          secret: r.secret,
+          expiresAt: r.expiresAt,
+        };
+        return jok(out);
+      } catch (e) {
+        return jerr(502, `issue failed: ${(e as Error).message}`);
+      }
+    }
+
+    // ---- P6 GET /api/screens/app-invite/list/:serviceId ----
+    if (path.startsWith("/api/screens/app-invite/list/") && method === "GET") {
+      const store: AppInviteStore | null | undefined = deps.appInvite?.store;
+      if (!deps.appInvite || !store) return jerr(503, "app-invite store not configured");
+      const serviceId = decodeURIComponent(
+        path.slice("/api/screens/app-invite/list/".length),
+      );
+      if (!serviceId) return jerr(400, "serviceId required");
+      try {
+        const rows = await store.listPendingInvites(serviceId);
+        const out: AppInviteListResponse = {
+          pending: projectPendingInvites(rows, now()),
+        };
+        return jok(out);
+      } catch (e) {
+        return jerr(502, `list failed: ${(e as Error).message}`);
+      }
+    }
+
+    // ---- P6 GET /api/screens/app-invite/access/:serviceId ----
+    if (path.startsWith("/api/screens/app-invite/access/") && method === "GET") {
+      const store: AppInviteStore | null | undefined = deps.appInvite?.store;
+      if (!deps.appInvite || !store) return jerr(503, "app-invite store not configured");
+      const serviceId = decodeURIComponent(
+        path.slice("/api/screens/app-invite/access/".length),
+      );
+      if (!serviceId) return jerr(400, "serviceId required");
+      try {
+        const rows = await store.listActiveAccess(serviceId);
+        const out: AppInviteAccessResponse = {
+          access: projectAccessRows(rows),
+        };
+        return jok(out);
+      } catch (e) {
+        return jerr(502, `access list failed: ${(e as Error).message}`);
+      }
+    }
+
+    // ---- P6 POST /api/screens/app-invite/revoke ----
+    //
+    // Discriminated by `scope`. `invite` soft-revokes a single pending
+    // invite by id; `access` soft-revokes a single redeemed access row
+    // by IRK pubkey hex. Both are idempotent — re-revoking returns
+    // 200 with `alreadyRevoked: true`.
+    if (path === "/api/screens/app-invite/revoke" && method === "POST") {
+      const store: AppInviteStore | null | undefined = deps.appInvite?.store;
+      if (!deps.appInvite || !store) return jerr(503, "app-invite store not configured");
+      const body = parseJson(req.body) as AppInviteRevokeRequest | null;
+      if (!body || typeof (body as { serviceId?: unknown }).serviceId !== "string") {
+        return jerr(400, "serviceId required");
+      }
+      const serviceId = (body as { serviceId: string }).serviceId;
+      const scope = (body as { scope?: unknown }).scope;
+      if (scope === "invite") {
+        const inviteId = (body as { inviteId?: unknown }).inviteId;
+        if (typeof inviteId !== "string" || inviteId.length === 0) {
+          return jerr(400, "inviteId required for scope='invite'");
+        }
+        try {
+          const ok = await store.revokeInvite({
+            serviceId,
+            inviteId,
+            revokedAt: now(),
+          });
+          const out: AppInviteRevokeResponse = { ok: true, alreadyRevoked: !ok };
+          return jok(out);
+        } catch (e) {
+          return jerr(502, `revoke failed: ${(e as Error).message}`);
+        }
+      }
+      if (scope === "access") {
+        const irkPubKey = (body as { irkPubKey?: unknown }).irkPubKey;
+        if (typeof irkPubKey !== "string" || irkPubKey.length === 0) {
+          return jerr(400, "irkPubKey required for scope='access'");
+        }
+        // Validate hex shape early so the store layer never sees garbage.
+        if (!/^[0-9a-fA-F]+$/.test(irkPubKey) || irkPubKey.length !== 64) {
+          return jerr(400, "irkPubKey must be 32-byte hex");
+        }
+        try {
+          const ok = await store.revokeAccess({
+            serviceId,
+            irkPubHex: irkPubKey.toLowerCase(),
+            revokedAt: now(),
+          });
+          const out: AppInviteRevokeResponse = { ok: true, alreadyRevoked: !ok };
+          return jok(out);
+        } catch (e) {
+          return jerr(502, `revoke failed: ${(e as Error).message}`);
+        }
+      }
+      return jerr(400, "scope must be 'invite' or 'access'");
     }
 
     // ---- P9 POST /api/screens/peer-backup/toggle ----
