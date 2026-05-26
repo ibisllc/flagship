@@ -505,4 +505,79 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         return VibeCodeReplyResponse(ok: true)
     }
+
+    // MARK: - P9 peer-backup
+
+    /// Overridable fixture for tests + dev. Nil → the honest-empty
+    /// "not participating, zero peers, zeroed stats" default below
+    /// (matches the daemon's behaviour when the registry is not wired).
+    public var peerBackupStatusFixture: PeerBackupStatusResponse?
+
+    /// Records each `peerBackupToggle` call's `participate` argument so
+    /// tests can assert the right value flowed through.
+    public private(set) var togglePeerBackupCalls: [Bool] = []
+
+    public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
+        try await tick()
+        if let fixture = peerBackupStatusFixture { return fixture }
+        return PeerBackupStatusResponse(
+            participating: false,
+            peersBackingYouUp: [],
+            peersYouBackUp: [],
+            shards: [],
+            repair: PeerBackupRepairStatus(
+                state: "idle",
+                lastTickMs: nil,
+                queued: 0,
+                completed24h: 0,
+                lastError: nil
+            ),
+            stats: PeerBackupStats(
+                total: 0,
+                durable: 0,
+                atRisk: 0,
+                yourBytesStored: 0,
+                peerBytesHosted: 0
+            )
+        )
+    }
+
+    public func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse {
+        try await tick()
+        togglePeerBackupCalls.append(participate)
+        if var fixture = peerBackupStatusFixture {
+            fixture = PeerBackupStatusResponse(
+                participating: participate,
+                peersBackingYouUp: fixture.peersBackingYouUp,
+                peersYouBackUp: fixture.peersYouBackUp,
+                shards: fixture.shards,
+                repair: fixture.repair,
+                stats: fixture.stats
+            )
+            peerBackupStatusFixture = fixture
+            return fixture
+        }
+        let next = PeerBackupStatusResponse(
+            participating: participate,
+            peersBackingYouUp: [],
+            peersYouBackUp: [],
+            shards: [],
+            repair: PeerBackupRepairStatus(
+                state: "idle",
+                lastTickMs: nil,
+                queued: 0,
+                completed24h: 0,
+                lastError: nil
+            ),
+            stats: PeerBackupStats(
+                total: 0,
+                durable: 0,
+                atRisk: 0,
+                yourBytesStored: 0,
+                peerBytesHosted: 0
+            )
+        )
+        peerBackupStatusFixture = next
+        return next
+    }
 }

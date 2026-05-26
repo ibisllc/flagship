@@ -5,6 +5,7 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.AppsListResponse
+import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.AppDetailResponse
 import com.flagshipserver.app.api.AppBackupStartRequest
 import com.flagshipserver.app.api.AppBackupStartResponse
@@ -84,6 +85,8 @@ private class StubScreensClient(
     override suspend fun revokePairedSession(tokenPrefix: String) = error("unused")
     override suspend fun ordersSend(req: OrdersSendRequest): OrdersSendResponse = error("unused")
     override suspend fun tierStatus(): TierStatusResponse = error("unused")
+    override suspend fun peerBackupStatus(): PeerBackupStatusResponse = error("unused")
+    override suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse = error("unused")
     override suspend fun urlControllerOwned(): UrlControllerOwnedResponse = error("unused")
     override suspend fun urlControllerClaim(req: UrlControllerClaimRequest): UrlControllerClaimResponse = error("unused")
     override suspend fun appBackupStart(req: AppBackupStartRequest): AppBackupStartResponse = error("unused")

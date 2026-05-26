@@ -84,6 +84,10 @@ public protocol ScreensClient: Sendable {
     // awaiting a tool response (talkToUser or requestEnvVar ack).
     func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse
+
+    // P9 — peer-backup management.
+    func peerBackupStatus() async throws -> PeerBackupStatusResponse
+    func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {

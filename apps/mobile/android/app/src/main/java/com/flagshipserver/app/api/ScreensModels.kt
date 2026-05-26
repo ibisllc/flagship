@@ -448,3 +448,60 @@ data class VibeCodeReplyRequest(
 
 @Serializable
 data class VibeCodeReplyResponse(val ok: Boolean)
+
+// ---------- P9 — peer-backup status + toggle ----------------------------
+
+@Serializable
+data class PeerBackupPeerHostingYou(
+    val peerFqdn: String,
+    val shardsHosted: Int,
+    val lastSeenMs: Long,
+    val online: Boolean,
+)
+
+@Serializable
+data class PeerBackupPeerYouHost(
+    val peerFqdn: String,
+    val shardsHosted: Int,
+    val bytesHosted: Long,
+    val lastFetchedMs: Long,
+)
+
+@Serializable
+data class PeerBackupShardSummary(
+    val shardId: String,
+    val replicas: Int,
+    val minReplicas: Int,
+    val bytes: Long,
+)
+
+@Serializable
+data class PeerBackupRepairStatus(
+    val state: String,                       // "idle" | "running" | "error"
+    val lastTickMs: Long? = null,
+    val queued: Int,
+    val completed24h: Int,
+    val lastError: String? = null,
+)
+
+@Serializable
+data class PeerBackupStats(
+    val total: Int,
+    val durable: Int,
+    val atRisk: Int,
+    val yourBytesStored: Long,
+    val peerBytesHosted: Long,
+)
+
+@Serializable
+data class PeerBackupStatusResponse(
+    val participating: Boolean,
+    val peersBackingYouUp: List<PeerBackupPeerHostingYou>,
+    val peersYouBackUp: List<PeerBackupPeerYouHost>,
+    val shards: List<PeerBackupShardSummary>,
+    val repair: PeerBackupRepairStatus,
+    val stats: PeerBackupStats,
+)
+
+@Serializable
+data class PeerBackupToggleRequest(val participate: Boolean)

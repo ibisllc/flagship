@@ -23,6 +23,7 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
+import com.flagshipserver.app.ui.screens.PeerBackupScreen
 import com.flagshipserver.app.ui.screens.PrivacyScreen
 import com.flagshipserver.app.ui.screens.ProfilesScreen
 import com.flagshipserver.app.ui.screens.ProvidersScreen
@@ -95,5 +96,7 @@ fun SettingsTab() {
         composable("profiles") { ProfilesScreen(nav) }
         // P7 — dedicated tier-status / subscription screen.
         composable("tier-status") { TierStatusScreen(nav) }
+        // P9 — peer-backup management.
+        composable("peer-backup") { PeerBackupScreen(nav) }
     }
 }

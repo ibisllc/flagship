@@ -177,6 +177,17 @@ class LiveScreensClient(
         return request("/api/screens/llm/sessions/$sessionId/reply", VibeCodeReplyResponse.serializer(), "POST", body)
     }
 
+    override suspend fun peerBackupStatus(): PeerBackupStatusResponse =
+        request("/api/screens/peer-backup/status", PeerBackupStatusResponse.serializer())
+
+    override suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse {
+        val body = json.encodeToString(
+            PeerBackupToggleRequest.serializer(),
+            PeerBackupToggleRequest(participate = participate),
+        ).toByteArray()
+        return request("/api/screens/peer-backup/toggle", PeerBackupStatusResponse.serializer(), "POST", body)
+    }
+
     /** SSE stream of install events. Frame format: `data: <json>\n\n` */
     override fun installEvents(serial: String): Flow<InstallEvent> = channelFlow {
         val base = base()

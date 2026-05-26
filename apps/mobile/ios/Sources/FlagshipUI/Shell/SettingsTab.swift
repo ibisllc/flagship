@@ -89,6 +89,7 @@ public struct SettingsTab: View {
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenProfiles: { path.append(.profiles) },
+                    onOpenPeerBackup: { path.append(.peerBackup) },
                     onOpenAbout: { path.append(.about) },
                     onOpenDeveloper: { path.append(.developer) },
                     onOpenPrivacy: { path.append(.privacy) },
@@ -283,6 +284,8 @@ public struct SettingsTab: View {
                     }
                 }
             )
+        case .peerBackup:
+            PeerBackupScreen(vm: PeerBackupViewModel(client: client))
         }
     }
 }

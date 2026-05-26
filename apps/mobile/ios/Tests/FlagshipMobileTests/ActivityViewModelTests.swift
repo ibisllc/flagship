@@ -102,6 +102,8 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
         try await real.ordersSend(req)
     }
     func tierStatus() async throws -> TierStatusResponse { try await real.tierStatus() }
+    func peerBackupStatus() async throws -> PeerBackupStatusResponse { try await real.peerBackupStatus() }
+    func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse { try await real.peerBackupToggle(participate: participate) }
     func urlControllerOwned() async throws -> UrlControllerOwnedResponse {
         try await real.urlControllerOwned()
     }

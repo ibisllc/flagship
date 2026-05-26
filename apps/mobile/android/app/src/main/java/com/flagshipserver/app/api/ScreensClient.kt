@@ -76,6 +76,10 @@ interface ScreensClient {
     suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState
     suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse
 
+    // P9 — peer-backup management.
+    suspend fun peerBackupStatus(): PeerBackupStatusResponse
+    suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse
+
     // P1.15 install-events SSE — streams provisioning progress
     fun installEvents(serial: String): Flow<InstallEvent>
 

@@ -363,6 +363,69 @@ class MockScreensClient(
         )
     }
 
+    /** Overridable fixture for tests + dev. Null → the honest-empty
+     *  "not participating, zero peers, zeroed stats" default below
+     *  (matches the daemon's behaviour when the registry is not wired). */
+    var peerBackupStatusFixture: PeerBackupStatusResponse? = null
+
+    /** Records each `peerBackupToggle` call's `participate` argument so
+     *  tests can assert the right value flowed through. */
+    val togglePeerBackupCalls: MutableList<Boolean> = mutableListOf()
+
+    override suspend fun peerBackupStatus(): PeerBackupStatusResponse {
+        tick()
+        peerBackupStatusFixture?.let { return it }
+        return PeerBackupStatusResponse(
+            participating = false,
+            peersBackingYouUp = emptyList(),
+            peersYouBackUp = emptyList(),
+            shards = emptyList(),
+            repair = PeerBackupRepairStatus(
+                state = "idle",
+                lastTickMs = null,
+                queued = 0,
+                completed24h = 0,
+                lastError = null,
+            ),
+            stats = PeerBackupStats(
+                total = 0,
+                durable = 0,
+                atRisk = 0,
+                yourBytesStored = 0,
+                peerBytesHosted = 0,
+            ),
+        )
+    }
+
+    override suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse {
+        tick()
+        togglePeerBackupCalls.add(participate)
+        val current = peerBackupStatusFixture
+        val next = if (current != null) {
+            current.copy(participating = participate)
+        } else {
+            PeerBackupStatusResponse(
+                participating = participate,
+                peersBackingYouUp = emptyList(),
+                peersYouBackUp = emptyList(),
+                shards = emptyList(),
+                repair = PeerBackupRepairStatus(
+                    state = "idle",
+                    lastTickMs = null,
+                    queued = 0,
+                    completed24h = 0,
+                    lastError = null,
+                ),
+                stats = PeerBackupStats(
+                    total = 0, durable = 0, atRisk = 0,
+                    yourBytesStored = 0, peerBytesHosted = 0,
+                ),
+            )
+        }
+        peerBackupStatusFixture = next
+        return next
+    }
+
     override fun installEvents(serial: String): Flow<InstallEvent> = flow {
         val timeline = listOf<Pair<Long, InstallEvent>>(
             0L  to InstallEvent.Registered(serial, now()),

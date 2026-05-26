@@ -109,6 +109,10 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "Profiles", description = "Switch between your clouds.") {
             nav.navigate("profiles")
         }
+        // P9 — peer-backup management.
+        SettingsRow(label = "Peer-backup", description = "Shard health across peers + repair status.") {
+            nav.navigate("peer-backup")
+        }
         SettingsRow(label = "Privacy", description = "Face unlock at launch, app-level gating.") {
             nav.navigate("privacy")
         }

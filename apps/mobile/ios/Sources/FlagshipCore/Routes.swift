@@ -68,6 +68,9 @@ public enum SettingsRoute: Hashable, Sendable {
     /// W3 — multi-profile picker; lists the clouds this phone is a
     /// member of and lets the user switch active profile.
     case profiles
+    /// P9 — peer-backup management. Participation toggle + peer lists
+    /// (backing you up / you back up) + shard health + repair status.
+    case peerBackup
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad

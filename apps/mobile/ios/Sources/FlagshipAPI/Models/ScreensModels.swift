@@ -724,3 +724,115 @@ public struct VibeCodeReplyResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public init(ok: Bool) { self.ok = ok }
 }
+
+// MARK: - P9 — peer-backup status + toggle
+
+public struct PeerBackupPeerHostingYou: Codable, Equatable, Sendable, Identifiable {
+    public let peerFqdn: String
+    public let shardsHosted: Int
+    public let lastSeenMs: Int64
+    public let online: Bool
+
+    public var id: String { peerFqdn }
+
+    public init(peerFqdn: String, shardsHosted: Int, lastSeenMs: Int64, online: Bool) {
+        self.peerFqdn = peerFqdn
+        self.shardsHosted = shardsHosted
+        self.lastSeenMs = lastSeenMs
+        self.online = online
+    }
+}
+
+public struct PeerBackupPeerYouHost: Codable, Equatable, Sendable, Identifiable {
+    public let peerFqdn: String
+    public let shardsHosted: Int
+    public let bytesHosted: Int64
+    public let lastFetchedMs: Int64
+
+    public var id: String { peerFqdn }
+
+    public init(peerFqdn: String, shardsHosted: Int, bytesHosted: Int64, lastFetchedMs: Int64) {
+        self.peerFqdn = peerFqdn
+        self.shardsHosted = shardsHosted
+        self.bytesHosted = bytesHosted
+        self.lastFetchedMs = lastFetchedMs
+    }
+}
+
+public struct PeerBackupShardSummary: Codable, Equatable, Sendable, Identifiable {
+    public let shardId: String
+    public let replicas: Int
+    public let minReplicas: Int
+    public let bytes: Int64
+
+    public var id: String { shardId }
+
+    public init(shardId: String, replicas: Int, minReplicas: Int, bytes: Int64) {
+        self.shardId = shardId
+        self.replicas = replicas
+        self.minReplicas = minReplicas
+        self.bytes = bytes
+    }
+}
+
+public struct PeerBackupRepairStatus: Codable, Equatable, Sendable {
+    public let state: String          // "idle" | "running" | "error"
+    public let lastTickMs: Int64?
+    public let queued: Int
+    public let completed24h: Int
+    public let lastError: String?
+
+    public init(state: String, lastTickMs: Int64?, queued: Int, completed24h: Int, lastError: String?) {
+        self.state = state
+        self.lastTickMs = lastTickMs
+        self.queued = queued
+        self.completed24h = completed24h
+        self.lastError = lastError
+    }
+}
+
+public struct PeerBackupStats: Codable, Equatable, Sendable {
+    public let total: Int
+    public let durable: Int
+    public let atRisk: Int
+    public let yourBytesStored: Int64
+    public let peerBytesHosted: Int64
+
+    public init(total: Int, durable: Int, atRisk: Int, yourBytesStored: Int64, peerBytesHosted: Int64) {
+        self.total = total
+        self.durable = durable
+        self.atRisk = atRisk
+        self.yourBytesStored = yourBytesStored
+        self.peerBytesHosted = peerBytesHosted
+    }
+}
+
+public struct PeerBackupStatusResponse: Codable, Equatable, Sendable {
+    public let participating: Bool
+    public let peersBackingYouUp: [PeerBackupPeerHostingYou]
+    public let peersYouBackUp: [PeerBackupPeerYouHost]
+    public let shards: [PeerBackupShardSummary]
+    public let repair: PeerBackupRepairStatus
+    public let stats: PeerBackupStats
+
+    public init(
+        participating: Bool,
+        peersBackingYouUp: [PeerBackupPeerHostingYou],
+        peersYouBackUp: [PeerBackupPeerYouHost],
+        shards: [PeerBackupShardSummary],
+        repair: PeerBackupRepairStatus,
+        stats: PeerBackupStats
+    ) {
+        self.participating = participating
+        self.peersBackingYouUp = peersBackingYouUp
+        self.peersYouBackUp = peersYouBackUp
+        self.shards = shards
+        self.repair = repair
+        self.stats = stats
+    }
+}
+
+public struct PeerBackupToggleRequest: Codable, Equatable, Sendable {
+    public let participate: Bool
+    public init(participate: Bool) { self.participate = participate }
+}

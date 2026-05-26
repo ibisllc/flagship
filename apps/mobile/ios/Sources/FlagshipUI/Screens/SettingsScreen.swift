@@ -67,6 +67,8 @@ public struct SettingsScreen: View {
     var onOpenAccountSecurity: () -> Void = {}
     /// W3 — open the Profiles picker (multi-cloud).
     var onOpenProfiles: () -> Void = {}
+    /// P9 — open the peer-backup management screen.
+    var onOpenPeerBackup: () -> Void = {}
     var onOpenAbout: () -> Void = {}
     var onOpenDeveloper: () -> Void = {}
     var onOpenPrivacy: () -> Void = {}
@@ -108,6 +110,7 @@ public struct SettingsScreen: View {
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenProfiles: @escaping () -> Void = {},
+        onOpenPeerBackup: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
         onOpenDeveloper: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
@@ -135,6 +138,7 @@ public struct SettingsScreen: View {
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenProfiles = onOpenProfiles
+        self.onOpenPeerBackup = onOpenPeerBackup
         self.onOpenAbout = onOpenAbout
         self.onOpenDeveloper = onOpenDeveloper
         self.onOpenPrivacy = onOpenPrivacy
@@ -577,6 +581,7 @@ public struct SettingsScreen: View {
                 linkRow("Recovery setup", subtitle: "If you lose this phone", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
                 linkRow("Back up your account key", subtitle: "Save an encrypted key file", icon: "doc.badge.arrow.up.fill", c: c, action: onOpenKeyfileBackup)
                 linkRow("Profiles", subtitle: "Switch between your clouds", icon: "person.2.circle.fill", c: c, action: onOpenProfiles)
+                linkRow("Peer-backup", subtitle: "Shard health across peers", icon: "externaldrive.connected.to.line.below.fill", c: c, action: onOpenPeerBackup)
                 linkRow("Privacy", subtitle: "Face ID lock, app-level gating", icon: "lock.shield.fill", c: c, action: onOpenPrivacy)
                 linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)
                 if showDeveloper {
