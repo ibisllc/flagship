@@ -39,6 +39,9 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 - **P13 (webapp + iOS + Android + Worker handler)** — per-server kill-switch end-to-end. Each client surface adds a "Danger zone" to the server-detail screen with the reason picker (lost/stolen/decommissioned) and the established confirmation (1.5s hold mobile / 3s countdown webapp). Canonical bytes `flagship/revoke/v1|userId|revokedServerId|reason|issuedAt`, IRK-signed. The Worker handler (`handleRevokeServer` in `packages/control-plane/src/serverRevocation.ts`) verifies + idempotency + walks `AutoUnlockLeaseStorage` and `BoxSealedLeaseStorage` to tear down every active lease for that server (the "brick on next boot" effect). `AuditEventKind` gains `server-revoked`. — `be1553e` (webapp) + `a53386d` (iOS+Android) + `859e17f` (Worker)
 - **D2 (local hygiene, not committed)** — pruned 83 merged branches + 51 stale `.claude/worktrees/agent-*` worktrees. Remaining: main + `w11` (unmerged, kept) + 3 unmerged worktree-agent branches.
 
+### Parity wave 4 (2026-05-25 night, cont.)
+- **P9 client UIs (all 3 surfaces)** — closes the P9 row end-to-end. Webapp view wired into Settings + reconciled field-by-field with the BFF (no drift; honest-zero rendering for the documented data gaps) — `8cbccf7` (76 files / 785 pass). Mobile UIs on iOS + Android with byte-identical wire shapes (Codable + @Serializable types mirror the daemon's TypeScript), new PeerBackupViewModel + PeerBackupScreen on each platform, Mock fixtures + 9 + 8 tests, hand-rolled stubs in ActivityViewModelTest*s patched for the interface extension — `4b82f5a`.
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
@@ -80,9 +83,12 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
   server-side social-media login so bots can act as the user — session must
   live on the box; native WebView is a different feature). _agent._
 - **P9** — Peer-backup management → daemon Screens-BFF + 3 UI. _agent._
-  ✅ daemon BFF (`af9cbc7`); ⏳ wire the 3 client UIs against it (webapp
-  view already exists — degrades gracefully today; needs iOS + Android UI
-  + verify webapp end-to-end with the new BFF).
+  ✅ (`af9cbc7` BFF + `8cbccf7` webapp + `4b82f5a` mobile). All four
+  parts shipped: daemon BFF (matches webapp's expected 22-field shape),
+  webapp view wired into Settings, iOS + Android Compose UIs reading the
+  same wire shape. Honest-zero rendering surfaces the documented
+  daemon-state gaps (per-shard bytes, peer liveness, repair counters)
+  without faking values.
 - **P10** — Replace device (IRK rotation) → webapp. _agent._ ✅ (`20224ce`).
 - **P11** — Wipe & restart → webapp. _agent._ ✅ (`20224ce`) — full ceremony,
   not the older "ship disabled" stance.
@@ -145,8 +151,8 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 ```
 
 ## Next agent-doable, smallest-first
-(Updated 2026-05-25 late after wave 3.) **Up next**: P9 client UIs (3
-surfaces against the new BFF) → P4 Android QR + admit → P12 webapp
-multi-profile + storage migration → P6 collaborator invites iOS + Android
-→ P8 framebuffer-stream port (iOS + Android) → P14 companion-browser
-dock. Then the hardware/owner items (A3–A6, TF*, C1, E*).
+(Updated 2026-05-25 late after wave 4.) **Up next**: P4 Android QR +
+admit → P6 collaborator invites iOS + Android → P12 webapp multi-profile
++ storage migration → P8 framebuffer-stream port (iOS + Android) → P14
+companion-browser dock (all 3) → P0 verify-only audits. Then the
+hardware/owner items (A3–A6, TF*, C1, E*).
