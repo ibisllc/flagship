@@ -275,8 +275,48 @@ async function irkFromInfoSeed(umkSeed, info) {
   return { privateKey, publicKey: jwkPub };
 }
 
+/** Read the current IRK rotation version for the active profile.
+ *  Persists in localStorage under `flagship.irk.version` (legacy /
+ *  default profile) or `flagship.irk.version.<profileId>`. Defaults to
+ *  1 so every existing install keeps signing under `flagship.irk.v1`
+ *  exactly as before — this is the Worker's registered key for any
+ *  account that hasn't run a Replace-device ceremony from the webapp.
+ *
+ *  A successful Replace-device complete on the webapp writes
+ *  `version+1` here so subsequent signing (push, recovery, release-
+ *  server-name, RCK orders…) uses the rotated IRK. */
+export function currentIrkVersion(profileId = activeProfileId()) {
+  try {
+    const ls = globalThis.localStorage;
+    if (!ls) return 1;
+    const key = profileId === DEFAULT_PROFILE_ID
+      ? "flagship.irk.version"
+      : `flagship.irk.version.${profileId}`;
+    const raw = ls.getItem(key);
+    const n = raw == null ? 1 : Number(raw);
+    return Number.isInteger(n) && n >= 1 ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** Persist the active IRK rotation version. Used by the webapp's
+ *  Replace-device ceremony AFTER the server's complete leg has
+ *  succeeded. */
+export function setCurrentIrkVersion(version, profileId = activeProfileId()) {
+  if (!Number.isInteger(version) || version < 1) {
+    throw new Error("irk version must be a positive integer");
+  }
+  const ls = globalThis.localStorage;
+  if (!ls) return; // best-effort
+  const key = profileId === DEFAULT_PROFILE_ID
+    ? "flagship.irk.version"
+    : `flagship.irk.version.${profileId}`;
+  ls.setItem(key, String(version));
+}
+
 export async function deriveIrkFromSeed(umkSeed) {
-  return irkFromInfoSeed(umkSeed, irkInfo(1));
+  return irkFromInfoSeed(umkSeed, irkInfo(currentIrkVersion()));
 }
 
 /** Derive the IRK at a specific rotation version. v1 == {@link

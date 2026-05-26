@@ -144,6 +144,39 @@ export async function deleteCloudRecovery(username) {
   return { deleted: true };
 }
 
+/**
+ * Register a fresh recovery passkey + wrap a caller-supplied UMK seed
+ * with its PRF output, WITHOUT uploading the envelope to .com. Returns
+ * `{ credentialIdHex, wrappedUmkB64, wrappedUmkBytes }`.
+ *
+ * Used by ceremonies that need to bundle the registration result into a
+ * larger atomically-posted envelope (wipe-restart, where the new
+ * envelope is swapped in by the Worker handler at the same instant the
+ * IRK rotates — uploading separately first would create a window where
+ * a passkey is registered against a username whose IRK hasn't yet
+ * accepted it).
+ *
+ * The 32-byte `umk` IS the new account key — anyone holding it AND the
+ * passkey can take over the account. Callers must scope its lifetime
+ * to the ceremony.
+ */
+export async function enrollNewRecoveryPasskey(umk, username) {
+  if (!(umk instanceof Uint8Array) || umk.length !== 32) {
+    throw new Error("umk must be a 32-byte Uint8Array");
+  }
+  if (!username) throw new Error("username required");
+  const result = await runSubOriginFlow("enroll", { umk, username });
+  if (result.type !== "flagship-recovery-enroll-result") {
+    throw new Error(`enroll: ${result.reason ?? "no result"}`);
+  }
+  const { credentialIdHex, wrappedUmkB64 } = result;
+  if (typeof credentialIdHex !== "string" || typeof wrappedUmkB64 !== "string") {
+    throw new Error("enroll: bad payload from sub-origin");
+  }
+  const wrappedUmkBytes = base64ToBytes(wrappedUmkB64);
+  return { credentialIdHex, wrappedUmkB64, wrappedUmkBytes };
+}
+
 /** Best-effort presence check used by views to decide UI state. */
 export async function hasCloudRecovery(username) {
   if (!username) return false;

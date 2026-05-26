@@ -9,9 +9,21 @@
 //   DELETE /api/push/<tokenId>      → revoke push tether (soft revoke)
 
 import { $, registerView, show } from "../lib/router.js";
-import { getSession } from "../lib/state.js";
+import { getSession, unlockSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import {
+  runReplaceDeviceCeremony,
+  completeReplaceDeviceCeremony,
+  startCountdown,
+} from "../lib/replaceDeviceCeremony.js";
+import { runWipeRestartCeremony } from "../lib/wipeRestartCeremony.js";
+import {
+  bootstrapFromExistingSeed,
+  currentIrkVersion,
+  resetDevice,
+  setCurrentIrkVersion,
+} from "../keystore.js";
 
 registerView("view-trusted-devices");
 
@@ -142,11 +154,11 @@ function renderDeviceCard(device) {
   `;
 }
 
-/** Danger zone: visible-but-explanatory v1 Wipe & restart entry.
- *  Mirrors the iOS B8 / Android C8 "Coming soon" pattern — the option
- *  needs to be visible so users see it exists and is being designed
- *  (hiding it leaves them wondering what their last-resort options
- *  are), and the actual ceremony lands as E6's v1.1 follow-up. */
+/** Danger zone: live ceremonies for Replace device + Wipe & restart.
+ *  Both rotate the account's identity keys; Wipe additionally drops
+ *  the recovery envelope + UMK, so it's the "nuclear" option. Each
+ *  uses a 3-second countdown confirm sheet (the webapp equivalent of
+ *  the iOS/Android long-press, per docs/revocation-ui.md). */
 function renderDangerZone() {
   return `
     <hr class="mt-4" />
@@ -156,37 +168,36 @@ function renderDangerZone() {
       your account's identity keys, disconnecting every device on this
       account in one shot.
     </p>
+    <div class="card" data-section="replace-device">
+      <div class="row">
+        <div class="weight-600">
+          <span aria-hidden="true">🔄</span>
+          Replace device
+        </div>
+        <button class="secondary danger" id="replace-device-btn">Replace device</button>
+      </div>
+      <p class="note small">
+        Rotates your account's identity key. Every other device on this
+        account will need to confirm a new pairing the next time it opens.
+        Pods stay running; apps stay installed.
+      </p>
+    </div>
     <div class="card" data-section="wipe-restart">
       <div class="row">
         <div class="weight-600">
           <span aria-hidden="true">🗑️</span>
           Wipe &amp; restart
         </div>
-        <button class="secondary" id="wipe-restart-btn">Learn more</button>
+        <button class="secondary danger" id="wipe-restart-btn">Wipe &amp; restart</button>
       </div>
       <p class="note small">
-        Coming in v1.1. Rotates your account identity + recovery passkey
-        in one ceremony. Pods stay running; apps stay installed; every
-        other device re-pairs fresh on next open.
+        Rotates your account identity + recovery passkey in one ceremony.
+        Every device currently on this account — including this browser —
+        gets disconnected and re-pairs fresh. Pods keep running; apps stay
+        installed.
       </p>
     </div>
   `;
-}
-
-async function showWipeComingSoon() {
-  const { inlineConfirm } = await import("../lib/modal.js");
-  await inlineConfirm({
-    title: "Wipe & restart — coming in v1.1",
-    message:
-      "Rotates your account identity AND recovery passkey in one ceremony. " +
-      "Every device currently on this account — including this browser — " +
-      "gets disconnected and re-pairs fresh. Pods keep running; apps stay " +
-      "installed. Shipping in v1.1 once the ceremony has been live-exercised " +
-      "across iPhone, Android, and webapp. For now use Disconnect above, or " +
-      "wait for Replace device to land first.",
-    okLabel: "Got it",
-    danger: false,
-  });
 }
 
 async function renderTrustedDevices() {
@@ -246,9 +257,258 @@ async function renderTrustedDevices() {
 }
 
 function bindDangerZone() {
-  document.getElementById("wipe-restart-btn")?.addEventListener("click", () => {
-    showWipeComingSoon().catch(() => {});
+  document.getElementById("replace-device-btn")?.addEventListener("click", () => {
+    runReplaceDeviceSheet().catch((e) => toast(e?.message ?? "Replace failed", "err"));
   });
+  document.getElementById("wipe-restart-btn")?.addEventListener("click", () => {
+    runWipeRestartSheet().catch((e) => toast(e?.message ?? "Wipe failed", "err"));
+  });
+}
+
+/** Build a native <dialog>-based confirmation sheet with a 3-second
+ *  countdown primary button. Resolves true when the countdown
+ *  completes; false on Cancel / Esc / backdrop. Copy is verbatim from
+ *  docs/revocation-ui.md so a future copy refactor surfaces here. */
+function openCountdownSheet({ titleHtml, bodyHtml, primaryLabel, primaryClass }) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "ceremony-dialog";
+    dialog.setAttribute("aria-modal", "true");
+    dialog.innerHTML = `
+      <form method="dialog" class="modal-card">
+        <h3 class="modal-title">${titleHtml}</h3>
+        <div class="modal-message">${bodyHtml}</div>
+        <p class="modal-message" data-countdown-line aria-live="polite"></p>
+        <div class="row-2 mt-3">
+          <button type="button" class="secondary" data-cancel>Cancel</button>
+          <button type="button" class="${primaryClass || "danger"}" data-primary>${primaryLabel}</button>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(dialog);
+    // Some test harnesses may not have HTMLDialogElement; degrade to a
+    // visible block.
+    if (typeof dialog.showModal === "function") {
+      try { dialog.showModal(); } catch { dialog.setAttribute("open", ""); }
+    } else {
+      dialog.setAttribute("open", "");
+    }
+    const primary = dialog.querySelector("[data-primary]");
+    const cancel = dialog.querySelector("[data-cancel]");
+    const line = dialog.querySelector("[data-countdown-line]");
+    let countdown = null;
+    let resolved = false;
+    const close = (v) => {
+      if (resolved) return;
+      resolved = true;
+      countdown?.cancel();
+      try { dialog.close(); } catch { /* polyfilled */ }
+      dialog.remove();
+      resolve(v);
+    };
+    cancel.addEventListener("click", () => close(false));
+    dialog.addEventListener("cancel", (ev) => { ev.preventDefault(); close(false); });
+    primary.addEventListener("click", () => {
+      if (countdown) return; // already counting
+      primary.setAttribute("disabled", "");
+      countdown = startCountdown({
+        onTick: (remaining) => {
+          if (remaining > 0) {
+            line.textContent = `Replacing in ${remaining}…`;
+            primary.textContent = `${remaining}…`;
+          } else {
+            line.textContent = "Working…";
+          }
+        },
+      });
+      countdown.promise.then((ok) => {
+        if (ok) close(true);
+      });
+    });
+  });
+}
+
+async function runReplaceDeviceSheet() {
+  const session = getSession();
+  if (!session.umk || !session.username) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  // Sheet copy — VERBATIM from docs/revocation-ui.md § "Replace device
+  // sheet copy". DO NOT REPHRASE.
+  const confirmed = await openCountdownSheet({
+    titleHtml: "Replace this device?",
+    bodyHtml: `
+      <p>Rotates your account's identity key. Every other device on this
+      account — including this phone — will need to confirm a new pairing
+      the next time it opens the app. You won't be locked out, but you'll
+      see a one-time biometric prompt on each device.</p>
+      <p>Pods stay running. Apps stay installed.</p>
+    `,
+    primaryLabel: "Replace",
+    primaryClass: "danger",
+  });
+  if (!confirmed) return;
+
+  const phase = openPhaseToast("Replace device");
+  try {
+    phase.update("signing", "Signing rotation request…");
+    const oldVersion = currentIrkVersion();
+    const result = await runReplaceDeviceCeremony({
+      username: session.username,
+      umk: session.umk,
+      currentVersion: oldVersion,
+      ifMatch: state.etag,
+    });
+    phase.update("posting", `Pending — completes ${formatCompletesAt(result.completesAt)}`);
+    // Some accounts/policy paths complete immediately; the spec
+    // optionally calls /complete now. Worker returns 425 if too early,
+    // so we tolerate the early-call failure silently — UI surfaces the
+    // pending state either way. On a successful complete, we bump the
+    // webapp's local IRK version slot AND refresh the in-session IRK
+    // so subsequent signing uses the rotated key.
+    try {
+      await completeReplaceDeviceCeremony({ username: session.username });
+      phase.update("installing", "Installing new identity…");
+      setCurrentIrkVersion(result.newVersion);
+      await unlockSession(session.umk, session.username);
+      phase.update("done", "Replace complete.");
+    } catch (e) {
+      if (e?.code === "425") {
+        // Grace not elapsed — keep the rotation pending; the user can
+        // come back to this view later and we'll detect a still-pending
+        // row via /api/users/:u/re-pair (GET). For now we surface the
+        // pending state and don't bump local IRK version yet.
+        phase.update("done", "Pending — finish later from this screen.");
+      } else if (e?.code === "404") {
+        // No pending row server-side (already completed) — treat as
+        // success and bump local version so subsequent signs match.
+        setCurrentIrkVersion(result.newVersion);
+        await unlockSession(session.umk, session.username);
+        phase.update("done", "Replace complete.");
+      } else {
+        throw e;
+      }
+    }
+    toast("Replace device — request accepted.");
+    await renderTrustedDevices();
+  } catch (e) {
+    phase.update("error", e?.message ?? "Couldn't replace");
+    toast(e?.message ?? "Replace failed", "err");
+  } finally {
+    phase.dismissAfter(3500);
+  }
+}
+
+async function runWipeRestartSheet() {
+  const session = getSession();
+  if (!session.umk || !session.username) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  // Sheet copy — VERBATIM from docs/revocation-ui.md § "Wipe & restart
+  // sheet copy". The user-facing `<u>` interpolation is the username
+  // exactly as registered.
+  const confirmed = await openCountdownSheet({
+    titleHtml: "Wipe and start over?",
+    bodyHtml: `
+      <p>Your account keeps the username <strong>@${escapeHtml(session.username)}</strong>
+      and your pods keep their data. Every device currently on this account
+      will be disconnected. You'll re-pair each one fresh — including this
+      phone, which becomes the new root of trust.</p>
+      <p><strong>This can't be undone from another device.</strong></p>
+    `,
+    primaryLabel: "Wipe and start over",
+    primaryClass: "danger",
+  });
+  if (!confirmed) return;
+
+  // We need a fresh local passphrase for the re-bound UMK.
+  const { inlinePrompt } = await import("../lib/modal.js");
+  const newLocalPass = await inlinePrompt({
+    title: "Set a new browser passphrase",
+    message: "After the wipe, this browser will unlock with a new passphrase. Use 8+ characters.",
+    placeholder: "New browser passphrase",
+    type: "password",
+    okLabel: "Continue",
+    validate: (v) => (v && v.length >= 8 ? null : "Use at least 8 characters"),
+  });
+  if (!newLocalPass) return;
+
+  const phase = openPhaseToast("Wipe & restart");
+  try {
+    phase.update("registering", "Registering new passkey…");
+    phase.update("signing", "Signing wipe request…");
+    const result = await runWipeRestartCeremony({
+      username: session.username,
+      umk: session.umk,
+      ifMatch: state.etag,
+    });
+    phase.update("posting", "Server accepted; installing locally…");
+    // Local install: drop the OLD wrapped UMK and re-bootstrap with
+    // the NEW UMK under the user's new browser passphrase. Failure
+    // here AFTER server-success matches the iOS "worst case" branch —
+    // we surface a clear recovery hint.
+    try {
+      await resetDevice();
+      // Fresh UMK = fresh v1 slot — the NEW IRK signed into wipe-restart
+      // is `flagship.irk.v1` off the NEW UMK, so the local IRK version
+      // resets to 1 for subsequent signing.
+      setCurrentIrkVersion(1);
+      await bootstrapFromExistingSeed(newLocalPass, result.newUmk);
+      await unlockSession(result.newUmk, session.username);
+    } catch (e) {
+      phase.update(
+        "error",
+        `Server committed but local install failed: ${e?.message ?? e}. Re-open the app to recover.`,
+      );
+      toast("Server wiped — re-open the app to finish on this browser.", "err");
+      return;
+    }
+    phase.update("done", "Wipe complete. New account key installed.");
+    toast("Wipe & restart complete.");
+    await renderTrustedDevices();
+  } catch (e) {
+    phase.update("error", e?.message ?? "Couldn't wipe");
+    toast(e?.message ?? "Wipe failed", "err");
+  } finally {
+    phase.dismissAfter(4000);
+  }
+}
+
+/** Lightweight phased-progress UI. Mirrors the iOS Phase enums — we
+ *  render the latest phase as a sticky note above the device list. */
+function openPhaseToast(action) {
+  const root = $("trusted-devices-list");
+  let bar = document.getElementById("ceremony-phase-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "ceremony-phase-bar";
+    bar.className = "card mt-2";
+    bar.setAttribute("aria-live", "polite");
+    if (root && root.parentElement) {
+      root.parentElement.insertBefore(bar, root);
+    } else {
+      document.body.appendChild(bar);
+    }
+  }
+  const setText = (phase, message) => {
+    bar.innerHTML = `<div class="weight-600">${escapeHtml(action)}</div>
+      <p class="note small" data-phase="${escapeHtml(phase)}">${escapeHtml(message)}</p>`;
+  };
+  setText("idle", "Starting…");
+  return {
+    update: setText,
+    dismissAfter(ms) {
+      setTimeout(() => { bar.remove(); }, ms);
+    },
+  };
+}
+
+function formatCompletesAt(ms) {
+  if (typeof ms !== "number" || !ms) return "soon";
+  const d = new Date(ms);
+  return d.toLocaleString();
 }
 
 export function initTrustedDevicesView() {

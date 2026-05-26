@@ -142,31 +142,45 @@ describe("trusted-devices quarantine (v1.2 Phase 4)", () => {
   });
 });
 
-describe("trusted-devices danger-zone E6 placeholder", () => {
+describe("trusted-devices danger-zone (P10 + P11 live)", () => {
   // Pure-logic mirror of the danger zone shape rendered by
-  // renderDangerZone() in views/trusted-devices.js. The HTML must
-  // still contain a Wipe & restart entry with a Learn-more button
-  // even when the device list is empty — that's the parity contract
-  // with iOS B8 / Android C8.
+  // renderDangerZone() in views/trusted-devices.js. The webapp's
+  // Danger Zone now ships TWO live ceremonies: Replace device (P10,
+  // IRK rotation) and Wipe & restart (P11, full account rotate).
+  // Both sections must be present whether the device list is empty
+  // or populated — that's the parity contract with iOS / Android.
 
   function renderDangerZone(): string {
     return `
     <hr class="mt-4" />
     <h3 class="mt-2">Danger zone</h3>
+    <div class="card" data-section="replace-device">
+      <div class="row">
+        <div class="weight-600">Replace device</div>
+        <button class="secondary danger" id="replace-device-btn">Replace device</button>
+      </div>
+    </div>
     <div class="card" data-section="wipe-restart">
       <div class="row">
         <div class="weight-600">Wipe &amp; restart</div>
-        <button class="secondary" id="wipe-restart-btn">Learn more</button>
+        <button class="secondary danger" id="wipe-restart-btn">Wipe &amp; restart</button>
       </div>
     </div>
   `;
   }
 
-  it("exposes a 'wipe-restart' section with a Learn-more button", () => {
+  it("exposes a 'wipe-restart' section with the live Wipe & restart button", () => {
     const html = renderDangerZone();
     expect(html).toContain('data-section="wipe-restart"');
     expect(html).toContain('id="wipe-restart-btn"');
     expect(html).toContain("Wipe &amp; restart");
+  });
+
+  it("exposes a 'replace-device' section with the live Replace button", () => {
+    const html = renderDangerZone();
+    expect(html).toContain('data-section="replace-device"');
+    expect(html).toContain('id="replace-device-btn"');
+    expect(html).toContain("Replace device");
   });
 
   it("danger-zone is independent of the device list (always rendered)", () => {
@@ -177,6 +191,8 @@ describe("trusted-devices danger-zone E6 placeholder", () => {
     const emptyListHtml = `<div class="card">Just this device</div>` + renderDangerZone();
     const populatedHtml = `<div class="card">deviceA</div><div class="card">deviceB</div>` + renderDangerZone();
     expect(emptyListHtml).toContain("wipe-restart-btn");
+    expect(emptyListHtml).toContain("replace-device-btn");
     expect(populatedHtml).toContain("wipe-restart-btn");
+    expect(populatedHtml).toContain("replace-device-btn");
   });
 });
