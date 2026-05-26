@@ -111,6 +111,8 @@ class BrowserViewerViewModel(
 
     data class IntSize(val width: Int, val height: Int)
 
+    data class KeyEvent(val eventType: String, val key: String, val code: String)
+
     companion object {
         /** Convert touch-coords in the viewport's pixel space to the
          *  frame's natural pixel space (mirrors the webapp's
@@ -127,6 +129,57 @@ class BrowserViewerViewModel(
             val x = (touchX / vw) * imgW
             val y = (touchY / vh) * imgH
             return x.roundToInt() to y.roundToInt()
+        }
+
+        /** Diff a soft-keyboard TextField edit and return the
+         *  key-events to ship. One keyDown+keyUp pair per inserted
+         *  character; one Backspace pair per removed character; mixed
+         *  edits collapse to "delete all of old, type all of new".
+         *  Mirrors BrowserViewerViewModel.keyEvents on iOS. */
+        fun keyEvents(oldText: String, newText: String): List<KeyEvent> {
+            if (oldText == newText) return emptyList()
+            if (newText.startsWith(oldText)) {
+                val added = newText.substring(oldText.length)
+                return added.flatMap { keyDownUpForChar(it) }
+            }
+            if (oldText.startsWith(newText)) {
+                val removed = oldText.length - newText.length
+                return (0 until removed).flatMap { backspacePair() }
+            }
+            val deletes = oldText.flatMap { backspacePair() }
+            val inserts = newText.flatMap { keyDownUpForChar(it) }
+            return deletes + inserts
+        }
+
+        private fun keyDownUpForChar(ch: Char): List<KeyEvent> {
+            val key = ch.toString()
+            val code = domCodeForChar(ch)
+            return listOf(
+                KeyEvent("keyDown", key, code),
+                KeyEvent("keyUp", key, code),
+            )
+        }
+
+        private fun backspacePair(): List<KeyEvent> = listOf(
+            KeyEvent("keyDown", "Backspace", "Backspace"),
+            KeyEvent("keyUp", "Backspace", "Backspace"),
+        )
+
+        private fun domCodeForChar(ch: Char): String {
+            if (ch in 'a'..'z') return "Key${ch.uppercaseChar()}"
+            if (ch in 'A'..'Z') return "Key$ch"
+            if (ch in '0'..'9') return "Digit$ch"
+            return when (ch) {
+                ' ' -> "Space"
+                '\n', '\r' -> "Enter"
+                '\t' -> "Tab"
+                '.' -> "Period"
+                ',' -> "Comma"
+                '/' -> "Slash"
+                '-' -> "Minus"
+                '=' -> "Equal"
+                else -> ""
+            }
         }
     }
 }

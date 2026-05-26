@@ -22,9 +22,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +36,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -74,6 +79,8 @@ fun BrowserViewerScreen(
         onDispose { vm.stop() }
     }
 
+    var keyboardVisible by remember { mutableStateOf(false) }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -99,6 +106,44 @@ fun BrowserViewerScreen(
                     Text("Stream closed", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
                 is BrowserViewerViewModel.Status.Failed ->
                     Text(s.message, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp), maxLines = 1)
+            }
+            Spacer(Modifier.weight(1f))
+            var showKeyboardToggle by remember { mutableStateOf(false) }
+            TextButton(onClick = { showKeyboardToggle = !showKeyboardToggle }) {
+                Text(if (showKeyboardToggle) "Hide keyboard" else "Show keyboard")
+            }
+            // Hoist the toggle so the TextField row below can read it.
+            keyboardVisible = showKeyboardToggle
+        }
+
+        // Soft-keyboard input row — visible only when toggled on. Each
+        // edit gets diffed against the previous text via the VM's pure
+        // `keyEvents()` helper and the resulting keyDown/keyUp pairs are
+        // shipped through `vm.sendKey`. Wire format mirrors the webapp
+        // viewer byte-for-byte (BrowserInput.key).
+        if (keyboardVisible) {
+            var keyboardText by remember { mutableStateOf("") }
+            val prevText = remember { mutableStateOf("") }
+            val focusRequester = remember { FocusRequester() }
+            OutlinedTextField(
+                value = keyboardText,
+                onValueChange = { newText ->
+                    val events = BrowserViewerViewModel.keyEvents(prevText.value, newText)
+                    for (e in events) {
+                        scope.launch { vm.sendKey(e.eventType, e.key, e.code) }
+                    }
+                    prevText.value = newText
+                    keyboardText = newText
+                },
+                placeholder = { Text("Type to send keys to the page") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = FS.space.s4, vertical = FS.space.s2)
+                    .focusRequester(focusRequester),
+            )
+            LaunchedEffect(keyboardVisible) {
+                if (keyboardVisible) focusRequester.requestFocus()
             }
         }
 
