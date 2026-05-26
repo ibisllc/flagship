@@ -66,6 +66,7 @@ import {
   handleRoutingLookup,
   handleServerLookup,
   handleServerRegister,
+  handleRevokeServer,
   handleServerReleaseName,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
@@ -351,6 +352,10 @@ const ROUTE_RE = {
   SERVER_RELEASE: /^\/api\/server\/release$/,
   SERVER_LOOKUP: /^\/api\/server\/by-domain\/([^/]+)$/,
   SERVER_REVOKE_BY_SELF: /^\/api\/server\/by-domain\/([^/]+)\/revoke$/,
+  // P13 — IRK-signed user-initiated server revocation (lost / stolen /
+  // decommissioned). Cascades through the boot-unlock leases so the
+  // box bricks on its next reboot.
+  SERVER_REGISTRY_REVOKE: /^\/api\/server-registry\/revoke$/,
   PUBKEY_CERT: /^\/api\/users\/([^/]+)\/pubkey-cert$/,
   CA_CERT: /^\/api\/ca\/cert$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
@@ -663,6 +668,24 @@ export async function tryControlPlane(
       await handleServerRevokeBySelf(
         { servers: storage.servers },
         decodeURIComponent(m[1]!),
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && ROUTE_RE.SERVER_REGISTRY_REVOKE.test(path)) {
+    // P13 — IRK-signed user-initiated server revocation. Marks the
+    // server record revoked, tears down every active boot-unlock
+    // lease (the "brick on next boot" effect), and appends a
+    // `server-revoked` audit row.
+    return finish(
+      await handleRevokeServer(
+        {
+          usernames: storage.usernames,
+          servers: storage.servers,
+          auditEvents: storage.auditEvents,
+          autoUnlockLeases: storage.autoUnlockLeases,
+          boxSealedLeases: storage.boxSealedLeases,
+        },
         await readJson(request),
       ),
     );

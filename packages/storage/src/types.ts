@@ -349,7 +349,12 @@ export type AuditEventKind =
   | "account-type-changed-multi-to-single"
   | "recovery-code-consumed"
   | "quarantine-blocked-revoke"
-  | "totp-failed-rate";
+  | "totp-failed-rate"
+  // P13 — IRK-signed user-initiated server revocation
+  // (POST /api/server-registry/revoke). Reason ∈ {lost, stolen,
+  // decommissioned}. Cascades through every active boot-unlock lease
+  // on the server so the box bricks on the next reboot.
+  | "server-revoked";
 
 /**
  * Plan B Phase 5 — recovery-method tag stored next to a re-pair
