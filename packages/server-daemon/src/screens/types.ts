@@ -565,3 +565,86 @@ export interface VibeCodeReplyRequest {
 export interface VibeCodeReplyResponse {
   ok: boolean;
 }
+
+// ---------- P9 — /api/screens/peer-backup ----------------------------------
+//
+// Two endpoints power the webapp / mobile peer-backup management view:
+//   GET  /api/screens/peer-backup/status        → PeerBackupStatusResponse
+//   POST /api/screens/peer-backup/toggle        → PeerBackupStatusResponse
+//                                                 body { participate: boolean }
+//
+// Shape matches `apps/web/public/webapp/views/peer-backup.js` byte-for-byte.
+// Fields the underlying daemon state does NOT yet capture (per-peer
+// online/lastSeen, repair-tick history, per-shard byte size for "my"
+// shards) are reported as honest empty/zero values — never fabricated.
+
+export interface PeerBackupPeerHostingYou {
+  /** Peer's serverId. Reused as the "fqdn" for display. */
+  peerFqdn: string;
+  /** Count of this server's shards the peer hosts. */
+  shardsHosted: number;
+  /** Last time we saw a successful challenge / placement (unix-ms). */
+  lastSeenMs: number;
+  /** Best-effort online signal (false when no recent activity). */
+  online: boolean;
+}
+
+export interface PeerBackupPeerYouHost {
+  peerFqdn: string;
+  /** Count of distinct shards this server hosts for the peer. */
+  shardsHosted: number;
+  /** Sum of `sizeBytes` across all hosted shards for this peer. */
+  bytesHosted: number;
+  /** Last time the peer pulled / verified a shard (unix-ms). */
+  lastFetchedMs: number;
+}
+
+export interface PeerBackupShardSummary {
+  /** Hex of `encChunkId`; unique per chunk on this server. */
+  shardId: string;
+  /** Surviving replicas across all peers (challengeStreak < 3). */
+  replicas: number;
+  /** Erasure-coding k — the minimum required to reconstruct. */
+  minReplicas: number;
+  /** Best-effort size; 0 when not yet tracked at the my-shard layer. */
+  bytes: number;
+}
+
+export interface PeerBackupRepairStatus {
+  /** "idle" | "running" | "error" — current repair-daemon state. */
+  state: "idle" | "running" | "error";
+  /** Unix-ms of the last completed repair tick, or null. */
+  lastTickMs: number | null;
+  /** Shards queued for re-placement right now. */
+  queued: number;
+  /** Repairs successfully completed in the last 24h. */
+  completed24h: number;
+  /** Last error message (if any). */
+  lastError?: string;
+}
+
+export interface PeerBackupStats {
+  /** Total chunks this server has shards for. */
+  total: number;
+  /** Chunks with ≥ k surviving replicas. */
+  durable: number;
+  /** Chunks with < k surviving replicas. */
+  atRisk: number;
+  /** Bytes of this server's data currently placed on peers (best-effort). */
+  yourBytesStored: number;
+  /** Bytes this server hosts for peers (sum of theirShards.sizeBytes). */
+  peerBytesHosted: number;
+}
+
+export interface PeerBackupStatusResponse {
+  participating: boolean;
+  peersBackingYouUp: PeerBackupPeerHostingYou[];
+  peersYouBackUp: PeerBackupPeerYouHost[];
+  shards: PeerBackupShardSummary[];
+  repair: PeerBackupRepairStatus;
+  stats: PeerBackupStats;
+}
+
+export interface PeerBackupToggleRequest {
+  participate: boolean;
+}

@@ -652,6 +652,16 @@ async function main(): Promise<void> {
         : null,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
       lineageResolver,
+      // P9 — peer-backup management surface. BackupLoop is the
+      // authoritative participation toggle; the registry + repair-stats
+      // hooks are not yet wired into the production boot path (the
+      // matchmaker constructs its own InMemoryShardRegistry on first
+      // upload but doesn't yet hand it back here). When registry/repair
+      // are absent the BFF surfaces the participation flag + an honest
+      // empty shard/peer/repair view.
+      peerBackup: {
+        backupLoop,
+      },
       postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
       // W10 — per-app env-var KV editor + vibe-code session BFF deps.
       appEnvStore: runtime.envStore,

@@ -42,6 +42,8 @@ import type {
   OrdersSendResponse,
   OwnedUrl,
   PairedSessionsListResponse,
+  PeerBackupStatusResponse,
+  PeerBackupToggleRequest,
   RecentInstallEvent,
   ReleaseStatusResponse,
   ServerDetailResponse,
@@ -62,6 +64,11 @@ import type {
   VibeCodeStartResponse,
   VibeCodeStatusResponse,
 } from "./types.js";
+import {
+  buildPeerBackupStatus,
+  type PeerBackupSnapshotDeps,
+} from "./peerBackupStatus.js";
+import type { BackupLoop } from "../backupLoop.js";
 import { collectServerMetrics, type ServerMetricsProvider } from "./serverMetrics.js";
 import { verifyCustomDomain, type DnsResolver } from "./verifyCustomDomain.js";
 import {
@@ -187,6 +194,15 @@ export interface ScreensHttpDeps {
    * id" in tests, production reads from the session's pending manifest.
    */
   resolveSessionAppId?: ((session: VibeCodeSession) => string | null) | null;
+  /**
+   * P9 — Snapshot-builder deps for the /api/screens/peer-backup/*
+   * endpoints. The toggle handler reuses `peerBackup.backupLoop` to
+   * flip the participation flag; the status handler projects the
+   * combined view from the registry + repair stats. All sub-deps are
+   * optional — the BFF surfaces an honest "not participating, empty"
+   * payload when no peer-backup state is wired.
+   */
+  peerBackup?: PeerBackupSnapshotDeps | null;
 }
 
 export interface VibeCodeRuntime {
@@ -842,6 +858,39 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const r = session.pushEnvVarAck({ toolUseId: pending.toolUseId, ack });
       if (!r.ok) return jerr(409, r.reason ?? "ack rejected");
       const out: VibeCodeReplyResponse = { ok: true };
+      return jok(out);
+    }
+
+    // ---- P9 GET /api/screens/peer-backup/status ----
+    //
+    // Snapshot of the daemon's peer-backup participation, shard health,
+    // peer topology, and repair history. Empty/zero values stand in for
+    // any underlying state the daemon hasn't wired yet — never fabricated.
+    if (path === "/api/screens/peer-backup/status" && method === "GET") {
+      const out: PeerBackupStatusResponse = buildPeerBackupStatus(
+        deps.peerBackup ?? {},
+      );
+      return jok(out);
+    }
+
+    // ---- P9 POST /api/screens/peer-backup/toggle ----
+    //
+    // Flips peer-backup participation. The paired-session gate has
+    // already authenticated; in webapp world the session token IS the
+    // PSK-equivalent (mirrors the lineage-resolve handler's design).
+    // Returns the post-toggle full status payload so the webapp can
+    // re-render without a second GET.
+    if (path === "/api/screens/peer-backup/toggle" && method === "POST") {
+      const loop: BackupLoop | null | undefined = deps.peerBackup?.backupLoop;
+      if (!loop) return jerr(503, "peer-backup not configured");
+      const body = parseJson(req.body) as PeerBackupToggleRequest | null;
+      if (!body || typeof body.participate !== "boolean") {
+        return jerr(400, "participate (boolean) required");
+      }
+      loop.setEnabled(body.participate, now());
+      const out: PeerBackupStatusResponse = buildPeerBackupStatus(
+        deps.peerBackup ?? {},
+      );
       return jok(out);
     }
 
