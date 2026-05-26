@@ -30,6 +30,10 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 - **A2** Mac burner Quick (dumb-flash, default) vs Advanced (remaster) mode toggle — `e3407ef` (71 burner tests pass)
 - **P2 / P3 / P5 / P7 (Android)** — Android half of the parity wave, wire-identical with iOS (same canonical bytes, copy, field sets) — `01e8dd4` (gradle test BUILD SUCCESSFUL)
 
+### Parity wave 2 (2026-05-25 night)
+- **P10 / P11 (webapp)** — full Replace-device + Wipe & restart ceremonies wired into Settings → Trusted devices. Both `<dialog>` flows with the 3-second-countdown confirmation, verbatim copy from `docs/revocation-ui.md`. New `lib/replaceDeviceCeremony.js` + `lib/wipeRestartCeremony.js`; canonical bytes round-tripped through `@flagship/protocol` verifiers in tests. `keystore.js` gains `currentIrkVersion()` for IRK rotation. — `20224ce` (full repo: 311 files, 3907 pass / 10 skip)
+- **P1 (iOS + Android)** — persistent backup-reminder banner on Home, mirroring the webapp predicate. `RecoveryBannerStore` on each platform; dismiss flag in UserDefaults / SharedPreferences. — `4bd3e73`
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
@@ -58,7 +62,7 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
 
 - **P0** — Parity audit gate + keep `docs/feature-parity.md` current; verify the
   "done" cells are truly wired (marketplace iOS, create-server iOS pickers). _agent._
-- **P1** — Post-creation backup REMINDER on all 3. _agent._ ✅ webapp (`e598f32`); ⏳ iOS + Android.
+- **P1** — Post-creation backup REMINDER on all 3. _agent._ ✅ (`e598f32` + `4bd3e73`).
 - **P2** — Trademark-claim → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
 - **P3** — Pending-server cancel → real `ReleaseServerName` envelope + `/api/server/release`. _agent._ ✅ (`ca7165a` + `01e8dd4`).
 - **P4** — Cross-device QR pairing + admit → Android (webapp + iOS done). _agent._
@@ -73,10 +77,9 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
 - **P9** — Peer-backup management → daemon Screens-BFF + 3 UI. **Decision
   2026-05-25**: build full BFF (status + toggle) to webapp's expected contract
   + wire all 3. _agent._
-- **P10** — Replace device (IRK rotation) → webapp (iOS/Android done). _agent._
-- **P11** — Wipe & restart → webapp. **Decision 2026-05-25**: build the full
-  ceremony now (override the older "ship disabled" v1 stance) — mirror iOS
-  exactly. _agent._
+- **P10** — Replace device (IRK rotation) → webapp. _agent._ ✅ (`20224ce`).
+- **P11** — Wipe & restart → webapp. _agent._ ✅ (`20224ce`) — full ceremony,
+  not the older "ship disabled" stance.
 - **P12** — Multi-profile switching → webapp (iOS/Android done; needs a
   storage migration from single localStorage to a multi-profile store). _agent._
 - **P13** — Kill-switch / server-revocation UI → all 3. **Decision 2026-05-25**:
@@ -138,11 +141,9 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 ```
 
 ## Next agent-doable, smallest-first
-(Updated 2026-05-25 evening after wave 1.) **In flight**: P10 + P11 webapp
-(Replace + Wipe ceremonies, owner decision).
-**Up next**: P1 mobile (iOS + Android home banner) → P4 Android QR + admit →
-P13 per-server danger zone (all 3) → P9 daemon BFF + 3 UIs → P12 webapp
-multi-profile + storage migration → P6 collaborator invites iOS + Android →
-P8 framebuffer-stream port (iOS + Android) → P14 companion-browser dock →
-D1 merge / D2 prune stale branches. Then the hardware/owner items (A3–A6,
-TF*, C1, E*).
+(Updated 2026-05-25 night after wave 2.) **Up next**: P13 per-server
+danger zone (all 3) → P9 daemon BFF then 3 UIs → P4 Android QR + admit
+→ P12 webapp multi-profile + storage migration → P6 collaborator invites
+iOS + Android → P8 framebuffer-stream port (iOS + Android) → P14
+companion-browser dock → D2 prune stale branches. Then the
+hardware/owner items (A3–A6, TF*, C1, E*).

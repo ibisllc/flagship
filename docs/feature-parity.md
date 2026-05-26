@@ -18,7 +18,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 3 | Login / account-resolve (never-404, takeover) | ✅ | ✅ | ✅ | — | — |
 | 4 | Join / **cross-device QR pairing + admit** | ✅ | ✅ | ❌ | Android | **P4** |
 | 5 | Recovery (keyfile + cloud + post-recovery) | ✅ | ✅ | ✅ | — | — |
-| 6 | Key backup + Secure-your-account + **reminder** | ✅ | ⚠️ | ⚠️ | iOS+Android (reminder) | **P1** |
+| 6 | Key backup + Secure-your-account + **reminder** | ✅ | ✅ | ✅ | — | ✓ P1 |
 | 7 | Create server (QR relay, TTL, boot-unlock) | ✅ | ✅ | ✅ | — | — |
 | 8 | Pending server + cancel → **release name** | ✅ | ✅ | ✅ | — | ✓ P3 |
 | 9 | Server detail (auto-unlock, metrics, events) | ✅ | ✅ | ✅ | — | — |
@@ -38,8 +38,8 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 23 | Push registration | ✅ | ✅ | ✅ | — | — |
 | 24 | **In-app browser-viewer** | ✅ | ❌ | ❌ | iOS+Android | **P8** |
 | 25 | Activity feed | ✅ | ✅ | ✅ | — | — |
-| 26 | **Replace device** (IRK rotation) | ❌ | ✅ | ✅ | webapp | **P10** |
-| 27 | **Wipe & restart** | ❌ | ✅ | ✅ | webapp | **P11** |
+| 26 | **Replace device** (IRK rotation) | ✅ | ✅ | ✅ | — | ✓ P10 |
+| 27 | **Wipe & restart** | ✅ | ✅ | ✅ | — | ✓ P11 |
 | 28 | **Kill-switch / server revocation UI** | ❌ | ❌ | ❌ | all 3 | **P13** |
 
 Legend: ✅ believed wired · ⚠️ partial / unverified / audit-disputed · ❌ missing.
@@ -48,8 +48,8 @@ Legend: ✅ believed wired · ⚠️ partial / unverified / audit-disputed · �
 
 - **To iOS + Android:** collaborator invites (P6), browser-viewer (P8 —
   framebuffer-stream, see decision note below), peer-backup (P9), cross-device
-  pairing → Android only (P4), backup reminder (P1 mobile half).
-- **To webapp:** Replace device (P10), Wipe & restart (P11), multi-profile (P12).
+  pairing → Android only (P4).
+- **To webapp:** multi-profile (P12).
 - **All three:** kill-switch UI (P13 — per-server danger zone, decided),
   companion-browser dock (P14 — new, see below).
 - **Verify-only:** marketplace iOS wiring, create-server iOS pickers (P0).
