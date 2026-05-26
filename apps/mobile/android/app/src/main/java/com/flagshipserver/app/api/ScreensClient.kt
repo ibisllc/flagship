@@ -85,6 +85,11 @@ interface ScreensClient {
 
     // P1.6 vibe-code stream — token/build-log/deploy events
     fun vibeCodeStream(sessionId: String): Flow<VibeCodeFrame>
+
+    // P8 browser-tab framebuffer stream — opens a WS to
+    // `/api/screens/browser-tabs/:tabId/stream` and returns a
+    // bidirectional handle.
+    fun browserTabStream(tabId: String): BrowserStream
 }
 
 sealed class ScreensError(message: String) : Throwable(message) {

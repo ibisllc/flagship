@@ -24,6 +24,10 @@ public struct ServiceDetailScreen: View {
     @State private var replaceDraft = ""
     var onSave: () -> Void = {}
     var onRemove: () -> Void = {}
+    /// P8 — when the daemon reports open browser-tabs for this app the
+    /// detail screen shows a section that calls this to push the tabs
+    /// list onto the nav stack.
+    var onOpenBrowserTabs: () -> Void = {}
 
     public init(
         vm: ServiceDetailViewModel,
@@ -31,7 +35,8 @@ public struct ServiceDetailScreen: View {
         pods: [PodInfo],
         globalLeaderPodId: String?,
         onSave: @escaping () -> Void = {},
-        onRemove: @escaping () -> Void = {}
+        onRemove: @escaping () -> Void = {},
+        onOpenBrowserTabs: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.username = username
@@ -39,6 +44,7 @@ public struct ServiceDetailScreen: View {
         self.globalLeaderPodId = globalLeaderPodId
         self.onSave = onSave
         self.onRemove = onRemove
+        self.onOpenBrowserTabs = onOpenBrowserTabs
     }
 
     public var body: some View {
@@ -54,6 +60,7 @@ public struct ServiceDetailScreen: View {
                     header(d: d.app, c: c)
                     whereItRuns(d: d, c: c)
                     webDomains(d: d, c: c)
+                    browserTabsRow(d: d, c: c)
                     logsAndBackup(d: d, c: c)
                     saveAndRemove(c: c)
                 }
@@ -491,6 +498,31 @@ public struct ServiceDetailScreen: View {
                     Text("Prior to claiming a FQDN, you must set a CNAME record targeting \(customDomainRoot).")
                         .font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func browserTabsRow(d: AppDetailResponse, c: FSColors) -> some View {
+        if !d.browserTabs.isEmpty {
+            section("BROWSER", c: c) {
+                Button(action: onOpenBrowserTabs) {
+                    FSCard {
+                        HStack(spacing: FS.space.s3) {
+                            Image(systemName: "rectangle.on.rectangle").foregroundColor(c.primary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Open browser viewer").foregroundColor(c.text)
+                                Text("\(d.browserTabs.count) tab\(d.browserTabs.count == 1 ? "" : "s") running server-side")
+                                    .font(FS.font.caption())
+                                    .foregroundColor(c.textMuted)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("service-detail-open-browser-viewer")
             }
         }
     }

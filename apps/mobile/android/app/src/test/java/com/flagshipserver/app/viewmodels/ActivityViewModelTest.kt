@@ -99,6 +99,8 @@ private class StubScreensClient(
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse = error("unused")
     override fun installEvents(serial: String): Flow<InstallEvent> = emptyFlow()
     override fun vibeCodeStream(sessionId: String): Flow<VibeCodeFrame> = emptyFlow()
+    override fun browserTabStream(tabId: String): com.flagshipserver.app.api.BrowserStream =
+        com.flagshipserver.app.api.MockBrowserStream()
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

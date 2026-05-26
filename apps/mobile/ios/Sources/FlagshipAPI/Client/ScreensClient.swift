@@ -88,6 +88,13 @@ public protocol ScreensClient: Sendable {
     // P9 — peer-backup management.
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
     func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
+
+    // P8 — browser-tab framebuffer stream. Opens a WS to
+    // `/api/screens/browser-tabs/:tabId/stream` (with the session token
+    // as a query param) and returns a bidirectional handle: incoming
+    // frames flow through `incoming`, outgoing pointer / key events
+    // ship through `send(_:)`.
+    func browserTabStream(tabId: String) -> any BrowserStream
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {

@@ -24,6 +24,10 @@ sealed interface AppsRoute {
     data object VibeCodeProviderPick : AppsRoute
     data object VibeCodeDescribe : AppsRoute
     data class VibeCodeGenerating(val sessionId: String) : AppsRoute
+    /** P8 — list of headless-Chromium tabs running for an app. */
+    data class BrowserTabs(val serviceId: String) : AppsRoute
+    /** P8 — the framebuffer viewer that streams a single tab. */
+    data class BrowserViewer(val serviceId: String, val tabId: String) : AppsRoute
 }
 
 sealed interface ActivityRoute {

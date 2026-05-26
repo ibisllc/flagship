@@ -266,4 +266,7 @@ class LiveScreensClient(
             close()
         }
     }
+
+    override fun browserTabStream(tabId: String): BrowserStream =
+        OkHttpBrowserStream(client = client, store = store, tabId = tabId)
 }

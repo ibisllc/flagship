@@ -465,4 +465,14 @@ class MockScreensClient(
         emit(VibeCodeFrame.Deploy("habits", "https://habits.harry.flagship.services/"))
         emit(VibeCodeFrame.Done)
     }
+
+    val browserStreamsOpened = mutableListOf<String>()
+    var browserStreamFramesToEmit: List<BrowserFrame> = emptyList()
+
+    override fun browserTabStream(tabId: String): BrowserStream {
+        browserStreamsOpened.add(tabId)
+        val s = MockBrowserStream()
+        for (f in browserStreamFramesToEmit) s.emit(f)
+        return s
+    }
 }

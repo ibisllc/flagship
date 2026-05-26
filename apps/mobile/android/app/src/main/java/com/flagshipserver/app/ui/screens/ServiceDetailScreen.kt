@@ -3,6 +3,7 @@ package com.flagshipserver.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -269,6 +270,36 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     }
                 },
             )
+        }
+
+        // P8 — browser viewer entry. The daemon advertises open tabs
+        // via P1.3 app-detail (AppDetailResponse.browserTabs). When the
+        // detail screen migrates off sample data this row becomes
+        // conditional on `detail.browserTabs.isNotEmpty()`; until then
+        // the BrowserTabsScreen handles the empty case gracefully.
+        Spacer(Modifier.height(FS.space.s6))
+        SectionHeader("Browser")
+        FSCard(
+            padding = PaddingValues(FS.space.s4),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { nav.navigate("browser-tabs/$serviceId") },
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Open browser viewer",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 16.sp),
+                    )
+                    Text(
+                        text = "Stream a server-side Chromium tab and forward touches.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                }
+                Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+            }
         }
 
         Spacer(Modifier.height(FS.space.s8))

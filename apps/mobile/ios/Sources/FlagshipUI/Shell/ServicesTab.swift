@@ -112,6 +112,10 @@ public struct ServicesTab: View {
             VibeCodeChatContainer(sessionId: sessionId)
         case .serviceEnv(let appId, let creator, let slug):
             ServiceEnvContainer(appId: appId, creator: creator, slug: slug)
+        case .browserTabs(let serviceId):
+            BrowserTabsContainer(serviceId: serviceId, path: $path)
+        case .browserViewer(_, let tabId):
+            BrowserViewerContainer(tabId: tabId)
         }
     }
 
@@ -349,7 +353,8 @@ struct ServiceDetailContainer: View {
                     pods: app.pods,
                     globalLeaderPodId: app.leaderPodId,
                     onSave: { Task { await save(vm: vm) } },
-                    onRemove: { toasts.warning("Remove flow not wired yet.") }
+                    onRemove: { toasts.warning("Remove flow not wired yet.") },
+                    onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) }
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -573,6 +578,51 @@ struct VibeCodeGeneratingContainer: View {
         }
         .task {
             if vm == nil { vm = VibeCodeStreamViewModel(sessionId: sessionId, client: client) }
+        }
+    }
+}
+
+// P8 — browser-tabs list container. Loads the tab list for an app and
+// pushes the viewer onto the nav stack when a row is tapped.
+struct BrowserTabsContainer: View {
+    let serviceId: String
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @State private var vm: BrowserTabsViewModel?
+
+    var body: some View {
+        Group {
+            if let vm {
+                BrowserTabsScreen(vm: vm, onPick: { tab in
+                    path.append(.browserViewer(serviceId: serviceId, tabId: tab.tabId))
+                })
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            if vm == nil { vm = BrowserTabsViewModel(serviceId: serviceId, client: client) }
+        }
+    }
+}
+
+// P8 — viewer container. Owns the BrowserViewerViewModel lifecycle so
+// the WS gets started/stopped with the screen.
+struct BrowserViewerContainer: View {
+    let tabId: String
+    @Environment(\.screensClient) private var client
+    @State private var vm: BrowserViewerViewModel?
+
+    var body: some View {
+        Group {
+            if let vm {
+                BrowserViewerScreen(vm: vm)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            if vm == nil { vm = BrowserViewerViewModel(tabId: tabId, client: client) }
         }
     }
 }

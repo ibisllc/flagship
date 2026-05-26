@@ -18,6 +18,8 @@ import com.flagshipserver.app.ui.screens.MarketplaceDetailScreen
 import com.flagshipserver.app.ui.screens.VibeCodeProviderPickScreen
 import com.flagshipserver.app.ui.screens.VibeCodeDescribeScreen
 import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
+import com.flagshipserver.app.ui.screens.BrowserTabsScreen
+import com.flagshipserver.app.ui.screens.BrowserViewerScreen
 
 @Composable
 fun ServicesTab() {
@@ -54,6 +56,15 @@ fun ServicesTab() {
         composable("vibe/generating/{sessionId}") { entry ->
             val sid = entry.arguments?.getString("sessionId") ?: return@composable
             VibeCodeGeneratingScreen(nav, sessionId = sid)
+        }
+        composable("browser-tabs/{serviceId}") { entry ->
+            val sid = entry.arguments?.getString("serviceId") ?: return@composable
+            BrowserTabsScreen(nav, serviceId = sid)
+        }
+        composable("browser-viewer/{serviceId}/{tabId}") { entry ->
+            val sid = entry.arguments?.getString("serviceId") ?: return@composable
+            val tid = entry.arguments?.getString("tabId") ?: return@composable
+            BrowserViewerScreen(nav, serviceId = sid, tabId = tid)
         }
     }
 }

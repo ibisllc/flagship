@@ -224,6 +224,132 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
+
+    // MARK: - P8 browser-tab framebuffer stream
+
+    public func browserTabStream(tabId: String) -> any BrowserStream {
+        let stream = LiveBrowserStream(
+            urlSession: urlSession,
+            store: store,
+            tabId: tabId
+        )
+        stream.start()
+        return stream
+    }
+}
+
+/// URLSessionWebSocketTask-backed implementation. Reconnects up to
+/// `maxReconnects` times with exponential backoff on transient close.
+/// Phase 1: backoff tuning + finer error surfaces are TODO.
+public final class LiveBrowserStream: BrowserStream, @unchecked Sendable {
+    public let incoming: AsyncStream<BrowserFrame>
+    private let continuation: AsyncStream<BrowserFrame>.Continuation
+    private let urlSession: URLSession
+    private let store: any SessionStoring
+    private let tabId: String
+    private var task: URLSessionWebSocketTask?
+    private var driver: Task<Void, Never>?
+    private var closed = false
+    private let lock = NSLock()
+    private let maxReconnects = 3
+
+    public init(urlSession: URLSession, store: any SessionStoring, tabId: String) {
+        self.urlSession = urlSession
+        self.store = store
+        self.tabId = tabId
+        var c: AsyncStream<BrowserFrame>.Continuation!
+        self.incoming = AsyncStream { c = $0 }
+        self.continuation = c
+    }
+
+    public func start() {
+        driver = Task { [weak self] in
+            guard let self else { return }
+            var attempt = 0
+            while !Task.isCancelled, !self.isClosed(), attempt <= self.maxReconnects {
+                let ok = await self.runOnce()
+                if ok { break }
+                attempt += 1
+                if attempt > self.maxReconnects { break }
+                let backoffMs: UInt64 = UInt64(min(8000, 250 * (1 << attempt)))
+                try? await Task.sleep(nanoseconds: backoffMs * 1_000_000)
+            }
+            self.continuation.finish()
+        }
+    }
+
+    private func isClosed() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return closed
+    }
+
+    private func runOnce() async -> Bool {
+        guard let base = await store.podBaseUrl,
+              let token = await store.sessionToken else { return true }
+        let wsBase = base
+            .replacingOccurrences(of: "https://", with: "wss://")
+            .replacingOccurrences(of: "http://", with: "ws://")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let encodedToken = token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? token
+        let encodedTabId = tabId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? tabId
+        let urlStr = "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream?sessionToken=\(encodedToken)"
+        guard let url = URL(string: urlStr) else { return true }
+        let ws = urlSession.webSocketTask(with: url)
+        lock.lock(); self.task = ws; lock.unlock()
+        ws.resume()
+        var sawAnyFrame = false
+        while !Task.isCancelled, !self.isClosed() {
+            do {
+                let msg = try await ws.receive()
+                let data: Data
+                switch msg {
+                case .data(let d): data = d
+                case .string(let s): data = Data(s.utf8)
+                @unknown default: continue
+                }
+                if let frame = BrowserFrame.decode(data) {
+                    continuation.yield(frame)
+                    sawAnyFrame = true
+                }
+            } catch {
+                ws.cancel(with: .abnormalClosure, reason: nil)
+                // Either way we want to retry — keep reconnecting on
+                // transient drops. The driver caps the attempts.
+                _ = sawAnyFrame
+                return false
+            }
+        }
+        ws.cancel(with: .normalClosure, reason: nil)
+        return true
+    }
+
+    public func send(_ input: BrowserInput) async {
+        lock.lock(); let ws = task; let isClosed = closed; lock.unlock()
+        guard !isClosed, let ws else { return }
+        do {
+            // Webapp dispatches text frames (JSON.stringify(...) →
+            // WebSocket.send(text)); daemon's `ws.on('message')` receives
+            // a UTF-8 string. Mirror that wire encoding so the daemon
+            // parser path is identical.
+            let data = try input.encode()
+            let text = String(data: data, encoding: .utf8) ?? "{}"
+            try await ws.send(.string(text))
+        } catch {
+            // Transient WS failure — the driver loop will detect a
+            // closed socket on its next `receive()` and trigger the
+            // reconnect path.
+        }
+    }
+
+    public func close() {
+        lock.lock()
+        closed = true
+        let ws = task
+        lock.unlock()
+        ws?.cancel(with: .normalClosure, reason: nil)
+        driver?.cancel()
+        continuation.finish()
+    }
 }
 
 private struct EmptyResponse: Decodable {}

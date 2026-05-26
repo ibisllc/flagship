@@ -143,4 +143,7 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
         try await real.vibeCodeSessionReply(sessionId: sessionId, req)
     }
+    func browserTabStream(tabId: String) -> any BrowserStream {
+        real.browserTabStream(tabId: tabId)
+    }
 }

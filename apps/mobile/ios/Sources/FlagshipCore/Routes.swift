@@ -23,6 +23,10 @@ public enum AppsRoute: Hashable, Sendable {
     /// W10 — per-app env-var KV editor. Reached from the per-service
     /// detail screen's "Configure environment" menu item.
     case serviceEnv(appId: String, creator: String, slug: String)
+    /// P8 — list of headless-Chromium tabs running for an app.
+    case browserTabs(serviceId: String)
+    /// P8 — the framebuffer viewer that streams a single tab.
+    case browserViewer(serviceId: String, tabId: String)
 }
 
 public enum ActivityRoute: Hashable, Sendable {

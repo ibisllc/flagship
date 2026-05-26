@@ -580,4 +580,26 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         peerBackupStatusFixture = next
         return next
     }
+
+    // MARK: - P8 browser-tab stream (mock WS)
+
+    public var browserStreamsOpened: [String] = []
+    /// Test hook: callers can pre-seed frames the mock should emit on
+    /// the next browserTabStream() call. Each entry is sent at startup;
+    /// the stream then waits for close() (no auto-finish so the consumer
+    /// drives lifecycle).
+    public var browserStreamFramesToEmit: [BrowserFrame] = []
+
+    public func browserTabStream(tabId: String) -> any BrowserStream {
+        browserStreamsOpened.append(tabId)
+        let s = MockBrowserStream()
+        let toEmit = browserStreamFramesToEmit
+        Task {
+            for f in toEmit {
+                s.yield(f)
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        return s
+    }
 }
