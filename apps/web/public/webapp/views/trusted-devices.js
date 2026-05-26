@@ -15,6 +15,7 @@ import { toast } from "../lib/toast.js";
 import {
   runReplaceDeviceCeremony,
   completeReplaceDeviceCeremony,
+  fetchPendingRePair,
   startCountdown,
 } from "../lib/replaceDeviceCeremony.js";
 import { runWipeRestartCeremony } from "../lib/wipeRestartCeremony.js";
@@ -24,16 +25,20 @@ import {
   resetDevice,
   setCurrentIrkVersion,
 } from "../keystore.js";
+import { renderPendingBanner, shouldRenderBanner } from "../lib/pendingRePairBanner.js";
 
 registerView("view-trusted-devices");
 
 const COM_BASE = "https://flagshipserver.com";
 
-/** Cached state: last-fetched devices + ETag for the If-Match flow. */
+/** Cached state: last-fetched devices + ETag for the If-Match flow.
+ *  `pendingRePair` mirrors the GET /api/users/:u/re-pair snapshot so a
+ *  fresh load can surface the banner without re-initiating. */
 const state = {
   username: "",
   devices: [],
   etag: null,
+  pendingRePair: null,
 };
 
 function platformIcon(p) {
@@ -84,6 +89,19 @@ async function fetchDevices() {
   state.etag = r.headers.get("etag");
   const body = await r.json();
   state.devices = body.devices ?? [];
+}
+
+async function fetchPendingRePairSnapshot() {
+  if (!state.username) {
+    state.pendingRePair = null;
+    return;
+  }
+  try {
+    const out = await fetchPendingRePair({ username: state.username });
+    state.pendingRePair = out;
+  } catch {
+    state.pendingRePair = null;
+  }
 }
 
 async function disconnectDevice(device) {
@@ -206,8 +224,11 @@ async function renderTrustedDevices() {
   root.innerHTML = `<div class="card placeholder">Loading devices…</div>`;
   try {
     await fetchDevices();
+    await fetchPendingRePairSnapshot();
+    const bannerHtml = renderPendingBanner(state.pendingRePair);
     if (state.devices.length === 0) {
       root.innerHTML = `
+        ${bannerHtml}
         <div class="card">
           <div class="weight-600">Just this device</div>
           <p class="note small">
@@ -217,10 +238,11 @@ async function renderTrustedDevices() {
           </p>
         </div>
         ${renderDangerZone()}`;
+      bindPendingBanner();
       bindDangerZone();
       return;
     }
-    root.innerHTML = state.devices.map(renderDeviceCard).join("") + renderDangerZone();
+    root.innerHTML = bannerHtml + state.devices.map(renderDeviceCard).join("") + renderDangerZone();
     root.querySelectorAll("[data-disconnect]").forEach((btn) => {
       btn.addEventListener("click", async (ev) => {
         const tokenId = ev.currentTarget.getAttribute("data-disconnect");
@@ -250,9 +272,42 @@ async function renderTrustedDevices() {
         }
       });
     });
+    bindPendingBanner();
     bindDangerZone();
   } catch (e) {
     root.innerHTML = `<div class="card placeholder err-text">${escapeHtml(e.message ?? "Couldn't load devices")}</div>`;
+  }
+}
+
+function bindPendingBanner() {
+  if (!shouldRenderBanner(state.pendingRePair)) return;
+  document.getElementById("finalize-replace-btn")?.addEventListener("click", () => {
+    finalizePendingReplace().catch((e) => toast(e?.message ?? "Finalize failed", "err"));
+  });
+}
+
+async function finalizePendingReplace() {
+  const session = getSession();
+  if (!session.umk || !session.username) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  const phase = openPhaseToast("Finalize replace");
+  try {
+    phase.update("installing", "Installing new identity…");
+    const out = await completeReplaceDeviceCeremony({ username: session.username });
+    // Bump the local IRK slot so subsequent signs use the rotated key.
+    setCurrentIrkVersion(currentIrkVersion() + 1);
+    await unlockSession(session.umk, session.username);
+    phase.update("done", "Replace complete.");
+    toast("Replace complete.");
+    state.pendingRePair = null;
+    await renderTrustedDevices();
+  } catch (e) {
+    phase.update("error", e?.message ?? "Couldn't finalize");
+    toast(e?.message ?? "Finalize failed", "err");
+  } finally {
+    phase.dismissAfter(3500);
   }
 }
 
@@ -354,12 +409,15 @@ async function runReplaceDeviceSheet() {
   try {
     phase.update("signing", "Signing rotation request…");
     const oldVersion = currentIrkVersion();
-    const result = await runReplaceDeviceCeremony({
-      username: session.username,
-      umk: session.umk,
-      currentVersion: oldVersion,
-      ifMatch: state.etag,
-    });
+    const result = await runReplaceDeviceCeremony(
+      {
+        username: session.username,
+        umk: session.umk,
+        currentVersion: oldVersion,
+        ifMatch: state.etag,
+      },
+      { requestTotpProof: promptForTotpProof },
+    );
     phase.update("posting", `Pending — completes ${formatCompletesAt(result.completesAt)}`);
     // Some accounts/policy paths complete immediately; the spec
     // optionally calls /complete now. Worker returns 425 if too early,
@@ -503,6 +561,30 @@ function openPhaseToast(action) {
       setTimeout(() => { bar.remove(); }, ms);
     },
   };
+}
+
+/** v1.2 — multi-device accounts need a TOTP proof beside the signed
+ *  envelope. The ceremony helper calls this when the Worker returns
+ *  401 + accountType:"multi"; we open a single-input prompt for the
+ *  6-digit code (or a recovery-format code) and pass it back. The
+ *  ceremony then retries with the proof attached. Returning `null`
+ *  cancels and surfaces a friendly "cancelled" error. */
+async function promptForTotpProof() {
+  const { inlinePrompt } = await import("../lib/modal.js");
+  const code = await inlinePrompt({
+    title: "Enter your TOTP code",
+    message:
+      "This account requires a 6-digit code from your authenticator app, " +
+      "or a recovery code if you've lost the device with the authenticator.",
+    placeholder: "123456",
+    type: "text",
+    okLabel: "Continue",
+    validate: (v) => (v && v.length >= 6 ? null : "Enter the 6-digit code or a recovery code"),
+  });
+  if (!code) return null;
+  // Heuristic: pure-numeric 6-8 digits → TOTP; anything else → recovery.
+  const method = /^\d{6,8}$/.test(code) ? "totp" : "recovery";
+  return { code, method };
 }
 
 function formatCompletesAt(ms) {

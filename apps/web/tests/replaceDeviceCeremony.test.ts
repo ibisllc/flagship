@@ -14,6 +14,7 @@ import {
   TAG_RE_PAIR_INITIATE,
   runReplaceDeviceCeremony,
   completeReplaceDeviceCeremony,
+  fetchPendingRePair,
   startCountdown,
 } from "../public/webapp/lib/replaceDeviceCeremony.js";
 import {
@@ -327,6 +328,211 @@ describe("P10 — completeReplaceDeviceCeremony", () => {
     await expect(
       completeReplaceDeviceCeremony({ username: USERNAME }, { fetch: fakeFetch as any }),
     ).rejects.toMatchObject({ code: "404" });
+  });
+});
+
+describe("P10 — multi-device TOTP retry", () => {
+  function mockFetchSequence(responses: Array<{ status: number; body: any }>) {
+    let i = 0;
+    return vi.fn(async (_url: string, init: any) => {
+      const r = responses[i++];
+      if (!r) throw new Error("unexpected extra fetch call");
+      return {
+        ok: r.status >= 200 && r.status < 300,
+        status: r.status,
+        headers: { get: () => null },
+        json: async () => r.body,
+        text: async () => JSON.stringify(r.body),
+        _init: init,
+      } as any;
+    });
+  }
+
+  it("on 401 totpProof-required, prompts and retries with totpProof in the body", async () => {
+    const fakeFetch = mockFetchSequence([
+      {
+        status: 401,
+        body: {
+          error: "totpProof required for multi-device recovery",
+          accountType: "multi",
+        },
+      },
+      {
+        status: 200,
+        body: {
+          ok: true,
+          completesAt: 1700000060000,
+          graceMs: 60000,
+          accountType: "multi",
+          totpRequired: true,
+        },
+      },
+    ]);
+    const requestTotpProof = vi.fn(async () => ({ code: "123456", method: "totp" as const }));
+
+    const result = await runReplaceDeviceCeremony(
+      { username: USERNAME, umk: FIXED_UMK, currentVersion: 1, ifMatch: null },
+      {
+        fetch: fakeFetch as any,
+        origin: "https://flagshipserver.com",
+        now: () => 1700000000000,
+        requestTotpProof,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.accountType).toBe("multi");
+    expect(result.totpRequired).toBe(true);
+    expect(requestTotpProof).toHaveBeenCalledTimes(1);
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+
+    const retryInit = (fakeFetch.mock.calls[1] as any)[1];
+    const retryBody = JSON.parse(retryInit.body);
+    expect(retryBody.totpProof).toEqual({ code: "123456", method: "totp" });
+    // Original request envelope + signature must be preserved verbatim.
+    expect(retryBody.request).toBeDefined();
+    expect(retryBody.signature).toMatch(/^[0-9a-f]{128}$/);
+    const firstInit = (fakeFetch.mock.calls[0] as any)[1];
+    const firstBody = JSON.parse(firstInit.body);
+    expect(retryBody.request).toEqual(firstBody.request);
+    expect(retryBody.signature).toEqual(firstBody.signature);
+  });
+
+  it("passes recovery method through when the prompt returns one", async () => {
+    const fakeFetch = mockFetchSequence([
+      { status: 401, body: { error: "totpProof required", accountType: "multi" } },
+      {
+        status: 200,
+        body: {
+          ok: true,
+          completesAt: 1,
+          graceMs: 1,
+          accountType: "multi",
+          totpRequired: true,
+        },
+      },
+    ]);
+    const requestTotpProof = vi.fn(async () => ({
+      code: "abcd-efgh-1234",
+      method: "recovery" as const,
+    }));
+    await runReplaceDeviceCeremony(
+      { username: USERNAME, umk: FIXED_UMK, ifMatch: null },
+      { fetch: fakeFetch as any, requestTotpProof },
+    );
+    const retryBody = JSON.parse((fakeFetch.mock.calls[1] as any)[1].body);
+    expect(retryBody.totpProof.method).toBe("recovery");
+    expect(retryBody.totpProof.code).toBe("abcd-efgh-1234");
+  });
+
+  it("cancelling the prompt rejects with code 'cancelled' and a friendly message", async () => {
+    const fakeFetch = mockFetchSequence([
+      { status: 401, body: { error: "totpProof required", accountType: "multi" } },
+    ]);
+    const requestTotpProof = vi.fn(async () => null);
+    await expect(
+      runReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, ifMatch: null },
+        { fetch: fakeFetch as any, requestTotpProof },
+      ),
+    ).rejects.toMatchObject({
+      code: "cancelled",
+      message: expect.stringMatching(/cancelled/i),
+    });
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retry-also-401 surfaces a 401-coded error with the server's message", async () => {
+    const fakeFetch = mockFetchSequence([
+      { status: 401, body: { error: "totpProof required", accountType: "multi" } },
+      { status: 401, body: { error: "invalid TOTP proof", remainingAttempts: 4 } },
+    ]);
+    const requestTotpProof = vi.fn(async () => ({ code: "000000", method: "totp" as const }));
+    await expect(
+      runReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, ifMatch: null },
+        { fetch: fakeFetch as any, requestTotpProof },
+      ),
+    ).rejects.toMatchObject({
+      code: "401",
+      message: expect.stringMatching(/rejected|invalid/i),
+    });
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("without a requestTotpProof dep, a 401 still maps to the legacy 'open the app' copy", async () => {
+    const fakeFetch = mockFetchSequence([
+      { status: 401, body: { error: "totpProof required", accountType: "multi" } },
+    ]);
+    await expect(
+      runReplaceDeviceCeremony(
+        { username: USERNAME, umk: FIXED_UMK, ifMatch: null },
+        { fetch: fakeFetch as any },
+      ),
+    ).rejects.toMatchObject({ code: "401" });
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("P10 — fetchPendingRePair", () => {
+  it("returns the pending row when one exists", async () => {
+    const fakeFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        pending: {
+          newIrkPub: "aa".repeat(32),
+          oldIrkPub: "bb".repeat(32),
+          initiatedAt: 1700000000000,
+          completesAt: 1700604800000,
+          objectedAt: null,
+        },
+      }),
+      text: async () => "",
+    }));
+    const out = await fetchPendingRePair(
+      { username: USERNAME },
+      { fetch: fakeFetch as any, origin: "https://flagshipserver.com" },
+    );
+    expect(out.pending).not.toBeNull();
+    expect(out.pending!.newIrkPub).toBe("aa".repeat(32));
+    expect(out.pending!.completesAt).toBe(1700604800000);
+    expect((fakeFetch.mock.calls[0] as any)[0]).toBe(
+      "https://flagshipserver.com/api/users/harry/re-pair",
+    );
+    expect((fakeFetch.mock.calls[0] as any)[1].method).toBe("GET");
+  });
+
+  it("returns { pending: null } when nothing is pending", async () => {
+    const fakeFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ pending: null }),
+      text: async () => "",
+    }));
+    const out = await fetchPendingRePair(
+      { username: USERNAME },
+      { fetch: fakeFetch as any },
+    );
+    expect(out.pending).toBeNull();
+    expect(out.unavailable).toBeUndefined();
+  });
+
+  it("returns { pending: null, unavailable: true } on a 404/405 (older Worker)", async () => {
+    for (const status of [404, 405]) {
+      const fakeFetch = vi.fn(async () => ({
+        ok: false,
+        status,
+        json: async () => ({}),
+        text: async () => "",
+      }));
+      const out = await fetchPendingRePair(
+        { username: USERNAME },
+        { fetch: fakeFetch as any },
+      );
+      expect(out.pending).toBeNull();
+      expect(out.unavailable).toBe(true);
+    }
   });
 });
 

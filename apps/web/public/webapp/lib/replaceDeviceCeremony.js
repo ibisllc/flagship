@@ -67,6 +67,14 @@ export function canonicalRePairInitiateBytes({ username, newIrkPubHex, oldIrkPub
  * "403" | "400" | "5xx" | "network") on a non-2xx so the calling UI
  * can map to user-facing copy.
  *
+ * v1.2 — multi-device accounts: when the Worker responds 401 with
+ * `{ error: "totpProof required for multi-device recovery",
+ * accountType: "multi" }`, we open `deps.requestTotpProof()` (a UI
+ * hook returning `{ code, method } | null`), then retry the POST with
+ * the same signed envelope plus the `totpProof` field. A second 401
+ * surfaces as a 401-coded error; a `null` from the prompt rejects as
+ * "cancelled" with code "cancelled".
+ *
  * @param {object} args
  * @param {string} args.username
  * @param {Uint8Array} args.umk           session UMK seed (32 bytes)
@@ -76,6 +84,8 @@ export function canonicalRePairInitiateBytes({ username, newIrkPubHex, oldIrkPub
  * @param {typeof fetch} [deps.fetch]     injectable fetch
  * @param {string} [deps.origin]          override the .com origin (tests)
  * @param {() => number} [deps.now]       injectable clock
+ * @param {() => Promise<{code: string, method?: "totp"|"recovery"} | null>} [deps.requestTotpProof]
+ *   UI hook for the multi-device TOTP prompt. Returning `null` cancels.
  */
 export async function runReplaceDeviceCeremony(args, deps = {}) {
   const { username, umk } = args;
@@ -111,22 +121,58 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
   );
 
   // 3 — POST initiate.
-  const headers = { "content-type": "application/json" };
-  if (ifMatch) headers["if-match"] = ifMatch;
-  const body = {
+  const url = `${origin}/api/users/${encodeURIComponent(username)}/re-pair`;
+  const baseHeaders = { "content-type": "application/json" };
+  if (ifMatch) baseHeaders["if-match"] = ifMatch;
+  const baseBody = {
     request: { username, newIrkPub: newIrkPubHex, oldIrkPub: oldIrkPubHex, issuedAt },
     signature: bytesToHex(sigBytes),
   };
-  let resp;
-  try {
-    resp = await f(`${origin}/api/users/${encodeURIComponent(username)}/re-pair`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    throw makeError(`network: ${e?.message ?? e}`, "network");
+
+  async function post(body) {
+    try {
+      return await f(url, {
+        method: "POST",
+        headers: baseHeaders,
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      throw makeError(`network: ${e?.message ?? e}`, "network");
+    }
   }
+
+  let resp = await post(baseBody);
+
+  if (resp.status === 401) {
+    const text = await resp.text().catch(() => "");
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { parsed = null; }
+    // Multi-device path: Worker says totpProof is required. Open the
+    // prompt (if wired) and retry once with the proof.
+    const needsTotp =
+      parsed && (
+        parsed.accountType === "multi" ||
+        (typeof parsed.error === "string" && parsed.error.includes("totpProof"))
+      );
+    if (needsTotp && typeof deps.requestTotpProof === "function") {
+      const proof = await deps.requestTotpProof();
+      if (!proof || typeof proof.code !== "string" || proof.code.length === 0) {
+        throw makeError("Recovery cancelled — TOTP code is required.", "cancelled");
+      }
+      const method = proof.method === "recovery" ? "recovery" : "totp";
+      resp = await post({ ...baseBody, totpProof: { code: proof.code, method } });
+      if (resp.status === 401) {
+        const text2 = await resp.text().catch(() => "");
+        throw makeError(`TOTP code rejected: ${text2 || "invalid code"}`, "401");
+      }
+    } else {
+      throw makeError(
+        "This account requires a TOTP code to recover. Open the app on a trusted device.",
+        "401",
+      );
+    }
+  }
+
   if (resp.status === 200) {
     const json = await resp.json().catch(() => ({}));
     return {
@@ -153,9 +199,6 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
   }
   if (resp.status === 409) {
     throw makeError("A device replacement is already pending on this account.", "409");
-  }
-  if (resp.status === 401) {
-    throw makeError("This account requires a TOTP code to recover. Open the app on a trusted device.", "401");
   }
   if (resp.status === 403) {
     throw makeError("The server rejected the request — refresh and try again.", "403");
@@ -244,6 +287,46 @@ export function startCountdown({ onTick, intervalMs = 1000, ticks = 3 } = {}) {
       if (resolver) resolver(false);
     },
   };
+}
+
+/**
+ * GET the pending re-pair row, if any. Returns:
+ *   - `{ pending: { newIrkPub, oldIrkPub, initiatedAt, completesAt,
+ *      objectedAt } }` when one exists,
+ *   - `{ pending: null }` when nothing is pending,
+ *   - `{ pending: null, unavailable: true }` when the endpoint isn't
+ *     wired (older Worker; the caller treats this the same as "no
+ *     pending row" but can hide the banner gracefully).
+ *
+ * @param {object} args
+ * @param {string} args.username
+ * @param {object} [deps]
+ * @param {typeof fetch} [deps.fetch]
+ * @param {string} [deps.origin]
+ */
+export async function fetchPendingRePair(args, deps = {}) {
+  const { username } = args;
+  if (!username) throw makeError("username required", "400");
+  const f = deps.fetch || fetch;
+  const origin = deps.origin || APEX;
+  let resp;
+  try {
+    resp = await f(
+      `${origin}/api/users/${encodeURIComponent(username)}/re-pair`,
+      { method: "GET", cache: "no-store" },
+    );
+  } catch (e) {
+    throw makeError(`network: ${e?.message ?? e}`, "network");
+  }
+  if (resp.status === 404 || resp.status === 405) {
+    return { pending: null, unavailable: true };
+  }
+  if (resp.status !== 200) {
+    const text = await resp.text().catch(() => "");
+    throw makeError(`Server error (${resp.status}): ${text}`, "5xx");
+  }
+  const body = await resp.json().catch(() => ({}));
+  return { pending: body.pending ?? null };
 }
 
 function makeError(message, code, extra) {
