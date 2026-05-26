@@ -214,3 +214,93 @@ deploy + daemon binary rebuild + redeploy).
   defer until a real need surfaces).
 - keystore.js refactor to read currentIrkVersion through profilesStore
   (today it has its own per-profile suffix scheme).
+
+---
+
+## N — NFC retail tier (post-v1, planned)
+
+The NFC tap-to-pair design for pre-built retail boxes lives in
+`docs/nfc-box-pairing.md` (with refinements + locked decisions appended
+2026-05-26). **Post-v1 by design** — nothing here ships before the core
+v1 launches. The original spec's implementation checklist is
+reorganized here into agent-doable / human-required / business-gated
+buckets.
+
+Owner decisions locked 2026-05-26 (see the doc for full text):
+- Q1 online-activation gate: **deferred** (tamper-evident + first-claim only).
+- Q2 iOS NFC flow: **try read+write, fall back to LED-SAS**.
+- Q3 hardware shipping model: **deferred** (business gate; design tasks proceed).
+- Q4 `BoxUnpair` semantics: **rebind only, no remote wipe**.
+
+### N-PROTO — Protocol additions (`@flagship/protocol`)
+- **N-PROTO-1** `PAIR` + `SIG` canonical-bytes type + Ed25519 verify; HKDF transcript derivation (`flagship/pair/v1`). _agent._
+- **N-PROTO-2** `BoxUnpair` envelope `flagship/box-unpair/v1|userId|boxId|issuedAt`, IRK-signed, rebind-only semantics. _agent._
+- **N-PROTO-3** `WiFiConfig` envelope carried over K_session after pair. _agent._
+- **N-PROTO-4** SAS derivation helper + LED-SAS encoding alphabet (4-color pulses, 3-of-3 confirm, 10s/pulse, 3 retries). _agent._
+
+### N-BOX — Box firmware / ISO (single golden image)
+- **N-BOX-1** Box state machine — UNPAIRED (regen) → PAIRED (persist) → RESET (secure-erase); wire into `server-daemon` boot path. _agent + hardware to verify._
+- **N-BOX-2** Per-boot ephemeral keygen + hard RNG entropy gate (`entropy_avail ≥ 256`). _agent._
+- **N-BOX-3** Pair-mode emitter — write `PAIR`/`SIG` (NDEF) to the tag; clear on PAIRED. _agent + MCU bring-up to test end-to-end._
+- **N-BOX-4** Power-button long-hold handler — 10 s with LED countdown, no ACPI collision. _agent + hardware._
+- **N-BOX-5** First-valid-claim latch + 30 s session-lock window. _agent._
+- **N-BOX-6** LED status driver + SAS encoder (fallback flow). _agent + hardware._
+- **N-BOX-7** mDNS advertise + cloud rendezvous (`hint` includes the 6-digit STK suffix for disambiguation). _agent._
+- **N-BOX-8** Post-pair Wi-Fi config receiver (over K_session). _agent._
+- **N-BOX-9** Resale wipe verification — read-back 4 KiB after LUKS erase. _agent._
+- **N-BOX-10** ISO RNG seeding (jitterentropy + haveged-equivalent baked in). _agent + ops/CI (the ISO build pipeline)._
+- **N-BOX-11** NFC-failure graceful-degrade to DIY HDMI+QR path on the same box. _agent._
+
+### N-MCU — Companion MCU (branded SKU; gated on N-BIZ)
+- **N-MCU-1** Pick MCU + NTAG part (NT3H2111 / ST25DV + CH32V/STM32C0). _hardware._
+- **N-MCU-2** MCU firmware: USB-CDC payload receive + NTAG I²C driver + read+write tap handling. _hardware + agent for protocol-spec adherence._
+- **N-MCU-3** Reference schematic + antenna layout. _hardware._
+- **N-MCU-4** Production bring-up + QA procedure. _hardware + ops._
+
+### N-PHONE — Phone apps
+- **N-PHONE-1** iOS Core NFC capability + entitlement + usage strings. _owner (Xcode/ASC)._
+- **N-PHONE-2** iOS `NFCTagReaderSession` read flow + pairing UI ("tap your box"). _agent._
+- **N-PHONE-3** iOS read+write tap with LAN+LED-SAS fallback (per Q2). _agent._
+- **N-PHONE-4** Android NFC read/write + pairing UI. _agent._
+- **N-PHONE-5** ECDH + K_session derivation + claim submit (both platforms). _agent._
+- **N-PHONE-6** LED-SAS fallback UI (camera capture + decode of the LED pulse pattern). _agent._
+
+### N-CLOUD — Cloud / Worker
+- **N-CLOUD-1** Activation API — `POST /api/serial/activate` (retailer-scoped auth) + `GET /api/serial/{serial}/status` (in-store-only per Q1). _agent._
+- **N-CLOUD-2** Worker-side enforce "activated" check on first ownership claim for branded boxes. _agent._
+- **N-CLOUD-3** Two-box disambiguation rendezvous: the cloud `hint` carries the 6-digit STK suffix so a phone can pick the right candidate. _agent._
+
+### N-MFG — Manufacturing / retail (gated on N-BIZ)
+- **N-MFG-1** Single golden ISO build pipeline (reuse `reproducible-iso-build.md`). _ops/CI._
+- **N-MFG-2** Serial space allocation scheme (per-SKU prefix, monotonic, public). _ops._
+- **N-MFG-3** Retail integration spec (POS scanner → activation API). _ops + retail partner._
+- **N-MFG-4** Tamper-evident packaging spec. _ops + supplier._
+- **N-MFG-5** "Tap here" iconography on the case + non-metal antenna window. _design + tooling._
+
+### N-HW — Hardware platform (gated on N-BIZ)
+- **N-HW-1** Lock hardware platform (mini-PC SoC family + SBC vs custom). _hardware + business._
+- **N-HW-2** BOM + cost target. _hardware + business._
+- **N-HW-3** First production run + QA process. _hardware + ops._
+- **N-HW-4** Hardware RNG strategy (TRNG part vs reliance on N-BOX-2 software seeding). _hardware._
+- **N-HW-5** Case ID reserves a non-metal NFC window over the antenna. _design + tooling._
+
+### N-BIZ — Business model (Q3: DEFERRED until post-v1 signals)
+- **N-BIZ-1** Decide direct-ship vs partner vs open-hardware vs hybrid. _owner._
+- **N-BIZ-2** Partner agreements / supplier contracts (if partner). _owner + legal._
+- **N-BIZ-3** Warranty / return / support process. _owner._
+
+### N-DOCS — Documentation + tests
+- **N-DOCS-1** E2E: tap-to-pair happy path; MitM-on-LAN rejected; reset→re-pair; pre-activation claim rejected; two-boxes-one-LAN disambiguation. _agent._
+- **N-DOCS-2** Update `lifecycle-spec.md` and `multi-device.md` with the NFC tier. _agent._
+- **N-DOCS-3** Add NFC tier to `feature-parity.md` if exposed as a user-facing surface. _agent._
+- **N-DOCS-4** Operator runbook for "shipping a branded box" (closes when N-BIZ closes). _agent._
+
+### N — Suggested first wave (when picked up)
+The unblocked-by-Q3 work is the protocol + ISO + phone work. Sensible first wave:
+1. **N-PROTO-1..4** (one TS package; small).
+2. **N-BOX-2, N-BOX-5, N-BOX-7, N-BOX-9** (state-machine plumbing that doesn't need hardware).
+3. **N-PHONE-2, N-PHONE-4, N-PHONE-5** (read-only NFC + ECDH + claim submit; deferred read+write under N-PHONE-3 until LED-SAS exists).
+4. **N-CLOUD-1, N-CLOUD-2, N-CLOUD-3** (activation API + enforcement + disambiguation).
+5. **N-DOCS-2** (cross-link from the lifecycle spec).
+
+Everything else is gated on either hardware bring-up (N-MCU + N-BOX-3/4/6/8) or the business-model gate (N-BIZ → N-MFG → N-HW).

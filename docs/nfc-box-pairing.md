@@ -354,6 +354,87 @@ without `E_box_priv`, which never leaves the box.
       pre-activation claim rejected; two-boxes-one-LAN disambiguation.
 - [ ] Update `lifecycle-spec.md` and `multi-device.md` with the NFC tier.
 
+> The full task breakdown (agent-doable / human-required / business-gated) lives in `docs/v1-operational-tasks.md` § **N — NFC retail tier (post-v1, planned)**.
+
+---
+
+## Design refinements (2026-05-26 review)
+
+Layered on top of the original spec; nothing removed.
+
+**Handshake / state**
+
+1. **30-second session-lock window.** When the phone reads `PAIR` over
+   NFC, the box latches the `sessionId` for 30 s; only a claim
+   matching that `sessionId` can win the first-valid-claim race.
+   After 30 s with no claim the box rolls a fresh keypair + sessionId.
+   Closes the implicit race in the "first valid claim wins" rule.
+
+2. **`BoxUnpair` envelope.** New `@flagship/protocol` type:
+   `flagship/box-unpair/v1 | userId | boxId | issuedAt`, IRK-signed.
+   Owner-initiated remote unpair, semantics in "Locked decisions" Q4.
+
+3. **`WiFiConfig` over K_session.** After the pair latches, the phone
+   ships SSID/PSK/region over the encrypted post-pair channel; box
+   stores + joins. Documents the otherwise-implicit Wi-Fi onboarding
+   path. Carried as an authenticated envelope inside the
+   `K_session`-encrypted tunnel.
+
+4. **Hard RNG gate before keygen.** ISO blocks all keygen until
+   `/proc/sys/kernel/random/entropy_avail ≥ 256`. Configures
+   jitterentropy + a `haveged`-equivalent into the golden ISO so x86
+   boxes without a hardware TRNG aren't keygen-blocked at every boot.
+
+5. **LED-SAS alphabet specced.** 4-color pulse pattern encoding
+   ~6 bits per glance; 3-of-3 confirmation pattern (user matches
+   three glances); 10-second per-pulse timeout; 3 retries before
+   the box clears its emit + waits 30 s.
+
+**Hardware / box surface**
+
+6. **Resale-wipe verification.** After RESET secure-erases LUKS, the
+   firmware reads back a 4-KiB chunk from the wiped volume and
+   confirms it decrypts to garbage (no recognizable plaintext). On
+   success, a green LED solid 5 s + audible chime if the SKU has a
+   buzzer. Tells the seller "wipe confirmed" visually.
+
+7. **NFC-failure graceful degrade.** If the NTAG / companion MCU is
+   dead (broken antenna, EEPROM failure), the box still pairs via
+   the DIY HDMI+QR path (the same `PAIR`/`SIG` rendered as a QR on
+   a connected monitor + relay v2's SAS). Hardware fault doesn't
+   brick the unit.
+
+8. **"Tap here" iconography as case-ID requirement.** Standard symbol
+   (NFC waves over a phone outline) printed in the antenna window;
+   non-metal window over the antenna is a tooling-blocker; reserve
+   the antenna footprint pre-tooling. Promoted from "residual risk"
+   to a hard checklist item.
+
+9. **Two-box-one-LAN disambiguation hint.** `hint` field carries a
+   6-digit visible code (last 6 hex of `STK_pub`). When the phone
+   discovers multiple candidates over LAN/cloud, it shows the suffix;
+   user confirms the matching box before the tap. Tightens T2.
+
+**Phone UI**
+
+10. **"Pairing with [hint] (read via tap)" affordance + optional
+    SAS glance.** Even on branded boxes (where the tap authenticates
+    `E_box_pub` by physics), the phone shows the SAS as an *optional*
+    additional verification glance — visible alongside the LED on
+    the box. Defensive in noisy environments (e.g., a maker space
+    with three Flagship boxes in pairing mode at once).
+
+---
+
+## Locked decisions (2026-05-26 review)
+
+| # | Decision | Choice |
+|---|----------|--------|
+| Q1 | Online-sales activation gate | **Defer** — tamper-evident packaging + first-claim latch only. No carrier webhook, no shipping-email code, no order-attestation backend. The implementation checklist's "Serial → activation API" task is **in-store-only** for v1; online sales rely on T4's mitigation (a) alone. The API surface (N-CLOUD) extends cleanly if we ever add an online gate. |
+| Q2 | iOS NFC ergonomics | **Try read+write, fall back to LED-SAS** — best UX when Core NFC cooperates, graceful degrade when it doesn't. If the write half of the tap session fails, the phone surfaces "we'll finish over Wi-Fi — watch the LEDs" and continues via LAN + LED-SAS. |
+| Q3 | Hardware shipping model | **Defer** — proceed with protocol + ISO + phone + reference companion-MCU work; the manufacturing / retail / hardware-platform tasks stay flagged **business gate** until who-ships-this is decided. |
+| Q4 | `BoxUnpair` semantics | **Light touch — rebind only.** The envelope resets the box to UNPAIRED state on next boot but LEAVES LUKS data intact. Wipe-on-resale still requires physical button hold. An attacker with phone access cannot remotely destroy server data; matches the "phone is the trust root, not the wipe oracle" stance. |
+
 ---
 
 ## Cross-references
