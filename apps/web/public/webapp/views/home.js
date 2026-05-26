@@ -205,6 +205,80 @@ function isPromoEntry(e) {
 const COM_BASE_FOR_E7 = "https://flagshipserver.com";
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
+// Mirrors wizard.js's RECOVERY_WARN_KEY — the wizard SETs this to "true"
+// when the user skips "Secure your account" and REMOVES it once a backup
+// (cloud passkey or .flagshipkey file) actually completes. So a "true"
+// value is the single, consistent signal that recovery is not enrolled.
+const RECOVERY_WARN_KEY = "flagship.recovery.warn.v1";
+// Per-device dismiss for the home nudge — local state only, no API. Mirrors
+// the dismissable backup nudge on iOS/Android (a UI preference, not a
+// security decision; clearing the warn key on real enrolment is the source
+// of truth, this only quiets a still-unenrolled reminder the user has seen).
+const RECOVERY_BANNER_DISMISS_KEY = "flagship.recovery.banner.dismissed.v1";
+const RECOVERY_BANNER_ID = "home-recovery-banner";
+
+/**
+ * Pure predicate for the home backup-reminder banner. Show it iff the
+ * wizard flagged recovery as not-yet-enrolled (`warn === "true"`) AND the
+ * user hasn't dismissed the nudge on this device. Extracted so the rule
+ * is testable without a DOM (mirrors accountReset.test.ts's approach).
+ */
+export function shouldShowRecoveryBanner({ warn, dismissed } = {}) {
+  return warn === "true" && dismissed !== "true";
+}
+
+/**
+ * Render (or remove) the dismissable "secure your account" nudge above the
+ * server list. Routes into Settings → Recovery via the existing
+ * enterRecovery(); the dismiss writes a local flag so it stays hidden.
+ */
+function renderRecoveryBanner() {
+  let warn = null;
+  let dismissed = null;
+  try {
+    warn = localStorage.getItem(RECOVERY_WARN_KEY);
+    dismissed = localStorage.getItem(RECOVERY_BANNER_DISMISS_KEY);
+  } catch { /* localStorage disabled — treat as no banner */ }
+
+  const existing = document.getElementById(RECOVERY_BANNER_ID);
+  if (!shouldShowRecoveryBanner({ warn, dismissed })) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+
+  const host = document.createElement("div");
+  host.id = RECOVERY_BANNER_ID;
+  host.className = "card";
+  host.style.borderLeft = "3px solid var(--warn, #d28a00)";
+  host.innerHTML = `
+    <div class="weight-600">Your account isn't backed up yet</div>
+    <p class="note small">
+      If you lose this device, there's no way back in. Set up recovery now
+      (one minute) so you can restore your account from a fresh browser.
+    </p>
+    <div class="row-2">
+      <button class="primary" id="${RECOVERY_BANNER_ID}-secure">Secure my account</button>
+      <button class="secondary" id="${RECOVERY_BANNER_ID}-dismiss">Not now</button>
+    </div>
+  `;
+  const list = document.getElementById("servers-list");
+  list?.parentNode?.insertBefore(host, list);
+
+  document
+    .getElementById(`${RECOVERY_BANNER_ID}-secure`)
+    ?.addEventListener("click", async () => {
+      const { enterRecovery } = await import("./recovery.js");
+      if (typeof enterRecovery === "function") enterRecovery();
+    });
+  document
+    .getElementById(`${RECOVERY_BANNER_ID}-dismiss`)
+    ?.addEventListener("click", () => {
+      try { localStorage.setItem(RECOVERY_BANNER_DISMISS_KEY, "true"); } catch { /* swallow */ }
+      document.getElementById(RECOVERY_BANNER_ID)?.remove();
+    });
+}
+
 /**
  * E7 — peer "your account was reset on another device" detector.
  *
@@ -289,6 +363,11 @@ export async function renderHome() {
   // is no longer in /api/users/:u/devices. Silent on failure so a
   // transient network blip doesn't flash a banner.
   detectAccountReset(session.username).catch(() => {});
+
+  // Post-creation backup nudge — shown when the wizard flagged recovery
+  // as skipped (not enrolled) and the user hasn't dismissed it on this
+  // device. Local-only signal; no API call.
+  renderRecoveryBanner();
 
   const sid = localStorage.getItem("flagship.sessionId");
   const sessionStatusEl = $("session-status");
