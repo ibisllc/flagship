@@ -63,6 +63,15 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 - **P8 keyboard polish (iOS + Android)** — the framebuffer-viewer VMs already exposed `sendKey`; this lands the on-phone UI. Each surface adds a "Show keyboard / Hide keyboard" toggle in the controls bar that focuses a soft-input field; every value-change is diffed via the pure `keyEvents(from,to)` helper (insert / delete / replace) and shipped as keyDown+keyUp pairs through `vm.sendKey`. Backspace handled. DOM-code mapping covers letters + digits + Space/Enter/Tab/Period/Comma/Slash/Minus/Equal. Wire format byte-identical with the webapp + the existing P8 tests. — `4bc57cc` (iOS) + `a03a05c` (Android)
 - **Webapp polish — TOTP 401 retry + pending /re-pair banner** — closes the two follow-ups from commit `20224ce`. `replaceDeviceCeremony.js` detects the Worker's 401 `{ accountType: "multi" }` body, prompts for a 6-digit code via injected `requestTotpProof`, retries with `totpProof: { code, method }`. New `fetchPendingRePair()` polls `GET /api/users/:u/re-pair` (verified to exist at `packages/control-plane/src/rePair.ts:1019-1037`); new `lib/pendingRePairBanner.js` renders a "Replace pending — Finalize now" banner above the device list when grace is elapsed. Worker side flagged as needing nothing; v2-hardening note: the GET is unauthenticated by design (leaks pending pubkeys to anyone who knows the username). — `27b14b1` (22 new tests; 867 webapp pass)
 
+### Parity wave 11 (2026-05-26, cont.) — P14 Phase 2 write-relay
+- **Daemon write-relay (4 endpoints)** — `POST /api/companion/request-write` (companion-gated, kinds limited to release-server + revoke-server in v1), `GET /api/screens/companion/pending-writes` (owner-gated), `POST /api/screens/companion/resolve-pending` (owner-gated, idempotent), `GET /api/companion/my-pending` (companion-gated; resolved rows are sticky and do NOT downgrade to expired). New InMemoryCompanionWriteRequestStore. Phase 2.5 push hooks marked inline. 27 new tests. — `0c6e7bd`
+- **Webapp both halves** — companion-side: `requireOwnerProfile()` in releaseServer.js + revokeServer.js now routes through `submitWriteRequest` instead of throwing; a polling sheet shows "Forwarded to owner — waiting (mm:ss)" until the daemon's my-pending shows approved/denied/expired. Owner-side: new Settings → "Companion requests" view with a pending-count badge; Approve runs the existing signer helper (releaseServerName / revokeServer with the owner's umk + signWithIrk) and posts resolve {approved} ONLY on destination-POST success; Deny posts resolve {denied}. 45 new tests; full repo 4186 pass. — `fc4da67`
+- **Mobile owner UI (iOS + Android)** — Settings → "Companion requests" with pending-count badge. Each row's intent (release/revoke) is parsed per-kind from the dynamic JSON (`[String: AnyCodable]` on iOS, `JsonObject` on Android). Approve uses 1.5s hold-to-confirm (`LongPressGesture` / `withTimeout(1500)`); calls `FlagshipServerClient.releaseServerName` or `.revokeServer`; only on destination-POST success posts resolve. Inline error slot per row preserves the request for retry. 8 + 7 new tests. — `b499dd8`
+
+### Parity wave 12 (2026-05-26, cont.) — close-out
+- **P0a + P0b iOS gaps** — create-server adds the backup-policy picker (none / phone-only [default] / peer) + LLM-preferences TextEditor with UserDefaults-backed CreateServerDraftStore persistence (matches webapp's buildDraft.js vocabulary byte-for-byte; draft-only — never enters the signed InstallBlob). Marketplace detail's Deploy button is now a real install: ScreensModels gains InstallServiceRequest + canonical bytes `flagship/install-service/v1|serverId|creator|slug|manifestJson|(1|0)|issuedAt`; LiveScreensClient hits `<podBaseUrl>/api/services` (the daemon's service-platform handler, NOT /api/screens/*); MarketplaceDetailContainer wires idle/installing/succeeded/failed states. 7 + 5 new tests. — `e6d932b`
+- **P12 hard cut-over** — drops the bidirectional localStorage mirror introduced by the original P12 (`a76cf57`). `profilesStore.set(...)` no longer mirrors writes to the flat key by default; device-wide slots (`username`, `wizardState`, `currentIrkVersion`) are explicitly carved out via a new `deviceWideOrPreProfile` flag. New `cleanupLegacyKeys()` runs once on boot (gated by both `migrated.v2` AND `legacyCleaned.v1` sentinels), deletes legacy flat keys ONLY when the new store has the value (orphan-defense). 14 call-sites refactored to use `profileGet`/`profileSet`/`profileRemove` (lib/api, state, push, keyfileBackup; views: wizard, home, unlock, pair, activity, recovery, bootstrap, join, companion-dock, pending-server). 38 store tests (+17 new), 929 webapp pass. — `23f9aee`
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
@@ -178,28 +187,30 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 (A1, A2, P1, P2, P3) ─▶ D1
 ```
 
-## Next agent-doable, smallest-first
-(Updated 2026-05-26 after wave 10.) Every P-task is now ✅ across the
-agent-doable surface; the parity matrix has no remaining gaps. The
-peer-backup data layer + P10/P8 polish + P14 Phase 1 are all live.
+## Agent-doable backlog: **EXHAUSTED** (2026-05-26)
 
-**Remaining agent-doable** (smaller scope):
-- **P14 Phase 2** — write-relay: daemon queues companion-initiated
-  writes + push-fans-out to the owner + an "approve queued write" UI
-  on the owner surface. The 403 `companion-write-not-allowed` code
-  shipped in Phase 1 is the contract the owner-side UI will read.
-- **P0 verify-only audits** — confirm the matrix's "done" cells are
-  truly wired (marketplace iOS, create-server iOS pickers). Light
-  read-only review.
-- **P12 hard cut-over** (defer-able) — remove the bidirectional
-  localStorage mirror after users have all migrated; refactor every
-  legacy call-site to the per-profile store.
+Every P-task and every smaller follow-up I could land without
+credentials or hardware is on main. The remaining items are all
+irreducibly human / ops:
 
-**Owner / ops** (irreducible, needs human or credentials):
 - A3 Alpine base-ISO af_packet fix → A4 R2 upload → A5/A6 real-hardware
-  Alpine e2e.
+  Alpine e2e (the lynchpin gate for real green padlock on real
+  hardware).
 - TF1 wrangler APNs secrets + TF2 Associated Domains tick + TF3 Xcode
   Archive → TF4 ASC metadata → TF5 device-push smoke → TF6 5 testers.
 - C1 Android Play internal track.
 - E1–E3 v1-alpha live exercises (recovery / rotation / update-pack /
   marketplace MVP / disclosure + bounty).
+
+The Worker deploy for the P13 server-revoke endpoint + the daemon
+rebuild that picks up P6/P9/P14 BFFs are also owner-driven (wrangler
+deploy + daemon binary rebuild + redeploy).
+
+### Possible follow-ups (defer-able, no v1 blocker)
+- P14 Phase 2.5 push integration (replace the polling with
+  notifyOwner/notifyCompanion at the two HOOK comments in the daemon).
+- P14 expand the relayable-kinds list beyond release/revoke-server
+  (replace-device, wipe-restart — both involve recovery passkeys, so
+  defer until a real need surfaces).
+- keystore.js refactor to read currentIrkVersion through profilesStore
+  (today it has its own per-profile suffix scheme).

@@ -19,7 +19,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 4 | Join / **cross-device QR pairing + admit** | ✅ | ✅ | ✅ | — | ✓ P4 |
 | 5 | Recovery (keyfile + cloud + post-recovery) | ✅ | ✅ | ✅ | — | — |
 | 6 | Key backup + Secure-your-account + **reminder** | ✅ | ✅ | ✅ | — | ✓ P1 |
-| 7 | Create server (QR relay, TTL, boot-unlock) | ✅ | ⚠️ | ✅ | iOS form fields | **P0a** |
+| 7 | Create server (QR relay, TTL, boot-unlock) | ✅ | ✅ | ✅ | — | ✓ P0a |
 | 8 | Pending server + cancel → **release name** | ✅ | ✅ | ✅ | — | ✓ P3 |
 | 9 | Server detail (auto-unlock, metrics, events) | ✅ | ✅ | ✅ | — | — |
 | 10 | Boot/unlock approval | ✅ | ✅ | ✅ | — | — |
@@ -28,7 +28,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 13 | Account security (badge + TOTP 2FA) | ✅ | ✅ | ✅ | — | — |
 | 14 | **Audit log** | ✅ | ✅ | ✅ | — | ✓ P5 |
 | 15 | **Collaborator invites** (issue + manage) | ✅ | ✅ | ✅ | — | ✓ P6 |
-| 16 | Marketplace (browse + install) | ✅ | ⚠️ | ✅ | iOS install button | **P0b** |
+| 16 | Marketplace (browse + install) | ✅ | ✅ | ✅ | — | ✓ P0b |
 | 17 | Services / detail / env-vars / BYOK LLM | ✅ | ✅ | ✅ | — | — |
 | 18 | Vibe-code (chat + app build) | ✅ | ✅ | ✅ | — | — |
 | 19 | **Peer-backup** management (+ daemon BFF) | ✅ | ✅ | ✅ | — | ✓ P9 |
@@ -46,8 +46,8 @@ Legend: ✅ believed wired · ⚠️ partial / unverified / audit-disputed · �
 
 ## Gap list (port direction)
 
-- **All three:** companion-browser dock (P14 — new, see below).
-- **iOS small gaps (P0 audit 2026-05-26):** the create-server iOS screen is missing two form fields the webapp has (backup-policy + LLM-preferences, draft-only metadata) — **P0a**. The iOS marketplace detail screen renders correctly but the "Deploy" button closure is empty (no install action) — **P0b**.
+- **All matrix rows are ✅ across all three surfaces** — no remaining cross-surface UI gaps as of 2026-05-26.
+- **P14 companion-browser dock** is now Phase-1 (pairing + read-only + write-relay queue) + Phase-2 (write-relay endpoints + owner approve UI) live; the only carve-out is non-relayable kinds (Wipe & Replace) where companions still get the "open your owner app" CompanionWriteError, intentional for v1.
 
 ### P8 decision (2026-05-25)
 The real use-case for the browser-viewer is "log into social media / Uber /
