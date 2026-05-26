@@ -17,23 +17,25 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 
 ## ✅ Done this session (committed)
 
+### Earlier (before 2026-05-25 evening)
 - **#10** installer-core (headless base config, GRUB BIOS+UEFI, success-gated self-wipe) — `ac527a9`
 - **#11** recipe-sig verify ARMED (seam a) + first-boot provisioning WIRED (seam b) + QEMU full-install e2e runner; the e2e found+fixed 7 real install bugs and root-caused the modloop/af_packet blocker — `32d9af1`, `ee0b835`, `0d96c5b`, `25743a2`
 - **#12** server personalize-stream endpoint (`POST /api/personalize-iso`) + box-side ISO9660 trailer-find + `/ready` custom-ISO download — `2bec7b8`, `baaffd3`
 - **CS** removed iOS "Skip — pretend it's already running"; mock-backed real create-server flow via a demo-QR in MOCK mode — `97fae58`
 
+### Parity wave 1 (2026-05-25 evening)
+- **A1** `/ready` Advanced-options disclosure (BYO-ISO/Debian path tucked behind a `<details>`; Alpine custom-ISO download stays primary) — `620d16f`
+- **P1 (webapp)** post-creation backup reminder banner on home (dismissable; reuses the wizard's `flagship.recovery.warn.v1` signal) — `e598f32`
+- **P2 / P3 / P5 / P7 (iOS)** — trademark-claim, release-server (real `ReleaseServerName` envelope + release-then-revoke on cancel), dedicated audit-log viewer, tier-status screen — `ca7165a` (500 XCTest, 0 failures)
+- **A2** Mac burner Quick (dumb-flash, default) vs Advanced (remaster) mode toggle — `e3407ef` (71 burner tests pass)
+- **P2 / P3 / P5 / P7 (Android)** — Android half of the parity wave, wire-identical with iOS (same canonical bytes, copy, field sets) — `01e8dd4` (gradle test BUILD SUCCESSFUL)
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
 
-- **A1** — `/ready` Advanced-options affordance (BYO-ISO/Debian). _agent._ Alpine
-  custom-ISO download is done (#12); add an explicit "Advanced options"
-  disclosure that reveals the recipe copy/download + Assembler/Debian path
-  (currently only prose, no actionable toggle). Files: `apps/web/public/ready/`.
-- **A2** — Burner Advanced/remaster UI. _agent._ `apps/burner-mac` has the
-  dumb-flash default AND a full BYO-ISO/Debian remaster (`Remaster.swift`) that
-  is NOT wired into the UI. Add a Quick vs Advanced mode toggle in
-  `WizardView`/`WizardModel`; mirror intent in the TS `packages/flagship-burner`.
+- ~~**A1** — `/ready` Advanced-options affordance (BYO-ISO/Debian)~~ ✅ `620d16f`.
+- ~~**A2** — Burner Quick (default, dumb-flash) vs Advanced (remaster) toggle~~ ✅ `e3407ef`. The TS burner in `packages/flagship-burner` is a CLI library only (no UI), so the "Mode toggle" lives on the Mac GUI; the TS side already exposes both code paths.
 - **A3** — Base-ISO af_packet fix (modloop/DHCP). **_ops/CI (lynchpin)._** Stock
   Alpine standard ISO in apkovl-mode doesn't mount modloop → no af_packet → no
   DHCP (`docs/installer-tiny.md §3a`). Bake af_packet into the initramfs / make
@@ -52,33 +54,39 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 
 ## P — 3-surface feature parity (webapp · iOS · Android)
 
-See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port
-(two source audits disagreed on some cells — re-verify before porting).
+See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
 
 - **P0** — Parity audit gate + keep `docs/feature-parity.md` current; verify the
-  "done" cells are truly wired (marketplace iOS, create-server iOS pickers,
-  trademark iOS). _agent._
-- **P1** — Post-creation backup REMINDER on all 3 (the nag if "Secure your
-  account" was skipped; audit flags webapp missing). _agent._
-- **P2** — Trademark-claim → iOS + Android (webapp done; owner: it's webapp-only;
-  mailto trademarks@flagshipserver.com with the requested name pre-filled in the
-  username-taken state). _agent._
-- **P3** — Server release/revoke → iOS + Android (webapp wires releaseServerName
-  on pending-server cancel; audit-disputed — verify). _agent._
+  "done" cells are truly wired (marketplace iOS, create-server iOS pickers). _agent._
+- **P1** — Post-creation backup REMINDER on all 3. _agent._ ✅ webapp (`e598f32`); ⏳ iOS + Android.
+- **P2** — Trademark-claim → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
+- **P3** — Pending-server cancel → real `ReleaseServerName` envelope + `/api/server/release`. _agent._ ✅ (`ca7165a` + `01e8dd4`).
 - **P4** — Cross-device QR pairing + admit → Android (webapp + iOS done). _agent._
-- **P5** — Audit log → iOS + Android (webapp `audit-log.js`). _agent._
+- **P5** — Audit log → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
 - **P6** — Collaborator invites (issue + manage) → iOS + Android (webapp
-  `invite-issue.js`/`invite-manage.js`). _agent._
-- **P7** — Tier-status / monetization → iOS + Android (webapp `tier-status.js`). _agent._
-- **P8** — In-app browser-viewer → iOS + Android (webapp `browser-viewer.js`;
-  WKWebView / Android WebView gated to the user's own subdomain). _agent._
-- **P9** — Peer-backup management → iOS + Android (+ finish daemon Screens-BFF
-  status/toggle; webapp `peer-backup.js` is partial). _agent._
+  `invite-issue.js`/`invite-manage.js`; verify daemon BFF first). _agent._
+- **P7** — Tier-status / monetization → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
+- **P8** — Browser-viewer → iOS + Android. **Decision 2026-05-25**: mirror the
+  webapp's WS framebuffer-stream + input-forwarding (the real use-case is
+  server-side social-media login so bots can act as the user — session must
+  live on the box; native WebView is a different feature). _agent._
+- **P9** — Peer-backup management → daemon Screens-BFF + 3 UI. **Decision
+  2026-05-25**: build full BFF (status + toggle) to webapp's expected contract
+  + wire all 3. _agent._
 - **P10** — Replace device (IRK rotation) → webapp (iOS/Android done). _agent._
-- **P11** — Wipe & restart → webapp (iOS/Android done; `docs/wipe-restart.md`). _agent._
-- **P12** — Multi-profile switching → webapp (iOS/Android done). _agent._
-- **P13** — Kill-switch / server-revocation UI → all 3 (boot DELETE-lease +
-  ServerRevocation exist; user-facing control missing). _agent._
+- **P11** — Wipe & restart → webapp. **Decision 2026-05-25**: build the full
+  ceremony now (override the older "ship disabled" v1 stance) — mirror iOS
+  exactly. _agent._
+- **P12** — Multi-profile switching → webapp (iOS/Android done; needs a
+  storage migration from single localStorage to a multi-profile store). _agent._
+- **P13** — Kill-switch / server-revocation UI → all 3. **Decision 2026-05-25**:
+  per-server danger zone (reason picker lost/stolen/decommissioned), guarded
+  by the established two-tap-hold (mobile) / 3-second countdown (webapp), IRK
+  signature only. _agent._
+- **P14** — Companion-browser dock (new, 2026-05-25). Every owner app must be
+  able to dock to a regular browser as an ephemeral companion surface (the
+  owner app is the long-lived trust root, the browser is paired in for
+  ergonomic input; WhatsApp-style). Cross-cutting; lands on all three. _agent._
 
 ## C / TF — Ship the apps
 
@@ -130,5 +138,11 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 ```
 
 ## Next agent-doable, smallest-first
-P2 (trademark iOS+Android) → P5/P7/P8 (audit-log / tier-status / browser-viewer)
-→ A1 (/ready Advanced) → A2 (burner Advanced) → P1/P3 → the rest of P → D1.
+(Updated 2026-05-25 evening after wave 1.) **In flight**: P10 + P11 webapp
+(Replace + Wipe ceremonies, owner decision).
+**Up next**: P1 mobile (iOS + Android home banner) → P4 Android QR + admit →
+P13 per-server danger zone (all 3) → P9 daemon BFF + 3 UIs → P12 webapp
+multi-profile + storage migration → P6 collaborator invites iOS + Android →
+P8 framebuffer-stream port (iOS + Android) → P14 companion-browser dock →
+D1 merge / D2 prune stale branches. Then the hardware/owner items (A3–A6,
+TF*, C1, E*).
