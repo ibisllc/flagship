@@ -21,6 +21,13 @@ public struct ActivityTab: View {
                     case .secretRequests: SecretRequestsContainer()
                     case .installProgress(let serial): InstallProgressStub(serial: serial)
                     case .postRecovery: PostRecoveryContainer()
+                    case .auditLog:
+                        AuditLogScreen(
+                            vm: AuditLogViewModel(
+                                server: server,
+                                username: app.currentUser ?? ""
+                            )
+                        )
                     }
                 }
         }
@@ -57,6 +64,7 @@ public struct ActivityTab: View {
                     onPickPod: { pod in app.setCurrentPod(pod.podId) },
                     onOpenApprovals: { path.append(.secretRequests) },
                     onOpenPostRecovery: { path.append(.postRecovery) },
+                    onOpenAuditLog: { path.append(.auditLog) },
                     onRefresh: { await vm.load() }
                 )
             } else {

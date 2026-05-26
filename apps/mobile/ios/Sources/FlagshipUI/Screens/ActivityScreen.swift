@@ -13,6 +13,8 @@ public struct ActivityScreen: View {
     var onPickPod: (PodInfo) -> Void = { _ in }
     var onOpenApprovals: () -> Void = {}
     var onOpenPostRecovery: () -> Void = {}
+    /// P5 — push the dedicated full-page audit-log viewer.
+    var onOpenAuditLog: () -> Void = {}
     var onRefresh: () async -> Void = {}
 
     public init(
@@ -23,6 +25,7 @@ public struct ActivityScreen: View {
         onPickPod: @escaping (PodInfo) -> Void = { _ in },
         onOpenApprovals: @escaping () -> Void = {},
         onOpenPostRecovery: @escaping () -> Void = {},
+        onOpenAuditLog: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {}
     ) {
         self.state = state
@@ -32,6 +35,7 @@ public struct ActivityScreen: View {
         self.onPickPod = onPickPod
         self.onOpenApprovals = onOpenApprovals
         self.onOpenPostRecovery = onOpenPostRecovery
+        self.onOpenAuditLog = onOpenAuditLog
         self.onRefresh = onRefresh
     }
 
@@ -68,19 +72,22 @@ public struct ActivityScreen: View {
                             postRecoveryCard(snap, c: c)
                         }
                     }
-                    if !feed.auditEvents.isEmpty {
-                        section("ACCOUNT EVENTS", c: c) {
-                            FSCard {
-                                VStack(spacing: FS.space.s3) {
-                                    ForEach(feed.auditEvents.indices, id: \.self) { i in
-                                        let e = feed.auditEvents[i]
-                                        auditRow(event: e, c: c)
-                                        if i < feed.auditEvents.count - 1 {
-                                            Divider().background(c.border)
+                    section("ACCOUNT EVENTS", c: c) {
+                        VStack(alignment: .leading, spacing: FS.space.s3) {
+                            if !feed.auditEvents.isEmpty {
+                                FSCard {
+                                    VStack(spacing: FS.space.s3) {
+                                        ForEach(feed.auditEvents.indices, id: \.self) { i in
+                                            let e = feed.auditEvents[i]
+                                            auditRow(event: e, c: c)
+                                            if i < feed.auditEvents.count - 1 {
+                                                Divider().background(c.border)
+                                            }
                                         }
                                     }
                                 }
                             }
+                            viewFullAuditLogRow(c: c)
                         }
                     }
                     section("RECENT DEPLOYS", c: c) {
@@ -153,6 +160,23 @@ public struct ActivityScreen: View {
         if snap.lastReissue != nil { return "Re-attach finished." }
         if snap.state.lastSeen != nil { return "Re-attach in progress." }
         return "Snapshot ready."
+    }
+
+    /// P5 — entry into the dedicated full-page audit-log viewer. Mirrors
+    /// the webapp's "see all activity" link.
+    private func viewFullAuditLogRow(c: FSColors) -> some View {
+        Button(action: onOpenAuditLog) {
+            FSCard {
+                HStack {
+                    Image(systemName: "list.bullet.rectangle").foregroundColor(c.primary)
+                    Text("View full audit log").foregroundColor(c.text)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("activity-open-audit-log")
     }
 
     /// Account-level audit event row. Mirrors webapp activity.js'

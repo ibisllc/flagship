@@ -33,10 +33,16 @@ public enum ActivityRoute: Hashable, Sendable {
     /// progress. Separate path-stack entry so back-nav lands the user
     /// on Activity, not Settings.
     case postRecovery
+    /// P5 — the dedicated full-page audit-log viewer, reached from the
+    /// Activity feed's "View full audit log" row.
+    case auditLog
 }
 
 public enum SettingsRoute: Hashable, Sendable {
     case providers
+    /// P7 — the dedicated tier-status / subscription screen, reached from
+    /// the Settings "Subscription" nav row.
+    case tierStatus
     case recovery
     case postRecoveryProgress
     /// "Back up your account key" — passphrase-encrypted `.flagshipkey`

@@ -159,6 +159,20 @@ public enum AuthCodeRevoke {
     }
 }
 
+/// Release a reserved server name so it can be claimed again. An
+/// abandoned/failed install leaves the name pinned by its RCK routing
+/// record; revoking the auth-code alone doesn't free it. The
+/// IRK-signed envelope POSTs to `.com`'s `/api/server/release`, which
+/// drops the routing record + active auth-codes + the server record.
+/// The protocol-level tag matches packages/protocol/src/auth.ts
+/// `TAG_RELEASE_SERVER_NAME` (`tag|username|serverDomain|issuedAt`).
+public enum ReleaseServerName {
+    public static let canonicalTag = "flagship/release-server-name/v1"
+    public static func canonicalBytes(username: String, serverDomain: String, issuedAt: Int64) -> Data {
+        Data([canonicalTag, username, serverDomain, String(issuedAt)].joined(separator: "|").utf8)
+    }
+}
+
 /// B7 — Re-pair initiate envelope. Signed by the NEW IRK over a
 /// claim that includes the OLD IRK pubkey (for .com's snapshot
 /// match) + the NEW pubkey + a freshness timestamp. Mirrors

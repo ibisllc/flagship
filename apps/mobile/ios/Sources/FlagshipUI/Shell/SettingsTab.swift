@@ -85,6 +85,7 @@ public struct SettingsTab: View {
                         }
                     },
                     onOpenProviders: { path.append(.providers) },
+                    onOpenSubscription: { path.append(.tierStatus) },
                     onOpenRecovery: { path.append(.recovery) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenProfiles: { path.append(.profiles) },
@@ -204,6 +205,8 @@ public struct SettingsTab: View {
         switch route {
         case .providers:
             ProvidersStub()
+        case .tierStatus:
+            TierStatusScreen(vm: TierStatusViewModel(client: client))
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .keyfileBackup:

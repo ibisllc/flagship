@@ -56,6 +56,8 @@ public struct SettingsScreen: View {
     var onRevokeDevice: (PairedSessionSummary) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onOpenProviders: () -> Void = {}
+    /// P7 — open the dedicated tier-status / subscription screen.
+    var onOpenSubscription: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
     /// Open "Back up your account key" — the `.flagshipkey` export.
     var onOpenKeyfileBackup: () -> Void = {}
@@ -101,6 +103,7 @@ public struct SettingsScreen: View {
         onDisconnectTrustedDevice: @escaping (TrustedDevice) async -> Bool = { _ in false },
         onSignOut: @escaping () -> Void = {},
         onOpenProviders: @escaping () -> Void = {},
+        onOpenSubscription: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
@@ -127,6 +130,7 @@ public struct SettingsScreen: View {
         self.onRevokeDevice = onRevokeDevice
         self.onSignOut = onSignOut
         self.onOpenProviders = onOpenProviders
+        self.onOpenSubscription = onOpenSubscription
         self.onOpenRecovery = onOpenRecovery
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
@@ -240,33 +244,48 @@ public struct SettingsScreen: View {
         }
     }
 
+    /// P7 — compact nav row into the dedicated tier-status screen. The
+    /// full breakdown (credits, dispatcher usage, custom domains,
+    /// reserved names) now lives on TierStatusScreen; this row just
+    /// surfaces the current tier + a chevron.
     private func subscription(c: FSColors) -> some View {
         section("SUBSCRIPTION", c: c) {
-            switch tier {
-            case .idle, .loading:
-                ServerCardSkeleton()
-            case .failed(let msg):
-                ErrorCard(message: msg)
-            case .loaded(let t):
+            Button(action: onOpenSubscription) {
                 FSCard {
-                    VStack(alignment: .leading, spacing: FS.space.s3) {
-                        HStack {
-                            Text(t.tier.capitalized)
-                                .font(FS.font.h3()).foregroundColor(c.text)
-                            Spacer()
-                            FSPill(t.tier == "byok" ? "Bring-your-own-key" : t.tier == "promo" ? "Free credits" : "Free", kind: .provisioning)
+                    HStack(alignment: .top, spacing: FS.space.s3) {
+                        Image(systemName: "creditcard.fill")
+                            .foregroundColor(c.primary)
+                            .imageScale(.large)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Tier & usage")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(c.text)
+                            Text(subscriptionSubtitle)
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
                         }
-                        if let day = t.llmCreditsRemainingDay, let total = t.llmCreditsRemainingTotal {
-                            row(label: "Credits today", value: "\(day) remaining", c: c)
-                            row(label: "Credits lifetime", value: "\(total) remaining", c: c)
-                        }
-                        if let usage = t.dispatcherUsageGBmonth, let quota = t.dispatcherFreeQuotaGBmonth {
-                            row(label: "Bandwidth", value: String(format: "%.1f GB / %.0f GB", usage, quota), c: c)
-                        }
-                        FSGhostButton("Manage providers", block: true, action: onOpenProviders)
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
                     }
                 }
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings-open-subscription")
+        }
+    }
+
+    private var subscriptionSubtitle: String {
+        switch tier {
+        case .loaded(let t):
+            switch t.tier {
+            case "byok":  return "Bring-your-own-key • credits, usage, domains"
+            case "promo": return "Free credits • credits, usage, domains"
+            default:      return "Free • credits, usage, domains"
+            }
+        case .failed:
+            return "Credits, usage, custom domains, reserved names"
+        default:
+            return "Loading…"
         }
     }
 

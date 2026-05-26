@@ -24,6 +24,13 @@ public protocol FlagshipServerClient: Sendable {
     /// the "Cancel order" action on a pending pod. 404 is treated as
     /// success by both Mock + Live impls.
     func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws
+    /// Release a reserved server name (free the name) so it can be
+    /// claimed again. The real mechanism behind "Cancel server": an
+    /// IRK-signed `ReleaseServerName` envelope POSTed to
+    /// `/api/server/release`, which drops the routing record + active
+    /// auth-codes + the server record. Unlike a bare auth-code revoke
+    /// this un-pins the name itself. Mirrors webapp `releaseServerName`.
+    func releaseServerName(_ req: ReleaseServerNameRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     /// Login/join preflight. GET /api/account/resolve/<username>. The
     /// sign-in space is access-control evaluation, not a fetch: this
@@ -835,6 +842,28 @@ public struct AuthCodeRevokeRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// POST /api/server/release — IRK-signed release of a reserved server
+/// name. The phone fires this when the user cancels a pending/abandoned
+/// server. Mirrors the canonical-bytes tag
+/// `flagship/release-server-name/v1` (`tag|username|serverDomain|issuedAt`)
+/// + the @flagship/protocol `ReleaseServerName` shape. Authorization is
+/// the IRK signature itself — only the account owner can produce it.
+public struct ReleaseServerNameRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let username: String
+        public let serverDomain: String
+        public let issuedAt: Int64
+        public init(username: String, serverDomain: String, issuedAt: Int64) {
+            self.username = username; self.serverDomain = serverDomain; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String         // hex, IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
 // MARK: - Wire types
 
 /// POST /api/username/claim — idempotent. The Worker checks the IRK
@@ -1301,6 +1330,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var claimedUsernames: [String: String] = [:]   // username → irkPub
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
+    public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
     public private(set) var registeredPushTokens: [String: PushTokenRegisterRequest.Inner] = [:] // tokenId → inner
     private var nextPushTokenId = 1
@@ -1338,6 +1368,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws {
         try await tick()
         revokedAuthCodes.insert(req.request.serial)
+    }
+
+    public func releaseServerName(_ req: ReleaseServerNameRequest) async throws {
+        try await tick()
+        releasedServerNames.append(req)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
@@ -2127,6 +2162,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             body: body,
             acceptStatuses: [200, 201, 204, 403, 404]
         )
+    }
+
+    public func releaseServerName(_ req: ReleaseServerNameRequest) async throws {
+        let body = try JSONEncoder().encode(req)
+        try await postJson("/api/server/release", body: body)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {

@@ -1,5 +1,6 @@
 import SwiftUI
 import FlagshipAPI
+import FlagshipCore
 
 /// D.2.2 — ChooseUsernameScreen.
 ///
@@ -54,6 +55,7 @@ public struct ChooseUsernameScreen: View {
                 .task(id: username) {
                     await vm?.evaluate(username)
                 }
+                trademarkClaimAffordance
                 Spacer()
                 FSPrimaryButton(
                     "Continue",
@@ -70,6 +72,23 @@ public struct ChooseUsernameScreen: View {
         }
         .task {
             if vm == nil { vm = ChooseUsernameViewModel(server: server) }
+        }
+    }
+
+    /// Shown only in the `.taken` state: a subtle "I hold a trademark"
+    /// affordance that opens a prefilled mailto to the trademarks desk
+    /// (TrademarkClaim mirrors the canonical webapp message).
+    @ViewBuilder private var trademarkClaimAffordance: some View {
+        if case .taken = vm?.status, let url = TrademarkClaim.mailtoURL(username: username) {
+            FSColorReader { c in
+                Link(destination: url) {
+                    Text("I hold a trademark to this name")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .underline()
+                }
+                .accessibilityIdentifier("trademark-claim-link")
+            }
         }
     }
 

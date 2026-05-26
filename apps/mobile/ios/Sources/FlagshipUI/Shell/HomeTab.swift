@@ -287,28 +287,56 @@ struct PendingPodContainer: View {
         }
     }
 
+    /// Cancel the server. Mirrors webapp `cancelServer`: FIRST release
+    /// the name (an IRK-signed `ReleaseServerName` → /api/server/release,
+    /// which un-pins the routing record so the name can be re-used),
+    /// THEN revoke the install auth-code (belt-and-braces, the release
+    /// already revokes active codes server-side). If the release fails
+    /// we surface the error and KEEP the pod — dropping it locally would
+    /// strand the name as still-reserved.
     private func cancelOrder() async {
         guard !cancelling else { return }
         cancelling = true
         defer { cancelling = false }
-        if let serial = pod.pendingAuthCodeSerial,
-           let username = app.currentUser {
-            do {
-                let irk = try await Keystore.deriveIRK(reason: "Cancel order for \(pod.name)")
-                let now = Int64(Date().timeIntervalSince1970 * 1000)
-                let bytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
-                let sig = try irk.signature(for: bytes)
-                try await serverClient.revokeAuthCode(.init(
-                    request: .init(serial: serial, username: username, issuedAt: now),
-                    signature: HexUtil.encode(sig)
-                ))
-                toasts.success("Order cancelled.")
-            } catch {
-                toasts.warning("Couldn't reach flagshipserver.com — the order is removed locally; the box (if it ever boots) will be rejected on first phone-home.")
-            }
+        guard let username = app.currentUser else {
+            app.removePod(pod.podId)
+            onAfterCancel()
+            return
         }
-        app.removePod(pod.podId)
-        onAfterCancel()
+        do {
+            let irk = try await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            // 1. Release the name (the real free-the-name mechanism).
+            // serverDomain = <server>.<user>.flagship.services, held on
+            // the pod as its fqdn.
+            let releaseBytes = ReleaseServerName.canonicalBytes(
+                username: username, serverDomain: pod.fqdn, issuedAt: now
+            )
+            let releaseSig = try irk.signature(for: releaseBytes)
+            try await serverClient.releaseServerName(.init(
+                request: .init(username: username, serverDomain: pod.fqdn, issuedAt: now),
+                signature: HexUtil.encode(releaseSig)
+            ))
+            // 2. Belt-and-braces auth-code revoke. The release already
+            // revoked active codes server-side; this is a cheap explicit
+            // revoke of the serial we hold locally. 403/404 (already
+            // gone) is treated as success by the client.
+            if let serial = pod.pendingAuthCodeSerial {
+                let revokeBytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
+                let revokeSig = try irk.signature(for: revokeBytes)
+                try? await serverClient.revokeAuthCode(.init(
+                    request: .init(serial: serial, username: username, issuedAt: now),
+                    signature: HexUtil.encode(revokeSig)
+                ))
+            }
+            toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
+            app.removePod(pod.podId)
+            onAfterCancel()
+        } catch {
+            // Keep the pod: the name is still reserved, so dropping it
+            // locally would just hide a name the user can't re-use.
+            toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
+        }
     }
 }
 
