@@ -10,6 +10,7 @@
  */
 
 import type { BackupLoop } from "../backupLoop.js";
+import type { PeerActivitySnapshot } from "../peerBackup/peerActivityWatchdog.js";
 import type {
   MyShardRow,
   ShardRegistry,
@@ -49,6 +50,13 @@ export interface PeerBackupSnapshotDeps {
   registry?: ShardRegistry | null;
   /** Best-effort repair-tick history; defaults to idle/zero. */
   repairStats?: RepairStatsProvider | null;
+  /**
+   * Persistent peer-link activity signal. When wired, the projector
+   * reads `peerActivity.lastSeenMs(peerFqdn)` for the `online`/`lastSeenMs`
+   * fields on `peersBackingYouUp`. When unset, the projector falls back
+   * to the per-row `lastChallenge ?? storedAt` proxy.
+   */
+  peerActivity?: PeerActivitySnapshot | null;
   /**
    * Erasure-coding `k`. Production wiring should pass the BackupLoop's
    * cfg.k; default 3 mirrors `apps/web/public/webapp/views/peer-backup.js`
@@ -100,6 +108,7 @@ export function buildPeerBackupStatus(
     myShards,
     now(),
     onlineThresholdMs,
+    deps.peerActivity ?? null,
   );
   const peersYouBackUp = projectPeersYouBackUp(theirShards);
 
@@ -113,12 +122,20 @@ export function buildPeerBackupStatus(
     summedTheirBytes,
   );
 
+  // Sum bytes of surviving shards (challengeStreak < 3) for `yourBytesStored`.
+  // Lost rows are excluded so the number tracks "what the network actually
+  // holds for me" rather than "what I once placed". Same survivor cutoff
+  // the projector uses for the per-chunk replica count below.
+  const yourBytesStored = myShards.reduce(
+    (acc, r) => (r.challengeStreak < 3 ? acc + r.sizeBytes : acc),
+    0,
+  );
+
   const stats: PeerBackupStats = {
     total: shards.length,
     durable: shards.filter((s) => s.replicas >= k).length,
     atRisk: shards.filter((s) => s.replicas < k).length,
-    // `MyShardRow` doesn't carry a per-shard byte size yet — honest 0.
-    yourBytesStored: 0,
+    yourBytesStored,
     peerBytesHosted,
   };
 
@@ -149,13 +166,14 @@ function projectMyShards(
   const out: PeerBackupShardSummary[] = [];
   for (const [shardId, group] of byChunk) {
     const survivors = group.filter((r) => r.challengeStreak < 3).length;
+    // All rows under the same encChunkId share a sizeBytes; surface the
+    // first survivor's value (or any row if none survive).
+    const sample = group.find((r) => r.challengeStreak < 3) ?? group[0]!;
     out.push({
       shardId,
       replicas: survivors,
       minReplicas: k,
-      // MyShardRow doesn't yet carry the byte size — honest 0 until
-      // it's added. The webapp renders "0 B" rather than "—" in that case.
-      bytes: 0,
+      bytes: sample.sizeBytes,
     });
   }
   // Stable order — newest chunks first based on the earliest storedAt.
@@ -167,10 +185,12 @@ function projectPeersBackingYouUp(
   rows: MyShardRow[],
   nowMs: number,
   onlineThresholdMs: number,
+  peerActivity: PeerActivitySnapshot | null,
 ): PeerBackupPeerHostingYou[] {
   // One entry per unique peerServerId; `shardsHosted` counts that
-  // peer's distinct (encChunkId, shardIndex) pairs; `lastSeenMs` is the
-  // most recent successful challenge OR storedAt fallback.
+  // peer's distinct (encChunkId, shardIndex) pairs; `lastSeenMs` prefers
+  // the live PeerActivityWatchdog signal, falling back to the
+  // `lastChallenge ?? storedAt` proxy when no watchdog is wired.
   const byPeer = new Map<
     string,
     { shards: number; lastSeenMs: number }
@@ -178,17 +198,21 @@ function projectPeersBackingYouUp(
   for (const r of rows) {
     const entry = byPeer.get(r.peerServerId) ?? { shards: 0, lastSeenMs: 0 };
     entry.shards += 1;
-    const seen = r.lastChallenge ?? r.storedAt;
-    if (seen > entry.lastSeenMs) entry.lastSeenMs = seen;
+    const proxySeen = r.lastChallenge ?? r.storedAt;
+    if (proxySeen > entry.lastSeenMs) entry.lastSeenMs = proxySeen;
     byPeer.set(r.peerServerId, entry);
   }
   return [...byPeer.entries()]
-    .map(([peerFqdn, v]) => ({
-      peerFqdn,
-      shardsHosted: v.shards,
-      lastSeenMs: v.lastSeenMs,
-      online: nowMs - v.lastSeenMs <= onlineThresholdMs,
-    }))
+    .map(([peerFqdn, v]) => {
+      const live = peerActivity?.lastSeenMs(peerFqdn);
+      const lastSeenMs = typeof live === "number" && live > v.lastSeenMs ? live : v.lastSeenMs;
+      return {
+        peerFqdn,
+        shardsHosted: v.shards,
+        lastSeenMs,
+        online: nowMs - lastSeenMs <= onlineThresholdMs,
+      };
+    })
     .sort((a, b) => a.peerFqdn.localeCompare(b.peerFqdn));
 }
 

@@ -168,6 +168,7 @@ export class RepairDaemon {
             peerServerId: a.peer.serverId,
             peerStkPub: a.peer.stkPub,
             storedAt: (this.opts.now ?? (() => Date.now()))(),
+            sizeBytes: bytes.length,
             challengeStreak: 0,
           });
           result.replaced += 1;

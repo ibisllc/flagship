@@ -23,6 +23,8 @@ import {
   type TheirShardRow,
 } from "../../src/peerBackup/registry.js";
 import { buildPeerBackupStatus } from "../../src/screens/peerBackupStatus.js";
+import { PeerActivityWatchdog } from "../../src/peerBackup/peerActivityWatchdog.js";
+import { RepairStatsAccumulator } from "../../src/peerBackup/repairStatsAccumulator.js";
 import {
   buildScreensHttp,
   type ScreensHttpDeps,
@@ -81,6 +83,7 @@ function myRow(over: Partial<MyShardRow> = {}): MyShardRow {
     peerServerId: "peer-A",
     peerStkPub: stk(0xa1),
     storedAt: 100,
+    sizeBytes: 0,
     challengeStreak: 0,
     ...over,
   };
@@ -222,11 +225,133 @@ describe("buildPeerBackupStatus — projector", () => {
     });
   });
 
-  it("yourBytesStored is honest 0 — MyShardRow does not yet carry per-shard size", () => {
+  it("yourBytesStored is 0 when rows carry sizeBytes=0 (legacy / unwired placement)", () => {
     const reg = new InMemoryShardRegistry();
-    reg.recordMyShard(myRow({ encChunkId: cid(0xaa), shardIndex: 0 }));
+    reg.recordMyShard(myRow({ encChunkId: cid(0xaa), shardIndex: 0, sizeBytes: 0 }));
     const r = buildPeerBackupStatus({ registry: reg, k: 3 });
     expect(r.stats.yourBytesStored).toBe(0);
+  });
+
+  it("yourBytesStored sums sizeBytes across surviving rows (Gap 1 wired)", () => {
+    const reg = new InMemoryShardRegistry();
+    // 3 placements * 1024 = 3072 bytes total — all survive.
+    reg.recordMyShard(
+      myRow({ encChunkId: cid(0xaa), shardIndex: 0, peerServerId: "peer-1", sizeBytes: 1024 }),
+    );
+    reg.recordMyShard(
+      myRow({ encChunkId: cid(0xaa), shardIndex: 1, peerServerId: "peer-2", sizeBytes: 1024 }),
+    );
+    reg.recordMyShard(
+      myRow({ encChunkId: cid(0xaa), shardIndex: 2, peerServerId: "peer-3", sizeBytes: 1024 }),
+    );
+    // Lost row — excluded from the sum.
+    reg.recordMyShard(
+      myRow({
+        encChunkId: cid(0xbb),
+        shardIndex: 0,
+        peerServerId: "peer-x",
+        sizeBytes: 9999,
+        challengeStreak: 3,
+      }),
+    );
+    const r = buildPeerBackupStatus({ registry: reg, k: 3 });
+    expect(r.stats.yourBytesStored).toBe(3072);
+    // Shard summary surfaces the sample sizeBytes for the chunk.
+    const aaSummary = r.shards.find(
+      (s) => s.shardId === new Array(32).fill(0xaa).map((b) => b.toString(16).padStart(2, "0")).join(""),
+    )!;
+    expect(aaSummary.bytes).toBe(1024);
+  });
+});
+
+// ---------- Gap 2 — peer-activity watchdog -------------------------------
+
+describe("buildPeerBackupStatus — peer-activity watchdog (Gap 2)", () => {
+  it("falls back to lastChallenge ?? storedAt when no watchdog wired (unchanged behaviour)", () => {
+    const reg = new InMemoryShardRegistry();
+    reg.recordMyShard(
+      myRow({ encChunkId: cid(0xaa), shardIndex: 0, peerServerId: "peer-A", storedAt: 1000 }),
+    );
+    const r = buildPeerBackupStatus({
+      registry: reg,
+      k: 3,
+      now: () => 5_000,
+      onlineThresholdMs: 1_000,
+    });
+    const a = r.peersBackingYouUp.find((p) => p.peerFqdn === "peer-A")!;
+    expect(a.lastSeenMs).toBe(1000);
+    expect(a.online).toBe(false);
+  });
+
+  it("prefers the watchdog's live timestamp when it is newer than the proxy", () => {
+    const reg = new InMemoryShardRegistry();
+    // Proxy says lastSeen=1000 (offline); watchdog says 4900 (online at now=5000, threshold=1000).
+    reg.recordMyShard(
+      myRow({ encChunkId: cid(0xaa), shardIndex: 0, peerServerId: "peer-A", storedAt: 1000 }),
+    );
+    const watchdog = new PeerActivityWatchdog(() => 4900);
+    watchdog.bump("peer-A");
+    const r = buildPeerBackupStatus({
+      registry: reg,
+      peerActivity: watchdog,
+      k: 3,
+      now: () => 5_000,
+      onlineThresholdMs: 1_000,
+    });
+    const a = r.peersBackingYouUp.find((p) => p.peerFqdn === "peer-A")!;
+    expect(a.lastSeenMs).toBe(4900);
+    expect(a.online).toBe(true);
+  });
+
+  it("ignores a stale watchdog when the proxy is newer", () => {
+    const reg = new InMemoryShardRegistry();
+    reg.recordMyShard(
+      myRow({
+        encChunkId: cid(0xaa),
+        shardIndex: 0,
+        peerServerId: "peer-A",
+        storedAt: 1000,
+        lastChallenge: 4500,
+      }),
+    );
+    const watchdog = new PeerActivityWatchdog(() => 200);
+    watchdog.bump("peer-A");
+    const r = buildPeerBackupStatus({
+      registry: reg,
+      peerActivity: watchdog,
+      k: 3,
+      now: () => 5_000,
+      onlineThresholdMs: 1_000,
+    });
+    const a = r.peersBackingYouUp.find((p) => p.peerFqdn === "peer-A")!;
+    expect(a.lastSeenMs).toBe(4500);
+    expect(a.online).toBe(true);
+  });
+});
+
+// ---------- Gap 3 — repair-stats accumulator -----------------------------
+
+describe("buildPeerBackupStatus — repair-stats accumulator (Gap 3)", () => {
+  it("falls back to idle/zero when no accumulator wired", () => {
+    const r = buildPeerBackupStatus({});
+    expect(r.repair).toEqual({
+      state: "idle",
+      lastTickMs: null,
+      queued: 0,
+      completed24h: 0,
+    });
+  });
+
+  it("threads RepairStatsAccumulator.snapshot() into the wire shape", async () => {
+    let now = 1_000;
+    const acc = new RepairStatsAccumulator({ now: () => now });
+    now = 2_000;
+    await acc.wrapTick(async () => ({ replaced: 4 }));
+    const r = buildPeerBackupStatus({ repairStats: acc });
+    expect(r.repair.state).toBe("idle");
+    expect(r.repair.lastTickMs).toBe(2_000);
+    expect(r.repair.completed24h).toBe(4);
+    expect(r.repair.lastError).toBeUndefined();
   });
 });
 

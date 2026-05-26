@@ -22,6 +22,13 @@ export interface MyShardRow {
   /** Peer's STK pubkey, used to verify their challenge-response signatures. */
   peerStkPub: Bytes;
   storedAt: number;
+  /**
+   * Size of this shard's encrypted bytes — captured at placement time so
+   * the BFF can sum a real `yourBytesStored` without re-loading the shard.
+   * Sourced from `bytes.length` at the `recordMyShard` call site (initial
+   * upload + RepairDaemon re-placement).
+   */
+  sizeBytes: number;
   lastChallenge?: number;
   challengeStreak: number;
 }

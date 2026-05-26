@@ -77,6 +77,7 @@ function row(over: Partial<MyShardRow> = {}): MyShardRow {
     peerServerId: over.peerServerId ?? "peer-A",
     peerStkPub: over.peerStkPub ?? peerSTKPub,
     storedAt: over.storedAt ?? 0,
+    sizeBytes: over.sizeBytes ?? 0,
     challengeStreak: over.challengeStreak ?? 0,
     ...over,
   };

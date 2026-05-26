@@ -21,6 +21,7 @@ function row(over: Partial<MyShardRow> = {}): MyShardRow {
     peerServerId: over.peerServerId ?? "peer-A",
     peerStkPub: over.peerStkPub ?? stk(0xa1),
     storedAt: 0,
+    sizeBytes: over.sizeBytes ?? SHARD_BYTES.length,
     challengeStreak: over.challengeStreak ?? 0,
     ...over,
   };
@@ -208,5 +209,28 @@ describe("RepairDaemon — repairOnce", () => {
     const r = await daemon.repairOnce();
     expect(r.attempted).toBe(1);
     expect(r.replaced).toBe(0);
+  });
+
+  it("re-placed row carries sizeBytes from the loaded shard (Gap 1)", async () => {
+    const reg = new InMemoryShardRegistry();
+    for (let i = 0; i < 10; i++) {
+      reg.recordMyShard(row({ shardIndex: i, peerServerId: `peer-${i}` }));
+    }
+    reg.recordChallengeFail(enc, 0, "peer-0");
+    reg.recordChallengeFail(enc, 0, "peer-0");
+    reg.recordChallengeFail(enc, 0, "peer-0");
+    const daemon = new RepairDaemon({
+      registry: reg,
+      source: okSource,
+      loader: okLoader,
+      peerProvider: makeProvider([{ serverId: "peer-fresh", stkPub: stk(0x42) }]),
+      pusher: makePusher("ok"),
+      k: 10,
+      n: 16,
+    });
+    await daemon.repairOnce();
+    const fresh = reg.myShards().find((r) => r.peerServerId === "peer-fresh")!;
+    expect(fresh).toBeDefined();
+    expect(fresh.sizeBytes).toBe(SHARD_BYTES.length);
   });
 });
