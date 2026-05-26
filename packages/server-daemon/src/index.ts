@@ -16,6 +16,7 @@ import {
 } from "./alertInboxHttp.js";
 import { buildAdminProxyHandler } from "./adminProxy.js";
 import { BackupLoop } from "./backupLoop.js";
+import { InMemoryAppInviteStore } from "./inviteHandler.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
@@ -166,6 +167,14 @@ async function main(): Promise<void> {
   const backupLoop = swkHex
     ? new BackupLoop({ swk: hexToBytes(swkHex.trim()), k: 3, n: 5 })
     : null;
+
+  // P6 — collaborator invites BFF store. The signed surface
+  // (`/.flagship/app/<id>/invite`) and the Screens-BFF MUST point at
+  // the same `AppInviteStore` instance so an invite issued via the
+  // phone appears in the webapp's manage view (and vice versa). The
+  // signed-surface entry isn't wired into the production boot yet;
+  // when it lands it must take THIS instance, not its own.
+  const appInviteStore = new InMemoryAppInviteStore();
 
   // ---- Order serial (provisioning-status channel) ----
   // The InstallBlob's authCode.serial is the order id keying the
@@ -661,6 +670,12 @@ async function main(): Promise<void> {
       // empty shard/peer/repair view.
       peerBackup: {
         backupLoop,
+      },
+      // P6 — collaborator invites. Same store the signed-surface entry
+      // must point at when it gets wired (see construction above).
+      appInvite: {
+        store: appInviteStore,
+        serverFqdn: env.serverFqdn!,
       },
       postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
       // W10 — per-app env-var KV editor + vibe-code session BFF deps.
