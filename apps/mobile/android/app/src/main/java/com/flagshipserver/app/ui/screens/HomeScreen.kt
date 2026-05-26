@@ -60,6 +60,15 @@ fun HomeScreen(
     showRecoveryNudge: Boolean = false,
     onSetUpRecovery: () -> Unit = {},
     onDismissRecoveryNudge: () -> Unit = {},
+    /** Mirror of the webapp's persistent post-creation backup-reminder
+     *  banner (apps/web/public/webapp/views/home.js). True when
+     *  !hasCloudRecovery AND the user hasn't persistently dismissed.
+     *  Distinct from `showRecoveryNudge`: the nudge above quick-actions
+     *  gates on at-least-one-online-pod + session-only dismiss; this
+     *  banner gates on neither, so it surfaces immediately after
+     *  account creation and stays hidden across launches once dismissed. */
+    showRecoveryBackupBanner: Boolean = false,
+    onDismissRecoveryBackupBanner: () -> Unit = {},
     /** E7 — renders the account-was-reset danger banner above
      *  everything else. Suppresses the recovery nudge while shown so
      *  the two banners don't stack. */
@@ -105,6 +114,14 @@ fun HomeScreen(
         if (accountWasReset) {
             Spacer(Modifier.height(FS.space.s4))
             AccountResetBanner(onSignInAgain = onSignInAgain)
+        }
+
+        if (showRecoveryBackupBanner && !accountWasReset) {
+            Spacer(Modifier.height(FS.space.s4))
+            RecoveryBackupBanner(
+                onSecure = onSetUpRecovery,
+                onDismiss = onDismissRecoveryBackupBanner,
+            )
         }
 
         if (showRecoveryNudge && !accountWasReset) {
@@ -327,6 +344,38 @@ private fun AccountResetBanner(onSignInAgain: () -> Unit) {
                 style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
             )
             FSPrimaryButton(label = "Sign in again", onClick = onSignInAgain, block = true)
+        }
+    }
+}
+
+/** Persistent post-creation backup-reminder banner. Mirrors the
+ *  webapp banner in apps/web/public/webapp/views/home.js — surfaces
+ *  the moment the user lands on Home without a cloud-recovery
+ *  envelope (no online-pod gate), and stays hidden across launches
+ *  once "Not now" is tapped. Tapping "Secure my account" routes into
+ *  the existing recovery flow on the Settings tab. */
+@Composable
+private fun RecoveryBackupBanner(onSecure: () -> Unit, onDismiss: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+            modifier = Modifier.testTag("recovery-backup-banner"),
+        ) {
+            Text(
+                "Your account isn't backed up yet",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                "If you lose this device, there's no way back in. Set up " +
+                    "recovery now (one minute) so you can restore your account.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSPrimaryButton(label = "Secure my account", onClick = onSecure)
+                FSGhostButton(label = "Not now", onClick = onDismiss)
+            }
         }
     }
 }

@@ -16,6 +16,14 @@ public struct HomeScreen: View {
     /// — HomeTab passes the resolved value rather than the app object
     /// so HomeScreen stays previewable in isolation.
     let showRecoveryNudge: Bool
+    /// Mirror of the webapp's persistent post-creation backup-reminder
+    /// banner (apps/web/public/webapp/views/home.js). True when
+    /// !hasCloudRecovery AND the user hasn't persistently dismissed.
+    /// Distinct from `showRecoveryNudge`: the nudge above quick-actions
+    /// gates on at-least-one-online-pod + session-only dismiss; this
+    /// banner gates on neither, so it surfaces immediately after
+    /// account creation and stays hidden across launches once dismissed.
+    let showRecoveryBackupBanner: Bool
     /// E7 — when true, render the danger banner that says "your
     /// account was reset on another device" + a "Sign in again" CTA
     /// that drops the user to Welcome.
@@ -34,6 +42,7 @@ public struct HomeScreen: View {
     var onRefresh: () async -> Void = {}
     var onSetUpRecovery: () -> Void = {}
     var onDismissRecoveryNudge: () -> Void = {}
+    var onDismissRecoveryBackupBanner: () -> Void = {}
     var onSignInAgain: () -> Void = {}
 
     public init(
@@ -42,6 +51,7 @@ public struct HomeScreen: View {
         pods: [PodInfo],
         leaderPodId: String?,
         showRecoveryNudge: Bool = false,
+        showRecoveryBackupBanner: Bool = false,
         accountWasReset: Bool = false,
         deviceCapability: DeviceCapabilityBlock? = nil,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
@@ -52,6 +62,7 @@ public struct HomeScreen: View {
         onRefresh: @escaping () async -> Void = {},
         onSetUpRecovery: @escaping () -> Void = {},
         onDismissRecoveryNudge: @escaping () -> Void = {},
+        onDismissRecoveryBackupBanner: @escaping () -> Void = {},
         onSignInAgain: @escaping () -> Void = {}
     ) {
         self.state = state
@@ -59,6 +70,7 @@ public struct HomeScreen: View {
         self.pods = pods
         self.leaderPodId = leaderPodId
         self.showRecoveryNudge = showRecoveryNudge
+        self.showRecoveryBackupBanner = showRecoveryBackupBanner
         self.accountWasReset = accountWasReset
         self.deviceCapability = deviceCapability
         self.onOpenPod = onOpenPod
@@ -69,6 +81,7 @@ public struct HomeScreen: View {
         self.onRefresh = onRefresh
         self.onSetUpRecovery = onSetUpRecovery
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
+        self.onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner
         self.onSignInAgain = onSignInAgain
     }
 
@@ -79,6 +92,9 @@ public struct HomeScreen: View {
                 header(c: c)
                 if accountWasReset {
                     accountResetBanner(c: c)
+                }
+                if showRecoveryBackupBanner && !accountWasReset {
+                    recoveryBackupBanner(c: c)
                 }
                 if showRecoveryNudge && !accountWasReset {
                     recoveryNudge(c: c)
@@ -125,6 +141,32 @@ public struct HomeScreen: View {
             }
         }
         .accessibilityIdentifier("account-reset-banner")
+    }
+
+    /// Persistent post-creation backup-reminder banner. Mirrors the
+    /// webapp banner in apps/web/public/webapp/views/home.js — surfaces
+    /// the moment the user lands on Home without a cloud-recovery
+    /// envelope (no online-pod gate), and stays hidden across launches
+    /// once "Not now" is tapped. Tapping "Secure my account" routes
+    /// into the existing recovery flow on the Settings tab.
+    private func recoveryBackupBanner(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your account isn't backed up yet")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(c.text)
+                    Text("If you lose this device, there's no way back in. Set up recovery now (one minute) so you can restore your account.")
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                }
+                HStack(spacing: FS.space.s2) {
+                    FSPrimaryButton("Secure my account", block: false, action: onSetUpRecovery)
+                    FSGhostButton("Not now", block: false, action: onDismissRecoveryBackupBanner)
+                }
+            }
+        }
+        .accessibilityIdentifier("recovery-backup-banner")
     }
 
     /// "Your phone is the only key" warning. Surfaces after the user

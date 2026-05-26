@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -24,6 +25,7 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.core.RecoveryBannerStore
 import com.flagshipserver.app.ui.screens.AddServerChooserScreen
 import com.flagshipserver.app.ui.screens.AddServerMode
 import com.flagshipserver.app.ui.screens.DemoInstallProgressScreen
@@ -46,6 +48,12 @@ fun HomeTab() {
     val pods by app.pods.collectAsState()
     val scope = rememberCoroutineScope()
     val vm = remember { HomeViewModel(client) }
+    val ctx = LocalContext.current
+    // Persistent dismiss for the post-creation backup-reminder banner
+    // (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
+    // StateFlow is collected below so toggling `setDismissed(true)`
+    // from "Not now" recomposes Home and the banner disappears.
+    val recoveryBannerStore = remember { RecoveryBannerStore.fromContext(ctx) }
 
     LaunchedEffect(app.currentPodId.value) { vm.load() }
 
@@ -107,7 +115,12 @@ fun HomeTab() {
             val dismissed by app.recoveryNudgeDismissedThisSession.collectAsState()
             val reset by app.accountWasReset.collectAsState()
             val capability by app.deviceCapability.collectAsState()
+            val bannerDismissed by recoveryBannerStore.dismissed.collectAsState()
             val showNudge = !hasRecovery && !dismissed && pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
+            val showBackupBanner = RecoveryBannerStore.shouldShow(
+                hasCloudRecovery = hasRecovery,
+                dismissed = bannerDismissed,
+            )
             HomeScreen(
                 state = vm.state.collectAsState().value,
                 username = app.currentUser.collectAsState().value ?: "",
@@ -122,6 +135,8 @@ fun HomeTab() {
                 showRecoveryNudge = showNudge,
                 onSetUpRecovery = { deepLinker.enqueue(DeepLink.RecoverySetup) },
                 onDismissRecoveryNudge = { app.dismissRecoveryNudgeForSession() },
+                showRecoveryBackupBanner = showBackupBanner,
+                onDismissRecoveryBackupBanner = { recoveryBannerStore.setDismissed(true) },
                 accountWasReset = reset,
                 onSignInAgain = { app.signOut() },
                 deviceCapability = capability,

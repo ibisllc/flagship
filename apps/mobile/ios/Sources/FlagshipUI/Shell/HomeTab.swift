@@ -12,6 +12,11 @@ public struct HomeTab: View {
 
     @State private var path: [HomeRoute] = []
     @State private var vm: HomeViewModel?
+    /// Persistent dismiss for the post-creation backup-reminder banner
+    /// (mirror of webapp's flagship.recovery.banner.dismissed.v1). The
+    /// store is observed so toggling `dismissed` from "Not now"
+    /// re-renders Home and the banner disappears immediately.
+    @State private var recoveryBannerStore = RecoveryBannerStore()
 
     public init() {}
 
@@ -60,6 +65,10 @@ public struct HomeTab: View {
                     pods: app.pods,
                     leaderPodId: app.leaderPodId,
                     showRecoveryNudge: app.shouldShowRecoveryNudge,
+                    showRecoveryBackupBanner: RecoveryBannerStore.shouldShow(
+                        hasCloudRecovery: app.hasCloudRecovery,
+                        dismissed: recoveryBannerStore.dismissed
+                    ),
                     accountWasReset: app.accountWasReset,
                     deviceCapability: app.deviceCapability,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
@@ -76,6 +85,9 @@ public struct HomeTab: View {
                     },
                     onDismissRecoveryNudge: {
                         app.recoveryNudgeDismissedThisSession = true
+                    },
+                    onDismissRecoveryBackupBanner: {
+                        recoveryBannerStore.dismissed = true
                     },
                     onSignInAgain: {
                         // E7 — drop everything and head back to Welcome.
