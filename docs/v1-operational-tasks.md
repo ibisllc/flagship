@@ -34,6 +34,11 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 - **P10 / P11 (webapp)** — full Replace-device + Wipe & restart ceremonies wired into Settings → Trusted devices. Both `<dialog>` flows with the 3-second-countdown confirmation, verbatim copy from `docs/revocation-ui.md`. New `lib/replaceDeviceCeremony.js` + `lib/wipeRestartCeremony.js`; canonical bytes round-tripped through `@flagship/protocol` verifiers in tests. `keystore.js` gains `currentIrkVersion()` for IRK rotation. — `20224ce` (full repo: 311 files, 3907 pass / 10 skip)
 - **P1 (iOS + Android)** — persistent backup-reminder banner on Home, mirroring the webapp predicate. `RecoveryBannerStore` on each platform; dismiss flag in UserDefaults / SharedPreferences. — `4bd3e73`
 
+### Parity wave 3 (2026-05-25 night, cont.)
+- **P9 daemon BFF** — `GET /api/screens/peer-backup/status` + `POST .../toggle` on the daemon Screens-BFF, byte-for-byte matching the webapp's expected 22-field response shape (so the existing webapp view lights up). Pure projector `buildPeerBackupStatus()` over BackupLoop + ShardRegistry. Honest about data gaps (per-shard bytes, peer liveness, repair-tick counters not yet tracked → returns 0/empty/idle rather than fabricating). — `af9cbc7` (313 files / 3940 pass / 10 skip)
+- **P13 (webapp + iOS + Android + Worker handler)** — per-server kill-switch end-to-end. Each client surface adds a "Danger zone" to the server-detail screen with the reason picker (lost/stolen/decommissioned) and the established confirmation (1.5s hold mobile / 3s countdown webapp). Canonical bytes `flagship/revoke/v1|userId|revokedServerId|reason|issuedAt`, IRK-signed. The Worker handler (`handleRevokeServer` in `packages/control-plane/src/serverRevocation.ts`) verifies + idempotency + walks `AutoUnlockLeaseStorage` and `BoxSealedLeaseStorage` to tear down every active lease for that server (the "brick on next boot" effect). `AuditEventKind` gains `server-revoked`. — `be1553e` (webapp) + `a53386d` (iOS+Android) + `859e17f` (Worker)
+- **D2 (local hygiene, not committed)** — pruned 83 merged branches + 51 stale `.claude/worktrees/agent-*` worktrees. Remaining: main + `w11` (unmerged, kept) + 3 unmerged worktree-agent branches.
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
@@ -74,18 +79,19 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
   webapp's WS framebuffer-stream + input-forwarding (the real use-case is
   server-side social-media login so bots can act as the user — session must
   live on the box; native WebView is a different feature). _agent._
-- **P9** — Peer-backup management → daemon Screens-BFF + 3 UI. **Decision
-  2026-05-25**: build full BFF (status + toggle) to webapp's expected contract
-  + wire all 3. _agent._
+- **P9** — Peer-backup management → daemon Screens-BFF + 3 UI. _agent._
+  ✅ daemon BFF (`af9cbc7`); ⏳ wire the 3 client UIs against it (webapp
+  view already exists — degrades gracefully today; needs iOS + Android UI
+  + verify webapp end-to-end with the new BFF).
 - **P10** — Replace device (IRK rotation) → webapp. _agent._ ✅ (`20224ce`).
 - **P11** — Wipe & restart → webapp. _agent._ ✅ (`20224ce`) — full ceremony,
   not the older "ship disabled" stance.
 - **P12** — Multi-profile switching → webapp (iOS/Android done; needs a
   storage migration from single localStorage to a multi-profile store). _agent._
-- **P13** — Kill-switch / server-revocation UI → all 3. **Decision 2026-05-25**:
-  per-server danger zone (reason picker lost/stolen/decommissioned), guarded
-  by the established two-tap-hold (mobile) / 3-second countdown (webapp), IRK
-  signature only. _agent._
+- **P13** — Kill-switch / server-revocation UI → all 3 + Worker handler. _agent._
+  ✅ (`be1553e` + `a53386d` + `859e17f`). Per-server danger zone with reason
+  picker + 1.5s hold (mobile) / 3s countdown (webapp); IRK-signed; the Worker
+  cascades the boot lease tear-down so the box bricks on next boot.
 - **P14** — Companion-browser dock (new, 2026-05-25). Every owner app must be
   able to dock to a regular browser as an ephemeral companion surface (the
   owner app is the long-lived trust root, the browser is paired in for
@@ -116,11 +122,9 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
 - **D1** — Merge `feat/keyfile-backup-and-provisioning-status` → main after the
   full gate. _agent preps, owner approves push._ Blocked by A1, A2, P1, P2, P3
   (land a coherent slice first).
-- **D2** — Prune stale branches: ~80 `worktree-agent-*`/feature branches are
-  already IN-MAIN + in-HEAD (a:0) — stale leftovers; 4 `a:1` branches
-  (w11/Hetzner, demo_users, android-rename, W11) are superseded. Verify
-  containment in main, delete, `git worktree prune`. Keep main + the active
-  branch. _agent._
+- ~~**D2** — Prune stale branches~~ ✅ (local cleanup, no commit). 83
+  merged branches + 51 `.claude/worktrees/agent-*` worktrees removed.
+  Remaining: main + `w11` + 3 unmerged worktree-agents (kept intentionally).
 
 ## E — v1-alpha live exercises (docs/build-tasks.md §S)
 
@@ -141,9 +145,8 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 ```
 
 ## Next agent-doable, smallest-first
-(Updated 2026-05-25 night after wave 2.) **Up next**: P13 per-server
-danger zone (all 3) → P9 daemon BFF then 3 UIs → P4 Android QR + admit
-→ P12 webapp multi-profile + storage migration → P6 collaborator invites
-iOS + Android → P8 framebuffer-stream port (iOS + Android) → P14
-companion-browser dock → D2 prune stale branches. Then the
-hardware/owner items (A3–A6, TF*, C1, E*).
+(Updated 2026-05-25 late after wave 3.) **Up next**: P9 client UIs (3
+surfaces against the new BFF) → P4 Android QR + admit → P12 webapp
+multi-profile + storage migration → P6 collaborator invites iOS + Android
+→ P8 framebuffer-stream port (iOS + Android) → P14 companion-browser
+dock. Then the hardware/owner items (A3–A6, TF*, C1, E*).

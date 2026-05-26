@@ -31,7 +31,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 16 | Marketplace (browse + install) | ✅ | ⚠️ | ✅ | verify iOS wiring | **P0** |
 | 17 | Services / detail / env-vars / BYOK LLM | ✅ | ✅ | ✅ | — | — |
 | 18 | Vibe-code (chat + app build) | ✅ | ✅ | ✅ | — | — |
-| 19 | **Peer-backup** management (+ daemon BFF) | ⚠️ | ❌ | ❌ | all 3 + BFF | **P9** |
+| 19 | **Peer-backup** management (+ daemon BFF) | ⚠️ | ❌ | ❌ | iOS+Android UI (BFF ✓ daemon) | **P9** |
 | 20 | **Tier-status / monetization** | ✅ | ✅ | ✅ | — | ✓ P7 |
 | 21 | Multi-profile / iCloud switching | ⚠️ | ✅ | ✅ | webapp | **P12** |
 | 22 | Settings + developer settings | ✅ | ✅ | ✅ | — | — |
@@ -40,18 +40,17 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 25 | Activity feed | ✅ | ✅ | ✅ | — | — |
 | 26 | **Replace device** (IRK rotation) | ✅ | ✅ | ✅ | — | ✓ P10 |
 | 27 | **Wipe & restart** | ✅ | ✅ | ✅ | — | ✓ P11 |
-| 28 | **Kill-switch / server revocation UI** | ❌ | ❌ | ❌ | all 3 | **P13** |
+| 28 | **Kill-switch / server revocation UI** | ✅ | ✅ | ✅ | — | ✓ P13 |
 
 Legend: ✅ believed wired · ⚠️ partial / unverified / audit-disputed · ❌ missing.
 
 ## Gap list (port direction)
 
 - **To iOS + Android:** collaborator invites (P6), browser-viewer (P8 —
-  framebuffer-stream, see decision note below), peer-backup (P9), cross-device
-  pairing → Android only (P4).
-- **To webapp:** multi-profile (P12).
-- **All three:** kill-switch UI (P13 — per-server danger zone, decided),
-  companion-browser dock (P14 — new, see below).
+  framebuffer-stream, see decision note below), peer-backup UI (P9 UI;
+  daemon BFF already ✓), cross-device pairing → Android only (P4).
+- **To webapp:** multi-profile (P12), peer-backup view finalization (P9 webapp).
+- **All three:** companion-browser dock (P14 — new, see below).
 - **Verify-only:** marketplace iOS wiring, create-server iOS pickers (P0).
 
 ### P8 decision (2026-05-25)
