@@ -1,5 +1,6 @@
 // P2.1 — server-detail view. Calls /api/screens/server-detail (P1.1).
-// Also hosts the per-server "auto-unlock" toggle (auto_unlock_lease_design.md).
+// Also hosts the per-server "auto-unlock" toggle (auto_unlock_lease_design.md)
+// and the P13 per-server kill-switch danger zone.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
@@ -8,6 +9,13 @@ import {
   listLeases,
   revokeLease,
 } from "../lib/leases.js";
+import {
+  countdownConfirm,
+  revokeServer,
+  REVOCATION_REASONS,
+} from "../lib/revokeServer.js";
+import { signWithIrk } from "../keystore.js";
+import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 
@@ -87,8 +95,18 @@ export async function renderServerDetail() {
             </div>
           </div>
         `).join("")}
+      <h2 class="mt-4">Danger zone</h2>
+      <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}" data-username="${escapeHtml(body.username)}">
+        <p class="note">
+          Revoke this server when the box is lost, stolen, or being
+          decommissioned. The box will refuse to boot on the next reboot —
+          this cannot be undone.
+        </p>
+        <button id="revoke-server-btn" class="danger full-width mt-2">Revoke this server</button>
+      </div>
     `;
     wireAutoUnlock(body.serverFqdn);
+    wireDangerZone(body.serverFqdn, body.username);
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -213,6 +231,126 @@ function startMetricsPolling(serverFqdn) {
   };
   void tick();
   metricsTimer = setInterval(tick, 15_000);
+}
+
+function wireDangerZone(serverFqdn, username) {
+  $("revoke-server-btn")?.addEventListener("click", () => {
+    openRevokeDialog(serverFqdn, username).catch((e) => {
+      if (e?.code !== "cancelled") toast(`revoke failed: ${e.message ?? e}`, "err");
+    });
+  });
+}
+
+async function openRevokeDialog(serverFqdn, username) {
+  const session = getSession();
+  if (!session.umk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", "Revoke this server");
+  dlg.innerHTML = `
+    <h3 class="modal-title">Revoke this server?</h3>
+    <p class="modal-message">
+      Bricks the box on next boot — this cannot be undone.
+      ${escapeHtml(serverFqdn)} will refuse to start, even with the
+      correct passphrase. Other servers on your account stay running.
+    </p>
+    <fieldset class="mt-3">
+      <legend class="caption">Reason</legend>
+      ${REVOCATION_REASONS.map((r, i) => `
+        <label class="row">
+          <input type="radio" name="revoke-reason" value="${escapeHtml(r)}" ${i === 0 ? "checked" : ""} />
+          <span class="value">${escapeHtml(reasonLabel(r))}</span>
+        </label>
+      `).join("")}
+    </fieldset>
+    <p class="modal-error err-text hidden" data-revoke-error></p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-revoke-cancel>Cancel</button>
+      <button class="danger" data-revoke-go>Revoke</button>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+
+  const cleanup = () => {
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+  const cancelBtn = dlg.querySelector("[data-revoke-cancel]");
+  const goBtn = dlg.querySelector("[data-revoke-go]");
+  const errEl = dlg.querySelector("[data-revoke-error]");
+  let abort = null;
+
+  return new Promise((resolve, reject) => {
+    const onCancel = () => {
+      if (abort) abort.abort();
+      cleanup();
+      reject({ code: "cancelled" });
+    };
+    const onEscape = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); onCancel(); }
+    };
+    dlg.addEventListener("close", onCancel, { once: true });
+    cancelBtn.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onEscape);
+
+    goBtn.addEventListener("click", async () => {
+      const reason = dlg.querySelector('input[name="revoke-reason"]:checked')?.value;
+      if (!REVOCATION_REASONS.includes(reason)) {
+        errEl.textContent = "Pick a reason.";
+        errEl.classList.remove("hidden");
+        return;
+      }
+      // Enter the 3-second countdown. The button label becomes a
+      // tick and the Cancel button is the abort.
+      abort = new AbortController();
+      goBtn.disabled = true;
+      try {
+        await countdownConfirm({
+          signal: abort.signal,
+          onTick: (s) => {
+            goBtn.textContent = s > 0 ? `Revoking in ${s}…` : "Revoking…";
+          },
+        });
+        await revokeServer({
+          userId: username,
+          revokedServerId: serverFqdn,
+          reason,
+          umk: session.umk,
+          signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
+        });
+        toast("Server revoked. It will refuse to boot next time.", "ok");
+        document.removeEventListener("keydown", onEscape);
+        dlg.removeEventListener("close", onCancel);
+        cleanup();
+        resolve();
+      } catch (e) {
+        if (e?.code === "cancelled") {
+          // Returned to the picker so the user can re-confirm.
+          goBtn.disabled = false;
+          goBtn.textContent = "Revoke";
+          return;
+        }
+        document.removeEventListener("keydown", onEscape);
+        dlg.removeEventListener("close", onCancel);
+        cleanup();
+        reject(e);
+      }
+    });
+  });
+}
+
+function reasonLabel(r) {
+  switch (r) {
+    case "lost": return "Lost";
+    case "stolen": return "Stolen";
+    case "decommissioned": return "Decommissioned";
+    default: return r;
+  }
 }
 
 export function initServerDetailView() {
