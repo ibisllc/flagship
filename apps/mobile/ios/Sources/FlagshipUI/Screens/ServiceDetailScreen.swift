@@ -28,6 +28,9 @@ public struct ServiceDetailScreen: View {
     /// detail screen shows a section that calls this to push the tabs
     /// list onto the nav stack.
     var onOpenBrowserTabs: () -> Void = {}
+    /// P6 — push the collaborator-invite manage surface onto the nav
+    /// stack. Unconditionally surfaced (independent of detail state).
+    var onOpenCollaborators: () -> Void = {}
 
     public init(
         vm: ServiceDetailViewModel,
@@ -36,7 +39,8 @@ public struct ServiceDetailScreen: View {
         globalLeaderPodId: String?,
         onSave: @escaping () -> Void = {},
         onRemove: @escaping () -> Void = {},
-        onOpenBrowserTabs: @escaping () -> Void = {}
+        onOpenBrowserTabs: @escaping () -> Void = {},
+        onOpenCollaborators: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.username = username
@@ -45,6 +49,7 @@ public struct ServiceDetailScreen: View {
         self.onSave = onSave
         self.onRemove = onRemove
         self.onOpenBrowserTabs = onOpenBrowserTabs
+        self.onOpenCollaborators = onOpenCollaborators
     }
 
     public var body: some View {
@@ -61,6 +66,7 @@ public struct ServiceDetailScreen: View {
                     whereItRuns(d: d, c: c)
                     webDomains(d: d, c: c)
                     browserTabsRow(d: d, c: c)
+                    collaboratorsRow(c: c)
                     logsAndBackup(d: d, c: c)
                     saveAndRemove(c: c)
                 }
@@ -524,6 +530,29 @@ public struct ServiceDetailScreen: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("service-detail-open-browser-viewer")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func collaboratorsRow(c: FSColors) -> some View {
+        section("COLLABORATORS", c: c) {
+            Button(action: onOpenCollaborators) {
+                FSCard {
+                    HStack(spacing: FS.space.s3) {
+                        Image(systemName: "person.2.fill").foregroundColor(c.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Manage collaborators").foregroundColor(c.text)
+                            Text("Issue invites + revoke active access")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("service-detail-open-collaborators")
         }
     }
 

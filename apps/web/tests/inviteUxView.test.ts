@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
 /**
- * #82 — Invite UX webapp views.
+ * #82 / P6 — Invite UX webapp views.
  *
  * Tests assert the modules are served as static assets and have the
  * required structural pieces: registerView calls, label-book usage,
  * Web Share API + clipboard fallback in invite-issue, and revoke flow
  * in invite-manage. We don't simulate the runtime here — the dist is
  * what the production webapp loads, so structure-level tests catch
- * regressions early.
+ * regressions early. With the P6 BFF live (87868e8 + d0e6508), the
+ * "no BFF" fallback branch is now defence-in-depth, and the empty
+ * state copy reflects "no invites yet" instead of "no data tracked
+ * locally".
  */
 describe("webapp invite views (#82)", () => {
   it("/views/invite-issue.js registers a view and calls into the label-book", async () => {
@@ -37,6 +40,65 @@ describe("webapp invite views (#82)", () => {
     expect(r.body).toContain("/api/screens/app-invite/access/");
     expect(r.body).toContain("/api/screens/app-invite/revoke");
     expect(r.body).toContain("removeLabel");
+  });
+
+  it("invite-manage.js reads every BFF field the daemon returns (no drift)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/invite-manage.js" });
+    expect(r.statusCode).toBe(200);
+    // AppInvitePendingSummary — { opaqueTag, inviteId, role, expiresAt }
+    expect(r.body).toContain("inv.opaqueTag");
+    expect(r.body).toContain("inv.inviteId");
+    expect(r.body).toContain("inv.role");
+    expect(r.body).toContain("inv.expiresAt");
+    // AppInviteAccessSummary — { opaqueTag, irkPubHex, role, grantedAt }
+    expect(r.body).toContain("a.opaqueTag");
+    expect(r.body).toContain("a.irkPubHex");
+    expect(r.body).toContain("a.role");
+    expect(r.body).toContain("a.grantedAt");
+    // Revoke wire shape: { serviceId, inviteId, scope: "invite" }
+    // OR { serviceId, irkPubKey, scope: "access" }
+    expect(r.body).toContain('scope: "invite"');
+    expect(r.body).toContain('scope: "access"');
+    expect(r.body).toContain("irkPubKey");
+  });
+
+  it("invite-issue.js sends the BFF the wire shape the daemon expects", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/invite-issue.js" });
+    expect(r.statusCode).toBe(200);
+    // AppInviteIssueRequest — { serviceId, role, opaqueTag, contextNote }
+    expect(r.body).toContain("serviceId: app.serviceId");
+    expect(r.body).toContain("role,");
+    expect(r.body).toContain("opaqueTag,");
+    expect(r.body).toContain("contextNote: contextNote || null");
+    // AppInviteIssueResponse — { secret, expiresAt }
+    expect(r.body).toContain("body.secret");
+    expect(r.body).toContain("body.expiresAt");
+  });
+
+  it("invite-manage.js empty-state copy reflects the live BFF (P6 done)", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/views/invite-manage.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("no pending invites yet");
+    expect(r.body).toContain("no active access yet");
+    // The legacy "tracked locally" wording is no longer the primary
+    // empty state — the fallback degraded path still references it
+    // internally as defence-in-depth, but the main empty-state copy
+    // pivoted.
+    expect(r.body).not.toContain("no pending invites tracked locally");
+    expect(r.body).not.toContain("access list not available");
+  });
+
+  it("app.js registers both invite views under SUB_VIEW_TABS=apps", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/webapp/app.js" });
+    expect(r.statusCode).toBe(200);
+    expect(r.body).toContain("initInviteIssueView");
+    expect(r.body).toContain("initInviteManageView");
+    expect(r.body).toContain('"view-invite-issue": "apps"');
+    expect(r.body).toContain('"view-invite-manage": "apps"');
   });
 
   it("/lib/labelBook.js exposes IDB persistence primitives", async () => {

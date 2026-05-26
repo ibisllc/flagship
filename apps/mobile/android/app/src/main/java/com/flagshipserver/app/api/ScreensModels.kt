@@ -505,3 +505,78 @@ data class PeerBackupStatusResponse(
 
 @Serializable
 data class PeerBackupToggleRequest(val participate: Boolean)
+
+// ---------- P6 — app-invite (collaborator invites) -----------------------
+//
+// Wire-shape parity with `packages/server-daemon/src/screens/types.ts`
+// (AppInvite*) — the daemon never sees the local label-book
+// (displayName / channel / sentTo / notes). The only client-supplied
+// strings that ride the wire are `opaqueTag` (16-byte hex anonymization
+// handle) and the optional `contextNote` rendered to the redeemer.
+
+@Serializable
+data class AppInviteIssueRequest(
+    val serviceId: String,
+    val role: String,
+    val opaqueTag: String,
+    val contextNote: String? = null,
+)
+
+@Serializable
+data class AppInviteIssueResponse(
+    val secret: String,
+    val expiresAt: Long,
+)
+
+@Serializable
+data class AppInvitePendingSummary(
+    val opaqueTag: String,
+    val inviteId: String,
+    val role: String,
+    val expiresAt: Long,
+)
+
+@Serializable
+data class AppInviteListResponse(
+    val pending: List<AppInvitePendingSummary>,
+)
+
+@Serializable
+data class AppInviteAccessSummary(
+    val opaqueTag: String,
+    val irkPubHex: String,
+    val role: String,
+    val grantedAt: Long,
+)
+
+@Serializable
+data class AppInviteAccessResponse(
+    val access: List<AppInviteAccessSummary>,
+)
+
+/** Discriminated revoke request. The daemon expects either:
+ *    { serviceId, inviteId, scope: "invite" }
+ *    { serviceId, irkPubKey, scope: "access" }
+ *  We model both branches as one data class with optional fields + a
+ *  scope discriminator; the JSON encoder skips null optionals
+ *  (`explicitNulls = false`), matching the union shape on the wire. */
+@Serializable
+data class AppInviteRevokeRequest(
+    val serviceId: String,
+    val scope: String,
+    val inviteId: String? = null,
+    val irkPubKey: String? = null,
+) {
+    companion object {
+        fun invite(serviceId: String, inviteId: String): AppInviteRevokeRequest =
+            AppInviteRevokeRequest(serviceId = serviceId, scope = "invite", inviteId = inviteId)
+        fun access(serviceId: String, irkPubKey: String): AppInviteRevokeRequest =
+            AppInviteRevokeRequest(serviceId = serviceId, scope = "access", irkPubKey = irkPubKey)
+    }
+}
+
+@Serializable
+data class AppInviteRevokeResponse(
+    val ok: Boolean,
+    val alreadyRevoked: Boolean? = null,
+)

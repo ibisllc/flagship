@@ -89,6 +89,15 @@ public protocol ScreensClient: Sendable {
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
     func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
 
+    // P6 — collaborator-invite management. Issue mints a bearer invite +
+    // returns the share secret + TTL; list / access enumerate the active
+    // server-side state; revoke soft-deletes a pending invite OR an
+    // active access row (discriminated by `scope`).
+    func appInviteIssue(_ req: AppInviteIssueRequest) async throws -> AppInviteIssueResponse
+    func appInviteList(serviceId: String) async throws -> AppInviteListResponse
+    func appInviteAccess(serviceId: String) async throws -> AppInviteAccessResponse
+    func appInviteRevoke(_ req: AppInviteRevokeRequest) async throws -> AppInviteRevokeResponse
+
     // P8 — browser-tab framebuffer stream. Opens a WS to
     // `/api/screens/browser-tabs/:tabId/stream` (with the session token
     // as a query param) and returns a bidirectional handle: incoming

@@ -116,6 +116,10 @@ public struct ServicesTab: View {
             BrowserTabsContainer(serviceId: serviceId, path: $path)
         case .browserViewer(_, let tabId):
             BrowserViewerContainer(tabId: tabId)
+        case .inviteManage(let serviceId):
+            InviteManageContainer(serviceId: serviceId, path: $path)
+        case .inviteIssue(let serviceId):
+            InviteIssueContainer(serviceId: serviceId, path: $path)
         }
     }
 
@@ -354,7 +358,8 @@ struct ServiceDetailContainer: View {
                     globalLeaderPodId: app.leaderPodId,
                     onSave: { Task { await save(vm: vm) } },
                     onRemove: { toasts.warning("Remove flow not wired yet.") },
-                    onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) }
+                    onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
+                    onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) }
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -624,5 +629,112 @@ struct BrowserViewerContainer: View {
         .task {
             if vm == nil { vm = BrowserViewerViewModel(tabId: tabId, client: client) }
         }
+    }
+}
+
+// P6 — Collaborator-invite manage container. Loads pending invites +
+// active access via the BFF; exposes a "+ Issue invite" entry that
+// pushes the issue screen onto the same nav stack. Labels are resolved
+// from the local-only InviteLabelBook — never via the wire.
+struct InviteManageContainer: View {
+    let serviceId: String
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @Environment(\.inviteLabelBook) private var labelBook
+    @State private var vm: InviteManageViewModel?
+
+    var body: some View {
+        Group {
+            if let vm {
+                InviteManageScreen(
+                    vm: vm,
+                    appLabel: appLabel(for: serviceId),
+                    appUrlForShare: appShareUrl(for: serviceId),
+                    onIssueTapped: { path.append(.inviteIssue(serviceId: serviceId)) }
+                )
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            if vm == nil {
+                vm = InviteManageViewModel(
+                    serviceId: serviceId,
+                    client: client,
+                    labelBook: labelBook
+                )
+            }
+        }
+    }
+
+    private func appLabel(for serviceId: String) -> String {
+        if let dashIdx = serviceId.firstIndex(of: "-") {
+            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        }
+        return serviceId
+    }
+
+    /// Best-effort share-URL root. The real value lands via app-detail
+    /// when wired; for the issuance screen we synthesize a canonical
+    /// "<slug>.<creator>.flagship.services" form so the share URL is
+    /// well-formed in dev — production replaces it via the app-detail
+    /// response.
+    private func appShareUrl(for serviceId: String) -> String {
+        if let dashIdx = serviceId.firstIndex(of: "-") {
+            let creator = String(serviceId[..<dashIdx])
+            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
+            return "https://\(slug).\(creator).flagship.services"
+        }
+        return "https://\(serviceId).flagship.services"
+    }
+}
+
+// P6 — Issue container. Owns the issue ViewModel; on success the
+// InviteIssueScreen renders the share URL + share-sheet locally and
+// the user can pop back to InviteManage manually.
+struct InviteIssueContainer: View {
+    let serviceId: String
+    @Binding var path: [AppsRoute]
+    @Environment(\.screensClient) private var client
+    @Environment(\.inviteLabelBook) private var labelBook
+    @State private var vm: InviteIssueViewModel?
+
+    var body: some View {
+        Group {
+            if let vm {
+                InviteIssueScreen(
+                    vm: vm,
+                    appLabel: appLabel(for: serviceId)
+                )
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            if vm == nil {
+                vm = InviteIssueViewModel(
+                    serviceId: serviceId,
+                    appUrl: appShareUrl(for: serviceId),
+                    client: client,
+                    labelBook: labelBook
+                )
+            }
+        }
+    }
+
+    private func appLabel(for serviceId: String) -> String {
+        if let dashIdx = serviceId.firstIndex(of: "-") {
+            return String(serviceId[serviceId.index(after: dashIdx)...]).capitalized
+        }
+        return serviceId
+    }
+
+    private func appShareUrl(for serviceId: String) -> String {
+        if let dashIdx = serviceId.firstIndex(of: "-") {
+            let creator = String(serviceId[..<dashIdx])
+            let slug = String(serviceId[serviceId.index(after: dashIdx)...])
+            return "https://\(slug).\(creator).flagship.services"
+        }
+        return "https://\(serviceId).flagship.services"
     }
 }

@@ -581,6 +581,78 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return next
     }
 
+    // MARK: - P6 app-invite
+
+    /// Overridable fixture for `appInviteList(serviceId:)`. Nil → honest-
+    /// empty default. Matches the daemon's "no pending invites" steady
+    /// state. Mirrors Android's `appInviteListFixture`.
+    public var appInviteListFixture: AppInviteListResponse?
+
+    /// Overridable fixture for `appInviteAccess(serviceId:)`. Nil →
+    /// honest-empty default. Mirrors Android's `appInviteAccessFixture`.
+    public var appInviteAccessFixture: AppInviteAccessResponse?
+
+    /// Optional issuance result override. When nil the mock mints a
+    /// deterministic 32-byte hex secret + 24h TTL — matching the
+    /// daemon's `DEFAULT_TTL_MS`.
+    public var appInviteIssueFixture: AppInviteIssueResponse?
+
+    /// Records each `appInviteIssue` call's request so tests can assert
+    /// the wire shape (incl. that no label/displayName/sentTo flowed
+    /// through — privacy invariant). Mirrors `togglePeerBackupCalls`.
+    public private(set) var appInviteIssueCalls: [AppInviteIssueRequest] = []
+
+    /// Records each `appInviteRevoke` call's request — drives the
+    /// "revoke fires the right shape" tests.
+    public private(set) var appInviteRevokeCalls: [AppInviteRevokeRequest] = []
+
+    public func appInviteIssue(_ req: AppInviteIssueRequest) async throws -> AppInviteIssueResponse {
+        try await tick()
+        appInviteIssueCalls.append(req)
+        if let fixture = appInviteIssueFixture { return fixture }
+        // Deterministic-ish: hex(SHA-like) over the opaqueTag; falls
+        // back to a 64-zero-hex string if something exotic happens.
+        let secret = (0..<32).map { _ in
+            String(format: "%02x", UInt8.random(in: 0...255))
+        }.joined()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        return AppInviteIssueResponse(secret: secret, expiresAt: nowMs + 24 * 3600 * 1000)
+    }
+
+    public func appInviteList(serviceId: String) async throws -> AppInviteListResponse {
+        try await tick()
+        if let fixture = appInviteListFixture { return fixture }
+        return AppInviteListResponse(pending: [])
+    }
+
+    public func appInviteAccess(serviceId: String) async throws -> AppInviteAccessResponse {
+        try await tick()
+        if let fixture = appInviteAccessFixture { return fixture }
+        return AppInviteAccessResponse(access: [])
+    }
+
+    public func appInviteRevoke(_ req: AppInviteRevokeRequest) async throws -> AppInviteRevokeResponse {
+        try await tick()
+        appInviteRevokeCalls.append(req)
+        // Idempotency: a second revoke for the same row returns
+        // `alreadyRevoked = true`. Tracked by (scope, key) tuple over
+        // the call history.
+        let key: String = {
+            if req.scope == "invite" { return "invite:\(req.serviceId):\(req.inviteId ?? "")" }
+            return "access:\(req.serviceId):\(req.irkPubKey ?? "")"
+        }()
+        let priorMatches = appInviteRevokeCalls.dropLast().contains { prior in
+            let pk: String
+            if prior.scope == "invite" {
+                pk = "invite:\(prior.serviceId):\(prior.inviteId ?? "")"
+            } else {
+                pk = "access:\(prior.serviceId):\(prior.irkPubKey ?? "")"
+            }
+            return pk == key
+        }
+        return AppInviteRevokeResponse(ok: true, alreadyRevoked: priorMatches)
+    }
+
     // MARK: - P8 browser-tab stream (mock WS)
 
     public var browserStreamsOpened: [String] = []

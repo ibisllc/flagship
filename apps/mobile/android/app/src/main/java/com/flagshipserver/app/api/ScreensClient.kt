@@ -80,6 +80,15 @@ interface ScreensClient {
     suspend fun peerBackupStatus(): PeerBackupStatusResponse
     suspend fun peerBackupToggle(participate: Boolean): PeerBackupStatusResponse
 
+    // P6 — collaborator-invite management. Issue mints a bearer invite +
+    // returns the share secret + TTL; list / access enumerate the active
+    // server-side state; revoke soft-deletes a pending invite OR an
+    // active access row (discriminated by `scope`).
+    suspend fun appInviteIssue(req: AppInviteIssueRequest): AppInviteIssueResponse
+    suspend fun appInviteList(serviceId: String): AppInviteListResponse
+    suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse
+    suspend fun appInviteRevoke(req: AppInviteRevokeRequest): AppInviteRevokeResponse
+
     // P1.15 install-events SSE — streams provisioning progress
     fun installEvents(serial: String): Flow<InstallEvent>
 

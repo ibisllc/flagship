@@ -4,6 +4,12 @@
 
 package com.flagshipserver.app.viewmodels
 
+import com.flagshipserver.app.api.AppInviteAccessResponse
+import com.flagshipserver.app.api.AppInviteIssueRequest
+import com.flagshipserver.app.api.AppInviteIssueResponse
+import com.flagshipserver.app.api.AppInviteListResponse
+import com.flagshipserver.app.api.AppInviteRevokeRequest
+import com.flagshipserver.app.api.AppInviteRevokeResponse
 import com.flagshipserver.app.api.AppsListResponse
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.AppDetailResponse
@@ -97,6 +103,10 @@ private class StubScreensClient(
     override suspend fun serviceEnvUnset(appId: String, req: ServiceEnvUnsetRequest): ServiceEnvOpResponse = error("unused")
     override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState = error("unused")
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse = error("unused")
+    override suspend fun appInviteIssue(req: AppInviteIssueRequest): AppInviteIssueResponse = error("unused")
+    override suspend fun appInviteList(serviceId: String): AppInviteListResponse = error("unused")
+    override suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse = error("unused")
+    override suspend fun appInviteRevoke(req: AppInviteRevokeRequest): AppInviteRevokeResponse = error("unused")
     override fun installEvents(serial: String): Flow<InstallEvent> = emptyFlow()
     override fun vibeCodeStream(sessionId: String): Flow<VibeCodeFrame> = emptyFlow()
     override fun browserTabStream(tabId: String): com.flagshipserver.app.api.BrowserStream =

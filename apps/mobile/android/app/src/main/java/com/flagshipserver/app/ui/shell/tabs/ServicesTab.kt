@@ -20,6 +20,8 @@ import com.flagshipserver.app.ui.screens.VibeCodeDescribeScreen
 import com.flagshipserver.app.ui.screens.VibeCodeGeneratingScreen
 import com.flagshipserver.app.ui.screens.BrowserTabsScreen
 import com.flagshipserver.app.ui.screens.BrowserViewerScreen
+import com.flagshipserver.app.ui.screens.InviteIssueScreen
+import com.flagshipserver.app.ui.screens.InviteManageScreen
 
 @Composable
 fun ServicesTab() {
@@ -65,6 +67,14 @@ fun ServicesTab() {
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
             val tid = entry.arguments?.getString("tabId") ?: return@composable
             BrowserViewerScreen(nav, serviceId = sid, tabId = tid)
+        }
+        composable("invite-manage/{serviceId}") { entry ->
+            val sid = entry.arguments?.getString("serviceId") ?: return@composable
+            InviteManageScreen(nav, serviceId = sid)
+        }
+        composable("invite-issue/{serviceId}") { entry ->
+            val sid = entry.arguments?.getString("serviceId") ?: return@composable
+            InviteIssueScreen(nav, serviceId = sid)
         }
     }
 }

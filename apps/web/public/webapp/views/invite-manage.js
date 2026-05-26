@@ -5,13 +5,11 @@
 // daemon's response only carries opaque tags + IRK pubkey prefixes;
 // the human-readable "John (work)" mapping never leaves this device.
 //
-// Cross-worker dependency: the daemon's screens BFF surface for
-// `/api/screens/app-invite/list/:serviceId` and `/api/screens/app-invite/revoke`
-// is stubbed for now (the inviteHandler primitives exist server-side
-// at /.flagship/app/<id>/invite/* but a paired-session-gated BFF
-// wrapper isn't shipped yet). This view degrades to a "no data" state
-// when the endpoints aren't configured, so the rest of #82 (issue +
-// labels) can land while the BFF wrapper follows.
+// P6 status: the daemon BFF (`/api/screens/app-invite/{issue,list,access,revoke}`)
+// is now live (commits 87868e8 + d0e6508). The legacy "no BFF" fallback
+// branch is kept only as defence in depth for a misconfigured daemon
+// (503 / 404) — the empty-state copy now matches the expected steady
+// state ("no pending invites yet" rather than "tracked locally").
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
@@ -75,12 +73,14 @@ async function renderPending(app, labelByTag) {
       b.addEventListener("click", () => onRevokeInvite(app, b.getAttribute("data-id"), b.getAttribute("data-tag")));
     });
   } catch (e) {
-    if (e instanceof ScreensError && e.status === 404) {
-      // BFF wrapper not yet wired — show the locally-known labels so
-      // the user still gets utility from this screen.
+    if (e instanceof ScreensError && (e.status === 404 || e.status === 503)) {
+      // Daemon BFF unreachable — render the locally-tracked labels as
+      // a degraded read-only view so the user keeps the issuance log
+      // even when the daemon can't be queried. The BFF is live in
+      // production; this branch is defence-in-depth only.
       const local = [...labelByTag.values()];
       if (local.length === 0) {
-        root.innerHTML = '<div class="card placeholder">no pending invites tracked locally</div>';
+        root.innerHTML = '<div class="card placeholder">no pending invites yet</div>';
         return;
       }
       root.innerHTML = local.map((l) => `
@@ -127,8 +127,8 @@ async function renderActive(app, labelByTag) {
       b.addEventListener("click", () => onRevokeAccess(app, b.getAttribute("data-irk"), b.getAttribute("data-tag")));
     });
   } catch (e) {
-    if (e instanceof ScreensError && e.status === 404) {
-      root.innerHTML = '<div class="card placeholder">access list not available in this build</div>';
+    if (e instanceof ScreensError && (e.status === 404 || e.status === 503)) {
+      root.innerHTML = '<div class="card placeholder">no active access yet</div>';
     } else {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(String(e))}</p></div>`;
     }

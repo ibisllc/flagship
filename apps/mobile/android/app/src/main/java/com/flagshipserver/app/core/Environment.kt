@@ -66,3 +66,9 @@ typealias VibeCodeEnvelopeSigner = suspend (com.flagshipserver.app.api.ServiceEn
 val LocalVibeCodeEnvelopeSigner = staticCompositionLocalOf<VibeCodeEnvelopeSigner> {
     { _ -> "0".repeat(128) }
 }
+
+/** P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
+ *  to local display name + channel + sent-to memo + notes. NEVER
+ *  leaves the device. Default is an in-memory book; production
+ *  MainActivity installs the SharedPreferences-backed variant. */
+val LocalInviteLabelBook = staticCompositionLocalOf<InviteLabelBook> { InMemoryInviteLabelBook() }

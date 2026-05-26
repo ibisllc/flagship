@@ -28,6 +28,10 @@ sealed interface AppsRoute {
     data class BrowserTabs(val serviceId: String) : AppsRoute
     /** P8 — the framebuffer viewer that streams a single tab. */
     data class BrowserViewer(val serviceId: String, val tabId: String) : AppsRoute
+    /** P6 — per-app collaborator-invite manage surface. */
+    data class InviteManage(val serviceId: String) : AppsRoute
+    /** P6 — per-app collaborator-invite issuance form. */
+    data class InviteIssue(val serviceId: String) : AppsRoute
 }
 
 sealed interface ActivityRoute {

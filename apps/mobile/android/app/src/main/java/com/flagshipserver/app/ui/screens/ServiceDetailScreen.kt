@@ -302,6 +302,32 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             }
         }
 
+        // P6 — collaborator invites. Unconditional row → manage view.
+        Spacer(Modifier.height(FS.space.s4))
+        SectionHeader("Collaborators")
+        FSCard(
+            padding = PaddingValues(FS.space.s4),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { nav.navigate("invite-manage/$serviceId") },
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Manage collaborators",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 16.sp),
+                    )
+                    Text(
+                        text = "Issue invites + revoke active access",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    )
+                }
+                Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+            }
+        }
+
         Spacer(Modifier.height(FS.space.s8))
         FSPrimaryButton(
             label = "Save",

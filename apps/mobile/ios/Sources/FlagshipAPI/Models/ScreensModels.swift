@@ -836,3 +836,112 @@ public struct PeerBackupToggleRequest: Codable, Equatable, Sendable {
     public let participate: Bool
     public init(participate: Bool) { self.participate = participate }
 }
+
+// MARK: - P6 — app-invite (collaborator invites)
+//
+// Wire-shape parity with `packages/server-daemon/src/screens/types.ts`
+// (AppInvite*) — the daemon never sees the local label-book
+// (displayName / channel / sentTo / notes). The only client-supplied
+// strings that ride the wire are `opaqueTag` (16-byte hex anonymization
+// handle) and the optional `contextNote` rendered to the redeemer.
+
+public struct AppInviteIssueRequest: Codable, Equatable, Sendable {
+    public let serviceId: String
+    public let role: String
+    public let opaqueTag: String
+    public let contextNote: String?
+
+    public init(serviceId: String, role: String, opaqueTag: String, contextNote: String?) {
+        self.serviceId = serviceId
+        self.role = role
+        self.opaqueTag = opaqueTag
+        self.contextNote = contextNote
+    }
+}
+
+public struct AppInviteIssueResponse: Codable, Equatable, Sendable {
+    public let secret: String
+    public let expiresAt: Int64
+
+    public init(secret: String, expiresAt: Int64) {
+        self.secret = secret
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct AppInvitePendingSummary: Codable, Equatable, Sendable, Identifiable {
+    public let opaqueTag: String
+    public let inviteId: String
+    public let role: String
+    public let expiresAt: Int64
+
+    public var id: String { inviteId }
+
+    public init(opaqueTag: String, inviteId: String, role: String, expiresAt: Int64) {
+        self.opaqueTag = opaqueTag
+        self.inviteId = inviteId
+        self.role = role
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct AppInviteListResponse: Codable, Equatable, Sendable {
+    public let pending: [AppInvitePendingSummary]
+    public init(pending: [AppInvitePendingSummary]) { self.pending = pending }
+}
+
+public struct AppInviteAccessSummary: Codable, Equatable, Sendable, Identifiable {
+    public let opaqueTag: String
+    public let irkPubHex: String
+    public let role: String
+    public let grantedAt: Int64
+
+    public var id: String { irkPubHex }
+
+    public init(opaqueTag: String, irkPubHex: String, role: String, grantedAt: Int64) {
+        self.opaqueTag = opaqueTag
+        self.irkPubHex = irkPubHex
+        self.role = role
+        self.grantedAt = grantedAt
+    }
+}
+
+public struct AppInviteAccessResponse: Codable, Equatable, Sendable {
+    public let access: [AppInviteAccessSummary]
+    public init(access: [AppInviteAccessSummary]) { self.access = access }
+}
+
+/// Discriminated revoke request. Mirrors the daemon's union shape — the
+/// `scope` field gates which optional field is required: `inviteId` for
+/// `scope == "invite"`, `irkPubKey` for `scope == "access"`.
+public struct AppInviteRevokeRequest: Codable, Equatable, Sendable {
+    public let serviceId: String
+    public let scope: String
+    public let inviteId: String?
+    public let irkPubKey: String?
+
+    public init(serviceId: String, scope: String, inviteId: String? = nil, irkPubKey: String? = nil) {
+        self.serviceId = serviceId
+        self.scope = scope
+        self.inviteId = inviteId
+        self.irkPubKey = irkPubKey
+    }
+
+    public static func invite(serviceId: String, inviteId: String) -> AppInviteRevokeRequest {
+        AppInviteRevokeRequest(serviceId: serviceId, scope: "invite", inviteId: inviteId, irkPubKey: nil)
+    }
+
+    public static func access(serviceId: String, irkPubKey: String) -> AppInviteRevokeRequest {
+        AppInviteRevokeRequest(serviceId: serviceId, scope: "access", inviteId: nil, irkPubKey: irkPubKey)
+    }
+}
+
+public struct AppInviteRevokeResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let alreadyRevoked: Bool?
+
+    public init(ok: Bool, alreadyRevoked: Bool? = nil) {
+        self.ok = ok
+        self.alreadyRevoked = alreadyRevoked
+    }
+}

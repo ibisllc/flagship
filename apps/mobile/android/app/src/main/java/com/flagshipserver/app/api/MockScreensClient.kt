@@ -475,4 +475,67 @@ class MockScreensClient(
         for (f in browserStreamFramesToEmit) s.emit(f)
         return s
     }
+
+    // ---------- P6 app-invite -----------------------------------------
+
+    /** Overridable fixture for `appInviteList(serviceId)`. Null → honest-
+     *  empty default (matches the daemon's "no pending invites" steady
+     *  state). Mirrors iOS's `appInviteListFixture`. */
+    var appInviteListFixture: AppInviteListResponse? = null
+
+    /** Overridable fixture for `appInviteAccess(serviceId)`. Null →
+     *  honest-empty default. Mirrors iOS's `appInviteAccessFixture`. */
+    var appInviteAccessFixture: AppInviteAccessResponse? = null
+
+    /** Optional issuance result override. When null the mock mints a
+     *  deterministic 32-byte hex secret + 24h TTL — matching the
+     *  daemon's `DEFAULT_TTL_MS`. */
+    var appInviteIssueFixture: AppInviteIssueResponse? = null
+
+    /** Records each `appInviteIssue` call so tests can assert the wire
+     *  shape (incl. that no label/displayName/sentTo flowed through —
+     *  privacy invariant). Mirrors iOS's `appInviteIssueCalls`. */
+    val appInviteIssueCalls: MutableList<AppInviteIssueRequest> = mutableListOf()
+
+    /** Records each `appInviteRevoke` call's request. */
+    val appInviteRevokeCalls: MutableList<AppInviteRevokeRequest> = mutableListOf()
+
+    override suspend fun appInviteIssue(req: AppInviteIssueRequest): AppInviteIssueResponse {
+        tick()
+        appInviteIssueCalls.add(req)
+        appInviteIssueFixture?.let { return it }
+        val secret = (1..32).joinToString("") {
+            "%02x".format(kotlin.random.Random.nextInt(0, 256))
+        }
+        return AppInviteIssueResponse(secret = secret, expiresAt = now() + 24L * 3600 * 1000)
+    }
+
+    override suspend fun appInviteList(serviceId: String): AppInviteListResponse {
+        tick()
+        return appInviteListFixture ?: AppInviteListResponse(pending = emptyList())
+    }
+
+    override suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse {
+        tick()
+        return appInviteAccessFixture ?: AppInviteAccessResponse(access = emptyList())
+    }
+
+    override suspend fun appInviteRevoke(req: AppInviteRevokeRequest): AppInviteRevokeResponse {
+        tick()
+        appInviteRevokeCalls.add(req)
+        val key = when (req.scope) {
+            "invite" -> "invite:${req.serviceId}:${req.inviteId ?: ""}"
+            "access" -> "access:${req.serviceId}:${req.irkPubKey ?: ""}"
+            else -> "${req.scope}:${req.serviceId}"
+        }
+        val priorMatches = appInviteRevokeCalls.dropLast(1).any { prior ->
+            val pk = when (prior.scope) {
+                "invite" -> "invite:${prior.serviceId}:${prior.inviteId ?: ""}"
+                "access" -> "access:${prior.serviceId}:${prior.irkPubKey ?: ""}"
+                else -> "${prior.scope}:${prior.serviceId}"
+            }
+            pk == key
+        }
+        return AppInviteRevokeResponse(ok = true, alreadyRevoked = priorMatches)
+    }
 }

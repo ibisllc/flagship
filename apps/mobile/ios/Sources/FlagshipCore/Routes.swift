@@ -27,6 +27,14 @@ public enum AppsRoute: Hashable, Sendable {
     case browserTabs(serviceId: String)
     /// P8 — the framebuffer viewer that streams a single tab.
     case browserViewer(serviceId: String, tabId: String)
+    /// P6 — per-app collaborator-invite manage surface. Lists pending
+    /// invites + active access rows + offers revoke. Reached from the
+    /// service-detail screen's "Collaborators" row.
+    case inviteManage(serviceId: String)
+    /// P6 — per-app collaborator-invite issuance form. Returns the
+    /// share secret + TTL once submitted; the client builds the share
+    /// URL + opens the share sheet locally.
+    case inviteIssue(serviceId: String)
 }
 
 public enum ActivityRoute: Hashable, Sendable {

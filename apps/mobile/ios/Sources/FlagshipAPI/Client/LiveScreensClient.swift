@@ -178,6 +178,23 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         return try await request("/api/screens/peer-backup/toggle", method: "POST", body: body)
     }
 
+    public func appInviteIssue(_ req: AppInviteIssueRequest) async throws -> AppInviteIssueResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/app-invite/issue", method: "POST", body: body)
+    }
+    public func appInviteList(serviceId: String) async throws -> AppInviteListResponse {
+        let escaped = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
+        return try await request("/api/screens/app-invite/list/\(escaped)")
+    }
+    public func appInviteAccess(serviceId: String) async throws -> AppInviteAccessResponse {
+        let escaped = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
+        return try await request("/api/screens/app-invite/access/\(escaped)")
+    }
+    public func appInviteRevoke(_ req: AppInviteRevokeRequest) async throws -> AppInviteRevokeResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/app-invite/revoke", method: "POST", body: body)
+    }
+
     /// WebSocket stream of vibe-code frames. The daemon currently
     /// stubs this to a poll-driven proxy; we model the SDK-level
     /// API as a true AsyncStream so the UI doesn't care.
