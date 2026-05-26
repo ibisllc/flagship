@@ -89,6 +89,13 @@ import {
   handleRevokeCompanion,
   type CompanionBffDeps,
 } from "./companion.js";
+import {
+  handleMyPending,
+  handlePendingWrites,
+  handleRequestWrite,
+  handleResolvePending,
+  type CompanionWriteRelayDeps,
+} from "./companionWriteRelay.js";
 import type { BackupLoop } from "../backupLoop.js";
 import { collectServerMetrics, type ServerMetricsProvider } from "./serverMetrics.js";
 import { verifyCustomDomain, type DnsResolver } from "./verifyCustomDomain.js";
@@ -295,6 +302,40 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       return await handleRedeemTicket(deps.companion, req);
     }
 
+    // ---- P14 Phase 2 — companion-side write-relay endpoints ----
+    //
+    // These live OUTSIDE /api/screens/ (the companion's webapp/SDK
+    // calls them with a companion paired-session token), but they are
+    // STILL gated — the redeem endpoint is the only truly public
+    // companion path. We explicitly run the paired-session gate here
+    // before dispatching.
+    if (
+      (rawPath === "/api/companion/request-write" &&
+        req.method.toUpperCase() === "POST") ||
+      (rawPath === "/api/companion/my-pending" &&
+        req.method.toUpperCase() === "GET")
+    ) {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      if (!deps.companion.writeRequestStore) {
+        return jerr(503, "companion write-relay not configured");
+      }
+      const denied = deps.gate.check(req);
+      if (denied) return denied;
+      const relayDeps: CompanionWriteRelayDeps = {
+        writeRequestStore: deps.companion.writeRequestStore,
+        pairedSessions: deps.companion.pairedSessions,
+      };
+      if (deps.companion.now) relayDeps.now = deps.companion.now;
+      if (deps.companion.randomBytes) relayDeps.randomBytes = deps.companion.randomBytes;
+      if (typeof deps.companion.writeRequestTtlMs === "number") {
+        relayDeps.ttlMs = deps.companion.writeRequestTtlMs;
+      }
+      if (rawPath === "/api/companion/request-write") {
+        return await handleRequestWrite(relayDeps, req);
+      }
+      return await handleMyPending(relayDeps, req);
+    }
+
     if (!req.path.startsWith("/api/screens/")) return null;
     const denied = deps.gate.check(req);
     if (denied) return denied;
@@ -304,11 +345,13 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
 
     // ---- P14 companion-write guard ----
     //
-    // Companions are read-only in v1. Any endpoint that mutates
-    // paired-session-bound state must be gated. Wave 9 will add a
-    // write-relay (the owner approves a queued companion write); for
-    // now the BFF surfaces a 403 the webapp catches and renders as
-    // "open your owner app to approve this".
+    // Companions are read-only on destination endpoints. Any path
+    // that mutates paired-session-bound state returns 403 with
+    // `companion-write-not-allowed` — the webapp catches it and tells
+    // the user to open their owner app to approve. Phase 2 (above)
+    // adds an *opt-in* relay path (`/api/companion/request-write`)
+    // companions take to queue an intent for the owner to sign +
+    // dispatch; this 403 gate STAYS as the default.
     //
     // The list of representative write endpoints is the set that
     // performs signed-envelope mutations OR paired-session-authorized
@@ -340,6 +383,41 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path === "/api/screens/companion/revoke" && method === "POST") {
       if (!deps.companion) return jerr(503, "companion dock not configured");
       return await handleRevokeCompanion(deps.companion, req);
+    }
+
+    // ---- P14 Phase 2 — owner-side write-relay endpoints ----
+    //
+    // GET /pending-writes lists every unresolved+non-expired row;
+    // POST /resolve-pending marks a row approved/denied. Both are
+    // owner-gated (the write-scope guard above already 403'd a
+    // companion calling /resolve-pending — see isWriteScopedPath()).
+    //
+    // PHASE 2.5 HOOK: the resolve-pending handler currently relies
+    // on the companion to POLL /api/companion/my-pending for the
+    // outcome. When push lands, fire a per-companion
+    // `notifyCompanion(row.companionTokenPrefix, { kind: "write-resolved",
+    // requestId, outcome })` from inside handleResolvePending.
+    if (
+      (path === "/api/screens/companion/pending-writes" && method === "GET") ||
+      (path === "/api/screens/companion/resolve-pending" && method === "POST")
+    ) {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      if (!deps.companion.writeRequestStore) {
+        return jerr(503, "companion write-relay not configured");
+      }
+      const relayDeps: CompanionWriteRelayDeps = {
+        writeRequestStore: deps.companion.writeRequestStore,
+        pairedSessions: deps.companion.pairedSessions,
+      };
+      if (deps.companion.now) relayDeps.now = deps.companion.now;
+      if (deps.companion.randomBytes) relayDeps.randomBytes = deps.companion.randomBytes;
+      if (typeof deps.companion.writeRequestTtlMs === "number") {
+        relayDeps.ttlMs = deps.companion.writeRequestTtlMs;
+      }
+      if (path === "/api/screens/companion/pending-writes") {
+        return await handlePendingWrites(relayDeps);
+      }
+      return await handleResolvePending(relayDeps, req);
     }
 
     // ---- WS-upgrade-only endpoints (P1.6 + P1.11)
@@ -1345,6 +1423,13 @@ function isWriteScopedPath(path: string): boolean {
   // case the order ever changes).
   if (path === "/api/screens/companion/mint-ticket") return true;
   if (path === "/api/screens/companion/revoke") return true;
+  // P14 Phase 2 — resolve-pending is owner-only by definition (a
+  // companion approving its own queued write would defeat the whole
+  // relay). Block here belt-and-braces; the relay handler also
+  // requires the resolver token to be a non-companion paired-session
+  // implicitly (the gate accepts both, but a companion that POSTs to
+  // /resolve-pending lands in this 403 before reaching the handler).
+  if (path === "/api/screens/companion/resolve-pending") return true;
   return false;
 }
 

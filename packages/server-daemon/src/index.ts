@@ -18,6 +18,7 @@ import { buildAdminProxyHandler } from "./adminProxy.js";
 import { BackupLoop } from "./backupLoop.js";
 import { InMemoryAppInviteStore } from "./inviteHandler.js";
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
+import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
@@ -182,6 +183,13 @@ async function main(): Promise<void> {
   // never strands a real user. A SQLite-backed store can slot in
   // later via the CompanionTicketStore interface.
   const companionTicketStore = new InMemoryCompanionTicketStore();
+
+  // P14 Phase 2 — write-relay queue. Companions POST unsigned intents
+  // here; the owner reads + signs + dispatches + resolves. Single
+  // instance shared across the four routes
+  // (request-write / pending-writes / resolve-pending / my-pending).
+  // 10-minute TTL bounds the daemon-restart window.
+  const companionWriteRequestStore = new InMemoryCompanionWriteRequestStore();
 
   // ---- Order serial (provisioning-status channel) ----
   // The InstallBlob's authCode.serial is the order id keying the
@@ -694,6 +702,8 @@ async function main(): Promise<void> {
         pairedSessions,
         serverFqdn: env.serverFqdn!,
         username,
+        // P14 Phase 2 — write-relay queue.
+        writeRequestStore: companionWriteRequestStore,
       },
       postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
       // W10 — per-app env-var KV editor + vibe-code session BFF deps.
@@ -1346,6 +1356,17 @@ export type {
   CompanionTicketRow,
   CompanionTicketStore,
 } from "./companion/companionTicketStore.js";
+export {
+  COMPANION_WRITE_REQUEST_KINDS,
+  InMemoryCompanionWriteRequestStore,
+  isSupportedWriteRequestKind,
+} from "./companion/companionWriteRequestStore.js";
+export type {
+  CompanionWriteRequestKind,
+  CompanionWriteRequestRow,
+  CompanionWriteRequestStatus,
+  CompanionWriteRequestStore,
+} from "./companion/companionWriteRequestStore.js";
 export type {
   AppAccessRow,
   AppInviteRow,

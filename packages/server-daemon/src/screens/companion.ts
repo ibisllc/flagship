@@ -31,6 +31,7 @@ import type {
   CompanionTicketStore,
 } from "../companion/companionTicketStore.js";
 import { sha256HexOfHex } from "../companion/companionTicketStore.js";
+import type { CompanionWriteRequestStore } from "../companion/companionWriteRequestStore.js";
 
 const J = { "content-type": "application/json" } as const;
 
@@ -60,6 +61,15 @@ export interface CompanionBffDeps {
   ticketTtlMs?: number;
   /** Override companion-session TTL. Default 4h. */
   companionTtlMs?: number;
+  /**
+   * P14 Phase 2 — write-relay queue. Optional in v1: when unset, the
+   * four relay endpoints respond 503. Production wires one
+   * `InMemoryCompanionWriteRequestStore` shared across the four
+   * routes; a SQLite adapter can slot in later via the same interface.
+   */
+  writeRequestStore?: CompanionWriteRequestStore;
+  /** Override write-request TTL. Default 10 minutes. */
+  writeRequestTtlMs?: number;
 }
 
 export interface MintTicketRequest {
