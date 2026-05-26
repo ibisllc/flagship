@@ -5,6 +5,7 @@ import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { loadProviders } from "../providers.js";
+import { get as recoveryStoreGet, set as recoveryStoreSet } from "../lib/profilesStore.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -236,8 +237,12 @@ function renderRecoveryBanner() {
   let warn = null;
   let dismissed = null;
   try {
-    warn = localStorage.getItem(RECOVERY_WARN_KEY);
-    dismissed = localStorage.getItem(RECOVERY_BANNER_DISMISS_KEY);
+    // P12 — per-profile recovery flags. Prefer the active profile's slot
+    // (so switching profiles re-evaluates the banner against the new cloud's
+    // enrolment state) and fall back to the legacy flat keys for installs
+    // that haven't been touched by the migration yet.
+    warn = recoveryStoreGet("recoveryWarn") ?? localStorage.getItem(RECOVERY_WARN_KEY);
+    dismissed = recoveryStoreGet("recoveryBannerDismissed") ?? localStorage.getItem(RECOVERY_BANNER_DISMISS_KEY);
   } catch { /* localStorage disabled — treat as no banner */ }
 
   const existing = document.getElementById(RECOVERY_BANNER_ID);
@@ -274,7 +279,11 @@ function renderRecoveryBanner() {
   document
     .getElementById(`${RECOVERY_BANNER_ID}-dismiss`)
     ?.addEventListener("click", () => {
-      try { localStorage.setItem(RECOVERY_BANNER_DISMISS_KEY, "true"); } catch { /* swallow */ }
+      try {
+        // P12 — write to the active profile's slot (the store also mirrors
+        // to the legacy flat key, so unmigrated read-sites stay aligned).
+        recoveryStoreSet("recoveryBannerDismissed", "true");
+      } catch { /* swallow */ }
       document.getElementById(RECOVERY_BANNER_ID)?.remove();
     });
 }

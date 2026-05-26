@@ -6,6 +6,12 @@
 // to populate; `lock()` clears.
 
 import { deriveIrkFromSeed } from "../keystore.js";
+import {
+  get as storeGet,
+  set as storeSet,
+  ensureProfile,
+  setActiveCloudName,
+} from "./profilesStore.js";
 
 const _session = {
   umk: null,
@@ -20,7 +26,13 @@ export function getSession() {
 export async function unlockSession(seed, username) {
   _session.umk = seed;
   _session.irk = await deriveIrkFromSeed(seed);
-  _session.username = username ?? localStorage.getItem("flagship.username") ?? "";
+  // Per-profile resolution: prefer the explicit arg, then the active
+  // profile's `username` slot, then the legacy flat key (defensive
+  // fallback for first-runs that haven't migrated yet).
+  _session.username = username
+    ?? storeGet("username")
+    ?? localStorage.getItem("flagship.username")
+    ?? "";
 }
 
 export function lockSession() {
@@ -55,6 +67,14 @@ export async function ensureUsername() {
     },
   });
   if (!handle) throw new Error("username required");
+  // Persist under the active profile (auto-creating it when this is a
+  // first-run with no profile yet) AND mirror to the legacy flat key
+  // for any unmigrated read-site.
+  try {
+    ensureProfile(handle);
+    setActiveCloudName(handle);
+    storeSet("username", handle);
+  } catch { /* fall through to legacy write */ }
   localStorage.setItem("flagship.username", handle);
   _session.username = handle;
   return handle;

@@ -56,7 +56,9 @@ describe("home recovery-banner wiring", () => {
 
   it("dismiss writes a local flag (no API) so it stays hidden", () => {
     expect(HOME_JS).toMatch(/RECOVERY_BANNER_DISMISS_KEY/);
-    expect(HOME_JS).toMatch(/localStorage\.setItem\(RECOVERY_BANNER_DISMISS_KEY, "true"\)/);
+    // P12 — the dismiss flag now lives in the per-profile profilesStore (which
+    // mirrors back to RECOVERY_BANNER_DISMISS_KEY so any legacy read still works).
+    expect(HOME_JS).toMatch(/recoveryStoreSet\("recoveryBannerDismissed", "true"\)/);
   });
 
   it("the CTA routes into Settings → Recovery via enterRecovery()", () => {

@@ -47,7 +47,9 @@ import { initTrustedDevicesView } from "./views/trusted-devices.js";
 import { initAccountSecurityView } from "./views/account-security.js";
 import { initAddDeviceView } from "./views/add-device.js";
 import { initJoinView, enterJoin } from "./views/join.js";
+import { initProfilesView, enterProfiles, renderProfiles, setProfileSwitchHandler } from "./views/profiles.js";
 import { joinLinkFromLocation } from "./lib/crossDevicePairing.js";
+import { migrateLegacy as migrateProfilesStore } from "./lib/profilesStore.js";
 
 // Register the tab-bar landing sections (#23). They have no per-view
 // module — the tab bar simply toggles them.
@@ -80,6 +82,7 @@ const SUB_VIEW_TABS = {
   "view-tier-status": "settings",
   "view-paired-sessions": "settings",
   "view-peer-backup": "settings",
+  "view-profiles": "settings",
   "view-orders-debug": "settings",
 };
 
@@ -161,6 +164,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-sessions", enterPairedSessions);
   wire("settings-tab-peer-backup", enterPeerBackup);
+  wire("settings-tab-profiles", enterProfiles);
   wire("settings-tab-orders-debug", enterOrdersDebug);
   wire("settings-tab-create-server", enterCreateServer);
   $("settings-tab-reset")?.addEventListener("click", async () => {
@@ -196,6 +200,9 @@ function wireServicesTabEntries() {
 
 async function boot() {
   persistDebugFlagFromUrl();
+  // P12 — auto-migrate legacy single-profile localStorage into the new
+  // per-profile namespace. Idempotent; gated by `flagship.profiles.migrated.v2`.
+  try { migrateProfilesStore(); } catch { /* swallow — best-effort */ }
   initBootstrapView();
   initUnlockView();
   initHomeView({
@@ -237,6 +244,15 @@ async function boot() {
   initCreateServerView();
   initActivityView();
   initPendingServerView();
+  initProfilesView();
+  // When the user flips profiles, re-render the surfaces that read per-
+  // profile state so the new active cloud's view is what they see.
+  setProfileSwitchHandler(() => {
+    try { renderProfiles(); } catch { /* swallow */ }
+    // Home + Settings render lazily on enter — the profile switch only needs
+    // to re-render the Profiles view itself; entering home/settings later
+    // picks up the new active cloud automatically through profilesStore.
+  });
 
   // Home-tab → in-tab nav (the legacy home-grid is gone; what remains
   // are the two session-row buttons "pair-with-server" + "open-pod-pair").
