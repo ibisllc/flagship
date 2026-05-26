@@ -46,6 +46,13 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 - **P4 Android QR pairing + admit** — Compose `QrImage` wrapper over the existing ZXing+PairingQr path, focused VM tests on the admit boundary (happy / server-rejects / wrong-device fail-closed), 3 canonical-bytes pins against iOS + the Worker verifier (`flagship/device-admit/v1|<username>|<newDevicePubHex>|<issuedAt>`). The bulk of the admit flow was already in place from earlier work — this rounds out the verification surface. — `f607668`
 - **P12 webapp multi-profile + storage migration** — new `lib/profilesStore.js` owns a per-profile `flagship.profiles.v2` namespace, idempotent one-shot legacy migration gated by a sentinel (NEVER nukes legacy keys), bidirectional mirroring so unrefactored call-sites stay aligned. New Profiles view mirrors iOS visually. 21 + 5 new tests; 811 webapp tests pass. — `a76cf57`
 
+### Parity wave 6 (2026-05-25 night, cont.)
+- **P6 daemon BFF + production wiring** — 4 collaborator-invite routes (issue / list / access / revoke) on the daemon Screens-BFF, backed by the existing `AppInviteStore` (with two new methods — `listPendingInvites` + `revokeInvite`). The production daemon entry constructs one `InMemoryAppInviteStore` so the phone-side signed surface and the BFF point at the same ledger when the signed surface gets wired. 20 new tests. — `87868e8` + `d0e6508`
+- **P8 mobile WS framebuffer viewer (iOS + Android)** — full server-side-browser viewer mirroring the webapp byte-for-byte: WS URL shape, frame/error/input wire shapes, JPEG decoding into UIImage/Bitmap, drag → mouseDown/Move/Up, exp-backoff reconnect ≤3. 14 + 14 new tests; phase-2 deferrals (keyboard, scroll-forwarding gestures, finer error surfacing) noted inline. — `1540747`
+
+### Parity wave 7 (2026-05-25 night, cont.)
+- **P6 client UIs (all 3 surfaces)** — closes P6 end-to-end. Webapp finalize (empty-state copy + 4 new tests). New iOS InviteIssue/InviteManage + InviteLabelBook (UserDefaults). New Android equivalents (SharedPreferences). Privacy invariant preserved on all 3: only `opaqueTag` + `role` + `contextNote` cross the wire. Webapp 815 pass, iOS green, Android BUILD SUCCESSFUL. — `a25a864`
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
@@ -79,13 +86,17 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
 - **P3** — Pending-server cancel → real `ReleaseServerName` envelope + `/api/server/release`. _agent._ ✅ (`ca7165a` + `01e8dd4`).
 - **P4** — Cross-device QR pairing + admit → Android. _agent._ ✅ (`f607668`).
 - **P5** — Audit log → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
-- **P6** — Collaborator invites (issue + manage) → iOS + Android (webapp
-  `invite-issue.js`/`invite-manage.js`; verify daemon BFF first). _agent._
+- **P6** — Collaborator invites (issue + manage) → daemon BFF + 3 UI. _agent._
+  ✅ (`87868e8` BFF + `d0e6508` prod wiring + `a25a864` client UIs).
+  Privacy invariant preserved on all 3: server sees only opaqueTag + role
+  + optional contextNote; labels (displayName/channel/sentTo/notes) stay
+  on each client keyed by (serviceId, opaqueTag).
 - **P7** — Tier-status / monetization → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
-- **P8** — Browser-viewer → iOS + Android. **Decision 2026-05-25**: mirror the
-  webapp's WS framebuffer-stream + input-forwarding (the real use-case is
-  server-side social-media login so bots can act as the user — session must
-  live on the box; native WebView is a different feature). _agent._
+- **P8** — Browser-viewer → iOS + Android. _agent._ ✅ (`1540747`).
+  Native WS clients streaming JPEG frames + forwarding mouseDown/Move/Up
+  (scroll + keyboard are Phase-2 plumbing-ready deferrals). The locked
+  decision held: this is the server-side-browser-tab viewer for bot
+  workflows, NOT a phone-side WebView.
 - **P9** — Peer-backup management → daemon Screens-BFF + 3 UI. _agent._
   ✅ (`af9cbc7` BFF + `8cbccf7` webapp + `4b82f5a` mobile). All four
   parts shipped: daemon BFF (matches webapp's expected 22-field shape),
@@ -158,8 +169,10 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 ```
 
 ## Next agent-doable, smallest-first
-(Updated 2026-05-25 late after wave 5.) **Up next**: P6 collaborator
-invites iOS + Android (verify daemon BFF first; if missing, BFF + 2 UI)
-→ P8 framebuffer-stream port (iOS + Android) → P14 companion-browser
-dock (all 3) → P0 verify-only audits. Then the hardware/owner items
-(A3–A6, TF*, C1, E*).
+(Updated 2026-05-25 late after wave 7.) Every P-task except P14 + P0
+is now ✅ across all 3 surfaces. **Up next**: P14 companion-browser
+dock (all 3, new design work — no precedent, would benefit from an
+owner design pass before agents) → P0 verify-only audits (marketplace
+iOS / create-server iOS pickers — light read-only review). Then the
+hardware/owner items (A3–A6 base-ISO + e2e, TF* App Store, C1 Play,
+E1–E3 v1-alpha live exercises).

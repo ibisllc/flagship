@@ -27,7 +27,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 12 | Devices: trusted-devices + paired-sessions | ✅ | ✅ | ✅ | — | — |
 | 13 | Account security (badge + TOTP 2FA) | ✅ | ✅ | ✅ | — | — |
 | 14 | **Audit log** | ✅ | ✅ | ✅ | — | ✓ P5 |
-| 15 | **Collaborator invites** (issue + manage) | ✅ | ❌ | ❌ | iOS+Android | **P6** |
+| 15 | **Collaborator invites** (issue + manage) | ✅ | ✅ | ✅ | — | ✓ P6 |
 | 16 | Marketplace (browse + install) | ✅ | ⚠️ | ✅ | verify iOS wiring | **P0** |
 | 17 | Services / detail / env-vars / BYOK LLM | ✅ | ✅ | ✅ | — | — |
 | 18 | Vibe-code (chat + app build) | ✅ | ✅ | ✅ | — | — |
@@ -36,7 +36,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 21 | Multi-profile / iCloud switching | ✅ | ✅ | ✅ | — | ✓ P12 |
 | 22 | Settings + developer settings | ✅ | ✅ | ✅ | — | — |
 | 23 | Push registration | ✅ | ✅ | ✅ | — | — |
-| 24 | **In-app browser-viewer** | ✅ | ❌ | ❌ | iOS+Android | **P8** |
+| 24 | **In-app browser-viewer** (WS framebuffer) | ✅ | ✅ | ✅ | — | ✓ P8 |
 | 25 | Activity feed | ✅ | ✅ | ✅ | — | — |
 | 26 | **Replace device** (IRK rotation) | ✅ | ✅ | ✅ | — | ✓ P10 |
 | 27 | **Wipe & restart** | ✅ | ✅ | ✅ | — | ✓ P11 |
@@ -46,8 +46,6 @@ Legend: ✅ believed wired · ⚠️ partial / unverified / audit-disputed · �
 
 ## Gap list (port direction)
 
-- **To iOS + Android:** collaborator invites (P6), browser-viewer (P8 —
-  framebuffer-stream, see decision note below).
 - **All three:** companion-browser dock (P14 — new, see below).
 - **Verify-only:** marketplace iOS wiring, create-server iOS pickers (P0).
 
