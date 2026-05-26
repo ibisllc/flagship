@@ -90,6 +90,7 @@ public struct SettingsTab: View {
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
+                    onOpenCompanionDock: { path.append(.companionDock) },
                     onOpenAbout: { path.append(.about) },
                     onOpenDeveloper: { path.append(.developer) },
                     onOpenPrivacy: { path.append(.privacy) },
@@ -286,6 +287,12 @@ public struct SettingsTab: View {
             )
         case .peerBackup:
             PeerBackupScreen(vm: PeerBackupViewModel(client: client))
+        case .companionDock:
+            CompanionDockScreen(
+                vm: CompanionDockViewModel(client: client),
+                podBaseUrl: app.currentPod.map { CompanionTicketURL.podBaseUrl(forFqdn: $0.fqdn) },
+                username: app.currentUser ?? ""
+            )
         }
     }
 }

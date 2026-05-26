@@ -17,6 +17,8 @@
 // `signReleaseServerName`. The iOS/Android composers mirror the same
 // canonical-bytes shape natively.
 
+import { requireOwnerProfile } from "./companionGuard.js";
+
 /** Canonical-bytes tag — MUST match @flagship/protocol
  *  TAG_RELEASE_SERVER_NAME. */
 export const TAG_RELEASE_SERVER_NAME = "flagship/release-server-name/v1";
@@ -52,6 +54,11 @@ export function serverDomainOf(serverName, username) {
 export async function releaseServerName(args, deps = {}) {
   const { username, serverDomain, umk, signWithIrk } = args;
   if (!username || !serverDomain) throw new Error("username and serverDomain required");
+  // P14 — companion sessions can't sign (no UMK on this device). Refuse
+  // at the surface rather than surfacing a cryptic seed error mid-call.
+  // The default helper checks the active profile via profilesStore; tests
+  // can override via deps.requireOwnerProfile.
+  (deps.requireOwnerProfile ?? requireOwnerProfile)();
   if (!umk || typeof signWithIrk !== "function") {
     throw new Error("unlock the webapp first");
   }

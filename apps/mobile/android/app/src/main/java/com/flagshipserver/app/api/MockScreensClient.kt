@@ -538,4 +538,43 @@ class MockScreensClient(
         }
         return AppInviteRevokeResponse(ok = true, alreadyRevoked = priorMatches)
     }
+
+    // ---------- P14 companion-dock -----------------------------------
+
+    /** Overridable fixture for `companionList()`. Null → honest-empty
+     *  default (matches the daemon's behaviour when no companion has
+     *  redeemed a ticket yet). Mirrors iOS's `companionListFixture`. */
+    var companionListFixture: CompanionListResponse? = null
+
+    /** Records each `companionMintTicket` call so tests can assert the
+     *  wire shape (label round-tripped, no other fields snuck in). */
+    val companionMintCalls: MutableList<CompanionMintTicketRequest> = mutableListOf()
+
+    /** Records each `companionRevoke` call's tokenPrefix. */
+    val companionRevokeCalls: MutableList<String> = mutableListOf()
+
+    override suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse {
+        tick()
+        companionMintCalls.add(req)
+        val id = "tk-${UUID.randomUUID().toString().take(8).lowercase()}"
+        val secret = (1..32).joinToString("") {
+            "%02x".format(kotlin.random.Random.nextInt(0, 256))
+        }
+        return CompanionMintTicketResponse(
+            ticketId = id,
+            ticketSecret = secret,
+            expiresAt = now() + 60_000L,
+        )
+    }
+
+    override suspend fun companionList(): CompanionListResponse {
+        tick()
+        return companionListFixture ?: CompanionListResponse(companions = emptyList())
+    }
+
+    override suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse {
+        tick()
+        companionRevokeCalls.add(req.tokenPrefix)
+        return CompanionRevokeResponse(ok = true)
+    }
 }

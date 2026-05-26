@@ -416,6 +416,72 @@ public struct AppBackupStartResponse: Codable, Equatable, Sendable {
     public let encrypted: Bool
 }
 
+// MARK: - P14 — companion-dock (read-only desktop browser companions)
+//
+// "Dock a browser" mints a 60-second pairing ticket on the pod; the
+// owner's phone shows it as a QR. A desktop browser scans, hits
+// `POST /api/companion/redeem` against the pod, and is granted a
+// 4-hour read-only companion session. The phone owns mint + list +
+// revoke; the browser owns redeem (out of scope for iOS).
+
+public struct CompanionMintTicketRequest: Codable, Equatable, Sendable {
+    public let label: String?
+    public init(label: String? = nil) { self.label = label }
+}
+
+public struct CompanionMintTicketResponse: Codable, Equatable, Sendable {
+    public let ticketId: String
+    public let ticketSecret: String
+    public let expiresAt: Int64
+    public init(ticketId: String, ticketSecret: String, expiresAt: Int64) {
+        self.ticketId = ticketId
+        self.ticketSecret = ticketSecret
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct CompanionSummary: Codable, Equatable, Sendable, Identifiable {
+    public let tokenPrefix: String
+    public let label: String?
+    public let redeemedAt: Int64
+    public let lastSeenMs: Int64
+    public let expiresAt: Int64
+    public let userAgent: String?
+
+    public var id: String { tokenPrefix }
+
+    public init(
+        tokenPrefix: String,
+        label: String? = nil,
+        redeemedAt: Int64,
+        lastSeenMs: Int64,
+        expiresAt: Int64,
+        userAgent: String? = nil
+    ) {
+        self.tokenPrefix = tokenPrefix
+        self.label = label
+        self.redeemedAt = redeemedAt
+        self.lastSeenMs = lastSeenMs
+        self.expiresAt = expiresAt
+        self.userAgent = userAgent
+    }
+}
+
+public struct CompanionListResponse: Codable, Equatable, Sendable {
+    public let companions: [CompanionSummary]
+    public init(companions: [CompanionSummary]) { self.companions = companions }
+}
+
+public struct CompanionRevokeRequest: Codable, Equatable, Sendable {
+    public let tokenPrefix: String
+    public init(tokenPrefix: String) { self.tokenPrefix = tokenPrefix }
+}
+
+public struct CompanionRevokeResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public init(ok: Bool) { self.ok = ok }
+}
+
 // MARK: - AnyCodable (used for free-form manifest fields + order responses)
 
 public struct AnyCodable: Codable {

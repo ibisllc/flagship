@@ -158,4 +158,13 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func browserTabStream(tabId: String) -> any BrowserStream {
         real.browserTabStream(tabId: tabId)
     }
+    func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse {
+        try await real.companionMintTicket(req)
+    }
+    func companionList() async throws -> CompanionListResponse {
+        try await real.companionList()
+    }
+    func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse {
+        try await real.companionRevoke(req)
+    }
 }

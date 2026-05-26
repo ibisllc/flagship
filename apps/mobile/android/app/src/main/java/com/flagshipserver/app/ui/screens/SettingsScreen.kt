@@ -109,6 +109,10 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "Profiles", description = "Switch between your clouds.") {
             nav.navigate("profiles")
         }
+        // P14 — companion-dock: mint a 60s pairing ticket → 4h read-only browser.
+        SettingsRow(label = "Dock a browser", description = "Scan a one-time QR from a desktop browser to view your cloud read-only for 4 hours.") {
+            nav.navigate("companion-dock")
+        }
         // P9 — peer-backup management.
         SettingsRow(label = "Peer-backup", description = "Shard health across peers + repair status.") {
             nav.navigate("peer-backup")

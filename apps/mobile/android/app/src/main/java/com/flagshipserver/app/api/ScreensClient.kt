@@ -89,6 +89,11 @@ interface ScreensClient {
     suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse
     suspend fun appInviteRevoke(req: AppInviteRevokeRequest): AppInviteRevokeResponse
 
+    // P14 — companion-dock (60s pairing ticket → 4h read-only browser).
+    suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse
+    suspend fun companionList(): CompanionListResponse
+    suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse
+
     // P1.15 install-events SSE — streams provisioning progress
     fun installEvents(serial: String): Flow<InstallEvent>
 

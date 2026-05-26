@@ -204,6 +204,19 @@ class LiveScreensClient(
         return request("/api/screens/app-invite/revoke", AppInviteRevokeResponse.serializer(), "POST", body)
     }
 
+    override suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse {
+        val body = json.encodeToString(CompanionMintTicketRequest.serializer(), req).toByteArray()
+        return request("/api/screens/companion/mint-ticket", CompanionMintTicketResponse.serializer(), "POST", body)
+    }
+
+    override suspend fun companionList(): CompanionListResponse =
+        request("/api/screens/companion/list", CompanionListResponse.serializer())
+
+    override suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse {
+        val body = json.encodeToString(CompanionRevokeRequest.serializer(), req).toByteArray()
+        return request("/api/screens/companion/revoke", CompanionRevokeResponse.serializer(), "POST", body)
+    }
+
     /** SSE stream of install events. Frame format: `data: <json>\n\n` */
     override fun installEvents(serial: String): Flow<InstallEvent> = channelFlow {
         val base = base()

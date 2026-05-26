@@ -33,6 +33,7 @@
 // install pattern: keystore swap happens AFTER server-success only).
 
 import { bytesToHex, deriveIrkFromSeed, hkdf32 } from "../keystore.js";
+import { requireOwnerProfile } from "./companionGuard.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_WIPE_RESTART. */
 export const TAG_WIPE_RESTART = "flagship/wipe-restart/v1";
@@ -120,6 +121,9 @@ export async function runWipeRestartCeremony(args, deps = {}) {
   const ifMatch = args.ifMatch ?? null;
   const enrollPasskey = args.enrollPasskey ?? defaultEnrollPasskey;
   if (!username) throw makeError("username required", "400");
+  // P14 — companion sessions can't sign. Refuse with a tagged error
+  // before generating the new UMK.
+  (deps.requireOwnerProfile ?? requireOwnerProfile)();
   if (!(umk instanceof Uint8Array) || umk.length !== 32) {
     throw makeError("umk must be a 32-byte Uint8Array", "400");
   }

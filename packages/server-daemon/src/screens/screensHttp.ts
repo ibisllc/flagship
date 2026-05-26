@@ -81,6 +81,14 @@ import {
   type AppInviteBffDeps,
 } from "./appInvite.js";
 import type { AppInviteStore } from "../inviteHandler.js";
+import {
+  denyCompanionWrite,
+  handleListCompanions,
+  handleMintTicket,
+  handleRedeemTicket,
+  handleRevokeCompanion,
+  type CompanionBffDeps,
+} from "./companion.js";
 import type { BackupLoop } from "../backupLoop.js";
 import { collectServerMetrics, type ServerMetricsProvider } from "./serverMetrics.js";
 import { verifyCustomDomain, type DnsResolver } from "./verifyCustomDomain.js";
@@ -226,6 +234,20 @@ export interface ScreensHttpDeps {
    * signed surfaces share state.
    */
   appInvite?: AppInviteBffDeps | null;
+  /**
+   * P14 — Companion-browser dock. Wires the four
+   * /api/screens/companion/* endpoints + the PUBLIC /api/companion/
+   * redeem endpoint into the screens dispatch. The redeem path is
+   * intentionally NOT gated by the paired-session check — the
+   * ticketId+secret IS the proof of authorization (the owner minted
+   * the ticket via the gated mint-ticket endpoint and handed it to
+   * the companion via a QR code).
+   *
+   * When unset, all four endpoints return 503 — the webapp + mobile
+   * surfaces degrade with an empty companion-list rather than
+   * pretending the feature is on.
+   */
+  companion?: CompanionBffDeps | null;
 }
 
 export interface VibeCodeRuntime {
@@ -259,12 +281,66 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
   const now = deps.now ?? (() => Date.now());
 
   return async function handle(req: HttpRequest): Promise<HttpResponse | null> {
+    const rawPath = req.path.split("?")[0]!;
+
+    // ---- P14 PUBLIC /api/companion/redeem ----
+    //
+    // Mounted on a NON-/api/screens/ path because there is no
+    // paired-session token yet — the ticket itself is the proof. The
+    // owner minted it via the gated /api/screens/companion/mint-ticket
+    // endpoint; this is where the holder exchanges it for a
+    // 4-hour companion paired-session.
+    if (rawPath === "/api/companion/redeem" && req.method.toUpperCase() === "POST") {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handleRedeemTicket(deps.companion, req);
+    }
+
     if (!req.path.startsWith("/api/screens/")) return null;
     const denied = deps.gate.check(req);
     if (denied) return denied;
 
-    const path = req.path.split("?")[0]!;
+    const path = rawPath;
     const method = req.method.toUpperCase();
+
+    // ---- P14 companion-write guard ----
+    //
+    // Companions are read-only in v1. Any endpoint that mutates
+    // paired-session-bound state must be gated. Wave 9 will add a
+    // write-relay (the owner approves a queued companion write); for
+    // now the BFF surfaces a 403 the webapp catches and renders as
+    // "open your owner app to approve this".
+    //
+    // The list of representative write endpoints is the set that
+    // performs signed-envelope mutations OR paired-session-authorized
+    // mutations on this pod: app-invite issue/revoke, peer-backup
+    // toggle, env-var set/unset, lineage-resolve POST,
+    // app-backup/start, orders/send, url-controller/claim, and the
+    // mint-ticket itself (a companion shouldn't be able to mint more
+    // companions). The gate already authenticated; this is just the
+    // companion-write check on top.
+    if (method !== "GET" && isWriteScopedPath(path)) {
+      const denied = denyCompanionWrite(deps.pairedSessions ?? null, req);
+      if (denied) return denied;
+    }
+
+    // ---- P14 /api/screens/companion/* ----
+    //
+    // Owner-gated companion-dock administration. Mint a ticket the QR
+    // code carries; list active companions; revoke by tokenPrefix.
+    // The write-guard above already returned 403 if a companion is
+    // calling mint-ticket / revoke.
+    if (path === "/api/screens/companion/mint-ticket" && method === "POST") {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handleMintTicket(deps.companion, req);
+    }
+    if (path === "/api/screens/companion/list" && method === "GET") {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handleListCompanions(deps.companion);
+    }
+    if (path === "/api/screens/companion/revoke" && method === "POST") {
+      if (!deps.companion) return jerr(503, "companion dock not configured");
+      return await handleRevokeCompanion(deps.companion, req);
+    }
 
     // ---- WS-upgrade-only endpoints (P1.6 + P1.11)
     // These paths normally don't reach the HTTP dispatch at all — the
@@ -1222,6 +1298,54 @@ function jok(body: unknown): HttpResponse {
 
 function jerr(status: number, message: string): HttpResponse {
   return { status, headers: J, body: JSON.stringify({ error: message }) };
+}
+
+/**
+ * P14 — predicate: does the given /api/screens/* path mutate
+ * paired-session-bound state? Companions are blocked from these in
+ * v1. Wave 9 will add the write-relay so the owner can approve
+ * companion-initiated writes after the fact; until then, returning
+ * 403 here is the honest user experience ("open your owner app").
+ *
+ * Conservative inclusion rule: anything that POSTs/PUTs/DELETEs
+ * under /api/screens/ AND mutates pod state. Read endpoints
+ * (GET) are not included — companions are read-only, not blind.
+ *
+ * Companion-dock paths themselves (mint-ticket / revoke) are gated
+ * separately in the dispatcher above (a companion shouldn't mint
+ * NEW companion sessions).
+ */
+function isWriteScopedPath(path: string): boolean {
+  if (!path.startsWith("/api/screens/")) return false;
+  // app-invite issue + revoke
+  if (path === "/api/screens/app-invite/issue") return true;
+  if (path === "/api/screens/app-invite/revoke") return true;
+  // peer-backup toggle
+  if (path === "/api/screens/peer-backup/toggle") return true;
+  // env-var set + unset
+  if (/^\/api\/screens\/services\/[^/]+\/env\/(set|unset)$/.test(path)) return true;
+  // lineage-resolve POST
+  if (path === "/api/screens/lineage-resolve") return true;
+  // app-backup start
+  if (path === "/api/screens/app-backup/start") return true;
+  // orders/send
+  if (path === "/api/screens/orders/send") return true;
+  // url-controller claim
+  if (path === "/api/screens/url-controller/claim") return true;
+  // url-controller verify (POST, but it's a read-shaped network probe)
+  // — explicitly EXCLUDED so companions can preview cert health.
+  // vibe-code start + reply — mutate session state; companion-blocked
+  // (Wave 9 will surface a companion-side compose UI that proxies through).
+  if (path === "/api/screens/vibe-code/start") return true;
+  if (/^\/api\/screens\/llm\/sessions\/[^/]+\/reply$/.test(path)) return true;
+  // paired-session revoke (DELETE) — also written below as DELETE.
+  if (path.startsWith("/api/screens/paired-sessions/")) return true;
+  // companion mint-ticket itself — block here too as belt-and-braces
+  // (the dispatcher above handles this before reaching here, but in
+  // case the order ever changes).
+  if (path === "/api/screens/companion/mint-ticket") return true;
+  if (path === "/api/screens/companion/revoke") return true;
+  return false;
 }
 
 function hexToBytesLocal(hex: string): Uint8Array {

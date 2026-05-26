@@ -39,6 +39,7 @@ import {
   deriveIrkVersioned,
   bytesToHex,
 } from "../keystore.js";
+import { requireOwnerProfile } from "./companionGuard.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_RE_PAIR_INITIATE. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
@@ -81,6 +82,8 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
   const currentVersion = args.currentVersion ?? 1;
   const ifMatch = args.ifMatch ?? null;
   if (!username) throw makeError("username required", "400");
+  // P14 — companion sessions can't sign; refuse before deriving keys.
+  (deps.requireOwnerProfile ?? requireOwnerProfile)();
   if (!(umk instanceof Uint8Array) || umk.length !== 32) {
     throw makeError("umk must be a 32-byte Uint8Array", "400");
   }

@@ -104,6 +104,13 @@ public protocol ScreensClient: Sendable {
     // frames flow through `incoming`, outgoing pointer / key events
     // ship through `send(_:)`.
     func browserTabStream(tabId: String) -> any BrowserStream
+
+    // P14 — companion-dock. Phone mints a 60-second ticket → desktop
+    // browser scans → 4-hour read-only companion session. iOS owns
+    // mint / list / revoke; the browser hits a separate `/redeem`.
+    func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse
+    func companionList() async throws -> CompanionListResponse
+    func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {

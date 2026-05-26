@@ -20,6 +20,8 @@
 // flagshipserver.com so the wire shape is ready the moment the
 // orchestrator promotes the handler into apps/com.
 
+import { requireOwnerProfile } from "./companionGuard.js";
+
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_REVOKE. */
 export const TAG_REVOKE = "flagship/revoke/v1";
 
@@ -69,6 +71,9 @@ export async function revokeServer(args, deps = {}) {
   if (!REVOCATION_REASONS.includes(reason)) {
     throw makeError(`reason must be one of ${REVOCATION_REASONS.join(", ")}`, "400");
   }
+  // P14 — companion sessions can't sign. Refuse with a user-friendly
+  // message before the cryptic "unlock the webapp first" fires.
+  (deps.requireOwnerProfile ?? requireOwnerProfile)();
   if (!umk || typeof signWithIrk !== "function") {
     throw makeError("unlock the webapp first", "400");
   }

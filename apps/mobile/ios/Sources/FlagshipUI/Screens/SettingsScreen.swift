@@ -69,6 +69,8 @@ public struct SettingsScreen: View {
     var onOpenProfiles: () -> Void = {}
     /// P9 — open the peer-backup management screen.
     var onOpenPeerBackup: () -> Void = {}
+    /// P14 — open the "Dock a browser" companion-pairing screen.
+    var onOpenCompanionDock: () -> Void = {}
     var onOpenAbout: () -> Void = {}
     var onOpenDeveloper: () -> Void = {}
     var onOpenPrivacy: () -> Void = {}
@@ -111,6 +113,7 @@ public struct SettingsScreen: View {
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenProfiles: @escaping () -> Void = {},
         onOpenPeerBackup: @escaping () -> Void = {},
+        onOpenCompanionDock: @escaping () -> Void = {},
         onOpenAbout: @escaping () -> Void = {},
         onOpenDeveloper: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
@@ -139,6 +142,7 @@ public struct SettingsScreen: View {
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenProfiles = onOpenProfiles
         self.onOpenPeerBackup = onOpenPeerBackup
+        self.onOpenCompanionDock = onOpenCompanionDock
         self.onOpenAbout = onOpenAbout
         self.onOpenDeveloper = onOpenDeveloper
         self.onOpenPrivacy = onOpenPrivacy
@@ -581,6 +585,7 @@ public struct SettingsScreen: View {
                 linkRow("Recovery setup", subtitle: "If you lose this phone", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
                 linkRow("Back up your account key", subtitle: "Save an encrypted key file", icon: "doc.badge.arrow.up.fill", c: c, action: onOpenKeyfileBackup)
                 linkRow("Profiles", subtitle: "Switch between your clouds", icon: "person.2.circle.fill", c: c, action: onOpenProfiles)
+                linkRow("Dock a browser", subtitle: "Read-only desktop companion (4h)", icon: "laptopcomputer", c: c, action: onOpenCompanionDock)
                 linkRow("Peer-backup", subtitle: "Shard health across peers", icon: "externaldrive.connected.to.line.below.fill", c: c, action: onOpenPeerBackup)
                 linkRow("Privacy", subtitle: "Face ID lock, app-level gating", icon: "lock.shield.fill", c: c, action: onOpenPrivacy)
                 linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)

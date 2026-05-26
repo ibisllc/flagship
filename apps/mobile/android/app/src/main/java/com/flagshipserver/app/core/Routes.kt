@@ -53,6 +53,10 @@ sealed interface SettingsRoute {
     data object About : SettingsRoute
     data object AddControlDevice : SettingsRoute
     data object Developer : SettingsRoute
+    /** P14 — Settings → Dock a browser. Mints a 60-second pairing
+     *  ticket as a QR; a desktop browser scans to become a 4-hour
+     *  read-only companion. */
+    data object CompanionDock : SettingsRoute
 }
 
 enum class RootDestination(val key: String, val label: String) {

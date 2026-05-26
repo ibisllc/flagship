@@ -653,6 +653,55 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return AppInviteRevokeResponse(ok: true, alreadyRevoked: priorMatches)
     }
 
+    // MARK: - P14 companion-dock
+
+    /// Overridable fixture for `companionList()`. Nil → honest-empty
+    /// default (`{ companions: [] }`), matching the daemon's behaviour
+    /// when no companions have been redeemed. Mirrors Android's
+    /// `companionListFixture`.
+    public var companionListFixture: CompanionListResponse?
+
+    /// Records each `companionMintTicket(_:)` call's request so tests
+    /// can assert the label flowed through.
+    public private(set) var companionMintCalls: [CompanionMintTicketRequest] = []
+
+    /// Records each `companionRevoke(_:)` call's `tokenPrefix` so
+    /// tests can assert the right session was killed.
+    public private(set) var companionRevokeCalls: [String] = []
+
+    public func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse {
+        try await tick()
+        companionMintCalls.append(req)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let ticketId = "tk-\(UUID().uuidString.prefix(8).lowercased())"
+        let secret = (0..<32).map { _ in
+            String(format: "%02x", UInt8.random(in: 0...255))
+        }.joined()
+        return CompanionMintTicketResponse(
+            ticketId: ticketId,
+            ticketSecret: secret,
+            expiresAt: nowMs + 60 * 1000
+        )
+    }
+
+    public func companionList() async throws -> CompanionListResponse {
+        try await tick()
+        if let fixture = companionListFixture { return fixture }
+        return CompanionListResponse(companions: [])
+    }
+
+    public func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse {
+        try await tick()
+        companionRevokeCalls.append(req.tokenPrefix)
+        if var fixture = companionListFixture {
+            fixture = CompanionListResponse(
+                companions: fixture.companions.filter { $0.tokenPrefix != req.tokenPrefix }
+            )
+            companionListFixture = fixture
+        }
+        return CompanionRevokeResponse(ok: true)
+    }
+
     // MARK: - P8 browser-tab stream (mock WS)
 
     public var browserStreamsOpened: [String] = []

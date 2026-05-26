@@ -242,6 +242,20 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         }
     }
 
+    // MARK: - P14 companion-dock
+
+    public func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/companion/mint-ticket", method: "POST", body: body)
+    }
+    public func companionList() async throws -> CompanionListResponse {
+        try await request("/api/screens/companion/list")
+    }
+    public func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/companion/revoke", method: "POST", body: body)
+    }
+
     // MARK: - P8 browser-tab framebuffer stream
 
     public func browserTabStream(tabId: String) -> any BrowserStream {

@@ -580,3 +580,39 @@ data class AppInviteRevokeResponse(
     val ok: Boolean,
     val alreadyRevoked: Boolean? = null,
 )
+
+// ---------- P14 — companion-dock (browser pairing tickets) -------------
+//
+// A 60-second single-use pairing ticket minted on the phone; a desktop
+// browser scans the QR + redeems against the pod, becoming a 4-hour
+// read-only "companion" session. List + revoke surface the active
+// companions per pod.
+
+@Serializable
+data class CompanionMintTicketRequest(val label: String?)
+
+@Serializable
+data class CompanionMintTicketResponse(
+    val ticketId: String,
+    val ticketSecret: String,
+    val expiresAt: Long,
+)
+
+@Serializable
+data class CompanionSummary(
+    val tokenPrefix: String,
+    val label: String?,
+    val redeemedAt: Long,
+    val lastSeenMs: Long,
+    val expiresAt: Long,
+    val userAgent: String?,
+)
+
+@Serializable
+data class CompanionListResponse(val companions: List<CompanionSummary>)
+
+@Serializable
+data class CompanionRevokeRequest(val tokenPrefix: String)
+
+@Serializable
+data class CompanionRevokeResponse(val ok: Boolean)

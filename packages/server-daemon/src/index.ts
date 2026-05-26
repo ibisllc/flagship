@@ -17,6 +17,7 @@ import {
 import { buildAdminProxyHandler } from "./adminProxy.js";
 import { BackupLoop } from "./backupLoop.js";
 import { InMemoryAppInviteStore } from "./inviteHandler.js";
+import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { buildCloneApp } from "./cloneService.js";
 import { loadConfig, parseConfig, type ServerConfig } from "./config.js";
@@ -175,6 +176,12 @@ async function main(): Promise<void> {
   // signed-surface entry isn't wired into the production boot yet;
   // when it lands it must take THIS instance, not its own.
   const appInviteStore = new InMemoryAppInviteStore();
+
+  // P14 — Companion-browser dock ticket ledger. Same in-memory shape
+  // as the appInviteStore; tickets TTL out in 60s so a daemon restart
+  // never strands a real user. A SQLite-backed store can slot in
+  // later via the CompanionTicketStore interface.
+  const companionTicketStore = new InMemoryCompanionTicketStore();
 
   // ---- Order serial (provisioning-status channel) ----
   // The InstallBlob's authCode.serial is the order id keying the
@@ -676,6 +683,17 @@ async function main(): Promise<void> {
       appInvite: {
         store: appInviteStore,
         serverFqdn: env.serverFqdn!,
+      },
+      // P14 — companion-browser dock. Owner-gated mint/list/revoke +
+      // public redeem. Companions land in the same `pairedSessions`
+      // store (flagged `companion: true` + 4h `expiresAt`); the gate
+      // rejects expired companion tokens and the BFF's write-scope
+      // guard returns 403 for companion-initiated mutations.
+      companion: {
+        ticketStore: companionTicketStore,
+        pairedSessions,
+        serverFqdn: env.serverFqdn!,
+        username,
       },
       postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
       // W10 — per-app env-var KV editor + vibe-code session BFF deps.
@@ -1320,6 +1338,14 @@ export {
   signIssueInvite,
   signRevokeAccess,
 } from "./inviteHandler.js";
+export {
+  InMemoryCompanionTicketStore,
+  sha256HexOfHex as companionSha256HexOfHex,
+} from "./companion/companionTicketStore.js";
+export type {
+  CompanionTicketRow,
+  CompanionTicketStore,
+} from "./companion/companionTicketStore.js";
 export type {
   AppAccessRow,
   AppInviteRow,

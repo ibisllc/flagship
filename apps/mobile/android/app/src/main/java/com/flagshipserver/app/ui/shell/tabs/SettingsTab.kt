@@ -17,6 +17,7 @@ import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.AccountSecurityScreen
 import com.flagshipserver.app.ui.screens.AddControlDeviceScreen
 import com.flagshipserver.app.ui.screens.AddDeviceScreen
+import com.flagshipserver.app.ui.screens.CompanionDockScreen
 import com.flagshipserver.app.ui.screens.JoinDeviceScreen
 import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import java.net.URLDecoder
@@ -98,5 +99,7 @@ fun SettingsTab() {
         composable("tier-status") { TierStatusScreen(nav) }
         // P9 — peer-backup management.
         composable("peer-backup") { PeerBackupScreen(nav) }
+        // P14 — companion-dock (dock a browser).
+        composable("companion-dock") { CompanionDockScreen(nav) }
     }
 }

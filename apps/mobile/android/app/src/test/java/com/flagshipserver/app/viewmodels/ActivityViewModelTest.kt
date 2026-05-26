@@ -11,6 +11,11 @@ import com.flagshipserver.app.api.AppInviteListResponse
 import com.flagshipserver.app.api.AppInviteRevokeRequest
 import com.flagshipserver.app.api.AppInviteRevokeResponse
 import com.flagshipserver.app.api.AppsListResponse
+import com.flagshipserver.app.api.CompanionListResponse
+import com.flagshipserver.app.api.CompanionMintTicketRequest
+import com.flagshipserver.app.api.CompanionMintTicketResponse
+import com.flagshipserver.app.api.CompanionRevokeRequest
+import com.flagshipserver.app.api.CompanionRevokeResponse
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.AppDetailResponse
 import com.flagshipserver.app.api.AppBackupStartRequest
@@ -107,6 +112,9 @@ private class StubScreensClient(
     override suspend fun appInviteList(serviceId: String): AppInviteListResponse = error("unused")
     override suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse = error("unused")
     override suspend fun appInviteRevoke(req: AppInviteRevokeRequest): AppInviteRevokeResponse = error("unused")
+    override suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse = error("unused")
+    override suspend fun companionList(): CompanionListResponse = error("unused")
+    override suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse = error("unused")
     override fun installEvents(serial: String): Flow<InstallEvent> = emptyFlow()
     override fun vibeCodeStream(sessionId: String): Flow<VibeCodeFrame> = emptyFlow()
     override fun browserTabStream(tabId: String): com.flagshipserver.app.api.BrowserStream =
