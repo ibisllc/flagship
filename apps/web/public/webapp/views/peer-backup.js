@@ -1,8 +1,8 @@
 // Task #27 — Peer-backup participation view.
 //
-// Router slot: `data-view="view-peer-backup"` (section id
-// `view-peer-backup`). The shell worker wires the home-grid entry
-// (e.g. `open-peer-backup`) to `enterPeerBackup`.
+// Router slot: section id `view-peer-backup`. Reached from
+// Settings → Peer-backup. Calls into the daemon's P9 Screens-BFF
+// endpoints (landed daemon-side in af9cbc7).
 //
 // Surfaces:
 //   1. Participation toggle (POST /api/screens/peer-backup/toggle).
@@ -17,13 +17,20 @@
 //   5. Repair status: current and last-run repair daemon ticks.
 //
 // BFF endpoints consumed:
-//   GET  /api/screens/peer-backup/status
-//   POST /api/screens/peer-backup/toggle  { participate: boolean }
+//   GET  /api/screens/peer-backup/status   → PeerBackupStatusResponse
+//   POST /api/screens/peer-backup/toggle   { participate: boolean }
 //
-// TODO(daemon BFF): the production daemon (packages/server-daemon)
-// does not yet expose /api/screens/peer-backup/*. Until that lands
-// the view renders a graceful "not yet available" card. The view
-// itself is stable; the BFF is the missing piece.
+// Honest production-data gaps (per af9cbc7):
+//   - per-shard byte size (PeerBackupShardSummary.bytes) is reported
+//     as 0 until the my-shard layer tracks it. We render that as
+//     "size not tracked" rather than "0 B" so it doesn't look like
+//     the shard is empty.
+//   - `stats.yourBytesStored` returns 0 for the same reason — surfaced
+//     as a friendly placeholder.
+//   - peer liveness (`online`) is best-effort based on last challenge
+//     timestamp; the warning pill is informational, not authoritative.
+//   - repair-tick counters are 0 until the daemon wraps RepairDaemon
+//     in the accumulator.
 
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
@@ -41,8 +48,17 @@ function fmtBytes(n) {
 }
 
 function fmtDate(unixMs) {
-  if (typeof unixMs !== "number") return "—";
+  if (typeof unixMs !== "number" || unixMs <= 0) return "never";
   return new Date(unixMs).toLocaleString();
+}
+
+// Daemon-side honest-zero accounting for fields the my-shard layer
+// doesn't yet track (per af9cbc7). Render a clearer string than "0 B"
+// when a byte counter is structurally 0.
+function fmtBytesOrUntracked(n) {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+  if (n === 0) return "not yet tracked";
+  return fmtBytes(n);
 }
 
 function shardPill(shard) {
@@ -64,15 +80,27 @@ export async function renderPeerBackup() {
     body = await screensFetch("/api/screens/peer-backup/status");
   } catch (e) {
     if (e instanceof ScreensError) {
-      if (e.status === 404 || e.status === 503) {
-        // BFF not wired yet; render the canonical empty-state with the
-        // copy that explains how to enable the surface server-side.
+      if (e.status === 404) {
+        // Older daemon — pre-P9 (af9cbc7). The view is stable; the
+        // server just needs a newer daemon image to expose the BFF.
         root.innerHTML = `
           <div class="card placeholder">
-            peer-backup BFF not available on this daemon — once your
-            pod runs a daemon with <code>/api/screens/peer-backup/*</code>,
-            this view will show participation, shard health, and repair
-            status. (Daemon TODO: expose status + toggle endpoints.)
+            Peer-backup isn't available on this server yet — its daemon
+            is running an older build (pre-P9). Update the daemon to
+            get participation, shard health, and repair status here.
+          </div>
+        `;
+        return;
+      }
+      if (e.status === 503) {
+        // Daemon is up but peer-backup hasn't been configured for this
+        // server. This is normal for fresh installs that opted out
+        // during the first-run wizard.
+        root.innerHTML = `
+          <div class="card placeholder">
+            Peer-backup hasn't been configured for this server yet.
+            Re-run the first-run wizard, or contact your server admin
+            to enable the peer-backup pool.
           </div>
         `;
         return;
@@ -126,13 +154,33 @@ export async function renderPeerBackup() {
     return;
   }
 
+  // Participating-but-warming-up — opted in but the matchmaker
+  // hasn't paired this server with any peers yet, and no shards
+  // have been placed. Make this explicit so the user knows the
+  // system is healthy, just empty.
+  const isWarmingUp = participating
+    && peersBackingYouUp.length === 0
+    && peersYouBackUp.length === 0
+    && shards.length === 0;
+
+  const warmingUpCard = isWarmingUp
+    ? `
+      <div class="card placeholder mt-2">
+        You're in the peer-backup pool — the matchmaker hasn't paired
+        this server with any peers yet. Once that happens you'll see
+        peers and shard health populate below; nothing else for you
+        to do here.
+      </div>
+    `
+    : "";
+
   const statsCard = `
     <h3 class="mt-4">Shard health</h3>
     <div class="card">
       <div class="row"><span class="label">total shards</span><span class="value">${escapeHtml(String(stats.total ?? shards.length))}</span></div>
       <div class="row"><span class="label">durable</span><span class="value">${escapeHtml(String(stats.durable ?? 0))}</span></div>
       <div class="row"><span class="label">at risk</span><span class="value">${escapeHtml(String(stats.atRisk ?? 0))}</span></div>
-      <div class="row"><span class="label">your bytes stored</span><span class="value">${escapeHtml(fmtBytes(stats.yourBytesStored))}</span></div>
+      <div class="row"><span class="label">your bytes stored</span><span class="value">${escapeHtml(fmtBytesOrUntracked(stats.yourBytesStored))}</span></div>
       <div class="row"><span class="label">peer bytes hosted</span><span class="value">${escapeHtml(fmtBytes(stats.peerBytesHosted))}</span></div>
     </div>
   `;
@@ -140,7 +188,7 @@ export async function renderPeerBackup() {
   const peersBackingYouUpCard = `
     <h3 class="mt-4">Peers backing you up</h3>
     ${peersBackingYouUp.length === 0
-      ? '<div class="card placeholder">no peers backing you up yet — repair daemon will recruit some next tick</div>'
+      ? '<div class="card placeholder">No peers yet — the repair daemon will recruit some on its next tick.</div>'
       : peersBackingYouUp.map((p) => `
         <div class="card">
           <div class="row row-top">
@@ -160,7 +208,7 @@ export async function renderPeerBackup() {
   const peersYouBackUpCard = `
     <h3 class="mt-4">Peers you back up</h3>
     ${peersYouBackUp.length === 0
-      ? '<div class="card placeholder">not hosting any peer shards yet — matchmaker hasn\'t paired you with anyone yet</div>'
+      ? '<div class="card placeholder">Not hosting any peer shards yet — the matchmaker hasn\'t paired you with anyone yet.</div>'
       : peersYouBackUp.map((p) => `
         <div class="card">
           <div class="row row-top">
@@ -188,7 +236,7 @@ export async function renderPeerBackup() {
               <div class="value text-xs">${escapeHtml(s.shardId ?? "?")}</div>
               <div class="faint-sm">
                 ${escapeHtml(String(s.replicas ?? 0))}/${escapeHtml(String(s.minReplicas ?? 3))} replicas
-                · ${escapeHtml(fmtBytes(s.bytes))}
+                · ${escapeHtml(fmtBytesOrUntracked(s.bytes))}
               </div>
             </div>
             ${shardPill(s)}
@@ -209,7 +257,8 @@ export async function renderPeerBackup() {
     </div>
   `;
 
-  root.innerHTML = participationCard + statsCard + peersBackingYouUpCard + peersYouBackUpCard + shardsCard + repairCard;
+  root.innerHTML = participationCard + warmingUpCard + statsCard
+    + peersBackingYouUpCard + peersYouBackUpCard + shardsCard + repairCard;
   $("peer-backup-toggle")?.addEventListener("click", () => runToggle(!participating));
 }
 

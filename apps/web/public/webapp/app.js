@@ -30,6 +30,7 @@ import { initServiceDetailView } from "./views/service-detail.js";
 import { initInviteIssueView } from "./views/invite-issue.js";
 import { initInviteManageView } from "./views/invite-manage.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
+import { initPeerBackupView, enterPeerBackup } from "./views/peer-backup.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
@@ -78,6 +79,7 @@ const SUB_VIEW_TABS = {
   "view-post-recovery": "settings",
   "view-tier-status": "settings",
   "view-paired-sessions": "settings",
+  "view-peer-backup": "settings",
   "view-orders-debug": "settings",
 };
 
@@ -158,6 +160,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
   wire("settings-tab-sessions", enterPairedSessions);
+  wire("settings-tab-peer-backup", enterPeerBackup);
   wire("settings-tab-orders-debug", enterOrdersDebug);
   wire("settings-tab-create-server", enterCreateServer);
   $("settings-tab-reset")?.addEventListener("click", async () => {
@@ -211,6 +214,7 @@ async function boot() {
   initInviteIssueView();
   initInviteManageView();
   initPairedSessionsView();
+  initPeerBackupView();
   initTrustedDevicesView();
   initAccountSecurityView();
   initAddDeviceView();
