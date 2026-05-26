@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.ui.screens.ActivityScreen
+import com.flagshipserver.app.ui.screens.AuditLogScreen
 import com.flagshipserver.app.ui.screens.PostRecoveryScreen
 import com.flagshipserver.app.ui.screens.SecretRequestsScreen
 
@@ -33,5 +34,7 @@ fun ActivityTab() {
         composable("activity") { ActivityScreen(nav) }
         composable("secret-requests") { SecretRequestsScreen(nav) }
         composable("post-recovery") { PostRecoveryScreen(nav) }
+        // P5 — full-page audit-log viewer reached from the Activity feed.
+        composable("audit-log") { AuditLogScreen(nav) }
     }
 }

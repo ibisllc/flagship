@@ -1,5 +1,7 @@
 package com.flagshipserver.app.ui.screens
 
+import android.content.Intent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -14,10 +16,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.TrademarkClaim
 import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -50,6 +55,7 @@ private val usernameRegex = Regex("^[a-z0-9]{3,30}$")
 @Composable
 fun ChooseUsernameScreen(onContinue: (String) -> Unit) {
     val flagshipServer = LocalFlagshipServerClient.current
+    val context = LocalContext.current
     var username by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<UsernameCheck>(UsernameCheck.Empty) }
 
@@ -112,6 +118,21 @@ fun ChooseUsernameScreen(onContinue: (String) -> Unit) {
                 else -> null
             },
         )
+
+        // Shown only in the Taken state: a subtle "I hold a trademark"
+        // affordance that opens a prefilled mailto to the trademarks
+        // desk (TrademarkClaim mirrors the canonical webapp message).
+        if (status == UsernameCheck.Taken) {
+            Text(
+                text = "I hold a trademark to this name",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, textDecoration = TextDecoration.Underline),
+                modifier = Modifier.clickable {
+                    val intent = Intent(Intent.ACTION_SENDTO, TrademarkClaim.mailtoUri(username))
+                    runCatching { context.startActivity(intent) }
+                },
+            )
+        }
 
         Spacer(Modifier.height(FS.space.s8))
 

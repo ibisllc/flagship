@@ -28,6 +28,7 @@ import com.flagshipserver.app.ui.screens.ProfilesScreen
 import com.flagshipserver.app.ui.screens.ProvidersScreen
 import com.flagshipserver.app.ui.screens.RecoveryScreen
 import com.flagshipserver.app.ui.screens.SettingsScreen
+import com.flagshipserver.app.ui.screens.TierStatusScreen
 import com.flagshipserver.app.ui.screens.TrustedDevicesScreen
 
 @Composable
@@ -92,5 +93,7 @@ fun SettingsTab() {
         composable("providers") { ProvidersScreen(nav) }
         composable("privacy") { PrivacyScreen(nav) }
         composable("profiles") { ProfilesScreen(nav) }
+        // P7 — dedicated tier-status / subscription screen.
+        composable("tier-status") { TierStatusScreen(nav) }
     }
 }

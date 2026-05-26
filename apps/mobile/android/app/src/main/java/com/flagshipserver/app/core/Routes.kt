@@ -30,10 +30,16 @@ sealed interface ActivityRoute {
     /** The sealed-key RELAY approval surface (SecretRequestsScreen). */
     data object SecretRequests : ActivityRoute
     data class InstallProgress(val serial: String) : ActivityRoute
+    /** P5 — the dedicated full-page audit-log viewer, reached from the
+     *  Activity feed's "View full audit log" row. */
+    data object AuditLog : ActivityRoute
 }
 
 sealed interface SettingsRoute {
     data object Providers : SettingsRoute
+    /** P7 — the dedicated tier-status / subscription screen, reached from
+     *  the Settings "Plan / Subscription" nav row. */
+    data object TierStatus : SettingsRoute
     data object Recovery : SettingsRoute
     data object PostRecoveryProgress : SettingsRoute
     data object About : SettingsRoute

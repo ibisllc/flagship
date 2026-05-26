@@ -23,6 +23,11 @@ interface FlagshipServerClient {
      *  register with this serial. User-facing this is "Cancel order".
      *  404 (already gone) is treated as success by both Mock + Live. */
     suspend fun revokeAuthCode(req: AuthCodeRevokeRequest)
+    /** IRK-signed `ReleaseServerName` envelope POSTed to
+     *  /api/server/release. Where revokeAuthCode kills the install
+     *  TICKET, this un-pins the name itself (routing record + active
+     *  auth-codes + server record). Mirrors webapp `releaseServerName`. */
+    suspend fun releaseServerName(req: ReleaseServerNameRequest)
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
     suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse
     suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope
@@ -558,6 +563,25 @@ data class AuthCodeRevokeRequest(
     )
 }
 
+/** POST /api/server/release — IRK-signed release of a reserved server
+ *  name. Fired when the user cancels a pending/abandoned server. Mirrors
+ *  the canonical-bytes tag `flagship/release-server-name/v1`
+ *  (`tag|username|serverDomain|issuedAt`) + the @flagship/protocol
+ *  `ReleaseServerName` shape. Authorization is the IRK signature itself
+ *  — only the account owner can produce it. */
+@Serializable
+data class ReleaseServerNameRequest(
+    val request: Inner,
+    val signature: String,           // hex, IRK
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val serverDomain: String,
+        val issuedAt: Long,
+    )
+}
+
 @Serializable
 data class RckRegisterRequest(
     val request: Inner,
@@ -806,6 +830,7 @@ class MockFlagshipServerClient(
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
     private val _issuedAuthCodes = mutableMapOf<String, AuthCodeWire>()  // serial → wire
     private val _revokedAuthCodes = mutableSetOf<String>()
+    private val _releasedServerNames = mutableListOf<ReleaseServerNameRequest>()
     private val _registeredRcks = mutableMapOf<String, String>()         // subdomain → rckPubKey
     private val _registeredPushTokens = mutableMapOf<String, PushTokenRegisterRequest.Inner>()
     private var nextPushTokenId = 1
@@ -813,6 +838,7 @@ class MockFlagshipServerClient(
     val claimedUsernames: Map<String, String> get() = _claimedUsernames
     val issuedAuthCodes: Map<String, AuthCodeWire> get() = _issuedAuthCodes
     val revokedAuthCodes: Set<String> get() = _revokedAuthCodes
+    val releasedServerNames: List<ReleaseServerNameRequest> get() = _releasedServerNames
     val registeredRcks: Map<String, String> get() = _registeredRcks
     val registeredPushTokens: Map<String, PushTokenRegisterRequest.Inner> get() = _registeredPushTokens
 
@@ -842,6 +868,11 @@ class MockFlagshipServerClient(
     override suspend fun revokeAuthCode(req: AuthCodeRevokeRequest) {
         tick()
         _revokedAuthCodes += req.request.serial
+    }
+
+    override suspend fun releaseServerName(req: ReleaseServerNameRequest) {
+        tick()
+        _releasedServerNames += req
     }
 
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
@@ -936,8 +967,43 @@ class MockFlagshipServerClient(
     var devicesByUser: Map<String, List<TrustedDevice>> = emptyMap()
 
     /** Scripted audit log per username — tests configure to drive
-     *  Activity feed renders without hitting the Worker. */
-    var auditEventsByUser: Map<String, List<AuditEvent>> = emptyMap()
+     *  Activity feed renders without hitting the Worker. The default
+     *  seed gives the demo username "harry" a handful of plausible
+     *  recent events so the P5 audit-log screen + the Activity feed
+     *  both have something to render in dev/preview without any setup.
+     *  Tests that need a clean state simply reassign the whole map. */
+    var auditEventsByUser: Map<String, List<AuditEvent>> = run {
+        val now = System.currentTimeMillis()
+        val hour = 3_600_000L
+        mapOf(
+            "harry" to listOf(
+                AuditEvent(
+                    seq = 4, eventKind = "device-added",
+                    detail = "Added iPad (kitchen)",
+                    devicePrefix = "f9e8d7c6",
+                    postedAt = now - 2 * hour,
+                ),
+                AuditEvent(
+                    seq = 3, eventKind = "device-replaced",
+                    detail = "Rotated identity key from a new device",
+                    devicePrefix = "a1b2c3d4",
+                    postedAt = now - 26 * hour,
+                ),
+                AuditEvent(
+                    seq = 2, eventKind = "recovery-set-up",
+                    detail = "Enrolled cloud recovery passkey",
+                    devicePrefix = "a1b2c3d4",
+                    postedAt = now - 5 * 24 * hour,
+                ),
+                AuditEvent(
+                    seq = 1, eventKind = "device-disconnected",
+                    detail = "Disconnected iPhone (old)",
+                    devicePrefix = "deadbeef",
+                    postedAt = now - 30 * 24 * hour,
+                ),
+            ),
+        )
+    }
 
     /** Scripted recovery enrollment per username. Drives the C9 Home
      *  nudge in tests. Unconfigured users default to `false` — the
@@ -1417,6 +1483,13 @@ class LiveFlagshipServerClient(
             "$base/api/auth-code/$encodedSerial/revoke", req,
             serializer = AuthCodeRevokeRequest.serializer(),
             accept = setOf(200, 201, 204, 403, 404),
+        )
+    }
+
+    override suspend fun releaseServerName(req: ReleaseServerNameRequest) {
+        transport.postJson(
+            "$base/api/server/release", req,
+            serializer = ReleaseServerNameRequest.serializer(),
         )
     }
 

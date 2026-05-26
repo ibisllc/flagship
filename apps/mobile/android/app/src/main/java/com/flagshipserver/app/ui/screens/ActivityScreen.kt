@@ -142,6 +142,25 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
 
     val recentRows = feed.items
         .filter { it !is ActivityItem.RecoverySnapshot }
+    // P5 — always-present entry into the dedicated full-page audit log.
+    // Mirrors the webapp's "see all activity" + iOS
+    // ActivityScreen.viewFullAuditLogRow.
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "View full audit log",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                "Every signed account action — device changes, recovery rotations, URL renames.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+            FSGhostButton(label = "Open audit log", onClick = { nav.navigate("audit-log") })
+        }
+    }
+    Spacer(Modifier.height(FS.space.s3))
     if (recentRows.isEmpty()) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Text("No recent activity.", color = FS.colors.textMuted)

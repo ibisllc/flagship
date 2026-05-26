@@ -105,6 +105,21 @@ object AuthCodeRevoke {
             .joinToString("|").toByteArray()
 }
 
+/** Release a reserved server name so it can be claimed again. An
+ *  abandoned/failed install leaves the name pinned by its RCK routing
+ *  record; revoking the auth-code alone doesn't free it. The IRK-signed
+ *  envelope POSTs to `.com`'s `/api/server/release`, which drops the
+ *  routing record + active auth-codes + the server record. The
+ *  protocol-level tag matches packages/protocol/src/auth.ts
+ *  `TAG_RELEASE_SERVER_NAME` (`tag|username|serverDomain|issuedAt`) +
+ *  the iOS `ReleaseServerName.canonicalBytes` byte-for-byte. */
+object ReleaseServerName {
+    const val CANONICAL_TAG = "flagship/release-server-name/v1"
+    fun canonicalBytes(username: String, serverDomain: String, issuedAt: Long): ByteArray =
+        listOf(CANONICAL_TAG, username, serverDomain, issuedAt.toString())
+            .joinToString("|").toByteArray()
+}
+
 /** V3 — Service URL-stem rename envelope. Signed by the user's CURRENT
  *  IRK. The internal serviceId is preserved across renames; only the
  *  user-visible newDisplayLabel changes. Mirrors

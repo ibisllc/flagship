@@ -71,6 +71,14 @@ fun SettingsScreen(nav: NavController) {
 
         Spacer(Modifier.height(FS.space.s6))
 
+        // P7 — dedicated tier-status / subscription screen. Mirrors the
+        // iOS SettingsScreen subscription nav row + webapp tier-status.js.
+        SettingsRow(
+            label = "Plan / Subscription",
+            description = "Tier, LLM credits, dispatcher usage, custom domains, reserved names.",
+        ) {
+            nav.navigate("tier-status")
+        }
         SettingsRow(label = "AI providers", description = "BYO LLM provider keys (Anthropic, OpenAI, Google, Groq, Ollama).") {
             nav.navigate("providers")
         }

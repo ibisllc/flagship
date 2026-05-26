@@ -25,7 +25,9 @@ import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.AuthCodeRevoke as AuthCodeRevokeBytes
+import com.flagshipserver.app.core.ReleaseServerName as ReleaseServerNameBytes
 import com.flagshipserver.app.api.AuthCodeRevokeRequest
+import com.flagshipserver.app.api.ReleaseServerNameRequest
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -81,28 +83,63 @@ fun PendingServerScreen(pod: PodInfo, onCancel: () -> Unit) {
             label = "Cancel order",
             onClick = {
                 scope.launch {
-                    val serial = pod.pendingAuthCodeSerial
                     val username = app.currentUser.value
-                    if (serial != null && username != null) {
-                        try {
-                            val irk = Keystore.deriveIRK("Cancel order for ${pod.name}")
-                            val now = System.currentTimeMillis()
-                            val canonical = AuthCodeRevokeBytes.canonicalBytes(serial, username, now)
-                            val sig = HexUtil.encode(irk.sign(canonical))
-                            flagshipServer.revokeAuthCode(
-                                AuthCodeRevokeRequest(
-                                    request = AuthCodeRevokeRequest.Inner(
-                                        serial = serial, username = username, issuedAt = now,
-                                    ),
-                                    signature = sig,
-                                ),
-                            )
-                            toasts.success("Order cancelled.")
-                        } catch (_: Throwable) {
-                            toasts.warning("Couldn't reach .com — local pod will be dropped anyway.")
-                        }
+                    if (username == null) {
+                        // No account context — nothing to release; just drop
+                        // the local placeholder.
+                        onCancel()
+                        return@launch
                     }
-                    onCancel()
+                    // Mirrors webapp `cancelServer` + iOS HomeTab.cancelOrder:
+                    // FIRST release the name (the IRK-signed
+                    // ReleaseServerName → /api/server/release un-pins the
+                    // routing record so the name can be re-used), THEN
+                    // belt-and-braces revoke the install auth-code. If the
+                    // release fails we surface the error and KEEP the pod —
+                    // dropping it locally would strand the name as
+                    // still-reserved.
+                    try {
+                        val irk = Keystore.deriveIRK("Cancel server ${pod.name}")
+                        val now = System.currentTimeMillis()
+                        // 1. Release the name. serverDomain =
+                        // <server>.<user>.flagship.services, held on the pod
+                        // as its fqdn.
+                        val releaseBytes = ReleaseServerNameBytes.canonicalBytes(username, pod.fqdn, now)
+                        val releaseSig = HexUtil.encode(irk.sign(releaseBytes))
+                        flagshipServer.releaseServerName(
+                            ReleaseServerNameRequest(
+                                request = ReleaseServerNameRequest.Inner(
+                                    username = username, serverDomain = pod.fqdn, issuedAt = now,
+                                ),
+                                signature = releaseSig,
+                            ),
+                        )
+                        // 2. Belt-and-braces auth-code revoke. The release
+                        // already revoked active codes server-side; 403/404
+                        // (already gone) is treated as success by the client.
+                        val serial = pod.pendingAuthCodeSerial
+                        if (serial != null) {
+                            val revokeBytes = AuthCodeRevokeBytes.canonicalBytes(serial, username, now)
+                            val revokeSig = HexUtil.encode(irk.sign(revokeBytes))
+                            runCatching {
+                                flagshipServer.revokeAuthCode(
+                                    AuthCodeRevokeRequest(
+                                        request = AuthCodeRevokeRequest.Inner(
+                                            serial = serial, username = username, issuedAt = now,
+                                        ),
+                                        signature = revokeSig,
+                                    ),
+                                )
+                            }
+                        }
+                        toasts.success("Server \"${pod.name}\" cancelled — the name is free again.")
+                        onCancel()
+                    } catch (_: Throwable) {
+                        // Keep the pod: the name is still reserved, so
+                        // dropping it locally would just hide a name the
+                        // user can't re-use.
+                        toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
+                    }
                 }
             },
             block = true,
