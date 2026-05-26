@@ -12,9 +12,15 @@ final class OnboardingSmokeTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// Smoke: cold-launch → onboarding → home. Uses the Skip button so
-    /// the relay WebSocket isn't required.
-    func test_coldLaunchWalksFromWelcomeToHome() throws {
+    /// Smoke: cold-launch → onboarding → the create-server flow reaches the
+    /// match page via the MOCK relay. In mock mode (the Debug default) the
+    /// "Use a demo QR" button generates a valid QR locally and runs the REAL
+    /// flow against the mock backend — no relay WebSocket / desktop QR needed.
+    /// (Replaces the removed "Skip — pretend it's already running" shortcut.)
+    /// Stops at the match page so the assertion needs no Keystore/biometric
+    /// (that only kicks in at confirm/mint); the full mint→deliver path is
+    /// covered by the unit suite.
+    func test_coldLaunchReachesCreateServerMatch() throws {
         let app = XCUIApplication()
         app.launch()
 
@@ -30,18 +36,26 @@ final class OnboardingSmokeTests: XCTestCase {
         usernameField.typeText("harry")
         app.buttons["Continue"].tap()
 
-        // 3. CreateServer — fill name, tap Skip.
+        // 3. CreateServer — fill name, Continue to the QR step.
         let nameField = app.textFields.matching(identifier: "cs-name-field").firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.tap()
         nameField.typeText("Home")
-        let skip = app.buttons["cs-skip-button"]
-        XCTAssertTrue(skip.waitForExistence(timeout: 3))
-        skip.tap()
+        let cont = app.buttons["cs-continue-button"]
+        XCTAssertTrue(cont.waitForExistence(timeout: 3))
+        cont.tap()
 
-        // 4. Home — should render the welcome card.
-        XCTAssertTrue(app.staticTexts["Welcome back,"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["harry."].exists)
+        // 4. Scan page — use the mock-mode demo QR to drive the real flow.
+        let demoQr = app.buttons["cs-demo-qr-button"]
+        XCTAssertTrue(demoQr.waitForExistence(timeout: 3),
+                      "Mock mode must surface the demo-QR shortcut.")
+        demoQr.tap()
+
+        // 5. The mock relay acks → the 6-digit match page appears.
+        let match = app.otherElements.matching(identifier: "cs-match-label").firstMatch
+        let matchText = app.staticTexts.matching(identifier: "cs-match-label").firstMatch
+        XCTAssertTrue(match.waitForExistence(timeout: 8) || matchText.waitForExistence(timeout: 1),
+                      "Demo QR should drive through the mock relay to the match page.")
     }
 
     /// QR-relay path: paste a QR URL → mock relay acks → SAS code visible.

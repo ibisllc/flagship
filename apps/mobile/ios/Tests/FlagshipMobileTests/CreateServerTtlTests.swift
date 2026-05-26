@@ -29,6 +29,22 @@ final class CreateServerTtlTests: XCTestCase {
         XCTAssertEqual(vm.recipeTtlMs, 6 * 60 * 60_000)
     }
 
+    /// The mock-mode "Use a demo QR" affordance (which replaced the removed
+    /// "Skip — pretend it's already running" shortcut) must drive the REAL flow
+    /// against the mock backend: design → scan → a locally-generated demo QR →
+    /// the mock relay acks → the match page. (Stops at .matching; confirm/mint
+    /// needs Keystore, exercised elsewhere.)
+    func testDemoQrDrivesRealFlowToMatchViaMocks() async throws {
+        let vm = makeVM()
+        vm.name = "Home"
+        vm.continueToScan()
+        await vm.qrDetected(QrRelay.makeDemoQrUrl())
+        guard case .matching(let code, _) = vm.phase else {
+            return XCTFail("expected .matching after the demo QR, got \(vm.phase)")
+        }
+        XCTAssertEqual(code.count, 6)
+    }
+
     func testSetRecipeTtlHoursClampsToFiveMinutes() {
         let vm = makeVM()
         vm.setRecipeTtlHours(0.0)  // way below 5 min

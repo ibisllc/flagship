@@ -29,6 +29,29 @@ final class QrRelayProtocolTests: XCTestCase {
         XCTAssertThrowsError(try QrRelay.parseQrUrl(""))
     }
 
+    // MARK: - Demo QR (mock / UI-testing)
+
+    func test_makeDemoQrUrlRoundTripsThroughParse() throws {
+        // The mock-mode "Use a demo QR" affordance must produce a URL the real
+        // flow accepts (a fresh 32-byte browser key + a non-empty sid), so the
+        // full create-server flow runs against the mock backend.
+        let url = QrRelay.makeDemoQrUrl()
+        XCTAssertTrue(url.hasPrefix("https://flagshipserver.com/qr?s="))
+        let s = try QrRelay.parseQrUrl(url)
+        XCTAssertFalse(s.sid.isEmpty)
+        XCTAssertEqual(s.browserPublicKey.count, 32)
+        // Distinct each call (fresh ephemeral key + random sid).
+        XCTAssertNotEqual(QrRelay.makeDemoQrUrl(), QrRelay.makeDemoQrUrl())
+    }
+
+    func test_demoQrDerivesAMatchCode() throws {
+        // It must also drive the local X25519 derivation (the match page).
+        let s = try QrRelay.parseQrUrl(QrRelay.makeDemoQrUrl())
+        let phoneSk = Curve25519.KeyAgreement.PrivateKey()
+        let m = try QrRelay.deriveMaterial(phonePrivateKey: phoneSk, browserPublicKey: s.browserPublicKey)
+        XCTAssertEqual(m.matchCode.count, 6)
+    }
+
     func test_rejectsKeyOfWrongLength() {
         XCTAssertThrowsError(try QrRelay.parseQrUrl("s=a&k=AAAA"))
     }

@@ -182,9 +182,6 @@ public struct HomeTab: View {
                     // tapping it opens PendingServerScreen.
                     addPendingPod(name: name, description: description, fqdn: serverDomain, serial: serial)
                 },
-                onDemoComplete: { name, description in
-                    addOnlinePodAndDismiss(name: name, description: description)
-                },
                 onCancel: {
                     // User backed out before delivering — drop any
                     // pending state and head home.
@@ -228,7 +225,6 @@ public struct HomeTab: View {
 
 struct CreateServerContainer: View {
     let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
-    let onDemoComplete: (_ name: String, _ description: String) -> Void
     let onCancel: () -> Void
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.qrRelayClient) private var qrRelay
@@ -237,11 +233,9 @@ struct CreateServerContainer: View {
 
     init(
         onDelivered: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void,
-        onDemoComplete: @escaping (_ name: String, _ description: String) -> Void,
         onCancel: @escaping () -> Void = {}
     ) {
         self.onDelivered = onDelivered
-        self.onDemoComplete = onDemoComplete
         self.onCancel = onCancel
     }
 
@@ -258,7 +252,6 @@ struct CreateServerContainer: View {
                         let serial = vm.lastDeliveredSerial ?? ""
                         onDelivered(serverDomain, serial, name, description)
                     },
-                    onDemoComplete: onDemoComplete,
                     onCancel: onCancel
                 )
             } else {

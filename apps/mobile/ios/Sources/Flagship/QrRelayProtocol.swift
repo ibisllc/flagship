@@ -96,6 +96,20 @@ public enum QrRelay {
         return QrSession(sid: sid, browserPublicKey: pkRaw)
     }
 
+    /// Build a VALID demo QR URL for MOCK / UI-testing ONLY. Generates a fresh
+    /// ephemeral browser X25519 keypair + a random sid and formats it exactly
+    /// like the URL the browser shows. The phone-side flow derives a real match
+    /// code from it, and in MOCK mode the mock relay acks — so the full
+    /// create-server flow (connect → match → mint → deliver) runs end-to-end
+    /// against the mock backend without a desktop. The UI only surfaces this in
+    /// mock mode; it is never used against the live relay.
+    public static func makeDemoQrUrl() -> String {
+        let browserSk = Curve25519.KeyAgreement.PrivateKey()
+        let k = Base64URL.encode(browserSk.publicKey.rawRepresentation)
+        let sid = Base64URL.encode(Data((0..<9).map { _ in UInt8.random(in: 0...255) }))
+        return "https://\(qrUrlHost)/qr?s=\(sid)&k=\(k)"
+    }
+
     /// Run the local X25519 + HKDF on the phone side. The caller passes
     /// its freshly-generated private key (don't reuse — ephemeral) and
     /// the browser's raw public key from the QR URL. Output is the

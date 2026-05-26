@@ -10,20 +10,18 @@ import FlagshipCore
 /// list and see the same content (with a Cancel order button).
 public struct CreateServerStubScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(DeveloperSettings.self) private var dev
     @Bindable var vm: CreateServerViewModel
     var onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
-    var onDemoComplete: (_ name: String, _ description: String) -> Void = { _, _ in }
     var onCancel: () -> Void = {}
 
     public init(
         vm: CreateServerViewModel,
         onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
-        onDemoComplete: @escaping (_ name: String, _ description: String) -> Void = { _, _ in },
         onCancel: @escaping () -> Void = {}
     ) {
         self.vm = vm
         self.onDelivered = onDelivered
-        self.onDemoComplete = onDemoComplete
         self.onCancel = onCancel
     }
 
@@ -85,16 +83,6 @@ public struct CreateServerStubScreen: View {
                 vm.continueToScan()
             }
             .accessibilityIdentifier("cs-continue-button")
-
-            if vm.canAdvanceFromDesign {
-                FSGhostButton(
-                    "Skip — pretend it's already running",
-                    block: true
-                ) {
-                    onDemoComplete(vm.name, vm.description)
-                }
-                .accessibilityIdentifier("cs-skip-button")
-            }
         }
     }
 
@@ -239,6 +227,18 @@ public struct CreateServerStubScreen: View {
             }
             .accessibilityIdentifier("cs-paste-toggle")
             .padding(.top, FS.space.s2)
+
+            // MOCK mode only: no desktop QR needed. Generate a valid demo QR
+            // locally and run the REAL flow against the mock relay/server, so
+            // the whole create-server UI is testable end-to-end without infra.
+            // (Replaces the old "skip — pretend it's running" shortcut, which
+            // faked an online server instead of exercising the real flow.)
+            if !dev.useLiveClient {
+                FSGhostButton("Use a demo QR (mock)", block: true) {
+                    Task { await vm.qrDetected(QrRelay.makeDemoQrUrl()) }
+                }
+                .accessibilityIdentifier("cs-demo-qr-button")
+            }
 
             FSGhostButton("Back", block: true) { vm.phase = .design }
         }
