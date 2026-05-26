@@ -702,6 +702,35 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return CompanionRevokeResponse(ok: true)
     }
 
+    // MARK: - P14 Phase 2 companion write-relay (owner queue)
+
+    /// Overridable fixture for `companionPendingWrites()`. Nil → honest-empty
+    /// (`{ pending: [] }`), matching the daemon's behaviour when no
+    /// companion has queued an unsigned write.
+    public var companionPendingWritesFixture: CompanionPendingWritesResponse?
+
+    /// Records each `companionResolvePending(_:)` call so tests can
+    /// assert which request was resolved + with what outcome.
+    public private(set) var companionResolveCalls: [CompanionResolvePendingRequest] = []
+
+    public func companionPendingWrites() async throws -> CompanionPendingWritesResponse {
+        try await tick()
+        if let fixture = companionPendingWritesFixture { return fixture }
+        return CompanionPendingWritesResponse(pending: [])
+    }
+
+    public func companionResolvePending(_ req: CompanionResolvePendingRequest) async throws -> CompanionResolvePendingResponse {
+        try await tick()
+        companionResolveCalls.append(req)
+        if var fixture = companionPendingWritesFixture {
+            fixture = CompanionPendingWritesResponse(
+                pending: fixture.pending.filter { $0.requestId != req.requestId }
+            )
+            companionPendingWritesFixture = fixture
+        }
+        return CompanionResolvePendingResponse(ok: true, alreadyResolved: false)
+    }
+
     // MARK: - P8 browser-tab stream (mock WS)
 
     public var browserStreamsOpened: [String] = []

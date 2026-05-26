@@ -577,4 +577,30 @@ class MockScreensClient(
         companionRevokeCalls.add(req.tokenPrefix)
         return CompanionRevokeResponse(ok = true)
     }
+
+    // ---------- P14 Phase 2 companion write-relay (owner queue) -------
+
+    /** Overridable fixture for `companionPendingWrites()`. Null →
+     *  honest-empty default. Mirrors iOS `companionPendingWritesFixture`. */
+    var companionPendingWritesFixture: CompanionPendingWritesResponse? = null
+
+    /** Records each `companionResolvePending` call so tests can assert
+     *  which request was resolved + with what outcome. */
+    val companionResolveCalls: MutableList<CompanionResolvePendingRequest> = mutableListOf()
+
+    override suspend fun companionPendingWrites(): CompanionPendingWritesResponse {
+        tick()
+        return companionPendingWritesFixture ?: CompanionPendingWritesResponse(pending = emptyList())
+    }
+
+    override suspend fun companionResolvePending(req: CompanionResolvePendingRequest): CompanionResolvePendingResponse {
+        tick()
+        companionResolveCalls.add(req)
+        companionPendingWritesFixture?.let { fixture ->
+            companionPendingWritesFixture = fixture.copy(
+                pending = fixture.pending.filterNot { it.requestId == req.requestId },
+            )
+        }
+        return CompanionResolvePendingResponse(ok = true, alreadyResolved = false)
+    }
 }

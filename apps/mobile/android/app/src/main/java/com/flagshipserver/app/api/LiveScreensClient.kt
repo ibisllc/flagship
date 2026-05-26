@@ -217,6 +217,14 @@ class LiveScreensClient(
         return request("/api/screens/companion/revoke", CompanionRevokeResponse.serializer(), "POST", body)
     }
 
+    override suspend fun companionPendingWrites(): CompanionPendingWritesResponse =
+        request("/api/screens/companion/pending-writes", CompanionPendingWritesResponse.serializer())
+
+    override suspend fun companionResolvePending(req: CompanionResolvePendingRequest): CompanionResolvePendingResponse {
+        val body = json.encodeToString(CompanionResolvePendingRequest.serializer(), req).toByteArray()
+        return request("/api/screens/companion/resolve-pending", CompanionResolvePendingResponse.serializer(), "POST", body)
+    }
+
     /** SSE stream of install events. Frame format: `data: <json>\n\n` */
     override fun installEvents(serial: String): Flow<InstallEvent> = channelFlow {
         val base = base()

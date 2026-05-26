@@ -88,6 +88,11 @@ public enum SettingsRoute: Hashable, Sendable {
     /// read-only companion of the user's account; lists + revokes
     /// active companions.
     case companionDock
+    /// P14 Phase 2 — "Companion requests" inbox. Lists unsigned write
+    /// requests companions have forwarded to the owner; the owner
+    /// approves (which IRK-signs + dispatches the destination call) or
+    /// denies. Reached from Settings.
+    case companionRequests
 }
 
 /// The four top-level destinations. Both the iPhone TabView and the iPad

@@ -71,6 +71,12 @@ public struct SettingsScreen: View {
     var onOpenPeerBackup: () -> Void = {}
     /// P14 — open the "Dock a browser" companion-pairing screen.
     var onOpenCompanionDock: () -> Void = {}
+    /// P14 Phase 2 — open the Companion-requests inbox. The badge count
+    /// next to the row reflects `pendingCompanionWritesCount`.
+    var onOpenCompanionRequests: () -> Void = {}
+    /// P14 Phase 2 — count of pending companion-forwarded writes. Drives
+    /// the badge on the Companion-requests nav row.
+    var pendingCompanionWritesCount: Int = 0
     var onOpenAbout: () -> Void = {}
     var onOpenDeveloper: () -> Void = {}
     var onOpenPrivacy: () -> Void = {}
@@ -114,6 +120,8 @@ public struct SettingsScreen: View {
         onOpenProfiles: @escaping () -> Void = {},
         onOpenPeerBackup: @escaping () -> Void = {},
         onOpenCompanionDock: @escaping () -> Void = {},
+        onOpenCompanionRequests: @escaping () -> Void = {},
+        pendingCompanionWritesCount: Int = 0,
         onOpenAbout: @escaping () -> Void = {},
         onOpenDeveloper: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
@@ -143,6 +151,8 @@ public struct SettingsScreen: View {
         self.onOpenProfiles = onOpenProfiles
         self.onOpenPeerBackup = onOpenPeerBackup
         self.onOpenCompanionDock = onOpenCompanionDock
+        self.onOpenCompanionRequests = onOpenCompanionRequests
+        self.pendingCompanionWritesCount = pendingCompanionWritesCount
         self.onOpenAbout = onOpenAbout
         self.onOpenDeveloper = onOpenDeveloper
         self.onOpenPrivacy = onOpenPrivacy
@@ -586,6 +596,14 @@ public struct SettingsScreen: View {
                 linkRow("Back up your account key", subtitle: "Save an encrypted key file", icon: "doc.badge.arrow.up.fill", c: c, action: onOpenKeyfileBackup)
                 linkRow("Profiles", subtitle: "Switch between your clouds", icon: "person.2.circle.fill", c: c, action: onOpenProfiles)
                 linkRow("Dock a browser", subtitle: "Read-only desktop companion (4h)", icon: "laptopcomputer", c: c, action: onOpenCompanionDock)
+                linkRow(
+                    "Companion requests",
+                    subtitle: companionRequestsSubtitle,
+                    icon: "tray.full",
+                    c: c,
+                    badge: pendingCompanionWritesCount > 0 ? pendingCompanionWritesCount : nil,
+                    action: onOpenCompanionRequests
+                )
                 linkRow("Peer-backup", subtitle: "Shard health across peers", icon: "externaldrive.connected.to.line.below.fill", c: c, action: onOpenPeerBackup)
                 linkRow("Privacy", subtitle: "Face ID lock, app-level gating", icon: "lock.shield.fill", c: c, action: onOpenPrivacy)
                 linkRow("About Flagship", subtitle: "Version, license, source", icon: "info.circle.fill", c: c, action: onOpenAbout)
@@ -650,7 +668,7 @@ public struct SettingsScreen: View {
             .padding(.top, FS.space.s4)
     }
 
-    private func linkRow(_ title: String, subtitle: String, icon: String, c: FSColors, action: @escaping () -> Void) -> some View {
+    private func linkRow(_ title: String, subtitle: String, icon: String, c: FSColors, badge: Int? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             FSCard {
                 HStack {
@@ -660,11 +678,27 @@ public struct SettingsScreen: View {
                         Text(subtitle).font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                     Spacer()
+                    if let badge, badge > 0 {
+                        Text("\(badge)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(c.danger)
+                            .clipShape(Capsule())
+                            .accessibilityIdentifier("settings-link-badge-\(title)")
+                    }
                     Image(systemName: "chevron.right").foregroundColor(c.textMuted)
                 }
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var companionRequestsSubtitle: String {
+        if pendingCompanionWritesCount == 0 { return "Approve writes from docked browsers" }
+        if pendingCompanionWritesCount == 1 { return "1 pending write from a docked browser" }
+        return "\(pendingCompanionWritesCount) pending writes from docked browsers"
     }
 
     @ViewBuilder

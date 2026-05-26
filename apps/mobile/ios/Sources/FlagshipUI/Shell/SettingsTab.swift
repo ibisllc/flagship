@@ -20,6 +20,8 @@ public struct SettingsTab: View {
     @State private var replaceToast: String?
     @State private var wipeVm: WipeRestartViewModel?
     @State private var wipeToast: String?
+    @State private var companionRequestsVm: CompanionRequestsViewModel?
+    @State private var pendingCompanionCount: Int = 0
 
     public init() {}
 
@@ -91,6 +93,8 @@ public struct SettingsTab: View {
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
                     onOpenCompanionDock: { path.append(.companionDock) },
+                    onOpenCompanionRequests: { path.append(.companionRequests) },
+                    pendingCompanionWritesCount: pendingCompanionCount,
                     onOpenAbout: { path.append(.about) },
                     onOpenDeveloper: { path.append(.developer) },
                     onOpenPrivacy: { path.append(.privacy) },
@@ -200,6 +204,22 @@ public struct SettingsTab: View {
             }
             if case .idle = vm?.tier { await vm?.load() }
         }
+        .task {
+            await refreshCompanionPendingCount()
+        }
+    }
+
+    /// One-shot fetch of the pending companion-write count so the
+    /// Settings nav row can render a badge. Best-effort: a daemon that
+    /// doesn't implement the endpoint yet silently leaves the badge at
+    /// 0 instead of surfacing an error.
+    private func refreshCompanionPendingCount() async {
+        do {
+            let r = try await client.companionPendingWrites()
+            pendingCompanionCount = r.pending.count
+        } catch {
+            pendingCompanionCount = 0
+        }
     }
 
     @ViewBuilder
@@ -293,7 +313,52 @@ public struct SettingsTab: View {
                 podBaseUrl: app.currentPod.map { CompanionTicketURL.podBaseUrl(forFqdn: $0.fqdn) },
                 username: app.currentUser ?? ""
             )
+        case .companionRequests:
+            CompanionRequestsContainer(
+                vm: $companionRequestsVm,
+                onPendingCountChanged: { count in pendingCompanionCount = count }
+            )
         }
+    }
+}
+
+/// P14 Phase 2 — container that owns the CompanionRequestsViewModel
+/// lifecycle so the SettingsTab can navigate to it without keeping the
+/// VM alive after pop. Mirrors PostRecoveryContainer's shape.
+struct CompanionRequestsContainer: View {
+    @Environment(\.screensClient) private var client
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @Binding var vm: CompanionRequestsViewModel?
+    var onPendingCountChanged: (Int) -> Void = { _ in }
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                CompanionRequestsScreen(vm: vm)
+                    .onChange(of: countFor(vm.state)) { _, newValue in
+                        onPendingCountChanged(newValue)
+                    }
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil {
+                vm = CompanionRequestsViewModel(
+                    client: client,
+                    server: server,
+                    username: { [app] in app.currentUser }
+                )
+            }
+            if case .idle = vm?.state { await vm?.load() }
+        }
+    }
+
+    private func countFor(_ state: LoadingState<[CompanionPendingWrite]>) -> Int {
+        if case .loaded(let rows) = state { return rows.count }
+        return 0
     }
 }
 

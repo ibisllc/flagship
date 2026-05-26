@@ -256,6 +256,17 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         return try await request("/api/screens/companion/revoke", method: "POST", body: body)
     }
 
+    // MARK: - P14 Phase 2 companion write-relay (owner queue)
+
+    public func companionPendingWrites() async throws -> CompanionPendingWritesResponse {
+        try await request("/api/screens/companion/pending-writes")
+    }
+
+    public func companionResolvePending(_ req: CompanionResolvePendingRequest) async throws -> CompanionResolvePendingResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/companion/resolve-pending", method: "POST", body: body)
+    }
+
     // MARK: - P8 browser-tab framebuffer stream
 
     public func browserTabStream(tabId: String) -> any BrowserStream {

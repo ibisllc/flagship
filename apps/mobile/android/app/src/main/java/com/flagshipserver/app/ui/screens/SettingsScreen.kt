@@ -3,19 +3,24 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -23,14 +28,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
@@ -113,6 +124,9 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "Dock a browser", description = "Scan a one-time QR from a desktop browser to view your cloud read-only for 4 hours.") {
             nav.navigate("companion-dock")
         }
+        // P14 Phase 2 — companion-requests inbox. Badge reflects the
+        // pending count fetched once when this screen appears.
+        CompanionRequestsRow(nav)
         // P9 — peer-backup management.
         SettingsRow(label = "Peer-backup", description = "Shard health across peers + repair status.") {
             nav.navigate("peer-backup")
@@ -231,13 +245,52 @@ fun SettingsScreen(nav: NavController) {
 }
 
 @Composable
-private fun SettingsRow(label: String, description: String, onClick: () -> Unit) {
+private fun SettingsRow(label: String, description: String, badge: Int? = null, onClick: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column {
-            Text(label, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+                if (badge != null && badge > 0) {
+                    Spacer(Modifier.width(FS.space.s2))
+                    Text(
+                        text = badge.toString(),
+                        color = Color.White,
+                        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier
+                            .background(color = FS.colors.danger, shape = RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .semantics { contentDescription = "settings-link-badge-$label" },
+                    )
+                }
+            }
             Text(description, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
             FSGhostButton(label = "Open", onClick = onClick)
         }
     }
     Spacer(Modifier.height(FS.space.s2))
+}
+
+/** P14 Phase 2 — owns its own state so the count can refresh on
+ *  appearance without prop-drilling through SettingsScreen. */
+@Composable
+private fun CompanionRequestsRow(nav: NavController) {
+    val client = LocalScreensClient.current
+    var pending by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        pending = runCatching { client.companionPendingWrites() }
+            .map { it.pending.size }
+            .getOrDefault(0)
+    }
+    val description = when {
+        pending == 0 -> "Approve writes from docked browsers."
+        pending == 1 -> "1 pending write from a docked browser."
+        else -> "$pending pending writes from docked browsers."
+    }
+    SettingsRow(
+        label = "Companion requests",
+        description = description,
+        badge = pending.takeIf { it > 0 },
+    ) {
+        nav.navigate("companion-requests")
+    }
 }

@@ -94,6 +94,12 @@ interface ScreensClient {
     suspend fun companionList(): CompanionListResponse
     suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse
 
+    // P14 Phase 2 — owner-side companion write-relay queue. List the
+    // pending unsigned write-requests companions have forwarded; record
+    // an outcome once the owner signs + dispatches (or refuses).
+    suspend fun companionPendingWrites(): CompanionPendingWritesResponse
+    suspend fun companionResolvePending(req: CompanionResolvePendingRequest): CompanionResolvePendingResponse
+
     // P1.15 install-events SSE — streams provisioning progress
     fun installEvents(serial: String): Flow<InstallEvent>
 

@@ -57,6 +57,11 @@ sealed interface SettingsRoute {
      *  ticket as a QR; a desktop browser scans to become a 4-hour
      *  read-only companion. */
     data object CompanionDock : SettingsRoute
+
+    /** P14 Phase 2 — Settings → Companion requests. Inbox for unsigned
+     *  write requests companions have forwarded to the owner; the
+     *  owner approves (IRK-signs + dispatches) or denies. */
+    data object CompanionRequests : SettingsRoute
 }
 
 enum class RootDestination(val key: String, val label: String) {

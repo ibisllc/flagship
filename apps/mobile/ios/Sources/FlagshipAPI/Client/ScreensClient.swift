@@ -111,6 +111,12 @@ public protocol ScreensClient: Sendable {
     func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse
     func companionList() async throws -> CompanionListResponse
     func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse
+
+    // P14 Phase 2 — owner-side companion write-relay queue. List the
+    // pending unsigned write-requests companions have forwarded; record
+    // an outcome once the owner signs + dispatches (or refuses).
+    func companionPendingWrites() async throws -> CompanionPendingWritesResponse
+    func companionResolvePending(_ req: CompanionResolvePendingRequest) async throws -> CompanionResolvePendingResponse
 }
 
 public enum ScreensClientError: Error, LocalizedError, Sendable {

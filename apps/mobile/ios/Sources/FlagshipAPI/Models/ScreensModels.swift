@@ -482,6 +482,75 @@ public struct CompanionRevokeResponse: Codable, Equatable, Sendable {
     public init(ok: Bool) { self.ok = ok }
 }
 
+// MARK: - P14 Phase 2 — companion write-relay (owner-side queue)
+//
+// A companion may POST `/api/companion/request-write` with an unsigned
+// intent; the owner's phone polls `/api/screens/companion/pending-writes`,
+// signs + dispatches the destination call (releaseServerName /
+// revokeServer), then POSTs `/api/screens/companion/resolve-pending` to
+// record the outcome. The 403 gate on destination endpoints stays;
+// this surface is the explicit opt-in path companions take to ask the
+// owner to do the write.
+//
+// `intent` is dynamic JSON — its shape depends on `kind`. v1 kinds:
+//   - "release-server":  { username, serverDomain, issuedAt }
+//   - "revoke-server":   { userId, revokedServerId, reason, issuedAt }
+// Other kinds render as "Unsupported request kind" without auto-action.
+
+public struct CompanionPendingWrite: Codable, Equatable, Identifiable {
+    public let requestId: String
+    public let companionTokenPrefix: String
+    public let companionLabel: String?
+    public let kind: String
+    public let intent: [String: AnyCodable]
+    public let queuedAt: Int64
+    public let expiresAt: Int64
+
+    public var id: String { requestId }
+
+    public init(
+        requestId: String,
+        companionTokenPrefix: String,
+        companionLabel: String?,
+        kind: String,
+        intent: [String: AnyCodable],
+        queuedAt: Int64,
+        expiresAt: Int64
+    ) {
+        self.requestId = requestId
+        self.companionTokenPrefix = companionTokenPrefix
+        self.companionLabel = companionLabel
+        self.kind = kind
+        self.intent = intent
+        self.queuedAt = queuedAt
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct CompanionPendingWritesResponse: Codable, Equatable {
+    public let pending: [CompanionPendingWrite]
+    public init(pending: [CompanionPendingWrite]) { self.pending = pending }
+}
+
+public struct CompanionResolvePendingRequest: Codable, Equatable, Sendable {
+    public let requestId: String
+    /// "approved" | "denied"
+    public let outcome: String
+    public init(requestId: String, outcome: String) {
+        self.requestId = requestId
+        self.outcome = outcome
+    }
+}
+
+public struct CompanionResolvePendingResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let alreadyResolved: Bool?
+    public init(ok: Bool, alreadyResolved: Bool? = nil) {
+        self.ok = ok
+        self.alreadyResolved = alreadyResolved
+    }
+}
+
 // MARK: - AnyCodable (used for free-form manifest fields + order responses)
 
 public struct AnyCodable: Codable {

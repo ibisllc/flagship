@@ -167,4 +167,10 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse {
         try await real.companionRevoke(req)
     }
+    func companionPendingWrites() async throws -> CompanionPendingWritesResponse {
+        try await real.companionPendingWrites()
+    }
+    func companionResolvePending(_ req: CompanionResolvePendingRequest) async throws -> CompanionResolvePendingResponse {
+        try await real.companionResolvePending(req)
+    }
 }

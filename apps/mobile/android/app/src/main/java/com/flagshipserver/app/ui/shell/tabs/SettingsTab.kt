@@ -18,6 +18,7 @@ import com.flagshipserver.app.ui.screens.AccountSecurityScreen
 import com.flagshipserver.app.ui.screens.AddControlDeviceScreen
 import com.flagshipserver.app.ui.screens.AddDeviceScreen
 import com.flagshipserver.app.ui.screens.CompanionDockScreen
+import com.flagshipserver.app.ui.screens.CompanionRequestsScreen
 import com.flagshipserver.app.ui.screens.JoinDeviceScreen
 import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import java.net.URLDecoder
@@ -101,5 +102,7 @@ fun SettingsTab() {
         composable("peer-backup") { PeerBackupScreen(nav) }
         // P14 — companion-dock (dock a browser).
         composable("companion-dock") { CompanionDockScreen(nav) }
+        // P14 Phase 2 — companion-requests inbox.
+        composable("companion-requests") { CompanionRequestsScreen(nav) }
     }
 }

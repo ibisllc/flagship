@@ -10,6 +10,7 @@ package com.flagshipserver.app.api
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 // ---------- Shared shapes ----------------------------------------------
 
@@ -616,3 +617,43 @@ data class CompanionRevokeRequest(val tokenPrefix: String)
 
 @Serializable
 data class CompanionRevokeResponse(val ok: Boolean)
+
+// ---------- P14 Phase 2 — companion write-relay (owner queue) ---------
+//
+// A companion may POST `/api/companion/request-write` with an unsigned
+// intent; the owner's app polls `/api/screens/companion/pending-writes`,
+// signs + dispatches the destination call (releaseServerName /
+// revokeServer), then POSTs `/api/screens/companion/resolve-pending` to
+// mark the row approved/denied.
+//
+// `intent` is dynamic JSON keyed off `kind`. v1 kinds:
+//   - "release-server":  { username, serverDomain, issuedAt }
+//   - "revoke-server":   { userId, revokedServerId, reason, issuedAt }
+// Other kinds render as "Unsupported request kind" without auto-action.
+
+@Serializable
+data class CompanionPendingWrite(
+    val requestId: String,
+    val companionTokenPrefix: String,
+    val companionLabel: String? = null,
+    val kind: String,
+    val intent: JsonObject,
+    val queuedAt: Long,
+    val expiresAt: Long,
+)
+
+@Serializable
+data class CompanionPendingWritesResponse(val pending: List<CompanionPendingWrite>)
+
+@Serializable
+data class CompanionResolvePendingRequest(
+    val requestId: String,
+    /** "approved" | "denied" */
+    val outcome: String,
+)
+
+@Serializable
+data class CompanionResolvePendingResponse(
+    val ok: Boolean,
+    val alreadyResolved: Boolean? = null,
+)
