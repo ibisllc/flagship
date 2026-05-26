@@ -44,6 +44,7 @@ public struct ServerDetailScreen: View {
                     deviceRow(d: d, c: c)
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     timeline(d: d, c: c)
+                    DangerZoneCard(serverDomain: d.serverFqdn)
                 }
                 Spacer().frame(height: FS.space.s12)
             }
@@ -295,6 +296,171 @@ struct BootUnlockCard: View {
             toasts.success("Auto-unlock disabled. This box will ask your phone on its next reboot.")
         } catch {
             toasts.error("Couldn't disable auto-unlock: \(error.localizedDescription)")
+        }
+    }
+}
+
+/// P13 — per-server danger zone. Exposes a single "Revoke this server"
+/// button that opens a sheet with a reason picker + a hold-to-confirm
+/// primary. Pure presentation; the signing+POST live in
+/// `RevokeServerViewModel`.
+struct DangerZoneCard: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
+
+    let serverDomain: String
+
+    @State private var showSheet = false
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("DANGER ZONE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Revoke this server when the box is lost, stolen, or being decommissioned. The box will refuse to boot — this cannot be undone.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    FSDangerButton("Revoke this server", block: true) {
+                        showSheet = true
+                    }
+                    .accessibilityIdentifier("sd-revoke-server")
+                }
+            }
+        }
+        .sheet(isPresented: $showSheet) {
+            RevokeServerSheet(
+                serverDomain: serverDomain,
+                username: { app.currentUser },
+                server: server,
+                onCompleted: { toasts.success("Server revoked. It will refuse to boot next time.") },
+                onFailed: { msg in toasts.error("Revoke failed: \(msg)") }
+            )
+        }
+    }
+}
+
+/// Sheet body for P13. Reason picker + hold-to-confirm primary
+/// (1.5s long-press, per docs/revocation-ui.md). The visible button
+/// label tracks press progress so the user gets a clear "Hold to
+/// confirm" affordance.
+struct RevokeServerSheet: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
+
+    let serverDomain: String
+    let username: () -> String?
+    let server: any FlagshipServerClient
+    let onCompleted: () -> Void
+    let onFailed: (String) -> Void
+
+    @State private var reason: RevokeServerViewModel.Reason = .stolen
+    @State private var vm: RevokeServerViewModel?
+    @State private var holding = false
+
+    /// Long-press duration. Pinned to docs/revocation-ui.md (1.5s).
+    static let holdSeconds: Double = 1.5
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        NavigationStack {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Revoke this server?")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(c.text)
+                Text("Bricks the box on next boot — this cannot be undone. \(serverDomain) will refuse to start. Other servers on your account stay running.")
+                    .font(FS.font.body())
+                    .foregroundColor(c.textMuted)
+
+                Text("REASON")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1)
+                    .foregroundColor(c.textMuted)
+                    .padding(.top, FS.space.s2)
+
+                Picker("Reason", selection: $reason) {
+                    ForEach(RevokeServerViewModel.Reason.allCases, id: \.self) { r in
+                        Text(r.label).tag(r)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("revoke-reason-picker")
+
+                Spacer()
+
+                if let vm, case .failed(let msg) = vm.phase {
+                    Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
+                }
+
+                // Primary: a long-press button. Tap-and-hold for 1.5s
+                // to confirm. A short tap does nothing destructive.
+                Button(action: {}) {
+                    Text(buttonLabel)
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .foregroundColor(c.danger)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: FS.radius.md)
+                                .stroke(c.danger, lineWidth: 1)
+                        )
+                }
+                .accessibilityIdentifier("revoke-confirm-hold")
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: Self.holdSeconds)
+                        .onChanged { _ in holding = true }
+                        .onEnded { _ in
+                            holding = false
+                            Task { await fire() }
+                        }
+                )
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 0)
+                        .onEnded { _ in holding = false }
+                )
+                .disabled(isPosting)
+
+                FSGhostButton("Cancel", block: true) { dismiss() }
+                    .padding(.bottom, FS.space.s2)
+            }
+            .padding(FS.space.s4)
+        }
+    }
+
+    private var isPosting: Bool {
+        if let p = vm?.phase, case .posting = p { return true }
+        if let p = vm?.phase, case .signing = p { return true }
+        return false
+    }
+
+    private var buttonLabel: String {
+        if isPosting { return "Revoking…" }
+        if holding { return "Hold to confirm…" }
+        return "Hold to revoke"
+    }
+
+    @MainActor
+    private func fire() async {
+        let m = vm ?? RevokeServerViewModel(
+            server: server,
+            serverDomain: serverDomain,
+            username: username
+        )
+        vm = m
+        await m.run(reason: reason)
+        switch m.phase {
+        case .completed:
+            onCompleted()
+            dismiss()
+        case .failed(let msg):
+            onFailed(msg)
+        default:
+            break
         }
     }
 }

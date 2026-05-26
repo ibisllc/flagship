@@ -173,6 +173,35 @@ public enum ReleaseServerName {
     }
 }
 
+/// P13 — per-server kill-switch envelope. Signed by the account IRK
+/// to declare a server DEAD on its next boot. Unlike ReleaseServerName
+/// (which frees the name so it can be re-claimed), this is the
+/// "brick the box" path used when a phone/box is lost, stolen, or
+/// being decommissioned. The protocol-level tag matches
+/// packages/protocol/src/auth.ts `TAG_REVOKE`
+/// (`tag|userId|revokedServerId|reason|issuedAt`).
+public enum ServerRevocationClaim {
+    public static let canonicalTag = "flagship/revoke/v1"
+    /// Fixed reason vocabulary. Must match @flagship/protocol
+    /// `RevocationReason` + the Android `ServerRevocationClaim.REASONS`
+    /// + the webapp `REVOCATION_REASONS` constant.
+    public static let reasons = ["lost", "stolen", "decommissioned"]
+    public static func canonicalBytes(
+        userId: String,
+        revokedServerId: String,
+        reason: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            userId,
+            revokedServerId,
+            reason,
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
 /// B7 — Re-pair initiate envelope. Signed by the NEW IRK over a
 /// claim that includes the OLD IRK pubkey (for .com's snapshot
 /// match) + the NEW pubkey + a freshness timestamp. Mirrors

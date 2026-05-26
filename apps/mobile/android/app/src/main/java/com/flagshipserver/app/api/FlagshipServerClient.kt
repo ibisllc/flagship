@@ -28,6 +28,12 @@ interface FlagshipServerClient {
      *  TICKET, this un-pins the name itself (routing record + active
      *  auth-codes + server record). Mirrors webapp `releaseServerName`. */
     suspend fun releaseServerName(req: ReleaseServerNameRequest)
+    /** P13 — per-server kill-switch. IRK-signed `ServerRevocation`
+     *  envelope POSTed to /api/server-registry/revoke. The server
+     *  refuses to boot on its next reboot — irreversible. Reason ∈
+     *  {"lost","stolen","decommissioned"}. Mirrors the webapp
+     *  `revokeServer` + the iOS `revokeServer` shape. */
+    suspend fun revokeServer(req: ServerRevocationRequest)
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
     suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse
     suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope
@@ -582,6 +588,26 @@ data class ReleaseServerNameRequest(
     )
 }
 
+/** P13 — POST /api/server-registry/revoke. IRK-signed envelope that
+ *  declares a server DEAD (kill switch). The box will refuse to boot
+ *  on its next reboot — irreversible. Mirrors the canonical-bytes tag
+ *  `flagship/revoke/v1` (`tag|userId|revokedServerId|reason|issuedAt`)
+ *  + the @flagship/protocol `ServerRevocation` shape. */
+@Serializable
+data class ServerRevocationRequest(
+    val request: Inner,
+    val signature: String,           // hex, IRK
+) {
+    @Serializable
+    data class Inner(
+        val userId: String,
+        val revokedServerId: String,
+        /** One of {"lost", "stolen", "decommissioned"}. */
+        val reason: String,
+        val issuedAt: Long,
+    )
+}
+
 @Serializable
 data class RckRegisterRequest(
     val request: Inner,
@@ -831,6 +857,7 @@ class MockFlagshipServerClient(
     private val _issuedAuthCodes = mutableMapOf<String, AuthCodeWire>()  // serial → wire
     private val _revokedAuthCodes = mutableSetOf<String>()
     private val _releasedServerNames = mutableListOf<ReleaseServerNameRequest>()
+    private val _revokedServers = mutableListOf<ServerRevocationRequest>()
     private val _registeredRcks = mutableMapOf<String, String>()         // subdomain → rckPubKey
     private val _registeredPushTokens = mutableMapOf<String, PushTokenRegisterRequest.Inner>()
     private var nextPushTokenId = 1
@@ -839,6 +866,7 @@ class MockFlagshipServerClient(
     val issuedAuthCodes: Map<String, AuthCodeWire> get() = _issuedAuthCodes
     val revokedAuthCodes: Set<String> get() = _revokedAuthCodes
     val releasedServerNames: List<ReleaseServerNameRequest> get() = _releasedServerNames
+    val revokedServers: List<ServerRevocationRequest> get() = _revokedServers
     val registeredRcks: Map<String, String> get() = _registeredRcks
     val registeredPushTokens: Map<String, PushTokenRegisterRequest.Inner> get() = _registeredPushTokens
 
@@ -873,6 +901,11 @@ class MockFlagshipServerClient(
     override suspend fun releaseServerName(req: ReleaseServerNameRequest) {
         tick()
         _releasedServerNames += req
+    }
+
+    override suspend fun revokeServer(req: ServerRevocationRequest) {
+        tick()
+        _revokedServers += req
     }
 
     override suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse {
@@ -1490,6 +1523,17 @@ class LiveFlagshipServerClient(
         transport.postJson(
             "$base/api/server/release", req,
             serializer = ReleaseServerNameRequest.serializer(),
+        )
+    }
+
+    override suspend fun revokeServer(req: ServerRevocationRequest) {
+        // P13 — the matching `.com` Worker route is not yet wired (a
+        // precedent endpoint exists on the apps/web Fastify server).
+        // The URL path is fixed per the orchestrator handoff so the
+        // wire shape is ready once the Worker handler lands.
+        transport.postJson(
+            "$base/api/server-registry/revoke", req,
+            serializer = ServerRevocationRequest.serializer(),
         )
     }
 

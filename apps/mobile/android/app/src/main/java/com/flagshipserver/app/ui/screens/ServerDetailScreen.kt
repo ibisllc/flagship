@@ -6,7 +6,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,7 +17,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +52,7 @@ import com.flagshipserver.app.api.ServerMetricsResponse
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.SecretRequestCoordinator
 import com.flagshipserver.app.core.ServerSettingsStore
@@ -50,6 +66,9 @@ import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.launch
 import com.flagshipserver.app.viewmodels.HomeViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
+import com.flagshipserver.app.viewmodels.RevokeServerPhase
+import com.flagshipserver.app.viewmodels.RevokeServerReason
+import com.flagshipserver.app.viewmodels.RevokeServerViewModel
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -108,6 +127,8 @@ fun ServerDetailScreen(podId: String, onBack: () -> Unit) {
         (detail as? LoadingState.Loaded)?.let { d ->
             Spacer(Modifier.height(FS.space.s6))
             BootUnlockCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
+            DangerZoneCard(serverDomain = d.value.serverFqdn)
         }
 
         Spacer(Modifier.height(FS.space.s12))
@@ -326,4 +347,200 @@ private fun humanBytes(bytes: Long): String {
     var i = 0
     while (v >= k && i < units.lastIndex) { v /= k; i++ }
     return "%.1f %s".format(v, units[i])
+}
+
+// P13 — per-server danger zone. Exposes a single "Revoke this server"
+// button that opens a ModalBottomSheet with a reason picker + a
+// hold-to-confirm primary. The signing+POST lives in
+// RevokeServerViewModel. Mirror of iOS DangerZoneCard.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DangerZoneCard(serverDomain: String) {
+    val app = LocalAppState.current
+    val server = LocalFlagshipServerClient.current
+    val toasts = LocalToastCenter.current
+    val username by app.currentUser.collectAsState()
+    var showSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    Text(
+        "Danger zone",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Text(
+                "Revoke this server when the box is lost, stolen, or being decommissioned. The box will refuse to boot — this cannot be undone.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            )
+            FSDangerButton(
+                label = "Revoke this server",
+                onClick = { showSheet = true },
+                block = true,
+                modifier = Modifier.semantics { contentDescription = "sd-revoke-server" },
+            )
+        }
+    }
+
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = sheetState,
+        ) {
+            RevokeServerSheetBody(
+                serverDomain = serverDomain,
+                username = { username },
+                server = server,
+                onCompleted = {
+                    toasts.success("Server revoked. It will refuse to boot next time.")
+                    showSheet = false
+                },
+                onFailed = { msg ->
+                    toasts.error("Revoke failed: $msg")
+                },
+                onCancel = { showSheet = false },
+            )
+        }
+    }
+}
+
+@Composable
+private fun RevokeServerSheetBody(
+    serverDomain: String,
+    username: () -> String?,
+    server: com.flagshipserver.app.api.FlagshipServerClient,
+    onCompleted: () -> Unit,
+    onFailed: (String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var reason by remember { mutableStateOf(RevokeServerReason.STOLEN) }
+    val scope = rememberCoroutineScope()
+    val vm = remember(serverDomain) {
+        RevokeServerViewModel(
+            server = server,
+            serverDomain = serverDomain,
+            username = username,
+        )
+    }
+    val phase by vm.phase.collectAsState()
+    var holding by remember { mutableStateOf(false) }
+
+    Column(
+        Modifier.padding(FS.space.s4),
+        verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+    ) {
+        Text(
+            "Revoke this server?",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            "Bricks the box on next boot — this cannot be undone. $serverDomain will refuse to start. Other servers on your account stay running.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+        )
+
+        Text(
+            "Reason",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+            for (r in RevokeServerReason.entries) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = reason == r,
+                            onClick = { reason = r },
+                            enabled = !isBusy(phase),
+                        )
+                        .semantics {
+                            contentDescription = "revoke-reason-${r.wire}"
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = reason == r, onClick = { reason = r })
+                    Text(
+                        r.label,
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 15.sp),
+                    )
+                }
+            }
+        }
+
+        (phase as? RevokeServerPhase.Failed)?.let { f ->
+            Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+        }
+
+        // Primary: hold-to-confirm. 1.5s long-press fires the run.
+        // Pinned to docs/revocation-ui.md (must match iOS). A short
+        // tap does nothing destructive.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(FS.radius.md))
+                .pointerInput(reason, phase) {
+                    detectTapGestures(
+                        onPress = {
+                            if (isBusy(phase)) return@detectTapGestures
+                            holding = true
+                            var fired = false
+                            try {
+                                kotlinx.coroutines.withTimeout(REVOKE_HOLD_MS) {
+                                    tryAwaitRelease()
+                                }
+                                // Released before timeout → no-op (short tap).
+                            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+                                // Held 1.5s → fire the run.
+                                fired = true
+                            }
+                            holding = false
+                            if (fired) {
+                                scope.launch {
+                                    vm.run(reason)
+                                    when (val p = vm.phase.value) {
+                                        is RevokeServerPhase.Completed -> onCompleted()
+                                        is RevokeServerPhase.Failed -> onFailed(p.message)
+                                        else -> {}
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+                .semantics { contentDescription = "revoke-confirm-hold" },
+            contentAlignment = Alignment.Center,
+        ) {
+            FSDangerButton(
+                label = buttonLabel(phase, holding),
+                onClick = { /* hold-to-confirm — onClick is a no-op */ },
+                block = true,
+                enabled = !isBusy(phase),
+            )
+        }
+
+        FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+        Spacer(Modifier.height(FS.space.s2))
+    }
+}
+
+// P13 — hold-to-confirm duration. Pinned to docs/revocation-ui.md
+// (must match iOS RevokeServerSheet.holdSeconds).
+private const val REVOKE_HOLD_MS = 1500L
+
+private fun isBusy(p: RevokeServerPhase): Boolean = when (p) {
+    is RevokeServerPhase.Signing, is RevokeServerPhase.Posting -> true
+    else -> false
+}
+
+private fun buttonLabel(p: RevokeServerPhase, holding: Boolean): String = when {
+    p is RevokeServerPhase.Signing || p is RevokeServerPhase.Posting -> "Revoking…"
+    holding -> "Hold to confirm…"
+    else -> "Hold to revoke"
 }

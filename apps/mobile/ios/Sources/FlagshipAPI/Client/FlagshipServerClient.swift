@@ -31,6 +31,12 @@ public protocol FlagshipServerClient: Sendable {
     /// auth-codes + the server record. Unlike a bare auth-code revoke
     /// this un-pins the name itself. Mirrors webapp `releaseServerName`.
     func releaseServerName(_ req: ReleaseServerNameRequest) async throws
+    /// P13 — per-server kill-switch. IRK-signed `ServerRevocation`
+    /// envelope POSTed to `/api/server-registry/revoke`. The server
+    /// will refuse to boot on its next reboot (the box becomes a
+    /// brick). Reason ∈ {"lost", "stolen", "decommissioned"}. Mirrors
+    /// the webapp `revokeServer` + the Android `revokeServer` shape.
+    func revokeServer(_ req: ServerRevocationRequest) async throws
     func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse
     /// Login/join preflight. GET /api/account/resolve/<username>. The
     /// sign-in space is access-control evaluation, not a fetch: this
@@ -864,6 +870,30 @@ public struct ReleaseServerNameRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// P13 — POST /api/server-registry/revoke. IRK-signed envelope that
+/// declares a server DEAD (kill switch). The box will refuse to boot
+/// on its next reboot — irreversible. Mirrors the canonical-bytes
+/// tag `flagship/revoke/v1` (`tag|userId|revokedServerId|reason|issuedAt`)
+/// + the @flagship/protocol `ServerRevocation` shape.
+public struct ServerRevocationRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let userId: String
+        public let revokedServerId: String
+        /// One of {"lost", "stolen", "decommissioned"}.
+        public let reason: String
+        public let issuedAt: Int64
+        public init(userId: String, revokedServerId: String, reason: String, issuedAt: Int64) {
+            self.userId = userId; self.revokedServerId = revokedServerId
+            self.reason = reason; self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String         // hex, IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
 // MARK: - Wire types
 
 /// POST /api/username/claim — idempotent. The Worker checks the IRK
@@ -1331,6 +1361,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
+    public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
     public private(set) var registeredPushTokens: [String: PushTokenRegisterRequest.Inner] = [:] // tokenId → inner
     private var nextPushTokenId = 1
@@ -1373,6 +1404,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func releaseServerName(_ req: ReleaseServerNameRequest) async throws {
         try await tick()
         releasedServerNames.append(req)
+    }
+
+    public func revokeServer(_ req: ServerRevocationRequest) async throws {
+        try await tick()
+        revokedServers.append(req)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
@@ -2167,6 +2203,15 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func releaseServerName(_ req: ReleaseServerNameRequest) async throws {
         let body = try JSONEncoder().encode(req)
         try await postJson("/api/server/release", body: body)
+    }
+
+    public func revokeServer(_ req: ServerRevocationRequest) async throws {
+        // P13 — the matching `.com` Worker route is not yet wired (a
+        // precedent endpoint exists on the apps/web Fastify server).
+        // The URL path is fixed per the orchestrator handoff so the
+        // wire shape is ready once the Worker handler lands.
+        let body = try JSONEncoder().encode(req)
+        try await postJson("/api/server-registry/revoke", body: body)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {

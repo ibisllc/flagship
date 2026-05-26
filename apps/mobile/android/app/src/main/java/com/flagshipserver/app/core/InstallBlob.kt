@@ -120,6 +120,35 @@ object ReleaseServerName {
             .joinToString("|").toByteArray()
 }
 
+/** P13 — per-server kill-switch envelope. Signed by the account IRK
+ *  to declare a server DEAD on its next boot. Unlike ReleaseServerName
+ *  (which frees the name so it can be re-claimed), this is the "brick
+ *  the box" path used when a phone/box is lost, stolen, or being
+ *  decommissioned. The protocol-level tag matches
+ *  packages/protocol/src/auth.ts `TAG_REVOKE`
+ *  (`tag|userId|revokedServerId|reason|issuedAt`) + the iOS
+ *  `ServerRevocationClaim.canonicalBytes` + the webapp
+ *  `canonicalRevokeBytes` byte-for-byte. */
+object ServerRevocationClaim {
+    const val CANONICAL_TAG = "flagship/revoke/v1"
+    /** Fixed reason vocabulary. Must match @flagship/protocol's
+     *  RevocationReason + the iOS `ServerRevocationClaim.reasons`
+     *  + the webapp REVOCATION_REASONS constant. */
+    val REASONS: List<String> = listOf("lost", "stolen", "decommissioned")
+    fun canonicalBytes(
+        userId: String,
+        revokedServerId: String,
+        reason: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        userId,
+        revokedServerId,
+        reason,
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
 /** V3 — Service URL-stem rename envelope. Signed by the user's CURRENT
  *  IRK. The internal serviceId is preserved across renames; only the
  *  user-visible newDisplayLabel changes. Mirrors
