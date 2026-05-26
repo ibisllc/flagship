@@ -302,7 +302,7 @@ describe("companionGuard.requireOwnerProfile()", () => {
     expect(() => guard.requireOwnerProfile()).not.toThrow();
   });
 
-  it("signing helpers (releaseServer / revokeServer / replace / wipe) refuse companion writes", async () => {
+  it("non-relayable signing helpers (replace / wipe) still REFUSE companion writes", async () => {
     const { receiver } = await loadReceiverModule();
     const fetchImpl = async () =>
       new Response(
@@ -320,43 +320,150 @@ describe("companionGuard.requireOwnerProfile()", () => {
       locationHref: "https://web.flagshipserver.com/?companion=abc",
     });
 
-    // releaseServer — refuses BEFORE any fetch network call.
+    // replaceDeviceCeremony — outside the v1 relayable set; throws.
+    const replacePath = resolve(
+      __dirname, "..", "public", "webapp", "lib", "replaceDeviceCeremony.js",
+    );
+    const replaceMod = await import(pathToFileURL(replacePath).href + `?t=${Math.random()}`);
+    await expect(
+      replaceMod.runReplaceDeviceCeremony(
+        { username: "alice", umk: new Uint8Array(32) },
+        { fetch: async () => new Response("", { status: 500 }) },
+      ),
+    ).rejects.toThrow(/companion/i);
+
+    // wipeRestartCeremony — also outside the v1 relayable set.
+    const wipePath = resolve(
+      __dirname, "..", "public", "webapp", "lib", "wipeRestartCeremony.js",
+    );
+    const wipeMod = await import(pathToFileURL(wipePath).href + `?t=${Math.random()}`);
+    // Find the entry that wraps requireOwnerProfile(); call it with minimal
+    // arg coverage to elicit the guard.
+    let wipeSaw = false;
+    for (const fn of Object.keys(wipeMod)) {
+      if (typeof wipeMod[fn] !== "function") continue;
+      try {
+        // Call with maximally-permissive args; the guard runs before deeper checks.
+        const out = wipeMod[fn](
+          {
+            username: "alice",
+            serverDomain: "home.alice.flagship.services",
+            umk: new Uint8Array(32),
+            signWithIrk: async () => new Uint8Array(64),
+          },
+          { fetch: async () => new Response("", { status: 500 }) },
+        );
+        if (out && typeof out.then === "function") await out;
+      } catch (e: unknown) {
+        if (/companion/i.test(String((e as Error)?.message ?? e))) { wipeSaw = true; break; }
+      }
+    }
+    expect(wipeSaw).toBe(true);
+  });
+
+  it("RELAYABLE signing helpers (releaseServer / revokeServer) forward to the daemon write-relay", async () => {
+    const { receiver, api } = await loadReceiverModule();
+    const fetchImpl = async () =>
+      new Response(
+        JSON.stringify({
+          companionSessionToken: "abc" + "0".repeat(61),
+          expiresAt: 1,
+          podBaseUrl: "https://home.alice.flagship.services",
+          username: "alice",
+        }),
+        { status: 200 },
+      );
+    await receiver.redeemCompanionAndPersist(VALID_PAYLOAD, {
+      fetchImpl,
+      historyReplaceState: () => {},
+      locationHref: "https://web.flagshipserver.com/?companion=abc",
+    });
+
+    // releaseServerName under a companion profile now forwards to the
+    // pod's /api/companion/request-write instead of throwing.
+    expect(api.getPodBaseUrl()).toBe("https://home.alice.flagship.services");
     const releasePath = resolve(__dirname, "..", "public", "webapp", "lib", "releaseServer.js");
     const releaseMod = await import(pathToFileURL(releasePath).href + `?t=${Math.random()}`);
-    let releaseCalls = 0;
-    await expect(
-      releaseMod.releaseServerName(
-        {
-          username: "alice",
-          serverDomain: "home.alice.flagship.services",
-          umk: new Uint8Array(32),
-          signWithIrk: async () => new Uint8Array(64),
-        },
-        {
-          fetch: async () => { releaseCalls += 1; return new Response("", { status: 500 }); },
-        },
-      ),
-    ).rejects.toThrow(/companion/i);
-    expect(releaseCalls).toBe(0); // never reached the network
 
-    // revokeServer — same.
+    let releaseRelayUrl: string | null = null;
+    let releaseRelayBody: unknown = null;
+    const releaseRelayFetch: typeof fetch = (async (url: string, init: RequestInit) => {
+      releaseRelayUrl = url;
+      releaseRelayBody = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({
+        requestId: "req-release-1",
+        queuedAt: 1700000000000,
+        expiresAt: 1700000000000 + 600_000,
+      }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const releaseOut = await releaseMod.releaseServerName(
+      {
+        username: "alice",
+        serverDomain: "home.alice.flagship.services",
+        umk: new Uint8Array(32),
+        signWithIrk: async () => new Uint8Array(64),
+      },
+      { fetch: releaseRelayFetch, now: () => 1700000000000 },
+    );
+    expect(releaseOut).toMatchObject({
+      pending: true,
+      kind: "release-server",
+      requestId: "req-release-1",
+    });
+    expect(releaseRelayUrl).toBe(
+      "https://home.alice.flagship.services/api/companion/request-write",
+    );
+    expect(releaseRelayBody).toMatchObject({
+      kind: "release-server",
+      intent: {
+        username: "alice",
+        serverDomain: "home.alice.flagship.services",
+        issuedAt: 1700000000000,
+      },
+    });
+
+    // revokeServer under a companion profile — same shape, kind="revoke-server".
     const revokePath = resolve(__dirname, "..", "public", "webapp", "lib", "revokeServer.js");
     const revokeMod = await import(pathToFileURL(revokePath).href + `?t=${Math.random()}`);
-    let revokeCalls = 0;
-    await expect(
-      revokeMod.revokeServer(
-        {
-          userId: "alice",
-          revokedServerId: "home.alice.flagship.services",
-          reason: "decommissioned",
-          umk: new Uint8Array(32),
-          signWithIrk: async () => new Uint8Array(64),
-        },
-        {
-          fetch: async () => { revokeCalls += 1; return new Response("", { status: 500 }); },
-        },
-      ),
-    ).rejects.toThrow(/companion/i);
-    expect(revokeCalls).toBe(0);
+    let revokeRelayUrl: string | null = null;
+    let revokeRelayBody: unknown = null;
+    const revokeRelayFetch: typeof fetch = (async (url: string, init: RequestInit) => {
+      revokeRelayUrl = url;
+      revokeRelayBody = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({
+        requestId: "req-revoke-1",
+        queuedAt: 1700000000000,
+        expiresAt: 1700000000000 + 600_000,
+      }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const revokeOut = await revokeMod.revokeServer(
+      {
+        userId: "alice",
+        revokedServerId: "home.alice.flagship.services",
+        reason: "decommissioned",
+        umk: new Uint8Array(32),
+        signWithIrk: async () => new Uint8Array(64),
+      },
+      { fetch: revokeRelayFetch, now: () => 1700000000000 },
+    );
+    expect(revokeOut).toMatchObject({
+      pending: true,
+      kind: "revoke-server",
+      requestId: "req-revoke-1",
+    });
+    expect(revokeRelayUrl).toBe(
+      "https://home.alice.flagship.services/api/companion/request-write",
+    );
+    expect(revokeRelayBody).toMatchObject({
+      kind: "revoke-server",
+      intent: {
+        userId: "alice",
+        revokedServerId: "home.alice.flagship.services",
+        reason: "decommissioned",
+        issuedAt: 1700000000000,
+      },
+    });
   });
 });

@@ -237,7 +237,13 @@ async function cancelServer(id) {
   const d = await getDraft(id);
   if (!d) return toast("draft not found", "err");
   const session = getSession();
-  if (!session.umk || !session.irk) {
+  // P14 Phase 2 — companion profiles route the cancel through the
+  // owner; they don't need an unlocked session to QUEUE the request.
+  // The companion-aware branch below detects {pending:true} and
+  // surfaces the "Forwarded to owner" sheet.
+  const { isCompanionProfile } = await import("../lib/companionGuard.js");
+  const asCompanion = isCompanionProfile();
+  if (!asCompanion && (!session.umk || !session.irk)) {
     return toast("unlock the webapp first", "err");
   }
   const username = session.username
@@ -247,18 +253,36 @@ async function cancelServer(id) {
   const { inlineConfirm } = await import("../lib/modal.js");
   const confirmed = await inlineConfirm({
     title: `Cancel server "${d.serverName}"?`,
-    message:
-      "Frees the name so you can use it again. Any pending install recipe is voided; a box that boots later is rejected. If this server is already running, it will be released — do this only if you mean to give the name up.",
-    okLabel: "Cancel server",
+    message: asCompanion
+      ? "Companion sessions can't sign on their own — this will queue the request for the account owner to approve from their owner app."
+      : "Frees the name so you can use it again. Any pending install recipe is voided; a box that boots later is rejected. If this server is already running, it will be released — do this only if you mean to give the name up.",
+    okLabel: asCompanion ? "Forward to owner" : "Cancel server",
     danger: true,
   });
   if (!confirmed) return;
 
   const serverDomain = serverDomainOf(d.serverName, username);
   try {
-    await releaseServerName(
+    const out = await releaseServerName(
       { username, serverDomain, umk: session.umk, signWithIrk },
     );
+    if (out && out.pending) {
+      // Companion path — open the polling sheet until the owner resolves.
+      const { showCompanionPendingSheet, outcomeToastCopy } = await import(
+        "../lib/companionPendingSheet.js"
+      );
+      const result = await showCompanionPendingSheet(out);
+      if (result.outcome === "approved") {
+        if (d.code) await revokeAuthCodeBestEffort(d.code, username).catch(() => {});
+        await deleteDraft(id);
+        toast(`server "${d.serverName}" cancelled — the name is free again`, "ok");
+        await refreshDrafts();
+        return;
+      }
+      const { text, kind } = outcomeToastCopy(result.outcome);
+      toast(text, kind);
+      return;
+    }
     // Best-effort auth-code revoke too (the release already revokes
     // active codes server-side, but an in-flight serial we hold locally
     // is cheap to revoke explicitly). 404/403 == already gone.

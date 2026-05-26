@@ -316,13 +316,32 @@ async function openRevokeDialog(serverFqdn, username) {
             goBtn.textContent = s > 0 ? `Revoking in ${s}…` : "Revoking…";
           },
         });
-        await revokeServer({
+        const revokeOut = await revokeServer({
           userId: username,
           revokedServerId: serverFqdn,
           reason,
           umk: session.umk,
           signWithIrk: (umk, bytes) => signWithIrk(umk, bytes),
         });
+        if (revokeOut && revokeOut.pending) {
+          // P14 Phase 2 — companion profile: open the polling sheet.
+          document.removeEventListener("keydown", onEscape);
+          dlg.removeEventListener("close", onCancel);
+          cleanup();
+          const { showCompanionPendingSheet, outcomeToastCopy } = await import(
+            "../lib/companionPendingSheet.js"
+          );
+          const result = await showCompanionPendingSheet(revokeOut);
+          if (result.outcome === "approved") {
+            toast("Server revoked. It will refuse to boot next time.", "ok");
+            resolve();
+          } else {
+            const { text, kind } = outcomeToastCopy(result.outcome);
+            toast(text, kind);
+            resolve();
+          }
+          return;
+        }
         toast("Server revoked. It will refuse to boot next time.", "ok");
         document.removeEventListener("keydown", onEscape);
         dlg.removeEventListener("close", onCancel);

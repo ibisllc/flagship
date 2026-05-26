@@ -20,7 +20,8 @@
 // flagshipserver.com so the wire shape is ready the moment the
 // orchestrator promotes the handler into apps/com.
 
-import { requireOwnerProfile } from "./companionGuard.js";
+import { CompanionWriteError, requireOwnerProfile } from "./companionGuard.js";
+import { submitWriteRequest } from "./companionWriteRelay.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_REVOKE. */
 export const TAG_REVOKE = "flagship/revoke/v1";
@@ -71,16 +72,40 @@ export async function revokeServer(args, deps = {}) {
   if (!REVOCATION_REASONS.includes(reason)) {
     throw makeError(`reason must be one of ${REVOCATION_REASONS.join(", ")}`, "400");
   }
-  // P14 — companion sessions can't sign. Refuse with a user-friendly
-  // message before the cryptic "unlock the webapp first" fires.
-  (deps.requireOwnerProfile ?? requireOwnerProfile)();
+  const issuedAt = (deps.now || Date.now)();
+  // P14 Phase 2 — companion profiles route the intent through the
+  // owner via /api/companion/request-write. Owner-app side surfaces
+  // it under Settings → Companion requests; on approve the owner signs
+  // + posts the actual revocation envelope.
+  try {
+    (deps.requireOwnerProfile ?? requireOwnerProfile)();
+  } catch (e) {
+    if (e instanceof CompanionWriteError) {
+      const submit = deps.submitWriteRequest || submitWriteRequest;
+      const queued = await submit(
+        {
+          kind: "revoke-server",
+          intent: { userId, revokedServerId, reason, issuedAt },
+        },
+        deps,
+      );
+      return {
+        ok: false,
+        pending: true,
+        kind: "revoke-server",
+        requestId: queued.requestId,
+        queuedAt: queued.queuedAt,
+        expiresAt: queued.expiresAt,
+      };
+    }
+    throw e;
+  }
   if (!umk || typeof signWithIrk !== "function") {
     throw makeError("unlock the webapp first", "400");
   }
   const f = deps.fetch || fetch;
   const toHex = deps.bytesToHex || defaultBytesToHex;
   const origin = deps.origin || ORIGIN;
-  const issuedAt = (deps.now || Date.now)();
 
   const sig = await signWithIrk(
     umk,

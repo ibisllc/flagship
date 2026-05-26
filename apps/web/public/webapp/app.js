@@ -32,6 +32,11 @@ import { initInviteManageView } from "./views/invite-manage.js";
 import { initPairedSessionsView, enterPairedSessions } from "./views/paired-sessions.js";
 import { initPeerBackupView, enterPeerBackup } from "./views/peer-backup.js";
 import { initCompanionDockView, enterCompanionDock } from "./views/companion-dock.js";
+import {
+  initCompanionRequestsView,
+  enterCompanionRequests,
+  refreshBadgeOnce as refreshCompanionRequestsBadge,
+} from "./views/companion-requests.js";
 import { initTierStatusView, enterTierStatus } from "./views/tier-status.js";
 import { initMarketplaceView, enterMarketplace } from "./views/marketplace.js";
 import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
@@ -88,6 +93,7 @@ const SUB_VIEW_TABS = {
   "view-paired-sessions": "settings",
   "view-peer-backup": "settings",
   "view-companion-dock": "settings",
+  "view-companion-requests": "settings",
   "view-profiles": "settings",
   "view-orders-debug": "settings",
 };
@@ -106,6 +112,9 @@ async function enterSettingsTab() {
     toggle.checked = on;
     row.classList.toggle("hidden", !on);
   }
+  // P14 Phase 2 — refresh the companion-requests badge on Settings entry.
+  // Best-effort; an older daemon (503) leaves the badge at 0.
+  refreshCompanionRequestsBadge().catch(() => { /* swallow */ });
 }
 
 /**
@@ -171,6 +180,7 @@ function wireSettingsTabEntries() {
   wire("settings-tab-sessions", enterPairedSessions);
   wire("settings-tab-peer-backup", enterPeerBackup);
   wire("settings-tab-companion-dock", enterCompanionDock);
+  wire("settings-tab-companion-requests", enterCompanionRequests);
   wire("settings-tab-profiles", enterProfiles);
   wire("settings-tab-orders-debug", enterOrdersDebug);
   wire("settings-tab-create-server", enterCreateServer);
@@ -230,6 +240,7 @@ async function boot() {
   initPairedSessionsView();
   initPeerBackupView();
   initCompanionDockView();
+  initCompanionRequestsView();
   initTrustedDevicesView();
   initAccountSecurityView();
   initAddDeviceView();

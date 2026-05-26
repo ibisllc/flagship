@@ -64,7 +64,20 @@ async function runCancel() {
     const serverDomain = currentOrder.fqdn || currentOrder.serverDomain;
     if (session.umk && session.irk && username && serverDomain) {
       try {
-        await releaseServerName({ username, serverDomain, umk: session.umk, signWithIrk });
+        const out = await releaseServerName({ username, serverDomain, umk: session.umk, signWithIrk });
+        if (out && out.pending) {
+          // P14 Phase 2 — companion path: surface the pending sheet so
+          // the user knows the request is queued (release will happen
+          // once the owner approves; the local order is still cleared).
+          const { showCompanionPendingSheet, outcomeToastCopy } = await import(
+            "../lib/companionPendingSheet.js"
+          );
+          const result = await showCompanionPendingSheet(out);
+          if (result.outcome !== "approved") {
+            const { text, kind } = outcomeToastCopy(result.outcome);
+            toast(text, kind);
+          }
+        }
       } catch (e) {
         // Don't fail the whole cancel — the auth-code is already revoked,
         // which voids the install. Surface a soft warning so the user

@@ -8,6 +8,7 @@ import { TOAST_ICONS } from "./icons.js";
 let toastTimer = null;
 
 export function toast(text, kind) {
+  if (typeof document === "undefined") return;
   const el = document.getElementById("toast");
   if (!el) return;
   el.classList.remove("hidden", "err", "ok", "warn");

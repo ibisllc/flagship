@@ -17,7 +17,8 @@
 // `signReleaseServerName`. The iOS/Android composers mirror the same
 // canonical-bytes shape natively.
 
-import { requireOwnerProfile } from "./companionGuard.js";
+import { CompanionWriteError, requireOwnerProfile } from "./companionGuard.js";
+import { submitWriteRequest } from "./companionWriteRelay.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol
  *  TAG_RELEASE_SERVER_NAME. */
@@ -54,18 +55,41 @@ export function serverDomainOf(serverName, username) {
 export async function releaseServerName(args, deps = {}) {
   const { username, serverDomain, umk, signWithIrk } = args;
   if (!username || !serverDomain) throw new Error("username and serverDomain required");
-  // P14 — companion sessions can't sign (no UMK on this device). Refuse
-  // at the surface rather than surfacing a cryptic seed error mid-call.
-  // The default helper checks the active profile via profilesStore; tests
-  // can override via deps.requireOwnerProfile.
-  (deps.requireOwnerProfile ?? requireOwnerProfile)();
+  const issuedAt = (deps.now || Date.now)();
+  // P14 Phase 2 — companion profiles can't sign locally (no UMK on this
+  // device). For relay-supported kinds (release-server is one of two),
+  // we forward the intent to the owner via /api/companion/request-write
+  // instead of throwing. The owner-profile app surfaces the request in
+  // its "Companion requests" view and signs+posts on approval.
+  try {
+    (deps.requireOwnerProfile ?? requireOwnerProfile)();
+  } catch (e) {
+    if (e instanceof CompanionWriteError) {
+      const submit = deps.submitWriteRequest || submitWriteRequest;
+      const queued = await submit(
+        {
+          kind: "release-server",
+          intent: { username, serverDomain, issuedAt },
+        },
+        deps,
+      );
+      return {
+        ok: false,
+        pending: true,
+        kind: "release-server",
+        requestId: queued.requestId,
+        queuedAt: queued.queuedAt,
+        expiresAt: queued.expiresAt,
+      };
+    }
+    throw e;
+  }
   if (!umk || typeof signWithIrk !== "function") {
     throw new Error("unlock the webapp first");
   }
   const f = deps.fetch || fetch;
   const toHex = deps.bytesToHex || defaultBytesToHex;
   const origin = deps.origin || ORIGIN;
-  const issuedAt = (deps.now || Date.now)();
   const sig = await signWithIrk(
     umk,
     canonical([TAG_RELEASE_SERVER_NAME, username, serverDomain, issuedAt]),

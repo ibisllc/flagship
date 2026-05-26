@@ -118,6 +118,10 @@
           <button class="secondary full-width" id="settings-tab-sessions">Browser sessions</button>
           <button class="secondary full-width" id="settings-tab-peer-backup">Peer-backup</button>
           <button class="secondary full-width" id="settings-tab-companion-dock">Dock a browser</button>
+          <button class="secondary full-width" id="settings-tab-companion-requests">
+            Companion requests
+            <span id="companion-requests-badge" class="pill hidden" aria-label="pending companion requests">0</span>
+          </button>
           <button class="secondary full-width" id="settings-tab-profiles">Profiles</button>
         </div>
 
@@ -244,6 +248,22 @@
         <div class="row-2">
           <button class="secondary" id="companion-dock-refresh">Refresh</button>
           <button class="secondary" id="companion-dock-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- View: Companion requests (P14 Phase 2) — owner-side approval
+           queue for write-requests forwarded by docked companions. -->
+      <section id="view-companion-requests" class="hidden">
+        <h2>Companion requests</h2>
+        <p class="note">
+          Docked companion browsers can't sign on your behalf. When one
+          tries to release or revoke a server, the request lands here so
+          you can approve or deny it.
+        </p>
+        <div id="companion-requests-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="companion-requests-refresh">Refresh</button>
+          <button class="secondary" id="companion-requests-back">← Back</button>
         </div>
       </section>
 
