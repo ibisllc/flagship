@@ -22,6 +22,33 @@ describe("/ready/ — post-order recipe landing", () => {
     expect(r.body).toContain("ready-to-flash");
   });
 
+  it("tucks the BYO-ISO / Assembler path into an Advanced options disclosure, ISO stays primary", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/ready/" });
+    expect(r.statusCode).toBe(200);
+
+    // The recommended Alpine custom-ISO download stays primary + visible
+    // (the button is NOT inside the disclosure).
+    const ctaIdx = r.body.indexOf('id="alpineCta"');
+    const detailsIdx = r.body.indexOf("<details");
+    expect(ctaIdx).toBeGreaterThan(-1);
+    expect(detailsIdx).toBeGreaterThan(-1);
+    expect(ctaIdx).toBeLessThan(detailsIdx);
+    expect(r.body.indexOf('id="downloadIso"')).toBeLessThan(detailsIdx);
+
+    // The BYO path is an explicit collapsible disclosure with the agreed copy.
+    expect(r.body).toMatch(/<details[^>]*class="advanced-disclosure"/);
+    expect(r.body).toContain("Advanced options: Bring your own Linux");
+
+    // The recipe + Assembler affordances now live inside the disclosure.
+    const detailsBlock = r.body.slice(detailsIdx, r.body.indexOf("</details>"));
+    expect(detailsBlock).toContain('id="copyRecipe"');
+    expect(detailsBlock).toContain('id="downloadRecipe"');
+    expect(detailsBlock).toContain('id="installerPrimary"');
+    expect(detailsBlock).toContain('id="installerOthers"');
+    expect(detailsBlock).toContain("only install the Assembler once");
+  });
+
   it("serves /ready/ready.js wired to the QR hand-off key + on-brand installer links", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/ready/ready.js" });
