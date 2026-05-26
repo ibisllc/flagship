@@ -124,4 +124,50 @@ class DevicePairingTest {
     @Test fun freshDevicePub_is32BytesHex() {
         assertEquals(64, freshDevicePub().length)
     }
+
+    // ── DeviceAdmit canonical bytes (byte-identical with iOS + the
+    //    Worker verifier) ─────────────────────────────────────────────
+    //
+    // The Worker verifies under canonical bytes
+    //   flagship/device-admit/v1|<username>|<newDevicePubHex>|<issuedAt>
+    // Drift in tag, separator, field order, or `issuedAt` rendering
+    // breaks every cross-device admit. Mirrors
+    // ios/Sources/Flagship/DeviceAdmit.swift `canonicalBytes()`.
+
+    @Test fun deviceAdmit_canonicalBytes_matchesWorkerString() {
+        val admit = DeviceAdmit(
+            username = "techstars",
+            newDevicePubHex = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+            issuedAt = 1_700_000_000_000L,
+        )
+        val expected =
+            "flagship/device-admit/v1|" +
+                "techstars|" +
+                "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20|" +
+                "1700000000000"
+        val actual = DeviceAdmitClaim.canonicalBytes(admit).toString(Charsets.UTF_8)
+        assertEquals(expected, actual)
+    }
+
+    @Test fun deviceAdmit_canonicalTag_isExact() {
+        // The tag itself is load-bearing: changing it silently swaps the
+        // verification domain. Pin it independently.
+        assertEquals("flagship/device-admit/v1", DeviceAdmitClaim.CANONICAL_TAG)
+    }
+
+    @Test fun deviceAdmit_signThenVerify_underAccountIrk() {
+        val seed = ByteArray(32) { (it * 7 + 3).toByte() }
+        val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed)
+        val admit = DeviceAdmit(
+            username = "acme",
+            newDevicePubHex = HexUtil.encode(ByteArray(32) { 0x42 }),
+            issuedAt = 42L,
+        )
+        val sig = DeviceAdmitClaim.sign(admit, com.google.crypto.tink.subtle.Ed25519Sign(seed))
+        assertTrue(DeviceAdmitClaim.verify(admit, sig, pair.publicKey))
+
+        // A flipped issuedAt MUST fail (commits to the exact envelope).
+        val tampered = admit.copy(issuedAt = 43L)
+        assertTrue("tampered envelope must not verify", !DeviceAdmitClaim.verify(tampered, sig, pair.publicKey))
+    }
 }
