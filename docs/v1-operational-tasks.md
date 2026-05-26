@@ -53,6 +53,16 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 ### Parity wave 7 (2026-05-25 night, cont.)
 - **P6 client UIs (all 3 surfaces)** — closes P6 end-to-end. Webapp finalize (empty-state copy + 4 new tests). New iOS InviteIssue/InviteManage + InviteLabelBook (UserDefaults). New Android equivalents (SharedPreferences). Privacy invariant preserved on all 3: only `opaqueTag` + `role` + `contextNote` cross the wire. Webapp 815 pass, iOS green, Android BUILD SUCCESSFUL. — `a25a864`
 
+### Parity wave 8 (2026-05-26, design decisions in)
+- **P14 Phase 1 (all 4 surfaces)** — companion-browser dock. Owner picked "Remote-control + 4h TTL" (WhatsApp-Web pattern) + "All 3 hosts + receiver in one big wave". Daemon: companion-ticket store + 4 endpoints (mint / redeem / list / revoke); paired-session store gains `companion` + `expiresAt` columns; companion writes → 403 `companion-write-not-allowed`. Webapp: host UI in Settings + boot-time `?companion=…` receiver flow that persists a `kind: companion` profile in the P12 store + `requireOwnerProfile()` gates on every signing helper. iOS + Android: matching host UIs. QR encodes `https://web.flagshipserver.com/?companion=<base64url JSON>` with sorted-keys (iOS) / declaration-order (Android) JSON; 60s ticket TTL, single-use; 4h companion session TTL. — `c7ea6e6` (48 new tests on daemon+webapp + 23 iOS + 17 Android; full repo 4067 pass / 10 skip)
+
+### Parity wave 9 (2026-05-26, cont.)
+- **P9 daemon data gaps closed** — the three documented "honest zeros" now carry real data. `MyShardRow` gains `sizeBytes` (required); RepairDaemon.placeOne writes `bytes.length`; projector sums real bytes. New `PeerActivityWatchdog` + `wrapPeerLink` tap PeerLink send/recv; projector prefers watchdog ts over the `lastChallenge ?? storedAt` proxy when newer. New `RepairStatsAccumulator` (24h rolling window) implements `RepairStatsProvider`. No wire-shape changes — existing slots populated. Caveat: RepairDaemon has no production caller yet; the accumulator is wire-ready and starts emitting real numbers once a scheduled-tick site lands. — `c0ff3cb` (26 new tests; 1031 daemon pass)
+
+### Parity wave 10 (2026-05-26, cont.)
+- **P8 keyboard polish (iOS + Android)** — the framebuffer-viewer VMs already exposed `sendKey`; this lands the on-phone UI. Each surface adds a "Show keyboard / Hide keyboard" toggle in the controls bar that focuses a soft-input field; every value-change is diffed via the pure `keyEvents(from,to)` helper (insert / delete / replace) and shipped as keyDown+keyUp pairs through `vm.sendKey`. Backspace handled. DOM-code mapping covers letters + digits + Space/Enter/Tab/Period/Comma/Slash/Minus/Equal. Wire format byte-identical with the webapp + the existing P8 tests. — `4bc57cc` (iOS) + `a03a05c` (Android)
+- **Webapp polish — TOTP 401 retry + pending /re-pair banner** — closes the two follow-ups from commit `20224ce`. `replaceDeviceCeremony.js` detects the Worker's 401 `{ accountType: "multi" }` body, prompts for a 6-digit code via injected `requestTotpProof`, retries with `totpProof: { code, method }`. New `fetchPendingRePair()` polls `GET /api/users/:u/re-pair` (verified to exist at `packages/control-plane/src/rePair.ts:1019-1037`); new `lib/pendingRePairBanner.js` renders a "Replace pending — Finalize now" banner above the device list when grace is elapsed. Worker side flagged as needing nothing; v2-hardening note: the GET is unauthenticated by design (leaks pending pubkeys to anyone who knows the username). — `27b14b1` (22 new tests; 867 webapp pass)
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
@@ -169,10 +179,27 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 ```
 
 ## Next agent-doable, smallest-first
-(Updated 2026-05-25 late after wave 7.) Every P-task except P14 + P0
-is now ✅ across all 3 surfaces. **Up next**: P14 companion-browser
-dock (all 3, new design work — no precedent, would benefit from an
-owner design pass before agents) → P0 verify-only audits (marketplace
-iOS / create-server iOS pickers — light read-only review). Then the
-hardware/owner items (A3–A6 base-ISO + e2e, TF* App Store, C1 Play,
-E1–E3 v1-alpha live exercises).
+(Updated 2026-05-26 after wave 10.) Every P-task is now ✅ across the
+agent-doable surface; the parity matrix has no remaining gaps. The
+peer-backup data layer + P10/P8 polish + P14 Phase 1 are all live.
+
+**Remaining agent-doable** (smaller scope):
+- **P14 Phase 2** — write-relay: daemon queues companion-initiated
+  writes + push-fans-out to the owner + an "approve queued write" UI
+  on the owner surface. The 403 `companion-write-not-allowed` code
+  shipped in Phase 1 is the contract the owner-side UI will read.
+- **P0 verify-only audits** — confirm the matrix's "done" cells are
+  truly wired (marketplace iOS, create-server iOS pickers). Light
+  read-only review.
+- **P12 hard cut-over** (defer-able) — remove the bidirectional
+  localStorage mirror after users have all migrated; refactor every
+  legacy call-site to the per-profile store.
+
+**Owner / ops** (irreducible, needs human or credentials):
+- A3 Alpine base-ISO af_packet fix → A4 R2 upload → A5/A6 real-hardware
+  Alpine e2e.
+- TF1 wrangler APNs secrets + TF2 Associated Domains tick + TF3 Xcode
+  Archive → TF4 ASC metadata → TF5 device-push smoke → TF6 5 testers.
+- C1 Android Play internal track.
+- E1–E3 v1-alpha live exercises (recovery / rotation / update-pack /
+  marketplace MVP / disclosure + bounty).
