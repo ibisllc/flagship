@@ -710,10 +710,14 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// the stream then waits for close() (no auto-finish so the consumer
     /// drives lifecycle).
     public var browserStreamFramesToEmit: [BrowserFrame] = []
+    /// Last `MockBrowserStream` handed out — tests inspect `.sent` here
+    /// to assert what the VM forwarded after a sendKey/sendMouse call.
+    public weak var lastBrowserStream: MockBrowserStream?
 
     public func browserTabStream(tabId: String) -> any BrowserStream {
         browserStreamsOpened.append(tabId)
         let s = MockBrowserStream()
+        lastBrowserStream = s
         let toEmit = browserStreamFramesToEmit
         Task {
             for f in toEmit {

@@ -119,4 +119,67 @@ public final class BrowserViewerViewModel {
     public func sendKey(eventType: String, key: String, code: String) async {
         await stream?.send(.key(eventType: eventType, key: key, code: code))
     }
+
+    /// Diff `oldText` → `newText` from a single soft-keyboard TextField
+    /// edit and return the key-events to ship. The DOM-side webapp lets
+    /// the browser fire keyDown/keyUp per physical key; on a phone we
+    /// only see post-IME text deltas, so we synthesise one keyDown+keyUp
+    /// pair per inserted character and one Backspace pair per removed.
+    /// Pure-typed inserts and pure-typed deletes are common; any other
+    /// shape (replacement / cursor edit) is modelled as "delete all of
+    /// old, type all of new".
+    public static func keyEvents(
+        from oldText: String, to newText: String
+    ) -> [(eventType: String, key: String, code: String)] {
+        if oldText == newText { return [] }
+        if newText.hasPrefix(oldText) {
+            let added = String(newText.dropFirst(oldText.count))
+            return added.flatMap { ch in keyDownUp(forChar: ch) }
+        }
+        if oldText.hasPrefix(newText) {
+            let removed = oldText.count - newText.count
+            return (0..<removed).flatMap { _ in keyDownUp(forBackspace: ()) }
+        }
+        let deletes = oldText.flatMap { _ in keyDownUp(forBackspace: ()) }
+        let inserts = newText.flatMap { ch in keyDownUp(forChar: ch) }
+        return deletes + inserts
+    }
+
+    private static func keyDownUp(forChar ch: Character) -> [(eventType: String, key: String, code: String)] {
+        let key = String(ch)
+        let code = domCode(forChar: ch)
+        return [
+            (eventType: "keyDown", key: key, code: code),
+            (eventType: "keyUp", key: key, code: code),
+        ]
+    }
+
+    private static func keyDownUp(forBackspace _: Void) -> [(eventType: String, key: String, code: String)] {
+        [
+            (eventType: "keyDown", key: "Backspace", code: "Backspace"),
+            (eventType: "keyUp", key: "Backspace", code: "Backspace"),
+        ]
+    }
+
+    private static func domCode(forChar ch: Character) -> String {
+        if ch.isLetter, let scalar = ch.lowercased().unicodeScalars.first,
+           scalar.value >= 0x61, scalar.value <= 0x7a {
+            return "Key\(String(scalar).uppercased())"
+        }
+        if ch.isNumber, let scalar = ch.unicodeScalars.first,
+           scalar.value >= 0x30, scalar.value <= 0x39 {
+            return "Digit\(String(scalar))"
+        }
+        switch ch {
+        case " ": return "Space"
+        case "\n", "\r": return "Enter"
+        case "\t": return "Tab"
+        case ".": return "Period"
+        case ",": return "Comma"
+        case "/": return "Slash"
+        case "-": return "Minus"
+        case "=": return "Equal"
+        default: return ""
+        }
+    }
 }

@@ -14,6 +14,9 @@ public struct BrowserViewerScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: BrowserViewerViewModel
     @State private var inDrag = false
+    @State private var keyboardVisible = false
+    @State private var keyInput = ""
+    @FocusState private var keyFieldFocused: Bool
 
     public init(vm: BrowserViewerViewModel) {
         self.vm = vm
@@ -26,12 +29,17 @@ public struct BrowserViewerScreen: View {
             GeometryReader { geo in
                 framebufferView(viewport: geo.size, c: c)
             }
+            hiddenKeyboardField()
         }
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Browser")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { vm.start() }
-        .onDisappear { vm.stop() }
+        .onDisappear {
+            keyboardVisible = false
+            keyFieldFocused = false
+            vm.stop()
+        }
     }
 
     @ViewBuilder
@@ -53,10 +61,41 @@ public struct BrowserViewerScreen: View {
                 Text(msg).foregroundColor(c.danger).lineLimit(1)
             }
             Spacer()
+            Button {
+                keyboardVisible.toggle()
+                keyFieldFocused = keyboardVisible
+                if !keyboardVisible { keyInput = "" }
+            } label: {
+                Image(systemName: keyboardVisible ? "keyboard.chevron.compact.down" : "keyboard")
+                    .foregroundColor(keyboardVisible ? c.primary : c.textMuted)
+            }
+            .accessibilityIdentifier("browser-viewer-toggle-keyboard")
         }
         .padding(.horizontal, FS.space.s4)
         .padding(.vertical, FS.space.s2)
         .background(c.bg)
+    }
+
+    @ViewBuilder
+    private func hiddenKeyboardField() -> some View {
+        if keyboardVisible {
+            TextField("", text: $keyInput)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .focused($keyFieldFocused)
+                .opacity(0.001)
+                .frame(height: 1)
+                .accessibilityIdentifier("browser-viewer-key-input")
+                .onChange(of: keyInput) { oldValue, newValue in
+                    let events = BrowserViewerViewModel.keyEvents(from: oldValue, to: newValue)
+                    guard !events.isEmpty else { return }
+                    Task {
+                        for e in events {
+                            await vm.sendKey(eventType: e.eventType, key: e.key, code: e.code)
+                        }
+                    }
+                }
+        }
     }
 
     @ViewBuilder

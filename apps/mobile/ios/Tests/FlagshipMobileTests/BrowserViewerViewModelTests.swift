@@ -133,6 +133,63 @@ final class BrowserViewerViewModelTests: XCTestCase {
         XCTAssertNotNil(vm.frame)
     }
 
+    // MARK: - Key-event diff (P8 keyboard UI)
+
+    func test_keyEvents_singleCharAppended_emitsKeyDownThenKeyUp() {
+        let evs = BrowserViewerViewModel.keyEvents(from: "ab", to: "abc")
+        XCTAssertEqual(evs.count, 2)
+        XCTAssertEqual(evs[0].eventType, "keyDown")
+        XCTAssertEqual(evs[0].key, "c")
+        XCTAssertEqual(evs[0].code, "KeyC")
+        XCTAssertEqual(evs[1].eventType, "keyUp")
+        XCTAssertEqual(evs[1].key, "c")
+        XCTAssertEqual(evs[1].code, "KeyC")
+    }
+
+    func test_keyEvents_multipleCharsAppended_emitsPairPerChar() {
+        let evs = BrowserViewerViewModel.keyEvents(from: "", to: "Hi 1")
+        XCTAssertEqual(evs.count, 8)
+        XCTAssertEqual(evs.map(\.eventType), ["keyDown", "keyUp", "keyDown", "keyUp", "keyDown", "keyUp", "keyDown", "keyUp"])
+        XCTAssertEqual(evs.map(\.key), ["H", "H", "i", "i", " ", " ", "1", "1"])
+        XCTAssertEqual(evs.map(\.code), ["KeyH", "KeyH", "KeyI", "KeyI", "Space", "Space", "Digit1", "Digit1"])
+    }
+
+    func test_keyEvents_singleCharRemoved_emitsBackspacePair() {
+        let evs = BrowserViewerViewModel.keyEvents(from: "abc", to: "ab")
+        XCTAssertEqual(evs.count, 2)
+        XCTAssertEqual(evs[0].eventType, "keyDown")
+        XCTAssertEqual(evs[0].key, "Backspace")
+        XCTAssertEqual(evs[0].code, "Backspace")
+        XCTAssertEqual(evs[1].eventType, "keyUp")
+        XCTAssertEqual(evs[1].key, "Backspace")
+    }
+
+    func test_keyEvents_unchanged_emitsNothing() {
+        XCTAssertTrue(BrowserViewerViewModel.keyEvents(from: "hello", to: "hello").isEmpty)
+    }
+
+    func test_keyEvents_replacement_deletesOldThenInsertsNew() {
+        let evs = BrowserViewerViewModel.keyEvents(from: "ab", to: "cd")
+        XCTAssertEqual(evs.count, 8)
+        XCTAssertEqual(evs.prefix(4).map(\.key), ["Backspace", "Backspace", "Backspace", "Backspace"])
+        XCTAssertEqual(evs.suffix(4).map(\.key), ["c", "c", "d", "d"])
+    }
+
+    func test_vm_sendKey_routesThroughBrowserInputKeyShape() async {
+        let mock = MockScreensClient()
+        mock.simulatedLatency = 0
+        let vm = BrowserViewerViewModel(tabId: "tab-k", client: mock)
+        vm.start()
+        await vm.sendKey(eventType: "keyDown", key: "a", code: "KeyA")
+        await vm.sendKey(eventType: "keyUp", key: "a", code: "KeyA")
+        let stream = mock.lastBrowserStream as? MockBrowserStream
+        XCTAssertNotNil(stream)
+        XCTAssertEqual(stream?.sent.count, 2)
+        XCTAssertEqual(stream?.sent[0], .key(eventType: "keyDown", key: "a", code: "KeyA"))
+        XCTAssertEqual(stream?.sent[1], .key(eventType: "keyUp", key: "a", code: "KeyA"))
+        vm.stop()
+    }
+
     // MARK: - Stream lifecycle through MockScreensClient
 
     func test_browserTabStream_recordsTabIdAndCanSendInputs() async {
