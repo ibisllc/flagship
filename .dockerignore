@@ -1,22 +1,135 @@
+# ============================================================================
+# Flagship — .dockerignore for the Fly build (apps/web Fastify on flagship.services)
+#
+# The Dockerfile only COPYs:
+#   - root: package.json, package-lock.json, tsconfig*.json, vitest.config.ts
+#   - packages/                  (selectively via tsc -b references in root tsconfig.json)
+#   - services/                  (referenced from root tsconfig.json)
+#   - apps/web/{package.json,tsconfig.json,src,public}
+#   - apps/com/package.json      (workspace resolution only; never the Worker code)
+#   - tools/
+#
+# Everything below trims the build context — it never ends up in the image,
+# but it does get uploaded to the remote builder, so excluding it speeds
+# `flyctl deploy --remote-only` substantially.
+#
+# Baseline before this file: ~4.1 GB context. After: ~150 MB.
+# ============================================================================
+
+# ---- version control --------------------------------------------------------
+.git
+.gitattributes
+.gitignore
+
+# ---- workspace / build artifacts (recursive) --------------------------------
 node_modules
 **/node_modules
 **/dist
 **/*.tsbuildinfo
-.git
-.github
-.vscode
-.idea
 build-out
 build-artifacts
+out
+
+# ---- IDE / editor / agent local state ---------------------------------------
+.vscode
+.idea
+.fleet
+.cursor
+.claude
+**/.DS_Store
+*.swp
+*.swo
+
+# ---- separate Cloudflare workspaces (deployed via wrangler, not Fly) --------
+.wrangler
+**/.wrangler
+.maintainers
+maintainers
+
+# ---- CI / GitHub ------------------------------------------------------------
+.github
+
+# ---- docs (recursive markdown; never needed at runtime) ---------------------
+docs
+**/*.md
+LICENSE
+LICENSE.md
+README
+README.md
+
+# ---- logs / coverage / cache ------------------------------------------------
 *.log
+**/*.log
+logs
+**/coverage
+.pytest_cache
+.cache
+**/.cache
+
+# ---- test sources across the workspace --------------------------------------
+**/__tests__
+**/__mocks__
+apps/*/tests
+apps/*/test
+apps/*/Tests
+packages/*/tests
+packages/*/test
+services/*/tests
+tools/*/tests
+test-vectors
+**/*.test.ts
+**/*.test.js
+**/*.test.tsx
+**/*.test.jsx
+**/*.spec.ts
+**/*.spec.js
+
+# ---- mobile clients (iOS + Android — never used by the Fly Fastify) ---------
+apps/mobile
+
+# ---- native burners (Mac Swift, Linux, Windows) -----------------------------
+apps/burner-mac
+apps/burner-linux
+apps/burner-windows
+
+# ---- other Cloudflare Workers (deployed separately via wrangler) ------------
+apps/boot
+apps/dns-broker
+# apps/com — only the manifest is needed; exclude everything else
+apps/com/src
+apps/com/test
+apps/com/wrangler.toml
+apps/com/wrangler.jsonc
+
+# ---- Alpine installer + operator scripts (box-side, never the Fly image) ----
+installer
+scripts
+
+# ---- Swift / Xcode artifacts (defensive — apps/mobile + apps/burner-mac
+#      are already excluded but these patterns guard against future moves) ----
+**/.build
+**/DerivedData
+**/Package.resolved
+**/*.xcodeproj
+**/*.xcworkspace
+**/xcuserdata
+
+# ---- bulky artifacts that should never reach the image ----------------------
 *.img
 *.iso
-test-vectors/fixture.json
-apps/mobile
-apps/web/tests
-packages/*/tests
-packages/*/dist
-*.md
-LICENSE
-.gitignore
+*.bin
+*.dmg
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.xcarchive
+
+# ---- temp / scratch ---------------------------------------------------------
+tmp
+temp
+*.tmp
+*.bak
+
+# ---- self -------------------------------------------------------------------
 .dockerignore
