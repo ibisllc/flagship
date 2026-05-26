@@ -27,15 +27,32 @@ COPY apps/web/package.json apps/web/tsconfig.json apps/web/
 COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/
 COPY apps/com/package.json apps/com/
+COPY tools tools/
 
-# Plain workspace install — `@ibisllc/maintainers` resolves from the npm
-# registry like any other dependency (no lifecycle pull/bundle hooks).
-# Fallback to `npm install` if `npm ci` fails (e.g. lockfile drift).
+# Install ALL deps (incl. dev) so tsc + types are available for the
+# `tsc -b` step. devDependencies are pruned out below before the runtime
+# stage copies node_modules.
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --workspaces --include-workspace-root --no-audit --no-fund \
  || npm install --workspaces --include-workspace-root --no-audit --no-fund
 
 RUN npx tsc -b
+
+# Slim the runtime image:
+#   1. Drop per-workspace node_modules for workspaces the Fly runtime
+#      never touches (the other Cloudflare Workers + the e2e harness).
+#      Most deps are hoisted to the root anyway; this is belt-and-braces
+#      for any non-hoisted ones (~tens of MB).
+#   2. `npm prune --omit=dev` removes typescript, vite, vitest, @esbuild,
+#      @types/*, and other build-only tools from the root node_modules
+#      (~150-200 MB).
+#
+# `tsx` is the runtime entry (see CMD) and is now a ROOT dependency
+# (not a devDep — see package.json) so it survives the prune.
+RUN rm -rf apps/com/node_modules apps/boot/node_modules \
+           apps/dns-broker/node_modules apps/web/e2e/node_modules \
+           2>/dev/null || true
+RUN npm prune --omit=dev
 
 ################################################################################
 
