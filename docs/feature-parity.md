@@ -16,7 +16,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 1 | Open / create account | ✅ | ✅ | ✅ | — | — |
 | 2 | Username taken-state + **trademark-claim** | ✅ | ✅ | ✅ | — | ✓ P2 |
 | 3 | Login / account-resolve (never-404, takeover) | ✅ | ✅ | ✅ | — | — |
-| 4 | Join / **cross-device QR pairing + admit** | ✅ | ✅ | ❌ | Android | **P4** |
+| 4 | Join / **cross-device QR pairing + admit** | ✅ | ✅ | ✅ | — | ✓ P4 |
 | 5 | Recovery (keyfile + cloud + post-recovery) | ✅ | ✅ | ✅ | — | — |
 | 6 | Key backup + Secure-your-account + **reminder** | ✅ | ✅ | ✅ | — | ✓ P1 |
 | 7 | Create server (QR relay, TTL, boot-unlock) | ✅ | ✅ | ✅ | — | — |
@@ -33,7 +33,7 @@ Canonical surface = wherever the feature is most complete (port FROM there).
 | 18 | Vibe-code (chat + app build) | ✅ | ✅ | ✅ | — | — |
 | 19 | **Peer-backup** management (+ daemon BFF) | ✅ | ✅ | ✅ | — | ✓ P9 |
 | 20 | **Tier-status / monetization** | ✅ | ✅ | ✅ | — | ✓ P7 |
-| 21 | Multi-profile / iCloud switching | ⚠️ | ✅ | ✅ | webapp | **P12** |
+| 21 | Multi-profile / iCloud switching | ✅ | ✅ | ✅ | — | ✓ P12 |
 | 22 | Settings + developer settings | ✅ | ✅ | ✅ | — | — |
 | 23 | Push registration | ✅ | ✅ | ✅ | — | — |
 | 24 | **In-app browser-viewer** | ✅ | ❌ | ❌ | iOS+Android | **P8** |
@@ -47,9 +47,7 @@ Legend: ✅ believed wired · ⚠️ partial / unverified / audit-disputed · �
 ## Gap list (port direction)
 
 - **To iOS + Android:** collaborator invites (P6), browser-viewer (P8 —
-  framebuffer-stream, see decision note below), cross-device pairing →
-  Android only (P4).
-- **To webapp:** multi-profile (P12).
+  framebuffer-stream, see decision note below).
 - **All three:** companion-browser dock (P14 — new, see below).
 - **Verify-only:** marketplace iOS wiring, create-server iOS pickers (P0).
 

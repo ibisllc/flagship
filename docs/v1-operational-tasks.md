@@ -42,6 +42,10 @@ xcodebuild green, Android gradle green, `tsc -b` clean.
 ### Parity wave 4 (2026-05-25 night, cont.)
 - **P9 client UIs (all 3 surfaces)** — closes the P9 row end-to-end. Webapp view wired into Settings + reconciled field-by-field with the BFF (no drift; honest-zero rendering for the documented data gaps) — `8cbccf7` (76 files / 785 pass). Mobile UIs on iOS + Android with byte-identical wire shapes (Codable + @Serializable types mirror the daemon's TypeScript), new PeerBackupViewModel + PeerBackupScreen on each platform, Mock fixtures + 9 + 8 tests, hand-rolled stubs in ActivityViewModelTest*s patched for the interface extension — `4b82f5a`.
 
+### Parity wave 5 (2026-05-25 night, cont.)
+- **P4 Android QR pairing + admit** — Compose `QrImage` wrapper over the existing ZXing+PairingQr path, focused VM tests on the admit boundary (happy / server-rejects / wrong-device fail-closed), 3 canonical-bytes pins against iOS + the Worker verifier (`flagship/device-admit/v1|<username>|<newDevicePubHex>|<issuedAt>`). The bulk of the admit flow was already in place from earlier work — this rounds out the verification surface. — `f607668`
+- **P12 webapp multi-profile + storage migration** — new `lib/profilesStore.js` owns a per-profile `flagship.profiles.v2` namespace, idempotent one-shot legacy migration gated by a sentinel (NEVER nukes legacy keys), bidirectional mirroring so unrefactored call-sites stay aligned. New Profiles view mirrors iOS visually. 21 + 5 new tests; 811 webapp tests pass. — `a76cf57`
+
 ---
 
 ## A — Install → live padlock (the e2e operation)
@@ -73,7 +77,7 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
 - **P1** — Post-creation backup REMINDER on all 3. _agent._ ✅ (`e598f32` + `4bd3e73`).
 - **P2** — Trademark-claim → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
 - **P3** — Pending-server cancel → real `ReleaseServerName` envelope + `/api/server/release`. _agent._ ✅ (`ca7165a` + `01e8dd4`).
-- **P4** — Cross-device QR pairing + admit → Android (webapp + iOS done). _agent._
+- **P4** — Cross-device QR pairing + admit → Android. _agent._ ✅ (`f607668`).
 - **P5** — Audit log → iOS + Android. _agent._ ✅ (`ca7165a` + `01e8dd4`).
 - **P6** — Collaborator invites (issue + manage) → iOS + Android (webapp
   `invite-issue.js`/`invite-manage.js`; verify daemon BFF first). _agent._
@@ -92,8 +96,11 @@ See `docs/feature-parity.md` for the full matrix. Every task is audit-then-port.
 - **P10** — Replace device (IRK rotation) → webapp. _agent._ ✅ (`20224ce`).
 - **P11** — Wipe & restart → webapp. _agent._ ✅ (`20224ce`) — full ceremony,
   not the older "ship disabled" stance.
-- **P12** — Multi-profile switching → webapp (iOS/Android done; needs a
-  storage migration from single localStorage to a multi-profile store). _agent._
+- **P12** — Multi-profile switching → webapp. _agent._ ✅ (`a76cf57`).
+  Per-profile localStorage namespace (`flagship.profiles.v2`) + one-shot
+  idempotent legacy migration + new Profiles view. Defensive: legacy
+  keys retained + bidirectional mirroring so unrefactored call-sites
+  stay aligned (a future hard cut-over removes the mirror).
 - **P13** — Kill-switch / server-revocation UI → all 3 + Worker handler. _agent._
   ✅ (`be1553e` + `a53386d` + `859e17f`). Per-server danger zone with reason
   picker + 1.5s hold (mobile) / 3s countdown (webapp); IRK-signed; the Worker
@@ -151,8 +158,8 @@ TF2 ─▶ TF3 ─▶ TF5 / TF6
 ```
 
 ## Next agent-doable, smallest-first
-(Updated 2026-05-25 late after wave 4.) **Up next**: P4 Android QR +
-admit → P6 collaborator invites iOS + Android → P12 webapp multi-profile
-+ storage migration → P8 framebuffer-stream port (iOS + Android) → P14
-companion-browser dock (all 3) → P0 verify-only audits. Then the
-hardware/owner items (A3–A6, TF*, C1, E*).
+(Updated 2026-05-25 late after wave 5.) **Up next**: P6 collaborator
+invites iOS + Android (verify daemon BFF first; if missing, BFF + 2 UI)
+→ P8 framebuffer-stream port (iOS + Android) → P14 companion-browser
+dock (all 3) → P0 verify-only audits. Then the hardware/owner items
+(A3–A6, TF*, C1, E*).
