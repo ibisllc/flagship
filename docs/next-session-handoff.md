@@ -5,6 +5,57 @@ follow-ups to reach release-grade.
 
 **Last commit on main:** `5dd36c5` (NFC docs cross-link — N-DOCS-2).
 
+---
+
+## 🚀 Kickoff prompt for the next session (paste into Claude Code)
+
+> Read `docs/next-session-handoff.md` end-to-end, then open
+> `docs/owner-e2e-checklist.md` — that's the 17-task plan to take this
+> project to a real owner-visible e2e (boot a box + see live alerts on
+> iPhone Lock Screen + Dynamic Island + Apple Watch + Android). The
+> only **agent-doable** task on the critical path is **W1** (Apple
+> Watch install-progress surface, ~2-3 h Swift); everything else is
+> me (TestFlight clicks, Xcode Archive, USB burning, real hardware).
+> Start by reading the W1 entry in `owner-e2e-checklist.md`, confirm
+> the relevant files exist (`apps/mobile/ios/Sources/FlagshipWatch/...`
+> and the iOS reference `ProvisionTimelineView.swift`), then build W1.
+>
+> Working rules for this session:
+> - **One commit per logical task.** Imperative subjects per
+>   `CLAUDE.md`. **No `Co-Authored-By: Claude` trailer** (owner
+>   preference).
+> - **Verify after every code change**: `npx tsc -b` (clean) +
+>   `npx vitest run` (all green) before commit. For iOS code:
+>   `cd apps/mobile/ios && xcodebuild -scheme FlagshipMobile-Package
+>   -destination 'platform=iOS Simulator,id=4AF319FC-4B22-4233-8720-E3A2E8638AC1'
+>   test` (iPhone 16e). For Android: `JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+>   ./gradlew test`.
+> - **Use sub-agents (`Agent` tool) for parallel investigation** when
+>   the codebase is unfamiliar — the `Explore` subagent for "where is
+>   X" / "how does Y work", the `Plan` subagent for design decisions
+>   that need cross-file thinking. Don't burn the main context window
+>   on grep loops.
+> - **Track progress with `TaskCreate` / `TaskUpdate`** — mark
+>   `in_progress` when starting, `completed` only when fully done +
+>   tests green + committed.
+> - **Be honest about blockers**: if a test fails, fix it or stop —
+>   don't claim "done" until it's actually green. If something
+>   doesn't work as the doc claims, update the doc.
+> - **Don't deploy to prod** without explicit owner approval (the
+>   prior session shipped 2 deploys; same etiquette applies).
+> - **After W1**: append a one-paragraph completion summary to
+>   `docs/owner-e2e-checklist.md` (tick the W1 box, note the commit
+>   sha + test counts), commit it, and either continue with W2 or
+>   stop and ask. Don't keep accumulating work without checkpointing.
+>
+> The full backlog beyond the e2e checklist (NFC C3 mobile read flow,
+> N-CLOUD-2 hot-path wire-in, canonical-bytes golden vectors, B1-B4
+> v1 polish, A3 distroless gated on e2e satisfaction) is in the
+> §  "Agent" section below. Don't start any of it until the e2e
+> checklist is meaningfully advanced.
+
+---
+
 For full detail: `docs/v1-operational-tasks.md` (canonical backlog incl.
 § N NFC tier), `docs/feature-parity.md` (matrix — every row ✅),
 `docs/nfc-box-pairing.md` (retail-box design + 2026-05-26 refinements).
