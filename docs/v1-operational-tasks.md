@@ -302,7 +302,7 @@ _Follow-up (small):_ add PAIR / BoxUnpair / WiFiConfig golden vectors to `test-v
 
 ### N-DOCS — Documentation + tests
 - **N-DOCS-1** E2E: tap-to-pair happy path; MitM-on-LAN rejected; reset→re-pair; pre-activation claim rejected; two-boxes-one-LAN disambiguation. _agent._
-- **N-DOCS-2** Update `lifecycle-spec.md` and `multi-device.md` with the NFC tier. _agent._
+- [x] **N-DOCS-2** Update `lifecycle-spec.md` and `multi-device.md` with the NFC tier. _agent — lifecycle § 3 carries a NFC callout above Path A; multi-device "See also" links the design doc._
 - **N-DOCS-3** Add NFC tier to `feature-parity.md` if exposed as a user-facing surface. _agent._
 - **N-DOCS-4** Operator runbook for "shipping a branded box" (closes when N-BIZ closes). _agent._
 

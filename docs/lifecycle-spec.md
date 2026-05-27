@@ -147,6 +147,16 @@ iCloud-Keychain / Google Block Store-wrapped UMK + biometrics.
 
 ## 3. PROVISIONING — TWO PATHS
 
+> **Path A — branded boxes — post-v1 NFC tap-to-pair.** Once retail
+> hardware ships, Path A's `[Build code]` step is replaced by an NFC
+> tap that pairs the phone with the box at ~4 cm — proximity
+> authenticates `E_box_pub` by physics instead of a code paste. The
+> protocol-level design + cloud activation flow live in
+> [`nfc-box-pairing.md`](nfc-box-pairing.md) and `docs/v1-operational-tasks.md
+> § N`. v1 still uses the `[Build code]` paste shown here; the NFC
+> tier is additive, not a replacement (it falls back to QR + LED-SAS
+> when the NFC tag is unavailable).
+
 ### Path A: Order a pre-built box from us
 
 #### Phone screens

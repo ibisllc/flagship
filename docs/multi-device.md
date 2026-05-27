@@ -108,3 +108,10 @@ account moves forward.
 - [[wipe-restart]] — the v1.1 nuclear option.
 - [[revocation-ui]] — UI surfaces across iOS, Android, webapp.
 - `docs/build-tasks.md` section S.7 (the v1-alpha device-list checklist).
+- [`nfc-box-pairing.md`](nfc-box-pairing.md) — the **NFC retail tier**
+  (post-v1, planned). Branded boxes pair via a 4 cm NFC tap that
+  authenticates `E_box_pub` by physics, with an LED-SAS fallback when
+  Core NFC misbehaves. The owner remains the trust root; pairing
+  yields a `K_session`-protected post-pair channel and the same
+  IRK-signed claim that this multi-device flow has always used —
+  the device-list semantics here are unchanged.
