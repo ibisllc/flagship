@@ -255,6 +255,88 @@ Debian advanced-mode is the only working creation route.**
 
 ---
 
+## 🎯 Owner e2e roadmap — "boot a real box + see live alerts on phone + Watch"
+
+This is the concrete sequence to take the project from "code shipped"
+to "the owner can boot a box and watch it provision live on iPhone +
+Watch + Android". 17 tasks; 4 lanes that can run in parallel; ~3-4
+half-days of work end-to-end if pushed.
+
+### Lane W — Watch surface (agent-doable; ships in TestFlight build)
+
+- [ ] **W1** — Apple Watch install-progress surface (~2-3h Swift).
+  New WatchOS view + WatchConnectivity sync; must be in the same
+  Archive as TF3.
+- [ ] **W2** — Watch complication for current phase (~1h, optional).
+  Glanceable surface on the watch face.
+
+### Lane TF — iOS TestFlight (your half-day, mostly 📱)
+
+- [ ] **TF2** — Tick Associated Domains capability (📱 5 min).
+- [ ] **TF3** — Xcode Archive + ASC upload (🖥 30 min). **Blocked by TF2 + W1.**
+- [ ] **TF4** — ASC metadata + "What to Test" copy (📱 30 min).
+  **Blocked by TF3.**
+- [ ] **TF5** — Install on iPhone + Watch via TestFlight (📱⌚ 10 min).
+  **Blocked by TF4.** This is where APNs registers your push token.
+
+### Lane AND — Android Play (parallel to TF; your half-day)
+
+- [ ] **AND1** — Build signed AAB (`./gradlew :app:bundleRelease`).
+- [ ] **AND2** — Play Console internal track upload. **Blocked by AND1.**
+- [ ] **AND3** — Install on Android device + grant FCM perms.
+  **Blocked by AND2.**
+
+### Lane ALP — Alpine af_packet (parallel; multi-hour 🖥)
+
+This lane unblocks the **Recommended** apkovl path. The Debian path
+works without it.
+
+- [ ] **ALP1** — Custom Alpine initramfs w/ af_packet baked in (or
+  fix the modloop mount in apkovl mode).
+- [ ] **ALP2** — Reproducible ISO build via the existing CI workflow
+  with the new initramfs. **Blocked by ALP1.**
+- [ ] **ALP3** — Upload to R2 as `flagship-alpine-base.iso` +
+  re-probe `/api/personalize-iso` (must stop 503-ing).
+  **Blocked by ALP2.**
+
+### Lane E2E — the actual run (depends on the lanes above)
+
+- [ ] **E2E-PREP** — Pair iPhone + Watch + create test account in the
+  app (📱⌚ 10 min). **Blocked by TF5.**
+- [ ] **E2E-DEBIAN** — Create server from app → Mac burner Advanced →
+  Debian 13 netinst → burn → boot → observe alerts on iPhone Lock
+  Screen + Dynamic Island + Watch + green padlock at
+  `https://<server>.<you>.flagship.services/` (📱⌚📦 ~1h).
+  **Blocked by E2E-PREP.**
+- [ ] **E2E-ALPINE** — Same as E2E-DEBIAN but the Recommended apkovl
+  path (download personalized ISO from `/ready` → Quick mode burn).
+  **Blocked by E2E-PREP + ALP3.**
+- [ ] **E2E-ANDROID** — Repeat one of the above on Android (📱📦
+  ~30 min). **Blocked by AND3.**
+- [ ] **VERIFY** — Screenshot all 5 alert surfaces (Lock Screen,
+  Dynamic Island compact/expanded/minimal, Watch view) for evidence
+  + ASC "What's New" copy + the eventual launch blog post (📱⌚
+  15 min). **Blocked by E2E-DEBIAN.**
+
+### Critical path
+
+```
+TF2 ─┐
+     ├─→ TF3 → TF4 → TF5 → E2E-PREP → E2E-DEBIAN → VERIFY
+W1 ──┘                                        ↘
+                                               ALP3 ─→ E2E-ALPINE
+                                                       (also blocked by E2E-PREP)
+
+AND1 → AND2 → AND3 → E2E-ANDROID                 (independent of iOS lane)
+ALP1 → ALP2 → ALP3                               (independent until E2E-ALPINE)
+W2                                               (optional polish for Watch)
+```
+
+The shortest path to seeing alerts on your phone = W1 → TF2/3/4/5 →
+E2E-PREP → E2E-DEBIAN → VERIFY. Everything else is parallel.
+
+---
+
 ## Suggested next-session opening move
 
 **Smallest, highest value**: Phase 2 TestFlight (TF2-TF6). One
