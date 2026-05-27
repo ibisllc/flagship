@@ -242,10 +242,12 @@ Owner decisions locked 2026-05-26 (see the doc for full text):
 - Q4 `BoxUnpair` semantics: **rebind only, no remote wipe**.
 
 ### N-PROTO — Protocol additions (`@flagship/protocol`)
-- **N-PROTO-1** `PAIR` + `SIG` canonical-bytes type + Ed25519 verify; HKDF transcript derivation (`flagship/pair/v1`). _agent._
-- **N-PROTO-2** `BoxUnpair` envelope `flagship/box-unpair/v1|userId|boxId|issuedAt`, IRK-signed, rebind-only semantics. _agent._
-- **N-PROTO-3** `WiFiConfig` envelope carried over K_session after pair. _agent._
-- **N-PROTO-4** SAS derivation helper + LED-SAS encoding alphabet (4-color pulses, 3-of-3 confirm, 10s/pulse, 3 retries). _agent._
+- [x] **N-PROTO-1** `PAIR` + `SIG` canonical-bytes type + Ed25519 verify; HKDF transcript derivation (`flagship/pair/v1`). _agent — `packages/protocol/src/nfcPair.ts` + 27 tests._
+- [x] **N-PROTO-2** `BoxUnpair` envelope `flagship/box-unpair/v1|userId|boxId|issuedAt`, IRK-signed, rebind-only semantics. _agent._
+- [x] **N-PROTO-3** `WiFiConfig` envelope carried over K_session after pair. _agent — sealed under AES-GCM with K_session as key; tag-check on open prevents key-collision reinterpret._
+- [x] **N-PROTO-4** SAS derivation helper + LED-SAS encoding alphabet (4-color pulses, 3-of-3 confirm, 10s/pulse, 3 retries). _agent — RGBY alphabet fixed at v1; bump `PAIR_PROTOCOL_VERSION` to reorder._
+
+_Follow-up (small):_ add PAIR / BoxUnpair / WiFiConfig golden vectors to `test-vectors/canonical-bytes.json` to lock the byte format permanently (`canonicalBytesVectors.test.ts` is the drift detector).
 
 ### N-BOX — Box firmware / ISO (single golden image)
 - **N-BOX-1** Box state machine — UNPAIRED (regen) → PAIRED (persist) → RESET (secure-erase); wire into `server-daemon` boot path. _agent + hardware to verify._
