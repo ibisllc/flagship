@@ -49,3 +49,4 @@ export * from "./demoUsersAdminProvision.js";
 export * from "./demoUsersAdminCloudInit.js";
 export * from "./provisionEvents.js";
 export * from "./personalizeIso.js";
+export * from "./serialActivation.js";

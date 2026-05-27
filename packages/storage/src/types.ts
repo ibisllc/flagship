@@ -853,6 +853,7 @@ export interface Storage {
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
+  boxSerials: BoxSerialsStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1418,4 +1419,63 @@ export interface DeviceCapabilityGrantStorage {
   /** Stamp `revoked_at` on the matching grant. Throws Error
    *  `'unknown grantId'` if no row exists. */
   revoke(grantId: string, revokedAt: number): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Box serials — branded-tier activation + first-claim binding (migration 0039)
+//
+// Allocated at production time, activated at retail PoS, bound to a
+// stkPub on first ownership claim. See `docs/nfc-box-pairing.md` for
+// the surrounding NFC pairing design and `docs/v1-operational-tasks.md
+// § N-CLOUD` for the API + enforcement scope.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface BoxSerialRecord {
+  serial: string;
+  sku: string;
+  /** Null until the retailer marks the box activated at PoS. */
+  activatedAt: number | null;
+  /** Free-text retailer identifier (store id / register #). Audit only. */
+  activatedBy: string | null;
+  /** Set on first successful ownership claim; one-shot bind. */
+  stkPubHex: string | null;
+  /** Last 6 hex of stkPubHex — denormalized for the rendezvous lookup. */
+  suffix6: string | null;
+  boundAt: number | null;
+  createdAt: number;
+}
+
+export interface BoxSerialsStorage {
+  /** Insert a fresh production row. Returns ok:false reason
+   *  `'duplicate serial'` if the serial already exists. */
+  create(
+    rec: Pick<BoxSerialRecord, "serial" | "sku" | "createdAt">,
+  ): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(serial: string): Promise<BoxSerialRecord | undefined>;
+  /** Mark a serial activated. Idempotent — returns ok:true with
+   *  `alreadyActivated:true` on a second call. Returns ok:false
+   *  reason `'unknown serial'` when the row doesn't exist. */
+  activate(args: {
+    serial: string;
+    activatedBy: string | null;
+    at: number;
+  }): Promise<
+    | { ok: true; alreadyActivated: boolean }
+    | { ok: false; reason: string }
+  >;
+  /** One-shot bind on first claim. Returns ok:false reason
+   *  `'not activated'` if `activatedAt` is null, `'already bound'`
+   *  if the row has a different stkPubHex set, `'unknown serial'`
+   *  if absent. */
+  bindStk(args: {
+    serial: string;
+    stkPubHex: string;
+    suffix6: string;
+    at: number;
+  }): Promise<
+    | { ok: true; alreadyBound: boolean }
+    | { ok: false; reason: string }
+  >;
+  /** Disambiguation lookup — every row whose suffix6 matches. */
+  listBySuffix6(suffix6: string): Promise<BoxSerialRecord[]>;
 }

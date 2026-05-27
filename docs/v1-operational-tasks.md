@@ -277,9 +277,9 @@ _Follow-up (small):_ add PAIR / BoxUnpair / WiFiConfig golden vectors to `test-v
 - **N-PHONE-6** LED-SAS fallback UI (camera capture + decode of the LED pulse pattern). _agent._
 
 ### N-CLOUD — Cloud / Worker
-- **N-CLOUD-1** Activation API — `POST /api/serial/activate` (retailer-scoped auth) + `GET /api/serial/{serial}/status` (in-store-only per Q1). _agent._
-- **N-CLOUD-2** Worker-side enforce "activated" check on first ownership claim for branded boxes. _agent._
-- **N-CLOUD-3** Two-box disambiguation rendezvous: the cloud `hint` carries the 6-digit STK suffix so a phone can pick the right candidate. _agent._
+- [x] **N-CLOUD-1** Activation API — `POST /api/serial/activate` (retailer-scoped auth) + `GET /api/serial/{serial}/status` (in-store-only per Q1). _agent — `packages/control-plane/src/serialActivation.ts` + 22 tests; HMAC scheme = SHA-256(FLAGSHIP_RETAILER_HMAC_SECRET, canonical), ±5 min freshness; D1 migration 0039_box_serials.sql._
+- **N-CLOUD-2** Worker-side enforce "activated" check on first ownership claim for branded boxes. _agent — helper `enforceActivated()` shipped + tested; wire-in to `handleServerRegister` still pending (touches a hot path; deferred to a focused follow-up)._
+- [x] **N-CLOUD-3** Two-box disambiguation rendezvous: the cloud `hint` carries the 6-digit STK suffix so a phone can pick the right candidate. _agent — `GET /api/rendezvous/:suffix6` returns every bound serial matching the suffix (full stkPub not leaked; phone has it from the NFC tap)._
 
 ### N-MFG — Manufacturing / retail (gated on N-BIZ)
 - **N-MFG-1** Single golden ISO build pipeline (reuse `reproducible-iso-build.md`). _ops/CI._

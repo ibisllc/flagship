@@ -9,6 +9,8 @@ import type {
   SecretMailboxPurpose,
   BoxSealedLeaseRecord,
   BoxSealedLeaseStorage,
+  BoxSerialRecord,
+  BoxSerialsStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   RecoveryWipePolicy,
@@ -2655,6 +2657,113 @@ export class D1DeviceCapabilityGrantStorage
   }
 }
 
+interface BoxSerialRow {
+  serial: string;
+  sku: string;
+  activated_at: number | null;
+  activated_by: string | null;
+  stk_pub_hex: string | null;
+  suffix6: string | null;
+  bound_at: number | null;
+  created_at: number;
+}
+
+function rowToBoxSerial(r: BoxSerialRow): BoxSerialRecord {
+  return {
+    serial: r.serial,
+    sku: r.sku,
+    activatedAt: r.activated_at,
+    activatedBy: r.activated_by,
+    stkPubHex: r.stk_pub_hex,
+    suffix6: r.suffix6,
+    boundAt: r.bound_at,
+    createdAt: r.created_at,
+  };
+}
+
+export class D1BoxSerialsStorage implements BoxSerialsStorage {
+  constructor(private readonly db: D1Database) {}
+  async create(rec: Pick<BoxSerialRecord, "serial" | "sku" | "createdAt">) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO box_serials (serial, sku, created_at) VALUES (?1, ?2, ?3)`,
+        )
+        .bind(rec.serial, rec.sku, rec.createdAt)
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate serial" };
+      }
+      throw e;
+    }
+  }
+  async get(serial: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM box_serials WHERE serial = ?1`)
+      .bind(serial)
+      .first<BoxSerialRow>();
+    return r ? rowToBoxSerial(r) : undefined;
+  }
+  async activate(args: { serial: string; activatedBy: string | null; at: number }) {
+    const existing = await this.get(args.serial);
+    if (!existing) return { ok: false as const, reason: "unknown serial" };
+    if (existing.activatedAt !== null) {
+      return { ok: true as const, alreadyActivated: true };
+    }
+    await this.db
+      .prepare(
+        `UPDATE box_serials SET activated_at = ?1, activated_by = ?2
+         WHERE serial = ?3 AND activated_at IS NULL`,
+      )
+      .bind(args.at, args.activatedBy, args.serial)
+      .run();
+    return { ok: true as const, alreadyActivated: false };
+  }
+  async bindStk(args: {
+    serial: string;
+    stkPubHex: string;
+    suffix6: string;
+    at: number;
+  }) {
+    const existing = await this.get(args.serial);
+    if (!existing) return { ok: false as const, reason: "unknown serial" };
+    if (existing.activatedAt === null) {
+      return { ok: false as const, reason: "not activated" };
+    }
+    if (existing.stkPubHex !== null) {
+      if (existing.stkPubHex.toLowerCase() === args.stkPubHex.toLowerCase()) {
+        return { ok: true as const, alreadyBound: true };
+      }
+      return { ok: false as const, reason: "already bound" };
+    }
+    await this.db
+      .prepare(
+        `UPDATE box_serials SET stk_pub_hex = ?1, suffix6 = ?2, bound_at = ?3
+         WHERE serial = ?4 AND stk_pub_hex IS NULL`,
+      )
+      .bind(
+        args.stkPubHex.toLowerCase(),
+        args.suffix6.toLowerCase(),
+        args.at,
+        args.serial,
+      )
+      .run();
+    return { ok: true as const, alreadyBound: false };
+  }
+  async listBySuffix6(suffix6: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM box_serials WHERE suffix6 = ?1 ORDER BY bound_at DESC`,
+      )
+      .bind(suffix6.toLowerCase())
+      .all<BoxSerialRow>();
+    return (r.results ?? []).map(rowToBoxSerial);
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -2684,6 +2793,7 @@ export class D1Storage implements Storage {
   installPolicyFanout: InstallPolicyFanoutStorage;
   demoUsers: DemoUsersStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
+  boxSerials: BoxSerialsStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -2713,5 +2823,6 @@ export class D1Storage implements Storage {
     this.installPolicyFanout = new D1InstallPolicyFanoutStorage(db);
     this.demoUsers = new D1DemoUsersStorage(db);
     this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
+    this.boxSerials = new D1BoxSerialsStorage(db);
   }
 }

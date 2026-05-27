@@ -57,6 +57,8 @@ import type {
   DemoUsersStorage,
   InstallPolicyFanoutRecord,
   InstallPolicyFanoutStorage,
+  BoxSerialRecord,
+  BoxSerialsStorage,
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
 } from "./types.js";
@@ -1149,6 +1151,71 @@ export class InMemoryDeviceCapabilityGrantStorage
   }
 }
 
+export class InMemoryBoxSerialsStorage implements BoxSerialsStorage {
+  private bySerial = new Map<string, BoxSerialRecord>();
+  private clone(r: BoxSerialRecord): BoxSerialRecord {
+    return { ...r };
+  }
+  async create(rec: Pick<BoxSerialRecord, "serial" | "sku" | "createdAt">) {
+    if (this.bySerial.has(rec.serial)) {
+      return { ok: false as const, reason: "duplicate serial" };
+    }
+    this.bySerial.set(rec.serial, {
+      serial: rec.serial,
+      sku: rec.sku,
+      activatedAt: null,
+      activatedBy: null,
+      stkPubHex: null,
+      suffix6: null,
+      boundAt: null,
+      createdAt: rec.createdAt,
+    });
+    return { ok: true as const };
+  }
+  async get(serial: string) {
+    const r = this.bySerial.get(serial);
+    return r ? this.clone(r) : undefined;
+  }
+  async activate(args: { serial: string; activatedBy: string | null; at: number }) {
+    const r = this.bySerial.get(args.serial);
+    if (!r) return { ok: false as const, reason: "unknown serial" };
+    if (r.activatedAt !== null) {
+      return { ok: true as const, alreadyActivated: true };
+    }
+    r.activatedAt = args.at;
+    r.activatedBy = args.activatedBy;
+    return { ok: true as const, alreadyActivated: false };
+  }
+  async bindStk(args: {
+    serial: string;
+    stkPubHex: string;
+    suffix6: string;
+    at: number;
+  }) {
+    const r = this.bySerial.get(args.serial);
+    if (!r) return { ok: false as const, reason: "unknown serial" };
+    if (r.activatedAt === null) return { ok: false as const, reason: "not activated" };
+    if (r.stkPubHex !== null) {
+      if (r.stkPubHex.toLowerCase() === args.stkPubHex.toLowerCase()) {
+        return { ok: true as const, alreadyBound: true };
+      }
+      return { ok: false as const, reason: "already bound" };
+    }
+    r.stkPubHex = args.stkPubHex.toLowerCase();
+    r.suffix6 = args.suffix6.toLowerCase();
+    r.boundAt = args.at;
+    return { ok: true as const, alreadyBound: false };
+  }
+  async listBySuffix6(suffix6: string) {
+    const s = suffix6.toLowerCase();
+    const out: BoxSerialRecord[] = [];
+    for (const r of this.bySerial.values()) {
+      if (r.suffix6 === s) out.push(this.clone(r));
+    }
+    return out;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -1178,4 +1245,5 @@ export class InMemoryStorage implements Storage {
   installPolicyFanout = new InMemoryInstallPolicyFanoutStorage();
   demoUsers = new InMemoryDemoUsersStorage();
   deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
+  boxSerials = new InMemoryBoxSerialsStorage();
 }
