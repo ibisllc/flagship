@@ -250,15 +250,15 @@ Owner decisions locked 2026-05-26 (see the doc for full text):
 _Follow-up (small):_ add PAIR / BoxUnpair / WiFiConfig golden vectors to `test-vectors/canonical-bytes.json` to lock the byte format permanently (`canonicalBytesVectors.test.ts` is the drift detector).
 
 ### N-BOX — Box firmware / ISO (single golden image)
-- **N-BOX-1** Box state machine — UNPAIRED (regen) → PAIRED (persist) → RESET (secure-erase); wire into `server-daemon` boot path. _agent + hardware to verify._
-- **N-BOX-2** Per-boot ephemeral keygen + hard RNG entropy gate (`entropy_avail ≥ 256`). _agent._
+- **N-BOX-1** Box state machine — UNPAIRED (regen) → PAIRED (persist) → RESET (secure-erase); wire into `server-daemon` boot path. _agent + hardware to verify — pure state machine is **DONE** in `packages/server-daemon/src/nfcPairing/pairStateMachine.ts`; boot-path wiring still pending._
+- [x] **N-BOX-2** Per-boot ephemeral keygen + hard RNG entropy gate (`entropy_avail ≥ 256`). _agent — `nfcPairing/rngGate.ts` + `nfcPairing/pairEmitter.ts:generatePairKeys`._
 - **N-BOX-3** Pair-mode emitter — write `PAIR`/`SIG` (NDEF) to the tag; clear on PAIRED. _agent + MCU bring-up to test end-to-end._
 - **N-BOX-4** Power-button long-hold handler — 10 s with LED countdown, no ACPI collision. _agent + hardware._
-- **N-BOX-5** First-valid-claim latch + 30 s session-lock window. _agent._
+- [x] **N-BOX-5** First-valid-claim latch + 30 s session-lock window. _agent — `nfcPairing/pairStateMachine.ts`._
 - **N-BOX-6** LED status driver + SAS encoder (fallback flow). _agent + hardware._
-- **N-BOX-7** mDNS advertise + cloud rendezvous (`hint` includes the 6-digit STK suffix for disambiguation). _agent._
-- **N-BOX-8** Post-pair Wi-Fi config receiver (over K_session). _agent._
-- **N-BOX-9** Resale wipe verification — read-back 4 KiB after LUKS erase. _agent._
+- [x] **N-BOX-7** mDNS advertise + cloud rendezvous (`hint` includes the 6-digit STK suffix for disambiguation). _agent — payload assembly in `nfcPairing/pairEmitter.ts:buildPairHint`; actual mDNS publisher binding still pending._
+- **N-BOX-8** Post-pair Wi-Fi config receiver (over K_session). _agent — protocol envelope shipped under N-PROTO-3; daemon-side receiver still pending._
+- [x] **N-BOX-9** Resale wipe verification — read-back 4 KiB after LUKS erase. _agent — `nfcPairing/wipeVerifier.ts`._
 - **N-BOX-10** ISO RNG seeding (jitterentropy + haveged-equivalent baked in). _agent + ops/CI (the ISO build pipeline)._
 - **N-BOX-11** NFC-failure graceful-degrade to DIY HDMI+QR path on the same box. _agent._
 
