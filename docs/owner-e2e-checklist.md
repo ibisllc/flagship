@@ -52,7 +52,7 @@ Watch app cold still shows the timeline.
 iPhone receiving them; at least one XCTest verifies the view's state
 transitions; ships in the same Archive as TF3.
 
-**Completed**: 2026-05-30 (commit pending — appended after commit).
+**Completed**: 2026-05-30, commit `6274f1b`.
 The Watch target actually lives at `apps/mobile/ios/App/WatchApp/`
 (not `Sources/FlagshipWatch/` as the kickoff said — Xcode-managed
 target outside SPM). Picked WatchConnectivity over direct APNs to
