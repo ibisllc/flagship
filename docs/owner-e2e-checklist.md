@@ -123,7 +123,7 @@ running.
 face family in the simulator; updates within a heartbeat of phase
 transitions; ships in the same Archive as W1.
 
-**Completed**: 2026-05-30 (commit pending — appended after commit).
+**Completed**: 2026-05-30, commit `2b9fe30`.
 New `FlagshipWatchWidgets` Widget Extension target ships inside the
 Watch app bundle and provides three complication families:
 `.accessoryInline` ("Flagship: sealing"), `.accessoryCircular`
