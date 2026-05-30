@@ -88,6 +88,16 @@ struct FlagshipApp: App {
                     progress.onStep?(step)
                 }
             }
+            // Mirror the phase onto the watch's install-progress surface
+            // (W1). The push carries username + fqdn but no serial; the
+            // fqdn doubles as the publisher's continuity key — same
+            // install yields the same fqdn across every phase push, so
+            // history accumulates correctly on the watch.
+            WatchTimelinePublisher.shared.update(
+                from: event,
+                podName: event.fqdn.isEmpty ? "Provisioning" : event.fqdn,
+                serial: event.fqdn.isEmpty ? event.username : event.fqdn
+            )
         }
     }
 

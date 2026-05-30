@@ -9,14 +9,25 @@ struct WatchRootView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if session.pending.approvals.isEmpty {
-                    emptyState
-                } else {
+                if let timeline = session.provisionTimeline, timeline.active {
+                    // Active install dominates the watch face: the
+                    // ladder is the most time-sensitive thing the user
+                    // wants to see right now. Approvals show as a
+                    // secondary entry if any are pending.
+                    ProvisionTimelineWatchView(context: timeline)
+                } else if !session.pending.approvals.isEmpty {
                     List(session.pending.approvals) { approval in
                         NavigationLink(value: approval.requestId) {
                             ApprovalRow(approval: approval)
                         }
                     }
+                } else if let timeline = session.provisionTimeline {
+                    // Inactive (terminal-state) timeline still shows as
+                    // a glanceable acknowledgement until the phone
+                    // explicitly clears it.
+                    ProvisionTimelineWatchView(context: timeline)
+                } else {
+                    emptyState
                 }
             }
             .navigationTitle("Flagship")

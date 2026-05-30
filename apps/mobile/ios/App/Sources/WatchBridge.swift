@@ -19,6 +19,11 @@ final class WatchBridge: NSObject {
 
     private var client: (any ScreensClient)?
 
+    /// Last published timeline context. Held so a re-send after a
+    /// pending-approvals change preserves the timeline, since
+    /// applicationContext is "latest snapshot replaces previous".
+    private var timeline: WatchProtocol.ProvisionTimelineContext?
+
     private override init() { super.init() }
 
     /// Call once at app start to wire the bridge to the live screens
@@ -29,6 +34,34 @@ final class WatchBridge: NSObject {
         if WCSession.default.delegate !== self {
             WCSession.default.delegate = self
             WCSession.default.activate()
+        }
+    }
+
+    /// Publish a new provision-timeline snapshot to the paired watch.
+    /// Pass nil to clear the surface. Best-effort: dropped silently if
+    /// no watch is paired or WCSession isn't supported (simulator).
+    func updateProvisionTimeline(_ ctx: WatchProtocol.ProvisionTimelineContext?) {
+        timeline = ctx
+        pushApplicationContext()
+    }
+
+    private func pushApplicationContext() {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        var payload: [String: Any] = [:]
+        if let timeline,
+           let data = try? JSONEncoder().encode(timeline) {
+            payload["provision-timeline"] = data
+        }
+        // The applicationContext call REPLACES the prior snapshot, so an
+        // empty payload (no timeline + no approvals) is the documented
+        // way to clear the watch surface.
+        do {
+            try session.updateApplicationContext(payload)
+        } catch {
+            // Best-effort UX surface; never crash the phone over a
+            // failed watch update.
         }
     }
 }

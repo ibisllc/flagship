@@ -3,30 +3,53 @@ import WatchConnectivity
 
 /// Watch-side WatchConnectivity wrapper.
 ///
-/// - Reads `applicationContext` (the phone replaces it with the latest
-///   PendingApprovalsContext whenever the phone's approval list
-///   changes). The watch sees only the most recent snapshot.
+/// - Reads `applicationContext` (the phone replaces it on each send;
+///   the watch only sees the most recent snapshot — that's exactly the
+///   semantic we want). Two payloads share the dictionary today:
+///     * `pending` — `PendingApprovalsContext` (legacy unlock-approval
+///       surface, kept wired for the future relay path).
+///     * `provision-timeline` — `ProvisionTimelineContext` (W1 — the
+///       install-progress ladder rendered by `ProvisionTimelineWatchView`).
 /// - Sends `WatchProtocol.ApproveCommand` to the phone via
 ///   `sendMessage(_:replyHandler:errorHandler:)` so the phone gets a
 ///   reply ack we can use to flip the row UI.
+///
+/// Both payloads are persisted to UserDefaults on receipt so a cold
+/// watch-app launch picks up the most-recent snapshot even before
+/// WCSession redelivers it.
 @MainActor
 final class WatchConnectivityClient: NSObject, ObservableObject {
     static let shared = WatchConnectivityClient()
 
     @Published var pending: WatchProtocol.PendingApprovalsContext = .init()
+    @Published var provisionTimeline: WatchProtocol.ProvisionTimelineContext?
     @Published var inFlightRequestId: String? = nil
     @Published var lastError: String? = nil
     @Published var lastApprovedId: String? = nil
 
-    private override init() { super.init() }
+    private static let pendingDefaultsKey = "flagship.watch.pending-v1"
+    private static let timelineDefaultsKey = "flagship.watch.provision-timeline-v1"
+
+    private override init() {
+        super.init()
+        // Rehydrate the last snapshots so a cold launch isn't blank
+        // even if the watch hasn't reconnected to the iPhone yet.
+        if let data = UserDefaults.standard.data(forKey: Self.pendingDefaultsKey),
+           let ctx = try? JSONDecoder().decode(WatchProtocol.PendingApprovalsContext.self, from: data) {
+            self.pending = ctx
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.timelineDefaultsKey),
+           let ctx = try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data) {
+            self.provisionTimeline = ctx
+        }
+    }
 
     func activate() {
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
-        if let data = WCSession.default.receivedApplicationContext["pending"] as? Data {
-            try? decode(data: data)
-        }
+        let context = WCSession.default.receivedApplicationContext
+        applyApplicationContext(context)
     }
 
     func approve(_ approval: WatchProtocol.PendingApproval) async {
@@ -64,9 +87,17 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
         }
     }
 
-    private func decode(data: Data) throws {
-        let ctx = try JSONDecoder().decode(WatchProtocol.PendingApprovalsContext.self, from: data)
-        self.pending = ctx
+    private func applyApplicationContext(_ context: [String: Any]) {
+        if let data = context["pending"] as? Data,
+           let ctx = try? JSONDecoder().decode(WatchProtocol.PendingApprovalsContext.self, from: data) {
+            self.pending = ctx
+            UserDefaults.standard.set(data, forKey: Self.pendingDefaultsKey)
+        }
+        if let data = context["provision-timeline"] as? Data,
+           let ctx = try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data) {
+            self.provisionTimeline = ctx
+            UserDefaults.standard.set(data, forKey: Self.timelineDefaultsKey)
+        }
     }
 }
 
@@ -78,7 +109,6 @@ extension WatchConnectivityClient: WCSessionDelegate {
     ) {}
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        guard let data = applicationContext["pending"] as? Data else { return }
-        Task { @MainActor in try? self.decode(data: data) }
+        Task { @MainActor in self.applyApplicationContext(applicationContext) }
     }
 }

@@ -24,7 +24,7 @@ The Watch app today handles unlock approvals only. These tasks add
 the install-progress surface so a glance at the watch shows what
 phase a provisioning box is in.
 
-### W1 — Apple Watch install-progress surface (~2-3 h)
+### W1 — Apple Watch install-progress surface (~2-3 h) ✅
 
 **Owner**: 🤖 agent. Pure Swift, no hardware needed.
 
@@ -51,6 +51,64 @@ Watch app cold still shows the timeline.
 (or direct push) carries phase updates within ~2 seconds of the
 iPhone receiving them; at least one XCTest verifies the view's state
 transitions; ships in the same Archive as TF3.
+
+**Completed**: 2026-05-30 (commit pending — appended after commit).
+The Watch target actually lives at `apps/mobile/ios/App/WatchApp/`
+(not `Sources/FlagshipWatch/` as the kickoff said — Xcode-managed
+target outside SPM). Picked WatchConnectivity over direct APNs to
+match the existing approvals plumbing. Implementation:
+
+- `Sources/FlagshipUI/ViewModels/ProvisionTimelineLadder.swift` —
+  extracted the row-projection algorithm out of
+  `ProvisionTimelineView` into a pure-Swift, SwiftUI-free type. The
+  view now delegates to it. This is the canonical spec.
+- `Tests/FlagshipMobileTests/ProvisionTimelineLadderTests.swift` —
+  9 new XCTest cases covering pre-checkpoint, in-flight progression,
+  current-row detail precedence, terminal live (collapses to all
+  done), terminal error at mid-ladder + first-row + empty-detail
+  edge case, and the forward-compat unknown-phase sentinel.
+- `App/Shared/WatchProvisionTimeline.swift` — Codable wire payload
+  (`WatchProtocol.ProvisionTimelineContext`) + parallel ladder
+  projection (`WatchProtocol.ProvisionTimelineLadder`) that mirrors
+  the FlagshipUI algorithm against the wire-type the watch receives
+  (Foundation-only so the watch target doesn't pull in FlagshipAPI).
+  Also includes `ProvisionPhaseMapping` that folds the fine-grained
+  PROVISION_PHASES wire vocabulary onto the 8-phase ladder.
+- `App/Sources/WatchTimelinePublisher.swift` — iPhone-side
+  aggregator. Two update paths: `update(from: ProvisionStatus,...)`
+  for the polled rich source and `update(from: ProvisionPhaseEvent,...)`
+  for the push-driven path. Either commits to `WatchBridge`.
+- `App/Sources/WatchBridge.swift` — new `updateProvisionTimeline(_:)`
+  that JSON-encodes the context and pushes via
+  `WCSession.updateApplicationContext` under the
+  `provision-timeline` key (next to the existing `pending` key).
+- `App/Sources/FlagshipApp.swift` — wired `ProvisionPhaseBridge.onPhase`
+  to also forward to the publisher (using the push's `fqdn` as the
+  continuity key so consecutive pushes for the same install
+  accumulate history correctly).
+- `App/WatchApp/WatchConnectivityClient.swift` — added
+  `@Published provisionTimeline`, decodes both payloads, and
+  persists each to `UserDefaults` so a cold watch launch shows the
+  most-recent snapshot before WCSession reconnects.
+- `App/WatchApp/ProvisionTimelineWatchView.swift` — watchOS SwiftUI
+  view with a compact rail-with-nodes layout sized for the smallest
+  watch face. Uses the same row-state vocabulary as iOS.
+- `App/WatchApp/WatchRootView.swift` — active timeline dominates the
+  watch face; pending approvals show if no timeline is active;
+  inactive (terminal) timeline still surfaces until the phone clears
+  it.
+- `App/FlagshipApp.xcodeproj/project.pbxproj` — wired 3 new files
+  into the right groups + target sources lists (Shared/ visible to
+  both FlagshipApp + FlagshipWatchApp; new App/Sources file in
+  FlagshipApp only; new WatchApp file in FlagshipWatchApp only).
+
+**Gates** (all green): vitest **333 files / 4286 pass**, tsc -b
+clean, iOS xcodebuild FlagshipMobile-Package test **624 tests**
+(+9 new from the baseline 615). The watchOS Swift sources typecheck
+cleanly against the WatchSimulator26.5 SDK that's installed; full
+watchOS-platform build is gated on the owner installing the watchOS
+26.5 platform via Xcode → Settings → Components (a TF3 prerequisite
+regardless — the Archive needs the Watch target embedded).
 
 ### W2 — Watch complication for current phase (~1 h, optional)
 

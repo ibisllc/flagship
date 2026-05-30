@@ -30,6 +30,10 @@
 		D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA35BF39206378728D34AE65 /* WatchBridge.swift */; };
 		DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */; };
 		E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */; };
+		E3D8C826FE421D5C5206C975 /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */; };
+		DC7D8721A793D7AED86FF5DF /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */; };
+		7F6CC51AE99214546D09E28F /* WatchTimelinePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */; };
+		A2E0242CCCA672F9DF8A392A /* ProvisionTimelineWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -142,6 +146,9 @@
 		02496F836C57C5F611D9C415 /* workloop.h-1YSUXMQYKAHG9 */ = {isa = PBXFileReference; path = "workloop.h-1YSUXMQYKAHG9"; sourceTree = "<group>"; };
 		024B33BB784EEEC08820E902 /* common.h-T9QV8ONS941C */ = {isa = PBXFileReference; path = "common.h-T9QV8ONS941C"; sourceTree = "<group>"; };
 		0257E69AE45D2265F100E0F5 /* WatchApproval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApproval.swift; sourceTree = "<group>"; };
+		91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchProvisionTimeline.swift; sourceTree = "<group>"; };
+		52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTimelinePublisher.swift; sourceTree = "<group>"; };
+		AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionTimelineWatchView.swift; sourceTree = "<group>"; };
 		0258579892F84962AD942A7F /* INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB */ = {isa = PBXFileReference; path = "INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB"; sourceTree = "<group>"; };
 		025EDAB97F073A49C40B147A /* INPaymentMethodType.h-2Y9AYBWSL4X38 */ = {isa = PBXFileReference; path = "INPaymentMethodType.h-2Y9AYBWSL4X38"; sourceTree = "<group>"; };
 		026B40B3492D5EEBECA48E81 /* types.h-EDPX0HDHYBWI */ = {isa = PBXFileReference; path = "types.h-EDPX0HDHYBWI"; sourceTree = "<group>"; };
@@ -12164,6 +12171,7 @@
 				D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */,
 				5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */,
 				EA35BF39206378728D34AE65 /* WatchBridge.swift */,
+				52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -19823,6 +19831,7 @@
 				62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */,
 				1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */,
 				0257E69AE45D2265F100E0F5 /* WatchApproval.swift */,
+				91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -29748,6 +29757,7 @@
 			children = (
 				364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */,
 				AC644708931B6CC8A4F4273F /* Info.plist */,
+				AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */,
 				6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */,
 				1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */,
 			);
@@ -38543,6 +38553,8 @@
 				AC4E7F4AAE2AA9C3651AD92D /* PodStatusSnapshot.swift in Sources */,
 				0F4B42407D260837449D3D7E /* WatchApproval.swift in Sources */,
 				D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */,
+				E3D8C826FE421D5C5206C975 /* WatchProvisionTimeline.swift in Sources */,
+				7F6CC51AE99214546D09E28F /* WatchTimelinePublisher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -38551,7 +38563,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */,
+				A2E0242CCCA672F9DF8A392A /* ProvisionTimelineWatchView.swift in Sources */,
 				4FEA6B5C2B78A94C15B80B74 /* WatchApproval.swift in Sources */,
+				DC7D8721A793D7AED86FF5DF /* WatchProvisionTimeline.swift in Sources */,
 				DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */,
 				34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */,
 			);
