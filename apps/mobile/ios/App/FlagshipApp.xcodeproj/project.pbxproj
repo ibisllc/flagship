@@ -34,6 +34,11 @@
 		DC7D8721A793D7AED86FF5DF /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */; };
 		7F6CC51AE99214546D09E28F /* WatchTimelinePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */; };
 		A2E0242CCCA672F9DF8A392A /* ProvisionTimelineWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */; };
+		B24D1A750F22BD603F42D7A1 /* FlagshipWatchWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665DB1B44C4538A412C02D08 /* FlagshipWatchWidgetsBundle.swift */; };
+		6D6A1DD06F0B9304241DB33E /* ProvisionPhaseComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785B937E9481A2016960C473 /* ProvisionPhaseComplication.swift */; };
+		902D3FECF21FB36918A886BC /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
+		FA70A6C965C9C751B514ADC9 /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */; };
+		A364A1557B0A1E9E05E53212 /* FlagshipWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +48,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 2A018BB2AA740157B8047930;
 			remoteInfo = FlagshipWidgets;
+		};
+		340A8F1B8D0D3998FB801D0A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 93FD94A2CD553E9E36DD9987 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F6845DB2D7814BA26A5F1DF3;
+			remoteInfo = FlagshipWatchWidgets;
 		};
 		0CBC71D3D69A0AEFDF9C0A10 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -61,6 +73,17 @@
 			dstSubfolderSpec = 13;
 			files = (
 				1C9D09A9144DD8F14716442B /* FlagshipWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		31F2FF20723AD496F844E9CC /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A364A1557B0A1E9E05E53212 /* FlagshipWatchWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -149,6 +172,12 @@
 		91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchProvisionTimeline.swift; sourceTree = "<group>"; };
 		52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTimelinePublisher.swift; sourceTree = "<group>"; };
 		AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionTimelineWatchView.swift; sourceTree = "<group>"; };
+		665DB1B44C4538A412C02D08 /* FlagshipWatchWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlagshipWatchWidgetsBundle.swift; sourceTree = "<group>"; };
+		785B937E9481A2016960C473 /* ProvisionPhaseComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionPhaseComplication.swift; sourceTree = "<group>"; };
+		69B01ADFF83845FD6E41F091 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F0FFC72B3F610A47B494FEBF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
+		04E9CC443BFF5F1FE5A256C7 /* FlagshipWatchApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchApp.entitlements; sourceTree = "<group>"; };
+		49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FlagshipWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0258579892F84962AD942A7F /* INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB */ = {isa = PBXFileReference; path = "INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB"; sourceTree = "<group>"; };
 		025EDAB97F073A49C40B147A /* INPaymentMethodType.h-2Y9AYBWSL4X38 */ = {isa = PBXFileReference; path = "INPaymentMethodType.h-2Y9AYBWSL4X38"; sourceTree = "<group>"; };
 		026B40B3492D5EEBECA48E81 /* types.h-EDPX0HDHYBWI */ = {isa = PBXFileReference; path = "types.h-EDPX0HDHYBWI"; sourceTree = "<group>"; };
@@ -29755,6 +29784,7 @@
 		AC52F51D56E503B2D597DA6D /* WatchApp */ = {
 			isa = PBXGroup;
 			children = (
+				04E9CC443BFF5F1FE5A256C7 /* FlagshipWatchApp.entitlements */,
 				364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */,
 				AC644708931B6CC8A4F4273F /* Info.plist */,
 				AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */,
@@ -29762,6 +29792,17 @@
 				1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */,
 			);
 			path = WatchApp;
+			sourceTree = "<group>";
+		};
+		80B44BAA59D8FB0D2ED8E075 /* WatchWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				F0FFC72B3F610A47B494FEBF /* FlagshipWatchWidgets.entitlements */,
+				665DB1B44C4538A412C02D08 /* FlagshipWatchWidgetsBundle.swift */,
+				69B01ADFF83845FD6E41F091 /* Info.plist */,
+				785B937E9481A2016960C473 /* ProvisionPhaseComplication.swift */,
+			);
+			path = WatchWidgets;
 			sourceTree = "<group>";
 		};
 		AC5962C0E53A0DBFD48725BB /* XCBuildData */ = {
@@ -33604,6 +33645,7 @@
 				35A7CF9005DFBA00AB42586B /* FlagshipAppUITests.xctest */,
 				6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */,
 				320466AFB364B4CE4A1DB396 /* FlagshipWidgets.appex */,
+				49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -38370,6 +38412,7 @@
 				7A32690FE07864A771E99F82 /* Resources */,
 				5846003CBA49B0B79C07350E /* Shared */,
 				AC52F51D56E503B2D597DA6D /* WatchApp */,
+				80B44BAA59D8FB0D2ED8E075 /* WatchWidgets */,
 				1B2A4CB3BFA9C1404E8FC705 /* Sources */,
 				15EFE9D22B724D06FFC50F85 /* build */,
 			);
@@ -38424,10 +38467,12 @@
 			buildConfigurationList = 819E8225FA46B210725BE0BC /* Build configuration list for PBXNativeTarget "FlagshipWatchApp" */;
 			buildPhases = (
 				EC69399646768B5C24017860 /* Sources */,
+				31F2FF20723AD496F844E9CC /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D70DBB6E9E6855AD116CE6BE /* PBXTargetDependency */,
 			);
 			name = FlagshipWatchApp;
 			packageProductDependencies = (
@@ -38435,6 +38480,23 @@
 			productName = FlagshipWatchApp;
 			productReference = 6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F6845DB2D7814BA26A5F1DF3 /* FlagshipWatchWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5AF779971DA86747447E7716 /* Build configuration list for PBXNativeTarget "FlagshipWatchWidgets" */;
+			buildPhases = (
+				41FDFA3C46BAFA6042F396C3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FlagshipWatchWidgets;
+			packageProductDependencies = (
+			);
+			productName = FlagshipWatchWidgets;
+			productReference = 49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		A16BAA0B8A46E60C20043C5A /* FlagshipAppUITests */ = {
 			isa = PBXNativeTarget;
@@ -38502,6 +38564,7 @@
 				852E625851F523D0A0F60658 /* FlagshipApp */,
 				A16BAA0B8A46E60C20043C5A /* FlagshipAppUITests */,
 				9BD4F7904286639BE4ABA578 /* FlagshipWatchApp */,
+				F6845DB2D7814BA26A5F1DF3 /* FlagshipWatchWidgets */,
 				2A018BB2AA740157B8047930 /* FlagshipWidgets */,
 			);
 		};
@@ -38571,6 +38634,17 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		41FDFA3C46BAFA6042F396C3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B24D1A750F22BD603F42D7A1 /* FlagshipWatchWidgetsBundle.swift in Sources */,
+				6D6A1DD06F0B9304241DB33E /* ProvisionPhaseComplication.swift in Sources */,
+				902D3FECF21FB36918A886BC /* WatchApproval.swift in Sources */,
+				FA70A6C965C9C751B514ADC9 /* WatchProvisionTimeline.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -38583,6 +38657,11 @@
 			isa = PBXTargetDependency;
 			target = 2A018BB2AA740157B8047930 /* FlagshipWidgets */;
 			targetProxy = 0A6B987E96A65D0C2E64521C /* PBXContainerItemProxy */;
+		};
+		D70DBB6E9E6855AD116CE6BE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F6845DB2D7814BA26A5F1DF3 /* FlagshipWatchWidgets */;
+			targetProxy = 340A8F1B8D0D3998FB801D0A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -38625,6 +38704,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = WatchApp/FlagshipWatchApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 8G8RHBU9BN;
 				INFOPLIST_FILE = WatchApp/Info.plist;
@@ -38885,6 +38965,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = WatchApp/FlagshipWatchApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 8G8RHBU9BN;
 				INFOPLIST_FILE = WatchApp/Info.plist;
@@ -38897,6 +38978,54 @@
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
+		};
+		341714BD9C312EA0292120F7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = WatchWidgets/FlagshipWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8G8RHBU9BN;
+				INFOPLIST_FILE = WatchWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app.watchkitapp.widgets;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		63D80CC8BB9927EB20896D79 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = WatchWidgets/FlagshipWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8G8RHBU9BN;
+				INFOPLIST_FILE = WatchWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app.watchkitapp.widgets;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -38933,6 +39062,15 @@
 			buildConfigurations = (
 				EE821C2E478FD89C3BCFFDF8 /* Debug */,
 				2569B03C76DA086B1BFBE4AF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5AF779971DA86747447E7716 /* Build configuration list for PBXNativeTarget "FlagshipWatchWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				341714BD9C312EA0292120F7 /* Debug */,
+				63D80CC8BB9927EB20896D79 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

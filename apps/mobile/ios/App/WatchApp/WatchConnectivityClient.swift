@@ -1,5 +1,8 @@
 import Foundation
 import WatchConnectivity
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 /// Watch-side WatchConnectivity wrapper.
 ///
@@ -28,7 +31,16 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
     @Published var lastApprovedId: String? = nil
 
     private static let pendingDefaultsKey = "flagship.watch.pending-v1"
-    private static let timelineDefaultsKey = "flagship.watch.provision-timeline-v1"
+    /// Shared between the watch app and the watch widget extension via
+    /// App Group `group.com.flagshipserver.app` (W2). The widget reads
+    /// this key from `UserDefaults(suiteName:)` to render the
+    /// complication.
+    static let timelineDefaultsKey = "flagship.watch.provision-timeline-v1"
+    static let appGroupSuiteName = "group.com.flagshipserver.app"
+
+    private static var sharedDefaults: UserDefaults {
+        UserDefaults(suiteName: appGroupSuiteName) ?? .standard
+    }
 
     private override init() {
         super.init()
@@ -38,7 +50,14 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
            let ctx = try? JSONDecoder().decode(WatchProtocol.PendingApprovalsContext.self, from: data) {
             self.pending = ctx
         }
-        if let data = UserDefaults.standard.data(forKey: Self.timelineDefaultsKey),
+        // Timeline is read from the App Group so a cold watch launch +
+        // a cold widget reload see the same snapshot. Falls back to
+        // standard defaults so older builds that wrote to the standard
+        // suite are still recoverable on first run.
+        let timelineData =
+            Self.sharedDefaults.data(forKey: Self.timelineDefaultsKey)
+            ?? UserDefaults.standard.data(forKey: Self.timelineDefaultsKey)
+        if let data = timelineData,
            let ctx = try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data) {
             self.provisionTimeline = ctx
         }
@@ -96,7 +115,16 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
         if let data = context["provision-timeline"] as? Data,
            let ctx = try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data) {
             self.provisionTimeline = ctx
+            // Persist to the App Group so the watch widget extension
+            // (W2) can read the same snapshot, and to the standard
+            // suite as a cold-launch fallback.
+            Self.sharedDefaults.set(data, forKey: Self.timelineDefaultsKey)
             UserDefaults.standard.set(data, forKey: Self.timelineDefaultsKey)
+            #if canImport(WidgetKit)
+            // Kick the widget timeline so the complication updates
+            // within a heartbeat of the phase transition.
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
         }
     }
 }

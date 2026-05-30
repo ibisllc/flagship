@@ -110,7 +110,7 @@ watchOS-platform build is gated on the owner installing the watchOS
 26.5 platform via Xcode → Settings → Components (a TF3 prerequisite
 regardless — the Archive needs the Watch target embedded).
 
-### W2 — Watch complication for current phase (~1 h, optional)
+### W2 — Watch complication for current phase (~1 h, optional) ✅
 
 **Owner**: 🤖 agent.
 
@@ -122,6 +122,64 @@ running.
 **Done when**: Complication renders correctly on at least one watch
 face family in the simulator; updates within a heartbeat of phase
 transitions; ships in the same Archive as W1.
+
+**Completed**: 2026-05-30 (commit pending — appended after commit).
+New `FlagshipWatchWidgets` Widget Extension target ships inside the
+Watch app bundle and provides three complication families:
+`.accessoryInline` ("Flagship: sealing"), `.accessoryCircular`
+(icon + 3-char phase abbreviation), and `.accessoryRectangular`
+(two-line title + detail or fqdn). Data path: the Watch app's
+`WatchConnectivityClient` writes the latest
+`WatchProtocol.ProvisionTimelineContext` to App-Group-shared
+UserDefaults (`group.com.flagshipserver.app`, key
+`flagship.watch.provision-timeline-v1`) on every applicationContext
+update and immediately calls `WidgetCenter.shared.reloadAllTimelines`
+so the complication refreshes within a heartbeat of a phase change.
+
+New files:
+- `App/WatchWidgets/FlagshipWatchWidgetsBundle.swift` — `@main`
+  WidgetBundle.
+- `App/WatchWidgets/ProvisionPhaseComplication.swift` — `Widget` +
+  `TimelineProvider` + the three family-specific views.
+- `App/WatchWidgets/Info.plist` — declares
+  `NSExtensionPointIdentifier = com.apple.widgetkit-extension`.
+- `App/WatchWidgets/FlagshipWatchWidgets.entitlements` — App Group.
+- `App/WatchApp/FlagshipWatchApp.entitlements` — App Group (Watch
+  app needs read+write access to the shared suite).
+
+Modified files:
+- `App/WatchApp/WatchConnectivityClient.swift` — write the timeline
+  payload to the App Group suite + call `WidgetCenter.reloadAllTimelines`
+  on every applicationContext update.
+- `App/FlagshipApp.xcodeproj/project.pbxproj` — new
+  `FlagshipWatchWidgets` PBXNativeTarget (`product-type.app-extension`,
+  `SDKROOT=watchos`, `WATCHOS_DEPLOYMENT_TARGET=10.0`,
+  `PRODUCT_BUNDLE_IDENTIFIER=com.flagshipserver.app.watchkitapp.widgets`),
+  new XCConfigurationList + 2 XCBuildConfiguration entries, new
+  PBXSourcesBuildPhase, new PBXCopyFilesBuildPhase on FlagshipWatchApp
+  to embed the `.appex`, new PBXTargetDependency, new PBXGroup for
+  WatchWidgets, FlagshipWatchApp builds reference the new
+  `WatchApp/FlagshipWatchApp.entitlements`.
+
+**Gates** (all green): pbxproj parses (xcodebuild -list shows
+FlagshipWatchWidgets among targets and schemes); watch widget
+sources typecheck against WatchSimulator26.5 SDK; FlagshipApp iOS
+build still succeeds; vitest 333 files / 4286 pass; iOS xcodebuild
+FlagshipMobile-Package test 624 pass.
+
+**Owner TF3 prerequisites added by this change** (in addition to
+the existing TF2 Associated Domains tick):
+1. **Enable App Group capability** on bundle ID
+   `com.flagshipserver.app.watchkitapp` (Watch app) AND
+   `com.flagshipserver.app.watchkitapp.widgets` (NEW widget bundle
+   ID — register it first if it doesn't exist).
+2. Both bundle IDs must include the existing
+   `group.com.flagshipserver.app` App Group.
+3. Full Watch + widget rendering can only be verified after the
+   owner installs the **watchOS 26.5 platform** via Xcode →
+   Settings → Components (the SDK is already present; only the
+   runtime is missing, so the existing pbxproj wiring builds
+   on-device but can't be simulator-tested from this Mac).
 
 ---
 
