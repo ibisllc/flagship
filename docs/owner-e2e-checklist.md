@@ -338,7 +338,7 @@ HEAD.
 | 5b | `NSCameraUsageDescription` | ✅ | `project.yml` line 50: `"Flagship uses the camera to scan a pairing QR shown by your server."`. |
 | 5c | Notifications usage | ✅ | iOS does not require an explicit usage-description key for push or local notifications; the system prompt is canonical. No action needed. |
 | 5d | `NSAppTransportSecurity` | ✅ | Not declared = ATS defaults to strict (HTTPS-only, TLS 1.2+, modern ciphers). The Worker + daemon + Fly + Let's Encrypt chain all conform. No action needed. |
-| 5e | `NFCReaderUsageDescription` | ⚠ | **Not present + not yet needed.** The TF3 Archive will not fail without it because no NFC entitlement is on the app target (no `com.apple.developer.nfc.readersession.formats` in entitlements, no `CoreNFC` import in Sources). **Follow-up before any NFC TestFlight build** (post-v1 N-PHONE work): add `INFOPLIST_KEY_NFCReaderUsageDescription: "Flagship reads a one-time activation tag inside the device's branded box to pair securely."` to `project.yml` *and* enable the NFC capability on the bundle ID + entitlements file. |
+| 5e | `NFCReaderUsageDescription` | ✅ | `project.yml` `FlagshipApp.settings.base` (added by C3 Wave 2): `INFOPLIST_KEY_NFCReaderUsageDescription: "Flagship uses NFC to pair a new Flagship box by tapping your phone to it."` Also: `com.apple.developer.nfc.readersession.formats` = `[NDEF, TAG]` in `FlagshipApp.entitlements`. **Dev-portal follow-up before Archive**: enable Near Field Communication Tag Reading on `com.flagshipserver.app` (developer.apple.com → Identifiers → Capabilities → ☑ Near Field Communication Tag Reading → Save), or Archive validation will reject. |
 | 6 | Associated Domains entitlement | ✅ | `FlagshipApp.entitlements` lines 7-11: `applinks:flagshipserver.com` + `webcredentials:flagshipserver.com`. (Cross-checked: not duplicated into Info.plist — correct, entitlements is the right home.) |
 | 7 | `aps-environment` | ✅ | `FlagshipApp.entitlements` lines 5-6 use `$(APS_ENVIRONMENT)`; `project.yml` lines 65-68 drive it to `development` (Debug) / `production` (Release). Correct for both TestFlight and prod. |
 | 8 | Background modes | ✅ | Info.plist lines 32-36: `remote-notification`, `fetch`. Required for the install-progress silent-push path. Also redundantly declared in `project.yml` line 75 — fine. |
@@ -346,9 +346,9 @@ HEAD.
 | — | Critical Alerts entitlement | ℹ | `FlagshipApp.entitlements` lines 12-13: `com.apple.developer.usernotifications.critical-alerts: true`. Apple grants this on a per-app-request basis; shipping the entitlement pre-grant is harmless. No action for TF3. |
 | — | App Group | ✅ | `FlagshipApp.entitlements` lines 14-17: `group.com.flagshipserver.app`. Required for widget + Watch complication shared storage. Reminder to enable on the watch + widget bundle IDs in the dev portal (covered in the top section above). |
 
-**Summary**: 3 ❌ items to fix before clicking Archive (#3, #4, #5a),
-all in `apps/mobile/ios/App/project.yml`. One ⚠ follow-up (#5e) for
-the NFC TestFlight build later. Everything else is ✅.
+**Summary**: All ❌ items resolved by the C3 Wave 2 commit (#3, #4,
+#5a, #5e). Dev-portal capability ticks remain (Associated Domains, App
+Groups, Near Field Communication Tag Reading). Everything else is ✅.
 
 **Suggested single edit** to `project.yml` under
 `FlagshipApp.settings.base`:

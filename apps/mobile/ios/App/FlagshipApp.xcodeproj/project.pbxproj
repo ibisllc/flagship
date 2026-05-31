@@ -16,8 +16,10 @@
 		3E1A2A9FEFB1ABE512FD060D /* FlagshipUI in Frameworks */ = {isa = PBXBuildFile; productRef = E09B09A74799A9F822F53DEC /* FlagshipUI */; };
 		4139AA3CADE3E3E93DEF5F57 /* InstallProgressLiveActivityCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */; };
 		477681FB8855FCBE67AAFE77 /* WidgetBundleEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00FD448EA89E02E3EC94E310 /* WidgetBundleEntry.swift */; };
+		4B5304800B09623388924E78 /* ProvisionTimelineWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */; };
 		4FEA6B5C2B78A94C15B80B74 /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
 		52740C43DE82D908A417150D /* FlagshipAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4050D91C1A76B12D804925FA /* FlagshipAppIntents.swift */; };
+		598E6331C6653579257D65A7 /* WatchTimelinePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */; };
 		68333BBE718704FD1F39C6EF /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
 		6B1F3A5CBAD6B75C65A23FC8 /* InstallProgressAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */; };
 		7BFECA1D36A2BB6408A4D8E2 /* PodStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */; };
@@ -27,18 +29,11 @@
 		B717FAA14A446FBAC6DCB244 /* FlagshipApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 358AFC87FBA9DD274F112C5A /* FlagshipApp.swift */; };
 		C4EB2B45098E076E61D61035 /* PodStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */; };
 		C74D00A6563CEB33082C616F /* PodStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */; };
+		CEBD233D64450227ABEB47A1 /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */; };
 		D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA35BF39206378728D34AE65 /* WatchBridge.swift */; };
+		DACD9A3A8F73A32711B6F72C /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */; };
 		DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */; };
 		E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */; };
-		E3D8C826FE421D5C5206C975 /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */; };
-		DC7D8721A793D7AED86FF5DF /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */; };
-		7F6CC51AE99214546D09E28F /* WatchTimelinePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */; };
-		A2E0242CCCA672F9DF8A392A /* ProvisionTimelineWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */; };
-		B24D1A750F22BD603F42D7A1 /* FlagshipWatchWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665DB1B44C4538A412C02D08 /* FlagshipWatchWidgetsBundle.swift */; };
-		6D6A1DD06F0B9304241DB33E /* ProvisionPhaseComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785B937E9481A2016960C473 /* ProvisionPhaseComplication.swift */; };
-		902D3FECF21FB36918A886BC /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
-		FA70A6C965C9C751B514ADC9 /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */; };
-		A364A1557B0A1E9E05E53212 /* FlagshipWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,13 +43,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 2A018BB2AA740157B8047930;
 			remoteInfo = FlagshipWidgets;
-		};
-		340A8F1B8D0D3998FB801D0A /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 93FD94A2CD553E9E36DD9987 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = F6845DB2D7814BA26A5F1DF3;
-			remoteInfo = FlagshipWatchWidgets;
 		};
 		0CBC71D3D69A0AEFDF9C0A10 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -73,17 +61,6 @@
 			dstSubfolderSpec = 13;
 			files = (
 				1C9D09A9144DD8F14716442B /* FlagshipWidgets.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		31F2FF20723AD496F844E9CC /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				A364A1557B0A1E9E05E53212 /* FlagshipWatchWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -169,15 +146,6 @@
 		02496F836C57C5F611D9C415 /* workloop.h-1YSUXMQYKAHG9 */ = {isa = PBXFileReference; path = "workloop.h-1YSUXMQYKAHG9"; sourceTree = "<group>"; };
 		024B33BB784EEEC08820E902 /* common.h-T9QV8ONS941C */ = {isa = PBXFileReference; path = "common.h-T9QV8ONS941C"; sourceTree = "<group>"; };
 		0257E69AE45D2265F100E0F5 /* WatchApproval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApproval.swift; sourceTree = "<group>"; };
-		91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchProvisionTimeline.swift; sourceTree = "<group>"; };
-		52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTimelinePublisher.swift; sourceTree = "<group>"; };
-		AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionTimelineWatchView.swift; sourceTree = "<group>"; };
-		665DB1B44C4538A412C02D08 /* FlagshipWatchWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlagshipWatchWidgetsBundle.swift; sourceTree = "<group>"; };
-		785B937E9481A2016960C473 /* ProvisionPhaseComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionPhaseComplication.swift; sourceTree = "<group>"; };
-		69B01ADFF83845FD6E41F091 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		F0FFC72B3F610A47B494FEBF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
-		04E9CC443BFF5F1FE5A256C7 /* FlagshipWatchApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchApp.entitlements; sourceTree = "<group>"; };
-		49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FlagshipWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0258579892F84962AD942A7F /* INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB */ = {isa = PBXFileReference; path = "INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB"; sourceTree = "<group>"; };
 		025EDAB97F073A49C40B147A /* INPaymentMethodType.h-2Y9AYBWSL4X38 */ = {isa = PBXFileReference; path = "INPaymentMethodType.h-2Y9AYBWSL4X38"; sourceTree = "<group>"; };
 		026B40B3492D5EEBECA48E81 /* types.h-EDPX0HDHYBWI */ = {isa = PBXFileReference; path = "types.h-EDPX0HDHYBWI"; sourceTree = "<group>"; };
@@ -1634,6 +1602,7 @@
 		2A66EB5C61C033588608D3EC /* CreateServerViewModel.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = CreateServerViewModel.d; sourceTree = "<group>"; };
 		2A6B7764EC76FED29DDB53A1 /* INTransferMoneyIntent.h-3AU17LOF3SDI8 */ = {isa = PBXFileReference; path = "INTransferMoneyIntent.h-3AU17LOF3SDI8"; sourceTree = "<group>"; };
 		2A6C65CD1994DF7EED86696A /* PlatformWebAuthnProvider.swiftconstvalues */ = {isa = PBXFileReference; path = PlatformWebAuthnProvider.swiftconstvalues; sourceTree = "<group>"; };
+		2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchTimelinePublisher.swift; sourceTree = "<group>"; };
 		2A7D093D491792C3338B0052 /* AVAudioSourceNode.h-1A0X3QT27GRLI */ = {isa = PBXFileReference; path = "AVAudioSourceNode.h-1A0X3QT27GRLI"; sourceTree = "<group>"; };
 		2A80A4D9C8C8BF429B85826F /* ___wctype.h-3EPX3F11OVVGO */ = {isa = PBXFileReference; path = "___wctype.h-3EPX3F11OVVGO"; sourceTree = "<group>"; };
 		2A8329F2C939EC2F79D562F7 /* SwiftShims-ETMZL06LU75E.pcm */ = {isa = PBXFileReference; path = "SwiftShims-ETMZL06LU75E.pcm"; sourceTree = "<group>"; };
@@ -3149,6 +3118,7 @@
 		53B78502A933B72D66B7E678 /* UIMainMenuSystem.h-3VRS2IPWQONDX */ = {isa = PBXFileReference; path = "UIMainMenuSystem.h-3VRS2IPWQONDX"; sourceTree = "<group>"; };
 		53C1252B79B7ED098A57F4E4 /* IOSurface-2GMZHIFU9GAVA.pcm */ = {isa = PBXFileReference; path = "IOSurface-2GMZHIFU9GAVA.pcm"; sourceTree = "<group>"; };
 		53C5995BE60E390108D43FA8 /* INStartCallIntent.h-2SBHW6WMS5V53 */ = {isa = PBXFileReference; path = "INStartCallIntent.h-2SBHW6WMS5V53"; sourceTree = "<group>"; };
+		53CF39E90AB3F77BFED7833A /* FlagshipWatchWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlagshipWatchWidgetsBundle.swift; sourceTree = "<group>"; };
 		53D270D4FF9C46DA2269BF1C /* TARGET@v12_hash=944892537996c134d66653629bd04d4c-json */ = {isa = PBXFileReference; path = "TARGET@v12_hash=944892537996c134d66653629bd04d4c-json"; sourceTree = "<group>"; };
 		53D4EABADD9143DB32BAF94F /* InstallProgressBridge.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = InstallProgressBridge.d; sourceTree = "<group>"; };
 		53D860FF7E80A9B6D3B55897 /* PodStatusWidget.swift-3NUW50KRA41Q8 */ = {isa = PBXFileReference; path = "PodStatusWidget.swift-3NUW50KRA41Q8"; sourceTree = "<group>"; };
@@ -4087,6 +4057,7 @@
 		6D43EAE23113E5811C84403C /* BiometricLockScreen.swiftdeps */ = {isa = PBXFileReference; path = BiometricLockScreen.swiftdeps; sourceTree = "<group>"; };
 		6D45DA09457623C0B8BA5E92 /* FlagshipWidgets-generated-files.hmap */ = {isa = PBXFileReference; path = "FlagshipWidgets-generated-files.hmap"; sourceTree = "<group>"; };
 		6D514B413CCBFA2996D6CBC9 /* UIStringDrawing.h-2GSFSNT43YEF4 */ = {isa = PBXFileReference; path = "UIStringDrawing.h-2GSFSNT43YEF4"; sourceTree = "<group>"; };
+		6D5AE5E513DBE2B79120ABD9 /* FlagshipWatchApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchApp.entitlements; sourceTree = "<group>"; };
 		6D5EE984DB6D4BC0E19BBDBB /* reloc.h-GS9FJF26TNDE */ = {isa = PBXFileReference; path = "reloc.h-GS9FJF26TNDE"; sourceTree = "<group>"; };
 		6D66DD4A8D0E8A730C99A852 /* PodStatusSnapshot.swiftconstvalues */ = {isa = PBXFileReference; path = PodStatusSnapshot.swiftconstvalues; sourceTree = "<group>"; };
 		6D6C0711BF4A56B208AB2F9C /* INNotebookItemType.h-300VON7LLHKVW */ = {isa = PBXFileReference; path = "INNotebookItemType.h-300VON7LLHKVW"; sourceTree = "<group>"; };
@@ -5007,6 +4978,7 @@
 		86F25372A16D4F504FF9AD74 /* Spatial-1HOKQLWXNANNU.pcm */ = {isa = PBXFileReference; path = "Spatial-1HOKQLWXNANNU.pcm"; sourceTree = "<group>"; };
 		86F5CECF1EBDB84D756D4195 /* PodStatusWidget.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = PodStatusWidget.d; sourceTree = "<group>"; };
 		86FA33A234B5A9FA52165984 /* AVAudioFile.h-28FIF340K2R8Z */ = {isa = PBXFileReference; path = "AVAudioFile.h-28FIF340K2R8Z"; sourceTree = "<group>"; };
+		870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchProvisionTimeline.swift; sourceTree = "<group>"; };
 		871506C9F2469381B92DDC86 /* UIDynamicAnimator.h-146DVZKWUKBX5 */ = {isa = PBXFileReference; path = "UIDynamicAnimator.h-146DVZKWUKBX5"; sourceTree = "<group>"; };
 		87179D5F552A2EEEA653316F /* AppIntents-6CJUOQN05KXEDZWRYXGEXV4HC.pcm */ = {isa = PBXFileReference; path = "AppIntents-6CJUOQN05KXEDZWRYXGEXV4HC.pcm"; sourceTree = "<group>"; };
 		871B2F352E5DF8CD5A472C35 /* INActivateCarSignalIntent.h-32JO5YV2I7H5X */ = {isa = PBXFileReference; path = "INActivateCarSignalIntent.h-32JO5YV2I7H5X"; sourceTree = "<group>"; };
@@ -5540,6 +5512,7 @@
 		95E4B585056F977A98D06550 /* base.h-1C8R6AOVBA9T8 */ = {isa = PBXFileReference; path = "base.h-1C8R6AOVBA9T8"; sourceTree = "<group>"; };
 		95E7335533D55800EDB3835A /* FlagshipServerClient.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = FlagshipServerClient.o; sourceTree = "<group>"; };
 		95F0F82D5C144D44964C0B0E /* CFNetwork-3MVTA3VYEJCA3.pcm */ = {isa = PBXFileReference; path = "CFNetwork-3MVTA3VYEJCA3.pcm"; sourceTree = "<group>"; };
+		95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionPhaseComplication.swift; sourceTree = "<group>"; };
 		9605A8BC375B09773EF527BA /* LoginViewModel.dia */ = {isa = PBXFileReference; path = LoginViewModel.dia; sourceTree = "<group>"; };
 		960DAD9E2D275C802ABF28BD /* InstallProgressBridge.o-3QNBSRVEBS50L */ = {isa = PBXFileReference; path = "InstallProgressBridge.o-3QNBSRVEBS50L"; sourceTree = "<group>"; };
 		9617C6502C9B8C05F8675B4E /* ServicesListViewModel.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = ServicesListViewModel.o; sourceTree = "<group>"; };
@@ -8540,6 +8513,7 @@
 		E7B72964B3E258001C705FA9 /* AVContinuityDevice.h-1UOAJECDVS8WZ */ = {isa = PBXFileReference; path = "AVContinuityDevice.h-1UOAJECDVS8WZ"; sourceTree = "<group>"; };
 		E7B9634339DA0ABBAFF781B8 /* SecretMailboxClient.dia */ = {isa = PBXFileReference; path = SecretMailboxClient.dia; sourceTree = "<group>"; };
 		E7BA6C0E672732C0EE29A2A9 /* INCallRecordType.h-2TRN7KO6U90G4 */ = {isa = PBXFileReference; path = "INCallRecordType.h-2TRN7KO6U90G4"; sourceTree = "<group>"; };
+		E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionTimelineWatchView.swift; sourceTree = "<group>"; };
 		E7C7AD793A336643C0A9E8BE /* stdatomic.h-3APXXH54L719Q */ = {isa = PBXFileReference; path = "stdatomic.h-3APXXH54L719Q"; sourceTree = "<group>"; };
 		E7CE6B2D4B3C2246F8092DFA /* UIWindowSceneActivationConfiguration.h-HTGB49M6P4D5 */ = {isa = PBXFileReference; path = "UIWindowSceneActivationConfiguration.h-HTGB49M6P4D5"; sourceTree = "<group>"; };
 		E7D9B460EC8D2487F956B398 /* OpenAccountViewModel.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = OpenAccountViewModel.d; sourceTree = "<group>"; };
@@ -8662,6 +8636,7 @@
 		EAB742A9BDAE7D1B3C2244D4 /* FlagshipAPI.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = FlagshipAPI.o; sourceTree = "<group>"; };
 		EAC9AA2CD4493D9C93FA5F93 /* UNNotification.h-1372Q1II2DOJ2 */ = {isa = PBXFileReference; path = "UNNotification.h-1372Q1II2DOJ2"; sourceTree = "<group>"; };
 		EADA7193D5D6EA4DFF2B8DB6 /* LoadingState.swiftconstvalues */ = {isa = PBXFileReference; path = LoadingState.swiftconstvalues; sourceTree = "<group>"; };
+		EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipWatchWidgets.entitlements; sourceTree = "<group>"; };
 		EB124989021652CC46841408 /* FlagshipUI-primary.priors */ = {isa = PBXFileReference; path = "FlagshipUI-primary.priors"; sourceTree = "<group>"; };
 		EB1C78112ED8ED18D0DCB8FA /* CoreData-DHG9UTD98OA9.pcm */ = {isa = PBXFileReference; path = "CoreData-DHG9UTD98OA9.pcm"; sourceTree = "<group>"; };
 		EB3063B0B57D467908E0DC0D /* WatchBridge.swiftconstvalues */ = {isa = PBXFileReference; path = WatchBridge.swiftconstvalues; sourceTree = "<group>"; };
@@ -9085,6 +9060,7 @@
 		F768B6BF192B1BCA7D7FDCA9 /* INSetMessageAttributeIntentResponse.h-C76F16GX9GP1 */ = {isa = PBXFileReference; path = "INSetMessageAttributeIntentResponse.h-C76F16GX9GP1"; sourceTree = "<group>"; };
 		F76A745D1BC3EE400B3DE719 /* UNNotificationResponse+UIKitAdditions.h-13NCFQ793ER0V */ = {isa = PBXFileReference; path = "UNNotificationResponse+UIKitAdditions.h-13NCFQ793ER0V"; sourceTree = "<group>"; };
 		F76DA904E69D0CEC11B27A62 /* MTLResource.h-2588SRJD5IQUM */ = {isa = PBXFileReference; path = "MTLResource.h-2588SRJD5IQUM"; sourceTree = "<group>"; };
+		F770CD2952CF826FD5D49B33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F780AD273D70C6485883415C /* dirent.h-2XUW7TORCBXKS */ = {isa = PBXFileReference; path = "dirent.h-2XUW7TORCBXKS"; sourceTree = "<group>"; };
 		F78257AB63F2BA9D4DA16976 /* _seek_set.h-2Q7DCTNPIZ653 */ = {isa = PBXFileReference; path = "_seek_set.h-2Q7DCTNPIZ653"; sourceTree = "<group>"; };
 		F78853E7D1C6DFCC43C795AC /* SessionStoring.swiftconstvalues */ = {isa = PBXFileReference; path = SessionStoring.swiftconstvalues; sourceTree = "<group>"; };
@@ -9394,10 +9370,10 @@
 		FFE9DC5AFC8481BF0DF7B358 /* ContentView.swiftconstvalues */ = {isa = PBXFileReference; path = ContentView.swiftconstvalues; sourceTree = "<group>"; };
 		FFECAD1BE8E58AD13B8518C8 /* INDeleteTasksIntent.h-3CU0Q7V1HXO4I */ = {isa = PBXFileReference; path = "INDeleteTasksIntent.h-3CU0Q7V1HXO4I"; sourceTree = "<group>"; };
 		FFF1ABF6B0FDFB51F65A6836 /* CoreSpotlight-3OCT2U1E1NM6W.pcm */ = {isa = PBXFileReference; path = "CoreSpotlight-3OCT2U1E1NM6W.pcm"; sourceTree = "<group>"; };
-		"TEMP_0CE11DF0-AA0A-42C6-A420-6D361DD6E38E" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_715823F0-8571-46B3-BD1F-FAFC66D17663" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_BE417F07-35FF-4E38-9344-23A17AF00B53" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_FD75A557-0D0E-4E94-AFB1-1AC01BC9AF09" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_298D3FB3-D4E8-4F8A-9A7F-DF0F93922808" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_8C8EF60A-9937-4138-87F3-599F94BFE19D" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_D8FFCB29-E67F-4542-8468-949779C65666" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_F693248F-5020-4E5E-B4EA-E2A930066101" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -12200,7 +12176,7 @@
 				D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */,
 				5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */,
 				EA35BF39206378728D34AE65 /* WatchBridge.swift */,
-				52227AE38213A51ED7DA2013 /* WatchTimelinePublisher.swift */,
+				2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -18468,6 +18444,17 @@
 			path = LP;
 			sourceTree = "<group>";
 		};
+		564C6947F31B33F80500C451 /* WatchWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				EB03394B07AE3AC9DDF17FDF /* FlagshipWatchWidgets.entitlements */,
+				53CF39E90AB3F77BFED7833A /* FlagshipWatchWidgetsBundle.swift */,
+				F770CD2952CF826FD5D49B33 /* Info.plist */,
+				95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */,
+			);
+			path = WatchWidgets;
+			sourceTree = "<group>";
+		};
 		56581AB3659DE21AF1E50EEA /* ZQ */ = {
 			isa = PBXGroup;
 			children = (
@@ -19860,7 +19847,7 @@
 				62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */,
 				1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */,
 				0257E69AE45D2265F100E0F5 /* WatchApproval.swift */,
-				91B2A4BAC61BC24EF485482C /* WatchProvisionTimeline.swift */,
+				870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -27978,6 +27965,7 @@
 				1B2A4CB3BFA9C1404E8FC705 /* Sources */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				AC52F51D56E503B2D597DA6D /* WatchApp */,
+				564C6947F31B33F80500C451 /* WatchWidgets */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				D18DA5554F47DFAA52FA22EE /* Products */,
 			);
@@ -29784,25 +29772,14 @@
 		AC52F51D56E503B2D597DA6D /* WatchApp */ = {
 			isa = PBXGroup;
 			children = (
-				04E9CC443BFF5F1FE5A256C7 /* FlagshipWatchApp.entitlements */,
+				6D5AE5E513DBE2B79120ABD9 /* FlagshipWatchApp.entitlements */,
 				364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */,
 				AC644708931B6CC8A4F4273F /* Info.plist */,
-				AB93B99DB3B8558BAFF47FA5 /* ProvisionTimelineWatchView.swift */,
+				E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */,
 				6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */,
 				1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */,
 			);
 			path = WatchApp;
-			sourceTree = "<group>";
-		};
-		80B44BAA59D8FB0D2ED8E075 /* WatchWidgets */ = {
-			isa = PBXGroup;
-			children = (
-				F0FFC72B3F610A47B494FEBF /* FlagshipWatchWidgets.entitlements */,
-				665DB1B44C4538A412C02D08 /* FlagshipWatchWidgetsBundle.swift */,
-				69B01ADFF83845FD6E41F091 /* Info.plist */,
-				785B937E9481A2016960C473 /* ProvisionPhaseComplication.swift */,
-			);
-			path = WatchWidgets;
 			sourceTree = "<group>";
 		};
 		AC5962C0E53A0DBFD48725BB /* XCBuildData */ = {
@@ -33645,7 +33622,6 @@
 				35A7CF9005DFBA00AB42586B /* FlagshipAppUITests.xctest */,
 				6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */,
 				320466AFB364B4CE4A1DB396 /* FlagshipWidgets.appex */,
-				49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -38400,19 +38376,19 @@
 			path = QO;
 			sourceTree = "<group>";
 		};
-		"TEMP_11E6678D-6BC5-45AD-B430-FD899729BB81" /* . */ = {
+		"TEMP_8E8D782B-FEAD-49D6-9E0E-6C9B43366E53" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_FD75A557-0D0E-4E94-AFB1-1AC01BC9AF09" /* project.yml */,
-				"TEMP_715823F0-8571-46B3-BD1F-FAFC66D17663" /* FlagshipApp.xcodeproj */,
-				"TEMP_0CE11DF0-AA0A-42C6-A420-6D361DD6E38E" /* FlagshipApp.entitlements */,
-				"TEMP_BE417F07-35FF-4E38-9344-23A17AF00B53" /* Info.plist */,
+				"TEMP_D8FFCB29-E67F-4542-8468-949779C65666" /* project.yml */,
+				"TEMP_F693248F-5020-4E5E-B4EA-E2A930066101" /* FlagshipApp.xcodeproj */,
+				"TEMP_298D3FB3-D4E8-4F8A-9A7F-DF0F93922808" /* FlagshipApp.entitlements */,
+				"TEMP_8C8EF60A-9937-4138-87F3-599F94BFE19D" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
+				564C6947F31B33F80500C451 /* WatchWidgets */,
 				7A32690FE07864A771E99F82 /* Resources */,
 				5846003CBA49B0B79C07350E /* Shared */,
 				AC52F51D56E503B2D597DA6D /* WatchApp */,
-				80B44BAA59D8FB0D2ED8E075 /* WatchWidgets */,
 				1B2A4CB3BFA9C1404E8FC705 /* Sources */,
 				15EFE9D22B724D06FFC50F85 /* build */,
 			);
@@ -38467,12 +38443,10 @@
 			buildConfigurationList = 819E8225FA46B210725BE0BC /* Build configuration list for PBXNativeTarget "FlagshipWatchApp" */;
 			buildPhases = (
 				EC69399646768B5C24017860 /* Sources */,
-				31F2FF20723AD496F844E9CC /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				D70DBB6E9E6855AD116CE6BE /* PBXTargetDependency */,
 			);
 			name = FlagshipWatchApp;
 			packageProductDependencies = (
@@ -38480,23 +38454,6 @@
 			productName = FlagshipWatchApp;
 			productReference = 6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */;
 			productType = "com.apple.product-type.application";
-		};
-		F6845DB2D7814BA26A5F1DF3 /* FlagshipWatchWidgets */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 5AF779971DA86747447E7716 /* Build configuration list for PBXNativeTarget "FlagshipWatchWidgets" */;
-			buildPhases = (
-				41FDFA3C46BAFA6042F396C3 /* Sources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = FlagshipWatchWidgets;
-			packageProductDependencies = (
-			);
-			productName = FlagshipWatchWidgets;
-			productReference = 49F1198C6FD78607277D11EC /* FlagshipWatchWidgets.appex */;
-			productType = "com.apple.product-type.app-extension";
 		};
 		A16BAA0B8A46E60C20043C5A /* FlagshipAppUITests */ = {
 			isa = PBXNativeTarget;
@@ -38564,7 +38521,6 @@
 				852E625851F523D0A0F60658 /* FlagshipApp */,
 				A16BAA0B8A46E60C20043C5A /* FlagshipAppUITests */,
 				9BD4F7904286639BE4ABA578 /* FlagshipWatchApp */,
-				F6845DB2D7814BA26A5F1DF3 /* FlagshipWatchWidgets */,
 				2A018BB2AA740157B8047930 /* FlagshipWidgets */,
 			);
 		};
@@ -38599,6 +38555,7 @@
 				C74D00A6563CEB33082C616F /* PodStatusSnapshot.swift in Sources */,
 				C4EB2B45098E076E61D61035 /* PodStatusWidget.swift in Sources */,
 				68333BBE718704FD1F39C6EF /* WatchApproval.swift in Sources */,
+				CEBD233D64450227ABEB47A1 /* WatchProvisionTimeline.swift in Sources */,
 				477681FB8855FCBE67AAFE77 /* WidgetBundleEntry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -38616,8 +38573,8 @@
 				AC4E7F4AAE2AA9C3651AD92D /* PodStatusSnapshot.swift in Sources */,
 				0F4B42407D260837449D3D7E /* WatchApproval.swift in Sources */,
 				D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */,
-				E3D8C826FE421D5C5206C975 /* WatchProvisionTimeline.swift in Sources */,
-				7F6CC51AE99214546D09E28F /* WatchTimelinePublisher.swift in Sources */,
+				DACD9A3A8F73A32711B6F72C /* WatchProvisionTimeline.swift in Sources */,
+				598E6331C6653579257D65A7 /* WatchTimelinePublisher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -38626,22 +38583,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */,
-				A2E0242CCCA672F9DF8A392A /* ProvisionTimelineWatchView.swift in Sources */,
+				4B5304800B09623388924E78 /* ProvisionTimelineWatchView.swift in Sources */,
 				4FEA6B5C2B78A94C15B80B74 /* WatchApproval.swift in Sources */,
-				DC7D8721A793D7AED86FF5DF /* WatchProvisionTimeline.swift in Sources */,
 				DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */,
 				34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		41FDFA3C46BAFA6042F396C3 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				B24D1A750F22BD603F42D7A1 /* FlagshipWatchWidgetsBundle.swift in Sources */,
-				6D6A1DD06F0B9304241DB33E /* ProvisionPhaseComplication.swift in Sources */,
-				902D3FECF21FB36918A886BC /* WatchApproval.swift in Sources */,
-				FA70A6C965C9C751B514ADC9 /* WatchProvisionTimeline.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -38657,11 +38602,6 @@
 			isa = PBXTargetDependency;
 			target = 2A018BB2AA740157B8047930 /* FlagshipWidgets */;
 			targetProxy = 0A6B987E96A65D0C2E64521C /* PBXContainerItemProxy */;
-		};
-		D70DBB6E9E6855AD116CE6BE /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = F6845DB2D7814BA26A5F1DF3 /* FlagshipWatchWidgets */;
-			targetProxy = 340A8F1B8D0D3998FB801D0A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -38682,7 +38622,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flagship;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Flagship uses NFC to pair a new Flagship box by tapping your phone to it.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -38704,7 +38648,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_ENTITLEMENTS = WatchApp/FlagshipWatchApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 8G8RHBU9BN;
 				INFOPLIST_FILE = WatchApp/Info.plist;
@@ -38851,7 +38794,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Flagship;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Flagship uses NFC to pair a new Flagship box by tapping your phone to it.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Flagship uses the camera to scan a pairing QR shown by your server.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -38965,7 +38912,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_ENTITLEMENTS = WatchApp/FlagshipWatchApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 8G8RHBU9BN;
 				INFOPLIST_FILE = WatchApp/Info.plist;
@@ -38978,54 +38924,6 @@
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
-		};
-		341714BD9C312EA0292120F7 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_ENTITLEMENTS = WatchWidgets/FlagshipWatchWidgets.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 8G8RHBU9BN;
-				INFOPLIST_FILE = WatchWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app.watchkitapp.widgets;
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchsimulator watchos";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Debug;
-		};
-		63D80CC8BB9927EB20896D79 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				CODE_SIGN_ENTITLEMENTS = WatchWidgets/FlagshipWatchWidgets.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 8G8RHBU9BN;
-				INFOPLIST_FILE = WatchWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.flagshipserver.app.watchkitapp.widgets;
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchsimulator watchos";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -39062,15 +38960,6 @@
 			buildConfigurations = (
 				EE821C2E478FD89C3BCFFDF8 /* Debug */,
 				2569B03C76DA086B1BFBE4AF /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		5AF779971DA86747447E7716 /* Build configuration list for PBXNativeTarget "FlagshipWatchWidgets" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				341714BD9C312EA0292120F7 /* Debug */,
-				63D80CC8BB9927EB20896D79 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

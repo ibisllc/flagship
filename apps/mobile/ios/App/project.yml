@@ -48,6 +48,24 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_NSCameraUsageDescription: "Flagship uses the camera to scan a pairing QR shown by your server."
+        # Biometric gate for sensitive actions (approve unlock, revoke
+        # server, wipe & restart). Without this key iOS still falls back
+        # to passcode, but the prompt looks stock — TF3 ASC review-bot
+        # flags absence.
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server."
+        # NFC retail-tier pairing (N-PHONE / C3). The phone reads a
+        # PAIR + SIG NDEF from a branded box's tag, derives a session
+        # key via ECDH, and seals the Wi-Fi config under it. Required
+        # whenever the binary links Core NFC.
+        INFOPLIST_KEY_NFCReaderUsageDescription: "Flagship uses NFC to pair a new Flagship box by tapping your phone to it."
+        # ASC review-bot wants a category for every app. Flagship is a
+        # tool / utility, not entertainment or social.
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        # Export-compliance: we only use OS-provided crypto (CryptoKit,
+        # Security.framework) + standard HTTPS/TLS, so declare NO to
+        # skip the per-Archive manual prompt that delays TestFlight by
+        # ~24h.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # ActivityKit Live Activities for the create-server SSE flow.
         # Renders on Dynamic-Island + Lock-Screen via the widget extension.
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
@@ -98,6 +116,14 @@ targets:
         # is harmless (it'll just be ignored), so we declare it now
         # to avoid a TestFlight re-upload when the grant lands.
         com.apple.developer.usernotifications.critical-alerts: true
+        # NFC retail-tier pairing (C3 / N-PHONE). NDEF + TAG let us
+        # both read the branded box's PAIR+SIG NDEF and (for diagnostic
+        # workflows) talk to ISO14443 tags directly. The dev portal
+        # also needs Near Field Communication Tag Reading enabled on
+        # com.flagshipserver.app before the Archive will validate.
+        com.apple.developer.nfc.readersession.formats:
+          - NDEF
+          - TAG
 
   FlagshipWidgets:
     type: app-extension
