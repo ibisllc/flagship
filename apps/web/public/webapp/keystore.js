@@ -23,6 +23,8 @@
 // in-process override ({@link setActiveKeystoreProfile}) for callers that want
 // to scope an op without touching localStorage.
 
+import * as profilesStore from "./lib/profilesStore.js";
+
 const DB_NAME = "flagship-webapp";
 const DB_STORE = "keystore";
 const RECORD_KEY = "wrappedUmk";
@@ -289,12 +291,47 @@ export function currentIrkVersion(profileId = activeProfileId()) {
   try {
     const ls = globalThis.localStorage;
     if (!ls) return 1;
-    const key = profileId === DEFAULT_PROFILE_ID
-      ? "flagship.irk.version"
-      : `flagship.irk.version.${profileId}`;
-    const raw = ls.getItem(key);
-    const n = raw == null ? 1 : Number(raw);
-    return Number.isInteger(n) && n >= 1 ? n : 1;
+    // Default profile keeps the legacy direct-read path (the legacy
+    // flat key has no cloudName under which profilesStore could
+    // index it). Named profiles read through profilesStore — that's
+    // the B3 cut-over.
+    if (profileId === DEFAULT_PROFILE_ID) {
+      const raw = ls.getItem("flagship.irk.version");
+      const n = raw == null ? 1 : Number(raw);
+      return Number.isInteger(n) && n >= 1 ? n : 1;
+    }
+    const fromStore = profilesStore.get("currentIrkVersion", {
+      storage: ls,
+      cloudName: profileId,
+    });
+    if (fromStore != null) {
+      const n = Number(fromStore);
+      if (Number.isInteger(n) && n >= 1) return n;
+    }
+    // Pre-B3 installs wrote `flagship.irk.version.<profileId>`
+    // directly. Read forward + migrate one-shot into profilesStore
+    // so the next call hits the canonical path. We don't bother
+    // migrating when the value is 1 — that's the implicit default,
+    // already what an absent slot resolves to.
+    const raw = ls.getItem(`flagship.irk.version.${profileId}`);
+    if (raw != null) {
+      const n = Number(raw);
+      const valid = Number.isInteger(n) && n >= 1 ? n : 1;
+      if (valid > 1) {
+        try {
+          profilesStore.set("currentIrkVersion", String(valid), {
+            storage: ls,
+            cloudName: profileId,
+            mirror: false,
+          });
+        } catch {
+          // best-effort migration; reading the legacy value still
+          // returns a correct result this round.
+        }
+      }
+      return valid;
+    }
+    return 1;
   } catch {
     return 1;
   }
@@ -309,6 +346,25 @@ export function setCurrentIrkVersion(version, profileId = activeProfileId()) {
   }
   const ls = globalThis.localStorage;
   if (!ls) return; // best-effort
+  if (profileId !== DEFAULT_PROFILE_ID) {
+    // Canonical: per-profile slot in profilesStore. mirror:false
+    // suppresses the SLOT_FIELDS auto-mirror (which would write
+    // `flagship.irk.version` — the DEFAULT-profile key — clobbering
+    // the default profile's value with this named profile's version).
+    try {
+      profilesStore.set("currentIrkVersion", String(version), {
+        storage: ls,
+        cloudName: profileId,
+        mirror: false,
+      });
+    } catch {
+      // fall through to the legacy mirror so we don't drop the write.
+    }
+  }
+  // Always also write the profile-specific legacy key. For the
+  // default profile this is the canonical store. For named profiles
+  // it's a backward-compat mirror so an old webapp tab reading the
+  // suffix key directly stays consistent until it refreshes.
   const key = profileId === DEFAULT_PROFILE_ID
     ? "flagship.irk.version"
     : `flagship.irk.version.${profileId}`;

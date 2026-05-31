@@ -71,12 +71,16 @@ export const SLOT_FIELDS = Object.freeze([
   // cloud is established. We keep the legacy flat key mirrored for those.
   { slot: "username",                legacy: "flagship.username",                       deviceWideOrPreProfile: true },
   { slot: "accountId",               legacy: "flagship.accountId" },
-  // `currentIrkVersion` is owned by keystore.js which uses its OWN
-  // per-profile suffix scheme (`flagship.irk.version` for the default
-  // profile, `flagship.irk.version.<profileId>` for others). The legacy
-  // flat key IS the default-profile key for keystore — sweeping it would
-  // make keystore.currentIrkVersion() return 1 (the default) on next boot.
-  // Mark as device-wide so the cleanup sweep leaves it alone.
+  // `currentIrkVersion` for NAMED profiles is stored through this
+  // store (B3 closed the prior P12 carve-out). The DEFAULT profile
+  // (`profileId === "__default__"`) still uses the legacy flat key
+  // `flagship.irk.version` directly — keystore reads/writes it
+  // without round-tripping through this store, because the default
+  // profile has no cloudName to key a slot under. We keep
+  // deviceWideOrPreProfile:true so the cleanup sweep leaves the
+  // legacy key in place for the default-profile path. Non-default
+  // keystore writes pass `mirror:false` to skip the default-key
+  // auto-mirror, which would otherwise clobber the default profile.
   { slot: "currentIrkVersion",       legacy: "flagship.irk.version",                    deviceWideOrPreProfile: true },
   { slot: "recoveryWarn",            legacy: "flagship.recovery.warn.v1" },
   { slot: "recoveryBannerDismissed", legacy: "flagship.recovery.banner.dismissed.v1" },
@@ -270,7 +274,14 @@ export function set(slot, value, opts = {}) {
   const cloudName = opts.cloudName ?? getActiveCloudName(storage);
   const legacyKey = SLOT_TO_LEGACY.get(slot);
   const isDeviceWide = DEVICE_WIDE_SLOTS.has(slot);
-  const shouldMirror = opts.mirror === true || isDeviceWide;
+  // `opts.mirror === true`  → force-on the legacy mirror (used by tests).
+  // `opts.mirror === false` → force-off (B3 — keystore writing a non-
+  //                            default-profile slot whose device-wide
+  //                            legacy key is reserved for the DEFAULT
+  //                            profile; auto-mirror would clobber it).
+  // omitted                  → defer to the slot's device-wide flag.
+  const shouldMirror =
+    opts.mirror === true || (opts.mirror !== false && isDeviceWide);
 
   if (!cloudName) {
     // No active profile. Non-device-wide writes silently drop here — by
