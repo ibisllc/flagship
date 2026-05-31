@@ -31,13 +31,17 @@ targets:
         product: FlagshipUI
       - target: FlagshipWidgets
         embed: true
-      # NOTE: FlagshipWatchApp is intentionally NOT listed as an
-      # embedded dependency here so the iPhone scheme builds clean on
-      # a host without a watchOS simulator runtime. For TestFlight /
-      # App Store archives the watch app needs to be embedded — flip
-      # this back on (or wire via a separate archive xcconfig) once
-      # the user has installed a watchOS simulator + the watch
-      # bundle-id is registered in the Apple Developer portal.
+      # FlagshipWatchApp embed turned ON for TestFlight / App Store
+      # archives. Requires the watchOS simulator runtime + the
+      # `.watchkitapp` bundle ID's App Group capability ticked in the
+      # Apple Developer portal (see docs/owner-e2e-checklist.md §
+      # TF3 pre-archive). If the local Mac doesn't have the watchOS
+      # platform installed, the iPhone-only scheme `FlagshipApp` will
+      # still build for Simulator — Xcode skips missing-platform
+      # dependencies during simulator builds — but an Archive will
+      # fail until the platform is installed.
+      - target: FlagshipWatchApp
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.flagshipserver.app
@@ -160,11 +164,26 @@ targets:
         excludes:
           - "Info.plist"
       - path: Shared/WatchApproval.swift
+      # W1 — provision-timeline context the watch app decodes off
+      # WCSession applicationContext + the widget extension reads
+      # from the App-Group-shared UserDefaults.
+      - path: Shared/WatchProvisionTimeline.swift
+    dependencies:
+      # W2 — embedded widget extension that renders the install-
+      # progress complication on the watch face / Smart Stack.
+      - target: FlagshipWatchWidgets
+        embed: true
+    entitlements:
+      path: WatchApp/FlagshipWatchApp.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.flagshipserver.app
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.flagshipserver.app.watchkitapp
         DEVELOPMENT_TEAM: 8G8RHBU9BN
         INFOPLIST_FILE: WatchApp/Info.plist
+        CODE_SIGN_ENTITLEMENTS: WatchApp/FlagshipWatchApp.entitlements
         TARGETED_DEVICE_FAMILY: "4"
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
@@ -173,6 +192,40 @@ targets:
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
         SDKROOT: watchos
         SUPPORTED_PLATFORMS: "watchsimulator watchos"
+
+  # W2 — Watch widget extension that ships the install-progress
+  # complication. Lives inside the FlagshipWatchApp.app bundle's
+  # PlugIns/ directory via the embed dependency above.
+  FlagshipWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: WatchWidgets
+        excludes:
+          - "Info.plist"
+      - path: Shared/WatchApproval.swift
+      - path: Shared/WatchProvisionTimeline.swift
+    entitlements:
+      path: WatchWidgets/FlagshipWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.flagshipserver.app
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.flagshipserver.app.watchkitapp.widgets
+        DEVELOPMENT_TEAM: 8G8RHBU9BN
+        INFOPLIST_FILE: WatchWidgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: WatchWidgets/FlagshipWatchWidgets.entitlements
+        TARGETED_DEVICE_FAMILY: "4"
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        SDKROOT: watchos
+        SUPPORTED_PLATFORMS: "watchsimulator watchos"
+        SKIP_INSTALL: YES
 
   FlagshipAppUITests:
     type: bundle.ui-testing
