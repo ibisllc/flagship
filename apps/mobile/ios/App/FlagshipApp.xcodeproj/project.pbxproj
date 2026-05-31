@@ -194,6 +194,7 @@
 		02A1E70A95B49947B67795A9 /* stat.h-3NJF7FAUKCYL2 */ = {isa = PBXFileReference; path = "stat.h-3NJF7FAUKCYL2"; sourceTree = "<group>"; };
 		02C9D09E02CD9C95B884A8CE /* ActivityTab.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = ActivityTab.o; sourceTree = "<group>"; };
 		02C9DF8442AEA6AB5FC9DCC8 /* _DarwinFoundation3-13WBO3OK5MEI3NKGGYHIQ5CPG.pcm */ = {isa = PBXFileReference; path = "_DarwinFoundation3-13WBO3OK5MEI3NKGGYHIQ5CPG.pcm"; sourceTree = "<group>"; };
+		02E103AA00FB9BA7E6BEC6AE /* shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = shared; path = ../../shared; sourceTree = SOURCE_ROOT; };
 		02EAE57F76560D9D384060C9 /* ApproveUnlockScreen.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = ApproveUnlockScreen.d; sourceTree = "<group>"; };
 		02ECC8AF515C55514A6AF4C4 /* AVQueuedSampleBufferRendering.h-JDCCAKKCHOYV */ = {isa = PBXFileReference; path = "AVQueuedSampleBufferRendering.h-JDCCAKKCHOYV"; sourceTree = "<group>"; };
 		02F1B8C556D7AB2428EEDA7F /* CIKernel.h-2K5SWZKWCW801 */ = {isa = PBXFileReference; path = "CIKernel.h-2K5SWZKWCW801"; sourceTree = "<group>"; };
@@ -9406,10 +9407,10 @@
 		FFE9DC5AFC8481BF0DF7B358 /* ContentView.swiftconstvalues */ = {isa = PBXFileReference; path = ContentView.swiftconstvalues; sourceTree = "<group>"; };
 		FFECAD1BE8E58AD13B8518C8 /* INDeleteTasksIntent.h-3CU0Q7V1HXO4I */ = {isa = PBXFileReference; path = "INDeleteTasksIntent.h-3CU0Q7V1HXO4I"; sourceTree = "<group>"; };
 		FFF1ABF6B0FDFB51F65A6836 /* CoreSpotlight-3OCT2U1E1NM6W.pcm */ = {isa = PBXFileReference; path = "CoreSpotlight-3OCT2U1E1NM6W.pcm"; sourceTree = "<group>"; };
-		"TEMP_1FA5EA9D-3D85-4A14-8E0A-7AFC2B88170B" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_27B9CEB4-1EC2-4BCC-9DCD-B5C43B84E9EB" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_990015E5-D9A2-4E1E-A0E1-FF7A3E66CB63" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_F80859B4-F2F4-4874-858D-B03AA81C1075" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_49D5AA69-899D-4C7B-AC88-70A6AC4DA992" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_89A684FE-A4EC-4B80-913A-BE0FAB994573" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_B328679B-7BDC-4BAD-8D9C-FB808D6C0EB3" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_FF82B813-F7E3-4C47-897D-5F3E7B84D06C" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -21404,6 +21405,7 @@
 			isa = PBXGroup;
 			children = (
 				CA43A33A5EACE6A2A88A7032 /* ios */,
+				02E103AA00FB9BA7E6BEC6AE /* shared */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -38427,13 +38429,13 @@
 			path = QO;
 			sourceTree = "<group>";
 		};
-		"TEMP_2D526389-77A7-49A7-8C9D-A7122B6456B5" /* . */ = {
+		"TEMP_407763C0-95F3-4251-9B32-4757F633CED2" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_F80859B4-F2F4-4874-858D-B03AA81C1075" /* project.yml */,
-				"TEMP_27B9CEB4-1EC2-4BCC-9DCD-B5C43B84E9EB" /* FlagshipApp.xcodeproj */,
-				"TEMP_990015E5-D9A2-4E1E-A0E1-FF7A3E66CB63" /* FlagshipApp.entitlements */,
-				"TEMP_1FA5EA9D-3D85-4A14-8E0A-7AFC2B88170B" /* Info.plist */,
+				"TEMP_FF82B813-F7E3-4C47-897D-5F3E7B84D06C" /* project.yml */,
+				"TEMP_49D5AA69-899D-4C7B-AC88-70A6AC4DA992" /* FlagshipApp.xcodeproj */,
+				"TEMP_89A684FE-A4EC-4B80-913A-BE0FAB994573" /* FlagshipApp.entitlements */,
+				"TEMP_B328679B-7BDC-4BAD-8D9C-FB808D6C0EB3" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -38592,6 +38594,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				1F050BDA9FFDA352E3E867CA /* XCLocalSwiftPackageReference ".." */,
+				004D986F910C92547B82CDCD /* XCLocalSwiftPackageReference "../../shared" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D18DA5554F47DFAA52FA22EE /* Products */;
@@ -39130,6 +39133,10 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		004D986F910C92547B82CDCD /* XCLocalSwiftPackageReference "../../shared" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../shared;
+		};
 		1F050BDA9FFDA352E3E867CA /* XCLocalSwiftPackageReference ".." */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ..;

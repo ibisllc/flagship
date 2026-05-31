@@ -390,6 +390,24 @@ public struct TierStatusResponse: Codable, Equatable, Sendable {
     public let dispatcherFreeQuotaGBmonth: Double?
     public let customDomains: [String]
     public let reservedNames: [String]
+
+    public init(
+        tier: String,
+        llmCreditsRemainingDay: Int64?,
+        llmCreditsRemainingTotal: Int64?,
+        dispatcherUsageGBmonth: Double?,
+        dispatcherFreeQuotaGBmonth: Double?,
+        customDomains: [String],
+        reservedNames: [String]
+    ) {
+        self.tier = tier
+        self.llmCreditsRemainingDay = llmCreditsRemainingDay
+        self.llmCreditsRemainingTotal = llmCreditsRemainingTotal
+        self.dispatcherUsageGBmonth = dispatcherUsageGBmonth
+        self.dispatcherFreeQuotaGBmonth = dispatcherFreeQuotaGBmonth
+        self.customDomains = customDomains
+        self.reservedNames = reservedNames
+    }
 }
 
 // MARK: - P1.17 / P1.18 url-controller

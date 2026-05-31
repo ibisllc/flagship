@@ -26,6 +26,9 @@ apps/com/test/**/*.js
 apps/mobile/ios/.build/
 apps/mobile/ios/.swiftpm/
 apps/mobile/ios/DerivedData/
+apps/mobile/shared/.build/
+apps/mobile/shared/.swiftpm/
+apps/mobile/shared/DerivedData/
 apps/mobile/android/.gradle/
 apps/mobile/android/build/
 apps/mobile/android/local.properties
