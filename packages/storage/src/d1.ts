@@ -11,6 +11,8 @@ import type {
   BoxSealedLeaseStorage,
   BoxSerialRecord,
   BoxSerialsStorage,
+  NfcRendezvousRecord,
+  NfcRendezvousStorage,
   PendingRePairRecord,
   PendingRePairStorage,
   RecoveryWipePolicy,
@@ -2764,6 +2766,74 @@ export class D1BoxSerialsStorage implements BoxSerialsStorage {
   }
 }
 
+interface NfcRendezvousRow {
+  rendezvous_id: string;
+  sealed_hex: string;
+  nonce_hex: string;
+  deposited_at: number;
+  expires_at: number;
+}
+
+function rowToNfcRendezvous(r: NfcRendezvousRow): NfcRendezvousRecord {
+  return {
+    rendezvousId: r.rendezvous_id,
+    sealedHex: r.sealed_hex,
+    nonceHex: r.nonce_hex,
+    depositedAt: r.deposited_at,
+    expiresAt: r.expires_at,
+  };
+}
+
+export class D1NfcRendezvousStorage implements NfcRendezvousStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: NfcRendezvousRecord) {
+    // Idempotent overwrite — a re-deposit (e.g. phone retried after a
+    // typo'd WiFi password) replaces the prior blob in the same slot.
+    await this.db
+      .prepare(
+        `INSERT INTO nfc_rendezvous
+           (rendezvous_id, sealed_hex, nonce_hex, deposited_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(rendezvous_id) DO UPDATE SET
+           sealed_hex = excluded.sealed_hex,
+           nonce_hex = excluded.nonce_hex,
+           deposited_at = excluded.deposited_at,
+           expires_at = excluded.expires_at`,
+      )
+      .bind(
+        rec.rendezvousId,
+        rec.sealedHex,
+        rec.nonceHex,
+        rec.depositedAt,
+        rec.expiresAt,
+      )
+      .run();
+  }
+  async consume(rendezvousId: string, now: number) {
+    const r = await this.db
+      .prepare(`SELECT * FROM nfc_rendezvous WHERE rendezvous_id = ?1`)
+      .bind(rendezvousId)
+      .first<NfcRendezvousRow>();
+    if (!r) return undefined;
+    // Always delete on a hit — expired or not — so a stale slot doesn't
+    // linger after the first poll discovers it.
+    await this.db
+      .prepare(`DELETE FROM nfc_rendezvous WHERE rendezvous_id = ?1`)
+      .bind(rendezvousId)
+      .run();
+    if (r.expires_at <= now) return undefined;
+    return rowToNfcRendezvous(r);
+  }
+  async purgeExpired(now: number) {
+    const r = await this.db
+      .prepare(`DELETE FROM nfc_rendezvous WHERE expires_at <= ?1`)
+      .bind(now)
+      .run();
+    const meta = (r as unknown as { meta?: { changes?: number } }).meta;
+    return meta?.changes ?? 0;
+  }
+}
+
 export class D1Storage implements Storage {
   usernames: UsernameStorage;
   usernameAliases: UsernameAliasStorage;
@@ -2794,6 +2864,7 @@ export class D1Storage implements Storage {
   demoUsers: DemoUsersStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   boxSerials: BoxSerialsStorage;
+  nfcRendezvous: NfcRendezvousStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -2824,5 +2895,6 @@ export class D1Storage implements Storage {
     this.demoUsers = new D1DemoUsersStorage(db);
     this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
     this.boxSerials = new D1BoxSerialsStorage(db);
+    this.nfcRendezvous = new D1NfcRendezvousStorage(db);
   }
 }

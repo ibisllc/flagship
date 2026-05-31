@@ -59,6 +59,8 @@ import type {
   InstallPolicyFanoutStorage,
   BoxSerialRecord,
   BoxSerialsStorage,
+  NfcRendezvousRecord,
+  NfcRendezvousStorage,
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
 } from "./types.js";
@@ -1216,6 +1218,36 @@ export class InMemoryBoxSerialsStorage implements BoxSerialsStorage {
   }
 }
 
+export class InMemoryNfcRendezvousStorage implements NfcRendezvousStorage {
+  private byId = new Map<string, NfcRendezvousRecord>();
+  private clone(r: NfcRendezvousRecord): NfcRendezvousRecord {
+    return { ...r };
+  }
+  async put(rec: NfcRendezvousRecord) {
+    this.byId.set(rec.rendezvousId, this.clone(rec));
+  }
+  async consume(rendezvousId: string, now: number) {
+    const r = this.byId.get(rendezvousId);
+    if (!r) return undefined;
+    if (r.expiresAt <= now) {
+      this.byId.delete(rendezvousId);
+      return undefined;
+    }
+    this.byId.delete(rendezvousId);
+    return this.clone(r);
+  }
+  async purgeExpired(now: number) {
+    let n = 0;
+    for (const [id, r] of this.byId) {
+      if (r.expiresAt <= now) {
+        this.byId.delete(id);
+        n++;
+      }
+    }
+    return n;
+  }
+}
+
 export class InMemoryStorage implements Storage {
   usernames = new InMemoryUsernameStorage();
   usernameAliases = new InMemoryUsernameAliasStorage();
@@ -1246,4 +1278,5 @@ export class InMemoryStorage implements Storage {
   demoUsers = new InMemoryDemoUsersStorage();
   deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
   boxSerials = new InMemoryBoxSerialsStorage();
+  nfcRendezvous = new InMemoryNfcRendezvousStorage();
 }

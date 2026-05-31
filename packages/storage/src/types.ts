@@ -854,6 +854,7 @@ export interface Storage {
   demoUsers: DemoUsersStorage;
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   boxSerials: BoxSerialsStorage;
+  nfcRendezvous: NfcRendezvousStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1478,4 +1479,44 @@ export interface BoxSerialsStorage {
   >;
   /** Disambiguation lookup — every row whose suffix6 matches. */
   listBySuffix6(suffix6: string): Promise<BoxSerialRecord[]>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// NFC rendezvous (C3 — cloud side of the NFC tap-to-pair flow).
+//
+// The phone POSTs a sealed WiFi-config blob keyed by
+// PairPayload.hint.cloudRendezvousId; the box polls the same key. The
+// blob is AES-GCM AEAD-sealed under the K_session both sides derived
+// from the NFC tap's ECDH, so the cloud rendezvous is just an opaque
+// drop-box — no signature or auth required at this layer.
+//
+// One-shot semantics: a successful read deletes the blob (a stale blob
+// in the slot would just confuse a future re-tap). TTL 15 min on the
+// deposit side; periodic GC cleans abandoned rows. Re-deposits
+// overwrite (the phone may retry after a typo'd WiFi password).
+//
+// See docs/v1-operational-tasks.md § N-CLOUD.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface NfcRendezvousRecord {
+  /** Matches PairPayload.hint.cloudRendezvousId. */
+  rendezvousId: string;
+  /** Hex-encoded sealed WiFi-config blob (AEAD ciphertext + tag). */
+  sealedHex: string;
+  /** Hex-encoded 12-byte AEAD nonce. */
+  nonceHex: string;
+  /** ms epoch — when the phone deposited the blob. */
+  depositedAt: number;
+  /** ms epoch — deposit + ttlMs; rows past this are evicted. */
+  expiresAt: number;
+}
+
+export interface NfcRendezvousStorage {
+  /** Idempotent upsert — a re-deposit overwrites the prior blob. */
+  put(rec: NfcRendezvousRecord): Promise<void>;
+  /** One-shot read — returns the record and DELETES it atomically.
+   *  Returns undefined when absent or expired. */
+  consume(rendezvousId: string, now: number): Promise<NfcRendezvousRecord | undefined>;
+  /** Periodic cleanup — drop expired rows. Returns the count purged. */
+  purgeExpired(now: number): Promise<number>;
 }
