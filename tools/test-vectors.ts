@@ -15,17 +15,22 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
+  canonicalBoxUnpair,
+  canonicalPair,
+  canonicalWiFiConfig,
   deriveBAK,
   deriveIRK,
   deriveSTK,
   deriveSWK,
   ed,
   signAccountRecovery,
+  signBoxUnpair,
   signInvite,
   signInviteAcceptance,
   signDeviceCapabilityGrant,
   signMembershipMutation,
   signMigrationRequest,
+  signPair,
   signPbAnnounce,
   signPbPeerConfirm,
   signPbRequestPeers,
@@ -34,7 +39,9 @@ import {
   signRevocation,
   signRevokeDeviceCapabilityGrant,
   signTunnelHello,
+  PAIR_PROTOCOL_VERSION,
   type AccountRecovery,
+  type BoxUnpair,
   type DeviceCapabilityGrant,
   type ImageRebuildRequest,
   type InviteAcceptance,
@@ -42,6 +49,7 @@ import {
   type Keypair,
   type MembershipMutation,
   type MigrationRequest,
+  type PairPayload,
   type PbAnnounce,
   type PbPeerConfirm,
   type PbRequestPeers,
@@ -49,6 +57,7 @@ import {
   type RevokeDeviceCapabilityGrant,
   type ServerRevocation,
   type TunnelHello,
+  type WiFiConfig,
 } from "@flagship/protocol";
 
 function hex(b: Uint8Array): string {
@@ -67,9 +76,20 @@ const stk = deriveSTK(swk);
 
 interface Vector {
   name: string;
-  signedBy: "irk" | "bak" | "stk";
+  /** `"none"` for canonical-bytes-only fixtures (no signature). */
+  signedBy: "irk" | "bak" | "stk" | "none";
   input: unknown;
+  /** Empty when signedBy === "none". */
   signatureHex: string;
+  /**
+   * Optional: raw canonical-bytes hex for fixtures where we want to
+   * byte-compare the encoder output across languages, independent of
+   * (or in addition to) a signature verify. Used for the WiFiConfig
+   * vector — the AEAD seal involves a random nonce so the ciphertext
+   * itself can't be a fixed fixture, but the plaintext bytes that go
+   * into the seal SHOULD be deterministic across implementations.
+   */
+  canonicalHex?: string;
 }
 
 function makeVector(
@@ -79,6 +99,14 @@ function makeVector(
   sig: Uint8Array,
 ): Vector {
   return { name, signedBy, input, signatureHex: hex(sig) };
+}
+
+function makeCanonicalOnlyVector(
+  name: string,
+  input: unknown,
+  canonical: Uint8Array,
+): Vector {
+  return { name, signedBy: "none", input, signatureHex: "", canonicalHex: hex(canonical) };
 }
 
 async function main() {
@@ -171,10 +199,13 @@ async function main() {
     ),
   );
 
-  // TunnelHello (BAK or STK; we use BAK here since the existing helper does)
+  // TunnelHello (BAK or STK; we use BAK here since the existing helper does).
+  // Wire field is `controlledDomains` (was `subdomains` pre-rename);
+  // serialize as `subdomains` in the fixture for backward-compatibility
+  // with existing Swift/Kotlin tests that index by the old name.
   const hello: TunnelHello = {
     serverId: "srv-test",
-    subdomains: ["b.harry", "a.harry"],
+    controlledDomains: ["b.harry", "a.harry"],
     nonce: FIXED_NONCE,
     issuedAt: ISSUED_AT,
   };
@@ -182,7 +213,12 @@ async function main() {
     makeVector(
       "tunnel-hello",
       "bak",
-      { ...hello, nonce: hex(hello.nonce) },
+      {
+        serverId: hello.serverId,
+        subdomains: hello.controlledDomains,
+        nonce: hex(hello.nonce),
+        issuedAt: hello.issuedAt,
+      },
       signTunnelHello(hello, bak),
     ),
   );
@@ -289,14 +325,104 @@ async function main() {
     ),
   );
 
-  // Sanity-check: every recorded signature verifies.
+  // ────────────────────────────────────────────────────────────────
+  // N-PROTO NFC retail-tier envelopes — signed PAIR + BoxUnpair +
+  // canonical-bytes-only WiFiConfig. The PAIR uses STK (the box's
+  // per-boot ephemeral); BoxUnpair uses IRK; WiFiConfig is sealed
+  // under K_session AEAD post-pair so a signature wouldn't add
+  // anything — its golden vector is the canonical-bytes shape that
+  // goes into the seal, so a Swift/Kotlin drift in the encoder is
+  // caught even though the ciphertext itself is non-deterministic.
+
+  // PairPayload (STK) — fixed eBoxPub + nonce + sessionId for
+  // determinism. The hint fields are fixed per the locked NFC design
+  // (mdns + cloud rendezvous + suffix6).
+  const FIXED_E_BOX_PUB = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) FIXED_E_BOX_PUB[i] = (i * 5 + 3) & 0xff;
+  const PAIR_NONCE = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) PAIR_NONCE[i] = (i + 17) & 0xff;
+  const PAIR_SESSION_ID = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) PAIR_SESSION_ID[i] = (i * 11 + 5) & 0xff;
+  const suffix6 = hex(stk.publicKey).slice(-6);
+  const pair: PairPayload = {
+    v: PAIR_PROTOCOL_VERSION,
+    stkPub: stk.publicKey,
+    eBoxPub: FIXED_E_BOX_PUB,
+    nonce: PAIR_NONCE,
+    sessionId: PAIR_SESSION_ID,
+    hint: {
+      mdnsName: `flagship-${suffix6}.local`,
+      cloudRendezvousId: `rndz-${suffix6}`,
+      suffix6,
+    },
+  };
+  vectors.push(
+    makeVector(
+      "pair",
+      "stk",
+      {
+        v: pair.v,
+        stkPub: hex(pair.stkPub),
+        eBoxPub: hex(pair.eBoxPub),
+        nonce: hex(pair.nonce),
+        sessionId: hex(pair.sessionId),
+        hint: pair.hint,
+      },
+      signPair(pair, stk),
+    ),
+  );
+
+  // BoxUnpair (IRK) — owner-side rebind-only unpair. boxId is the
+  // box's stkPub hex; matches the wire field the verifier expects.
+  const unpair: BoxUnpair = {
+    userId: "harry",
+    boxId: hex(stk.publicKey),
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(makeVector("box-unpair", "irk", unpair, signBoxUnpair(unpair, irk)));
+
+  // WiFiConfig (canonical-bytes only). The actual ciphertext varies
+  // per nonce so we don't fixture it; what we DO want to fixture is
+  // the plaintext bytes the seal consumes — drift there breaks
+  // cross-language interop even though everything would still
+  // "work" on a single platform.
+  const wifi: WiFiConfig = {
+    ssid: "Home",
+    psk: "correct-horse-battery-staple",
+    regulatoryRegion: "US",
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(makeCanonicalOnlyVector("wifi-config", wifi, canonicalWiFiConfig(wifi)));
+
+  // Sanity-check: every recorded signature verifies, and every
+  // canonical-bytes-only vector's recorded canonicalHex matches what
+  // we'd compute today (catches generator self-inconsistency).
   const verifyKeys: Record<string, Keypair> = { irk, bak, stk };
   for (const v of vectors) {
+    if (v.signedBy === "none") {
+      if (!v.canonicalHex) {
+        throw new Error(`vector ${v.name}: canonical-only vector missing canonicalHex`);
+      }
+      const got = hex(payloadFor(v));
+      if (got !== v.canonicalHex) {
+        throw new Error(`vector ${v.name}: canonical-bytes self-check mismatch`);
+      }
+      continue;
+    }
     const k = verifyKeys[v.signedBy];
     if (!k) throw new Error(`unknown signer: ${v.signedBy}`);
     if (!ed.verify(hexFromString(v.signatureHex), payloadFor(v), k.publicKey)) {
       throw new Error(`vector ${v.name}: roundtrip verification failed`);
     }
+  }
+  // Side-band: also confirm the PAIR + BoxUnpair canonical bytes
+  // round-trip through the exported encoders — this catches a future
+  // refactor that, say, accidentally re-orders fields.
+  if (hex(canonicalPair(pair)) !== hex(payloadFor(vectors.find((v) => v.name === "pair")!))) {
+    throw new Error("pair canonical-bytes self-check mismatch");
+  }
+  if (hex(canonicalBoxUnpair(unpair)) !== hex(payloadFor(vectors.find((v) => v.name === "box-unpair")!))) {
+    throw new Error("box-unpair canonical-bytes self-check mismatch");
   }
 
   const file = {
@@ -444,6 +570,30 @@ function payloadFor(v: Vector): Uint8Array {
           i.reason,
           i.issuedAt,
         ].join("|"),
+      );
+    case "pair": {
+      const hint = i.hint as { mdnsName: string; cloudRendezvousId: string; suffix6: string };
+      return enc(
+        [
+          "flagship/pair/v1",
+          i.v,
+          i.stkPub,
+          i.eBoxPub,
+          i.nonce,
+          i.sessionId,
+          hint.mdnsName,
+          hint.cloudRendezvousId,
+          hint.suffix6,
+        ].join("|"),
+      );
+    }
+    case "box-unpair":
+      return enc(
+        ["flagship/box-unpair/v1", i.userId, i.boxId, i.issuedAt].join("|"),
+      );
+    case "wifi-config":
+      return enc(
+        ["flagship/wifi-config/v1", i.ssid, i.psk, i.regulatoryRegion, i.issuedAt].join("|"),
       );
   }
   throw new Error(`unknown vector ${v.name}`);

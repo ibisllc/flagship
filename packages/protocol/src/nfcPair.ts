@@ -119,7 +119,13 @@ function hex(b: Bytes): string {
   return s;
 }
 
-function canonicalPair(p: PairPayload): Bytes {
+/**
+ * Canonical-bytes encoders for the three NFC envelopes. Exported so
+ * the cross-language golden-vectors test (and any Swift/Kotlin mirror
+ * tests) can byte-compare implementations against a recorded fixture
+ * without having to re-derive the format.
+ */
+export function canonicalPair(p: PairPayload): Bytes {
   return new TextEncoder().encode(
     [
       TAG_PAIR,
@@ -135,13 +141,13 @@ function canonicalPair(p: PairPayload): Bytes {
   );
 }
 
-function canonicalBoxUnpair(u: BoxUnpair): Bytes {
+export function canonicalBoxUnpair(u: BoxUnpair): Bytes {
   return new TextEncoder().encode(
     [TAG_BOX_UNPAIR, u.userId, u.boxId, u.issuedAt].join("|"),
   );
 }
 
-function canonicalWiFiConfig(w: WiFiConfig): Bytes {
+export function canonicalWiFiConfig(w: WiFiConfig): Bytes {
   return new TextEncoder().encode(
     [TAG_WIFI_CONFIG, w.ssid, w.psk, w.regulatoryRegion, w.issuedAt].join("|"),
   );
