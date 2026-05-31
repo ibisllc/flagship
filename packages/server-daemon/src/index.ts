@@ -16,6 +16,8 @@ import {
 } from "./alertInboxHttp.js";
 import { buildAdminProxyHandler } from "./adminProxy.js";
 import { BackupLoop } from "./backupLoop.js";
+import { RepairScheduler } from "./peerBackup/repairScheduler.js";
+import { RepairStatsAccumulator } from "./peerBackup/repairStatsAccumulator.js";
 import { InMemoryAppInviteStore } from "./inviteHandler.js";
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
 import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
@@ -169,6 +171,32 @@ async function main(): Promise<void> {
   const backupLoop = swkHex
     ? new BackupLoop({ swk: hexToBytes(swkHex.trim()), k: 3, n: 5 })
     : null;
+
+  // B4 — peer-backup repair scheduler. Accumulator is always
+  // constructed so the P9 BFF surfaces a typed snapshot (vs. a
+  // null-provider fallback). The scheduler arms an interval that
+  // drives `RepairDaemon.repairOnce` only when a real daemon is
+  // wired; today the upstream shard-registry + peer-side adapters
+  // aren't bolted in yet, so `start()` is a no-op (intentionally)
+  // and the BFF surfaces idle/zero — same observable behavior as
+  // pre-B4, but with the scheduling site in place for the upstream
+  // wire-up to flip on without further changes here.
+  const repairAccumulator = new RepairStatsAccumulator();
+  const repairTickMs = (() => {
+    const raw = process.env.FLAGSHIP_REPAIR_TICK_MS;
+    if (!raw) return undefined;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 1_000 ? n : undefined;
+  })();
+  const repairScheduler = new RepairScheduler({
+    accumulator: repairAccumulator,
+    daemon: null,
+    ...(repairTickMs !== undefined ? { intervalMs: repairTickMs } : {}),
+  });
+  // Idempotent no-op today (daemon=null). Once the upstream wires a
+  // real RepairDaemon and calls repairScheduler.setDaemon(daemon),
+  // a subsequent .start() will arm the interval.
+  repairScheduler.start();
 
   // P6 — collaborator invites BFF store. The signed surface
   // (`/.flagship/app/<id>/invite`) and the Screens-BFF MUST point at
@@ -677,14 +705,19 @@ async function main(): Promise<void> {
       controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
       lineageResolver,
       // P9 — peer-backup management surface. BackupLoop is the
-      // authoritative participation toggle; the registry + repair-stats
-      // hooks are not yet wired into the production boot path (the
-      // matchmaker constructs its own InMemoryShardRegistry on first
-      // upload but doesn't yet hand it back here). When registry/repair
-      // are absent the BFF surfaces the participation flag + an honest
-      // empty shard/peer/repair view.
+      // authoritative participation toggle. The shard registry is not
+      // yet bolted into the production boot path (no upstream shard
+      // upload mechanism in src/ today — the BFF still surfaces an
+      // empty shard/peer view in that case). B4 wires the
+      // RepairStatsAccumulator + RepairScheduler so the BFF's
+      // `repair` block surfaces accumulator state instead of the
+      // null-provider default; today the scheduler is constructed
+      // with `daemon=null` so its snapshot is idle/zero — same
+      // observable behavior as before, but the plumbing is ready for
+      // the daemon to be late-bound once the upstream lands.
       peerBackup: {
         backupLoop,
+        repairStats: repairAccumulator,
       },
       // P6 — collaborator invites. Same store the signed-surface entry
       // must point at when it gets wired (see construction above).
@@ -842,6 +875,8 @@ async function main(): Promise<void> {
   }
   process.once("SIGTERM", () => updateScheduler.stop());
   process.once("SIGINT", () => updateScheduler.stop());
+  process.once("SIGTERM", () => repairScheduler.stop());
+  process.once("SIGINT", () => repairScheduler.stop());
 
   // Stay alive forever (tunnel client + TLS server are event-driven and
   // hold the event loop on their own).
