@@ -1,5 +1,7 @@
 import Foundation
+#if !os(watchOS)
 import LocalAuthentication
+#endif
 
 public struct BiometricGate {
     public enum GateError: Error {
@@ -11,6 +13,17 @@ public struct BiometricGate {
     public init() {}
 
     public func evaluate(reason: String) async throws {
+        #if os(watchOS)
+        // LAPolicy.deviceOwnerAuthenticationWithBiometrics is unavailable
+        // on watchOS — the Watch app doesn't call this surface today
+        // (biometric-gated actions are iPhone-only), but the SPM target
+        // this file lives in gets pulled into the watchOS build pass
+        // when FlagshipApp embeds FlagshipWatchApp. Returning
+        // .notAvailable keeps the API shape consistent so any future
+        // watch-side caller fails the same way Touch ID-less devices do.
+        _ = reason
+        throw GateError.notAvailable
+        #else
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
@@ -30,5 +43,6 @@ public struct BiometricGate {
                 }
             }
         }
+        #endif
     }
 }
