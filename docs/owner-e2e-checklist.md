@@ -18,6 +18,86 @@ for the "what works for the owner today?" matrix.
 
 ---
 
+## ⚡ TF3 pre-archive checklist (do these FIRST)
+
+Run through every box below **before** opening Xcode and clicking
+Product → Archive. Most failures at Archive time are dev-portal
+configuration, not code. Estimated total: 25-40 min if no Apple
+back-office wait. All extracted from TF2/W1/W2 entries below + the
+TF3 Info.plist audit so the owner has one place to look.
+
+### Developer portal — Identifiers
+
+- [ ] **Associated Domains** capability ticked on
+  `com.flagshipserver.app` (TF2 entry below).
+  developer.apple.com → Identifiers → `com.flagshipserver.app` →
+  Capabilities → ☑ Associated Domains → Save.
+- [ ] **App Group** `group.com.flagshipserver.app` enabled on
+  `com.flagshipserver.app` itself (already needed for the iOS widget
+  extension), on `com.flagshipserver.app.watchkitapp` (Watch app),
+  AND on `com.flagshipserver.app.watchkitapp.widgets` (W2's new
+  widget bundle).
+  developer.apple.com → Identifiers → each bundle ID → Capabilities →
+  ☑ App Groups → Edit → ☑ `group.com.flagshipserver.app` → Save.
+- [ ] **Register new bundle ID**
+  `com.flagshipserver.app.watchkitapp.widgets` (W2). This is a new
+  identifier introduced by the watch complication.
+  developer.apple.com → Identifiers → New → App ID → Explicit →
+  enter `com.flagshipserver.app.watchkitapp.widgets`, description
+  "Flagship Watch Widgets" → enable App Groups → Continue → Register.
+- [ ] **Confirm APNs key** in the developer portal matches the one
+  whose secret is loaded into the Worker
+  (`APNS_KEY_ID` + `APNS_TEAM_ID` + `APNS_BUNDLE_ID` +
+  `APNS_AUTH_KEY_PEM` — all 4 already set per session notes).
+  developer.apple.com → Keys → confirm the active key's ID matches
+  the Worker's `APNS_KEY_ID` and APNs is checked on the key.
+
+### Xcode — local toolchain
+
+- [ ] **watchOS 26.5 platform** installed. Xcode → Settings →
+  Components → watchOS 26.5 → download. Required for the Watch
+  scheme to build for Simulator + for the Archive to include the
+  embedded Watch app.
+- [ ] **Flip the Watch dependency back on** in `apps/mobile/ios/App/project.yml`
+  before Archive. Currently `FlagshipWatchApp` is commented out of
+  `FlagshipApp.dependencies` (lines 34-40) so the iPhone scheme
+  builds clean without the watchOS runtime; for TestFlight the
+  Watch app must be embedded. Re-run `xcodegen` after the edit.
+- [ ] **Code signing on** for Release: the project sets
+  `CODE_SIGNING_ALLOWED: NO` as the base for simulator-only test
+  runs. The Archive needs `-allowProvisioningUpdates` or an xcconfig
+  override that flips both flags back to `YES`. The standard
+  `xcodebuild archive ... -allowProvisioningUpdates` invocation in
+  Xcode's Distribute App wizard handles this automatically.
+
+### Info.plist / entitlements
+
+- [ ] **Run the TF3 Info.plist audit** (full section below). At
+  minimum: add `LSApplicationCategoryType` and `ITSAppUsesNonExemptEncryption`
+  to `apps/mobile/ios/App/project.yml` (as `INFOPLIST_KEY_*` entries
+  under `FlagshipApp.settings.base`) and re-run xcodegen. ASC will
+  reject the upload without them.
+
+### External assets
+
+- [ ] **Privacy policy URL** returns 200. Verify with
+  `curl -sI https://flagshipserver.com/privacy.html | head -1`.
+  ASC requires a live privacy URL for any app that uses push or
+  collects any data.
+
+### Sanity gate before clicking Archive
+
+- [ ] `xcodebuild -scheme FlagshipMobile-Package test` runs green
+  on this Mac (624 XCTests as of W1 commit `6274f1b`).
+- [ ] `xcodebuild -scheme FlagshipApp -destination 'platform=iOS Simulator,name=iPhone 16e' build` succeeds.
+- [ ] `xcodebuild -list -project apps/mobile/ios/App/FlagshipApp.xcodeproj`
+  shows `FlagshipWatchApp` and `FlagshipWatchWidgets` among the
+  targets.
+
+When every box above is ticked → proceed to TF3 below.
+
+---
+
 ## Lane W — Watch surface (🤖 agent-doable)
 
 The Watch app today handles unlock approvals only. These tasks add
@@ -230,6 +310,57 @@ with "Processing" → "Ready to Submit" status.
 **Done when**: All ASC required fields are green; "Submit for
 Review" button is enabled (don't click it for TestFlight — internal
 testing doesn't need review).
+
+### TF4 — "What to Test" draft
+
+Paste verbatim into the ASC TestFlight → "What to Test" field. ~620
+chars, single paragraph, sized to fit ASC's input.
+
+```
+Exercise the full create-server flow end-to-end: mint a recipe from the iPhone app, paste it into the Mac burner, burn a USB, boot a spare machine, and watch it provision. While the install runs, glance at the Lock Screen and Dynamic Island for the live install-progress timeline (8 phases: booting → downloading → partitioning → installing → registering → sealing → pairing → live) and confirm the paired Apple Watch shows the same ladder plus the watch-face complication ("Flagship: sealing", etc.). Also sanity-test pair-existing-box, recovery via .flagshipkey + iCloud passkey, the P14 companion-dock pairing on web.flagshipserver.com, and a P13 server-revoke from the danger zone. File any phase that fails to surface on any one of those channels.
+```
+
+### TF3 — pre-archive Info.plist audit
+
+Audit of `apps/mobile/ios/App/Info.plist` + `project.yml` (xcodegen
+synthesizes most plist entries from `INFOPLIST_KEY_*` build
+settings, so several items live in `project.yml` rather than the
+literal Info.plist file). Performed 2026-05-31 against commit at
+HEAD.
+
+| # | Item | Status | Where it lives / Action |
+|---|------|--------|--------------------------|
+| 1 | `CFBundleDisplayName` | ✅ | `project.yml` line 47: `INFOPLIST_KEY_CFBundleDisplayName: Flagship`. |
+| 2 | `CFBundleShortVersionString` + `CFBundleVersion` | ✅ | Info.plist lines 17-18 + 30-31: `1.0` / `1`. Bump for each TestFlight build. |
+| 3 | `LSApplicationCategoryType` | ❌ | **Missing.** ASC will warn or reject. Add to `project.yml` under `FlagshipApp.settings.base` as `INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities` (recommended for Flagship's tool-shaped UI) and re-run xcodegen. |
+| 4 | `ITSAppUsesNonExemptEncryption` | ❌ | **Missing.** Every Archive triggers a manual export-compliance prompt without it, slowing TestFlight processing by ~24h. Flagship uses only OS-provided crypto + standard HTTPS / TLS, so `false` is correct. Add to `project.yml`: `INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO` and re-run xcodegen. |
+| 5a | `NSFaceIDUsageDescription` | ❌ | **Missing.** The app gates sensitive actions via biometrics. iOS will silently fall back to passcode without a fatal crash, but the Face ID prompt will look stock. Add to `project.yml`: `INFOPLIST_KEY_NSFaceIDUsageDescription: "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server."` and re-run xcodegen. |
+| 5b | `NSCameraUsageDescription` | ✅ | `project.yml` line 50: `"Flagship uses the camera to scan a pairing QR shown by your server."`. |
+| 5c | Notifications usage | ✅ | iOS does not require an explicit usage-description key for push or local notifications; the system prompt is canonical. No action needed. |
+| 5d | `NSAppTransportSecurity` | ✅ | Not declared = ATS defaults to strict (HTTPS-only, TLS 1.2+, modern ciphers). The Worker + daemon + Fly + Let's Encrypt chain all conform. No action needed. |
+| 5e | `NFCReaderUsageDescription` | ⚠ | **Not present + not yet needed.** The TF3 Archive will not fail without it because no NFC entitlement is on the app target (no `com.apple.developer.nfc.readersession.formats` in entitlements, no `CoreNFC` import in Sources). **Follow-up before any NFC TestFlight build** (post-v1 N-PHONE work): add `INFOPLIST_KEY_NFCReaderUsageDescription: "Flagship reads a one-time activation tag inside the device's branded box to pair securely."` to `project.yml` *and* enable the NFC capability on the bundle ID + entitlements file. |
+| 6 | Associated Domains entitlement | ✅ | `FlagshipApp.entitlements` lines 7-11: `applinks:flagshipserver.com` + `webcredentials:flagshipserver.com`. (Cross-checked: not duplicated into Info.plist — correct, entitlements is the right home.) |
+| 7 | `aps-environment` | ✅ | `FlagshipApp.entitlements` lines 5-6 use `$(APS_ENVIRONMENT)`; `project.yml` lines 65-68 drive it to `development` (Debug) / `production` (Release). Correct for both TestFlight and prod. |
+| 8 | Background modes | ✅ | Info.plist lines 32-36: `remote-notification`, `fetch`. Required for the install-progress silent-push path. Also redundantly declared in `project.yml` line 75 — fine. |
+| 9 | `UIBackgroundModes` with `remote-notification` | ✅ | Same as #8 — present. |
+| — | Critical Alerts entitlement | ℹ | `FlagshipApp.entitlements` lines 12-13: `com.apple.developer.usernotifications.critical-alerts: true`. Apple grants this on a per-app-request basis; shipping the entitlement pre-grant is harmless. No action for TF3. |
+| — | App Group | ✅ | `FlagshipApp.entitlements` lines 14-17: `group.com.flagshipserver.app`. Required for widget + Watch complication shared storage. Reminder to enable on the watch + widget bundle IDs in the dev portal (covered in the top section above). |
+
+**Summary**: 3 ❌ items to fix before clicking Archive (#3, #4, #5a),
+all in `apps/mobile/ios/App/project.yml`. One ⚠ follow-up (#5e) for
+the NFC TestFlight build later. Everything else is ✅.
+
+**Suggested single edit** to `project.yml` under
+`FlagshipApp.settings.base`:
+
+```yaml
+INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+INFOPLIST_KEY_NSFaceIDUsageDescription: "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server."
+```
+
+Then `cd apps/mobile/ios/App && xcodegen` and re-run an `xcodebuild
+build` smoke before Archive.
 
 ### TF5 — Install TestFlight build on iPhone + Watch (10 min)
 
