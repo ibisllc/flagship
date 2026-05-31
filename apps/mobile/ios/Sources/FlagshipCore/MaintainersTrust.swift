@@ -153,11 +153,17 @@ enum MaintainersCanonical {
     }
 
     /// Deterministic encoding of a non-negative safe integer. The TS uses
-    /// `Number.MAX_SAFE_INTEGER` (2^53-1); Swift `Int` is 64-bit so we
-    /// enforce the same upper bound to stay byte-identical.
+    /// `Number.MAX_SAFE_INTEGER` (2^53-1); Swift `Int` is 64-bit on iOS
+    /// + macOS but 32-bit on watchOS (arm64_32), so type the bound as
+    /// Int64 explicitly to avoid an integer-literal overflow when the
+    /// SPM target gets pulled into the watchOS build pass. On watchOS
+    /// every Int input is automatically ≤ Int.max (2^31-1) < maxSafe,
+    /// so the upper-bound check becomes a no-op there but the input
+    /// type still rejects anything that wouldn't round-trip through
+    /// JS Numbers.
     static func canonicalUint(_ n: Int) throws -> String {
-        let maxSafe = 9_007_199_254_740_991
-        if n < 0 || n > maxSafe { throw CanonicalBytesError.invalid }
+        let maxSafe: Int64 = 9_007_199_254_740_991
+        if n < 0 || Int64(n) > maxSafe { throw CanonicalBytesError.invalid }
         return String(n)
     }
 
