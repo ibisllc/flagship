@@ -221,8 +221,16 @@ deploy + daemon binary rebuild + redeploy).
 - P14 expand the relayable-kinds list beyond release/revoke-server
   (replace-device, wipe-restart — both involve recovery passkeys, so
   defer until a real need surfaces).
-- keystore.js refactor to read currentIrkVersion through profilesStore
-  (today it has its own per-profile suffix scheme).
+- **Watch delegate-key for opt-in quick approvals** (post-v1; v1.1 /
+  v1.2 candidate). User toggle "Quick approve from Apple Watch" mints
+  an IRK-signed `WatchDelegateKey` scoped to boot approvals only, with
+  laxer SE access (`.userPresence` instead of `.biometryCurrentSet`)
+  so a Watch tap doesn't require an iPhone biometric prompt. Default
+  OFF. Destructive ops (revoke / wipe / replace-device) always stay
+  IRK-gated. Auto-revokes on IRK rotation / replace-device / wipe.
+  Pick up alongside the Watch-approve re-routing through the new
+  sealed-lease / boot.flagshipserver.com relay flow. Full design in
+  `docs/watch-delegate-key-design.md`.
 
 ---
 
