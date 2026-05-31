@@ -1,6 +1,7 @@
 import XCTest
 @testable import FlagshipUI
 @testable import Flagship
+@testable import FlagshipCore
 @testable import FlagshipAPI
 
 /// E2E ViewModel tests for the recipe-TTL knob landed in the

@@ -1,5 +1,6 @@
 import Foundation
 import WatchConnectivity
+import FlagshipCore
 #if canImport(WidgetKit)
 import WidgetKit
 #endif

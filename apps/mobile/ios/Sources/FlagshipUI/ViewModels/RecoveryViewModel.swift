@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import CryptoKit
 import Flagship
+import FlagshipCore
 import FlagshipAPI
 
 /// Owns the WebAuthn-PRF cloud-recovery flow.

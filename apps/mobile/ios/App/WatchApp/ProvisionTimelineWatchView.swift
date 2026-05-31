@@ -1,4 +1,5 @@
 import SwiftUI
+import FlagshipCore
 
 /// watchOS install-progress surface — W1. Mirrors the iPhone's
 /// `ProvisionTimelineView` ladder (booting → downloading → partitioning

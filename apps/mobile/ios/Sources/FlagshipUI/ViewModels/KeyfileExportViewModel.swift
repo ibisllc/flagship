@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import CryptoKit
 import Flagship
+import FlagshipCore
 
 /// Drives "Back up your account key" — reads the UMK out of the
 /// Keystore (behind the biometric gate) and wraps it into a

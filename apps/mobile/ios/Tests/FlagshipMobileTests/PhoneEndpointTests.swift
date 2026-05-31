@@ -1,6 +1,7 @@
 import XCTest
 import CryptoKit
 @testable import Flagship
+@testable import FlagshipCore
 
 /// Mirror-tests for the phone-as-unlock-endpoint RELAY model. These pin the
 /// Swift implementation against deterministic vectors generated from

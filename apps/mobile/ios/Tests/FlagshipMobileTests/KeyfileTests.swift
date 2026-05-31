@@ -1,6 +1,7 @@
 import XCTest
 import CryptoKit
 @testable import Flagship
+@testable import FlagshipCore
 
 final class KeyfileTests: XCTestCase {
 

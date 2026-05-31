@@ -10,18 +10,16 @@
 		04479628B5AF50BB0B8C4EA5 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF58F7F531BA9B5914B63CA1 /* ContentView.swift */; };
 		072F2E6BBA4C724C847AEBDC /* InstallProgressAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */; };
 		0B9051D212D7ABF830BFC8C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4BCF8466537CDEBE460F85A8 /* Assets.xcassets */; };
-		0F4B42407D260837449D3D7E /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
 		1C9D09A9144DD8F14716442B /* FlagshipWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 320466AFB364B4CE4A1DB396 /* FlagshipWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		25FF22502B5437B43895A9CB /* ProvisionPhaseComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */; };
 		34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */; };
+		3C9A765CFA2D09FA245A31E0 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9703502B31E53B7A7B02182E /* FlagshipCore */; };
 		3E1A2A9FEFB1ABE512FD060D /* FlagshipUI in Frameworks */ = {isa = PBXBuildFile; productRef = E09B09A74799A9F822F53DEC /* FlagshipUI */; };
 		4139AA3CADE3E3E93DEF5F57 /* InstallProgressLiveActivityCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */; };
 		477681FB8855FCBE67AAFE77 /* WidgetBundleEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00FD448EA89E02E3EC94E310 /* WidgetBundleEntry.swift */; };
 		4B5304800B09623388924E78 /* ProvisionTimelineWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */; };
-		4FEA6B5C2B78A94C15B80B74 /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
 		52740C43DE82D908A417150D /* FlagshipAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4050D91C1A76B12D804925FA /* FlagshipAppIntents.swift */; };
 		598E6331C6653579257D65A7 /* WatchTimelinePublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */; };
-		68333BBE718704FD1F39C6EF /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
 		6B1F3A5CBAD6B75C65A23FC8 /* InstallProgressAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */; };
 		7BFECA1D36A2BB6408A4D8E2 /* PodStatusPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */; };
 		816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 364AF47F5435B920B6FCA2AA /* FlagshipWatchApp.swift */; };
@@ -29,18 +27,14 @@
 		8C738115140ACB707212DE1C /* FlagshipWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8D1ECF1BA1D4441C3439B988 /* FlagshipWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 052606FE5632D693E043CD9D /* FlagshipWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		96F743F46295DACB52910AA8 /* InstallProgressLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 378E57D6EA8CCCF38A83A0D3 /* InstallProgressLiveActivity.swift */; };
-		9CB61F0DF1D3D61B0D33AD5A /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */; };
-		9E9422BA0ACEDB924B09A502 /* WatchApproval.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0257E69AE45D2265F100E0F5 /* WatchApproval.swift */; };
 		AC4E7F4AAE2AA9C3651AD92D /* PodStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */; };
 		B717FAA14A446FBAC6DCB244 /* FlagshipApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 358AFC87FBA9DD274F112C5A /* FlagshipApp.swift */; };
 		C4EB2B45098E076E61D61035 /* PodStatusWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5522F4368F6C5A87495ADB /* PodStatusWidget.swift */; };
 		C74D00A6563CEB33082C616F /* PodStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */; };
-		CEBD233D64450227ABEB47A1 /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */; };
 		D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA35BF39206378728D34AE65 /* WatchBridge.swift */; };
-		DACD9A3A8F73A32711B6F72C /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */; };
 		DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */; };
 		E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */; };
-		F3273888032BFEAA947C7F41 /* WatchProvisionTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */; };
+		FF6B2586776383AA4776A217 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 62BE221458756CDD4E0B2EC4 /* FlagshipCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -188,7 +182,6 @@
 		0242701EF7FB5D49A8ED7334 /* DemoInstallProgressScreen.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = DemoInstallProgressScreen.o; sourceTree = "<group>"; };
 		02496F836C57C5F611D9C415 /* workloop.h-1YSUXMQYKAHG9 */ = {isa = PBXFileReference; path = "workloop.h-1YSUXMQYKAHG9"; sourceTree = "<group>"; };
 		024B33BB784EEEC08820E902 /* common.h-T9QV8ONS941C */ = {isa = PBXFileReference; path = "common.h-T9QV8ONS941C"; sourceTree = "<group>"; };
-		0257E69AE45D2265F100E0F5 /* WatchApproval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApproval.swift; sourceTree = "<group>"; };
 		0258579892F84962AD942A7F /* INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB */ = {isa = PBXFileReference; path = "INSetClimateSettingsInCarIntent.h-22CR85SLG9XVB"; sourceTree = "<group>"; };
 		025EDAB97F073A49C40B147A /* INPaymentMethodType.h-2Y9AYBWSL4X38 */ = {isa = PBXFileReference; path = "INPaymentMethodType.h-2Y9AYBWSL4X38"; sourceTree = "<group>"; };
 		026B40B3492D5EEBECA48E81 /* types.h-EDPX0HDHYBWI */ = {isa = PBXFileReference; path = "types.h-EDPX0HDHYBWI"; sourceTree = "<group>"; };
@@ -5022,7 +5015,6 @@
 		86F25372A16D4F504FF9AD74 /* Spatial-1HOKQLWXNANNU.pcm */ = {isa = PBXFileReference; path = "Spatial-1HOKQLWXNANNU.pcm"; sourceTree = "<group>"; };
 		86F5CECF1EBDB84D756D4195 /* PodStatusWidget.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = PodStatusWidget.d; sourceTree = "<group>"; };
 		86FA33A234B5A9FA52165984 /* AVAudioFile.h-28FIF340K2R8Z */ = {isa = PBXFileReference; path = "AVAudioFile.h-28FIF340K2R8Z"; sourceTree = "<group>"; };
-		870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchProvisionTimeline.swift; sourceTree = "<group>"; };
 		871506C9F2469381B92DDC86 /* UIDynamicAnimator.h-146DVZKWUKBX5 */ = {isa = PBXFileReference; path = "UIDynamicAnimator.h-146DVZKWUKBX5"; sourceTree = "<group>"; };
 		87179D5F552A2EEEA653316F /* AppIntents-6CJUOQN05KXEDZWRYXGEXV4HC.pcm */ = {isa = PBXFileReference; path = "AppIntents-6CJUOQN05KXEDZWRYXGEXV4HC.pcm"; sourceTree = "<group>"; };
 		871B2F352E5DF8CD5A472C35 /* INActivateCarSignalIntent.h-32JO5YV2I7H5X */ = {isa = PBXFileReference; path = "INActivateCarSignalIntent.h-32JO5YV2I7H5X"; sourceTree = "<group>"; };
@@ -9414,13 +9406,29 @@
 		FFE9DC5AFC8481BF0DF7B358 /* ContentView.swiftconstvalues */ = {isa = PBXFileReference; path = ContentView.swiftconstvalues; sourceTree = "<group>"; };
 		FFECAD1BE8E58AD13B8518C8 /* INDeleteTasksIntent.h-3CU0Q7V1HXO4I */ = {isa = PBXFileReference; path = "INDeleteTasksIntent.h-3CU0Q7V1HXO4I"; sourceTree = "<group>"; };
 		FFF1ABF6B0FDFB51F65A6836 /* CoreSpotlight-3OCT2U1E1NM6W.pcm */ = {isa = PBXFileReference; path = "CoreSpotlight-3OCT2U1E1NM6W.pcm"; sourceTree = "<group>"; };
-		"TEMP_5A8AF4D0-B6A4-4EB8-9816-83B3041759B4" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_B8D3C452-C1E2-4048-B39A-3A299331B27B" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_CC199C4E-AE4C-4844-8AB3-7824B9311DFF" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_FF0DBB3F-7831-4009-A1C0-C1C32C6A2FD6" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_1FA5EA9D-3D85-4A14-8E0A-7AFC2B88170B" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		"TEMP_27B9CEB4-1EC2-4BCC-9DCD-B5C43B84E9EB" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_990015E5-D9A2-4E1E-A0E1-FF7A3E66CB63" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_F80859B4-F2F4-4874-858D-B03AA81C1075" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2FA51140DC2C890C0E0413D6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FF6B2586776383AA4776A217 /* FlagshipCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		46288564620EA6DD17008E0B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3C9A765CFA2D09FA245A31E0 /* FlagshipCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA24B2037F8D1870508F6794 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -19890,8 +19898,6 @@
 			children = (
 				62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */,
 				1EF36CB31F2C2F33FF52D36C /* PodStatusSnapshot.swift */,
-				0257E69AE45D2265F100E0F5 /* WatchApproval.swift */,
-				870FBB3D0B0DD671A5E3C305 /* WatchProvisionTimeline.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -38421,13 +38427,13 @@
 			path = QO;
 			sourceTree = "<group>";
 		};
-		"TEMP_9C9A9890-4B71-462A-8505-327E1A326C1E" /* . */ = {
+		"TEMP_2D526389-77A7-49A7-8C9D-A7122B6456B5" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_FF0DBB3F-7831-4009-A1C0-C1C32C6A2FD6" /* project.yml */,
-				"TEMP_5A8AF4D0-B6A4-4EB8-9816-83B3041759B4" /* FlagshipApp.xcodeproj */,
-				"TEMP_B8D3C452-C1E2-4048-B39A-3A299331B27B" /* FlagshipApp.entitlements */,
-				"TEMP_CC199C4E-AE4C-4844-8AB3-7824B9311DFF" /* Info.plist */,
+				"TEMP_F80859B4-F2F4-4874-858D-B03AA81C1075" /* project.yml */,
+				"TEMP_27B9CEB4-1EC2-4BCC-9DCD-B5C43B84E9EB" /* FlagshipApp.xcodeproj */,
+				"TEMP_990015E5-D9A2-4E1E-A0E1-FF7A3E66CB63" /* FlagshipApp.entitlements */,
+				"TEMP_1FA5EA9D-3D85-4A14-8E0A-7AFC2B88170B" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -38449,6 +38455,7 @@
 			buildConfigurationList = 6E5003C827096C801A51E88F /* Build configuration list for PBXNativeTarget "FlagshipWatchWidgets" */;
 			buildPhases = (
 				0A07DEAC385ECF88055760F3 /* Sources */,
+				46288564620EA6DD17008E0B /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -38456,6 +38463,7 @@
 			);
 			name = FlagshipWatchWidgets;
 			packageProductDependencies = (
+				9703502B31E53B7A7B02182E /* FlagshipCore */,
 			);
 			productName = FlagshipWatchWidgets;
 			productReference = 052606FE5632D693E043CD9D /* FlagshipWatchWidgets.appex */;
@@ -38507,6 +38515,7 @@
 			buildConfigurationList = 819E8225FA46B210725BE0BC /* Build configuration list for PBXNativeTarget "FlagshipWatchApp" */;
 			buildPhases = (
 				EC69399646768B5C24017860 /* Sources */,
+				2FA51140DC2C890C0E0413D6 /* Frameworks */,
 				5F562245A651623CB476C049 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -38516,6 +38525,7 @@
 			);
 			name = FlagshipWatchApp;
 			packageProductDependencies = (
+				62BE221458756CDD4E0B2EC4 /* FlagshipCore */,
 			);
 			productName = FlagshipWatchApp;
 			productReference = 6DABF23A55B894623149E1C8 /* FlagshipWatchApp.app */;
@@ -38615,8 +38625,6 @@
 			files = (
 				834D62D11BC2D886AD2C5EEB /* FlagshipWatchWidgetsBundle.swift in Sources */,
 				25FF22502B5437B43895A9CB /* ProvisionPhaseComplication.swift in Sources */,
-				9E9422BA0ACEDB924B09A502 /* WatchApproval.swift in Sources */,
-				F3273888032BFEAA947C7F41 /* WatchProvisionTimeline.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -38636,8 +38644,6 @@
 				96F743F46295DACB52910AA8 /* InstallProgressLiveActivity.swift in Sources */,
 				C74D00A6563CEB33082C616F /* PodStatusSnapshot.swift in Sources */,
 				C4EB2B45098E076E61D61035 /* PodStatusWidget.swift in Sources */,
-				68333BBE718704FD1F39C6EF /* WatchApproval.swift in Sources */,
-				CEBD233D64450227ABEB47A1 /* WatchProvisionTimeline.swift in Sources */,
 				477681FB8855FCBE67AAFE77 /* WidgetBundleEntry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -38653,9 +38659,7 @@
 				4139AA3CADE3E3E93DEF5F57 /* InstallProgressLiveActivityCenter.swift in Sources */,
 				7BFECA1D36A2BB6408A4D8E2 /* PodStatusPublisher.swift in Sources */,
 				AC4E7F4AAE2AA9C3651AD92D /* PodStatusSnapshot.swift in Sources */,
-				0F4B42407D260837449D3D7E /* WatchApproval.swift in Sources */,
 				D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */,
-				DACD9A3A8F73A32711B6F72C /* WatchProvisionTimeline.swift in Sources */,
 				598E6331C6653579257D65A7 /* WatchTimelinePublisher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -38666,9 +38670,7 @@
 			files = (
 				816E9648DA4A66666DE744FA /* FlagshipWatchApp.swift in Sources */,
 				4B5304800B09623388924E78 /* ProvisionTimelineWatchView.swift in Sources */,
-				4FEA6B5C2B78A94C15B80B74 /* WatchApproval.swift in Sources */,
 				DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */,
-				9CB61F0DF1D3D61B0D33AD5A /* WatchProvisionTimeline.swift in Sources */,
 				34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -39135,6 +39137,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		62BE221458756CDD4E0B2EC4 /* FlagshipCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FlagshipCore;
+		};
+		9703502B31E53B7A7B02182E /* FlagshipCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FlagshipCore;
+		};
 		E09B09A74799A9F822F53DEC /* FlagshipUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FlagshipUI;

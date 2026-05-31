@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Argon2Kit
+import FlagshipCore
 
 /// `.flagshipkey` — a passphrase-wrapped, portable backup of the User
 /// Master Key. Byte-compatible with `packages/protocol/src/keyfile.ts`.

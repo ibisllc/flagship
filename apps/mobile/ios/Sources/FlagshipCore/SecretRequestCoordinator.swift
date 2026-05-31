@@ -1,6 +1,5 @@
 import Foundation
 import CryptoKit
-import Flagship
 import FlagshipAPI
 
 /// Drives the phone's half of the boot-secret RELAY handshake

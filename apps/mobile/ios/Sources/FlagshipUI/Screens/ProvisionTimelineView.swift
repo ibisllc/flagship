@@ -1,5 +1,6 @@
 import SwiftUI
 import FlagshipAPI
+import FlagshipCore
 
 /// Live provisioning-status timeline for a pending server. Renders the
 /// ordered install phases (Booting → … → Server is live) as a connected

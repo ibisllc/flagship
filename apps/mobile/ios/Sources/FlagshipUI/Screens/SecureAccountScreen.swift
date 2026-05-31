@@ -1,6 +1,7 @@
 import SwiftUI
 import CryptoKit
 import Flagship
+import FlagshipCore
 import FlagshipAPI
 
 /// **Secure your account** — the skippable backup nudge shown right after

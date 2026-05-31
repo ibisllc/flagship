@@ -163,12 +163,14 @@ targets:
       - path: WatchApp
         excludes:
           - "Info.plist"
-      - path: Shared/WatchApproval.swift
-      # W1 — provision-timeline context the watch app decodes off
-      # WCSession applicationContext + the widget extension reads
-      # from the App-Group-shared UserDefaults.
-      - path: Shared/WatchProvisionTimeline.swift
     dependencies:
+      # The wire types the watch decodes (WatchProtocol.*) +
+      # cross-platform protocol code (NfcPair, ProvisionTimelineLadder,
+      # etc.) live in the SPM's FlagshipCore product. The watch links
+      # ONLY the cross-platform SPM products — never `Flagship`
+      # (Keystore/biometric) or `FlagshipUI` (UIKit/ActivityKit).
+      - package: FlagshipPkg
+        product: FlagshipCore
       # W2 — embedded widget extension that renders the install-
       # progress complication on the watch face / Smart Stack.
       - target: FlagshipWatchWidgets
@@ -204,8 +206,12 @@ targets:
       - path: WatchWidgets
         excludes:
           - "Info.plist"
-      - path: Shared/WatchApproval.swift
-      - path: Shared/WatchProvisionTimeline.swift
+    dependencies:
+      # Same FlagshipCore product the watch app uses — the widget
+      # decodes the App-Group-shared ProvisionTimelineContext blob the
+      # watch app deposits there. Cross-platform SPM product only.
+      - package: FlagshipPkg
+        product: FlagshipCore
     entitlements:
       path: WatchWidgets/FlagshipWatchWidgets.entitlements
       properties:

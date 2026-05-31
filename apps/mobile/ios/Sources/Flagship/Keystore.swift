@@ -600,17 +600,7 @@ fileprivate struct WrappingKeypair {
 
     static func createOrLoad(reason: String) async throws -> WrappingKeypair {
         let ctx = LAContext()
-        #if !os(watchOS)
-        // LAContext.localizedReason is unavailable on watchOS — the
-        // SE-key creation path here is iPhone-only (Watch app never
-        // calls Keystore.createOrLoad), but the SPM target this file
-        // lives in gets pulled into the watchOS build pass when
-        // FlagshipApp embeds FlagshipWatchApp. Setting the reason
-        // unconditionally would refuse to compile on watchOS.
         ctx.localizedReason = reason
-        #else
-        _ = reason
-        #endif
 
         // Each profile gets its OWN wrapping keypair so a profile's UMK
         // can only be unwrapped under its own slot. The default profile

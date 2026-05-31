@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 import FlagshipAPI
-import Flagship
 
 /// W3 — durable profile descriptor. A "cloud" is what we used to call
 /// a "username" — each cloud has one root key (today's IRK). One phone
@@ -119,6 +118,14 @@ public final class AppState {
     /// Nil ⇒ no active profile (unpaired, or every profile was wiped).
     public var activeProfileCloudName: String?
 
+    /// iOS-side hook to keep the per-profile keystore (UMK/IRK key
+    /// slots) aligned with the active cloud. Wired by the iPhone app at
+    /// boot — the iOS shell injects a closure that calls
+    /// `Keystore.setActiveProfile(cloudName)` from the iOS-only
+    /// `Flagship` SPM target. Left unset on watchOS (no keystore on the
+    /// watch); the AppState mutations themselves are fully cross-platform.
+    public var onActiveProfileChanged: ((String) -> Void)?
+
     public init(
         isPaired: Bool = false,
         currentUser: String? = nil,
@@ -224,7 +231,7 @@ public final class AppState {
         // Keep the keystore's active-profile pointer aligned with the
         // onboarded cloud (the add-profile VMs already point it before
         // key-gen; this covers re-onboarding / switch-back paths).
-        Keystore.setActiveProfile(username)
+        onActiveProfileChanged?(username)
     }
 
     /// W3 — register a new profile (or refresh an existing one with the
@@ -254,7 +261,9 @@ public final class AppState {
         // Per-profile keystore keying: point UMK/IRK derivation at this
         // profile's slot so deriveIRK / unwrapUMK target the active cloud.
         // The profileId is the cloudName lowercased (Keystore normalizes).
-        Keystore.setActiveProfile(p.cloudName)
+        // Wired by the iOS shell via onActiveProfileChanged; the watch
+        // app leaves the hook unset.
+        onActiveProfileChanged?(p.cloudName)
     }
 
     private func upsertProfile(_ profile: Profile) {

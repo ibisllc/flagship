@@ -1,6 +1,7 @@
 import SwiftUI
 import CryptoKit
 import Flagship
+import FlagshipCore
 
 /// Settings → Recovery setup. Walks the user through registering a
 /// passkey on flagshipserver.com + uploading a wrapped UMK envelope.

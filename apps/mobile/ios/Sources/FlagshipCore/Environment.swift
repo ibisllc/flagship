@@ -1,6 +1,5 @@
 import SwiftUI
 import FlagshipAPI
-import Flagship
 
 /// EnvironmentValues extension so any view can read the live ScreensClient
 /// via `@Environment(\.screensClient)`. The App-level shell injects either

@@ -2,6 +2,7 @@ import XCTest
 import CryptoKit
 @testable import FlagshipAPI
 @testable import Flagship
+@testable import FlagshipCore
 
 /// P0b parity gap (audit 2026-05-26): the iOS marketplace Deploy button
 /// was a stub `{}`. Wire-shape must match the webapp's `runInstall` /

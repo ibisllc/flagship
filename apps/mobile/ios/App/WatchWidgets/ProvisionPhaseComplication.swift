@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import FlagshipCore
 
 /// watchOS complication / Smart-Stack widget that surfaces the install
 /// phase of an in-flight server provision at a glance, without the user

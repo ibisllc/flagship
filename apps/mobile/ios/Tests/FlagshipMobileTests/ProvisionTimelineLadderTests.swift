@@ -1,6 +1,6 @@
 import XCTest
 @testable import FlagshipAPI
-@testable import FlagshipUI
+@testable import FlagshipCore
 
 /// Spec for the ProvisionTimelineLadder row projection.
 ///

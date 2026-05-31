@@ -5,6 +5,7 @@ let package = Package(
     name: "FlagshipMobile",
     platforms: [
         .iOS(.v17),
+        .watchOS(.v10),
         .macOS(.v14)
     ],
     products: [
@@ -24,9 +25,15 @@ let package = Package(
         .package(url: "https://github.com/rkreutz/Argon2Kit.git", exact: "0.1.1")
     ],
     targets: [
+        // Flagship — iOS-only crypto + keystore + biometric gate.
+        // Pulls in Argon2Kit, LocalAuthentication, AuthenticationServices.
+        // Never linked from a watchOS target — the iOS shell links it
+        // for SE-keypair / biometric / `.flagshipkey` import-export
+        // flows; the watch has no analogue.
         .target(
             name: "Flagship",
             dependencies: [
+                "FlagshipCore",
                 .product(name: "Argon2Kit", package: "Argon2Kit")
             ],
             path: "Sources/Flagship"
@@ -35,9 +42,16 @@ let package = Package(
             name: "FlagshipAPI",
             path: "Sources/FlagshipAPI"
         ),
+        // FlagshipCore is the CROSS-PLATFORM module — usable from iOS,
+        // watchOS, and macOS targets. It depends only on FlagshipAPI
+        // (also cross-platform) and pure system frameworks (Foundation,
+        // CryptoKit, Security). Anything that needs LocalAuthentication,
+        // Argon2Kit, AuthenticationServices, UIKit or ActivityKit lives
+        // in `Flagship` (iOS-only) or `FlagshipUI` (iOS-only) so the
+        // watchOS build pass never has to compile incompatible code.
         .target(
             name: "FlagshipCore",
-            dependencies: ["FlagshipAPI", "Flagship"],
+            dependencies: ["FlagshipAPI"],
             path: "Sources/FlagshipCore"
         ),
         .target(

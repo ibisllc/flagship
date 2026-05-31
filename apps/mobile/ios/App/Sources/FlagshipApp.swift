@@ -24,6 +24,13 @@ struct FlagshipApp: App {
         self.liveClient = LiveScreensClient(store: KeychainSessionStore())
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
+        // AppState's profile-switch hook bridges into the iOS-only
+        // Keystore so UMK/IRK derivation tracks the active cloud. The
+        // hook is unset on watchOS (which doesn't link the iOS-only
+        // Flagship target / has no keystore).
+        appState.onActiveProfileChanged = { cloudName in
+            Keystore.setActiveProfile(cloudName)
+        }
     }
 
     /// Smoke-test entry point: when launched with `-smoke-mode YES`

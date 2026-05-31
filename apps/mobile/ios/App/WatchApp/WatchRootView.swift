@@ -1,4 +1,5 @@
 import SwiftUI
+import FlagshipCore
 
 /// watchOS landing surface. Lists pending unlock approvals; tapping a
 /// row opens the per-row sheet with an "Approve" CTA that fires a

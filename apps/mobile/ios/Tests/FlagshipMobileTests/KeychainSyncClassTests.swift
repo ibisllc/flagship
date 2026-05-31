@@ -1,5 +1,6 @@
 import XCTest
 @testable import Flagship
+@testable import FlagshipCore
 
 /// W8 — verify that the Keychain wrapper plumbs the iCloud-sync class
 /// flag through. On the iOS simulator test bundle there's no Keychain

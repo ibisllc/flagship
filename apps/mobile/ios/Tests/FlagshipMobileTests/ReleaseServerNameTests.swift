@@ -1,6 +1,7 @@
 import XCTest
 import CryptoKit
 @testable import Flagship
+@testable import FlagshipCore
 @testable import FlagshipAPI
 
 /// P3 — pending-server cancel flow.

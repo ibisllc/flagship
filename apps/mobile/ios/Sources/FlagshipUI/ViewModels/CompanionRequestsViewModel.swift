@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import CryptoKit
 import Flagship
+import FlagshipCore
 import FlagshipAPI
 
 /// P14 Phase 2 — drives the Settings → Companion requests surface.
