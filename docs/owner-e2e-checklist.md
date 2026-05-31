@@ -58,11 +58,15 @@ TF3 Info.plist audit so the owner has one place to look.
   Components → watchOS 26.5 → download. Required for the Watch
   scheme to build for Simulator + for the Archive to include the
   embedded Watch app.
-- [ ] **Flip the Watch dependency back on** in `apps/mobile/ios/App/project.yml`
-  before Archive. Currently `FlagshipWatchApp` is commented out of
-  `FlagshipApp.dependencies` (lines 34-40) so the iPhone scheme
-  builds clean without the watchOS runtime; for TestFlight the
-  Watch app must be embedded. Re-run `xcodegen` after the edit.
+- [x] **Watch dependency is ON** in `apps/mobile/ios/App/project.yml`.
+  As of the FlagshipShared two-package split (commit `bd47974`), the
+  Watch app + Watch widget link the cross-platform `FlagshipShared`
+  package's `FlagshipCore` product (NOT the iOS-only `FlagshipPkg`,
+  which pulls Argon2Kit and has no watchOS slice). `FlagshipWatchApp`
+  is embedded in `FlagshipApp.dependencies` and builds clean for the
+  watchOS simulator — verified this session, with Argon2Kit never
+  compiled for the watch slice. Nothing to flip; just have the
+  watchOS 26.5 platform installed before Archive.
 - [ ] **Code signing on** for Release: the project sets
   `CODE_SIGNING_ALLOWED: NO` as the base for simulator-only test
   runs. The Archive needs `-allowProvisioningUpdates` or an xcconfig
@@ -88,7 +92,9 @@ TF3 Info.plist audit so the owner has one place to look.
 ### Sanity gate before clicking Archive
 
 - [ ] `xcodebuild -scheme FlagshipMobile-Package test` runs green
-  on this Mac (624 XCTests as of W1 commit `6274f1b`).
+  on this Mac (646 XCTests as of the FlagshipShared split, commit
+  `bd47974`; tests use `@testable import FlagshipCore/FlagshipAPI`,
+  which resolves across the package boundary).
 - [ ] `xcodebuild -scheme FlagshipApp -destination 'platform=iOS Simulator,name=iPhone 16e' build` succeeds.
 - [ ] `xcodebuild -list -project apps/mobile/ios/App/FlagshipApp.xcodeproj`
   shows `FlagshipWatchApp` and `FlagshipWatchWidgets` among the
