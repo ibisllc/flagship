@@ -3,11 +3,20 @@ import {
   handleServerLookup,
   handleServerRegister,
 } from "@flagship/control-plane";
-import type { AuthCodeStorage, ServerStorage } from "@flagship/storage";
+import type {
+  AuthCodeStorage,
+  BoxSerialsStorage,
+  ServerStorage,
+} from "@flagship/storage";
 
 export interface ServerRegisterOptions {
   authCodes: AuthCodeStorage;
   servers: ServerStorage;
+  /** N-CLOUD-2: branded box serial enforcement. Wire when running on
+   *  identity-plane / .com with the box_serials table provisioned;
+   *  omit on the data-plane (.services Fastify) which never sees a
+   *  registration carrying boxSerial. */
+  boxSerials?: BoxSerialsStorage;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -19,6 +28,7 @@ export function registerServerRegister(
   const deps = {
     authCodes: opts.authCodes,
     servers: opts.servers,
+    boxSerials: opts.boxSerials,
     maxAgeMs: opts.maxAgeMs,
     now: opts.now,
   };

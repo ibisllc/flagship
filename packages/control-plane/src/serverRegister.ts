@@ -6,6 +6,7 @@ import {
 } from "@flagship/protocol";
 import type {
   AuthCodeStorage,
+  BoxSerialsStorage,
   InstallPolicyFanoutStorage,
   PushTokenStorage,
   RoutingStorage,
@@ -13,6 +14,7 @@ import type {
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
+import { enforceActivated } from "./serialActivation.js";
 /**
  * Minimum DNS-client surface `handleServerRegister` needs. Both
  * `CloudflareDnsClient` (direct CF token, dev/legacy) and
@@ -64,6 +66,18 @@ export interface ServerRegisterDeps {
     category: string;
     sealedPayloadHex: string;
   }) => Promise<{ ok: boolean; sent: number; failed: number }>;
+  /**
+   * N-CLOUD-2: branded box hardware-serial enforcement. When provided,
+   * a registration that carries a top-level `boxSerial` is checked
+   * against the box_serials table via `enforceActivated` BEFORE the
+   * auth-code is consumed, so a failed check is retriable. When omitted,
+   * the handler fails-closed for any registration claiming a boxSerial
+   * — we'd rather 403 a misconfigured prod than silently accept a
+   * branded-box claim no one verified. Self-built / Debian / Alpine
+   * boxes (which never include boxSerial) pass through unchanged
+   * either way.
+   */
+  boxSerials?: BoxSerialsStorage;
   maxAgeMs?: number;
   now?: () => number;
 }
@@ -87,6 +101,20 @@ interface RegisterBody {
     nonce?: string;
   };
   signature?: string;
+  /**
+   * N-CLOUD-2: optional box hardware serial. Pre-allocated at
+   * manufacture time, retailer-HMAC-activated via /api/serial/activate.
+   * Branded retail boxes include it here; self-built boxes omit it.
+   *
+   * Carried unsigned at the top level in v1 so a future promotion into
+   * the signed `request` envelope can change the canonical bytes
+   * backward-compatibly. Integrity of the bind comes from `bindStk`'s
+   * atomic first-claim semantic — the serial gets nailed to the
+   * server's Ed25519 identity on first registration; subsequent
+   * registrations with the same identity are idempotent rebinds, and a
+   * different identity claiming the same serial is rejected.
+   */
+  boxSerial?: string;
 }
 
 export async function handleServerRegister(
@@ -171,6 +199,44 @@ export async function handleServerRegister(
   }
   const age = now - r.issuedAt;
   if (age > maxAgeMs || age < -60_000) return forbidden("stale registration");
+
+  // N-CLOUD-2: branded box hardware-serial enforcement. Runs BEFORE
+  // auth-code consumption so a failed serial check leaves the recipe
+  // usable for a retry with the right box. Self-built / Debian / Alpine
+  // boxes never include `boxSerial` and skip this block entirely.
+  if (body.boxSerial !== undefined) {
+    if (typeof body.boxSerial !== "string" || body.boxSerial.length === 0) {
+      return malformed("malformed boxSerial");
+    }
+    if (!deps.boxSerials) {
+      // Fail-closed: a branded-box claim landing at a server with no
+      // box_serials storage configured shouldn't silently slip through.
+      return forbidden("box serial enforcement not configured");
+    }
+    const identityHex = bytesToHex(identityPub);
+    const bind = await enforceActivated(
+      { serials: deps.boxSerials },
+      {
+        serial: body.boxSerial,
+        stkPubHex: identityHex,
+        suffix6: identityHex.slice(-6),
+        at: now,
+      },
+    );
+    if (!bind.ok) {
+      // Translate storage-layer reasons to the registration-handler
+      // vocabulary so the daemon error surface reads cleanly.
+      const reason =
+        bind.reason === "unknown serial"
+          ? "unknown box serial"
+          : bind.reason === "not activated"
+            ? "box serial not activated"
+            : bind.reason === "already bound"
+              ? "box serial already bound to a different server identity"
+              : `box serial check failed: ${bind.reason}`;
+      return forbidden(reason);
+    }
+  }
 
   const useResult = await validateAndUseAuthCode(deps.authCodes, authCode.serial, now);
   if (!useResult.ok) {

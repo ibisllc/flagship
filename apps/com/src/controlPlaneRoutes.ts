@@ -650,6 +650,10 @@ export async function tryControlPlane(
           pushTokens: storage.pushTokens,
           installPolicyFanout: storage.installPolicyFanout,
           ...(srForwarder ? { forwardToProviders: srForwarder } : {}),
+          // N-CLOUD-2: enforce branded-box hardware-serial activation
+          // when the registration body carries `boxSerial`. Self-built
+          // boxes never include it and skip the check.
+          boxSerials: storage.boxSerials,
         },
         await readJson(request),
       ),

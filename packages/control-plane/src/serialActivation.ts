@@ -181,12 +181,11 @@ export async function handleRendezvousLookup(
 
 /**
  * Helper for the register-server hot path. Call when the incoming
- * registration carries a `serial` field (branded boxes do). Returns
- * `ok:true` to proceed with the bind, or `ok:false` with a 403-shaped
- * reason for the caller to surface.
- *
- * Not wired into `handleServerRegister` in this commit — N-CLOUD-2 in
- * the doc is the wire-in step; this commit lands the helper.
+ * registration carries a `boxSerial` field (branded boxes do). Returns
+ * `ok:true` to proceed with the bind, or `ok:false` with a reason the
+ * caller surfaces as a 403. Wired into `handleServerRegister` as of
+ * N-CLOUD-2; see `docs/n-cloud-2-design-discussion.md` for the
+ * operational trade-offs that shaped the wire-in.
  */
 export async function enforceActivated(
   deps: Pick<SerialActivationDeps, "serials">,
