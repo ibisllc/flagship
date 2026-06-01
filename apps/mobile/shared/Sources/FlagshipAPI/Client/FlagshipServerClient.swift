@@ -78,6 +78,18 @@ public protocol FlagshipServerClient: Sendable {
     /// GET /api/users/:u/devices.
     func listDevices(username: String) async throws -> TrustedDevicesListResponse
 
+    /// Watch delegate keys — opt-in "quick approve a box boot from the Watch".
+    /// The phone mints an IRK-signed `WatchDelegateKey` (scoped boot-approval,
+    /// 7-day TTL) and registers it; the boot worker then accepts the delegate
+    /// key's signature on a boot approval. Mirrors the cloud handlers in
+    /// packages/control-plane/src/watchDelegates.ts.
+    ///   POST /api/users/:u/watch-delegates
+    func mintWatchDelegate(username: String, body: WatchDelegateMintRequest) async throws -> WatchDelegateMintResponse
+    ///   GET  /api/users/:u/watch-delegates
+    func listWatchDelegates(username: String) async throws -> WatchDelegatesListResponse
+    ///   POST /api/users/:u/watch-delegates/revoke
+    func revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) async throws
+
     /// Account-level audit log surfaced via /api/users/:u/audit. Used
     /// by the Activity feed to render device-disconnect / device-
     /// replaced / wipe-restart / recovery-set-up events alongside
@@ -825,6 +837,102 @@ public struct DeviceAdmitResponse: Codable, Equatable, Sendable {
         self.ok = ok
         self.tokenId = tokenId
         self.quarantineUntil = quarantineUntil
+    }
+}
+
+// MARK: - Watch delegate keys (wire types)
+
+/// POST /api/users/:u/watch-delegates body. `grant` mirrors the cloud's
+/// `WatchDelegateKey` (the field names match the Worker's MintBody.grant) and
+/// `signature` is the IRK Ed25519 signature over its canonical bytes.
+public struct WatchDelegateMintRequest: Codable, Equatable, Sendable {
+    public struct Grant: Codable, Equatable, Sendable {
+        public let grantId: String
+        public let username: String
+        /// lowercased hex, 32 bytes.
+        public let delegatePubKey: String
+        public let scopes: [String]
+        public let issuedAt: Int64
+        public let expiresAt: Int64
+        public init(grantId: String, username: String, delegatePubKey: String, scopes: [String], issuedAt: Int64, expiresAt: Int64) {
+            self.grantId = grantId
+            self.username = username
+            self.delegatePubKey = delegatePubKey
+            self.scopes = scopes
+            self.issuedAt = issuedAt
+            self.expiresAt = expiresAt
+        }
+    }
+    public let grant: Grant
+    /// hex; Ed25519 by account IRK over the grant's canonical bytes.
+    public let signature: String
+    public init(grant: Grant, signature: String) {
+        self.grant = grant
+        self.signature = signature
+    }
+}
+
+/// POST /api/users/:u/watch-delegates success body.
+public struct WatchDelegateMintResponse: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let grantId: String
+    public let expiresAt: Int64
+    /// Present when the mint replaced a prior active delegate (one-per-user).
+    public let replacedGrantId: String?
+    public init(ok: Bool, grantId: String, expiresAt: Int64, replacedGrantId: String?) {
+        self.ok = ok
+        self.grantId = grantId
+        self.expiresAt = expiresAt
+        self.replacedGrantId = replacedGrantId
+    }
+}
+
+/// One active delegate as returned by GET /api/users/:u/watch-delegates.
+public struct WatchDelegateInfo: Codable, Equatable, Sendable, Identifiable {
+    public let grantId: String
+    public let delegatePubKey: String
+    public let scopes: [String]
+    public let issuedAt: Int64
+    public let expiresAt: Int64
+    public var id: String { grantId }
+    public init(grantId: String, delegatePubKey: String, scopes: [String], issuedAt: Int64, expiresAt: Int64) {
+        self.grantId = grantId
+        self.delegatePubKey = delegatePubKey
+        self.scopes = scopes
+        self.issuedAt = issuedAt
+        self.expiresAt = expiresAt
+    }
+}
+
+/// GET /api/users/:u/watch-delegates body. The cloud lists only delegates
+/// that are un-revoked AND still verify under the account's current IRK.
+public struct WatchDelegatesListResponse: Codable, Equatable, Sendable {
+    public let username: String
+    public let delegates: [WatchDelegateInfo]
+    public init(username: String, delegates: [WatchDelegateInfo]) {
+        self.username = username
+        self.delegates = delegates
+    }
+}
+
+/// POST /api/users/:u/watch-delegates/revoke body.
+public struct WatchDelegateRevokeRequest: Codable, Equatable, Sendable {
+    public struct Request: Codable, Equatable, Sendable {
+        public let grantId: String
+        public let username: String
+        public let issuedAt: Int64
+        public init(grantId: String, username: String, issuedAt: Int64) {
+            self.grantId = grantId
+            self.username = username
+            self.issuedAt = issuedAt
+        }
+    }
+    public let request: Request
+    /// hex; Ed25519 by account IRK over the revoke envelope's canonical bytes.
+    public let signature: String
+    public init(request: Request, signature: String) {
+        self.request = request
+        self.signature = signature
     }
 }
 
@@ -1609,6 +1717,56 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return DeviceAdmitResponse(ok: true, tokenId: id, quarantineUntil: until)
     }
 
+    /// Active watch delegates per user. The Mock holds only the un-revoked
+    /// rows (the list endpoint shows active-only), mirroring the Worker's
+    /// one-active-per-user invariant: a mint replaces the prior.
+    public var watchDelegatesByUser: [String: [WatchDelegateInfo]] = [:]
+
+    public func mintWatchDelegate(username: String, body: WatchDelegateMintRequest) async throws -> WatchDelegateMintResponse {
+        try await tick()
+        let u = username.lowercased()
+        // The Worker rejects a scope set other than ["boot-approval"]
+        // (FlagshipCore's WatchDelegateKeyEnvelope.bootApprovalScope; inlined
+        // here so the API module needn't depend on FlagshipCore).
+        guard body.grant.scopes == ["boot-approval"] else {
+            throw ScreensClientError.http(status: 400, message: "invalid scopes")
+        }
+        guard body.grant.expiresAt > nowProvider() else {
+            throw ScreensClientError.http(status: 400, message: "delegate already expired")
+        }
+        // One active per user — replace the prior (matches the Worker, which
+        // revokes the existing active row before insert).
+        let prior = watchDelegatesByUser[u]?.first
+        watchDelegatesByUser[u] = [
+            WatchDelegateInfo(
+                grantId: body.grant.grantId,
+                delegatePubKey: body.grant.delegatePubKey.lowercased(),
+                scopes: body.grant.scopes,
+                issuedAt: body.grant.issuedAt,
+                expiresAt: body.grant.expiresAt
+            )
+        ]
+        return WatchDelegateMintResponse(
+            ok: true,
+            grantId: body.grant.grantId,
+            expiresAt: body.grant.expiresAt,
+            replacedGrantId: prior?.grantId
+        )
+    }
+
+    public func listWatchDelegates(username: String) async throws -> WatchDelegatesListResponse {
+        try await tick()
+        let u = username.lowercased()
+        let active = (watchDelegatesByUser[u] ?? []).filter { $0.expiresAt > nowProvider() }
+        return WatchDelegatesListResponse(username: u, delegates: active)
+    }
+
+    public func revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) async throws {
+        try await tick()
+        let u = username.lowercased()
+        watchDelegatesByUser[u]?.removeAll { $0.grantId == body.request.grantId }
+    }
+
     /// Scripted install-event log per serial. Tests configure
     /// `installEventScripts[serial]` with a sequence of (eventName,
     /// detail, postedAt) tuples; each `getInstallEvents` call serves
@@ -2275,6 +2433,31 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let encoded = account.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? account
         let payload = try JSONEncoder().encode(body)
         return try await postJsonReturning("/api/users/\(encoded)/devices/admit", body: payload)
+    }
+
+    public func mintWatchDelegate(username: String, body: WatchDelegateMintRequest) async throws -> WatchDelegateMintResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let payload = try JSONEncoder().encode(body)
+        return try await postJsonReturning("/api/users/\(encoded)/watch-delegates", body: payload)
+    }
+
+    public func listWatchDelegates(username: String) async throws -> WatchDelegatesListResponse {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/watch-delegates"))
+        req.httpMethod = "GET"
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
+        return try JSONDecoder().decode(WatchDelegatesListResponse.self, from: data)
+    }
+
+    public func revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) async throws {
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let payload = try JSONEncoder().encode(body)
+        try await postJson("/api/users/\(encoded)/watch-delegates/revoke", body: payload)
     }
 
     public func getInstallEvents(serial: String, since: Int) async throws -> InstallEventsPollResponse {

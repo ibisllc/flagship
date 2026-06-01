@@ -98,6 +98,47 @@ public enum BootAuth {
         return "\(scheme) \(base64url(json))"
     }
 
+    /// Build the delegate-role `Authorization` header value, signed by the
+    /// watch-delegate key (NOT the IRK). The boot worker accepts this ONLY on
+    /// POST /api/boot/response (the per-boot approval); every other route is
+    /// owner-IRK only. Byte-identical to `ownerHeader` except `role` is
+    /// "delegate" and the signer is the delegate key — so the only thing that
+    /// changes for the user is that no fresh biometric prompt fires.
+    public static func delegateHeader(
+        serverDomain: String,
+        method: String,
+        path: String,
+        delegateKey: Curve25519.Signing.PrivateKey,
+        now: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+        nonce: Data? = nil
+    ) throws -> String {
+        let n = nonce ?? randomNonce()
+        let pubHex = HexUtil.encode(delegateKey.publicKey.rawRepresentation)
+        let nonceHex = HexUtil.encode(n)
+        let canon = canonicalBytes(
+            role: "delegate",
+            serverDomain: serverDomain,
+            method: method,
+            path: path,
+            pubKeyHex: pubHex,
+            nonceHex: nonceHex,
+            issuedAt: now
+        )
+        let sig = try delegateKey.signature(for: canon)
+        let env = Envelope(
+            role: "delegate",
+            serverDomain: serverDomain,
+            method: method.uppercased(),
+            path: path,
+            pubKeyHex: pubHex,
+            nonceHex: nonceHex,
+            issuedAt: now,
+            signatureHex: HexUtil.encode(sig)
+        )
+        let json = try JSONEncoder().encode(env)
+        return "\(scheme) \(base64url(json))"
+    }
+
     /// base64url without padding — matches gate.ts `b64urlDecode` (which
     /// re-pads on the way in).
     static func base64url(_ data: Data) -> String {
