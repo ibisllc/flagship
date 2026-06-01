@@ -86,20 +86,22 @@ function concat(parts: Uint8Array[]): Uint8Array {
 }
 
 /**
- * Glue the already-built trailer onto the base ISO stream. The trailer
- * is small (~1 KB) so we build it eagerly in RAM; only the 240 MB base
- * stream is forwarded chunk-by-chunk by `personalizeStream`.
+ * Build ONLY the trailer envelope from an already-signed blob + signature —
+ * no base-ISO stream involved. The trailer is small (~1 KB). Pulled out of
+ * `streamPersonalize` so callers that stream the base ISO themselves (e.g. the
+ * Worker, which streams the R2 body runtime-natively rather than through a JS
+ * `pull` loop) can get just the bytes to append. Byte-for-byte identical to
+ * the trailer `buildTrailer` produces.
  */
-export function streamPersonalize(
-  args: StreamPersonalizeInput,
-): StreamPersonalizeOutput {
-  const { baseIsoStream, baseIsoSize, blob, blobSignature } = args;
+export function buildTrailerFromSignature(
+  blob: InstallBlob,
+  blobSignature: Uint8Array,
+): Uint8Array {
   if (blobSignature.length !== SIG_LEN) {
     throw new Error(
-      `streamPersonalize: expected ${SIG_LEN}-byte signature, got ${blobSignature.length}`,
+      `buildTrailerFromSignature: expected ${SIG_LEN}-byte signature, got ${blobSignature.length}`,
     );
   }
-
   const json = new TextEncoder().encode(JSON.stringify(installBlobToJson(blob)));
   const totalSize =
     HEADER_LEN +
@@ -110,12 +112,9 @@ export function streamPersonalize(
     FOOTER_LEN +
     TOTAL_SIZE_FIELD;
   if (totalSize > MAX_TRAILER_BYTES) {
-    throw new Error(
-      `trailer too large: ${totalSize} > ${MAX_TRAILER_BYTES}`,
-    );
+    throw new Error(`trailer too large: ${totalSize} > ${MAX_TRAILER_BYTES}`);
   }
-
-  const trailerBytes = concat([
+  return concat([
     MAGIC_HEADER,
     Uint8Array.of(FORMAT_VERSION),
     u32le(json.length),
@@ -124,6 +123,18 @@ export function streamPersonalize(
     MAGIC_FOOTER,
     u32le(totalSize),
   ]);
+}
+
+/**
+ * Glue the already-built trailer onto the base ISO stream. The trailer
+ * is small (~1 KB) so we build it eagerly in RAM; only the 240 MB base
+ * stream is forwarded chunk-by-chunk by `personalizeStream`.
+ */
+export function streamPersonalize(
+  args: StreamPersonalizeInput,
+): StreamPersonalizeOutput {
+  const { baseIsoStream, baseIsoSize, blob, blobSignature } = args;
+  const trailerBytes = buildTrailerFromSignature(blob, blobSignature);
 
   const stream = personalizeStream(baseIsoStream, trailerBytes);
   return {

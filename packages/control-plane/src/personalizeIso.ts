@@ -13,21 +13,27 @@
  * Response. The recipe parsing + signature verify + trailer glue live here so
  * they are unit-testable without a runtime.
  */
-import { installBlobFromJson, streamPersonalize } from "@flagship/iso-personalizer";
+import { installBlobFromJson, buildTrailerFromSignature } from "@flagship/iso-personalizer";
 import { verifyInstallBlob, type InstallBlob } from "@flagship/protocol";
 
 type InstallBlobJson = Parameters<typeof installBlobFromJson>[0];
 
 export interface BaseIso {
-  /** The base-ISO byte stream (e.g. `R2Bucket.get(key).body`). */
-  stream: ReadableStream<Uint8Array>;
   /** Total bytes of the base ISO (needed for the personalized Content-Length). */
   size: number;
+  /** Optional. The trailer path no longer consumes the base stream — the
+   *  caller streams the body itself (the Worker pipes the R2 body
+   *  runtime-natively via FixedLengthStream, NOT through a JS `pull` loop,
+   *  which the runtime would terminate mid-download on large ISOs). Kept
+   *  optional for callers that still pass it. */
+  stream?: ReadableStream<Uint8Array>;
 }
 
 export interface PersonalizeOk {
   ok: true;
-  stream: ReadableStream<Uint8Array>;
+  /** The (~1 KB) trailer to append AFTER the base-ISO bytes. The caller owns
+   *  streaming `base || trailerBytes` to its response/sink. */
+  trailerBytes: Uint8Array;
   /** baseIsoSize + trailerSize — the personalized Content-Length. */
   totalBytes: number;
   /** A safe download filename derived from the recipe. */
@@ -112,13 +118,13 @@ export function buildPersonalizedIso(recipeText: string, base: BaseIso): Persona
     };
   }
   try {
-    const out = streamPersonalize({
-      baseIsoStream: base.stream,
-      baseIsoSize: base.size,
-      blob,
-      blobSignature: sig,
-    });
-    return { ok: true, stream: out.stream, totalBytes: out.totalBytes, filename: safeIsoFilename(blob) };
+    const trailerBytes = buildTrailerFromSignature(blob, sig);
+    return {
+      ok: true,
+      trailerBytes,
+      totalBytes: base.size + trailerBytes.length,
+      filename: safeIsoFilename(blob),
+    };
   } catch (e) {
     return { ok: false, status: 500, error: `personalize failed: ${e instanceof Error ? e.message : String(e)}` };
   }

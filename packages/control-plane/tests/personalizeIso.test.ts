@@ -46,24 +46,6 @@ function baseIso(bytes = 4096): { stream: ReadableStream<Uint8Array>; size: numb
   return { stream, size: bytes, buf };
 }
 
-async function drain(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) chunks.push(value);
-  }
-  const len = chunks.reduce((n, c) => n + c.length, 0);
-  const out = new Uint8Array(len);
-  let off = 0;
-  for (const c of chunks) {
-    out.set(c, off);
-    off += c.length;
-  }
-  return out;
-}
-
 describe("parseRecipeEnvelope — accepts every shape the burner/webapp emit", () => {
   it("flat InstallBlobJson + blobSignatureHex (the webapp/burner recipe)", () => {
     const { sig, json } = signedRecipe();
@@ -92,15 +74,18 @@ describe("buildPersonalizedIso — streams base + appended recipe trailer", () =
     const { blob, sig, json } = signedRecipe();
     const base = baseIso(8192);
     const text = JSON.stringify({ ...json, blobSignatureHex: Buffer.from(sig).toString("hex") });
-    const res = buildPersonalizedIso(text, { stream: base.stream, size: base.size });
+    const res = buildPersonalizedIso(text, { size: base.size });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.filename).toBe("flagship-home.alice.flagship.services.iso");
 
-    const personalized = await drain(res.stream);
+    // The Worker streams the base bytes verbatim, then appends res.trailerBytes.
+    // Reconstruct that to verify the trailer round-trips.
+    const personalized = new Uint8Array(base.size + res.trailerBytes.length);
+    personalized.set(base.buf, 0);
+    personalized.set(res.trailerBytes, base.size);
     expect(personalized.length).toBe(res.totalBytes);
     expect(res.totalBytes).toBeGreaterThan(base.size);
-    // The base bytes are forwarded verbatim, then the trailer.
     expect(personalized.slice(0, base.size)).toEqual(base.buf);
 
     // parseTrailer (the same code the box mirrors) recovers a valid recipe.
@@ -114,7 +99,7 @@ describe("buildPersonalizedIso — streams base + appended recipe trailer", () =
     const { sig, json } = signedRecipe();
     const tampered = { ...json, installerGitRef: "evil", blobSignatureHex: Buffer.from(sig).toString("hex") };
     const base = baseIso();
-    const res = buildPersonalizedIso(JSON.stringify(tampered), { stream: base.stream, size: base.size });
+    const res = buildPersonalizedIso(JSON.stringify(tampered), { size: base.size });
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.status).toBe(400);
@@ -123,7 +108,7 @@ describe("buildPersonalizedIso — streams base + appended recipe trailer", () =
 
   it("rejects a malformed envelope with HTTP 400", () => {
     const base = baseIso();
-    const res = buildPersonalizedIso("{}", { stream: base.stream, size: base.size });
+    const res = buildPersonalizedIso("{}", { size: base.size });
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.status).toBe(400);

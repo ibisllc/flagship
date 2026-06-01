@@ -782,7 +782,7 @@ async function personalizeIsoRoute(request: Request, env: RouteEnv): Promise<Res
     recipeText = await request.text();
   }
   const { buildPersonalizedIso } = await import("@flagship/control-plane");
-  const res = buildPersonalizedIso(recipeText, { stream: base.body, size: base.size });
+  const res = buildPersonalizedIso(recipeText, { size: base.size });
   if (!res.ok) {
     return jsonResponse({ error: res.error }, res.status);
   }
@@ -793,7 +793,29 @@ async function personalizeIsoRoute(request: Request, env: RouteEnv): Promise<Res
     // Per-user, single-use; never cache.
     "cache-control": "no-store",
   });
-  return new Response(res.stream, { status: 200, headers });
+  // Stream base-ISO bytes + the ~1 KB trailer RUNTIME-NATIVELY. Piping the R2
+  // body through a FixedLengthStream lets the Cloudflare runtime move the
+  // ~240 MB without a per-chunk JS `pull` loop. The previous hand-rolled
+  // ReadableStream ran every chunk through Worker JS on the request's
+  // execution budget, so the runtime terminated it mid-download — truncating
+  // the ISO at a throughput-dependent point (37%/77% in the wild). base.size +
+  // trailer === totalBytes, so the FixedLengthStream closes exactly.
+  const out = new FixedLengthStream(res.totalBytes);
+  void (async () => {
+    try {
+      await base.body!.pipeTo(out.writable, { preventClose: true });
+      const w = out.writable.getWriter();
+      await w.write(res.trailerBytes);
+      await w.close();
+    } catch {
+      try {
+        await out.writable.abort();
+      } catch {
+        /* writable already errored (client aborted / upstream cut) */
+      }
+    }
+  })();
+  return new Response(out.readable, { status: 200, headers });
 }
 
 /**
