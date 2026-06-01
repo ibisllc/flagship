@@ -7,6 +7,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -63,6 +65,8 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.api.TrustedDevice
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.keystore.PasskeyRecoveryManager
+import com.flagshipserver.app.keystore.PlatformWebAuthnProvider
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.TrustedDevicesViewModel
@@ -76,6 +80,12 @@ import java.util.Locale
 fun TrustedDevicesScreen(nav: NavController) {
     val app = LocalAppState.current
     val server = LocalFlagshipServerClient.current
+    // E5 — the Wipe ceremony rotates the recovery passkey. It must run the
+    // REAL CredentialManager provider (same one Recovery/Secure-account use),
+    // not the Mock — otherwise the new UMK is sealed under a passkey that
+    // doesn't exist and the account is unrecoverable after the wipe.
+    val ctx = LocalContext.current
+    val passkeys = remember(ctx) { PasskeyRecoveryManager(ctx.applicationContext) }
     val vm: TrustedDevicesViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -108,6 +118,14 @@ fun TrustedDevicesScreen(nav: NavController) {
             initializer {
                 com.flagshipserver.app.viewmodels.WipeRestartViewModel(
                     server = server,
+                    // Real passkey provider — see note at the top of this
+                    // composable. `ctx as? Activity` is resolved lazily at
+                    // ceremony time so the CredentialManager UI has a host.
+                    webAuthn = PlatformWebAuthnProvider(
+                        activity = { ctx as? Activity },
+                        username = { app.currentUser.value },
+                        manager = passkeys,
+                    ),
                     username = { app.currentUser.value },
                 )
             }
