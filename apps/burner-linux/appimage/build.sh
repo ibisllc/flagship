@@ -48,10 +48,15 @@ mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "${APPDIR}/usr/share/polkit-1/actions"
 
 # ---- python sources ----
-install -Dm755 "${LINUX_DIR}/flagship-burner.py" "${APPDIR}/usr/bin/flagship-burner"
-install -Dm644 "${LINUX_DIR}/wizard.py"          "${APPDIR}/usr/share/flagship-burner/wizard.py"
-install -Dm644 "${LINUX_DIR}/cli_runner.py"      "${APPDIR}/usr/share/flagship-burner/cli_runner.py"
-install -Dm644 "${LINUX_DIR}/disk_enumerator.py" "${APPDIR}/usr/share/flagship-burner/disk_enumerator.py"
+install -Dm755 "${LINUX_DIR}/flagship-burner.py"   "${APPDIR}/usr/bin/flagship-burner"
+install -Dm644 "${LINUX_DIR}/wizard.py"            "${APPDIR}/usr/share/flagship-burner/wizard.py"
+install -Dm644 "${LINUX_DIR}/cli_runner.py"        "${APPDIR}/usr/share/flagship-burner/cli_runner.py"
+install -Dm644 "${LINUX_DIR}/disk_enumerator.py"   "${APPDIR}/usr/share/flagship-burner/disk_enumerator.py"
+install -Dm644 "${LINUX_DIR}/alpine_personalize.py" "${APPDIR}/usr/share/flagship-burner/alpine_personalize.py"
+install -Dm644 "${LINUX_DIR}/base_iso_cache.py"    "${APPDIR}/usr/share/flagship-burner/base_iso_cache.py"
+# disk_write.py is the script pkexec elevates for the raw write — install it
+# 0755 so the polkit-launched python3 can read+exec it.
+install -Dm755 "${LINUX_DIR}/disk_write.py"        "${APPDIR}/usr/share/flagship-burner/disk_write.py"
 
 # ---- node CLI (built dist, copied into the AppImage) ----
 CLI_SRC="${REPO_ROOT}/packages/flagship-burner/dist"
@@ -64,9 +69,13 @@ else
   cp -r "${CLI_SRC}" "${APPDIR}/usr/share/flagship-burner/cli-dist"
 fi
 
-# ---- polkit policy (operator must install separately on first run) ----
+# ---- polkit policies (operator installs these separately on first run) ----
+# The Node-CLI write action (Advanced mode) + the local-flasher action
+# (Quick mode: pkexec python3 disk_write.py).
 install -Dm644 "${LINUX_DIR}/polkit/com.flagshipserver.burner.policy" \
   "${APPDIR}/usr/share/polkit-1/actions/com.flagshipserver.burner.policy"
+install -Dm644 "${LINUX_DIR}/polkit/com.flagshipserver.burner.write-image.policy" \
+  "${APPDIR}/usr/share/polkit-1/actions/com.flagshipserver.burner.write-image.policy"
 
 # ---- desktop file ----
 cat > "${APPDIR}/usr/share/applications/com.flagshipserver.Burner.desktop" <<'DESK'
