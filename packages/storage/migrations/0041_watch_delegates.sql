@@ -8,8 +8,9 @@
 -- fully biometric-gated for every destructive operation. The boot worker +
 -- the Worker accept a delegate signature for a boot approval and NOTHING else.
 --
--- Shape parallels device_capability_grants (0031) — TEXT primary key (sha256
--- hex of the envelope's canonical bytes), hex crypto material, ms-since-epoch
+-- Shape parallels device_capability_grants (0031) — TEXT primary key (the
+-- envelope's v4-UUID grantId, which is itself part of the signed canonical
+-- bytes), hex crypto material, ms-since-epoch
 -- timestamps, a nullable revoked_at so the row is RETAINED on revoke for
 -- audit + replay. Simpler than device grants: ONE active delegate per user
 -- (no device label), enforced by the unique partial index below — re-minting

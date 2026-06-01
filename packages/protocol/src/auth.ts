@@ -3434,7 +3434,12 @@ export function verifyWatchDelegateKey(g: WatchDelegateKey, sig: Bytes, irkPub: 
   }
 }
 
-/** SHA-256 hex of the canonical bytes — the D1 key + revocation handle. */
+/**
+ * SHA-256 hex of the canonical bytes — a content fingerprint of the envelope.
+ * NOTE: this is NOT the storage key. The D1 primary key (and revocation
+ * handle) is the envelope's own `grantId` (a fresh v4 UUID), mirroring
+ * device_capability_grants. This helper exists for integrity checks / dedup.
+ */
 export async function watchDelegateKeyId(g: WatchDelegateKey): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", canonicalWatchDelegateKey(g));
   return hex(new Uint8Array(digest));
