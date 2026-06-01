@@ -1,5 +1,15 @@
 # Session handoff — portable cold-start (works on ANY dev machine)
 
+> **Pending design (not yet implemented):**
+> `docs/per-user-cert-and-addressing.md` — launch-architecture decision
+> to move from one TLS cert *per box* to one cert *per user*
+> (`[<user>, *.<user>]`), `<label>.<user>` app addressing with a `--`
+> box-pin operator, trust-root-device cert minting (account-key /
+> cert-key split + CAA-pin + CT), and routing-key-based soft/hard
+> revocation. **Sequenced after c4.6** (shared serverRegister/DNS/cert
+> surface). Ship the contract only; the multi-box mesh/replication is
+> deferred. Implementable by another device from that doc alone.
+
 ## §0 W12 — Debian-netinst installer (2026-05-21)
 
 Root-caused every silent W11 live-test failure to date: Alpine 3.21
