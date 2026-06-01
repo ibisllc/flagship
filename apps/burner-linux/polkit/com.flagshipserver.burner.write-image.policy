@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Flagship Burner — PolicyKit action for the LOCAL personalize pipeline.
+
+  Quick mode caches the base Alpine ISO, appends the recipe trailer locally
+  (no Node CLI), then raw-writes the prepared image to the USB. That raw write
+  needs CAP_SYS_ADMIN (effectively root), so the GUI pkexec's the small,
+  auditable `disk_write.py` flasher — NOT the whole GUI and NOT Node.
+
+  When the user clicks "Flash to USB", pkexec invokes python3 as root after
+  the user authenticates to the PolicyKit agent. The flasher takes exactly two
+  args (<image> <device>) and streams FLAGSHIP_PROGRESS: lines back.
+
+  Install this file to /usr/share/polkit-1/actions/.
+-->
+<policyconfig>
+
+  <vendor>Flagship</vendor>
+  <vendor_url>https://flagshipserver.com</vendor_url>
+  <icon_name>drive-removable-media-usb</icon_name>
+
+  <action id="com.flagshipserver.burner.write-image">
+    <description>Write a Flagship install image to a USB drive</description>
+    <message>Authentication is required to write the Flagship install image to your USB drive. This will erase the drive.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/python3</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>
