@@ -23,6 +23,7 @@ import com.flagshipserver.app.api.EncryptedSessionStore
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.LiveScreensClient
 import com.flagshipserver.app.api.LiveSecretMailboxClient
+import com.flagshipserver.app.api.LiveFlagshipServerClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.MockSecretMailboxClient
@@ -82,11 +83,18 @@ class MainActivity : FragmentActivity() {
             requireBiometricAtLaunch = privacy.requireBiometricAtLaunch.value,
         )
         val sessionStore = EncryptedSessionStore.create(applicationContext)
-        val flagshipServer = MockFlagshipServerClient()
         val toasts = ToastCenter()
         deepLinker = DeepLinker()
         val devSettings = DeveloperSettings.create(applicationContext)
         val okHttp = buildOkHttp()
+
+        // Identity / security plane. Mock for emulator/dev; Live talks to the
+        // real flagshipserver.com (identity claims, login/resolve, recovery,
+        // device admit/replace/wipe, TOTP, audit, revoke, peer-backup, tier).
+        // Pivoted on the developer toggle below — previously this was hardwired
+        // to the mock, so a shipped build never reached the real backend.
+        val mockFlagshipServer = MockFlagshipServerClient()
+        val liveFlagshipServer = LiveFlagshipServerClient(OkHttpJsonTransport(okHttp))
 
         val mockScreens = MockScreensClient()
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
@@ -95,7 +103,10 @@ class MainActivity : FragmentActivity() {
         val mockMailbox = MockSecretMailboxClient()
         val liveMailbox = LiveSecretMailboxClient(OkHttpJsonTransport(okHttp))
 
-        val registrar = PushRegistrar(appState, flagshipServer)
+        // Push-token registration is inherently a real-backend operation
+        // (registering an FCM token + X25519 push key against .com), so it
+        // always uses the live client; without a session it no-ops.
+        val registrar = PushRegistrar(appState, liveFlagshipServer)
         PushHolder.registrar = registrar
 
         // Boot-secret RELAY: a `secret-request` push routes into the approval
@@ -121,6 +132,10 @@ class MainActivity : FragmentActivity() {
                 if (useLive) liveRelay else mockRelay
             val effectiveMailbox: SecretMailboxClient =
                 if (useLive) liveMailbox else mockMailbox
+            // Identity calls are IRK-signed (not session-token gated), so this
+            // pivots on the toggle alone — like relay/mailbox above.
+            val effectiveFlagshipServer: FlagshipServerClient =
+                if (useLive) liveFlagshipServer else mockFlagshipServer
 
             val sizeClass = calculateWindowSizeClass(this)
 
@@ -128,7 +143,7 @@ class MainActivity : FragmentActivity() {
                 CompositionLocalProvider(
                     LocalAppState provides appState,
                     LocalScreensClient provides effectiveScreens,
-                    LocalFlagshipServerClient provides flagshipServer,
+                    LocalFlagshipServerClient provides effectiveFlagshipServer,
                     LocalQrRelayClient provides effectiveRelay,
                     LocalSecretMailboxClient provides effectiveMailbox,
                     LocalToastCenter provides toasts,
