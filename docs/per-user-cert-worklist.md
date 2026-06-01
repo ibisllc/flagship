@@ -56,11 +56,19 @@ Move from **one LE cert per box** → **one cert per user**: SANs collapse from 
 
 **Q-D — RECOMMENDATION (awaiting confirm): derive the ACME account key from the UMK.** Make the ACME account keypair a deterministic HKDF derivation off the UMK (exactly like IRK/BAK: `acct = derive(UMK, "flagship/acme-account/v1")`). Then BOTH trust-root peers (phone + webapp, which already share the UMK via the existing pairing/recovery) independently derive the *same* account key — no separate sealing, no second ACME account, and recovery is automatic (whoever recovers the UMK has the account key; folds into J.3/J.4 + WebAuthn-PRF for free). CAA pins the single accounturi. → unblocks task #28.
 
-**Q-C — RECOMMENDATION (awaiting confirm): reserve-the-dimension now, build the machinery now too if you want it.** See the "more info" in chat. Default plan: key the cert identity on `(user, trustGroup)` with `trustGroup="default"` so multi-group is never a migration; build the actual per-group cert issuance + the box-grouping UI now only if you confirm (it asks single-box users to categorize boxes they don't have yet).
+**Q-C — RESOLVED → NOT a cert feature; don't build.** Trust-domain segmentation is achieved by creating a **separate Flagship user account/profile** (account picker at app open; possibly paid-tier-gated, separate convo). The cert stays strictly one-per-account; no `(user, trustGroup)` dimension. Drop it.
+
+**DEVICE MODEL (owner clarification 2026-06-01):** "phone" and "webapp" are two **co-equal classes** of user-device; a user has arbitrarily many user-devices and grants **administrator** status to **any subset**. Admins hold the security authority (minting/renewing certs). So issuance authority = the **admin subset**, NOT a device type. Consequence: the ACME account key is **admin-held (sealed per admin device), NOT UMK-derived** — UMK-derivation would hand it to every device including non-admins, breaking the admin boundary. Likely extends the existing DeviceCapabilityGrant scope system. **Build EVERYTHING now incl. the mesh** (tested against simulated peers).
 
 **Q-E — RESOLVED by re-framing.** §5.2 step 2 "box confirmed out of the mesh" = **"box removed from the trust-root's authorized cert-recipient set"** — a *local, atomic* operation on the phone, NOT a round-trip the partitioned box must ack. Re-mint distributes only to boxes still on the phone's authorized list; a partitioned/unreachable compromised box simply isn't on it. Partition becomes a non-issue. Consistent with §4 (phone = issuance authority) + §5.2 step 1 (routing already cut).
 
-**Q-flag — RECOMMENDATION (awaiting confirm): keep `replication: "isolated" | "leader"`, default `isolated`, inert at launch.** Accurate vocabulary, forward-extensible (could add `"multi-leader"`). Low stakes since inert, but lock it before it's on the protocol wire.
+**Q-flag — DECIDED → keep `replication: "isolated" | "leader"`**, default `isolated`, inert at launch. Forward-extensible to `"multi-leader"`.
+
+### Admin / mint-authority decisions (2026-06-01, owner-confirmed)
+- **Admin model = a new `admin` DeviceScope** (SHIPPED, commit `3997bc1`: appended to `DEVICE_SCOPES` in `auth.ts`). A device holding the `admin` scope is an account administrator and may mint/renew certs (holds the sealed ACME account key). Reuses the existing DeviceCapabilityGrant / `requireDeviceScope` plumbing.
+- **ACME account key = admin-held, NOT UMK-derived.** Generated once; sealed per admin device (sealed to each admin device's IRK when promoted, via the existing device-seal pattern). Non-admin devices never receive it.
+- **Demoting/losing an admin device ROTATES the account key** — re-mint the ACME account key + re-pin CAA + re-seal to remaining admins so the removed device's copy goes dead. Debounced against flapping (security-first, matches §5.3 "when in doubt, hard").
+- **Offline-autonomy window = account default + optional per-box override.** Account default set at first-server creation (+ Settings); each box's detail screen can override (e.g. locked-closet NAS = Indefinite, travel box = 3 days). Each box's delegated-renewal token carries its own window; unset = account default.
 
 **Q3 — GREENLIT to build the merged per-user name table** ("yes, do it now"). Will reconcile with v2-device-addressing before coding the resolver (tasks #24 resolver-half + #25).
 
