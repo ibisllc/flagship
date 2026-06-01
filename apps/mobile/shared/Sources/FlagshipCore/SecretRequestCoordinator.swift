@@ -70,6 +70,15 @@ public final class SecretRequestCoordinator {
     /// IRK). Whichever key the installer sealed the LUKS blob against, the
     /// phone opens it. Injectable for tests.
     private let unsealSeedProvider: (String) async throws -> [Data]
+    /// Returns the watch-delegate signing key if the user has opted into
+    /// quick-approve-from-Watch on THIS device, else nil. When present, a
+    /// boot UNLOCK approval signs the boot-worker Authorization header with
+    /// the delegate key (role="delegate") instead of the IRK — so no fresh
+    /// biometric prompt fires for the header. nil ⇒ today's IRK path.
+    /// Injectable; defaults to "no delegate" so every existing call site is
+    /// unchanged. (Auto-lease deposit + entitlement still use the IRK — the
+    /// delegate is scoped to the boot-approval response alone.)
+    private let watchDelegateKeyProvider: () -> Curve25519.Signing.PrivateKey?
     private let now: () -> Int64
     private let nonceGen: () -> Data
 
@@ -78,6 +87,7 @@ public final class SecretRequestCoordinator {
         username: String,
         irkProvider: @escaping () async throws -> Curve25519.Signing.PrivateKey,
         unsealSeedProvider: @escaping (String) async throws -> [Data],
+        watchDelegateKeyProvider: @escaping () -> Curve25519.Signing.PrivateKey? = { nil },
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         nonceGen: @escaping () -> Data = { SecretRequestCoordinator.randomNonce() }
     ) {
@@ -85,6 +95,7 @@ public final class SecretRequestCoordinator {
         self.username = username
         self.irkProvider = irkProvider
         self.unsealSeedProvider = unsealSeedProvider
+        self.watchDelegateKeyProvider = watchDelegateKeyProvider
         self.now = now
         self.nonceGen = nonceGen
     }
@@ -165,7 +176,22 @@ public final class SecretRequestCoordinator {
             nonce: nonce,
             issuedAt: verified.pending.issuedAt
         )
-        let irk = try await irkProvider()
+        // A watch delegate signs the boot-response header for a plain UNLOCK
+        // approval (no auto-lease). That path needs the IRK for NOTHING, so we
+        // never call irkProvider() and no biometric prompt fires — the whole
+        // point of the feature. Entitlement + auto-lease deposit always use the
+        // IRK (the delegate is scoped to the boot-approval response alone), so
+        // we resolve the IRK lazily, only when a branch below actually needs it.
+        let delegateKey: Curve25519.Signing.PrivateKey? =
+            (purpose == .unlockKey && !depositAutoLease) ? watchDelegateKeyProvider() : nil
+        let irk: Curve25519.Signing.PrivateKey? =
+            delegateKey == nil ? try await irkProvider() : nil
+        func requireIrk() throws -> Curve25519.Signing.PrivateKey {
+            // Unreachable when delegateKey != nil — every IRK-consuming branch
+            // runs only on the delegate==nil path, where irk was resolved above.
+            guard let irk else { throw CoordinatorError.purposeUnsupported("internal: missing IRK") }
+            return irk
+        }
 
         let sealedHex: String
         var unlockKey: Data?
@@ -175,7 +201,7 @@ public final class SecretRequestCoordinator {
             sealedHex = reply.sealedHex
             unlockKey = reply.luksKey
         case .entitlement:
-            sealedHex = try buildEntitlementReply(request: request, irk: irk)
+            sealedHex = try buildEntitlementReply(request: request, irk: try requireIrk())
         }
 
         let body = SecretResponseBody(
@@ -186,22 +212,35 @@ public final class SecretRequestCoordinator {
             issuedAt: now()
         )
         // The sealed reply goes to the dedicated boot worker (where the box
-        // polls), owner-IRK-authed via the Flagship-Boot-v1 header.
-        let respAuth = try BootAuth.ownerHeader(
-            serverDomain: request.serverDomain,
-            method: "POST",
-            path: "/api/boot/response",
-            irk: irk,
-            now: now(),
-            nonce: nonceGen()
-        )
+        // polls), authed via the Flagship-Boot-v1 header — delegate-signed when
+        // the user opted into quick-approve, owner-IRK-signed otherwise.
+        let respAuth: String
+        if let delegateKey {
+            respAuth = try BootAuth.delegateHeader(
+                serverDomain: request.serverDomain,
+                method: "POST",
+                path: "/api/boot/response",
+                delegateKey: delegateKey,
+                now: now(),
+                nonce: nonceGen()
+            )
+        } else {
+            respAuth = try BootAuth.ownerHeader(
+                serverDomain: request.serverDomain,
+                method: "POST",
+                path: "/api/boot/response",
+                irk: try requireIrk(),
+                now: now(),
+                nonce: nonceGen()
+            )
+        }
         try await mailbox.postResponse(response: body, bootAuth: respAuth)
 
         // "auto" mode: deposit a box-sealed lease so the box self-unlocks on
         // future reboots (the user's IRK authorizes it here — I2). Only for
         // unlock-key; the key is the one we just recovered, never `.com`-visible.
         if depositAutoLease, purpose == .unlockKey, let key = unlockKey {
-            return try await depositAutoUnlockLease(request: request, luksKey: key, irk: irk)
+            return try await depositAutoUnlockLease(request: request, luksKey: key, irk: try requireIrk())
         }
         return nil
     }

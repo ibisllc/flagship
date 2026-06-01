@@ -182,6 +182,103 @@ final class SecretRequestCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testUnlockApproval_withWatchDelegate_signsResponseWithDelegateRole_andSkipsIRK() async throws {
+        let mailbox = MockMailbox(username: username)
+        let nonce = Data(repeating: 0x33, count: 32)
+        let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: nonce, domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let luksKey = Data("real-luks-disk-key-0123456789abc".utf8)
+        let unsealPub = try Curve25519.Signing.PrivateKey(rawRepresentation: unsealSeed).publicKey.rawRepresentation
+        mailbox.sealedLuksKeyHex = HexUtil.encode(
+            try SecretSeal.sealForEd25519Recipient(plaintext: luksKey, recipientEd25519Pub: unsealPub)
+        )
+
+        // A delegate key is enrolled. The IRK provider MUST NOT be called —
+        // that's the "no biometric prompt" guarantee.
+        let delegate = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x05, count: 32))
+        var irkCalls = 0
+        let coord = SecretRequestCoordinator(
+            mailbox: mailbox,
+            username: username,
+            irkProvider: { irkCalls += 1; return self.phoneIrk() },
+            unsealSeedProvider: { _ in [self.unsealSeed] },
+            watchDelegateKeyProvider: { delegate },
+            now: { 999 },
+            nonceGen: { Data(repeating: 0xaa, count: 32) }
+        )
+        let verified = try await coord.fetchVerifiedRequests()
+        // fetch builds the mailbox-auth with the IRK (a separate, background
+        // concern). The guarantee under test is that the user-facing APPROVAL
+        // adds no further IRK use — so zero the counter after the poll.
+        irkCalls = 0
+        try await coord.confirmAndRespond(verified[0])
+
+        XCTAssertEqual(irkCalls, 0, "a delegate-signed unlock approval must not touch the IRK")
+
+        // Decode the boot-worker Authorization header and confirm the role +
+        // that the signature verifies under the DELEGATE key.
+        let bootAuth = try XCTUnwrap(mailbox.postedResponses.last?.bootAuth)
+        let parts = bootAuth.split(separator: " ")
+        XCTAssertEqual(String(parts[0]), "Flagship-Boot-v1")
+        var b64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        let obj = try JSONSerialization.jsonObject(with: Data(base64Encoded: b64)!) as! [String: Any]
+        XCTAssertEqual(obj["role"] as? String, "delegate")
+        XCTAssertEqual(obj["pubKeyHex"] as? String, HexUtil.encode(delegate.publicKey.rawRepresentation))
+        let canon = BootAuth.canonicalBytes(
+            role: "delegate", serverDomain: "home.alice.flagship.services", method: "POST",
+            path: "/api/boot/response", pubKeyHex: obj["pubKeyHex"] as! String,
+            nonceHex: obj["nonceHex"] as! String, issuedAt: (obj["issuedAt"] as! NSNumber).int64Value
+        )
+        let sig = HexUtil.decode(obj["signatureHex"] as! String)!
+        XCTAssertTrue(delegate.publicKey.isValidSignature(sig, for: canon))
+    }
+
+    @MainActor
+    func testAutoLeaseApproval_ignoresDelegate_andUsesIRK() async throws {
+        // depositAutoLease still requires the IRK (the delegate is scoped to
+        // the boot-response only). Even with a delegate enrolled, an auto-lease
+        // approval signs owner-IRK.
+        let mailbox = MockMailbox(username: username)
+        let nonce = Data(repeating: 0x34, count: 32)
+        let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: nonce, domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let luksKey = Data("real-luks-disk-key-0123456789abc".utf8)
+        let unsealPub = try Curve25519.Signing.PrivateKey(rawRepresentation: unsealSeed).publicKey.rawRepresentation
+        mailbox.sealedLuksKeyHex = HexUtil.encode(
+            try SecretSeal.sealForEd25519Recipient(plaintext: luksKey, recipientEd25519Pub: unsealPub)
+        )
+        let delegate = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x05, count: 32))
+        var irkCalls = 0
+        let coord = SecretRequestCoordinator(
+            mailbox: mailbox,
+            username: username,
+            irkProvider: { irkCalls += 1; return self.phoneIrk() },
+            unsealSeedProvider: { _ in [self.unsealSeed] },
+            watchDelegateKeyProvider: { delegate },
+            now: { 999 },
+            nonceGen: { Data(repeating: 0xaa, count: 32) }
+        )
+        let verified = try await coord.fetchVerifiedRequests()
+        irkCalls = 0 // ignore the poll's mailbox-auth IRK use
+        _ = try await coord.confirmAndRespond(verified[0], depositAutoLease: true)
+        XCTAssertGreaterThan(irkCalls, 0, "auto-lease deposit must use the IRK, not the delegate")
+        let bootAuth = try XCTUnwrap(mailbox.postedResponses.last?.bootAuth)
+        var b64 = String(bootAuth.split(separator: " ")[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        let obj = try JSONSerialization.jsonObject(with: Data(base64Encoded: b64)!) as! [String: Any]
+        XCTAssertEqual(obj["role"] as? String, "owner")
+    }
+
+    @MainActor
     func testUnlockKeyFailsWhenNoSealedKeyOnFile() async throws {
         let mailbox = MockMailbox(username: username)
         let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: Data(repeating: 0x33, count: 32), domain: "home.alice.flagship.services")
