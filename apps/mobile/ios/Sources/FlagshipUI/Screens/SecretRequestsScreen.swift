@@ -84,7 +84,12 @@ struct SecretRequestsContainer: View {
                     seeds.append(irk.rawRepresentation)
                 }
                 return seeds
-            }
+            },
+            // When the user opted into "Quick approve from Apple Watch", a
+            // plain unlock approval signs the boot-response with this delegate
+            // key (role="delegate") instead of the IRK — no biometric prompt.
+            // nil (not enrolled) ⇒ today's IRK path.
+            watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
         )
     }
 
