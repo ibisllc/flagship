@@ -28,6 +28,13 @@ public static class BaseIsoCache
     /// </summary>
     public const string Url = "https://flagshipserver.com/build/iso/flagship-alpine-base.iso";
 
+    /// <summary>
+    /// After this long, the next apkovl burn does ONE quiet HEAD to see whether
+    /// a newer base was published — so a long-lived cache doesn't silently miss
+    /// an update, without re-checking on every burn.
+    /// </summary>
+    public static readonly TimeSpan MaxCacheAge = TimeSpan.FromDays(7);
+
     public sealed class CacheException : Exception
     {
         public CacheException(string message) : base(message) { }
@@ -67,16 +74,36 @@ public static class BaseIsoCache
     public static async Task<string> EnsureAsync(
         Action<double> progress,
         Action? onDownloadStart = null,
+        Action<string>? notice = null,
         CancellationToken cancellation = default)
     {
         string dest = CachedPath();
         if (File.Exists(dest))
         {
-            // Trust the cached copy; a corrupt cache surfaces at flash time.
+            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(dest) < MaxCacheAge)
+                return dest;   // fresh — use directly, no network touched
+
+            // Stale (> a week): ONE quiet HEAD to see if a newer base shipped.
+            string? remoteTag = await HeadEtagAsync(cancellation).ConfigureAwait(false);
+            if (remoteTag != null)
+            {
+                if (remoteTag == StoredEtag(dest))
+                {
+                    Touch(dest);   // unchanged upstream — reset the week
+                }
+                else
+                {
+                    notice?.Invoke("a newer base image is available — update the Flagship Assembler to use it");
+                    StoreEtag(remoteTag, dest);
+                    Touch(dest);   // re-check (and re-warn) at most once per week
+                }
+            }
+            // HEAD failed (offline) → keep the valid cache; never block a burn.
             return dest;
         }
         onDownloadStart?.Invoke();
 
+        string? etag = null;
         string tmp = dest + ".partial";
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
 
@@ -101,6 +128,7 @@ public static class BaseIsoCache
             if (!response.IsSuccessStatusCode)
                 throw new CacheException($"Base-image download failed (HTTP {(int)response.StatusCode}).");
 
+            etag = response.Headers.ETag?.Tag;
             long expectedLen = response.Content.Headers.ContentLength ?? -1;
 
             using var sha = SHA256.Create();
@@ -144,11 +172,47 @@ public static class BaseIsoCache
         // Atomic-ish move into place.
         TryDelete(dest);
         File.Move(tmp, dest);
+        if (etag != null) StoreEtag(etag, dest);
         return dest;
     }
 
     private static void TryDelete(string path)
     {
         try { if (File.Exists(path)) File.Delete(path); } catch { /* best effort */ }
+    }
+
+    // --- Freshness helpers (mirror BaseIsoCache.swift) ---
+
+    private static string EtagSidecar(string dest) => dest + ".etag";
+
+    private static string? StoredEtag(string dest)
+    {
+        try { return File.Exists(EtagSidecar(dest)) ? File.ReadAllText(EtagSidecar(dest)) : null; }
+        catch { return null; }
+    }
+
+    private static void StoreEtag(string tag, string dest)
+    {
+        try { File.WriteAllText(EtagSidecar(dest), tag); } catch { /* best effort */ }
+    }
+
+    private static void Touch(string dest)
+    {
+        try { File.SetLastWriteTimeUtc(dest, DateTime.UtcNow); } catch { /* best effort */ }
+    }
+
+    /// <summary>Lightweight conditional check — a HEAD for the ETag. Returns null
+    /// when the network is unreachable, so the caller keeps using the valid
+    /// cache rather than blocking the burn.</summary>
+    private static async Task<string?> HeadEtagAsync(CancellationToken cancellation)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            using var req = new HttpRequestMessage(HttpMethod.Head, Url);
+            using var resp = await http.SendAsync(req, cancellation).ConfigureAwait(false);
+            return resp.Headers.ETag?.Tag;
+        }
+        catch { return null; }
     }
 }

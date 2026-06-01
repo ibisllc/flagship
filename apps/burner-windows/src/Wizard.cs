@@ -459,6 +459,7 @@ public sealed class Wizard : INotifyPropertyChanged
                         AppendLog(LogStream.Stdout,
                             "+ one-time download of base image (~240 MB — cached, won't repeat)");
                     }),
+                    notice: m => OnUi(() => AppendLog(LogStream.Stdout, "+ " + m)),
                     cancellation: _cts.Token);
             }
             catch (Exception e)
