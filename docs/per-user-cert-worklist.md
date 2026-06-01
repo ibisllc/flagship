@@ -46,6 +46,24 @@ Move from **one LE cert per box** → **one cert per user**: SANs collapse from 
 - **Q-E — Mesh ejection ↔ re-mint atomicity under partition (§9-E, §5.2).** How is "box is confirmed out of the mesh" established before re-mint under a network partition? (deferred-machinery, but §5.2 ordering depends on it.)
 - **Q-flag — Manifest-flag default naming (§7.6).** Confirm `replication:"leader"|"isolated"`, default `isolated`, inert, before baking into the protocol wire (task 9) — changing a shipped manifest field later is costly.
 
+## Owner decisions (2026-06-01)
+
+**Global directive:** *build everything now, defer NOTHING* — except where "deferred" means **physically untestable without a 2nd box** (the cert-replication mesh / unified-instance / split-brain machinery, §7). You can't verify a peer mesh or a leader-failover with one box, so the protocol *contract + data-model reservations* land now (so it's never a migration) and the mesh *code* lands the moment box #2 exists. That's "not writing unverifiable code," not "deferring a feature." Everything security-relevant (account-key recovery, CAA-pin, CT monitor, short-lived certs) ships now.
+
+**Q-A — RESOLVED → user-configurable "offline autonomy window."** At first-server creation (and editable in Settings) the user picks how long their servers may keep running while the phone is offline: **3 / 7 / 15 / 30 / … days, or Indefinite.** That value drives a **time-boxed, per-box-revocable delegated-renewal capability**: the trust-root device hands the box a token authorized to *renew the existing `[<user>, *.<user>]` namespace cert* (renewal only — never fresh issuance/rotation, which stays root-only per §4) valid for the chosen window; the box renews autonomously inside it; near expiry the phone/webapp must come online to re-arm. **Indefinite** = a non-expiring delegation (revoked only explicitly). Mirrors the existing two-tier boot-unlock (auto/approve + TTL) + InstallBlob TTL pattern. → unblocks task #26's renewal half; adds a new sub-task: the setting (protocol field + first-run question + Settings UI on iOS/Android/webapp + daemon honoring the window).
+
+**Q-B — build at launch (don't defer).** Adopt LE's short-lived (~6-day) profile. It *requires* Q-A's delegated autonomous renewal, which we're now building, so the dependency is satisfied. Strongest blast-radius bound for the shared key.
+
+**Q-D — RECOMMENDATION (awaiting confirm): derive the ACME account key from the UMK.** Make the ACME account keypair a deterministic HKDF derivation off the UMK (exactly like IRK/BAK: `acct = derive(UMK, "flagship/acme-account/v1")`). Then BOTH trust-root peers (phone + webapp, which already share the UMK via the existing pairing/recovery) independently derive the *same* account key — no separate sealing, no second ACME account, and recovery is automatic (whoever recovers the UMK has the account key; folds into J.3/J.4 + WebAuthn-PRF for free). CAA pins the single accounturi. → unblocks task #28.
+
+**Q-C — RECOMMENDATION (awaiting confirm): reserve-the-dimension now, build the machinery now too if you want it.** See the "more info" in chat. Default plan: key the cert identity on `(user, trustGroup)` with `trustGroup="default"` so multi-group is never a migration; build the actual per-group cert issuance + the box-grouping UI now only if you confirm (it asks single-box users to categorize boxes they don't have yet).
+
+**Q-E — RESOLVED by re-framing.** §5.2 step 2 "box confirmed out of the mesh" = **"box removed from the trust-root's authorized cert-recipient set"** — a *local, atomic* operation on the phone, NOT a round-trip the partitioned box must ack. Re-mint distributes only to boxes still on the phone's authorized list; a partitioned/unreachable compromised box simply isn't on it. Partition becomes a non-issue. Consistent with §4 (phone = issuance authority) + §5.2 step 1 (routing already cut).
+
+**Q-flag — RECOMMENDATION (awaiting confirm): keep `replication: "isolated" | "leader"`, default `isolated`, inert at launch.** Accurate vocabulary, forward-extensible (could add `"multi-leader"`). Low stakes since inert, but lock it before it's on the protocol wire.
+
+**Q3 — GREENLIT to build the merged per-user name table** ("yes, do it now"). Will reconcile with v2-device-addressing before coding the resolver (tasks #24 resolver-half + #25).
+
 ## Risks / cross-cutting
 
 - **Live prod cert chain:** tasks 1/2/4/8 rewrite the exact SAN+DNS paths producing the current green-padlock cert — atomic commit, c4.6-gated, live-smoked or TLS breaks for real servers.
