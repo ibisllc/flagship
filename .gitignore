@@ -33,6 +33,9 @@ apps/mobile/android/.gradle/
 apps/mobile/android/build/
 apps/mobile/android/local.properties
 apps/mobile/android/app/build/
+apps/mobile/android/keystore/keystore.properties
+apps/mobile/android/keystore/*.jks
+apps/mobile/android/keystore/*.keystore
 
 # bootkey artifacts (large, regenerable)
 build-artifacts/

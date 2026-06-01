@@ -396,9 +396,19 @@ Parallel to Lane TF — no shared dependencies.
 
 **Owner**: 🖥 owner.
 
-**Description**:
+**Description**: One-time keystore + Firebase setup, then build.
 ```sh
 cd apps/mobile/android
+# 1. Generate the release keystore (once; back up the .jks securely).
+keytool -genkeypair -v -keystore keystore/flagship-release.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias flagship
+# 2. Fill in the signing creds (gitignored — never committed).
+cp keystore/keystore.properties.example keystore/keystore.properties
+$EDITOR keystore/keystore.properties
+# 3. Drop the real google-services.json from Firebase Console
+#    (Project settings → Your apps → com.flagshipserver.app) over
+#    the placeholder at app/google-services.json.
+# 4. Build the signed AAB.
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ./gradlew :app:bundleRelease
 ```
