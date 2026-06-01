@@ -23,6 +23,7 @@
         <local:NullToVisibilityConverter x:Key="NullToCollapsed"/>
         <local:NotNullToVisibilityConverter x:Key="NotNullToVisible"/>
         <local:StreamToBrushConverter x:Key="StreamToBrush"/>
+        <local:ModeToggleLabelConverter x:Key="ModeToggleLabel"/>
     </Window.Resources>
 
     <Grid Margin="0">
@@ -33,24 +34,38 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <StackPanel Grid.Row="0"
-                    Orientation="Horizontal"
-                    Margin="22,18,22,8"
-                    VerticalAlignment="Center">
-            <Border Style="{StaticResource IconCircle}"
-                    Background="{StaticResource FB.PrimaryFaded}">
-                <TextBlock Text="&#x1F525;"
-                           HorizontalAlignment="Center"
+        <Grid Grid.Row="0" Margin="22,18,22,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <Border Style="{StaticResource IconCircle}"
+                        Background="{StaticResource FB.PrimaryFaded}">
+                    <TextBlock Text="&#x1F525;"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="18"/>
+                </Border>
+                <TextBlock Text="Flagship Burner"
+                           FontFamily="{StaticResource FB.Font.Title}"
+                           FontSize="18"
+                           Foreground="{StaticResource FB.Text}"
                            VerticalAlignment="Center"
-                           FontSize="18"/>
-            </Border>
-            <TextBlock Text="Flagship Burner"
-                       FontFamily="{StaticResource FB.Font.Title}"
-                       FontSize="18"
-                       Foreground="{StaticResource FB.Text}"
-                       VerticalAlignment="Center"
-                       Margin="10,0,0,0"/>
-        </StackPanel>
+                           Margin="10,0,0,0"/>
+            </StackPanel>
+            <!-- Quick / Advanced mode toggle. Quick (default) = recipe + USB,
+                 burner owns the Alpine pipeline. Advanced = bring a stock ISO. -->
+            <Button Grid.Column="2"
+                    x:Name="ModeToggle"
+                    Style="{StaticResource LinkButton}"
+                    Content="{Binding Mode, Converter={StaticResource ModeToggleLabel}}"
+                    Click="ModeToggle_Click"
+                    VerticalAlignment="Center"/>
+        </Grid>
 
         <!-- Three drop-rows + bake button -->
         <ScrollViewer Grid.Row="1"
@@ -107,7 +122,9 @@
                     </Grid>
                 </Border>
 
-                <!-- Row 2: ISO -->
+                <!-- Row 2: ISO — Advanced mode only. Quick mode caches the
+                     Alpine base + appends the recipe trailer locally, so the
+                     user never has to supply an ISO. -->
                 <Border x:Name="IsoRow"
                         Style="{StaticResource DropRowBorder}"
                         Tag="{Binding IsoRowTag}"
@@ -117,7 +134,9 @@
                         Drop="IsoRow_Drop"
                         MouseLeftButtonUp="IsoRow_Click"
                         Cursor="Hand"
-                        Margin="0,4,0,8">
+                        Margin="0,4,0,8"
+                        Visibility="{Binding ShowIsoRow,
+                            Converter={StaticResource BoolToVisibility}}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -212,7 +231,10 @@
                             Style="{StaticResource BakeButton}"
                             Content="{Binding BakeButtonLabel}"
                             IsEnabled="{Binding CanBake}"
-                            Click="Bake_Click"/>
+                            Click="Bake_Click"
+                            Visibility="{Binding ShowProgress,
+                                Converter={StaticResource BoolToVisibility},
+                                ConverterParameter=invert}"/>
                     <TextBlock Style="{StaticResource Caption}"
                                HorizontalAlignment="Center"
                                Margin="0,8,0,0"
@@ -222,6 +244,44 @@
                                TextAlignment="Center"
                                Visibility="{Binding ShowReadiness,
                                    Converter={StaticResource BoolToVisibility}}"/>
+
+                    <!-- Progress block (Quick local pipeline + Advanced write).
+                         The bar fills ORANGE during the one-time base download
+                         + personalize, then the accent color during the write.
+                         ProgressTint flips the Foreground accordingly. -->
+                    <StackPanel HorizontalAlignment="Center"
+                                Visibility="{Binding ShowProgress,
+                                    Converter={StaticResource BoolToVisibility}}">
+                        <ProgressBar x:Name="PhaseProgress"
+                                     Width="260" Height="6"
+                                     Minimum="0" Maximum="1"
+                                     Value="{Binding ProgressValue, Mode=OneWay}"
+                                     IsIndeterminate="{Binding ProgressIndeterminate}"
+                                     Foreground="{Binding ProgressTint}"
+                                     Background="{StaticResource FB.SurfaceElevated}"
+                                     BorderThickness="0"/>
+                        <TextBlock Style="{StaticResource Caption}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,8,0,0"
+                                   Text="{Binding ProgressCaption}"/>
+                        <!-- "won't happen again" — download phase only -->
+                        <TextBlock HorizontalAlignment="Center"
+                                   Margin="0,4,0,0"
+                                   MaxWidth="280"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   FontFamily="{StaticResource FB.Font.Body}"
+                                   FontSize="11.5"
+                                   Foreground="{StaticResource FB.Warning}"
+                                   Text="One-time download of base image — won't happen again. Every server after this reuses it."
+                                   Visibility="{Binding ShowDownloadBanner,
+                                       Converter={StaticResource BoolToVisibility}}"/>
+                        <Button Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Center"
+                                Margin="0,6,0,0"
+                                Content="Cancel"
+                                Click="Bake_Click"/>
+                    </StackPanel>
 
                     <!-- Done card -->
                     <Border BorderThickness="1"

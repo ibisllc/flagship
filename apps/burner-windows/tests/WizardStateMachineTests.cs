@@ -90,6 +90,9 @@ public class WizardStateMachineTests
 /// <summary>
 /// Plain mirror of the Wizard view-model's derived state — same rules,
 /// no WPF dependencies. If the rules in Wizard.cs change, update both.
+///
+/// Defaults to Advanced (requires an ISO) so the legacy assertions above keep
+/// their shape; the Quick-mode rules are pinned in <see cref="QuickModeRules"/>.
 /// </summary>
 internal sealed class WizardStateView
 {
@@ -98,11 +101,15 @@ internal sealed class WizardStateView
     public string? SelectedDevice { get; set; }
     public bool IsRunning { get; set; }
     public bool IsFinished { get; set; }
+    public BurnerMode Mode { get; set; } = BurnerMode.Advanced;
+
+    private bool RequiresIso => Mode.RequiresUserISO();
 
     public bool HasRecipe => !string.IsNullOrEmpty(RecipePath);
     public bool HasIso => !string.IsNullOrEmpty(IsoPath);
     public bool HasDisk => !string.IsNullOrEmpty(SelectedDevice);
-    public bool CanBake => HasRecipe && HasIso && HasDisk && !IsRunning && !IsFinished;
+    public bool CanBake =>
+        HasRecipe && (!RequiresIso || HasIso) && HasDisk && !IsRunning && !IsFinished;
 
     public string ReadinessSummary
     {
@@ -110,7 +117,7 @@ internal sealed class WizardStateView
         {
             var missing = new System.Collections.Generic.List<string>();
             if (!HasRecipe) missing.Add("recipe");
-            if (!HasIso) missing.Add("ISO");
+            if (RequiresIso && !HasIso) missing.Add("ISO");
             if (!HasDisk) missing.Add("USB drive");
             if (missing.Count == 0)
             {
@@ -120,4 +127,37 @@ internal sealed class WizardStateView
             return $"Need: {string.Join(", ", missing)}.";
         }
     }
+}
+
+/// <summary>Quick mode (the Alpine pipeline) needs recipe + USB only — no ISO.</summary>
+public class QuickModeRules
+{
+    [Fact]
+    public void QuickMode_RecipePlusDisk_CanBake_NoIso()
+    {
+        var s = new WizardStateView
+        {
+            Mode = BurnerMode.Quick,
+            RecipePath = @"C:\tmp\recipe.json",
+            SelectedDevice = @"\\.\PhysicalDrive2",
+        };
+        Assert.True(s.CanBake);
+        Assert.Equal(@"Writes to \\.\PhysicalDrive2 · erases what's there", s.ReadinessSummary);
+    }
+
+    [Fact]
+    public void QuickMode_RecipeOnly_NeedsDiskNotIso()
+    {
+        var s = new WizardStateView { Mode = BurnerMode.Quick, RecipePath = @"C:\tmp\recipe.json" };
+        Assert.False(s.CanBake);
+        Assert.Equal("Need: USB drive.", s.ReadinessSummary);
+    }
+
+    [Fact]
+    public void QuickMode_DoesNotRequireUserIso()
+        => Assert.False(BurnerMode.Quick.RequiresUserISO());
+
+    [Fact]
+    public void AdvancedMode_RequiresUserIso()
+        => Assert.True(BurnerMode.Advanced.RequiresUserISO());
 }

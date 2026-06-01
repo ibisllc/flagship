@@ -9,6 +9,8 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- DiskWrite.cs pins a managed buffer + offsets a byte* into WriteFile. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <EnableDefaultPageItems>false</EnableDefaultPageItems>
@@ -29,6 +31,11 @@
     <Compile Include="src\CliLocator.cs" />
     <Compile Include="src\DiskEnumerator.cs" />
     <Compile Include="src\VerifyResult.cs" />
+    <Compile Include="src\Recipe.cs" />
+    <Compile Include="src\Ed25519Verify.cs" />
+    <Compile Include="src\AlpinePersonalize.cs" />
+    <Compile Include="src\BaseIsoCache.cs" />
+    <Compile Include="src\DiskWrite.cs" />
   </ItemGroup>
 
   <ItemGroup>
