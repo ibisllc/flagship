@@ -134,6 +134,60 @@ export function parseAppLabel(label: string): { slug: string; creator: string } 
 }
 
 /**
+ * The `--` pin operator (per-user-cert design §3.3). A leftmost label of
+ * the form `<label>--<server>` pins an app to a specific box — a rare
+ * power-user / debug escape hatch, NOT the primary public form. Split on
+ * the FIRST `--`: left = app label, right = box name.
+ *
+ * Returns the parsed halves, or `{ ok: false }` if `L` is not a pin label
+ * or violates the dash rules. A plain label (no `--`) returns
+ * `{ ok: false, reason: "not a pin label" }` — callers use `isPinLabel`
+ * first, or treat that reason as "fall through to the normal resolver".
+ *
+ * Rules (§3.3):
+ *   - The app part and the box part are each ordinary slugs, so neither may
+ *     contain `--` (SLUG_RE already forbids doubled dashes) or a
+ *     leading/trailing dash.
+ *   - The segment before `--` must NOT be exactly 2 characters, and the
+ *     whole label must NOT begin `xn--` — both collide with the IDN /
+ *     punycode R-LDH reservation (RFC 5890: hyphens at character positions
+ *     3–4 are reserved for A-labels).
+ */
+export function parsePinLabel(
+  leftmostLabel: string,
+): { ok: true; label: string; server: string } | { ok: false; reason: string } {
+  const norm = String(leftmostLabel).toLowerCase();
+  const idx = norm.indexOf("--");
+  if (idx < 0) return { ok: false, reason: "not a pin label (no `--` operator)" };
+  // R-LDH guard: a label beginning `xn--` is a reserved punycode A-label.
+  if (norm.startsWith("xn--")) {
+    return { ok: false, reason: "label must not begin `xn--` (RFC 5890 reservation)" };
+  }
+  const labelPart = norm.slice(0, idx);
+  const serverPart = norm.slice(idx + 2);
+  // R-LDH guard: a 2-char app part puts `--` at character positions 3–4.
+  if (labelPart.length === 2) {
+    return { ok: false, reason: "app part before `--` must not be exactly 2 characters" };
+  }
+  const app = validateAppSlug(labelPart);
+  if (!app.ok) return { ok: false, reason: `bad app part: ${app.reason}` };
+  // The box part must itself be a clean slug — this rejects a box name that
+  // smuggles a second `--` (`app--box--extra` → serverPart `box--extra`).
+  const box = validateAppSlug(serverPart);
+  if (!box.ok) return { ok: false, reason: `bad box part: ${box.reason}` };
+  return { ok: true, label: app.label, server: box.label };
+}
+
+/**
+ * Cheap predicate: does this leftmost label use the `--` pin operator?
+ * The §3.4 resolver checks this FIRST (step 1) before box-name / device /
+ * install-table lookup.
+ */
+export function isPinLabel(leftmostLabel: string): boolean {
+  return String(leftmostLabel).includes("--");
+}
+
+/**
  * Legacy validator kept for code paths that still treat the leftmost
  * subdomain as a single opaque DNS label (e.g., the cert plumbing).
  * Prefer `parseAppLabel` for app routing.

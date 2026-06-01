@@ -4,6 +4,8 @@ import {
   validateAppLabel,
   validateAppSlug,
   parseAppLabel,
+  parsePinLabel,
+  isPinLabel,
   userWildcardSans,
   serverWildcardSans,
   appFqdn,
@@ -88,6 +90,47 @@ describe("appFqdn", () => {
     expect(appFqdn("habits", "homebox", "harry", "flagship.services")).toBe(
       "habits.homebox.harry.flagship.services",
     );
+  });
+});
+
+describe("parsePinLabel (-- pin operator, §3.3)", () => {
+  it("splits <label>--<server> on the first --", () => {
+    const r = parsePinLabel("photo-album--home");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.label).toBe("photo-album");
+      expect(r.server).toBe("home");
+    }
+  });
+
+  it("returns not-a-pin-label for a plain label (no --)", () => {
+    const r = parsePinLabel("photo-album");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/not a pin label/);
+  });
+
+  it("rejects an xn-- prefixed label (R-LDH)", () => {
+    expect(parsePinLabel("xn--home").ok).toBe(false);
+  });
+
+  it("rejects a 2-char app part before -- (R-LDH positions 3–4)", () => {
+    expect(parsePinLabel("ab--home").ok).toBe(false);
+  });
+
+  it("rejects a box part that smuggles a second -- ", () => {
+    // first -- splits to label="app", server="box--extra" → bad slug.
+    expect(parsePinLabel("app--box--extra").ok).toBe(false);
+  });
+
+  it("rejects empty app or box parts", () => {
+    expect(parsePinLabel("--home").ok).toBe(false);
+    expect(parsePinLabel("photo--").ok).toBe(false);
+  });
+
+  it("isPinLabel detects the operator", () => {
+    expect(isPinLabel("photo--home")).toBe(true);
+    expect(isPinLabel("photo-album")).toBe(false);
+    expect(isPinLabel("plain")).toBe(false);
   });
 });
 
