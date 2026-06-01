@@ -855,6 +855,7 @@ export interface Storage {
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   boxSerials: BoxSerialsStorage;
   nfcRendezvous: NfcRendezvousStorage;
+  watchDelegates: WatchDelegateStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1419,6 +1420,55 @@ export interface DeviceCapabilityGrantStorage {
   getByDevicePub(devicePubHex: string): Promise<DeviceCapabilityGrantRecord | undefined>;
   /** Stamp `revoked_at` on the matching grant. Throws Error
    *  `'unknown grantId'` if no row exists. */
+  revoke(grantId: string, revokedAt: number): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// WatchDelegateKey — opt-in quick-approve delegate keys (migration 0041)
+//
+// The IRK-attested `WatchDelegateKey` envelope (packages/protocol/src/auth.ts)
+// lets the owner approve a server BOOT from the Watch without a fresh phone
+// biometric prompt. Stored per user, scoped to "boot-approval" ONLY, short-TTL,
+// independently revocable. Parallels device_capability_grants but is simpler:
+// ONE active delegate per user (re-mint tombstones the prior), no device label.
+// `revoked_at` is null while active; the row is RETAINED on revoke so audit +
+// replay still resolve.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface WatchDelegateRecord {
+  grantId: string;
+  username: string;
+  delegatePubHex: string;
+  scopesJson: string;
+  issuedAt: number;
+  expiresAt: number;
+  /** Ed25519 IRK signature over the WatchDelegateKey canonical bytes. */
+  signatureHex: string;
+  revokedAt: number | null;
+}
+
+/**
+ * Store contract for `watch_delegates`. Invariants:
+ *   • `put` rejects a duplicate ACTIVE delegate for the same `username`
+ *     (re-mint MUST `revoke` the prior first). The D1 adapter relies on the
+ *     unique partial index `idx_wd_username_active`; InMemory checks
+ *     explicitly. Shared reason `'duplicate active watch delegate for user'`.
+ *   • `getActiveForUser` returns AT MOST one row; both adapters throw if that
+ *     invariant is somehow violated.
+ *   • `listForUser` is issued_at DESC (most-recent first).
+ *   • `revoke` mutates `revoked_at` only; the row stays. Throws
+ *     `'unknown grantId'` on a missing row.
+ */
+export interface WatchDelegateStorage {
+  put(rec: WatchDelegateRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(grantId: string): Promise<WatchDelegateRecord | undefined>;
+  /** All delegates for a user, ACTIVE + revoked, issued_at DESC. */
+  listForUser(username: string): Promise<WatchDelegateRecord[]>;
+  /** The SINGLE active delegate for a user, or undefined. */
+  getActiveForUser(username: string): Promise<WatchDelegateRecord | undefined>;
+  /** The active delegate whose pubkey matches — used to verify a
+   *  delegate-signed boot approval. undefined when none active. */
+  getActiveByDelegatePub(delegatePubHex: string): Promise<WatchDelegateRecord | undefined>;
   revoke(grantId: string, revokedAt: number): Promise<void>;
 }
 

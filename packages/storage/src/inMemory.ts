@@ -1,4 +1,6 @@
 import type {
+  WatchDelegateRecord,
+  WatchDelegateStorage,
   AuditEventRecord,
   AuditEventStorage,
   AutoUnlockLeaseRecord,
@@ -1279,4 +1281,64 @@ export class InMemoryStorage implements Storage {
   deviceCapabilityGrants = new InMemoryDeviceCapabilityGrantStorage();
   boxSerials = new InMemoryBoxSerialsStorage();
   nfcRendezvous = new InMemoryNfcRendezvousStorage();
+  watchDelegates = new InMemoryWatchDelegateStorage();
+}
+
+/**
+ * In-memory WatchDelegateStorage — opt-in Watch quick-approve delegate keys
+ * (docs/watch-delegate-key-design.md). Map keyed by grantId; the
+ * one-active-delegate-per-user invariant is enforced in put().
+ */
+export class InMemoryWatchDelegateStorage implements WatchDelegateStorage {
+  private byId = new Map<string, WatchDelegateRecord>();
+
+  async put(rec: WatchDelegateRecord): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (rec.revokedAt === null) {
+      for (const r of this.byId.values()) {
+        if (r.revokedAt === null && r.username.toLowerCase() === rec.username.toLowerCase()) {
+          return { ok: false, reason: "duplicate active watch delegate for user" };
+        }
+      }
+    }
+    this.byId.set(rec.grantId, { ...rec });
+    return { ok: true };
+  }
+
+  async get(grantId: string): Promise<WatchDelegateRecord | undefined> {
+    const r = this.byId.get(grantId);
+    return r ? { ...r } : undefined;
+  }
+
+  async listForUser(username: string): Promise<WatchDelegateRecord[]> {
+    const u = username.toLowerCase();
+    return [...this.byId.values()]
+      .filter((r) => r.username.toLowerCase() === u)
+      .sort((a, b) => b.issuedAt - a.issuedAt)
+      .map((r) => ({ ...r }));
+  }
+
+  async getActiveForUser(username: string): Promise<WatchDelegateRecord | undefined> {
+    const u = username.toLowerCase();
+    const active = [...this.byId.values()].filter(
+      (r) => r.revokedAt === null && r.username.toLowerCase() === u,
+    );
+    if (active.length > 1) {
+      throw new Error(`getActiveForUser: more than one active watch delegate for ${username}`);
+    }
+    return active[0] ? { ...active[0] } : undefined;
+  }
+
+  async getActiveByDelegatePub(delegatePubHex: string): Promise<WatchDelegateRecord | undefined> {
+    const p = delegatePubHex.toLowerCase();
+    const active = [...this.byId.values()]
+      .filter((r) => r.revokedAt === null && r.delegatePubHex.toLowerCase() === p)
+      .sort((a, b) => b.issuedAt - a.issuedAt);
+    return active[0] ? { ...active[0] } : undefined;
+  }
+
+  async revoke(grantId: string, revokedAt: number): Promise<void> {
+    const r = this.byId.get(grantId);
+    if (!r) throw new Error("unknown grantId");
+    r.revokedAt = revokedAt;
+  }
 }

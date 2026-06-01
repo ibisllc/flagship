@@ -66,6 +66,8 @@ import type {
   InstallPolicyFanoutStorage,
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
+  WatchDelegateRecord,
+  WatchDelegateStorage,
 } from "./types.js";
 
 /**
@@ -2865,6 +2867,7 @@ export class D1Storage implements Storage {
   deviceCapabilityGrants: DeviceCapabilityGrantStorage;
   boxSerials: BoxSerialsStorage;
   nfcRendezvous: NfcRendezvousStorage;
+  watchDelegates: WatchDelegateStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -2896,5 +2899,109 @@ export class D1Storage implements Storage {
     this.deviceCapabilityGrants = new D1DeviceCapabilityGrantStorage(db);
     this.boxSerials = new D1BoxSerialsStorage(db);
     this.nfcRendezvous = new D1NfcRendezvousStorage(db);
+    this.watchDelegates = new D1WatchDelegateStorage(db);
+  }
+}
+
+interface WatchDelegateRow {
+  grant_id: string;
+  username: string;
+  delegate_pub_hex: string;
+  scopes_json: string;
+  issued_at: number;
+  expires_at: number;
+  signature_hex: string;
+  revoked_at: number | null;
+}
+function rowToWatchDelegate(r: WatchDelegateRow): WatchDelegateRecord {
+  return {
+    grantId: r.grant_id,
+    username: r.username,
+    delegatePubHex: r.delegate_pub_hex,
+    scopesJson: r.scopes_json,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    signatureHex: r.signature_hex,
+    revokedAt: r.revoked_at,
+  };
+}
+
+/** D1 WatchDelegateStorage — opt-in Watch quick-approve delegate keys.
+ *  Mirrors D1DeviceCapabilityGrantStorage; one active delegate per user is
+ *  enforced by the unique partial index `idx_wd_username_active`. */
+export class D1WatchDelegateStorage implements WatchDelegateStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: WatchDelegateRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO watch_delegates
+            (grant_id, username, delegate_pub_hex, scopes_json,
+             issued_at, expires_at, signature_hex, revoked_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+        )
+        .bind(
+          rec.grantId,
+          rec.username.toLowerCase(),
+          rec.delegatePubHex.toLowerCase(),
+          rec.scopesJson,
+          rec.issuedAt,
+          rec.expiresAt,
+          rec.signatureHex,
+          rec.revokedAt,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate active watch delegate for user" };
+      }
+      throw e;
+    }
+  }
+  async get(grantId: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM watch_delegates WHERE grant_id = ?1`)
+      .bind(grantId)
+      .first<WatchDelegateRow>();
+    return r ? rowToWatchDelegate(r) : undefined;
+  }
+  async listForUser(username: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM watch_delegates WHERE username = ?1 ORDER BY issued_at DESC`)
+      .bind(username.toLowerCase())
+      .all<WatchDelegateRow>();
+    return (r.results ?? []).map(rowToWatchDelegate);
+  }
+  async getActiveForUser(username: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM watch_delegates WHERE username = ?1 AND revoked_at IS NULL`)
+      .bind(username.toLowerCase())
+      .all<WatchDelegateRow>();
+    const rows = r.results ?? [];
+    if (rows.length > 1) {
+      throw new Error(`getActiveForUser: more than one active watch delegate for ${username}`);
+    }
+    return rows[0] ? rowToWatchDelegate(rows[0]) : undefined;
+  }
+  async getActiveByDelegatePub(delegatePubHex: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM watch_delegates
+         WHERE delegate_pub_hex = ?1 AND revoked_at IS NULL
+         ORDER BY issued_at DESC LIMIT 1`,
+      )
+      .bind(delegatePubHex.toLowerCase())
+      .first<WatchDelegateRow>();
+    return r ? rowToWatchDelegate(r) : undefined;
+  }
+  async revoke(grantId: string, revokedAt: number) {
+    const res = await this.db
+      .prepare(`UPDATE watch_delegates SET revoked_at = ?2 WHERE grant_id = ?1`)
+      .bind(grantId, revokedAt)
+      .run();
+    const changes = (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
+    if (changes === 0) throw new Error("unknown grantId");
   }
 }
