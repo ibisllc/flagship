@@ -7,9 +7,14 @@
 // installs the recovered UMK + initiates re-pair + labels this device
 // "admin" with the RESOLVED username (no "recovered-user" placeholder).
 //
-// Phase 3 is Mock-WebAuthn only (MockWebAuthnProvider); live
-// CredentialManager wiring is a separate human/device task. Phase 4
-// adds the grace countdown / completion polling / push / quarantine.
+// Phase 4 adds the grace countdown / completion polling / push /
+// quarantine.
+//
+// The production call site injects the REAL CredentialManager-backed
+// provider (same one Recovery + Secure-account use) so credentialed
+// takeover login is actually credentialed — the passkey-PRF unwrap must
+// assert against the user's real cloud-recovery credential, not a Mock.
+// The Mock stays the injectable default for previews + unit tests.
 //
 // Mirror of the iOS Phase 3 login screens.
 
@@ -50,10 +55,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
-import com.flagshipserver.app.keystore.MockWebAuthnProvider
+import com.flagshipserver.app.keystore.PasskeyRecoveryManager
+import com.flagshipserver.app.keystore.PlatformWebAuthnProvider
 import com.flagshipserver.app.keystore.WebAuthnProvider
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
@@ -73,15 +81,27 @@ fun RealAccountLoginContainer(
     resolution: AccountResolution,
     onOpened: () -> Unit,
     onBack: () -> Unit,
-    /** Phase 3 = Mock; the live CredentialManager wrapper is a separate
-     *  human/device task. Injectable so tests + previews pin behaviour. */
-    webauthn: WebAuthnProvider = remember { MockWebAuthnProvider() },
+    /** Real CredentialManager-backed provider by default (built below from
+     *  the local context). Injectable so tests + previews can pin the Mock;
+     *  null → use the real production provider. */
+    webauthn: WebAuthnProvider? = null,
 ) {
     val app = LocalAppState.current
     val server = LocalFlagshipServerClient.current
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Credentialed takeover must assert against the user's REAL cloud-
+    // recovery passkey — a Mock would make "credentialed" login meaningless.
+    val passkeys = remember(ctx) { PasskeyRecoveryManager(ctx.applicationContext) }
+    val provider = webauthn ?: remember(ctx) {
+        PlatformWebAuthnProvider(
+            activity = { ctx as? Activity },
+            username = { app.currentUser.value },
+            manager = passkeys,
+        )
+    }
     val vm = remember(resolution) {
-        LoginViewModel(resolution = resolution, server = server, app = app, webauthn = webauthn)
+        LoginViewModel(resolution = resolution, server = server, app = app, webauthn = provider)
     }
     val phase by vm.phase.collectAsState()
 
