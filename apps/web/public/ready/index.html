@@ -142,57 +142,58 @@
           A recipe is a tiny signed file — your phone authorized it, and only your phone can.
         </p>
 
-        <!-- Default (Alpine) path: a ready-to-flash custom ISO, recipe baked in. -->
-        <div class="alpine-cta" id="alpineCta">
+        <!-- Primary (recommended) path: the guided Flagship Assembler flow. -->
+        <section class="step">
           <span class="recommended">Recommended</span>
-          <h3>Download your ready-to-flash boot image</h3>
-          <p>
-            A custom Flagship image with your recipe already inside. Flash it to any USB
-            stick (with the Flagship burner, or any USB writer), boot the target machine,
-            and watch it come up on your phone. Nothing else to configure.
+          <h3><span class="num">1</span> Your recipe for <strong id="serverDomain">your server</strong></h3>
+          <p>Two ways to hand it to the Assembler — pick whichever fits:</p>
+          <div class="actions">
+            <button id="copyRecipe" type="button">Copy recipe</button>
+            <button id="downloadRecipe" type="button" class="secondary">Download .json</button>
+          </div>
+          <p class="status-line" id="recipeStatus">
+            <strong>Copy</strong> if the Assembler is on this computer — nothing touches the disk.
+            <strong>Download</strong> if you'll carry it to another machine.
           </p>
-          <button type="button" class="dl-primary" id="downloadIso">Download boot image (.iso)</button>
-          <p class="advanced-note status-line" id="isoStatus"></p>
-        </div>
+          <div class="meta" id="recipeMeta"></div>
+        </section>
 
+        <section class="step">
+          <h3><span class="num">2</span> The Flagship Assembler</h3>
+          <p>The desktop app that writes your boot USB. It bakes the recipe inside a stock Linux installer image — no balenaEtcher, Rufus, or dd needed.</p>
+          <div class="actions" id="installerPrimary"><!-- big download for the detected OS, filled by ready.js --></div>
+          <div class="dl-others" id="installerOthers"><!-- other OSes, filled by ready.js --></div>
+          <p class="reuse-note">
+            <strong>You only install the Assembler once.</strong> Reuse it for every server you ever set up — just feed it a fresh recipe each time.
+          </p>
+        </section>
+
+        <section class="step">
+          <h3><span class="num">3</span> Assemble &amp; boot</h3>
+          <p>Open the Assembler, give it this recipe (paste it, or open the downloaded file) + a recommended Linux image + a USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
+          <p class="installer-iso">Not sure which image? <a class="secondary-link" href="/docs#recommended-linux" target="_blank" rel="noopener">See the recommended Linux images →</a></p>
+        </section>
+
+        <!-- Advanced: self-download a prebuilt image with the recipe baked in. -->
         <details class="advanced-disclosure" id="advancedOptions">
-          <summary>Advanced options: Bring your own Linux</summary>
+          <summary>Advanced: download a ready-to-flash image yourself</summary>
           <p class="advanced-intro">
-            Prefer to start from a stock Linux installer image (Debian, Ubuntu, …)? Hand the
-            recipe to the Flagship Assembler instead — it bakes it into an image you supply.
-            Only Debian is tested today, and you won't get the early on-screen signals the
-            recommended image gives you.
+            Rather skip the Assembler? You can download a prebuilt Flagship image with your
+            recipe already baked in, then flash it with any USB writer. This path may be
+            unavailable while the base image is being published — if the download doesn't
+            start, use the recommended Assembler flow above.
           </p>
 
-          <section class="step">
-            <h3><span class="num">1</span> Your recipe for <strong id="serverDomain">your server</strong></h3>
-            <p>Two ways to hand it to the Assembler — pick whichever fits:</p>
-            <div class="actions">
-              <button id="copyRecipe" type="button">Copy recipe</button>
-              <button id="downloadRecipe" type="button" class="secondary">Download .json</button>
-            </div>
-            <p class="status-line" id="recipeStatus">
-              <strong>Copy</strong> if the Assembler is on this computer — nothing touches the disk.
-              <strong>Download</strong> if you'll carry it to another machine.
+          <div class="alpine-cta" id="alpineCta">
+            <h3>Download your ready-to-flash boot image</h3>
+            <p>
+              A custom Flagship image with your recipe already inside. Flash it to any USB
+              stick, boot the target machine, and watch it come up on your phone. Nothing
+              else to configure.
             </p>
-            <div class="meta" id="recipeMeta"></div>
-          </section>
-
-          <section class="step">
-            <h3><span class="num">2</span> The Flagship Assembler</h3>
-            <p>The desktop app that writes your boot USB. It bakes the recipe inside a stock Linux installer image — no balenaEtcher, Rufus, or dd needed.</p>
-            <div class="actions" id="installerPrimary"><!-- big download for the detected OS, filled by ready.js --></div>
-            <div class="dl-others" id="installerOthers"><!-- other OSes, filled by ready.js --></div>
-            <p class="reuse-note">
-              <strong>You only install the Assembler once.</strong> Reuse it for every server you ever set up — just feed it a fresh recipe each time.
-            </p>
-          </section>
-
-          <section class="step">
-            <h3><span class="num">3</span> Assemble &amp; boot</h3>
-            <p>Open the Assembler, give it this recipe (paste it, or open the downloaded file) + a recommended Linux image + a USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
-            <p class="installer-iso">Not sure which image? <a class="secondary-link" href="/docs#recommended-linux" target="_blank" rel="noopener">See the recommended Linux images →</a></p>
-          </section>
+            <button type="button" class="dl-primary" id="downloadIso">Download boot image (.iso)</button>
+            <p class="advanced-note status-line" id="isoStatus"></p>
+          </div>
         </details>
       </div>
 

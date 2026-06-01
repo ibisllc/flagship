@@ -16,37 +16,35 @@ describe("/ready/ — post-order recipe landing", () => {
     // The no-recipe fallback exists for direct navigation.
     expect(r.body).toContain('id="noRecipe"');
     expect(r.body).toContain('src="/ready/ready.js"');
-    // #12: the recommended default — download a ready-to-flash custom ISO.
+    // The self-download image path still exists, now behind Advanced.
     expect(r.body).toContain('id="alpineCta"');
     expect(r.body).toContain('id="downloadIso"');
     expect(r.body).toContain("ready-to-flash");
   });
 
-  it("tucks the BYO-ISO / Assembler path into an Advanced options disclosure, ISO stays primary", async () => {
+  it("makes the Assembler flow primary and tucks the self-download ISO into an Advanced disclosure", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/ready/" });
     expect(r.statusCode).toBe(200);
 
-    // The recommended Alpine custom-ISO download stays primary + visible
-    // (the button is NOT inside the disclosure).
-    const ctaIdx = r.body.indexOf('id="alpineCta"');
     const detailsIdx = r.body.indexOf("<details");
-    expect(ctaIdx).toBeGreaterThan(-1);
     expect(detailsIdx).toBeGreaterThan(-1);
-    expect(ctaIdx).toBeLessThan(detailsIdx);
-    expect(r.body.indexOf('id="downloadIso"')).toBeLessThan(detailsIdx);
 
-    // The BYO path is an explicit collapsible disclosure with the agreed copy.
+    // The recipe + Assembler affordances are now primary — outside the disclosure.
+    expect(r.body.indexOf('id="copyRecipe"')).toBeLessThan(detailsIdx);
+    expect(r.body.indexOf('id="downloadRecipe"')).toBeLessThan(detailsIdx);
+    expect(r.body.indexOf('id="installerPrimary"')).toBeLessThan(detailsIdx);
+    expect(r.body.indexOf('id="installerOthers"')).toBeLessThan(detailsIdx);
+
+    // The Advanced path is an explicit collapsible disclosure with the new copy.
     expect(r.body).toMatch(/<details[^>]*class="advanced-disclosure"/);
-    expect(r.body).toContain("Advanced options: Bring your own Linux");
+    expect(r.body).toContain("Advanced: download a ready-to-flash image yourself");
 
-    // The recipe + Assembler affordances now live inside the disclosure.
+    // The self-download personalized-image path now lives inside the disclosure.
     const detailsBlock = r.body.slice(detailsIdx, r.body.indexOf("</details>"));
-    expect(detailsBlock).toContain('id="copyRecipe"');
-    expect(detailsBlock).toContain('id="downloadRecipe"');
-    expect(detailsBlock).toContain('id="installerPrimary"');
-    expect(detailsBlock).toContain('id="installerOthers"');
-    expect(detailsBlock).toContain("only install the Assembler once");
+    expect(detailsBlock).toContain('id="alpineCta"');
+    expect(detailsBlock).toContain('id="downloadIso"');
+    expect(detailsBlock).toContain('id="isoStatus"');
   });
 
   it("serves /ready/ready.js wired to the QR hand-off key + on-brand installer links", async () => {
