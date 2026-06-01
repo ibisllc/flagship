@@ -3059,13 +3059,21 @@ export type DeviceScope =
   | "add-device"
   | "manage-services"
   | "revoke-others"
-  | "demo-provision";
+  | "demo-provision"
+  // The "administrator" authority (per-user-cert design): a device with the
+  // `admin` scope may perform security operations on the account — chiefly
+  // minting/renewing the per-user TLS cert (it holds the sealed ACME account
+  // key). Granting it to only a subset of the user's devices keeps a lost or
+  // less-trusted device from minting for the whole `*.<user>` namespace.
+  // Appended LAST so existing grants' canonical-byte scope indices are
+  // unchanged.
+  | "admin";
 
 /**
  * Canonical scope list — also the sort order for canonical-bytes. We
  * sort by index in THIS list (not alphabetically) so the audit-vector
  * ordering stays stable even if a future scope name would re-shuffle
- * an alphabetical sort.
+ * an alphabetical sort. APPEND new scopes; never reorder.
  */
 export const DEVICE_SCOPES: readonly DeviceScope[] = [
   "browse",
@@ -3075,6 +3083,7 @@ export const DEVICE_SCOPES: readonly DeviceScope[] = [
   "manage-services",
   "revoke-others",
   "demo-provision",
+  "admin",
 ] as const;
 
 const DEVICE_SCOPE_INDEX: ReadonlyMap<DeviceScope, number> = new Map(

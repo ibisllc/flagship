@@ -111,14 +111,14 @@ describe("DeviceCapabilityGrant — sign + verify", () => {
   });
 
   it("canonical bytes are order-independent on scopes (DEVICE_SCOPES index order, not alphabetical)", async () => {
-    // DEVICE_SCOPES order = [browse, install-service, vibe-code, add-device, manage-services, revoke-others, demo-provision]
+    // DEVICE_SCOPES order = [browse, install-service, vibe-code, add-device, manage-services, revoke-others, demo-provision, admin]
     // Alphabetical would put 'add-device' first; DEVICE_SCOPES-index puts 'browse' first.
     const all: DeviceScope[] = [...DEVICE_SCOPES];
     const reversed = [...all].reverse();
     const a = await deviceCapabilityGrantId(baseGrant({ scopes: all }));
     const b = await deviceCapabilityGrantId(baseGrant({ scopes: reversed }));
     const c = await deviceCapabilityGrantId(
-      baseGrant({ scopes: ["revoke-others", "browse", "vibe-code", "manage-services", "add-device", "demo-provision", "install-service"] }),
+      baseGrant({ scopes: ["revoke-others", "browse", "admin", "vibe-code", "manage-services", "add-device", "demo-provision", "install-service"] }),
     );
     expect(a).toBe(b);
     expect(a).toBe(c);
