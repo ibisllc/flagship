@@ -69,7 +69,12 @@ SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
 export SOURCE_DATE_EPOCH
 
 WORK_DIR="$(mktemp -d -t flagship-iso.XXXXXX)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+# xorriso -extract preserves the Alpine ISO's read-only dir modes (apks/ is
+# 0555), so a plain `rm -rf` can't unlink files inside them and exits non-zero
+# — which, as an EXIT trap, would fail the whole build even though the ISO was
+# written fine. Restore owner-write before removing, and never let cleanup
+# failure mask the build's real exit status.
+trap 'chmod -R u+w "$WORK_DIR" 2>/dev/null || true; rm -rf "$WORK_DIR" 2>/dev/null || true' EXIT
 
 EXPECTED_SHA="${ALPINE_SHA256[$ALPINE_VERSION]:-}"
 if [[ -z "$EXPECTED_SHA" ]]; then
