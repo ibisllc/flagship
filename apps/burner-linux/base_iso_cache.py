@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.error import HTTPError, URLError
@@ -28,6 +29,11 @@ URL = "https://flagshipserver.com/build/iso/flagship-alpine-base.iso"
 
 # Mirrors BaseIsoCache.cachedURL's filename: flagship-base-<version>.iso.
 CACHE_FILENAME = f"flagship-base-{VERSION}.iso"
+
+# After this long, the next apkovl burn does ONE quiet HEAD to see whether a
+# newer base was published — so a long-lived cache doesn't silently miss an
+# update, without re-checking on every burn. Mirrors BaseIsoCache.maxCacheAge.
+MAX_CACHE_AGE = 7 * 24 * 3600  # one week, in seconds
 
 ProgressCb = Callable[[float], None]
 OnDownloadStart = Callable[[], None]
@@ -97,22 +103,36 @@ def is_cached() -> bool:
 def ensure(
     progress: Optional[ProgressCb] = None,
     on_download_start: Optional[OnDownloadStart] = None,
+    notice: Optional[Callable[[str], None]] = None,
 ) -> Path:
     """Return the cached base ISO, downloading + verifying it once if absent.
 
     `progress` is called 0…1 during the download phase only. `on_download_start`
     fires once if a download is actually starting (so the UI can show the
-    one-time-download banner). Returns the cached path.
+    one-time-download banner). `notice` carries informational messages (e.g. a
+    newer base being available) to the log. Returns the cached path.
 
     Raises CacheError subclasses with clear messages on no-internet / HTTP
     status / checksum mismatch.
     """
     progress = progress or (lambda _p: None)
     on_download_start = on_download_start or (lambda: None)
+    notice = notice or (lambda _m: None)
 
     dest = cached_path()
     if dest.exists():
-        # Trust the cached copy; a corrupt cache surfaces at flash time.
+        if time.time() - dest.stat().st_mtime < MAX_CACHE_AGE:
+            return dest  # fresh — use directly, no network touched
+        # Stale (> a week): ONE quiet HEAD to see if a newer base shipped.
+        remote_tag = _head_etag()
+        if remote_tag is not None:
+            if remote_tag == _stored_etag(dest):
+                _touch(dest)  # unchanged upstream — reset the week
+            else:
+                notice("a newer base image is available — update the Flagship Assembler to use it")
+                _store_etag(remote_tag, dest)
+                _touch(dest)  # re-check (and re-warn) at most once per week
+        # HEAD failed (offline) → keep the valid cache; never block a burn.
         return dest
 
     on_download_start()
@@ -129,6 +149,7 @@ def ensure(
         status = getattr(resp, "status", 200) or 200
         if not (200 <= status <= 299):
             raise HTTPStatusError(status)
+        etag = resp.headers.get("ETag")
         length_header = resp.headers.get("Content-Length")
         expected_len = int(length_header) if length_header else -1
 
@@ -165,4 +186,46 @@ def ensure(
 
     # Atomic move into place.
     os.replace(tmp, dest)
+    if etag:
+        _store_etag(etag, dest)
     return dest
+
+
+# --- Freshness helpers (mirror BaseIsoCache.swift) ---------------------------
+
+
+def _etag_sidecar(dest: Path) -> Path:
+    return dest.with_suffix(dest.suffix + ".etag")
+
+
+def _stored_etag(dest: Path) -> Optional[str]:
+    try:
+        return _etag_sidecar(dest).read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _store_etag(tag: str, dest: Path) -> None:
+    try:
+        _etag_sidecar(dest).write_text(tag, encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _touch(dest: Path) -> None:
+    try:
+        os.utime(dest, None)  # bump mtime/atime to now — resets the week
+    except OSError:
+        pass
+
+
+def _head_etag() -> Optional[str]:
+    """Lightweight conditional check — a HEAD for the ETag. Returns None when
+    the network is unreachable, so the caller keeps using the valid cache
+    rather than blocking the burn."""
+    req = Request(URL, method="HEAD", headers={"User-Agent": "flagship-burner-linux"})
+    try:
+        with urlopen(req, timeout=8) as r:  # noqa: S310 - fixed https URL constant
+            return r.headers.get("ETag")
+    except (HTTPError, URLError, OSError):
+        return None
