@@ -46,8 +46,57 @@ Legend: ✅ believed wired · ⚠️ partial / unverified / audit-disputed · �
 
 ## Gap list (port direction)
 
-- **All matrix rows are ✅ across all three surfaces** — no remaining cross-surface UI gaps as of 2026-05-26.
-- **P14 companion-browser dock** is now Phase-1 (pairing + read-only + write-relay queue) + Phase-2 (write-relay endpoints + owner approve UI) live; the only carve-out is non-relayable kinds (Wipe & Replace) where companions still get the "open your owner app" CompanionWriteError, intentional for v1.
+### ⚠️ VERIFIED audit 2026-06-01 — the "all ✅" above was overstated
+
+A deep four-surface source audit (iOS phone, Apple Watch, Android, webapp) found
+the 2026-05-26 "all ✅" was *UI-presence* only and hid real **realness/wiring**
+gaps — several security-relevant. The matrix tracks "is the screen there"; these
+are "does it actually sign/reach-the-backend/fire." Status below is the live
+truth; close-direction noted.
+
+**Fixed this pass:**
+- **Android shipped a MOCK identity client in production** — `MainActivity`
+  hardwired `MockFlagshipServerClient` for *every* identity/security flow.
+  FIXED: `LiveFlagshipServerClient` now pivots on the dev toggle (commit on main).
+
+**In progress (webapp, this pass):** boot-approval relay (`boot.flagshipserver.com`
+was entirely absent), TOTP enroll signing (stub), audit-log view (dead-wired),
+device-capability scope-gating (lib unused).
+
+**Open — iOS (canonical=webapp for the crypto ones):**
+- **WebAuthn/passkey is a dev stand-in everywhere** (`PlatformWebAuthnProvider`
+  synthesizes credentials) → cloud recovery, Wipe & restart, takeover login are
+  NOT Face-ID/passkey-protected. Port from webapp `lib/recovery.js` (real PRF).
+  Needs the real `ASAuthorizationPlatformPublicKeyCredentialProvider` + the
+  `webcredentials` entitlement + a device to verify.
+- **Env-var/BYOK writes sign 128 zeros** — `vibeCodeEnvelopeSigner` never bound;
+  daemon rejects. Bind a Keystore-IRK signer at the shell.
+- **Replace-device has no finalize UI** — `complete()` has zero callers; needs a
+  pending-status card + "Complete replacement" action.
+- **NFC reachable only from the Developer screen** (expected per the post-v1 NFC plan).
+
+**Open — Android:**
+- **Wipe & Login-takeover use a MOCK passkey** even though `PasskeyRecoveryManager`
+  (real CredentialManager+PRF) already powers Recovery/Secure-account. Inject the
+  real provider into `WipeRestartViewModel` + `RealAccountLoginContainer`.
+- **Env-var/BYOK signer = 128 zeros** (same as iOS) — provide a real
+  `LocalVibeCodeEnvelopeSigner` in `MainActivity`.
+- Cross-device cloud restore + in-Settings restore-installs-seed are stubbed.
+
+**Open — Apple Watch (owner's emphasis: boot/security alerts):**
+- Provisioning (W1 timeline + W2 complication) is genuinely live. But the
+  **boot-approval surface is a façade** — the approval list is never populated,
+  "Approve" replies empty, there is **no security-alert plumbing and no watch
+  push**. Fix is mostly phone-side: forward `secret-request` + security events
+  over WatchConnectivity (reuse the built `WatchRootView` list), make Approve
+  either real (via the phone's `SecretRequestCoordinator`) or an honest "Open on
+  iPhone" handoff, add a steady-state security/health complication, and give the
+  watch target notification entitlement + actionable categories.
+
+- **P14 companion-browser dock** is live across iOS/Android/webapp (Phase-1 pairing
+  + read-only + write-relay queue, Phase-2 write-relay + owner approve); carve-out:
+  non-relayable kinds (Wipe & Replace) still return the "open your owner app"
+  CompanionWriteError — intentional for v1.
 
 ### P8 decision (2026-05-25)
 The real use-case for the browser-viewer is "log into social media / Uber /
