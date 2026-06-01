@@ -29,5 +29,7 @@
 	<true/>
 	<key>WKWatchOnly</key>
 	<false/>
+	<key>WKCompanionAppBundleIdentifier</key>
+	<string>com.flagshipserver.app</string>
 </dict>
 </plist>
