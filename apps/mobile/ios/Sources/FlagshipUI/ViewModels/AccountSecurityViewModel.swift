@@ -76,6 +76,15 @@ public final class AccountSecurityViewModel {
         self.username = username
     }
 
+    /// Build the watch-delegate ("Quick approve from Apple Watch") toggle VM
+    /// from the same server + username injection, so the Account-security
+    /// screen can host the toggle without the app layer wiring a second
+    /// dependency graph. Keystore-backed crypto/local-store use their
+    /// defaults (this runs on a real device / the sim Keychain fallback).
+    public func makeWatchDelegateViewModel() -> WatchDelegateViewModel {
+        WatchDelegateViewModel(server: server, username: username)
+    }
+
     /// Read the current account-type from the Worker. Idempotent;
     /// safe to call on every Settings screen open.
     public func load() async {

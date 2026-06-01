@@ -221,6 +221,10 @@ public final class WipeRestartViewModel {
         // to push-relay to a now-invalid identity. Re-registration
         // happens on next launch via PushRegistrar.
         try? Keystore.setPushTokenId(nil)
+        // The account key was just replaced — drop any watch-delegate key
+        // (the new IRK won't attest the old delegate, so .com already stops
+        // honoring it; this clears the orphaned local key).
+        Keystore.clearWatchDelegate()
         phase = .completed
     }
 

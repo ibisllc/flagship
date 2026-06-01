@@ -13,6 +13,7 @@ public struct AccountSecurityScreen: View {
     @State private var showEnableSheet = false
     @State private var showDisableSheet = false
     @State private var disableCode: String = ""
+    @State private var watchVM: WatchDelegateViewModel?
     @Bindable var viewModel: AccountSecurityViewModel
 
     public init(viewModel: AccountSecurityViewModel) {
@@ -32,12 +33,20 @@ public struct AccountSecurityScreen: View {
                 explainer(c: c)
                 actions(c: c)
 
+                if let watchVM {
+                    watchSection(c: c, vm: watchVM)
+                }
+
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
         }
         .background(c.bg.ignoresSafeArea())
-        .task { await viewModel.load() }
+        .task {
+            if watchVM == nil { watchVM = viewModel.makeWatchDelegateViewModel() }
+            await viewModel.load()
+            await watchVM?.load()
+        }
         .sheet(isPresented: $showEnableSheet) {
             AccountSecurityEnableSheet(viewModel: viewModel) {
                 showEnableSheet = false
@@ -123,6 +132,49 @@ public struct AccountSecurityScreen: View {
                     .font(FS.font.caption())
                     .foregroundColor(c.danger)
                     .accessibilityIdentifier("account-security-failed-msg")
+            }
+        }
+    }
+
+    /// "Quick approve from Apple Watch" — the opt-in watch-delegate toggle
+    /// (docs/watch-delegate-key-design.md §4). Default-OFF. Flipping it on
+    /// mints a boot-approval-only delegate key (one Face ID); off revokes it.
+    @ViewBuilder
+    private func watchSection(c: FSColors, vm: WatchDelegateViewModel) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                Toggle(isOn: Binding(
+                    get: { vm.isEnabled },
+                    set: { want in
+                        Task { want ? await vm.enable() : await vm.disable() }
+                    }
+                )) {
+                    HStack(spacing: FS.space.s2) {
+                        Image(systemName: "applewatch")
+                            .foregroundColor(c.primary)
+                        Text("Quick approve from Apple Watch")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(c.text)
+                    }
+                }
+                .accessibilityIdentifier("watch-delegate-toggle")
+                .disabled(vm.phase == .enabling || vm.phase == .disabling)
+
+                Text("Approve a server boot from your Watch without unlocking your iPhone. Other actions — revoke server, wipe & restart, replace device — always require Face ID. Off by default.")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+
+                if vm.isEnabled, let exp = vm.expiresAt {
+                    Text("Active — renews by \(formattedDate(exp))")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.success)
+                }
+                if case .failed(let msg) = vm.phase {
+                    Text(msg)
+                        .font(FS.font.caption())
+                        .foregroundColor(c.danger)
+                        .accessibilityIdentifier("watch-delegate-failed-msg")
+                }
             }
         }
     }

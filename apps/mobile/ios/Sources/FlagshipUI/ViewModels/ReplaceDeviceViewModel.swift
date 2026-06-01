@@ -137,6 +137,12 @@ public final class ReplaceDeviceViewModel {
             _ = try await server.completeRePair(username: user)
             try Keystore.setCurrentIrkVersion(pending)
             try Keystore.setPendingIrkRotationVersion(nil)
+            // The IRK just rotated. Any watch-delegate key was attested by the
+            // OLD IRK, so .com's list re-verify already stops honoring it
+            // (the primary auto-revoke). Clear the now-orphaned local key so a
+            // stale delegate can't linger on this device. The user re-enables
+            // "Quick approve from Watch" if they still want it.
+            Keystore.clearWatchDelegate()
             phase = .completed
         } catch ScreensClientError.http(let status, _) where status == 425 {
             // Grace not elapsed yet — surface as still-pending so the
