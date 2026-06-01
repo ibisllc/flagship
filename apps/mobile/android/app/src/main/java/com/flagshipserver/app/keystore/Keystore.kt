@@ -323,6 +323,69 @@ object Keystore {
         return X25519KeyPair(privateKey = priv, publicKey = pub)
     }
 
+    // ---- Watch delegate key (opt-in quick-approve) ---------------------
+    //
+    // A per-device Ed25519 key for "approve a boot from the watch". Unlike
+    // deriveIRK, this NEVER calls BiometricAuthority.ensureFresh() — so
+    // signing a boot approval with it raises no biometric prompt, which is
+    // the whole point. The IRK attests its pubkey at enrollment; the cloud +
+    // boot worker honor its signature for boot approval ONLY. Stored in the
+    // active profile's prefs like the push key (device-local, never synced).
+
+    private fun watchDelegateSeedKey() = pkey("watch.delegate.seed")
+    private fun watchDelegateGrantIdKey() = pkey("watch.delegate.grantId")
+
+    /** Load (or mint + persist) the watch-delegate signing key. No biometric
+     *  prompt — the seed lives in EncryptedSharedPreferences and is read
+     *  whenever the app runs. */
+    fun loadOrCreateWatchDelegateKey(): Ed25519Sign {
+        val p = requirePrefs()
+        val key = watchDelegateSeedKey()
+        val seedHex = p.getString(key, null)
+        val seed = if (seedHex != null) {
+            HexUtil.decode(seedHex) ?: error("corrupt watch-delegate seed")
+        } else {
+            val s = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            p.edit().putString(key, HexUtil.encode(s)).apply()
+            s
+        }
+        return Ed25519Sign(seed)
+    }
+
+    /** The watch-delegate pubkey hex if a key is enrolled on this device,
+     *  else null (no key is minted by this read). */
+    fun watchDelegatePubHex(): String? {
+        val seedHex = requirePrefs().getString(watchDelegateSeedKey(), null) ?: return null
+        val seed = HexUtil.decode(seedHex) ?: return null
+        return HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(seed).publicKey)
+    }
+
+    /** True when a delegate key is enrolled — the boot-approval signer reads
+     *  this to choose the delegate (no prompt) vs the IRK path. */
+    fun hasWatchDelegateKey(): Boolean =
+        requirePrefs().getString(watchDelegateSeedKey(), null) != null
+
+    fun watchDelegateGrantId(): String? =
+        requirePrefs().getString(watchDelegateGrantIdKey(), null)
+
+    fun setWatchDelegateGrantId(id: String?) {
+        val e = requirePrefs().edit()
+        val k = watchDelegateGrantIdKey()
+        if (id == null) e.remove(k) else e.putString(k, id)
+        e.apply()
+    }
+
+    /** Drop the delegate key + grantId from this device. Called on toggle-off,
+     *  Replace device, and Wipe & restart. The server-side revoke (IRK-signed)
+     *  + the cloud's IRK re-verify are the authority; this clears the local
+     *  key so a stale device can't keep signing. */
+    fun clearWatchDelegate() {
+        requirePrefs().edit()
+            .remove(watchDelegateSeedKey())
+            .remove(watchDelegateGrantIdKey())
+            .apply()
+    }
+
     /** Last-registered push tokenId; null if no current registration. */
     fun pushTokenId(): String? = requirePrefs().getString(pkey(KEY_PUSH_TOKEN_ID), null)
 
@@ -354,6 +417,8 @@ object Keystore {
         editor.remove(pkey(KEY_PUSH_TOKEN_ID))
         editor.remove(pkey(KEY_IRK_VERSION))
         editor.remove(pkey(KEY_IRK_PENDING_VERSION))
+        editor.remove(watchDelegateSeedKey())
+        editor.remove(watchDelegateGrantIdKey())
         // Per-version IRK caches (C7) — sweep every "<irk.seed key>.vN"
         // entry the rotation primitive might have written FOR THE ACTIVE
         // PROFILE. Other profiles' caches survive.

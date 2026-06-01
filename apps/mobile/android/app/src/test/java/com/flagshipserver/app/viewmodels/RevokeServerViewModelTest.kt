@@ -28,6 +28,10 @@ import com.flagshipserver.app.api.RecoveryEnvelopeResponse
 import com.flagshipserver.app.api.ReleaseServerNameRequest
 import com.flagshipserver.app.api.ServerRevocationRequest
 import com.flagshipserver.app.api.SetCustomDomainRequest
+import com.flagshipserver.app.api.WatchDelegateMintRequest
+import com.flagshipserver.app.api.WatchDelegateMintResponse
+import com.flagshipserver.app.api.WatchDelegateRevokeRequest
+import com.flagshipserver.app.api.WatchDelegatesListResponse
 import com.flagshipserver.app.api.TotpDisableRequest
 import com.flagshipserver.app.api.TotpDisableResponse
 import com.flagshipserver.app.api.TotpEnrollBeginRequest
@@ -190,6 +194,9 @@ class RevokeServerViewModelTest {
         override suspend fun totpEnrollConfirm(username: String, body: TotpEnrollConfirmRequest): TotpEnrollConfirmResponse = throw error
         override suspend fun totpDisable(username: String, body: TotpDisableRequest): TotpDisableResponse = throw error
         override suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse = throw error
+        override suspend fun mintWatchDelegate(username: String, body: WatchDelegateMintRequest): WatchDelegateMintResponse = throw error
+        override suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse = throw error
+        override suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) { throw error }
         override suspend fun resolveAccount(username: String): AccountResolution = throw error
     }
 }

@@ -163,6 +163,17 @@ interface FlagshipServerClient {
      *  consent). Mirrors handleVouchedDeviceAdmit in
      *  packages/control-plane/src/push.ts. */
     suspend fun admitDevice(account: String, req: DeviceAdmitRequest): DeviceAdmitResponse
+
+    /** Watch delegate keys — opt-in "quick approve a boot from the watch".
+     *  The phone mints an IRK-signed WatchDelegateKey (scoped boot-approval,
+     *  7-day TTL); the boot worker then accepts the delegate key's signature
+     *  on a boot approval. Mirrors packages/control-plane/src/watchDelegates.ts.
+     *    POST /api/users/:u/watch-delegates */
+    suspend fun mintWatchDelegate(username: String, body: WatchDelegateMintRequest): WatchDelegateMintResponse
+    /** GET /api/users/:u/watch-delegates */
+    suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse
+    /** POST /api/users/:u/watch-delegates/revoke */
+    suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest)
 }
 
 /** Phase 3b — POST /api/users/:u/devices/admit body. Mirrors the Worker
@@ -197,6 +208,64 @@ data class DeviceAdmitResponse(
      *  revoke others / hold admin reach. ~14 days out. */
     val quarantineUntil: Long? = null,
 )
+
+// ---- Watch delegate keys (wire types) ---------------------------------
+
+/** POST /api/users/:u/watch-delegates body. `grant` field names match the
+ *  Worker's MintBody.grant; `signature` is the IRK Ed25519 over the grant's
+ *  canonical bytes. */
+@Serializable
+data class WatchDelegateMintRequest(
+    val grant: Grant,
+    val signature: String,
+) {
+    @Serializable
+    data class Grant(
+        val grantId: String,
+        val username: String,
+        /** lowercased hex, 32 bytes. */
+        val delegatePubKey: String,
+        val scopes: List<String>,
+        val issuedAt: Long,
+        val expiresAt: Long,
+    )
+}
+
+@Serializable
+data class WatchDelegateMintResponse(
+    val ok: Boolean,
+    val grantId: String,
+    val expiresAt: Long,
+    val replacedGrantId: String? = null,
+)
+
+@Serializable
+data class WatchDelegateInfo(
+    val grantId: String,
+    val delegatePubKey: String,
+    val scopes: List<String>,
+    val issuedAt: Long,
+    val expiresAt: Long,
+)
+
+@Serializable
+data class WatchDelegatesListResponse(
+    val username: String,
+    val delegates: List<WatchDelegateInfo>,
+)
+
+@Serializable
+data class WatchDelegateRevokeRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val grantId: String,
+        val username: String,
+        val issuedAt: Long,
+    )
+}
 
 /** Login/join preflight result — Kotlin mirror of the Worker's
  *  `AccountResolution` (packages/control-plane/src/accountResolve.ts).
@@ -861,6 +930,11 @@ class MockFlagshipServerClient(
     private val _registeredRcks = mutableMapOf<String, String>()         // subdomain → rckPubKey
     private val _registeredPushTokens = mutableMapOf<String, PushTokenRegisterRequest.Inner>()
     private var nextPushTokenId = 1
+    /** Settable clock so tests can drive TTL/expiry math deterministically. */
+    var nowMs: () -> Long = { System.currentTimeMillis() }
+    /** Active watch delegates per user (un-revoked only; the list endpoint
+     *  shows active-only, one-active-per-user — a mint replaces the prior). */
+    val watchDelegatesByUser = mutableMapOf<String, MutableList<WatchDelegateInfo>>()
 
     val claimedUsernames: Map<String, String> get() = _claimedUsernames
     val issuedAuthCodes: Map<String, AuthCodeWire> get() = _issuedAuthCodes
@@ -1446,6 +1520,47 @@ class MockFlagshipServerClient(
         )
     }
 
+    override suspend fun mintWatchDelegate(username: String, body: WatchDelegateMintRequest): WatchDelegateMintResponse {
+        tick()
+        val u = username.lowercase()
+        // The Worker rejects any scope set other than ["boot-approval"]
+        // (core.WatchDelegateKey.BOOT_APPROVAL_SCOPE; inlined so the api
+        // package needn't depend on core).
+        if (body.grant.scopes != listOf("boot-approval")) {
+            throw HttpException(400, "invalid scopes")
+        }
+        if (body.grant.expiresAt <= nowMs()) throw HttpException(400, "delegate already expired")
+        val prior = watchDelegatesByUser[u]?.firstOrNull()
+        watchDelegatesByUser[u] = mutableListOf(
+            WatchDelegateInfo(
+                grantId = body.grant.grantId,
+                delegatePubKey = body.grant.delegatePubKey.lowercase(),
+                scopes = body.grant.scopes,
+                issuedAt = body.grant.issuedAt,
+                expiresAt = body.grant.expiresAt,
+            )
+        )
+        return WatchDelegateMintResponse(
+            ok = true,
+            grantId = body.grant.grantId,
+            expiresAt = body.grant.expiresAt,
+            replacedGrantId = prior?.grantId,
+        )
+    }
+
+    override suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse {
+        tick()
+        val u = username.lowercase()
+        val active = (watchDelegatesByUser[u] ?: emptyList()).filter { it.expiresAt > nowMs() }
+        return WatchDelegatesListResponse(username = u, delegates = active)
+    }
+
+    override suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) {
+        tick()
+        val u = username.lowercase()
+        watchDelegatesByUser[u]?.removeAll { it.grantId == body.request.grantId }
+    }
+
     private fun etagFor(devices: List<TrustedDevice>): String {
         // Identity-significant subset only; lastSeenAt deliberately
         // excluded so test push-delivery doesn't flutter the ETag.
@@ -1769,6 +1884,33 @@ class LiveFlagshipServerClient(
             body = req,
             serializer = DeviceAdmitRequest.serializer(),
             responseSerializer = DeviceAdmitResponse.serializer(),
+        )
+    }
+
+    override suspend fun mintWatchDelegate(username: String, body: WatchDelegateMintRequest): WatchDelegateMintResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            url = "$base/api/users/$encoded/watch-delegates",
+            body = body,
+            serializer = WatchDelegateMintRequest.serializer(),
+            responseSerializer = WatchDelegateMintResponse.serializer(),
+        )
+    }
+
+    override suspend fun listWatchDelegates(username: String): WatchDelegatesListResponse {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.getJson(
+            url = "$base/api/users/$encoded/watch-delegates",
+            responseSerializer = WatchDelegatesListResponse.serializer(),
+        )
+    }
+
+    override suspend fun revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        transport.postJson(
+            url = "$base/api/users/$encoded/watch-delegates/revoke",
+            body = body,
+            serializer = WatchDelegateRevokeRequest.serializer(),
         )
     }
 }

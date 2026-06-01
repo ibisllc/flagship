@@ -86,6 +86,36 @@ object BootAuth {
         return "$SCHEME ${base64url(jsonStr.toByteArray(Charsets.UTF_8))}"
     }
 
+    /** Build the delegate-role `Authorization` header, signed by the
+     *  watch-delegate key (NOT the IRK). The boot worker accepts this ONLY on
+     *  POST /api/boot/response (the per-boot approval); every other route is
+     *  owner-IRK only. Byte-identical to ownerHeader except role="delegate". */
+    fun delegateHeader(
+        serverDomain: String,
+        method: String,
+        path: String,
+        signer: Ed25519Sign,
+        pubHex: String,
+        issuedAt: Long,
+        nonce: ByteArray,
+    ): String {
+        val nonceHex = HexUtil.encode(nonce)
+        val canon = canonicalBytes("delegate", serverDomain, method, path, pubHex, nonceHex, issuedAt)
+        val sig = signer.sign(canon)
+        val env = Envelope(
+            role = "delegate",
+            serverDomain = serverDomain,
+            method = method.uppercase(),
+            path = path,
+            pubKeyHex = pubHex,
+            nonceHex = nonceHex,
+            issuedAt = issuedAt,
+            signatureHex = HexUtil.encode(sig),
+        )
+        val jsonStr = json.encodeToString(Envelope.serializer(), env)
+        return "$SCHEME ${base64url(jsonStr.toByteArray(Charsets.UTF_8))}"
+    }
+
     /** base64url without padding — matches gate.ts b64urlDecode (re-pads). */
     private fun base64url(b: ByteArray): String =
         java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b)

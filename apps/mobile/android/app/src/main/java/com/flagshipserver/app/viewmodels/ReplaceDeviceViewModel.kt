@@ -121,6 +121,10 @@ class ReplaceDeviceViewModel(
             server.completeRePair(user)
             Keystore.setCurrentIrkVersion(pending)
             Keystore.setPendingIrkRotationVersion(null)
+            // The IRK just rotated. Any watch-delegate key was attested by the
+            // OLD IRK, so .com's list re-verify already stops honoring it (the
+            // primary auto-revoke). Clear the orphaned local key.
+            Keystore.clearWatchDelegate()
             _phase.value = ReplaceDevicePhase.Completed
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()

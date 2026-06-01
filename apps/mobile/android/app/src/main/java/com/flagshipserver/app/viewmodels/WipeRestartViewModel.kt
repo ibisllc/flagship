@@ -157,6 +157,10 @@ class WipeRestartViewModel(
             // Drop our push token — it's bound to an identity that
             // no longer exists on .com.
             Keystore.setPushTokenId(null)
+            // The account key was just replaced — drop any watch-delegate key
+            // (the new IRK won't attest the old delegate, so .com already
+            // stops honoring it; this clears the orphaned local key).
+            Keystore.clearWatchDelegate()
         } catch (e: Throwable) {
             _phase.value = WipeRestartPhase.Failed(
                 "Server committed but local install failed: ${e.message}. Open the app fresh to recover.",
