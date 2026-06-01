@@ -273,6 +273,9 @@ final class WizardModel: ObservableObject {
                             self?.appendLog(stream: .stdout,
                                             text: "+ one-time download of base image (≈240 MB — cached, won't repeat)")
                         }
+                    },
+                    notice: { [weak self] m in
+                        Task { @MainActor in self?.appendLog(stream: .stdout, text: "+ \(m)") }
                     })
             } catch {
                 appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)

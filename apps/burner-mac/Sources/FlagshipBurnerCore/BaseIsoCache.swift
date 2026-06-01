@@ -15,6 +15,11 @@ public enum BaseIsoCache {
     /// R2 body directly — runtime-native, no truncation).
     public static let url = URL(string: "https://flagshipserver.com/build/iso/flagship-alpine-base.iso")!
 
+    /// After this long, the next apkovl burn does ONE quiet HEAD to see whether
+    /// a newer base was published — so a long-lived cache doesn't silently miss
+    /// an update, without re-checking on every single burn.
+    public static let maxCacheAge: TimeInterval = 7 * 24 * 3600
+
     public enum CacheError: LocalizedError {
         case offline(String)
         case httpStatus(Int)
@@ -58,10 +63,26 @@ public enum BaseIsoCache {
     /// once with `true` if a download is actually starting (so the UI can show
     /// the one-time-download banner) or `false` if served from cache.
     public static func ensure(progress: @escaping (Double) -> Void,
-                              onDownloadStart: @escaping () -> Void = {}) async throws -> URL {
+                              onDownloadStart: @escaping () -> Void = {},
+                              notice: @escaping (String) -> Void = { _ in }) async throws -> URL {
         let dest = try cachedURL()
-        if FileManager.default.fileExists(atPath: dest.path) {
-            // Trust the cached copy; a corrupt cache surfaces at flash time.
+        let fm = FileManager.default
+        if fm.fileExists(atPath: dest.path) {
+            let mtime = (try? fm.attributesOfItem(atPath: dest.path)[.modificationDate]) as? Date ?? .distantPast
+            if Date().timeIntervalSince(mtime) < maxCacheAge {
+                return dest   // fresh — use directly, no network touched
+            }
+            // Stale (> a week): ONE quiet HEAD to see if a newer base shipped.
+            if let remoteTag = await headETag() {
+                if remoteTag == storedETag(for: dest) {
+                    touch(dest)   // unchanged upstream — reset the week
+                } else {
+                    notice("a newer base image is available — update the Flagship Assembler to use it")
+                    storeETag(remoteTag, for: dest)
+                    touch(dest)   // re-check (and re-warn) at most once per week
+                }
+            }
+            // HEAD failed (offline) → keep the valid cache; never block a burn.
             return dest
         }
         onDownloadStart()
@@ -112,6 +133,33 @@ public enum BaseIsoCache {
         // Atomic move into place.
         try? FileManager.default.removeItem(at: dest)
         try FileManager.default.moveItem(at: tmp, to: dest)
+        if let tag = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag") {
+            storeETag(tag, for: dest)
+        }
         return dest
+    }
+
+    // MARK: - Freshness helpers
+
+    private static func etagSidecar(for dest: URL) -> URL { dest.appendingPathExtension("etag") }
+    private static func storedETag(for dest: URL) -> String? {
+        try? String(contentsOf: etagSidecar(for: dest), encoding: .utf8)
+    }
+    private static func storeETag(_ tag: String, for dest: URL) {
+        try? tag.write(to: etagSidecar(for: dest), atomically: true, encoding: .utf8)
+    }
+    private static func touch(_ url: URL) {
+        try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+    }
+    /// Lightweight conditional check — a HEAD for the ETag. Returns nil when the
+    /// network is unreachable, so the caller keeps using the valid cache rather
+    /// than blocking the burn.
+    private static func headETag() async -> String? {
+        var req = URLRequest(url: url)
+        req.httpMethod = "HEAD"
+        req.timeoutInterval = 8
+        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse else { return nil }
+        return http.value(forHTTPHeaderField: "ETag")
     }
 }
