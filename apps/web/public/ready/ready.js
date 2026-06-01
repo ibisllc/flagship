@@ -147,6 +147,14 @@ function renderInstaller(detected) {
     ).join(" ");
     others.textContent = "The Assembler is a desktop app — pick your platform.";
   }
+
+  // No-recipe view: point the "get the burner ahead of time" link at the
+  // detected OS so the Assembler is reachable even without a pending recipe.
+  const noRecipeLink = $("noRecipeInstaller");
+  if (noRecipeLink && detected && OS_INFO[detected]) {
+    noRecipeLink.href = OS_INFO[detected].href;
+    noRecipeLink.textContent = `Download the Flagship Assembler for ${OS_INFO[detected].label}`;
+  }
 }
 
 function main() {

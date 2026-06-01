@@ -159,8 +159,8 @@
         </section>
 
         <section class="step">
-          <h3><span class="num">2</span> The Flagship Assembler</h3>
-          <p>The desktop app that writes your boot USB. It bakes the recipe inside a stock Linux installer image — no balenaEtcher, Rufus, or dd needed.</p>
+          <h3><span class="num">2</span> Download the Flagship Assembler</h3>
+          <p>The desktop app that writes your boot USB. Paste your recipe and it does the rest — it downloads the Flagship base image <strong>once</strong> (then reuses it for every later server) and bakes your recipe in. No balenaEtcher, Rufus, dd, or separate ISO download.</p>
           <div class="actions" id="installerPrimary"><!-- big download for the detected OS, filled by ready.js --></div>
           <div class="dl-others" id="installerOthers"><!-- other OSes, filled by ready.js --></div>
           <p class="reuse-note">
@@ -170,8 +170,8 @@
 
         <section class="step">
           <h3><span class="num">3</span> Assemble &amp; boot</h3>
-          <p>Open the Assembler, give it this recipe (paste it, or open the downloaded file) + a recommended Linux image + a USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
-          <p class="installer-iso">Not sure which image? <a class="secondary-link" href="/docs#recommended-linux" target="_blank" rel="noopener">See the recommended Linux images →</a></p>
+          <p>Open the Assembler, paste this recipe (or open the downloaded file), pick your USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
+          <p class="installer-iso">Already have your own Debian/Ubuntu image you'd rather use? The Assembler's <strong>Advanced</strong> mode remasters it instead. <a class="secondary-link" href="/docs#recommended-linux" target="_blank" rel="noopener">Recommended Linux images →</a></p>
         </section>
 
         <!-- Advanced: self-download a prebuilt image with the recipe baked in. -->
@@ -207,6 +207,9 @@
           <a class="btn-link" href="/">Go to the homepage →</a>
           <a class="secondary-link" href="/docs">How it works</a>
         </div>
+        <p class="reuse-note" style="margin-top:1.25rem">
+          Want the burner app ahead of time? <a class="secondary-link" id="noRecipeInstaller" href="/download/mac">Download the Flagship Assembler</a> — install it once, then feed it a recipe.
+        </p>
       </div>
     </main>
 
