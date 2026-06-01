@@ -127,6 +127,9 @@ import {
   handleMintDeviceGrant,
   handleListDeviceGrants,
   handleRevokeDeviceGrant,
+  handleMintWatchDelegate,
+  handleListWatchDelegates,
+  handleRevokeWatchDelegate,
   type CaIssuer,
   type CaGate,
   type HandlerResponse,
@@ -499,6 +502,9 @@ const ROUTE_RE = {
   // v2 device-addressing public endpoints (S3.3).
   DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
+  // Watch delegate keys (Phase 2c) — opt-in quick-approve from the Watch.
+  WATCH_DELEGATES_LIST: /^\/api\/users\/([^/]+)\/watch-delegates$/,
+  WATCH_DELEGATES_REVOKE: /^\/api\/users\/([^/]+)\/watch-delegates\/revoke$/,
   // W12 debug — observability for the d-i+late-command pipeline. The
   // installer POSTs short progress markers via curl; the operator GETs
   // the concatenated log. Backed by ISO_TEMP_BUCKET (already provisioned
@@ -1216,6 +1222,41 @@ export async function tryControlPlane(
       await handleListDeviceGrants(
         {
           storage: storage.deviceCapabilityGrants,
+          usernames: storage.usernames,
+        },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // Watch delegate keys (Phase 2c). Same ordering hazard as device grants:
+  // the `/revoke` suffix must hit BEFORE the bare list/mint path.
+  if (method === "POST" && (m = path.match(ROUTE_RE.WATCH_DELEGATES_REVOKE))) {
+    return finish(
+      await handleRevokeWatchDelegate(
+        {
+          storage: storage.watchDelegates,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.WATCH_DELEGATES_LIST))) {
+    return finish(
+      await handleMintWatchDelegate(
+        {
+          storage: storage.watchDelegates,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.WATCH_DELEGATES_LIST))) {
+    return finish(
+      await handleListWatchDelegates(
+        {
+          storage: storage.watchDelegates,
           usernames: storage.usernames,
         },
         decodeURIComponent(m[1]!),

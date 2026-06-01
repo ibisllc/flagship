@@ -64,6 +64,12 @@ export type RateLimitEndpoint =
   | "device-grants-list"
   | "device-grants-revoke"
   | "device-grants-mint"
+  // Watch delegate keys (Phase 2c) — same shape as device grants:
+  //   list is a public read (per-IP); mint + revoke are IRK-signed but the
+  //   wire shape doesn't expose the IRK pub at edge speed, so per-IP only.
+  | "watch-delegates-list"
+  | "watch-delegates-revoke"
+  | "watch-delegates-mint"
   | "account-resolve"
   // "Cancel this device" on the install-progress page. Public (a demo
   // account is a no-auth capability), so per-IP only at the edge. Tight
@@ -141,6 +147,15 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "irk", limit: 20, windowSec: 3600 },
   ],
   "device-grants-mint": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 50, windowSec: 3600 },
+  ],
+  "watch-delegates-list": [{ axis: "ip", limit: 60, windowSec: 60 }],
+  "watch-delegates-revoke": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 20, windowSec: 3600 },
+  ],
+  "watch-delegates-mint": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 50, windowSec: 3600 },
   ],
@@ -324,6 +339,19 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/device-grants$/.test(pathname)) {
     return "device-grants-mint";
   }
+  // Watch delegate keys (Phase 2c). Same ordering: `/revoke` before the bare.
+  if (
+    m === "POST" &&
+    /^\/api\/users\/[^/]+\/watch-delegates\/revoke$/.test(pathname)
+  ) {
+    return "watch-delegates-revoke";
+  }
+  if (m === "GET" && /^\/api\/users\/[^/]+\/watch-delegates$/.test(pathname)) {
+    return "watch-delegates-list";
+  }
+  if (m === "POST" && /^\/api\/users\/[^/]+\/watch-delegates$/.test(pathname)) {
+    return "watch-delegates-mint";
+  }
   if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
     return "account-resolve";
   }
@@ -381,6 +409,14 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
     // Same shape — the revoke envelope identifies the user by
     // `request.username`, not by IRK pub. Per-IP suffices at the
     // edge; the handler does the full IRK signature check.
+    candidate = undefined;
+  } else if (
+    endpoint === "watch-delegates-mint" ||
+    endpoint === "watch-delegates-revoke"
+  ) {
+    // Watch delegates mirror device grants: the wire shape identifies the
+    // user by `grant.username` / `request.username`, not by IRK pub. Per-IP
+    // suffices at the edge; the handler does the full IRK signature check.
     candidate = undefined;
   } else return undefined;
   return typeof candidate === "string" && /^[0-9a-fA-F]{64}$/.test(candidate)
