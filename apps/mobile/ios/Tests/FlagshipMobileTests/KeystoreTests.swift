@@ -65,6 +65,52 @@ final class KeystoreTests: XCTestCase {
         let sig = try irk.signature(for: msg)
         XCTAssertTrue(irk.publicKey.isValidSignature(sig, for: msg))
     }
+
+    // MARK: - Watch delegate key
+
+    func test_watchDelegateKey_absentUntilCreated_thenStable() throws {
+        XCTAssertNil(Keystore.watchDelegateKey())
+        let k1 = try Keystore.loadOrCreateWatchDelegateKey()
+        let k2 = try Keystore.loadOrCreateWatchDelegateKey()
+        // Persisted → same key on reload (NOT a fresh random each call).
+        XCTAssertEqual(k1.publicKey.rawRepresentation, k2.publicKey.rawRepresentation)
+        XCTAssertEqual(
+            Keystore.watchDelegateKey()?.publicKey.rawRepresentation,
+            k1.publicKey.rawRepresentation
+        )
+    }
+
+    func test_watchDelegateKey_isDistinctFromIRK() async throws {
+        try await Keystore.generateUMK(reason: "test")
+        let irk = try await Keystore.deriveIRK(reason: "test")
+        let delegate = try Keystore.loadOrCreateWatchDelegateKey()
+        // The delegate is a SEPARATE key — never equal to the IRK.
+        XCTAssertNotEqual(delegate.publicKey.rawRepresentation, irk.publicKey.rawRepresentation)
+    }
+
+    func test_watchDelegateGrantId_roundTrips() throws {
+        XCTAssertNil(Keystore.watchDelegateGrantId())
+        try Keystore.setWatchDelegateGrantId("grant-xyz")
+        XCTAssertEqual(Keystore.watchDelegateGrantId(), "grant-xyz")
+        try Keystore.setWatchDelegateGrantId(nil)
+        XCTAssertNil(Keystore.watchDelegateGrantId())
+    }
+
+    func test_clearWatchDelegate_removesKeyAndGrantId() throws {
+        _ = try Keystore.loadOrCreateWatchDelegateKey()
+        try Keystore.setWatchDelegateGrantId("grant-xyz")
+        Keystore.clearWatchDelegate()
+        XCTAssertNil(Keystore.watchDelegateKey())
+        XCTAssertNil(Keystore.watchDelegateGrantId())
+    }
+
+    func test_wipe_clearsWatchDelegate() throws {
+        _ = try Keystore.loadOrCreateWatchDelegateKey()
+        try Keystore.setWatchDelegateGrantId("grant-xyz")
+        Keystore.wipe()
+        XCTAssertNil(Keystore.watchDelegateKey())
+        XCTAssertNil(Keystore.watchDelegateGrantId())
+    }
 }
 
 /// Per-profile keystore keying — each cloud profile holds its OWN device

@@ -295,6 +295,65 @@ public struct Keystore {
         return String(data: d, encoding: .utf8)
     }
 
+    // MARK: - Watch delegate key (opt-in quick-approve)
+
+    /// Load the active watch-delegate signing key, or mint a fresh one if
+    /// none exists. Mirrors `loadOrCreatePushX25519`: a per-device Ed25519
+    /// key persisted as raw bytes, NOT derived from the (biometric-gated)
+    /// UMK — so signing a boot approval with it never prompts for Face ID
+    /// while the phone is unlocked. The IRK attests this key's pubkey via a
+    /// `WatchDelegateKey` envelope at enrollment; the cloud + boot worker
+    /// accept its signature for boot approval ONLY.
+    ///
+    /// Stored `.deviceLocal` so it is bound to THIS device — a restored
+    /// device inherits nothing and must re-enroll, matching the per-device
+    /// opt-in model.
+    public static func loadOrCreateWatchDelegateKey() throws -> Curve25519.Signing.PrivateKey {
+        let acct = account(KCKey.watchDelegateSeed)
+        if let raw = keychainRead(account: acct),
+           let pk = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw) {
+            return pk
+        }
+        let pk = Curve25519.Signing.PrivateKey()
+        try keychainWrite(account: acct, data: pk.rawRepresentation, sync: .deviceLocal)
+        return pk
+    }
+
+    /// The active watch-delegate key if one is enrolled on this device,
+    /// else nil. The boot-approval signing path uses this: present ⇒ sign
+    /// with the delegate (no prompt); absent ⇒ fall back to the IRK.
+    public static func watchDelegateKey() -> Curve25519.Signing.PrivateKey? {
+        guard let raw = keychainRead(account: account(KCKey.watchDelegateSeed)),
+              let pk = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw)
+        else { return nil }
+        return pk
+    }
+
+    /// Persist / clear the active delegate's grantId — needed to mint the
+    /// IRK-signed RevokeWatchDelegate when the toggle flips off.
+    public static func setWatchDelegateGrantId(_ id: String?) throws {
+        let acct = account(KCKey.watchDelegateGrantId)
+        if let id, let bytes = id.data(using: .utf8) {
+            try keychainWrite(account: acct, data: bytes, sync: .deviceLocal)
+        } else {
+            keychainDelete(account: acct)
+        }
+    }
+
+    public static func watchDelegateGrantId() -> String? {
+        guard let d = keychainRead(account: account(KCKey.watchDelegateGrantId)) else { return nil }
+        return String(data: d, encoding: .utf8)
+    }
+
+    /// Drop the delegate key + its grantId from this device. Called on
+    /// toggle-off, Replace device, and Wipe & restart. The server-side
+    /// revoke (IRK-signed) is the authority; this clears the local key so a
+    /// stale device can't keep signing even before the revoke propagates.
+    public static func clearWatchDelegate() {
+        keychainDelete(account: account(KCKey.watchDelegateSeed))
+        keychainDelete(account: account(KCKey.watchDelegateGrantId))
+    }
+
     // MARK: - Wipe (sign-out / tests)
 
     /// Wipe ONLY the active profile's key slots — so signing out of one
@@ -312,7 +371,9 @@ public struct Keystore {
                         account(KCKey.ephemeralPub, profile: id),
                         account(KCKey.simWrapPriv, profile: id),
                         account(KCKey.irkVersion, profile: id),
-                        account(KCKey.irkPendingVersion, profile: id)]
+                        account(KCKey.irkPendingVersion, profile: id),
+                        account(KCKey.watchDelegateSeed, profile: id),
+                        account(KCKey.watchDelegateGrantId, profile: id)]
         if id == defaultProfileId {
             // Legacy parity: the default install owned the device push channel.
             accounts.append(KCKey.pushX25519Priv)
@@ -337,7 +398,8 @@ public struct Keystore {
         let known = Set([activeProfileId, defaultProfileId])
         for id in known {
             for base in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
-                         KCKey.irkVersion, KCKey.irkPendingVersion] {
+                         KCKey.irkVersion, KCKey.irkPendingVersion,
+                         KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId] {
                 keychainDelete(account: account(base, profile: id))
             }
             WrappingKeypair.deleteSEKeyIfExists(profile: id)
@@ -412,6 +474,16 @@ public struct Keystore {
         /// B7 — pending re-pair target version while a rotation is
         /// in flight. Cleared on completion or abort. */
         static let irkPendingVersion   = "com.flagship.irk.pendingVersion"
+        /// Watch delegate key — the raw 32-byte Ed25519 seed for the opt-in
+        /// "quick approve a boot from the Watch" signing key. Stored
+        /// `.deviceLocal` (NOT iCloud-synced, this-device-only) so it never
+        /// rides a restore to another device + is readable while the phone is
+        /// unlocked WITHOUT a biometric prompt — that silent-while-unlocked
+        /// property is the whole point. The IRK stays biometric-gated. */
+        static let watchDelegateSeed    = "com.flagship.watchdelegate.seed"
+        /// The active delegate's grantId (UUID) — needed to build the
+        /// IRK-signed RevokeWatchDelegate when the toggle flips off. */
+        static let watchDelegateGrantId = "com.flagship.watchdelegate.grantid"
     }
 
     /// The active profile's sim-wrap Keychain account (default → legacy).
