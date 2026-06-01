@@ -15,6 +15,10 @@ struct ContentView: View {
         ZStack {
             if app.isPaired {
                 RootShell(initialDestination: smokeInitialDestination ?? .home)
+                    // Bind the real Keystore-IRK signer for SetServiceEnv
+                    // envelopes (the default is a 128-zero placeholder the
+                    // daemon rejects).
+                    .environment(\.vibeCodeEnvelopeSigner, keystoreVibeCodeEnvelopeSigner())
             } else {
                 Color.clear
             }

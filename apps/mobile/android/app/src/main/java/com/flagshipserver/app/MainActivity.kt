@@ -39,7 +39,10 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
 import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalPrivacySettings
+import com.flagshipserver.app.core.LocalVibeCodeEnvelopeSigner
+import com.flagshipserver.app.core.canonicalSetServiceEnv
 import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalSecretMailboxClient
@@ -150,6 +153,14 @@ class MainActivity : FragmentActivity() {
                     LocalDeepLinker provides deepLinker,
                     LocalDeveloperSettings provides devSettings,
                     LocalPrivacySettings provides privacy,
+                    // Real IRK signer for SetServiceEnv envelopes (was the
+                    // 128-zero placeholder, which the daemon always rejected).
+                    LocalVibeCodeEnvelopeSigner provides { envelope ->
+                        HexUtil.encode(
+                            Keystore.deriveIRK("Sign service configuration")
+                                .sign(canonicalSetServiceEnv(envelope)),
+                        )
+                    },
                 ) {
                     Surface(color = FS.colors.bg, modifier = Modifier.fillMaxSize()) {
                         AppRoot(widthSizeClass = mapWidth(sizeClass.widthSizeClass))

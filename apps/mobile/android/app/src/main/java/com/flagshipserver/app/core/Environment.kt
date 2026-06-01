@@ -67,6 +67,27 @@ val LocalVibeCodeEnvelopeSigner = staticCompositionLocalOf<VibeCodeEnvelopeSigne
     { _ -> "0".repeat(128) }
 }
 
+/**
+ * Canonical bytes for a `SetServiceEnvRequest`, byte-identical to the
+ * webapp's `canonicalSetServiceEnv` and `@flagship/protocol/auth.ts`
+ * `signSetServiceEnv`. Keys are sorted; pairs are `key=value`; the field
+ * separator is `|`. The daemon re-derives these bytes and verifies the
+ * Ed25519 signature against the owner IRK, so the layout must match exactly.
+ */
+fun canonicalSetServiceEnv(req: com.flagshipserver.app.api.ServiceEnvSetEnvelope): ByteArray {
+    val pairs = req.env.keys.sorted().map { "$it=${req.env[it]}" }
+    val parts = buildList {
+        add("flagship/set-service-env/v1")
+        add(req.serverId)
+        add(req.creator)
+        add(req.slug)
+        add(pairs.size.toString())
+        addAll(pairs)
+        add(req.issuedAt.toString())
+    }
+    return parts.joinToString("|").toByteArray(Charsets.UTF_8)
+}
+
 /** P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
  *  to local display name + channel + sent-to memo + notes. NEVER
  *  leaves the device. Default is an in-memory book; production
