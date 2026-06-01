@@ -142,6 +142,53 @@
                     </Setter.Value>
                 </Setter>
             </Style>
+
+            <!-- Implicit ProgressBar template. The stock Aero template ignores
+                 Foreground, so we roll a minimal rounded two-layer bar that
+                 honors it — this is how the orange→accent tint flip shows.
+                 Determinate fill rides on the templated PART_Indicator; the
+                 indeterminate state slides a short pip across. -->
+            <Style TargetType="ProgressBar">
+                <Setter Property="Foreground" Value="{StaticResource FB.Primary}"/>
+                <Setter Property="Background" Value="{StaticResource FB.SurfaceElevated}"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ProgressBar">
+                            <Border CornerRadius="3"
+                                    Background="{TemplateBinding Background}"
+                                    ClipToBounds="True">
+                                <Grid x:Name="PART_Track">
+                                    <Rectangle x:Name="PART_Indicator"
+                                               HorizontalAlignment="Left"
+                                               RadiusX="3" RadiusY="3"
+                                               Fill="{TemplateBinding Foreground}"/>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsIndeterminate" Value="True">
+                                    <!-- Show a wide pip and pulse its opacity so
+                                         the user sees motion without a layout
+                                         animation on the templated indicator. -->
+                                    <Setter TargetName="PART_Indicator" Property="HorizontalAlignment" Value="Stretch"/>
+                                    <Trigger.EnterActions>
+                                        <BeginStoryboard Name="IndetPulse">
+                                            <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                <DoubleAnimation Storyboard.TargetName="PART_Indicator"
+                                                                 Storyboard.TargetProperty="Opacity"
+                                                                 From="0.35" To="0.85" Duration="0:0:0.7"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </Trigger.EnterActions>
+                                    <Trigger.ExitActions>
+                                        <StopStoryboard BeginStoryboardName="IndetPulse"/>
+                                    </Trigger.ExitActions>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

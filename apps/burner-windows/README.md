@@ -1,35 +1,53 @@
 # Flagship Burner — Windows GUI
 
-WPF + .NET 8 wrapper around the `@flagship/burner` Node CLI
-(`packages/flagship-burner/`). UX matches `apps/burner-mac/` and
-`apps/burner-linux/` 1:1: one window, three drop-rows, big Bake button,
-collapsed log drawer.
+WPF + .NET 8. UX matches `apps/burner-mac/` and `apps/burner-linux/` 1:1:
+one window, drop-rows, big Bake button, collapsed log drawer. Two flows,
+toggled in the header:
 
-## What it does
+- **Quick (default)** — the burner OWNS the Alpine pipeline. It caches the
+  stock Flagship Alpine base ISO ONCE under
+  `%LOCALAPPDATA%\flagship-burner`, appends the phone-signed recipe as a
+  trailer LOCALLY (byte-identical to the server's
+  `iso-personalizer/streamPersonalize`), and raw-writes the result to USB.
+  No per-server 240 MB download, no user-supplied ISO, **no Node** — recipe
+  verify (Ed25519) + personalize + flash are all native C#.
+- **Advanced** — bring a stock Ubuntu/Debian ISO + a recipe; the burner
+  shells out to the `@flagship/burner` Node CLI (`packages/flagship-burner/`)
+  to remaster + flash, exactly as before.
+
+## What it does (Quick mode)
 
 1. **Recipe** — drag in (or click and pick) the signed JSON the website
-   produces after the phone scans the QR code. The GUI shells out to
-   `flagship-burn verify` and shows you the server-domain + expiry so
-   you can sanity-check before flashing.
-2. **ISO** — drag in a stock Ubuntu Server ISO. Run `flagship-burn
-   distros` for accepted SHAs.
-3. **USB Drive** — pick a USB drive from a read-only list. Only
-   removable drives in the 500MB–500GB band appear; internal SSDs,
-   NVMe boot drives, and oversized disks are hidden by design — they're
-   also hard-refused by the CLI's safety classifier even with an
-   explicit `--device`. `\\.\PhysicalDrive0` is the system disk on
-   every Windows install and is permanently blocked.
-4. **Bake** — invokes the CLI's `write` subcommand and streams
-   stdout/stderr into the log drawer. The app launches with a
-   `requireAdministrator` UAC manifest so the raw `\\.\PhysicalDrive*`
-   open succeeds without a second prompt.
+   produces after the phone scans the QR code. The GUI parses + verifies the
+   Ed25519 signature **locally** and shows the server-domain + expiry.
+2. **USB Drive** — pick a USB drive from a read-only list. Only removable
+   drives in the 500MB–500GB band appear; internal SSDs, NVMe boot drives,
+   and oversized disks are hidden by design. `\\.\PhysicalDrive0` is the
+   system disk on every Windows install and is permanently blocked.
+3. **Bake** — runs three phases with a live progress bar:
+   - **download** (first run only) — the base ISO is fetched + sha256-verified.
+     The bar fills **orange** with a "won't happen again" caption; every
+     server after this reuses the cache.
+   - **personalize** — the recipe trailer is appended to a copy of the base;
+     the ISO9660 PVD volume-size is patched so the box's
+     `volumeSpaceSize × logicalBlockSize` find lands exactly on the trailer.
+   - **write** — the prepared, sector-aligned image is locked + dismounted
+     off its volumes and raw-written to `\\.\PhysicalDriveN`; the bar fills
+     in the accent color. The `requireAdministrator` UAC manifest lets the
+     raw open succeed without a second prompt.
+
+   In **Advanced** mode, Bake instead invokes the CLI's `write` subcommand
+   and streams its stdout/stderr into the log drawer.
 
 ## Requirements
 
 - **.NET 8 SDK** (build only — runtime is bundled in published builds).
-- **Node.js 20+** somewhere the locator can find it (`node.exe` in
-  `%ProgramFiles%\nodejs\`, `%LocalAppData%\Programs\nodejs\`, or on
-  `PATH`). Same prereq as the Mac and Linux burners.
+- **Node.js 20+** — only for **Advanced** mode (the CLI remaster path).
+  Quick mode is fully native C# and needs no Node. When present, the
+  locator finds `node.exe` in `%ProgramFiles%\nodejs\`,
+  `%LocalAppData%\Programs\nodejs\`, or on `PATH`.
+- **Internet** on the first Quick-mode bake (one-time base-ISO download;
+  cached thereafter under `%LOCALAPPDATA%\flagship-burner`).
 - **Windows 10 1809+** or **Windows 11**. The manifest declares both.
 - **`wmic.exe`** (every Win10/Win11 install) or **PowerShell 5.1+**
   with `Get-PhysicalDisk` (fallback when wmic is removed in some
