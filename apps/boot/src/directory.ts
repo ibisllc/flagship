@@ -35,6 +35,20 @@ export interface DirectoryClient {
    * binding.
    */
   ownerIrkForDomain(serverDomain: string): Promise<string | null>;
+  /**
+   * Returns the active watch-delegate pubkeys (hex) scoped to "boot-approval"
+   * for the account that owns `serverDomain`, each with its expiry, or null
+   * if the server / account is unknown. Used for the delegate-role authz
+   * binding on the boot-approval route (the gate filters expiry).
+   *
+   * The identity plane's `/watch-delegates` list is the authority: it returns
+   * only delegates that are un-revoked AND still verify under the account's
+   * CURRENT IRK, so an IRK rotation drops orphaned delegates here without the
+   * boot worker holding any directory state of its own.
+   */
+  activeBootDelegatesForDomain(
+    serverDomain: string,
+  ): Promise<Array<{ pubKeyHex: string; expiresAt: number }> | null>;
 }
 
 export interface HttpDirectoryClientOpts {
@@ -137,5 +151,46 @@ export class HttpDirectoryClient implements DirectoryClient {
       return (binding as { pubKey: string }).pubKey.toLowerCase();
     }
     return null;
+  }
+
+  async activeBootDelegatesForDomain(
+    serverDomain: string,
+  ): Promise<Array<{ pubKeyHex: string; expiresAt: number }> | null> {
+    const user = usernameFromServerDomain(serverDomain, this.apex);
+    if (!user) return null;
+    // The server must exist + belong to this account, same precondition as
+    // the owner-IRK read — a delegate can't approve boots for a serverDomain
+    // that maps to the username but was never registered.
+    const stk = await this.boxStkForDomain(serverDomain);
+    if (stk === null) return null;
+    const res = await this.fetchImpl(
+      `${this.base}/api/users/${encodeURIComponent(user)}/watch-delegates`,
+      { headers: { accept: "application/json" } },
+    );
+    if (!res.ok) return [];
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      return [];
+    }
+    const delegates = (body as { delegates?: unknown }).delegates;
+    if (!Array.isArray(delegates)) return [];
+    const out: Array<{ pubKeyHex: string; expiresAt: number }> = [];
+    for (const d of delegates) {
+      if (!d || typeof d !== "object") continue;
+      const pub = (d as { delegatePubKey?: unknown }).delegatePubKey;
+      const scopes = (d as { scopes?: unknown }).scopes;
+      const expiresAt = (d as { expiresAt?: unknown }).expiresAt;
+      if (
+        typeof pub === "string" &&
+        Array.isArray(scopes) &&
+        scopes.includes("boot-approval") &&
+        typeof expiresAt === "number"
+      ) {
+        out.push({ pubKeyHex: pub.toLowerCase(), expiresAt });
+      }
+    }
+    return out;
   }
 }

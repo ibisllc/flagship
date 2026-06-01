@@ -36,6 +36,7 @@ const SERVER_B = "kitchen.bob.flagship.services";
 const boxA = keypair(1);
 const ownerA = keypair(2);
 const boxB = keypair(3);
+const delegateA = keypair(4); // active watch delegate for ownerA's account
 
 function makeDirectory(): DirectoryClient {
   return {
@@ -46,6 +47,13 @@ function makeDirectory(): DirectoryClient {
     },
     async ownerIrkForDomain(d) {
       if (d.toLowerCase() === SERVER_A) return bytesToHex(ownerA.publicKey);
+      return null;
+    },
+    async activeBootDelegatesForDomain(d) {
+      if (d.toLowerCase() === SERVER_A) {
+        return [{ pubKeyHex: bytesToHex(delegateA.publicKey), expiresAt: 9_000_000 }];
+      }
+      if (d.toLowerCase() === SERVER_B) return [];
       return null;
     },
   };
@@ -242,6 +250,62 @@ describe("boot routes — request → notify → response → poll round-trip", 
     // Second poll — single-use; already consumed.
     const poll2 = await routeBoot(deps, "GET", pollPath, boxAuth("GET", pollPath, 54), undefined);
     expect(poll2?.status).toBe(404);
+  });
+
+  it("a watch delegate can post the sealed response (boot approval)", async () => {
+    // The same round-trip, but the approval is signed by the account's
+    // active watch-delegate key instead of the IRK — the Watch-driven
+    // quick-approve path. The box still polls + consumes identically.
+    const { req, body } = secretRequestBody(0x5a);
+    const reqPath = "/api/boot/request";
+    await routeBoot(deps, "POST", reqPath, boxAuth("POST", reqPath, 71), body);
+
+    const sealed = buildSealedSecretResponse(new Uint8Array(32).fill(0xcd), req);
+    const respBody = {
+      response: {
+        serverDomain: SERVER_A,
+        requestNonceHex: bytesToHex(req.nonce),
+        purpose: "unlock-key",
+        sealed: bytesToHex(sealed.sealed),
+        issuedAt: now,
+      },
+    };
+    const respPath = "/api/boot/response";
+    const delegateAuth = signBootRequest(
+      { role: "delegate", serverDomain: SERVER_A, method: "POST", path: respPath, pubKeyHex: bytesToHex(delegateA.publicKey), nonceHex: nonce(72), issuedAt: now },
+      delegateA.privateKey,
+    );
+    const posted = await routeBoot(deps, "POST", respPath, delegateAuth, respBody);
+    expect(posted?.status).toBe(200);
+
+    // Box polls + consumes the delegate-approved sealed blob.
+    const pollPath = `/api/boot/response/${SERVER_A}/${bytesToHex(req.nonce)}`;
+    const poll = await routeBoot(deps, "GET", pollPath, boxAuth("GET", pollPath, 73), undefined);
+    expect(poll?.status).toBe(200);
+    expect((poll!.body as { sealed: string }).sealed).toBe(bytesToHex(sealed.sealed));
+  });
+
+  it("a delegate CANNOT deposit a lease (owner-only route)", async () => {
+    // The lease-deposit route names only "owner"; a delegate-signed lease
+    // deposit is rejected — the delegate is scoped to boot approval alone.
+    const respPath = "/api/boot/lease";
+    const delegateAuth = signBootRequest(
+      { role: "delegate", serverDomain: SERVER_A, method: "PUT", path: respPath, pubKeyHex: bytesToHex(delegateA.publicKey), nonceHex: nonce(74), issuedAt: now },
+      delegateA.privateKey,
+    );
+    // Body shape is irrelevant — the gate rejects on principal before use.
+    const r = await routeBoot(deps, "PUT", respPath, delegateAuth, {
+      lease: {
+        serverDomain: SERVER_A,
+        stkPub: bytesToHex(boxA.publicKey),
+        leaseId: "a".repeat(32),
+        sealedKey: "ab".repeat(48),
+        issuedAt: now,
+        expiresAt: now + 60_000,
+      },
+      signature: "00".repeat(64),
+    });
+    expect(r?.status).toBe(403);
   });
 
   it("notify is DEDUPED per nonce — repeated announces of the same nonce send ONE push", async () => {

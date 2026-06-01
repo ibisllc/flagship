@@ -45,7 +45,7 @@ export const DEFAULT_MAX_AGE_MS = 5 * 60_000;
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
 
-export type GateRole = "box" | "owner";
+export type GateRole = "box" | "owner" | "delegate";
 
 /**
  * The signed authorization envelope. Carried in the `Authorization`
@@ -152,7 +152,11 @@ export interface GateDeps {
 export async function gate(
   deps: GateDeps,
   required: {
-    role: GateRole;
+    /** The role(s) this route permits. A single role, or a set — the
+     *  boot-approval route permits ["owner", "delegate"]; every other
+     *  route names exactly one. The envelope's own `role` (bound into the
+     *  signature) must be one of these. */
+    role: GateRole | readonly GateRole[];
     serverDomain: string;
     method: string;
     path: string;
@@ -161,13 +165,18 @@ export async function gate(
 ): Promise<GateResult> {
   const now = deps.now ?? (() => Date.now());
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+  const requiredRoles: readonly GateRole[] = Array.isArray(required.role)
+    ? required.role
+    : [required.role as GateRole];
 
   // ── Rule 1: malformed → reject before any work. ──────────────────────
   const parsed = parseAuthHeader(authHeader);
   if (!parsed) return deny(400, "malformed authorization");
   const e = parsed;
 
-  if (e.role !== "box" && e.role !== "owner") return deny(400, "unknown role");
+  if (e.role !== "box" && e.role !== "owner" && e.role !== "delegate") {
+    return deny(400, "unknown role");
+  }
   if (typeof e.serverDomain !== "string" || e.serverDomain.length === 0) {
     return deny(400, "malformed serverDomain");
   }
@@ -184,7 +193,7 @@ export async function gate(
   // The envelope MUST match the role the route requires + the exact
   // resource the router resolved. Binding the method/path/serverDomain
   // here is what makes the signature non-transferable across routes.
-  if (e.role !== required.role) return deny(403, "wrong principal for this route");
+  if (!requiredRoles.includes(e.role)) return deny(403, "wrong principal for this route");
   if (!equalHex(e.serverDomain.toLowerCase(), required.serverDomain.toLowerCase())) {
     return deny(403, "serverDomain binding mismatch");
   }
@@ -226,10 +235,23 @@ export async function gate(
     const dirStk = await deps.directory.boxStkForDomain(e.serverDomain);
     if (dirStk === null) return deny(404, "unknown server");
     if (!equalHex(e.pubKeyHex, dirStk)) return deny(403, "box STK not bound to this server");
-  } else {
+  } else if (e.role === "owner") {
     const dirIrk = await deps.directory.ownerIrkForDomain(e.serverDomain);
     if (dirIrk === null) return deny(404, "unknown server");
     if (!equalHex(e.pubKeyHex, dirIrk)) return deny(403, "owner IRK does not own this server");
+  } else {
+    // delegate — a watch-delegate key, authorized ONLY for the boot-approval
+    // route (routes that don't list "delegate" in their allowed set already
+    // rejected it above). Bind the pubkey to an ACTIVE, in-scope, unexpired
+    // boot-approval delegate for the account that owns serverDomain. The
+    // identity plane's list already pruned delegates that no longer verify
+    // under the current IRK, so an IRK rotation revokes the delegate's power
+    // here even without an explicit revoke landing first.
+    const pubs = await deps.directory.activeBootDelegatesForDomain(e.serverDomain);
+    if (pubs === null) return deny(404, "unknown server");
+    const match = pubs.find((p) => equalHex(e.pubKeyHex, p.pubKeyHex));
+    if (!match) return deny(403, "delegate not authorized for this account");
+    if (match.expiresAt <= now()) return deny(403, "delegate expired");
   }
 
   // ── Rule 3 (part b): nonce — single-use within the freshness window. ──

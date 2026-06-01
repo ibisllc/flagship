@@ -23,9 +23,15 @@ const SERVER_B = "kitchen.bob.flagship.services";
 const boxA = kp(1);
 const ownerA = kp(2);
 const boxB = kp(3);
+const delegateA = kp(4); // active watch delegate for ownerA's account
+const expiredDelegateA = kp(5); // a delegate past its TTL
 const foreign = kp(9);
 
-/** Directory: serverA → boxA STK / ownerA IRK; serverB → boxB STK. */
+const FUTURE = 9_000_000; // well past the test clock (1_000_000)
+const PAST = 500_000; // before the test clock — an expired delegate
+
+/** Directory: serverA → boxA STK / ownerA IRK + one active + one expired
+ *  boot-approval delegate; serverB → boxB STK only (no owner, no delegates). */
 function makeDirectory(): DirectoryClient {
   return {
     async boxStkForDomain(d) {
@@ -36,6 +42,16 @@ function makeDirectory(): DirectoryClient {
     async ownerIrkForDomain(d) {
       if (d.toLowerCase() === SERVER_A) return ownerA.pubHex;
       return null;
+    },
+    async activeBootDelegatesForDomain(d) {
+      if (d.toLowerCase() === SERVER_A) {
+        return [
+          { pubKeyHex: delegateA.pubHex, expiresAt: FUTURE },
+          { pubKeyHex: expiredDelegateA.pubHex, expiresAt: PAST },
+        ];
+      }
+      if (d.toLowerCase() === SERVER_B) return []; // server exists, no delegates
+      return null; // unknown server
     },
   };
 }
@@ -122,6 +138,83 @@ describe("identity gate — owner-IRK writes", () => {
       ownerA.priv,
     );
     const r = await gate(deps, { role: "box", serverDomain: SERVER_A, method: "GET", path }, auth);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.status).toBe(403);
+  });
+});
+
+describe("identity gate — watch-delegate boot approval", () => {
+  // The boot-approval route (POST /api/boot/response) permits BOTH owner and
+  // delegate; every other route names owner only. These exercise the gate
+  // with the ["owner","delegate"] allowed set the route passes.
+  const APPROVE_PATH = "/api/boot/response";
+  let deps: GateDeps;
+  beforeEach(() => {
+    deps = makeDeps(() => 1_000_000);
+  });
+
+  it("accepts an active boot-approval delegate on the approval route", async () => {
+    const auth = signBootRequest(
+      { role: "delegate", serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH, pubKeyHex: delegateA.pubHex, nonceHex: nonce(41), issuedAt: 1_000_000 },
+      delegateA.priv,
+    );
+    const r = await gate(deps, { role: ["owner", "delegate"], serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH }, auth);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.role).toBe("delegate");
+  });
+
+  it("still accepts the owner IRK on the same route (delegate is additive)", async () => {
+    const auth = signBootRequest(
+      { role: "owner", serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH, pubKeyHex: ownerA.pubHex, nonceHex: nonce(42), issuedAt: 1_000_000 },
+      ownerA.priv,
+    );
+    const r = await gate(deps, { role: ["owner", "delegate"], serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH }, auth);
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects a delegate NOT registered for the account", async () => {
+    const auth = signBootRequest(
+      { role: "delegate", serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH, pubKeyHex: foreign.pubHex, nonceHex: nonce(43), issuedAt: 1_000_000 },
+      foreign.priv,
+    );
+    const r = await gate(deps, { role: ["owner", "delegate"], serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH }, auth);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.status).toBe(403);
+  });
+
+  it("rejects an EXPIRED delegate (past its TTL)", async () => {
+    const auth = signBootRequest(
+      { role: "delegate", serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH, pubKeyHex: expiredDelegateA.pubHex, nonceHex: nonce(44), issuedAt: 1_000_000 },
+      expiredDelegateA.priv,
+    );
+    const r = await gate(deps, { role: ["owner", "delegate"], serverDomain: SERVER_A, method: "POST", path: APPROVE_PATH }, auth);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.status).toBe(403);
+      expect(r.error).toMatch(/expired/);
+    }
+  });
+
+  it("rejects a delegate on an owner-ONLY route (deposit lease)", async () => {
+    // The delegate signs a lease-deposit envelope, but that route names only
+    // "owner" — the delegate is the LEAST-destructive principal and may not
+    // deposit a long-lived auto-unlock lease.
+    const leasePath = "/api/boot/lease";
+    const auth = signBootRequest(
+      { role: "delegate", serverDomain: SERVER_A, method: "PUT", path: leasePath, pubKeyHex: delegateA.pubHex, nonceHex: nonce(45), issuedAt: 1_000_000 },
+      delegateA.priv,
+    );
+    const r = await gate(deps, { role: "owner", serverDomain: SERVER_A, method: "PUT", path: leasePath }, auth);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.status).toBe(403);
+  });
+
+  it("AUTHZ binding: a serverA delegate cannot approve serverB (cross-account)", async () => {
+    const auth = signBootRequest(
+      { role: "delegate", serverDomain: SERVER_B, method: "POST", path: APPROVE_PATH, pubKeyHex: delegateA.pubHex, nonceHex: nonce(46), issuedAt: 1_000_000 },
+      delegateA.priv,
+    );
+    const r = await gate(deps, { role: ["owner", "delegate"], serverDomain: SERVER_B, method: "POST", path: APPROVE_PATH }, auth);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.status).toBe(403);
   });

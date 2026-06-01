@@ -230,7 +230,48 @@ export async function handleListWatchDelegates(
   const u = username.toLowerCase();
   const rows = await deps.storage.listForUser(u);
   const active = rows.filter((r) => r.revokedAt === null);
-  return ok({ username: u, delegates: active.map(recordToPublic) });
+
+  // Re-verify each active delegate under the user's CURRENT IRK and drop any
+  // that no longer verify. This makes the public list authoritative: an IRK
+  // rotation (Replace-device / Wipe) changes irkPubHex, so every delegate
+  // signed by the prior IRK silently disappears here even if its explicit
+  // revoke didn't fire — the same defense-in-depth requireBootApprovalDelegate
+  // applies, but centralized so EVERY consumer (the boot worker's directory
+  // read, the iPhone toggle's "active delegates" surface) sees only delegates
+  // that are genuinely still tied to the live account identity.
+  const userRec = await deps.usernames.get(u);
+  if (!userRec) return ok({ username: u, delegates: [] });
+
+  let irkPub: Uint8Array;
+  try {
+    irkPub = hexToBytes(userRec.irkPubHex);
+  } catch {
+    return ok({ username: u, delegates: [] });
+  }
+
+  const verified = active.filter((r) => {
+    let delegatePub: Uint8Array;
+    let sig: Uint8Array;
+    let scopes: DelegateScope[];
+    try {
+      delegatePub = hexToBytes(r.delegatePubHex);
+      sig = hexToBytes(r.signatureHex);
+      scopes = JSON.parse(r.scopesJson) as DelegateScope[];
+    } catch {
+      return false;
+    }
+    const grant: WatchDelegateKey = {
+      grantId: r.grantId,
+      username: r.username.toLowerCase(),
+      delegatePubKey: delegatePub,
+      scopes,
+      issuedAt: r.issuedAt,
+      expiresAt: r.expiresAt,
+    };
+    return verifyWatchDelegateKey(grant, sig, irkPub);
+  });
+
+  return ok({ username: u, delegates: verified.map(recordToPublic) });
 }
 
 // ──────────────────────────────────────────────────────────────────────

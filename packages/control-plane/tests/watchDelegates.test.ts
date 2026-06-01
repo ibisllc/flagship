@@ -195,6 +195,43 @@ describe("handleMintWatchDelegate", () => {
   });
 });
 
+describe("handleListWatchDelegates", () => {
+  it("excludes an active row that no longer verifies under the current IRK", async () => {
+    // Models post-IRK-rotation: an active delegate signed by a superseded
+    // IRK must not appear in the authoritative list.
+    const h = await mkHarness();
+    const good = mintDelegate({ userIrk: h.userIrk, grantId: "wd-good" });
+    await handleMintWatchDelegate(h.deps, good.body);
+
+    // The unique-active index allows only one un-revoked row, so revoke the
+    // good one first, then inject a rogue-signed active row in its place.
+    await h.storage.revoke("wd-good", 1_000_400);
+    const rogue = makeKey();
+    const delegate = makeKey();
+    const grant: WatchDelegateKey = {
+      grantId: "wd-rogue",
+      username: USER,
+      delegatePubKey: delegate.publicKey,
+      scopes: ["boot-approval"],
+      issuedAt: 1_000_000,
+      expiresAt: 1_000_000 + 7 * 24 * 3_600_000,
+    };
+    await h.storage.put({
+      grantId: grant.grantId,
+      username: USER,
+      delegatePubHex: hex(delegate.publicKey),
+      scopesJson: JSON.stringify(grant.scopes),
+      issuedAt: grant.issuedAt,
+      expiresAt: grant.expiresAt,
+      signatureHex: hex(signWatchDelegateKey(grant, rogue)),
+      revokedAt: null,
+    });
+
+    const listed = await handleListWatchDelegates(h.deps, USER);
+    expect((listed.body as { delegates: unknown[] }).delegates.length).toBe(0);
+  });
+});
+
 describe("handleRevokeWatchDelegate", () => {
   it("revokes → list excludes; revoke is idempotent", async () => {
     const h = await mkHarness();

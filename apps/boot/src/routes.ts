@@ -483,8 +483,16 @@ async function handlePostResponse(
     return { status: 400, body: { error: "sealed must be non-empty hex within bounds" } };
   }
 
-  // Rules 2-4 — owner-IRK gate bound to (POST, this path, serverDomain).
-  const auth = await gate(deps.gate, { role: "owner", serverDomain: resp.serverDomain, method: "POST", path }, authHeader);
+  // Rules 2-4 — the boot-approval write. This is the ONE route a watch
+  // delegate may sign: the owner IRK (full biometric) OR an active
+  // boot-approval delegate (the phone's .userPresence key, triggered from
+  // the Watch without a fresh Face ID prompt). Every other owner route
+  // (deposit/revoke lease) stays IRK-only — least-destructive scoping.
+  const auth = await gate(
+    deps.gate,
+    { role: ["owner", "delegate"], serverDomain: resp.serverDomain, method: "POST", path },
+    authHeader,
+  );
   if (!auth.ok) return { status: auth.status, body: { error: auth.error } };
 
   // The pending row must exist + not be expired + match the purpose.

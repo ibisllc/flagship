@@ -90,4 +90,49 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
     });
     expect(await dir.boxStkForDomain(SERVER)).toBeNull();
   });
+
+  it("resolves active boot-approval delegates from /watch-delegates (server must exist)", async () => {
+    const delPub = "ee".repeat(32);
+    const dir = new HttpDirectoryClient({
+      identityPlaneUrl: base,
+      apex,
+      fetchImpl: fetchStub({
+        "/api/users/alice/pods": { pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] },
+        "/api/users/alice/watch-delegates": {
+          username: "alice",
+          delegates: [
+            { delegatePubKey: delPub, scopes: ["boot-approval"], expiresAt: 9_000_000 },
+            // A non-boot scope (hypothetical) is filtered out.
+            { delegatePubKey: "ff".repeat(32), scopes: ["something-else"], expiresAt: 9_000_000 },
+          ],
+        },
+      }),
+    });
+    const got = await dir.activeBootDelegatesForDomain(SERVER);
+    expect(got).toEqual([{ pubKeyHex: delPub, expiresAt: 9_000_000 }]);
+  });
+
+  it("returns null for delegates when the server isn't registered", async () => {
+    const dir = new HttpDirectoryClient({
+      identityPlaneUrl: base,
+      apex,
+      fetchImpl: fetchStub({
+        "/api/users/alice/watch-delegates": { delegates: [{ delegatePubKey: "ee".repeat(32), scopes: ["boot-approval"], expiresAt: 9_000_000 }] },
+        // no /pods row → server unknown
+      }),
+    });
+    expect(await dir.activeBootDelegatesForDomain(SERVER)).toBeNull();
+  });
+
+  it("returns [] when the server exists but has no delegates", async () => {
+    const dir = new HttpDirectoryClient({
+      identityPlaneUrl: base,
+      apex,
+      fetchImpl: fetchStub({
+        "/api/users/alice/pods": { pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] },
+        // no /watch-delegates route → 404 → treated as empty
+      }),
+    });
+    expect(await dir.activeBootDelegatesForDomain(SERVER)).toEqual([]);
+  });
 });
