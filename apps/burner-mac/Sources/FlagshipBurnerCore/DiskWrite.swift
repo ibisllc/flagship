@@ -54,9 +54,18 @@ public enum DiskWrite {
         var written = 0
         var lastPct = -1
         let chunkSize = 1024 * 1024
+        let sector = 512
         while true {
-            let data = inp.readData(ofLength: chunkSize)
+            var data = inp.readData(ofLength: chunkSize)
             if data.isEmpty { break }
+            // Raw character devices require sector-aligned writes. Full 1 MiB
+            // chunks are aligned; only the FINAL short chunk can be partial
+            // (e.g. a personalized ISO = base + ~1 KB trailer). Pad it with
+            // zeros to the next sector. The box finds the trailer by the ISO
+            // volume size, not the device end, so trailing zeros are harmless —
+            // and without this, `write()` fails EINVAL ("couldn't be saved").
+            let rem = data.count % sector
+            if rem != 0 { data.append(Data(count: sector - rem)) }
             try out.write(contentsOf: data)
             written += data.count
             let pct = Int(Double(written) / Double(size) * 100)

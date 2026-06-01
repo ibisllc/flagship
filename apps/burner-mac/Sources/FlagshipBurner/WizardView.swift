@@ -62,16 +62,28 @@ struct WizardView: View {
 
     private var panes: some View {
         VStack(alignment: .leading, spacing: FB.Spacing.s4) {
-            if model.mode == .advanced {
-                recipeRow
+            recipeRow
+            // Quick uses the burner's cached Alpine base — no user ISO needed.
+            // Advanced brings a stock Ubuntu/Debian ISO to remaster.
+            if model.mode.requiresUserISO {
+                isoRow
             }
-            isoRow
             diskRow
             wifiRow
             Spacer(minLength: FB.Spacing.s2)
             bakeRow
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Download + personalize run on the burner before the write; show those in
+    /// the warning (orange) tint so the bar visibly changes color when the
+    /// write phase starts filling in the normal accent.
+    private var progressTint: Color {
+        switch model.phase {
+        case "download", "personalize": return FB.Colors.warning
+        default: return FB.Colors.primary
+        }
     }
 
     private var header: some View {
@@ -318,12 +330,19 @@ struct WizardView: View {
                         }
                     }
                     .progressViewStyle(.linear)
-                    .tint(FB.Colors.primary)
+                    .tint(progressTint)
                     .frame(width: 260)
                     Text(progressCaption)
                         .font(FB.Font.caption())
                         .foregroundStyle(FB.Colors.textMuted)
                         .monospacedDigit()
+                    if model.phase == "download" {
+                        Text("This won't happen again — every server after this reuses it.")
+                            .font(FB.Font.caption())
+                            .foregroundStyle(FB.Colors.warning)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 280)
+                    }
                 }
                 .frame(minHeight: 28)
             } else if model.isFinished {

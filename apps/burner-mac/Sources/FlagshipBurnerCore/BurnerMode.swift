@@ -2,10 +2,10 @@ import Foundation
 
 /// Which assembly flow the wizard runs.
 ///
-/// - `quick`: the user supplies a *pre-personalized* custom Alpine ISO that
-///   already carries the recipe baked into its trailer (server-side
-///   `/api/personalize-iso`). The burner just flashes the bytes to the USB.
-///   No recipe input is required.
+/// - `quick`: the user supplies only a recipe (the JSON certificate). The
+///   burner downloads the stock Flagship Alpine base ISO ONCE (cached), appends
+///   the recipe trailer locally (AlpinePersonalize), and flashes — no per-server
+///   240 MB download, no separate ISO file, no third-party flasher.
 /// - `advanced`: the user supplies a stock Ubuntu/Debian ISO + a JSON recipe;
 ///   the burner remasters in-place (autoinstall / preseed) and then flashes.
 ///   This was the only flow before the Alpine pipeline shipped; it's now
@@ -14,9 +14,18 @@ public enum BurnerMode: String, Sendable, CaseIterable {
     case quick
     case advanced
 
-    /// Quick takes a pre-personalized ISO — no recipe input needed.
-    /// Advanced still requires a JSON recipe to remaster the stock ISO.
+    /// Both flows are recipe-driven now: Quick bakes the recipe into the cached
+    /// Alpine base; Advanced bakes it into the stock ISO you bring.
     public var requiresRecipe: Bool {
+        switch self {
+        case .quick: return true
+        case .advanced: return true
+        }
+    }
+
+    /// Quick uses the burner's cached base ISO; only Advanced needs the user to
+    /// supply a stock ISO file.
+    public var requiresUserISO: Bool {
         switch self {
         case .quick: return false
         case .advanced: return true

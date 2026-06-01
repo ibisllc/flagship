@@ -22,15 +22,17 @@ final class BurnerModeTests: XCTestCase {
         XCTAssertEqual(Set(BurnerMode.allCases), Set([.quick, .advanced]))
     }
 
-    /// Quick = flash the ISO bytes the server already personalized. No JSON
-    /// recipe needed — the recipe lives in the ISO trailer.
-    func testQuickDoesNotRequireRecipe() {
-        XCTAssertFalse(BurnerMode.quick.requiresRecipe)
+    /// Both flows are recipe-driven now. Quick bakes the recipe into the burner's
+    /// cached Alpine base; it needs the recipe but NOT a user-supplied ISO.
+    func testQuickRequiresRecipeButNotUserISO() {
+        XCTAssertTrue(BurnerMode.quick.requiresRecipe)
+        XCTAssertFalse(BurnerMode.quick.requiresUserISO)
     }
 
-    /// Advanced = stock distro ISO + recipe → remaster. Recipe is mandatory.
-    func testAdvancedRequiresRecipe() {
+    /// Advanced = stock distro ISO + recipe → remaster. Both are mandatory.
+    func testAdvancedRequiresRecipeAndUserISO() {
         XCTAssertTrue(BurnerMode.advanced.requiresRecipe)
+        XCTAssertTrue(BurnerMode.advanced.requiresUserISO)
     }
 
     /// The bake CTA reads differently per mode so the user knows whether a

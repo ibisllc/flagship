@@ -33,6 +33,10 @@ final class WizardModel: ObservableObject {
     /// Advanced = remaster a stock Ubuntu/Debian ISO with a JSON recipe.
     @Published var mode: BurnerMode = .quick
 
+    /// True once a (one-time) base-ISO download begins this run — drives the
+    /// "won't happen again" banner under the progress bar.
+    @Published var baseDownloadStarted = false
+
     /// Test seam: set inside `runWrite()` only on the branch that actually
     /// runs the remaster step. The model-level unit tests can assert against
     /// it without having to stub the privileged helper.
@@ -40,6 +44,8 @@ final class WizardModel: ObservableObject {
 
     var phaseLabel: String? {
         switch phase {
+        case "download": return "One-time download of base image…"
+        case "personalize": return "Personalizing…"
         case "remaster": return "Building image…"
         case "write": return "Writing to USB…"
         default: return nil
@@ -76,7 +82,8 @@ final class WizardModel: ObservableObject {
     }
 
     var canFlash: Bool {
-        guard iso != nil, selectedDisk != nil else { return false }
+        guard selectedDisk != nil else { return false }
+        if mode.requiresUserISO && iso == nil { return false }
         if mode.requiresRecipe && recipe == nil { return false }
         return true
     }
@@ -84,10 +91,11 @@ final class WizardModel: ObservableObject {
     var readinessSummary: String {
         var missing: [String] = []
         if mode.requiresRecipe && recipe == nil { missing.append("Certificate") }
-        if iso == nil { missing.append("ISO") }
+        if mode.requiresUserISO && iso == nil { missing.append("ISO") }
         if selectedDisk == nil { missing.append("USB drive") }
         if missing.isEmpty {
-            return "Ready: \(iso?.lastPathComponent ?? "") → \(selectedDisk?.deviceNode ?? "")"
+            let what = mode.requiresUserISO ? (iso?.lastPathComponent ?? "") : (verified?.serverDomain ?? "your server")
+            return "Ready: \(what) → \(selectedDisk?.deviceNode ?? "")"
         }
         return "Need: \(missing.joined(separator: ", "))."
     }
@@ -225,28 +233,72 @@ final class WizardModel: ObservableObject {
     /// grant; the helper can't read user folders) then hand the prepared
     /// image to the helper.
     func runWrite() async {
-        guard let iso = iso, let disk = selectedDisk else { return }
+        guard let disk = selectedDisk else { return }
+        if mode.requiresUserISO && iso == nil { return }
         if mode.requiresRecipe && recipe == nil { return }
         guard !isRunning else { return }
         isRunning = true
         progress = nil
         phase = nil
+        baseDownloadStarted = false
         didRemasterForTest = false
         defer { isRunning = false; endProgress() }
 
-        // Path A — Quick: flash the ISO bytes as-is. No remaster.
-        // Path B — Advanced: remaster into /tmp first, then flash.
+        // Path A — Quick: download+cache the Alpine base once, append the recipe
+        // trailer locally, flash. Path B — Advanced: remaster a user ISO first.
         let imagePath: String
         var preparedToCleanup: URL? = nil
         defer { if let p = preparedToCleanup { try? FileManager.default.removeItem(at: p) } }
 
         switch mode {
         case .quick:
-            imagePath = iso.path
-            appendLog(stream: .stdout, text: "+ quick flash \(iso.lastPathComponent) (recipe already baked)")
+            guard let recipeURL = recipe else { return }
+            let parsed: Recipe
+            do { parsed = try RecipeLoader.load(contentsOf: recipeURL) }
+            catch {
+                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                return
+            }
+            // 1. One-time base-ISO download (cached for every later server).
+            phase = "download"
+            let baseURL: URL
+            do {
+                baseURL = try await BaseIsoCache.ensure(
+                    progress: { [weak self] p in
+                        Task { @MainActor in self?.progress = p; DockProgress.set(p) }
+                    },
+                    onDownloadStart: { [weak self] in
+                        Task { @MainActor in
+                            self?.baseDownloadStarted = true
+                            self?.appendLog(stream: .stdout,
+                                            text: "+ one-time download of base image (≈240 MB — cached, won't repeat)")
+                        }
+                    })
+            } catch {
+                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                return
+            }
+            // 2. Personalize locally — append the recipe trailer to the base.
+            phase = "personalize"
+            progress = nil
+            DockProgress.set(nil)
+            let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
+            do {
+                appendLog(stream: .stdout, text: "+ personalize \(parsed.serverDomain)")
+                try await Task.detached(priority: .userInitiated) {
+                    try AlpinePersonalize.personalize(baseISO: baseURL, recipe: parsed, outURL: preparedURL)
+                }.value
+            } catch {
+                appendLog(stream: .stderr, text: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                try? FileManager.default.removeItem(at: preparedURL)
+                return
+            }
+            preparedToCleanup = preparedURL
+            imagePath = preparedURL.path
 
         case .advanced:
-            guard let recipe = recipe else { return }
+            guard let iso = iso, let recipe = recipe else { return }
             phase = "remaster"
             let preparedURL = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("flagship-prepared-\(UUID().uuidString).iso")
