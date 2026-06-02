@@ -42,10 +42,31 @@ final class RecoveryUploadTests: XCTestCase {
         XCTAssertEqual(String(data: canonical, encoding: .utf8), expectedCanonical)
     }
 
-    /// The load-bearing assertion: signing the canonical bytes with the
-    /// 0x03-seed IRK MUST reproduce the exact hex the TS signer emits.
-    func test_kat_signatureMatchesExactLiteral() throws {
+    /// CryptoKit's `Curve25519.Signing` is RANDOMIZED (hedged) — the same
+    /// message signs to different bytes each call, so byte-equality with a
+    /// deterministic (noble/libsodium) signature is impossible. The real
+    /// cross-platform lock (same convention as `WatchDelegateKeyTests`):
+    ///   (1) our canonical bytes are byte-identical to TS — PROVEN by
+    ///       verifying the deterministic TS KAT signature against them;
+    ///   (2) our own signer's output round-trips through verify.
+    func test_kat_canonicalVerifiesUnderTsSignature() throws {
         let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed)
+        let canonical = RecoveryUpload.canonical(
+            username: username,
+            credentialIdHex: credentialIdHex,
+            wrappedUmkHashHex: wrappedUmkHashHex,
+            issuedAt: issuedAt
+        )
+        // (1) The deterministic TS signature verifies against OUR canonical
+        // bytes ⇒ byte-for-byte canonical parity with the TS signer.
+        let pub = try Curve25519.Signing.PublicKey(
+            rawRepresentation: Self.hexToData(expectedIrkPubHex)
+        )
+        XCTAssertTrue(
+            pub.isValidSignature(Self.hexToData(expectedSignatureHex), for: canonical),
+            "TS KAT signature must verify against the iOS canonical bytes"
+        )
+        // (2) Our signer (randomized) produces a signature that verifies.
         let sigHex = try RecoveryUpload.sign(
             username: username,
             credentialIdHex: credentialIdHex,
@@ -53,7 +74,18 @@ final class RecoveryUploadTests: XCTestCase {
             issuedAt: issuedAt,
             irk: irk
         )
-        XCTAssertEqual(sigHex, expectedSignatureHex)
+        XCTAssertTrue(irk.publicKey.isValidSignature(Self.hexToData(sigHex), for: canonical))
+    }
+
+    private static func hexToData(_ hex: String) -> Data {
+        var data = Data(capacity: hex.count / 2)
+        var idx = hex.startIndex
+        while idx < hex.endIndex {
+            let next = hex.index(idx, offsetBy: 2)
+            data.append(UInt8(hex[idx..<next], radix: 16)!)
+            idx = next
+        }
+        return data
     }
 
     /// The wire body the live client POSTs must serialize to exactly
