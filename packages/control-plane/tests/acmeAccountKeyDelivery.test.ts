@@ -222,6 +222,26 @@ describe("handleDepositAcmeAccountKey", () => {
     expect(res.status).toBe(403);
   });
 
+  it("rejects a deposit whose grant username does not own the server with 403", async () => {
+    const h = await mkHarness();
+    // A different account signs a grant naming ITSELF, sealed to THIS box STK.
+    const otherIrk = makeKey();
+    await h.storage.usernames.put({
+      username: "mallory",
+      irkPubHex: hex(otherIrk.publicKey),
+      claimedAt: 1,
+    });
+    const { body } = depositBody({
+      userIrk: otherIrk,
+      username: "mallory",
+      recipientPub: h.boxStk.publicKey,
+    });
+    const res = await handleDepositAcmeAccountKey(h.deps, HOST, body);
+    expect(res.status).toBe(403);
+    expect((res.body as { error: string }).error).toMatch(/does not own this server/);
+    expect(await h.storage.acmeAccountKeyDelivery.getByDomain(HOST)).toBeUndefined();
+  });
+
   it("rejects a deposit for an unknown server with 404", async () => {
     const h = await mkHarness();
     const { body } = depositBody({ userIrk: h.userIrk, recipientPub: h.boxStk.publicKey });

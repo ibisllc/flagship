@@ -137,9 +137,14 @@ export async function handleDepositAcmeAccountKey(
     };
   }
 
-  // The grant is signed by the account IRK — fetch it by the grant's username
-  // (the box was registered under this account; the IRK is the trust anchor).
+  // The grant MUST name the account that owns this server, and it MUST be
+  // signed by THAT account's IRK (the trust anchor). Fetching the IRK off the
+  // server's own username — not a body-supplied one — mirrors the box-sealed
+  // lease deposit and closes any cross-account deposit ambiguity.
   const usernameNorm = g.username.toLowerCase();
+  if (usernameNorm !== reg.username.toLowerCase()) {
+    return { status: 403, body: { error: "username does not own this server" } };
+  }
   const userRec = await deps.usernames.get(usernameNorm);
   if (!userRec) return { status: 404, body: { error: "username not registered" } };
 
