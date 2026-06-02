@@ -80,6 +80,12 @@ export interface MinimalAcmeClient {
   waitForValidStatus(challenge: AcmeChallenge): Promise<unknown>;
   finalizeOrder(order: AcmeOrder, csr: Buffer): Promise<AcmeOrder>;
   getCertificate(order: AcmeOrder): Promise<string>;
+  /**
+   * RFC 8555 §7.6 certificate revocation. Authorized by the ACME account
+   * key the client already holds (no separate authorization step). `reason`
+   * is an RFC 5280 CRL reason code (1 = keyCompromise).
+   */
+  revokeCertificate(cert: string, opts?: { reason?: number }): Promise<void>;
 }
 
 export interface AcmeChallenge {
@@ -265,6 +271,40 @@ export class LetsEncryptIssuer implements AcmeIssuer {
     } finally {
       for (const c of cleanups.reverse()) await c();
     }
+  }
+
+  /**
+   * Revoke a previously-issued leaf cert (RFC 8555 §7.6), authorized by the
+   * ACME ACCOUNT key this issuer already holds — the same account that
+   * issued the cert. `reason` is an RFC 5280 CRL reason code; default 1
+   * (keyCompromise), the correct reason for a STOLEN server whose cert
+   * private key is now exposed.
+   *
+   * THEFT-RESPONSE ORDERING (important): a stolen box may have shared its
+   * Let's Encrypt-issued leaf cert with sibling boxes (one shared cert
+   * across `*.<user>`). Revoking that cert kills TLS for EVERY box that
+   * served under it, not just the stolen one. So the multi-box theft flow
+   * MUST re-mint a fresh cert for the SURVIVING boxes FIRST, let them cut
+   * over, and only THEN revoke the old shared cert. Revoke-before-re-mint
+   * would black-hole the survivors until their next renewal. This method is
+   * the single-daemon capability; the cross-box orchestration (re-mint
+   * survivors → confirm cutover → revoke) lives above it and needs a live
+   * 2-box exercise to validate.
+   */
+  async revokeCertificate(certPem: string, reason = 1): Promise<void> {
+    // Build/reuse the account-key-authorized client. Mirrors issue(): the
+    // account that minted the cert is the one authorized to revoke it, so
+    // ensure it's registered before calling through.
+    this.client ??= this.buildClient();
+    const client = this.client;
+    if (!this.accountReady) {
+      await client.createAccount({
+        termsOfServiceAgreed: true,
+        contact: [`mailto:${this.opts.email}`],
+      });
+      this.accountReady = true;
+    }
+    await client.revokeCertificate(certPem, { reason });
   }
 
 }

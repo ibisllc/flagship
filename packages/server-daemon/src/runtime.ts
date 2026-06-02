@@ -342,6 +342,21 @@ export interface DaemonRuntime {
   addUpgradeHandler(
     h: (args: UpgradeRequest) => boolean,
   ): void;
+  /**
+   * THEFT RESPONSE — revoke this daemon's currently-installed leaf cert via
+   * RFC 8555 §7.6, authorized by the ACME account key the issuer holds.
+   * `reason` is an RFC 5280 CRL reason code; default 1 (keyCompromise) —
+   * the correct reason when a box is stolen and its cert private key is
+   * exposed. Throws if no live cert is installed.
+   *
+   * ORDERING for the multi-box case: a stolen box may have served a SHARED
+   * cert (`*.<user>`); revoking it kills TLS for every surviving box too.
+   * The cross-box flow must RE-MINT a fresh cert for the survivors and let
+   * them cut over BEFORE calling this on the old cert. This is the
+   * single-daemon capability; the orchestration above it (re-mint survivors
+   * → confirm cutover → revoke) needs a live 2-box exercise.
+   */
+  revokeCurrentCert(reason?: number): Promise<void>;
 }
 
 export interface UpgradeRequest {
@@ -926,7 +941,28 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     addUpgradeHandler(h) {
       extraUpgrades.push(h);
     },
+    revokeCurrentCert: (reason = 1) => revokeCurrentCert({ issuer, certManager, reason }),
   };
+}
+
+/**
+ * Revoke the daemon's currently-installed leaf cert (RFC 8555 §7.6). Split
+ * out and exported so the theft-response path and tests can drive it with a
+ * fake issuer + cert manager. Throws if no live cert is installed.
+ *
+ * See `DaemonRuntime.revokeCurrentCert` for the re-mint-survivors-BEFORE-
+ * revoke ordering the multi-box flow must honour.
+ */
+export async function revokeCurrentCert(deps: {
+  issuer: { revokeCertificate(certPem: string, reason?: number): Promise<void> };
+  certManager: { currentCertPem(): string | null };
+  reason?: number;
+}): Promise<void> {
+  const certPem = deps.certManager.currentCertPem();
+  if (!certPem) {
+    throw new Error("[runtime] revokeCurrentCert: no live cert installed to revoke");
+  }
+  await deps.issuer.revokeCertificate(certPem, deps.reason ?? 1);
 }
 
 async function maybeBuildDataProvisioner(envFile?: string): Promise<DataProvisioner | null> {

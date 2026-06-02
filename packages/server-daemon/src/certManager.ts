@@ -100,6 +100,15 @@ export class CertManager implements AlpnChallengeServer {
     return this.real !== null;
   }
 
+  /**
+   * The currently-installed live (non-custom) leaf cert PEM, or null if
+   * none is loaded. Used by the theft-response path to feed the cert to
+   * ACME revocation (RFC 8555 §7.6).
+   */
+  currentCertPem(): string | null {
+    return this.real?.certPem ?? null;
+  }
+
   /** Time until the live cert expires, in ms. Returns 0 if no cert is loaded. */
   msUntilExpiry(now = Date.now()): number {
     if (!this.real) return 0;

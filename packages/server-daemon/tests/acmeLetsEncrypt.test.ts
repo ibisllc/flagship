@@ -123,6 +123,9 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
           "",
         ].join("\n");
       },
+      async revokeCertificate(cert, opts) {
+        calls.push(`revokeCertificate:${opts?.reason ?? ""}`);
+      },
     };
 
     const alpn: AlpnChallengeServer = {
@@ -268,6 +271,7 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
         async getCertificate() {
           return fakeCertPem;
         },
+        async revokeCertificate() {},
       };
     }
     const alpnServer: AlpnChallengeServer = {
@@ -369,6 +373,7 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
           "",
         ].join("\n");
       },
+      async revokeCertificate() {},
     };
 
     const alpn: AlpnChallengeServer = {
@@ -500,6 +505,7 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
       async getCertificate() {
         return "-----BEGIN CERTIFICATE-----\nMIIBIjANBg=\n-----END CERTIFICATE-----\n";
       },
+      async revokeCertificate() {},
     };
     const issuer = new LetsEncryptIssuer({
       email: "ops@flagshipserver.com",
@@ -560,6 +566,7 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
       async getCertificate() {
         return "-----BEGIN CERTIFICATE-----\nMIIBIjANBg=\n-----END CERTIFICATE-----\n";
       },
+      async revokeCertificate() {},
     };
     const dns: DnsChallengeWriter = {
       async publishTxt(host, value) {
@@ -629,6 +636,7 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
       async getCertificate() {
         return "-----BEGIN CERTIFICATE-----\nMIIBIjANBg= \n-----END CERTIFICATE-----\n";
       },
+      async revokeCertificate() {},
     };
     const issuer = new LetsEncryptIssuer({
       email: "ops@flagshipserver.com",
@@ -652,5 +660,135 @@ describe("LetsEncryptIssuer — orchestration against a fake ACME client", () =>
     expect(seq.indexOf("acme-validating")).toBeGreaterThan(
       seq.indexOf("dns01-propagation-wait"),
     );
+  });
+});
+
+describe("LetsEncryptIssuer.revokeCertificate (RFC 8555 §7.6, theft response)", () => {
+  // A minimal recording client: only the methods revocation touches matter.
+  function makeRevokeClient(opts?: { revokeThrows?: Error }): {
+    client: MinimalAcmeClient;
+    revoked: { cert: string; reason?: number }[];
+    createAccountCalls: number;
+    order: string[];
+  } {
+    const revoked: { cert: string; reason?: number }[] = [];
+    const order: string[] = [];
+    let createAccountCalls = 0;
+    const stub = async () => ({});
+    const client: MinimalAcmeClient = {
+      async createAccount() {
+        createAccountCalls++;
+        order.push("createAccount");
+        return {};
+      },
+      createOrder: stub as unknown as MinimalAcmeClient["createOrder"],
+      getAuthorizations: stub as unknown as MinimalAcmeClient["getAuthorizations"],
+      getChallengeKeyAuthorization: stub as unknown as MinimalAcmeClient["getChallengeKeyAuthorization"],
+      completeChallenge: stub,
+      waitForValidStatus: stub,
+      finalizeOrder: stub as unknown as MinimalAcmeClient["finalizeOrder"],
+      getCertificate: stub as unknown as MinimalAcmeClient["getCertificate"],
+      async revokeCertificate(cert, o) {
+        order.push("revokeCertificate");
+        if (opts?.revokeThrows) throw opts.revokeThrows;
+        revoked.push({ cert, reason: o?.reason });
+      },
+    };
+    return {
+      client,
+      revoked,
+      get createAccountCalls() {
+        return createAccountCalls;
+      },
+      order,
+    };
+  }
+
+  const CERT_PEM = "-----BEGIN CERTIFICATE-----\nMIIBstolen=\n-----END CERTIFICATE-----\n";
+
+  function issuerWith(rec: { client: MinimalAcmeClient }): LetsEncryptIssuer {
+    return new LetsEncryptIssuer({
+      email: "ops@flagshipserver.com",
+      environment: "staging",
+      accountKeyPem: "ACCOUNT_KEY",
+      alpn: { present: () => () => {} },
+      clientFactory: () => rec.client,
+    });
+  }
+
+  it("calls the ACME client's revokeCertificate with the cert PEM and default reason 1 (keyCompromise)", async () => {
+    const rec = makeRevokeClient();
+    await issuerWith(rec).revokeCertificate(CERT_PEM);
+    expect(rec.revoked).toHaveLength(1);
+    expect(rec.revoked[0]!.cert).toBe(CERT_PEM);
+    expect(rec.revoked[0]!.reason).toBe(1);
+  });
+
+  it("forwards an explicit reason code", async () => {
+    const rec = makeRevokeClient();
+    // 4 = superseded — e.g. re-mint replaced this cert.
+    await issuerWith(rec).revokeCertificate(CERT_PEM, 4);
+    expect(rec.revoked[0]!.reason).toBe(4);
+  });
+
+  it("registers the account before revoking (revocation is account-key-authorized)", async () => {
+    const rec = makeRevokeClient();
+    await issuerWith(rec).revokeCertificate(CERT_PEM);
+    expect(rec.order).toEqual(["createAccount", "revokeCertificate"]);
+  });
+
+  it("surfaces errors thrown by the ACME client", async () => {
+    const rec = makeRevokeClient({ revokeThrows: new Error("urn:ietf:params:acme:error:alreadyRevoked") });
+    await expect(issuerWith(rec).revokeCertificate(CERT_PEM)).rejects.toThrow(/alreadyRevoked/);
+  });
+
+  it("reuses the registered account when an issue() already created it (no double-register)", async () => {
+    // Drive a full issue() first (which registers the account), then revoke.
+    // The account must be created exactly once across both operations.
+    const calls: string[] = [];
+    const order: AcmeOrder = {
+      status: "pending",
+      expires: new Date(Date.now() + 60_000).toISOString(),
+      identifiers: [],
+      authorizations: ["https://acme/authz/1"],
+      finalize: "https://acme/finalize",
+    };
+    const alpnChallenge: AcmeChallenge = {
+      type: "tls-alpn-01",
+      url: "https://acme/chall/alpn",
+      status: "pending",
+      token: "tok-alpn",
+    };
+    const client: MinimalAcmeClient = {
+      async createAccount() { calls.push("createAccount"); return {}; },
+      async createOrder(o) { return { ...order, identifiers: o.identifiers }; },
+      async getAuthorizations(o: AcmeOrder): Promise<AcmeAuthorization[]> {
+        return o.identifiers.map((id) => ({
+          identifier: { type: id.type, value: id.value },
+          status: "pending",
+          challenges: [alpnChallenge],
+        }));
+      },
+      async getChallengeKeyAuthorization(c) { return `${c.token}.thumb`; },
+      async completeChallenge() { return {}; },
+      async waitForValidStatus() { return {}; },
+      async finalizeOrder(o) { return { ...o, status: "valid" }; },
+      async getCertificate() {
+        return "-----BEGIN CERTIFICATE-----\nMIIBIjANBg=\n-----END CERTIFICATE-----\n";
+      },
+      async revokeCertificate() { calls.push("revokeCertificate"); },
+    };
+    const issuer = new LetsEncryptIssuer({
+      email: "ops@flagshipserver.com",
+      environment: "staging",
+      accountKeyPem: "K",
+      alpn: { present: () => () => {} },
+      clientFactory: () => client,
+      dns01PropagationDelayMs: 0,
+    });
+    await issuer.issue(["home.alice.flagship.services"]);
+    await issuer.revokeCertificate(CERT_PEM);
+    expect(calls.filter((c) => c === "createAccount")).toHaveLength(1);
+    expect(calls).toContain("revokeCertificate");
   });
 });
