@@ -27,40 +27,55 @@ public final class PlatformWebAuthnProvider: NSObject, WebAuthnProvider {
         self.displayName = displayName
     }
 
-    public func register() async throws -> WebAuthnRegistration {
+    public func register(prfSalt: Data) async throws -> WebAuthnRegistration {
         // Real ceremony requires:
         //   - ASAuthorizationPlatformPublicKeyCredentialProvider(relyingPartyIdentifier:)
         //   - .createCredentialRegistrationRequest(challenge:userId:name:)
         //   - ASAuthorizationController + delegate
-        //   - Set PRF extension on the request (iOS 18+ API surface
-        //     varies; left as a TODO until App Store build wires the
-        //     entitlement).
-        // For now we synthesize a deterministic credentialID off the
-        // device's vendor identifier so a setup→recover round-trip on
-        // the same device works without entitlements.
+        //   - Set the PRF extension on the request with eval.first = prfSalt
+        //     (iOS 18+ `ASAuthorizationPublicKeyCredentialPRFRegistrationInput`).
+        //     Left as a TODO until the App Store build wires the entitlement;
+        //     `prfSalt` is accepted now so callers don't change when it lands.
+        // For now we synthesize a deterministic credentialID off the device's
+        // vendor identifier so a setup→recover round-trip on the same device
+        // works without entitlements. It is emitted as HEX (Task #2 — the
+        // Worker requires ^[0-9a-fA-F]{16,512}$ on the wire); a real
+        // ASAuthorization rawId is raw bytes the caller hex-encodes the same
+        // way (RecoveryViewModel.credentialIdHex).
         let id = await deviceIdSeed()
-        return WebAuthnRegistration(credentialId: "platform-\(id)")
+        return WebAuthnRegistration(credentialId: Self.hexCredentialId("platform-\(id)"))
     }
 
     public func assertAny() async throws -> WebAuthnRegistration {
         let id = await deviceIdSeed()
-        return WebAuthnRegistration(credentialId: "platform-\(id)")
+        return WebAuthnRegistration(credentialId: Self.hexCredentialId("platform-\(id)"))
     }
 
-    public func prfAssert(credentialId: String) async throws -> Data {
-        // Production PRF will be the `hmac-secret` output of the
-        // CTAP assertion. For the seam to work in dev we derive a
-        // stable 32-byte secret via HKDF keyed off the credentialID +
-        // a device-bound salt (Keychain-stored). That secret is NOT
-        // hardware-bound; the live impl must override.
+    public func prfAssert(credentialId: String, prfSalt: Data) async throws -> Data {
+        // Production PRF will be the `hmac-secret` output of the CTAP
+        // assertion with eval.first = prfSalt. For the seam to work in dev
+        // we derive a stable 32-byte secret via HKDF keyed off the
+        // credentialID + the passphrase-derived prfSalt + a device-bound
+        // salt (Keychain-stored). That secret is NOT hardware-bound; the
+        // live impl must override. Including prfSalt in `info` makes the
+        // dev output depend on the passphrase, matching the real ceremony's
+        // salt-keyed behavior.
         let salt = await deviceBoundSalt()
         let key = HKDF<SHA256>.deriveKey(
             inputKeyMaterial: SymmetricKey(data: Data(credentialId.utf8)),
             salt: salt,
-            info: Data("flagship/platform-prf/v1".utf8),
+            info: Data("flagship/platform-prf/v1|".utf8) + prfSalt,
             outputByteCount: 32
         )
         return key.withUnsafeBytes { Data($0) }
+    }
+
+    /// UTF-8→hex encode the dev stand-in credentialID so it satisfies the
+    /// Worker's hex regex on the wire. A real ASAuthorization rawId is
+    /// already raw bytes; `RecoveryViewModel.credentialIdHex` hex-encodes
+    /// it the same way, so the wire field is hex either way.
+    private static func hexCredentialId(_ raw: String) -> String {
+        Data(raw.utf8).map { String(format: "%02x", $0) }.joined()
     }
 
     private func deviceIdSeed() async -> String {

@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Client for the pre-pairing endpoints on flagshipserver.com (the
 /// Cloudflare Worker at `apps/com/`). The phone hits these BEFORE it has
@@ -49,6 +50,15 @@ public protocol FlagshipServerClient: Sendable {
     func resolveAccount(username: String) async throws -> AccountResolution
     func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
+    /// Task #74 — the passphrase-gated wrapped-UMK fetch. POSTs
+    /// `{ fetchToken: <hex>, issuedAt: <ms> }` to
+    /// `POST /api/recovery/by-username/<username>/fetch`; `.com` releases
+    /// the ciphertext only when `SHA-256(fetchToken)` matches the stored
+    /// hash (a wrong passphrase → 403; rate-limited 429). Replaces the
+    /// dead `GET /api/recovery/fetch` path for the native cloud-recovery
+    /// flow. See `RecoveryFetchResponse` for the body shape and
+    /// recovery.js `fetchWrappedUmk` for the canonical reference.
+    func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse
     /// Register an APNs device token with .com so the Worker can relay
     /// (or retry) encrypted push payloads to this device. The returned
     /// tokenId is the handle to later revoke the registration.
@@ -1433,18 +1443,34 @@ public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
         /// Not in the signed canonical bytes — it's opaque ciphertext, so
         /// tampering breaks account-key recovery, never forges it.
         public let wrappedAcmeAccountKey: String?
+        /// Task #74 — SHA-256 hex (64 chars) of the passphrase-derived
+        /// `fetchToken`. The Worker stores it and later compares it to
+        /// `SHA-256(presented fetchToken)` to gate the wrapped-UMK fetch.
+        /// Optional on the wire (accept-if-present server-side) so the
+        /// signed canonical-bytes type stays stable — the IRK signs only
+        /// over the wrappedUmk hash — but the native enroll always sends it.
+        public let fetchTokenHash: String?
+        /// Task #74 — SHA-256 hex (64 chars) of the passphrase-derived
+        /// `prfSalt`. Returned on the gated fetch so a recovering device
+        /// can confirm it re-derives the same salt (anti-coercion). Same
+        /// accept-if-present optionality as `fetchTokenHash`.
+        public let prfSaltHash: String?
         public init(
             username: String,
             credentialId: String,
             wrappedUmk: String,
             issuedAt: Int64,
-            wrappedAcmeAccountKey: String? = nil
+            wrappedAcmeAccountKey: String? = nil,
+            fetchTokenHash: String? = nil,
+            prfSaltHash: String? = nil
         ) {
             self.username = username
             self.credentialId = credentialId
             self.wrappedUmk = wrappedUmk
             self.issuedAt = issuedAt
             self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+            self.fetchTokenHash = fetchTokenHash
+            self.prfSaltHash = prfSaltHash
         }
     }
     public let request: Inner
@@ -1486,6 +1512,52 @@ public struct RecoveryEnvelope: Codable, Equatable, Sendable {
     }
 }
 
+/// Request body of the Task #74 gated fetch — `{ fetchToken: <hex>,
+/// issuedAt: <ms> }`. `issuedAt` is checked for 5-min freshness by the
+/// Worker (replay defense).
+public struct RecoveryFetchTokenBody: Codable, Equatable, Sendable {
+    public let fetchToken: String
+    public let issuedAt: Int64
+    public init(fetchToken: String, issuedAt: Int64) {
+        self.fetchToken = fetchToken
+        self.issuedAt = issuedAt
+    }
+}
+
+/// Body of the Task #74 gated fetch (`POST /api/recovery/by-username/<u>/fetch`),
+/// mirroring the Worker's `handleFetchWrappedUmkWithToken` response:
+/// `{ username, credentialId, wrappedUmk, wrappedAcmeAccountKey?, prfSaltHash?, updatedAt }`.
+///
+/// `prfSaltHash` is the lowercase SHA-256 hex of the enroll-time `prfSalt`.
+/// A recovering device MUST verify it equals `SHA-256(local prfSalt)` before
+/// proceeding — a malicious `.com` returning a different salt would otherwise
+/// coerce the wrong PRF output and surface only as an opaque AES-GCM tag
+/// mismatch. `credentialId` is hex (the form `navigator.credentials.get`'s
+/// `allowCredentials` needs after a hex→bytes decode).
+public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
+    public let username: String
+    public let credentialId: String
+    public let wrappedUmk: String
+    public let wrappedAcmeAccountKey: String?
+    public let prfSaltHash: String?
+    public let updatedAt: Int64?
+    public init(
+        username: String,
+        credentialId: String,
+        wrappedUmk: String,
+        wrappedAcmeAccountKey: String? = nil,
+        prfSaltHash: String? = nil,
+        updatedAt: Int64? = nil
+    ) {
+        self.username = username
+        self.credentialId = credentialId
+        self.wrappedUmk = wrappedUmk
+        self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+        self.prfSaltHash = prfSaltHash
+        self.updatedAt = updatedAt
+    }
+}
+
 // MARK: - Mock
 
 public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Sendable {
@@ -1512,6 +1584,23 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// docs/v2-device-addressing-and-real-ticket.md §5.1.
     public var deviceCapabilities: [String: DeviceCapabilityBlock] = [:]
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
+    /// Username-keyed mirror of the Worker's `webauthn_recovery` row,
+    /// holding the Task #74 passphrase-gate hashes so the gated fetch can
+    /// be exercised end-to-end (enroll → gated-fetch → unwrap) in tests.
+    /// Lower-cased username → stored record.
+    private struct MockRecoveryRow: Sendable {
+        var credentialId: String
+        var wrappedUmk: String
+        var wrappedAcmeAccountKey: String?
+        var fetchTokenHash: String?   // SHA-256 hex of the fetchToken
+        var prfSaltHash: String?      // SHA-256 hex of the prfSalt
+        var updatedAt: Int64
+    }
+    private var recoveryRowsByUser: [String: MockRecoveryRow] = [:]
+    /// Test hook — when set, the gated fetch returns THIS `prfSaltHash`
+    /// instead of the stored one, modelling a tampered/malicious `.com`.
+    /// Exercises the recover-path anti-coercion check.
+    public var tamperedPrfSaltHashOnFetch: String? = nil
 
     /// Tracks usernames that have been claimed so the mock can return
     /// 409 on a second different-IRK claim (idempotent under same IRK).
@@ -1711,6 +1800,22 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             wrappedUmk: req.request.wrappedUmk,
             wrappedAcmeAccountKey: req.request.wrappedAcmeAccountKey
         )
+        // Mirror the Worker's username-keyed row + Task #74 gate hashes so
+        // the gated fetch round-trips. Preserve an existing escrowed ACME
+        // key on a UMK-only re-upload, matching handleUploadWebauthnRecovery.
+        let u = req.request.username.lowercased()
+        let existing = recoveryRowsByUser[u]
+        let acme = (req.request.wrappedAcmeAccountKey?.isEmpty == false)
+            ? req.request.wrappedAcmeAccountKey
+            : existing?.wrappedAcmeAccountKey
+        recoveryRowsByUser[u] = MockRecoveryRow(
+            credentialId: req.request.credentialId,
+            wrappedUmk: req.request.wrappedUmk,
+            wrappedAcmeAccountKey: acme,
+            fetchTokenHash: req.request.fetchTokenHash?.lowercased() ?? existing?.fetchTokenHash,
+            prfSaltHash: req.request.prfSaltHash?.lowercased() ?? existing?.prfSaltHash,
+            updatedAt: Int64(Date().timeIntervalSince1970 * 1000)
+        )
         return RecoveryEnvelopeResponse(ok: true, updated: updated)
     }
 
@@ -1718,6 +1823,46 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         if let env = recoveryStore[credentialId] { return env }
         throw ScreensClientError.http(status: 404, message: "no envelope")
+    }
+
+    public func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse {
+        try await tick()
+        guard let row = recoveryRowsByUser[username.lowercased()] else {
+            throw ScreensClientError.http(status: 404, message: "no recovery record")
+        }
+        // Legacy row with no gate → 409, same as the Worker.
+        guard let storedHash = row.fetchTokenHash else {
+            throw ScreensClientError.http(status: 409, message: "record predates passphrase gate")
+        }
+        // The Worker hashes the PRESENTED fetchToken bytes and compares.
+        guard let tokenBytes = Self.hexToBytes(fetchTokenHex.lowercased()) else {
+            throw ScreensClientError.http(status: 400, message: "fetchToken must be hex")
+        }
+        let presented = SHA256.hash(data: tokenBytes).map { String(format: "%02x", $0) }.joined()
+        guard presented == storedHash.lowercased() else {
+            throw ScreensClientError.http(status: 403, message: "invalid fetch token")
+        }
+        return RecoveryFetchResponse(
+            username: username.lowercased(),
+            credentialId: row.credentialId,
+            wrappedUmk: row.wrappedUmk,
+            wrappedAcmeAccountKey: row.wrappedAcmeAccountKey,
+            prfSaltHash: tamperedPrfSaltHashOnFetch ?? row.prfSaltHash,
+            updatedAt: row.updatedAt
+        )
+    }
+
+    private static func hexToBytes(_ hex: String) -> Data? {
+        guard hex.count % 2 == 0 else { return nil }
+        var out = Data(capacity: hex.count / 2)
+        var idx = hex.startIndex
+        while idx < hex.endIndex {
+            let next = hex.index(idx, offsetBy: 2)
+            guard let b = UInt8(hex[idx..<next], radix: 16) else { return nil }
+            out.append(b)
+            idx = next
+        }
+        return out
     }
 
     public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {
@@ -2450,6 +2595,11 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return try await postJsonReturning("/api/recovery", body: body)
     }
 
+    /// LEGACY — there is no live `GET /api/recovery/fetch` on the Worker;
+    /// the native cloud-recovery flow uses `fetchWrappedUmk` (the gated
+    /// POST) instead. This method survives only for the Mock-only takeover
+    /// VMs (RealAccountLogin / WipeRestart), whose live ASAuthorization
+    /// wiring is a separate task. Do NOT use it on the live recovery path.
     public func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope {
         var comps = URLComponents(url: baseUrl.appendingPathComponent("/api/recovery/fetch"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [URLQueryItem(name: "credentialId", value: credentialId)]
@@ -2462,6 +2612,37 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(RecoveryEnvelope.self, from: data)
+    }
+
+    public func fetchWrappedUmk(username: String, fetchTokenHex: String) async throws -> RecoveryFetchResponse {
+        // Task #74 — the gate. POST the passphrase-derived fetchToken;
+        // `.com` only releases the ciphertext when SHA-256(fetchToken)
+        // matches the stored hash. Maps the Worker's status codes to the
+        // same human errors recovery.js surfaces (wrong passphrase / rate
+        // limit / legacy pre-gate row).
+        let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/recovery/by-username/\(encoded)/fetch"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        req.httpBody = try JSONEncoder().encode(RecoveryFetchTokenBody(fetchToken: fetchTokenHex, issuedAt: issuedAt))
+        let (data, resp) = try await urlSession.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        switch status {
+        case 200..<300:
+            return try JSONDecoder().decode(RecoveryFetchResponse.self, from: data)
+        case 403:
+            throw ScreensClientError.http(status: 403, message: "wrong passphrase")
+        case 404:
+            throw ScreensClientError.http(status: 404, message: "no cloud recovery for that username")
+        case 409:
+            throw ScreensClientError.http(status: 409, message: "this record predates the passphrase gate — re-enrol cloud recovery first")
+        case 429:
+            throw ScreensClientError.http(status: 429, message: "too many attempts — wait 15 minutes before retrying")
+        default:
+            let text = String(data: data, encoding: .utf8) ?? ""
+            throw ScreensClientError.http(status: status, message: text)
+        }
     }
 
     public func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse {

@@ -32,6 +32,8 @@ public struct SecureAccountScreen: View {
     @State private var showFileExport = false
     @State private var cloudError: String?
     @State private var cloudWorking = false
+    @State private var cloudPassphrase = ""
+    @State private var cloudPassphrase2 = ""
 
     public init(
         username: String,
@@ -64,6 +66,10 @@ public struct SecureAccountScreen: View {
                     VStack(spacing: FS.space.s3) {
                         cloudRow(c: c)
                         fileRow(c: c)
+                    }
+
+                    if vm.selected == .cloud {
+                        cloudPassphraseFields(c: c)
                     }
 
                     if let cloudError {
@@ -146,6 +152,41 @@ public struct SecureAccountScreen: View {
     }
 
     // MARK: - Rows
+
+    /// Recovery-passphrase entry for cloud backup (Task #4). Mirrors
+    /// recovery.js enroll: two fields, 8+ chars, must match. The passphrase
+    /// is Argon2id-hardened on enroll and is REQUIRED — plus the passkey —
+    /// to recover on a new device.
+    private func cloudPassphraseFields(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text("Recovery passphrase")
+                .font(FS.font.h4())
+                .foregroundColor(c.text)
+            Text("You'll need this passphrase AND your passkey to recover on a new device. Pick something memorable — we can't reset it.")
+                .font(FS.font.bodySm())
+                .foregroundColor(c.textMuted)
+            SecureField("Passphrase (8+ characters)", text: $cloudPassphrase)
+                .textContentType(.newPassword)
+                .autocorrectionDisabled(true)
+                .textInputAutocapitalization(.never)
+                .padding(FS.space.s3)
+                .background(c.surface)
+                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                .accessibilityIdentifier("secure-account-passphrase")
+            SecureField("Re-enter passphrase", text: $cloudPassphrase2)
+                .textContentType(.newPassword)
+                .autocorrectionDisabled(true)
+                .textInputAutocapitalization(.never)
+                .padding(FS.space.s3)
+                .background(c.surface)
+                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                .accessibilityIdentifier("secure-account-passphrase-2")
+        }
+        .padding(FS.space.s4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(c.surface)
+        .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
+    }
 
     private func cloudRow(c: FSColors) -> some View {
         optionRow(
@@ -244,11 +285,23 @@ public struct SecureAccountScreen: View {
     /// read it back and hand it to RecoveryViewModel.setup.
     private func setUpCloudBackup() async {
         guard let recoveryVm else { return }
+        // Validate the recovery passphrase up front (mirrors recovery.js
+        // enroll). The Argon2id derivation + envelope upload happen inside
+        // RecoveryViewModel.setup.
+        guard cloudPassphrase.count >= 8 else {
+            cloudError = "Passphrase must be 8+ characters."
+            return
+        }
+        guard cloudPassphrase == cloudPassphrase2 else {
+            cloudError = "Passphrases do not match."
+            return
+        }
+        cloudError = nil
         cloudWorking = true
         defer { cloudWorking = false }
         do {
             let umk = try await Keystore.currentUMK(reason: "Back up your Flagship account to iCloud")
-            await recoveryVm.setup(umkSeed: umk)
+            await recoveryVm.setup(umkSeed: umk, passphrase: cloudPassphrase)
             if case .registered = recoveryVm.phase {
                 onSecured()
             } else if case .failed(let msg) = recoveryVm.phase {

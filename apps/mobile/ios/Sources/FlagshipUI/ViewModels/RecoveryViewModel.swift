@@ -47,18 +47,40 @@ public final class RecoveryViewModel {
         self.username = username
     }
 
-    /// Register the user's authenticator + ship a recovery envelope
-    /// for the current Keystore-held UMK. Caller is expected to have
-    /// already generated the UMK (`Keystore.generateUMK(...)` once).
-    public func setup(umkSeed: SymmetricKey) async {
+    /// Register the user's authenticator + ship a recovery envelope for
+    /// the current Keystore-held UMK, gated behind a recovery PASSPHRASE
+    /// (Task #4). Caller is expected to have already generated the UMK
+    /// (`Keystore.generateUMK(...)` once).
+    ///
+    /// The passphrase (entered twice in the UI, min 8 chars) is
+    /// Argon2id-hardened into `{fetchToken, prfSalt}` exactly as
+    /// recovery.js does. `prfSalt` feeds WebAuthn's PRF so the wrap key is
+    /// bound to the passphrase; `SHA-256(fetchToken)` + `SHA-256(prfSalt)`
+    /// are shipped in the signed `/api/recovery` request so a later device
+    /// can gate-fetch the ciphertext and verify the salt.
+    public func setup(umkSeed: SymmetricKey, passphrase: String) async {
         phase = .settingUp
         guard let user = username(), !user.isEmpty else {
             phase = .failed("No active account on this device.")
             return
         }
+        guard passphrase.count >= 8 else {
+            phase = .failed("Passphrase must be 8+ characters.")
+            return
+        }
         do {
-            let registration = try await webAuthn.register()
-            let prfSecret = try await webAuthn.prfAssert(credentialId: registration.credentialId)
+            // Argon2id (~1-2s) → fetchToken + prfSalt. Mirrors recovery.js.
+            let secrets = try RecoveryDerivation.derivePassphraseSecrets(passphrase, user)
+
+            // Create the passkey with PRF input = prfSalt, then PRF-assert
+            // to get the 32-byte secret. credentialId is lowercase hex of
+            // the raw credential-ID bytes (Worker requires ^[0-9a-fA-F]+$).
+            let registration = try await webAuthn.register(prfSalt: secrets.prfSalt)
+            let credentialIdHex = Self.credentialIdHex(registration.credentialId)
+            let prfSecret = try await webAuthn.prfAssert(
+                credentialId: registration.credentialId,
+                prfSalt: secrets.prfSalt
+            )
             // Single self-contained AES-GCM blob (nonce‖ct‖tag). The Worker
             // base64-decodes it and SHA-256s the bytes; we hash the same
             // bytes to put into the signed canonical.
@@ -89,12 +111,14 @@ public final class RecoveryViewModel {
             // Sign the UploadRecoveryRecord under the account IRK. The
             // signature covers the HASH of the ciphertext + the credentialId
             // + username + issuedAt — exactly what the Worker re-derives and
-            // verifies. credentialId is the WebAuthn credential, already hex.
+            // verifies. The fetchToken/prfSalt hashes ride OUTSIDE the signed
+            // canonical (the Worker accepts-if-present; they're hashes of
+            // passphrase-derived secrets, not forgeable into a different UMK).
             let irk = try await Keystore.deriveIRK(reason: "Back up your Flagship account")
             let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
             let signature = try RecoveryUpload.sign(
                 username: user,
-                credentialIdHex: registration.credentialId,
+                credentialIdHex: credentialIdHex,
                 wrappedUmkHashHex: wrappedUmkHashHex,
                 issuedAt: issuedAt,
                 irk: irk
@@ -103,30 +127,70 @@ public final class RecoveryViewModel {
             _ = try await client.registerRecoveryEnvelope(.init(
                 request: .init(
                     username: user,
-                    credentialId: registration.credentialId,
+                    credentialId: credentialIdHex,
                     wrappedUmk: wrappedUmk,
                     issuedAt: issuedAt,
-                    wrappedAcmeAccountKey: wrappedAcme
+                    wrappedAcmeAccountKey: wrappedAcme,
+                    fetchTokenHash: RecoveryDerivation.sha256Hex(secrets.fetchToken),
+                    prfSaltHash: RecoveryDerivation.sha256Hex(secrets.prfSalt)
                 ),
                 signature: signature
             ))
-            phase = .registered(credentialId: registration.credentialId)
+            phase = .registered(credentialId: credentialIdHex)
         } catch {
             phase = .failed(error.localizedDescription)
         }
     }
 
-    /// Recover the UMK on a fresh phone. Returns the recovered seed
-    /// (caller injects it into Keystore via a hypothetical
-    /// `Keystore.installUMK(seed:)` — not implemented here yet).
-    public func recover() async -> SymmetricKey? {
+    /// Recover the UMK on a fresh phone from a username + recovery
+    /// passphrase (Task #4 — the gated fetch). Returns the recovered seed
+    /// (the caller installs it via `Keystore.installUMK`).
+    ///
+    /// Flow (mirrors recovery.js `recover`):
+    ///   1. Argon2id(passphrase, username) → fetchToken + prfSalt.
+    ///   2. `POST /api/recovery/by-username/<u>/fetch` with the fetchToken;
+    ///      `.com` releases the ciphertext only on a matching SHA-256.
+    ///   3. Verify `SHA-256(local prfSalt) == response.prfSaltHash` —
+    ///      refuse on mismatch (anti-coercion).
+    ///   4. PRF get() with input = prfSalt → unwrap the UMK (+ #28 ACME key).
+    public func recover(username user: String, passphrase: String) async -> SymmetricKey? {
         phase = .recovering
+        let normalizedUser = user.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedUser.isEmpty else {
+            phase = .failed("Enter your account name.")
+            return nil
+        }
+        guard passphrase.count >= 8 else {
+            phase = .failed("Passphrase must be 8+ characters.")
+            return nil
+        }
         do {
-            let prompt = try await webAuthn.assertAny()
-            let env = try await client.fetchRecoveryEnvelope(credentialId: prompt.credentialId)
-            let prfSecret = try await webAuthn.prfAssert(credentialId: prompt.credentialId)
+            let secrets = try RecoveryDerivation.derivePassphraseSecrets(passphrase, normalizedUser)
+
+            // The gate: present the fetchToken; a wrong passphrase → 403.
+            let fetched = try await client.fetchWrappedUmk(
+                username: normalizedUser,
+                fetchTokenHex: HexUtil.encode(secrets.fetchToken)
+            )
+
+            // Anti-coercion: confirm the server returned the same prfSalt we
+            // derived locally. A tampered `.com` feeding a different salt
+            // would otherwise surface only as an opaque AES-GCM tag mismatch.
+            if let serverPrfSaltHash = fetched.prfSaltHash {
+                let localPrfSaltHash = RecoveryDerivation.sha256Hex(secrets.prfSalt)
+                guard localPrfSaltHash == serverPrfSaltHash.lowercased() else {
+                    phase = .failed("Server returned a stale prfSaltHash — refusing to proceed.")
+                    return nil
+                }
+            }
+
+            // PRF get() against the released credential, salt = prfSalt.
+            let prfSecret = try await webAuthn.prfAssert(
+                credentialId: fetched.credentialId,
+                prfSalt: secrets.prfSalt
+            )
             let seed = try Recovery.unwrap(
-                wrappedUmkBase64: env.wrappedUmk,
+                wrappedUmkBase64: fetched.wrappedUmk,
                 prfSecret: prfSecret
             )
             // #28 — if the envelope carries the escrowed ACME account key,
@@ -134,7 +198,7 @@ public final class RecoveryViewModel {
             // recovered device regains cert-minting authority. Non-fatal:
             // UMK recovery is primary, and accounts that never minted an
             // account key simply won't carry this field.
-            if let wrappedAcme = env.wrappedAcmeAccountKey {
+            if let wrappedAcme = fetched.wrappedAcmeAccountKey {
                 do {
                     let scalar = try AcmeAccountKey.unwrapFromEscrow(
                         base64: wrappedAcme,
@@ -153,15 +217,52 @@ public final class RecoveryViewModel {
             return nil
         }
     }
+
+    /// Normalize a credentialId to lowercase hex of its raw bytes — the
+    /// WIRE form the Worker requires (`^[0-9a-fA-F]{16,512}$`). The real
+    /// `ASAuthorization` provider yields raw credential-ID bytes; we
+    /// expect those already hex-encoded. Anything already-hex passes
+    /// through (lower-cased); a non-hex dev stand-in id is UTF-8→hex
+    /// encoded so it still satisfies the regex deterministically.
+    static func credentialIdHex(_ credentialId: String) -> String {
+        let lower = credentialId.lowercased()
+        let isHex = !lower.isEmpty
+            && lower.count % 2 == 0
+            && lower.allSatisfy { $0.isHexDigit }
+        if isHex { return lower }
+        return HexUtil.encode(Data(credentialId.utf8))
+    }
 }
 
 /// Abstraction over the platform's WebAuthn + PRF assertion API. Live
 /// impl wraps ASAuthorizationController; tests + previews use the
 /// mock which generates deterministic credentialIds + PRF secrets.
+///
+/// The `prfSalt:` parameters carry the passphrase-derived PRF salt (Task
+/// #4) into WebAuthn's `prf.eval.first`, binding the PRF output to the
+/// user's passphrase exactly as recovery.js does. Callers that don't run
+/// the passphrase flow (the Mock-only takeover VMs) use the no-salt
+/// convenience shims below, which default the salt to a fixed value.
 public protocol WebAuthnProvider: Sendable {
-    func register() async throws -> WebAuthnRegistration
+    func register(prfSalt: Data) async throws -> WebAuthnRegistration
     func assertAny() async throws -> WebAuthnRegistration
-    func prfAssert(credentialId: String) async throws -> Data
+    func prfAssert(credentialId: String, prfSalt: Data) async throws -> Data
+}
+
+/// The default PRF salt used by the no-salt convenience overloads — keeps
+/// the legacy takeover flows (RealAccountLogin / WipeRestart) deriving a
+/// stable secret without threading a passphrase through them.
+public let defaultWebAuthnPrfSalt = Data("flagship/recovery/v1".utf8)
+
+public extension WebAuthnProvider {
+    /// Back-compat shim: register without an explicit PRF salt.
+    func register() async throws -> WebAuthnRegistration {
+        try await register(prfSalt: defaultWebAuthnPrfSalt)
+    }
+    /// Back-compat shim: PRF-assert with the default salt.
+    func prfAssert(credentialId: String) async throws -> Data {
+        try await prfAssert(credentialId: credentialId, prfSalt: defaultWebAuthnPrfSalt)
+    }
 }
 
 public struct WebAuthnRegistration: Sendable {
@@ -169,20 +270,32 @@ public struct WebAuthnRegistration: Sendable {
     public init(credentialId: String) { self.credentialId = credentialId }
 }
 
-/// Mock provider — deterministic PRF secret per credentialId so a
-/// setup + recover round-trip works in tests.
+/// Mock provider — deterministic PRF secret keyed on the PRF salt so a
+/// passphrase-bound setup + recover round-trip works in tests. A real
+/// authenticator keys its hmac-secret output by the salt (NOT the
+/// credentialId), so we mirror that: the same passphrase derives the same
+/// salt on both enroll and recover, yielding the same unwrap key even
+/// when the two ceremonies surface different credentialIds.
 public final class MockWebAuthnProvider: WebAuthnProvider, @unchecked Sendable {
     public init() {}
-    public func register() async throws -> WebAuthnRegistration {
-        WebAuthnRegistration(credentialId: "mock-cred-\(UUID().uuidString.prefix(8))")
+    public func register(prfSalt: Data) async throws -> WebAuthnRegistration {
+        // Hex credentialId so it satisfies the Worker's ^[0-9a-fA-F]{16,512}$
+        // and survives a hex→bytes→hex round-trip in tests.
+        WebAuthnRegistration(
+            credentialId: "aabbccdd" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        )
     }
     public func assertAny() async throws -> WebAuthnRegistration {
+        // Stable id for the legacy takeover flows (RealAccountLogin /
+        // WipeRestart) whose Mock recovery store is keyed by it. The new
+        // passphrase-gated recover path does NOT use assertAny — it fetches
+        // by username — so this value is unrelated to the gated fetch.
         WebAuthnRegistration(credentialId: "mock-cred-existing")
     }
-    public func prfAssert(credentialId: String) async throws -> Data {
-        // HKDF a stable secret keyed on the credentialId.
+    public func prfAssert(credentialId: String, prfSalt: Data) async throws -> Data {
+        // HKDF a stable secret keyed on the PRF salt.
         let key = HKDF<SHA256>.deriveKey(
-            inputKeyMaterial: SymmetricKey(data: Data(credentialId.utf8)),
+            inputKeyMaterial: SymmetricKey(data: prfSalt),
             salt: Data("flagship/mock-prf/v1".utf8),
             info: Data(),
             outputByteCount: 32

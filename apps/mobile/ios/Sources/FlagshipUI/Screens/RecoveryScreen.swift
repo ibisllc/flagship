@@ -8,14 +8,22 @@ import FlagshipCore
 public struct RecoveryScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: RecoveryViewModel
-    var onRunSetup: () async -> Void = {}
-    var onRunRecover: () async -> Void = {}
+    /// Receives the recovery PASSPHRASE the user typed (Task #4 — entered
+    /// twice + validated here before enroll).
+    var onRunSetup: (String) async -> Void = { _ in }
+    /// Receives the recovery PASSPHRASE for the restore path.
+    var onRunRecover: (String) async -> Void = { _ in }
     var onShowReattachProgress: () -> Void = {}
+
+    @State private var enrollPassphrase = ""
+    @State private var enrollPassphrase2 = ""
+    @State private var recoverPassphrase = ""
+    @State private var localError: String?
 
     public init(
         vm: RecoveryViewModel,
-        onRunSetup: @escaping () async -> Void = {},
-        onRunRecover: @escaping () async -> Void = {},
+        onRunSetup: @escaping (String) async -> Void = { _ in },
+        onRunRecover: @escaping (String) async -> Void = { _ in },
         onShowReattachProgress: @escaping () -> Void = {}
     ) {
         self.vm = vm
@@ -38,7 +46,33 @@ public struct RecoveryScreen: View {
                         switch vm.phase {
                         case .idle:
                             Text("No recovery envelope on file yet.").foregroundColor(c.text)
-                            FSPrimaryButton("Set up recovery", block: true) { Task { await onRunSetup() } }
+                            Text("Pick a recovery passphrase (8+ characters). You'll need it — plus your passkey — to recover on a new device.")
+                                .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            SecureField("Recovery passphrase", text: $enrollPassphrase)
+                                .textContentType(.newPassword)
+                                .autocorrectionDisabled(true)
+                                .textInputAutocapitalization(.never)
+                                .padding(FS.space.s3)
+                                .background(c.surface)
+                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                                .accessibilityIdentifier("recovery-enroll-passphrase")
+                            SecureField("Re-enter passphrase", text: $enrollPassphrase2)
+                                .textContentType(.newPassword)
+                                .autocorrectionDisabled(true)
+                                .textInputAutocapitalization(.never)
+                                .padding(FS.space.s3)
+                                .background(c.surface)
+                                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                                .accessibilityIdentifier("recovery-enroll-passphrase-2")
+                            if let localError {
+                                Text(localError).font(FS.font.caption()).foregroundColor(c.danger)
+                            }
+                            FSPrimaryButton("Set up recovery", block: true) {
+                                guard validateEnroll() else { return }
+                                let pp = enrollPassphrase
+                                Task { await onRunSetup(pp) }
+                            }
+                            .accessibilityIdentifier("recovery-enroll-go")
                         case .settingUp:
                             HStack { ProgressView(); Text("Registering passkey…").foregroundColor(c.textMuted) }
                         case .registered(let credId):
@@ -95,5 +129,20 @@ public struct RecoveryScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle("Recovery")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Mirror recovery.js enroll validation: 8+ chars and the two entries
+    /// must match. Surfaces the error inline without leaving `.idle`.
+    private func validateEnroll() -> Bool {
+        if enrollPassphrase.count < 8 {
+            localError = "Passphrase must be 8+ characters."
+            return false
+        }
+        if enrollPassphrase != enrollPassphrase2 {
+            localError = "Passphrases do not match."
+            return false
+        }
+        localError = nil
+        return true
     }
 }

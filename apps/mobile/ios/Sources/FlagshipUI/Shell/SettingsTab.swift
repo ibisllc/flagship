@@ -503,17 +503,22 @@ struct RecoveryContainer: View {
             if let vm {
                 RecoveryScreen(
                     vm: vm,
-                    onRunSetup: {
+                    onRunSetup: { passphrase in
                         // Fresh UMK seed for the demo. Real call site
-                        // passes the live UMK derived from Keystore.
+                        // (SecureAccountScreen) passes the live UMK from
+                        // Keystore. The passphrase comes from the screen's
+                        // validated SecureFields.
                         let seed = SymmetricKey(size: .bits256)
-                        await vm.setup(umkSeed: seed)
+                        await vm.setup(umkSeed: seed, passphrase: passphrase)
                         if case .registered = vm.phase {
                             toasts.success("Recovery is active.")
                         }
                     },
-                    onRunRecover: {
-                        let recovered = await vm.recover()
+                    onRunRecover: { passphrase in
+                        let recovered = await vm.recover(
+                            username: app.currentUser ?? "",
+                            passphrase: passphrase
+                        )
                         if recovered != nil {
                             toasts.success("UMK recovered.")
                         }

@@ -6,13 +6,13 @@ import FlagshipAPI
 /// Hosts the "I already have an account" branch from Welcome.
 ///
 /// Lifecycle:
-///   1. .recovering — fires RecoveryViewModel.recover() on .task.
-///   2. .succeeded(seed) — shows PostRecoveryChoiceScreen so the
+///   1. form — collect username + recovery passphrase (Task #4).
+///   2. .recovering — Argon2id-derive → gated fetch → verify prfSalt →
+///      PRF unwrap (RecoveryViewModel.recover(username:passphrase:)).
+///   3. .succeeded(seed) — shows PostRecoveryChoiceScreen so the
 ///      user picks Keep-both / Replace-lost / Wipe.
-///   3. .failed(reason) — shows ErrorCard + retry, with a clear
-///      hint for the "no passkey on this device" case (the most
-///      common cause: user is on a fresh phone with a different
-///      Apple ID, or has iCloud Keychain disabled).
+///   4. .failed(reason) — shows ErrorCard + retry, with a clear
+///      hint for the "wrong passphrase / no passkey" cases.
 ///
 /// On choice, the container hands AppState back to OnboardingFlow
 /// via the onComplete callback. The actual rotation work for
@@ -32,6 +32,9 @@ public struct RecoverFromWelcomeContainer: View {
     @State private var vm: RecoveryViewModel?
     @State private var recoveredSeed: SymmetricKey?
     @State private var errorMessage: String?
+    @State private var username = ""
+    @State private var passphrase = ""
+    @State private var working = false
 
     public init(
         onComplete: @escaping (RecoveryChoice, SymmetricKey) -> Void = { _, _ in },
@@ -50,8 +53,11 @@ public struct RecoverFromWelcomeContainer: View {
         .navigationTitle("Recover")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if vm == nil { vm = RecoveryViewModel(client: server) }
-            await runRecoveryIfNeeded()
+            // Platform-backed provider on device; the simulator path falls
+            // back to a stable HKDF derivation keyed by the prfSalt.
+            if vm == nil {
+                vm = RecoveryViewModel(client: server, webAuthn: PlatformWebAuthnProvider())
+            }
         }
     }
 
@@ -63,11 +69,49 @@ public struct RecoverFromWelcomeContainer: View {
                 wipeAndRestartEnabled: false,
                 onContinue: { choice in onComplete(choice, seed) }
             )
+        } else if working {
+            recoveringView(c: c)
         } else if let message = errorMessage {
             failureView(message: message, c: c)
         } else {
-            recoveringView(c: c)
+            formView(c: c)
         }
+    }
+
+    private func formView(c: FSColors) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Spacer().frame(height: FS.space.s6)
+                Text("Recover your account")
+                    .font(FS.font.h2()).foregroundColor(c.text)
+                Text("Enter your account name and recovery passphrase. We'll verify your passkey, fetch your wrapped account key, and bring this device into your existing account.")
+                    .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                TextField("Account name", text: $username)
+                    .textContentType(.username)
+                    .autocorrectionDisabled(true)
+                    .textInputAutocapitalization(.never)
+                    .padding(FS.space.s3)
+                    .background(c.surface)
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                    .accessibilityIdentifier("recover-username")
+                SecureField("Recovery passphrase", text: $passphrase)
+                    .textContentType(.password)
+                    .autocorrectionDisabled(true)
+                    .textInputAutocapitalization(.never)
+                    .padding(FS.space.s3)
+                    .background(c.surface)
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                    .accessibilityIdentifier("recover-passphrase")
+                FSPrimaryButton("Recover", block: true, large: true) {
+                    Task { await runRecovery() }
+                }
+                .accessibilityIdentifier("recover-go")
+                FSGhostButton("Cancel", block: true, action: onBack)
+                Spacer()
+            }
+            .padding(.horizontal, FS.space.s6)
+        }
+        .accessibilityIdentifier("recover-form")
     }
 
     private func recoveringView(c: FSColors) -> some View {
@@ -75,18 +119,15 @@ public struct RecoverFromWelcomeContainer: View {
             Spacer()
             ProgressView()
                 .scaleEffect(1.4)
-            Text("Authenticate with your passkey")
+            Text("Hardening your passphrase…")
                 .font(FS.font.h3())
                 .foregroundColor(c.text)
-            Text("We'll fetch your wrapped account key and bring this device into your existing Flagship account.")
+            Text("This takes a moment. We'll then verify your passkey and fetch your wrapped account key.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, FS.space.s8)
             Spacer()
-            FSGhostButton("Cancel", block: true, action: onBack)
-                .padding(.horizontal, FS.space.s6)
-                .padding(.bottom, FS.space.s6)
         }
         .accessibilityIdentifier("recover-recovering")
     }
@@ -112,7 +153,6 @@ public struct RecoverFromWelcomeContainer: View {
             Spacer()
             FSPrimaryButton("Try again", block: true, large: true) {
                 errorMessage = nil
-                Task { await runRecoveryIfNeeded(force: true) }
             }
             FSGhostButton("Back", block: true, action: onBack)
             Spacer().frame(height: FS.space.s8)
@@ -121,10 +161,11 @@ public struct RecoverFromWelcomeContainer: View {
         .accessibilityIdentifier("recover-failed")
     }
 
-    private func runRecoveryIfNeeded(force: Bool = false) async {
+    private func runRecovery() async {
         guard let vm else { return }
-        if !force && recoveredSeed != nil { return }
-        let seed = await vm.recover()
+        working = true
+        defer { working = false }
+        let seed = await vm.recover(username: username, passphrase: passphrase)
         if let seed {
             recoveredSeed = seed
             errorMessage = nil
@@ -136,15 +177,20 @@ public struct RecoverFromWelcomeContainer: View {
     }
 
     private func humanizedError(_ raw: String) -> String {
-        // Surface the most common case (no credentials on this device)
-        // in plain language; otherwise pass through the underlying
-        // message. RecoveryViewModel uses error.localizedDescription
-        // for everything, so we substring-match.
+        // Surface the most common cases in plain language; otherwise pass
+        // through the underlying message. RecoveryViewModel uses
+        // error.localizedDescription for everything, so we substring-match.
         let lower = raw.lowercased()
+        if lower.contains("wrong passphrase") || lower.contains("invalid fetch token") {
+            return "That passphrase didn't match. Check it and try again."
+        }
         if lower.contains("not allowed") || lower.contains("no credentials")
             || lower.contains("nomatchingcredential") || lower.contains("interrupted")
         {
             return "We couldn't find a recovery passkey on this device."
+        }
+        if lower.contains("no cloud recovery") {
+            return "No cloud recovery is set up for that account name."
         }
         return raw
     }

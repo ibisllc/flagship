@@ -154,4 +154,50 @@ final class RecoveryUploadTests: XCTestCase {
         let expected = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(RecoveryUpload.wrappedUmkHashHex(bytes), expected)
     }
+
+    /// Task #4 — the passphrase-gate hashes ride INSIDE `request`
+    /// (`r.fetchTokenHash` / `r.prfSaltHash`), beside the credentialId, and
+    /// are absent from the top level. The Worker reads them accept-if-present.
+    func test_registerBodyShape_fetchAndPrfSaltHashesRideInsideRequest() throws {
+        let fth = String(repeating: "a", count: 64)
+        let psh = String(repeating: "b", count: 64)
+        let req = RecoveryUploadRequest(
+            request: .init(
+                username: username,
+                credentialId: credentialIdHex,
+                wrappedUmk: "Zm9v",
+                issuedAt: issuedAt,
+                fetchTokenHash: fth,
+                prfSaltHash: psh
+            ),
+            signature: "00"
+        )
+        let data = try JSONEncoder().encode(req)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        // Not leaked to the top level.
+        XCTAssertNil(obj["fetchTokenHash"])
+        XCTAssertNil(obj["prfSaltHash"])
+        let inner = try XCTUnwrap(obj["request"] as? [String: Any])
+        XCTAssertEqual(inner["fetchTokenHash"] as? String, fth)
+        XCTAssertEqual(inner["prfSaltHash"] as? String, psh)
+    }
+
+    /// When omitted (legacy callers), the optional hash fields don't appear
+    /// in the encoded body at all — preserving the pre-#4 wire shape.
+    func test_registerBodyShape_hashesOmittedWhenNil() throws {
+        let req = RecoveryUploadRequest(
+            request: .init(
+                username: username,
+                credentialId: credentialIdHex,
+                wrappedUmk: "Zm9v",
+                issuedAt: issuedAt
+            ),
+            signature: "00"
+        )
+        let data = try JSONEncoder().encode(req)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let inner = try XCTUnwrap(obj["request"] as? [String: Any])
+        XCTAssertNil(inner["fetchTokenHash"])
+        XCTAssertNil(inner["prfSaltHash"])
+    }
 }
