@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
+import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
@@ -137,11 +138,20 @@ fun RecoveryScreen(nav: NavController) {
                                     nonceBase64 = sealed.nonceBase64,
                                 ),
                             )
+                            // #28 — escrow the ACME account key under the same
+                            // PRF secret. Non-fatal (see SecureAccountScreen).
+                            val wrappedAcme: String? = try {
+                                val scalar = Keystore.loadOrCreateAcmeAccountKeyScalar()
+                                AcmeAccountKey.wrapForEscrow(scalar, created.prfSecret)
+                            } catch (_: Throwable) {
+                                null
+                            }
                             flagshipServer.registerRecoveryEnvelope(
                                 RecoveryEnvelopeRequest(
                                     credentialId = created.credentialId,
                                     wrappedUmkBase64 = sealed.ciphertextBase64,
                                     nonceBase64 = sealed.nonceBase64,
+                                    wrappedAcmeAccountKey = wrappedAcme,
                                 ),
                             )
                             cloudStatus = CloudStatus.Configured

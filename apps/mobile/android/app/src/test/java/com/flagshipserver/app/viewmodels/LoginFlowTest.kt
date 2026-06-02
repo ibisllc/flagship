@@ -27,6 +27,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
+import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.keystore.Keystore
@@ -81,6 +82,24 @@ class LoginFlowTest {
                 nonceBase64 = sealed.nonceBase64,
             ),
         )
+    }
+
+    /** Seed an envelope that ALSO escrows an ACME account key (#28),
+     *  wrapped under the same Mock PRF secret. Returns the raw scalar so
+     *  the caller can assert it's restored into the Keystore. */
+    private suspend fun seedRecoveryEnvelopeWithAcme(server: MockFlagshipServerClient): ByteArray {
+        val prfSecret = webauthn.prfAssert(credentialId)
+        val sealed = Recovery.wrap(recoveredSeed, prfSecret)
+        val acmeScalar = AcmeAccountKey.generateScalar()
+        server.registerRecoveryEnvelope(
+            RecoveryEnvelopeRequest(
+                credentialId = credentialId,
+                wrappedUmkBase64 = sealed.ciphertextBase64,
+                nonceBase64 = sealed.nonceBase64,
+                wrappedAcmeAccountKey = AcmeAccountKey.wrapForEscrow(acmeScalar, prfSecret),
+            ),
+        )
+        return acmeScalar
     }
 
     private fun resolution(
@@ -186,6 +205,48 @@ class LoginFlowTest {
         assertTrue(app.pods.first().isEmpty())
         assertEquals(ADMIN_DEVICE_LABEL, app.activeProfile?.deviceLabel)
         assertNull("pending rotation cleared after completion", Keystore.pendingIrkRotationVersion())
+    }
+
+    // #28 — a takeover from an envelope that escrowed the ACME account key
+    // restores BOTH the UMK and the account-key scalar into the recovered
+    // profile's Keystore slot. confirmTakeover switches to the "harry"
+    // profile (setActiveProfile) before installing, so the scalar lands
+    // there.
+    @Test fun single_confirm_restoresEscrowedAcmeAccountKey() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val escrowedScalar = seedRecoveryEnvelopeWithAcme(server)
+        val app = AppState()
+        val m = vm(resolution("harry", "single", recoveryPresent = true), server, app)
+
+        m.begin()
+        // No account key on this fresh device before the takeover.
+        Keystore.setActiveProfile("harry")
+        assertFalse(Keystore.hasAcmeAccountKey())
+        Keystore.setActiveProfile(null)
+
+        m.confirmTakeover()
+
+        // UMK restored + the ACME account key restored into the active
+        // (recovered) profile.
+        assertArrayEquals(recoveredSeed, Keystore.currentUmkSeed())
+        assertEquals("harry", Keystore.activeProfile())
+        assertTrue("account key restored", Keystore.hasAcmeAccountKey())
+        assertArrayEquals(escrowedScalar, Keystore.acmeAccountKeyScalar())
+    }
+
+    // A takeover from a legacy envelope WITHOUT an escrowed account key
+    // still succeeds and simply restores no account key (backward-compat).
+    @Test fun single_confirm_withoutEscrowedAcme_restoresNoAccountKey() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        seedRecoveryEnvelope(server)
+        val app = AppState()
+        val m = vm(resolution("harry", "single", recoveryPresent = true), server, app)
+
+        m.begin()
+        m.confirmTakeover()
+
+        assertArrayEquals(recoveredSeed, Keystore.currentUmkSeed())
+        assertFalse("no account key when none was escrowed", Keystore.hasAcmeAccountKey())
     }
 
     // ─── 3. multi takeover requires the second factor ─────────────────

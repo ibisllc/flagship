@@ -39,6 +39,9 @@ object Keystore {
     private const val KEY_IRK_SEED = "irk.seed"
     private const val KEY_PUSH_X25519_PRIV = "push.x25519.priv"
     private const val KEY_PUSH_TOKEN_ID = "push.tokenId"
+    /** #28 — exportable ECDSA P-256 ACME account-key scalar (32 bytes,
+     *  hex). Admin-held; escrowed into the recovery envelope. */
+    private const val KEY_ACME_ACCOUNT_SCALAR = "acme.account.scalar"
     /** Active IRK HKDF version counter (B7/C7). Stored as a string of
      *  the integer; absent means v1 (the historical default). Bumped
      *  by Replace device + Wipe & restart ceremonies so old-IRK
@@ -386,6 +389,57 @@ object Keystore {
             .apply()
     }
 
+    // ---- ACME account key (#28, per-user-cert) -------------------------
+    //
+    // The ECDSA P-256 (ES256) account key that authorizes minting this
+    // user's TLS certs. Admin-held + independent of the UMK, so it is
+    // stored as a raw EXPORTABLE 32-byte scalar (hex) in EncryptedShared-
+    // Preferences — NOT an AndroidKeyStore key, which couldn't be escrowed.
+    // No biometric gate on read (mirrors the push + watch-delegate keys):
+    // the escrow path needs the raw bytes whenever the app runs. The
+    // recovery envelope carries the wrapped form (see AcmeAccountKey).
+
+    private fun acmeAccountKeyScalarKey() = pkey(KEY_ACME_ACCOUNT_SCALAR)
+
+    /** Load (or mint + persist) the ACME account-key scalar for the active
+     *  profile. First call generates a fresh P-256 scalar via
+     *  AcmeAccountKey.generateScalar(). */
+    fun loadOrCreateAcmeAccountKeyScalar(): ByteArray {
+        val p = requirePrefs()
+        val key = acmeAccountKeyScalarKey()
+        p.getString(key, null)?.let { hex ->
+            HexUtil.decode(hex)?.let { return it }
+        }
+        val scalar = com.flagshipserver.app.core.AcmeAccountKey.generateScalar()
+        p.edit().putString(key, HexUtil.encode(scalar)).apply()
+        return scalar
+    }
+
+    /** Raw read of the ACME account-key scalar (no mint). Returns null when
+     *  absent. Used by the escrow-upload path so a missing key never forces
+     *  one into existence. */
+    fun acmeAccountKeyScalar(): ByteArray? {
+        val hex = requirePrefs().getString(acmeAccountKeyScalarKey(), null) ?: return null
+        return HexUtil.decode(hex)
+    }
+
+    /** Install a recovered ACME account-key scalar into the active profile.
+     *  Used by the recovery-restore path after unwrapping the escrowed key
+     *  from the fetched envelope. */
+    fun importAcmeAccountKeyScalar(scalar: ByteArray) {
+        require(scalar.size == 32) { "ACME account key scalar must be 32 bytes" }
+        requirePrefs().edit().putString(acmeAccountKeyScalarKey(), HexUtil.encode(scalar)).apply()
+    }
+
+    /** True when an ACME account key is held on this device (active profile). */
+    fun hasAcmeAccountKey(): Boolean =
+        requirePrefs().getString(acmeAccountKeyScalarKey(), null) != null
+
+    /** Drop the ACME account-key scalar from the active profile. */
+    fun clearAcmeAccountKey() {
+        requirePrefs().edit().remove(acmeAccountKeyScalarKey()).apply()
+    }
+
     /** Last-registered push tokenId; null if no current registration. */
     fun pushTokenId(): String? = requirePrefs().getString(pkey(KEY_PUSH_TOKEN_ID), null)
 
@@ -419,6 +473,7 @@ object Keystore {
         editor.remove(pkey(KEY_IRK_PENDING_VERSION))
         editor.remove(watchDelegateSeedKey())
         editor.remove(watchDelegateGrantIdKey())
+        editor.remove(acmeAccountKeyScalarKey())
         // Per-version IRK caches (C7) — sweep every "<irk.seed key>.vN"
         // entry the rotation primitive might have written FOR THE ACTIVE
         // PROFILE. Other profiles' caches survive.
@@ -450,6 +505,7 @@ object Keystore {
         val bases = listOf(
             KEY_UMK_SEED, KEY_IRK_SEED, KEY_PUSH_X25519_PRIV,
             KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION,
+            KEY_ACME_ACCOUNT_SCALAR,
         )
         for (key in p.all.keys) {
             if (key == KEY_ACTIVE_PROFILE) { editor.remove(key); continue }

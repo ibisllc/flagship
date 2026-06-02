@@ -41,6 +41,7 @@ import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RePairInitiateRequest
+import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.RePairInitiateClaim
@@ -135,6 +136,12 @@ class LoginViewModel(
      *  confirmed takeover. Never persisted until [confirmTakeover]. */
     private var recoveredSeed: ByteArray? = null
 
+    /** #28 — recovered ACME account-key scalar (32 bytes), unwrapped from
+     *  the envelope's escrowed `wrappedAcmeAccountKey` if present. Held in
+     *  memory until [confirmTakeover] imports it into the recovered
+     *  profile's Keystore slot. Null when the account never escrowed one. */
+    private var recoveredAcmeScalar: ByteArray? = null
+
     /** MULTI second factor captured by [submitSecondFactor], threaded
      *  into the re-pair `totpProof`. */
     private var secondFactor: RePairInitiateRequest.TotpProof? = null
@@ -185,6 +192,17 @@ class LoginViewModel(
             resolution.recovery.credentialId ?: error("no recovery credential"),
         )
         val prfSecret = webauthn.prfAssert(envelope.credentialId)
+        // #28 — if the account escrowed its ACME account key, unwrap it now
+        // (same PRF secret, separate HKDF salt) and hold it for the
+        // confirmed takeover to import. Non-fatal: a failure here must never
+        // block the UMK recovery — cert-minting can be re-established later.
+        recoveredAcmeScalar = envelope.wrappedAcmeAccountKey?.let { wrapped ->
+            try {
+                AcmeAccountKey.unwrapFromEscrow(wrapped, prfSecret)
+            } catch (_: Throwable) {
+                null
+            }
+        }
         return Recovery.unwrap(
             ciphertextBase64 = envelope.wrappedUmkBase64,
             nonceBase64 = envelope.nonceBase64,
@@ -254,6 +272,16 @@ class LoginViewModel(
             //    the recovered identity's keys. installUmk resets the IRK
             //    version to v1 and sweeps stale per-version caches.
             Keystore.installUmk(seed)
+
+            // 1b. #28 — restore the recovered ACME account key into the now-
+            //     active profile's slot, re-establishing cert-minting
+            //     authority on this device. Non-fatal: never block the
+            //     takeover if the import hiccups.
+            recoveredAcmeScalar?.let { scalar ->
+                try {
+                    Keystore.importAcmeAccountKeyScalar(scalar)
+                } catch (_: Throwable) { /* recoverable via a surviving admin device */ }
+            }
 
             // 2. Derive OLD (v1, the recovered identity's current IRK) +
             //    NEW (v2) IRK and sign the re-pair with the NEW IRK — the

@@ -854,6 +854,14 @@ data class RecoveryEnvelopeRequest(
     val credentialId: String,
     val wrappedUmkBase64: String,
     val nonceBase64: String,
+    // #28 — the ACME account key escrowed alongside the UMK. Single
+    // self-contained base64 blob (nonce‖ct‖tag) from
+    // AcmeAccountKey.wrapForEscrow. The JSON key MUST be
+    // `wrappedAcmeAccountKey` (read verbatim by control-plane
+    // webauthnRecovery.handleUploadWebauthnRecovery). Optional + ciphertext
+    // only — never in the signed canonical, so tampering breaks recovery of
+    // the account key but can never forge it.
+    val wrappedAcmeAccountKey: String? = null,
 )
 
 @Serializable
@@ -864,6 +872,10 @@ data class RecoveryEnvelope(
     val credentialId: String,
     val wrappedUmkBase64: String,
     val nonceBase64: String,
+    // #28 — present when the account minted + escrowed an ACME account key.
+    // Decoded by the recovery-restore path (LoginViewModel) and imported via
+    // Keystore.importAcmeAccountKeyScalar.
+    val wrappedAcmeAccountKey: String? = null,
 )
 
 /** POST /api/push/register canonical-bytes envelope. Inner shape mirrors
@@ -1045,10 +1057,14 @@ class MockFlagshipServerClient(
 
     override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse {
         tick()
+        // Preserve a previously-escrowed account key when a re-upload
+        // omits it, mirroring the control-plane upsert (#28).
+        val priorAcme = recoveryStore[req.credentialId]?.wrappedAcmeAccountKey
         recoveryStore[req.credentialId] = RecoveryEnvelope(
             credentialId = req.credentialId,
             wrappedUmkBase64 = req.wrappedUmkBase64,
             nonceBase64 = req.nonceBase64,
+            wrappedAcmeAccountKey = req.wrappedAcmeAccountKey ?: priorAcme,
         )
         return RecoveryEnvelopeResponse(ok = true)
     }
