@@ -186,7 +186,7 @@ final class RevokeServerTests: XCTestCase {
         func revokeServer(_ req: ServerRevocationRequest) async throws { throw error }
         func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse { throw error }
         func resolveAccount(username: String) async throws -> AccountResolution { throw error }
-        func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse { throw error }
+        func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse { throw error }
         func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope { throw error }
         func registerPushToken(_ req: PushTokenRegisterRequest) async throws -> PushTokenRegisterResponse { throw error }
         func revokePushToken(tokenId: String) async throws { throw error }

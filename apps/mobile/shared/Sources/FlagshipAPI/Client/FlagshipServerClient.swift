@@ -47,7 +47,7 @@ public protocol FlagshipServerClient: Sendable {
     /// packages/control-plane/src/accountResolve.ts. See
     /// docs/login-and-account-redesign.md.
     func resolveAccount(username: String) async throws -> AccountResolution
-    func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse
+    func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse
     func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope
     /// Register an APNs device token with .com so the Worker can relay
     /// (or retry) encrypted push payloads to this device. The returned
@@ -1409,52 +1409,79 @@ public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
     }
 }
 
-public struct RecoveryEnvelopeRequest: Codable, Equatable, Sendable {
-    public let credentialId: String
-    public let wrappedUmkBase64: String
-    public let nonceBase64: String
-    /// #28 — the escrow-wrapped ACME account key (base64 of nonce‖ct‖tag),
-    /// shipped alongside the UMK so a recovering device can restore
-    /// cert-minting authority. Optional: absent for accounts that never
-    /// minted an account key. The Worker reads `r.wrappedAcmeAccountKey` —
-    /// the synthesized CodingKey from this property name matches the wire.
-    public let wrappedAcmeAccountKey: String?
-    public init(
-        credentialId: String,
-        wrappedUmkBase64: String,
-        nonceBase64: String,
-        wrappedAcmeAccountKey: String? = nil
-    ) {
-        self.credentialId = credentialId
-        self.wrappedUmkBase64 = wrappedUmkBase64
-        self.nonceBase64 = nonceBase64
-        self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+/// POST /api/recovery — SIGNED cloud-recovery upload. Codable-encodes to
+/// `{ request: { username, credentialId, wrappedUmk, issuedAt,
+/// wrappedAcmeAccountKey? }, signature }`, the exact body
+/// `handleUploadWebauthnRecovery` expects.
+///
+/// - `wrappedUmk` is a SINGLE self-contained base64 blob (nonce‖ct‖tag from
+///   AES-GCM `.combined`). The Worker base64-decodes it and SHA-256s the
+///   bytes; there is NO separate nonce field.
+/// - `signature` is hex Ed25519 by the account IRK over the canonical
+///   `flagship/upload-recovery-record/v1|<username>|<credentialId>|<wrappedUmkHashHex>|<issuedAt>`
+///   (see Flagship/RecoveryUpload). The IRK signs the HASH of the
+///   ciphertext, not the ciphertext, so the bytes stay small.
+public struct RecoveryUploadRequest: Codable, Equatable, Sendable {
+    public struct Inner: Codable, Equatable, Sendable {
+        public let username: String
+        public let credentialId: String      // hex (8..256 bytes)
+        public let wrappedUmk: String        // base64 of nonce‖ct‖tag
+        public let issuedAt: Int64           // ms epoch; 5-min freshness
+        /// #28 — escrow-wrapped ACME account key (base64 of nonce‖ct‖tag),
+        /// shipped INSIDE `request` so the Worker reads `r.wrappedAcmeAccountKey`.
+        /// Optional: absent for accounts that never minted an account key.
+        /// Not in the signed canonical bytes — it's opaque ciphertext, so
+        /// tampering breaks account-key recovery, never forges it.
+        public let wrappedAcmeAccountKey: String?
+        public init(
+            username: String,
+            credentialId: String,
+            wrappedUmk: String,
+            issuedAt: Int64,
+            wrappedAcmeAccountKey: String? = nil
+        ) {
+            self.username = username
+            self.credentialId = credentialId
+            self.wrappedUmk = wrappedUmk
+            self.issuedAt = issuedAt
+            self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
+        }
+    }
+    public let request: Inner
+    public let signature: String             // hex Ed25519 by the account IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
     }
 }
 
 public struct RecoveryEnvelopeResponse: Codable, Equatable, Sendable {
     public let ok: Bool
-    public init(ok: Bool) { self.ok = ok }
+    /// Whether the upsert replaced an existing record. The Worker returns
+    /// `{ ok, updated }`; absent on the Mock's synthetic success.
+    public let updated: Bool?
+    public init(ok: Bool, updated: Bool? = nil) { self.ok = ok; self.updated = updated }
 }
 
+/// Recovery-envelope fetch response, aligned to the Worker's gated-fetch
+/// body (`handleFetchWrappedUmkWithToken`): `{ username, credentialId,
+/// wrappedUmk, wrappedAcmeAccountKey?, prfSaltHash?, updatedAt }`. The
+/// ciphertext field is `wrappedUmk` (single self-contained blob); there is
+/// no separate `nonceBase64`.
 public struct RecoveryEnvelope: Codable, Equatable, Sendable {
     public let credentialId: String
-    public let wrappedUmkBase64: String
-    public let nonceBase64: String
+    public let wrappedUmk: String
     /// #28 — the escrow-wrapped ACME account key the Worker releases on
-    /// fetch (`wrappedAcmeAccountKey` in the response body). Absent when the
-    /// account never minted an account key. A recovering device unwraps this
-    /// with the same PRF secret and imports it via `Keystore.importAcmeAccountKey`.
+    /// fetch. Absent when the account never minted an account key. A
+    /// recovering device unwraps this with the same PRF secret and imports
+    /// it via `Keystore.importAcmeAccountKey`.
     public let wrappedAcmeAccountKey: String?
     public init(
         credentialId: String,
-        wrappedUmkBase64: String,
-        nonceBase64: String,
+        wrappedUmk: String,
         wrappedAcmeAccountKey: String? = nil
     ) {
         self.credentialId = credentialId
-        self.wrappedUmkBase64 = wrappedUmkBase64
-        self.nonceBase64 = nonceBase64
+        self.wrappedUmk = wrappedUmk
         self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
     }
 }
@@ -1676,15 +1703,15 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         )
     }
 
-    public func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse {
+    public func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse {
         try await tick()
-        recoveryStore[req.credentialId] = RecoveryEnvelope(
-            credentialId: req.credentialId,
-            wrappedUmkBase64: req.wrappedUmkBase64,
-            nonceBase64: req.nonceBase64,
-            wrappedAcmeAccountKey: req.wrappedAcmeAccountKey
+        let updated = recoveryStore[req.request.credentialId] != nil
+        recoveryStore[req.request.credentialId] = RecoveryEnvelope(
+            credentialId: req.request.credentialId,
+            wrappedUmk: req.request.wrappedUmk,
+            wrappedAcmeAccountKey: req.request.wrappedAcmeAccountKey
         )
-        return RecoveryEnvelopeResponse(ok: true)
+        return RecoveryEnvelopeResponse(ok: true, updated: updated)
     }
 
     public func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope {
@@ -2418,9 +2445,9 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return try JSONDecoder().decode(AccountResolution.self, from: data)
     }
 
-    public func registerRecoveryEnvelope(_ req: RecoveryEnvelopeRequest) async throws -> RecoveryEnvelopeResponse {
+    public func registerRecoveryEnvelope(_ req: RecoveryUploadRequest) async throws -> RecoveryEnvelopeResponse {
         let body = try JSONEncoder().encode(req)
-        return try await postJsonReturning("/api/recovery/register", body: body)
+        return try await postJsonReturning("/api/recovery", body: body)
     }
 
     public func fetchRecoveryEnvelope(credentialId: String) async throws -> RecoveryEnvelope {

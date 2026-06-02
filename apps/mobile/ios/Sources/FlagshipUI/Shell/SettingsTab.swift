@@ -493,6 +493,7 @@ struct ProvidersStub: View {
 struct RecoveryContainer: View {
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(ToastCenter.self) private var toasts
+    @Environment(AppState.self) private var app
     @State private var vm: RecoveryViewModel?
     var onShowPostRecoveryProgress: () -> Void = {}
 
@@ -527,7 +528,8 @@ struct RecoveryContainer: View {
                 // simulator path falls back to a stable HKDF derivation.
                 vm = RecoveryViewModel(
                     client: serverClient,
-                    webAuthn: PlatformWebAuthnProvider()
+                    webAuthn: PlatformWebAuthnProvider(),
+                    username: { [app] in app.currentUser }
                 )
             }
         }

@@ -10,7 +10,10 @@ import AuthenticationServices
 ///   2. Run a PRF-extension assertion to derive a 32-byte secret from
 ///      the passkey + a fixed salt.
 ///   3. AES-GCM encrypt the UMK seed under the PRF-derived key.
-///   4. Upload {credentialID, ciphertext, nonce} to flagshipserver.com.
+///   4. Upload a SIGNED {credentialId, wrappedUmk, issuedAt} envelope to
+///      flagshipserver.com (POST /api/recovery). wrappedUmk is the single
+///      self-contained AES-GCM blob (nonce‖ct‖tag); see RecoveryUpload for
+///      the canonical bytes the IRK signs.
 ///
 /// Recovery (on a fresh phone — old phone lost):
 ///   1. PRF assertion against the registered credential.
@@ -42,12 +45,15 @@ public struct Recovery {
         }
     }
 
-    /// Wrap a UMK seed under a PRF-derived key. Returns the AES-GCM
-    /// ciphertext + nonce as base64 strings, ready to ship.
+    /// Wrap a UMK seed under a PRF-derived key. Returns a SINGLE
+    /// self-contained base64 blob — the AES-GCM `.combined` representation
+    /// (nonce‖ciphertext‖tag) — ready to ship as the Worker's `wrappedUmk`
+    /// field. The nonce lives inside the blob; there is no separate nonce
+    /// field. The Worker SHA-256s the decoded bytes of exactly this blob.
     public static func wrap(
         umkSeed: SymmetricKey,
         prfSecret: Data
-    ) throws -> (ciphertextBase64: String, nonceBase64: String) {
+    ) throws -> String {
         let key = HKDF<SHA256>.deriveKey(
             inputKeyMaterial: SymmetricKey(data: prfSecret),
             salt: Data("flagship/recovery-wrap/v1".utf8),
@@ -59,20 +65,16 @@ public struct Recovery {
         guard let combined = sealed.combined else {
             throw RecoveryError.decryptionFailed("no combined ciphertext")
         }
-        // Split nonce (first 12 bytes of combined) from ciphertext+tag.
-        let nonce = combined.prefix(12)
-        let rest = combined.dropFirst(12)
-        return (rest.base64EncodedString(), Data(nonce).base64EncodedString())
+        return combined.base64EncodedString()
     }
 
-    /// Reverse of `wrap`. Decrypts the envelope into a UMK seed.
+    /// Reverse of `wrap`. Decrypts the single self-contained combined blob
+    /// (nonce‖ciphertext‖tag, base64) into a UMK seed.
     public static func unwrap(
-        ciphertextBase64: String,
-        nonceBase64: String,
+        wrappedUmkBase64: String,
         prfSecret: Data
     ) throws -> SymmetricKey {
-        guard let ct = Data(base64Encoded: ciphertextBase64),
-              let nonceData = Data(base64Encoded: nonceBase64) else {
+        guard let combined = Data(base64Encoded: wrappedUmkBase64) else {
             throw RecoveryError.decryptionFailed("base64 decode")
         }
         let key = HKDF<SHA256>.deriveKey(
@@ -82,9 +84,7 @@ public struct Recovery {
             outputByteCount: 32
         )
         do {
-            let nonce = try AES.GCM.Nonce(data: nonceData)
-            let box = try AES.GCM.SealedBox(combined: Data(nonceData) + ct)
-            _ = nonce
+            let box = try AES.GCM.SealedBox(combined: combined)
             let plaintext = try AES.GCM.open(box, using: key)
             return SymmetricKey(data: plaintext)
         } catch {

@@ -61,11 +61,9 @@ final class AcmeAccountKeyTests: XCTestCase {
     func test_escrow_salt_isDomainSeparatedFromUmkWrap() throws {
         let scalar = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
         let prf = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
-        let umkEnv = try Recovery.wrap(umkSeed: SymmetricKey(data: scalar), prfSecret: prf)
-        // Recovery.wrap returns ciphertext + nonce split; reassemble combined.
-        let ct = Data(base64Encoded: umkEnv.ciphertextBase64)!
-        let nonce = Data(base64Encoded: umkEnv.nonceBase64)!
-        let combinedUnderUmkSalt = (nonce + ct).base64EncodedString()
+        // Recovery.wrap returns a single self-contained combined blob
+        // (nonce‖ct‖tag) sealed under the UMK-wrap salt.
+        let combinedUnderUmkSalt = try Recovery.wrap(umkSeed: SymmetricKey(data: scalar), prfSecret: prf)
         XCTAssertThrowsError(
             try AcmeAccountKey.unwrapFromEscrow(base64: combinedUnderUmkSalt, prfSecret: prf)
         )

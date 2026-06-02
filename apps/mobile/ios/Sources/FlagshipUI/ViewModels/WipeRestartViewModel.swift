@@ -103,27 +103,23 @@ public final class WipeRestartViewModel {
             return
         }
 
-        // 4 — Wrap the NEW UMK under the new PRF secret.
+        // 4 — Wrap the NEW UMK under the new PRF secret. `Recovery.wrap`
+        // returns a SINGLE self-contained base64 blob (nonce‖ct‖tag) — the
+        // exact value the Worker stores as wrappedUmk and SHA-256s.
         phase = .wrappingNewUmk
-        let wrapped: (ciphertextBase64: String, nonceBase64: String)
+        let newWrappedUmkB64: String
         do {
-            wrapped = try Recovery.wrap(umkSeed: newUmk, prfSecret: prfSecret)
+            newWrappedUmkB64 = try Recovery.wrap(umkSeed: newUmk, prfSecret: prfSecret)
         } catch {
             phase = .failed("Couldn't wrap new key: \(error.localizedDescription)")
             return
         }
-        // The Worker stores wrappedUmk as a single base64 string that
-        // it decodes + hashes. The Worker's canonical bytes also
-        // SHA-256 the decoded ciphertext bytes (NOT base64 chars), so
-        // we feed it the raw nonce||ct bytes the SealedBox produces.
-        guard let nonceBytes = Data(base64Encoded: wrapped.nonceBase64),
-              let ctBytes = Data(base64Encoded: wrapped.ciphertextBase64)
-        else {
+        // The Worker's canonical bytes SHA-256 the DECODED ciphertext bytes
+        // (NOT base64 chars), so we hash the raw bytes of the same blob.
+        guard let combined = Data(base64Encoded: newWrappedUmkB64) else {
             phase = .failed("Local base64 round-trip failed")
             return
         }
-        let combined = nonceBytes + ctBytes
-        let newWrappedUmkB64 = combined.base64EncodedString()
         let wrappedHashHex = sha256Hex(combined)
 
         // 5 — Derive OLD + NEW IRK pub keys.

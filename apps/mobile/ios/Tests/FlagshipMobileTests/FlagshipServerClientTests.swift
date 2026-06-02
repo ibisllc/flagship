@@ -132,15 +132,19 @@ final class FlagshipServerClientTests: XCTestCase {
 
     func test_recoveryEnvelope_roundTrip() async throws {
         let c = makeClient()
-        let req = RecoveryEnvelopeRequest(
-            credentialId: "cred-1",
-            wrappedUmkBase64: "Zm9v",
-            nonceBase64: "YmFy"
+        let req = RecoveryUploadRequest(
+            request: .init(
+                username: "demo1234",
+                credentialId: "cred-1",
+                wrappedUmk: "Zm9v",
+                issuedAt: 1_700_000_000_000
+            ),
+            signature: "00"
         )
         _ = try await c.registerRecoveryEnvelope(req)
         let fetched = try await c.fetchRecoveryEnvelope(credentialId: "cred-1")
         XCTAssertEqual(fetched.credentialId, "cred-1")
-        XCTAssertEqual(fetched.wrappedUmkBase64, "Zm9v")
+        XCTAssertEqual(fetched.wrappedUmk, "Zm9v")
     }
 
     func test_fetchRecoveryEnvelope_unknownCredentialThrows404() async {

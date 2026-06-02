@@ -107,7 +107,8 @@ public struct SecureAccountScreen: View {
                 // Settings → Recovery (RecoveryContainer).
                 recoveryVm = RecoveryViewModel(
                     client: server,
-                    webAuthn: PlatformWebAuthnProvider()
+                    webAuthn: PlatformWebAuthnProvider(),
+                    username: { [username] in username }
                 )
             }
         }

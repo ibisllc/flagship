@@ -31,10 +31,20 @@ public final class RecoveryViewModel {
 
     private let client: any FlagshipServerClient
     private let webAuthn: WebAuthnProvider
+    /// The account whose UMK is being escrowed. The Worker REQUIRES it in
+    /// the signed upload (it fetches the IRK pubkey by username + verifies
+    /// the signature under it). The recover path doesn't need it — a fresh
+    /// phone has no username yet — so it defaults to nil.
+    private let username: () -> String?
 
-    public init(client: any FlagshipServerClient, webAuthn: WebAuthnProvider = MockWebAuthnProvider()) {
+    public init(
+        client: any FlagshipServerClient,
+        webAuthn: WebAuthnProvider = MockWebAuthnProvider(),
+        username: @escaping () -> String? = { nil }
+    ) {
         self.client = client
         self.webAuthn = webAuthn
+        self.username = username
     }
 
     /// Register the user's authenticator + ship a recovery envelope
@@ -42,15 +52,29 @@ public final class RecoveryViewModel {
     /// already generated the UMK (`Keystore.generateUMK(...)` once).
     public func setup(umkSeed: SymmetricKey) async {
         phase = .settingUp
+        guard let user = username(), !user.isEmpty else {
+            phase = .failed("No active account on this device.")
+            return
+        }
         do {
             let registration = try await webAuthn.register()
             let prfSecret = try await webAuthn.prfAssert(credentialId: registration.credentialId)
-            let env = try Recovery.wrap(umkSeed: umkSeed, prfSecret: prfSecret)
+            // Single self-contained AES-GCM blob (nonce‖ct‖tag). The Worker
+            // base64-decodes it and SHA-256s the bytes; we hash the same
+            // bytes to put into the signed canonical.
+            let wrappedUmk = try Recovery.wrap(umkSeed: umkSeed, prfSecret: prfSecret)
+            guard let wrappedUmkBytes = Data(base64Encoded: wrappedUmk) else {
+                phase = .failed("Local base64 round-trip failed")
+                return
+            }
+            let wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
+
             // #28 — also escrow the ACME account key (cert-minting authority)
             // under the SAME PRF secret so a fully device-less recovery can
             // restore issuance. UMK escrow is primary: a failure to mint or
             // wrap the account key must NOT fail recovery setup, so this is a
-            // best-effort do/catch that simply omits the field on error.
+            // best-effort do/catch that simply omits the field on error. The
+            // account key uses its OWN wrap (salt flagship/recovery-acme-wrap/v1).
             var wrappedAcme: String? = nil
             do {
                 let acme = try Keystore.loadOrCreateAcmeAccountKey()
@@ -61,11 +85,30 @@ public final class RecoveryViewModel {
             } catch {
                 // Non-fatal: continue without the escrowed account key.
             }
+
+            // Sign the UploadRecoveryRecord under the account IRK. The
+            // signature covers the HASH of the ciphertext + the credentialId
+            // + username + issuedAt — exactly what the Worker re-derives and
+            // verifies. credentialId is the WebAuthn credential, already hex.
+            let irk = try await Keystore.deriveIRK(reason: "Back up your Flagship account")
+            let issuedAt = Int64(Date().timeIntervalSince1970 * 1000)
+            let signature = try RecoveryUpload.sign(
+                username: user,
+                credentialIdHex: registration.credentialId,
+                wrappedUmkHashHex: wrappedUmkHashHex,
+                issuedAt: issuedAt,
+                irk: irk
+            )
+
             _ = try await client.registerRecoveryEnvelope(.init(
-                credentialId: registration.credentialId,
-                wrappedUmkBase64: env.ciphertextBase64,
-                nonceBase64: env.nonceBase64,
-                wrappedAcmeAccountKey: wrappedAcme
+                request: .init(
+                    username: user,
+                    credentialId: registration.credentialId,
+                    wrappedUmk: wrappedUmk,
+                    issuedAt: issuedAt,
+                    wrappedAcmeAccountKey: wrappedAcme
+                ),
+                signature: signature
             ))
             phase = .registered(credentialId: registration.credentialId)
         } catch {
@@ -83,8 +126,7 @@ public final class RecoveryViewModel {
             let env = try await client.fetchRecoveryEnvelope(credentialId: prompt.credentialId)
             let prfSecret = try await webAuthn.prfAssert(credentialId: prompt.credentialId)
             let seed = try Recovery.unwrap(
-                ciphertextBase64: env.wrappedUmkBase64,
-                nonceBase64: env.nonceBase64,
+                wrappedUmkBase64: env.wrappedUmk,
                 prfSecret: prfSecret
             )
             // #28 — if the envelope carries the escrowed ACME account key,

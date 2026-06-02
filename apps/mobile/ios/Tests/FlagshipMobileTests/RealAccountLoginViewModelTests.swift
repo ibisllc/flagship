@@ -54,11 +54,15 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         let credentialId = "mock-cred-existing"
         let umk = SymmetricKey(size: .bits256)
         let prf = try await MockWebAuthnProvider().prfAssert(credentialId: credentialId)
-        let env = try Recovery.wrap(umkSeed: umk, prfSecret: prf)
+        let wrappedUmk = try Recovery.wrap(umkSeed: umk, prfSecret: prf)
         _ = try await server.registerRecoveryEnvelope(.init(
-            credentialId: credentialId,
-            wrappedUmkBase64: env.ciphertextBase64,
-            nonceBase64: env.nonceBase64
+            request: .init(
+                username: "demo1234",
+                credentialId: credentialId,
+                wrappedUmk: wrappedUmk,
+                issuedAt: 1_700_000_000_000
+            ),
+            signature: "00"
         ))
         return umk
     }

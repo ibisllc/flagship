@@ -177,8 +177,7 @@ public final class RealAccountLoginViewModel {
             let env = try await server.fetchRecoveryEnvelope(credentialId: prompt.credentialId)
             let prfSecret = try await webAuthn.prfAssert(credentialId: prompt.credentialId)
             seed = try Recovery.unwrap(
-                ciphertextBase64: env.wrappedUmkBase64,
-                nonceBase64: env.nonceBase64,
+                wrappedUmkBase64: env.wrappedUmk,
                 prfSecret: prfSecret
             )
         } catch {
