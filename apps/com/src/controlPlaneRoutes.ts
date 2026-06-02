@@ -35,6 +35,9 @@ import {
   handleReleaseBoxSealedLease,
   handleRevokeBoxSealedLease,
   handleListBoxSealedLeases,
+  handleDepositAcmeAccountKey,
+  handleReleaseAcmeAccountKey,
+  handleRevokeAcmeAccountKeyDelivery,
   handleNotifyOwner,
   handleObjectRePair,
   handleTotpDisable,
@@ -423,6 +426,12 @@ const ROUTE_RE = {
   LEASE_V2_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2$/,
   LEASE_V2_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease-v2\/([^/]+)$/,
   LEASE_V2_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases-v2$/,
+  // #28 Option B — seal-to-box ACME account-key delivery. ONE path
+  // (singular `acme-account-key`) discriminated by method:
+  //   POST   deposit (IRK-signed grant, sealed to the box STK)
+  //   GET    release (public box poll — sealed blob only)
+  //   DELETE delivery-revoke (IRK-signed)
+  ACME_ACCOUNT_KEY_DELIVERY: /^\/api\/server\/([^/]+)\/acme-account-key$/,
   USER_PODS: /^\/api\/users\/([^/]+)\/pods$/,
   USER_DEVICES: /^\/api\/users\/([^/]+)\/devices$/,
   // Phase 3b — vouched cross-device admit. The admin signs a
@@ -1025,6 +1034,44 @@ export async function tryControlPlane(
           await readJson(request),
         ),
       );
+    }
+    // #28 Option B — seal-to-box ACME account-key delivery (deposit / release
+    // / revoke). Same deposit-and-release shape as the box-sealed lease above;
+    // the deposit ALSO records the grant (for audit + requireMinter) so the
+    // rotation sweep + the mint-coordination path already cover the box's copy.
+    {
+      const buildAcmeDeliveryDeps = () => ({
+        servers: storage.servers,
+        usernames: storage.usernames,
+        delivery: storage.acmeAccountKeyDelivery,
+        acmeAccountKeyGrants: storage.acmeAccountKeyGrants,
+      });
+      if (method === "POST" && (m = path.match(ROUTE_RE.ACME_ACCOUNT_KEY_DELIVERY))) {
+        return finishPlain(
+          await handleDepositAcmeAccountKey(
+            buildAcmeDeliveryDeps(),
+            decodeURIComponent(m[1]!),
+            await readJson(request),
+          ),
+        );
+      }
+      if (method === "GET" && (m = path.match(ROUTE_RE.ACME_ACCOUNT_KEY_DELIVERY))) {
+        return finishPlain(
+          await handleReleaseAcmeAccountKey(
+            buildAcmeDeliveryDeps(),
+            decodeURIComponent(m[1]!),
+          ),
+        );
+      }
+      if (method === "DELETE" && (m = path.match(ROUTE_RE.ACME_ACCOUNT_KEY_DELIVERY))) {
+        return finishPlain(
+          await handleRevokeAcmeAccountKeyDelivery(
+            buildAcmeDeliveryDeps(),
+            decodeURIComponent(m[1]!),
+            await readJson(request),
+          ),
+        );
+      }
     }
     // Identity-plane half of the boot worker's NOTIFY PIPE. The boot
     // worker (apps/boot) calls this server-to-server with a shared

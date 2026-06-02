@@ -64,6 +64,20 @@ describe("rateLimit — endpoint detection", () => {
     expect(LIMITS["demo-cancel"]?.every((a) => a.axis === "ip")).toBe(true);
   });
 
+  it("maps the #28 seal-to-box ACME delivery endpoints by method", () => {
+    const p = "/api/server/nas.dani.flagship.services/acme-account-key";
+    expect(endpointFor("POST", p)).toBe("acme-key-deposit");
+    expect(endpointFor("GET", p)).toBe("acme-key-release");
+    expect(endpointFor("DELETE", p)).toBe("acme-key-delivery-revoke");
+    // The release (public box poll) is per-IP only.
+    expect(LIMITS["acme-key-release"]?.every((a) => a.axis === "ip")).toBe(true);
+    // The singular delivery path must NOT collide with the plural per-user
+    // grant routes.
+    expect(endpointFor("POST", "/api/users/dani/acme-account-keys")).toBe(
+      "acme-account-keys-mint",
+    );
+  });
+
   it("returns null for unrelated routes (no false-positive rate limits)", () => {
     expect(endpointFor("GET", "/api/health")).toBeNull();
     expect(endpointFor("POST", "/api/marketplace/list")).toBeNull();
@@ -473,6 +487,18 @@ describe("rateLimit — wired into route()", () => {
     expect(LIMITS["recovery-by-username"]).toEqual([
       { axis: "ip", limit: 10, windowSec: 3600 },
       { axis: "usernameHash", limit: 3, windowSec: 900 },
+    ]);
+    // #28 Option B seal-to-box delivery buckets.
+    expect(LIMITS["acme-key-deposit"]).toEqual([
+      { axis: "ip", limit: 10, windowSec: 60 },
+      { axis: "irk", limit: 50, windowSec: 3600 },
+    ]);
+    expect(LIMITS["acme-key-release"]).toEqual([
+      { axis: "ip", limit: 120, windowSec: 60 },
+    ]);
+    expect(LIMITS["acme-key-delivery-revoke"]).toEqual([
+      { axis: "ip", limit: 10, windowSec: 60 },
+      { axis: "irk", limit: 20, windowSec: 3600 },
     ]);
   });
 });

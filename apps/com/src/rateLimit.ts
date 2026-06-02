@@ -79,6 +79,14 @@ export type RateLimitEndpoint =
   | "acme-account-keys-list"
   | "acme-account-keys-revoke"
   | "acme-account-keys-mint"
+  // #28 Option B — seal-to-box ACME account-key DELIVERY (deposit / release /
+  // revoke). Distinct from the per-admin-device grant mint above: a box has no
+  // session at boot, so the deposit is IRK-signed (per-IRK + per-IP, like a
+  // grant mint) but the RELEASE is a PUBLIC box poll (per-IP only, generous —
+  // a box may poll a few times across a boot). The delivery-revoke is IRK-signed.
+  | "acme-key-deposit"
+  | "acme-key-release"
+  | "acme-key-delivery-revoke"
   | "mint-reservation-acquire"
   | "mint-reservation-release"
   | "account-resolve"
@@ -179,6 +187,19 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "acme-account-keys-mint": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 50, windowSec: 3600 },
+  ],
+  // #28 Option B — seal-to-box ACME account-key delivery. Deposit mirrors a
+  // grant mint (IRK 50/h + IP 10/min). Release is a PUBLIC box poll — per-IP
+  // only, generous (120/min) since a box may poll a few times across a boot.
+  // Delivery-revoke is a one-shot kill switch (IRK 20/h + IP 10/min).
+  "acme-key-deposit": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 50, windowSec: 3600 },
+  ],
+  "acme-key-release": [{ axis: "ip", limit: 120, windowSec: 60 }],
+  "acme-key-delivery-revoke": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 20, windowSec: 3600 },
   ],
   // The reservation lease is polled across a renewal cycle by a minter, so
   // the per-IP budget is more generous than a one-shot grant mint. Per-IP
@@ -393,6 +414,14 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/acme-account-keys$/.test(pathname)) {
     return "acme-account-keys-mint";
   }
+  // #28 Option B — seal-to-box ACME account-key delivery. ONE path
+  // (`/api/server/<domain>/acme-account-key`, singular — distinct from the
+  // plural per-user grant routes above) discriminated by method.
+  if (/^\/api\/server\/[^/]+\/acme-account-key$/.test(pathname)) {
+    if (m === "POST") return "acme-key-deposit";
+    if (m === "GET") return "acme-key-release";
+    if (m === "DELETE") return "acme-key-delivery-revoke";
+  }
   // Per-user-cert mint-reservation lease. `/release` before the bare acquire.
   if (
     m === "POST" &&
@@ -474,12 +503,15 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
     candidate = undefined;
   } else if (
     endpoint === "acme-account-keys-mint" ||
-    endpoint === "acme-account-keys-revoke"
+    endpoint === "acme-account-keys-revoke" ||
+    endpoint === "acme-key-deposit" ||
+    endpoint === "acme-key-delivery-revoke"
   ) {
-    // Per-user-cert ACME account-key grants mirror device grants / watch
-    // delegates: the wire shape carries `grant.username` / `request.username`,
-    // not the IRK pub. Per-IP suffices at the edge; the handler does the full
-    // IRK signature check.
+    // Per-user-cert ACME account-key grants + #28 seal-to-box delivery mirror
+    // device grants / watch delegates: the wire shape carries `grant.username`
+    // / `request.username`, not the IRK pub. Per-IP suffices at the edge; the
+    // handler does the full IRK signature check. (acme-key-release is a public
+    // box poll — never reaches here; it's per-IP only by its LIMITS entry.)
     candidate = undefined;
   } else return undefined;
   return typeof candidate === "string" && /^[0-9a-fA-F]{64}$/.test(candidate)
