@@ -82,7 +82,14 @@ Move from **one LE cert per box** → **one cert per user**: SANs collapse from 
 - **Share with NON-minting siblings: yes, always.** Every TLS-terminating box needs the cert+key regardless of mint rights. Non-minters are receive-only (lead→sibling pattern in `customDomainCert.ts`).
 - **Share with OTHER minters: yes — and sharing PREVENTS over-minting.** A minting-capable box that receives a cert with a fresh expiry stands down (the distributed expiry is the coordination state). Plus a deterministic single-lead election among {admin devices ∪ indefinite-delegated boxes} ⇒ exactly one minter per cycle; §5.4 debounce backstops the race. So the LE 5-dup/7-day limit is never hit in normal operation.
 
-Minters = {admin-scope devices} ∪ {boxes with an indefinite renewal delegation}. Everyone else is receive-only. One lead mints per cycle → fans out to all serving boxes.
+Minters = {admin-scope devices} ∪ {boxes with an indefinite renewal delegation}. Everyone else is receive-only. One minter per cycle → fans out to all serving boxes.
+
+**Mint coordination = a reservation LEASE, not static lead election (owner refinement 2026-06-01).** Static election is unsafe — a lead that dies before minting leaves others deferring to a corpse while the cert expires. Instead:
+- A minter that sees the cert nearing expiry (comfortable margin, e.g. 1/3 life left) does an **atomic CAS reservation at `.com`**: "intent to mint, reserved until T+δ", δ ≈ one ACME order (~5 min) ≪ remaining cert life (days).
+- Other minters back off while a live reservation exists; resume if it lapses with no fresh cert (the reserver died) or stand down when a fresh expiry appears.
+- The reservation lease IS the dynamic election (whoever grabs the lock leads that cycle); self-healing against a dead lead because δ ≪ remaining life gives ample takeover time. `.com` holds the lock (non-secret coordination; it can stall like any control-plane availability dep but can't forge — CT-monitor catches that). → builds into task #27.
+
+**Offline-autonomy window is PER-SERVER, not account-wide (owner refinement 2026-06-01, SUPERSEDES the earlier account-default+override).** The decision "can this box survive the phone being off, how long" is inherently per-server (trust/location is per-server). Declared at server creation ("safe always-on location? how long phone-off?"). NO account-wide functional layer — only a remembered last-choice as a UI **pre-fill convenience**. (A future account-wide *ceiling* — "no server may exceed N days" — is a distinct concept the per-server field won't foreclose; not building now.) Finite value ⇒ pre-mint only (box holds no key); Indefinite ⇒ that box gets the revocable renewal delegation.
 
 ## Risks / cross-cutting
 
