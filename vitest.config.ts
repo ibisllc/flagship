@@ -14,6 +14,7 @@ export default defineConfig({
     ],
     testTimeout: 30_000,
     environment: "node",
+    setupFiles: ["./vitest.setup.ts"],
     coverage: {
       reporter: ["text", "html"],
     },
