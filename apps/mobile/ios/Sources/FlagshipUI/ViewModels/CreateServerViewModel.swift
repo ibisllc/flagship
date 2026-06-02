@@ -79,6 +79,14 @@ public final class CreateServerViewModel {
     /// carried on the wire — "auto" is the absent/legacy default (mirrors the
     /// webapp's create-server.js and keeps the recipe bytes identical).
     public var bootUnlockMode: BootUnlockStore.Mode = .auto
+    /// Per-server cert-autonomy policy (per-user-cert design, `docs/per-user-cert-worklist.md`
+    /// Q-A). Picks how long this box may keep renewing its TLS cert while the
+    /// phone is offline. Finite windows ⇒ "managed" (a trusted device re-mints);
+    /// "Indefinite" ⇒ "autonomous" (the box holds a sealed minting key and renews
+    /// itself forever). Carried in the SIGNED InstallBlob — the recipe-JSON plumbing
+    /// in trailer.ts reconstructs `certAutonomy` so the daemon's canonical bytes
+    /// match the signature. Default = 90-day managed window.
+    public var certAutonomy: CertAutonomyChoice = .days90
     /// Draft-only metadata — backup policy the user wants applied to this
     /// server once it's up. NOT signed into the InstallBlob (the audit
     /// against InstallBlob.swift confirmed `backupPolicy` does not appear
@@ -296,10 +304,55 @@ public final class CreateServerViewModel {
             // Only "approve" rides the wire; "auto" stays absent so the
             // recipe bytes match the webapp + a pre-bootUnlockMode verifier
             // still accepts it. The box treats absence as "auto".
-            bootUnlockMode: bootUnlockMode == .approve ? "approve" : nil
+            bootUnlockMode: bootUnlockMode == .approve ? "approve" : nil,
+            // certAutonomy ALWAYS rides the wire (signature-safe — trailer.ts
+            // reconstructs it). days90 ⇒ managed:90; finite ⇒ managed:N;
+            // Indefinite ⇒ autonomous.
+            certAutonomy: certAutonomy.installBlob
         )
         let blobSig = try irk.signature(for: blob.canonicalBytes())
         return SignedInstallBlob(blob: blob, signatureHex: HexUtil.encode(blobSig))
+    }
+}
+
+/// Per-server cert-autonomy choice surfaced on the create-server screen.
+/// Maps the user-facing "how long can this box run while my phone is offline"
+/// question onto the signed `InstallBlob.CertAutonomy`. Every finite choice is
+/// "managed" (a trusted device keeps minting); only `.indefinite` hands the box
+/// a self-minting key ("autonomous"). Default is `.days90` — a 90-day managed
+/// window matching the LE max-validity ceiling discussed in the worklist.
+public enum CertAutonomyChoice: String, CaseIterable, Sendable {
+    case days3
+    case days7
+    case days15
+    case days30
+    case days90
+    case indefinite
+
+    /// Short user-facing label for the radio row.
+    public var label: String {
+        switch self {
+        case .days3:      return "3 days"
+        case .days7:      return "7 days"
+        case .days15:     return "15 days"
+        case .days30:     return "30 days"
+        case .days90:     return "90 days"
+        case .indefinite: return "Indefinite"
+        }
+    }
+
+    /// The signed-blob value. Finite windows ⇒ managed with N days; Indefinite ⇒
+    /// autonomous (the box becomes a minter). Always returns a value so the
+    /// recipe carries a cert-autonomy field on every server.
+    public var installBlob: InstallBlob.CertAutonomy {
+        switch self {
+        case .days3:      return .init(mode: "managed", offlineWindowDays: 3)
+        case .days7:      return .init(mode: "managed", offlineWindowDays: 7)
+        case .days15:     return .init(mode: "managed", offlineWindowDays: 15)
+        case .days30:     return .init(mode: "managed", offlineWindowDays: 30)
+        case .days90:     return .init(mode: "managed", offlineWindowDays: 90)
+        case .indefinite: return .init(mode: "autonomous")
+        }
     }
 }
 
@@ -326,6 +379,19 @@ public struct SignedInstallBlob: Sendable {
         /// "auto" default, mirroring the webapp's onWireBlob. The box reads
         /// `blob.bootUnlockMode` from this JSON; absent ⇒ "auto".
         public let bootUnlockMode: String?
+        /// Per-server cert-autonomy policy. JSON key MUST be `certAutonomy` with
+        /// `mode` + `offlineWindowDays`, matching trailer.ts `InstallBlobJson`
+        /// so the daemon reconstructs identical canonical bytes. Optional only
+        /// for legacy/absent recipes — the phone always emits it.
+        public let certAutonomy: OnWireCertAutonomy?
+    }
+    /// Mirrors trailer.ts `InstallBlobJson.certAutonomy`
+    /// (`{ mode, offlineWindowDays? }`). `offlineWindowDays` is omitted from the
+    /// JSON when nil (autonomous mode) so the round-trip matches the optional TS
+    /// field rather than emitting an explicit `null`.
+    public struct OnWireCertAutonomy: Codable, Sendable {
+        public let mode: String
+        public let offlineWindowDays: Int?
     }
     public struct OnWireAuthCode: Codable, Sendable {
         public let version: Int
@@ -362,7 +428,10 @@ public struct SignedInstallBlob: Sendable {
                 authCodeUserSignature: HexUtil.encode(blob.authCodeUserSignature),
                 installerGitRef: blob.installerGitRef,
                 rckPubKey: HexUtil.encode(blob.rckPubKey),
-                bootUnlockMode: blob.bootUnlockMode
+                bootUnlockMode: blob.bootUnlockMode,
+                certAutonomy: blob.certAutonomy.map {
+                    OnWireCertAutonomy(mode: $0.mode, offlineWindowDays: $0.offlineWindowDays)
+                }
             ),
             blobSignature: signatureHex
         )

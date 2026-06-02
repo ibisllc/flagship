@@ -76,6 +76,7 @@ public struct CreateServerStubScreen: View {
                     .accessibilityIdentifier("cs-description-field")
                     recipeTtlPicker(c: c)
                     bootUnlockPicker(c: c)
+                    certAutonomyPicker(c: c)
                     backupPolicyPicker(c: c)
                     llmPreferencesField(c: c)
                 }
@@ -187,6 +188,31 @@ public struct CreateServerStubScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("cs-bootunlock-\(mode.rawValue)")
+    }
+
+    // MARK: - Cert-autonomy picker
+    //
+    // Per-server "how long can this box keep renewing its TLS cert while my
+    // phone is offline" knob (docs/per-user-cert-worklist.md Q-A). Carried in
+    // the SIGNED InstallBlob — finite windows ⇒ a trusted device re-mints;
+    // "Indefinite" ⇒ the box holds its own minting key and renews forever.
+    // Default 90 days.
+    private func certAutonomyPicker(c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            Text("Certificate autonomy")
+                .font(.subheadline)
+                .foregroundStyle(c.text)
+            Picker("Certificate autonomy", selection: $vm.certAutonomy) {
+                ForEach(CertAutonomyChoice.allCases, id: \.self) { choice in
+                    Text(choice.label).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("cs-cert-autonomy-picker")
+            Text("How long this box may renew its own TLS certificate while your phone is offline. Indefinite lets this box renew its own certificate forever (it holds a minting key); every other choice keeps minting on your trusted devices.")
+                .font(.caption)
+                .foregroundColor(c.textMuted)
+        }
     }
 
     // MARK: - Backup policy picker (draft-only metadata)
