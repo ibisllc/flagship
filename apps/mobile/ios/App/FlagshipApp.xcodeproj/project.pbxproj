@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		036C641C1039906318B21AB1 /* WatchSecurityAlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6695FF22B3FF092FF12DC35A /* WatchSecurityAlertsView.swift */; };
 		04479628B5AF50BB0B8C4EA5 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF58F7F531BA9B5914B63CA1 /* ContentView.swift */; };
 		072F2E6BBA4C724C847AEBDC /* InstallProgressAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62CE490D10F73B8244E1BDAB /* InstallProgressAttributes.swift */; };
 		0B9051D212D7ABF830BFC8C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4BCF8466537CDEBE460F85A8 /* Assets.xcassets */; };
@@ -34,6 +35,7 @@
 		D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA35BF39206378728D34AE65 /* WatchBridge.swift */; };
 		DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */; };
 		E511C4B07B982FB2320280C6 /* OnboardingSmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F095FFB5E2CFA036042119C /* OnboardingSmokeTests.swift */; };
+		FC64923B7DC383ED61C87497 /* WatchSecurityAlertsPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CA1F4CA62F0ED3857DFAF0 /* WatchSecurityAlertsPublisher.swift */; };
 		FF6B2586776383AA4776A217 /* FlagshipCore in Frameworks */ = {isa = PBXBuildFile; productRef = 62BE221458756CDD4E0B2EC4 /* FlagshipCore */; };
 /* End PBXBuildFile section */
 
@@ -1990,6 +1992,7 @@
 		33BB47900D677F090AC8C8B7 /* arm64-apple-ios-simulator.swiftinterface-1KKRU0XXUD6BU */ = {isa = PBXFileReference; path = "arm64-apple-ios-simulator.swiftinterface-1KKRU0XXUD6BU"; sourceTree = "<group>"; };
 		33BDD6373229C1D9890EF956 /* PushRegistrar.dia */ = {isa = PBXFileReference; path = PushRegistrar.dia; sourceTree = "<group>"; };
 		33C76A637CBAC11829BD433C /* ASPasswordCredentialIdentity.h-1H5RVK423BHVH */ = {isa = PBXFileReference; path = "ASPasswordCredentialIdentity.h-1H5RVK423BHVH"; sourceTree = "<group>"; };
+		33CA1F4CA62F0ED3857DFAF0 /* WatchSecurityAlertsPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSecurityAlertsPublisher.swift; sourceTree = "<group>"; };
 		33CAA1005ADD6A5484530260 /* CGPDFPage.h-3W156BVDB8UKF */ = {isa = PBXFileReference; path = "CGPDFPage.h-3W156BVDB8UKF"; sourceTree = "<group>"; };
 		33CEE069AA476B4264B8C53A /* RealAccountLoginScreen.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = RealAccountLoginScreen.o; sourceTree = "<group>"; };
 		33DDF0F7912E4CF21DD95D11 /* CoreText-2C7KN0R8TNZFM.pcm */ = {isa = PBXFileReference; path = "CoreText-2C7KN0R8TNZFM.pcm"; sourceTree = "<group>"; };
@@ -3851,6 +3854,7 @@
 		6689A6C06844261B7F7B0B01 /* KeychainSessionStore.o-3M0Y66DG6B2MI */ = {isa = PBXFileReference; path = "KeychainSessionStore.o-3M0Y66DG6B2MI"; sourceTree = "<group>"; };
 		668CE1A33761592777D1EAEA /* ptrcheck.h-IZSXAMEY9G4X */ = {isa = PBXFileReference; path = "ptrcheck.h-IZSXAMEY9G4X"; sourceTree = "<group>"; };
 		6693F7104E0DBFFB0D18F5CB /* QrRelayClient.swift-RF5HTOXRPFXS */ = {isa = PBXFileReference; path = "QrRelayClient.swift-RF5HTOXRPFXS"; sourceTree = "<group>"; };
+		6695FF22B3FF092FF12DC35A /* WatchSecurityAlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSecurityAlertsView.swift; sourceTree = "<group>"; };
 		66A54CACDE7211E6E9D16A4A /* NSFileProviderExtension.h-3EIH4BQ6QKKFD */ = {isa = PBXFileReference; path = "NSFileProviderExtension.h-3EIH4BQ6QKKFD"; sourceTree = "<group>"; };
 		66B46D99F7593D49D2F733A8 /* AddDeviceViewModel.swiftdeps */ = {isa = PBXFileReference; path = AddDeviceViewModel.swiftdeps; sourceTree = "<group>"; };
 		66B5361F044DAC680E9EB5CB /* CreateServerViewModel.swiftconstvalues */ = {isa = PBXFileReference; path = CreateServerViewModel.swiftconstvalues; sourceTree = "<group>"; };
@@ -9407,10 +9411,10 @@
 		FFE9DC5AFC8481BF0DF7B358 /* ContentView.swiftconstvalues */ = {isa = PBXFileReference; path = ContentView.swiftconstvalues; sourceTree = "<group>"; };
 		FFECAD1BE8E58AD13B8518C8 /* INDeleteTasksIntent.h-3CU0Q7V1HXO4I */ = {isa = PBXFileReference; path = "INDeleteTasksIntent.h-3CU0Q7V1HXO4I"; sourceTree = "<group>"; };
 		FFF1ABF6B0FDFB51F65A6836 /* CoreSpotlight-3OCT2U1E1NM6W.pcm */ = {isa = PBXFileReference; path = "CoreSpotlight-3OCT2U1E1NM6W.pcm"; sourceTree = "<group>"; };
-		"TEMP_49D5AA69-899D-4C7B-AC88-70A6AC4DA992" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
-		"TEMP_89A684FE-A4EC-4B80-913A-BE0FAB994573" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
-		"TEMP_B328679B-7BDC-4BAD-8D9C-FB808D6C0EB3" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_FF82B813-F7E3-4C47-897D-5F3E7B84D06C" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_B2D6D7C3-0D04-4E78-AFB8-169310EA0548" /* FlagshipApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = FlagshipApp.xcodeproj; sourceTree = "<group>"; };
+		"TEMP_BF6E5866-95F6-4FF4-B9B0-A1706399E541" /* project.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = project.yml; sourceTree = "<group>"; };
+		"TEMP_E68B7305-C9D3-4BE9-88EB-1F156FE54C2D" /* FlagshipApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FlagshipApp.entitlements; sourceTree = "<group>"; };
+		"TEMP_FE5F3F01-36F1-474F-B31E-C9749F937EF9" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -12229,6 +12233,7 @@
 				D2BCEBBC9F7EBD3839DF504F /* InstallProgressLiveActivityCenter.swift */,
 				5A21D2CD995D16DBBB0228F4 /* PodStatusPublisher.swift */,
 				EA35BF39206378728D34AE65 /* WatchBridge.swift */,
+				33CA1F4CA62F0ED3857DFAF0 /* WatchSecurityAlertsPublisher.swift */,
 				2A78989926C4BD61EA637143 /* WatchTimelinePublisher.swift */,
 			);
 			path = Sources;
@@ -29830,6 +29835,7 @@
 				E7C08C9B4454F05A0F494D78 /* ProvisionTimelineWatchView.swift */,
 				6A873E78CA17ECB3B23C2CA6 /* WatchConnectivityClient.swift */,
 				1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */,
+				6695FF22B3FF092FF12DC35A /* WatchSecurityAlertsView.swift */,
 			);
 			path = WatchApp;
 			sourceTree = "<group>";
@@ -38429,13 +38435,13 @@
 			path = QO;
 			sourceTree = "<group>";
 		};
-		"TEMP_407763C0-95F3-4251-9B32-4757F633CED2" /* . */ = {
+		"TEMP_09576B7A-93DA-4F1B-BA91-F43FCEF8E925" /* . */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_FF82B813-F7E3-4C47-897D-5F3E7B84D06C" /* project.yml */,
-				"TEMP_49D5AA69-899D-4C7B-AC88-70A6AC4DA992" /* FlagshipApp.xcodeproj */,
-				"TEMP_89A684FE-A4EC-4B80-913A-BE0FAB994573" /* FlagshipApp.entitlements */,
-				"TEMP_B328679B-7BDC-4BAD-8D9C-FB808D6C0EB3" /* Info.plist */,
+				"TEMP_BF6E5866-95F6-4FF4-B9B0-A1706399E541" /* project.yml */,
+				"TEMP_B2D6D7C3-0D04-4E78-AFB8-169310EA0548" /* FlagshipApp.xcodeproj */,
+				"TEMP_E68B7305-C9D3-4BE9-88EB-1F156FE54C2D" /* FlagshipApp.entitlements */,
+				"TEMP_FE5F3F01-36F1-474F-B31E-C9749F937EF9" /* Info.plist */,
 				F51043E76B25BB084043EA15 /* UITests */,
 				5B69A221CA30982662250465 /* WidgetExtension */,
 				564C6947F31B33F80500C451 /* WatchWidgets */,
@@ -38663,6 +38669,7 @@
 				7BFECA1D36A2BB6408A4D8E2 /* PodStatusPublisher.swift in Sources */,
 				AC4E7F4AAE2AA9C3651AD92D /* PodStatusSnapshot.swift in Sources */,
 				D5CCF74541392B71FBFF4A81 /* WatchBridge.swift in Sources */,
+				FC64923B7DC383ED61C87497 /* WatchSecurityAlertsPublisher.swift in Sources */,
 				598E6331C6653579257D65A7 /* WatchTimelinePublisher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -38675,6 +38682,7 @@
 				4B5304800B09623388924E78 /* ProvisionTimelineWatchView.swift in Sources */,
 				DCF5A2645EE6DAD83067434A /* WatchConnectivityClient.swift in Sources */,
 				34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */,
+				036C641C1039906318B21AB1 /* WatchSecurityAlertsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
