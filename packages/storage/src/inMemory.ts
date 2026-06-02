@@ -3,6 +3,8 @@ import type {
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
   AcmeAccountKeyGrantStorage,
+  AcmeAccountKeyDeliveryRecord,
+  AcmeAccountKeyDeliveryStorage,
   MintReservationRecord,
   MintReservationStorage,
   AuditEventRecord,
@@ -1290,6 +1292,7 @@ export class InMemoryStorage implements Storage {
   watchDelegates = new InMemoryWatchDelegateStorage();
   mintReservations = new InMemoryMintReservationStorage();
   acmeAccountKeyGrants = new InMemoryAcmeAccountKeyGrantStorage();
+  acmeAccountKeyDelivery = new InMemoryAcmeAccountKeyDeliveryStorage();
   namespace = new InMemoryNamespaceStorage();
 }
 
@@ -1458,6 +1461,42 @@ export class InMemoryAcmeAccountKeyGrantStorage implements AcmeAccountKeyGrantSt
     for (const r of this.byId.values()) {
       if (r.revokedAt === null && r.accountKeyId === accountKeyId) {
         r.revokedAt = revokedAt;
+        n++;
+      }
+    }
+    return n;
+  }
+}
+
+/**
+ * In-memory AcmeAccountKeyDeliveryStorage — seal-to-box delivery of the shared
+ * ACME account key (#28 Option B). ONE slot per serverDomain (the map key), so
+ * `put` overwrites a prior deposit. `deleteByAccountKeyId` drops every slot of
+ * a rotated key (the rotation hook). Mirrors InMemoryBoxSealedLeaseStorage.
+ */
+export class InMemoryAcmeAccountKeyDeliveryStorage
+  implements AcmeAccountKeyDeliveryStorage
+{
+  private byDomain = new Map<string, AcmeAccountKeyDeliveryRecord>();
+
+  async put(rec: AcmeAccountKeyDeliveryRecord): Promise<void> {
+    this.byDomain.set(rec.serverDomain, { ...rec });
+  }
+
+  async getByDomain(serverDomain: string): Promise<AcmeAccountKeyDeliveryRecord | undefined> {
+    const r = this.byDomain.get(serverDomain);
+    return r ? { ...r } : undefined;
+  }
+
+  async deleteByDomain(serverDomain: string): Promise<void> {
+    this.byDomain.delete(serverDomain);
+  }
+
+  async deleteByAccountKeyId(accountKeyId: string): Promise<number> {
+    let n = 0;
+    for (const [k, r] of this.byDomain) {
+      if (r.accountKeyId === accountKeyId) {
+        this.byDomain.delete(k);
         n++;
       }
     }

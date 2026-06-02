@@ -70,6 +70,8 @@ import type {
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
   AcmeAccountKeyGrantStorage,
+  AcmeAccountKeyDeliveryRecord,
+  AcmeAccountKeyDeliveryStorage,
   MintReservationRecord,
   MintReservationStorage,
   NameClaimRecord,
@@ -2884,6 +2886,7 @@ export class D1Storage implements Storage {
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
+  acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
   namespace: NamespaceStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
@@ -2919,6 +2922,7 @@ export class D1Storage implements Storage {
     this.watchDelegates = new D1WatchDelegateStorage(db);
     this.mintReservations = new D1MintReservationStorage(db);
     this.acmeAccountKeyGrants = new D1AcmeAccountKeyGrantStorage(db);
+    this.acmeAccountKeyDelivery = new D1AcmeAccountKeyDeliveryStorage(db);
     this.namespace = new D1NamespaceStorage(db);
   }
 }
@@ -3211,6 +3215,90 @@ export class D1AcmeAccountKeyGrantStorage implements AcmeAccountKeyGrantStorage 
          WHERE account_key_id = ?1 AND revoked_at IS NULL`,
       )
       .bind(accountKeyId, revokedAt)
+      .run();
+    return (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
+  }
+}
+
+interface AcmeAccountKeyDeliveryRow {
+  server_domain: string;
+  account_key_id: string;
+  sealed_account_key_hex: string;
+  recipient_pub_hex: string;
+  issued_at: number;
+  expires_at: number;
+  revoked_at: number | null;
+}
+function rowToAcmeAccountKeyDelivery(
+  r: AcmeAccountKeyDeliveryRow,
+): AcmeAccountKeyDeliveryRecord {
+  return {
+    serverDomain: r.server_domain,
+    accountKeyId: r.account_key_id,
+    sealedAccountKeyHex: r.sealed_account_key_hex,
+    recipientPubHex: r.recipient_pub_hex,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    revokedAt: r.revoked_at,
+  };
+}
+
+/** D1 AcmeAccountKeyDeliveryStorage — seal-to-box delivery of the shared ACME
+ *  account key (#28 Option B). ONE slot per server_domain (PK); `put` is an
+ *  upsert (a fresh deposit supersedes the prior seal). `deleteByAccountKeyId`
+ *  drops every slot of a rotated key in one statement (the rotation hook).
+ *  Mirrors D1BoxSealedLeaseStorage; `.com` holds ciphertext only (I1). */
+export class D1AcmeAccountKeyDeliveryStorage
+  implements AcmeAccountKeyDeliveryStorage
+{
+  constructor(private readonly db: D1Database) {}
+
+  async put(rec: AcmeAccountKeyDeliveryRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO acme_account_key_delivery
+           (server_domain, account_key_id, sealed_account_key_hex,
+            recipient_pub_hex, issued_at, expires_at, revoked_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(server_domain) DO UPDATE SET
+           account_key_id = excluded.account_key_id,
+           sealed_account_key_hex = excluded.sealed_account_key_hex,
+           recipient_pub_hex = excluded.recipient_pub_hex,
+           issued_at = excluded.issued_at,
+           expires_at = excluded.expires_at,
+           revoked_at = excluded.revoked_at`,
+      )
+      .bind(
+        rec.serverDomain,
+        rec.accountKeyId,
+        rec.sealedAccountKeyHex,
+        rec.recipientPubHex.toLowerCase(),
+        rec.issuedAt,
+        rec.expiresAt,
+        rec.revokedAt,
+      )
+      .run();
+  }
+
+  async getByDomain(serverDomain: string): Promise<AcmeAccountKeyDeliveryRecord | undefined> {
+    const r = await this.db
+      .prepare(`SELECT * FROM acme_account_key_delivery WHERE server_domain = ?1`)
+      .bind(serverDomain)
+      .first<AcmeAccountKeyDeliveryRow>();
+    return r ? rowToAcmeAccountKeyDelivery(r) : undefined;
+  }
+
+  async deleteByDomain(serverDomain: string): Promise<void> {
+    await this.db
+      .prepare(`DELETE FROM acme_account_key_delivery WHERE server_domain = ?1`)
+      .bind(serverDomain)
+      .run();
+  }
+
+  async deleteByAccountKeyId(accountKeyId: string): Promise<number> {
+    const res = await this.db
+      .prepare(`DELETE FROM acme_account_key_delivery WHERE account_key_id = ?1`)
+      .bind(accountKeyId)
       .run();
     return (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
   }

@@ -868,6 +868,7 @@ export interface Storage {
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
+  acmeAccountKeyDelivery: AcmeAccountKeyDeliveryStorage;
   namespace: NamespaceStorage;
 }
 
@@ -1544,6 +1545,60 @@ export interface AcmeAccountKeyGrantStorage {
   revoke(grantId: string, revokedAt: number): Promise<void>;
   /** Tombstone every active grant of `accountKeyId`; returns the count revoked. */
   revokeByAccountKeyId(accountKeyId: string, revokedAt: number): Promise<number>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// AcmeAccountKeyDelivery — seal-to-box delivery of the shared ACME account
+// key (#28 Option B; per-user-cert design). Deposit-and-release, mirroring
+// the box-sealed LUKS lease (BoxSealedLeaseStorage above):
+//   • An admin DEPOSITS the account key sealed to the box STK (one slot per
+//     server_domain — the box that serves it).
+//   • The box RELEASES the slot on boot and unseals with its STK private key.
+// `.com` holds only ciphertext (sealed to the box STK) + the IRK-signature-
+// vetted public references; it can withhold (DoS) but never read or retarget
+// the seal — the same invariants the LUKS lease release carries (I1/I2/I3).
+//
+// ONE slot per server_domain (PK), distinct from AcmeAccountKeyGrantStorage
+// (which keeps the per-admin-device fan-out + audit/requireMinter copies). On
+// rotation, deleteByAccountKeyId tombstones the box's released-key slot so a
+// stolen box can't re-release a retired key.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AcmeAccountKeyDeliveryRecord {
+  /** The box FQDN this sealed key is delivered to (PK — one slot per box). */
+  serverDomain: string;
+  /** sha256-hex of the ACME account PUBLIC key; rotation changes it. The
+   *  handle `deleteByAccountKeyId` keys on this to drop a retired key's slot. */
+  accountKeyId: string;
+  /** The ACME account key sealed to `recipientPubHex` — opaque ciphertext hex.
+   *  NEVER plaintext (I1). The box unseals with its STK private key. */
+  sealedAccountKeyHex: string;
+  /** The PINNED seal recipient — box STK pubkey, hex (the directory-bound
+   *  identity for `serverDomain`; covered by the IRK signature on the grant). */
+  recipientPubHex: string;
+  issuedAt: number;
+  expiresAt: number;
+  /** ms since epoch, null = active. Set on a delivery-revoke (the slot is
+   *  retained for audit; release refuses a revoked slot). */
+  revokedAt: number | null;
+}
+
+/**
+ * Store contract for `acme_account_key_delivery`. ONE active slot per box.
+ *   • `put` inserts-or-replaces the slot for `serverDomain` (re-deposit
+ *     overwrites — a fresh seal supersedes the prior one).
+ *   • `getByDomain` returns the slot regardless of revoked/expired state
+ *     (the handler applies the freshness + revoked gate, mirroring how the
+ *     box-sealed-lease release filters).
+ *   • `deleteByDomain` drops the slot (delivery-revoke).
+ *   • `deleteByAccountKeyId` drops EVERY slot of a retired account key in one
+ *     statement (rotation hook) and returns the count deleted.
+ */
+export interface AcmeAccountKeyDeliveryStorage {
+  put(rec: AcmeAccountKeyDeliveryRecord): Promise<void>;
+  getByDomain(serverDomain: string): Promise<AcmeAccountKeyDeliveryRecord | undefined>;
+  deleteByDomain(serverDomain: string): Promise<void>;
+  deleteByAccountKeyId(accountKeyId: string): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
