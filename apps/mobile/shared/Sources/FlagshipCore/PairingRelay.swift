@@ -118,26 +118,26 @@ public final class MockPairingRelayClient: PairingRelayClient, @unchecked Sendab
     public func adminAwaitDevicePubkey(sid: String, aeadKey: SymmetricKey) async throws -> Data {
         await delay()
         if let e = mapBehaviorError() { throw e }
-        lock.lock()
-        if let raw = devicePubkeyRaw {
-            lock.unlock()
-            return raw
-        }
         return try await withCheckedThrowingContinuation { cont in
-            devicePubWaiters.append(cont)
-            lock.unlock()
+            let raw: Data? = lock.withLock {
+                if let raw = devicePubkeyRaw { return raw }
+                devicePubWaiters.append(cont)
+                return nil
+            }
+            if let raw { cont.resume(returning: raw) }
         }
     }
 
     public func adminDeliverBundle(sid: String, ciphertextBase64Url: String, nonceBase64Url: String) async throws {
         await delay()
         if let e = mapBehaviorError() { throw e }
-        lock.lock()
-        bundle = (ciphertextBase64Url, nonceBase64Url)
-        lastDeliveredBundle = (ciphertextBase64Url, nonceBase64Url)
-        let waiters = bundleWaiters
-        bundleWaiters.removeAll()
-        lock.unlock()
+        let waiters: [CheckedContinuation<(ciphertextBase64Url: String, nonceBase64Url: String), Error>] = lock.withLock {
+            bundle = (ciphertextBase64Url, nonceBase64Url)
+            lastDeliveredBundle = (ciphertextBase64Url, nonceBase64Url)
+            let waiters = bundleWaiters
+            bundleWaiters.removeAll()
+            return waiters
+        }
         for w in waiters { w.resume(returning: (ciphertextBase64Url, nonceBase64Url)) }
     }
 
@@ -148,21 +148,20 @@ public final class MockPairingRelayClient: PairingRelayClient, @unchecked Sendab
     ) async throws -> (ciphertextBase64Url: String, nonceBase64Url: String) {
         await delay()
         if let e = mapBehaviorError() { throw e }
-        lock.lock()
-        lastIncomingSealedPubkey = (devicePubCiphertextBase64Url, devicePubNonceBase64Url)
-        lock.unlock()
+        lock.withLock {
+            lastIncomingSealedPubkey = (devicePubCiphertextBase64Url, devicePubNonceBase64Url)
+        }
         // The incoming side must publish the RAW pubkey to the admin side
         // via `provideRawIncomingPubkey` (the Mock can't open the seal).
         // If it hasn't yet, the admin's await is pending; once it does,
         // those waiters drain. Now await the admin's bundle.
-        lock.lock()
-        if let b = bundle {
-            lock.unlock()
-            return (b.ct, b.nonce)
-        }
         return try await withCheckedThrowingContinuation { cont in
-            bundleWaiters.append(cont)
-            lock.unlock()
+            let ready: (ciphertextBase64Url: String, nonceBase64Url: String)? = lock.withLock {
+                if let b = bundle { return (b.ct, b.nonce) }
+                bundleWaiters.append(cont)
+                return nil
+            }
+            if let ready { cont.resume(returning: ready) }
         }
     }
 
@@ -179,10 +178,11 @@ public final class MockPairingRelayClient: PairingRelayClient, @unchecked Sendab
     }
 
     public func close() async {
-        lock.lock()
-        let dpw = devicePubWaiters; devicePubWaiters.removeAll()
-        let bw = bundleWaiters; bundleWaiters.removeAll()
-        lock.unlock()
+        let (dpw, bw) = lock.withLock {
+            let dpw = devicePubWaiters; devicePubWaiters.removeAll()
+            let bw = bundleWaiters; bundleWaiters.removeAll()
+            return (dpw, bw)
+        }
         for w in dpw { w.resume(throwing: PairingRelayError.sessionInvalidated) }
         for w in bw { w.resume(throwing: PairingRelayError.sessionInvalidated) }
     }

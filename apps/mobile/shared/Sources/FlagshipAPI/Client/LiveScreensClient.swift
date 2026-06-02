@@ -396,7 +396,7 @@ public final class LiveBrowserStream: BrowserStream, @unchecked Sendable {
         let urlStr = "\(wsBase)/api/screens/browser-tabs/\(encodedTabId)/stream?sessionToken=\(encodedToken)"
         guard let url = URL(string: urlStr) else { return true }
         let ws = urlSession.webSocketTask(with: url)
-        lock.lock(); self.task = ws; lock.unlock()
+        lock.withLock { self.task = ws }
         ws.resume()
         var sawAnyFrame = false
         while !Task.isCancelled, !self.isClosed() {
@@ -425,7 +425,7 @@ public final class LiveBrowserStream: BrowserStream, @unchecked Sendable {
     }
 
     public func send(_ input: BrowserInput) async {
-        lock.lock(); let ws = task; let isClosed = closed; lock.unlock()
+        let (ws, isClosed) = lock.withLock { (task, closed) }
         guard !isClosed, let ws else { return }
         do {
             // Webapp dispatches text frames (JSON.stringify(...) →
