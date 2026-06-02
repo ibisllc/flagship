@@ -124,10 +124,14 @@ targets:
         # critical sound flag bypass Focus/DND. Apple grants this
         # via a separate request (User Guide:
         # https://developer.apple.com/contact/request/notifications-critical-alerts-entitlement/).
-        # Shipping the entitlement on the binary BEFORE Apple grants
-        # is harmless (it'll just be ignored), so we declare it now
-        # to avoid a TestFlight re-upload when the grant lands.
-        com.apple.developer.usernotifications.critical-alerts: true
+        # DISABLED until Apple grants it: an UNGRANTED special entitlement
+        # blocks automatic-signing profile creation for development device
+        # builds (it is NOT silently ignored on the dev path — contrary to a
+        # prior note here). The app doesn't request `.criticalAlert` yet, so
+        # nothing functional is lost. Re-enable this single line the moment the
+        # grant lands (then `xcodegen generate`), and wire the client
+        # `.criticalAlert` authorization + critical-flagged APNs payloads.
+        # com.apple.developer.usernotifications.critical-alerts: true
         # NFC retail-tier pairing (C3 / N-PHONE). NDEF + TAG let us
         # both read the branded box's PAIR+SIG NDEF and (for diagnostic
         # workflows) talk to ISO14443 tags directly. The dev portal
