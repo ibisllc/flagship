@@ -1,6 +1,8 @@
 import type {
   WatchDelegateRecord,
   WatchDelegateStorage,
+  AcmeAccountKeyGrantRecord,
+  AcmeAccountKeyGrantStorage,
   MintReservationRecord,
   MintReservationStorage,
   AuditEventRecord,
@@ -1285,6 +1287,7 @@ export class InMemoryStorage implements Storage {
   nfcRendezvous = new InMemoryNfcRendezvousStorage();
   watchDelegates = new InMemoryWatchDelegateStorage();
   mintReservations = new InMemoryMintReservationStorage();
+  acmeAccountKeyGrants = new InMemoryAcmeAccountKeyGrantStorage();
 }
 
 /**
@@ -1389,5 +1392,72 @@ export class InMemoryWatchDelegateStorage implements WatchDelegateStorage {
     const r = this.byId.get(grantId);
     if (!r) throw new Error("unknown grantId");
     r.revokedAt = revokedAt;
+  }
+}
+
+/**
+ * In-memory AcmeAccountKeyGrantStorage — sealed ACME account keys handed to
+ * admin devices (per-user-cert design). Map keyed by grantId. Unlike watch
+ * delegates, MANY active grants per user coexist (one per admin device), so
+ * `put` only rejects a duplicate grantId. `revokeByAccountKeyId` tombstones
+ * every active copy of a rotated key.
+ */
+export class InMemoryAcmeAccountKeyGrantStorage implements AcmeAccountKeyGrantStorage {
+  private byId = new Map<string, AcmeAccountKeyGrantRecord>();
+
+  async put(
+    rec: AcmeAccountKeyGrantRecord,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (this.byId.has(rec.grantId)) {
+      return { ok: false, reason: "duplicate acme account key grant id" };
+    }
+    this.byId.set(rec.grantId, { ...rec });
+    return { ok: true };
+  }
+
+  async get(grantId: string): Promise<AcmeAccountKeyGrantRecord | undefined> {
+    const r = this.byId.get(grantId);
+    return r ? { ...r } : undefined;
+  }
+
+  async listForUser(username: string): Promise<AcmeAccountKeyGrantRecord[]> {
+    const u = username.toLowerCase();
+    return [...this.byId.values()]
+      .filter((r) => r.username.toLowerCase() === u)
+      .sort((a, b) => b.issuedAt - a.issuedAt)
+      .map((r) => ({ ...r }));
+  }
+
+  async getActiveForUser(username: string): Promise<AcmeAccountKeyGrantRecord[]> {
+    const u = username.toLowerCase();
+    return [...this.byId.values()]
+      .filter((r) => r.revokedAt === null && r.username.toLowerCase() === u)
+      .sort((a, b) => b.issuedAt - a.issuedAt)
+      .map((r) => ({ ...r }));
+  }
+
+  async getActiveByRecipient(recipientPubHex: string): Promise<AcmeAccountKeyGrantRecord[]> {
+    const p = recipientPubHex.toLowerCase();
+    return [...this.byId.values()]
+      .filter((r) => r.revokedAt === null && r.recipientPubHex.toLowerCase() === p)
+      .sort((a, b) => b.issuedAt - a.issuedAt)
+      .map((r) => ({ ...r }));
+  }
+
+  async revoke(grantId: string, revokedAt: number): Promise<void> {
+    const r = this.byId.get(grantId);
+    if (!r) throw new Error("unknown grantId");
+    r.revokedAt = revokedAt;
+  }
+
+  async revokeByAccountKeyId(accountKeyId: string, revokedAt: number): Promise<number> {
+    let n = 0;
+    for (const r of this.byId.values()) {
+      if (r.revokedAt === null && r.accountKeyId === accountKeyId) {
+        r.revokedAt = revokedAt;
+        n++;
+      }
+    }
+    return n;
   }
 }

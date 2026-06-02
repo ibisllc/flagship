@@ -857,6 +857,7 @@ export interface Storage {
   nfcRendezvous: NfcRendezvousStorage;
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
+  acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1471,6 +1472,67 @@ export interface WatchDelegateStorage {
    *  delegate-signed boot approval. undefined when none active. */
   getActiveByDelegatePub(delegatePubHex: string): Promise<WatchDelegateRecord | undefined>;
   revoke(grantId: string, revokedAt: number): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// AcmeAccountKeyGrant — sealed ACME account key handed to an admin device
+// (migration 0043; per-user-cert design)
+//
+// The IRK-signed `AcmeAccountKeyGrant` envelope (packages/protocol/src/auth.ts)
+// distributes the (already-sealed, opaque) ACME account key to each device the
+// account designates `admin`. Those devices may mint/renew the per-user cert;
+// `.com` never sees the unsealed key. Shape parallels WatchDelegateRecord, but
+// with TWO deliberate differences:
+//   • MULTIPLE active grants per user are allowed — each admin device holds its
+//     own sealed copy, so there is NO unique-active index. `put` only rejects a
+//     duplicate `grantId`.
+//   • `revokeByAccountKeyId` tombstones EVERY grant of a retired key in one
+//     shot (rotation on admin demotion / compromise kills all copies at once).
+// `revoked_at` is null while active; rows are RETAINED on revoke for audit.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AcmeAccountKeyGrantRecord {
+  grantId: string;
+  username: string;
+  /** sha256-hex of the ACME account PUBLIC key — shared by every grant of the
+   *  same key; rotation changes it. The handle `revokeByAccountKeyId` keys on. */
+  accountKeyId: string;
+  /** The recipient admin device's Ed25519 pubkey, 32 bytes hex. */
+  recipientPubHex: string;
+  /** The ACME account key sealed to the recipient (opaque ciphertext, hex). */
+  sealedAccountKeyHex: string;
+  issuedAt: number;
+  expiresAt: number;
+  /** Ed25519 IRK signature over the AcmeAccountKeyGrant canonical bytes. */
+  signatureHex: string;
+  revokedAt: number | null;
+}
+
+/**
+ * Store contract for `acme_account_key_grants`. Invariants:
+ *   • `put` rejects only a duplicate `grantId` (reason
+ *     `'duplicate acme account key grant id'`). Unlike watch delegates there is
+ *     NO one-active-per-user limit — every admin device holds its own grant.
+ *   • `getActiveForUser` returns ALL active (non-revoked) grants for a user.
+ *   • `getActiveByRecipient` returns the active grants sealed to one device.
+ *   • `listForUser` is issued_at DESC (most-recent first), active + revoked.
+ *   • `revoke` mutates one row's `revoked_at`; throws `'unknown grantId'` on a
+ *     missing row.
+ *   • `revokeByAccountKeyId` tombstones every still-active grant of that key and
+ *     returns the count revoked (rotation of a retired account key).
+ */
+export interface AcmeAccountKeyGrantStorage {
+  put(rec: AcmeAccountKeyGrantRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  get(grantId: string): Promise<AcmeAccountKeyGrantRecord | undefined>;
+  /** All grants for a user, ACTIVE + revoked, issued_at DESC. */
+  listForUser(username: string): Promise<AcmeAccountKeyGrantRecord[]>;
+  /** ALL active grants for a user (one per admin device). */
+  getActiveForUser(username: string): Promise<AcmeAccountKeyGrantRecord[]>;
+  /** Active grants sealed to a specific recipient device pubkey. */
+  getActiveByRecipient(recipientPubHex: string): Promise<AcmeAccountKeyGrantRecord[]>;
+  revoke(grantId: string, revokedAt: number): Promise<void>;
+  /** Tombstone every active grant of `accountKeyId`; returns the count revoked. */
+  revokeByAccountKeyId(accountKeyId: string, revokedAt: number): Promise<number>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

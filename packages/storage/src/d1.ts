@@ -68,6 +68,8 @@ import type {
   DeviceCapabilityGrantStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
+  AcmeAccountKeyGrantRecord,
+  AcmeAccountKeyGrantStorage,
   MintReservationRecord,
   MintReservationStorage,
 } from "./types.js";
@@ -2871,6 +2873,7 @@ export class D1Storage implements Storage {
   nfcRendezvous: NfcRendezvousStorage;
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
+  acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -2904,6 +2907,7 @@ export class D1Storage implements Storage {
     this.nfcRendezvous = new D1NfcRendezvousStorage(db);
     this.watchDelegates = new D1WatchDelegateStorage(db);
     this.mintReservations = new D1MintReservationStorage(db);
+    this.acmeAccountKeyGrants = new D1AcmeAccountKeyGrantStorage(db);
   }
 }
 
@@ -3079,5 +3083,123 @@ export class D1MintReservationStorage implements MintReservationStorage {
       .prepare(`DELETE FROM mint_reservations WHERE username = ?1 AND holder_pub_hex = ?2`)
       .bind(username.toLowerCase(), holderPubHex.toLowerCase())
       .run();
+  }
+}
+
+interface AcmeAccountKeyGrantRow {
+  grant_id: string;
+  username: string;
+  account_key_id: string;
+  recipient_pub_hex: string;
+  sealed_account_key_hex: string;
+  issued_at: number;
+  expires_at: number;
+  signature_hex: string;
+  revoked_at: number | null;
+}
+function rowToAcmeAccountKeyGrant(r: AcmeAccountKeyGrantRow): AcmeAccountKeyGrantRecord {
+  return {
+    grantId: r.grant_id,
+    username: r.username,
+    accountKeyId: r.account_key_id,
+    recipientPubHex: r.recipient_pub_hex,
+    sealedAccountKeyHex: r.sealed_account_key_hex,
+    issuedAt: r.issued_at,
+    expiresAt: r.expires_at,
+    signatureHex: r.signature_hex,
+    revokedAt: r.revoked_at,
+  };
+}
+
+/** D1 AcmeAccountKeyGrantStorage — sealed ACME account keys handed to admin
+ *  devices (per-user-cert design). MANY active grants per user coexist (one per
+ *  admin device), so there is NO unique-active index; `put` only rejects a
+ *  duplicate grant_id (the PRIMARY KEY). `revokeByAccountKeyId` tombstones every
+ *  active copy of a rotated key in one statement. */
+export class D1AcmeAccountKeyGrantStorage implements AcmeAccountKeyGrantStorage {
+  constructor(private readonly db: D1Database) {}
+  async put(rec: AcmeAccountKeyGrantRecord) {
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO acme_account_key_grants
+            (grant_id, username, account_key_id, recipient_pub_hex,
+             sealed_account_key_hex, issued_at, expires_at, signature_hex, revoked_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+        )
+        .bind(
+          rec.grantId,
+          rec.username.toLowerCase(),
+          rec.accountKeyId,
+          rec.recipientPubHex.toLowerCase(),
+          rec.sealedAccountKeyHex,
+          rec.issuedAt,
+          rec.expiresAt,
+          rec.signatureHex,
+          rec.revokedAt,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE|PRIMARY KEY/i.test(msg)) {
+        return { ok: false as const, reason: "duplicate acme account key grant id" };
+      }
+      throw e;
+    }
+  }
+  async get(grantId: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM acme_account_key_grants WHERE grant_id = ?1`)
+      .bind(grantId)
+      .first<AcmeAccountKeyGrantRow>();
+    return r ? rowToAcmeAccountKeyGrant(r) : undefined;
+  }
+  async listForUser(username: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM acme_account_key_grants WHERE username = ?1 ORDER BY issued_at DESC`)
+      .bind(username.toLowerCase())
+      .all<AcmeAccountKeyGrantRow>();
+    return (r.results ?? []).map(rowToAcmeAccountKeyGrant);
+  }
+  async getActiveForUser(username: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM acme_account_key_grants
+         WHERE username = ?1 AND revoked_at IS NULL
+         ORDER BY issued_at DESC`,
+      )
+      .bind(username.toLowerCase())
+      .all<AcmeAccountKeyGrantRow>();
+    return (r.results ?? []).map(rowToAcmeAccountKeyGrant);
+  }
+  async getActiveByRecipient(recipientPubHex: string) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM acme_account_key_grants
+         WHERE recipient_pub_hex = ?1 AND revoked_at IS NULL
+         ORDER BY issued_at DESC`,
+      )
+      .bind(recipientPubHex.toLowerCase())
+      .all<AcmeAccountKeyGrantRow>();
+    return (r.results ?? []).map(rowToAcmeAccountKeyGrant);
+  }
+  async revoke(grantId: string, revokedAt: number) {
+    const res = await this.db
+      .prepare(`UPDATE acme_account_key_grants SET revoked_at = ?2 WHERE grant_id = ?1`)
+      .bind(grantId, revokedAt)
+      .run();
+    const changes = (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
+    if (changes === 0) throw new Error("unknown grantId");
+  }
+  async revokeByAccountKeyId(accountKeyId: string, revokedAt: number) {
+    const res = await this.db
+      .prepare(
+        `UPDATE acme_account_key_grants SET revoked_at = ?2
+         WHERE account_key_id = ?1 AND revoked_at IS NULL`,
+      )
+      .bind(accountKeyId, revokedAt)
+      .run();
+    return (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
   }
 }
