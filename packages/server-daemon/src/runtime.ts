@@ -22,6 +22,7 @@ import {
 } from "./acme/letsEncryptIssuer.js";
 import { PersistentAcmeStore, shouldReuseCert } from "./acme/persistentStore.js";
 import { RemoteDnsChallengeWriter } from "./acme/remoteDnsChallengeWriter.js";
+import { fetchGrantedAccountKeyPem } from "./acme/grantedAccountKey.js";
 import {
   superviseTunnelClient,
   type SupervisedTunnelClient,
@@ -652,6 +653,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     store,
     createPrivateKey: () => acme.crypto.createPrivateKey().then((b) => b.toString()),
     onGenerated: opts.onAccountKeyGenerated,
+    // #28 seal-to-box: if an admin has granted this box the user's SHARED ACME
+    // account key (sealed to its STK = the identity Ed25519 seed), adopt it so
+    // every box under the user mints certs under ONE Let's Encrypt account.
+    // Returns null when there's no grant / .com is unreachable / the blob isn't
+    // for us, in which case resolveAccountKey falls back to disk → self-gen.
+    resolveGrantedPem: () =>
+      fetchGrantedAccountKeyPem({
+        baseUrl: opts.controlPlaneBaseUrl,
+        serverFqdn: opts.serverFqdn,
+        stkSeed: identity.privateKey,
+      }),
   });
 
   const dns = new RemoteDnsChallengeWriter({
