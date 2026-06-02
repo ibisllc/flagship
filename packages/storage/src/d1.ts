@@ -1534,14 +1534,16 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
       .prepare(
         `INSERT INTO webauthn_recovery_records
            (username, credential_id_hex, wrapped_umk_b64, irk_pub_hex,
-            fetch_token_hash, prf_salt_hash, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?)
+            fetch_token_hash, prf_salt_hash, wrapped_acme_account_key_b64,
+            created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?)
          ON CONFLICT(username) DO UPDATE SET
            credential_id_hex = excluded.credential_id_hex,
            wrapped_umk_b64 = excluded.wrapped_umk_b64,
            irk_pub_hex = excluded.irk_pub_hex,
            fetch_token_hash = excluded.fetch_token_hash,
            prf_salt_hash = excluded.prf_salt_hash,
+           wrapped_acme_account_key_b64 = excluded.wrapped_acme_account_key_b64,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -1551,6 +1553,7 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         rec.irkPubHex,
         rec.fetchTokenHashHex ?? null,
         rec.prfSaltHashHex ?? null,
+        rec.wrappedAcmeAccountKeyB64 ?? null,
         rec.createdAt,
         rec.updatedAt,
       )
@@ -1568,6 +1571,7 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
         irk_pub_hex: string;
         fetch_token_hash: string | null;
         prf_salt_hash: string | null;
+        wrapped_acme_account_key_b64: string | null;
         created_at: number;
         updated_at: number;
       }>();
@@ -1579,6 +1583,9 @@ export class D1WebauthnRecoveryStorage implements WebauthnRecoveryStorage {
       irkPubHex: r.irk_pub_hex,
       ...(r.fetch_token_hash ? { fetchTokenHashHex: r.fetch_token_hash } : {}),
       ...(r.prf_salt_hash ? { prfSaltHashHex: r.prf_salt_hash } : {}),
+      ...(r.wrapped_acme_account_key_b64
+        ? { wrappedAcmeAccountKeyB64: r.wrapped_acme_account_key_b64 }
+        : {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     };

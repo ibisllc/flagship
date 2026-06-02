@@ -49,6 +49,7 @@ async function upload(opts: {
   issuedAt?: number;
   fetchTokenHashHex?: string;
   prfSaltHashHex?: string;
+  wrappedAcmeAccountKeyB64?: string;
 }) {
   const username = opts.username ?? USERNAME;
   const credentialId = opts.credentialId ?? "deadbeef".repeat(4);
@@ -65,6 +66,7 @@ async function upload(opts: {
   };
   if (opts.fetchTokenHashHex) request.fetchTokenHash = opts.fetchTokenHashHex;
   if (opts.prfSaltHashHex) request.prfSaltHash = opts.prfSaltHashHex;
+  if (opts.wrappedAcmeAccountKeyB64) request.wrappedAcmeAccountKey = opts.wrappedAcmeAccountKeyB64;
   return handleUploadWebauthnRecovery(
     {
       usernames: opts.storage.usernames,
@@ -84,6 +86,18 @@ describe("webauthn recovery — upload", () => {
     expect((res.body as { updated: boolean }).updated).toBe(false);
     const stored = await storage.webauthnRecovery.get(USERNAME);
     expect(stored?.credentialIdHex).toBe("deadbeef".repeat(4));
+  });
+
+  it("#28 — escrows the ACME account key alongside the UMK; preserves it on a UMK-only re-upload", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    await upload({ storage, irk, wrappedAcmeAccountKeyB64: "QUNNVC1LRVktQ0lQSEVS" });
+    const stored = await storage.webauthnRecovery.get(USERNAME);
+    expect(stored?.wrappedAcmeAccountKeyB64).toBe("QUNNVC1LRVktQ0lQSEVS");
+    // A later UMK-only refresh (no account-key field) must NOT drop the escrow.
+    await upload({ storage, irk, wrappedUmk: new Uint8Array([0xbb]) });
+    const after = await storage.webauthnRecovery.get(USERNAME);
+    expect(after?.wrappedAcmeAccountKeyB64).toBe("QUNNVC1LRVktQ0lQSEVS");
   });
 
   it("upsert replaces wrappedUmk + credentialId, preserves createdAt", async () => {

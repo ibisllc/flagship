@@ -449,6 +449,16 @@ export interface WebauthnRecoveryRecord {
   credentialIdHex: string;
   /** Opaque AES-GCM ciphertext (base64). `.com` cannot decrypt — only the user's passkey can. */
   wrappedUmkB64: string;
+  /**
+   * Per-user-cert (#28): the ACME ACCOUNT key, escrowed as opaque ciphertext
+   * (base64) wrapped to the SAME recovery credential as the UMK. The account
+   * key is admin-held (not UMK-derived), so losing every admin device would
+   * otherwise brick cert issuance forever — escrowing it here makes it
+   * recoverable independently of any surviving device. `.com` only ever sees
+   * ciphertext. Optional + backward-compatible: legacy rows / accounts
+   * without a minted account key leave it unset.
+   */
+  wrappedAcmeAccountKeyB64?: string;
   irkPubHex: string;
   /**
    * Task #74 — passphrase-derived fetch-token gate (hex SHA-256).

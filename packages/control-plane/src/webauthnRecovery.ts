@@ -152,6 +152,16 @@ export async function handleUploadWebauthnRecovery(
     irkPubHex: userRec.irkPubHex,
     ...(typeof r.fetchTokenHash === "string" ? { fetchTokenHashHex: r.fetchTokenHash.toLowerCase() } : {}),
     ...(typeof r.prfSaltHash === "string" ? { prfSaltHashHex: r.prfSaltHash.toLowerCase() } : {}),
+    // #28 — the ACME account key, escrowed as opaque ciphertext alongside the
+    // UMK. Optional (same accept-if-present pattern as the hashes above; not
+    // in the signed canonical — it's ciphertext, so tampering breaks recovery
+    // of the account key, never forges it). Preserve an existing value when a
+    // re-upload omits it (e.g. a UMK-only refresh).
+    ...(typeof r.wrappedAcmeAccountKey === "string" && r.wrappedAcmeAccountKey.length > 0
+      ? { wrappedAcmeAccountKeyB64: r.wrappedAcmeAccountKey }
+      : existing?.wrappedAcmeAccountKeyB64
+        ? { wrappedAcmeAccountKeyB64: existing.wrappedAcmeAccountKeyB64 }
+        : {}),
     createdAt: existing?.createdAt ?? t,
     updatedAt: t,
   });
@@ -253,6 +263,12 @@ export async function handleFetchWrappedUmkWithToken(
       username: rec.username,
       credentialId: rec.credentialIdHex,
       wrappedUmk: rec.wrappedUmkB64,
+      // #28 — release the escrowed ACME account key alongside the UMK so a
+      // recovering device can restore cert-minting authority. Ciphertext only;
+      // absent when the account never minted an account key.
+      ...(rec.wrappedAcmeAccountKeyB64
+        ? { wrappedAcmeAccountKey: rec.wrappedAcmeAccountKeyB64 }
+        : {}),
       // The PRF salt hash is returned so the client can verify it
       // re-derives the same value from the passphrase locally — a
       // defense against a malicious .com swapping the salt to coerce
