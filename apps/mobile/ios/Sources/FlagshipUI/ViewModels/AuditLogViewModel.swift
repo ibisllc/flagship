@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import FlagshipAPI
+import FlagshipCore
 
 /// Backs the dedicated full-page audit-log viewer (P5). Mirrors the
 /// canonical webapp `views/audit-log.js`: a paginated, time-sorted list
@@ -89,6 +90,12 @@ public final class AuditLogViewModel {
             // AND we haven't hit its hard cap.
             canLoadMore = sorted.count >= limit && limit < Self.maxLimit
             status = .loaded
+            // Mirror the freshly-loaded events onto the watch's
+            // security-alerts surface (the bridge is a no-op when
+            // unwired — previews/tests stay side-effect-free).
+            WatchSecurityAlertsBridge.shared.publishEvents(
+                sorted.map(WatchProtocol.SecurityAlert.init(audit:))
+            )
         } catch {
             // Keep any already-shown events on a load-more failure so the
             // list doesn't blank out; only a fresh load surfaces .failed.

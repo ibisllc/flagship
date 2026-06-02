@@ -77,6 +77,15 @@ public enum SettingsRoute: Hashable, Sendable {
     case scanPairingCode
     case developer
     case privacy
+    /// B7 — Replace-device FINALIZE surface. Reached after `initiate`
+    /// returns `.pending`, or re-entered later while a rotation is in
+    /// flight. Carries the server-reported `completesAt` (Unix ms) so the
+    /// screen renders the 24-hour grace countdown and gates the Complete
+    /// button until the window elapses. `nil` means "deadline unknown on
+    /// this launch" (e.g. re-entered from a cold start where only the
+    /// pending version survived) — the screen then lets the user attempt
+    /// Complete and relies on the server's 425 to keep them waiting.
+    case replaceDeviceFinalize(completesAt: Int64?)
     /// W3 — multi-profile picker; lists the clouds this phone is a
     /// member of and lets the user switch active profile.
     case profiles

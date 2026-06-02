@@ -27,11 +27,15 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
 
     @Published var pending: WatchProtocol.PendingApprovalsContext = .init()
     @Published var provisionTimeline: WatchProtocol.ProvisionTimelineContext?
+    /// Pending boot approvals + recent account security events. Drives
+    /// `WatchSecurityAlertsView`.
+    @Published var securityAlerts: WatchProtocol.SecurityAlertsContext?
     @Published var inFlightRequestId: String? = nil
     @Published var lastError: String? = nil
     @Published var lastApprovedId: String? = nil
 
     private static let pendingDefaultsKey = "flagship.watch.pending-v1"
+    private static let alertsDefaultsKey = "flagship.watch.security-alerts-v1"
     /// Shared between the watch app and the watch widget extension via
     /// App Group `group.com.flagshipserver.app` (W2). The widget reads
     /// this key from `UserDefaults(suiteName:)` to render the
@@ -61,6 +65,10 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
         if let data = timelineData,
            let ctx = try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data) {
             self.provisionTimeline = ctx
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.alertsDefaultsKey),
+           let ctx = try? JSONDecoder().decode(WatchProtocol.SecurityAlertsContext.self, from: data) {
+            self.securityAlerts = ctx
         }
     }
 
@@ -112,6 +120,18 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
            let ctx = try? JSONDecoder().decode(WatchProtocol.PendingApprovalsContext.self, from: data) {
             self.pending = ctx
             UserDefaults.standard.set(data, forKey: Self.pendingDefaultsKey)
+        }
+        // Security-alerts surface (boot approvals + recent security
+        // events). The phone drops the key entirely when both halves are
+        // empty, so its absence means "all quiet" — clear and forget the
+        // persisted snapshot so a stale glance doesn't linger.
+        if let data = context["security-alerts"] as? Data,
+           let ctx = try? JSONDecoder().decode(WatchProtocol.SecurityAlertsContext.self, from: data) {
+            self.securityAlerts = ctx
+            UserDefaults.standard.set(data, forKey: Self.alertsDefaultsKey)
+        } else if context["security-alerts"] == nil {
+            self.securityAlerts = nil
+            UserDefaults.standard.removeObject(forKey: Self.alertsDefaultsKey)
         }
         if let data = context["provision-timeline"] as? Data,
            let ctx = try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data) {

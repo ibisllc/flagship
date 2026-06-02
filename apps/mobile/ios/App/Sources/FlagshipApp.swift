@@ -208,6 +208,10 @@ struct FlagshipApp: App {
                     }
                     appDelegate.linker = linker
                     WatchBridge.shared.activate(client: activeClient)
+                    // Wire the FlagshipCore security-alerts bridge → the
+                    // App-target publisher so the boot-approval + audit
+                    // surfaces fan out to the paired watch.
+                    WatchSecurityAlertsPublisher.shared.activate()
                     let push = PushNotifications(linker: linker)
                     let registrar = PushRegistrar(appState: appState, client: activeServerClient)
                     push.onDeviceTokenChange = { token in

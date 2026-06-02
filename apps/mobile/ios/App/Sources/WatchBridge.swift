@@ -9,10 +9,19 @@ import UIKit
 
 /// Phone-side WatchConnectivity bridge.
 ///
-/// The legacy unlock-approval watch feature was removed along with the
-/// plaintext boot-approval flow it drove. This keeps a minimal WCSession
-/// shell so a future relay-over-watch approval feature can hang off it;
-/// today it holds no pending state and replies empty to any message.
+/// Publishes two glanceable surfaces to the paired watch via
+/// `updateApplicationContext` (the watch only ever sees the latest
+/// snapshot — exactly the semantic we want):
+///
+///   * `provision-timeline` — the in-flight install ladder (W1).
+///   * `security-alerts` — pending boot approvals + recent account
+///     security events, so a wrist glance surfaces "a box wants
+///     approval" / "something changed on my account" without unlocking
+///     the phone.
+///
+/// Both are held as the bridge's current state because the
+/// applicationContext call replaces the whole snapshot — re-sending one
+/// surface must preserve the other.
 @MainActor
 final class WatchBridge: NSObject {
     static let shared = WatchBridge()
@@ -20,9 +29,13 @@ final class WatchBridge: NSObject {
     private var client: (any ScreensClient)?
 
     /// Last published timeline context. Held so a re-send after a
-    /// pending-approvals change preserves the timeline, since
+    /// security-alerts change preserves the timeline, since
     /// applicationContext is "latest snapshot replaces previous".
     private var timeline: WatchProtocol.ProvisionTimelineContext?
+
+    /// Last published security-alerts context. Held for the same
+    /// snapshot-replace reason as `timeline`.
+    private var alerts: WatchProtocol.SecurityAlertsContext?
 
     private override init() { super.init() }
 
@@ -45,6 +58,14 @@ final class WatchBridge: NSObject {
         pushApplicationContext()
     }
 
+    /// Publish a new security-alerts snapshot (pending boot approvals +
+    /// recent security events). Pass nil (or an empty context) to clear
+    /// the surface — the watch then shows its "all quiet" state.
+    func updateSecurityAlerts(_ ctx: WatchProtocol.SecurityAlertsContext?) {
+        alerts = ctx
+        pushApplicationContext()
+    }
+
     private func pushApplicationContext() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
@@ -54,9 +75,16 @@ final class WatchBridge: NSObject {
            let data = try? JSONEncoder().encode(timeline) {
             payload["provision-timeline"] = data
         }
+        // Only carry security-alerts when there's something to show, so a
+        // cleared surface drops out of the snapshot rather than shipping
+        // an empty array that the watch would have to special-case.
+        if let alerts, !alerts.isEmpty,
+           let data = try? JSONEncoder().encode(alerts) {
+            payload["security-alerts"] = data
+        }
         // The applicationContext call REPLACES the prior snapshot, so an
-        // empty payload (no timeline + no approvals) is the documented
-        // way to clear the watch surface.
+        // empty payload (no timeline + no alerts) is the documented way
+        // to clear the watch surface.
         do {
             try session.updateApplicationContext(payload)
         } catch {

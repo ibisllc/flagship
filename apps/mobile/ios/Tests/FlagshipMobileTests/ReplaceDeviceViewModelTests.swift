@@ -122,6 +122,93 @@ final class ReplaceDeviceViewModelTests: XCTestCase {
             XCTFail("expected .failed, got \(vm.phase)")
         }
     }
+
+    // MARK: - B7 finalize-screen support (resume / graceElapsed / pending)
+
+    func test_hasPendingRotation_tracksKeystoreSlot() throws {
+        let server = MockFlagshipServerClient()
+        let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+        XCTAssertFalse(vm.hasPendingRotation)
+        try Keystore.setPendingIrkRotationVersion(2)
+        XCTAssertTrue(vm.hasPendingRotation)
+        try Keystore.setPendingIrkRotationVersion(nil)
+        XCTAssertFalse(vm.hasPendingRotation)
+    }
+
+    func test_resume_fromIdle_entersPendingWithDeadline() {
+        let server = MockFlagshipServerClient()
+        let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+        vm.resume(completesAt: 1_700_000_000_000)
+        if case .pending(let at) = vm.phase {
+            XCTAssertEqual(at, 1_700_000_000_000)
+        } else {
+            XCTFail("expected .pending, got \(vm.phase)")
+        }
+    }
+
+    func test_resume_fromFailed_reentersPending() async {
+        let server = MockFlagshipServerClient()
+        let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+        // Drive into .failed deterministically: complete() with no pending
+        // rotation fails before touching the network.
+        await vm.complete()
+        guard case .failed = vm.phase else {
+            return XCTFail("expected .failed precondition, got \(vm.phase)")
+        }
+        vm.resume(completesAt: 42)
+        if case .pending(let at) = vm.phase {
+            XCTAssertEqual(at, 42)
+        } else {
+            XCTFail("expected .pending after resume, got \(vm.phase)")
+        }
+    }
+
+    func test_resume_doesNotClobberCompleted() async throws {
+        try await makeUMK()
+        try Keystore.setPendingIrkRotationVersion(2)
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+        await vm.complete()
+        guard case .completed = vm.phase else {
+            return XCTFail("expected .completed precondition, got \(vm.phase)")
+        }
+        // resume MUST be a no-op once completed — never reopen the grace.
+        vm.resume(completesAt: 999)
+        if case .completed = vm.phase {} else {
+            XCTFail("resume clobbered terminal .completed → \(vm.phase)")
+        }
+    }
+
+    func test_graceElapsed_trueWhenDeadlinePast() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        XCTAssertTrue(ReplaceDeviceViewModel.graceElapsed(completesAt: 1_999_000, now: now))
+        XCTAssertTrue(ReplaceDeviceViewModel.graceElapsed(completesAt: 2_000_000, now: now)) // exactly now
+    }
+
+    func test_graceElapsed_falseWhenDeadlineFuture() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        XCTAssertFalse(ReplaceDeviceViewModel.graceElapsed(completesAt: 2_001_000, now: now))
+    }
+
+    func test_initiate_thenResumePreservesDeadline() async throws {
+        try await makeUMK()
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        server.rePairBehavior = .ok
+        let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+        await vm.initiate(currentEtag: nil)
+        guard case .pending(let original) = vm.phase else {
+            return XCTFail("expected .pending after initiate, got \(vm.phase)")
+        }
+        // A re-entry with the same deadline keeps the VM in .pending.
+        vm.resume(completesAt: original)
+        if case .pending(let at) = vm.phase {
+            XCTAssertEqual(at, original)
+        } else {
+            XCTFail("expected .pending after resume, got \(vm.phase)")
+        }
+    }
 }
 
 /// B7 — Keystore IRK-version primitive tests (separate from the VM

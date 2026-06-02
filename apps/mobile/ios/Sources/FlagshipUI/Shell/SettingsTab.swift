@@ -128,13 +128,12 @@ public struct SettingsTab: View {
                         // Reuse the most recent ETag we captured from
                         // the trusted-devices fetch (vm.devicesEtag).
                         await replaceVm?.initiate(currentEtag: vm.devicesEtag)
-                        // Surface the outcome as a toast — the UI
-                        // doesn't yet have a dedicated pending-status
-                        // card; that's a v1.1 follow-up.
+                        // On a successful initiate, push the dedicated
+                        // FINALIZE screen (24h grace countdown + Complete).
+                        // A failure stays inline as a toast.
                         switch replaceVm?.phase {
                         case .pending(let completesAt):
-                            let hours = max(1, (completesAt - Int64(Date().timeIntervalSince1970 * 1000)) / 3_600_000)
-                            replaceToast = "Replace initiated. Takes effect in ~\(hours)h unless another device objects."
+                            path.append(.replaceDeviceFinalize(completesAt: completesAt))
                         case .failed(let msg):
                             replaceToast = msg
                         default:
@@ -280,6 +279,24 @@ public struct SettingsTab: View {
                     )
                 }
             )
+        case .replaceDeviceFinalize(let completesAt):
+            // B7 — the finalize surface (24h grace countdown + Complete).
+            // Reuses the VM built by onReplaceDevice when present; the
+            // container reconstructs it if we arrived cold (e.g. a future
+            // deep link) so the screen always has a driver.
+            ReplaceDeviceFinalizeContainer(
+                vm: $replaceVm,
+                completesAt: completesAt,
+                onCompleted: {
+                    // The IRK just rotated — the in-memory session is
+                    // stale. Drop push + sign out so the app re-pairs
+                    // cleanly on next open.
+                    Task { @MainActor in
+                        await pushRegistrar?.revoke()
+                        app.signOut()
+                    }
+                }
+            )
         case .developer:
             DeveloperScreen(dev: dev, onWipeIdentity: {
                 Task { @MainActor in
@@ -359,6 +376,42 @@ struct CompanionRequestsContainer: View {
     private func countFor(_ state: LoadingState<[CompanionPendingWrite]>) -> Int {
         if case .loaded(let rows) = state { return rows.count }
         return 0
+    }
+}
+
+/// B7 — owns the ReplaceDeviceViewModel for the finalize screen. Reuses
+/// the VM already built by `onReplaceDevice` (passed through the binding)
+/// or constructs one on cold entry. Built as a container so the VM is
+/// created in `.task` (never during view-body evaluation), mirroring
+/// `CompanionRequestsContainer`.
+struct ReplaceDeviceFinalizeContainer: View {
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
+    @Binding var vm: ReplaceDeviceViewModel?
+    let completesAt: Int64?
+    var onCompleted: () -> Void = {}
+
+    var body: some View {
+        ZStack {
+            FSColors.scheme(.light).bg.ignoresSafeArea()
+            if let vm {
+                ReplaceDeviceFinalizeScreen(
+                    vm: vm,
+                    completesAt: completesAt,
+                    onCompleted: onCompleted
+                )
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            if vm == nil {
+                vm = ReplaceDeviceViewModel(
+                    server: server,
+                    username: { [app] in app.currentUser }
+                )
+            }
+        }
     }
 }
 

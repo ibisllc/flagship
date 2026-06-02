@@ -1,11 +1,22 @@
 import SwiftUI
 import FlagshipCore
 
-/// watchOS landing surface. Lists pending unlock approvals; tapping a
-/// row opens the per-row sheet with an "Approve" CTA that fires a
-/// WCSession message to the phone.
+/// watchOS landing surface. While an install is in flight the provision
+/// ladder dominates the face; otherwise the security surface
+/// (`WatchSecurityAlertsView`) is primary — it lists pending boot
+/// approvals + recent account security events. Tapping an approval row
+/// opens the per-row sheet whose "Approve" CTA fires a WCSession message
+/// to the phone (which holds the keys).
 struct WatchRootView: View {
     @EnvironmentObject private var session: WatchConnectivityClient
+
+    /// True when something on the security surface needs the user's
+    /// attention or is worth a glance (a pending approval or a recent
+    /// event). Drives whether the security surface pre-empts an inactive
+    /// timeline acknowledgement.
+    private var hasSecuritySurface: Bool {
+        !WatchProtocol.SecurityAlertsProjection.isEmpty(session.securityAlerts)
+    }
 
     var body: some View {
         NavigationStack {
@@ -13,51 +24,34 @@ struct WatchRootView: View {
                 if let timeline = session.provisionTimeline, timeline.active {
                     // Active install dominates the watch face: the
                     // ladder is the most time-sensitive thing the user
-                    // wants to see right now. Approvals show as a
-                    // secondary entry if any are pending.
+                    // wants to see right now.
                     ProvisionTimelineWatchView(context: timeline)
-                } else if !session.pending.approvals.isEmpty {
-                    List(session.pending.approvals) { approval in
-                        NavigationLink(value: approval.requestId) {
-                            ApprovalRow(approval: approval)
-                        }
-                    }
+                } else if hasSecuritySurface {
+                    // Pending boot approvals + recent security events.
+                    // Pre-empts an inactive (terminal) timeline because a
+                    // box waiting on approval is more actionable than a
+                    // finished install's acknowledgement.
+                    WatchSecurityAlertsView()
+                        .environmentObject(session)
                 } else if let timeline = session.provisionTimeline {
                     // Inactive (terminal-state) timeline still shows as
                     // a glanceable acknowledgement until the phone
                     // explicitly clears it.
                     ProvisionTimelineWatchView(context: timeline)
                 } else {
-                    emptyState
-                }
-            }
-            .navigationTitle("Flagship")
-            .navigationDestination(for: String.self) { requestId in
-                if let approval = session.pending.approvals.first(where: { $0.requestId == requestId }) {
-                    ApprovalDetail(approval: approval)
+                    // Nothing in flight, nothing pending — show the
+                    // security surface's "all quiet" state so the app
+                    // still reads as the security companion it is.
+                    WatchSecurityAlertsView()
                         .environmentObject(session)
                 }
             }
+            .navigationTitle("Flagship")
         }
-    }
-
-    @ViewBuilder
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "lock.shield")
-                .imageScale(.large)
-                .foregroundStyle(.secondary)
-            Text("No pending approvals").font(.headline)
-            Text("Approvals from your servers will show up here.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding()
     }
 }
 
-private struct ApprovalRow: View {
+struct ApprovalRow: View {
     let approval: WatchProtocol.PendingApproval
 
     var body: some View {
@@ -79,7 +73,7 @@ private struct ApprovalRow: View {
     }
 }
 
-private struct ApprovalDetail: View {
+struct ApprovalDetail: View {
     let approval: WatchProtocol.PendingApproval
     @EnvironmentObject private var session: WatchConnectivityClient
     @Environment(\.dismiss) private var dismiss

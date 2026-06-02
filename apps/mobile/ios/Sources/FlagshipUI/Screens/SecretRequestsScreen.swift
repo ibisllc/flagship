@@ -102,6 +102,13 @@ struct SecretRequestsContainer: View {
         do {
             let verified = try await coord.fetchVerifiedRequests()
             state = .loaded(verified)
+            // Mirror the pending approvals onto the watch (bridge is a
+            // no-op when unwired). Project from the underlying mailbox
+            // request, not the verified wrapper, so the wire type stays
+            // FlagshipAPI-free.
+            WatchSecurityAlertsBridge.shared.publishApprovals(
+                verified.map { WatchProtocol.PendingApproval(secretRequest: $0.pending) }
+            )
         } catch {
             state = .failed(error.localizedDescription)
         }

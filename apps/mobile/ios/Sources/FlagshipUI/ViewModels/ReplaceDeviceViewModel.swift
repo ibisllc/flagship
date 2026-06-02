@@ -45,6 +45,37 @@ public final class ReplaceDeviceViewModel {
         self.username = username
     }
 
+    /// True iff this device has a pending IRK rotation marked locally —
+    /// i.e. `initiate` succeeded and `complete` hasn't latched yet. The
+    /// finalize screen uses this to decide whether to offer Complete vs.
+    /// tell the user there's nothing in flight.
+    public var hasPendingRotation: Bool {
+        Keystore.pendingIrkRotationVersion() != nil
+    }
+
+    /// Re-seat the VM into `.pending` from a known deadline — used when
+    /// the finalize screen is (re)opened for an already-initiated
+    /// rotation (e.g. straight after `initiate`, or on a later app launch
+    /// where only the route's `completesAt` survived). Pure local state;
+    /// touches no network. No-op if a terminal/active phase is already in
+    /// progress so we never clobber an in-flight `complete`.
+    public func resume(completesAt: Int64) {
+        switch phase {
+        case .idle, .pending, .failed:
+            phase = .pending(completesAt: completesAt)
+        case .signing, .posting, .completing, .completed:
+            break
+        }
+    }
+
+    /// Whether the 24-hour grace window has elapsed relative to `now`
+    /// (defaulting to the wall clock). Pure + injectable so the finalize
+    /// screen's countdown + button-gate are unit-testable. Returns true
+    /// when `completesAt` is in the past (or now).
+    public static func graceElapsed(completesAt: Int64, now: Date = Date()) -> Bool {
+        Int64(now.timeIntervalSince1970 * 1000) >= completesAt
+    }
+
     /// Kick off the ceremony. `currentEtag` is the value the caller
     /// captured from its most recent `listDevices` call — passing it
     /// fences the device-list-shifted race. Pass nil to skip the
