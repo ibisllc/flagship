@@ -68,10 +68,20 @@ data class AcmeAccountKeyGrantMintResponse(
     val expiresAt: Long,
 )
 
+/** Reply from the domain-scoped delivery endpoint
+ *  (POST /api/server/:domain/acme-account-key). The seal is delivered in the
+ *  request body; the reply echoes only the public accountKeyId — a read is
+ *  never a delivery channel for the sealed key. */
+@Serializable
+data class AcmeAccountKeyGrantDeliverResponse(
+    val ok: Boolean = true,
+    val accountKeyId: String,
+)
+
 /**
- * POST a SEAL-TO-BOX grant. The username path segment is URL-encoded; the body
- * also carries username (the handler normalizes / matches both). Returns the
- * public-reference reply.
+ * POST a SEAL-TO-BOX grant to the USER-scoped escrow endpoint. The username
+ * path segment is URL-encoded; the body also carries username (the handler
+ * normalizes / matches both). Returns the public-reference reply.
  *
  * Declared as an extension on [FlagshipServerClient] per the #28 handoff while
  * deliberately NOT editing FlagshipServerClient.kt (another worker owns it).
@@ -92,5 +102,41 @@ suspend fun FlagshipServerClient.mintAcmeAccountKeyGrant(
         request,
         serializer = AcmeAccountKeyGrantMintRequest.serializer(),
         responseSerializer = AcmeAccountKeyGrantMintResponse.serializer(),
+    )
+}
+
+/**
+ * #28 SEAL-TO-BOX delivery — grant a specific box cert-minting autonomy by
+ * POSTing the box-sealed account-key grant to the DOMAIN-scoped endpoint:
+ *
+ *   POST /api/server/<serverDomain>/acme-account-key
+ *   body { grant: { grantId, username, accountKeyId, recipientPubKey(hex box
+ *                   STK), sealedAccountKey(hex), issuedAt, expiresAt },
+ *          signature(hex, Ed25519 IRK over the canonical grant) }
+ *   200  { ok, accountKeyId }
+ *
+ * Same `{ grant, signature }` body the producer already builds (reused
+ * verbatim from [AcmeAccountKeyGrantMintRequest]); only the URL is
+ * domain-scoped — the grant is delivered TO the box that will mint, so the
+ * route is keyed on its serverDomain rather than the owning username.
+ *
+ * The [serverDomain] path segment is URL-encoded; an FQDN is already URL-safe,
+ * so this matches the literal route the Worker mounts. `transport`/`baseUrl`
+ * are passed explicitly for the same private-property reason as
+ * [mintAcmeAccountKeyGrant].
+ */
+suspend fun FlagshipServerClient.grantAcmeAccountKeyAutonomy(
+    transport: JsonHttpTransport,
+    serverDomain: String,
+    request: AcmeAccountKeyGrantMintRequest,
+    baseUrl: String = LiveFlagshipServerClient.DEFAULT_BASE_URL,
+): AcmeAccountKeyGrantDeliverResponse {
+    val base = baseUrl.trimEnd('/')
+    val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+    return transport.postJsonForResponse(
+        "$base/api/server/$encoded/acme-account-key",
+        request,
+        serializer = AcmeAccountKeyGrantMintRequest.serializer(),
+        responseSerializer = AcmeAccountKeyGrantDeliverResponse.serializer(),
     )
 }
