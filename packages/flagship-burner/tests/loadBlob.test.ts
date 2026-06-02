@@ -31,6 +31,8 @@ function buildSignedRecipe(opts: {
   irkSeed?: number;
   delegateSeed?: number;
   rckSeed?: number;
+  bootUnlockMode?: "auto" | "approve";
+  certAutonomy?: { mode: "managed" | "autonomous"; offlineWindowDays?: number };
 }): { json: string; userPubKey: Uint8Array } {
   const irk = makeKeypair(opts.irkSeed ?? 7);
   const delegate = makeKeypair(opts.delegateSeed ?? 8);
@@ -57,6 +59,8 @@ function buildSignedRecipe(opts: {
     authCodeUserSignature: new Uint8Array(64), // not verified by the Burner
     installerGitRef: "main",
     rckPubKey: rck.publicKey,
+    ...(opts.bootUnlockMode ? { bootUnlockMode: opts.bootUnlockMode } : {}),
+    ...(opts.certAutonomy ? { certAutonomy: opts.certAutonomy } : {}),
   };
   const sig = signInstallBlob(blob, irk);
   const json = JSON.stringify({
@@ -80,6 +84,8 @@ function buildSignedRecipe(opts: {
     authCodeUserSignature: bytesToHex(blob.authCodeUserSignature),
     installerGitRef: blob.installerGitRef,
     rckPubKey: bytesToHex(blob.rckPubKey),
+    ...(opts.bootUnlockMode ? { bootUnlockMode: opts.bootUnlockMode } : {}),
+    ...(opts.certAutonomy ? { certAutonomy: opts.certAutonomy } : {}),
     blobSignatureHex: bytesToHex(sig),
   });
   return { json, userPubKey: irk.publicKey };
@@ -93,6 +99,20 @@ describe("loadBlobFromString", () => {
     expect(loaded.blob.version).toBe(2);
     expect(loaded.blob.serverDomain).toBe("home.harry.flagship.services");
     expect(loaded.blob.authCode.expiresAt).toBe(future);
+  });
+
+  it("accepts (verifies) a blob carrying certAutonomy + bootUnlockMode", () => {
+    // The signature covers these fields; parseInstallBlob MUST reconstruct
+    // them or verify fails. Proves the burner round-trip is signature-safe.
+    const future = Date.now() + 6 * 60 * 60_000;
+    const { json } = buildSignedRecipe({
+      authExpiresAt: future,
+      bootUnlockMode: "approve",
+      certAutonomy: { mode: "autonomous" },
+    });
+    const loaded = loadBlobFromString(json);
+    expect(loaded.blob.bootUnlockMode).toBe("approve");
+    expect(loaded.blob.certAutonomy?.mode).toBe("autonomous");
   });
 
   it("accepts the issued envelope { blob, blobSignature } (what .com/website hand out)", () => {

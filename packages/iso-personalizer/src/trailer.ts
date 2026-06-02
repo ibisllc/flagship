@@ -144,6 +144,10 @@ interface InstallBlobJson {
   authCodeUserSignature: string;
   installerGitRef: string;
   rckPubKey: string;
+  /** Optional signed fields — MUST be carried through the round-trip or the
+   *  reconstructed blob's canonical bytes won't match the signature. */
+  bootUnlockMode?: "auto" | "approve";
+  certAutonomy?: { mode: "managed" | "autonomous"; offlineWindowDays?: number };
 }
 
 function bytesToHex(b: Bytes): string {
@@ -180,6 +184,8 @@ export function installBlobToJson(b: InstallBlob): InstallBlobJson {
     authCodeUserSignature: bytesToHex(b.authCodeUserSignature),
     installerGitRef: b.installerGitRef,
     rckPubKey: bytesToHex(b.rckPubKey),
+    ...(b.bootUnlockMode !== undefined ? { bootUnlockMode: b.bootUnlockMode } : {}),
+    ...(b.certAutonomy !== undefined ? { certAutonomy: b.certAutonomy } : {}),
   };
 }
 
@@ -207,5 +213,7 @@ export function installBlobFromJson(j: InstallBlobJson): InstallBlob {
     authCodeUserSignature: hexToBytes(j.authCodeUserSignature),
     installerGitRef: j.installerGitRef ?? "",
     rckPubKey: hexToBytes(j.rckPubKey),
+    ...(j.bootUnlockMode !== undefined ? { bootUnlockMode: j.bootUnlockMode } : {}),
+    ...(j.certAutonomy !== undefined ? { certAutonomy: j.certAutonomy } : {}),
   };
 }
