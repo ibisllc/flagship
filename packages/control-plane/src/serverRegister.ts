@@ -301,23 +301,24 @@ export async function handleServerRegister(
   }
 
   // Publish A/AAAA so the user's URLs resolve to the .services SNI
-  // passthrough. Four names per server registration (idempotent — DNS
-  // upsert is no-op when the record already exists with the right
-  // content):
-  //   - <server>.<user>.flagship.services    (apex of the pod zone)
-  //   - *.<server>.<user>.flagship.services  (canonical app URLs)
+  // passthrough. PER-USER DNS (task #23): TWO names per registration — the
+  // user zone only (idempotent — DNS upsert is a no-op when the record
+  // already exists with the right content):
   //   - <user>.flagship.services             (apex of the user zone)
-  //   - *.<user>.flagship.services           (alias URLs + the canonical
-  //                                           <server>.<user> pod label)
+  //   - *.<user>.flagship.services           (every one-label-deep public
+  //                                           name: the pod label
+  //                                           <server>.<user>, app labels
+  //                                           <label>.<user>, device labels)
+  // The deprecated per-server pair (<server>.<user> + *.<server>.<user>) is
+  // dropped — the pod apex resolves via the `*.<user>` wildcard. Degenerate
+  // FQDNs that don't parse as <server>.<user> fall back to the pod apex.
   // Best-effort: a DNS failure shouldn't fail registration.
   let dnsPublished: { type: string; name: string; content: string }[] = [];
   let dnsError: string | undefined;
   if (deps.dns) {
     const podApex = authCode.serverDomain;
-    const podWildcard = `*.${podApex}`;
     const userZone = userZoneOf(podApex);
-    const names = [podApex, podWildcard];
-    if (userZone) names.push(userZone, `*.${userZone}`);
+    const names = userZone ? [userZone, `*.${userZone}`] : [podApex, `*.${podApex}`];
     try {
       for (const name of names) {
         const a = await deps.dns.client.upsert({

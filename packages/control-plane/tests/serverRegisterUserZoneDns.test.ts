@@ -41,8 +41,8 @@ class FakeDns implements Pick<CloudflareDnsClient, "upsert"> {
   }
 }
 
-describe("serverRegister — user-zone DNS publishing (N0c)", () => {
-  it("publishes A records for the pod zone AND user zone", async () => {
+describe("serverRegister — user-zone DNS publishing (N0c, task #23)", () => {
+  it("publishes ONLY the two user-zone A records (pod apex resolves via the wildcard)", async () => {
     const usernames = new InMemoryUsernameStorage();
     const irk = makeKey();
     await usernames.put({
@@ -120,15 +120,13 @@ describe("serverRegister — user-zone DNS publishing (N0c)", () => {
       },
     );
     expect(r.status).toBe(200);
+    // PER-USER DNS (task #23): TWO records, the user zone only. The pod apex
+    // `home.alice` and every app label resolve via the `*.alice` wildcard, so
+    // the deprecated per-server pair is no longer published.
     const names = fakeDns.upserted.map((u) => u.name).sort();
-    expect(names).toEqual(
-      [
-        "*.alice.flagship.services",
-        "*.home.alice.flagship.services",
-        "alice.flagship.services",
-        "home.alice.flagship.services",
-      ].sort(),
-    );
+    expect(names).toEqual(["*.alice.flagship.services", "alice.flagship.services"]);
+    expect(names).not.toContain("home.alice.flagship.services");
+    expect(names).not.toContain("*.home.alice.flagship.services");
     for (const u of fakeDns.upserted) {
       expect(u.type).toBe("A");
       expect(u.content).toBe("203.0.113.42");
