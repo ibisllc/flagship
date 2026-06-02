@@ -91,6 +91,40 @@ Minters = {admin-scope devices} ∪ {boxes with an indefinite renewal delegation
 
 **Offline-autonomy window is PER-SERVER, not account-wide (owner refinement 2026-06-01, SUPERSEDES the earlier account-default+override).** The decision "can this box survive the phone being off, how long" is inherently per-server (trust/location is per-server). Declared at server creation ("safe always-on location? how long phone-off?"). NO account-wide functional layer — only a remembered last-choice as a UI **pre-fill convenience**. (A future account-wide *ceiling* — "no server may exceed N days" — is a distinct concept the per-server field won't foreclose; not building now.) Finite value ⇒ pre-mint only (box holds no key); Indefinite ⇒ that box gets the revocable renewal delegation.
 
+## Pressure-test findings (red-team 2026-06-01) — flaw → fix
+
+### CRITICAL (architecture-level)
+
+- **PSL ceiling (scaling blocker).** LE's "certificates per *registered domain*" limit (50/week, override ~3–5k/week) keys on the public-suffix+1. If `flagship.services` is NOT on the **Public Suffix List**, EVERY user's cert counts against ONE shared limit → a hard ceiling of a few-thousand users total, regardless of per-user. **FIX: get `flagship.services` (+ the cert apex) onto the PSL**, so `<user>.flagship.services` becomes each its own registered domain → per-user 50/week. Standard multi-tenant pattern (Heroku et al.). PSL propagation takes weeks–months → **must start NOW**. (Per-user *helps* — fewer issuances than per-box — but doesn't remove the shared-registered-domain limit; PSL does. Note: the 5-duplicate/7-day limit is already per-user since each SAN set `[<user>,*.<user>]` is unique.) — **OPS ACTION, owner-gated.**
+- **`.com` must NOT be a hard renewal dependency.** The mint reservation-lease at `.com` makes cert *renewal* `.com`-gated — a regression from today's autonomous boxes (a `.com` outage → eventual TLS death, not just routing disruption). **FIX: the reservation is BEST-EFFORT/advisory.** If `.com` is unreachable, minters fall back to a **deterministic local tiebreak** (e.g. lowest-pubkey-hash mints first, others wait a derived delay) + jittered mint-anyway, accepting an occasional duplicate cert (survivable; bounded by the 5/7-day dup limit). Renewal never hard-depends on `.com`.
+- **Account-key recovery must be ESCROWED, not derived.** We decided the ACME account key is admin-held + sealed (NOT UMK-derived), so losing your only admin device would otherwise brick issuance forever. **FIX: escrow the account key as ciphertext in the WebAuthn-PRF / J.3-J.4 recovery envelope** (encrypted to the recovery credential; `.com` holds only ciphertext). Re-escrow on every rotation. Recoverable independent of any surviving device.
+
+### THE ONE REAL FORK (needs owner decision) — see chat
+
+- **"Indefinite" autonomy = that box holds the ACME ACCOUNT KEY = becomes a cert-minting authority.** Stock ACME has no clean attenuated "renew-this-SAN-set-only" delegation; a box that renews autonomously past the cert's max validity MUST hold the account key (it can then mint *any* cert for the namespace, not just renew). So the window maps to: **short (≤~6d) → short-lived cert, no box key; medium (≤90d) → standard 90-day cert, no box key (admin just surfaces every ≤90d); indefinite (>90d) → seal account key to that box (opt-in, per-box-revocable, the conscious weakening).** DECISION: allow true-indefinite (box becomes a minter), or **cap max autonomy at 90 days** (no box ever holds minting authority — cleaner invariant, costs "surface a device every ≤90 days").
+
+### FIXES I'll bake in (no decision needed)
+
+- **Admin demotion = a coordinated atomic sequence:** routing-revoke + revoke any renewal delegations + rotate the account key + re-pin CAA (short TTL) + re-seal to remaining admins + re-escrow recovery. The CAA-propagation TTL window is bounded by routing-revoke being instant; keep CAA TTL short.
+- **Promotion to admin** = an existing admin seals the account key to the target device's IRK + grants the `admin` DeviceCapabilityGrant. Reuses the device-admit sealed-transfer pattern.
+- **Cert-key distribution envelope** = seal(cert key → box STK) + sign(by minter, account-attested). Boxes are receive-only; verify the minter signature. Reuse `customDomainCert.ts` lead→sibling.
+- **Renew ≠ rotate (churn fix).** Routine renewal REUSES the cert keypair (distribute just the new *public* cert blob — cheap, no re-seal). Rotate the keypair only on compromise/demotion (the rare re-seal-everything event). Relaxes §4.2 "rotated each issuance" → "rotated on compromise/demotion." Critical with short-lived certs (renew every ~2d).
+- **Soft-revoke is only soft if the key is WIPED.** A decommissioned box keeps a *valid* cert key until expiry → off-path MITM risk if its disk is later recovered. Clean decommission must LUKS-wipe + destroy the cert key; a box leaving your control with the key intact is HARD (re-mint + CA-revoke). Sharpens §5.1/§5.3.
+- **Delegated-box hard-revoke** has extra ordered steps: routing-revoke + **delegation-revoke** (both instant at `.com`) BEFORE re-mint, then rotate key + re-mint + CA-revoke.
+- **Merged-namespace collisions** (offline cross-box installs racing for a label) resolve via a **deterministic rule** + `.com` as the serializer of phone-signed name claims (`.com` orders/dedupes; phone signs so `.com` can't invent names — routing/availability concern, not content-forge). Auto-suffix `-<author>`/`-<box>` on hard collision so an install never hard-fails.
+- **Resolver returns (target, label-class, security-context)** — not just a route — so each class (app / device / box-apex / pin) applies its correct capability/security context.
+- **Box quarantine** for cert participation: an admin-authorized new box may *receive + serve* the cert immediately but may NOT mint (no indefinite delegation) until its quarantine clears.
+- **CA-revoke is best-effort** (browsers soft-fail OCSP); **short-lived certs are the real blast-radius bound** (reinforces Q-B=yes). Don't over-rely on OCSP/CRL.
+- **Verify routing-revoke is genuinely instant** — the Fly hub must consult live routing state (not a stale cache); the whole §5 "instant cutoff" argument rests on it.
+- **Renewal-reminder push** ("cert expires in N days, open the app") via the existing push infra — the admin-availability safety net for finite windows.
+- **Clock-skew tolerance:** decide expiry off the cert's authoritative `notAfter`; a minter waits past the *nominal* reservation expiry before taking over a lapsed lease.
+- **Privacy property (document):** usernames are enumerable via CT logs (every `<user>` cert is public) — but the `*.<user>` wildcard keeps individual **app labels OUT of CT** (a privacy WIN vs. per-app certs). State both.
+- **Live-swap de-risk:** old 3-SAN certs already cover `[<user>, *.<user>]`, so the new `<label>.<user>` form works mid-transition on old certs; ONLY the deprecated two-label-deep `<app>.<server>.<user>` form breaks → inventory + migrate demo/dev pods first.
+
+### SCOPE-HONESTY HEADS-UP
+
+- **`replication: "leader"` is distributed-consensus, not "more code."** Single-writer-with-failover + split-brain avoidance is Raft/lease territory — famously subtle, data-loss-prone if rushed. Build the CONTRACT + a `.com` leader-lease fence now, but land the actual failover-replication INCREMENTALLY with exhaustive partition tests — this is the one piece NOT to cram. (The cert mesh itself — distribute/quarantine/revoke — is tractable and built now.)
+
 ## Risks / cross-cutting
 
 - **Live prod cert chain:** tasks 1/2/4/8 rewrite the exact SAN+DNS paths producing the current green-padlock cert — atomic commit, c4.6-gated, live-smoked or TLS breaks for real servers.
