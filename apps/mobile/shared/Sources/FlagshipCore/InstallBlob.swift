@@ -34,6 +34,11 @@ public struct InstallBlob: Equatable, Sendable {
     /// Optional + conditionally appended to canonicalBytes for backward
     /// compatibility — nil ⇒ legacy bytes (consumers treat absence as "auto").
     public var bootUnlockMode: String?
+    /// Per-server cert-autonomy policy (per-user-cert design). "managed"
+    /// (default) ⇒ an admin device renews the cert; "autonomous" ⇒ the box
+    /// holds a sealed account key and renews itself indefinitely. Optional +
+    /// conditionally appended; MUST match the TS `ca=<mode>:<days>` bytes.
+    public var certAutonomy: CertAutonomy?
 
     public init(
         version: Int = 2,
@@ -46,7 +51,8 @@ public struct InstallBlob: Equatable, Sendable {
         authCodeUserSignature: Data,
         installerGitRef: String = "main",
         rckPubKey: Data,
-        bootUnlockMode: String? = nil
+        bootUnlockMode: String? = nil,
+        certAutonomy: CertAutonomy? = nil
     ) {
         self.version = version
         self.serverDomain = serverDomain
@@ -59,6 +65,17 @@ public struct InstallBlob: Equatable, Sendable {
         self.installerGitRef = installerGitRef
         self.rckPubKey = rckPubKey
         self.bootUnlockMode = bootUnlockMode
+        self.certAutonomy = certAutonomy
+    }
+
+    /// Mirrors the TS InstallBlob.certAutonomy shape.
+    public struct CertAutonomy: Equatable, Sendable {
+        public var mode: String              // "managed" | "autonomous"
+        public var offlineWindowDays: Int?   // managed-mode target; nil ⇒ 0 on the wire
+        public init(mode: String, offlineWindowDays: Int? = nil) {
+            self.mode = mode
+            self.offlineWindowDays = offlineWindowDays
+        }
     }
 
     /// Canonical bytes — pipe-separated, tag prefix kept at v1 for the
@@ -83,6 +100,11 @@ public struct InstallBlob: Equatable, Sendable {
         // Backward-compatible: absent ⇒ exact legacy bytes; present ⇒ appended
         // last so the signer commits to it. MUST match TS canonicalInstallBlob.
         if let mode = bootUnlockMode { parts.append(mode) }
+        // certAutonomy appended after bootUnlockMode with a `ca=` prefix that
+        // can't collide with a bootUnlockMode value. MUST match TS exactly.
+        if let ca = certAutonomy {
+            parts.append("ca=\(ca.mode):\(ca.offlineWindowDays ?? 0)")
+        }
         return Data(parts.joined(separator: "|").utf8)
     }
 }
