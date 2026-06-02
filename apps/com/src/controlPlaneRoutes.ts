@@ -1333,6 +1333,9 @@ export async function tryControlPlane(
         {
           storage: storage.acmeAccountKeyGrants,
           usernames: storage.usernames,
+          // #28 — a grant-key rotation ALSO drops the box's seal-to-box
+          // delivery slot for that key (so a stolen box can't re-release it).
+          delivery: storage.acmeAccountKeyDelivery,
         },
         await readJson(request),
       ),

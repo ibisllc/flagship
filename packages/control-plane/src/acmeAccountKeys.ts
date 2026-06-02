@@ -36,6 +36,7 @@ import {
   type RevokeAcmeAccountKey,
 } from "@flagship/protocol";
 import type {
+  AcmeAccountKeyDeliveryStorage,
   AcmeAccountKeyGrantRecord,
   AcmeAccountKeyGrantStorage,
   UsernameStorage,
@@ -53,6 +54,14 @@ import {
 export interface AcmeAccountKeysDeps {
   storage: AcmeAccountKeyGrantStorage;
   usernames: UsernameStorage;
+  /**
+   * The #28 seal-to-box DELIVERY store (optional). When present, a grant
+   * revoke (key rotation on admin demotion / compromise) ALSO drops the box's
+   * released-key slot for that accountKeyId — so a stolen box can't re-release
+   * the now-dead key on its next boot. Absent ⇒ delivery sweep is a no-op
+   * (mint/list/requireMinter paths don't need it).
+   */
+  delivery?: AcmeAccountKeyDeliveryStorage;
   now?: () => number;
 }
 
@@ -257,7 +266,17 @@ export async function handleRevokeAcmeAccountKeyGrant(
   // (rotation on admin demotion / compromise kills all sealed copies at once).
   // Idempotent: a re-revoke just returns 0.
   const revoked = await deps.storage.revokeByAccountKeyId(r.accountKeyId, now);
-  return ok({ ok: true, accountKeyId: r.accountKeyId, revoked });
+
+  // #28 — ALSO drop any seal-to-box DELIVERY slot of this key. The grant
+  // tombstone above kills the admin-device copies, but an autonomous box pulls
+  // its sealed key from the delivery slot at boot; without this, a stolen box
+  // could re-release the now-dead key on its next reboot. deleteByAccountKeyId
+  // is idempotent (returns 0 when no slot matches).
+  let deliveryDropped = 0;
+  if (deps.delivery) {
+    deliveryDropped = await deps.delivery.deleteByAccountKeyId(r.accountKeyId);
+  }
+  return ok({ ok: true, accountKeyId: r.accountKeyId, revoked, deliveryDropped });
 }
 
 // ──────────────────────────────────────────────────────────────────────

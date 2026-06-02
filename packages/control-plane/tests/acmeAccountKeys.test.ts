@@ -27,6 +27,7 @@ import {
   type RevokeAcmeAccountKey,
 } from "@flagship/protocol";
 import {
+  InMemoryAcmeAccountKeyDeliveryStorage,
   InMemoryAcmeAccountKeyGrantStorage,
   InMemoryUsernameStorage,
 } from "@flagship/storage";
@@ -286,6 +287,68 @@ describe("handleRevokeAcmeAccountKeyGrant", () => {
     });
     expect(again.status).toBe(200);
     expect((again.body as { revoked: number }).revoked).toBe(0);
+  });
+
+  it("#28: ALSO drops the seal-to-box delivery slot of the rotated key", async () => {
+    const h = await mkHarness();
+    const delivery = new InMemoryAcmeAccountKeyDeliveryStorage();
+    const deps: AcmeAccountKeysDeps = { ...h.deps, delivery };
+
+    // A box holds a released-key slot for key-X (its own server domain).
+    await delivery.put({
+      serverDomain: "nas.dani.flagship.services",
+      accountKeyId: "key-X",
+      sealedAccountKeyHex: "cc".repeat(8),
+      recipientPubHex: "aa".repeat(32),
+      issuedAt: 1_000_000,
+      expiresAt: 9_999_999_999_999,
+      revokedAt: null,
+    });
+    // A slot of a DIFFERENT key must survive.
+    await delivery.put({
+      serverDomain: "media.dani.flagship.services",
+      accountKeyId: "key-Y",
+      sealedAccountKeyHex: "dd".repeat(8),
+      recipientPubHex: "bb".repeat(32),
+      issuedAt: 1_000_000,
+      expiresAt: 9_999_999_999_999,
+      revokedAt: null,
+    });
+
+    const revoke: RevokeAcmeAccountKey = {
+      accountKeyId: "key-X",
+      username: USER,
+      reason: "compromise",
+      issuedAt: 1_000_500,
+    };
+    const res = await handleRevokeAcmeAccountKeyGrant(deps, {
+      request: revoke,
+      signature: hex(signRevokeAcmeAccountKey(revoke, h.userIrk)),
+    });
+    expect(res.status).toBe(200);
+    expect((res.body as { deliveryDropped: number }).deliveryDropped).toBe(1);
+
+    // The rotated key's box slot is gone; the other key's slot survives.
+    expect(await delivery.getByDomain("nas.dani.flagship.services")).toBeUndefined();
+    expect(
+      (await delivery.getByDomain("media.dani.flagship.services"))?.accountKeyId,
+    ).toBe("key-Y");
+  });
+
+  it("#28: delivery sweep is a no-op when no delivery store is wired", async () => {
+    const h = await mkHarness(); // deps WITHOUT a delivery store
+    const revoke: RevokeAcmeAccountKey = {
+      accountKeyId: "key-X",
+      username: USER,
+      reason: "rotation",
+      issuedAt: 1_000_500,
+    };
+    const res = await handleRevokeAcmeAccountKeyGrant(h.deps, {
+      request: revoke,
+      signature: hex(signRevokeAcmeAccountKey(revoke, h.userIrk)),
+    });
+    expect(res.status).toBe(200);
+    expect((res.body as { deliveryDropped: number }).deliveryDropped).toBe(0);
   });
 
   it("rejects a bad revoke signature with 403", async () => {
