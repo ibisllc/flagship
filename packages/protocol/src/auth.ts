@@ -3690,6 +3690,61 @@ export function verifyRevokeAcmeAccountKey(r: RevokeAcmeAccountKey, sig: Bytes, 
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// MintReservation — the dead-lead-safe CAS lease that serializes who
+// re-mints a user's per-user cert this cycle (per-user-cert design).
+//
+// A minter (an admin-scope device, or an "autonomous" box that holds a
+// renewal delegation) signs this claim with its OWN minting key before
+// acquiring the lease at `.com`. The HOLDER signs — unlike the ACME-account
+// envelopes (IRK-signed by the account root), this one is authenticated by
+// whoever wants to lead the cycle, and `.com` separately confirms (via
+// requireMinter) that the holder is a real minter for the user. The lease
+// is non-secret coordination metadata: `.com` orders/dedupes it but cannot
+// forge a cert, and CT-monitoring catches anything that slips. δ (the lease
+// TTL implied by expiresAt) ≈ one ACME order, ≪ remaining cert life, so a
+// dead lead's lease lapses and the next minter takes over.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface MintReservationClaim {
+  username: string;
+  /** The minter's own signing pubkey (32 bytes) — the holder that signed. */
+  holderPubKey: Bytes;
+  /** ms since epoch; the lease is reclaimable once now >= expiresAt. */
+  expiresAt: number;
+}
+
+const TAG_MINT_RESERVATION = "flagship/mint-reservation/v1";
+
+function canonicalMintReservation(c: MintReservationClaim): Bytes {
+  if (c.username.length === 0) throw new Error('MintReservationClaim: empty "username"');
+  for (let i = 0; i < c.username.length; i++) {
+    const ch = c.username.charCodeAt(i);
+    if (ch === 0x7c) throw new Error('MintReservationClaim field "username" contains separator \'|\'');
+    if (ch <= 0x1f || ch === 0x7f) {
+      throw new Error(`MintReservationClaim field "username" contains control char 0x${ch.toString(16)} at index ${i}`);
+    }
+  }
+  if (c.holderPubKey.length !== 32) {
+    throw new Error(`MintReservationClaim: holderPubKey must be 32 bytes, got ${c.holderPubKey.length}`);
+  }
+  return new TextEncoder().encode(
+    [TAG_MINT_RESERVATION, c.username, hex(c.holderPubKey), c.expiresAt].join("|"),
+  );
+}
+
+export function signMintReservation(c: MintReservationClaim, kp: Keypair): Bytes {
+  return ed.sign(canonicalMintReservation(c), kp.privateKey);
+}
+
+export function verifyMintReservation(c: MintReservationClaim, sig: Bytes, pub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalMintReservation(c), pub);
+  } catch {
+    return false;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // CustomDomainCert (#79B / Phase 4 C4.1c)
 //
 // The fleet-scoped TLS cert + private key for a user's custom (external)

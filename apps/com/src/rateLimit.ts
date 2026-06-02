@@ -70,6 +70,17 @@ export type RateLimitEndpoint =
   | "watch-delegates-list"
   | "watch-delegates-revoke"
   | "watch-delegates-mint"
+  // Per-user-cert ACME account-key grants + mint-reservation lease. Same
+  // shape as watch delegates: list is a public read (per-IP); the mutating
+  // paths are signed but the wire shape doesn't expose the signer pub at
+  // edge speed, so per-IP only. The reservation acquire/release are hotter
+  // (a minter may poll across a renewal cycle), so they get a slightly more
+  // generous per-IP budget than the one-shot grant mint/revoke.
+  | "acme-account-keys-list"
+  | "acme-account-keys-revoke"
+  | "acme-account-keys-mint"
+  | "mint-reservation-acquire"
+  | "mint-reservation-release"
   | "account-resolve"
   // "Cancel this device" on the install-progress page. Public (a demo
   // account is a no-auth capability), so per-IP only at the edge. Tight
@@ -159,6 +170,23 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 50, windowSec: 3600 },
   ],
+  // Per-user-cert ACME account-key grants + mint-reservation lease.
+  "acme-account-keys-list": [{ axis: "ip", limit: 60, windowSec: 60 }],
+  "acme-account-keys-revoke": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 20, windowSec: 3600 },
+  ],
+  "acme-account-keys-mint": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "irk", limit: 50, windowSec: 3600 },
+  ],
+  // The reservation lease is polled across a renewal cycle by a minter, so
+  // the per-IP budget is more generous than a one-shot grant mint. Per-IP
+  // only — the lease claim is holder-signed but the wire shape doesn't
+  // expose a registered IRK pub at edge speed (the handler does the full
+  // signature + requireMinter check).
+  "mint-reservation-acquire": [{ axis: "ip", limit: 60, windowSec: 60 }],
+  "mint-reservation-release": [{ axis: "ip", limit: 60, windowSec: 60 }],
   // Login/join preflight. The per-IP axis caps username enumeration
   // (the main concern for a 200-always existence oracle); the per-
   // usernameHash axis blunts hammering a single name. Generous enough
@@ -352,6 +380,32 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && /^\/api\/users\/[^/]+\/watch-delegates$/.test(pathname)) {
     return "watch-delegates-mint";
   }
+  // Per-user-cert ACME account-key grants. Same ordering: `/revoke` before bare.
+  if (
+    m === "POST" &&
+    /^\/api\/users\/[^/]+\/acme-account-keys\/revoke$/.test(pathname)
+  ) {
+    return "acme-account-keys-revoke";
+  }
+  if (m === "GET" && /^\/api\/users\/[^/]+\/acme-account-keys$/.test(pathname)) {
+    return "acme-account-keys-list";
+  }
+  if (m === "POST" && /^\/api\/users\/[^/]+\/acme-account-keys$/.test(pathname)) {
+    return "acme-account-keys-mint";
+  }
+  // Per-user-cert mint-reservation lease. `/release` before the bare acquire.
+  if (
+    m === "POST" &&
+    /^\/api\/users\/[^/]+\/mint-reservation\/release$/.test(pathname)
+  ) {
+    return "mint-reservation-release";
+  }
+  if (
+    m === "POST" &&
+    /^\/api\/users\/[^/]+\/mint-reservation$/.test(pathname)
+  ) {
+    return "mint-reservation-acquire";
+  }
   if (m === "GET" && /^\/api\/account\/resolve\/[^/]+$/.test(pathname)) {
     return "account-resolve";
   }
@@ -417,6 +471,15 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
     // Watch delegates mirror device grants: the wire shape identifies the
     // user by `grant.username` / `request.username`, not by IRK pub. Per-IP
     // suffices at the edge; the handler does the full IRK signature check.
+    candidate = undefined;
+  } else if (
+    endpoint === "acme-account-keys-mint" ||
+    endpoint === "acme-account-keys-revoke"
+  ) {
+    // Per-user-cert ACME account-key grants mirror device grants / watch
+    // delegates: the wire shape carries `grant.username` / `request.username`,
+    // not the IRK pub. Per-IP suffices at the edge; the handler does the full
+    // IRK signature check.
     candidate = undefined;
   } else return undefined;
   return typeof candidate === "string" && /^[0-9a-fA-F]{64}$/.test(candidate)

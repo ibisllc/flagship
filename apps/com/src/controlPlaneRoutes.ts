@@ -130,6 +130,11 @@ import {
   handleMintWatchDelegate,
   handleListWatchDelegates,
   handleRevokeWatchDelegate,
+  handleMintAcmeAccountKeyGrant,
+  handleListAcmeAccountKeyGrants,
+  handleRevokeAcmeAccountKeyGrant,
+  handleAcquireMintReservation,
+  handleReleaseMintReservation,
   type CaIssuer,
   type CaGate,
   type HandlerResponse,
@@ -505,6 +510,14 @@ const ROUTE_RE = {
   // Watch delegate keys (Phase 2c) — opt-in quick-approve from the Watch.
   WATCH_DELEGATES_LIST: /^\/api\/users\/([^/]+)\/watch-delegates$/,
   WATCH_DELEGATES_REVOKE: /^\/api\/users\/([^/]+)\/watch-delegates\/revoke$/,
+  // Per-user-cert ACME account-key grants — distribute the (sealed) minting
+  // authority to admin devices; revoke-by-accountKeyId rotates a retired key.
+  ACME_ACCOUNT_KEYS_LIST: /^\/api\/users\/([^/]+)\/acme-account-keys$/,
+  ACME_ACCOUNT_KEYS_REVOKE: /^\/api\/users\/([^/]+)\/acme-account-keys\/revoke$/,
+  // Per-user-cert mint-reservation lease — the dead-lead-safe CAS lock that
+  // serializes who re-mints the per-user cert this cycle.
+  MINT_RESERVATION: /^\/api\/users\/([^/]+)\/mint-reservation$/,
+  MINT_RESERVATION_RELEASE: /^\/api\/users\/([^/]+)\/mint-reservation\/release$/,
   // W12 debug — observability for the d-i+late-command pipeline. The
   // installer POSTs short progress markers via curl; the operator GETs
   // the concatenated log. Backed by ISO_TEMP_BUCKET (already provisioned
@@ -1260,6 +1273,68 @@ export async function tryControlPlane(
           usernames: storage.usernames,
         },
         decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // Per-user-cert ACME account-key grants. Same ordering hazard as device
+  // grants / watch delegates: the `/revoke` suffix must hit BEFORE the bare
+  // list/mint path. List + mint are metadata-only / public-field replies —
+  // the sealed account key is NEVER echoed (delivery is the request's job).
+  if (method === "POST" && (m = path.match(ROUTE_RE.ACME_ACCOUNT_KEYS_REVOKE))) {
+    return finish(
+      await handleRevokeAcmeAccountKeyGrant(
+        {
+          storage: storage.acmeAccountKeyGrants,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.ACME_ACCOUNT_KEYS_LIST))) {
+    return finish(
+      await handleMintAcmeAccountKeyGrant(
+        {
+          storage: storage.acmeAccountKeyGrants,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.ACME_ACCOUNT_KEYS_LIST))) {
+    return finish(
+      await handleListAcmeAccountKeyGrants(
+        {
+          storage: storage.acmeAccountKeyGrants,
+          usernames: storage.usernames,
+        },
+        decodeURIComponent(m[1]!),
+      ),
+    );
+  }
+  // Per-user-cert mint-reservation lease. `/release` before the bare acquire.
+  if (method === "POST" && (m = path.match(ROUTE_RE.MINT_RESERVATION_RELEASE))) {
+    return finish(
+      await handleReleaseMintReservation(
+        {
+          reservations: storage.mintReservations,
+          acmeGrants: storage.acmeAccountKeyGrants,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
+      ),
+    );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.MINT_RESERVATION))) {
+    return finish(
+      await handleAcquireMintReservation(
+        {
+          reservations: storage.mintReservations,
+          acmeGrants: storage.acmeAccountKeyGrants,
+          usernames: storage.usernames,
+        },
+        await readJson(request),
       ),
     );
   }

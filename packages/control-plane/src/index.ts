@@ -45,6 +45,8 @@ export * from "./quarantineAlerts.js";
 export * from "./totp.js";
 export * from "./deviceCapabilityGrants.js";
 export * from "./watchDelegates.js";
+export * from "./acmeAccountKeys.js";
+export * from "./mintReservations.js";
 export * from "./demoUsersAdmin.js";
 export * from "./demoUsersAdminProvision.js";
 export * from "./demoUsersAdminCloudInit.js";
