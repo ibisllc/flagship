@@ -72,6 +72,9 @@ import type {
   AcmeAccountKeyGrantStorage,
   MintReservationRecord,
   MintReservationStorage,
+  NameClaimRecord,
+  NamespaceStorage,
+  NameClaimKind,
 } from "./types.js";
 
 /**
@@ -2874,6 +2877,7 @@ export class D1Storage implements Storage {
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
+  namespace: NamespaceStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -2908,6 +2912,7 @@ export class D1Storage implements Storage {
     this.watchDelegates = new D1WatchDelegateStorage(db);
     this.mintReservations = new D1MintReservationStorage(db);
     this.acmeAccountKeyGrants = new D1AcmeAccountKeyGrantStorage(db);
+    this.namespace = new D1NamespaceStorage(db);
   }
 }
 
@@ -3201,5 +3206,93 @@ export class D1AcmeAccountKeyGrantStorage implements AcmeAccountKeyGrantStorage 
       .bind(accountKeyId, revokedAt)
       .run();
     return (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
+  }
+}
+
+interface NameClaimRow {
+  username: string;
+  label: string;
+  kind: string;
+  ref_id: string;
+  claimed_at: number;
+}
+function rowToNameClaim(r: NameClaimRow): NameClaimRecord {
+  return {
+    username: r.username,
+    label: r.label,
+    kind: r.kind as NameClaimKind,
+    refId: r.ref_id,
+    claimedAt: r.claimed_at,
+  };
+}
+
+/** D1 NamespaceStorage — the merged per-user leftmost-label uniqueness
+ *  invariant (§3.4; per-user-cert design). The unique index
+ *  `idx_name_claims_username_label` enforces "at most one claim per
+ *  (username, label)" at the DB level. `claim` first reads the existing
+ *  row: an identical (kind, ref_id) is idempotent (ok, original claimed_at
+ *  preserved); otherwise it INSERTs and translates a surfaced UNIQUE
+ *  violation — the read-then-insert race where a DIFFERENT claim landed
+ *  in between — into the shared `"name taken"` reason. Both columns are
+ *  stored lower-cased so the index key is the case-insensitive pair. */
+export class D1NamespaceStorage implements NamespaceStorage {
+  constructor(private readonly db: D1Database) {}
+  async claim(rec: NameClaimRecord) {
+    const existing = await this.resolve(rec.username, rec.label);
+    if (existing) {
+      if (existing.kind === rec.kind && existing.refId === rec.refId) {
+        return { ok: true as const };
+      }
+      return { ok: false as const, reason: "name taken" };
+    }
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO name_claims (username, label, kind, ref_id, claimed_at)
+           VALUES (?1, ?2, ?3, ?4, ?5)`,
+        )
+        .bind(
+          rec.username.toLowerCase(),
+          rec.label.toLowerCase(),
+          rec.kind,
+          rec.refId,
+          rec.claimedAt,
+        )
+        .run();
+      return { ok: true as const };
+    } catch (e) {
+      const msg = String((e as Error).message ?? e);
+      if (/UNIQUE/i.test(msg)) {
+        // A concurrent claim raced in between the resolve and the insert.
+        // Re-resolve so an identical (kind, refId) still reads as
+        // idempotent; anything else is the collision.
+        const now = await this.resolve(rec.username, rec.label);
+        if (now && now.kind === rec.kind && now.refId === rec.refId) {
+          return { ok: true as const };
+        }
+        return { ok: false as const, reason: "name taken" };
+      }
+      throw e;
+    }
+  }
+  async release(username: string, label: string) {
+    await this.db
+      .prepare(`DELETE FROM name_claims WHERE username = ?1 AND label = ?2`)
+      .bind(username.toLowerCase(), label.toLowerCase())
+      .run();
+  }
+  async resolve(username: string, label: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM name_claims WHERE username = ?1 AND label = ?2`)
+      .bind(username.toLowerCase(), label.toLowerCase())
+      .first<NameClaimRow>();
+    return r ? rowToNameClaim(r) : undefined;
+  }
+  async listForUser(username: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM name_claims WHERE username = ?1 ORDER BY claimed_at ASC`)
+      .bind(username.toLowerCase())
+      .all<NameClaimRow>();
+    return (r.results ?? []).map(rowToNameClaim);
   }
 }

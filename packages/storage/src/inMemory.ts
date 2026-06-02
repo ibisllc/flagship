@@ -69,6 +69,8 @@ import type {
   NfcRendezvousStorage,
   DeviceCapabilityGrantRecord,
   DeviceCapabilityGrantStorage,
+  NameClaimRecord,
+  NamespaceStorage,
 } from "./types.js";
 
 /**
@@ -1288,6 +1290,7 @@ export class InMemoryStorage implements Storage {
   watchDelegates = new InMemoryWatchDelegateStorage();
   mintReservations = new InMemoryMintReservationStorage();
   acmeAccountKeyGrants = new InMemoryAcmeAccountKeyGrantStorage();
+  namespace = new InMemoryNamespaceStorage();
 }
 
 /**
@@ -1459,5 +1462,60 @@ export class InMemoryAcmeAccountKeyGrantStorage implements AcmeAccountKeyGrantSt
       }
     }
     return n;
+  }
+}
+
+/**
+ * In-memory NamespaceStorage — the merged per-user leftmost-label uniqueness
+ * invariant (§3.4; per-user-cert design). Keyed by `<username> <label>`
+ * with BOTH components lower-cased, so the map key IS the case-insensitive
+ * (username, label) uniqueness — exactly what the D1 unique index enforces.
+ * `claim` admits an identical (kind, refId) re-claim and rejects a different
+ * one with the shared reason `"name taken"`.
+ */
+export class InMemoryNamespaceStorage implements NamespaceStorage {
+  private byKey = new Map<string, NameClaimRecord>();
+
+  private key(username: string, label: string): string {
+    return `${username.toLowerCase()} ${label.toLowerCase()}`;
+  }
+
+  async claim(
+    rec: NameClaimRecord,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const k = this.key(rec.username, rec.label);
+    const existing = this.byKey.get(k);
+    if (existing) {
+      // An identical (kind, refId) re-claim is idempotent — keep the
+      // original claimedAt. Any other (kind, refId) is the collision the
+      // invariant exists to reject.
+      if (existing.kind === rec.kind && existing.refId === rec.refId) {
+        return { ok: true };
+      }
+      return { ok: false, reason: "name taken" };
+    }
+    this.byKey.set(k, {
+      ...rec,
+      username: rec.username.toLowerCase(),
+      label: rec.label.toLowerCase(),
+    });
+    return { ok: true };
+  }
+
+  async release(username: string, label: string): Promise<void> {
+    this.byKey.delete(this.key(username, label));
+  }
+
+  async resolve(username: string, label: string): Promise<NameClaimRecord | undefined> {
+    const r = this.byKey.get(this.key(username, label));
+    return r ? { ...r } : undefined;
+  }
+
+  async listForUser(username: string): Promise<NameClaimRecord[]> {
+    const u = username.toLowerCase();
+    return [...this.byKey.values()]
+      .filter((r) => r.username.toLowerCase() === u)
+      .sort((a, b) => a.claimedAt - b.claimedAt)
+      .map((r) => ({ ...r }));
   }
 }

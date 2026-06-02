@@ -858,6 +858,7 @@ export interface Storage {
   watchDelegates: WatchDelegateStorage;
   mintReservations: MintReservationStorage;
   acmeAccountKeyGrants: AcmeAccountKeyGrantStorage;
+  namespace: NamespaceStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1674,4 +1675,77 @@ export interface NfcRendezvousStorage {
   consume(rendezvousId: string, now: number): Promise<NfcRendezvousRecord | undefined>;
   /** Periodic cleanup — drop expired rows. Returns the count purged. */
   purgeExpired(now: number): Promise<number>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Merged per-user leftmost-label namespace (§3.4 invariant — migration 0044)
+//
+// docs/per-user-cert-and-addressing.md §3.4 + worklist task #25. Under
+// per-user addressing every public name a user serves — an APP label
+// (`<label>.<user>`), a BOX name (the per-box apex), and a DEVICE label
+// (the v2 device-addressing `<user>.<device-label>` form) — shares ONE
+// leftmost-label space beneath `*.<user>`. They MUST be mutually unique:
+// the resolver (worklist task #24) walks `--`-pin → box-name → device-label
+// → app-label, and that precedence is only sound if a single label can't
+// simultaneously mean two different things. This store is the `.com`-side
+// serializer of phone-signed name claims — it orders + dedupes so an
+// offline cross-box install race resolves to exactly one owner per label.
+//
+// One row per (username, label); `(username, label)` is the uniqueness key
+// (a UNIQUE index in D1). Labels are matched case-INSENSITIVELY (DNS labels
+// are case-folding) — the adapters lower-case both columns on write so the
+// stored form is already canonical. `kind` tags which of the three sources
+// claimed it; `refId` is the stable identity the label maps to (the app's
+// stable-id, the box's serverId, or the device-label). A re-claim that
+// carries the IDENTICAL `(kind, refId)` is idempotent (ok); a claim from a
+// DIFFERENT `(kind, refId)` is the collision the invariant exists to reject.
+// ──────────────────────────────────────────────────────────────────────
+
+export type NameClaimKind = "app" | "box" | "device";
+
+export interface NameClaimRecord {
+  /** Account that owns the `*.<user>` namespace. */
+  username: string;
+  /** The leftmost DNS label being claimed (case-insensitive; the adapters
+   *  store it lower-cased). */
+  label: string;
+  /** Which of the three merged sources is claiming the label. */
+  kind: NameClaimKind;
+  /** The stable identity the label resolves to: an app's stable-id, a box's
+   *  serverId, or a device-label. Pairs with `kind` to decide whether a
+   *  re-claim is the same claim (idempotent) or a genuine collision. */
+  refId: string;
+  /** ms since epoch — when the claim was first recorded. */
+  claimedAt: number;
+}
+
+/**
+ * Store contract for `name_claims` — the merged per-user leftmost-label
+ * uniqueness invariant. Implementations live in `inMemory.ts` (tests + dev)
+ * and `d1.ts` (Worker production). Invariants:
+ *
+ *   • `claim` is the single mutating entry point. It returns
+ *     `{ ok: true }` when the label is free OR when an existing claim for
+ *     `(username, label)` has the IDENTICAL `(kind, refId)` (an idempotent
+ *     re-claim — `claimedAt` is preserved, not bumped). It returns
+ *     `{ ok: false, reason: "name taken" }` when `(username, label)` is
+ *     already claimed by a DIFFERENT `kind`-or-`refId`. The shared reason
+ *     string `"name taken"` makes the collision caller-checkable across
+ *     both adapters.
+ *   • `release` deletes the `(username, label)` row so the label is free
+ *     to be claimed again (e.g. an app uninstalled, a box decommissioned).
+ *     Idempotent: releasing an absent row is success.
+ *   • `resolve` returns the single claim for `(username, label)` or
+ *     undefined — the lookup the addressing resolver uses to learn a
+ *     label's kind + target.
+ *   • `listForUser` returns every claim for the user (claimedAt ASC, oldest
+ *     first) — drives the "what names does this account own" listing.
+ *
+ * Username + label are matched case-insensitively throughout.
+ */
+export interface NamespaceStorage {
+  claim(rec: NameClaimRecord): Promise<{ ok: true } | { ok: false; reason: string }>;
+  release(username: string, label: string): Promise<void>;
+  resolve(username: string, label: string): Promise<NameClaimRecord | undefined>;
+  listForUser(username: string): Promise<NameClaimRecord[]>;
 }
