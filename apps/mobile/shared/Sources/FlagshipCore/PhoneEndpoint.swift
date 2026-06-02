@@ -523,10 +523,10 @@ enum PhoneEndpointFieldGuard {
 /// `u = (1 + y) / (1 - y) mod p`, `p = 2^255 - 19`, where `y` is the low
 /// 255 bits (little-endian) of the Ed25519 compressed point. Matches
 /// noble-curves' `toMontgomery` (`Fp.div(1n + y, 1n - y)`).
-enum Curve25519Map {
-    enum MapError: Error, Equatable { case badInput; case notInvertible }
+public enum Curve25519Map {
+    public enum MapError: Error, Equatable { case badInput; case notInvertible }
 
-    static func edwardsPubToMontgomery(_ edPub: Data) throws -> Data {
+    public static func edwardsPubToMontgomery(_ edPub: Data) throws -> Data {
         guard edPub.count == 32 else { throw MapError.badInput }
         // Decode y: the 32-byte little-endian value with the top (sign) bit
         // cleared — we only need y for the map, not the x-coordinate.
@@ -545,7 +545,7 @@ enum Curve25519Map {
     /// `clamp(SHA512(seed)[0..32])` — libsodium's
     /// `crypto_sign_ed25519_sk_to_curve25519`. Matches noble's
     /// `toMontgomerySecret` (hash → adjustScalarBytes).
-    static func edwardsSeedToMontgomery(_ seed: Data) -> Data {
+    public static func edwardsSeedToMontgomery(_ seed: Data) -> Data {
         var hashed = [UInt8](SHA512.hash(data: seed).prefix(32))
         hashed[0] &= 248
         hashed[31] &= 127
