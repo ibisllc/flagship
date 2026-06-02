@@ -6,6 +6,8 @@ import {
   parseAppLabel,
   parsePinLabel,
   isPinLabel,
+  resolveLeftmostLabel,
+  type ResolverLookups,
   userWildcardSans,
   serverWildcardSans,
   appFqdn,
@@ -131,6 +133,53 @@ describe("parsePinLabel (-- pin operator, §3.3)", () => {
     expect(isPinLabel("photo--home")).toBe(true);
     expect(isPinLabel("photo-album")).toBe(false);
     expect(isPinLabel("plain")).toBe(false);
+  });
+});
+
+describe("resolveLeftmostLabel (§3.4 precedence)", () => {
+  function lookups(over: Partial<{ boxes: string[]; devices: string[]; apps: string[] }> = {}): ResolverLookups {
+    const boxes = new Set(over.boxes ?? []);
+    const devices = new Set(over.devices ?? []);
+    const apps = new Set(over.apps ?? []);
+    return {
+      isBoxName: (l) => boxes.has(l),
+      isDeviceLabel: (l) => devices.has(l),
+      isAppLabel: (l) => apps.has(l),
+    };
+  }
+
+  it("1. a -- label resolves to a pin (highest precedence)", () => {
+    const r = resolveLeftmostLabel("photo-album--home", lookups({ boxes: ["home"] }));
+    expect(r).toEqual({ cls: "pin", label: "photo-album", server: "home" });
+  });
+
+  it("2. a registered box name → box-apex", () => {
+    expect(resolveLeftmostLabel("home", lookups({ boxes: ["home"] }))).toEqual({ cls: "box-apex", label: "home" });
+  });
+
+  it("3. a device label → device (before app)", () => {
+    expect(resolveLeftmostLabel("reviewer", lookups({ devices: ["reviewer"], apps: ["reviewer"] })))
+      .toEqual({ cls: "device", label: "reviewer" });
+  });
+
+  it("4. an install-table app → app", () => {
+    expect(resolveLeftmostLabel("game", lookups({ apps: ["game"] }))).toEqual({ cls: "app", label: "game" });
+  });
+
+  it("5. unknown label → none (disambiguation)", () => {
+    expect(resolveLeftmostLabel("nope", lookups())).toEqual({ cls: "none", label: "nope" });
+  });
+
+  it("precedence: box-name beats a same-named app", () => {
+    expect(resolveLeftmostLabel("home", lookups({ boxes: ["home"], apps: ["home"] })).cls).toBe("box-apex");
+  });
+
+  it("a malformed pin (xn-- / 2-char) falls through to none, not app", () => {
+    expect(resolveLeftmostLabel("ab--home", lookups({ apps: ["ab--home"] })).cls).toBe("none");
+  });
+
+  it("is case-insensitive on the input label", () => {
+    expect(resolveLeftmostLabel("HOME", lookups({ boxes: ["home"] })).cls).toBe("box-apex");
   });
 });
 

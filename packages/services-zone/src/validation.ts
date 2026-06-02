@@ -188,6 +188,57 @@ export function isPinLabel(leftmostLabel: string): boolean {
 }
 
 /**
+ * The class a leftmost label resolves to under the §3.4 ONE per-user
+ * resolver. App labels, box-coordination names, pin targets, and device
+ * labels all share the same `*.<user>` leftmost-label space and MUST be
+ * mutually unique within a user (the storage invariant); this resolver
+ * applies the deterministic PRECEDENCE so the class is well-defined even
+ * if that invariant is ever momentarily violated.
+ */
+export type LabelClass = "pin" | "box-apex" | "device" | "app" | "none";
+
+export interface ResolverLookups {
+  /** Is `label` a registered box (server) name for this user? */
+  isBoxName(label: string): boolean;
+  /** Is `label` a registered device label (v2 device-addressing)? */
+  isDeviceLabel(label: string): boolean;
+  /** Is `label` an app installed in this user's install table? */
+  isAppLabel(label: string): boolean;
+}
+
+export interface ResolvedLabel {
+  cls: LabelClass;
+  /** For "pin": the app label; otherwise the input label (lowercased). */
+  label: string;
+  /** For "pin": the target box name. Absent otherwise. */
+  server?: string;
+}
+
+/**
+ * The §3.4 per-user leftmost-label resolver. Resolution PRECEDENCE:
+ *   1. contains `--` → pin (`label--server`), route to that box.
+ *   2. registered box name → box-coordination apex (`/.flagship/*`).
+ *   3. registered device label → device view (capability scopes apply).
+ *   4. in the install table → leader-route to that service.
+ *   5. else → the disambiguation / "not an app" page.
+ *
+ * Returns `(cls, label, server?)`, NOT just a route, so each caller applies
+ * the correct security/capability context for the class (red-team C3).
+ */
+export function resolveLeftmostLabel(leftmostLabel: string, lookups: ResolverLookups): ResolvedLabel {
+  const norm = String(leftmostLabel).toLowerCase();
+  if (isPinLabel(norm)) {
+    const p = parsePinLabel(norm);
+    if (!p.ok) return { cls: "none", label: norm };
+    return { cls: "pin", label: p.label, server: p.server };
+  }
+  if (lookups.isBoxName(norm)) return { cls: "box-apex", label: norm };
+  if (lookups.isDeviceLabel(norm)) return { cls: "device", label: norm };
+  if (lookups.isAppLabel(norm)) return { cls: "app", label: norm };
+  return { cls: "none", label: norm };
+}
+
+/**
  * Legacy validator kept for code paths that still treat the leftmost
  * subdomain as a single opaque DNS label (e.g., the cert plumbing).
  * Prefer `parseAppLabel` for app routing.
