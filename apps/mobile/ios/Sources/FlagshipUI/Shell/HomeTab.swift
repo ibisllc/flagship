@@ -479,8 +479,10 @@ struct ServerDetailContainer: View {
             await detailVm?.load()
             metricsVm?.startPolling(every: 15)
             // Park the task here so polling stops when the view goes
-            // away.
-            for await _ in AsyncStream<Never> { _ in } { }
+            // away. The stream never yields; binding it to a local keeps
+            // the build closure unambiguous (not confusable with the loop body).
+            let parkUntilCancelled = AsyncStream<Never> { _ in }
+            for await _ in parkUntilCancelled { }
         }
         .onDisappear { metricsVm?.stopPolling() }
     }

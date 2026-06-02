@@ -23,11 +23,18 @@ import Flagship
 public typealias VibeCodeEnvelopeSigner = @MainActor (ServiceEnvSetEnvelope) async throws -> String
 
 private struct VibeCodeEnvelopeSignerKey: EnvironmentKey {
-    @MainActor static let defaultValue: VibeCodeEnvelopeSigner = { _ in
-        // Preview / test default — returns a placeholder hex string.
-        // Production replaces this via `.environment(\.vibeCodeEnvelopeSigner, …)`
-        // at the RootShell level.
-        return String(repeating: "0", count: 128)
+    // `EnvironmentKey.defaultValue` is a `nonisolated` protocol requirement,
+    // so it cannot be satisfied by a `@MainActor`-isolated stored property
+    // without crossing actor isolation (an error under the Swift 6 language
+    // mode). The closure body captures no main-actor state — it just returns
+    // a constant — so we build it lazily in a `nonisolated` computed property.
+    // Production still overrides this via `.environment(\.vibeCodeEnvelopeSigner, …)`.
+    nonisolated static var defaultValue: VibeCodeEnvelopeSigner {
+        { _ in
+            // Preview / test default — returns a placeholder hex string the
+            // daemon always rejects, which is correct for offline surfaces.
+            String(repeating: "0", count: 128)
+        }
     }
 }
 

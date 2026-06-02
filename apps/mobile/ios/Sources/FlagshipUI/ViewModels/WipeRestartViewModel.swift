@@ -74,11 +74,13 @@ public final class WipeRestartViewModel {
             return
         }
 
-        // 1 — Materialize OLD + NEW UMKs.
+        // 1 — Materialize the NEW UMK. We still force-resolve the CURRENT
+        // UMK first so the biometric/Keychain unlock prompt gates the wipe;
+        // the value itself is unused now that `Recovery.wrap` derives the
+        // wrapping key from the fresh PRF secret.
         phase = .preparingKeys
-        let oldUmk: SymmetricKey
         do {
-            oldUmk = try await Keystore.currentUMK(reason: "Wipe & restart")
+            _ = try await Keystore.currentUMK(reason: "Wipe & restart")
         } catch {
             phase = .failed("Couldn't access your current account key: \(error.localizedDescription)")
             return
