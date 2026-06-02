@@ -72,6 +72,18 @@ Move from **one LE cert per box** → **one cert per user**: SANs collapse from 
 
 **Q3 — GREENLIT to build the merged per-user name table** ("yes, do it now"). Will reconcile with v2-device-addressing before coding the resolver (tasks #24 resolver-half + #25).
 
+### Cert distribution semantics (owner Q&A 2026-06-01 — sharpens the mesh, task #27/§7)
+
+**Principle: one cert per account, shared to EVERY serving box; "may mint" ≠ "holds the cert"; minting is coordinated to exactly ONE issuance per renewal cycle.**
+
+- **Admin returns → adopt, don't reflexively re-mint.** The most-recent valid cert (whoever minted it) is the account's live cert; an admin device observes/adopts it + keeps CT-monitoring, and re-mints ONLY on need (near-expiry-with-no-recent-renewal, or a rotation event). Re-minting just because an admin came online wastes an LE duplicate-cert slot.
+  - Finite window: the box never minted → the admin's return IS the renewal.
+  - Indefinite: the delegated box already renewed → admin stays hands-off.
+- **Share with NON-minting siblings: yes, always.** Every TLS-terminating box needs the cert+key regardless of mint rights. Non-minters are receive-only (lead→sibling pattern in `customDomainCert.ts`).
+- **Share with OTHER minters: yes — and sharing PREVENTS over-minting.** A minting-capable box that receives a cert with a fresh expiry stands down (the distributed expiry is the coordination state). Plus a deterministic single-lead election among {admin devices ∪ indefinite-delegated boxes} ⇒ exactly one minter per cycle; §5.4 debounce backstops the race. So the LE 5-dup/7-day limit is never hit in normal operation.
+
+Minters = {admin-scope devices} ∪ {boxes with an indefinite renewal delegation}. Everyone else is receive-only. One lead mints per cycle → fans out to all serving boxes.
+
 ## Risks / cross-cutting
 
 - **Live prod cert chain:** tasks 1/2/4/8 rewrite the exact SAN+DNS paths producing the current green-padlock cert — atomic commit, c4.6-gated, live-smoked or TLS breaks for real servers.
