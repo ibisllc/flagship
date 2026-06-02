@@ -217,6 +217,27 @@ public protocol FlagshipServerClient: Sendable {
     /// state, not an error). Mirrors handleGetProvisionStatus in
     /// packages/control-plane/src/provisionStatus.ts.
     func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus?
+
+    /// #28 seal-to-box — grant cert-minting autonomy to ONE box.
+    ///
+    /// Domain-scoped delivery of an IRK-signed, box-sealed ACME
+    /// account-key grant. The cloud auto-deposits the sealed key for the
+    /// addressed box to release on its next ACME run. Unlike the legacy
+    /// user-scoped mint (`mintAcmeAccountKeyGrant`, which is a generic
+    /// per-recipient store), this path is keyed by the box's own
+    /// `serverDomain`, so the deposit lands in the box's delivery slot.
+    ///
+    ///   POST /api/server/<serverDomain>/acme-account-key
+    ///   body: same `{ grant, signature }` the producer already builds.
+    ///   200:  { ok, accountKeyId }
+    ///
+    /// The `body.grant.recipientPubKey` MUST be the addressed box's STK
+    /// (the caller re-resolves it from the pods directory before sealing,
+    /// so a lying relay can't redirect the seal to a box it controls).
+    func grantAcmeAccountKeyAutonomy(
+        serverDomain: String,
+        body: AcmeAccountKeyGrantMintRequest
+    ) async throws -> AcmeAccountKeyAutonomyResponse
 }
 
 public struct AppRenameRequest: Encodable, Sendable {
@@ -1609,6 +1630,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
     public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
+    /// #28 — recorded box-autonomy grants, paired with the addressed
+    /// serverDomain so tests can assert the domain-scoped delivery target.
+    public private(set) var grantedAcmeAutonomy: [(serverDomain: String, body: AcmeAccountKeyGrantMintRequest)] = []
     public private(set) var registeredRcks: [String: String] = [:]    // serverDomain → rckPubKey
     public private(set) var registeredPushTokens: [String: PushTokenRegisterRequest.Inner] = [:] // tokenId → inner
     private var nextPushTokenId = 1
@@ -1656,6 +1680,15 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func revokeServer(_ req: ServerRevocationRequest) async throws {
         try await tick()
         revokedServers.append(req)
+    }
+
+    public func grantAcmeAccountKeyAutonomy(
+        serverDomain: String,
+        body: AcmeAccountKeyGrantMintRequest
+    ) async throws -> AcmeAccountKeyAutonomyResponse {
+        try await tick()
+        grantedAcmeAutonomy.append((serverDomain, body))
+        return AcmeAccountKeyAutonomyResponse(ok: true, accountKeyId: body.grant.accountKeyId)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {
@@ -2566,6 +2599,18 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // wire shape is ready once the Worker handler lands.
         let body = try JSONEncoder().encode(req)
         try await postJson("/api/server-registry/revoke", body: body)
+    }
+
+    public func grantAcmeAccountKeyAutonomy(
+        serverDomain: String,
+        body: AcmeAccountKeyGrantMintRequest
+    ) async throws -> AcmeAccountKeyAutonomyResponse {
+        // Domain-scoped #28 delivery. The grant's IRK signature commits to
+        // the grant's canonical bytes (not the URL), so the FQDN is just a
+        // routing key here; we still percent-encode it for a valid path.
+        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
+        let payload = try JSONEncoder().encode(body)
+        return try await postJsonReturning("/api/server/\(encoded)/acme-account-key", body: payload)
     }
 
     public func usernameAvailable(_ username: String) async throws -> UsernameAvailabilityResponse {

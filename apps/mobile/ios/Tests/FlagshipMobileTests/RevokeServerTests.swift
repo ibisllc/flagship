@@ -210,6 +210,7 @@ final class RevokeServerTests: XCTestCase {
         func totpEnrollConfirm(username: String, body: TotpEnrollConfirmRequest) async throws -> TotpEnrollConfirmResponse { throw error }
         func totpDisable(username: String, body: TotpDisableRequest) async throws -> TotpDisableResponse { throw error }
         func fetchProvisionStatus(serial: String) async throws -> ProvisionStatus? { throw error }
+        func grantAcmeAccountKeyAutonomy(serverDomain: String, body: AcmeAccountKeyGrantMintRequest) async throws -> AcmeAccountKeyAutonomyResponse { throw error }
     }
 
     @MainActor
