@@ -1119,8 +1119,39 @@ export async function resolveAccountKey(deps: {
   store: { loadAccountKey(): Promise<string | null>; saveAccountKey(pem: string): Promise<void> } | null;
   createPrivateKey: () => Promise<string>;
   onGenerated?: (pem: string) => void;
+  /**
+   * #28 seal-to-box: resolve the user's SHARED ACME account key, granted to
+   * this box and sealed to its STK (see `unsealGrantedAccountKeyPem`). Returns
+   * the PEM, or null when there's no active grant (or `.com` is unreachable —
+   * the resolver swallows transient errors and returns null). Tried BEFORE the
+   * on-disk key so a grant supersedes a previously self-generated account key
+   * (the box adopts the shared key); the granted PEM is then persisted so a
+   * later OFFLINE boot still has it. With no grant, behaviour is unchanged.
+   */
+  resolveGrantedPem?: () => Promise<string | null>;
 }): Promise<string> {
   if (deps.explicitPem) return deps.explicitPem;
+  if (deps.resolveGrantedPem) {
+    let granted: string | null = null;
+    try {
+      granted = await deps.resolveGrantedPem();
+    } catch {
+      granted = null; // .com unreachable / unseal failed → fall back to disk
+    }
+    if (granted) {
+      if (deps.store) {
+        try {
+          await deps.store.saveAccountKey(granted);
+        } catch (e) {
+          throw new Error(
+            `[runtime] failed to persist granted ACME account key — refusing to boot to avoid an inconsistent issuance identity. Underlying error: ${(e as Error).message}`,
+            { cause: e },
+          );
+        }
+      }
+      return granted;
+    }
+  }
   if (deps.store) {
     const loaded = await deps.store.loadAccountKey();
     if (loaded) return loaded;
