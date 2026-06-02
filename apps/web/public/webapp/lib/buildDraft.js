@@ -77,6 +77,9 @@ export async function saveDraft(draft) {
     updatedAt: Date.now(),
     deliveredAt: draft.deliveredAt,
     code: draft.code,
+    // Per-user-cert offline-autonomy window chosen for this draft, so a
+    // resumed draft restores the picker. { mode, offlineWindowDays? }.
+    certAutonomy: draft.certAutonomy,
   };
   await new Promise((resolve, reject) => {
     const r = store.put(record);
@@ -148,6 +151,15 @@ export function canonicalInstallBlob(b) {
   // the value. MUST stay byte-identical to the TS or the QR→burner→register
   // signature chain breaks.
   if (b.bootUnlockMode !== undefined) parts.push(b.bootUnlockMode);
+  // Same backward-compatible append, AFTER bootUnlockMode. The `ca=` prefix
+  // keeps the token from colliding with a bootUnlockMode value
+  // ("auto"/"approve") if a blob carries certAutonomy but not bootUnlockMode.
+  // `<days>` is offlineWindowDays ?? 0 (0 for "autonomous"). MUST stay
+  // byte-identical to packages/protocol/src/auth.ts canonicalInstallBlob and
+  // the Swift InstallBlob.canonicalBytes() or the recipe fails box verification.
+  if (b.certAutonomy !== undefined) {
+    parts.push(`ca=${b.certAutonomy.mode}:${b.certAutonomy.offlineWindowDays ?? 0}`);
+  }
   return new TextEncoder().encode(parts.join("|"));
 }
 

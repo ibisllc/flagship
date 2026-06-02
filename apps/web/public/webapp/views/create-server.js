@@ -339,6 +339,7 @@ async function resumeDraft(id) {
   $("cs-server-name").value = d.serverName || "";
   $("cs-backup-policy").value = d.backupPolicy || "phone-only";
   $("cs-llm-pref").value = (d.llmPreferences || []).map((p) => `${p.providerId}:${p.modelName ?? ""}`).join("\n");
+  restoreCertAutonomy(d.certAutonomy);
   toast(`resumed ${d.serverName}`);
 }
 
@@ -367,7 +368,11 @@ function readInputs() {
   // A two-option choice carried in the SIGNED InstallBlob so a relay can't
   // downgrade an `approve` server to `auto`. Default `auto`.
   const bootUnlockMode = readBootUnlockMode();
-  return { serverName, backupPolicy, llmPreferences, recipeTtlMs, bootUnlockMode };
+  // Cert-autonomy / offline-autonomy window (per-user-cert design,
+  // docs/per-user-cert-worklist.md). Carried in the SIGNED InstallBlob so a
+  // relay can't silently weaken "managed" → "autonomous".
+  const certAutonomy = readCertAutonomy();
+  return { serverName, backupPolicy, llmPreferences, recipeTtlMs, bootUnlockMode, certAutonomy };
 }
 
 // Read the selected boot-unlock mode from the radio group. Defaults to
@@ -375,6 +380,48 @@ function readInputs() {
 function readBootUnlockMode() {
   const checked = document.querySelector('input[name="cs-boot-unlock"]:checked');
   return checked && checked.value === "approve" ? "approve" : "auto";
+}
+
+// Finite offline-autonomy windows offered in the picker, in days. A finite
+// pick maps to certAutonomy = { mode: "managed", offlineWindowDays: N };
+// "Indefinite" maps to { mode: "autonomous" } (the power-user weakening where
+// the box itself holds a sealed, revocable ACME account key). Default 90.
+export const CERT_AUTONOMY_DAY_OPTIONS = [3, 7, 15, 30, 90];
+export const DEFAULT_CERT_AUTONOMY_DAYS = 90;
+
+// Read the selected cert-autonomy window from the <select>. Returns the
+// certAutonomy object to thread onto the blob. Absent control / unrecognised
+// value falls back to the default managed window so the field is always
+// present (the box otherwise defaults to managed/30 — we prefer the explicit
+// user choice). "indefinite" ⇒ autonomous.
+export function readCertAutonomy() {
+  const el = $("cs-cert-autonomy");
+  const raw = el ? String(el.value) : String(DEFAULT_CERT_AUTONOMY_DAYS);
+  if (raw === "indefinite") return { mode: "autonomous" };
+  const days = parseInt(raw, 10);
+  const valid = CERT_AUTONOMY_DAY_OPTIONS.includes(days) ? days : DEFAULT_CERT_AUTONOMY_DAYS;
+  return { mode: "managed", offlineWindowDays: valid };
+}
+
+// Restore the cert-autonomy <select> from a saved draft's certAutonomy
+// object. "autonomous" ⇒ "indefinite"; managed ⇒ its day value (falling
+// back to the default when the stored value isn't one of the offered
+// options). A draft saved before this field existed leaves the default.
+function restoreCertAutonomy(certAutonomy) {
+  const el = $("cs-cert-autonomy");
+  if (!el) return;
+  if (!certAutonomy) {
+    el.value = String(DEFAULT_CERT_AUTONOMY_DAYS);
+    return;
+  }
+  if (certAutonomy.mode === "autonomous") {
+    el.value = "indefinite";
+    return;
+  }
+  const days = certAutonomy.offlineWindowDays;
+  el.value = CERT_AUTONOMY_DAY_OPTIONS.includes(days)
+    ? String(days)
+    : String(DEFAULT_CERT_AUTONOMY_DAYS);
 }
 
 // Recipe TTL bounds — single user-facing knob. 5 min floor, 24 hour
@@ -612,6 +659,10 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   // default, so an auto recipe signs/serialises byte-identically to a legacy
   // pre-bootUnlockMode recipe (and old verifiers keep accepting it).
   if (bootUnlockMode === "approve") blob.bootUnlockMode = "approve";
+  // Per-user-cert: carry the chosen offline-autonomy window in the SIGNED
+  // blob. Appended AFTER bootUnlockMode in canonicalInstallBlob as
+  // `ca=<mode>:<days>`; the signer commits to it so a relay can't weaken it.
+  if (inputs.certAutonomy !== undefined) blob.certAutonomy = inputs.certAutonomy;
   const blobBytes = canonicalInstallBlob(blob);
   const blobSig = await signWithIrk(session.umk, blobBytes);
 
@@ -636,6 +687,10 @@ async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   // Mirror the conditional from the canonical blob: present iff "approve",
   // so the downloaded recipe JSON carries exactly what was signed.
   if (blob.bootUnlockMode !== undefined) onWireBlob.bootUnlockMode = blob.bootUnlockMode;
+  // Carry certAutonomy through to the recipe JSON exactly as signed — the
+  // burner round-trips it (installBlobFromJson) and re-derives the same
+  // canonical bytes for box verification (iso-personalizer InstallBlobJson).
+  if (blob.certAutonomy !== undefined) onWireBlob.certAutonomy = blob.certAutonomy;
   return { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
 }
 
@@ -779,6 +834,7 @@ export function initCreateServerView() {
     $("cs-llm-pref").value = "";
     $("cs-relay-session").value = "";
     $("cs-match-code").textContent = "— — —";
+    restoreCertAutonomy(null);
     setStatus("idle", "idle");
   });
   $("create-server-back")?.addEventListener("click", () => {

@@ -471,6 +471,17 @@
             </label>
           </div>
 
+          <label class="mt-3" for="cs-cert-autonomy">How long can this server run while your phone is offline?</label>
+          <select id="cs-cert-autonomy">
+            <option value="3">3 days</option>
+            <option value="7">7 days</option>
+            <option value="15">15 days</option>
+            <option value="30">30 days</option>
+            <option value="90" selected>90 days (default)</option>
+            <option value="indefinite">Indefinite (this box can renew its own certificate)</option>
+          </select>
+          <p id="cs-cert-autonomy-hint" class="faint-sm">A finite window means an admin device renews the certificate before it lapses — pick shorter for a box you can reach often. <strong>Indefinite</strong> hands this box a revocable key so it renews itself forever; choose it only for a physically-secure, always-on machine.</p>
+
           <div class="row-2 mt-2">
             <button class="secondary" id="cs-save-draft">Save draft</button>
             <button class="secondary" id="cs-new">New</button>
