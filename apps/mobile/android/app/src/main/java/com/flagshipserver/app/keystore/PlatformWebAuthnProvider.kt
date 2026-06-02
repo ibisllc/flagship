@@ -62,4 +62,13 @@ class PlatformWebAuthnProvider(
             ?: throw IllegalStateException("Open this screen from the foreground to use a passkey.")
         return manager.assertPrf(act, credentialId)
     }
+
+    override suspend fun prfAssertWithSalt(credentialId: String, prfSalt: ByteArray): ByteArray {
+        // Passphrase-gated login-takeover: assert against the existing cloud
+        // credential with the passphrase-derived prfSalt as the PRF input.
+        // (No fresh-secret reuse here — this path never mints the credential.)
+        val act = activity()
+            ?: throw IllegalStateException("Open this screen from the foreground to use a passkey.")
+        return manager.assertPrf(act, credentialId, prfSalt)
+    }
 }

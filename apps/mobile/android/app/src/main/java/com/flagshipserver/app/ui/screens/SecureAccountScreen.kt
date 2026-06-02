@@ -60,30 +60,31 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.flagshipserver.app.api.RecoveryEnvelopeRequest
-import com.flagshipserver.app.core.AcmeAccountKey
-import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
-import com.flagshipserver.app.core.RecoveryUpload
 import com.flagshipserver.app.keystore.BlockStoreUmkStore
+import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.keystore.PasskeyAvailability
+import com.flagshipserver.app.keystore.PasskeyCeremonyAdapter
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
-import com.flagshipserver.app.keystore.Recovery
 import com.flagshipserver.app.keystore.WrappedUmk
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSField
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.SecureAccountOption
 import com.flagshipserver.app.viewmodels.SecureAccountViewModel
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Full-screen overlay host for the "Secure your account" step. Rendered
@@ -150,6 +151,8 @@ fun SecureAccountScreen(
 
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var passphrase by remember { mutableStateOf("") }
+    var passphraseConfirm by remember { mutableStateOf("") }
 
     fun configureCloudThenContinue() {
         if (activity == null) {
@@ -160,52 +163,37 @@ fun SecureAccountScreen(
             working = true; error = null
             try {
                 val username = app.currentUser.value ?: "you"
-                val created = passkeys.createPasskey(activity, username)
+                // Biometric IRK consent up front, then Argon2id + the wrap /
+                // sign / upload off the main thread (the shared ceremony
+                // mirrors recovery.js, incl. fetchTokenHash + prfSaltHash + #28).
+                val irkMaterial = KeystoreIrkAccess().resolve("Back up your recovery key")
                 val umk = Keystore.loadOrCreateUmkSeed()
-                val wrappedUmk = Recovery.wrap(umkSeed = umk, prfSecret = created.prfSecret)
-                blockStore.save(
-                    WrappedUmk(
-                        credentialId = created.credentialId,
-                        wrappedUmkBase64 = wrappedUmk,
-                    ),
-                )
-                // #28 — escrow the ACME account key under the SAME passkey-PRF
-                // secret. Non-fatal: a failure here must never block the
-                // primary UMK escrow (cert-minting authority is recoverable
-                // via a surviving admin device too).
-                val wrappedAcme: String? = try {
-                    val scalar = Keystore.loadOrCreateAcmeAccountKeyScalar()
-                    AcmeAccountKey.wrapForEscrow(scalar, created.prfSecret)
+                val acmeScalar = try {
+                    Keystore.loadOrCreateAcmeAccountKeyScalar()
                 } catch (_: Throwable) {
                     null
                 }
-                // IRK-sign the upload: the Worker looks up the account IRK
-                // pubkey by username and verifies `signature` over the
-                // canonical UploadRecoveryRecord (hash of the wrapped blob).
-                val irkMaterial = KeystoreIrkAccess().resolve("Back up your recovery key")
-                val issuedAt = System.currentTimeMillis()
-                val wrappedUmkBytes = java.util.Base64.getDecoder().decode(wrappedUmk)
-                val wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
-                val signature = RecoveryUpload.sign(
-                    irk = irkMaterial.signer,
-                    username = username,
-                    credentialId = created.credentialId,
-                    wrappedUmkHashHex = wrappedUmkHashHex,
-                    issuedAt = issuedAt,
-                )
-                flagshipServer.registerRecoveryEnvelope(
-                    RecoveryEnvelopeRequest(
-                        request = RecoveryEnvelopeRequest.Inner(
-                            username = username,
-                            credentialId = created.credentialId,
-                            wrappedUmk = wrappedUmk,
-                            issuedAt = issuedAt,
-                            wrappedAcmeAccountKey = wrappedAcme,
-                        ),
-                        signature = HexUtil.encode(signature),
+                val result = withContext(Dispatchers.Default) {
+                    CloudRecoveryEnrollment.enroll(
+                        server = flagshipServer,
+                        passkeys = PasskeyCeremonyAdapter(passkeys, activity),
+                        irk = irkMaterial.signer,
+                        username = username,
+                        umkSeed = umk,
+                        passphrase = passphrase,
+                        passphraseConfirm = passphraseConfirm,
+                        acmeScalar = acmeScalar,
+                        now = System.currentTimeMillis(),
+                    )
+                }
+                blockStore.save(
+                    WrappedUmk(
+                        credentialId = result.credentialId,
+                        wrappedUmkBase64 = result.wrappedUmk,
                     ),
                 )
                 app.setHasCloudRecovery(true)
+                passphrase = ""; passphraseConfirm = ""
                 toasts.success("Cloud backup configured.")
                 onDone()
             } catch (t: Throwable) {
@@ -259,6 +247,26 @@ fun SecureAccountScreen(
             onClick = { vm.select(SecureAccountOption.File) },
         )
 
+        // Cloud backup is gated on a recovery passphrase that hardens the
+        // cloud blob (mirrors recovery.js #enroll). Surfaced only when the
+        // cloud option is selected so the file / skip flows stay one-tap.
+        if (selected == SecureAccountOption.Cloud) {
+            FSField(
+                value = passphrase,
+                onValueChange = { passphrase = it },
+                label = "Recovery passphrase (8+ characters)",
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.semantics { contentDescription = "secure-account-passphrase" },
+            )
+            FSField(
+                value = passphraseConfirm,
+                onValueChange = { passphraseConfirm = it },
+                label = "Confirm passphrase",
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.semantics { contentDescription = "secure-account-passphrase-confirm" },
+            )
+        }
+
         if (error != null) {
             FSCard(padding = PaddingValues(FS.space.s3)) {
                 Text(error!!, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
@@ -267,6 +275,13 @@ fun SecureAccountScreen(
 
         Spacer(Modifier.height(FS.space.s2))
 
+        val cloudReady = passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE &&
+            passphrase == passphraseConfirm
+        val canContinue = when (selected) {
+            SecureAccountOption.Cloud -> cloudReady
+            SecureAccountOption.File -> true
+            null -> false
+        }
         FSPrimaryButton(
             label = if (working) "Setting up…" else SecureAccountViewModel.CONTINUE,
             onClick = {
@@ -278,7 +293,7 @@ fun SecureAccountScreen(
             },
             block = true,
             large = true,
-            enabled = vm.canContinue && !working,
+            enabled = canContinue && !working,
             modifier = Modifier.semantics { contentDescription = "secure-account-continue" },
         )
         FSGhostButton(

@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
+import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.PlatformWebAuthnProvider
 import com.flagshipserver.app.keystore.WebAuthnProvider
@@ -124,6 +126,11 @@ fun RealAccountLoginContainer(
         LoginPhase.Idle, LoginPhase.Recovering -> RecoveringView(onCancel = onBack)
         is LoginPhase.NoCloudBackup -> NoCloudBackupView(
             single = p.single,
+            onImport = { showImport = true },
+            onBack = onBack,
+        )
+        is LoginPhase.AwaitingPassphrase -> PassphraseView(
+            onSubmit = { pp -> scope.launch { vm.submitPassphrase(pp) } },
             onImport = { showImport = true },
             onBack = onBack,
         )
@@ -227,6 +234,50 @@ private fun ImportBackupOption(onImport: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PassphraseView(
+    onSubmit: (String) -> Unit,
+    onImport: () -> Unit,
+    onBack: () -> Unit,
+) {
+    var passphrase by remember { mutableStateOf("") }
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = FS.space.s6, vertical = FS.space.s12)
+            .semantics { contentDescription = "login-passphrase" },
+        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    ) {
+        Text(
+            "Enter your recovery passphrase",
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
+        )
+        Text(
+            "This is the passphrase you chose when you backed up this account. We use it to unlock your wrapped account key — you'll also confirm your passkey.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+        )
+        FSField(
+            value = passphrase,
+            onValueChange = { passphrase = it },
+            label = "Recovery passphrase",
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.semantics { contentDescription = "login-passphrase-field" },
+        )
+        Spacer(Modifier.height(FS.space.s2))
+        FSPrimaryButton(
+            label = "Continue",
+            onClick = { onSubmit(passphrase) },
+            enabled = passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE,
+            block = true,
+            large = true,
+            modifier = Modifier.semantics { contentDescription = "login-passphrase-continue" },
+        )
+        ImportBackupOption(onImport = onImport)
+        FSGhostButton(label = "Back", onClick = onBack, block = true)
     }
 }
 

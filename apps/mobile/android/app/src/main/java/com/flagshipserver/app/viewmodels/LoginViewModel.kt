@@ -45,13 +45,16 @@ import com.flagshipserver.app.core.AcmeAccountKey
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.RePairInitiateClaim
+import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.Recovery
 import com.flagshipserver.app.keystore.WebAuthnProvider
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 /** The label every credential-proven takeover stamps on its new device.
  *  Reach (`ukey.*`) is what makes it special, not the id — but the label
@@ -70,6 +73,12 @@ sealed interface LoginPhase {
     /** recovery.present == false. A clean STATE (never a 404). The copy
      *  differs by account kind; the host renders it from [single]. */
     data class NoCloudBackup(val single: Boolean) : LoginPhase
+
+    /** The account's cloud record is gated by a recovery passphrase
+     *  (recovery.hasFetchGate == true). The host collects the passphrase
+     *  and calls [submitPassphrase]; the Argon2id-derived fetchToken then
+     *  gates the .com ciphertext release. [single] drives the copy. */
+    data class AwaitingPassphrase(val single: Boolean) : LoginPhase
 
     /** The PRF assertion + unwrap is running. */
     data object Recovering : LoginPhase
@@ -149,8 +158,11 @@ class LoginViewModel(
     /**
      * Entry point. Branch on the preflight:
      *   - no cloud backup → a clean STATE.
-     *   - single → PRF unwrap → TakeoverReady.
-     *   - multi  → PRF unwrap → AwaitingSecondFactor.
+     *   - passphrase-gated record (hasFetchGate) → collect the passphrase
+     *     first ([AwaitingPassphrase]); the gated fetch + unwrap runs in
+     *     [submitPassphrase].
+     *   - legacy record (no gate) → PRF unwrap directly (single →
+     *     TakeoverReady, multi → AwaitingSecondFactor).
      */
     suspend fun begin() {
         if (!resolution.recovery.present) {
@@ -159,8 +171,64 @@ class LoginViewModel(
             _phase.value = LoginPhase.NoCloudBackup(single = !isMulti)
             return
         }
+        if (resolution.recovery.hasFetchGate) {
+            // Modern record: the ciphertext is gated behind the
+            // passphrase-derived fetchToken — collect the passphrase.
+            _phase.value = LoginPhase.AwaitingPassphrase(single = !isMulti)
+            return
+        }
+        // Legacy record (predates the passphrase gate): unwrap with the
+        // fixed-salt PRF directly.
         runRecovery()
     }
+
+    /**
+     * Passphrase-gated restore (Task #74). Derives the secrets (Argon2id,
+     * off the main thread), runs the gated fetch, asserts the returned
+     * prfSaltHash matches the locally-derived prfSalt (refusing on
+     * mismatch), then PRF-asserts with prfSalt and unwraps the UMK + the
+     * escrowed ACME key. On success: single → TakeoverReady, multi →
+     * AwaitingSecondFactor.
+     */
+    suspend fun submitPassphrase(passphrase: String) {
+        if (_phase.value !is LoginPhase.AwaitingPassphrase) return
+        _phase.value = LoginPhase.Recovering
+        try {
+            val result = withContext(Dispatchers.Default) {
+                CloudRecoveryEnrollment.restore(
+                    server = server,
+                    passkeys = webAuthnCeremony(),
+                    username = username,
+                    passphrase = passphrase,
+                    now = now(),
+                )
+            }
+            require(result.umkSeed.size == 32) { "recovered UMK isn't 32 bytes" }
+            recoveredSeed = result.umkSeed
+            recoveredAcmeScalar = result.acmeScalar
+            _phase.value = if (isMulti) {
+                LoginPhase.AwaitingSecondFactor
+            } else {
+                LoginPhase.TakeoverReady(resolution.grace)
+            }
+        } catch (t: Throwable) {
+            _phase.value = LoginPhase.Failed(humanizedError(t))
+        }
+    }
+
+    /** Adapt the [WebAuthnProvider] to the [CloudRecoveryEnrollment.
+     *  PasskeyCeremony] seam the shared restore helper consumes. Restore
+     *  only ever calls [CloudRecoveryEnrollment.PasskeyCeremony.assert]
+     *  (PRF-get with the passphrase-derived prfSalt); create is unreachable
+     *  here so it fails loudly if ever wired wrong. */
+    private fun webAuthnCeremony(): CloudRecoveryEnrollment.PasskeyCeremony =
+        object : CloudRecoveryEnrollment.PasskeyCeremony {
+            override suspend fun create(username: String, prfEvalInput: ByteArray): Pair<String, ByteArray> =
+                throw IllegalStateException("login takeover never creates a passkey")
+
+            override suspend fun assert(credentialId: String, prfEvalInput: ByteArray): ByteArray =
+                webauthn.prfAssertWithSalt(credentialId, prfEvalInput)
+        }
 
     /** Run the passkey-PRF assertion + unwrap. On success: single lands
      *  on [LoginPhase.TakeoverReady]; multi gates on the second factor

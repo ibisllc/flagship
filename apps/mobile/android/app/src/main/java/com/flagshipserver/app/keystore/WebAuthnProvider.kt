@@ -15,9 +15,16 @@ interface WebAuthnProvider {
      *  (hex-encoded). */
     suspend fun register(): String
 
-    /** PRF-assert against the given credentialId. Returns the
-     *  32-byte hmac-secret output. */
+    /** PRF-assert against the given credentialId with the LEGACY fixed
+     *  salt (Recovery.PRF_SALT). Returns the 32-byte hmac-secret output. */
     suspend fun prfAssert(credentialId: String): ByteArray
+
+    /** PRF-assert against [credentialId] with an explicit [prfSalt] as the
+     *  WebAuthn `prf.eval.first` input — the passphrase-derived salt for
+     *  the gated cloud-recovery flow. Defaults to [prfAssert] (the fixed
+     *  salt) so existing impls + the Wipe/register seam keep working. */
+    suspend fun prfAssertWithSalt(credentialId: String, prfSalt: ByteArray): ByteArray =
+        prfAssert(credentialId)
 }
 
 class MockWebAuthnProvider : WebAuthnProvider {
@@ -38,6 +45,19 @@ class MockWebAuthnProvider : WebAuthnProvider {
             /* ikm = */ credentialId.toByteArray(Charsets.UTF_8),
             /* salt = */ "flagship/mock-prf/v1".toByteArray(Charsets.UTF_8),
             /* info = */ ByteArray(0),
+            /* size = */ 32,
+        )
+    }
+    override suspend fun prfAssertWithSalt(credentialId: String, prfSalt: ByteArray): ByteArray {
+        // Fold the prfSalt into the deterministic secret so a Mock
+        // enrollment + restore that share the same (credentialId, prfSalt)
+        // round-trip the AES-GCM wrap, while a different salt yields a
+        // different secret (mirrors a real authenticator's PRF coupling).
+        return Hkdf.computeHkdf(
+            /* macAlgorithm = */ "HMACSHA256",
+            /* ikm = */ credentialId.toByteArray(Charsets.UTF_8),
+            /* salt = */ "flagship/mock-prf/v1".toByteArray(Charsets.UTF_8),
+            /* info = */ prfSalt,
             /* size = */ 32,
         )
     }

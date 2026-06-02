@@ -55,6 +55,10 @@ class LoginFlowTest {
     private val credentialId = "ab".repeat(32)        // hex-shaped Mock cred
     private val recoveredSeed = ByteArray(32) { (it + 1).toByte() }
 
+    private companion object {
+        const val GATED_PASSPHRASE = "correct horse battery staple"
+    }
+
     @Before
     fun setUp() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
@@ -162,6 +166,98 @@ class LoginFlowTest {
 
         assertEquals(LoginPhase.NoCloudBackup(single = false), m.phase.first())
         assertFalse(app.isPaired.first())
+    }
+
+    // ─── 1b. passphrase-gated takeover (Task #74) ─────────────────────
+
+    /** Enroll a passphrase-gated record through the shared ceremony so the
+     *  Mock stores the fetchToken / prfSalt gate hashes; the passkey
+     *  ceremony folds the prfSalt into the secret exactly like
+     *  MockWebAuthnProvider.prfAssertWithSalt, so the restore round-trips. */
+    private suspend fun enrollGated(server: MockFlagshipServerClient, username: String) {
+        val ceremony = object : com.flagshipserver.app.keystore.CloudRecoveryEnrollment.PasskeyCeremony {
+            override suspend fun create(username: String, prfEvalInput: ByteArray) =
+                credentialId to webauthn.prfAssertWithSalt(credentialId, prfEvalInput)
+            override suspend fun assert(credentialId: String, prfEvalInput: ByteArray) =
+                webauthn.prfAssertWithSalt(credentialId, prfEvalInput)
+        }
+        com.flagshipserver.app.keystore.CloudRecoveryEnrollment.enroll(
+            server = server,
+            passkeys = ceremony,
+            irk = com.google.crypto.tink.subtle.Ed25519Sign(ByteArray(32) { 0x03 }),
+            username = username,
+            umkSeed = recoveredSeed,
+            passphrase = GATED_PASSPHRASE,
+            passphraseConfirm = GATED_PASSPHRASE,
+            acmeScalar = null,
+            now = 1_000L,
+        )
+    }
+
+    private fun gatedResolution(username: String, kind: String) = AccountResolution(
+        username = username,
+        exists = true,
+        kind = kind,
+        recovery = AccountResolution.RecoveryState(
+            present = true,
+            hasFetchGate = true,
+            credentialId = credentialId,
+        ),
+        totpEnrolled = kind == "multi",
+        trustedDeviceCount = 0,
+        graceModel = if (kind == "multi") "24h-totp" else "7d",
+    )
+
+    @Test fun begin_gatedRecord_awaitsPassphrase_doesNotFetch() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        enrollGated(server, "harry")
+        val m = vm(gatedResolution("harry", "single"), server, AppState())
+
+        m.begin()
+
+        assertEquals(LoginPhase.AwaitingPassphrase(single = true), m.phase.first())
+    }
+
+    @Test fun gated_correctPassphrase_unwraps_landsOnTakeoverReady() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        enrollGated(server, "harry")
+        val app = AppState()
+        val m = vm(gatedResolution("harry", "single"), server, app)
+
+        m.begin()
+        m.submitPassphrase(GATED_PASSPHRASE)
+
+        assertEquals(
+            LoginPhase.TakeoverReady(AccountResolution.GraceModel.SevenDay),
+            m.phase.first(),
+        )
+        assertNull("nothing committed before confirm", server.lastRePairInitiate)
+        assertFalse(app.isPaired.first())
+    }
+
+    @Test fun gated_wrongPassphrase_failsAtGate() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        enrollGated(server, "harry")
+        val m = vm(gatedResolution("harry", "single"), server, AppState())
+
+        m.begin()
+        m.submitPassphrase("the wrong passphrase entirely")
+
+        assertTrue(m.phase.first() is LoginPhase.Failed)
+    }
+
+    @Test fun gated_multi_unwraps_thenGatesOnSecondFactor() = runTest {
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        enrollGated(server, "hilton")
+        val m = vm(gatedResolution("hilton", "multi"), server, AppState())
+
+        m.begin()
+        assertEquals(LoginPhase.AwaitingPassphrase(single = false), m.phase.first())
+        m.submitPassphrase(GATED_PASSPHRASE)
+
+        // Multi must still collect the second factor BEFORE re-pair.
+        assertEquals(LoginPhase.AwaitingSecondFactor, m.phase.first())
+        assertNull(server.lastRePairInitiate)
     }
 
     // ─── 2. single takeover ───────────────────────────────────────────

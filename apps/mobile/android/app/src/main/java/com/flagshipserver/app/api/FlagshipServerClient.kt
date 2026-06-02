@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
 import kotlinx.serialization.SerialName
@@ -37,6 +38,21 @@ interface FlagshipServerClient {
     suspend fun usernameAvailable(username: String): UsernameAvailabilityResponse
     suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse
     suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope
+
+    /** Task #74 — passphrase-gated cloud-recovery fetch. POSTs
+     *  `{ fetchToken: <hex>, issuedAt: <ms> }` to
+     *  `/api/recovery/by-username/<u>/fetch`; .com releases the wrapped
+     *  UMK (+ optional escrowed ACME key + prfSaltHash) only when
+     *  SHA-256(fetchToken) matches the stored hash. Throws
+     *  [HttpException] 403 on a wrong passphrase, 429 when rate-limited,
+     *  404 when no record exists, 409 for a pre-gate (legacy) record. The
+     *  fetchToken is the Argon2id-derived value from
+     *  RecoveryDerivation.derivePassphraseSecrets. */
+    suspend fun fetchWrappedUmkWithToken(
+        username: String,
+        fetchTokenHex: String,
+        issuedAt: Long,
+    ): GatedRecoveryEnvelope
     /** Register an FCM device token with .com so the Worker can relay
      *  encrypted push payloads. Returns a handle to later revoke. */
     suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse
@@ -875,6 +891,15 @@ data class RecoveryEnvelopeRequest(
         // ciphertext only — never in the signed canonical, so tampering
         // breaks recovery of the account key but can never forge it.
         val wrappedAcmeAccountKey: String? = null,
+        // Task #74 — passphrase-gate hashes. Both are lowercase SHA-256 hex
+        // of the Argon2id-derived fetchToken / prfSalt (see
+        // RecoveryDerivation). Optional on the wire (NOT in the signed
+        // canonical — the protocol only hashes wrappedUmk), but the modern
+        // enroll flow always sends both. fetchTokenHash gates the
+        // /fetch POST; prfSaltHash lets a recovering device confirm it
+        // re-derived the same salt before trusting the PRF output.
+        val fetchTokenHash: String? = null,
+        val prfSaltHash: String? = null,
     )
 }
 
@@ -892,6 +917,31 @@ data class RecoveryEnvelope(
     // Decoded by the recovery-restore path (LoginViewModel) and imported via
     // Keystore.importAcmeAccountKeyScalar.
     val wrappedAcmeAccountKey: String? = null,
+)
+
+/** `POST /api/recovery/by-username/<u>/fetch` — the body the passphrase-
+ *  gated fetch sends. `fetchToken` is the Argon2id-derived token (hex);
+ *  the Worker rejects a `issuedAt` more than ~5 min off as stale. */
+@Serializable
+data class GatedRecoveryFetchRequest(
+    val fetchToken: String, // hex
+    val issuedAt: Long,
+)
+
+/** Success body of the gated fetch. Mirrors handleFetchWrappedUmkWithToken
+ *  in control-plane/webauthnRecovery.ts: the wrapped UMK blob, the
+ *  credentialId pointer, the optional escrowed ACME key, and the stored
+ *  prfSaltHash (so the client can confirm its locally-derived prfSalt
+ *  matches before unwrapping — defense against a malicious .com swapping
+ *  the salt). `username`/`updatedAt` are returned but unused by the client. */
+@Serializable
+data class GatedRecoveryEnvelope(
+    val username: String? = null,
+    val credentialId: String,
+    val wrappedUmk: String,
+    val wrappedAcmeAccountKey: String? = null,
+    val prfSaltHash: String? = null,
+    val updatedAt: Long? = null,
 )
 
 /** POST /api/push/register canonical-bytes envelope. Inner shape mirrors
@@ -950,6 +1000,21 @@ class MockFlagshipServerClient(
     var deviceCapabilities: MutableMap<String, DeviceCapabilityBlock> = mutableMapOf(),
 ) : FlagshipServerClient {
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
+
+    /** Mirror of the Worker's webauthn_recovery row, keyed by lowercased
+     *  username — the unit the gated /fetch endpoint reads. Holds the
+     *  passphrase-gate hashes so [fetchWrappedUmkWithToken] can enforce the
+     *  same SHA-256(fetchToken) check the Worker does. */
+    private data class MockRecoveryRecord(
+        val credentialId: String,
+        val wrappedUmk: String,
+        val wrappedAcmeAccountKey: String?,
+        val fetchTokenHashHex: String?,
+        val prfSaltHashHex: String?,
+        val updatedAt: Long,
+    )
+    private val recoveryByUsername = mutableMapOf<String, MockRecoveryRecord>()
+
     private val _claimedUsernames = mutableMapOf<String, String>()       // username → irkPub
     private val _issuedAuthCodes = mutableMapOf<String, AuthCodeWire>()  // serial → wire
     private val _revokedAuthCodes = mutableSetOf<String>()
@@ -1077,10 +1142,24 @@ class MockFlagshipServerClient(
         // Preserve a previously-escrowed account key when a re-upload
         // omits it, mirroring the control-plane upsert (#28).
         val priorAcme = recoveryStore[r.credentialId]?.wrappedAcmeAccountKey
+        val resolvedAcme = r.wrappedAcmeAccountKey ?: priorAcme
         recoveryStore[r.credentialId] = RecoveryEnvelope(
             credentialId = r.credentialId,
             wrappedUmk = r.wrappedUmk,
-            wrappedAcmeAccountKey = r.wrappedAcmeAccountKey ?: priorAcme,
+            wrappedAcmeAccountKey = resolvedAcme,
+        )
+        // Also mirror the by-username row the gated /fetch endpoint reads,
+        // carrying the passphrase-gate hashes (Task #74). Preserve a prior
+        // ACME escrow / hashes the same way the Worker's upsert does.
+        val key = r.username.lowercase()
+        val prior = recoveryByUsername[key]
+        recoveryByUsername[key] = MockRecoveryRecord(
+            credentialId = r.credentialId,
+            wrappedUmk = r.wrappedUmk,
+            wrappedAcmeAccountKey = resolvedAcme ?: prior?.wrappedAcmeAccountKey,
+            fetchTokenHashHex = r.fetchTokenHash?.lowercase() ?: prior?.fetchTokenHashHex,
+            prfSaltHashHex = r.prfSaltHash?.lowercase() ?: prior?.prfSaltHashHex,
+            updatedAt = nowMs(),
         )
         return RecoveryEnvelopeResponse(ok = true)
     }
@@ -1088,6 +1167,32 @@ class MockFlagshipServerClient(
     override suspend fun fetchRecoveryEnvelope(credentialId: String): RecoveryEnvelope {
         tick()
         return recoveryStore[credentialId] ?: throw HttpException(404, "no envelope")
+    }
+
+    override suspend fun fetchWrappedUmkWithToken(
+        username: String,
+        fetchTokenHex: String,
+        issuedAt: Long,
+    ): GatedRecoveryEnvelope {
+        tick()
+        val rec = recoveryByUsername[username.lowercase()]
+            ?: throw HttpException(404, "no recovery record")
+        // Legacy row with no gate → the Worker refuses with 409.
+        val storedHash = rec.fetchTokenHashHex
+            ?: throw HttpException(409, "record predates passphrase gate — re-enrol cloud recovery")
+        // Enforce the SHA-256(fetchToken) gate exactly like the Worker.
+        val presented = com.flagshipserver.app.keystore.RecoveryDerivation.sha256Hex(
+            HexUtil.decode(fetchTokenHex.lowercase()) ?: throw HttpException(400, "fetchToken must be hex"),
+        )
+        if (presented != storedHash) throw HttpException(403, "invalid fetch token")
+        return GatedRecoveryEnvelope(
+            username = username.lowercase(),
+            credentialId = rec.credentialId,
+            wrappedUmk = rec.wrappedUmk,
+            wrappedAcmeAccountKey = rec.wrappedAcmeAccountKey,
+            prfSaltHash = rec.prfSaltHashHex,
+            updatedAt = rec.updatedAt,
+        )
     }
 
     override suspend fun registerPushToken(req: PushTokenRegisterRequest): PushTokenRegisterResponse {
@@ -1509,7 +1614,14 @@ class MockFlagshipServerClient(
             )
         }
         val kind = if ((accountTypeByUser[u] ?: "single") == "multi") "multi" else "single"
-        val hasRecovery = cloudRecoveryByUser[u] ?: false
+        // A real enrolled record (recoveryByUsername, written by
+        // registerRecoveryEnvelope) is authoritative for presence + the
+        // passphrase gate; the scripted cloudRecoveryByUser map is an
+        // explicit override for tests that don't run a full enroll.
+        val record = recoveryByUsername[u]
+        val hasRecovery = (cloudRecoveryByUser[u] ?: false) || record != null
+        val hasFetchGate = record?.fetchTokenHashHex != null
+        val credentialId = record?.credentialId
         val devices = devicesByUser[u]?.size ?: 0
         return AccountResolution(
             username = u,
@@ -1517,7 +1629,8 @@ class MockFlagshipServerClient(
             kind = kind,
             recovery = AccountResolution.RecoveryState(
                 present = hasRecovery,
-                hasFetchGate = false,
+                hasFetchGate = hasFetchGate,
+                credentialId = credentialId,
             ),
             totpEnrolled = totpEnrolledAtByUser[u] != null,
             trustedDeviceCount = devices,
@@ -1704,6 +1817,20 @@ class LiveFlagshipServerClient(
         return transport.getJson(
             "$base/api/recovery/fetch?credentialId=$encoded",
             responseSerializer = RecoveryEnvelope.serializer(),
+        )
+    }
+
+    override suspend fun fetchWrappedUmkWithToken(
+        username: String,
+        fetchTokenHex: String,
+        issuedAt: Long,
+    ): GatedRecoveryEnvelope {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return transport.postJsonForResponse(
+            "$base/api/recovery/by-username/$encoded/fetch",
+            GatedRecoveryFetchRequest(fetchToken = fetchTokenHex, issuedAt = issuedAt),
+            serializer = GatedRecoveryFetchRequest.serializer(),
+            responseSerializer = GatedRecoveryEnvelope.serializer(),
         )
     }
 

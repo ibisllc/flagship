@@ -32,18 +32,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.flagshipserver.app.api.RecoveryEnvelopeRequest
-import com.flagshipserver.app.core.AcmeAccountKey
-import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
-import com.flagshipserver.app.core.RecoveryUpload
 import com.flagshipserver.app.keystore.BlockStoreUmkStore
+import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
+import com.flagshipserver.app.keystore.PasskeyCeremonyAdapter
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.Recovery
 import com.flagshipserver.app.keystore.WrappedUmk
@@ -54,7 +53,9 @@ import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class RecoveryMode { Choose, Setup, Restore, Codes }
 private enum class CloudStatus { Unknown, NotConfigured, Configured, Failed }
@@ -76,6 +77,8 @@ fun RecoveryScreen(nav: NavController) {
     var codes by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var passphrase by remember { mutableStateOf("") }
+    var passphraseConfirm by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         cloudStatus = try {
@@ -122,6 +125,10 @@ fun RecoveryScreen(nav: NavController) {
             )
             RecoveryMode.Setup -> SetupCard(
                 working = working,
+                passphrase = passphrase,
+                onPassphrase = { passphrase = it },
+                passphraseConfirm = passphraseConfirm,
+                onPassphraseConfirm = { passphraseConfirm = it },
                 onConfigure = {
                     if (activity == null) {
                         error = "Open this screen from the foreground activity to use a passkey."
@@ -131,49 +138,40 @@ fun RecoveryScreen(nav: NavController) {
                         working = true; error = null
                         try {
                             val username = app.currentUser.value ?: "you"
-                            val created = passkeys.createPasskey(activity, username)
+                            // IRK access prompt up front (biometric) so the
+                            // Argon2id + passkey work happens after consent.
+                            val irkMaterial = KeystoreIrkAccess().resolve("Set up cloud recovery")
                             val umk = Keystore.loadOrCreateUmkSeed()
-                            val wrappedUmk = Recovery.wrap(umkSeed = umk, prfSecret = created.prfSecret)
-                            blockStore.save(
-                                WrappedUmk(
-                                    credentialId = created.credentialId,
-                                    wrappedUmkBase64 = wrappedUmk,
-                                ),
-                            )
-                            // #28 — escrow the ACME account key under the same
-                            // PRF secret. Non-fatal (see SecureAccountScreen).
-                            val wrappedAcme: String? = try {
-                                val scalar = Keystore.loadOrCreateAcmeAccountKeyScalar()
-                                AcmeAccountKey.wrapForEscrow(scalar, created.prfSecret)
+                            val acmeScalar = try {
+                                Keystore.loadOrCreateAcmeAccountKeyScalar()
                             } catch (_: Throwable) {
                                 null
                             }
-                            // IRK-sign the upload (see SecureAccountScreen): the
-                            // Worker verifies `signature` over the canonical
-                            // UploadRecoveryRecord under the account IRK pubkey.
-                            val irkMaterial = KeystoreIrkAccess().resolve("Set up cloud recovery")
-                            val issuedAt = System.currentTimeMillis()
-                            val wrappedUmkBytes = java.util.Base64.getDecoder().decode(wrappedUmk)
-                            val wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
-                            val signature = RecoveryUpload.sign(
-                                irk = irkMaterial.signer,
-                                username = username,
-                                credentialId = created.credentialId,
-                                wrappedUmkHashHex = wrappedUmkHashHex,
-                                issuedAt = issuedAt,
-                            )
-                            flagshipServer.registerRecoveryEnvelope(
-                                RecoveryEnvelopeRequest(
-                                    request = RecoveryEnvelopeRequest.Inner(
-                                        username = username,
-                                        credentialId = created.credentialId,
-                                        wrappedUmk = wrappedUmk,
-                                        issuedAt = issuedAt,
-                                        wrappedAcmeAccountKey = wrappedAcme,
-                                    ),
-                                    signature = HexUtil.encode(signature),
+                            // Argon2id (~1-2s) + the wrap math off the main
+                            // thread; the passkey ceremony resumes on whatever
+                            // dispatcher CredentialManager hops to internally.
+                            val result = withContext(Dispatchers.Default) {
+                                CloudRecoveryEnrollment.enroll(
+                                    server = flagshipServer,
+                                    passkeys = PasskeyCeremonyAdapter(passkeys, activity),
+                                    irk = irkMaterial.signer,
+                                    username = username,
+                                    umkSeed = umk,
+                                    passphrase = passphrase,
+                                    passphraseConfirm = passphraseConfirm,
+                                    acmeScalar = acmeScalar,
+                                    now = System.currentTimeMillis(),
+                                )
+                            }
+                            // Keep the Android Block Store copy so a new device
+                            // on the same Google account auto-restores.
+                            blockStore.save(
+                                WrappedUmk(
+                                    credentialId = result.credentialId,
+                                    wrappedUmkBase64 = result.wrappedUmk,
                                 ),
                             )
+                            passphrase = ""; passphraseConfirm = ""
                             cloudStatus = CloudStatus.Configured
                             toasts.success("Cloud recovery configured.")
                             mode = RecoveryMode.Choose
@@ -184,10 +182,15 @@ fun RecoveryScreen(nav: NavController) {
                         }
                     }
                 },
-                onCancel = { mode = RecoveryMode.Choose },
+                onCancel = {
+                    passphrase = ""; passphraseConfirm = ""
+                    mode = RecoveryMode.Choose
+                },
             )
             RecoveryMode.Restore -> RestoreCard(
                 working = working,
+                passphrase = passphrase,
+                onPassphrase = { passphrase = it },
                 onRun = {
                     if (activity == null) { error = "Open from foreground."; return@RestoreCard }
                     scope.launch {
@@ -195,13 +198,24 @@ fun RecoveryScreen(nav: NavController) {
                         try {
                             val envelope = blockStore.fetch()
                                 ?: throw IllegalStateException("no envelope on this device; cross-device restore not wired yet")
-                            val prfSecret = passkeys.assertPrf(activity, envelope.credentialId)
+                            val username = app.currentUser.value ?: "you"
+                            // The Block Store blob was sealed with the
+                            // passphrase-derived prfSalt, so re-derive it here
+                            // (Argon2id off the main thread) and assert with it.
+                            val secrets = withContext(Dispatchers.Default) {
+                                com.flagshipserver.app.keystore.RecoveryDerivation
+                                    .derivePassphraseSecrets(passphrase, username)
+                            }
+                            val prfSecret = passkeys.assertPrf(
+                                activity, envelope.credentialId, secrets.prfSalt,
+                            )
                             val seed = Recovery.unwrap(
                                 wrappedUmkBase64 = envelope.wrappedUmkBase64,
                                 prfSecret = prfSecret,
                             )
                             require(seed.size == 32) { "recovered UMK isn't 32 bytes" }
                             // TODO: persist seed into Keystore + invalidate cached IRK seed.
+                            passphrase = ""
                             toasts.success("UMK recovered (${seed.size} bytes). Re-pair your servers next.")
                             mode = RecoveryMode.Choose
                         } catch (t: Throwable) {
@@ -211,7 +225,10 @@ fun RecoveryScreen(nav: NavController) {
                         }
                     }
                 },
-                onCancel = { mode = RecoveryMode.Choose },
+                onCancel = {
+                    passphrase = ""
+                    mode = RecoveryMode.Choose
+                },
             )
             RecoveryMode.Codes -> CodesCard(
                 value = codes,
@@ -267,20 +284,43 @@ private fun ChooseCard(
 }
 
 @Composable
-private fun SetupCard(working: Boolean, onConfigure: () -> Unit, onCancel: () -> Unit) {
+private fun SetupCard(
+    working: Boolean,
+    passphrase: String,
+    onPassphrase: (String) -> Unit,
+    passphraseConfirm: String,
+    onPassphraseConfirm: (String) -> Unit,
+    onConfigure: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val canSubmit = !working &&
+        passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE &&
+        passphrase == passphraseConfirm
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text("Set up passkey recovery", color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Text(
-                "Tap Configure → confirm the passkey prompt → we wrap your UMK seed under the passkey-derived secret and back it up via Google Block Store.",
+                "Choose a recovery passphrase, then confirm the passkey prompt. The passphrase hardens your backup so that even a leak of the cloud copy can't be cracked without it. You'll need BOTH the passphrase and your passkey to recover.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
+            )
+            FSField(
+                value = passphrase,
+                onValueChange = onPassphrase,
+                label = "Recovery passphrase (8+ characters)",
+                visualTransformation = PasswordVisualTransformation(),
+            )
+            FSField(
+                value = passphraseConfirm,
+                onValueChange = onPassphraseConfirm,
+                label = "Confirm passphrase",
+                visualTransformation = PasswordVisualTransformation(),
             )
             FSPrimaryButton(
                 label = if (working) "Configuring…" else "Configure",
                 onClick = onConfigure,
-                enabled = !working,
+                enabled = canSubmit,
                 block = true,
             )
             FSGhostButton(label = "Back", onClick = onCancel)
@@ -289,20 +329,33 @@ private fun SetupCard(working: Boolean, onConfigure: () -> Unit, onCancel: () ->
 }
 
 @Composable
-private fun RestoreCard(working: Boolean, onRun: () -> Unit, onCancel: () -> Unit) {
+private fun RestoreCard(
+    working: Boolean,
+    passphrase: String,
+    onPassphrase: (String) -> Unit,
+    onRun: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val canSubmit = !working && passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text("Restore from cloud", color = FS.colors.text,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Text(
-                "We'll fetch the wrapped UMK from Block Store + run a passkey assertion to unlock it. Re-pair your servers afterwards.",
+                "Enter your recovery passphrase, then confirm the passkey prompt. We'll fetch the wrapped UMK from Block Store + unlock it. Re-pair your servers afterwards.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
+            )
+            FSField(
+                value = passphrase,
+                onValueChange = onPassphrase,
+                label = "Recovery passphrase",
+                visualTransformation = PasswordVisualTransformation(),
             )
             FSPrimaryButton(
                 label = if (working) "Restoring…" else "Restore",
                 onClick = onRun,
-                enabled = !working,
+                enabled = canSubmit,
                 block = true,
             )
             FSGhostButton(label = "Back", onClick = onCancel)
