@@ -1413,10 +1413,22 @@ public struct RecoveryEnvelopeRequest: Codable, Equatable, Sendable {
     public let credentialId: String
     public let wrappedUmkBase64: String
     public let nonceBase64: String
-    public init(credentialId: String, wrappedUmkBase64: String, nonceBase64: String) {
+    /// #28 — the escrow-wrapped ACME account key (base64 of nonce‖ct‖tag),
+    /// shipped alongside the UMK so a recovering device can restore
+    /// cert-minting authority. Optional: absent for accounts that never
+    /// minted an account key. The Worker reads `r.wrappedAcmeAccountKey` —
+    /// the synthesized CodingKey from this property name matches the wire.
+    public let wrappedAcmeAccountKey: String?
+    public init(
+        credentialId: String,
+        wrappedUmkBase64: String,
+        nonceBase64: String,
+        wrappedAcmeAccountKey: String? = nil
+    ) {
         self.credentialId = credentialId
         self.wrappedUmkBase64 = wrappedUmkBase64
         self.nonceBase64 = nonceBase64
+        self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
     }
 }
 
@@ -1429,10 +1441,21 @@ public struct RecoveryEnvelope: Codable, Equatable, Sendable {
     public let credentialId: String
     public let wrappedUmkBase64: String
     public let nonceBase64: String
-    public init(credentialId: String, wrappedUmkBase64: String, nonceBase64: String) {
+    /// #28 — the escrow-wrapped ACME account key the Worker releases on
+    /// fetch (`wrappedAcmeAccountKey` in the response body). Absent when the
+    /// account never minted an account key. A recovering device unwraps this
+    /// with the same PRF secret and imports it via `Keystore.importAcmeAccountKey`.
+    public let wrappedAcmeAccountKey: String?
+    public init(
+        credentialId: String,
+        wrappedUmkBase64: String,
+        nonceBase64: String,
+        wrappedAcmeAccountKey: String? = nil
+    ) {
         self.credentialId = credentialId
         self.wrappedUmkBase64 = wrappedUmkBase64
         self.nonceBase64 = nonceBase64
+        self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
     }
 }
 
@@ -1658,7 +1681,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         recoveryStore[req.credentialId] = RecoveryEnvelope(
             credentialId: req.credentialId,
             wrappedUmkBase64: req.wrappedUmkBase64,
-            nonceBase64: req.nonceBase64
+            nonceBase64: req.nonceBase64,
+            wrappedAcmeAccountKey: req.wrappedAcmeAccountKey
         )
         return RecoveryEnvelopeResponse(ok: true)
     }

@@ -46,10 +46,26 @@ public final class RecoveryViewModel {
             let registration = try await webAuthn.register()
             let prfSecret = try await webAuthn.prfAssert(credentialId: registration.credentialId)
             let env = try Recovery.wrap(umkSeed: umkSeed, prfSecret: prfSecret)
+            // #28 — also escrow the ACME account key (cert-minting authority)
+            // under the SAME PRF secret so a fully device-less recovery can
+            // restore issuance. UMK escrow is primary: a failure to mint or
+            // wrap the account key must NOT fail recovery setup, so this is a
+            // best-effort do/catch that simply omits the field on error.
+            var wrappedAcme: String? = nil
+            do {
+                let acme = try Keystore.loadOrCreateAcmeAccountKey()
+                wrappedAcme = try AcmeAccountKey.wrapForEscrow(
+                    scalar: acme.rawRepresentation,
+                    prfSecret: prfSecret
+                )
+            } catch {
+                // Non-fatal: continue without the escrowed account key.
+            }
             _ = try await client.registerRecoveryEnvelope(.init(
                 credentialId: registration.credentialId,
                 wrappedUmkBase64: env.ciphertextBase64,
-                nonceBase64: env.nonceBase64
+                nonceBase64: env.nonceBase64,
+                wrappedAcmeAccountKey: wrappedAcme
             ))
             phase = .registered(credentialId: registration.credentialId)
         } catch {
@@ -71,6 +87,23 @@ public final class RecoveryViewModel {
                 nonceBase64: env.nonceBase64,
                 prfSecret: prfSecret
             )
+            // #28 — if the envelope carries the escrowed ACME account key,
+            // unwrap it under the same PRF secret and import it so this
+            // recovered device regains cert-minting authority. Non-fatal:
+            // UMK recovery is primary, and accounts that never minted an
+            // account key simply won't carry this field.
+            if let wrappedAcme = env.wrappedAcmeAccountKey {
+                do {
+                    let scalar = try AcmeAccountKey.unwrapFromEscrow(
+                        base64: wrappedAcme,
+                        prfSecret: prfSecret
+                    )
+                    try Keystore.importAcmeAccountKey(scalar: scalar)
+                } catch {
+                    // Non-fatal: the UMK is recovered; account-key restore
+                    // can be retried (re-mint + re-escrow) later.
+                }
+            }
             phase = .recovered
             return seed
         } catch {

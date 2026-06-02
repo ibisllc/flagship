@@ -354,6 +354,49 @@ public struct Keystore {
         keychainDelete(account: account(KCKey.watchDelegateGrantId))
     }
 
+    // MARK: - ACME account key (#28 — cert-minting authority)
+
+    /// Load the profile's ACME account key (ECDSA P-256), minting a fresh
+    /// one on first call. The raw 32-byte private scalar is persisted under
+    /// `.cloudRoot` (iCloud-synced) so an iCloud-restored device inherits
+    /// the same cert-minting authority, and is read back as a
+    /// `P256.Signing.PrivateKey(rawRepresentation:)`.
+    ///
+    /// Unlike the UMK, this key is NOT biometric-gated and is stored
+    /// exportably: cert issuance is a background operation that must not
+    /// prompt for Face ID, and the raw scalar must be readable so it can be
+    /// escrowed into the WebAuthn-PRF recovery envelope (see
+    /// `AcmeAccountKey.wrapForEscrow`). The escrow is what makes losing
+    /// every device non-fatal for issuance.
+    public static func loadOrCreateAcmeAccountKey() throws -> P256.Signing.PrivateKey {
+        let acct = account(KCKey.acmeAccountKeyScalar)
+        if let raw = keychainRead(account: acct),
+           let pk = try? P256.Signing.PrivateKey(rawRepresentation: raw) {
+            return pk
+        }
+        let pk = P256.Signing.PrivateKey()
+        try keychainWrite(account: acct, data: pk.rawRepresentation, sync: .cloudRoot)
+        return pk
+    }
+
+    /// The profile's ACME account-key private scalar as raw bytes, or nil if
+    /// none has been minted. Used by the recovery-enrollment path to escrow
+    /// the key without forcing a (potentially prompting) keygen.
+    public static func acmeAccountKeyScalar() -> Data? {
+        keychainRead(account: account(KCKey.acmeAccountKeyScalar))
+    }
+
+    /// Install a recovered ACME account-key scalar into the profile's slot.
+    /// Used by the recovery RESTORE path after `AcmeAccountKey.unwrapFromEscrow`
+    /// yields the original 32-byte scalar. Validates that the bytes form a
+    /// well-formed P-256 private key before writing.
+    public static func importAcmeAccountKey(scalar: Data) throws {
+        // Round-trips through CryptoKit so a malformed scalar throws here
+        // rather than silently persisting an unusable key.
+        _ = try P256.Signing.PrivateKey(rawRepresentation: scalar)
+        try keychainWrite(account: account(KCKey.acmeAccountKeyScalar), data: scalar, sync: .cloudRoot)
+    }
+
     // MARK: - Wipe (sign-out / tests)
 
     /// Wipe ONLY the active profile's key slots — so signing out of one
@@ -373,7 +416,8 @@ public struct Keystore {
                         account(KCKey.irkVersion, profile: id),
                         account(KCKey.irkPendingVersion, profile: id),
                         account(KCKey.watchDelegateSeed, profile: id),
-                        account(KCKey.watchDelegateGrantId, profile: id)]
+                        account(KCKey.watchDelegateGrantId, profile: id),
+                        account(KCKey.acmeAccountKeyScalar, profile: id)]
         if id == defaultProfileId {
             // Legacy parity: the default install owned the device push channel.
             accounts.append(KCKey.pushX25519Priv)
@@ -399,7 +443,8 @@ public struct Keystore {
         for id in known {
             for base in [KCKey.wrappedUmk, KCKey.ephemeralPub, KCKey.simWrapPriv,
                          KCKey.irkVersion, KCKey.irkPendingVersion,
-                         KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId] {
+                         KCKey.watchDelegateSeed, KCKey.watchDelegateGrantId,
+                         KCKey.acmeAccountKeyScalar] {
                 keychainDelete(account: account(base, profile: id))
             }
             WrappingKeypair.deleteSEKeyIfExists(profile: id)
@@ -484,6 +529,14 @@ public struct Keystore {
         /// The active delegate's grantId (UUID) — needed to build the
         /// IRK-signed RevokeWatchDelegate when the toggle flips off. */
         static let watchDelegateGrantId = "com.flagship.watchdelegate.grantid"
+        /// #28 — the ACME account key's raw 32-byte P-256 private scalar.
+        /// This is the authority to mint the user's TLS certs (ES256 LE
+        /// account key). Stored EXPORTABLY + NON-biometric (cert issuance
+        /// must not prompt for Face ID) + `.cloudRoot`-synced so an
+        /// iCloud-restored device inherits it, AND escrowed into the
+        /// WebAuthn-PRF recovery envelope so losing every device doesn't
+        /// brick issuance. Profile-scoped like the UMK slots. */
+        static let acmeAccountKeyScalar = "com.flagship.acme-account-key.scalar"
     }
 
     /// The active profile's sim-wrap Keychain account (default → legacy).
