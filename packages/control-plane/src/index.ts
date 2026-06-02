@@ -46,6 +46,7 @@ export * from "./totp.js";
 export * from "./deviceCapabilityGrants.js";
 export * from "./watchDelegates.js";
 export * from "./acmeAccountKeys.js";
+export * from "./acmeAccountKeyDelivery.js";
 export * from "./mintReservations.js";
 export * from "./certRevocation.js";
 export * from "./demoUsersAdmin.js";
