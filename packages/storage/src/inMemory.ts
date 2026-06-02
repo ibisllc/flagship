@@ -1,6 +1,8 @@
 import type {
   WatchDelegateRecord,
   WatchDelegateStorage,
+  MintReservationRecord,
+  MintReservationStorage,
   AuditEventRecord,
   AuditEventStorage,
   AutoUnlockLeaseRecord,
@@ -1282,6 +1284,53 @@ export class InMemoryStorage implements Storage {
   boxSerials = new InMemoryBoxSerialsStorage();
   nfcRendezvous = new InMemoryNfcRendezvousStorage();
   watchDelegates = new InMemoryWatchDelegateStorage();
+  mintReservations = new InMemoryMintReservationStorage();
+}
+
+/**
+ * In-memory MintReservationStorage — the dead-lead-safe CAS lease that
+ * serializes per-user cert minting (per-user-cert design). One row per user;
+ * acquire wins iff none is live (no row / expired) or you already hold it.
+ */
+export class InMemoryMintReservationStorage implements MintReservationStorage {
+  private byUser = new Map<string, MintReservationRecord>();
+
+  async tryAcquire(args: {
+    username: string;
+    holderPubHex: string;
+    expiresAt: number;
+    now: number;
+  }): Promise<{ acquired: boolean; holder: MintReservationRecord }> {
+    const u = args.username.toLowerCase();
+    const holder = args.holderPubHex.toLowerCase();
+    const existing = this.byUser.get(u);
+    const live = existing !== undefined && existing.expiresAt > args.now;
+    // Win iff nothing live, OR you already hold the live lease (extend it).
+    if (!live || existing!.holderPubHex === holder) {
+      const rec: MintReservationRecord = {
+        username: u,
+        holderPubHex: holder,
+        acquiredAt: live ? existing!.acquiredAt : args.now,
+        expiresAt: args.expiresAt,
+      };
+      this.byUser.set(u, rec);
+      return { acquired: true, holder: rec };
+    }
+    // Someone else holds a live lease — back off.
+    return { acquired: false, holder: existing! };
+  }
+
+  async get(username: string): Promise<MintReservationRecord | undefined> {
+    return this.byUser.get(username.toLowerCase());
+  }
+
+  async release(username: string, holderPubHex: string): Promise<void> {
+    const u = username.toLowerCase();
+    const existing = this.byUser.get(u);
+    if (existing && existing.holderPubHex === holderPubHex.toLowerCase()) {
+      this.byUser.delete(u);
+    }
+  }
 }
 
 /**

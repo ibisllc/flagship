@@ -68,6 +68,8 @@ import type {
   DeviceCapabilityGrantStorage,
   WatchDelegateRecord,
   WatchDelegateStorage,
+  MintReservationRecord,
+  MintReservationStorage,
 } from "./types.js";
 
 /**
@@ -2868,6 +2870,7 @@ export class D1Storage implements Storage {
   boxSerials: BoxSerialsStorage;
   nfcRendezvous: NfcRendezvousStorage;
   watchDelegates: WatchDelegateStorage;
+  mintReservations: MintReservationStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.usernameAliases = new D1UsernameAliasStorage(db);
@@ -2900,6 +2903,7 @@ export class D1Storage implements Storage {
     this.boxSerials = new D1BoxSerialsStorage(db);
     this.nfcRendezvous = new D1NfcRendezvousStorage(db);
     this.watchDelegates = new D1WatchDelegateStorage(db);
+    this.mintReservations = new D1MintReservationStorage(db);
   }
 }
 
@@ -3003,5 +3007,77 @@ export class D1WatchDelegateStorage implements WatchDelegateStorage {
       .run();
     const changes = (res as { meta?: { changes?: number } }).meta?.changes ?? 0;
     if (changes === 0) throw new Error("unknown grantId");
+  }
+}
+
+interface MintReservationRow {
+  username: string;
+  holder_pub_hex: string;
+  acquired_at: number;
+  expires_at: number;
+}
+
+function rowToMintReservation(r: MintReservationRow): MintReservationRecord {
+  return {
+    username: r.username,
+    holderPubHex: r.holder_pub_hex,
+    acquiredAt: r.acquired_at,
+    expiresAt: r.expires_at,
+  };
+}
+
+/**
+ * D1 MintReservationStorage — the dead-lead-safe CAS lease (per-user-cert).
+ * Acquire is a single SQLite conditional upsert: it writes IFF there's no
+ * row, the existing row is EXPIRED, or you already hold it (the `ON CONFLICT
+ * … WHERE` clause). D1's single-writer serialization makes that atomic, so
+ * two minters racing can't both win. We read the row back to report who holds
+ * it now.
+ */
+export class D1MintReservationStorage implements MintReservationStorage {
+  constructor(private readonly db: D1Database) {}
+
+  async tryAcquire(args: {
+    username: string;
+    holderPubHex: string;
+    expiresAt: number;
+    now: number;
+  }) {
+    const u = args.username.toLowerCase();
+    const holder = args.holderPubHex.toLowerCase();
+    await this.db
+      .prepare(
+        `INSERT INTO mint_reservations (username, holder_pub_hex, acquired_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(username) DO UPDATE SET
+           holder_pub_hex = excluded.holder_pub_hex,
+           acquired_at    = excluded.acquired_at,
+           expires_at     = excluded.expires_at
+         WHERE mint_reservations.expires_at <= ?5
+            OR mint_reservations.holder_pub_hex = excluded.holder_pub_hex`,
+      )
+      .bind(u, holder, args.now, args.expiresAt, args.now)
+      .run();
+    const row = await this.db
+      .prepare(`SELECT * FROM mint_reservations WHERE username = ?1`)
+      .bind(u)
+      .first<MintReservationRow>();
+    const rec = rowToMintReservation(row!);
+    return { acquired: rec.holderPubHex === holder, holder: rec };
+  }
+
+  async get(username: string) {
+    const r = await this.db
+      .prepare(`SELECT * FROM mint_reservations WHERE username = ?1`)
+      .bind(username.toLowerCase())
+      .first<MintReservationRow>();
+    return r ? rowToMintReservation(r) : undefined;
+  }
+
+  async release(username: string, holderPubHex: string) {
+    await this.db
+      .prepare(`DELETE FROM mint_reservations WHERE username = ?1 AND holder_pub_hex = ?2`)
+      .bind(username.toLowerCase(), holderPubHex.toLowerCase())
+      .run();
   }
 }

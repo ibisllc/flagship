@@ -856,6 +856,7 @@ export interface Storage {
   boxSerials: BoxSerialsStorage;
   nfcRendezvous: NfcRendezvousStorage;
   watchDelegates: WatchDelegateStorage;
+  mintReservations: MintReservationStorage;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -1470,6 +1471,48 @@ export interface WatchDelegateStorage {
    *  delegate-signed boot approval. undefined when none active. */
   getActiveByDelegatePub(delegatePubHex: string): Promise<WatchDelegateRecord | undefined>;
   revoke(grantId: string, revokedAt: number): Promise<void>;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Mint reservation lease (per-user-cert design — mint coordination)
+//
+// A short-TTL CAS lock that serializes who re-mints a user's per-user cert
+// this cycle. A minter (admin device or "autonomous" box) acquires it before
+// minting; others back off while it's live; if the holder dies the TTL lapses
+// (δ ≈ one ACME order, ≪ remaining cert life) and the next minter takes over —
+// dead-lead-safe, no static election. BEST-EFFORT: if `.com` is unreachable
+// the daemon falls back to a deterministic local order, so renewal never
+// hard-depends on `.com`. The lease is non-secret coordination metadata.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface MintReservationRecord {
+  /** One active reservation per user (the storage key). */
+  username: string;
+  /** The minter currently holding the lease (their signing pubkey, hex). */
+  holderPubHex: string;
+  acquiredAt: number;
+  /** ms; the lease is reclaimable by anyone once `now >= expiresAt`. */
+  expiresAt: number;
+}
+
+export interface MintReservationStorage {
+  /**
+   * Atomic CAS acquire: succeeds IFF no LIVE reservation exists for
+   * `username` (no row, or the existing row is expired at `now`). Returns
+   * the resulting live holder either way — `acquired` says whether YOU won.
+   * Re-acquiring your own live lease (same holder) extends it and returns
+   * acquired:true.
+   */
+  tryAcquire(args: {
+    username: string;
+    holderPubHex: string;
+    expiresAt: number;
+    now: number;
+  }): Promise<{ acquired: boolean; holder: MintReservationRecord }>;
+  get(username: string): Promise<MintReservationRecord | undefined>;
+  /** Release the lease only if `holderPubHex` currently holds it; a no-op
+   *  otherwise (a stale holder can't free a successor's lease). */
+  release(username: string, holderPubHex: string): Promise<void>;
 }
 
 // ──────────────────────────────────────────────────────────────────────
