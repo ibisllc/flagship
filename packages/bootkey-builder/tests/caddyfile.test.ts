@@ -36,21 +36,23 @@ function entry(over: Partial<CaddyAppEntry> = {}): CaddyAppEntry {
 const ctx: CaddyContext = { username: "harry", serverName: "home-box" };
 
 describe("appFqdn / serverWildcardSelector", () => {
-  it("composes <app>.<server>.<user>.flagship.services", () => {
-    expect(appFqdn(ctx, "habits")).toBe("habits.home-box.harry.flagship.services");
+  it("composes <app>.<user>.flagship.services (per-user, task #23)", () => {
+    expect(appFqdn(ctx, "habits")).toBe("habits.harry.flagship.services");
   });
 
-  it("server wildcard catches everything under one server's namespace, sibling untouched", () => {
-    expect(serverWildcardSelector(ctx)).toBe("*.home-box.harry.flagship.services");
+  it("the wildcard selector is the USER zone — serverName does not affect it", () => {
+    expect(serverWildcardSelector(ctx)).toBe("*.harry.flagship.services");
+    // Two boxes under one user share the same user-zone wildcard; the tunnel
+    // hub (not the Caddyfile selector) arbitrates which box serves a label.
     const sibling = serverWildcardSelector({ ...ctx, serverName: "chillout" });
-    expect(sibling).toBe("*.chillout.harry.flagship.services");
+    expect(sibling).toBe("*.harry.flagship.services");
   });
 });
 
 describe("renderCaddyfile", () => {
-  it("emits a per-app site block at <subdomain>.<server>.<user>.flagship.services", () => {
+  it("emits a per-app site block at <subdomain>.<user>.flagship.services", () => {
     const out = renderCaddyfile(ctx, [entry()]);
-    expect(out).toContain("habits.home-box.harry.flagship.services {");
+    expect(out).toContain("habits.harry.flagship.services {");
   });
 
   it("strips client-supplied X-Flagship-* headers (defense against header injection)", () => {
@@ -82,13 +84,12 @@ describe("renderCaddyfile", () => {
     expect(out).toContain('reverse_proxy "app-x.local:1234"');
   });
 
-  it("catch-all 404 covers only THIS server's namespace (sibling servers untouched)", () => {
+  it("catch-all 404 covers the user zone `*.<user>` (task #23)", () => {
     const out = renderCaddyfile(ctx, []);
-    expect(out).toContain("*.home-box.harry.flagship.services {");
+    expect(out).toContain("*.harry.flagship.services {");
     expect(out).toContain('respond "app not found" 404');
-    // Other servers under harry's namespace must NOT be caught here.
-    expect(out).not.toContain("*.chillout.harry.flagship.services");
-    expect(out).not.toContain("*.harry.flagship.services {");
+    // The deprecated two-label-deep per-server wildcard must be gone.
+    expect(out).not.toContain("*.home-box.harry.flagship.services");
   });
 
   it("uses `tls internal` when no cert paths are supplied (dev mode)", () => {
@@ -105,7 +106,7 @@ describe("renderCaddyfile", () => {
     expect(out).not.toContain("tls internal");
   });
 
-  it("renders multiple apps as independent site blocks under one server", () => {
+  it("renders multiple apps as independent site blocks under the user zone", () => {
     const out = renderCaddyfile(ctx, [
       entry({ serviceId: "habits", manifest: manifest({ network: { subdomain: "habits" } }) }),
       entry({
@@ -114,8 +115,8 @@ describe("renderCaddyfile", () => {
         containerHost: "app-blog.local",
       }),
     ]);
-    expect(out).toContain("habits.home-box.harry.flagship.services {");
-    expect(out).toContain("blog.home-box.harry.flagship.services {");
+    expect(out).toContain("habits.harry.flagship.services {");
+    expect(out).toContain("blog.harry.flagship.services {");
   });
 
   it("turns off Caddy's auto-HTTPS so the SNI passthrough is the only termination point", () => {
@@ -125,10 +126,10 @@ describe("renderCaddyfile", () => {
 });
 
 describe("caddyfileConfigFile", () => {
-  it("emits to /etc/caddy/Caddyfile with mode 0644 and the per-server FQDN inside", () => {
+  it("emits to /etc/caddy/Caddyfile with mode 0644 and the user-zone FQDN inside", () => {
     const cf = caddyfileConfigFile(ctx, []);
     expect(cf.path).toBe("/etc/caddy/Caddyfile");
     expect(cf.mode).toBe(0o644);
-    expect(cf.content).toContain("home-box.harry.flagship.services");
+    expect(cf.content).toContain("harry.flagship.services");
   });
 });

@@ -447,20 +447,14 @@ function defaultHelloPage(): string {
  */
 export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<DaemonRuntime> {
   const wantWildcard = opts.wildcard ?? true;
-  // SAN list (N0c). The user-zone wildcard `*.<user>.flagship.services`
-  // covers single-label-deep names — both the canonical
-  // `<server>.<user>.flagship.services` and any aliased
-  // `<app>.<user>.flagship.services`. The pod-zone wildcard
-  // `*.<server>.<user>.flagship.services` covers the canonical
-  // app URLs `<app>.<server>.<user>.flagship.services` (one label deeper).
-  // The user-zone apex is included for completeness; it would otherwise
-  // not be covered by any wildcard.
-  const userZone = userZoneOf(opts.serverFqdn);
-  const sans = wantWildcard
-    ? userZone
-      ? [userZone, `*.${userZone}`, `*.${opts.serverFqdn}`]
-      : [opts.serverFqdn, `*.${opts.serverFqdn}`]
-    : [opts.serverFqdn];
+  // SAN list — PER-USER cert (per-user-cert design §2, task #23). ONE cert per
+  // user, SANs `[<user>, *.<user>]`. The user-zone wildcard `*.<user>` covers
+  // every one-label-deep public name: the box apex `<server>.<user>`, app
+  // labels `<label>.<user>`, device labels, and `--`-pinned `<label>--<server>.<user>`.
+  // The deprecated two-label-deep `*.<server>.<user>` SAN is DROPPED (apps are
+  // now `<label>.<user>`, not `<app>.<server>.<user>`). The apex is included so
+  // the bare `<user>` name is covered too.
+  const sans = userCertSans(opts.serverFqdn, wantWildcard);
   const certManager = new CertManager();
   // The default handler needs to refer to ServicePlatform, but ServicePlatform
   // is constructed below (after the cert + tunnel). The ref-cell lets
@@ -591,14 +585,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const identityKeypairForInjection = identity;
 
   // Tunnel client: forwards FRAME_OPEN(SNI) → 127.0.0.1:tlsPort.
-  // The initial controlledDomains list is the canonical pod FQDN plus
-  // (when wildcard is on) its single-label wildcard, which together
-  // cover the canonical app URL space (`<app>.<server>.<user>.flagship.services`).
-  // App-claimed alias / custom FQDNs are added later via /api/url/claim
-  // and pushed to the hub as a HELLO update.
-  const tunnelInitialDomains = wantWildcard
-    ? [opts.serverFqdn, `*.${opts.serverFqdn}`]
-    : [opts.serverFqdn];
+  // PER-USER addressing (task #23): the box claims its apex `<server>.<user>`
+  // PLUS the user-zone wildcard `*.<user>` — that's the leftmost-label space
+  // where app labels (`<label>.<user>`), device labels, and `--`-pins all
+  // live. The hub arbitrates which box serves each label via RCK / last-HELLO
+  // (single box ⇒ it serves all of `*.<user>`). The old per-server wildcard
+  // `*.<server>.<user>` is dropped (no two-label-deep public names anymore).
+  const tunnelInitialDomains = tunnelDomainsFor(opts.serverFqdn, wantWildcard);
   // In-pod live-siblings router. Receives the hub's domain-granted
   // broadcast (and, once N0e-2 lands the WS layer, inbound
   // sibling-app-message frames from peer pods).
@@ -1393,6 +1386,34 @@ export function userZoneOf(serverFqdn: string): string | null {
   const user = parts[parts.length - 1]!;
   if (!/^[a-z0-9]{3,30}$/.test(user)) return null;
   return `${user}.flagship.services`;
+}
+
+/**
+ * PER-USER cert SANs (task #23). ONE cert per user covers the user zone:
+ * `[<user>, *.<user>]`. The box apex `<server>.<user>`, every app label
+ * `<label>.<user>`, and device labels are all one label deep, so the
+ * wildcard covers them. The deprecated two-label-deep `*.<server>.<user>`
+ * SAN is gone. Falls back to the per-pod wildcard for degenerate FQDNs that
+ * don't parse as `<server>.<user>.flagship.services`. `wantWildcard=false`
+ * (e.g. ACME unavailable) yields just the apex. Mirrors `userWildcardSans`
+ * / `expectedCertSans` byte-for-byte so minter and CT-monitor agree.
+ */
+export function userCertSans(serverFqdn: string, wantWildcard: boolean): string[] {
+  if (!wantWildcard) return [serverFqdn];
+  const userZone = userZoneOf(serverFqdn);
+  return userZone ? [userZone, `*.${userZone}`] : [serverFqdn, `*.${serverFqdn}`];
+}
+
+/**
+ * PER-USER tunnel claim (task #23). The box claims its own apex
+ * `<server>.<user>` PLUS the user-zone wildcard `*.<user>` — the leftmost
+ * label space where app/device labels and `--`-pins live. The hub arbitrates
+ * which box serves each label (single box ⇒ it serves all of `*.<user>`).
+ */
+export function tunnelDomainsFor(serverFqdn: string, wantWildcard: boolean): string[] {
+  if (!wantWildcard) return [serverFqdn];
+  const userZone = userZoneOf(serverFqdn);
+  return userZone ? [serverFqdn, `*.${userZone}`] : [serverFqdn, `*.${serverFqdn}`];
 }
 
 function leftmostLabel(sni: string, serverFqdn: string): string | null {

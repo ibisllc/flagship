@@ -55,12 +55,14 @@ describe("ServerDnsPublisher", () => {
       serverName: "home-box",
       mode: "tunnel",
     });
-    expect(out.apex).toBe("home-box.harry.flagship.services");
-    expect(out.wildcard).toBe("*.home-box.harry.flagship.services");
+    // PER-USER DNS (task #23): two user-zone records, NOT per-server. The box
+    // apex `home-box.harry` resolves via the `*.harry` wildcard.
+    expect(out.apex).toBe("harry.flagship.services");
+    expect(out.wildcard).toBe("*.harry.flagship.services");
     expect(out.target).toBe("203.0.113.1");
     expect(zone.a.map((r) => r.name).sort()).toEqual([
-      "*.home-box.harry.flagship.services",
-      "home-box.harry.flagship.services",
+      "*.harry.flagship.services",
+      "harry.flagship.services",
     ]);
     for (const r of zone.a) expect(r.value).toBe("203.0.113.1");
   });

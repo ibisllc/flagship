@@ -82,8 +82,14 @@ export class ServerDnsPublisher {
     if (!isLabel(args.username) || !isLabel(args.serverName)) {
       throw new Error("username and serverName must be RFC 1035 labels");
     }
-    const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
-    const wildcardFqdn = `*.${args.serverName}.${args.username}.${apex}`;
+    // PER-USER DNS (task #23): publish the TWO user-zone records — the apex
+    // `<user>.<apex>` and the wildcard `*.<user>.<apex>` — instead of the old
+    // per-server pair. The box apex `<server>.<user>` and every app label
+    // `<label>.<user>` both resolve via the single `*.<user>` wildcard. Records
+    // are per-USER, so multiple boxes share them (published idempotently); the
+    // tunnel hub routes each SNI to the right box.
+    const apexFqdn = `${args.username}.${apex}`;
+    const wildcardFqdn = `*.${args.username}.${apex}`;
     const target = args.mode === "direct" ? requireIp(args.directIp) : this.opts.tunnelIngressIp;
 
     // Delete any prior records for this exact name so a flip leaves a clean zone.
@@ -120,8 +126,11 @@ export class ServerDnsPublisher {
    */
   async unpublish(args: { username: string; serverName: string }): Promise<void> {
     const apex = this.opts.apex ?? "flagship.services";
-    const apexFqdn = `${args.serverName}.${args.username}.${apex}`;
-    const wildcardFqdn = `*.${args.serverName}.${args.username}.${apex}`;
+    // PER-USER DNS (task #23): records are per-user, shared by every box under
+    // `<user>`. Only call this when the LAST server under the user is torn
+    // down — per-box routing revocation (#27) lives at the tunnel hub, not here.
+    const apexFqdn = `${args.username}.${apex}`;
+    const wildcardFqdn = `*.${args.username}.${apex}`;
     await this.purge(apexFqdn);
     await this.purge(wildcardFqdn);
     this.opts.registry.delete(apexFqdn);

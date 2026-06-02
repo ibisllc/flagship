@@ -65,8 +65,8 @@ describe("validateAppLabel", () => {
   });
 });
 
-describe("userWildcardSans (legacy / single-server users)", () => {
-  it("returns the apex + wildcard SAN list for a per-user cert", () => {
+describe("userWildcardSans (canonical per-user shape, task #23)", () => {
+  it("issues ONE cert covering the user apex + one label of subdomains", () => {
     expect(userWildcardSans("harry", "flagship.services")).toEqual([
       "harry.flagship.services",
       "*.harry.flagship.services",
@@ -74,23 +74,19 @@ describe("userWildcardSans (legacy / single-server users)", () => {
   });
 });
 
-describe("serverWildcardSans (multi-server v1)", () => {
-  it("issues a per-SERVER wildcard so adding a server doesn't reissue siblings' certs", () => {
+describe("serverWildcardSans (DEPRECATED — task #23)", () => {
+  it("still returns the old per-server shape for any straggler import", () => {
     expect(serverWildcardSans("homebox", "harry", "flagship.services")).toEqual([
       "homebox.harry.flagship.services",
       "*.homebox.harry.flagship.services",
-    ]);
-    expect(serverWildcardSans("chillout", "harry", "flagship.services")).toEqual([
-      "chillout.harry.flagship.services",
-      "*.chillout.harry.flagship.services",
     ]);
   });
 });
 
 describe("appFqdn", () => {
-  it("composes <app>.<server>.<user>.<apex>", () => {
-    expect(appFqdn("habits", "homebox", "harry", "flagship.services")).toBe(
-      "habits.homebox.harry.flagship.services",
+  it("composes <app>.<user>.<apex> (per-user, task #23)", () => {
+    expect(appFqdn("habits", "harry", "flagship.services")).toBe(
+      "habits.harry.flagship.services",
     );
   });
 });

@@ -255,20 +255,22 @@ export function validateAppLabel(input: string): LabelValidation {
 }
 
 /**
- * Per-user wildcard SAN list. Used when issuing a single cert that covers
- * the user's namespace apex plus a single layer of subdomains. SUPERSEDED
- * by `serverWildcardSans` for v1 (multi-server), kept for older callers.
+ * Per-user wildcard SAN list — the CANONICAL cert shape (task #23). ONE cert
+ * per user covers the user's apex `<user>.<apex>` plus a single layer of
+ * subdomains `*.<user>.<apex>`. Every public name (the box apex
+ * `<server>.<user>`, app labels `<label>.<user>`, device labels) lives one
+ * label deep under `<user>`, so the wildcard covers them all. Mirrors
+ * `expectedCertSans` (the CT-monitor side) byte-for-byte.
  */
 export function userWildcardSans(username: string, apex: string): string[] {
   return [`${username}.${apex}`, `*.${username}.${apex}`];
 }
 
 /**
- * Per-server wildcard SAN list. Each Flagship server gets its own cert
- * covering its own namespace under the user — `<server>.<user>.<apex>`
- * plus `*.<server>.<user>.<apex>` for app subdomains.
- *
- * This is the preferred shape for v1 (one user can run many servers).
+ * DEPRECATED (task #23): per-server SAN list — `<server>.<user>.<apex>` plus
+ * `*.<server>.<user>.<apex>`. The two-label-deep wildcard is gone; one cert
+ * now covers the whole user zone (`userWildcardSans`). No live callers; kept
+ * only so any straggler import still type-checks.
  */
 export function serverWildcardSans(
   serverName: string,
@@ -282,16 +284,16 @@ export function serverWildcardSans(
 }
 
 /**
- * Build the FQDN for one app on one server. This is the canonical URL
- * construction the whole stack should call when it needs an app's address.
+ * Build the FQDN for one app (task #23): apps live one label deep under the
+ * user zone — `<label>.<user>.<apex>` — not `<app>.<server>.<user>.<apex>`.
+ * This is the canonical URL construction the whole stack should call.
  */
 export function appFqdn(
   appSubdomain: string,
-  serverName: string,
   username: string,
   apex: string,
 ): string {
-  return `${appSubdomain}.${serverName}.${username}.${apex}`;
+  return `${appSubdomain}.${username}.${apex}`;
 }
 
 export const _internal = { LABEL_RE, USERNAME_RE, SLUG_RE, SLUG_MAX, RESERVED_USER_LABELS };

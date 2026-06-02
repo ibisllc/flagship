@@ -24,24 +24,29 @@ export interface CaddyContext {
 }
 
 /**
- * Build the FQDN for one app on this server.
+ * Build the FQDN for one app on this server. PER-USER addressing (task #23):
+ * apps live one label deep under the user zone — `<label>.<user>` — not
+ * `<app>.<server>.<user>`. The leftmost label (the app's subdomain) is unique
+ * within the user's merged namespace.
  */
 export function appFqdn(ctx: CaddyContext, subdomain: string): string {
-  return `${subdomain}.${ctx.serverName}.${ctx.username}.flagship.services`;
+  return `${subdomain}.${ctx.username}.flagship.services`;
 }
 
 /**
- * Build the wildcard Caddy site selector for this server's namespace —
- * e.g. `*.home-box.harry.flagship.services`.
+ * Build the wildcard Caddy site selector for this user's zone —
+ * e.g. `*.harry.flagship.services`. Every one-label-deep public name (app
+ * labels, the box apex, device labels) is matched here; the box only ever
+ * receives the labels the tunnel hub routes to it.
  */
 export function serverWildcardSelector(ctx: CaddyContext): string {
-  return `*.${ctx.serverName}.${ctx.username}.flagship.services`;
+  return `*.${ctx.username}.flagship.services`;
 }
 
 /**
  * Emit a Caddyfile that:
- * 1. Terminates per-app TLS using the wildcard cert provisioned for
- *    `*.<server>.<user>.flagship.services` (issued by the server's ACME flow).
+ * 1. Terminates per-app TLS using the user-zone wildcard cert provisioned for
+ *    `*.<user>.flagship.services` (issued by the server's ACME flow).
  * 2. STRIPS any client-supplied X-Flagship-* headers (defense against header
  *    injection — the platform's identity guarantees rest on this strip).
  * 3. Calls the local daemon's POST /apps/:id/identity/decide to authorize the
@@ -99,8 +104,8 @@ export function renderCaddyfile(ctx: CaddyContext, apps: CaddyAppEntry[]): strin
     lines.push("");
   }
 
-  // Catch-all for unknown subdomains under THIS SERVER's namespace.
-  // (Sibling servers under the same user have their own catch-all.)
+  // Catch-all for unknown labels under THIS USER's zone. The box only ever
+  // receives the labels the tunnel hub routes to it, so this stays local.
   lines.push(`${serverWildcardSelector(ctx)} {${tlsBlock}`);
   lines.push("  respond \"app not found\" 404");
   lines.push("}");
