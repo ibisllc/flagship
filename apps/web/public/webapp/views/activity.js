@@ -9,6 +9,11 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { get as profileGet } from "../lib/profilesStore.js";
+import {
+  auditKindLabel as auditLabel,
+  auditKindIcon as auditIcon,
+} from "../lib/auditLog.js";
+import { enterAccountAudit } from "./account-audit.js";
 
 registerView("view-activity", { tab: "activity" });
 
@@ -48,29 +53,11 @@ async function fanOut() {
   return { detail, recovery, audit };
 }
 
-function eventKindIcon(kind) {
-  return ({
-    "device-disconnected": "🔌",
-    "device-replaced":     "🔄",
-    "device-added":        "➕",
-    "wipe-restart":        "🗑️",
-    "recovery-set-up":     "🔐",
-    "recovery-rotated":    "🔁",
-    "app-renamed":         "🔗",
-  })[kind] ?? "•";
-}
-
-function eventKindLabel(kind) {
-  return ({
-    "device-disconnected": "Disconnected",
-    "device-replaced":     "Replaced",
-    "device-added":        "Added device",
-    "wipe-restart":        "Wiped & restarted",
-    "recovery-set-up":     "Recovery set up",
-    "recovery-rotated":    "Recovery rotated",
-    "app-renamed":         "Renamed app URL",
-  })[kind] ?? kind;
-}
+// The label / icon mapping lives in lib/auditLog.js so the inline
+// preview here and the full-page Account-history view stay in lockstep
+// (and both cover the v1.2 account-type / TOTP kinds). Thin aliases.
+const eventKindIcon = auditIcon;
+const eventKindLabel = auditLabel;
 
 export async function renderActivity() {
   const root = $("activity-feed");
@@ -106,6 +93,11 @@ export async function renderActivity() {
         </div>`)
       .join("") || '<div class="card placeholder">No recent activity.</div>';
 
+    // Inline preview of the latest account events (newest first, capped
+    // at what the 20-row fetch returned), plus a "see all" link into the
+    // full-page Account-history view (live .com feed, mirror of the iOS
+    // AuditLogScreen). The card is omitted entirely when there's nothing
+    // to show so a fresh account doesn't render an empty header.
     const auditCard = audit.length === 0
       ? ""
       : `
@@ -121,6 +113,7 @@ export async function renderActivity() {
             </div>
             ${e.detail ? `<p class="note small">${escapeHtml(e.detail)}</p>` : ""}
           </div>`).join("")}
+        <button class="secondary full-width mt-2" id="activity-see-all-audit">See all account history</button>
       `;
 
     root.innerHTML = `
@@ -130,6 +123,9 @@ export async function renderActivity() {
       ${recentRows}
     `;
     $("activity-feed-open-recovery")?.addEventListener("click", () => show("view-post-recovery"));
+    $("activity-see-all-audit")?.addEventListener("click", () => {
+      enterAccountAudit().catch(() => { /* silent — toast on the view itself */ });
+    });
   } catch (e) {
     if (e instanceof ScreensError) {
       root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(e.message)}</p></div>`;

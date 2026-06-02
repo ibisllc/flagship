@@ -48,6 +48,8 @@ import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 import { initBrowserViewerView } from "./views/browser-viewer.js";
 import { initCreateServerView, enterCreateServer } from "./views/create-server.js";
 import { initActivityView, renderActivity } from "./views/activity.js";
+import { initAccountAuditView } from "./views/account-audit.js";
+import { initBootApprovalView, enterBootApproval } from "./views/boot-approval.js";
 import { initPendingServerView, enterPendingServer } from "./views/pending-server.js";
 import { initTrustedDevicesView } from "./views/trusted-devices.js";
 import { initAccountSecurityView } from "./views/account-security.js";
@@ -87,6 +89,8 @@ const SUB_VIEW_TABS = {
   "view-service-env": "apps",
   "view-browser-viewer": "apps",
   "view-install-progress": "activity",
+  "view-account-audit": "activity",
+  "view-boot-approval": "activity",
   "view-settings": "settings",
   "view-account-security": "settings",
   "view-add-device": "settings",
@@ -209,6 +213,7 @@ function wireActivityEntries() {
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => toast(String(e), "err")));
   wire("activity-open-install-progress", enterInstallProgress);
+  wire("activity-open-boot-approval", enterBootApproval);
 }
 
 function wireServicesTabEntries() {
@@ -270,6 +275,8 @@ async function boot() {
   initBrowserViewerView();
   initCreateServerView();
   initActivityView();
+  initAccountAuditView();
+  initBootApprovalView();
   initPendingServerView();
   initProfilesView();
   // When the user flips profiles, re-render the surfaces that read per-

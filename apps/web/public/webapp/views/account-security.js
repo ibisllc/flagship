@@ -1,30 +1,34 @@
 // v1.2 Phase 4 — Settings → Account security on the webapp PWA.
-// Mirror of iOS AccountSecurityScreen.swift and Android
-// AccountSecurityScreen.kt.
+// Mirror of iOS AccountSecurityScreen.swift / AccountSecurityViewModel
+// and the Android equivalent.
 //
-// Drives:
+// Drives the FULL IRK-signed flow (the webapp holds the IRK via
+// keystore.js signWithIrk over WebCrypto Ed25519, so it signs the same
+// envelopes the mobile app does — superseding the earlier "use your
+// phone" placeholder):
 //   1. Read the account-type badge from GET /api/users/:u.
 //   2. Four-step enrollment (explainer → QR + secret → sample code →
-//      recovery codes display, gated behind "I've saved these").
-//   3. Disable via POST /api/users/:u/totp/disable.
+//      recovery codes display, gated behind "I've saved these"). The
+//      QR + manual-secret + recovery-codes display also let users
+//      print/screenshot from a larger surface.
+//   3. Disable via the IRK-signed POST /api/users/:u/totp/disable.
 //
-// The webapp doesn't sign the TOTP envelopes here — the mobile flow
-// owns the IRK and signs everything; the webapp surface is intended
-// for users who already have a phone enrolled and want to see / fall
-// back to the badge state from a browser. The enroll/disable buttons
-// surface a "use your phone" hint until the webapp's own IRK-signing
-// landing pad (separate v1.3 work) lands. The QR + manual-secret +
-// recovery-codes display ARE useful here for users who want to
-// print/screenshot the codes from a larger surface.
+// All three signed POSTs live in lib/totp.js, which mirrors the iOS
+// AccountSecurityViewModel state machine + the @flagship/protocol
+// canonical bytes.
 
 import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
+import {
+  fetchAccountType as totpFetchAccountType,
+  totpEnrollBegin,
+  totpEnrollConfirm,
+  totpDisable,
+} from "../lib/totp.js";
 
 registerView("view-account-security");
-
-const COM_BASE = "https://flagshipserver.com";
 
 const state = {
   username: "",
@@ -36,6 +40,7 @@ const state = {
   recoveryCodes: null,
   savedRecoveryCodes: false,
   failureMessage: null,
+  busy: false,               // a signed POST is in flight
 };
 
 async function fetchAccountType() {
@@ -46,17 +51,9 @@ async function fetchAccountType() {
     return;
   }
   state.username = username;
-  const r = await fetch(
-    `${COM_BASE}/api/users/${encodeURIComponent(username)}`,
-    { method: "GET", cache: "no-store" },
-  );
-  if (!r.ok) {
-    state.accountType = null;
-    return;
-  }
-  const body = await r.json();
-  state.accountType = body.accountType ?? "single";
-  state.totpEnrolledAt = body.totpEnrolledAt ?? null;
+  const { accountType, totpEnrolledAt } = await totpFetchAccountType(username);
+  state.accountType = accountType;
+  state.totpEnrolledAt = totpEnrolledAt;
 }
 
 function fmtDate(ms) {
@@ -176,8 +173,9 @@ function renderActions() {
     return `
       <div class="card mt-3">
         <button class="danger" id="account-security-disable"
-                data-account-security-disable-btn>
-          Disable multi-device + 2FA
+                data-account-security-disable-btn
+                ${state.busy ? "disabled" : ""}>
+          ${state.busy ? "Working…" : "Disable multi-device + 2FA"}
         </button>
       </div>
     `;
@@ -185,13 +183,13 @@ function renderActions() {
   return `
     <div class="card mt-3">
       <button id="account-security-enable"
-              data-account-security-enable-btn>
-        Enable multi-device + 2FA
+              data-account-security-enable-btn
+              ${state.busy ? "disabled" : ""}>
+        ${state.busy ? "Working…" : "Enable multi-device + 2FA"}
       </button>
       <p class="faint-sm mt-2">
-        Need to enroll from your phone? The mobile app drives the
-        IRK-signed handshake. The webapp surfaces the same flow once
-        v1.3 lands the browser-side signing path.
+        This browser signs the enrollment with your account key — no
+        phone required.
       </p>
     </div>
   `;
@@ -228,8 +226,29 @@ async function renderAccountSecurity() {
 
 function bindHandlers() {
   document.getElementById("account-security-enable")?.addEventListener("click", async () => {
-    state.failureMessage = "Use the mobile app to enroll — the webapp shares the badge but doesn't yet sign the enrollment envelope. Coming in v1.3.";
+    const session = getSession();
+    if (!session.umk) {
+      state.failureMessage = "Unlock the webapp first.";
+      await renderAccountSecurity();
+      return;
+    }
+    state.busy = true;
+    state.failureMessage = null;
     await renderAccountSecurity();
+    try {
+      const staged = await totpEnrollBegin({
+        username: session.username,
+        umk: session.umk,
+      });
+      state.staged = staged;
+    } catch (e) {
+      state.failureMessage = e?.status === 503
+        ? "Two-factor isn't enabled on this server yet. Try again later."
+        : `Couldn't start enrollment: ${e?.message ?? "unknown error"}`;
+    } finally {
+      state.busy = false;
+      await renderAccountSecurity();
+    }
   });
   document.getElementById("account-security-disable")?.addEventListener("click", async () => {
     const { inlineConfirm } = await import("../lib/modal.js");
@@ -240,14 +259,77 @@ function bindHandlers() {
       danger: true,
     });
     if (!ok) return;
-    state.failureMessage = "Use the mobile app to disable — the webapp shares the badge but doesn't yet sign the disable envelope. Coming in v1.3.";
+    const { inlinePrompt } = await import("../lib/modal.js");
+    const code = await inlinePrompt({
+      title: "Confirm with your 2FA code",
+      message: "Enter a live 6-digit code from your authenticator (or a recovery code) to disable.",
+      placeholder: "123456",
+    });
+    if (!code) return;
+    const session = getSession();
+    if (!session.umk) {
+      state.failureMessage = "Unlock the webapp first.";
+      await renderAccountSecurity();
+      return;
+    }
+    state.busy = true;
+    state.failureMessage = null;
     await renderAccountSecurity();
+    try {
+      const { accountType } = await totpDisable({
+        username: session.username,
+        umk: session.umk,
+        code,
+      });
+      state.accountType = accountType;
+      state.totpEnrolledAt = null;
+      toast("Two-factor disabled.");
+    } catch (e) {
+      state.failureMessage = e?.status === 401
+        ? "That code didn't match. Try a fresh code from your authenticator."
+        : e?.status === 409
+          ? "Disable refused — other devices are still trusted on this account. Disconnect them first."
+          : `Couldn't disable: ${e?.message ?? "unknown error"}`;
+    } finally {
+      state.busy = false;
+      await renderAccountSecurity();
+    }
   });
   document.getElementById("account-security-verify")?.addEventListener("click", async () => {
-    // No-op surface; the same v1.3 note applies. Surface a hint
-    // and clear the sample code so the input doesn't stay primed.
-    state.failureMessage = "Verify the code from the mobile app — the webapp can't sign the enrollment envelope yet. Coming in v1.3.";
+    const codeInput = document.getElementById("account-security-sample-code");
+    const code = (codeInput?.value ?? "").trim();
+    if (!code) {
+      state.failureMessage = "Enter the 6-digit code from your authenticator app.";
+      await renderAccountSecurity();
+      return;
+    }
+    const session = getSession();
+    if (!session.umk) {
+      state.failureMessage = "Unlock the webapp first.";
+      await renderAccountSecurity();
+      return;
+    }
+    state.busy = true;
+    state.failureMessage = null;
     await renderAccountSecurity();
+    try {
+      const result = await totpEnrollConfirm({
+        username: session.username,
+        umk: session.umk,
+        code,
+      });
+      state.accountType = result.accountType;
+      state.totpEnrolledAt = result.totpEnrolledAt;
+      state.recoveryCodes = result.recoveryCodes;
+      state.staged = null;
+    } catch (e) {
+      state.failureMessage = e?.status === 401
+        ? "That code didn't match. Try again with a fresh code from your authenticator."
+        : `Couldn't confirm: ${e?.message ?? "unknown error"}`;
+    } finally {
+      state.busy = false;
+      await renderAccountSecurity();
+    }
   });
   document.getElementById("account-security-cancel-enroll")?.addEventListener("click", async () => {
     state.staged = null;

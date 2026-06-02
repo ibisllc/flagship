@@ -4,6 +4,11 @@ import { tickRenewals } from "../lib/leases.js";
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
+import { getActiveProfile } from "../lib/profiles.js";
+import {
+  deviceCapabilityChipText,
+  applyScopeGateToButton,
+} from "../lib/usersCheck.js";
 import { loadProviders } from "../providers.js";
 import {
   get as recoveryStoreGet,
@@ -368,6 +373,45 @@ async function detectAccountReset(username) {
     });
 }
 
+/**
+ * v2 device-addressing — read the active profile's deviceCapability
+ * block (the `<u>.<device-label>` restricted sub-identity). Returns
+ * null for a legacy single-IRK session (no chip, all actions enabled),
+ * mirroring iOS AppState.deviceCapability. The block is stored on the
+ * profile descriptor by openAccount / accountResolve at sign-in.
+ */
+export function activeDeviceCapability() {
+  try {
+    return getActiveProfile()?.deviceCapability ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Render (or clear) the "Device: <label> · browse-only" chip below the
+ * username, mirroring iOS HomeScreen.deviceChip. The chip suppresses
+ * for a fully-scoped device or a legacy single-IRK session (chipText
+ * returns null) — same rule as iOS `!cap.isFullyScoped`.
+ */
+function renderDeviceCapabilityChip(cap) {
+  const slot = $("home-device-capability");
+  if (!slot) return;
+  const text = deviceCapabilityChipText(cap);
+  if (!text) {
+    slot.innerHTML = "";
+    slot.classList.add("hidden");
+    return;
+  }
+  slot.classList.remove("hidden");
+  slot.innerHTML = `
+    <span class="device-cap-chip" data-device-capability-chip
+          aria-label="${escapeHtml(text)}">
+      <span aria-hidden="true">🛡</span> ${escapeHtml(text)}
+    </span>
+  `;
+}
+
 export async function renderHome() {
   const session = getSession();
   setSubtitle(session.username ? `signed in as ${session.username}` : "signed in");
@@ -375,6 +419,24 @@ export async function renderHome() {
   $("home-irkpub").textContent = session.irk
     ? bytesToHex(session.irk.publicKey).slice(0, 16) + "…" + bytesToHex(session.irk.publicKey).slice(-4)
     : "—";
+
+  // v2 device-addressing — chip + per-action scope gating. A nil
+  // capability (legacy single-IRK path) enables everything; a restricted
+  // sub-identity (e.g. reviewer = [browse]) greys out install / vibe-code.
+  const deviceCap = activeDeviceCapability();
+  renderDeviceCapabilityChip(deviceCap);
+  applyScopeGateToButton(
+    $("services-list-open-marketplace"),
+    deviceCap,
+    "install-service",
+    "This device cannot install services. Use a primary device.",
+  );
+  applyScopeGateToButton(
+    $("services-list-open-vibe-code"),
+    deviceCap,
+    "vibe-code",
+    "This device cannot build new apps. Use a primary device.",
+  );
 
   // E7 — fire-and-forget account-reset detection. Renders a danger
   // banner above the server list if our locally-stored push tokenId

@@ -32,7 +32,12 @@
 //  v16: first-run wizard gained a skippable "Secure your account" step
 //       (cloud passkey pre-selected when available, else `.flagshipkey`
 //       file); added views/wizard.js to the precache.
-const SHELL_VERSION = "v16";
+//  v17: webapp ↔ mobile parity — added the live account audit log
+//       (lib/auditLog.js + views/account-audit.js), real IRK-signed TOTP
+//       enroll/disable (lib/totp.js), the boot-approval relay
+//       (lib/edToMont.js + lib/bootApproval.js + views/boot-approval.js),
+//       and device-capability chip/scope-gating (consumed in home.js).
+const SHELL_VERSION = "v17";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -77,6 +82,10 @@ const OPTIONAL_SHELL = [
   "/vendor/noble-hashes/crypto.js",
   "/lib/push.js",
   "/lib/icons.js",
+  "/lib/auditLog.js",
+  "/lib/totp.js",
+  "/lib/edToMont.js",
+  "/lib/bootApproval.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -97,6 +106,8 @@ const OPTIONAL_SHELL = [
   "/views/install-progress.js",
   "/views/orders-debug.js",
   "/views/browser-viewer.js",
+  "/views/account-audit.js",
+  "/views/boot-approval.js",
 ];
 
 // Combined list kept for the existing webappStatic test, which scans

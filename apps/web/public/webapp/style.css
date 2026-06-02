@@ -1163,6 +1163,29 @@ body.modal-open { overflow: hidden; }
   word-break: break-all;
 }
 
+/* v2 device-addressing — "Device: <label> · browse-only" chip below the
+ * username for a restricted sub-identity (mirror of iOS HomeScreen's
+ * deviceChip). */
+.device-cap-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--ink-muted) 8%, transparent);
+  color: var(--ink-muted);
+}
+
+/* A button greyed out because the active device's scope set excludes the
+ * action (set by applyScopeGateToButton). Mirrors the iOS disabled action
+ * row + its disabledReason tooltip. */
+button[data-device-restricted] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* "Your server is being installed" progress UI (mirror of the iOS /
  * Android install-progress surfaces). */
 .demo-progress-bar {

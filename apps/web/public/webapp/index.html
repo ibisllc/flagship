@@ -74,6 +74,10 @@
             <span class="label">Username</span>
             <span class="value" id="home-username">…</span>
           </div>
+          <!-- v2 device-addressing — "Device: <label> · browse-only" chip
+               for a restricted sub-identity. Empty + hidden for a primary
+               (fully-scoped or legacy single-IRK) session. -->
+          <div id="home-device-capability" class="hidden mt-1"></div>
           <div class="row">
             <span class="label">IRK pubkey</span>
             <span class="value" id="home-irkpub">…</span>
@@ -88,7 +92,17 @@
 
       <!-- View 3b: Activity tab — unlock approvals + install progress + audit log -->
       <section id="view-activity" class="hidden" data-tab="activity">
-        <h2>Install progress</h2>
+        <h2>Approve a box's boot</h2>
+        <div class="card">
+          <p class="note">
+            A box finishing setup (or rebooting) asks your trust-root
+            devices to release its disk-unlock key. Only your phone or this
+            browser can — flagshipserver.com just relays the request.
+          </p>
+          <button class="secondary full-width" id="activity-open-boot-approval">Review pending boxes</button>
+        </div>
+
+        <h2 class="mt-5">Install progress</h2>
         <div class="card">
           <p class="note">
             Watch a fresh build come online. Enter a serial to start streaming
@@ -100,6 +114,39 @@
         <h2 class="mt-5">Live feed</h2>
         <div id="activity-feed">
           <div class="card placeholder">loading…</div>
+        </div>
+      </section>
+
+      <!-- Full-page account audit log (live, .com-backed). Mirror of the
+           iOS/Android AuditLogScreen — "see all" detail from the Activity
+           tab's inline Account-events preview. -->
+      <section id="view-account-audit" class="hidden" data-tab="activity">
+        <h2>Account history</h2>
+        <p class="note">Every security-relevant change to your account.</p>
+        <div id="account-audit-content">
+          <div class="card placeholder">loading…</div>
+        </div>
+        <div class="row-2 mt-2">
+          <button class="secondary" id="account-audit-refresh">Refresh</button>
+          <button class="secondary" id="account-audit-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- Approve a box's boot (phone-as-unlock-endpoint relay). Mirror of
+           the iOS SecretRequestsScreen — fetch + directory-verify pending
+           boot-secret requests, then one-tap confirm to seal + release. -->
+      <section id="view-boot-approval" class="hidden" data-tab="activity">
+        <h2>Approve a box's boot</h2>
+        <p class="note">
+          Confirm a box is yours to release its boot secret — only your
+          trust-root devices can.
+        </p>
+        <div id="boot-approval-content">
+          <div class="card placeholder">loading…</div>
+        </div>
+        <div class="row-2 mt-2">
+          <button class="secondary" id="boot-approval-refresh">Refresh</button>
+          <button class="secondary" id="boot-approval-back">← Back</button>
         </div>
       </section>
 

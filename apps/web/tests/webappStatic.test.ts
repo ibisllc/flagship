@@ -337,7 +337,9 @@ describe("/webapp PWA static surface", () => {
     //     lib/keyfileBackup.js + the vendored noble-hashes argon2id).
     // v16 added the wizard "Secure your account" step + precached
     //     views/wizard.js.
-    expect(r.body).toContain('SHELL_VERSION = "v16"');
+    // v17 added the webapp ↔ mobile parity surfaces: live account audit
+    //     log, IRK-signed TOTP, boot-approval relay, device-cap gating.
+    expect(r.body).toContain('SHELL_VERSION = "v17"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

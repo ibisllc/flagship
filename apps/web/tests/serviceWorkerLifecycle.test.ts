@@ -200,15 +200,15 @@ describe("service-worker.js — install / activate / waiting-state safety", () =
 
   it("activate deletes stale shell caches but keeps the current one", async () => {
     const h = buildSandbox({ fetchPolicy: () => "ok" });
-    // Seed: pretend an old cache from a previous SW version exists.
-    await h.caches.open("flagship-webapp-shell-v14");
+    // Seed: pretend old caches from previous SW versions exist.
     await h.caches.open("flagship-webapp-shell-v15");
-    await fireEvent(h.self, "install", {}); // creates -v16
+    await h.caches.open("flagship-webapp-shell-v16");
+    await fireEvent(h.self, "install", {}); // creates the current (-v17)
     await fireEvent(h.self, "activate", {});
     const remaining = await h.caches.keys();
-    expect(remaining).toContain("flagship-webapp-shell-v16");
-    expect(remaining).not.toContain("flagship-webapp-shell-v14");
+    expect(remaining).toContain("flagship-webapp-shell-v17");
     expect(remaining).not.toContain("flagship-webapp-shell-v15");
+    expect(remaining).not.toContain("flagship-webapp-shell-v16");
   });
 
   it("postMessage SKIP_WAITING triggers self.skipWaiting()", async () => {
