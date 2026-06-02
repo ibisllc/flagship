@@ -155,4 +155,40 @@ describe("canonicalInstallBlob — v2 golden bytes", () => {
       verifyInstallBlob({ ...blob, bootUnlockMode: "auto" }, legacySig, irk.publicKey),
     ).toBe(false);
   });
+
+  it("certAutonomy: absent blob stays legacy; present value is committed (no downgrade)", () => {
+    // Absent → unchanged canonical bytes (old sigs verify).
+    expect(verifyInstallBlob(blob, signInstallBlob(blob, irk), irk.publicKey)).toBe(true);
+
+    const autonomous: InstallBlob = { ...blob, certAutonomy: { mode: "autonomous" } };
+    const sig = signInstallBlob(autonomous, irk);
+    expect(verifyInstallBlob(autonomous, sig, irk.publicKey)).toBe(true);
+    // Stripping the field (downgrade) must fail.
+    expect(verifyInstallBlob(blob, sig, irk.publicKey)).toBe(false);
+    // Flipping "autonomous" → "managed" (a privilege change) must fail.
+    expect(
+      verifyInstallBlob({ ...blob, certAutonomy: { mode: "managed" } }, sig, irk.publicKey),
+    ).toBe(false);
+    // The offlineWindowDays is committed too — changing it breaks the sig.
+    const managed7: InstallBlob = { ...blob, certAutonomy: { mode: "managed", offlineWindowDays: 7 } };
+    const sig7 = signInstallBlob(managed7, irk);
+    expect(verifyInstallBlob(managed7, sig7, irk.publicKey)).toBe(true);
+    expect(
+      verifyInstallBlob({ ...blob, certAutonomy: { mode: "managed", offlineWindowDays: 30 } }, sig7, irk.publicKey),
+    ).toBe(false);
+  });
+
+  it("certAutonomy: composes with bootUnlockMode (both committed independently)", () => {
+    const both: InstallBlob = {
+      ...blob,
+      bootUnlockMode: "approve",
+      certAutonomy: { mode: "managed", offlineWindowDays: 15 },
+    };
+    const sig = signInstallBlob(both, irk);
+    expect(verifyInstallBlob(both, sig, irk.publicKey)).toBe(true);
+    // Dropping certAutonomy but keeping bootUnlockMode must fail.
+    expect(
+      verifyInstallBlob({ ...blob, bootUnlockMode: "approve" }, sig, irk.publicKey),
+    ).toBe(false);
+  });
 });
