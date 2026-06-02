@@ -86,15 +86,12 @@ class WipeRestartViewModel(
             return
         }
 
-        // 3 — Wrap NEW UMK under PRF secret.
+        // 3 — Wrap NEW UMK under PRF secret. Recovery.wrap returns ONE
+        // self-contained blob (nonce ‖ ct ‖ tag) — exactly what the Worker
+        // base64-decodes and hashes.
         _phase.value = WipeRestartPhase.WrappingNewUmk
-        val sealed = Recovery.wrap(newUmk, prfSecret)
-        // The Worker hashes the decoded ciphertext bytes (nonce||ct).
-        val nonceBytes = java.util.Base64.getDecoder().decode(sealed.nonceBase64)
-        val ctBytes = java.util.Base64.getDecoder().decode(sealed.ciphertextBase64)
-        val combined = nonceBytes + ctBytes
-        val newWrappedUmkB64 = java.util.Base64.getEncoder().encodeToString(combined)
-        val wrappedHashHex = sha256Hex(combined)
+        val newWrappedUmkB64 = Recovery.wrap(newUmk, prfSecret)
+        val wrappedHashHex = sha256Hex(java.util.Base64.getDecoder().decode(newWrappedUmkB64))
 
         // 4 — Derive NEW IRK pub from NEW UMK at v1.
         _phase.value = WipeRestartPhase.Signing

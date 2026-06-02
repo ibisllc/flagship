@@ -849,29 +849,45 @@ enum class DeviceScope(val wire: String) {
     }
 }
 
+/** `POST /api/recovery` — IRK-SIGNED cloud-recovery upload. Serializes to
+ *  `{ request: { username, credentialId, wrappedUmk, issuedAt,
+ *  wrappedAcmeAccountKey? }, signature }`, matching
+ *  control-plane/webauthnRecovery.handleUploadWebauthnRecovery byte-for-byte.
+ *  The Worker base64-decodes `wrappedUmk`, hashes it to wrappedUmkHashHex,
+ *  and verifies `signature` (hex, ed25519 by the account IRK) over the
+ *  canonical UploadRecoveryRecord. `wrappedUmk` is a SINGLE self-contained
+ *  blob (nonce ‖ ct ‖ tag); there is NO separate nonce field. */
 @Serializable
 data class RecoveryEnvelopeRequest(
-    val credentialId: String,
-    val wrappedUmkBase64: String,
-    val nonceBase64: String,
-    // #28 — the ACME account key escrowed alongside the UMK. Single
-    // self-contained base64 blob (nonce‖ct‖tag) from
-    // AcmeAccountKey.wrapForEscrow. The JSON key MUST be
-    // `wrappedAcmeAccountKey` (read verbatim by control-plane
-    // webauthnRecovery.handleUploadWebauthnRecovery). Optional + ciphertext
-    // only — never in the signed canonical, so tampering breaks recovery of
-    // the account key but can never forge it.
-    val wrappedAcmeAccountKey: String? = null,
-)
+    val request: Inner,
+    val signature: String,           // hex, IRK
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val credentialId: String,
+        val wrappedUmk: String,
+        val issuedAt: Long,
+        // #28 — the ACME account key escrowed alongside the UMK. Single
+        // self-contained base64 blob (nonce‖ct‖tag) from
+        // AcmeAccountKey.wrapForEscrow. The JSON key MUST be
+        // `wrappedAcmeAccountKey` (read verbatim by the Worker). Optional +
+        // ciphertext only — never in the signed canonical, so tampering
+        // breaks recovery of the account key but can never forge it.
+        val wrappedAcmeAccountKey: String? = null,
+    )
+}
 
 @Serializable
 data class RecoveryEnvelopeResponse(val ok: Boolean)
 
+/** Response shape for the recovery fetch path. The Worker returns
+ *  `wrappedUmk` (the single self-contained blob), `credentialId`, and the
+ *  optional escrowed `wrappedAcmeAccountKey`. */
 @Serializable
 data class RecoveryEnvelope(
     val credentialId: String,
-    val wrappedUmkBase64: String,
-    val nonceBase64: String,
+    val wrappedUmk: String,
     // #28 — present when the account minted + escrowed an ACME account key.
     // Decoded by the recovery-restore path (LoginViewModel) and imported via
     // Keystore.importAcmeAccountKeyScalar.
@@ -1057,14 +1073,14 @@ class MockFlagshipServerClient(
 
     override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse {
         tick()
+        val r = req.request
         // Preserve a previously-escrowed account key when a re-upload
         // omits it, mirroring the control-plane upsert (#28).
-        val priorAcme = recoveryStore[req.credentialId]?.wrappedAcmeAccountKey
-        recoveryStore[req.credentialId] = RecoveryEnvelope(
-            credentialId = req.credentialId,
-            wrappedUmkBase64 = req.wrappedUmkBase64,
-            nonceBase64 = req.nonceBase64,
-            wrappedAcmeAccountKey = req.wrappedAcmeAccountKey ?: priorAcme,
+        val priorAcme = recoveryStore[r.credentialId]?.wrappedAcmeAccountKey
+        recoveryStore[r.credentialId] = RecoveryEnvelope(
+            credentialId = r.credentialId,
+            wrappedUmk = r.wrappedUmk,
+            wrappedAcmeAccountKey = r.wrappedAcmeAccountKey ?: priorAcme,
         )
         return RecoveryEnvelopeResponse(ok = true)
     }
@@ -1678,7 +1694,7 @@ class LiveFlagshipServerClient(
 
     override suspend fun registerRecoveryEnvelope(req: RecoveryEnvelopeRequest): RecoveryEnvelopeResponse =
         transport.postJsonForResponse(
-            "$base/api/recovery/register", req,
+            "$base/api/recovery", req,
             serializer = RecoveryEnvelopeRequest.serializer(),
             responseSerializer = RecoveryEnvelopeResponse.serializer(),
         )

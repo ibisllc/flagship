@@ -91,8 +91,7 @@ fun RecoverFromWelcomeContainer(
                 ?: throw IllegalStateException("No recovery passkey on this device")
             val prfSecret = passkeys.assertPrf(activity, envelope.credentialId)
             val seed = Recovery.unwrap(
-                ciphertextBase64 = envelope.ciphertextBase64,
-                nonceBase64 = envelope.nonceBase64,
+                wrappedUmkBase64 = envelope.wrappedUmkBase64,
                 prfSecret = prfSecret,
             )
             require(seed.size == 32) { "recovered UMK isn't 32 bytes" }

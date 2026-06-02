@@ -68,6 +68,7 @@ class BlockStoreUmkStore(context: Context) {
 @Serializable
 data class WrappedUmk(
     val credentialId: String,
-    val ciphertextBase64: String,
-    val nonceBase64: String,
+    // Single self-contained base64 blob (nonce ‖ ct ‖ tag) from
+    // Recovery.wrap — same shape that ships as `wrappedUmk` on the wire.
+    val wrappedUmkBase64: String,
 )

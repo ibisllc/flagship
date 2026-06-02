@@ -204,8 +204,7 @@ class LoginViewModel(
             }
         }
         return Recovery.unwrap(
-            ciphertextBase64 = envelope.wrappedUmkBase64,
-            nonceBase64 = envelope.nonceBase64,
+            wrappedUmkBase64 = envelope.wrappedUmk,
             prfSecret = prfSecret,
         )
     }

@@ -98,9 +98,17 @@ class LoginDecisionMatrixConformanceTest {
 
     private suspend fun seedRecoveryEnvelope(server: MockFlagshipServerClient) {
         val prfSecret = webauthn.prfAssert(credentialId)
-        val sealed = Recovery.wrap(recoveredSeed, prfSecret)
+        val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         server.registerRecoveryEnvelope(
-            RecoveryEnvelopeRequest(credentialId, sealed.ciphertextBase64, sealed.nonceBase64),
+            RecoveryEnvelopeRequest(
+                request = RecoveryEnvelopeRequest.Inner(
+                    username = "demo",
+                    credentialId = credentialId,
+                    wrappedUmk = wrapped,
+                    issuedAt = 0L,
+                ),
+                signature = "00",
+            ),
         )
     }
 

@@ -62,11 +62,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
 import com.flagshipserver.app.core.AcmeAccountKey
+import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.core.RecoveryUpload
 import com.flagshipserver.app.keystore.BlockStoreUmkStore
 import com.flagshipserver.app.keystore.Keystore
+import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.keystore.PasskeyAvailability
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
 import com.flagshipserver.app.keystore.Recovery
@@ -159,12 +162,11 @@ fun SecureAccountScreen(
                 val username = app.currentUser.value ?: "you"
                 val created = passkeys.createPasskey(activity, username)
                 val umk = Keystore.loadOrCreateUmkSeed()
-                val sealed = Recovery.wrap(umkSeed = umk, prfSecret = created.prfSecret)
+                val wrappedUmk = Recovery.wrap(umkSeed = umk, prfSecret = created.prfSecret)
                 blockStore.save(
                     WrappedUmk(
                         credentialId = created.credentialId,
-                        ciphertextBase64 = sealed.ciphertextBase64,
-                        nonceBase64 = sealed.nonceBase64,
+                        wrappedUmkBase64 = wrappedUmk,
                     ),
                 )
                 // #28 — escrow the ACME account key under the SAME passkey-PRF
@@ -177,12 +179,30 @@ fun SecureAccountScreen(
                 } catch (_: Throwable) {
                     null
                 }
+                // IRK-sign the upload: the Worker looks up the account IRK
+                // pubkey by username and verifies `signature` over the
+                // canonical UploadRecoveryRecord (hash of the wrapped blob).
+                val irkMaterial = KeystoreIrkAccess().resolve("Back up your recovery key")
+                val issuedAt = System.currentTimeMillis()
+                val wrappedUmkBytes = java.util.Base64.getDecoder().decode(wrappedUmk)
+                val wrappedUmkHashHex = RecoveryUpload.wrappedUmkHashHex(wrappedUmkBytes)
+                val signature = RecoveryUpload.sign(
+                    irk = irkMaterial.signer,
+                    username = username,
+                    credentialId = created.credentialId,
+                    wrappedUmkHashHex = wrappedUmkHashHex,
+                    issuedAt = issuedAt,
+                )
                 flagshipServer.registerRecoveryEnvelope(
                     RecoveryEnvelopeRequest(
-                        credentialId = created.credentialId,
-                        wrappedUmkBase64 = sealed.ciphertextBase64,
-                        nonceBase64 = sealed.nonceBase64,
-                        wrappedAcmeAccountKey = wrappedAcme,
+                        request = RecoveryEnvelopeRequest.Inner(
+                            username = username,
+                            credentialId = created.credentialId,
+                            wrappedUmk = wrappedUmk,
+                            issuedAt = issuedAt,
+                            wrappedAcmeAccountKey = wrappedAcme,
+                        ),
+                        signature = HexUtil.encode(signature),
                     ),
                 )
                 app.setHasCloudRecovery(true)

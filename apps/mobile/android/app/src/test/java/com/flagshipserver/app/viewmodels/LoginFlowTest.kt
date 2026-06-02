@@ -74,12 +74,16 @@ class LoginFlowTest {
      *  recovers exactly [recoveredSeed]. */
     private suspend fun seedRecoveryEnvelope(server: MockFlagshipServerClient) {
         val prfSecret = webauthn.prfAssert(credentialId)
-        val sealed = Recovery.wrap(recoveredSeed, prfSecret)
+        val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         server.registerRecoveryEnvelope(
             RecoveryEnvelopeRequest(
-                credentialId = credentialId,
-                wrappedUmkBase64 = sealed.ciphertextBase64,
-                nonceBase64 = sealed.nonceBase64,
+                request = RecoveryEnvelopeRequest.Inner(
+                    username = "demo",
+                    credentialId = credentialId,
+                    wrappedUmk = wrapped,
+                    issuedAt = 0L,
+                ),
+                signature = "00",
             ),
         )
     }
@@ -89,14 +93,18 @@ class LoginFlowTest {
      *  the caller can assert it's restored into the Keystore. */
     private suspend fun seedRecoveryEnvelopeWithAcme(server: MockFlagshipServerClient): ByteArray {
         val prfSecret = webauthn.prfAssert(credentialId)
-        val sealed = Recovery.wrap(recoveredSeed, prfSecret)
+        val wrapped = Recovery.wrap(recoveredSeed, prfSecret)
         val acmeScalar = AcmeAccountKey.generateScalar()
         server.registerRecoveryEnvelope(
             RecoveryEnvelopeRequest(
-                credentialId = credentialId,
-                wrappedUmkBase64 = sealed.ciphertextBase64,
-                nonceBase64 = sealed.nonceBase64,
-                wrappedAcmeAccountKey = AcmeAccountKey.wrapForEscrow(acmeScalar, prfSecret),
+                request = RecoveryEnvelopeRequest.Inner(
+                    username = "demo",
+                    credentialId = credentialId,
+                    wrappedUmk = wrapped,
+                    issuedAt = 0L,
+                    wrappedAcmeAccountKey = AcmeAccountKey.wrapForEscrow(acmeScalar, prfSecret),
+                ),
+                signature = "00",
             ),
         )
         return acmeScalar
