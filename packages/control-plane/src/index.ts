@@ -47,6 +47,7 @@ export * from "./deviceCapabilityGrants.js";
 export * from "./watchDelegates.js";
 export * from "./acmeAccountKeys.js";
 export * from "./mintReservations.js";
+export * from "./certRevocation.js";
 export * from "./demoUsersAdmin.js";
 export * from "./demoUsersAdminProvision.js";
 export * from "./demoUsersAdminCloudInit.js";
