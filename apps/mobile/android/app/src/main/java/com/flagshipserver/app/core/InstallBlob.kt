@@ -25,6 +25,11 @@ data class InstallBlob(
     // self-unlock, default) or "approve" (phone-gated every boot). Optional +
     // conditionally appended below — null ⇒ legacy bytes (absence == "auto").
     var bootUnlockMode: String? = null,
+    // Per-server cert-autonomy policy (per-user-cert design). "managed"
+    // (default) ⇒ an admin device renews the cert; "autonomous" ⇒ the box
+    // holds a sealed account key and renews itself indefinitely. Optional +
+    // conditionally appended; MUST match the TS `ca=<mode>:<days>` bytes.
+    var certAutonomy: CertAutonomy? = null,
 ) {
     companion object {
         // Tag stays v1 — the inner `version` field discriminates the
@@ -32,6 +37,14 @@ data class InstallBlob(
         // canonicalInstallBlob byte-for-byte.
         const val CANONICAL_TAG = "flagship/install-blob/v1"
     }
+
+    // Mirrors the TS InstallBlob.certAutonomy shape + the Swift
+    // InstallBlob.CertAutonomy. `offlineWindowDays` is managed-mode only;
+    // null ⇒ 0 on the wire (matches TS `offlineWindowDays ?? 0`).
+    data class CertAutonomy(
+        var mode: String,              // "managed" | "autonomous"
+        var offlineWindowDays: Int? = null,
+    )
 
     fun canonicalBytes(): ByteArray {
         val parts = mutableListOf(
@@ -51,6 +64,10 @@ data class InstallBlob(
         // Backward-compatible: absent ⇒ exact legacy bytes; present ⇒ appended
         // last so the signer commits to it. MUST match TS canonicalInstallBlob.
         bootUnlockMode?.let { parts.add(it) }
+        // certAutonomy appended AFTER bootUnlockMode with a `ca=` prefix that
+        // can't collide with a bootUnlockMode value. MUST match TS exactly
+        // (`ca=${mode}:${offlineWindowDays ?? 0}`).
+        certAutonomy?.let { parts.add("ca=${it.mode}:${it.offlineWindowDays ?: 0}") }
         return parts.joinToString("|").toByteArray()
     }
 }

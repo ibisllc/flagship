@@ -83,6 +83,45 @@ class InstallBlobTest {
         assertTrue(String(blob("auto").canonicalBytes()).endsWith("|auto"))
     }
 
+    // Mirrors the Swift test_installBlobCanonicalBytes_certAutonomyMatchesTSBytes
+    // + the TS canonicalInstallBlob `ca=${mode}:${days}` append. certAutonomy
+    // composes AFTER bootUnlockMode; absent ⇒ exact legacy bytes.
+    @Test fun installBlobCanonicalBytes_certAutonomyMatchesTSBytes() {
+        val auth = AuthCode(
+            serial = "01ABCD",
+            username = "harry",
+            serverName = "home",
+            serverDomain = "home.harry.flagship.services",
+            delegatedPubKey = ByteArray(32) { 0x11 },
+            userPubKey = ByteArray(32) { 0x22 },
+            issuedAt = 1L, expiresAt = 2L,
+        )
+        fun blob(ca: InstallBlob.CertAutonomy?, boot: String? = null) = InstallBlob(
+            serverDomain = "home.harry.flagship.services",
+            username = "harry",
+            serverName = "home",
+            phoneDelegatedPubKey = ByteArray(32) { 0x33 },
+            authCode = auth,
+            authCodeUserSignature = ByteArray(64) { 0x44 },
+            rckPubKey = ByteArray(32) { 0x55 },
+            bootUnlockMode = boot,
+            certAutonomy = ca,
+        )
+        fun canon(b: InstallBlob) = String(b.canonicalBytes())
+        val rck = "55".repeat(32)
+        // Absent ⇒ exact legacy bytes (no ca= token).
+        assertTrue(canon(blob(null)).endsWith("|$rck"))
+        // managed with a window ⇒ `ca=managed:<days>` — MUST match TS `ca=${mode}:${days}`.
+        assertTrue(canon(blob(InstallBlob.CertAutonomy("managed", 7))).endsWith("|ca=managed:7"))
+        // autonomous ⇒ days default to 0 on the wire.
+        assertTrue(canon(blob(InstallBlob.CertAutonomy("autonomous"))).endsWith("|ca=autonomous:0"))
+        // Composes AFTER bootUnlockMode (both committed independently).
+        assertTrue(
+            canon(blob(InstallBlob.CertAutonomy("managed", 15), boot = "approve"))
+                .endsWith("|approve|ca=managed:15")
+        )
+    }
+
     // The on-wire blob the box reads. Mirrors the webapp's onWireBlob: with
     // the DEFAULT Json (encodeDefaults=false, as used at CreateServerScreen's
     // deliver step), bootUnlockMode is OMITTED for the "auto" default and
