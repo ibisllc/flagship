@@ -86,11 +86,13 @@ targets:
         ENABLE_PREVIEWS: YES
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
-        # CODE_SIGNING_ALLOWED stays NO for simulator-only builds;
-        # device + TestFlight archives flip these via xcconfig or
-        # `xcodebuild -allowProvisioningUpdates` at archive time.
-        CODE_SIGNING_ALLOWED: NO
-        CODE_SIGNING_REQUIRED: NO
+        # Sign on every build. On-device debug builds — AND the embedded
+        # widget + watch targets — MUST be signed or the install fails with
+        # "executable is not codesigned" / embedded-binary cert mismatch.
+        # Simulator builds just ad-hoc "Sign to Run Locally" (no cert needed),
+        # so YES is safe for CI/simulator too. (Was NO; that broke device runs.)
+        CODE_SIGNING_ALLOWED: YES
+        CODE_SIGNING_REQUIRED: YES
       configs:
         Debug:
           APS_ENVIRONMENT: development
@@ -158,8 +160,8 @@ targets:
         INFOPLIST_FILE: WidgetExtension/Info.plist
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_ALLOWED: NO
-        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        CODE_SIGNING_REQUIRED: YES
         SKIP_INSTALL: YES
     entitlements:
       path: WidgetExtension/FlagshipWidgets.entitlements
@@ -202,8 +204,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "4"
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_ALLOWED: NO
-        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        CODE_SIGNING_REQUIRED: YES
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
         SDKROOT: watchos
         SUPPORTED_PLATFORMS: "watchsimulator watchos"
@@ -239,8 +241,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "4"
         SWIFT_VERSION: "5.0"
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_ALLOWED: NO
-        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        CODE_SIGNING_REQUIRED: YES
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
         SDKROOT: watchos
         SUPPORTED_PLATFORMS: "watchsimulator watchos"
@@ -261,6 +263,6 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: FlagshipApp
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_ALLOWED: NO
-        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: YES
+        CODE_SIGNING_REQUIRED: YES
         SWIFT_VERSION: "5.0"
