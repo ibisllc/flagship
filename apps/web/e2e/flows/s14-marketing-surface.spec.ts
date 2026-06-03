@@ -150,7 +150,7 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     expect(body).toContain("feTurbulence");
   });
 
-  test("/favicon.svg and /apple-touch-icon.svg are the same pennant mark", async ({
+  test("/favicon.svg and /apple-touch-icon.svg are the same rounded-square mark", async ({
     request,
   }) => {
     const fav = await request.get(`${APEX}/favicon.svg`);
@@ -160,12 +160,17 @@ test.describe("S14 — unified design system on the marketing surface", () => {
     const f = await fav.text();
     const a = await apple.text();
     for (const body of [f, a]) {
-      // Both icons share the same single-pennant geometry: ink ground,
-      // signal-amber flag, two ivory pole-cap circles.
-      expect(body).toContain("#14130E"); // ink ground
-      expect(body).toContain("#B26016"); // signal-amber flag
-      expect(body).toContain("#F4F1E8"); // canvas/ivory accents
-      // And it's a real pennant mark, not the old blue server logo.
+      // Both icons are the unified brand: a rounded square containing a
+      // circle, in the app-logo colorway (teal ground + white disc).
+      expect(body).toContain("#14B8A6"); // brand teal ground
+      expect(body).toContain("#FFFFFF"); // white disc
+      expect(body).toContain("<circle"); // the disc
+      // The old flag-on-mast pennant (amber flag + ivory pole caps + a
+      // mast <line>) is gone.
+      expect(body).not.toMatch(/#B26016/i);
+      expect(body).not.toMatch(/#D38347/i);
+      expect(body).not.toContain("<line");
+      // And not the even-older blue/green server logos.
       expect(body).not.toMatch(/#3B5BFF/i);
       expect(body).not.toMatch(/#4ad295/i);
     }

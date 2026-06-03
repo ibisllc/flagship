@@ -104,7 +104,7 @@ test.describe("S15 — webapp brand DNA", () => {
     expect(appleIcon).toMatch(/icon\.svg$/);
   });
 
-  test("webapp /icon.svg is the unified pennant mark", async ({ request, page }) => {
+  test("webapp /icon.svg is the unified rounded-square mark", async ({ request, page }) => {
     await page.goto("/");
     // Discover the icon URL from the document so we hit the same host
     // rewrite the browser sees.
@@ -120,13 +120,15 @@ test.describe("S15 — webapp brand DNA", () => {
     );
     expect(r.status()).toBe(200);
     const body = await r.text();
-    // Same pennant geometry as the marketing favicon — ink ground +
-    // amber flag + ivory pole caps. Different palette values (the
-    // webapp icon uses the lighter ink-mode variants) but the same
-    // mark.
-    expect(body).toContain("#14120D"); // ink ground (paired-ink canvas)
-    expect(body).toContain("#D38347"); // signal amber (ink-mode shade)
-    expect(body).toContain("#EFE9D6"); // ink-mode ivory
+    // The unified brand mark — a rounded square containing a circle, in
+    // the app-logo colorway (teal ground + white disc). Same mark the
+    // installed app icon uses.
+    expect(body).toContain("#14B8A6"); // brand teal ground
+    expect(body).toContain("#FFFFFF"); // white disc
+    expect(body).toContain("<circle");
+    // The old flag-on-mast pennant (amber flag + ivory caps + mast) is gone.
+    expect(body).not.toMatch(/#D38347/i);
+    expect(body).not.toContain("<line");
     expect(body).not.toMatch(/#4ad295/i);
   });
 

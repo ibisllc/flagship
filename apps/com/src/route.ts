@@ -908,22 +908,16 @@ function ogImage(url: URL): Response {
       <stop offset="55%" stop-color="#F4F1E8"/>
       <stop offset="100%" stop-color="#EDE9DC"/>
     </radialGradient>
-    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#D38347"/>
-      <stop offset="100%" stop-color="#B26016"/>
-    </linearGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
   <!-- Hairline frame -->
   <rect x="32" y="32" width="1136" height="566" fill="none" stroke="#DAD5C5" stroke-width="1"/>
-  <!-- Pennant mark, top-left -->
+  <!-- Brand mark, top-left: rounded square + disc -->
   <g transform="translate(80,80)">
-    <line x1="0" y1="0" x2="0" y2="58" stroke="#14130E" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M0 4 L42 4 L33 19 L42 34 L0 34 Z" fill="url(#amber)"/>
-    <circle cx="0" cy="0" r="4" fill="#14130E"/>
-    <circle cx="0" cy="58" r="4" fill="#14130E"/>
-    <text x="60" y="20" fill="#14130E" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600" font-size="22" letter-spacing="-0.3">Flagship</text>
-    <text x="60" y="44" fill="#6C685D" font-family="ui-monospace, monospace" font-size="13" letter-spacing="0.18em">A PERSONAL CLOUD</text>
+    <rect x="0" y="2" width="54" height="54" rx="13" fill="#14130E"/>
+    <circle cx="27" cy="29" r="19" fill="#F4F1E8"/>
+    <text x="70" y="24" fill="#14130E" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600" font-size="22" letter-spacing="-0.3">Flagship</text>
+    <text x="70" y="44" fill="#6C685D" font-family="ui-monospace, monospace" font-size="13" letter-spacing="0.18em">A PERSONAL CLOUD</text>
   </g>
   ${titleSvg}
   <text x="80" y="${subtitleY}" fill="#5A5B5E" font-family="ui-sans-serif, -apple-system, system-ui, sans-serif" font-weight="500" font-size="28" letter-spacing="-0.3">${escapeXml(subtitle)}</text>
@@ -1339,6 +1333,7 @@ const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   COMING_SOON_PATH,
   "/favicon.svg",
   "/apple-touch-icon.svg",
+  "/apple-touch-icon.png",
   "/404.html",
   "/robots.txt",
 ]);

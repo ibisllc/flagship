@@ -1,7 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Flagship">
-  <rect width="180" height="180" rx="40" fill="#14130E"/>
-  <line x1="62" y1="34" x2="62" y2="150" stroke="#F4F1E8" stroke-width="7" stroke-linecap="round"/>
-  <path d="M62 40 L138 40 L120 71 L138 102 L62 102 Z" fill="#B26016"/>
-  <circle cx="62" cy="34" r="9" fill="#F4F1E8"/>
-  <circle cx="62" cy="150" r="9" fill="#F4F1E8"/>
+  <rect width="180" height="180" fill="#14B8A6"/>
+  <circle cx="90" cy="90" r="65" fill="#FFFFFF"/>
 </svg>
