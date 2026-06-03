@@ -221,7 +221,7 @@ public final class RealAccountLoginViewModel {
             // Multi only — the Worker rejected the second factor.
             phase = .failed("That recovery code or authenticator code wasn't accepted. Check it and try again.")
         } catch {
-            phase = .failed("Couldn't start the takeover: \(error.localizedDescription)")
+            phase = .failed("Couldn't restore access: \(error.localizedDescription)")
         }
     }
 
@@ -241,7 +241,7 @@ public final class RealAccountLoginViewModel {
         } catch ScreensClientError.http(let status, _) where status == 425 {
             phase = .completed(username: username, completesAt: completesAt)
         } catch ScreensClientError.http(let status, _) where status == 403 || status == 409 {
-            phase = .failed("This takeover was cancelled. If it's still you, start again.")
+            phase = .failed("This was cancelled from another device on your account. If it's still you, start again.")
         } catch {
             phase = .failed("Couldn't finalize the takeover: \(error.localizedDescription)")
         }
@@ -304,11 +304,16 @@ public final class RealAccountLoginViewModel {
 
     private func humanizedRecoveryError(_ error: Error) -> String {
         let lower = "\(error)".lowercased()
+        // User dismissed the system passkey sheet (ASAuthorizationError.canceled
+        // is code 1001). Don't claim their passkey is missing — it isn't.
+        if lower.contains("cancel") || lower.contains("1001") {
+            return "Passkey sign-in was cancelled. Tap Restore access to try again, or use Import backup file below."
+        }
         if lower.contains("not allowed") || lower.contains("no credentials")
             || lower.contains("nomatchingcredential") || lower.contains("interrupted")
             || lower.contains("no envelope") || lower.contains("404")
         {
-            return "We couldn't find a recovery passkey on this device. Make sure you're signed into the same iCloud account, or use a device that still has access."
+            return "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain turned on. If you have your backup key file, use Import backup file below instead."
         }
         return "Recovery failed: \(error.localizedDescription)"
     }

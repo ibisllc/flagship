@@ -165,11 +165,11 @@ public struct RealAccountLoginScreen: View {
         } else if case .completed(_, let completesAt) = vm.phase {
             graceCountdownView(completesAt: completesAt, vm: vm, c: c)
         } else {
-            Text("Take over this account")
+            Text("Welcome back")
                 .font(FS.font.h2()).foregroundColor(c.text)
             Text(multi
-                 ? "Authenticate with your passkey and your recovery code to bring this device into your account. This device takes over after 24 hours."
-                 : "Authenticate with your passkey to bring this device into your account. This device will take over after 7 days; your old device is being alerted.")
+                 ? "Sign in with your recovery passkey and your recovery code to restore access on this device. For your security it becomes active after a 24-hour hold, and your other devices are notified so they can stop it if it wasn't you."
+                 : "Sign in with your recovery passkey to restore access on this device. For your security, access becomes active after a 7-day hold — if another device is signed in, it's notified and can stop it if it wasn't you.")
                 .font(FS.font.body())
                 .foregroundColor(c.textMuted)
 
@@ -194,7 +194,7 @@ public struct RealAccountLoginScreen: View {
             }
 
             FSPrimaryButton(
-                multi ? "Take over (24-hour grace)" : "Take over (7-day grace)",
+                multi ? "Restore access (24-hour hold)" : "Restore access (7-day hold)",
                 enabled: multi ? vm.canStartMultiTakeover : true,
                 block: true,
                 large: true
@@ -215,11 +215,11 @@ public struct RealAccountLoginScreen: View {
                 Image(systemName: "clock.badge.exclamationmark")
                     .foregroundColor(c.primary)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(multi ? "24-hour takeover" : "7-day takeover")
+                    Text(multi ? "24-hour security hold" : "7-day security hold")
                         .font(FS.font.bodySm()).foregroundColor(c.text)
                     Text(multi
-                         ? "Your account is multi-device, so taking over needs your second factor on top of your passkey. After a 24-hour grace your other devices are displaced and this device becomes the admin."
-                         : "This is a single-device account with no other device to keep. After a 7-day grace your old device is displaced and this device becomes the admin. Your old device is alerted in the meantime.")
+                         ? "Because your account has more than one device, restoring access here needs your recovery code as well as your passkey. After a 24-hour hold this device becomes the primary one; your other devices are notified and can stop it until then."
+                         : "This hold is the safety delay for a single-device account: after 7 days, this device has full access. It's what stops anyone else from quietly restoring your account — and if another device is ever signed in, it's alerted throughout and can stop the change.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                 }
@@ -232,7 +232,7 @@ public struct RealAccountLoginScreen: View {
 
     @ViewBuilder
     private func graceCountdownView(completesAt: Int64, vm: RealAccountLoginViewModel, c: FSColors) -> some View {
-        Text("Takeover started").font(FS.font.h2()).foregroundColor(c.text)
+        Text("Restoring your access").font(FS.font.h2()).foregroundColor(c.text)
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let nowMs = Int64(ctx.date.timeIntervalSince1970 * 1000)
             let remaining = max(0, completesAt - nowMs)
@@ -243,12 +243,12 @@ public struct RealAccountLoginScreen: View {
                         Image(systemName: "clock.badge.exclamationmark")
                             .foregroundColor(c.primary)
                         Text(elapsed
-                             ? "The grace period has elapsed — you can take over now."
-                             : "This device takes over in \(Self.formatRemaining(remaining)). Your other devices are being alerted and can object until then.")
+                             ? "The security hold is complete — you can finish restoring access now."
+                             : "Access becomes active in \(Self.formatRemaining(remaining)). Any other device on your account is notified and can stop it until then.")
                             .font(FS.font.bodySm()).foregroundColor(c.text)
                     }
                 }
-                FSPrimaryButton("Take over now", enabled: elapsed, block: true, large: true) {
+                FSPrimaryButton("Finish restoring access", enabled: elapsed, block: true, large: true) {
                     Task { await vm.completeTakeover() }
                 }
                 .accessibilityIdentifier("login-take-over-now")
@@ -273,7 +273,7 @@ public struct RealAccountLoginScreen: View {
             ProgressView().scaleEffect(1.3)
             Text("Authenticating with your passkey…")
                 .font(FS.font.h3()).foregroundColor(c.text)
-            Text("Fetching your account key and bringing this device into your Flagship account.")
+            Text("Fetching your account key and restoring access on this device.")
                 .font(FS.font.bodySm())
                 .foregroundColor(c.textMuted)
                 .multilineTextAlignment(.center)
