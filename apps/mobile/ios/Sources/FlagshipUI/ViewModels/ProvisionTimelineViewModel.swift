@@ -18,10 +18,14 @@ import FlagshipAPI
 @MainActor
 @Observable
 public final class ProvisionTimelineViewModel {
-    /// 3 seconds between polls (per the task contract).
-    public static let pollInterval: UInt64 = 3_000_000_000
-    /// Soft cap: stop polling an abandoned install after an hour.
-    public static let watchTimeout: UInt64 = 60 * 60_000_000_000
+    /// 3 seconds between polls (per the task contract). `nonisolated` so the
+    /// `init` default-argument expression (evaluated at the caller, which may
+    /// be nonisolated) can read it without a main-actor hop — safe because it's
+    /// an immutable Sendable constant, not main-actor state.
+    public nonisolated static let pollInterval: UInt64 = 3_000_000_000
+    /// Soft cap: stop polling an abandoned install after an hour. `nonisolated`
+    /// for the same reason — a pure timing constant, not isolated state.
+    public nonisolated static let watchTimeout: UInt64 = 60 * 60_000_000_000
 
     /// The latest status the Worker returned, or nil before the first
     /// checkpoint arrives (the box hasn't phoned home yet — a 404).
