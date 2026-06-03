@@ -135,50 +135,78 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         XCTAssertEqual(spy.callCount, 0, "no-recovery must NOT install a UMK")
     }
 
-    // MARK: - Single → TAKEOVER (7-day), no totpProof
+    // MARK: - Single → gated recovery (recovery rework Phase A)
 
-    func test_singleTakeover_installsUMK_initiatesRePair_noTotpProof() async throws {
+    /// A single-device account restores by passphrase + passkey: the gated
+    /// unwrap hands back the account's OWN UMK, we install it, and pair
+    /// IMMEDIATELY (`.finalized`) — no re-pair, no grace, because the recovered
+    /// key already matches the registered identity.
+    func test_singleRecovery_gatedUnwrap_finalizes_noRePair() async throws {
+        Keystore.wipe()
+        defer { Keystore.wipe() }
+        try await Keystore.generateUMK(reason: "test")
+        let umk = try await Keystore.currentUMK(reason: "test")
+
         let server = makeServer()
-        try await server.claimUsername(.init(
-            request: .init(username: "harry", irkPub: "ab", issuedAt: 1), signature: "s"
-        ))
-        let installedUmk = try await seedRecovery(server)
+        // Enrol the gated recovery row exactly as the real setup flow does
+        // (ships fetchTokenHash + prfSaltHash + a wrapped UMK keyed by the
+        // passphrase-derived PRF salt).
+        let enrol = RecoveryViewModel(
+            client: server, webAuthn: MockWebAuthnProvider(), username: { "harry" }
+        )
+        await enrol.setup(umkSeed: umk, passphrase: "correct horse battery staple")
+        guard case .registered = enrol.phase else {
+            return XCTFail("enrol failed: \(enrol.phase)")
+        }
+
         let spy = InstallSpy()
         let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
+        vm.passphraseInput = "correct horse battery staple"
 
         await vm.startTakeover()
 
-        guard case .completed(let user, _) = vm.phase else {
-            return XCTFail("expected .completed, got \(vm.phase)")
+        guard case .finalized(let user) = vm.phase else {
+            return XCTFail("expected .finalized (instant pair), got \(vm.phase)")
         }
         XCTAssertEqual(user, "harry")
-        // installUMK called on success, with the recovered seed.
-        XCTAssertEqual(spy.callCount, 1)
-        XCTAssertEqual(
-            spy.installed.first?.withUnsafeBytes { Data($0) },
-            installedUmk.withUnsafeBytes { Data($0) },
-            "the recovered UMK seed must be the one installed"
-        )
-        // Re-pair initiated; single carries NO totpProof.
-        let last = try XCTUnwrap(server.lastRePairInitiate)
-        XCTAssertEqual(last.username, "harry")
-        XCTAssertEqual(last.body.request.username, "harry")
-        XCTAssertFalse(last.body.request.newIrkPub.isEmpty)
-        XCTAssertNil(last.body.totpProof, "single re-pair must not carry a totpProof")
+        XCTAssertEqual(spy.callCount, 1, "the recovered UMK must be installed")
+        XCTAssertNil(server.lastRePairInitiate, "single-device recovery must NOT initiate a re-pair")
     }
 
-    // MARK: - Phase 4 — completeTakeover finalizes after grace
-
-    func test_grace_completeTakeover_finalizes() async throws {
+    /// No passphrase typed → the single path stops before any unwrap/install.
+    func test_singleRecovery_emptyPassphrase_failsBeforeUnwrap() async {
         let server = makeServer()
-        try await server.claimUsername(.init(
-            request: .init(username: "harry", irkPub: "ab", issuedAt: 1), signature: "s"
-        ))
-        _ = try await seedRecovery(server)
         let spy = InstallSpy()
         let r = resolution(username: "harry", kind: .single, recoveryPresent: true, grace: .sevenDay)
         let vm = makeVM(resolution: r, server: server, installSpy: spy)
+
+        await vm.startTakeover()   // passphraseInput is empty
+
+        guard case .failed = vm.phase else {
+            return XCTFail("expected .failed for a missing passphrase, got \(vm.phase)")
+        }
+        XCTAssertEqual(spy.callCount, 0)
+        XCTAssertNil(server.lastRePairInitiate)
+    }
+
+    // MARK: - Phase 4 — completeTakeover finalizes after grace (multi)
+
+    /// The grace → complete path now lives on the MULTI branch (single-device
+    /// recovery pairs instantly with no grace). Initiate with a second factor,
+    /// land in grace, then finalize.
+    func test_grace_completeTakeover_finalizes_multi() async throws {
+        let server = makeServer()
+        try await server.claimUsername(.init(
+            request: .init(username: "hilton", irkPub: "ab", issuedAt: 1), signature: "s"
+        ))
+        server.accountTypeByUser["hilton"] = "multi"
+        server.totpEnrolledAtByUser["hilton"] = 1
+        _ = try await seedRecovery(server)
+        let spy = InstallSpy()
+        let r = resolution(username: "hilton", kind: .multi, recoveryPresent: true, totpEnrolled: true, grace: .twentyFourHourTotp)
+        let vm = makeVM(resolution: r, server: server, installSpy: spy)
+        vm.secondFactorInput = "123456"
 
         await vm.startTakeover()
         guard case .completed = vm.phase else {
@@ -189,7 +217,7 @@ final class RealAccountLoginViewModelTests: XCTestCase {
         guard case .finalized(let user) = vm.phase else {
             return XCTFail("expected .finalized, got \(vm.phase)")
         }
-        XCTAssertEqual(user, "harry")
+        XCTAssertEqual(user, "hilton")
     }
 
     // MARK: - Multi requires a second factor BEFORE re-pair

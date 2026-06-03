@@ -58,7 +58,15 @@ public struct RealAccountLoginScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if vm == nil {
-                vm = RealAccountLoginViewModel(resolution: resolution, server: server)
+                // Inject the LIVE passkey provider (platform ASAuthorization on
+                // device, HKDF fallback in the Simulator) so single-device
+                // recovery can actually reach the user's iCloud-Keychain
+                // passkey — the prior default fell back to the mock provider.
+                vm = RealAccountLoginViewModel(
+                    resolution: resolution,
+                    server: server,
+                    webAuthn: PlatformWebAuthnProvider()
+                )
             }
             if importVm == nil {
                 importVm = KeyfileImportViewModel(server: server)
@@ -117,9 +125,64 @@ public struct RealAccountLoginScreen: View {
         case .noRecovery(let multi):
             noRecoveryState(multi: multi, c: c)
         case .singleTakeover:
-            takeover(vm: vm, multi: false, c: c)
+            singleRecovery(vm: vm, c: c)
         case .multiTakeover:
             takeover(vm: vm, multi: true, c: c)
+        }
+    }
+
+    // MARK: - Single-device recovery (passphrase + passkey → instant)
+
+    /// Recovery rework Phase A. Single-device accounts restore by entering
+    /// their recovery passphrase and verifying their passkey: the gated unwrap
+    /// hands back the account's own UMK, so once installed this device already
+    /// holds the registered identity and pairs immediately — no "takeover", no
+    /// grace. (Rotated accounts, where the registered key has since changed,
+    /// are the Phase-B re-pair case.)
+    @ViewBuilder
+    private func singleRecovery(vm: RealAccountLoginViewModel, c: FSColors) -> some View {
+        @Bindable var vm = vm
+
+        if case .working = vm.phase {
+            workingView(c: c)
+        } else if case .finalized = vm.phase {
+            workingView(c: c)
+        } else {
+            Text("Welcome back")
+                .font(FS.font.h2()).foregroundColor(c.text)
+            Text("Enter your recovery passphrase and verify your passkey to restore access on this device.")
+                .font(FS.font.body())
+                .foregroundColor(c.textMuted)
+
+            SecureField("Recovery passphrase", text: $vm.passphraseInput)
+                .textContentType(.password)
+                .autocorrectionDisabled(true)
+                .textInputAutocapitalization(.never)
+                .padding(FS.space.s3)
+                .background(c.surface)
+                .overlay(RoundedRectangle(cornerRadius: FS.radius.sm).stroke(c.border))
+                .accessibilityIdentifier("login-recovery-passphrase")
+
+            if case .failed(let msg) = vm.phase {
+                Text(msg)
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.danger)
+                    .accessibilityIdentifier("login-takeover-error")
+            }
+
+            FSPrimaryButton(
+                "Restore access",
+                enabled: vm.passphraseInput.count >= 8,
+                block: true,
+                large: true
+            ) {
+                Task { await vm.startTakeover() }
+            }
+            .accessibilityIdentifier("login-takeover-continue")
+
+            importBackupOption(c: c)
+
+            FSGhostButton("Back", block: true, action: onBack)
         }
     }
 

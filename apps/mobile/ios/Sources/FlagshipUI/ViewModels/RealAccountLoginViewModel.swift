@@ -85,6 +85,12 @@ public final class RealAccountLoginViewModel {
     /// the second-factor field; ignored on the single branch.
     public var secondFactorInput: String = ""
 
+    /// Recovery rework Phase A — the recovery passphrase for the
+    /// single-device gated unwrap. Bound to the passphrase field on the
+    /// single branch; ignored on multi (which still runs the legacy
+    /// passkey-only takeover pending the Phase-B rework).
+    public var passphraseInput: String = ""
+
     public let resolution: AccountResolution
     public let branch: Branch
 
@@ -158,13 +164,70 @@ public final class RealAccountLoginViewModel {
             // Nothing to do — the host renders the state; there's no
             // ceremony to run.
             return
-        case .multiTakeover:
-            guard canStartMultiTakeover else {
-                phase = .failed("Enter your recovery code or the 6-digit code from your authenticator app.")
-                return
-            }
         case .singleTakeover:
-            break
+            await startSingleDeviceRecovery()
+        case .multiTakeover:
+            await startMultiDeviceTakeover(ifMatch: ifMatch)
+        }
+    }
+
+    /// Single-device recovery (recovery rework Phase A).
+    ///
+    /// A single-device account's recovered UMK *is* the account's key, so once
+    /// we unwrap + install it this device already holds the registered
+    /// identity — there is nothing to "take over" and no grace. We reuse the
+    /// proven gated path (`RecoveryViewModel.recover`: passphrase → Argon2id →
+    /// gated fetch → live passkey PRF → unwrap, plus the anti-coercion check +
+    /// #28 ACME-key restore), install the seed, and finalize immediately.
+    ///
+    /// Phase B handles the rotated-account case — where the recovered key no
+    /// longer matches the server's current registered IRK — by detecting the
+    /// mismatch and running a real re-pair (3-day grace) against the live key.
+    private func startSingleDeviceRecovery() async {
+        guard passphraseInput.count >= 8 else {
+            phase = .failed("Enter your recovery passphrase (at least 8 characters).")
+            return
+        }
+        phase = .working
+        let username = resolution.username
+
+        // Gated unwrap of the cloud UMK against the LIVE passkey provider the
+        // screen injects. `recover` owns the Argon2id derivation, the gated
+        // `/fetch`, the prfSalt anti-coercion guard, and the ACME-key unwrap.
+        let recoveryVM = RecoveryViewModel(client: server, webAuthn: webAuthn)
+        guard let seed = await recoveryVM.recover(username: username, passphrase: passphraseInput) else {
+            if Task.isCancelled { return }
+            if case .failed(let msg) = recoveryVM.phase {
+                phase = .failed(humanizedRecoveryMessage(msg))
+            } else {
+                phase = .failed("Recovery was cancelled.")
+            }
+            return
+        }
+
+        // Install into THIS account's slot. installUMK resets the IRK lineage
+        // to v1 under the recovered UMK — which, for an unchanged account, is
+        // exactly the IRK the server still has registered.
+        Keystore.setActiveProfile(username)
+        do {
+            try await installUMK(seed, "Bring this device into your Flagship account")
+        } catch {
+            phase = .failed("Couldn't install your recovered account key: \(error.localizedDescription)")
+            return
+        }
+
+        // This device now holds the account's key — pair immediately, no grace.
+        phase = .finalized(username: username)
+    }
+
+    /// Multi-device takeover (legacy path, pending the Phase-B rework). Still
+    /// runs the passkey-only unwrap + re-pair with a TOTP / recovery-code
+    /// second factor. Unchanged by Phase A, which scopes the gated-unwrap
+    /// rework to single-device accounts first.
+    private func startMultiDeviceTakeover(ifMatch: String?) async {
+        guard canStartMultiTakeover else {
+            phase = .failed("Enter your recovery code or the 6-digit code from your authenticator app.")
+            return
         }
 
         phase = .working
@@ -186,17 +249,7 @@ public final class RealAccountLoginViewModel {
             return
         }
 
-        // 2 — Install the recovered UMK. This is the step the old
-        // `completeRecoveryPair` stubbed out; with it in place the
-        // derived IRK/BAK/SWK match the recovered identity. Reset to
-        // v1 (installUMK does this) — a takeover starts a fresh IRK
-        // lineage under the recovered UMK.
-        //
-        // Per-profile keying: point the keystore at THIS account's slot
-        // before installing so a takeover of a second cloud lands in its
-        // own slot and never clobbers an already-present profile. The
-        // injected `installUMK` seam (default = Keystore.installUMK)
-        // writes to whatever slot is active.
+        // 2 — Install the recovered UMK into this account's slot.
         Keystore.setActiveProfile(username)
         do {
             try await installUMK(seed, "Bring this device into your Flagship account")
@@ -205,12 +258,7 @@ public final class RealAccountLoginViewModel {
             return
         }
 
-        // 3 — Initiate the re-pair (TAKEOVER). The new IRK derives from
-        // the just-installed UMK at the current (reset) version; the
-        // old IRK is the same derivation pre-install isn't available on
-        // a fresh device, so we sign with the new key over both pubkeys
-        // (the Worker's takeover path tolerates a new==old-shaped
-        // initiate; the grace + admin reach are what matter here).
+        // 3 — Initiate the takeover re-pair with the typed second factor.
         do {
             let resp = try await initiateTakeoverRePair(
                 username: username,
@@ -218,7 +266,6 @@ public final class RealAccountLoginViewModel {
             )
             phase = .completed(username: username, completesAt: resp.completesAt)
         } catch ScreensClientError.http(let status, _) where status == 401 {
-            // Multi only — the Worker rejected the second factor.
             phase = .failed("That recovery code or authenticator code wasn't accepted. Check it and try again.")
         } catch {
             phase = .failed("Couldn't restore access: \(error.localizedDescription)")
@@ -316,5 +363,26 @@ public final class RealAccountLoginViewModel {
             return "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain turned on. If you have your backup key file, use Import backup file below instead."
         }
         return "Recovery failed: \(error.localizedDescription)"
+    }
+
+    /// String-form humanizer for the single-device path, where the failure
+    /// arrives as `RecoveryViewModel`'s phase message rather than a thrown
+    /// Error. Maps the common cases (cancelled sheet, wrong passphrase, missing
+    /// passkey) to friendly copy; otherwise passes the message through.
+    private func humanizedRecoveryMessage(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        if lower.contains("cancel") || lower.contains("1001") {
+            return "Passkey sign-in was cancelled. Tap Restore access to try again, or use Import backup file below."
+        }
+        if lower.contains("invalid fetch token") || lower.contains("wrong passphrase")
+            || lower.contains("403") {
+            return "That passphrase didn't match. Check it and try again."
+        }
+        if lower.contains("not allowed") || lower.contains("no credentials")
+            || lower.contains("nomatchingcredential") || lower.contains("interrupted")
+            || lower.contains("no envelope") || lower.contains("404") {
+            return "We couldn't find your recovery passkey on this device. Make sure you're signed in to the same iCloud account with iCloud Keychain on, or use Import backup file below."
+        }
+        return raw
     }
 }
