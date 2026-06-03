@@ -2,7 +2,7 @@
  * S15 — webapp PWA shell visuals.
  *
  * Verifies the webapp shares the brand DNA with the marketing site
- * (Geist + Geist Mono + Instrument Serif, single signal-amber accent)
+ * (Geist + Geist Mono + Instrument Serif, single teal accent)
  * while running on the paired-ink surface that suits an app shell.
  *
  * Behavioral coverage of the views themselves lives in S1–S13. This
@@ -16,7 +16,7 @@ import { test, expect } from "../fixtures/pod-sim.js";
 const PASSPHRASE = "correct-horse-battery-staple-shell-test";
 
 test.describe("S15 — webapp brand DNA", () => {
-  test("webapp loads with paired-ink palette + amber accent", async ({ page }) => {
+  test("webapp loads with paired-ink palette + teal accent", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#view-bootstrap")).toBeVisible();
 
@@ -37,10 +37,9 @@ test.describe("S15 — webapp brand DNA", () => {
     // Paired-ink canvas (warm off-black, not pure #0a0a0a from the old
     // identity).
     expect(tokens.canvas.toLowerCase()).not.toContain("#0a0a0a");
-    // Accent is signal-amber (the marketing-surface uses the deep
-    // #B26016, the webapp uses the lighter #D38347 since it sits on
-    // an ink background — but both belong to the same hue family
-    // and the OLD palette greens are gone).
+    // Accent is brand teal (#14B8A6), shared with the marketing
+    // surface via tokens.css. The OLD amber (#B26016/#D38347) and the
+    // even-older palette greens/blue are gone.
     expect(tokens.accent.toLowerCase()).not.toContain("4ad295");
     expect(tokens.accent.toLowerCase()).not.toContain("3b5bff");
     expect(tokens.accent).not.toBe("");

@@ -2,7 +2,7 @@
  * S14 — marketing-surface UI revamp.
  *
  * Verifies that the unified design system (tokens.css + components.css +
- * motion.js + the single signal-amber accent) is wired into every
+ * motion.js + the single teal accent) is wired into every
  * publicly-routable marketing page on flagshipserver.com.
  *
  * Spec-level focus is BRAND CONSISTENCY across pages, not pixel-perfect
@@ -84,15 +84,19 @@ async function readDocTokens(page: Page): Promise<DocTokens> {
 }
 
 test.describe("S14 — unified design system on the marketing surface", () => {
-  test("/tokens.css ships the signal-amber accent (not the banned blue)", async ({
+  test("/tokens.css ships the teal accent (not the banned blue)", async ({
     request,
   }) => {
     const r = await request.get(`${APEX}/tokens.css`);
     expect(r.status()).toBe(200);
     const body = await r.text();
-    // The single accent is signal-amber. The lila/blue (#3B5BFF) and the
-    // saturated green (#4ad295) from the prior identity must be gone.
-    expect(body).toMatch(/--accent:\s+#B26016/);
+    // The single accent is brand teal. The lila/blue (#3B5BFF), the
+    // saturated green (#4ad295), and the old amber (#B26016/#D38347)
+    // from prior identities must be gone.
+    expect(body).toMatch(/--teal:\s+#14B8A6/);
+    expect(body).toMatch(/--accent:\s+var\(--teal\)/);
+    expect(body).not.toMatch(/#B26016/i);
+    expect(body).not.toMatch(/#D38347/i);
     expect(body).not.toMatch(/--primary:\s+#3B5BFF/);
     expect(body).not.toMatch(/--accent:\s+#4ad295/i);
     // Type system: Geist (UI/body), Instrument Serif (display), Geist Mono.
@@ -253,7 +257,7 @@ test.describe("S14 — unified design system on the marketing surface", () => {
       expect(resp!.status(), `${p.path} status`).toBeLessThan(400);
       const tokens = await readDocTokens(page);
       baselines.push({ label: p.label, tokens });
-      // Every page must expose the signal-amber accent, not the banned
+      // Every page must expose the teal accent, not the banned
       // colors. We don't pin to an exact rendered string (CSS may
       // resolve `var(--accent)` to either the literal hex or a
       // computed-color form depending on the browser version), so we
