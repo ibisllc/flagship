@@ -87,14 +87,29 @@ after first boot.
 | Component | Path |
 |---|---|
 | Canonical-bytes (TS, ground truth) | `packages/protocol/src/auth.ts` (`canonicalInstallBlob`) |
-| iOS canonical-bytes | `apps/mobile/ios/Sources/Flagship/InstallBlob.swift` |
+| iOS / shared canonical-bytes | `apps/mobile/shared/Sources/FlagshipCore/InstallBlob.swift` |
 | Android canonical-bytes | `apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/InstallBlob.kt` |
 | Webapp canonical-bytes | `apps/web/public/webapp/lib/buildDraft.js` |
-| Burner verify | `packages/flagship-burner/src/loadBlob.ts` |
+| Burner verify (TS / CLI) | `packages/flagship-burner/src/loadBlob.ts` (delegates to `verifyInstallBlob`) |
+| Burner verify (Mac app) | `apps/burner-mac/Sources/FlagshipBurnerCore/Recipe.swift` (`canonicalBytes`) |
+| Burner verify (Windows app) | `apps/burner-windows/src/Recipe.cs` (`CanonicalBytes`) |
 | Worker enforce | `packages/control-plane/src/serverRegister.ts` |
 
-All five MUST produce byte-identical canonical-bytes given identical input.
+All of these MUST produce byte-identical canonical-bytes given identical input.
 The cross-platform tests in `apps/mobile/ios/Tests/.../InstallBlobTests.swift`
 and `apps/mobile/android/.../InstallBlobTest.kt` lock in the bytes; the
 canonical-bytes regression in `CreateServerTtlTests.swift` re-asserts the
-12-field shape.
+12-field shape; the burner golden vectors live in
+`apps/burner-mac/Tests/.../RecipeTests.swift` + `apps/burner-windows/tests/RecipeTests.cs`.
+
+> ⚠️ **Two commitment points per burner — easy to miss.** A burner not only
+> *verifies* the canonical bytes, it also *re-serializes* the blob into the ISO
+> trailer (`installBlobToJson` in `packages/iso-personalizer/src/trailer.ts`;
+> the hand-rolled `installBlobJSON` in the Mac/Windows `AlpinePersonalize`). Any
+> optional blob field the canonical bytes commit to — `bootUnlockMode`,
+> `certAutonomy`, and whatever comes next — MUST be emitted in **both** the
+> canonical-bytes builder and the trailer serializer, or the daemon's POST to
+> `/api/server/register` fails the Worker's re-verify even though the local burn
+> "succeeded". (This is exactly the `certAutonomy` regression that broke the
+> native burners while the TS path — which reuses the protocol helpers — stayed
+> correct.)
