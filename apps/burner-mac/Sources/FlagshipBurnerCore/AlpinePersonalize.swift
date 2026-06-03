@@ -128,8 +128,10 @@ public enum AlpinePersonalize {
     }
 
     /// `JSON.stringify(installBlobToJson(blob))` — same field order + compact
-    /// (no spaces) so the bytes match trailer.ts. bootUnlockMode is deliberately
-    /// omitted (installBlobToJson doesn't emit it — server parity).
+    /// (no spaces) so the bytes match trailer.ts. Optional bootUnlockMode +
+    /// certAutonomy are appended last (in that order), only when present, exactly
+    /// as installBlobToJson does — the embedded blob round-trips through the
+    /// daemon → Worker, which rebuilds the canonical bytes from these fields.
     static func installBlobJSON(_ r: Recipe) -> Data {
         var s = "{"
         s += "\"version\":\(r.version),"
@@ -152,6 +154,12 @@ public enum AlpinePersonalize {
         s += "\"authCodeUserSignature\":\(js(r.authCodeUserSignatureHex.lowercased())),"
         s += "\"installerGitRef\":\(js(r.installerGitRef)),"
         s += "\"rckPubKey\":\(js(r.rckPubKeyHex.lowercased()))"
+        if let mode = r.bootUnlockMode { s += ",\"bootUnlockMode\":\(js(mode))" }
+        if let ca = r.certAutonomy {
+            s += ",\"certAutonomy\":{\"mode\":\(js(ca.mode))"
+            if let days = ca.offlineWindowDays { s += ",\"offlineWindowDays\":\(days)" }
+            s += "}"
+        }
         s += "}"
         return Data(s.utf8)
     }

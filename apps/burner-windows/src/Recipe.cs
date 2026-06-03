@@ -49,8 +49,22 @@ public sealed record Recipe
     /// <summary>The effective mode the box bakes/dispatches on (absence ⇒ "auto").</summary>
     public string EffectiveBootUnlockMode => BootUnlockMode == "approve" ? "approve" : "auto";
 
+    /// <summary>
+    /// Cert-autonomy policy (mirrors @flagship/protocol InstallBlob.certAutonomy).
+    /// Phone-signed; null (absent) ⇒ omitted from the canonical bytes so legacy
+    /// recipes keep verifying.
+    /// </summary>
+    public RecipeCertAutonomy? CertAutonomy { get; init; }
+
     public DateTimeOffset ExpiresAtDate =>
         DateTimeOffset.FromUnixTimeMilliseconds(AuthCode.ExpiresAt);
+}
+
+/// <summary>Mirrors @flagship/protocol InstallBlob.certAutonomy.</summary>
+public sealed record RecipeCertAutonomy
+{
+    public string Mode { get; init; } = "";        // "managed" | "autonomous"
+    public int? OfflineWindowDays { get; init; }    // null ⇒ 0 on the wire
 }
 
 public sealed class RecipeException : Exception
@@ -111,6 +125,11 @@ public static class RecipeLoader
         // blob WITHOUT bootUnlockMode produces the pre-existing canonical bytes
         // (old signatures keep verifying); present ⇒ appended.
         if (r.BootUnlockMode != null) parts.Add(r.BootUnlockMode);
+        // certAutonomy appended after bootUnlockMode with a `ca=` prefix that
+        // can't collide with a bootUnlockMode value. MUST match @flagship/protocol
+        // canonicalInstallBlob byte-for-byte.
+        if (r.CertAutonomy != null)
+            parts.Add($"ca={r.CertAutonomy.Mode}:{r.CertAutonomy.OfflineWindowDays ?? 0}");
         return Encoding.UTF8.GetBytes(string.Join("|", parts));
     }
 
@@ -204,8 +223,20 @@ public static class RecipeLoader
                 RckPubKeyHex = ReqStr(root, "rckPubKey"),
                 BlobSignatureHex = ReqStr(root, "blobSignatureHex"),
                 BootUnlockMode = OptStr(root, "bootUnlockMode"),
+                CertAutonomy = ParseCertAutonomy(root),
             };
         }
+    }
+
+    private static RecipeCertAutonomy? ParseCertAutonomy(JsonElement root)
+    {
+        if (!root.TryGetProperty("certAutonomy", out var ca) || ca.ValueKind != JsonValueKind.Object)
+            return null;
+        return new RecipeCertAutonomy
+        {
+            Mode = ReqStr(ca, "mode"),
+            OfflineWindowDays = OptInt(ca, "offlineWindowDays"),
+        };
     }
 
     private static string ReqStr(JsonElement el, string name)

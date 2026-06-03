@@ -19,7 +19,8 @@ final class AlpinePersonalizeTests: XCTestCase {
             registrationUrl: "https://flagship.services/api/server/register",
             authCode: ac, authCodeUserSignatureHex: String(repeating: "11", count: 64),
             installerGitRef: "main", rckPubKeyHex: String(repeating: "ef", count: 32),
-            blobSignatureHex: String(repeating: "22", count: 64), bootUnlockMode: nil)
+            blobSignatureHex: String(repeating: "22", count: 64), bootUnlockMode: nil,
+            certAutonomy: nil)
     }
 
     private func u32le(_ d: Data, _ off: Int) -> UInt32 {

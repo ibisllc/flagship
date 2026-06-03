@@ -49,6 +49,18 @@ public class RecipeTests
     private const string ApproveGoldenJson =
         "{\"version\":2,\"serverDomain\":\"home.demoalice.flagship.services\",\"username\":\"demoalice\",\"serverName\":\"home\",\"phoneDelegatedPubKey\":\"1398f62c6d1a457c51ba6a4b5f3dbd2f69fca93216218dc8997e416bd17d93ca\",\"registrationUrl\":\"https://flagshipserver.com/api/server/register\",\"authCode\":{\"version\":1,\"serial\":\"01TESTAPPROV\",\"username\":\"demoalice\",\"serverName\":\"home\",\"serverDomain\":\"home.demoalice.flagship.services\",\"delegatedPubKey\":\"1398f62c6d1a457c51ba6a4b5f3dbd2f69fca93216218dc8997e416bd17d93ca\",\"userPubKey\":\"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c\",\"issuedAt\":1000,\"expiresAt\":99999999999999},\"authCodeUserSignature\":\"d696674534e72422b93ae38f52d4ebb6777ccf4c562ed0e346bf059dced2585eb41409cb14dcc6ab3b56442d5af1cbbc1d4fcf060f5fde91b33d8d7b470e9f06\",\"installerGitRef\":\"main\",\"rckPubKey\":\"fd1724385aa0c75b64fb78cd602fa1d991fdebf76b13c58ed702eac835e9f618\",\"blobSignatureHex\":\"f29ad6f68c8f72c99f25b158373689724a9bc67ea8a38abd1dc97f81f5d843a9d948885b23facd65ccf99cc6edc4b7bb814f5085a796fce66251bfad583ce500\",\"bootUnlockMode\":\"approve\"}";
 
+    // A REAL phone-signed recipe (the office.harry pod) carrying certAutonomy
+    // {managed, 90}. The blob signature commits to the trailing `ca=managed:90`;
+    // before the fix the C# CanonicalBytes dropped certAutonomy, so a valid
+    // recipe was rejected. Do not hand-edit.
+    private const string CertAutonomyGoldenJson =
+        "{\"version\":2,\"serverDomain\":\"office.harry.flagship.services\",\"username\":\"harry\",\"serverName\":\"office\",\"phoneDelegatedPubKey\":\"4353452947f51da8a811f882b2281a53c783dfdf10dd126216b309f781331f63\",\"registrationUrl\":\"https://flagshipserver.com/api/server/register\",\"authCode\":{\"version\":1,\"serial\":\"01903A4460FB1372A3563B\",\"username\":\"harry\",\"serverName\":\"office\",\"serverDomain\":\"office.harry.flagship.services\",\"delegatedPubKey\":\"4353452947f51da8a811f882b2281a53c783dfdf10dd126216b309f781331f63\",\"userPubKey\":\"1ca1b2b986dc86cd4c39b09ae870590bb62e6b0cf67cb30a33677a0c49114822\",\"issuedAt\":1780454806058,\"expiresAt\":1780476406058},\"authCodeUserSignature\":\"d77fbd446280796f4ba5d3074d9dc3461ec92c2063eb48fb98a37a5762d8497dc41e3679a093ae668e201a1493d141e561809ac31afc809bcdce5236bb183407\",\"installerGitRef\":\"main\",\"rckPubKey\":\"e0bdf925839bda739d30a81e75728761d659dcb24603f9b1d698220ae47c0da6\",\"certAutonomy\":{\"offlineWindowDays\":90,\"mode\":\"managed\"},\"blobSignatureHex\":\"369a6869eab5b7a8d5c41a6f69de98e11eabf24a955957d0c2b7bca52d2c119d471d68ceecb3249cb3c2487098f1bf8a41ebc9b5745882fd37e55b186cb59504\"}";
+
+    // "now" inside the recipe's [issuedAt, expiresAt] window so the expiry gate
+    // passes and the test exercises only signature verification.
+    private static readonly DateTimeOffset CertAutonomyNow =
+        DateTimeOffset.FromUnixTimeMilliseconds(1_780_460_000_000);
+
     private static byte[] D(string s) => Encoding.UTF8.GetBytes(s);
 
     [Fact]
@@ -137,6 +149,27 @@ public class RecipeTests
         // downgrade an "approve" server to "auto").
         var downgraded = ApproveGoldenJson.Replace(",\"bootUnlockMode\":\"approve\"", "");
         var ex = Assert.Throws<RecipeException>(() => RecipeLoader.Load(D(downgraded)));
+        Assert.Contains("signature", ex.Message);
+    }
+
+    [Fact]
+    public void AcceptsCertAutonomyRecipe()
+    {
+        var r = RecipeLoader.Load(D(CertAutonomyGoldenJson), CertAutonomyNow);
+        Assert.Equal("office.harry.flagship.services", r.ServerDomain);
+        Assert.NotNull(r.CertAutonomy);
+        Assert.Equal("managed", r.CertAutonomy!.Mode);
+        Assert.Equal(90, r.CertAutonomy!.OfflineWindowDays);
+    }
+
+    [Fact]
+    public void CertAutonomyIsCovenantBySignature()
+    {
+        // Flip managed→autonomous: canonical bytes become `ca=autonomous:90`,
+        // so the committed signature must fail — .com cannot silently change the
+        // cert-autonomy posture a phone signed.
+        var tampered = CertAutonomyGoldenJson.Replace("\"mode\":\"managed\"", "\"mode\":\"autonomous\"");
+        var ex = Assert.Throws<RecipeException>(() => RecipeLoader.Load(D(tampered), CertAutonomyNow));
         Assert.Contains("signature", ex.Message);
     }
 

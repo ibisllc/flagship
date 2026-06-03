@@ -137,8 +137,10 @@ public static class AlpinePersonalize
 
     /// <summary>
     /// JSON.stringify(installBlobToJson(blob)) — same field order + compact
-    /// (no spaces) so the bytes match trailer.ts. bootUnlockMode is deliberately
-    /// omitted (installBlobToJson doesn't emit it — server parity).
+    /// (no spaces) so the bytes match trailer.ts. Optional bootUnlockMode +
+    /// certAutonomy are appended last (in that order), only when present, exactly
+    /// as installBlobToJson does — the embedded blob round-trips through the
+    /// daemon → Worker re-verify, which rebuilds the canonical bytes from them.
     /// </summary>
     public static byte[] InstallBlobJson(Recipe r)
     {
@@ -164,6 +166,15 @@ public static class AlpinePersonalize
         s.Append("\"authCodeUserSignature\":").Append(Js(r.AuthCodeUserSignatureHex.ToLowerInvariant())).Append(',');
         s.Append("\"installerGitRef\":").Append(Js(r.InstallerGitRef)).Append(',');
         s.Append("\"rckPubKey\":").Append(Js(r.RckPubKeyHex.ToLowerInvariant()));
+        if (r.BootUnlockMode != null)
+            s.Append(",\"bootUnlockMode\":").Append(Js(r.BootUnlockMode));
+        if (r.CertAutonomy != null)
+        {
+            s.Append(",\"certAutonomy\":{\"mode\":").Append(Js(r.CertAutonomy.Mode));
+            if (r.CertAutonomy.OfflineWindowDays != null)
+                s.Append(",\"offlineWindowDays\":").Append(r.CertAutonomy.OfflineWindowDays.Value);
+            s.Append('}');
+        }
         s.Append('}');
         return Encoding.UTF8.GetBytes(s.ToString());
     }
