@@ -8,6 +8,32 @@ options:
   generateEmptyDirectories: true
   groupSortPosition: top
 
+# Project-wide version. CURRENT_PROJECT_VERSION → CFBundleVersion and
+# MARKETING_VERSION → CFBundleShortVersionString, inherited by every target so
+# the app and its embedded bundles (widgets, watch app, watch widgets) always
+# share one identical version pair. The App Store rejects an embedded extension
+# whose CFBundleVersion differs from its parent app; because the app generates
+# its Info.plist (GENERATE_INFOPLIST_FILE) its version resolved to null without
+# these, which is exactly the mismatch the build flagged.
+settings:
+  base:
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0"
+
+# Explicit shared scheme for the iPhone app, so `xcodegen generate` always
+# emits a runnable FlagshipApp scheme (Debug run on device, Release archive).
+# Without this XcodeGen generated none and it had to be shared by hand in Xcode
+# — which would silently disappear on the next regenerate.
+schemes:
+  FlagshipApp:
+    build:
+      targets:
+        FlagshipApp: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
 # Register flagship:// URL scheme so external taps and notification
 # payloads can deep-link into specific in-app destinations.
 fileGroups:
@@ -59,6 +85,15 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Flagship
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        # Fixed orientation per product decision: iPhone is portrait-only, iPad
+        # is landscape-only. Because neither device offers all four orientations
+        # we also declare UIRequiresFullScreen — this matches the intent (no
+        # Split View / Stage Manager multitasking) and silences Xcode's "all
+        # interface orientations must be supported unless the app requires full
+        # screen" warning for an iPad-capable target.
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSCameraUsageDescription: "Flagship uses the camera to scan a pairing QR shown by your server."
         # Biometric gate for sensitive actions (approve unlock, revoke
         # server, wipe & restart). Without this key iOS still falls back
