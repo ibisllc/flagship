@@ -1,5 +1,9 @@
 # Next-session handoff — 2026-05-27 end-of-day
 
+> **⚠ SUPERSEDED:** current open items are in
+> **`docs/session-handoff-2026-06-02.md`**; the canonical cold-start entry is
+> `docs/SESSION-HANDOFF.md`. This 2026-05-27 doc is kept for history only.
+
 Where work stopped + what to pick up. Both human tasks and agent-doable
 follow-ups to reach release-grade.
 
