@@ -236,7 +236,9 @@ extension PlatformWebAuthnProvider {
             challenge: Self.randomChallenge()
         )
 
-        let authorization = try await perform(request)
+        let authorization = try await perform(
+            request, options: .preferImmediatelyAvailableCredentials
+        )
         guard
             let credential = authorization.credential
                 as? ASAuthorizationPlatformPublicKeyCredentialAssertion
@@ -270,7 +272,14 @@ extension PlatformWebAuthnProvider {
             throw WebAuthnError.prfUnsupported
         }
 
-        let authorization = try await perform(request)
+        // Use the passkey already on this device. Recovery runs ON the target
+        // device, so the cross-device QR ("sign in with a nearby device") is
+        // nonsensical here — restrict to immediately-available local
+        // credentials and fail cleanly (caller offers the backup-file path)
+        // rather than presenting it.
+        let authorization = try await perform(
+            request, options: .preferImmediatelyAvailableCredentials
+        )
         guard
             let credential = authorization.credential
                 as? ASAuthorizationPlatformPublicKeyCredentialAssertion
@@ -291,7 +300,16 @@ extension PlatformWebAuthnProvider {
     }
 
     /// Bridge a single `ASAuthorizationController` run to async/await.
-    private func perform(_ request: ASAuthorizationRequest) async throws -> ASAuthorization {
+    ///
+    /// `options` lets assertions pass `.preferImmediatelyAvailableCredentials`,
+    /// which restricts the flow to a passkey that's already on THIS device
+    /// (the user's iCloud-Keychain passkey) — Face ID, never the cross-device
+    /// "scan a QR with a nearby device" hybrid transport. Registration leaves
+    /// it empty (it always mints a new credential).
+    private func perform(
+        _ request: ASAuthorizationRequest,
+        options: ASAuthorizationController.RequestOptions = []
+    ) async throws -> ASAuthorization {
         try await withCheckedThrowingContinuation { continuation in
             let controller = ASAuthorizationController(authorizationRequests: [request])
             let bridge = AuthControllerBridge(continuation: continuation)
@@ -300,7 +318,7 @@ extension PlatformWebAuthnProvider {
             // The controller holds delegate/presentationContextProvider
             // weakly; retain the bridge until the continuation resumes.
             bridge.retainSelf = bridge
-            controller.performRequests()
+            controller.performRequests(options: options)
         }
     }
 }
