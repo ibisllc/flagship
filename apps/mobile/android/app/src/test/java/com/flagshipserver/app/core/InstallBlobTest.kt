@@ -155,6 +155,43 @@ class InstallBlobTest {
         assertTrue(approve.contains("\"bootUnlockMode\":\"approve\""))
     }
 
+    // The on-wire certAutonomy: managed emits mode + offlineWindowDays;
+    // autonomous omits offlineWindowDays (null + encodeDefaults=false), matching
+    // the webapp onWireBlob + iOS OnWireCertAutonomy so trailer.ts round-trips.
+    @Test fun wireBlob_certAutonomy_emittedWithModeAndDays() {
+        fun bundle(ca: WireCertAutonomy?) = InstallBlobBundle(
+            blob = WireBlob(
+                serverDomain = "home.harry.flagship.services",
+                username = "harry",
+                serverName = "home",
+                phoneDelegatedPubKey = "33".repeat(32),
+                authCode = WireAuthCode(
+                    serial = "01ABCD",
+                    username = "harry",
+                    serverName = "home",
+                    serverDomain = "home.harry.flagship.services",
+                    delegatedPubKey = "33".repeat(32),
+                    userPubKey = "22".repeat(32),
+                    issuedAt = 1L,
+                    expiresAt = 2L,
+                ),
+                authCodeUserSignature = "44".repeat(64),
+                rckPubKey = "55".repeat(32),
+                certAutonomy = ca,
+            ),
+            blobSignature = "ab",
+        )
+        val managed = kotlinx.serialization.json.Json.encodeToString(
+            InstallBlobBundle.serializer(), bundle(WireCertAutonomy("managed", 30)))
+        assertTrue(managed.contains("\"certAutonomy\""))
+        assertTrue(managed.contains("\"mode\":\"managed\""))
+        assertTrue(managed.contains("\"offlineWindowDays\":30"))
+        val autonomous = kotlinx.serialization.json.Json.encodeToString(
+            InstallBlobBundle.serializer(), bundle(WireCertAutonomy("autonomous")))
+        assertTrue(autonomous.contains("\"mode\":\"autonomous\""))
+        assertFalse(autonomous.contains("offlineWindowDays"))
+    }
+
     @Test fun usernameClaim_canonicalBytes() {
         val s = String(UsernameClaim.canonicalBytes("harry", "abcd", 42))
         assertEquals("flagship/claim-username/v1|harry|abcd|42", s)

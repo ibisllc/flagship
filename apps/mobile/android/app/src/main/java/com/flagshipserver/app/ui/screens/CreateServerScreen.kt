@@ -55,6 +55,7 @@ import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RckRegisterRequest
 import com.flagshipserver.app.core.AuthCode as AuthCodeBytes
 import com.flagshipserver.app.core.Base64URL
+import com.flagshipserver.app.core.CertValidityStore
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InstallBlob as InstallBlobBytes
 import com.flagshipserver.app.core.InstallBlobBundle
@@ -71,6 +72,7 @@ import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.core.SlugUtil
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
+import com.flagshipserver.app.core.WireCertAutonomy
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
@@ -109,6 +111,10 @@ fun CreateServerScreen(
     // Boot-unlock policy — "auto" default (self-unlock via box-sealed lease) vs
     // "approve" (phone-gated every boot). Only "approve" rides the wire.
     var bootUnlockMode by remember { mutableStateOf(ServerSettingsStore.Mode.AUTO) }
+    // Cert autonomy — binary. false (default) = "managed" (an admin device
+    // renews; the window is the account-wide CertValidityStore). true =
+    // "autonomous" (the box renews its own cert forever).
+    var certCanMint by remember { mutableStateOf(false) }
 
     val scroll = rememberScrollState()
     Column(
@@ -138,6 +144,8 @@ fun CreateServerScreen(
                 },
                 bootUnlockMode = bootUnlockMode,
                 onBootUnlockMode = { bootUnlockMode = it },
+                certCanMint = certCanMint,
+                onCertCanMint = { certCanMint = it },
                 error = error,
                 onContinue = {
                     if (name.isBlank()) { error = "Name required."; return@DesignPhase }
@@ -167,6 +175,8 @@ fun CreateServerScreen(
                                 // absent (legacy bytes + webapp parity).
                                 bootUnlockMode = bootUnlockMode
                                     .takeIf { it == ServerSettingsStore.Mode.APPROVE }?.wire,
+                                certCanMint = certCanMint,
+                                certValidityDays = CertValidityStore.from(context).days,
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -253,6 +263,8 @@ private fun DesignPhase(
     onRecipeTtlMs: (Long) -> Unit,
     bootUnlockMode: ServerSettingsStore.Mode,
     onBootUnlockMode: (ServerSettingsStore.Mode) -> Unit,
+    certCanMint: Boolean,
+    onCertCanMint: (Boolean) -> Unit,
     error: String?,
     onContinue: () -> Unit,
     onCancel: () -> Unit,
@@ -278,6 +290,8 @@ private fun DesignPhase(
             RecipeTtlPicker(recipeTtlMs = recipeTtlMs, onRecipeTtlMs = onRecipeTtlMs)
             Spacer(Modifier.height(FS.space.s4))
             BootUnlockPicker(mode = bootUnlockMode, onMode = onBootUnlockMode)
+            Spacer(Modifier.height(FS.space.s4))
+            CertAutonomyPicker(canMint = certCanMint, onCanMint = onCertCanMint)
         }
     }
     if (error != null) {
@@ -353,6 +367,36 @@ private fun BootUnlockPicker(
         title = "Authorize each boot",
         subtitle = "Most theft-resistant. The box asks your phone on every reboot. Best for critical servers on stable infrastructure.",
         onClick = { onMode(ServerSettingsStore.Mode.APPROVE) },
+    )
+}
+
+// A binary: does THIS box mint its own TLS cert ("autonomous" — it holds a
+// sealed, revocable key) or does an admin device mint it ("managed", default)?
+// The renewal *window* for managed boxes is the account-wide setting in
+// Settings, stamped in at mint time — not asked here.
+@Composable
+private fun CertAutonomyPicker(
+    canMint: Boolean,
+    onCanMint: (Boolean) -> Unit,
+) {
+    Text(
+        "Who renews the certificate",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = !canMint,
+        title = "My devices renew it",
+        subtitle = "The default. This box holds no key — your phone or a trusted server mints its certificate. If every admin device stays offline past your certificate-validity window (Settings), the certificate lapses and the box stops serving.",
+        onClick = { onCanMint(false) },
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    BootUnlockOption(
+        selected = canMint,
+        title = "This server renews its own",
+        subtitle = "Give this box a sealed, revocable key so it renews its own certificate indefinitely. Only for a physically-secure, always-on machine.",
+        onClick = { onCanMint(true) },
     )
 }
 
@@ -473,6 +517,8 @@ private suspend fun prepareDelivery(
     serverName: String,
     recipeTtlMs: Long = DEFAULT_RECIPE_TTL_MS,
     bootUnlockMode: String? = null,
+    certCanMint: Boolean = false,
+    certValidityDays: Int = CertValidityStore.DEFAULT_DAYS,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -508,6 +554,14 @@ private suspend fun prepareDelivery(
     val authCodeUserSig = irk.sign(authCodeBytesObj.canonicalBytes())
     val authCodeUserSigHex = HexUtil.encode(authCodeUserSig)
 
+    // Autonomous ⇒ self-minting (no window); managed ⇒ stamp the account-wide
+    // validity window so an admin device knows the renewal deadline.
+    val certAutonomy = if (certCanMint) {
+        InstallBlobBytes.CertAutonomy(mode = "autonomous")
+    } else {
+        InstallBlobBytes.CertAutonomy(mode = "managed", offlineWindowDays = certValidityDays)
+    }
+
     val installBlobBytesObj = InstallBlobBytes(
         serverDomain = serverDomain,
         username = username,
@@ -517,6 +571,7 @@ private suspend fun prepareDelivery(
         authCodeUserSignature = authCodeUserSig,
         rckPubKey = rck.publicKey,
         bootUnlockMode = bootUnlockMode,
+        certAutonomy = certAutonomy,
     )
     val blobSigHex = HexUtil.encode(irk.sign(installBlobBytesObj.canonicalBytes()))
 
@@ -539,6 +594,10 @@ private suspend fun prepareDelivery(
             authCodeUserSignature = authCodeUserSigHex,
             rckPubKey = rckPubHex,
             bootUnlockMode = bootUnlockMode,
+            certAutonomy = WireCertAutonomy(
+                mode = certAutonomy.mode,
+                offlineWindowDays = certAutonomy.offlineWindowDays,
+            ),
         ),
         blobSignature = blobSigHex,
     )

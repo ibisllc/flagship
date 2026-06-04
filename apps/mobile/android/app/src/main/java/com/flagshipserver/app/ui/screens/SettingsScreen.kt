@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.core.CertValidityStore
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
@@ -58,6 +60,11 @@ fun SettingsScreen(nav: NavController) {
     var versionTaps by remember { mutableIntStateOf(0) }
     // C6a — drives the Remove-this-device confirmation dialog.
     var showRemoveConfirm by remember { mutableStateOf(false) }
+    // Account-wide certificate-validity window. Mirrors iOS CertValidityScreen.
+    val context = LocalContext.current
+    val certStore = remember { CertValidityStore.from(context) }
+    var certDays by remember { mutableIntStateOf(certStore.days) }
+    var showCertDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val hasRecovery by app.hasCloudRecovery.collectAsState()
 
@@ -134,6 +141,12 @@ fun SettingsScreen(nav: NavController) {
         SettingsRow(label = "Privacy", description = "Face unlock at launch, app-level gating.") {
             nav.navigate("privacy")
         }
+        SettingsRow(
+            label = "Certificate validity",
+            description = "Renewal window for servers your devices manage — $certDays days.",
+        ) {
+            showCertDialog = true
+        }
         if (devUnlocked) {
             SettingsRow(label = "Developer", description = "Toggle the live screens client + dev fixtures.") {
                 nav.navigate("developer")
@@ -193,6 +206,40 @@ fun SettingsScreen(nav: NavController) {
             onClick = { showRemoveConfirm = true },
             block = true,
         )
+
+        if (showCertDialog) {
+            AlertDialog(
+                onDismissRequest = { showCertDialog = false },
+                confirmButton = {
+                    TextButton(onClick = { showCertDialog = false }) { Text("Close") }
+                },
+                title = { Text("Certificate validity") },
+                text = {
+                    Column {
+                        Text(
+                            "How long a server your devices manage keeps serving before its " +
+                                "certificate must be renewed. If every admin device stays offline " +
+                                "past this window, the certificate lapses — the safety cut-off if " +
+                                "you lose your phone. Account-wide; only admin devices mint.",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        )
+                        Spacer(Modifier.height(FS.space.s2))
+                        CertValidityStore.PRESETS.forEach { d ->
+                            TextButton(onClick = {
+                                certStore.days = d
+                                certDays = certStore.days
+                            }) {
+                                Text(
+                                    if (certDays == d) "✓ $d days" else "$d days",
+                                    color = if (certDays == d) FS.colors.primary else FS.colors.text,
+                                )
+                            }
+                        }
+                    }
+                },
+            )
+        }
 
         if (showRemoveConfirm) {
             AlertDialog(
