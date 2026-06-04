@@ -106,49 +106,36 @@ APKOVL="$WORK_DIR/flagship.apkovl.tar.gz"
 echo "[build-iso] emitting apkovl"
 npx tsx packages/installer-apkovl/scripts/emit-apkovl.mjs "$APKOVL"
 
-# ── 3. Extract the Alpine ISO into a working tree ────────────────
-EXTRACTED="$WORK_DIR/extracted"
-mkdir -p "$EXTRACTED"
-echo "[build-iso] extracting Alpine ISO"
-xorriso -osirrox on -indev "$ALPINE_ISO" -extract / "$EXTRACTED" >/dev/null
-
-# Inject the apkovl at the root of the ISO9660 filesystem — Alpine's
-# init scans every block device's root for *.apkovl.tar.gz on boot.
-cp "$APKOVL" "$EXTRACTED/flagship.apkovl.tar.gz"
-
-# Clamp every file's mtime so the resulting ISO is bit-stable.
-find "$EXTRACTED" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
-
-# ── 4. Re-pack with xorriso, deterministic flags ────────────────
-echo "[build-iso] re-packing → $OUT_PATH"
+# ── 3. Re-pack: REPLAY the source boot equipment + inject the apkovl ─
+#
+# CRITICAL (bare-metal UEFI fix): the previous build extracted the ISO and
+# re-packed it with an isolinux/BIOS boot image ONLY — it dropped Alpine's
+# UEFI boot entry entirely. On a modern UEFI machine that stick has no EFI
+# boot, so the firmware never lists it in the boot menu (the exact symptom we
+# hit on real hardware). `xorriso -boot_image any replay` reproduces the
+# source ISO's FULL El Torito catalog (isolinux BIOS *and* the EFI boot image)
+# AND the isohybrid MBR/GPT, so the result is a true BIOS+UEFI hybrid — `dd` it
+# to USB and it boots on both. Same approach the Debian/Ubuntu burner uses
+# (packages/flagship-burner/src/remasterIso.ts). Bonus: no dependency on a
+# Linux-only `/usr/share/syslinux/isohdpfx.bin`, so the build is portable.
+#
+# We inject the apkovl by mapping the single file onto the source image
+# (indev → outdev). Alpine's init scans every block device's root for
+# *.apkovl.tar.gz on boot, so a root-level file is all it needs.
+echo "[build-iso] re-packing (BIOS+UEFI replay) → $OUT_PATH"
 mkdir -p "$(dirname "$OUT_PATH")"
+rm -f "$OUT_PATH"
+# Clamp the injected file's mtime so the output is bit-stable across builds.
+touch -h -d "@$SOURCE_DATE_EPOCH" "$APKOVL"
 xorriso \
+  -indev "$ALPINE_ISO" \
   -outdev "$OUT_PATH" \
   -volid "FLAGSHIP_ALPINE_${ALPINE_VERSION//./_}" \
   -volume_date "all_file_dates" "=$SOURCE_DATE_EPOCH" \
   -volume_date "uuid" "$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00)" \
-  -joliet on \
-  -map "$EXTRACTED" / \
-  -boot_image isolinux bin_path=/boot/syslinux/isolinux.bin \
-  -boot_image isolinux cat_path=/boot/syslinux/boot.cat \
-  -boot_image isolinux system_area=/usr/share/syslinux/isohdpfx.bin \
-  -- >/dev/null 2>&1 || {
-    # Fall back: some environments don't have isohdpfx at the standard
-    # path. In that case extract it from the source ISO (it lives in
-    # the first 512 bytes for hybrid-bootable ISOs).
-    dd if="$ALPINE_ISO" of="$WORK_DIR/mbr.bin" bs=1 count=432 2>/dev/null
-    xorriso \
-      -outdev "$OUT_PATH" \
-      -volid "FLAGSHIP_ALPINE_${ALPINE_VERSION//./_}" \
-      -volume_date "all_file_dates" "=$SOURCE_DATE_EPOCH" \
-      -volume_date "uuid" "$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y%m%d%H%M%S00)" \
-      -joliet on \
-      -map "$EXTRACTED" / \
-      -boot_image isolinux bin_path=/boot/syslinux/isolinux.bin \
-  -boot_image isolinux cat_path=/boot/syslinux/boot.cat \
-      -boot_image isolinux system_area="$WORK_DIR/mbr.bin" \
-      -- >/dev/null
-  }
+  -boot_image any replay \
+  -map "$APKOVL" /flagship.apkovl.tar.gz \
+  -- >/dev/null
 
 # ── 5. Compute + write SHA-256 sidecar ───────────────────────────
 sha=$(sha256sum "$OUT_PATH" | awk '{print $1}')
