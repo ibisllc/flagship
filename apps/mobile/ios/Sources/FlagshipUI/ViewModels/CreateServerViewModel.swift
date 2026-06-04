@@ -79,14 +79,19 @@ public final class CreateServerViewModel {
     /// carried on the wire — "auto" is the absent/legacy default (mirrors the
     /// webapp's create-server.js and keeps the recipe bytes identical).
     public var bootUnlockMode: BootUnlockStore.Mode = .auto
-    /// Per-server cert-autonomy policy (per-user-cert design, `docs/per-user-cert-worklist.md`
-    /// Q-A). Picks how long this box may keep renewing its TLS cert while the
-    /// phone is offline. Finite windows ⇒ "managed" (a trusted device re-mints);
-    /// "Indefinite" ⇒ "autonomous" (the box holds a sealed minting key and renews
-    /// itself forever). Carried in the SIGNED InstallBlob — the recipe-JSON plumbing
-    /// in trailer.ts reconstructs `certAutonomy` so the daemon's canonical bytes
-    /// match the signature. Default = 90-day managed window.
-    public var certAutonomy: CertAutonomyChoice = .days90
+    /// Whether THIS server may renew its own TLS certificate. Off (default) =
+    /// "managed": the box holds no minting key; an admin device (phone or
+    /// trusted server) re-mints before the account-wide validity window lapses.
+    /// On = "autonomous": the box holds a sealed, revocable minting key and
+    /// renews itself forever — only for a physically-secure, always-on machine.
+    /// The renewal *interval* is the account-wide `CertValidityStore` value,
+    /// stamped into the managed blob at mint time; it doesn't apply to
+    /// autonomous boxes. Carried in the SIGNED InstallBlob (trailer.ts
+    /// reconstructs `certAutonomy` so the daemon's canonical bytes match).
+    public var certCanMint: Bool = false
+    /// Account-wide cert validity window (days), read at mint time so the
+    /// managed blob's `offlineWindowDays` matches the user's Settings choice.
+    private let certValidity: CertValidityStore
     /// Draft-only metadata — backup policy the user wants applied to this
     /// server once it's up. NOT signed into the InstallBlob (the audit
     /// against InstallBlob.swift confirmed `backupPolicy` does not appear
@@ -95,13 +100,6 @@ public final class CreateServerViewModel {
     /// webapp's draft schema.
     public var backupPolicy: CreateServerDraftStore.BackupPolicy = .phoneOnly {
         didSet { draftStore.setBackupPolicy(backupPolicy) }
-    }
-    /// Draft-only metadata — free-text user note about LLM provider
-    /// preferences (e.g. "OpenAI gpt-4o for chat, local llama3 for code").
-    /// Surfaces later as a hint when the box's apps ask the user to pick a
-    /// provider; never reaches the signed blob.
-    public var llmPreferences: String = "" {
-        didSet { draftStore.setLlmPreferences(llmPreferences) }
     }
     /// Set after the .delivered transition. Container reads this so
     /// the new pending pod records the auth-code serial that Cancel-
@@ -119,19 +117,20 @@ public final class CreateServerViewModel {
         server: any FlagshipServerClient,
         relay: any QrRelayClient,
         bootUnlock: BootUnlockStore = BootUnlockStore(),
-        draftStore: CreateServerDraftStore = CreateServerDraftStore()
+        draftStore: CreateServerDraftStore = CreateServerDraftStore(),
+        certValidity: CertValidityStore = CertValidityStore()
     ) {
         self.username = username
         self.server = server
         self.relay = relay
         self.bootUnlock = bootUnlock
         self.draftStore = draftStore
+        self.certValidity = certValidity
         // Restore the user's last-typed draft so flipping away from the
         // screen mid-fill doesn't wipe their inputs. Hydrate AFTER the
         // stored properties are assigned so the didSet observers don't
         // double-write the same value back.
         self.backupPolicy = draftStore.backupPolicy()
-        self.llmPreferences = draftStore.llmPreferences()
     }
 
     public var canAdvanceFromDesign: Bool {
@@ -306,53 +305,15 @@ public final class CreateServerViewModel {
             // still accepts it. The box treats absence as "auto".
             bootUnlockMode: bootUnlockMode == .approve ? "approve" : nil,
             // certAutonomy ALWAYS rides the wire (signature-safe — trailer.ts
-            // reconstructs it). days90 ⇒ managed:90; finite ⇒ managed:N;
-            // Indefinite ⇒ autonomous.
-            certAutonomy: certAutonomy.installBlob
+            // reconstructs it). Autonomous ⇒ the box self-mints (no window);
+            // managed ⇒ the account-wide validity window is stamped in so an
+            // admin device knows the renewal deadline.
+            certAutonomy: certCanMint
+                ? InstallBlob.CertAutonomy(mode: "autonomous")
+                : InstallBlob.CertAutonomy(mode: "managed", offlineWindowDays: certValidity.days)
         )
         let blobSig = try irk.signature(for: blob.canonicalBytes())
         return SignedInstallBlob(blob: blob, signatureHex: HexUtil.encode(blobSig))
-    }
-}
-
-/// Per-server cert-autonomy choice surfaced on the create-server screen.
-/// Maps the user-facing "how long can this box run while my phone is offline"
-/// question onto the signed `InstallBlob.CertAutonomy`. Every finite choice is
-/// "managed" (a trusted device keeps minting); only `.indefinite` hands the box
-/// a self-minting key ("autonomous"). Default is `.days90` — a 90-day managed
-/// window matching the LE max-validity ceiling discussed in the worklist.
-public enum CertAutonomyChoice: String, CaseIterable, Sendable {
-    case days3
-    case days7
-    case days15
-    case days30
-    case days90
-    case indefinite
-
-    /// Short user-facing label for the radio row.
-    public var label: String {
-        switch self {
-        case .days3:      return "3 days"
-        case .days7:      return "7 days"
-        case .days15:     return "15 days"
-        case .days30:     return "30 days"
-        case .days90:     return "90 days"
-        case .indefinite: return "Indefinite"
-        }
-    }
-
-    /// The signed-blob value. Finite windows ⇒ managed with N days; Indefinite ⇒
-    /// autonomous (the box becomes a minter). Always returns a value so the
-    /// recipe carries a cert-autonomy field on every server.
-    public var installBlob: InstallBlob.CertAutonomy {
-        switch self {
-        case .days3:      return .init(mode: "managed", offlineWindowDays: 3)
-        case .days7:      return .init(mode: "managed", offlineWindowDays: 7)
-        case .days15:     return .init(mode: "managed", offlineWindowDays: 15)
-        case .days30:     return .init(mode: "managed", offlineWindowDays: 30)
-        case .days90:     return .init(mode: "managed", offlineWindowDays: 90)
-        case .indefinite: return .init(mode: "autonomous")
-        }
     }
 }
 

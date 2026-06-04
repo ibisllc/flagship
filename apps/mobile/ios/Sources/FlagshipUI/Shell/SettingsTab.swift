@@ -74,9 +74,25 @@ public struct SettingsTab: View {
                     tier: vm.tier,
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
-                    showDeveloper: dev.unlocked,
-                    onAddControlDevice: { path.append(.addControlDevice) },
-                    onAddDevice: { path.append(.addDevice) },
+                    // Developer tools are a mock-mode concern: a shipped
+                    // live build never surfaces them. The only way in is the
+                    // deliberate pre-login 3-tap on the Welcome box, which
+                    // flips to mock first.
+                    showDeveloper: !dev.useLiveClient,
+                    onAddDevice: {
+                        // Adding a device hands over the UMK (account master
+                        // key) — gate it behind an explicit Face ID before we
+                        // even reveal the pairing QR.
+                        Task { @MainActor in
+                            do {
+                                try await BiometricGate().evaluate(
+                                    reason: "Add a device that can hold your account key")
+                                path.append(.addDevice)
+                            } catch {
+                                // Cancelled or failed — stay put.
+                            }
+                        }
+                    },
                     onScanPairingCode: { path.append(.scanPairingCode) },
                     onRevokeDevice: { session in Task { await vm.revoke(session) } },
                     onDisconnectTrustedDevice: { device in await vm.disconnect(device) },
@@ -89,6 +105,7 @@ public struct SettingsTab: View {
                     onOpenProviders: { path.append(.providers) },
                     onOpenSubscription: { path.append(.tierStatus) },
                     onOpenRecovery: { path.append(.recovery) },
+                    onOpenCertValidity: { path.append(.certValidity) },
                     onOpenKeyfileBackup: { path.append(.keyfileBackup) },
                     onOpenProfiles: { path.append(.profiles) },
                     onOpenPeerBackup: { path.append(.peerBackup) },
@@ -230,6 +247,8 @@ public struct SettingsTab: View {
             TierStatusScreen(vm: TierStatusViewModel(client: client))
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
+        case .certValidity:
+            CertValidityScreen()
         case .keyfileBackup:
             KeyfileExportScreen(
                 vm: KeyfileExportViewModel(username: app.currentUser ?? "")
@@ -238,8 +257,6 @@ public struct SettingsTab: View {
             PostRecoveryContainer()
         case .about:
             AboutStub()
-        case .addControlDevice:
-            AddControlDeviceScreen()
         case .addDevice:
             // Phase 3b — admin side. Construct the VM with the active
             // account; the relay seam comes from the environment.

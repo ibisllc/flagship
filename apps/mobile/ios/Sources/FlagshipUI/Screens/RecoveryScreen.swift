@@ -36,8 +36,8 @@ public struct RecoveryScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("If you lose this phone").font(FS.font.h2()).foregroundColor(c.text)
-                Text("Your User Master Key (UMK) is what owns your account. We can wrap a copy under a key derived from a passkey — only you can unlock it with Face ID / Touch ID / security key.")
+                Text("Recover on a new device").font(FS.font.h2()).foregroundColor(c.text)
+                Text("Your User Master Key (UMK) owns your account, and it never leaves this device's secure hardware. Set recovery up so a replacement can get it back: we wrap a copy under your passkey (synced through iCloud Keychain) plus a recovery passphrase, and keep the ciphertext in the cloud. Lose this device? Get a new one, sign in, and enter your passphrase — single-admin accounts unlock after a 3-day safety wait.")
                     .font(FS.font.body()).foregroundColor(c.textMuted)
 
                 FSCard {
@@ -81,7 +81,7 @@ public struct RecoveryScreen: View {
                                 Text("Recovery active").foregroundColor(c.text)
                             }
                             Text("Credential: \(credId)").font(FS.font.mono()).foregroundColor(c.textMuted).lineLimit(1).truncationMode(.middle)
-                            Text("If you lose this phone, install Flagship on a new one and pick \"I lost my phone\" on the welcome screen.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            Text("If you lose this device, install Flagship on a new one, choose \"I already have an account,\" and recover with your passphrase.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         case .recovering:
                             HStack { ProgressView(); Text("Verifying passkey…").foregroundColor(c.textMuted) }
                         case .recovered:

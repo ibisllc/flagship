@@ -5,8 +5,8 @@ import FlagshipCore
 /// Settings tab. Sections:
 ///   - ACCOUNT — username
 ///   - SUBSCRIPTION — tier, credits, bandwidth, manage providers
-///   - CONTROL DEVICES — phone apps paired to this account (NOT pods)
-///                       with an Add control device action
+///   - CONTROL DEVICES — phones/laptops paired to manage this account
+///                       (NOT pods); added by docking a browser
 ///   - RECOVERY + ABOUT — recovery setup, version/license
 ///   - Sign out
 ///
@@ -46,7 +46,6 @@ public struct SettingsScreen: View {
     /// Worker `usernames` row. Nil while the load is in flight or if
     /// the call failed; "single" / "multi" otherwise.
     var accountType: String? = nil
-    var onAddControlDevice: () -> Void = {}
     /// Phase 3b — admin opens the "Add a device" cross-device QR pairing
     /// (Settings → Trusted devices → Add a device).
     var onAddDevice: () -> Void = {}
@@ -59,6 +58,8 @@ public struct SettingsScreen: View {
     /// P7 — open the dedicated tier-status / subscription screen.
     var onOpenSubscription: () -> Void = {}
     var onOpenRecovery: () -> Void = {}
+    /// Open the account-wide certificate-validity setting.
+    var onOpenCertValidity: () -> Void = {}
     /// Open "Back up your account key" — the `.flagshipkey` export.
     var onOpenKeyfileBackup: () -> Void = {}
     /// v1.2 Phase 4 — open the Account-security drill-down. The
@@ -106,7 +107,6 @@ public struct SettingsScreen: View {
         trustedDevices: LoadingState<[TrustedDevice]> = .loaded([]),
         showDeveloper: Bool = false,
         accountType: String? = nil,
-        onAddControlDevice: @escaping () -> Void = {},
         onAddDevice: @escaping () -> Void = {},
         onScanPairingCode: @escaping () -> Void = {},
         onRevokeDevice: @escaping (PairedSessionSummary) -> Void = { _ in },
@@ -115,6 +115,7 @@ public struct SettingsScreen: View {
         onOpenProviders: @escaping () -> Void = {},
         onOpenSubscription: @escaping () -> Void = {},
         onOpenRecovery: @escaping () -> Void = {},
+        onOpenCertValidity: @escaping () -> Void = {},
         onOpenKeyfileBackup: @escaping () -> Void = {},
         onOpenAccountSecurity: @escaping () -> Void = {},
         onOpenProfiles: @escaping () -> Void = {},
@@ -138,7 +139,6 @@ public struct SettingsScreen: View {
         self.onDisconnectTrustedDevice = onDisconnectTrustedDevice
         self.showDeveloper = showDeveloper
         self.accountType = accountType
-        self.onAddControlDevice = onAddControlDevice
         self.onAddDevice = onAddDevice
         self.onScanPairingCode = onScanPairingCode
         self.onRevokeDevice = onRevokeDevice
@@ -146,6 +146,7 @@ public struct SettingsScreen: View {
         self.onOpenProviders = onOpenProviders
         self.onOpenSubscription = onOpenSubscription
         self.onOpenRecovery = onOpenRecovery
+        self.onOpenCertValidity = onOpenCertValidity
         self.onOpenKeyfileBackup = onOpenKeyfileBackup
         self.onOpenAccountSecurity = onOpenAccountSecurity
         self.onOpenProfiles = onOpenProfiles
@@ -178,6 +179,7 @@ public struct SettingsScreen: View {
                 // "Multi-device + 2FA" state is one of the first
                 // things the user sees.
                 accountSecuritySection(c: c)
+                certificatesSection(c: c)
                 subscription(c: c)
                 trustedDevicesSection(c: c)
                 controlDevicesSection(c: c)
@@ -266,6 +268,34 @@ public struct SettingsScreen: View {
     /// full breakdown (credits, dispatcher usage, custom domains,
     /// reserved names) now lives on TierStatusScreen; this row just
     /// surfaces the current tier + a chevron.
+    /// Account-wide certificate-validity entry. The renewal window applies to
+    /// every server your devices manage; only admin devices actually mint.
+    private func certificatesSection(c: FSColors) -> some View {
+        section("CERTIFICATES", c: c) {
+            Button(action: onOpenCertValidity) {
+                FSCard {
+                    HStack(alignment: .top, spacing: FS.space.s3) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(c.primary)
+                            .imageScale(.large)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Certificate validity")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(c.text)
+                            Text("Renewal window for servers your devices manage")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings-open-cert-validity")
+        }
+    }
+
     private func subscription(c: FSColors) -> some View {
         section("SUBSCRIPTION", c: c) {
             Button(action: onOpenSubscription) {
@@ -539,30 +569,25 @@ public struct SettingsScreen: View {
                 case .failed(let msg):
                     ErrorCard(message: msg)
                 case .loaded(let sessions):
-                    VStack(spacing: FS.space.s3) {
-                        ForEach(sessions, id: \.tokenPrefix) { s in
-                            controlDeviceRow(s, c: c)
+                    if sessions.isEmpty {
+                        FSCard {
+                            HStack(alignment: .top, spacing: FS.space.s2) {
+                                Image(systemName: "laptopcomputer").foregroundColor(c.textMuted)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("No control devices").font(FS.font.bodySm()).foregroundColor(c.text)
+                                    Text("Dock a browser (under Recovery) to manage this account from a computer.")
+                                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                                }
+                            }
+                        }
+                    } else {
+                        VStack(spacing: FS.space.s3) {
+                            ForEach(sessions, id: \.tokenPrefix) { s in
+                                controlDeviceRow(s, c: c)
+                            }
                         }
                     }
                 }
-                Button(action: onAddControlDevice) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
-                        Text("Add control device")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(c.primary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, FS.space.s4)
-                    .padding(.vertical, FS.space.s3)
-                    .background(c.primary.opacity(0.08))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: FS.radius.md)
-                            .stroke(c.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
-                }
-                .padding(.top, FS.space.s2)
             }
         }
     }
@@ -592,7 +617,7 @@ public struct SettingsScreen: View {
     private func links(c: FSColors) -> some View {
         section("RECOVERY", c: c) {
             VStack(spacing: FS.space.s3) {
-                linkRow("Recovery setup", subtitle: "If you lose this phone", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
+                linkRow("Recovery setup", subtitle: "Recover on a new device", icon: "key.horizontal.fill", c: c, action: onOpenRecovery)
                 linkRow("Back up your account key", subtitle: "Save an encrypted key file", icon: "doc.badge.arrow.up.fill", c: c, action: onOpenKeyfileBackup)
                 linkRow("Profiles", subtitle: "Switch between your clouds", icon: "person.2.circle.fill", c: c, action: onOpenProfiles)
                 linkRow("Dock a browser", subtitle: "Read-only desktop companion (4h)", icon: "laptopcomputer", c: c, action: onOpenCompanionDock)

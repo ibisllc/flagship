@@ -5,7 +5,7 @@ import FlagshipAPI
 
 /// Services tab: list → detail; marketplace; vibe-code launcher. Owns its
 /// own NavigationStack with AppsRoute as the path element type. Surfaces
-/// as "Apps" in the UI for user-facing familiarity.
+/// as "Services" in the UI.
 public struct ServicesTab: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server
@@ -43,6 +43,11 @@ public struct ServicesTab: View {
         case .vibeCodeChat(let sessionId):
             if path.last != .vibeCodeChat(sessionId: sessionId) {
                 path.append(.vibeCodeChat(sessionId: sessionId))
+            }
+            _ = linker.consume()
+        case .startVibeCode:
+            if path.last != .vibeCodeProviderPick {
+                path.append(.vibeCodeProviderPick)
             }
             _ = linker.consume()
         default:
@@ -128,7 +133,7 @@ public struct ServicesTab: View {
     private func header(c: FSColors, vm: ServicesListViewModel) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
             HStack {
-                Text("Apps")
+                Text("Services")
                     .font(.system(size: 32, weight: .medium))
                     .foregroundColor(c.text)
                 Spacer()
@@ -164,12 +169,24 @@ public struct ServicesTab: View {
     @ViewBuilder
     private func searchBar(vm: ServicesListViewModel) -> some View {
         @Bindable var bindable = vm
-        FSField(value: $bindable.searchQuery, label: "", placeholder: "Search apps")
+        FSField(value: $bindable.searchQuery, label: "", placeholder: "Search services")
     }
 
     @ViewBuilder
     private func emptyOrList(vm: ServicesListViewModel, c: FSColors) -> some View {
-        switch vm.state {
+        if app.pods.isEmpty {
+            // No server yet — services run on your own box, so there's
+            // nothing to load. Guide to add one rather than surfacing a
+            // "not paired" error.
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    Text("Add a server first").font(FS.font.h3()).foregroundColor(c.text)
+                    Text("Services run on your own server. Add one to start building.")
+                        .font(FS.font.body()).foregroundColor(c.textMuted)
+                }
+            }
+        } else {
+            switch vm.state {
         case .idle, .loading:
             VStack(spacing: FS.space.s3) {
                 ForEach(0..<3) { _ in ServerCardSkeleton() }
@@ -180,10 +197,10 @@ public struct ServicesTab: View {
             if vm.filteredApps.isEmpty {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("Build your first app").font(FS.font.h3()).foregroundColor(c.text)
+                        Text("Build your first service").font(FS.font.h3()).foregroundColor(c.text)
                         Text("Describe it in plain English. The AI writes it, the daemon runs it.")
                             .font(FS.font.body()).foregroundColor(c.textMuted)
-                        FSPrimaryButton("Vibe-code an app", block: true) {
+                        FSPrimaryButton("Build a service", block: true) {
                             path.append(.vibeCodeProviderPick)
                         }
                     }
@@ -201,12 +218,13 @@ public struct ServicesTab: View {
                     FSCard {
                         HStack(spacing: FS.space.s3) {
                             Image(systemName: "sparkles").foregroundColor(c.primary)
-                            Text("Build another app").foregroundColor(c.text)
+                            Text("Build another service").foregroundColor(c.text)
                             Spacer()
                             Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
                         }
                     }
                 }.buttonStyle(.plain)
+            }
             }
         }
     }
@@ -218,7 +236,7 @@ public struct ServicesTab: View {
                     Image(systemName: "square.grid.2x2").foregroundColor(c.success)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Marketplace").foregroundColor(c.text)
-                        Text("Apps your neighbours built").font(FS.font.caption()).foregroundColor(c.textMuted)
+                        Text("Services your neighbours built").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
                     Spacer()
                     Image(systemName: "chevron.right").foregroundColor(c.textMuted)
@@ -459,6 +477,7 @@ struct MarketplaceContainer: View {
     @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
     @State private var vm: MarketplaceViewModel?
 
     var body: some View {
@@ -466,9 +485,17 @@ struct MarketplaceContainer: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 Text("Marketplace").font(.system(size: 32, weight: .medium)).foregroundColor(c.text)
-                Text("Apps your neighbours built. One tap to install.")
+                Text("Services your neighbours built. One tap to install.")
                     .font(.system(size: 17)).foregroundColor(c.textMuted)
-                if let vm {
+                if app.pods.isEmpty {
+                    // The marketplace is a catalog, browsable before you
+                    // own a server. Until the central catalog ships, show
+                    // a friendly placeholder instead of a "not paired" error.
+                    FSCard {
+                        Text("The marketplace is coming soon.")
+                            .foregroundColor(c.textMuted)
+                    }
+                } else if let vm {
                     @Bindable var bindable = vm
                     FSField(value: $bindable.searchQuery, label: "", placeholder: "Search marketplace")
                     switch vm.state {
@@ -493,6 +520,7 @@ struct MarketplaceContainer: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            guard !app.pods.isEmpty else { return }
             if vm == nil { vm = MarketplaceViewModel(client: client) }
             if case .idle = vm?.state { await vm?.load() }
         }

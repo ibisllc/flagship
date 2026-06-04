@@ -25,38 +25,42 @@ final class CreateServerCertAutonomyTests: XCTestCase {
         )
     }
 
-    func test_defaultCertAutonomyIsNinetyDays() {
-        XCTAssertEqual(makeVM().certAutonomy, .days90)
+    /// Cert autonomy is now a binary: default OFF = "managed" (an admin device
+    /// renews). The renewal window is the account-wide CertValidityStore.
+    func test_defaultCertIsManaged() {
+        XCTAssertFalse(makeVM().certCanMint)
     }
 }
 
-/// The `CertAutonomyChoice` → `InstallBlob.CertAutonomy` mapping. Every finite
-/// window is "managed" with its day count; "Indefinite" is "autonomous" (the
-/// box becomes a minter). `installBlob` ALWAYS returns a value.
-final class CertAutonomyChoiceTests: XCTestCase {
-    func test_installBlobMappingForEveryCase() {
-        XCTAssertEqual(CertAutonomyChoice.days3.installBlob,      .init(mode: "managed", offlineWindowDays: 3))
-        XCTAssertEqual(CertAutonomyChoice.days7.installBlob,      .init(mode: "managed", offlineWindowDays: 7))
-        XCTAssertEqual(CertAutonomyChoice.days15.installBlob,     .init(mode: "managed", offlineWindowDays: 15))
-        XCTAssertEqual(CertAutonomyChoice.days30.installBlob,     .init(mode: "managed", offlineWindowDays: 30))
-        XCTAssertEqual(CertAutonomyChoice.days90.installBlob,     .init(mode: "managed", offlineWindowDays: 90))
-        XCTAssertEqual(CertAutonomyChoice.indefinite.installBlob, .init(mode: "autonomous", offlineWindowDays: nil))
+/// The account-wide certificate-validity store: presets, default, and the
+/// clamp that keeps a stray value from widening the window.
+@MainActor
+final class CertValidityStoreTests: XCTestCase {
+    private func freshDefaults() -> UserDefaults {
+        let d = UserDefaults(suiteName: "cert-validity-test-\(UUID().uuidString)")!
+        return d
     }
 
-    func test_labelsAreUserFacing() {
-        XCTAssertEqual(CertAutonomyChoice.days3.label, "3 days")
-        XCTAssertEqual(CertAutonomyChoice.days7.label, "7 days")
-        XCTAssertEqual(CertAutonomyChoice.days15.label, "15 days")
-        XCTAssertEqual(CertAutonomyChoice.days30.label, "30 days")
-        XCTAssertEqual(CertAutonomyChoice.days90.label, "90 days")
-        XCTAssertEqual(CertAutonomyChoice.indefinite.label, "Indefinite")
+    func test_defaultIsThirtyDays() {
+        XCTAssertEqual(CertValidityStore(defaults: freshDefaults()).days, 30)
     }
 
-    func test_allCasesAreSurfaced() {
-        XCTAssertEqual(
-            CertAutonomyChoice.allCases,
-            [.days3, .days7, .days15, .days30, .days90, .indefinite]
-        )
+    func test_presetsAreSevenThirtyNinety() {
+        XCTAssertEqual(CertValidityStore.presets, [7, 30, 90])
+    }
+
+    func test_nonPresetWriteClampsToDefault() {
+        let store = CertValidityStore(defaults: freshDefaults())
+        store.days = 7
+        XCTAssertEqual(store.days, 7)
+        store.days = 45  // not a preset
+        XCTAssertEqual(store.days, 30)
+    }
+
+    func test_persistsAcrossInstances() {
+        let d = freshDefaults()
+        CertValidityStore(defaults: d).days = 90
+        XCTAssertEqual(CertValidityStore(defaults: d).days, 90)
     }
 }
 
@@ -97,14 +101,14 @@ final class CertAutonomyWireTests: XCTestCase {
 
     func test_choiceFlowsIntoCanonicalBytes() {
         let rck = String(repeating: "55", count: 32)
-        // The default 90-day choice ⇒ `ca=managed:90`.
-        let managed = signed(certAutonomy: CertAutonomyChoice.days90.installBlob)
+        // A managed window ⇒ `ca=managed:<days>`.
+        let managed = signed(certAutonomy: .init(mode: "managed", offlineWindowDays: 30))
         XCTAssertTrue(
             String(data: managed.blob.canonicalBytes(), encoding: .utf8)!
-                .hasSuffix("|\(rck)|ca=managed:90")
+                .hasSuffix("|\(rck)|ca=managed:30")
         )
-        // Indefinite ⇒ `ca=autonomous:0` (days default to 0 on the wire).
-        let autonomous = signed(certAutonomy: CertAutonomyChoice.indefinite.installBlob)
+        // Autonomous ⇒ `ca=autonomous:0` (days default to 0 on the wire).
+        let autonomous = signed(certAutonomy: .init(mode: "autonomous"))
         XCTAssertTrue(
             String(data: autonomous.blob.canonicalBytes(), encoding: .utf8)!
                 .hasSuffix("|\(rck)|ca=autonomous:0")
@@ -114,7 +118,7 @@ final class CertAutonomyWireTests: XCTestCase {
     // MARK: - On-wire JSON: certAutonomy key with mode + offlineWindowDays.
 
     func test_managedIncludesCertAutonomyWithDaysOnWire() throws {
-        let j = try json(signed(certAutonomy: CertAutonomyChoice.days7.installBlob))
+        let j = try json(signed(certAutonomy: .init(mode: "managed", offlineWindowDays: 7)))
         XCTAssertTrue(j.contains("\"certAutonomy\""))
         XCTAssertTrue(j.contains("\"mode\":\"managed\""))
         XCTAssertTrue(j.contains("\"offlineWindowDays\":7"))
@@ -123,7 +127,7 @@ final class CertAutonomyWireTests: XCTestCase {
     func test_autonomousOmitsOfflineWindowDaysOnWire() throws {
         // Autonomous ⇒ offlineWindowDays is nil ⇒ omitted (not `null`), matching
         // the optional TS field so the round-trip reconstructs identical bytes.
-        let j = try json(signed(certAutonomy: CertAutonomyChoice.indefinite.installBlob))
+        let j = try json(signed(certAutonomy: .init(mode: "autonomous")))
         XCTAssertTrue(j.contains("\"certAutonomy\""))
         XCTAssertTrue(j.contains("\"mode\":\"autonomous\""))
         XCTAssertFalse(j.contains("offlineWindowDays"))
@@ -132,7 +136,7 @@ final class CertAutonomyWireTests: XCTestCase {
     // MARK: - Round-trip parity with the OnWire decode (mode + days survive).
 
     func test_onWireCertAutonomyDecodesBackToManagedChoice() throws {
-        let wire = signed(certAutonomy: CertAutonomyChoice.days30.installBlob).onWire()
+        let wire = signed(certAutonomy: .init(mode: "managed", offlineWindowDays: 30)).onWire()
         let data = try JSONEncoder().encode(wire)
         let back = try JSONDecoder().decode(SignedInstallBlob.OnWire.self, from: data)
         XCTAssertEqual(back.blob.certAutonomy?.mode, "managed")

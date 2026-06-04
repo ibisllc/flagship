@@ -1562,13 +1562,21 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
     public let wrappedAcmeAccountKey: String?
     public let prfSaltHash: String?
     public let updatedAt: Int64?
+    /// Recovery Phase B — the account's CURRENTLY registered IRK pubkey (hex).
+    /// The recovered UMK deterministically yields the IRK it had at enrollment,
+    /// so the client compares this against the recovered IRK: equal ⇒ the key
+    /// never moved (instant pair); different ⇒ the key rotated and this device
+    /// must re-pair with `oldIrkPub = registeredIrkPubHex` + the grace window.
+    /// Absent on pre-Phase-B Workers.
+    public let registeredIrkPubHex: String?
     public init(
         username: String,
         credentialId: String,
         wrappedUmk: String,
         wrappedAcmeAccountKey: String? = nil,
         prfSaltHash: String? = nil,
-        updatedAt: Int64? = nil
+        updatedAt: Int64? = nil,
+        registeredIrkPubHex: String? = nil
     ) {
         self.username = username
         self.credentialId = credentialId
@@ -1576,6 +1584,7 @@ public struct RecoveryFetchResponse: Codable, Equatable, Sendable {
         self.wrappedAcmeAccountKey = wrappedAcmeAccountKey
         self.prfSaltHash = prfSaltHash
         self.updatedAt = updatedAt
+        self.registeredIrkPubHex = registeredIrkPubHex
     }
 }
 
@@ -1881,7 +1890,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             wrappedUmk: row.wrappedUmk,
             wrappedAcmeAccountKey: row.wrappedAcmeAccountKey,
             prfSaltHash: tamperedPrfSaltHashOnFetch ?? row.prfSaltHash,
-            updatedAt: row.updatedAt
+            updatedAt: row.updatedAt,
+            // Recovery Phase B — mirror the Worker, which returns the currently
+            // registered IRK from the usernames table. The Mock's analog is
+            // `claimedUsernames`; nil when the account wasn't claimed in this
+            // test harness (the client then stays on the instant path).
+            registeredIrkPubHex: claimedUsernames[username.lowercased()]
         )
     }
 

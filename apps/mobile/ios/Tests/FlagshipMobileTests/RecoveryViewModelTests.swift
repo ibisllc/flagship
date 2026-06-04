@@ -166,6 +166,48 @@ final class RecoveryViewModelTests: XCTestCase {
         XCTAssertEqual(recoveredBytes, originalBytes)
     }
 
+    // MARK: - Recovery Phase B: rotated-key detection
+
+    /// The fetch surfaces the account's currently registered IRK; the VM
+    /// captures it and `recoveredKeyMatchesRegistered` decides instant-pair
+    /// (key unchanged) vs re-pair (key rotated).
+    func test_phaseB_capturesRegisteredIrkAndComparesForRotation() async throws {
+        try await Keystore.generateUMK(reason: "device-A")
+        let umk = try await Keystore.currentUMK(reason: "device-A")
+        let irk = try await Keystore.deriveIRK(reason: "device-A")
+        let irkPubHex = HexUtil.encode(irk.publicKey.rawRepresentation)
+
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        // Register the account IRK (the Worker's usernames-row analog).
+        try await server.claimUsername(UsernameClaimRequest(
+            request: .init(username: username, irkPub: irkPubHex, issuedAt: 1),
+            signature: "00"
+        ))
+        await makeVM(server, user: username).setup(umkSeed: umk, passphrase: passphrase)
+
+        Keystore.wipe()
+        let vm = makeVM(server, user: nil)
+        _ = await vm.recover(username: username, passphrase: passphrase)
+        guard case .recovered = vm.phase else { return XCTFail("recover failed: \(vm.phase)") }
+
+        // The registered IRK was captured from the fetch.
+        XCTAssertEqual(vm.registeredIrkPubHex?.lowercased(), irkPubHex.lowercased())
+        // Recovered key == registered ⇒ instant path.
+        XCTAssertTrue(vm.recoveredKeyMatchesRegistered(recoveredIrkPubHex: irkPubHex))
+        // A different (rotated) key ⇒ re-pair path.
+        XCTAssertFalse(vm.recoveredKeyMatchesRegistered(
+            recoveredIrkPubHex: String(repeating: "ab", count: 32)))
+    }
+
+    /// A pre-Phase-B Worker (or a never-claimed account) returns no registered
+    /// IRK — the client stays on the instant path rather than force a re-pair.
+    func test_phaseB_noRegisteredKey_staysOnInstantPath() {
+        let vm = makeVM(MockFlagshipServerClient(), user: nil)
+        XCTAssertNil(vm.registeredIrkPubHex)
+        XCTAssertTrue(vm.recoveredKeyMatchesRegistered(recoveredIrkPubHex: "aabbccdd"))
+    }
+
     // MARK: - Anti-coercion: prfSaltHash mismatch is refused
 
     func test_recover_prfSaltHashMismatch_refuses() async throws {

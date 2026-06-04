@@ -47,11 +47,6 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         XCTAssertEqual(vm.backupPolicy, .phoneOnly)
     }
 
-    func test_defaultLlmPreferencesIsEmpty() {
-        let (vm, _) = makeVM()
-        XCTAssertEqual(vm.llmPreferences, "")
-    }
-
     func test_backupPolicyVocabularyMatchesWebapp() {
         // Mirrors the webapp's `("none" | "phone-only" | "peer")` from
         // apps/web/public/webapp/lib/buildDraft.js.
@@ -70,24 +65,6 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         XCTAssertEqual(d.string(forKey: "flagship.createServerDraft.backupPolicy"), "none")
     }
 
-    func test_llmPreferencesWritePropagates() {
-        let (vm, d) = makeVM()
-        vm.llmPreferences = "OpenAI gpt-4o for chat"
-        XCTAssertEqual(
-            d.string(forKey: "flagship.createServerDraft.llmPreferences"),
-            "OpenAI gpt-4o for chat"
-        )
-    }
-
-    func test_emptyLlmPreferencesClearsTheKey() {
-        let (vm, d) = makeVM()
-        vm.llmPreferences = "foo"
-        XCTAssertEqual(d.string(forKey: "flagship.createServerDraft.llmPreferences"), "foo")
-        vm.llmPreferences = ""
-        // Empty string ⇒ key cleared, not written as "".
-        XCTAssertNil(d.string(forKey: "flagship.createServerDraft.llmPreferences"))
-    }
-
     // MARK: - Persistence round-trip across VM construction
 
     func test_persistsAcrossViewModelConstruction() {
@@ -95,12 +72,10 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         do {
             let (vm, _) = makeVM(defaults: d)
             vm.backupPolicy = .peer
-            vm.llmPreferences = "local llama3"
         }
-        // New VM same defaults — should hydrate the prior values.
+        // New VM same defaults — should hydrate the prior value.
         let (vm2, _) = makeVM(defaults: d)
         XCTAssertEqual(vm2.backupPolicy, .peer)
-        XCTAssertEqual(vm2.llmPreferences, "local llama3")
     }
 
     // MARK: - InstallBlob has NO trace of these fields
@@ -108,7 +83,6 @@ final class CreateServerDraftFieldsTests: XCTestCase {
     func test_draftFieldsAreNotInCanonicalInstallBlob() throws {
         let (vm, _) = makeVM()
         vm.backupPolicy = .peer
-        vm.llmPreferences = "SECRET-LLM-NOTE-12345"
         // Construct a representative InstallBlob and assert its canonical
         // bytes don't carry either field. Re-asserts the audit finding
         // structurally (so a future protocol change can't quietly fold them
@@ -135,21 +109,17 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         let canonical = String(data: blob.canonicalBytes(), encoding: .utf8)!
         XCTAssertFalse(canonical.contains("peer"))
         XCTAssertFalse(canonical.contains("phone-only"))
-        XCTAssertFalse(canonical.contains("SECRET-LLM-NOTE-12345"))
         XCTAssertFalse(canonical.contains("backupPolicy"))
-        XCTAssertFalse(canonical.contains("llmPreferences"))
     }
 
     // MARK: - Successful delivery resets the draft
 
-    func test_resetClearsBothFields() {
+    func test_resetClearsDraft() {
         let (vm, d) = makeVM()
         vm.backupPolicy = .peer
-        vm.llmPreferences = "transient"
         CreateServerDraftStore(defaults: d).reset()
         // A freshly-constructed VM should now see defaults again.
         let (vm2, _) = makeVM(defaults: d)
         XCTAssertEqual(vm2.backupPolicy, .phoneOnly)
-        XCTAssertEqual(vm2.llmPreferences, "")
     }
 }

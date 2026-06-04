@@ -29,6 +29,13 @@ public final class RecoveryViewModel {
 
     public var phase: Phase = .idle
 
+    /// Recovery Phase B — the account's currently registered IRK pubkey (hex),
+    /// captured from the wrapped-UMK fetch. nil before a fetch, or when talking
+    /// to a pre-Phase-B Worker that doesn't return it. The post-recovery flow
+    /// compares this against the IRK derived from the recovered UMK to decide
+    /// instant-pair (key unchanged) vs re-pair-with-grace (key rotated).
+    public private(set) var registeredIrkPubHex: String?
+
     private let client: any FlagshipServerClient
     private let webAuthn: WebAuthnProvider
     /// The account whose UMK is being escrowed. The Worker REQUIRES it in
@@ -172,6 +179,9 @@ public final class RecoveryViewModel {
                 username: normalizedUser,
                 fetchTokenHex: HexUtil.encode(secrets.fetchToken)
             )
+            // Recovery Phase B — remember the registered IRK so the
+            // post-recovery flow can detect a rotated key.
+            registeredIrkPubHex = fetched.registeredIrkPubHex
 
             // Anti-coercion: confirm the server returned the same prfSalt we
             // derived locally. A tampered `.com` feeding a different salt
@@ -216,6 +226,19 @@ public final class RecoveryViewModel {
             phase = .failed(error.localizedDescription)
             return nil
         }
+    }
+
+    /// Recovery Phase B — decide the post-recovery path. Given the IRK pubkey
+    /// derived from the just-recovered UMK, returns true when it matches the
+    /// account's currently registered IRK (the key never moved ⇒ instant pair,
+    /// the existing Phase A path). A `false` means the key was rotated since the
+    /// recovery envelope was written, so this device must re-pair with
+    /// `oldIrkPub = registeredIrkPubHex` and wait out the grace window. When we
+    /// have no registered value (pre-Phase-B Worker), we stay on the instant
+    /// path rather than force a needless re-pair.
+    public func recoveredKeyMatchesRegistered(recoveredIrkPubHex: String) -> Bool {
+        guard let registered = registeredIrkPubHex else { return true }
+        return registered.lowercased() == recoveredIrkPubHex.lowercased()
     }
 
     /// Normalize a credentialId to lowercase hex of its raw bytes — the

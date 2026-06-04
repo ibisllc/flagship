@@ -37,6 +37,8 @@ public struct HomeScreen: View {
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
+    /// Cancel/delete a pending (in-flight) server straight from the list.
+    var onCancelServer: (PodInfo) -> Void = { _ in }
     var onVibeCode: () -> Void = {}
     var onBrowseMarketplace: () -> Void = {}
     var onRefresh: () async -> Void = {}
@@ -55,6 +57,7 @@ public struct HomeScreen: View {
         accountWasReset: Bool = false,
         deviceCapability: DeviceCapabilityBlock? = nil,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
+        onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
         onVibeCode: @escaping () -> Void = {},
@@ -76,6 +79,7 @@ public struct HomeScreen: View {
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
+        self.onCancelServer = onCancelServer
         self.onVibeCode = onVibeCode
         self.onBrowseMarketplace = onBrowseMarketplace
         self.onRefresh = onRefresh
@@ -105,7 +109,14 @@ public struct HomeScreen: View {
                 case .loaded(let d):
                     recentActivity(events: d.recentInstallEvents, c: c)
                 case .failed(let msg):
-                    ErrorCard(message: msg)
+                    // With no server there's nothing to load — a
+                    // "couldn't load" card is misleading. Leave the
+                    // space empty until the user adds their first server.
+                    if pods.isEmpty {
+                        EmptyView()
+                    } else {
+                        ErrorCard(message: msg)
+                    }
                 default:
                     EmptyView()
                 }
@@ -186,7 +197,7 @@ public struct HomeScreen: View {
                         Text("Set up recovery")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(c.text)
-                        Text("Right now this phone is the only way back into your account. Bank a passkey with Apple so you can recover if you lose this device.")
+                        Text("Right now this device is the only way back into your account. Bank a passkey with Apple so you can recover if you lose it.")
                             .font(FS.font.bodySm())
                             .foregroundColor(c.textMuted)
                     }
@@ -252,19 +263,19 @@ public struct HomeScreen: View {
         let canInstall = scopes == nil || scopes!.contains(.installService)
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: FS.space.s3)], spacing: FS.space.s3) {
             actionRow(
-                title: "Build a new app",
+                title: "Build a service",
                 subtitle: "Describe it in plain English. Your server builds and runs it.",
                 systemImage: "sparkles",
                 accent: c.primary,
                 action: onVibeCode,
                 enabled: canVibeCode,
-                disabledReason: "This device cannot build new apps. Use a primary device.",
+                disabledReason: "This device cannot build new services. Use a primary device.",
                 accessibilityId: "quick-action-vibe-code",
                 c: c
             )
             actionRow(
                 title: "Browse the marketplace",
-                subtitle: "Deploy apps your neighbours have published.",
+                subtitle: "Deploy services your neighbours have published.",
                 systemImage: "square.grid.2x2",
                 accent: c.success,
                 action: onBrowseMarketplace,
@@ -359,7 +370,7 @@ public struct HomeScreen: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            if pod.podId != leaderPodId {
+                            if pod.status != .pending && pod.podId != leaderPodId {
                                 Button {
                                     onSetLeader(pod)
                                 } label: {
@@ -370,6 +381,16 @@ public struct HomeScreen: View {
                                 onOpenPod(pod)
                             } label: {
                                 Label("Open", systemImage: "arrow.up.right.square")
+                            }
+                            // A pending (in-flight) server can be cancelled
+                            // straight from the list — frees the name + revokes
+                            // the install code.
+                            if pod.status == .pending {
+                                Button(role: .destructive) {
+                                    onCancelServer(pod)
+                                } label: {
+                                    Label("Cancel server", systemImage: "xmark.circle")
+                                }
                             }
                         }
                     }

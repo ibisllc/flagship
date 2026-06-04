@@ -56,12 +56,13 @@ public enum SettingsRoute: Hashable, Sendable {
     /// the Settings "Subscription" nav row.
     case tierStatus
     case recovery
+    /// Account-wide certificate-validity window (7/30/90 days).
+    case certValidity
     case postRecoveryProgress
     /// "Back up your account key" — passphrase-encrypted `.flagshipkey`
     /// export of the whole UMK. Reached from Settings → Recovery.
     case keyfileBackup
     case about
-    case addControlDevice
     /// Phase 3b — ADMIN side of cross-device QR pairing. Settings →
     /// Devices → Add device. Shows a pairing QR (a `/join` universal
     /// link) and runs the admin relay role: derive SAS → confirm match
@@ -114,7 +115,7 @@ public enum RootDestination: String, CaseIterable, Hashable, Identifiable, Senda
     public var title: String {
         switch self {
         case .home:     return "Home"
-        case .apps:     return "Apps"
+        case .apps:     return "Services"
         case .activity: return "Activity"
         case .settings: return "Settings"
         }

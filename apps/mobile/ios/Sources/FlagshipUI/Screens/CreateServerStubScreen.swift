@@ -12,6 +12,11 @@ public struct CreateServerStubScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(DeveloperSettings.self) private var dev
     @Bindable var vm: CreateServerViewModel
+    /// Which sub-step of the design phase is showing. The long single-scroll
+    /// form is split into one decision per page: 0 identity, 1 boot unlock,
+    /// 2 certificate, 3 backups.
+    @State private var designStep = 0
+    private let designStepCount = 4
     var onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onCancel: () -> Void = {}
 
@@ -60,32 +65,76 @@ public struct CreateServerStubScreen: View {
     // MARK: - Phase 1: Design
 
     private func designPage(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s4) {
-            phaseHeader("Design your server", subtitle: "Pick a short name + a one-line description. You'll see this everywhere the FQDN used to live.", c: c)
+        let (title, subtitle) = designStepHeader(designStep)
+        return VStack(alignment: .leading, spacing: FS.space.s4) {
+            phaseHeader(title, subtitle: subtitle, c: c)
+            Text("Step \(designStep + 1) of \(designStepCount)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(c.textMuted)
 
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    FSField(value: $vm.name, label: "Short name", placeholder: "Home, Office, Garage")
-                        .accessibilityIdentifier("cs-name-field")
-                    FSField(
-                        value: $vm.description,
-                        label: "One-line description",
-                        placeholder: "Failover for work · Music projects",
-                        helper: "Up to ~40 characters."
-                    )
-                    .accessibilityIdentifier("cs-description-field")
-                    recipeTtlPicker(c: c)
-                    bootUnlockPicker(c: c)
-                    certAutonomyPicker(c: c)
-                    backupPolicyPicker(c: c)
-                    llmPreferencesField(c: c)
+                    switch designStep {
+                    case 0:
+                        FSField(value: $vm.name, label: "Short name", placeholder: "Home, Office, Garage")
+                            .accessibilityIdentifier("cs-name-field")
+                        FSField(
+                            value: $vm.description,
+                            label: "One-line description",
+                            placeholder: "Failover for work · Music projects",
+                            helper: "Up to ~40 characters."
+                        )
+                        .accessibilityIdentifier("cs-description-field")
+                        recipeTtlPicker(c: c)
+                    case 1:
+                        bootUnlockPicker(c: c)
+                    case 2:
+                        certAutonomyPicker(c: c)
+                    default:
+                        backupPolicyPicker(c: c)
+                    }
                 }
             }
 
-            FSPrimaryButton("Continue", enabled: vm.canAdvanceFromDesign, block: true, large: true) {
-                vm.continueToScan()
+            designNav(c: c)
+        }
+    }
+
+    /// Per-step title + subtitle for the design wizard.
+    private func designStepHeader(_ step: Int) -> (String, String) {
+        switch step {
+        case 0:  return ("Name your server", "A short name + one-line description. You'll see this everywhere the FQDN used to live.")
+        case 1:  return ("Boot unlock", "How this box comes back online after a reboot.")
+        case 2:  return ("Certificate", "Who renews this server's TLS certificate.")
+        default: return ("Backups", "How this server's data is protected.")
+        }
+    }
+
+    /// Back / Next (or Continue on the last step). Step 0 gates Next behind a
+    /// non-empty name; every other step is free to advance.
+    @ViewBuilder
+    private func designNav(c: FSColors) -> some View {
+        VStack(spacing: FS.space.s2) {
+            if designStep < designStepCount - 1 {
+                FSPrimaryButton(
+                    "Next",
+                    enabled: designStep != 0 || vm.canAdvanceFromDesign,
+                    block: true,
+                    large: true
+                ) {
+                    designStep += 1
+                }
+                .accessibilityIdentifier("cs-next-button")
+            } else {
+                FSPrimaryButton("Continue", enabled: vm.canAdvanceFromDesign, block: true, large: true) {
+                    vm.continueToScan()
+                }
+                .accessibilityIdentifier("cs-continue-button")
             }
-            .accessibilityIdentifier("cs-continue-button")
+            if designStep > 0 {
+                FSGhostButton("Back", block: true) { designStep -= 1 }
+                    .accessibilityIdentifier("cs-back-button")
+            }
         }
     }
 
@@ -192,27 +241,59 @@ public struct CreateServerStubScreen: View {
 
     // MARK: - Cert-autonomy picker
     //
-    // Per-server "how long can this box keep renewing its TLS cert while my
-    // phone is offline" knob (docs/per-user-cert-worklist.md Q-A). Carried in
-    // the SIGNED InstallBlob — finite windows ⇒ a trusted device re-mints;
-    // "Indefinite" ⇒ the box holds its own minting key and renews forever.
-    // Default 90 days.
+    // A binary: does THIS box mint its own TLS certificate ("autonomous" — it
+    // holds a sealed, revocable key) or does an admin device mint it for the
+    // box ("managed", the default)? Carried in the SIGNED InstallBlob. The
+    // renewal *interval* for managed boxes is the account-wide setting in
+    // Settings, stamped in at mint time — it isn't asked here.
     private func certAutonomyPicker(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Certificate autonomy")
+            Text("Who renews the certificate")
                 .font(.subheadline)
                 .foregroundStyle(c.text)
-            Picker("Certificate autonomy", selection: $vm.certAutonomy) {
-                ForEach(CertAutonomyChoice.allCases, id: \.self) { choice in
-                    Text(choice.label).tag(choice)
-                }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("cs-cert-autonomy-picker")
-            Text("How long this box may renew its own TLS certificate while your phone is offline. Indefinite lets this box renew its own certificate forever (it holds a minting key); every other choice keeps minting on your trusted devices.")
-                .font(.caption)
-                .foregroundColor(c.textMuted)
+            certAutonomyOption(
+                canMint: false,
+                title: "My devices renew it",
+                subtitle: "The default. This box holds no key — your phone or a trusted server mints its certificate. If every admin device stays offline past your certificate-validity window (set in Settings), the certificate lapses and the box stops serving.",
+                c: c
+            )
+            certAutonomyOption(
+                canMint: true,
+                title: "This server renews its own",
+                subtitle: "Give this box a sealed, revocable minting key so it renews its own certificate indefinitely. Only for a physically-secure, always-on machine.",
+                c: c
+            )
         }
+    }
+
+    private func certAutonomyOption(
+        canMint: Bool,
+        title: String,
+        subtitle: String,
+        c: FSColors
+    ) -> some View {
+        let selected = vm.certCanMint == canMint
+        return Button {
+            vm.certCanMint = canMint
+        } label: {
+            HStack(alignment: .top, spacing: FS.space.s3) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundColor(selected ? c.primary : c.textMuted)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.medium)).foregroundColor(c.text)
+                    Text(subtitle).font(.caption).foregroundColor(c.textMuted)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(FS.space.s3)
+            .background(
+                RoundedRectangle(cornerRadius: FS.radius.md)
+                    .stroke(selected ? c.primary : c.border, lineWidth: selected ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("cs-cert-autonomy-\(canMint ? "autonomous" : "managed")")
     }
 
     // MARK: - Backup policy picker (draft-only metadata)
@@ -230,7 +311,7 @@ public struct CreateServerStubScreen: View {
             backupPolicyOption(
                 policy: .phoneOnly,
                 title: "Phone-side backups",
-                subtitle: "The default. Your phone pulls an encrypted backup of each app on a schedule. Restores need this device.",
+                subtitle: "The default. Your phone pulls an encrypted backup of each app on a schedule. Restores need this device. Because the backup lives on your phone, your server's data can't grow larger than your phone's free space.",
                 c: c
             )
             backupPolicyOption(
@@ -276,31 +357,6 @@ public struct CreateServerStubScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("cs-backup-policy-\(policy.rawValue)")
-    }
-
-    // MARK: - LLM preferences (draft-only metadata)
-    //
-    // Free-text user note about LLM provider preference. Mirrors the webapp's
-    // `#cs-llm-pref` textarea. NOT signed into the InstallBlob; surfaces
-    // later as a hint when apps request a provider key.
-    private func llmPreferencesField(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("LLM preferences")
-                .font(.subheadline)
-                .foregroundStyle(c.text)
-            TextEditor(text: $vm.llmPreferences)
-                .frame(minHeight: 88)
-                .padding(FS.space.s2)
-                .background(c.bg)
-                .overlay(
-                    RoundedRectangle(cornerRadius: FS.radius.md)
-                        .stroke(c.border, lineWidth: 1)
-                )
-                .accessibilityIdentifier("cs-llm-pref-field")
-            Text("Optional. e.g. \"OpenAI gpt-4o for chat, local llama3 for code\". Apps that ask for an LLM provider can use this as a hint.")
-                .font(.caption)
-                .foregroundColor(c.textMuted)
-        }
     }
 
     // MARK: - Phase 2: Scan

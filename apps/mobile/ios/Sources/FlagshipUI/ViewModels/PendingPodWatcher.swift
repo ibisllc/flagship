@@ -116,6 +116,11 @@ public final class PendingPodWatcher {
             pendingAuthCodeSerial: nil    // serial no longer relevant once online
         )
         app.pods[idx] = next
+        // It's a real (registered) server now — drop the local pending record
+        // so it isn't re-added as pending on the next launch.
+        if let user = app.currentUser, !user.isEmpty {
+            PendingServerStore().remove(username: user, podId: old.podId)
+        }
     }
 
     static func mapStep(_ eventName: String) -> InstallProgressViewModel.Step? {

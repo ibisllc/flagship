@@ -22,6 +22,10 @@ public enum DeepLink: Equatable, Sendable {
     /// id. Fired by the `vibecode-needs-you` push when the AI is
     /// awaiting an env-var or talkToUser response.
     case vibeCodeChat(sessionId: String)
+    /// Open the "build a service" (vibe-code) flow on the Services tab.
+    /// Triggered in-app from the Home quick action. Internal-only —
+    /// not parseable from a URL.
+    case startVibeCode
 
     /// Phase 3b — cross-device pairing join. Carries the relay session
     /// id + the admin's ephemeral X25519 public key (base64url) from a

@@ -9,6 +9,7 @@ public struct HomeTab: View {
     @Environment(\.flagshipServerClient) private var server
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
+    @Environment(ToastCenter.self) private var toasts
 
     @State private var path: [HomeRoute] = []
     @State private var vm: HomeViewModel?
@@ -72,10 +73,22 @@ public struct HomeTab: View {
                     accountWasReset: app.accountWasReset,
                     deviceCapability: app.deviceCapability,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
+                    onCancelServer: { pod in
+                        Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
+                    },
                     onAddServer: { path.append(.addServer) },
                     onSetLeader: { pod in app.setLeader(pod.podId) },
-                    onVibeCode: {},
-                    onBrowseMarketplace: {},
+                    onVibeCode: {
+                        // Building a service needs a server to build + run
+                        // it. With none, nudge the user to add one. The
+                        // full build flow lives on the Services tab.
+                        if app.pods.isEmpty {
+                            toasts.warning("Please add your first server.")
+                        } else {
+                            linker.pending = .startVibeCode
+                        }
+                    },
+                    onBrowseMarketplace: { linker.pending = .marketplace },
                     onRefresh: { await vm.load() },
                     onSetUpRecovery: {
                         // Drop the user onto the Settings tab's Recovery
@@ -105,6 +118,9 @@ public struct HomeTab: View {
             if vm == nil {
                 vm = HomeViewModel(client: client, podContext: app.currentPodId ?? app.leaderPodId)
             }
+            // Surface any pending server we delivered in a prior session before
+            // loading, so it's visible (and cancellable) immediately on launch.
+            restorePendingServers()
             if case .idle = vm?.detail { await vm?.load() }
             // Refresh cloud-recovery enrollment status when the tab
             // first appears. A failed lookup is silent — better to
@@ -231,7 +247,41 @@ public struct HomeTab: View {
             pendingAuthCodeSerial: serial
         )
         app.addPod(pod)
+        // Persist so the pending server survives an app restart — it isn't on
+        // .com yet (the box hasn't registered), so without this it would vanish
+        // from the list and the user couldn't see or cancel the in-flight install.
+        if let user = app.currentUser, !user.isEmpty {
+            PendingServerStore().add(username: user, .init(
+                podId: pod.podId,
+                name: name,
+                description: description,
+                fqdn: fqdn,
+                authCodeSerial: serial,
+                createdAt: Date().timeIntervalSince1970
+            ))
+        }
         path.removeAll()
+    }
+
+    /// Re-add persisted pending servers on launch, and drop any that have since
+    /// registered (they now arrive as real servers from .com). Idempotent —
+    /// safe to call on every Home appearance.
+    private func restorePendingServers() {
+        guard let user = app.currentUser, !user.isEmpty else { return }
+        let store = PendingServerStore()
+        let liveFqdns = Set(app.pods.filter { $0.status != .pending }.map { $0.fqdn })
+        store.reconcile(username: user, liveFqdns: liveFqdns)
+        let existing = Set(app.pods.map { $0.fqdn.lowercased() })
+        for rec in store.list(username: user) where !existing.contains(rec.fqdn.lowercased()) {
+            app.addPod(PodInfo(
+                podId: rec.podId,
+                name: rec.name,
+                description: rec.description.isEmpty ? nil : rec.description,
+                fqdn: rec.fqdn,
+                status: .pending,
+                pendingAuthCodeSerial: rec.authCodeSerial
+            ))
+        }
     }
 }
 
@@ -310,45 +360,60 @@ struct PendingPodContainer: View {
         guard !cancelling else { return }
         cancelling = true
         defer { cancelling = false }
-        guard let username = app.currentUser else {
-            app.removePod(pod.podId)
+        await cancelPendingServer(pod: pod, server: serverClient, app: app, toasts: toasts)
+        // The shared helper removes the pod on success; if it's gone, dismiss.
+        if !app.pods.contains(where: { $0.podId == pod.podId }) {
             onAfterCancel()
-            return
         }
-        do {
-            let irk = try await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
-            // 1. Release the name (the real free-the-name mechanism).
-            // serverDomain = <server>.<user>.flagship.services, held on
-            // the pod as its fqdn.
-            let releaseBytes = ReleaseServerName.canonicalBytes(
-                username: username, serverDomain: pod.fqdn, issuedAt: now
-            )
-            let releaseSig = try irk.signature(for: releaseBytes)
-            try await serverClient.releaseServerName(.init(
-                request: .init(username: username, serverDomain: pod.fqdn, issuedAt: now),
-                signature: HexUtil.encode(releaseSig)
+    }
+}
+
+/// Cancel a pending server: release the reserved name (un-pin the routing
+/// record so the name frees up), revoke the install auth-code, drop the local
+/// pending record, and remove the pod. Shared by the pending-detail screen
+/// (PendingPodContainer) and the Home list's "Cancel server" context action.
+/// Mirrors webapp `cancelServer`. On a release failure the pod is KEPT (the
+/// name is still reserved) with a warning toast.
+@MainActor
+func cancelPendingServer(
+    pod: PodInfo,
+    server: any FlagshipServerClient,
+    app: AppState,
+    toasts: ToastCenter
+) async {
+    guard let username = app.currentUser else {
+        app.removePod(pod.podId)
+        return
+    }
+    do {
+        let irk = try await Keystore.deriveIRK(reason: "Cancel server \(pod.name)")
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        // 1. Release the name (the real free-the-name mechanism).
+        let releaseBytes = ReleaseServerName.canonicalBytes(
+            username: username, serverDomain: pod.fqdn, issuedAt: now
+        )
+        let releaseSig = try irk.signature(for: releaseBytes)
+        try await server.releaseServerName(.init(
+            request: .init(username: username, serverDomain: pod.fqdn, issuedAt: now),
+            signature: HexUtil.encode(releaseSig)
+        ))
+        // 2. Belt-and-braces auth-code revoke (the release already revoked
+        // active codes server-side; 403/404 is treated as success).
+        if let serial = pod.pendingAuthCodeSerial {
+            let revokeBytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
+            let revokeSig = try irk.signature(for: revokeBytes)
+            try? await server.revokeAuthCode(.init(
+                request: .init(serial: serial, username: username, issuedAt: now),
+                signature: HexUtil.encode(revokeSig)
             ))
-            // 2. Belt-and-braces auth-code revoke. The release already
-            // revoked active codes server-side; this is a cheap explicit
-            // revoke of the serial we hold locally. 403/404 (already
-            // gone) is treated as success by the client.
-            if let serial = pod.pendingAuthCodeSerial {
-                let revokeBytes = AuthCodeRevoke.canonicalBytes(serial: serial, username: username, issuedAt: now)
-                let revokeSig = try irk.signature(for: revokeBytes)
-                try? await serverClient.revokeAuthCode(.init(
-                    request: .init(serial: serial, username: username, issuedAt: now),
-                    signature: HexUtil.encode(revokeSig)
-                ))
-            }
-            toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
-            app.removePod(pod.podId)
-            onAfterCancel()
-        } catch {
-            // Keep the pod: the name is still reserved, so dropping it
-            // locally would just hide a name the user can't re-use.
-            toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
         }
+        toasts.success("Server \"\(pod.name)\" cancelled — the name is free again.")
+        app.removePod(pod.podId)
+        PendingServerStore().remove(username: username, podId: pod.podId)
+    } catch {
+        // Keep the pod: the name is still reserved, so dropping it locally
+        // would just hide a name the user can't re-use.
+        toasts.warning("Couldn't cancel — the name is still reserved. Check your connection and try again.")
     }
 }
 
