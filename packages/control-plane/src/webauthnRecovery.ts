@@ -257,12 +257,21 @@ export async function handleFetchWrappedUmkWithToken(
   if (presentedHashHex !== rec.fetchTokenHashHex.toLowerCase()) {
     return { status: 403, body: { error: "invalid fetch token" } };
   }
+  // Recovery Phase B — surface the CURRENTLY registered IRK so the recovering
+  // client can detect whether the account's key was rotated since this recovery
+  // envelope was written. Recovered-IRK == registered ⇒ instant pair (the key
+  // never moved); != ⇒ the device must re-pair (oldIrkPub = this registered
+  // value) and wait out the grace window. Best-effort: a missing username row
+  // (shouldn't happen for an enrolled account) simply omits the field, leaving
+  // the client on its pre-Phase-B path.
+  const userRec = await deps.usernames.get(username);
   return {
     status: 200,
     body: {
       username: rec.username,
       credentialId: rec.credentialIdHex,
       wrappedUmk: rec.wrappedUmkB64,
+      ...(userRec ? { registeredIrkPubHex: userRec.irkPubHex } : {}),
       // #28 — release the escrowed ACME account key alongside the UMK so a
       // recovering device can restore cert-minting authority. Ciphertext only;
       // absent when the account never minted an account key.

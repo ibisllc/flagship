@@ -347,10 +347,44 @@ describe("webauthn recovery — Argon2id-gated fetch (Task #74)", () => {
       wrappedUmk: string;
       credentialId: string;
       prfSaltHash: string;
+      registeredIrkPubHex: string;
     };
     expect(body.wrappedUmk).toBe(bytesToB64(wrapped));
     expect(body.credentialId).toBe("deadbeef".repeat(4));
     expect(body.prfSaltHash).toBe(prfSaltHashHex);
+    // Recovery Phase B — the success body surfaces the currently registered
+    // IRK so the client can detect a rotated key.
+    expect(body.registeredIrkPubHex).toBe(bytesToHex(irk.publicKey));
+  });
+
+  it("surfaces the CURRENT registered IRK (Phase B rotation detection)", async () => {
+    const irk = makeKey();
+    const storage = await setup(irk);
+    const fetchToken = new Uint8Array(32);
+    crypto.getRandomValues(fetchToken);
+    const fetchTokenHashHex = await sha256Hex(fetchToken);
+    await upload({ storage, irk, fetchTokenHashHex });
+
+    // Simulate a key rotation after the recovery envelope was written: the
+    // usernames row now holds a DIFFERENT IRK than the recovery record.
+    const rotated = makeKey();
+    await storage.usernames.swapIrkPub(
+      USERNAME,
+      bytesToHex(irk.publicKey),
+      bytesToHex(rotated.publicKey),
+      Date.now(),
+    );
+
+    const res = await handleFetchWrappedUmkWithToken(
+      { usernames: storage.usernames, webauthnRecovery: storage.webauthnRecovery },
+      USERNAME,
+      { fetchToken: bytesToHex(fetchToken), issuedAt: Date.now() },
+    );
+    expect(res.status).toBe(200);
+    const body = res.body as { registeredIrkPubHex: string };
+    // The fetch returns the CURRENT (rotated) key, not the one baked into the
+    // recovery record — so the client sees recovered != registered and re-pairs.
+    expect(body.registeredIrkPubHex).toBe(bytesToHex(rotated.publicKey));
   });
 
   it("returns 403 for the wrong fetchToken (passphrase guess)", async () => {

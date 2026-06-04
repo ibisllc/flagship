@@ -539,11 +539,11 @@ describe("re-pair GET (status read)", () => {
 });
 
 // ───────────────────────────────────────────────────────────────────
-// v1.2 Plan B Phase 2 — single-device 7-day grace + TOTP gate
+// Recovery Phase B — single-device 3-day grace + TOTP gate
 // ───────────────────────────────────────────────────────────────────
 
-describe("v1.2 Phase 2 — single-device 7-day grace", () => {
-  it("stamps graceSeconds=604800 on a single-device account's pending row", async () => {
+describe("Recovery Phase B — single-device 3-day grace", () => {
+  it("stamps graceSeconds=259200 on a single-device account's pending row", async () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "single" });
@@ -559,7 +559,7 @@ describe("v1.2 Phase 2 — single-device 7-day grace", () => {
     expect(body.accountType).toBe("single");
     expect(body.totpRequired).toBe(false);
     const row = await storage.pendingRePairs.get(USERNAME);
-    expect(row?.graceSeconds).toBe(604_800);
+    expect(row?.graceSeconds).toBe(259_200);
     expect(row?.totpRequired).toBe(false);
     expect(row?.totpProofConsumed).toBe(false);
     // Bit 0 (T+0) stamped on initiate — the scheduler must not
@@ -644,7 +644,7 @@ describe("v1.2 Phase 2 — single-device 7-day grace", () => {
     expect(row?.totpProofConsumed).toBe(true);
   });
 
-  it("swaps the IRK after 7 days for a single-device account", async () => {
+  it("swaps the IRK after the single-device grace (3 days) for a single-device account", async () => {
     const oldIrk = makeKey();
     const newIrk = makeKey();
     const storage = await setup(oldIrk, { accountType: "single" });
@@ -656,7 +656,7 @@ describe("v1.2 Phase 2 — single-device 7-day grace", () => {
       USERNAME,
     );
     expect(earlyRes.status).toBe(425);
-    // 7 days + 1s is enough.
+    // The single-device grace (3 days) + 1s is enough.
     const lateRes = await handleCompleteRePair(
       { ...deps, now: () => Date.now() + RE_PAIR_SINGLE_GRACE_MS + 1_000 },
       USERNAME,

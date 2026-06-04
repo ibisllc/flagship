@@ -75,11 +75,13 @@ import { ALERT_BIT_T0 } from "./rePairAlerts.js";
  */
 export const RE_PAIR_GRACE_MS = 24 * 60 * 60_000;
 
-/** v1.2 — 7-day grace for single-device accounts. Wide enough that a
- * user on vacation / asleep / without their device doesn't miss the
- * objection window. See docs/v1.2-security-cascade.md §"Re-pair J.3
- * grace extension". */
-export const RE_PAIR_SINGLE_GRACE_MS = 7 * 24 * 60 * 60_000;
+/** Recovery Phase B — 3-day grace for single-device accounts. The earlier
+ * 7-day window was wide enough to never miss an objection, but it also meant a
+ * legitimately-recovering owner waited a week to take their account back. 3
+ * days keeps a real objection window while making same-week recovery viable.
+ * See docs/session-handoff-2026-06-02.md §4 + docs/v1.2-security-cascade.md
+ * §"Re-pair J.3 grace extension". */
+export const RE_PAIR_SINGLE_GRACE_MS = 3 * 24 * 60 * 60_000;
 
 /** v1.2 — 14-day quarantine on a freshly-admitted device's revoke-
  *  others power. The legitimate owner's existing devices remain at
