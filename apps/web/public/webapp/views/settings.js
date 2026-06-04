@@ -6,6 +6,7 @@ import {
   webPushSupported,
 } from "../lib/push.js";
 import { $, registerView, show } from "../lib/router.js";
+import { getCertValidityDays, setCertValidityDays } from "../lib/certValidity.js";
 import { getSession, ensureUsername } from "../lib/state.js";
 import { escapeHtml, sha256Bytes } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
@@ -320,6 +321,16 @@ export function initSettingsView() {
     await renderActiveProviderChip();
   });
   $("settings-reset")?.addEventListener("click", handleReset);
+  // Account-wide certificate-validity window — reflect the stored value and
+  // persist on change. Mirrors the iOS CertValidityScreen.
+  const certValidityEl = $("cert-validity-select");
+  if (certValidityEl) {
+    certValidityEl.value = String(getCertValidityDays());
+    certValidityEl.addEventListener("change", () => {
+      const v = setCertValidityDays(parseInt(certValidityEl.value, 10));
+      certValidityEl.value = String(v);
+    });
+  }
   $("push-enable")?.addEventListener("click", runEnablePush);
   $("push-disable")?.addEventListener("click", runDisablePush);
   // Refresh once on init; repeated renders are kicked from the

@@ -72,23 +72,16 @@
         background: var(--canvas-tinted); color: var(--ink); border: 1px solid var(--border);
       }
       .no-recipe.hidden, .has-recipe.hidden { display: none; }
-      .alpine-cta {
-        margin: var(--space-4) 0; padding: var(--space-4);
-        border: 1px solid var(--accent); border-radius: var(--radius-lg);
-        background: var(--canvas-tinted);
-      }
-      .alpine-cta h3 { margin: 0 0 var(--space-2); }
-      .alpine-cta p { margin: 0 0 var(--space-3); color: var(--ink-muted); font-size: var(--body-sm-size); }
-      .alpine-cta .dl-primary, .alpine-cta button.dl-primary {
-        display: inline-block; padding: 12px 22px; border: 0; cursor: pointer;
-        border-radius: var(--radius-md); background: var(--accent); color: var(--accent-ink, #fff);
-        font-weight: 600; font-size: var(--body-size); text-decoration: none;
-      }
-      .alpine-cta .recommended { display: inline-block; margin-bottom: var(--space-2); padding: 2px 10px;
+      .recommended { display: inline-block; margin-bottom: var(--space-2); padding: 2px 10px;
         border-radius: 999px; background: var(--accent); color: var(--accent-ink, #fff);
         font-size: var(--body-xs-size, 0.72rem); font-weight: 600; letter-spacing: 0.02em; }
-      .alpine-cta .advanced-note { margin-top: var(--space-3); margin-bottom: 0; }
-      .alpine-cta.hidden { display: none; }
+      .substep { margin-top: var(--space-5); }
+      .substep h4 {
+        margin: 0 0 var(--space-2); font-size: 15px; font-weight: 600; color: var(--ink);
+        display: flex; align-items: center; gap: var(--space-2);
+      }
+      .substep h4 .num { font-family: var(--font-mono); color: var(--accent); font-weight: 500; }
+      .substep p { margin: var(--space-1) 0; color: var(--ink-muted); font-size: var(--body-sm-size); }
       .advanced-disclosure {
         margin-top: var(--space-6);
         border: 1px solid var(--border-soft); border-radius: var(--radius-lg);
@@ -142,58 +135,53 @@
           A recipe is a tiny signed file — your phone authorized it, and only your phone can.
         </p>
 
-        <!-- Primary (recommended) path: the guided Flagship Assembler flow. -->
+        <!-- Recommended path: the guided Flagship Assembler flow, in one box. -->
         <section class="step">
           <span class="recommended">Recommended</span>
-          <h3><span class="num">1</span> Your recipe for <strong id="serverDomain">your server</strong></h3>
-          <p>Two ways to hand it to the Assembler — pick whichever fits:</p>
-          <div class="actions">
-            <button id="copyRecipe" type="button">Copy recipe</button>
-            <button id="downloadRecipe" type="button" class="secondary">Download .json</button>
-          </div>
-          <p class="status-line" id="recipeStatus">
-            <strong>Copy</strong> if the Assembler is on this computer — nothing touches the disk.
-            <strong>Download</strong> if you'll carry it to another machine.
-          </p>
-          <div class="meta" id="recipeMeta"></div>
-        </section>
+          <h3>Build your boot USB with the Flagship Assembler</h3>
+          <p>Three quick steps for <strong id="serverDomain">your server</strong>. The Assembler downloads the Flagship base image <strong>once</strong> and bakes your recipe in — no separate ISO download, no balenaEtcher, Rufus, or dd.</p>
 
-        <section class="step">
-          <h3><span class="num">2</span> Download the Flagship Assembler</h3>
-          <p>The desktop app that writes your boot USB. Paste your recipe and it does the rest — it downloads the Flagship base image <strong>once</strong> (then reuses it for every later server) and bakes your recipe in. No balenaEtcher, Rufus, dd, or separate ISO download.</p>
-          <div class="actions" id="installerPrimary"><!-- big download for the detected OS, filled by ready.js --></div>
-          <div class="dl-others" id="installerOthers"><!-- other OSes, filled by ready.js --></div>
-          <p class="reuse-note">
-            <strong>You only install the Assembler once.</strong> Reuse it for every server you ever set up — just feed it a fresh recipe each time.
-          </p>
-        </section>
-
-        <section class="step">
-          <h3><span class="num">3</span> Assemble &amp; boot</h3>
-          <p>Open the Assembler, paste this recipe (or open the downloaded file), pick your USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
-          <p class="installer-iso">Already have your own Debian/Ubuntu image you'd rather use? The Assembler's <strong>Advanced</strong> mode remasters it instead. <a class="secondary-link" href="/docs#recommended-linux" target="_blank" rel="noopener">Recommended Linux images →</a></p>
-        </section>
-
-        <!-- Advanced: self-download a prebuilt image with the recipe baked in. -->
-        <details class="advanced-disclosure" id="advancedOptions">
-          <summary>Advanced: download a ready-to-flash image yourself</summary>
-          <p class="advanced-intro">
-            Rather skip the Assembler? You can download a prebuilt Flagship image with your
-            recipe already baked in, then flash it with any USB writer. This path may be
-            unavailable while the base image is being published — if the download doesn't
-            start, use the recommended Assembler flow above.
-          </p>
-
-          <div class="alpine-cta" id="alpineCta">
-            <h3>Download your ready-to-flash boot image</h3>
-            <p>
-              A custom Flagship image with your recipe already inside. Flash it to any USB
-              stick, boot the target machine, and watch it come up on your phone. Nothing
-              else to configure.
+          <div class="substep">
+            <h4><span class="num">1</span> Grab your recipe</h4>
+            <p>A tiny signed file — your phone authorized it, and only your phone can.</p>
+            <div class="actions">
+              <button id="copyRecipe" type="button">Copy recipe</button>
+              <button id="downloadRecipe" type="button" class="secondary">Download .json</button>
+            </div>
+            <p class="status-line" id="recipeStatus">
+              <strong>Copy</strong> if the Assembler is on this computer — nothing touches the disk.
+              <strong>Download</strong> if you'll carry it to another machine.
             </p>
-            <button type="button" class="dl-primary" id="downloadIso">Download boot image (.iso)</button>
-            <p class="advanced-note status-line" id="isoStatus"></p>
+            <div class="meta" id="recipeMeta"></div>
           </div>
+
+          <div class="substep">
+            <h4><span class="num">2</span> Download the Flagship Assembler</h4>
+            <p>The desktop app that writes your boot USB. You only install it <strong>once</strong> — reuse it for every server, just feed it a fresh recipe each time.</p>
+            <div class="actions" id="installerPrimary"><!-- big download for the detected OS, filled by ready.js --></div>
+            <div class="dl-others" id="installerOthers"><!-- other OSes, filled by ready.js --></div>
+          </div>
+
+          <div class="substep">
+            <h4><span class="num">3</span> Assemble &amp; boot</h4>
+            <p>Open the Assembler, paste this recipe (or open the downloaded file), pick your USB drive, and hit Assemble. Boot the target machine from the USB — the rest is automatic, ending at a real green padlock on your domain.</p>
+          </div>
+        </section>
+
+        <!-- Advanced: bring your own ISO; the Assembler bakes the same recipe in. -->
+        <details class="advanced-disclosure" id="advancedOptions">
+          <summary>Advanced: bring your own ISO</summary>
+          <p class="advanced-intro">
+            Prefer to start from an OS image you downloaded yourself? Download a stock
+            Alpine, Debian, or Ubuntu ISO, then run the Assembler in <strong>Advanced
+            mode</strong>: point it at your downloaded image and the same recipe (copy it,
+            or open the .json from above) and it remasters that image with your recipe
+            baked in. Flash the result to USB and boot — identical outcome, your choice of
+            base image.
+          </p>
+          <p class="advanced-intro" style="margin-bottom: var(--space-5)">
+            <a class="secondary-link" href="/docs#recommended-linux" target="_blank" rel="noopener">Recommended Linux images →</a>
+          </p>
         </details>
       </div>
 

@@ -5,7 +5,6 @@
 // their LLM provider key). Each draft carries:
 //   - serverName        (DNS label)
 //   - backupPolicy      ("none" | "phone-only" | "peer")
-//   - llmPreferences    ({ providerId, modelName }[])
 //   - status            "draft" | "delivered" | "deployed"
 //
 // On "Deliver now" the composer:
@@ -71,7 +70,6 @@ export async function saveDraft(draft) {
     id,
     serverName: draft.serverName ?? "",
     backupPolicy: draft.backupPolicy ?? "phone-only",
-    llmPreferences: draft.llmPreferences ?? [],
     status: draft.status ?? "draft",
     createdAt: draft.createdAt ?? Date.now(),
     updatedAt: Date.now(),

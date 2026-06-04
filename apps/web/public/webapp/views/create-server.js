@@ -32,6 +32,7 @@ import {
   saveDraft,
 } from "../lib/buildDraft.js";
 import { releaseServerName, serverDomainOf } from "../lib/releaseServer.js";
+import { getCertValidityDays } from "../lib/certValidity.js";
 
 registerView("view-create-server");
 
@@ -338,7 +339,6 @@ async function resumeDraft(id) {
   activeDraftId = id;
   $("cs-server-name").value = d.serverName || "";
   $("cs-backup-policy").value = d.backupPolicy || "phone-only";
-  $("cs-llm-pref").value = (d.llmPreferences || []).map((p) => `${p.providerId}:${p.modelName ?? ""}`).join("\n");
   restoreCertAutonomy(d.certAutonomy);
   toast(`resumed ${d.serverName}`);
 }
@@ -352,13 +352,6 @@ function readInputs() {
     throw new Error(`server name "${serverName}" is reserved`);
   }
   const backupPolicy = $("cs-backup-policy").value;
-  const llmRaw = $("cs-llm-pref").value.trim();
-  const llmPreferences = llmRaw
-    ? llmRaw.split(/\r?\n/).filter(Boolean).map((line) => {
-        const [providerId, modelName] = line.split(":");
-        return { providerId: (providerId || "").trim(), modelName: (modelName || "").trim() };
-      })
-    : [];
   // Recipe TTL in millis. Picker UI emits hours via #cs-ttl-hours;
   // absent input = default 6 hours.
   const ttlEl = $("cs-ttl-hours");
@@ -372,7 +365,7 @@ function readInputs() {
   // docs/per-user-cert-worklist.md). Carried in the SIGNED InstallBlob so a
   // relay can't silently weaken "managed" → "autonomous".
   const certAutonomy = readCertAutonomy();
-  return { serverName, backupPolicy, llmPreferences, recipeTtlMs, bootUnlockMode, certAutonomy };
+  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, certAutonomy };
 }
 
 // Read the selected boot-unlock mode from the radio group. Defaults to
@@ -382,46 +375,28 @@ function readBootUnlockMode() {
   return checked && checked.value === "approve" ? "approve" : "auto";
 }
 
-// Finite offline-autonomy windows offered in the picker, in days. A finite
-// pick maps to certAutonomy = { mode: "managed", offlineWindowDays: N };
-// "Indefinite" maps to { mode: "autonomous" } (the power-user weakening where
-// the box itself holds a sealed, revocable ACME account key). Default 90.
-export const CERT_AUTONOMY_DAY_OPTIONS = [3, 7, 15, 30, 90];
-export const DEFAULT_CERT_AUTONOMY_DAYS = 90;
+// Cert autonomy is a BINARY choice: "managed" (the default — an admin device
+// renews) vs "autonomous" (the box holds a sealed, revocable key and renews
+// itself forever). The renewal *window* for managed boxes is the account-wide
+// validity setting (lib/certValidity.js), stamped in here — it isn't a
+// per-server pick.
 
-// Read the selected cert-autonomy window from the <select>. Returns the
-// certAutonomy object to thread onto the blob. Absent control / unrecognised
-// value falls back to the default managed window so the field is always
-// present (the box otherwise defaults to managed/30 — we prefer the explicit
-// user choice). "indefinite" ⇒ autonomous.
+// Read the selected cert-autonomy mode from the <select>. Returns the
+// certAutonomy object to thread onto the blob. "autonomous" ⇒ self-minting (no
+// window); anything else ⇒ managed with the account-wide validity window.
 export function readCertAutonomy() {
   const el = $("cs-cert-autonomy");
-  const raw = el ? String(el.value) : String(DEFAULT_CERT_AUTONOMY_DAYS);
-  if (raw === "indefinite") return { mode: "autonomous" };
-  const days = parseInt(raw, 10);
-  const valid = CERT_AUTONOMY_DAY_OPTIONS.includes(days) ? days : DEFAULT_CERT_AUTONOMY_DAYS;
-  return { mode: "managed", offlineWindowDays: valid };
+  const mode = el && String(el.value) === "autonomous" ? "autonomous" : "managed";
+  if (mode === "autonomous") return { mode: "autonomous" };
+  return { mode: "managed", offlineWindowDays: getCertValidityDays() };
 }
 
 // Restore the cert-autonomy <select> from a saved draft's certAutonomy
-// object. "autonomous" ⇒ "indefinite"; managed ⇒ its day value (falling
-// back to the default when the stored value isn't one of the offered
-// options). A draft saved before this field existed leaves the default.
+// object. "autonomous" stays autonomous; everything else (or absent) ⇒ managed.
 function restoreCertAutonomy(certAutonomy) {
   const el = $("cs-cert-autonomy");
   if (!el) return;
-  if (!certAutonomy) {
-    el.value = String(DEFAULT_CERT_AUTONOMY_DAYS);
-    return;
-  }
-  if (certAutonomy.mode === "autonomous") {
-    el.value = "indefinite";
-    return;
-  }
-  const days = certAutonomy.offlineWindowDays;
-  el.value = CERT_AUTONOMY_DAY_OPTIONS.includes(days)
-    ? String(days)
-    : String(DEFAULT_CERT_AUTONOMY_DAYS);
+  el.value = certAutonomy?.mode === "autonomous" ? "autonomous" : "managed";
 }
 
 // Recipe TTL bounds — single user-facing knob. 5 min floor, 24 hour

@@ -914,8 +914,8 @@ function ogImage(url: URL): Response {
   <rect x="32" y="32" width="1136" height="566" fill="none" stroke="#DAD5C5" stroke-width="1"/>
   <!-- Brand mark, top-left: rounded square + disc -->
   <g transform="translate(80,80)">
-    <rect x="0" y="2" width="54" height="54" rx="13" fill="#14130E"/>
-    <circle cx="27" cy="29" r="19" fill="#F4F1E8"/>
+    <rect x="0" y="2" width="54" height="54" rx="13" fill="#14B8A6"/>
+    <circle cx="27" cy="29" r="19" fill="#FFFFFF"/>
     <text x="70" y="24" fill="#14130E" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600" font-size="22" letter-spacing="-0.3">Flagship</text>
     <text x="70" y="44" fill="#6C685D" font-family="ui-monospace, monospace" font-size="13" letter-spacing="0.18em">A PERSONAL CLOUD</text>
   </g>

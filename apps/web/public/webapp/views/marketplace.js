@@ -8,7 +8,7 @@
 // listings is null today; the BFF passes it through verbatim.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl } from "../lib/api.js";
 import { installFromMarketplace } from "../lib/installService.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
@@ -39,6 +39,14 @@ export function scanGradePill(grade) {
 
 export async function renderMarketplace() {
   const root = $("marketplace-content");
+  // The marketplace is meant to be browsable before you own a server —
+  // it's a catalog, not something served by your pod. Until a central
+  // catalog exists, show a friendly placeholder instead of a
+  // "not paired to a server yet" error when there's no pod.
+  if (!getPodBaseUrl()) {
+    root.innerHTML = '<div class="card placeholder">The marketplace is coming soon.</div>';
+    return;
+  }
   root.innerHTML = skeletonCards(4);
   try {
     const body = await screensFetch("/api/screens/marketplace-browse");

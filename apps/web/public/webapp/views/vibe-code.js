@@ -354,6 +354,13 @@ export function initVibeCodeView() {
 }
 
 export async function enterVibeCode() {
+  // Building a service needs a server to build and run it. With none
+  // paired, nudge the user to add one rather than opening a dead form.
+  if (!getPodBaseUrl()) {
+    toast("Please add your first server.", "err");
+    show("view-home");
+    return;
+  }
   show("view-vibe-code");
   reset();
 }

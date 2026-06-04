@@ -9,20 +9,18 @@ describe("/ready/ — post-order recipe landing", () => {
     // Both ways to hand off the recipe (copy preferred, download fallback).
     expect(r.body).toContain('id="copyRecipe"');
     expect(r.body).toContain('id="downloadRecipe"');
-    // OS-detected installer surfaces + the "install once" message.
+    // OS-detected installer surfaces.
     expect(r.body).toContain('id="installerPrimary"');
     expect(r.body).toContain('id="installerOthers"');
-    expect(r.body).toContain("only install the Assembler once");
+    // The recommended box is badged + reuses the Assembler install-once message.
+    expect(r.body).toContain("Recommended");
+    expect(r.body).toContain("only install it");
     // The no-recipe fallback exists for direct navigation.
     expect(r.body).toContain('id="noRecipe"');
     expect(r.body).toContain('src="/ready/ready.js"');
-    // The self-download image path still exists, now behind Advanced.
-    expect(r.body).toContain('id="alpineCta"');
-    expect(r.body).toContain('id="downloadIso"');
-    expect(r.body).toContain("ready-to-flash");
   });
 
-  it("makes the Assembler flow primary and tucks the self-download ISO into an Advanced disclosure", async () => {
+  it("makes the Assembler flow primary and offers bring-your-own-ISO as an Advanced disclosure (no website-built image)", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/ready/" });
     expect(r.statusCode).toBe(200);
@@ -30,24 +28,24 @@ describe("/ready/ — post-order recipe landing", () => {
     const detailsIdx = r.body.indexOf("<details");
     expect(detailsIdx).toBeGreaterThan(-1);
 
-    // The recipe + Assembler affordances are now primary — outside the disclosure.
+    // The recipe + Assembler affordances are primary — outside the disclosure.
     expect(r.body.indexOf('id="copyRecipe"')).toBeLessThan(detailsIdx);
     expect(r.body.indexOf('id="downloadRecipe"')).toBeLessThan(detailsIdx);
     expect(r.body.indexOf('id="installerPrimary"')).toBeLessThan(detailsIdx);
     expect(r.body.indexOf('id="installerOthers"')).toBeLessThan(detailsIdx);
 
-    // The Advanced path is an explicit collapsible disclosure with the new copy.
+    // The Advanced path is an explicit collapsible disclosure: bring your own ISO,
+    // the Assembler bakes the same recipe in. No server-built/personalized image.
     expect(r.body).toMatch(/<details[^>]*class="advanced-disclosure"/);
-    expect(r.body).toContain("Advanced: download a ready-to-flash image yourself");
+    expect(r.body).toContain("Advanced: bring your own ISO");
+    expect(r.body).toContain("remasters that image");
 
-    // The self-download personalized-image path now lives inside the disclosure.
-    const detailsBlock = r.body.slice(detailsIdx, r.body.indexOf("</details>"));
-    expect(detailsBlock).toContain('id="alpineCta"');
-    expect(detailsBlock).toContain('id="downloadIso"');
-    expect(detailsBlock).toContain('id="isoStatus"');
+    // The curtailed website-built-image path is gone.
+    expect(r.body).not.toContain('id="alpineCta"');
+    expect(r.body).not.toContain('id="downloadIso"');
   });
 
-  it("serves /ready/ready.js wired to the QR hand-off key + on-brand installer links", async () => {
+  it("serves /ready/ready.js wired to the QR hand-off key + on-brand installer links, with no server-side ISO build", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/ready/ready.js" });
     expect(r.statusCode).toBe(200);
@@ -61,9 +59,8 @@ describe("/ready/ — post-order recipe landing", () => {
     expect(r.body).toContain("/download/mac");
     expect(r.body).toContain("/download/windows");
     expect(r.body).toContain("/download/linux");
-    // #12: the custom-ISO download POSTs the recipe to the personalize endpoint
-    // via a streamed form submit (not an in-memory blob).
-    expect(r.body).toContain("/api/personalize-iso");
-    expect(r.body).toContain("downloadAlpineIso");
+    // The curtailed website-built-image path is gone from the client too.
+    expect(r.body).not.toContain("/api/personalize-iso");
+    expect(r.body).not.toContain("downloadAlpineIso");
   });
 });

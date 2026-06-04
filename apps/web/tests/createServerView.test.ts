@@ -54,7 +54,7 @@ describe("create-server view — static structure (#24)", () => {
   it("provides the inputs the user fills in", () => {
     expect(VIEW_SRC).toMatch(/cs-server-name/);
     expect(VIEW_SRC).toMatch(/cs-backup-policy/);
-    expect(VIEW_SRC).toMatch(/cs-llm-pref/);
+    expect(VIEW_SRC).toMatch(/cs-cert-autonomy/);
     expect(VIEW_SRC).toMatch(/cs-relay-session/);
   });
 
@@ -479,35 +479,31 @@ describe("canonicalInstallBlob — certAutonomy byte-parity (per-user-cert)", ()
 });
 
 describe("create-server view — cert-autonomy picker (per-user-cert)", () => {
-  it("renders the offline-autonomy question prompt", () => {
-    expect(INDEX_HTML).toContain(
-      "How long can this server run while your phone is offline?",
-    );
+  it("renders the who-renews question prompt", () => {
+    expect(INDEX_HTML).toContain("Who renews this server's certificate?");
   });
 
-  it("offers 3/7/15/30/90 days + Indefinite, defaulting to 90", () => {
+  it("offers a binary managed/autonomous choice, defaulting to managed", () => {
     const sel = INDEX_HTML.slice(
       INDEX_HTML.indexOf('id="cs-cert-autonomy"'),
-      INDEX_HTML.indexOf('id="cs-cert-autonomy"') + 700,
+      INDEX_HTML.indexOf('id="cs-cert-autonomy"') + 400,
     );
-    expect(sel).toMatch(/<option value="3">/);
-    expect(sel).toMatch(/<option value="7">/);
-    expect(sel).toMatch(/<option value="15">/);
-    expect(sel).toMatch(/<option value="30">/);
-    expect(sel).toMatch(/<option value="90" selected>/);
-    expect(sel).toMatch(/<option value="indefinite">/);
-    // Exactly one option is preselected, and it's 90.
+    expect(sel).toMatch(/<option value="managed" selected>/);
+    expect(sel).toMatch(/<option value="autonomous">/);
+    // The old per-server days picker is gone.
+    expect(sel).not.toMatch(/value="indefinite"/);
+    expect(sel).not.toMatch(/value="90"/);
+    // Exactly one option is preselected, and it's managed.
     const selected = sel.match(/selected/g) || [];
     expect(selected.length).toBe(1);
-    expect(sel).not.toMatch(/value="indefinite"[^>]*selected/);
   });
 
   it("reads the picker and threads certAutonomy into the signed blob", () => {
-    // The reader exists and maps finite→managed, indefinite→autonomous.
+    // The reader maps autonomous→self-mint, managed→account-wide window.
     expect(VIEW_SRC).toContain("cs-cert-autonomy");
     expect(VIEW_SRC).toMatch(/export function readCertAutonomy\(/);
     expect(VIEW_SRC).toMatch(/mode: "autonomous"/);
-    expect(VIEW_SRC).toMatch(/mode: "managed", offlineWindowDays/);
+    expect(VIEW_SRC).toMatch(/mode: "managed", offlineWindowDays: getCertValidityDays\(\)/);
     // The blob carries it (mirror of the bootUnlockMode threading).
     expect(VIEW_SRC).toMatch(/blob\.certAutonomy = inputs\.certAutonomy/);
     // The downloaded recipe carries whatever the blob carried.
@@ -523,12 +519,12 @@ describe("create-server view — cert-autonomy picker (per-user-cert)", () => {
     expect(LIB_SRC).toContain("`ca=${b.certAutonomy.mode}:${b.certAutonomy.offlineWindowDays ?? 0}`");
   });
 
-  it("exposes the picker options + default as module exports", async () => {
-    const { CERT_AUTONOMY_DAY_OPTIONS, DEFAULT_CERT_AUTONOMY_DAYS } = await import(
-      "../public/webapp/views/create-server.js"
+  it("exposes the account-wide validity options + default as module exports", async () => {
+    const { CERT_VALIDITY_OPTIONS, DEFAULT_CERT_VALIDITY_DAYS } = await import(
+      "../public/webapp/lib/certValidity.js"
     );
-    expect(CERT_AUTONOMY_DAY_OPTIONS).toEqual([3, 7, 15, 30, 90]);
-    expect(DEFAULT_CERT_AUTONOMY_DAYS).toBe(90);
+    expect(CERT_VALIDITY_OPTIONS).toEqual([7, 30, 90]);
+    expect(DEFAULT_CERT_VALIDITY_DAYS).toBe(30);
   });
 });
 

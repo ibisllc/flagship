@@ -435,7 +435,7 @@ export async function renderHome() {
     $("services-list-open-vibe-code"),
     deviceCap,
     "vibe-code",
-    "This device cannot build new apps. Use a primary device.",
+    "This device cannot build new services. Use a primary device.",
   );
 
   // E7 — fire-and-forget account-reset detection. Renders a danger
@@ -493,8 +493,14 @@ export async function renderHome() {
       .map((s) => s.serverId);
     scheduleRenewals(liveServerIds);
   } catch (e) {
-    sessionStatusEl.textContent = "error";
-    list.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(String(e))}</p></div>`;
+    // A user with no server should never see a "couldn't load" card —
+    // the honest, non-alarming state is the same empty zero-state we
+    // show when the list comes back empty. Keep the failure in the
+    // console for debugging, but leave the surface clean.
+    console.warn("home: servers list failed to load", e);
+    sessionStatusEl.textContent = "no servers";
+    sessionStatusEl.classList.remove("ok");
+    renderEmptyServersList(list, { reason: "no-servers", username: session.username });
   }
 }
 
