@@ -14,6 +14,7 @@ import Observation
 public final class PrivacySettings {
     private let defaults: UserDefaults
     private let requireBiometricKey = "flagship.privacy.requireBiometric"
+    private let requirePassphraseKey = "flagship.privacy.requirePassphrase"
 
     /// True if a Face ID / Touch ID evaluation is required each time the
     /// app cold-launches or returns from background. Defaults to TRUE —
@@ -26,6 +27,16 @@ public final class PrivacySettings {
         didSet { defaults.set(requireBiometricAtLaunch, forKey: requireBiometricKey) }
     }
 
+    /// The strictest option: when ON, the app does NOT restore the
+    /// persisted session on launch, so every open requires a full
+    /// sign-in (the account passphrase), not just a Face ID unlock.
+    /// Default OFF — most users want to stay signed in behind Face ID.
+    /// Supersedes `requireBiometricAtLaunch` when both are set (a full
+    /// sign-in is strictly stronger than a face-unlock).
+    public var requirePassphraseAtLaunch: Bool {
+        didSet { defaults.set(requirePassphraseAtLaunch, forKey: requirePassphraseKey) }
+    }
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         // Unset → default ON. Once the user makes an explicit choice we
@@ -35,5 +46,7 @@ public final class PrivacySettings {
         } else {
             self.requireBiometricAtLaunch = defaults.bool(forKey: requireBiometricKey)
         }
+        // Unset → default OFF (opt-in to the slower, stricter mode).
+        self.requirePassphraseAtLaunch = defaults.bool(forKey: requirePassphraseKey)
     }
 }

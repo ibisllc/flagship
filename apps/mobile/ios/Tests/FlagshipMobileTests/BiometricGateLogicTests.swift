@@ -87,4 +87,14 @@ final class BiometricGateLogicTests: XCTestCase {
         let p3 = PrivacySettings(defaults: suite)
         XCTAssertTrue(p3.requireBiometricAtLaunch)
     }
+
+    func test_requirePassphraseAtLaunch_defaultsOffAndRoundTrips() {
+        let suite = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        // Unset → OFF (the stricter full-sign-in mode is opt-in).
+        let p1 = PrivacySettings(defaults: suite)
+        XCTAssertFalse(p1.requirePassphraseAtLaunch)
+        p1.requirePassphraseAtLaunch = true
+        let p2 = PrivacySettings(defaults: suite)
+        XCTAssertTrue(p2.requirePassphraseAtLaunch)
+    }
 }

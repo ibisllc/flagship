@@ -465,6 +465,25 @@ struct PrivacyScreen: View {
                 if let msg = pendingError {
                     Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
                 }
+
+                Divider().padding(.vertical, FS.space.s2)
+
+                Text("Require your passphrase")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(c.text)
+                Toggle(isOn: Binding(
+                    get: { privacy.requirePassphraseAtLaunch },
+                    set: { privacy.requirePassphraseAtLaunch = $0 },
+                )) {
+                    Text("Sign in with your passphrase every time")
+                        .foregroundColor(c.text)
+                }
+                .tint(c.primary)
+                .accessibilityIdentifier("privacy-require-passphrase-toggle")
+                Text("Off by default. When on, Flagship doesn't keep you signed in — each launch needs a full sign-in with your account passphrase, not just Face ID. The strongest option, and the slowest.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+
                 Spacer()
             }
             .padding(FS.space.s6)

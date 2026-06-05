@@ -203,7 +203,10 @@ struct FlagshipApp: App {
                     // active, land on the gated shell instead of forcing a
                     // fresh sign-in every launch. Demo/mock sessions never
                     // wrap a UMK, so they fall through to Welcome as before.
+                    // Skipped when the user opted into a full passphrase
+                    // sign-in on every open (Settings -> Privacy).
                     if !appState.isPaired,
+                       !privacy.requirePassphraseAtLaunch,
                        Keystore.hasWrappedUMK,
                        Keystore.activeProfileId != Keystore.defaultProfileId {
                         appState.restorePersistedSession(username: Keystore.activeProfileId)
