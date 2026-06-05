@@ -197,10 +197,21 @@ struct FlagshipApp: App {
                 .environment(\.pushRegistrar, pushRegistrar)
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker)
+                    // Restore a previously paired session: if the Keystore
+                    // still holds a wrapped UMK (a real account that
+                    // survives restarts) and we know which cloud was
+                    // active, land on the gated shell instead of forcing a
+                    // fresh sign-in every launch. Demo/mock sessions never
+                    // wrap a UMK, so they fall through to Welcome as before.
+                    if !appState.isPaired,
+                       Keystore.hasWrappedUMK,
+                       Keystore.activeProfileId != Keystore.defaultProfileId {
+                        appState.restorePersistedSession(username: Keystore.activeProfileId)
+                    }
                     // B12 — hydrate the AppState gate from persisted
                     // user preference. Done in onAppear (not init) so
-                    // SmokeMode runs first and can leave isPaired
-                    // false (in which case requireBiometricAtLaunch
+                    // SmokeMode + session-restore run first and can leave
+                    // isPaired false (in which case requireBiometricAtLaunch
                     // is moot — Welcome is unauthenticated anyway).
                     appState.requireBiometricAtLaunch = privacy.requireBiometricAtLaunch
                     if privacy.requireBiometricAtLaunch && appState.isPaired {

@@ -75,11 +75,16 @@ final class BiometricGateLogicTests: XCTestCase {
 
     func test_privacySettings_roundTripsThroughUserDefaults() {
         let suite = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        // Unset → default ON (face-unlock by default; the user can opt out).
         let p1 = PrivacySettings(defaults: suite)
-        XCTAssertFalse(p1.requireBiometricAtLaunch)
-        p1.requireBiometricAtLaunch = true
-        // New instance same suite — verifies the didSet writer.
+        XCTAssertTrue(p1.requireBiometricAtLaunch)
+        // An explicit OFF must persist (not be re-defaulted back to true).
+        p1.requireBiometricAtLaunch = false
         let p2 = PrivacySettings(defaults: suite)
-        XCTAssertTrue(p2.requireBiometricAtLaunch)
+        XCTAssertFalse(p2.requireBiometricAtLaunch)
+        // And an explicit ON round-trips through the didSet writer.
+        p2.requireBiometricAtLaunch = true
+        let p3 = PrivacySettings(defaults: suite)
+        XCTAssertTrue(p3.requireBiometricAtLaunch)
     }
 }

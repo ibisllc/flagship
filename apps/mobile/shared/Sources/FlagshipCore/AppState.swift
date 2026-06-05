@@ -234,6 +234,19 @@ public final class AppState {
         onActiveProfileChanged?(username)
     }
 
+    /// Restore a previously paired session on cold launch. The iOS shell
+    /// calls this when the Keystore still holds a wrapped UMK — a real
+    /// identity that survives app restarts — so the user lands on the
+    /// (biometric-gated) shell instead of re-running a full sign-in.
+    /// Pods are intentionally left empty; the tabs fetch them fresh from
+    /// `/devices`. No-op if a session is already active (smoke mode /
+    /// a live pairing wins). Demo/mock sessions never wrap a UMK, so the
+    /// shell never calls this for them — they fall through to Welcome.
+    public func restorePersistedSession(username: String) {
+        guard !isPaired else { return }
+        completeOnboarding(username: username, pods: [])
+    }
+
     /// W3 — register a new profile (or refresh an existing one with the
     /// same `cloudName`) and set it active.
     public func addProfile(_ profile: Profile, setActive: Bool = true) {

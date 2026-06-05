@@ -15,16 +15,25 @@ public final class PrivacySettings {
     private let defaults: UserDefaults
     private let requireBiometricKey = "flagship.privacy.requireBiometric"
 
-    /// True if the user has opted in to requiring a Face ID / Touch ID
-    /// evaluation each time the app cold-launches or returns from
-    /// background. Default false — opt-in (we don't want to lock
-    /// users out on first launch before they've seen the option).
+    /// True if a Face ID / Touch ID evaluation is required each time the
+    /// app cold-launches or returns from background. Defaults to TRUE —
+    /// a restored account opens behind a face-unlock rather than a full
+    /// sign-in. Only gates once an account is paired (a first-ever launch
+    /// with no account shows Welcome unguarded), and the device's own
+    /// "Sign out" fallback covers a phone with no biometric enrolled. The
+    /// user can turn this off in Settings → Privacy to open straight in.
     public var requireBiometricAtLaunch: Bool {
         didSet { defaults.set(requireBiometricAtLaunch, forKey: requireBiometricKey) }
     }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.requireBiometricAtLaunch = defaults.bool(forKey: requireBiometricKey)
+        // Unset → default ON. Once the user makes an explicit choice we
+        // honour the stored value.
+        if defaults.object(forKey: requireBiometricKey) == nil {
+            self.requireBiometricAtLaunch = true
+        } else {
+            self.requireBiometricAtLaunch = defaults.bool(forKey: requireBiometricKey)
+        }
     }
 }

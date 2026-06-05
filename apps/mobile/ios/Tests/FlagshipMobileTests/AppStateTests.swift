@@ -14,6 +14,31 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(s.leaderPod?.podId, "a")
     }
 
+    func test_restorePersistedSession_pairsWithUsernameAndNoPods() {
+        // Cold-launch restore: the Keystore still holds an identity, so
+        // the shell rebinds the session instead of forcing a fresh
+        // sign-in. Pods are intentionally empty — the tabs refetch them.
+        let s = AppState()
+        XCTAssertFalse(s.isPaired)
+        s.restorePersistedSession(username: "harry")
+        XCTAssertTrue(s.isPaired)
+        XCTAssertEqual(s.currentUser, "harry")
+        XCTAssertEqual(s.activeProfileCloudName, "harry")
+        XCTAssertTrue(s.pods.isEmpty)
+    }
+
+    func test_restorePersistedSession_isNoOpWhenAlreadyPaired() {
+        // A live pairing / smoke mode must win over a stale restore.
+        let s = AppState()
+        s.completeOnboarding(
+            username: "alice",
+            pods: [PodInfo(podId: "p", name: "P", fqdn: "p.alice.flagship.services")]
+        )
+        s.restorePersistedSession(username: "mallory")
+        XCTAssertEqual(s.currentUser, "alice")
+        XCTAssertEqual(s.leaderPodId, "p")
+    }
+
     func test_addPod_setsLeaderWhenNonePresent() {
         let s = AppState()
         s.completeOnboarding(username: "u", pods: [])
