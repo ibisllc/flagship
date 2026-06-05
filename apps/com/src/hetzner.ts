@@ -13,7 +13,7 @@
  * out of R2's public dev-url and `dd`s it onto /dev/sda — the same
  * primitive nixos-infect and hetzner-installimage rely on. No laptop
  * SSH is involved, so the laptop never needs `HCLOUD_TOKEN`. See W11
- * commit message + `docs/sample-user-vps-plan.md` Phase F for the
+ * commit message + `docs/archive/sample-user-vps-plan.md` Phase F for the
  * full rationale.
  *
  * See docs/sample-users.md §7 for the snapshot-side contract.

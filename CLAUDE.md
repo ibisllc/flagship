@@ -2,7 +2,7 @@
 
 Personal-cloud ecosystem. The phone is the trust root; users run their own server on commodity hardware at home; **TLS terminates on the user's box** so flagship.services literally cannot read user content. Verified end-to-end in production with a real green padlock as of 2026-05-05.
 
-If you have access to agent memory, **read `project_overview.md`** first — it's the canonical briefing. Then `final_architecture_2026_05_05.md` for details. This file is the in-repo abridged version.
+**This file is the single in-repo source of truth for current status and open work** — see "Current status & open work" at the bottom; update that section as work lands rather than starting new `docs/*handoff*.md` files. If you have access to agent memory, `project_overview.md` is a deeper architectural briefing (`final_architecture_2026_05_05.md` has the gory detail). Dated session handoffs and completed launch trackers are frozen in `docs/archive/` (history only).
 
 ## What's where
 
@@ -10,7 +10,7 @@ If you have access to agent memory, **read `project_overview.md`** first — it'
 apps/com/                  Cloudflare Worker — flagshipserver.com (identity + state) + web.flagshipserver.com (webapp host-rewrite)
 apps/web/                  Fly app — flagship.services (stateless data plane) + the webapp static surface
 apps/web/public/           Static assets served by the Worker's [assets] binding
-   build/                  /build/ — paste a build code, download a personalized ISO
+   ready/                  /ready/ — after an order: copy/download the recipe + get the burner (replaced the old /build/ paste-a-code page; /build/iso/ stays as the R2 ISO-stream backend)
    dev/create-server       /dev/create-server — phone simulator
    status/                 /status/ — live health dashboard
    security/               disclosure.html, report.html
@@ -44,7 +44,7 @@ fly.toml                   :443 raw-TCP (SNI passthrough) + :8443 TLS-term (API 
 ## Live URLs
 
 - `https://flagshipserver.com/` — landing
-- `https://flagshipserver.com/build/` — paste a build code, get a personalized ISO
+- `https://flagshipserver.com/ready/` — after an order: copy/download the recipe + get the burner
 - `https://flagshipserver.com/dev/create-server` — phone simulator (mints build codes)
 - `https://flagshipserver.com/status/` — live health
 - `https://flagshipserver.com/api/health` — JSON health
@@ -69,7 +69,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 # Smoke a fresh build chain
 # 1. Open https://flagshipserver.com/dev/create-server in a browser
-# 2. Mint a code, then paste it into https://flagshipserver.com/build/
+# 2. Mint an order; collect the recipe from https://flagshipserver.com/ready/
 # 3. Run packages/hello-daemon with the printed creds
 # 4. curl https://<assigned-subdomain>/   (real green padlock)
 ```
@@ -84,26 +84,54 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 - Canonical-bytes use `|` separator and `flagship/<purpose>/v1` tag prefix.
 - No comments unless the *why* is non-obvious; never explain *what*.
 
-## Status
+## Current status & open work
 
-- **End-to-end live**: real Let's Encrypt cert via TLS-ALPN-01 over SNI passthrough, verified 2026-05-05; wildcard SANs via DNS-01 since 2026-05-06; webapp at `web.flagshipserver.com`; auto-unlock-lease (one-shot + long-lived) live with silent renewer; WebAuthn-PRF cloud recovery; Web Push w/ RFC 8291 encrypted payloads; /consume → push auto-trigger.
-- 1500+ tests across 144+ files, all green. `npx vitest run` ~30s, `npx tsc -b` clean.
-- Workspace deps: `npm install` + `npx tsc -b`.
+> **This section is the single source of truth.** Update it as work lands —
+> don't spawn new `docs/*handoff*.md` files. Dated handoffs + completed launch
+> trackers are frozen in `docs/archive/`. Last updated **2026-06-05**.
 
-## Outstanding work (verified 2026-05-11; reconciled with the v1-alpha checklist in `docs/build-tasks.md`)
+### Live in production
+- **Per-user TLS** — one Let's Encrypt cert per user, SANs `[<user>, *.<user>]`, real green padlock (per-box → per-user cutover verified live 2026-06-02). ACME runs on the user's daemon over SNI passthrough; `.services` stays content-blind. Wildcard SANs via DNS-01.
+- Auto-unlock-lease (one-shot + long-lived) with silent renewer; WebAuthn-PRF cloud recovery; Web Push (RFC 8291 encrypted payloads); `/consume` → push.
+- **Cert model** (iOS + web + Android): creation is a binary — *managed* (your devices renew it, default) vs *autonomous* (the box self-renews); renewal window is an account-wide "Certificate validity" setting (presets 7/30/90, default 30).
+- **Recovery Phase B backend** deployed — single-device re-pair grace 7d→3d; the wrapped-UMK fetch returns `registeredIrkPubHex` for rotation detection.
+- Brand/teal migration complete (rounded-square-containing-a-circle mark; the flag-on-mast pennant is **retired — do not reintroduce**). `/og` social card, `/ready` page, webapp no-server empty states, iOS Apps→Services rename + persistent pending servers.
+- **All prod users wiped 2026-06-02** for a clean pre-release slate (`marketplace_listings` preserved).
 
-**Confirmed done despite older notes:** wildcard cert via DNS-01 (RemoteDnsChallengeWriter wired, `wildcard:true` default); daemon entry merge (server-daemon/src/index.ts is the production entry; hello-daemon stays as the explicit demo); persistent ACME on the production daemon; phone-server `/api/orders-from-user` endpoint; LUKS unlock-on-boot end-to-end (smoke-luks-unlock.ts and smoke-lease-unlock.ts both pass live); peer-backup matchmaker + BackupLoop wired (apps/web Fastify + server-daemon).
+Gates (2026-06-03): web 978 · com+control-plane 1108 · iOS 755 XCTests · `npx tsc -b` clean. `npx vitest run` ~30s. Workspace deps: `npm install` + `npx tsc -b`.
 
-**v1-launch blockers still open:**
-1. **E2E test rig + scenarios** (`docs/e2e-test-plan.md`). Playwright + pod-sim, chromium-only first. 13 scenarios covering signup → unlock-approve → lease + renewal → webauthn recovery → push subscribe + deliver. Largest single piece of work remaining.
-2. **iOS app real impl** (TestFlight-ready). Substantial Swift code under `apps/mobile/ios/Sources/` already; needs Xcode build + signing + TestFlight upload + 5 external testers.
-3. **Android app real impl** (Play internal track). 17 Kotlin files under `apps/mobile/android/`; same shape — Gradle build, FCM setup, signing, internal-track upload + 5 testers.
-4. **Marketplace security scan service**. `marketplace_listings.scan_grade` column ships NULL today; scanner service that pulls a docker image, runs Trivy + custom checks, posts back grade + R2 report. MVP requirement before public marketplace launch.
-5. **Recovery J.3 + J.4** — re-pair envelope (new IRK refs old; .com confirms in 24h grace; daemon swaps PSK + paired-session) + membership re-attach (walk apps, re-issue stable-ids, alert per app). Without these, a recovered UMK can't actually take over the user's existing servers.
-6. ~~**Reproducible-build CI for the Alpine ISO**~~ **DONE** (verified 2026-05-16) — `.github/workflows/build-iso.yml` builds the ISO twice and `cmp`-asserts byte-identical output, with `SOURCE_DATE_EPOCH` from the commit timestamp + a pinned Alpine ISO/sha256. (v1 caveat noted in the workflow: runner image + apt tool versions not SHA-pinned.)
-7. **Peer-backup distribution at scale** — primitives all built (peerLink, transport, shardStore, registry, repairDaemon, matchmaker, BackupLoop); needs operational tuning + a 7-day exercise across multiple pods to validate.
-8. Update-pack + lineage-break + STK rotation + recovery-from-lost-phone — each needs a live exercise per the v1-alpha done-when checklist.
+### Open work
 
-## When in doubt
+**Hardware / boot — the active thread (needs real metal):**
+1. **Alpine bare-metal boot.** The ISO-builder UEFI fix is DONE + locally proven (`scripts/build-flagship-iso.sh` now emits a true BIOS+UEFI hybrid via `xorriso … -boot_image any replay`; the old build silently dropped Alpine's UEFI entry). But on the test box Alpine's initramfs USB stack doesn't come up ("mounting boot media failed" → emergency shell). Next (blind-iterable): rebuild adding `xhci_pci`/`xhci_hcd`/`uas` to the boot cmdline, re-burn, observe how far it gets.
+2. **Ship the Alpine UEFI fix** — re-run the reproducible-build CI → rebuild ISO → upload to R2 as `flagship-alpine-base.iso` → bump the burner's `BaseIsoCache.version` + `sha256Hex` → rebuild + reinstall the signed Mac burner. Until this lands, `POST /api/personalize-iso` 503s and the Alpine "Recommended" path is unavailable.
+3. **Debian-preseed is the working path today** — it boots, autoinstalls, reaches `flagship-pod login:`. The burner "Quick" mode still points at the dead Alpine path (`BurnerMode.swift`) — repoint Quick to Debian-preseed until Alpine boots. `/ready` copy still frames Alpine as recommended — stale, update.
+4. **Verify Debian-preseed reliability** — cmdline injection (`Remaster.swift` grub/isolinux patch) was per-ISO flaky earlier; confirm a burned box registers + gets a cert.
 
-Read `project_overview.md` (in agent memory) end-to-end before making changes. `docs/build-tasks.md` (section S "v1 alpha done-when checklist") is the most current ground-truth for the launch list. `docs/e2e-test-plan.md` covers the test rig design.
+*Pending design calls (home, no hardware): Alpine-vs-Debian shipping default; burner UX (make Debian the recommended path); personalized-ISO trailer vs the isohybrid backup-GPT (`sgdisk -e` relocate vs in-ISO recipe file).*
+
+**App / recovery:**
+5. **Recovery Phase B re-pair branch (iOS, on-device validation).** Wire `recoveredKeyMatchesRegistered` into post-recovery completion: recovered IRK == registered → instant pair (Phase A); != → re-pair with `oldIrkPub = registeredIrkPubHex` + 3d grace; `KeyfileImportViewModel` instant skip-grace. Backend already deployed.
+6. **iOS owner-device confirmations** (from 2026-06-02, never confirmed on device): cross-device-QR recovery fix (`f4593a3`); Passwords-app icon flips to the teal ring; a real burn → box registers → green padlock.
+7. **iOS diagnostics:** jetsam memory crash after ~14 min (use the Memory Graph Debugger; note which screen grows); input-field delay on "I already have an account" (confirm with a Release/Profile build).
+
+**Ship / launch (owner-side, mostly):**
+8. **Stores.** iOS TestFlight (Associated Domains capability, Xcode Archive + ASC upload, metadata, 5 external testers); Android Play (signed AAB via `./gradlew :app:bundleRelease`, internal track, 5 testers). Neither app is on a store yet, so push / Live-Activity timelines can't be received on a real device.
+9. **Marketplace security scanner** — `marketplace_listings.scan_grade` ships NULL; needs the Trivy + custom-checks service that posts grade + R2 report. MVP gate before public marketplace.
+10. **v1-alpha live exercises** (multi-day, observational): recovery / rotation / update-pack over 7 days × 2 pods; peer-backup at scale; marketplace MVP; public disclosure + bounty path.
+
+**NFC retail tier (post-v1; design in `docs/v1-operational-tasks.md § N`):** protocol + daemon state machine + cloud activation API are built & partly live; **C3 — iOS + Android NFC read flow** is the remaining agent-doable chunk. Hardware bring-up waits on the hardware-shipping business decision.
+
+### When in doubt
+This file is the in-repo source of truth. For deeper detail, read the relevant living spec in `docs/` (index below), the operational runbooks in `docs/runbooks/`, or — for architecture — `project_overview.md` in agent memory. `docs/archive/` is frozen history.
+
+### Living design specs (index)
+- **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`
+- **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`
+- **Login / accounts / demo** — `login-and-account-redesign.md`, `sample-users.md`
+- **Install / ISO / burner** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`
+- **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
+- **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
+- **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `monetization-free-tier-first.md`, `multi-device-monetization.md`, `vibe-code-experience.md`
+- **Testing** — `e2e-test-plan.md`
+- **Design / ops** — `design-system.md`, `psl-submission-flagship-services.md`, `runbooks/`, `policy/`

@@ -10,7 +10,7 @@
  *   4. the artifact's own signature + TTL                      — this module
  *
  * #30 GENERALISED to the LOCKED Phase-2 v2 trust model (see flagship
- * `docs/v1-launch-program.md` "Phase-2 DESIGN DECISION — LOCKED v2"):
+ * `docs/archive/v1-launch-program.md` "Phase-2 DESIGN DECISION — LOCKED v2"):
  *
  *   L1 — a pinned `Mandate` is an INDEPENDENT trust anchor; "genesis" is
  *   merely "the first pin". The baked link-1 value is therefore the

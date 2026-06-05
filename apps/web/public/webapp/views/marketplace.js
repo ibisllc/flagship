@@ -3,8 +3,8 @@
 //
 // Task #28 — scan-grade pill (A/B/C/F) per listing with explanatory
 // tooltip. Ungraded listings render an "ungraded" pill since the
-// scanner service is still in flight (CLAUDE.md / build-tasks.md
-// blocker #4). The `scan_grade` field on /api/marketplace/search
+// scanner service is still in flight (see CLAUDE.md "Current status &
+// open work"). The `scan_grade` field on /api/marketplace/search
 // listings is null today; the BFF passes it through verbatim.
 
 import { $, registerView, show } from "../lib/router.js";

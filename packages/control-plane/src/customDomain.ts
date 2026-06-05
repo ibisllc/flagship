@@ -1,7 +1,7 @@
 // Custom (external) domain attach — the .com POST/GET path (#79A).
 //
 // DECIDED DESIGN (see project_external_domains memory +
-// docs/plan-external-domains-and-demo.md): the POST only RECORDS the
+// docs/archive/plan-external-domains-and-demo.md): the POST only RECORDS the
 // request (status='pending') and rate-limits. It does NOT verify the
 // CNAME — that is out-of-band (Phase 4 #79B/#82), which flips the row
 // to active/failed and pushes the outcome. So:

@@ -6,7 +6,7 @@
 // on the rendered single device POSTs `/connect` (no auth, no body)
 // and then polls `/api/users/check` until the lifecycle flips to
 // `up`. See docs/sample-users.md §10.5 + Phase D in
-// docs/sample-user-vps-plan.md.
+// docs/archive/sample-user-vps-plan.md.
 
 package com.flagshipserver.app.api
 
