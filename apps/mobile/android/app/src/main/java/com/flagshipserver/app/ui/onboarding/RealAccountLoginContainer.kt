@@ -227,11 +227,6 @@ private fun ImportBackupOption(onImport: () -> Unit) {
             Icon(Icons.Outlined.Lock, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Import backup file", color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-                Text(
-                    "Bring this device into your account using its backup key file. You'll need the file and its passphrase.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp),
-                )
             }
         }
     }
