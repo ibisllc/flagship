@@ -101,9 +101,6 @@ public struct RealAccountLoginScreen: View {
                         Text("Import backup file")
                             .font(FS.font.bodySm())
                             .foregroundColor(c.text)
-                        Text("Bring this device into your account using its backup key file. You'll need the file and its passphrase.")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").foregroundColor(c.textMuted)
