@@ -1,5 +1,5 @@
-// Paired-sessions list — Settings → Paired devices. Lists every
-// session token registered on the leader pod; tap to revoke.
+// Browser-sessions list — Settings → Browser sessions. Lists every
+// docked-browser session on the leader pod; tap to revoke.
 
 package com.flagshipserver.app.ui.screens
 
@@ -43,6 +43,7 @@ fun PairedSessionsScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     val sessions = remember { mutableStateListOf<PairedSessionSummary>() }
     var error by remember { mutableStateOf<String?>(null) }
+    var loaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
@@ -50,6 +51,8 @@ fun PairedSessionsScreen(nav: NavController) {
             sessions.addAll(client.pairedSessionsList().sessions)
         } catch (t: Throwable) {
             error = t.message
+        } finally {
+            loaded = true
         }
     }
 
@@ -64,7 +67,7 @@ fun PairedSessionsScreen(nav: NavController) {
         FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
         Spacer(Modifier.height(FS.space.s3))
         Text(
-            "Paired devices",
+            "Browser sessions",
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
@@ -74,8 +77,25 @@ fun PairedSessionsScreen(nav: NavController) {
             ErrorCard(message = error!!)
             return@Column
         }
-        if (sessions.isEmpty()) {
+        if (!loaded) {
             ServerCardSkeleton()
+            return@Column
+        }
+        if (sessions.isEmpty()) {
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    Text(
+                        "No browser sessions",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    )
+                    Text(
+                        "Dock a browser to manage this account from a computer.",
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp),
+                    )
+                }
+            }
             return@Column
         }
         sessions.forEach { session ->
