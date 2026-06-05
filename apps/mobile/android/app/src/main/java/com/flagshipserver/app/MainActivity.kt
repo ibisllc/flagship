@@ -85,6 +85,18 @@ class MainActivity : FragmentActivity() {
         appState = AppState(
             requireBiometricAtLaunch = privacy.requireBiometricAtLaunch.value,
         )
+        // Restore a previously paired session: if the Keystore still holds
+        // a UMK seed (a real identity that survives process death) and we
+        // know which cloud was active, land on the gated shell instead of
+        // forcing a fresh sign-in every launch. The AppState constructor
+        // already left the biometric latch armed, so a restored session
+        // opens behind the lock screen. Skipped when the user opted into a
+        // full passphrase sign-in every open. Demo/mock never store a seed.
+        if (!privacy.requirePassphraseAtLaunch.value) {
+            Keystore.activeProfile()?.let { activeCloud ->
+                if (Keystore.hasUmkSeed()) appState.restorePersistedSession(activeCloud)
+            }
+        }
         val sessionStore = EncryptedSessionStore.create(applicationContext)
         val toasts = ToastCenter()
         deepLinker = DeepLinker()

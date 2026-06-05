@@ -232,6 +232,18 @@ class AppState(
         _activeCloudName.value = username
     }
 
+    /** Restore a previously paired session on cold launch. The shell
+     *  calls this when the Keystore still holds a UMK seed (a real
+     *  identity that survives process death) so the user lands on the
+     *  (biometric-gated) shell instead of a fresh sign-in. Pods are left
+     *  empty; the tabs refetch them. No-op if already paired (a live
+     *  pairing wins). Demo/mock sessions never store a UMK seed, so the
+     *  shell never calls this for them — they fall through to Welcome. */
+    fun restorePersistedSession(username: String) {
+        if (_isPaired.value) return
+        completeOnboarding(username, emptyList())
+    }
+
     /** W3 — register a new profile (or refresh an existing entry with
      *  the same `cloudName`) and optionally make it active. */
     fun addProfile(profile: Profile, setActive: Boolean = true) {

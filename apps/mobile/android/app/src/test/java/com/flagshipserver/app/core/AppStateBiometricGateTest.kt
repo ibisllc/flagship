@@ -84,8 +84,7 @@ class AppStateBiometricGateTest {
     @Test fun privacySettings_persistsAcrossInstances() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val p1 = PrivacySettings.fromContext(ctx)
-        // Default false on a fresh prefs file.
-        // (May survive between tests — reset explicitly.)
+        // The unset default is now ON, so set an explicit value first.
         p1.setRequireBiometricAtLaunch(false)
         assertFalse(p1.requireBiometricAtLaunch.value)
 
@@ -95,5 +94,28 @@ class AppStateBiometricGateTest {
 
         // Clean up so subsequent tests in the same JVM start clean.
         p2.setRequireBiometricAtLaunch(false)
+    }
+
+    @Test fun privacySettings_biometricDefaultsOn_whenUnset() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        // Wipe the prefs file so the key is genuinely unset.
+        ctx.getSharedPreferences("flagship.privacy", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val p = PrivacySettings.fromContext(ctx)
+        assertTrue(p.requireBiometricAtLaunch.value)
+        // Restore the clean state for the rest of the JVM run.
+        p.setRequireBiometricAtLaunch(false)
+    }
+
+    @Test fun privacySettings_passphraseDefaultsOff_andPersists() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        ctx.getSharedPreferences("flagship.privacy", Context.MODE_PRIVATE)
+            .edit().clear().commit()
+        val p1 = PrivacySettings.fromContext(ctx)
+        assertFalse(p1.requirePassphraseAtLaunch.value)
+        p1.setRequirePassphraseAtLaunch(true)
+        val p2 = PrivacySettings.fromContext(ctx)
+        assertTrue(p2.requirePassphraseAtLaunch.value)
+        p2.setRequirePassphraseAtLaunch(false)
     }
 }

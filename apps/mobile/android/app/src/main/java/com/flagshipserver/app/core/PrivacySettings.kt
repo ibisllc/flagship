@@ -13,22 +13,40 @@ import kotlinx.coroutines.flow.asStateFlow
 
 private const val PRIVACY_PREFS = "flagship.privacy"
 private const val KEY_REQUIRE_BIOMETRIC = "requireBiometricAtLaunch"
+private const val KEY_REQUIRE_PASSPHRASE = "requirePassphraseAtLaunch"
 
 class PrivacySettings(private val prefs: SharedPreferences) {
 
     private val _requireBiometricAtLaunch =
-        MutableStateFlow(prefs.getBoolean(KEY_REQUIRE_BIOMETRIC, false))
+        MutableStateFlow(prefs.getBoolean(KEY_REQUIRE_BIOMETRIC, true))
 
-    /** True iff the user has opted in to requiring a BiometricPrompt
-     *  evaluation each time the app cold-launches or returns from
-     *  background. Opt-in (default false) so a fresh install doesn't
-     *  lock anyone out before they've seen the option. */
+    /** True iff a BiometricPrompt evaluation is required each time the
+     *  app cold-launches or returns from background. Defaults ON — a
+     *  restored account opens behind a biometric unlock rather than a
+     *  full sign-in; the user can turn it off to open straight in.
+     *  `getBoolean` returns the default only when the key is unset, so an
+     *  explicit choice is always honoured. */
     val requireBiometricAtLaunch: StateFlow<Boolean> =
         _requireBiometricAtLaunch.asStateFlow()
 
     fun setRequireBiometricAtLaunch(value: Boolean) {
         prefs.edit().putBoolean(KEY_REQUIRE_BIOMETRIC, value).apply()
         _requireBiometricAtLaunch.value = value
+    }
+
+    private val _requirePassphraseAtLaunch =
+        MutableStateFlow(prefs.getBoolean(KEY_REQUIRE_PASSPHRASE, false))
+
+    /** The strictest option: when ON, the app does NOT restore the
+     *  persisted session on launch, so every open requires a full
+     *  sign-in (the account passphrase), not just a biometric unlock.
+     *  Default OFF. Supersedes [requireBiometricAtLaunch] when both set. */
+    val requirePassphraseAtLaunch: StateFlow<Boolean> =
+        _requirePassphraseAtLaunch.asStateFlow()
+
+    fun setRequirePassphraseAtLaunch(value: Boolean) {
+        prefs.edit().putBoolean(KEY_REQUIRE_PASSPHRASE, value).apply()
+        _requirePassphraseAtLaunch.value = value
     }
 
     companion object {

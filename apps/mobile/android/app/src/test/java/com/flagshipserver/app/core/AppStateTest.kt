@@ -23,6 +23,28 @@ class AppStateTest {
         assertEquals("a", s.currentPodId.value)
     }
 
+    @Test fun restorePersistedSession_pairsWithUsernameAndNoPods() {
+        // Cold-launch restore: the Keystore still holds an identity, so
+        // the shell rebinds instead of forcing a fresh sign-in. Pods are
+        // empty — the tabs refetch them.
+        val s = AppState()
+        assertFalse(s.isPaired.value)
+        s.restorePersistedSession("harry")
+        assertTrue(s.isPaired.value)
+        assertEquals("harry", s.currentUser.value)
+        assertEquals("harry", s.activeCloudName.value)
+        assertTrue(s.pods.value.isEmpty())
+    }
+
+    @Test fun restorePersistedSession_isNoOpWhenAlreadyPaired() {
+        // A live pairing / smoke mode must win over a stale restore.
+        val s = AppState()
+        s.completeOnboarding("alice", listOf(pod("p")))
+        s.restorePersistedSession("mallory")
+        assertEquals("alice", s.currentUser.value)
+        assertEquals("p", s.leaderPodId.value)
+    }
+
     @Test fun addPod_setsLeaderWhenNonePresent() {
         val s = AppState()
         s.completeOnboarding("u", emptyList())

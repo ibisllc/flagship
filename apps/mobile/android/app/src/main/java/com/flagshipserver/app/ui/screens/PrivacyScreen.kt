@@ -49,6 +49,7 @@ fun PrivacyScreen(nav: NavController) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val enabled = privacy?.requireBiometricAtLaunch?.collectAsState()?.value ?: false
+    val passphraseEnabled = privacy?.requirePassphraseAtLaunch?.collectAsState()?.value ?: false
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     val scroll = rememberScrollState()
@@ -113,8 +114,10 @@ fun PrivacyScreen(nav: NavController) {
                     )
                 }
                 Text(
-                    "When on, Flagship asks for biometrics each time the app launches " +
-                        "or comes back from the background. Pods stay running; this just " +
+                    "On by default. Flagship asks for biometrics each time the app " +
+                        "launches or comes back from the background, so you stay signed " +
+                        "in without re-entering your passphrase. Turn it off to open " +
+                        "straight in. Either way your pods stay running; this just " +
                         "controls who can see and tap.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
@@ -122,6 +125,38 @@ fun PrivacyScreen(nav: NavController) {
                 errorMsg?.let { msg ->
                     Text(msg, color = FS.colors.danger, style = TextStyle(fontSize = 12.sp))
                 }
+            }
+        }
+
+        Spacer(Modifier.height(FS.space.s4))
+
+        FSCard(padding = PaddingValues(FS.space.s4)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                androidx.compose.foundation.layout.Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = FS.space.s2),
+                ) {
+                    Text(
+                        "Require your passphrase",
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.padding(end = FS.space.s4),
+                    )
+                    Switch(
+                        checked = passphraseEnabled,
+                        onCheckedChange = { newValue ->
+                            privacy?.setRequirePassphraseAtLaunch(newValue)
+                        },
+                    )
+                }
+                Text(
+                    "Off by default. When on, Flagship doesn't keep you signed in — " +
+                        "each launch needs a full sign-in with your account passphrase, " +
+                        "not just biometrics. The strongest option, and the slowest.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
             }
         }
 

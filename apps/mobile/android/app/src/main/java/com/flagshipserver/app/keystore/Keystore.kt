@@ -182,6 +182,13 @@ object Keystore {
         return seed
     }
 
+    /** True when this device already holds a UMK seed for the active
+     *  profile — a real identity that survives process death. The launch
+     *  path reads this to restore the session instead of forcing a fresh
+     *  sign-in. Unlike [loadOrCreateUmkSeed] it never mints one. */
+    fun hasUmkSeed(): Boolean =
+        requirePrefs().getString(pkey(KEY_UMK_SEED), null) != null
+
     /**
      * E4 — atomically install a pre-existing UMK seed. Used by Wipe
      * & restart: the caller has just generated a fresh 32-byte UMK
