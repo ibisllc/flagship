@@ -5,8 +5,9 @@ import FlagshipCore
 /// Settings tab. Sections:
 ///   - ACCOUNT — username
 ///   - SUBSCRIPTION — tier, credits, bandwidth, manage providers
-///   - CONTROL DEVICES — phones/laptops paired to manage this account
-///                       (NOT pods); added by docking a browser
+///   - BROWSER SESSIONS — computers you've docked a browser from to
+///                        manage this account (temporary, NOT pods).
+///                        Hidden entirely when none are active.
 ///   - RECOVERY + ABOUT — recovery setup, version/license
 ///   - Sign out
 ///
@@ -182,7 +183,7 @@ public struct SettingsScreen: View {
                 certificatesSection(c: c)
                 subscription(c: c)
                 trustedDevicesSection(c: c)
-                controlDevicesSection(c: c)
+                browserSessionsSection(c: c)
                 links(c: c)
                 signOut(c: c)
                 dangerZone(c: c)
@@ -192,6 +193,11 @@ public struct SettingsScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
         }
+        // The content fits horizontally, so disable sideways bounce —
+        // otherwise a left/right drag rubber-bands the whole page and
+        // springs back. .basedOnSize keeps vertical bounce intact while
+        // pinning the horizontal axis fixed.
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .background(c.bg.ignoresSafeArea())
         .refreshable { await onRefresh() }
         .confirmationDialog(
@@ -558,33 +564,23 @@ public struct SettingsScreen: View {
         }
     }
 
-    private func controlDevicesSection(c: FSColors) -> some View {
-        section("CONTROL DEVICES", c: c) {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Phones and laptops that can manage this account.")
-                    .font(FS.font.caption()).foregroundColor(c.textMuted)
-                switch controlDevices {
-                case .idle, .loading:
-                    ServerCardSkeleton()
-                case .failed(let msg):
-                    ErrorCard(message: msg)
-                case .loaded(let sessions):
-                    if sessions.isEmpty {
-                        FSCard {
-                            HStack(alignment: .top, spacing: FS.space.s2) {
-                                Image(systemName: "laptopcomputer").foregroundColor(c.textMuted)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("No control devices").font(FS.font.bodySm()).foregroundColor(c.text)
-                                    Text("Dock a browser (under Recovery) to manage this account from a computer.")
-                                        .font(FS.font.caption()).foregroundColor(c.textMuted)
-                                }
-                            }
-                        }
-                    } else {
-                        VStack(spacing: FS.space.s3) {
-                            ForEach(sessions, id: \.tokenPrefix) { s in
-                                controlDeviceRow(s, c: c)
-                            }
+    /// Docked-browser sessions — distinct from Trusted devices (which
+    /// hold your account keys). These are temporary desktop companions
+    /// created via "Dock a browser". The section is HIDDEN unless at
+    /// least one session is active, so a normal single-phone account
+    /// never sees a second, duplicate-looking device list. When present,
+    /// each row carries the Revoke action — the only place to end a
+    /// docked session.
+    @ViewBuilder
+    private func browserSessionsSection(c: FSColors) -> some View {
+        if case .loaded(let sessions) = controlDevices, !sessions.isEmpty {
+            section("BROWSER SESSIONS", c: c) {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Computers you've docked a browser from. They can manage this account for a few hours, then expire.")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
+                    VStack(spacing: FS.space.s3) {
+                        ForEach(sessions, id: \.tokenPrefix) { s in
+                            browserSessionRow(s, c: c)
                         }
                     }
                 }
@@ -592,7 +588,7 @@ public struct SettingsScreen: View {
         }
     }
 
-    private func controlDeviceRow(_ s: PairedSessionSummary, c: FSColors) -> some View {
+    private func browserSessionRow(_ s: PairedSessionSummary, c: FSColors) -> some View {
         FSCard {
             HStack {
                 Image(systemName: s.current ? "iphone.gen3" : "laptopcomputer")
