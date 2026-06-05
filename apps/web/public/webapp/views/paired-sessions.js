@@ -13,7 +13,7 @@ export async function renderPairedSessions() {
   try {
     const body = await screensFetch("/api/screens/paired-sessions/list");
     if (!body.sessions?.length) {
-      root.innerHTML = '<div class="card placeholder">no paired sessions</div>';
+      root.innerHTML = '<div class="card placeholder">no browser sessions</div>';
       return;
     }
     root.innerHTML = body.sessions.map((s) => `
