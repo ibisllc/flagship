@@ -140,7 +140,7 @@ dependencies {
     // unit tests too.
     implementation("com.google.zxing:core:3.5.3")
 
-    // Image loading (marketplace screenshots)
+    // Image loading (avatars, app screenshots)
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Charts for ServerDetail metrics — CPU/mem/disk/net time series.

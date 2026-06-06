@@ -28,7 +28,6 @@ The 20 endpoints (P1.1 – P1.20 in the cycle plan) cover:
 | P1.1 | GET /api/screens/server-detail | Server-detail card |
 | P1.2 | GET /api/screens/apps-list | Apps list |
 | P1.3 | GET /api/screens/app-detail/:appId | App detail page |
-| P1.4 | GET /api/screens/marketplace-browse | Marketplace |
 | P1.5 | POST /api/screens/vibe-code/start | Vibe-code launcher |
 | P1.6 | WS  /api/screens/vibe-code/:id/stream | Vibe-code live stream (stubbed; poll P1.7) |
 | P1.7 | GET /api/screens/vibe-code/:id | Vibe-code status / replay |

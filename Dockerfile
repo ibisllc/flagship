@@ -20,9 +20,6 @@ COPY packages packages/
 # `@ibisllc/maintainers` (exact pin in packages/server-daemon/package.json).
 # It is fetched from the registry by `npm ci`/`npm install` below — no
 # git clone or build-time pull step.
-# services/marketplace-scanner is referenced from root tsconfig.json so
-# `tsc -b` walks into it. Needed only at build time, not runtime.
-COPY services services/
 COPY apps/web/package.json apps/web/tsconfig.json apps/web/
 COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/

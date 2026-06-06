@@ -68,7 +68,6 @@ const OPTIONAL_SHELL = [
   "/qrScanner.js",
   "/lib/util.js",
   "/lib/podPair.js",
-  "/lib/installService.js",
   "/lib/leases.js",
   "/lib/recovery.js",
   "/lib/keyfile.js",

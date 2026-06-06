@@ -13,7 +13,6 @@
  *   GET  /api/screens/server-detail       seedable fixture
  *   GET  /api/screens/apps-list           apps-store snapshot
  *   GET  /api/screens/app-detail/:serviceId   apps-store lookup
- *   GET  /api/screens/marketplace-browse  empty array fixture
  *   GET  /api/screens/unlock-approvals/pending  pending-store snapshot
  *   POST /api/services                        IRK-verified install (record only)
  *   GET  /api/screens/paired-sessions/list  recorded paired-session orders
@@ -247,10 +246,6 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
     },
   );
 
-  app.get("/api/screens/marketplace-browse", async () => ({
-    listings: [],
-  }));
-
   app.get("/api/screens/unlock-approvals/pending", async () => ({
     pending: pending.list(),
   }));
@@ -271,7 +266,7 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
   }));
 
   // ──────────────────────────────────────────────────────────────────
-  // POST /api/services — webapp marketplace install path. Verifies the
+  // POST /api/services — webapp service install path. Verifies the
   // host IRK signature on the install envelope.
   // ──────────────────────────────────────────────────────────────────
   app.post<{ Body: { request?: Record<string, unknown>; signature?: string } }>(
