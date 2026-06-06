@@ -81,25 +81,5 @@ fun DeveloperScreen(nav: NavController) {
                 )
             }
         }
-
-        Spacer(Modifier.height(FS.space.s4))
-        // C3 Wave 2 — NFC retail-tier pair entry. Dev-only until owner
-        // has a real branded box; lifts onto onboarding when hardware
-        // ships.
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Text(
-                    "🧪 NFC pair (dev-only)",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                )
-                Text(
-                    "Exercise the tap-to-pair flow against a fixture or a real Flagship box tag.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp),
-                )
-                FSGhostButton(label = "Open NFC pair", onClick = { nav.navigate("nfc-pair") })
-            }
-        }
     }
 }
