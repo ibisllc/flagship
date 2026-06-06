@@ -754,6 +754,11 @@ function render(state) {
   const url = state.deployedUrl || (state.status === "deployed" ? deployedUrl : null);
   const failure = state.errorReason || state.failureReason || null;
   if (url) {
+    // Task #28 — terminal "Publish this app" action: post the canonical
+    // app id to /api/screens/marketplace/publish so the daemon (which holds
+    // the IRK + manifest hash) signs the listing request to .com.
+    const serviceCanonical = state.serviceCanonical ?? state.canonicalAppName ?? null;
+    const publishedSlug = state.marketplaceSlug ?? null;
     resultBox.innerHTML = `
       <div class="card">
         <div class="weight-600">Deployed ✓</div>
@@ -761,8 +766,14 @@ function render(state) {
           <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
         </div>
         ${leftOpen ? `<p class="note vc-left-open mt-1">${escapeHtml(LEFT_OPEN_WARNING)}</p>` : ""}
+        ${publishedSlug
+          ? `<div class="faint-sm mt-2">published as <code>${escapeHtml(publishedSlug)}</code> on the marketplace</div>`
+          : `<button id="vc-publish" class="secondary mt-2 full-width" data-canonical="${escapeHtml(serviceCanonical ?? "")}">
+              Publish this app
+            </button>`}
       </div>`;
     resultBox.classList.remove("hidden");
+    $("vc-publish")?.addEventListener("click", () => publishToMarketplace(serviceCanonical));
   } else if (failure) {
     // A relay failure is shown as the box worded it, with the way out.
     const relayAction = isRelayFailure(failure) && buildCredential && !relayTurnedOff
@@ -815,6 +826,50 @@ async function postDeploy(sessionId) {
     throw new ScreensError(msg, r.status, body);
   }
   return body;
+}
+
+/**
+ * Task #28 — Publish a vibe-coded app to the marketplace.
+ *
+ * POSTs `/api/screens/marketplace/publish` with the canonical app
+ * name. The daemon resolves the manifest, signs the listing request
+ * with the user's IRK, and proxies to .com's POST /api/marketplace/list.
+ *
+ * The webapp doesn't see the manifest contents — that lives on the
+ * pod's data layer and the daemon has direct access. Listings stay
+ * `scan_grade=null` until the scanner service catches up.
+ */
+async function publishToMarketplace(serviceCanonical) {
+  if (!serviceCanonical) {
+    return toast("missing app canonical name", "err");
+  }
+  if (!confirm(
+    `Publish "${serviceCanonical}" to the Flagship marketplace? You can unlist later from the marketplace view.`,
+  )) {
+    return;
+  }
+  const btn = $("vc-publish");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "publishing…";
+  }
+  try {
+    const r = await boxFetch("/api/screens/marketplace/publish", {
+      method: "POST",
+      body: JSON.stringify({ serviceCanonical }),
+    });
+    toast(`published as ${r.slug ?? serviceCanonical}`);
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "published ✓";
+    }
+  } catch (e) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Publish this app";
+    }
+    toast(e.message ?? String(e), "err");
+  }
 }
 
 async function triggerDeploy() {
