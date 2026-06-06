@@ -102,7 +102,6 @@
           <li>A <span class="yes">sealed LUKS blob</span> (we can't open it)</li>
           <li><span class="yes">Push tokens</span>, if you opt into push</li>
           <li><span class="yes">Billing data</span>, if you pay us</li>
-          <li><span class="yes">Marketplace listing</span> metadata, if you publish</li>
         </ul>
       </div>
       <div>
@@ -123,7 +122,7 @@
 
     <section id="who">
       <h2>1. Who this policy covers</h2>
-      <p>This policy applies to Flagship (operated by the Flagship team, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients, and the marketplace at <code>/marketplace</code>.</p>
+      <p>This policy applies to Flagship (operated by the Flagship team, sole proprietorship pending entity formation; the "Service") and to the websites <code>flagshipserver.com</code> and <code>flagship.services</code>, the iOS, Android, and webapp clients.</p>
       <p>It does not cover apps you install on your own Flagship server. Those apps run on hardware you own, under your control, and their privacy practices are theirs. We provide a sandbox; we don't supervise its inhabitants.</p>
       <p>It does not cover services you connect through the BYOK / browser features (Anthropic, OpenAI, Amazon, your bank, etc.). When you log into a third-party service from your Flagship browser, that service's privacy policy governs.</p>
     </section>
@@ -143,10 +142,7 @@
       <h3>2.4 Billing data (only if you pay)</h3>
       <p>If you buy hardware or subscribe to an add-on, Stripe handles payment and we receive: a Stripe customer ID, the last four digits of your card, your billing country, and the line items you bought. We never see the full card number. For shipping hardware we also store your shipping address until the box is delivered, then it's deleted within 90 days.</p>
 
-      <h3>2.5 Marketplace listing data (only if you publish)</h3>
-      <p>If you publish an app listing, we store the listing fields you submit: title, description, category, screenshots (in R2), the canonical pod URL, your username as author, and timestamps. Listings are public by definition.</p>
-
-      <h3>2.6 Logs (operational, short retention)</h3>
+      <h3>2.5 Logs (operational, short retention)</h3>
       <table class="t">
         <thead>
           <tr><th>Source</th><th>What's logged</th><th>Retention</th></tr>
@@ -175,7 +171,7 @@
         </tbody>
       </table>
 
-      <h3>2.7 What we explicitly don't collect</h3>
+      <h3>2.6 What we explicitly don't collect</h3>
       <ul>
         <li>The content of your TLS-encrypted traffic. <code>flagship.services</code> sees only encrypted bytes; the cert lives on your box.</li>
         <li>Files, photos, messages, or any application data stored on your Flagship server.</li>
@@ -212,7 +208,6 @@
         <li><strong>Billing data</strong>: kept for 7 years for tax compliance after the last transaction.</li>
         <li><strong>Shipping addresses</strong>: kept until delivered, plus 90 days for return-window handling.</li>
         <li><strong>Logs</strong>: 30 days, then aggregated counters only.</li>
-        <li><strong>Marketplace listings</strong>: kept while published; removed on delisting.</li>
       </ul>
     </section>
 
@@ -292,7 +287,6 @@
       <h4>Product</h4>
       <ul>
         <li><a href="/docs#how-it-works">How it works</a></li>
-        <li><a href="/marketplace/">Services</a></li>
         <li><a href="https://web.flagshipserver.com/">Webapp</a></li>
       </ul>
     </div>
