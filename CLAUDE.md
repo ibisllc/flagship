@@ -84,14 +84,22 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 - Canonical-bytes use `|` separator and `flagship/<purpose>/v1` tag prefix.
 - No comments unless the *why* is non-obvious; never explain *what*.
 - **Feature branches hold extracted, unshipped features.** `feat/marketplace`
-  (the marketplace — site + app UI) and `feat/retail-boxes` (the NFC retail
-  tier) were extracted OUT of `main` so `main` ships clean to App Store
-  review. `main` carries no marketplace/NFC *user-facing* surface; the dormant
-  backend stays. **At commit time, always consider a change's impact on those
-  branches** — they don't auto-receive `main`'s commits, so a `main`-only fix
-  to shared code (protocol, storage, daemon, shared UI components) will need
-  re-applying when a feature branch is integrated for release. Extraction is
-  **forward-only** (no history rewrite) so regressions are easy to bisect.
+  (the whole marketplace — UI, marketing copy, AND backend) and
+  `feat/retail-boxes` (the NFC retail tier) are extracted OUT of `main` so
+  `main` ships clean and "doesn't think of" them. Extraction is by **removal,
+  not feature flags** — branching IS the gate; there is no gating code in
+  `main`. It is **forward-only** (no history rewrite) and **lossless**:
+  anything removed from `main` must already exist on the feature branch, i.e.
+  `main ∪ feat == the original consolidated tree`.
+  - **DB migrations + the live database are infrastructure, NOT "our code" —
+    never extract them.** A feature-only table living in prod (e.g.
+    `marketplace_listings`, `box_serials`) is fine: developing the feature
+    means checking out its branch and running that code against the live
+    table. `main` keeps every migration; only application code (UI, handlers,
+    adapters, protocol types, tests) is extracted.
+  - **At commit time, weigh impact on the feature branches** — they don't
+    auto-receive `main`'s commits, so a `main`-only fix to shared code needs
+    re-applying (or cherry-picking forward) when a branch is integrated.
 
 ## Current status & open work
 
