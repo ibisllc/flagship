@@ -1336,8 +1336,18 @@ const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   "/apple-touch-icon.png",
   "/404.html",
   "/robots.txt",
+  // Load-bearing: the post-order recipe/ISO flow must work for a real
+  // user who has NO preview cookie, even while the marketing site is
+  // coming-soon. /ready/ (prefix below) + the shared assets it renders
+  // with are served through the gate. The download/personalize routes
+  // (/download/*, /api/*) are handled before the static fallback, so
+  // they're already ungated.
+  "/site.css",
+  "/theme-ui.css",
+  "/theme.js",
+  "/motion.js",
 ]);
-const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/"];
+const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/ready/"];
 
 function hasPreviewCookie(request: Request): boolean {
   const header = request.headers.get("cookie");
