@@ -908,11 +908,16 @@ function render(state) {
   const failure = state.errorReason || state.failureReason || null;
   pendingEnvVar = state.pendingRequest?.kind === "requestEnvVar" ? state.pendingRequest.payload?.name ?? null : null;
   pendingAppId = state.appId ?? null;
+  const serviceCanonical = state.serviceCanonical ?? state.canonicalAppName ?? null;
   const html = resultMarkup(state.pendingRequest, {
     url,
     leftOpen,
     failure,
     relayOff: Boolean(failure && isRelayFailure(failure) && buildCredential && !relayTurnedOff),
+    // Task #28 — terminal "Publish this app" action: post the canonical
+    // app id to /api/screens/marketplace/publish so the daemon (which holds
+    // the IRK + manifest hash) signs the listing request to .com.
+    publish: { canonical: serviceCanonical, slug: state.marketplaceSlug ?? null },
   });
   resultBox.classList.toggle("hidden", !html);
   if (html === lastResultHtml) return;
@@ -921,6 +926,7 @@ function render(state) {
   $("vc-relay-off")?.addEventListener("click", () => void relayOff());
   $("vc-envvar-send")?.addEventListener("click", () => void sendEnvVar());
   $("vc-envvar-decline")?.addEventListener("click", () => void answerEnvVar("declined"));
+  $("vc-publish")?.addEventListener("click", () => publishToMarketplace(serviceCanonical));
 }
 
 /**
@@ -928,10 +934,10 @@ function render(state) {
  * session runs on an app that is already live, and the owner must still be
  * able to answer it; the live link (or the failure) follows.
  */
-export function resultMarkup(pending, { url = null, leftOpen: open = false, failure = null, relayOff = false } = {}) {
+export function resultMarkup(pending, { url = null, leftOpen: open = false, failure = null, relayOff = false, publish = null } = {}) {
   let html = envVarRequestMarkup(pending);
   if (url) {
-    html += deployedMarkup(url, open);
+    html += deployedMarkup(url, open, publish);
   } else if (failure) {
     // A relay failure is shown as the box worded it, with the way out.
     const action = relayOff
@@ -961,7 +967,7 @@ export function envVarRequestMarkup(pending) {
 }
 
 /** The live link a deploy answered with. */
-export function deployedMarkup(url, open) {
+export function deployedMarkup(url, open, publish = null) {
   return `
       <div class="card">
         <div class="weight-600">Deployed ✓</div>
@@ -969,7 +975,18 @@ export function deployedMarkup(url, open) {
           <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
         </div>
         ${open ? `<p class="note vc-left-open mt-1">${escapeHtml(LEFT_OPEN_WARNING)}</p>` : ""}
+        ${publishMarkup(publish)}
       </div>`;
+}
+
+function publishMarkup(publish) {
+  if (!publish) return "";
+  if (publish.slug) {
+    return `<div class="faint-sm mt-2">published as <code>${escapeHtml(publish.slug)}</code> on the marketplace</div>`;
+  }
+  return `<button id="vc-publish" class="secondary mt-2 full-width" data-canonical="${escapeHtml(publish.canonical ?? "")}">
+              Publish this app
+            </button>`;
 }
 
 // The value goes to the box's env store under the owner's signature (the
@@ -1077,6 +1094,50 @@ async function postDeploy(sessionId) {
     throw new ScreensError(msg, r.status, body);
   }
   return body;
+}
+
+/**
+ * Task #28 — Publish a vibe-coded app to the marketplace.
+ *
+ * POSTs `/api/screens/marketplace/publish` with the canonical app
+ * name. The daemon resolves the manifest, signs the listing request
+ * with the user's IRK, and proxies to .com's POST /api/marketplace/list.
+ *
+ * The webapp doesn't see the manifest contents — that lives on the
+ * pod's data layer and the daemon has direct access. Listings stay
+ * `scan_grade=null` until the scanner service catches up.
+ */
+async function publishToMarketplace(serviceCanonical) {
+  if (!serviceCanonical) {
+    return toast("missing app canonical name", "err");
+  }
+  if (!confirm(
+    `Publish "${serviceCanonical}" to the Flagship marketplace? You can unlist later from the marketplace view.`,
+  )) {
+    return;
+  }
+  const btn = $("vc-publish");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "publishing…";
+  }
+  try {
+    const r = await boxFetch("/api/screens/marketplace/publish", {
+      method: "POST",
+      body: JSON.stringify({ serviceCanonical }),
+    });
+    toast(`published as ${r.slug ?? serviceCanonical}`);
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "published ✓";
+    }
+  } catch (e) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Publish this app";
+    }
+    toast(e.message ?? String(e), "err");
+  }
 }
 
 async function triggerDeploy() {
