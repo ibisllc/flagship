@@ -121,6 +121,7 @@ function resolveViewAlias(alias) {
     settings: "view-settings",
     recovery: "view-recovery",
     "install-progress": "view-install-progress",
+    marketplace: "view-marketplace",
     "pod-pair": "view-pod-pair",
     "server-detail": "view-server-detail",
     "create-server": "view-create-server",
