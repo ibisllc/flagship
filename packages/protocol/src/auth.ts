@@ -52,3 +52,4 @@ export * from "./acmeCustody.js";
 export * from "./certRevocation.js";
 export * from "./customDomainCert.js";
 export * from "./podBinding.js";
+export * from "./marketplace.js";

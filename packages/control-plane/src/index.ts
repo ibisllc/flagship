@@ -38,6 +38,7 @@ export * from "./metering.js";
 export * from "./serverRevoke.js";
 export * from "./serverRevocation.js";
 export * from "./accountDeletion.js";
+export * from "./marketplace.js";
 export * from "./push.js";
 export * from "./deviceDirectoryEtag.js";
 export * from "./accountResolve.js";

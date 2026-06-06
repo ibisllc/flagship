@@ -16,7 +16,8 @@
  *
  * Auto-renew default: ON for user-installed apps. Apps that opt into
  * "explicit renewal" (a flag in the grant) require a phone tap each
- * cycle — used for high-sensitivity surfaces like LLM-promo bootstrap.
+ * cycle — used for high-sensitivity surfaces like marketplace publish
+ * or LLM-promo bootstrap.
  *
  * The renewer is a PURE function over (existing grants, current time,
  * signing key, distributor). I/O happens in the distributor + the

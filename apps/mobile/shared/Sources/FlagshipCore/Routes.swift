@@ -23,6 +23,9 @@ public enum HomeRoute: Hashable, Sendable {
 
 public enum AppsRoute: Hashable, Sendable {
     case appDetail(serviceId: String)
+    /// Marketplace browse + per-listing detail (feat/marketplace).
+    case marketplace
+    case marketplaceDetail(creator: String, slug: String)
     /// Build-a-service chooser ("how do you want to build it?"). The new
     /// create-a-service entry; fans into the build modes below. Scratch
     /// routes on to `.vibeCodeProviderPick` (the existing vibe flow).

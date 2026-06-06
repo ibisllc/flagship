@@ -107,6 +107,9 @@ class LiveScreensClient(
     override suspend fun appDetail(serviceId: String): AppDetailResponse =
         request("/api/screens/app-detail/$serviceId", AppDetailResponse.serializer())
 
+    override suspend fun marketplaceBrowse(): MarketplaceBrowseResponse =
+        request("/api/screens/marketplace-browse", MarketplaceBrowseResponse.serializer())
+
     override suspend fun vibeCodeStart(req: VibeCodeStartRequest): VibeCodeStartResponse {
         val body = json.encodeToString(VibeCodeStartRequest.serializer(), req).toByteArray()
         return request("/api/screens/vibe-code/start", VibeCodeStartResponse.serializer(), "POST", body)

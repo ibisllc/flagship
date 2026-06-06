@@ -62,6 +62,7 @@ public struct HomeScreen: View {
     /// straight from the list — frees the name via the same release flow.
     var onDeleteDeadServer: (PodInfo) -> Void = { _ in }
     var onVibeCode: () -> Void = {}
+    var onBrowseMarketplace: () -> Void = {}
     var onRefresh: () async -> Void = {}
     var onSetUpRecovery: () -> Void = {}
     var onDismissRecoveryNudge: () -> Void = {}
@@ -95,6 +96,7 @@ public struct HomeScreen: View {
         onAddServer: @escaping () -> Void = {},
         onSetLeader: @escaping (PodInfo) -> Void = { _ in },
         onVibeCode: @escaping () -> Void = {},
+        onBrowseMarketplace: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onSetUpRecovery: @escaping () -> Void = {},
         onDismissRecoveryNudge: @escaping () -> Void = {},
@@ -119,6 +121,7 @@ public struct HomeScreen: View {
         self.onCancelServer = onCancelServer
         self.onDeleteDeadServer = onDeleteDeadServer
         self.onVibeCode = onVibeCode
+        self.onBrowseMarketplace = onBrowseMarketplace
         self.onRefresh = onRefresh
         self.onSetUpRecovery = onSetUpRecovery
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
@@ -301,9 +304,14 @@ public struct HomeScreen: View {
         // nil capability (legacy single-IRK path) enables everything.
         let scopes = deviceCapability?.scopeSet
         let canVibeCode = scopes == nil || scopes!.contains(.vibeCode)
-        // A single action: a stack, not an adaptive grid — the grid split
-        // regular-width screens into 280pt columns and left this card in one.
-        return VStack(spacing: FS.space.s3) {
+        let canInstall = scopes == nil || scopes!.contains(.installService)
+        // Two actions: side by side in two equal columns on a regular-width
+        // screen, stacked on a phone. An adaptive 280pt grid left a gap on
+        // wide screens (three columns, two cards).
+        let columns = sizeClass == .regular
+            ? [GridItem(.flexible(), spacing: FS.space.s3), GridItem(.flexible(), spacing: FS.space.s3)]
+            : [GridItem(.flexible())]
+        return LazyVGrid(columns: columns, spacing: FS.space.s3) {
             actionRow(
                 title: "Build a service",
                 subtitle: "Describe it in plain English. Your server builds and runs it.",
@@ -313,6 +321,17 @@ public struct HomeScreen: View {
                 enabled: canVibeCode,
                 disabledReason: "This device cannot build new services. Use a primary device.",
                 accessibilityId: "quick-action-vibe-code",
+                c: c
+            )
+            actionRow(
+                title: "Browse the marketplace",
+                subtitle: "Deploy services your neighbours have published.",
+                systemImage: "square.grid.2x2",
+                accent: c.success,
+                action: onBrowseMarketplace,
+                enabled: canInstall,
+                disabledReason: "This device cannot install services. Use a primary device.",
+                accessibilityId: "quick-action-install-service",
                 c: c
             )
         }
